@@ -261,6 +261,7 @@ describe("createReadonlyTranscriptSession", () => {
     const merged = mergeReadonlyRuntimeHistory(current, [], {
       pendingAsyncQuestions: atReadStart.pendingAsyncQuestions ?? [],
       handledAsyncQuestionIds: atReadStart.handledAsyncQuestionIds ?? new Set(),
+      asyncQuestionSkipMessages: atReadStart.asyncQuestionSkipMessages ?? [],
     });
 
     expect(merged.pendingAsyncQuestions).toEqual([question]);

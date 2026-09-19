@@ -120,7 +120,7 @@ export const mergeReadonlyRuntimeHistory = (
     {
       pendingAsyncQuestions: session.pendingAsyncQuestions ?? [],
       handledAsyncQuestionIds: session.handledAsyncQuestionIds ?? new Set(),
-      asyncQuestionSkipRevision: session.asyncQuestionSkipRevision,
+      asyncQuestionSkipMessages: session.asyncQuestionSkipMessages ?? [],
     },
     asyncQuestionsAtReadStart,
   );

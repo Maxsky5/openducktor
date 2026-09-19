@@ -16,6 +16,12 @@ const question = (sourceMessageId: string, questionIndex = 0) => ({
   options: ["Yes", "No"],
 });
 
+const userMessage = (
+  messageId: string,
+  timestamp = "2026-09-19T10:01:00.000Z",
+  text = "Continue",
+) => ({ messageId, timestamp, text });
+
 describe("asynchronous question projection", () => {
   test("keeps several questions pending without blocking turn state", () => {
     const projected = applyAsyncQuestionAnnotation(emptyAgentAsyncQuestionProjection(), {
@@ -32,16 +38,23 @@ describe("asynchronous question projection", () => {
       status: "pending",
       questions: [question("message-1"), question("message-2")],
     });
-    const answered = applyAsyncQuestionUserMessage(pending, [
-      {
-        questionItemId: question("message-1").questionItemId,
-        question: "Question 1",
-        answer: "Yes",
-      },
-    ]);
+    const answered = applyAsyncQuestionUserMessage(
+      pending,
+      [
+        {
+          questionItemId: question("message-1").questionItemId,
+          question: "Question 1",
+          answer: "Yes",
+        },
+      ],
+      userMessage("reply-message"),
+    );
 
     expect(answered.pendingAsyncQuestions).toEqual([question("message-2")]);
-    expect(applyAsyncQuestionUserMessage(answered, undefined).pendingAsyncQuestions).toEqual([]);
+    expect(
+      applyAsyncQuestionUserMessage(answered, undefined, userMessage("ordinary-message"))
+        .pendingAsyncQuestions,
+    ).toEqual([]);
   });
 
   test("history does not reopen a question handled after the read began", () => {
@@ -60,6 +73,7 @@ describe("asynchronous question projection", () => {
     const current = applyAsyncQuestionUserMessage(
       applyAsyncQuestionAnnotation(atReadStart, { status: "pending", questions: [source] }),
       undefined,
+      userMessage("ordinary-message"),
     );
 
     expect(
@@ -74,9 +88,64 @@ describe("asynchronous question projection", () => {
       status: "pending",
       questions: [source],
     });
-    const handled = applyAsyncQuestionUserMessage(history, undefined);
+    const handled = applyAsyncQuestionUserMessage(
+      history,
+      undefined,
+      userMessage("ordinary-message"),
+    );
 
     expect(mergeAsyncQuestionHistory(history, handled, handled)).toEqual(handled);
+  });
+
+  test("keeps a history question asked after a live ordinary message", () => {
+    const beforeMessage = question("message-before");
+    const afterMessage = question("message-after");
+    const history = projectAsyncQuestionsFromHistory([
+      {
+        role: "assistant",
+        messageId: beforeMessage.sourceMessageId,
+        timestamp: "2026-09-19T10:00:00.000Z",
+        text: beforeMessage.title,
+        parts: [],
+        asyncQuestion: { status: "pending", questions: [beforeMessage] },
+      },
+      {
+        role: "user",
+        messageId: "ordinary-message",
+        timestamp: "2026-09-19T10:01:00.000Z",
+        text: "Continue",
+        displayParts: [{ kind: "text", text: "Continue" }],
+        state: "read",
+        parts: [],
+      },
+      {
+        role: "assistant",
+        messageId: afterMessage.sourceMessageId,
+        timestamp: "2026-09-19T10:02:00.000Z",
+        text: afterMessage.title,
+        parts: [],
+        asyncQuestion: { status: "pending", questions: [afterMessage] },
+      },
+    ]);
+    const atReadStart = emptyAgentAsyncQuestionProjection();
+    const current = applyAsyncQuestionUserMessage(
+      atReadStart,
+      undefined,
+      userMessage("codex-user-synthetic"),
+    );
+
+    const merged = mergeAsyncQuestionHistory(history, current, atReadStart);
+    const replayed = applyAsyncQuestionAnnotation(merged, {
+      status: "pending",
+      questions: [afterMessage],
+    });
+
+    expect(history.pendingAsyncQuestions).toEqual([afterMessage]);
+    expect(merged.pendingAsyncQuestions).toEqual([afterMessage]);
+    expect(merged.handledAsyncQuestionIds).toContain(beforeMessage.questionItemId);
+    expect(merged.handledAsyncQuestionIds).not.toContain(afterMessage.questionItemId);
+    expect(merged.asyncQuestionSkipMessages).toHaveLength(1);
+    expect(replayed.pendingAsyncQuestions).toEqual([afterMessage]);
   });
 
   test("history resolves only the stable ID in a contextual reply", () => {

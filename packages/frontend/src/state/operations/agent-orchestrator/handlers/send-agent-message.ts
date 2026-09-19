@@ -192,9 +192,14 @@ const upsertAcceptedUserMessage = (
       {
         pendingAsyncQuestions: current.pendingAsyncQuestions ?? [],
         handledAsyncQuestionIds: current.handledAsyncQuestionIds ?? new Set(),
-        asyncQuestionSkipRevision: current.asyncQuestionSkipRevision,
+        asyncQuestionSkipMessages: current.asyncQuestionSkipMessages ?? [],
       },
       acceptedUserMessage.asyncQuestionReplies,
+      {
+        messageId: acceptedUserMessage.messageId,
+        timestamp: acceptedUserMessage.timestamp,
+        text: acceptedUserMessage.message,
+      },
     );
     return {
       ...current,

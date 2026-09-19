@@ -670,7 +670,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
 
       expect(inputs[0]).toMatchObject({ asyncQuestionItemIds: [questionItemId] });
       expect(getSession(sessionsRef)?.pendingAsyncQuestions).toEqual([]);
-      expect(getSession(sessionsRef)?.asyncQuestionSkipRevision).toBe(1);
+      expect(getSession(sessionsRef)?.asyncQuestionSkipMessages).toHaveLength(1);
     } finally {
       adapter.sendUserMessage = originalSendUserMessage;
     }

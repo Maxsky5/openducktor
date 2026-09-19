@@ -119,7 +119,7 @@ const asyncQuestionProjectionFromSession = (
     ? {
         pendingAsyncQuestions: [...(session.pendingAsyncQuestions ?? [])],
         handledAsyncQuestionIds: new Set(session.handledAsyncQuestionIds ?? []),
-        asyncQuestionSkipRevision: session.asyncQuestionSkipRevision,
+        asyncQuestionSkipMessages: [...(session.asyncQuestionSkipMessages ?? [])],
       }
     : emptyAgentAsyncQuestionProjection();
 

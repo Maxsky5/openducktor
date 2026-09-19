@@ -128,6 +128,12 @@ export type AgentChatMessageMeta =
       parentExternalSessionId: string;
     };
 
+export type AgentAsyncQuestionSkipMessage = {
+  messageId: string;
+  timestamp: string;
+  text: string;
+};
+
 export type AgentChatMessage = {
   id: string;
   role: "user" | "assistant" | "system" | "thinking" | "tool";
@@ -221,8 +227,8 @@ export type AgentSessionState = {
   pendingQuestions: AgentQuestionRequest[];
   pendingAsyncQuestions?: readonly AgentAsyncQuestion[];
   handledAsyncQuestionIds?: ReadonlySet<string>;
-  /** Transient order marker for ordinary user messages that skip pending async questions. */
-  asyncQuestionSkipRevision?: number | undefined;
+  /** Transient identity and order for user messages that skip pending async questions. */
+  asyncQuestionSkipMessages?: readonly AgentAsyncQuestionSkipMessage[];
   selectedModel: AgentModelSelection | null;
   runtimeAvailability?: AgentSessionRuntimeAvailability;
   pendingUserMessageStartedAt?: number | undefined;

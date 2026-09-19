@@ -306,11 +306,13 @@ const applyDirectSnapshot = (
           (question) => !handledAsyncQuestionIds.has(question.questionItemId),
         ),
         handledAsyncQuestionIds,
+        asyncQuestionSkipMessages: current.asyncQuestionSkipMessages ?? [],
       }
     : applyAsyncQuestionAnnotation(
         {
           pendingAsyncQuestions: current.pendingAsyncQuestions ?? [],
           handledAsyncQuestionIds,
+          asyncQuestionSkipMessages: current.asyncQuestionSkipMessages ?? [],
         },
         { status: "pending", questions: snapshot.pendingAsyncQuestions },
       );

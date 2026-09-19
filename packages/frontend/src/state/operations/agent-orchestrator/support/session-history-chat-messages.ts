@@ -451,7 +451,7 @@ export const applyLoadedSessionHistory = (
     {
       pendingAsyncQuestions: session.pendingAsyncQuestions ?? [],
       handledAsyncQuestionIds: session.handledAsyncQuestionIds ?? new Set(),
-      asyncQuestionSkipRevision: session.asyncQuestionSkipRevision,
+      asyncQuestionSkipMessages: session.asyncQuestionSkipMessages ?? [],
     },
     asyncQuestionsAtReadStart,
   );

@@ -112,6 +112,7 @@ export const handleAssistantMessage = (
         {
           pendingAsyncQuestions: current.pendingAsyncQuestions ?? [],
           handledAsyncQuestionIds: current.handledAsyncQuestionIds ?? new Set(),
+          asyncQuestionSkipMessages: current.asyncQuestionSkipMessages ?? [],
         },
         asyncQuestion,
       );
@@ -238,9 +239,10 @@ export const handleUserMessage = (
       {
         pendingAsyncQuestions: current.pendingAsyncQuestions ?? [],
         handledAsyncQuestionIds: current.handledAsyncQuestionIds ?? new Set(),
-        asyncQuestionSkipRevision: current.asyncQuestionSkipRevision,
+        asyncQuestionSkipMessages: current.asyncQuestionSkipMessages ?? [],
       },
       event.asyncQuestionReplies,
+      { messageId: event.messageId, timestamp: event.timestamp, text: event.message },
     );
     return {
       ...current,

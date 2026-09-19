@@ -235,7 +235,13 @@ describe("agent session live projection", () => {
       ...session,
       pendingAsyncQuestions: [],
       handledAsyncQuestionIds: new Set([question.questionItemId]),
-      asyncQuestionSkipRevision: 1,
+      asyncQuestionSkipMessages: [
+        {
+          messageId: "ordinary-message",
+          timestamp: "2026-09-19T10:01:00.000Z",
+          text: "Continue",
+        },
+      ],
     });
 
     const refreshed = build({ current: handled, snapshots: [liveSnapshot] });
@@ -243,7 +249,7 @@ describe("agent session live projection", () => {
 
     expect(refreshedSession?.pendingAsyncQuestions).toEqual([]);
     expect(refreshedSession?.handledAsyncQuestionIds).toContain(question.questionItemId);
-    expect(refreshedSession?.asyncQuestionSkipRevision).toBe(1);
+    expect(refreshedSession?.asyncQuestionSkipMessages).toHaveLength(1);
   });
 
   test("keeps a history question pending when the runtime snapshot has no tracker state", () => {

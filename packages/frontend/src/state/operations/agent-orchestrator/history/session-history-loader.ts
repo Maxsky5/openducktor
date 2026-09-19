@@ -212,7 +212,7 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
       ? {
           pendingAsyncQuestions: sessionAtReadStart.pendingAsyncQuestions ?? [],
           handledAsyncQuestionIds: sessionAtReadStart.handledAsyncQuestionIds ?? new Set<string>(),
-          asyncQuestionSkipRevision: sessionAtReadStart.asyncQuestionSkipRevision,
+          asyncQuestionSkipMessages: sessionAtReadStart.asyncQuestionSkipMessages ?? [],
         }
       : undefined;
     const history = await adapter.loadSessionHistory(historyInput);

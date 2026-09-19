@@ -1042,9 +1042,14 @@ describe("session history loader", () => {
         {
           pendingAsyncQuestions: current.pendingAsyncQuestions ?? [],
           handledAsyncQuestionIds: current.handledAsyncQuestionIds ?? new Set(),
-          asyncQuestionSkipRevision: current.asyncQuestionSkipRevision,
+          asyncQuestionSkipMessages: current.asyncQuestionSkipMessages ?? [],
         },
         undefined,
+        {
+          messageId: "live-user-message",
+          timestamp: "2026-09-19T10:01:00.000Z",
+          text: "Continue",
+        },
       ),
     }));
     harness.updateSession(sessionTarget, (current) => ({
@@ -1053,7 +1058,7 @@ describe("session history loader", () => {
         {
           pendingAsyncQuestions: current.pendingAsyncQuestions ?? [],
           handledAsyncQuestionIds: current.handledAsyncQuestionIds ?? new Set(),
-          asyncQuestionSkipRevision: current.asyncQuestionSkipRevision,
+          asyncQuestionSkipMessages: current.asyncQuestionSkipMessages ?? [],
         },
         { status: "pending", questions: [liveQuestion] },
       ),
