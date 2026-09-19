@@ -115,7 +115,8 @@ describe("SettingsNotificationsSection", () => {
     await waitFor(() =>
       expect(screen.queryByText(/Notification sound could not play/) === null).toBe(true),
     );
-  });
+    // CI runs this render-heavy flow beside the host suite on 3-4 vCPUs.
+  }, 2_500);
 
   test("offers Windows system settings without a permission result", async () => {
     const openSystemSettings = mock(async () => {});
