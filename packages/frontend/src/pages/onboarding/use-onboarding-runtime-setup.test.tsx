@@ -1037,5 +1037,6 @@ describe("useOnboardingRuntimeSetup", () => {
     } finally {
       host.runtimeExecutablesCheck = originalCheck;
     }
-  });
+    // CI runs this render-heavy flow beside the host suite on 3-4 vCPUs.
+  }, 2_500);
 });
