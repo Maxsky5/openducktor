@@ -15,7 +15,7 @@ import {
   refreshRuntimeCatalogIfStale,
   repoRuntimeFileSearchQueryOptions,
   resolveRuntimeCatalogSurface,
-  retryRuntimeCatalogSurface,
+  retryRuntimeCatalog,
   runtimeCatalogQueryKeys,
   runtimeCatalogQueryOptions,
   skippedRuntimeCatalogQueryOptions,
@@ -174,36 +174,78 @@ describe("runtime catalog queries", () => {
     }
   });
 
-  test("retries only the failed surface when a combined entry exists", async () => {
+  test("reloads the complete catalog when a surface retry runs", async () => {
     const queryClient = new QueryClient();
     const queryKey = runtimeCatalogQueryKeys.catalog(workingDirectoryRefFixture);
     queryClient.setQueryData(queryKey, runtimeCatalogFixture);
-    const loadCatalog = mock(async (): Promise<AgentRuntimeCatalog> => ({
+    const refreshedCatalog: AgentRuntimeCatalog = {
+      runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+      models: { status: "available", catalog: modelCatalogFixture },
+      slashCommands: { status: "available", catalog: slashCommandCatalogFixture },
       skills: { status: "available", catalog: skillCatalogFixture },
-    }));
+    };
+    const loadCatalog = mock(async () => refreshedCatalog);
 
-    await retryRuntimeCatalogSurface({
+    await retryRuntimeCatalog({
       queryClient,
       runtimeRef: workingDirectoryRefFixture,
-      surface: "skills",
       loadRuntimeCatalog: loadCatalog,
     });
 
-    expect(loadCatalog).toHaveBeenCalledWith({
-      ...workingDirectoryRefFixture,
-      surfaces: ["skills"],
+    expect(loadCatalog).toHaveBeenCalledWith(workingDirectoryRefFixture);
+    expect(queryClient.getQueryData<AgentRuntimeCatalog>(queryKey)).toEqual(refreshedCatalog);
+  });
+
+  test("replaces an invalidated entry with the new runtime catalog and clears invalidation", async () => {
+    const queryClient = new QueryClient();
+    const queryKey = runtimeCatalogQueryKeys.catalog(workingDirectoryRefFixture);
+    const oldModelCatalog: AgentModelCatalog = {
+      ...modelCatalogFixture,
+      models: [],
+      defaultModelsByProvider: { old: "old-model" },
+    };
+    queryClient.setQueryData(queryKey, {
+      ...runtimeCatalogFixture,
+      models: { status: "available", catalog: oldModelCatalog },
     });
+    await queryClient.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
+    const loadCatalog = mock(async () => runtimeCatalogFixture);
+
+    await retryRuntimeCatalog({
+      queryClient,
+      runtimeRef: workingDirectoryRefFixture,
+      loadRuntimeCatalog: loadCatalog,
+    });
+
+    const state = queryClient.getQueryState(queryKey);
+    expect(loadCatalog).toHaveBeenCalledWith(workingDirectoryRefFixture);
+    expect(state?.isInvalidated).toBe(false);
+    expect(state?.status).toBe("success");
     expect(queryClient.getQueryData<AgentRuntimeCatalog>(queryKey)).toEqual(runtimeCatalogFixture);
   });
 
-  test("reads the combined catalog when no entry exists to preserve", async () => {
+  test("forces a combined read on retry while the cached entry is fresh", async () => {
+    const queryClient = new QueryClient();
+    const queryKey = runtimeCatalogQueryKeys.catalog(workingDirectoryRefFixture);
+    queryClient.setQueryData(queryKey, runtimeCatalogFixture);
+    const loadCatalog = mock(async () => runtimeCatalogFixture);
+
+    await retryRuntimeCatalog({
+      queryClient,
+      runtimeRef: workingDirectoryRefFixture,
+      loadRuntimeCatalog: loadCatalog,
+    });
+
+    expect(loadCatalog).toHaveBeenCalledTimes(1);
+  });
+
+  test("reads the combined catalog when no entry exists to replace", async () => {
     const queryClient = new QueryClient();
     const loadCatalog = mock(async () => runtimeCatalogFixture);
 
-    await retryRuntimeCatalogSurface({
+    await retryRuntimeCatalog({
       queryClient,
       runtimeRef: workingDirectoryRefFixture,
-      surface: "models",
       loadRuntimeCatalog: loadCatalog,
     });
 
@@ -215,25 +257,26 @@ describe("runtime catalog queries", () => {
     ).toBe(runtimeCatalogFixture);
   });
 
-  test("records a failed surface and keeps the surfaces that already loaded", async () => {
+  test("keeps a whole-request retry failure in the query error path", async () => {
     const queryClient = new QueryClient();
     const queryKey = runtimeCatalogQueryKeys.catalog(workingDirectoryRefFixture);
     queryClient.setQueryData(queryKey, runtimeCatalogFixture);
     const loadCatalog = mock(async () => {
-      throw new Error("Subagent list offline.");
+      throw new Error("The runtime changed during this read. Reload the runtime data.");
     });
 
-    await retryRuntimeCatalogSurface({
+    await retryRuntimeCatalog({
       queryClient,
       runtimeRef: workingDirectoryRefFixture,
-      surface: "subagents",
       loadRuntimeCatalog: loadCatalog,
     });
 
-    expect(queryClient.getQueryData<AgentRuntimeCatalog>(queryKey)).toEqual({
-      ...runtimeCatalogFixture,
-      subagents: { status: "failed", message: "Subagent list offline." },
-    });
+    const state = queryClient.getQueryState(queryKey);
+    expect(state?.status).toBe("error");
+    expect(state?.error).toEqual(
+      new Error("The runtime changed during this read. Reload the runtime data."),
+    );
+    expect(queryClient.getQueryData<AgentRuntimeCatalog>(queryKey)).toEqual(runtimeCatalogFixture);
   });
 
   test("refreshes a stale combined catalog and reuses a fresh entry", async () => {

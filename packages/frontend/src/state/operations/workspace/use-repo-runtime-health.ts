@@ -102,22 +102,24 @@ export function useRepoRuntimeHealth({
       });
       const runtimeHealth = await queryClient.fetchQuery(queryOptions);
       if (options?.reloadCatalogs) {
-        // Reload every cached catalog scope of each refreshed ready runtime,
-        // including an unmounted repository-root prefetch entry. `type: "all"`
-        // covers cached entries that have no observers. Disabled and non-ready
+        // Reload every cached catalog scope of each refreshed ready runtime.
+        // `Query.fetch` calls the cached query function directly, so it also
+        // reloads entries whose observers are disabled. Disabled and non-ready
         // runtimes keep their cached data.
         await Promise.all(
           runtimeDefinitions
             .filter((definition) => isRepoRuntimeReady(runtimeHealth[definition.kind] ?? null))
-            .map((definition) =>
-              queryClient.refetchQueries({
+            .map(async (definition) => {
+              const catalogQueries = queryClient.getQueryCache().findAll({
                 queryKey: runtimeCatalogQueryKeys.runtimeCatalogScope({
                   repoPath: activeRepoPath,
                   runtimeKind: definition.kind,
                 }),
-                type: "all",
-              }),
-            ),
+              });
+              await Promise.all(
+                catalogQueries.map((query) => query.fetch().catch(() => undefined)),
+              );
+            }),
         );
       }
       return runtimeHealth;

@@ -49,7 +49,7 @@ import { availableDefaultSessionSelectionFor } from "@/features/session-start/se
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
-import { retryRuntimeCatalogSurface } from "@/state/queries/runtime-catalog";
+import { retryRuntimeCatalog } from "@/state/queries/runtime-catalog";
 import { useRuntimeModelCatalogs } from "@/state/queries/use-runtime-model-catalogs";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
@@ -348,14 +348,13 @@ export function useAgentStudioChatComposer({
                 "A repository path and session are required to refresh the session model catalog.",
               );
             }
-            await retryRuntimeCatalogSurface({
+            await retryRuntimeCatalog({
               queryClient,
               runtimeRef: {
                 repoPath: workspaceRepoPath,
                 runtimeKind: descriptor.kind,
                 workingDirectory: selectedSessionIdentity.workingDirectory,
               },
-              surface: "models",
               loadRuntimeCatalog: loadCatalogForRepo,
             });
           },

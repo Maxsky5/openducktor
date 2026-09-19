@@ -208,7 +208,7 @@ describe("useChatComposerSlashCommands", () => {
     }
   });
 
-  test("retries only the slash command surface after a failed read", async () => {
+  test("retries the combined catalog after a failed read", async () => {
     const runtimeCommand: AgentSlashCommand = {
       id: "runtime-review",
       trigger: "runtime-review",
@@ -242,9 +242,7 @@ describe("useChatComposerSlashCommands", () => {
       await harness.waitFor((state) => state.slashCommands.length === 1);
 
       expect(loadRuntimeCatalog).toHaveBeenCalledTimes(2);
-      expect(loadRuntimeCatalog.mock.calls[1]).toEqual([
-        { ...sessionRuntime.runtimeRef, surfaces: ["slashCommands"] },
-      ]);
+      expect(loadRuntimeCatalog.mock.calls[1]).toEqual([sessionRuntime.runtimeRef]);
       expect(harness.getLatest().slashCommandsError).toBeNull();
     } finally {
       await harness.unmount();

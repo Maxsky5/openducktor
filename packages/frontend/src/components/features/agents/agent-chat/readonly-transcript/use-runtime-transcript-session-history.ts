@@ -30,7 +30,7 @@ import {
 import {
   RUNTIME_CATALOG_STALE_TIME_MS,
   resolveRuntimeCatalogSurface,
-  retryRuntimeCatalogSurface,
+  retryRuntimeCatalog,
   runtimeCatalogQueryOptions,
 } from "@/state/queries/runtime-catalog";
 import { skippedQueryOptions } from "@/state/queries/skipped-query";
@@ -282,18 +282,16 @@ export function useRuntimeTranscriptSessionHistory({
   const retryHistory = useCallback(() => {
     void refetchHistory();
   }, [refetchHistory]);
-  // Retry only the skill surface. The combined catalog entry keeps every other
-  // surface that already loaded.
+  // Retry reloads the combined catalog for the transcript working directory.
   const [isRetryingSkills, setIsRetryingSkills] = useState(false);
   const retrySkills = useCallback(() => {
     if (runtimeCatalogRef === null) {
       return;
     }
     setIsRetryingSkills(true);
-    void retryRuntimeCatalogSurface({
+    void retryRuntimeCatalog({
       queryClient,
       runtimeRef: runtimeCatalogRef,
-      surface: "skills",
       loadRuntimeCatalog: loadRepoRuntimeCatalog,
     }).finally(() => setIsRetryingSkills(false));
   }, [loadRepoRuntimeCatalog, queryClient, runtimeCatalogRef]);

@@ -1,9 +1,8 @@
-import type { AgentRuntimeCatalogSurfaceName, RepoRuntimeRef } from "@openducktor/contracts";
+import type { RepoRuntimeRef } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentRuntimeCatalog,
   AgentRuntimeCatalogSurface,
-  ListAgentRuntimeCatalogInput,
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { type QueryKey, type QueryClient, queryOptions } from "@tanstack/react-query";
@@ -93,63 +92,31 @@ export const refreshRuntimeCatalogIfStale = (
     .catch(() => undefined);
 };
 
-export type RetryRuntimeCatalogSurfaceArgs = {
+export type RetryRuntimeCatalogArgs = {
   queryClient: QueryClient;
   runtimeRef: RuntimeWorkingDirectoryRef;
-  surface: AgentRuntimeCatalogSurfaceName;
-  loadRuntimeCatalog: (input: ListAgentRuntimeCatalogInput) => Promise<AgentRuntimeCatalog>;
+  loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
 };
 
 /**
- * A failed-surface retry reads only the failed surface and merges it into the
- * cached combined entry. Surfaces that succeeded keep their cached data and are
- * not re-read. When no combined entry exists yet, there is nothing to preserve,
- * so the retry reads the combined catalog.
+ * A failed-surface retry forces a combined catalog read for the runtime and
+ * working directory. The request keeps the complete-catalog contract, so the
+ * response replaces every surface and cannot mix data from two runtime
+ * instances or revive an invalidated entry. A whole-request failure stays in
+ * the query error path.
  */
-export const retryRuntimeCatalogSurface = async ({
+export const retryRuntimeCatalog = async ({
   queryClient,
   runtimeRef,
-  surface,
   loadRuntimeCatalog,
-}: RetryRuntimeCatalogSurfaceArgs): Promise<void> => {
-  const queryKey = runtimeCatalogQueryKeys.catalog(runtimeRef);
-  const previous = queryClient.getQueryData<AgentRuntimeCatalog>(queryKey);
-  try {
-    const read = await loadRuntimeCatalog(
-      previous === undefined ? runtimeRef : { ...runtimeRef, surfaces: [surface] },
-    );
-    queryClient.setQueryData<AgentRuntimeCatalog>(queryKey, (current) =>
-      previous === undefined ? read : mergeCatalogSurface(current ?? {}, surface, read),
-    );
-  } catch (cause) {
-    queryClient.setQueryData<AgentRuntimeCatalog>(queryKey, (current) =>
-      current === undefined
-        ? undefined
-        : mergeCatalogSurface(current, surface, {
-            [surface]: { status: "failed", message: errorMessage(cause) },
-          }),
-    );
-  }
-};
-
-const mergeCatalogSurface = (
-  catalog: AgentRuntimeCatalog,
-  surface: AgentRuntimeCatalogSurfaceName,
-  read: AgentRuntimeCatalog,
-): AgentRuntimeCatalog => {
-  const merged = read.runtime === undefined ? catalog : { ...catalog, runtime: read.runtime };
-  switch (surface) {
-    case "models":
-      return read.models === undefined ? merged : { ...merged, models: read.models };
-    case "slashCommands":
-      return read.slashCommands === undefined
-        ? merged
-        : { ...merged, slashCommands: read.slashCommands };
-    case "skills":
-      return read.skills === undefined ? merged : { ...merged, skills: read.skills };
-    case "subagents":
-      return read.subagents === undefined ? merged : { ...merged, subagents: read.subagents };
-  }
+}: RetryRuntimeCatalogArgs): Promise<void> => {
+  const queryOptions = runtimeCatalogQueryOptions(runtimeRef, loadRuntimeCatalog);
+  await queryClient.invalidateQueries({
+    queryKey: queryOptions.queryKey,
+    exact: true,
+    refetchType: "none",
+  });
+  await queryClient.fetchQuery(queryOptions).catch(() => undefined);
 };
 
 export type ResolvedRuntimeCatalogSurface<Catalog> = {

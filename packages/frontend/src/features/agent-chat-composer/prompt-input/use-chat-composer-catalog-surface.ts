@@ -1,21 +1,16 @@
-import type { AgentRuntimeCatalogSurfaceName } from "@openducktor/contracts";
 import type {
   AgentRuntimeCatalog,
   AgentRuntimeCatalogSurface,
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  retryRuntimeCatalogSurface,
-  resolveRuntimeCatalogSurface,
-} from "@/state/queries/runtime-catalog";
+import { retryRuntimeCatalog, resolveRuntimeCatalogSurface } from "@/state/queries/runtime-catalog";
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
 import { useChatComposerRuntimeCatalogQuery } from "./use-chat-composer-runtime-catalog-query";
 
 type UseChatComposerCatalogSurfaceArgs<Catalog> = {
   promptInputRuntime: ChatComposerPromptInputRuntime;
   supports: boolean;
-  surface: AgentRuntimeCatalogSurfaceName;
   loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
   selectSurface: (
     catalog: AgentRuntimeCatalog | undefined,
@@ -26,7 +21,6 @@ type UseChatComposerCatalogSurfaceArgs<Catalog> = {
 export const useChatComposerCatalogSurface = <Catalog>({
   promptInputRuntime,
   supports,
-  surface,
   loadRuntimeCatalog,
   selectSurface,
   emptyCatalog,
@@ -54,17 +48,16 @@ export const useChatComposerCatalogSurface = <Catalog>({
   }
 
   // A failed surface stays retryable from the surface that needs it. The retry
-  // reads only that surface and merges it into the cached catalog entry, so
-  // surfaces that succeeded are not re-read.
+  // reloads the combined catalog for the runtime and working directory, so a
+  // partial response never mixes data from two runtime instances.
   const runtimeRef =
     promptInputRuntime.state === "available" ? promptInputRuntime.runtimeRef : null;
   const retry =
     supports && runtimeRef !== null
       ? () => {
-          void retryRuntimeCatalogSurface({
+          void retryRuntimeCatalog({
             queryClient,
             runtimeRef,
-            surface,
             loadRuntimeCatalog,
           });
         }

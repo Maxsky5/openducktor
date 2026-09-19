@@ -191,6 +191,53 @@ describe("useRepoRuntimeHealth", () => {
     }
   });
 
+  test("reloads a cached catalog scope whose observer is disabled", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    const rootRef = {
+      repoPath: "/repo-a",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo-a",
+    };
+    const readCatalog = mock(async () => createRuntimeCatalogFixture());
+    const observer = new QueryObserver(client, {
+      queryKey: runtimeCatalogQueryKeys.catalog(rootRef),
+      queryFn: readCatalog,
+      enabled: false,
+    });
+    const unsubscribe = observer.subscribe(() => {});
+    client.setQueryData(runtimeCatalogQueryKeys.catalog(rootRef), createRuntimeCatalogFixture());
+    const harness = createHookHarness(
+      useRepoRuntimeHealth,
+      {
+        activeWorkspace: createActiveWorkspace("/repo-a"),
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        checkRepoRuntimeHealth,
+      },
+      {
+        wrapper: ({ children }) => (
+          <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        ),
+      },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (state) => state.activeRepoRuntimeHealthByRuntime.opencode?.status === "ready",
+      );
+
+      await harness.run(async (state) => {
+        await state.refreshRepoRuntimeHealth({ reloadCatalogs: true });
+      });
+
+      await waitFor(() => expect(readCatalog).toHaveBeenCalledTimes(1));
+    } finally {
+      unsubscribe();
+      await harness.unmount();
+      client.clear();
+    }
+  });
+
   test("reloads an inactive repository-root catalog entry for a ready runtime only", async () => {
     const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     const opencodeRootRef = {

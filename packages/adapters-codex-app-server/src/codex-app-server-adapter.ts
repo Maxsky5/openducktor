@@ -60,7 +60,6 @@ import {
   agentSessionRefsEqual,
   classifyAgentSessionActivity,
   classifySystemSlashCommandInvocation,
-  isAgentRuntimeCatalogSurfaceRequested,
   readAgentRuntimeCatalogSurface,
   withAgentSessionRef,
 } from "@openducktor/core";
@@ -761,28 +760,17 @@ export class CodexAppServerAdapter
     };
 
     const [models, slashCommands, skills] = await Promise.all([
-      isAgentRuntimeCatalogSurfaceRequested(input.surfaces, "models")
-        ? readAgentRuntimeCatalogSurface(readModels)
-        : undefined,
-      isAgentRuntimeCatalogSurfaceRequested(input.surfaces, "slashCommands")
-        ? readAgentRuntimeCatalogSurface(readSlashCommands)
-        : undefined,
-      isAgentRuntimeCatalogSurfaceRequested(input.surfaces, "skills")
-        ? readAgentRuntimeCatalogSurface(readSkills)
-        : undefined,
+      readAgentRuntimeCatalogSurface(readModels),
+      readAgentRuntimeCatalogSurface(readSlashCommands),
+      readAgentRuntimeCatalogSurface(readSkills),
     ]);
 
-    const catalog: AgentRuntimeCatalogRead = { runtime: CODEX_RUNTIME_DESCRIPTOR };
-    if (models) {
-      catalog.models = models;
-    }
-    if (slashCommands) {
-      catalog.slashCommands = slashCommands;
-    }
-    if (skills) {
-      catalog.skills = skills;
-    }
-    return catalog;
+    return {
+      runtime: CODEX_RUNTIME_DESCRIPTOR,
+      models,
+      slashCommands,
+      skills,
+    };
   }
 
   async searchFiles(input: SearchAgentFilesInput): Promise<AgentFileSearchResult[]> {

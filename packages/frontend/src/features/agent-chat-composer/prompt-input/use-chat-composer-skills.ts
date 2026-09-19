@@ -22,7 +22,6 @@ export const useChatComposerSkills = ({
   const { catalog, error, isLoading, retry } = useChatComposerCatalogSurface({
     promptInputRuntime,
     supports: supportsSkillReferences,
-    surface: "skills",
     loadRuntimeCatalog,
     selectSurface: (runtimeCatalog) => runtimeCatalog?.skills,
     emptyCatalog: EMPTY_SKILL_CATALOG,

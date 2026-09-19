@@ -157,7 +157,7 @@ describe("useChatComposerSubagents", () => {
     }
   });
 
-  test("retries only the subagent surface after a failed read", async () => {
+  test("retries the combined catalog after a failed read", async () => {
     const catalog: AgentSubagentCatalog = {
       subagents: [{ id: "reviewer", name: "reviewer", label: "Reviewer" }],
     };
@@ -187,9 +187,7 @@ describe("useChatComposerSubagents", () => {
       await harness.waitFor((state) => state.subagents.length === 1);
 
       expect(loadRuntimeCatalog).toHaveBeenCalledTimes(2);
-      expect(loadRuntimeCatalog.mock.calls[1]).toEqual([
-        { ...sessionRuntime.runtimeRef, surfaces: ["subagents"] },
-      ]);
+      expect(loadRuntimeCatalog.mock.calls[1]).toEqual([sessionRuntime.runtimeRef]);
       expect(harness.getLatest().subagentsError).toBeNull();
     } finally {
       await harness.unmount();

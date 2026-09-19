@@ -432,7 +432,7 @@ describe("loadClaudeRuntimeCatalog", () => {
     expect(catalog.skills?.status).toBe("available");
   });
 
-  test("reads only the requested surfaces when a filter is set", async () => {
+  test("reads every supported surface in one catalog session", async () => {
     const supportedAgents = mock(async () => agentFixtures);
     const supportedCommands = mock(async () => commandFixtures);
     const supportedModels = mock(async () => [modelFixture]);
@@ -443,16 +443,22 @@ describe("loadClaudeRuntimeCatalog", () => {
     });
 
     const catalog = await loadClaudeRuntimeCatalog(
-      { ...catalogInput, surfaces: ["skills"] },
+      catalogInput,
       undefined,
       process.execPath,
       () => sdkQuery,
     );
 
-    expect(Object.keys(catalog).sort()).toEqual(["runtime", "skills"]);
+    expect(Object.keys(catalog).sort()).toEqual([
+      "models",
+      "runtime",
+      "skills",
+      "slashCommands",
+      "subagents",
+    ]);
     expect(supportedCommands).toHaveBeenCalledTimes(1);
-    expect(supportedModels).not.toHaveBeenCalled();
-    expect(supportedAgents).not.toHaveBeenCalled();
+    expect(supportedModels).toHaveBeenCalledTimes(1);
+    expect(supportedAgents).toHaveBeenCalledTimes(1);
   });
 
   test("fails the whole read and closes the session when initialization fails", async () => {

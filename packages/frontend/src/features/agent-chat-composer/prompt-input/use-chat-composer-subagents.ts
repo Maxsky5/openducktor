@@ -22,7 +22,6 @@ export const useChatComposerSubagents = ({
   const { catalog, error, isLoading, retry } = useChatComposerCatalogSurface({
     promptInputRuntime,
     supports: supportsSubagentReferences,
-    surface: "subagents",
     loadRuntimeCatalog,
     selectSurface: (runtimeCatalog) => runtimeCatalog?.subagents,
     emptyCatalog: EMPTY_SUBAGENT_CATALOG,

@@ -191,22 +191,6 @@ describe("CodexAppServerAdapter lifecycle", () => {
     ]);
   });
 
-  test("reads only the requested surface for a filtered catalog request", async () => {
-    const { adapter, transports } = createHarness();
-
-    const catalog = await adapter.loadRuntimeCatalog({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      surfaces: ["models"],
-    });
-
-    expect(Object.keys(catalog).sort()).toEqual(["models", "runtime"]);
-    expect(transports.get("runtime-live")?.calls.map((call) => call.method)).toEqual([
-      "model/list",
-    ]);
-  });
-
   test("keeps the model surface when the skills surface fails", async () => {
     const transport = new FailingSkillsTransport("runtime-live", false);
     const adapter = new CodexAppServerAdapter({

@@ -21,7 +21,6 @@ import {
   type AgentRuntimeCatalogRead,
   type AgentSkillCatalog,
   type AgentSubagentCatalog,
-  isAgentRuntimeCatalogSurfaceRequested,
   type ListAgentRuntimeCatalogInput,
   readAgentRuntimeCatalogSurface,
 } from "@openducktor/core";
@@ -68,7 +67,7 @@ export const loadClaudeRuntimeCatalog = async (
     createQuery,
   );
   try {
-    return await readClaudeCatalogSurfaces(session.sdkQuery, input.surfaces);
+    return await readClaudeCatalogSurfaces(session.sdkQuery);
   } finally {
     closeClaudeCatalogSession(session);
   }
@@ -111,7 +110,6 @@ const closeClaudeCatalogSession = ({ queue, sdkQuery }: ClaudeCatalogSession): v
 
 const readClaudeCatalogSurfaces = async (
   sdkQuery: ClaudeCatalogQuery,
-  surfaces: ListAgentRuntimeCatalogInput["surfaces"],
 ): Promise<AgentRuntimeCatalogRead> => {
   let commands: Promise<SlashCommand[]> | undefined;
   const readCommands = (): Promise<SlashCommand[]> => {
@@ -119,39 +117,22 @@ const readClaudeCatalogSurfaces = async (
     return commands;
   };
   const [models, slashCommands, skills, subagents] = await Promise.all([
-    isAgentRuntimeCatalogSurfaceRequested(surfaces, "models")
-      ? readAgentRuntimeCatalogSurface(async () =>
-          toClaudeModelCatalog(await sdkQuery.supportedModels()),
-        )
-      : undefined,
-    isAgentRuntimeCatalogSurfaceRequested(surfaces, "slashCommands")
-      ? readAgentRuntimeCatalogSurface(async () =>
-          toClaudeSlashCommandCatalog(await readCommands()),
-        )
-      : undefined,
-    isAgentRuntimeCatalogSurfaceRequested(surfaces, "skills")
-      ? readAgentRuntimeCatalogSurface(async () => toClaudeSkillCatalog(await readCommands()))
-      : undefined,
-    isAgentRuntimeCatalogSurfaceRequested(surfaces, "subagents")
-      ? readAgentRuntimeCatalogSurface(async () =>
-          toClaudeSubagentCatalog(await sdkQuery.supportedAgents()),
-        )
-      : undefined,
+    readAgentRuntimeCatalogSurface(async () =>
+      toClaudeModelCatalog(await sdkQuery.supportedModels()),
+    ),
+    readAgentRuntimeCatalogSurface(async () => toClaudeSlashCommandCatalog(await readCommands())),
+    readAgentRuntimeCatalogSurface(async () => toClaudeSkillCatalog(await readCommands())),
+    readAgentRuntimeCatalogSurface(async () =>
+      toClaudeSubagentCatalog(await sdkQuery.supportedAgents()),
+    ),
   ]);
-  const catalog: AgentRuntimeCatalogRead = { runtime: CLAUDE_RUNTIME_DESCRIPTOR };
-  if (models) {
-    catalog.models = models;
-  }
-  if (slashCommands) {
-    catalog.slashCommands = slashCommands;
-  }
-  if (skills) {
-    catalog.skills = skills;
-  }
-  if (subagents) {
-    catalog.subagents = subagents;
-  }
-  return catalog;
+  return {
+    runtime: CLAUDE_RUNTIME_DESCRIPTOR,
+    models,
+    slashCommands,
+    skills,
+    subagents,
+  };
 };
 
 export const toClaudeModelCatalog = (models: ModelInfo[]): AgentModelCatalog => ({

@@ -10,20 +10,7 @@ export type AgentRuntimeCatalogSurface<Catalog> =
   | { status: "available"; catalog: Catalog }
   | { status: "failed"; message: string };
 
-export const agentRuntimeCatalogSurfaceNameValues = [
-  "models",
-  "slashCommands",
-  "skills",
-  "subagents",
-] as const;
-export const agentRuntimeCatalogSurfaceNameSchema = z.enum(agentRuntimeCatalogSurfaceNameValues);
-export type AgentRuntimeCatalogSurfaceName = z.infer<typeof agentRuntimeCatalogSurfaceNameSchema>;
-
-export const agentRuntimeLoadCatalogInputSchema = runtimeWorkingDirectoryRefSchema
-  .extend({
-    surfaces: z.array(agentRuntimeCatalogSurfaceNameSchema).nonempty().optional(),
-  })
-  .strict();
+export const agentRuntimeLoadCatalogInputSchema = runtimeWorkingDirectoryRefSchema;
 export type AgentRuntimeLoadCatalogInput = z.infer<typeof agentRuntimeLoadCatalogInputSchema>;
 
 export const agentRuntimeCatalogSchema = z

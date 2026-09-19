@@ -30,7 +30,7 @@ import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hoo
 import { workspaceSessionIdentity } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
 import {
   resolveRuntimeCatalogSurface,
-  retryRuntimeCatalogSurface,
+  retryRuntimeCatalog,
   runtimeCatalogQueryOptions,
 } from "@/state/queries/runtime-catalog";
 import { createWorkspaceSessionChatDraftPersistence } from "./workspace-session-chat-draft";
@@ -129,10 +129,9 @@ export function WorkspaceSessionChat({
   });
   const retryModelCatalog = useCallback(
     () =>
-      retryRuntimeCatalogSurface({
+      retryRuntimeCatalog({
         queryClient,
         runtimeRef,
-        surface: "models",
         loadRuntimeCatalog: runtime.loadRepoRuntimeCatalog,
       }),
     [queryClient, runtime.loadRepoRuntimeCatalog, runtimeRef],

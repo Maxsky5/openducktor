@@ -5,10 +5,10 @@ import type {
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   resolveRuntimeCatalogSurface,
-  retryRuntimeCatalogSurface,
+  retryRuntimeCatalog,
   runtimeCatalogQueryOptions,
   skippedRuntimeCatalogQueryOptions,
 } from "./runtime-catalog";
@@ -36,9 +36,6 @@ export function useRuntimeModelCatalogs({
   loadCatalog,
 }: UseRuntimeModelCatalogsArgs) {
   const queryClient = useQueryClient();
-  const [retryingRuntimeKinds, setRetryingRuntimeKinds] = useState<ReadonlySet<RuntimeKind>>(
-    () => new Set(),
-  );
   const uniqueRuntimeKinds = useMemo(() => Array.from(new Set(runtimeKinds)), [runtimeKinds]);
   const enabledRuntimeKindSet = useMemo(() => new Set(enabledRuntimeKinds), [enabledRuntimeKinds]);
   const catalogQueries = useQueries({
@@ -63,8 +60,7 @@ export function useRuntimeModelCatalogs({
           throw new Error(`Missing model catalog query for runtime '${runtimeKind}'.`);
         }
         const isEnabled = repoPath !== null && enabledRuntimeKindSet.has(runtimeKind);
-        const isRetrying = retryingRuntimeKinds.has(runtimeKind);
-        const isFetching = query.isFetching || isRetrying;
+        const isFetching = query.isFetching;
         const surface = resolveRuntimeCatalogSurface(query.data?.models, query.error);
         const hasUsableCatalog = isFetching || surface.error === null;
         return {
@@ -77,43 +73,15 @@ export function useRuntimeModelCatalogs({
             if (repoPath === null) {
               throw new Error("A repository path is required to retry the model catalog.");
             }
-            setRetryingRuntimeKinds((current) => {
-              if (current.has(runtimeKind)) {
-                return current;
-              }
-              const next = new Set(current);
-              next.add(runtimeKind);
-              return next;
+            await retryRuntimeCatalog({
+              queryClient,
+              runtimeRef: { repoPath, runtimeKind, workingDirectory: repoPath },
+              loadRuntimeCatalog: loadCatalog,
             });
-            try {
-              await retryRuntimeCatalogSurface({
-                queryClient,
-                runtimeRef: { repoPath, runtimeKind, workingDirectory: repoPath },
-                surface: "models",
-                loadRuntimeCatalog: loadCatalog,
-              });
-            } finally {
-              setRetryingRuntimeKinds((current) => {
-                if (!current.has(runtimeKind)) {
-                  return current;
-                }
-                const next = new Set(current);
-                next.delete(runtimeKind);
-                return next;
-              });
-            }
           },
         };
       }),
-    [
-      catalogQueries,
-      enabledRuntimeKindSet,
-      loadCatalog,
-      queryClient,
-      repoPath,
-      retryingRuntimeKinds,
-      uniqueRuntimeKinds,
-    ],
+    [catalogQueries, enabledRuntimeKindSet, loadCatalog, queryClient, repoPath, uniqueRuntimeKinds],
   );
 
   return { resources } satisfies { resources: RuntimeModelCatalogQueryResource[] };
