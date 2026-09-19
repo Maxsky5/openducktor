@@ -1,8 +1,4 @@
-import {
-  markdownLinkComponents,
-  markdownLinkUrlTransform,
-  type MarkdownLinkPolicy,
-} from "./markdown-link-policy";
+import { markdownLinkComponents, type MarkdownLinkPolicy } from "./markdown-link-policy";
 import { TASK_ASSET_URI_PREFIX, type TaskAssetRenderContext } from "@openducktor/contracts";
 import {
   type ComponentProps,
@@ -13,10 +9,10 @@ import {
   Suspense,
   useMemo,
 } from "react";
-import Markdown, { type Components, defaultUrlTransform, type UrlTransform } from "react-markdown";
-import remarkGfm from "remark-gfm";
+import type { Components } from "react-markdown";
 import { getShellBridge } from "@/lib/shell-bridge";
 import { cn } from "@/lib/utils";
+import { renderMarkdownElement } from "./markdown-render-element";
 import { MARKDOWN_COMPONENTS, type MarkdownRendererVariant } from "./markdown-renderer-components";
 import { prepareMarkdownRenderContent } from "./markdown-render-content";
 
@@ -49,9 +45,6 @@ type MarkdownRendererProps = {
   lightweight?: boolean;
 };
 
-const REMARK_PLUGINS = [remarkGfm];
-const MARKDOWN_URL_TRANSFORM: UrlTransform = (url) => defaultUrlTransform(url);
-
 const MARKDOWN_CLASSES = {
   compact: cn(
     "markdown-body prose prose-sm max-w-none text-[13px] leading-relaxed text-foreground",
@@ -77,27 +70,6 @@ const MARKDOWN_CLASSES = {
     "prose-blockquote:border-input prose-blockquote:bg-muted/30 prose-blockquote:px-3 prose-blockquote:py-1 prose-blockquote:text-foreground",
   ),
 } satisfies Record<MarkdownRendererVariant, string>;
-
-const MarkdownSync = memo(function MarkdownSync({
-  markdown,
-  components,
-  linkPolicy,
-}: {
-  markdown: string;
-  components: Components;
-  linkPolicy?: MarkdownLinkPolicy | undefined;
-}): ReactElement {
-  return (
-    <Markdown
-      remarkPlugins={REMARK_PLUGINS}
-      skipHtml
-      urlTransform={markdownLinkUrlTransform(MARKDOWN_URL_TRANSFORM, linkPolicy)}
-      components={components}
-    >
-      {markdown}
-    </Markdown>
-  );
-});
 
 type MarkdownRendererCandidate = "mermaid" | "math";
 
@@ -188,9 +160,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
       </Suspense>
     );
   } else {
-    renderedContent = (
-      <MarkdownSync markdown={content} components={components} linkPolicy={linkPolicy} />
-    );
+    renderedContent = renderMarkdownElement({ markdown: content, components, linkPolicy });
   }
 
   if (candidate !== null) {

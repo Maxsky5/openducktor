@@ -48,9 +48,11 @@ const createProps = ({
 
 const createHistoryLoadWrapper = (
   loadSelectedSessionBaselineHistory: AgentSessionHistoryLoadContextValue["loadSelectedSessionBaselineHistory"],
+  revalidateAgentSessionHistory: AgentSessionHistoryLoadContextValue["revalidateAgentSessionHistory"],
 ) => {
   const historyLoadActions: AgentSessionHistoryLoadContextValue = {
     loadSelectedSessionBaselineHistory,
+    revalidateAgentSessionHistory,
   };
   return function HistoryLoadWrapper({ children }: PropsWithChildren): ReactElement {
     return (
@@ -63,10 +65,16 @@ const createHistoryLoadWrapper = (
 
 const createHistoryLoadHarness = (
   props: ReturnType<typeof createProps>,
-  loadSessionHistory: AgentSessionHistoryLoadContextValue["loadSelectedSessionBaselineHistory"],
+  loadSelectedSessionBaselineHistory: AgentSessionHistoryLoadContextValue["loadSelectedSessionBaselineHistory"],
+  revalidateAgentSessionHistory: AgentSessionHistoryLoadContextValue["revalidateAgentSessionHistory"] = mock(
+    async () => null,
+  ),
 ) =>
   createHookHarness(useSelectedSessionHistoryLoad, props, {
-    wrapper: createHistoryLoadWrapper(loadSessionHistory),
+    wrapper: createHistoryLoadWrapper(
+      loadSelectedSessionBaselineHistory,
+      revalidateAgentSessionHistory,
+    ),
   });
 
 describe("useSelectedSessionHistoryLoad", () => {
@@ -102,6 +110,166 @@ describe("useSelectedSessionHistoryLoad", () => {
       );
 
       expect(loadSessionHistory).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("does not revalidate the history that a baseline load just delivered", async () => {
+    const loadSessionHistory = mock(async () => null);
+    const revalidateSessionHistory = mock(async () => null);
+    const harness = createHistoryLoadHarness(
+      createProps(),
+      loadSessionHistory,
+      revalidateSessionHistory,
+    );
+
+    try {
+      await harness.mount();
+
+      expect(loadSessionHistory).toHaveBeenCalledTimes(1);
+
+      await harness.update(
+        createProps({
+          session: createSession({ historyLoadState: "loaded" }),
+        }),
+      );
+
+      expect(revalidateSessionHistory).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("does not revalidate the history that a baseline load delivered through loading", async () => {
+    const loadSessionHistory = mock(async () => null);
+    const revalidateSessionHistory = mock(async () => null);
+    const harness = createHistoryLoadHarness(
+      createProps(),
+      loadSessionHistory,
+      revalidateSessionHistory,
+    );
+
+    try {
+      await harness.mount();
+
+      expect(loadSessionHistory).toHaveBeenCalledTimes(1);
+
+      await harness.update(
+        createProps({
+          session: createSession({ historyLoadState: "loading" }),
+        }),
+      );
+      await harness.update(
+        createProps({
+          session: createSession({ historyLoadState: "loaded" }),
+        }),
+      );
+
+      expect(revalidateSessionHistory).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("revalidates a retained session after the selection clears and returns", async () => {
+    const revalidateSessionHistory = mock(async () => null);
+    const loadedSession = createSession({ historyLoadState: "loaded" });
+    const harness = createHistoryLoadHarness(
+      createProps({ session: loadedSession }),
+      mock(async () => null),
+      revalidateSessionHistory,
+    );
+
+    try {
+      await harness.mount();
+
+      expect(revalidateSessionHistory).toHaveBeenCalledTimes(1);
+
+      await harness.update(createProps({ session: null }));
+      await harness.update(createProps({ session: loadedSession }));
+
+      expect(revalidateSessionHistory).toHaveBeenCalledTimes(2);
+      expect(revalidateSessionHistory).toHaveBeenLastCalledWith(selectedSessionIdentity);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("requests a new baseline for a selected session whose baseline failed", async () => {
+    const loadSessionHistory = mock(async () => null);
+    const revalidateSessionHistory = mock(async () => null);
+    const harness = createHistoryLoadHarness(
+      createProps({
+        session: createSession({ historyLoadState: "failed" }),
+      }),
+      loadSessionHistory,
+      revalidateSessionHistory,
+    );
+
+    try {
+      await harness.mount();
+
+      expect(loadSessionHistory).toHaveBeenCalledWith(selectedSessionIdentity);
+      expect(revalidateSessionHistory).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("revalidates a loaded selected session once", async () => {
+    const loadSessionHistory = mock(async () => null);
+    const revalidateSessionHistory = mock(async () => null);
+    const harness = createHistoryLoadHarness(
+      createProps({
+        session: createSession({ historyLoadState: "loaded" }),
+      }),
+      loadSessionHistory,
+      revalidateSessionHistory,
+    );
+
+    try {
+      await harness.mount();
+
+      expect(loadSessionHistory).not.toHaveBeenCalled();
+      expect(revalidateSessionHistory).toHaveBeenCalledTimes(1);
+      expect(revalidateSessionHistory).toHaveBeenCalledWith(selectedSessionIdentity);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("revalidates each selected session after the selection changes away and back", async () => {
+    const revalidateSessionHistory = mock(async () => null);
+    const firstSession = createSession({ historyLoadState: "loaded" });
+    const secondSession = createSession({
+      externalSessionId: "session-2",
+      historyLoadState: "loaded",
+    });
+    const harness = createHistoryLoadHarness(
+      createProps({ session: firstSession }),
+      mock(async () => null),
+      revalidateSessionHistory,
+    );
+
+    try {
+      await harness.mount();
+
+      expect(revalidateSessionHistory).toHaveBeenCalledTimes(1);
+
+      await harness.update(createProps({ session: secondSession }));
+
+      expect(revalidateSessionHistory).toHaveBeenCalledTimes(2);
+      expect(revalidateSessionHistory).toHaveBeenLastCalledWith({
+        externalSessionId: "session-2",
+        runtimeKind: selectedSessionIdentity.runtimeKind,
+        workingDirectory: selectedSessionIdentity.workingDirectory,
+      });
+
+      await harness.update(createProps({ session: firstSession }));
+
+      expect(revalidateSessionHistory).toHaveBeenCalledTimes(3);
+      expect(revalidateSessionHistory).toHaveBeenLastCalledWith(selectedSessionIdentity);
     } finally {
       await harness.unmount();
     }

@@ -204,6 +204,9 @@ export type AgentSessionHistoryLoadContextValue = {
   loadSelectedSessionBaselineHistory: (
     session: AgentSessionIdentity,
   ) => Promise<AgentSessionState | null>;
+  revalidateAgentSessionHistory: (
+    session: AgentSessionIdentity,
+  ) => Promise<AgentSessionState | null>;
 };
 
 export type AgentOperationsContextValue = {

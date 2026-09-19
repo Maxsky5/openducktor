@@ -56,7 +56,11 @@ export const createAgentSessionsStore = (
   initialWorkspaceRepoPath: string | null = null,
 ): AgentSessionsStore => {
   let workspaceRepoPath = initialWorkspaceRepoPath;
+  const retainedCollections = new Map<string, AgentSessionCollection>();
   let sessionCollection: AgentSessionCollection = emptyAgentSessionCollection();
+  if (workspaceRepoPath !== null) {
+    retainedCollections.set(workspaceRepoPath, sessionCollection);
+  }
   let activitySnapshot = createEmptyAgentActivitySnapshot(workspaceRepoPath);
   type VisiblePendingInputSnapshot = {
     collection: AgentSessionCollection;
@@ -96,6 +100,33 @@ export const createAgentSessionsStore = (
       collection: updater(current),
       result: undefined,
     }));
+  };
+
+  // A repository switch drops the late result of an unfinished history load.
+  // Return it to not requested, so the next visit requests the baseline history
+  // again.
+  const resetLoadingHistoryLoads = (collection: AgentSessionCollection): AgentSessionCollection => {
+    let next = collection;
+    for (const session of listAgentSessions(collection)) {
+      if (session.historyLoadState === "loading") {
+        next = replaceAgentSession(next, { ...session, historyLoadState: "not_requested" });
+      }
+    }
+    return next;
+  };
+
+  const retainActiveCollection = (): void => {
+    if (workspaceRepoPath === null) {
+      return;
+    }
+    retainedCollections.set(workspaceRepoPath, resetLoadingHistoryLoads(sessionCollection));
+  };
+
+  const activateCollection = (repoPath: string | null): AgentSessionCollection => {
+    if (repoPath === null) {
+      return emptyAgentSessionCollection();
+    }
+    return retainedCollections.get(repoPath) ?? emptyAgentSessionCollection();
   };
 
   return {
@@ -146,9 +177,17 @@ export const createAgentSessionsStore = (
       return nextSession;
     },
     resetWorkspace: (nextWorkspaceRepoPath) => {
+      retainActiveCollection();
       workspaceRepoPath = nextWorkspaceRepoPath;
-      sessionCollection = emptyAgentSessionCollection();
-      activitySnapshot = createEmptyAgentActivitySnapshot(workspaceRepoPath);
+      sessionCollection = activateCollection(nextWorkspaceRepoPath);
+      activitySnapshot = createAgentActivitySnapshot({
+        collection: sessionCollection,
+        previous:
+          activitySnapshot.workspaceRepoPath === workspaceRepoPath
+            ? activitySnapshot
+            : createEmptyAgentActivitySnapshot(workspaceRepoPath),
+        workspaceRepoPath,
+      });
       notifyListeners();
     },
   };

@@ -1,6 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { useCallback, useMemo } from "react";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { loadAgentSessionContextFromQuery } from "@/state/queries/agent-session-context";
 import { agentSessionHistoryQueryKeys } from "@/state/queries/agent-session-history";
@@ -23,7 +24,9 @@ import {
   createLoadAgentSessionHistory,
   createLoadSelectedSessionBaselineHistory,
   createReloadAgentSessionHistory,
+  createRevalidateAgentSessionHistory,
 } from "./history/session-history-loader";
+import { createSessionHistoryReadGeneration } from "./history/session-history-read-generation";
 import { createWorkflowSessionHistoryPromptPolicy } from "./history/workflow-session-history-policy";
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
 import { useRepoSessionReadModel } from "./hooks/use-repo-session-read-model";
@@ -147,6 +150,7 @@ export function useAgentOrchestratorOperations({
       workspaceRepoPath,
     ],
   );
+  const historyReadGeneration = useMemo(() => createSessionHistoryReadGeneration(), []);
   const sessionHistoryLoaders = useMemo(() => {
     const loaderArgs = {
       workspaceRepoPath,
@@ -162,16 +166,19 @@ export function useAgentOrchestratorOperations({
         loadRepoPromptOverrides: queryBackedPromptOverrides,
       }),
       loadSettingsSnapshot: () => loadSettingsSnapshotFromQuery(queryClient),
+      historyReadGeneration,
     };
 
     return {
       loadAgentSessionHistory: createLoadAgentSessionHistory(loaderArgs),
       loadSelectedSessionBaselineHistory: createLoadSelectedSessionBaselineHistory(loaderArgs),
       reloadAgentSessionHistory: createReloadAgentSessionHistory(loaderArgs),
+      revalidateAgentSessionHistory: createRevalidateAgentSessionHistory(loaderArgs),
     };
   }, [
     agentEngine,
     currentWorkspaceRepoPathRef,
+    historyReadGeneration,
     queryBackedPromptOverrides,
     queryClient,
     repoEpochRef,
@@ -188,11 +195,7 @@ export function useAgentOrchestratorOperations({
 
     await Promise.all([
       ...loadedSessions.map((session) =>
-        sessionHistoryLoaders.reloadAgentSessionHistory({
-          externalSessionId: session.externalSessionId,
-          runtimeKind: session.runtimeKind,
-          workingDirectory: session.workingDirectory,
-        }),
+        sessionHistoryLoaders.reloadAgentSessionHistory(toAgentSessionIdentity(session)),
       ),
       queryClient.invalidateQueries({
         queryKey: agentSessionHistoryQueryKeys.all,
@@ -332,6 +335,7 @@ export function useAgentOrchestratorOperations({
   const historyLoadActions = useMemo<AgentSessionHistoryLoadContextValue>(
     () => ({
       loadSelectedSessionBaselineHistory: sessionHistoryLoaders.loadSelectedSessionBaselineHistory,
+      revalidateAgentSessionHistory: sessionHistoryLoaders.revalidateAgentSessionHistory,
     }),
     [sessionHistoryLoaders],
   );

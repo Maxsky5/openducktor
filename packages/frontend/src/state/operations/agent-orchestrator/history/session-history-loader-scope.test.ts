@@ -13,6 +13,7 @@ import {
   createLoadAgentSessionHistory,
   loadSessionHistoryIntoStore,
 } from "./session-history-loader";
+import { createSessionHistoryReadGeneration } from "./session-history-read-generation";
 import { createWorkflowSessionHistoryPromptPolicy } from "./workflow-session-history-policy";
 
 const sessionTarget = {
@@ -20,6 +21,8 @@ const sessionTarget = {
   runtimeKind: "opencode",
   workingDirectory: "/repo/worktree",
 } satisfies AgentSessionIdentity;
+
+const historyReadGeneration = createSessionHistoryReadGeneration();
 
 const createSession = (): AgentSessionState =>
   createAgentSessionFixture({
@@ -88,6 +91,7 @@ describe("session history loader scope", () => {
       readSessionSnapshot: harness.readSessionSnapshot,
       updateSession: harness.updateSession,
       loadSystemPromptContext: createPromptPolicy(),
+      historyReadGeneration,
     });
 
     await loadAgentSessionHistory(sessionTarget);
@@ -111,6 +115,7 @@ describe("session history loader scope", () => {
       readSessionSnapshot: harness.readSessionSnapshot,
       updateSession: harness.updateSession,
       loadSystemPromptContext: createPromptPolicy(loadRepoPromptOverrides),
+      historyReadGeneration,
     });
 
     await expect(loadAgentSessionHistory(sessionTarget)).rejects.toThrow(
@@ -139,6 +144,7 @@ describe("session history loader scope", () => {
         taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
         loadRepoPromptOverrides,
       }),
+      historyReadGeneration,
     });
 
     await expect(loadAgentSessionHistory(sessionTarget)).resolves.not.toBeNull();
@@ -162,6 +168,7 @@ describe("session history loader scope", () => {
         updateSession: harness.updateSession,
         identity: sessionTarget,
         isStaleRepoOperation: () => false,
+        historyReadGeneration,
       }),
     ).rejects.toThrow(
       "Cannot load history for session 'external-1' because its association is missing.",
@@ -195,6 +202,7 @@ describe("session history loader scope", () => {
       identity: sessionTarget,
       loadSystemPromptContext: createPromptPolicy(loadRepoPromptOverrides),
       isStaleRepoOperation: () => false,
+      historyReadGeneration,
     });
 
     expect(historyInput).toMatchObject({
