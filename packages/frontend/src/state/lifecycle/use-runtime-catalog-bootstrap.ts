@@ -9,14 +9,14 @@ import type { ActiveWorkspace } from "@/types/state-slices";
 
 type UseRuntimeCatalogBootstrapArgs = {
   activeWorkspace: ActiveWorkspace | null;
-  enabledRuntimeDefinitions: RuntimeDescriptor[];
+  availableRuntimeDefinitions: RuntimeDescriptor[];
   runtimeHealthByRuntime: RepoRuntimeHealthMap;
   loadRepoRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
 };
 
 export function useRuntimeCatalogBootstrap({
   activeWorkspace,
-  enabledRuntimeDefinitions,
+  availableRuntimeDefinitions,
   runtimeHealthByRuntime,
   loadRepoRuntimeCatalog,
 }: UseRuntimeCatalogBootstrapArgs): void {
@@ -27,7 +27,7 @@ export function useRuntimeCatalogBootstrap({
     if (repoPath === null) {
       return;
     }
-    for (const definition of enabledRuntimeDefinitions) {
+    for (const definition of availableRuntimeDefinitions) {
       if (!isRepoRuntimeReady(runtimeHealthByRuntime[definition.kind] ?? null)) {
         continue;
       }
@@ -39,7 +39,7 @@ export function useRuntimeCatalogBootstrap({
       );
     }
   }, [
-    enabledRuntimeDefinitions,
+    availableRuntimeDefinitions,
     loadRepoRuntimeCatalog,
     queryClient,
     repoPath,

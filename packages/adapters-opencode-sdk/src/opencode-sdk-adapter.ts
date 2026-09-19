@@ -19,7 +19,7 @@ import type {
   EventUnsubscribe,
   ContinueInterruptedAgentTurnInput,
   ForkAgentSessionInput,
-  ListAgentRuntimeCatalogInput,
+  LoadAgentRuntimeCatalogInput,
   LoadAgentFileStatusInput,
   LoadAgentSessionDiffInput,
   LoadAgentSessionHistoryInput,
@@ -705,10 +705,10 @@ export class OpencodeSdkAdapter
     return target.parentID || null;
   }
 
-  async loadRuntimeCatalog(input: ListAgentRuntimeCatalogInput): Promise<AgentRuntimeCatalogRead> {
-    const clientInput = await this.resolveRuntimeClientInput(input, "load runtime catalog");
+  async loadRuntimeCatalog(input: LoadAgentRuntimeCatalogInput): Promise<AgentRuntimeCatalogRead> {
+    const runtimeClientInput = await this.resolveRuntimeClientInput(input, "load runtime catalog");
     return loadRuntimeCatalog(this.createClient, {
-      ...clientInput,
+      ...runtimeClientInput,
       repoPath: input.repoPath,
     });
   }

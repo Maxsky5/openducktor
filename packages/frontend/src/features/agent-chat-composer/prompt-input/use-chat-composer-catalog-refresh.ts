@@ -9,8 +9,6 @@ type UseChatComposerCatalogRefreshArgs = {
   loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
 };
 
-// The next consumer action (a menu open) fetches the combined catalog when the
-// cached entry is stale. A fresh entry is reused without a request.
 export const useChatComposerCatalogRefresh = ({
   promptInputRuntime,
   loadRuntimeCatalog,

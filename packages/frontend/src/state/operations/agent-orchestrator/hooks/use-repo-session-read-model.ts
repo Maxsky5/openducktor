@@ -847,8 +847,7 @@ export const useRepoSessionReadModel = ({
         return;
       }
       if (envelope.type === "slash_command_catalog_updated") {
-        // Claude derives skills from the same command list, so re-read the combined
-        // catalog for the exact runtime directory instead of writing one surface.
+        // Claude derives skills from the same command list, so re-read the whole catalog.
         runOrchestratorSideEffect(
           "agent-session-live-invalidate-slash-command-catalog",
           queryClient.invalidateQueries({

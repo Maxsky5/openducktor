@@ -14,43 +14,6 @@ import type {
 import type { CodexSessionHistoryError } from "../../ports/codex-session-history-error";
 import type { CodexSessionHistoryPort } from "../../ports/codex-session-history-port";
 
-const TRANSPORT_LOSS_OPERATIONS = new Set([
-  "codexAppServerTransport.ensureOpen",
-  "codexAppServerTransport.childProcess",
-  "codexAppServerTransport.sendMessage",
-  "codexAppServerTransport.close",
-  "codexAppServerTransport.rejectPendingRequestsForShutdown",
-]);
-
-const RUNTIME_UNAVAILABLE_MESSAGE =
-  "The Codex runtime is not reachable. Start the runtime and retry.";
-
-/**
- * A transport-loss failure means the request never reached a live runtime.
- * Pending requests wrap that failure with the request operation, so inspect
- * the cause chain. RPC errors and request timeouts keep the transport alive
- * and stay isolated to the caller.
- */
-const isTransportLoss = (cause: unknown): boolean => {
-  const visited = new Set<unknown>();
-  let current: unknown = cause;
-  while (current instanceof Error && !visited.has(current)) {
-    visited.add(current);
-    if (current instanceof HostResourceError) {
-      if (current.resource === "codexAppServerTransport") {
-        return true;
-      }
-    } else if (
-      current instanceof HostOperationError &&
-      TRANSPORT_LOSS_OPERATIONS.has(current.operation)
-    ) {
-      return true;
-    }
-    current = current.cause;
-  }
-  return false;
-};
-
 export const createCodexRuntimeTransport = (
   port: CodexAppServerPort & CodexSessionHistoryPort,
   runtimeId: string,
@@ -72,3 +35,39 @@ export const createCodexRuntimeTransport = (
     throw error;
   },
 });
+
+const TRANSPORT_LOSS_OPERATIONS = new Set([
+  "codexAppServerTransport.ensureOpen",
+  "codexAppServerTransport.childProcess",
+  "codexAppServerTransport.sendMessage",
+  "codexAppServerTransport.close",
+  "codexAppServerTransport.rejectPendingRequestsForShutdown",
+]);
+
+const RUNTIME_UNAVAILABLE_MESSAGE =
+  "The Codex runtime is not reachable. Start the runtime and retry.";
+
+/**
+ * Pending requests wrap a transport-loss failure with the request operation, so
+ * walk the cause chain. RPC errors and request timeouts keep the transport alive
+ * and stay isolated to the caller.
+ */
+const isTransportLoss = (cause: unknown): boolean => {
+  const visited = new Set<unknown>();
+  let current: unknown = cause;
+  while (current instanceof Error && !visited.has(current)) {
+    visited.add(current);
+    if (current instanceof HostResourceError) {
+      if (current.resource === "codexAppServerTransport") {
+        return true;
+      }
+    } else if (
+      current instanceof HostOperationError &&
+      TRANSPORT_LOSS_OPERATIONS.has(current.operation)
+    ) {
+      return true;
+    }
+    current = current.cause;
+  }
+  return false;
+};

@@ -10,7 +10,7 @@ import {
   type AgentRuntimeCatalogRead,
   type AgentSlashCommandCatalog,
   type AgentSubagentCatalog,
-  readAgentRuntimeCatalogSurface,
+  readCatalogSurface,
 } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
 import { detectAgentFileReferenceKind } from "./file-reference-utils";
@@ -96,9 +96,9 @@ export const loadRuntimeCatalog = async (
   };
 
   const [models, slashCommands, subagents] = await Promise.all([
-    readAgentRuntimeCatalogSurface(readModels),
-    readAgentRuntimeCatalogSurface(readSlashCommands),
-    readAgentRuntimeCatalogSurface(readSubagents),
+    readCatalogSurface(readModels),
+    readCatalogSurface(readSlashCommands),
+    readCatalogSurface(readSubagents),
   ]);
 
   return {

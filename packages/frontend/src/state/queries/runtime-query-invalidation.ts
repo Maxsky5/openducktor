@@ -36,11 +36,9 @@ const invalidateMatchingQueries = async (
   });
 };
 
-// The runtime lifecycle event reports a runtime start or stop. The host publishes it
-// only when a runtime instance starts or stops, and a replaced instance cannot serve
-// cached session reads or cached catalogs. Invalidate both. An active read refetches
-// on the ready event; a stopped runtime leaves its entries invalidated, so the next
-// read loads the new instance or fails with the runtime-unavailable message.
+// A replaced runtime instance cannot serve cached reads, so sessions and catalogs
+// are stale. An active read refetches on ready; a stopped runtime stays invalidated
+// until the next read.
 export const invalidateRuntimeQueries = (
   queryClient: QueryClient,
   scope: RepoRuntimeRef,
@@ -52,9 +50,8 @@ export const invalidateRuntimeQueries = (
     state,
   );
 
-// The lifecycle ready callback fires on every runtime ensure, including a workspace
-// switch that reuses a running runtime. Session reads are instance-bound and must
-// refresh. Catalogs are not instance-bound and stay cached across a switch.
+// The ready callback also fires on a workspace switch that reuses a running runtime.
+// Session reads are instance-bound; catalogs are not.
 export const invalidateRuntimeSessionQueries = (
   queryClient: QueryClient,
   scope: RepoRuntimeRef,

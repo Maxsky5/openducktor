@@ -47,35 +47,32 @@ import {
 } from "./readonly-transcript-session";
 import { errorMessageFromUnknown } from "./runtime-transcript-error";
 
-const retryActionWhenFailed = <Action>(failed: boolean, retry: Action): Action | null =>
-  failed ? retry : null;
-
-const resolveTranscriptSkillsQueryOptions = ({
+const resolveTranscriptCatalogQueryOptions = ({
   emptyReason,
   repoReadinessState,
   targetRuntimeKind,
-  runtimeCatalogRef,
+  runtimeRef,
   loadRepoRuntimeCatalog,
 }: {
   emptyReason: AgentSessionTranscriptEmptyReason | null;
   repoReadinessState: RepoRuntimeReadinessState;
   targetRuntimeKind: RuntimeKind | null;
-  runtimeCatalogRef: RuntimeWorkingDirectoryRef | null;
+  runtimeRef: RuntimeWorkingDirectoryRef | null;
   loadRepoRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
 }) => {
   if (emptyReason !== null) {
-    return skippedTranscriptSkillsQueryOptions;
+    return skippedTranscriptCatalogQueryOptions;
   }
   if (repoReadinessState !== "ready") {
-    return skippedTranscriptSkillsQueryOptions;
+    return skippedTranscriptCatalogQueryOptions;
   }
   if (targetRuntimeKind !== "claude") {
-    return skippedTranscriptSkillsQueryOptions;
+    return skippedTranscriptCatalogQueryOptions;
   }
-  if (runtimeCatalogRef === null) {
-    return skippedTranscriptSkillsQueryOptions;
+  if (runtimeRef === null) {
+    return skippedTranscriptCatalogQueryOptions;
   }
-  return runtimeCatalogQueryOptions(runtimeCatalogRef, loadRepoRuntimeCatalog);
+  return runtimeCatalogQueryOptions(runtimeRef, loadRepoRuntimeCatalog);
 };
 
 type UseRuntimeTranscriptSessionHistoryArgs = {
@@ -195,7 +192,7 @@ export function useRuntimeTranscriptSessionHistory({
       : skippedRuntimeSessionRefQueryOptions,
   );
   const runtimeSessionRef = runtimeSessionRefQuery.data ?? null;
-  const runtimeCatalogRef = useMemo<RuntimeWorkingDirectoryRef | null>(
+  const runtimeRef = useMemo<RuntimeWorkingDirectoryRef | null>(
     () =>
       runtimeSessionRef === null
         ? null
@@ -221,11 +218,11 @@ export function useRuntimeTranscriptSessionHistory({
   );
   const { refetch: refetchHistory } = historyQuery;
   const skillsQuery = useQuery(
-    resolveTranscriptSkillsQueryOptions({
+    resolveTranscriptCatalogQueryOptions({
       emptyReason,
       repoReadinessState,
       targetRuntimeKind,
-      runtimeCatalogRef,
+      runtimeRef,
       loadRepoRuntimeCatalog,
     }),
   );
@@ -282,28 +279,27 @@ export function useRuntimeTranscriptSessionHistory({
   const retryHistory = useCallback(() => {
     void refetchHistory();
   }, [refetchHistory]);
-  // Retry reloads the combined catalog for the transcript working directory.
   const [isRetryingSkills, setIsRetryingSkills] = useState(false);
   const retrySkills = useCallback(() => {
-    if (runtimeCatalogRef === null) {
+    if (runtimeRef === null) {
       return;
     }
     setIsRetryingSkills(true);
     void retryRuntimeCatalog({
       queryClient,
-      runtimeRef: runtimeCatalogRef,
+      runtimeRef,
       loadRuntimeCatalog: loadRepoRuntimeCatalog,
     }).finally(() => setIsRetryingSkills(false));
-  }, [loadRepoRuntimeCatalog, queryClient, runtimeCatalogRef]);
+  }, [loadRepoRuntimeCatalog, queryClient, runtimeRef]);
 
   return {
     session,
     interactionSession: matchingSession,
     transcriptState,
-    retryHistory: retryActionWhenFailed(historyQuery.error !== null, retryHistory),
+    retryHistory: historyQuery.error !== null ? retryHistory : null,
     isRetryingHistory: historyQuery.isFetching,
     skillSurfaceError: skillSurface.error,
-    retrySkills: retryActionWhenFailed(skillSurface.error !== null, retrySkills),
+    retrySkills: skillSurface.error !== null ? retrySkills : null,
     isRetryingSkills,
     replyAgentApproval,
     answerAgentQuestion,
@@ -359,7 +355,7 @@ const skippedRuntimeSessionRefQueryOptions = skippedQueryOptions<PolicyBoundSess
   refetchOnWindowFocus: false,
 });
 
-const skippedTranscriptSkillsQueryOptions = skippedQueryOptions<AgentRuntimeCatalog>({
+const skippedTranscriptCatalogQueryOptions = skippedQueryOptions<AgentRuntimeCatalog>({
   queryKey: ["runtime-transcript-skills", "skipped"] as const,
   staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
 });

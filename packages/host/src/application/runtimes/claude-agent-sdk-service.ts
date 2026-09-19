@@ -9,7 +9,7 @@ import type {
   AgentSessionTodoItem,
   ContinueInterruptedAgentTurnInput,
   ForkAgentSessionInput,
-  ListAgentRuntimeCatalogInput,
+  LoadAgentRuntimeCatalogInput,
   LoadAgentFileStatusInput,
   LoadAgentSessionDiffInput,
   LoadAgentSessionHistoryInput,
@@ -58,7 +58,7 @@ export type ClaudeAgentSdkService = {
   ): Effect.Effect<AgentSessionSummary, ClaudeAgentSdkServiceError>;
   releaseSession(input: SessionRef): Effect.Effect<void, ClaudeAgentSdkServiceError>;
   loadRuntimeCatalog(
-    input: ListAgentRuntimeCatalogInput,
+    input: LoadAgentRuntimeCatalogInput,
   ): Effect.Effect<AgentRuntimeCatalogRead, ClaudeAgentSdkServiceError>;
   searchFiles(
     input: SearchAgentFilesInput,

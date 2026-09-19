@@ -182,7 +182,7 @@ export function useAgentStudioChatComposer({
   } = useRuntimeAvailabilityContext();
   const queryClient = useQueryClient();
   const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
-  const loadCatalogForRepo = pickLoader(loadCatalog, loadRepoRuntimeCatalog);
+  const loadRuntimeCatalog = pickLoader(loadCatalog, loadRepoRuntimeCatalog);
   const loadFileSearchForRepo = pickLoader(loadFileSearch, loadRepoRuntimeFileSearch);
   const loadedSession = selectedSession.loadedSession;
   const selectedSessionIdentity = selectedSession.identity;
@@ -302,7 +302,7 @@ export function useAgentStudioChatComposer({
     repoPath: workspaceRepoPath,
     runtimeKinds: modelPickerRuntimeKinds,
     enabledRuntimeKinds: enabledModelPickerRuntimeKinds,
-    loadCatalog: loadCatalogForRepo,
+    loadRuntimeCatalog,
   });
   const modelPickerRuntimes = useMemo<ModelPickerRuntime[]>(() => {
     if (!hasSessionTarget) {
@@ -355,7 +355,7 @@ export function useAgentStudioChatComposer({
                 runtimeKind: descriptor.kind,
                 workingDirectory: selectedSessionIdentity.workingDirectory,
               },
-              loadRuntimeCatalog: loadCatalogForRepo,
+              loadRuntimeCatalog,
             });
           },
         }),
@@ -364,7 +364,7 @@ export function useAgentStudioChatComposer({
   }, [
     hasSessionTarget,
     isSessionModelCatalogLoading,
-    loadCatalogForRepo,
+    loadRuntimeCatalog,
     modelPickerRuntimeDefinitions,
     queryClient,
     repoModelPickerResources,
@@ -391,20 +391,20 @@ export function useAgentStudioChatComposer({
     promptInputRuntime,
     runtimeSupportsSlashCommands,
     reusablePrompts,
-    loadRuntimeCatalog: loadCatalogForRepo,
+    loadRuntimeCatalog,
   });
   const { skillCatalog, skills, skillsError, isSkillsLoading, retrySkills } = useChatComposerSkills(
     {
       promptInputRuntime,
       supportsSkillReferences,
-      loadRuntimeCatalog: loadCatalogForRepo,
+      loadRuntimeCatalog,
     },
   );
   const { subagentCatalog, subagents, subagentsError, isSubagentsLoading, retrySubagents } =
     useChatComposerSubagents({
       promptInputRuntime,
       supportsSubagentReferences,
-      loadRuntimeCatalog: loadCatalogForRepo,
+      loadRuntimeCatalog,
     });
   const {
     selectionCatalog,
@@ -471,7 +471,7 @@ export function useAgentStudioChatComposer({
   );
   const refreshCatalogIfStale = useChatComposerCatalogRefresh({
     promptInputRuntime,
-    loadRuntimeCatalog: loadCatalogForRepo,
+    loadRuntimeCatalog,
   });
   const isSelectionCatalogLoading = hasSessionTarget
     ? isSessionModelCatalogLoading
@@ -537,9 +537,8 @@ export function useAgentStudioChatComposer({
     selectionPolicy: modelPickerSelectionPolicy,
     favoriteState,
     onValueChange: handleSelectModelPair,
-    // The selected runtime catalog query stays enabled while the composer is
-    // mounted, so an enabled-transition refresh never runs for it. Refresh the
-    // cached catalog when the picker opens and the entry is stale.
+    // The catalog query stays enabled while the composer is mounted, so refresh
+    // the cached catalog when the picker opens and the entry is stale.
     onOpenChange: (open: boolean) => {
       setIsModelPickerOpen(open);
       if (open) {

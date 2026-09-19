@@ -47,9 +47,8 @@ export const useChatComposerCatalogSurface = <Catalog>({
     isLoading = catalogQuery.isLoading;
   }
 
-  // A failed surface stays retryable from the surface that needs it. The retry
-  // reloads the combined catalog for the runtime and working directory, so a
-  // partial response never mixes data from two runtime instances.
+  // The retry reads the combined catalog, so a partial response cannot mix data
+  // from two runtime instances.
   const runtimeRef =
     promptInputRuntime.state === "available" ? promptInputRuntime.runtimeRef : null;
   const retry =

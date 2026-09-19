@@ -39,7 +39,7 @@ import type {
   EventUnsubscribe,
   ContinueInterruptedAgentTurnInput,
   ForkAgentSessionInput,
-  ListAgentRuntimeCatalogInput,
+  LoadAgentRuntimeCatalogInput,
   ListSessionRuntimeSnapshotsInput,
   LoadAgentFileStatusInput,
   LoadAgentSessionDiffInput,
@@ -60,7 +60,7 @@ import {
   agentSessionRefsEqual,
   classifyAgentSessionActivity,
   classifySystemSlashCommandInvocation,
-  readAgentRuntimeCatalogSurface,
+  readCatalogSurface,
   withAgentSessionRef,
 } from "@openducktor/core";
 import { requireCodexPendingRequestKey } from "./codex-app-server-approvals";
@@ -743,7 +743,7 @@ export class CodexAppServerAdapter
     flushQueuedUserMessagesLaterImpl(this.turnLifecycleContext(), activeTurn);
   }
 
-  async loadRuntimeCatalog(input: ListAgentRuntimeCatalogInput): Promise<AgentRuntimeCatalogRead> {
+  async loadRuntimeCatalog(input: LoadAgentRuntimeCatalogInput): Promise<AgentRuntimeCatalogRead> {
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "load runtime catalog");
     const readModels = async (): Promise<AgentModelCatalog> =>
       toCatalog(await this.models.list(client, runtimeId));
@@ -760,9 +760,9 @@ export class CodexAppServerAdapter
     };
 
     const [models, slashCommands, skills] = await Promise.all([
-      readAgentRuntimeCatalogSurface(readModels),
-      readAgentRuntimeCatalogSurface(readSlashCommands),
-      readAgentRuntimeCatalogSurface(readSkills),
+      readCatalogSurface(readModels),
+      readCatalogSurface(readSlashCommands),
+      readCatalogSurface(readSkills),
     ]);
 
     return {

@@ -264,8 +264,8 @@ export const toOpenCodeRequestError = (
   cause: unknown,
   response?: ResponseMetadata,
 ): OpenCodeRequestError | AgentRuntimeQueryError => {
-  // A transport failure already carries the runtime failure code. Wrapping it
-  // would hide the unreachable runtime behind a surface-specific error.
+  // Keep the runtime failure: wrapping it would hide that the runtime is
+  // unreachable.
   if (cause instanceof AgentRuntimeQueryError) {
     return cause;
   }

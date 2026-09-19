@@ -168,19 +168,16 @@ export const useSessionRuntimeData = ({
       catalogQuery.data?.models,
       catalogQuery.error,
     );
-    const catalogQueryError = modelSurface.error;
     const todosQueryError = todosQuery.error instanceof Error ? todosQuery.error.message : null;
     const contextError = runtimeDataRefs.kind === "unavailable" ? runtimeDataRefs.error : null;
-    const resolvedCatalog = modelSurface.catalog;
-    const resolvedTodos = todosQuery.data ?? [];
     const isLoadingModelCatalog =
       isRuntimeReady && runtimeDataRefs.kind === "available" && catalogQuery.isFetching;
 
     return {
-      modelCatalog: resolvedCatalog,
-      todos: resolvedTodos,
+      modelCatalog: modelSurface.catalog,
+      todos: todosQuery.data ?? [],
       isLoadingModelCatalog,
-      catalogError: catalogQueryError,
+      catalogError: modelSurface.error,
       todosError: todosQueryError,
       runtimePolicyError,
       contextError,

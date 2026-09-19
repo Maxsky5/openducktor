@@ -21,7 +21,7 @@ import {
 type UseSessionStartModalRuntimeStateArgs = {
   initialCatalog: AgentModelCatalog | null | undefined;
   isOpen: boolean;
-  loadCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
+  loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
   runtimeDefinitions: RuntimeDescriptor[];
   selectedStartMode: AgentSessionStartMode;
   workspaceRepoPath: string | null;
@@ -43,7 +43,7 @@ const EMPTY_RUNTIME_KINDS: RuntimeKind[] = [];
 export function useSessionStartModalRuntimeState({
   initialCatalog,
   isOpen,
-  loadCatalog,
+  loadRuntimeCatalog,
   runtimeDefinitions,
   selectedStartMode,
   workspaceRepoPath,
@@ -103,7 +103,7 @@ export function useSessionStartModalRuntimeState({
     repoPath: workspaceRepoPath,
     runtimeKinds: eligibleRuntimeKinds,
     enabledRuntimeKinds,
-    loadCatalog,
+    loadRuntimeCatalog,
   });
   const catalogResources = useMemo(
     () =>

@@ -26,14 +26,14 @@ type UseRuntimeModelCatalogsArgs = {
   repoPath: string | null;
   runtimeKinds: readonly RuntimeKind[];
   enabledRuntimeKinds: readonly RuntimeKind[];
-  loadCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
+  loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
 };
 
 export function useRuntimeModelCatalogs({
   repoPath,
   runtimeKinds,
   enabledRuntimeKinds,
-  loadCatalog,
+  loadRuntimeCatalog,
 }: UseRuntimeModelCatalogsArgs) {
   const queryClient = useQueryClient();
   const uniqueRuntimeKinds = useMemo(() => Array.from(new Set(runtimeKinds)), [runtimeKinds]);
@@ -45,7 +45,7 @@ export function useRuntimeModelCatalogs({
         : null;
       return {
         ...(runtimeRef
-          ? runtimeCatalogQueryOptions(runtimeRef, loadCatalog)
+          ? runtimeCatalogQueryOptions(runtimeRef, loadRuntimeCatalog)
           : skippedRuntimeCatalogQueryOptions()),
         enabled: runtimeRef !== null && enabledRuntimeKindSet.has(runtimeKind),
       };
@@ -60,12 +60,11 @@ export function useRuntimeModelCatalogs({
           throw new Error(`Missing model catalog query for runtime '${runtimeKind}'.`);
         }
         const isEnabled = repoPath !== null && enabledRuntimeKindSet.has(runtimeKind);
-        const isFetching = query.isFetching;
         const surface = resolveRuntimeCatalogSurface(query.data?.models, query.error);
         return {
           runtimeKind,
           catalog: surface.catalog,
-          isFetching,
+          isFetching: query.isFetching,
           isEnabled,
           error: surface.error,
           retry: async (): Promise<void> => {
@@ -75,12 +74,19 @@ export function useRuntimeModelCatalogs({
             await retryRuntimeCatalog({
               queryClient,
               runtimeRef: { repoPath, runtimeKind, workingDirectory: repoPath },
-              loadRuntimeCatalog: loadCatalog,
+              loadRuntimeCatalog,
             });
           },
         };
       }),
-    [catalogQueries, enabledRuntimeKindSet, loadCatalog, queryClient, repoPath, uniqueRuntimeKinds],
+    [
+      catalogQueries,
+      enabledRuntimeKindSet,
+      loadRuntimeCatalog,
+      queryClient,
+      repoPath,
+      uniqueRuntimeKinds,
+    ],
   );
 
   return { resources } satisfies { resources: RuntimeModelCatalogQueryResource[] };

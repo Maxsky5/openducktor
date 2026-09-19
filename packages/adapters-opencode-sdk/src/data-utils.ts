@@ -17,8 +17,8 @@ export const unwrapData = <T>(
     return payload.data;
   }
 
-  // No HTTP response means the request never reached the runtime. This is a
-  // transport loss, so it fails the whole read instead of one surface.
+  // No HTTP response and an Error cause means the request never reached the
+  // runtime. Keep the runtime error so callers report an unreachable runtime.
   if (payload.response === undefined && payload.error instanceof Error) {
     throw new AgentRuntimeQueryError(
       "runtime_unavailable",

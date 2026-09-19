@@ -163,7 +163,7 @@ export type LoadAgentSessionHistoryInput =
 
 export type LoadAgentSessionTodosInput = PolicyBoundSessionRef;
 
-export type ListAgentRuntimeCatalogInput =
+export type LoadAgentRuntimeCatalogInput =
   import("@openducktor/contracts").AgentRuntimeLoadCatalogInput;
 
 export type AgentRuntimeCatalogSurfaceRead<Catalog> =
@@ -244,7 +244,7 @@ export interface AgentRuntimeDefinitionsPort {
 }
 
 export interface AgentCatalogPort {
-  loadRuntimeCatalog(input: ListAgentRuntimeCatalogInput): Promise<AgentRuntimeCatalogRead>;
+  loadRuntimeCatalog(input: LoadAgentRuntimeCatalogInput): Promise<AgentRuntimeCatalogRead>;
   searchFiles(input: SearchAgentFilesInput): Promise<AgentFileSearchResult[]>;
 }
 

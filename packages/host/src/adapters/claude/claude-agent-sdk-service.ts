@@ -5,7 +5,7 @@ import type {
   AgentSessionScope,
   ContinueInterruptedAgentTurnInput,
   ForkAgentSessionInput,
-  ListAgentRuntimeCatalogInput,
+  LoadAgentRuntimeCatalogInput,
   LoadAgentFileStatusInput,
   LoadAgentSessionDiffInput,
   LoadAgentSessionHistoryInput,
@@ -22,10 +22,7 @@ import type {
 import { Effect } from "effect";
 import { HostValidationError, toHostOperationError } from "../../effect/host-errors";
 import { resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
-import {
-  loadClaudeHistory,
-  loadClaudeRuntimeCatalog,
-} from "./claude-agent-sdk-catalog";
+import { loadClaudeHistory, loadClaudeRuntimeCatalog } from "./claude-agent-sdk-catalog";
 import {
   type ClaudeWorkspaceFileSearch,
   createClaudeWorkspaceFileSearch,
@@ -204,7 +201,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     });
   }
 
-  loadRuntimeCatalog(input: ListAgentRuntimeCatalogInput) {
+  loadRuntimeCatalog(input: LoadAgentRuntimeCatalogInput) {
     return fromPromise("claudeRuntime.loadRuntimeCatalog", () =>
       loadClaudeRuntimeCatalog(
         input,

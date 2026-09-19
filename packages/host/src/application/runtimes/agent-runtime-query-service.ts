@@ -18,7 +18,7 @@ import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { TaskReader } from "../../ports/task-repository-ports";
 import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { resolveRepoPath } from "./runtime-orchestrator-model";
-import { toAgentRuntimeCatalogResponse } from "./agent-runtime-catalog-response";
+import { toCatalogResponse } from "./agent-runtime-catalog-response";
 import { requireSessionScope, type QueryInput } from "./runtime-query-scope";
 import { requireRuntimeWorkingDirectory } from "./runtime-working-directory";
 import {
@@ -128,7 +128,7 @@ export const createAgentRuntimeQueryService = (
       read("loadRuntimeCatalog", input, (queries, request, runtime) =>
         queries
           .loadRuntimeCatalog(request)
-          .pipe(Effect.map((catalogRead) => toAgentRuntimeCatalogResponse(catalogRead, runtime))),
+          .pipe(Effect.map((catalogRead) => toCatalogResponse(catalogRead, runtime))),
       ),
     searchFiles: (input) =>
       read("searchFiles", input, (queries, request) => queries.searchFiles(request)),

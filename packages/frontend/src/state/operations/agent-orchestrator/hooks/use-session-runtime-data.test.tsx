@@ -529,7 +529,7 @@ describe("useSessionRuntimeData", () => {
         repoPath: args.repoPath,
         runtimeKinds: ["opencode"] as const,
         enabledRuntimeKinds: [] as const,
-        loadCatalog: args.loadRuntimeCatalog,
+        loadRuntimeCatalog: args.loadRuntimeCatalog,
       }).resources,
     });
     const harness = createHookHarness(

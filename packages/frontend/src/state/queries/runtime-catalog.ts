@@ -13,9 +13,11 @@ import { SKIPPED_QUERY_KEY_SEGMENT, skippedQueryOptions } from "./skipped-query"
 export const RUNTIME_CATALOG_STALE_TIME_MS = 5 * 60_000;
 export const RUNTIME_FILE_SEARCH_STALE_TIME_MS = 15_000;
 
+const runtimeCatalogKey = ["runtime-catalog"] as const;
+
 export const runtimeCatalogQueryKeys = {
-  all: ["runtime-catalog"] as const,
-  skipped: ["runtime-catalog", SKIPPED_QUERY_KEY_SEGMENT] as const,
+  all: runtimeCatalogKey,
+  skipped: [...runtimeCatalogKey, SKIPPED_QUERY_KEY_SEGMENT] as const,
   // Exact key for one runtime working directory read.
   catalog: ({ repoPath, runtimeKind, workingDirectory }: RuntimeWorkingDirectoryRef) =>
     [
@@ -78,10 +80,6 @@ export const loadRuntimeCatalogFromQuery = (
 ): Promise<AgentRuntimeCatalog> =>
   queryClient.fetchQuery(runtimeCatalogQueryOptions(runtimeRef, loadRuntimeCatalog));
 
-/**
- * The next consumer action fetches the combined catalog when the cached entry is
- * stale. A fresh entry is reused without a request.
- */
 export const refreshRuntimeCatalogIfStale = (
   queryClient: QueryClient,
   runtimeRef: RuntimeWorkingDirectoryRef,
@@ -99,11 +97,8 @@ export type RetryRuntimeCatalogArgs = {
 };
 
 /**
- * A failed-surface retry forces a combined catalog read for the runtime and
- * working directory. The request keeps the complete-catalog contract, so the
- * response replaces every surface and cannot mix data from two runtime
- * instances or revive an invalidated entry. A whole-request failure stays in
- * the query error path.
+ * Marks the entry stale first: fetchQuery skips the network for a fresh entry.
+ * A failed read lands in the query error path.
  */
 export const retryRuntimeCatalog = async ({
   queryClient,
@@ -125,10 +120,8 @@ export type ResolvedRuntimeCatalogSurface<Catalog> = {
 };
 
 /**
- * Projects one catalog surface for a consumer. TanStack Query keeps the last
- * data and error after a failed refetch, so any whole-request error discards
- * the retained surface and reports the query error until a read succeeds.
- * A background refresh with no prior error keeps valid retained data.
+ * A query error hides retained data, even while a retry runs. Without a query
+ * error, a failed surface reports its own message.
  */
 export const resolveRuntimeCatalogSurface = <Catalog>(
   surface: AgentRuntimeCatalogSurface<Catalog> | undefined,

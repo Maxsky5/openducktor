@@ -1,16 +1,16 @@
 import { expect, test } from "bun:test";
 import { AgentRuntimeQueryError } from "../ports/agent-runtime-query-error";
-import { readAgentRuntimeCatalogSurface } from "./agent-runtime-catalog";
+import { readCatalogSurface } from "./agent-runtime-catalog";
 
 test("returns an available surface for a successful read", async () => {
-  const surface = await readAgentRuntimeCatalogSurface(async () => ({ skills: [] }));
+  const surface = await readCatalogSurface(async () => ({ skills: [] }));
 
   expect(surface).toEqual({ status: "available", catalog: { skills: [] } });
 });
 
 test("keeps a surface-specific failure inside the surface", async () => {
   const cause = new Error("skill payload is not a list");
-  const surface = await readAgentRuntimeCatalogSurface(async () => {
+  const surface = await readCatalogSurface(async () => {
     throw cause;
   });
 
@@ -21,7 +21,7 @@ test("rethrows a native runtime-query failure for the whole combined read", asyn
   const cause = new AgentRuntimeQueryError("runtime_unavailable", "The runtime is not reachable.");
 
   await expect(
-    readAgentRuntimeCatalogSurface(async () => {
+    readCatalogSurface(async () => {
       throw cause;
     }),
   ).rejects.toBe(cause);

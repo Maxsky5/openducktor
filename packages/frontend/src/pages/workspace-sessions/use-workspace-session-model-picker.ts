@@ -41,7 +41,7 @@ export function useWorkspaceSessionModelPicker(
     repoPath,
     runtimeKinds,
     enabledRuntimeKinds,
-    loadCatalog: loadRepoRuntimeCatalog,
+    loadRuntimeCatalog: loadRepoRuntimeCatalog,
   });
   const favoriteState = useAgentModelFavorites({
     saveAgentModelFavorites: host.workspaceUpdateAgentModelFavorites,

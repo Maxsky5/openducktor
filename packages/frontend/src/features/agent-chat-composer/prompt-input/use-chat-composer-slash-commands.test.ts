@@ -3,7 +3,7 @@ import {
   MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
   type ReusablePrompt,
 } from "@openducktor/contracts";
-import type { AgentSlashCommand, ListAgentRuntimeCatalogInput } from "@openducktor/core";
+import type { AgentSlashCommand, LoadAgentRuntimeCatalogInput } from "@openducktor/core";
 import { createElement, type PropsWithChildren } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
@@ -216,7 +216,7 @@ describe("useChatComposerSlashCommands", () => {
       hints: [],
     };
     let attempts = 0;
-    const loadRuntimeCatalog = mock(async (_input: ListAgentRuntimeCatalogInput) => {
+    const loadRuntimeCatalog = mock(async (_input: LoadAgentRuntimeCatalogInput) => {
       attempts += 1;
       return attempts === 1
         ? { slashCommands: { status: "failed" as const, message: "Slash command list offline." } }

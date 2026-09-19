@@ -111,9 +111,8 @@ export const useChatComposerSlashCommands = ({
     slashCommandsError = resolved.error;
     isSlashCommandsLoading = slashCommandsQuery.isLoading;
   }
-  // The retry reloads the combined catalog for the runtime and working
-  // directory. OpenCode supports slash commands but not skills, so this surface
-  // owns its own retry instead of borrowing the skill retry.
+  // OpenCode supports slash commands but not skills, so this surface retries the
+  // catalog on its own.
   const runtimeRef =
     promptInputRuntime.state === "available" ? promptInputRuntime.runtimeRef : null;
   const retrySlashCommands =

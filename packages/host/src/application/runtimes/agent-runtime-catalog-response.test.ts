@@ -4,7 +4,7 @@ import {
   RUNTIME_DESCRIPTORS_BY_KIND,
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
-import { toAgentRuntimeCatalogResponse } from "./agent-runtime-catalog-response";
+import { toCatalogResponse } from "./agent-runtime-catalog-response";
 
 const runtime: RuntimeInstanceSummary = {
   runtimeId: "runtime-1",
@@ -20,10 +20,10 @@ const runtime: RuntimeInstanceSummary = {
 
 const modelsCatalog = { models: [], defaultModelsByProvider: {} };
 
-describe("toAgentRuntimeCatalogResponse", () => {
+describe("toCatalogResponse", () => {
   test("passes available surfaces through and keeps the runtime descriptor", () => {
     expect(
-      toAgentRuntimeCatalogResponse(
+      toCatalogResponse(
         {
           runtime: CLAUDE_RUNTIME_DESCRIPTOR,
           models: { status: "available", catalog: modelsCatalog },
@@ -37,13 +37,13 @@ describe("toAgentRuntimeCatalogResponse", () => {
   });
 
   test("omits surfaces the adapter does not serve", () => {
-    const response = toAgentRuntimeCatalogResponse({}, runtime);
+    const response = toCatalogResponse({}, runtime);
 
     expect(response).toEqual({});
   });
 
   test("names the runtime and the surface for a failed surface read", () => {
-    const response = toAgentRuntimeCatalogResponse(
+    const response = toCatalogResponse(
       {
         skills: { status: "failed", cause: new Error("skill index unavailable") },
       },
@@ -57,7 +57,7 @@ describe("toAgentRuntimeCatalogResponse", () => {
   });
 
   test("names the invalid field for invalid catalog data", () => {
-    const response = toAgentRuntimeCatalogResponse(
+    const response = toCatalogResponse(
       {
         // SAFETY: Invalid catalog data tests the host-side validation path.
         models: { status: "available", catalog: { models: "broken" } } as never,
@@ -75,7 +75,7 @@ describe("toAgentRuntimeCatalogResponse", () => {
   });
 
   test("keeps the other surfaces when one surface fails", () => {
-    const response = toAgentRuntimeCatalogResponse(
+    const response = toCatalogResponse(
       {
         models: { status: "available", catalog: modelsCatalog },
         subagents: { status: "failed", cause: new Error("agent index unavailable") },

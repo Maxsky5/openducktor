@@ -103,7 +103,7 @@ export function useSessionStartModalState({
     runtimeDefinitionsError,
     runtimeSettingsError,
   } = useRuntimeAvailabilityContext();
-  const loadCatalogForRepo = loadCatalog ?? loadRepoRuntimeCatalog;
+  const loadRuntimeCatalog = loadCatalog ?? loadRepoRuntimeCatalog;
   const [intent, setIntent] = useState<SessionStartModalIntent | null>(null);
   const [selection, setSelection] = useState<AgentModelSelection | null>(null);
   const [selectedTargetBranch, setSelectedTargetBranch] = useState("");
@@ -126,7 +126,7 @@ export function useSessionStartModalState({
   } = useSessionStartModalRuntimeState({
     initialCatalog,
     isOpen: intent !== null,
-    loadCatalog: loadCatalogForRepo,
+    loadRuntimeCatalog,
     runtimeDefinitions: availableRuntimeDefinitions,
     selectedStartMode: selectedStartModeForRuntime,
     workspaceRepoPath,

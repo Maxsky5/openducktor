@@ -82,7 +82,7 @@ export function AppLifecycleStateProvider({
 
   useRuntimeCatalogBootstrap({
     activeWorkspace,
-    enabledRuntimeDefinitions: availableRuntimeDefinitions,
+    availableRuntimeDefinitions,
     runtimeHealthByRuntime,
     loadRepoRuntimeCatalog,
   });

@@ -1,6 +1,6 @@
 import { AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS } from "@openducktor/contracts";
 import type {
-  ListAgentRuntimeCatalogInput,
+  LoadAgentRuntimeCatalogInput,
   LoadAgentFileStatusInput,
   LoadAgentSessionDiffInput,
   LoadAgentSessionHistoryInput,
@@ -12,7 +12,7 @@ import type { InvokeFn } from "./invoke-utils";
 export class HostAgentRuntimeQueryClient {
   constructor(private readonly invokeFn: InvokeFn) {}
 
-  agentRuntimeLoadCatalog(input: ListAgentRuntimeCatalogInput) {
+  agentRuntimeLoadCatalog(input: LoadAgentRuntimeCatalogInput) {
     const contract = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.loadCatalog;
     return this.invokeFn(
       contract.command,

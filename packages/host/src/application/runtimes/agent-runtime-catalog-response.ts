@@ -11,7 +11,7 @@ import type { AgentRuntimeCatalogRead, AgentRuntimeCatalogSurfaceRead } from "@o
 import { z } from "zod";
 import { errorMessage } from "../../effect/host-errors";
 
-export const toAgentRuntimeCatalogResponse = (
+export const toCatalogResponse = (
   read: AgentRuntimeCatalogRead,
   runtime: RuntimeInstanceSummary,
 ): AgentRuntimeCatalog => {
@@ -21,10 +21,15 @@ export const toAgentRuntimeCatalogResponse = (
     response.runtime = read.runtime;
   }
   if (read.models !== undefined) {
-    response.models = toSurface(label, "model catalog", read.models, agentModelCatalogSchema);
+    response.models = toSurfaceResponse(
+      label,
+      "model catalog",
+      read.models,
+      agentModelCatalogSchema,
+    );
   }
   if (read.slashCommands !== undefined) {
-    response.slashCommands = toSurface(
+    response.slashCommands = toSurfaceResponse(
       label,
       "slash command catalog",
       read.slashCommands,
@@ -32,10 +37,10 @@ export const toAgentRuntimeCatalogResponse = (
     );
   }
   if (read.skills !== undefined) {
-    response.skills = toSurface(label, "skill catalog", read.skills, skillCatalogSchema);
+    response.skills = toSurfaceResponse(label, "skill catalog", read.skills, skillCatalogSchema);
   }
   if (read.subagents !== undefined) {
-    response.subagents = toSurface(
+    response.subagents = toSurfaceResponse(
       label,
       "subagent catalog",
       read.subagents,
@@ -45,23 +50,23 @@ export const toAgentRuntimeCatalogResponse = (
   return response;
 };
 
-const toSurface = <Catalog>(
+const toSurfaceResponse = <Catalog>(
   label: string,
-  surface: string,
+  surfaceName: string,
   read: AgentRuntimeCatalogSurfaceRead<Catalog>,
   schema: z.ZodType<Catalog>,
 ): AgentRuntimeCatalogSurface<Catalog> => {
   if (read.status === "failed") {
     return {
       status: "failed",
-      message: `${label} could not load ${surface}. ${errorMessage(read.cause)} Retry this surface.`,
+      message: `${label} could not load ${surfaceName}. ${errorMessage(read.cause)} Retry this surface.`,
     };
   }
   const parsed = schema.safeParse(read.catalog);
   if (!parsed.success) {
     return {
       status: "failed",
-      message: `${label} returned invalid ${surface} data. ${formatIssues(parsed.error)} Update the runtime and retry this surface.`,
+      message: `${label} returned invalid ${surfaceName} data. ${formatIssues(parsed.error)} Update the runtime and retry this surface.`,
     };
   }
   return { status: "available", catalog: read.catalog };

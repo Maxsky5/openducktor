@@ -15,7 +15,7 @@ type NativeQueryResponse<Method extends keyof NativeAgentRuntimeQueries> = Await
   ReturnType<NativeAgentRuntimeQueries[Method]>
 >;
 
-/** Effect-returning native reads. Adapter results keep their native causes. */
+/** Native reads as Effects. Failures keep the adapter cause. */
 export type NativeAgentRuntimeQueryPort = {
   readonly [Method in keyof NativeAgentRuntimeQueries]: (
     input: Parameters<NativeAgentRuntimeQueries[Method]>[0],
@@ -25,7 +25,7 @@ export type NativeAgentRuntimeQueryPort = {
 type HostQueryResponse<Method extends keyof NativeAgentRuntimeQueries> =
   Method extends "loadRuntimeCatalog" ? AgentRuntimeCatalog : NativeQueryResponse<Method>;
 
-/** Application reads. The catalog response carries user-facing surface messages. */
+/** Application reads. Catalog failures carry user-facing messages. */
 export type AgentRuntimeQueryPort = {
   readonly [Method in keyof NativeAgentRuntimeQueries]: (
     input: Parameters<NativeAgentRuntimeQueries[Method]>[0],

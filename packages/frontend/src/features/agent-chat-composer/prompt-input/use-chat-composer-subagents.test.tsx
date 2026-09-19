@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import type {
   AgentSubagentCatalog,
   AgentRuntimeCatalog,
-  ListAgentRuntimeCatalogInput,
+  LoadAgentRuntimeCatalogInput,
 } from "@openducktor/core";
 import { createElement, type PropsWithChildren } from "react";
 import { QueryProvider } from "@/lib/query-provider";
@@ -162,7 +162,7 @@ describe("useChatComposerSubagents", () => {
       subagents: [{ id: "reviewer", name: "reviewer", label: "Reviewer" }],
     };
     let attempts = 0;
-    const loadRuntimeCatalog = mock(async (_input: ListAgentRuntimeCatalogInput) => {
+    const loadRuntimeCatalog = mock(async (_input: LoadAgentRuntimeCatalogInput) => {
       attempts += 1;
       return attempts === 1
         ? { subagents: { status: "failed" as const, message: "Subagent list offline." } }

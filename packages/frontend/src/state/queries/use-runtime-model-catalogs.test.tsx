@@ -53,7 +53,7 @@ describe("useRuntimeModelCatalogs", () => {
         repoPath: "/repo",
         runtimeKinds: ["opencode"] as const,
         enabledRuntimeKinds: ["opencode"] as const,
-        loadCatalog,
+        loadRuntimeCatalog: loadCatalog,
       },
       { wrapper },
     );
@@ -92,7 +92,7 @@ describe("useRuntimeModelCatalogs", () => {
         repoPath: "/repo",
         runtimeKinds: ["opencode", "codex"] as const,
         enabledRuntimeKinds: ["opencode", "codex"] as const,
-        loadCatalog,
+        loadRuntimeCatalog: loadCatalog,
       },
       { wrapper },
     );
@@ -136,7 +136,7 @@ describe("useRuntimeModelCatalogs", () => {
         repoPath: "/repo",
         runtimeKinds: ["opencode", "codex"] as const,
         enabledRuntimeKinds: ["codex"] as const,
-        loadCatalog,
+        loadRuntimeCatalog: loadCatalog,
       },
       { wrapper },
     );
@@ -173,7 +173,7 @@ describe("useRuntimeModelCatalogs", () => {
         repoPath: "/repo",
         runtimeKinds: ["opencode"] as const,
         enabledRuntimeKinds: ["opencode"] as const,
-        loadCatalog,
+        loadRuntimeCatalog: loadCatalog,
       },
       { wrapper },
     );
