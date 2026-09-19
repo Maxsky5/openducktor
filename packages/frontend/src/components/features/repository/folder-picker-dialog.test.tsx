@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, jest, mock, spyOn, test } from "bun:test";
 import type { DirectoryListing, FilesystemListDirectoryInput } from "@openducktor/contracts";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
@@ -472,10 +472,16 @@ describe("FolderPickerDialog", () => {
       if (!tree) throw new Error("Missing directory tree");
       expect(tree.classList.contains("min-h-0")).toBe(true);
       expect(tree.classList.contains("flex-1")).toBe(true);
+      jest.useFakeTimers();
       fireEvent.click(nextButton);
 
       expect(screen.getByText("/Users/dev/next")).toBeTruthy();
-      expect(screen.getByText("Loading directories…")).toBeTruthy();
+      const loadingMessage = screen.getByText<HTMLDivElement>("Loading directories…");
+      expect(loadingMessage.hidden).toBe(true);
+      act(() => jest.advanceTimersByTime(499));
+      expect(loadingMessage.hidden).toBe(true);
+      act(() => jest.advanceTimersByTime(1));
+      expect(loadingMessage.hidden).toBe(false);
       expect(document.querySelector('[data-slot="folder-picker-directory-tree"]')).toBe(tree);
       expect(tree.getAttribute("aria-busy")).toBe("true");
       const loading = document.querySelector<HTMLElement>(
@@ -520,6 +526,7 @@ describe("FolderPickerDialog", () => {
       expect(document.querySelector('[data-slot="folder-picker-directory-tree"]')).toBe(tree);
       expect(tree.getAttribute("aria-busy")).toBe("false");
     } finally {
+      jest.useRealTimers();
       rendered.unmount();
     }
   });
