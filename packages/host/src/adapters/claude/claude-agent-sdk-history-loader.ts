@@ -10,6 +10,7 @@ import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import { isLiveFinalAssistantStopReason } from "./claude-agent-sdk-history-assistant";
 import {
   type ClaudeHistoryMessage,
+  isClaudeSessionUnavailableError,
   loadClaudeHistoryProjectionInput,
 } from "./claude-agent-sdk-history-import";
 import type { ClaudeLiveUserMessage } from "./claude-agent-sdk-history-support";
@@ -18,6 +19,7 @@ import {
   isClaudeSubagentTranscriptTarget,
   parseClaudeTranscriptTarget,
 } from "./claude-agent-sdk-subagent-transcripts";
+import { hasActiveClaudeWork } from "./claude-agent-sdk-session-store";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
 import { readStringProp } from "./claude-agent-sdk-utils";
 
@@ -34,6 +36,7 @@ const claudeSubagentAssistantMessageSchema = z.looseObject({
 });
 
 export type ClaudeLiveHistoryContext = {
+  hasActiveWork: boolean;
   source: "fresh" | "persisted";
   userMessages: readonly ClaudeLiveUserMessage[];
 };
@@ -43,6 +46,7 @@ export type ClaudeLiveHistoryContext = {
  * fresh; a resumed or forked session owns a persisted transcript.
  */
 export const claudeLiveHistoryContext = (session: ClaudeSession): ClaudeLiveHistoryContext => ({
+  hasActiveWork: hasActiveClaudeWork(session),
   source:
     "externalSessionId" in session.input || "parentExternalSessionId" in session.input
       ? "persisted"
@@ -229,7 +233,26 @@ export const loadClaudeHistory = async (
   if (liveContext?.source === "fresh" && liveContext.userMessages.length === 0) {
     return finalizeClaudeHistory(input, []);
   }
-  const { messages, subagentAgentIdsByToolUseId } = await loadClaudeHistoryProjectionInput(input);
+  let projectionInput;
+  try {
+    projectionInput = await loadClaudeHistoryProjectionInput(input);
+  } catch (cause) {
+    // A selected-session revalidation can follow the first accepted live message before
+    // Claude makes the new transcript discoverable. The matching fresh session proves
+    // ownership, and its event stream remains the source for live transcript updates.
+    if (
+      liveContext?.source !== "fresh" ||
+      !liveContext.hasActiveWork ||
+      !isClaudeSessionUnavailableError(cause)
+    ) {
+      throw cause;
+    }
+    projectionInput = {
+      messages: [],
+      subagentAgentIdsByToolUseId: new Map<string, string>(),
+    };
+  }
+  const { messages, subagentAgentIdsByToolUseId } = projectionInput;
   const history = toClaudeHistoryMessages(messages, now, liveContext?.userMessages ?? [], {
     includeNestedEntries: isClaudeSubagentTranscriptTarget(input.externalSessionId),
     subagentAgentIdsByToolUseId,

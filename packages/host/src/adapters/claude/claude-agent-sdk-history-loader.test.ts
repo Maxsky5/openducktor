@@ -96,7 +96,7 @@ describe("loadClaudeHistory", () => {
           },
         },
         () => "2026-07-17T10:01:01.000Z",
-        { source: "fresh", userMessages: [] },
+        { hasActiveWork: false, source: "fresh", userMessages: [] },
       ),
     ).resolves.toEqual([
       {
@@ -107,6 +107,70 @@ describe("loadClaudeHistory", () => {
         parts: [],
       },
     ]);
+  });
+
+  test("keeps a fresh accepted user turn visible before Claude creates its transcript", async () => {
+    await expect(
+      loadClaudeHistory(
+        {
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/missing-worktree",
+          externalSessionId: "fresh-session",
+          runtimePolicy: { kind: "claude" },
+        },
+        () => "2026-07-17T10:01:01.000Z",
+        {
+          hasActiveWork: true,
+          source: "fresh",
+          userMessages: [
+            {
+              messageId: "user-1",
+              text: "Inspect the prompt builder.",
+              timestamp: "2026-07-17T10:01:00.000Z",
+              state: "read",
+            },
+          ],
+        },
+      ),
+    ).resolves.toEqual([
+      {
+        messageId: "user-1",
+        role: "user",
+        timestamp: "2026-07-17T10:01:00.000Z",
+        text: "Inspect the prompt builder.",
+        displayParts: [{ kind: "text", text: "Inspect the prompt builder." }],
+        state: "read",
+        parts: [],
+      },
+    ]);
+  });
+
+  test("propagates a missing transcript after fresh live work is no longer active", async () => {
+    await expect(
+      loadClaudeHistory(
+        {
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/missing-worktree",
+          externalSessionId: "fresh-session",
+          runtimePolicy: { kind: "claude" },
+        },
+        () => "2026-07-17T10:01:01.000Z",
+        {
+          hasActiveWork: false,
+          source: "fresh",
+          userMessages: [
+            {
+              messageId: "user-1",
+              text: "Inspect the prompt builder.",
+              timestamp: "2026-07-17T10:01:00.000Z",
+              state: "read",
+            },
+          ],
+        },
+      ),
+    ).rejects.toMatchObject({ code: "request_failed" });
   });
 
   test("imports persisted history for a resumed live session without new user turns", async () => {
@@ -120,7 +184,7 @@ describe("loadClaudeHistory", () => {
           runtimePolicy: { kind: "claude" },
         },
         () => "2026-07-17T10:01:01.000Z",
-        { source: "persisted", userMessages: [] },
+        { hasActiveWork: false, source: "persisted", userMessages: [] },
       ),
     ).rejects.toMatchObject({
       code: "request_failed",
@@ -154,6 +218,7 @@ describe("claudeLiveHistoryContext", () => {
         createClaudeSession({ acceptedUserMessages, queuedSdkMessages: [queuedMessage] }),
       ),
     ).toEqual({
+      hasActiveWork: true,
       source: "fresh",
       userMessages: [{ ...acceptedUserMessage, state: "queued" }],
     });
@@ -175,6 +240,7 @@ describe("claudeLiveHistoryContext", () => {
         }),
       ),
     ).toEqual({
+      hasActiveWork: false,
       source: "persisted",
       userMessages: [{ ...acceptedUserMessage, state: "read" }],
     });
