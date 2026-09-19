@@ -52,10 +52,13 @@ jobs:
         include:
           - label: Linux
             runner: ubuntu-latest
+            bunCacheDir: ~/.bun/install/cache
           - label: macOS
             runner: macos-15
+            bunCacheDir: ~/.bun/install/cache
           - label: Windows
             runner: windows-latest
+            bunCacheDir: D:/bun-cache
 
     steps:
       - name: Checkout
@@ -71,10 +74,17 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
+      - name: Use a same-volume Bun install cache
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          echo "BUN_INSTALL_CACHE_DIR=${{ matrix.bunCacheDir }}" >> "$GITHUB_ENV"
+          mkdir -p "${{ matrix.bunCacheDir }}"
+
       - name: Cache Bun download cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/.bun/install/cache
+          path: ${{ matrix.bunCacheDir }}
           key: ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-${{ hashFiles('bun.lock') }}
           restore-keys: |
             ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-

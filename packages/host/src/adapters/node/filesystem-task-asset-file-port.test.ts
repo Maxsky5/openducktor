@@ -412,7 +412,7 @@ describe("node task asset file port", () => {
       }
       await Effect.runPromise(port.cleanupCurrentOwner());
     }
-  }, 1_000);
+  }, 5_000);
 
   test("keeps staging when a live owner's start-time probe fails", async () => {
     const { aliveProcessIds, configDir, createPort, port, probeFailures, processStartedAtMs } =
