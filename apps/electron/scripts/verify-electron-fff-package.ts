@@ -1,8 +1,9 @@
 import { realpathSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
+import { statFile } from "@electron/asar";
 import { Effect } from "effect";
 import { runElectronEffect } from "../src/effect/electron-boundary";
 import { ElectronOperationError, errorMessage } from "../src/effect/electron-errors";
@@ -11,6 +12,7 @@ import type { ElectronReleaseArch, ElectronReleasePlatform } from "./electron-re
 
 const probeScanTimeoutMs = 5_000;
 const probeFileName = "openducktor-fff-package-check.txt";
+const fffPackageArchiveEntry = "node_modules/@ff-labs/fff-node/package.json";
 
 type VerifyPackagedFffFileSearchInput = {
   arch: ElectronReleaseArch;
@@ -42,34 +44,37 @@ export const verifyPackagedFffFileSearchEffect = ({
 }: VerifyPackagedFffFileSearchInput): Effect.Effect<
   VerifiedPackagedFffFileSearch,
   ElectronOperationError<PackagedFffErrorDetails>
-> =>
-  Effect.gen(function* () {
-    const nodeModulesDirectory = resolvePackagedFffNodeModulesDirectory({
-      arch,
-      platform,
-      releaseDirectory,
-    });
-    const verified = yield* Effect.tryPromise({
-      try: async () => {
-        const loaded = loadPackagedFffModule(nodeModulesDirectory);
-        await probePackagedFffScan(loaded.module);
-        return { modulePath: loaded.modulePath };
-      },
-      catch: (cause) =>
-        new ElectronOperationError({
-          operation: "electron.fff.verify-packaged",
-          message: `Invalid packaged Claude file search payload for ${platform}: ${errorMessage(
-            cause,
-          )}. Expected the unpacked payload under ${nodeModulesDirectory}`,
-          path: nodeModulesDirectory,
-          platform,
-          cause,
-          details: { nodeModulesDirectory },
-        }),
-    });
-
-    return verified;
+> => {
+  const resourcesDirectory = resolvePackagedAppResourcesDirectory({
+    arch,
+    platform,
+    releaseDirectory,
   });
+  const nodeModulesDirectory = resolvePackagedFffNodeModulesDirectory({
+    arch,
+    platform,
+    releaseDirectory,
+  });
+  return Effect.tryPromise({
+    try: async () => {
+      await assertPackagedAsarContainsFff(join(resourcesDirectory, "app.asar"));
+      const loaded = loadPackagedFffModule(nodeModulesDirectory);
+      await probePackagedFffScan(loaded.module);
+      return { modulePath: loaded.modulePath };
+    },
+    catch: (cause) =>
+      new ElectronOperationError({
+        operation: "electron.fff.verify-packaged",
+        message: `Invalid packaged Claude file search payload for ${platform}: ${errorMessage(
+          cause,
+        )}. Expected ${fffPackageArchiveEntry} in app.asar and the unpacked payload under ${nodeModulesDirectory}`,
+        path: nodeModulesDirectory,
+        platform,
+        cause,
+        details: { nodeModulesDirectory },
+      }),
+  });
+};
 
 export const verifyPackagedFffFileSearch = ({
   arch,
@@ -78,15 +83,29 @@ export const verifyPackagedFffFileSearch = ({
 }: VerifyPackagedFffFileSearchInput): Promise<VerifiedPackagedFffFileSearch> =>
   runElectronEffect(verifyPackagedFffFileSearchEffect({ arch, platform, releaseDirectory }));
 
+const assertPackagedAsarContainsFff = async (asarPath: string): Promise<void> => {
+  const metadata = await stat(asarPath);
+  if (!metadata.isFile() || metadata.size === 0) {
+    throw new Error(`expected a non-empty app.asar archive at ${asarPath}`);
+  }
+  let entry: ReturnType<typeof statFile>;
+  try {
+    entry = statFile(asarPath, fffPackageArchiveEntry);
+  } catch (cause) {
+    throw new Error(`the app.asar archive does not contain ${fffPackageArchiveEntry}`, { cause });
+  }
+  if (entry.unpacked !== true) {
+    throw new Error(`the app.asar archive does not unpack ${fffPackageArchiveEntry}`);
+  }
+};
+
 type LoadedPackagedFffModule = {
   modulePath: string;
   module: typeof import("@ff-labs/fff-node");
 };
 
 const loadPackagedFffModule = (nodeModulesDirectory: string): LoadedPackagedFffModule => {
-  const requireFromPackagedApp = createRequire(
-    join(nodeModulesDirectory, "openducktor-packaged-app-verifier.cjs"),
-  );
+  const requireFromPackagedApp = createRequire(join(nodeModulesDirectory, "package.json"));
   const modulePath = requireFromPackagedApp.resolve("@ff-labs/fff-node");
   const relativeModulePath = relative(realpathSync(nodeModulesDirectory), realpathSync(modulePath));
   if (relativeModulePath.startsWith("..") || isAbsolute(relativeModulePath)) {
