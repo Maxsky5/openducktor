@@ -45,7 +45,6 @@ export type FolderPickerController = {
   isSubmitting: boolean;
   isInitialLoad: boolean;
   isRefreshing: boolean;
-  isBusy: boolean;
   isCurrentPathSelectable: boolean;
   canDismiss: boolean;
   selectionMode: "directory" | "file";
@@ -143,7 +142,6 @@ export function useFolderPickerController({
   };
 
   const activeError = submitError ?? loadError;
-  const isBusy = isSubmitting || isInitialLoad;
   const helperMessage = getRepoHint(listing, requireGitRepo);
 
   return {
@@ -158,7 +156,6 @@ export function useFolderPickerController({
     isSubmitting,
     isInitialLoad,
     isRefreshing,
-    isBusy,
     isCurrentPathSelectable: confirmPath !== null,
     canDismiss: !isSubmitting,
     selectionMode,

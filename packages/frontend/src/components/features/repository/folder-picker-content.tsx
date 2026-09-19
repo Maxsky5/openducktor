@@ -26,7 +26,7 @@ function FolderPickerDirectoryBrowser({
   filterText: string;
   selectedFilePath: string | null;
   status: {
-    isBusy: boolean;
+    isSubmitting: boolean;
     isInitialLoad: boolean;
     isRefreshing: boolean;
   };
@@ -34,7 +34,9 @@ function FolderPickerDirectoryBrowser({
   onLoadDirectory: (path?: string | null) => void;
   onSelectFile: (path: string) => void;
 }): ReactElement {
-  const { isBusy, isInitialLoad, isRefreshing } = status;
+  const { isSubmitting, isInitialLoad, isRefreshing } = status;
+  const parentPath = listing?.parentPath ?? null;
+  const homePath = listing?.homePath ?? null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm">
@@ -49,7 +51,7 @@ function FolderPickerDirectoryBrowser({
             value={filterText}
             placeholder="Search this folder"
             className="pl-9"
-            disabled={isBusy || !listing}
+            disabled={isSubmitting}
             onChange={(event) => onFilterTextChange(event.currentTarget.value)}
           />
         </div>
@@ -61,9 +63,10 @@ function FolderPickerDirectoryBrowser({
           variant="outline"
           size="icon"
           aria-label="Go to parent folder"
+          aria-disabled={isSubmitting || !parentPath}
           title="Parent"
-          disabled={!listing?.parentPath || isBusy}
-          onClick={() => onLoadDirectory(listing?.parentPath ?? null)}
+          disabled={isSubmitting}
+          onClick={() => onLoadDirectory(parentPath)}
         >
           <ChevronUp className="size-4" />
         </Button>
@@ -72,9 +75,10 @@ function FolderPickerDirectoryBrowser({
           variant="outline"
           size="icon"
           aria-label="Go to home folder"
+          aria-disabled={isSubmitting || !homePath}
           title="Home"
-          disabled={!listing?.homePath || isBusy}
-          onClick={() => onLoadDirectory(listing?.homePath ?? null)}
+          disabled={isSubmitting}
+          onClick={() => onLoadDirectory(homePath)}
         >
           <Home className="size-4" />
         </Button>
@@ -129,7 +133,7 @@ function FolderPickerDirectoryBrowser({
                 "h-9 w-full justify-between gap-3 rounded-md px-3 text-left",
                 !entry.isDirectory && selectedFilePath === entry.path && "bg-accent",
               )}
-              disabled={isBusy}
+              disabled={isSubmitting}
               aria-pressed={entry.isDirectory ? undefined : selectedFilePath === entry.path}
               data-selected={entry.isDirectory ? undefined : selectedFilePath === entry.path}
               onClick={() =>
@@ -174,7 +178,7 @@ export function FolderPickerContent({
     helperMessage,
     isInitialLoad,
     isRefreshing,
-    isBusy,
+    isSubmitting,
     selectionMode,
     loadManualPath,
     loadDirectory,
@@ -195,13 +199,13 @@ export function FolderPickerContent({
             value={manualPath}
             placeholder={selectionMode === "file" ? "/path/to/folder" : "/path/to/your/repo"}
             className="font-mono"
-            disabled={isBusy}
+            disabled={isSubmitting}
             onChange={(event) => changeManualPath(event.currentTarget.value)}
           />
           <Button
             type="submit"
             variant="outline"
-            disabled={isBusy || manualPath.trim().length === 0}
+            disabled={isSubmitting || manualPath.trim().length === 0}
           >
             Load path
           </Button>
@@ -214,7 +218,7 @@ export function FolderPickerContent({
         filteredEntries={filteredEntries}
         filterText={filterText}
         selectedFilePath={selectedFilePath}
-        status={{ isBusy, isInitialLoad, isRefreshing }}
+        status={{ isSubmitting, isInitialLoad, isRefreshing }}
         onFilterTextChange={changeFilterText}
         onLoadDirectory={loadDirectory}
         onSelectFile={selectFile}

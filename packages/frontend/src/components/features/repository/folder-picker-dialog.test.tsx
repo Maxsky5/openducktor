@@ -424,7 +424,7 @@ describe("FolderPickerDialog", () => {
     }
   });
 
-  test("removes the previous directory entries as soon as navigation starts", async () => {
+  test("removes previous entries without dimming picker fields", async () => {
     let resolveNext = (_listing: DirectoryListing): void => undefined;
     const nextListing = new Promise<DirectoryListing>((resolve) => {
       resolveNext = resolve;
@@ -453,12 +453,26 @@ describe("FolderPickerDialog", () => {
 
     try {
       const nextButton = await screen.findByRole("button", { name: "next" });
+      const manualPath = screen.getByLabelText<HTMLInputElement>("Open path");
+      const filter = screen.getByLabelText<HTMLInputElement>("Filter directories");
+      const parent = screen.getByRole<HTMLButtonElement>("button", {
+        name: "Go to parent folder",
+      });
+      const home = screen.getByRole<HTMLButtonElement>("button", { name: "Go to home folder" });
       fireEvent.click(nextButton);
 
       expect(screen.getByText("/Users/dev/next")).toBeTruthy();
       expect(screen.getByText("Loading directories…")).toBeTruthy();
       expect(screen.queryByRole("button", { name: "old-entry" })).toBeNull();
       expect(screen.queryByRole("button", { name: "next" })).toBeNull();
+      expect(screen.getByLabelText("Open path")).toBe(manualPath);
+      expect(screen.getByLabelText("Filter directories")).toBe(filter);
+      expect(manualPath.disabled).toBe(false);
+      expect(filter.disabled).toBe(false);
+      expect(parent.disabled).toBe(false);
+      expect(parent.getAttribute("aria-disabled")).toBe("true");
+      expect(home.disabled).toBe(false);
+      expect(home.getAttribute("aria-disabled")).toBe("true");
 
       const confirmButton = screen.getByRole<HTMLButtonElement>("button", {
         name: "Select Folder",
