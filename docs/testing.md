@@ -45,6 +45,7 @@ Use [withViteTestServer](../packages/openducktor-web/src/vite-test-server.ts) fo
 - The preload removes the document theme class after each frontend test file.
 - Keep the workspace test timeouts: the host suite uses 5000 ms and the other workspaces use 1000 ms.
 - Fix a slow test at the source. Do not raise a timeout to hide it.
+- Give a single test an explicit per-test timeout only when its own work is heavy, such as a real process spawn or a full render flow. Name the cause in a comment above the timeout.
 
 ## Async and flaky tests
 

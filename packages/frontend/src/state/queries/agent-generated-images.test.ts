@@ -105,7 +105,8 @@ test("reads identity only and caches a Blob rather than encoded bytes", async ()
   });
   expect(client.getQueryData<Blob>(agentGeneratedImageQueryKeys.image(input))).toBe(blob);
   client.clear();
-});
+  // CI runs this queue coordination beside the host suite on 3-4 vCPUs.
+}, 2_500);
 
 test("rejects wrong echoed identity and does not retry errors", async () => {
   const client = new QueryClient();
@@ -328,7 +329,8 @@ test("new work at batch completion and concurrent revisions both reach a fresh b
   } finally {
     client.clear();
   }
-});
+  // CI runs this queue coordination beside the host suite on 3-4 vCPUs.
+}, 2_500);
 
 test("partial batch admission queues excess images until release", async () => {
   const client = new QueryClient();
@@ -366,4 +368,5 @@ test("partial batch admission queues excess images until release", async () => {
   } finally {
     client.clear();
   }
-});
+  // CI runs this queue coordination beside the host suite on 3-4 vCPUs.
+}, 2_500);

@@ -72,7 +72,8 @@ describe("onboarding notifications", () => {
     } finally {
       host.runtimeExecutablesCheck = originalCheck;
     }
-  });
+    // CI runs this render-heavy flow beside the host suite on 3-4 vCPUs.
+  }, 2_500);
 
   test("keeps notification settings open after a save failure and supports retry", async () => {
     let saveCalls = 0;
@@ -99,7 +100,8 @@ describe("onboarding notifications", () => {
     } finally {
       host.runtimeExecutablesCheck = originalCheck;
     }
-  });
+    // CI runs this render-heavy flow beside the host suite on 3-4 vCPUs.
+  }, 2_500);
 
   test("blocks duplicate notification saves while the first save is pending", async () => {
     const pendingSave = createDeferred<void>();
@@ -133,5 +135,6 @@ describe("onboarding notifications", () => {
     } finally {
       host.runtimeExecutablesCheck = originalCheck;
     }
-  });
+    // CI runs this render-heavy flow beside the host suite on 3-4 vCPUs.
+  }, 2_500);
 });
