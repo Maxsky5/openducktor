@@ -87,6 +87,55 @@ describe("OpenCode approval classifier", () => {
     ).toBe("unknown");
   });
 
+  test.each([
+    { name: "LF", command: "ls -la\nrm output.txt" },
+    { name: "CRLF", command: "ls -la\r\nrm output.txt" },
+  ])("does not treat a metadata $name command list as one read command", ({ command }) => {
+    expect(
+      classifyOpenCodeApprovalMutation({
+        permission: "bash",
+        patterns: [],
+        command,
+      }),
+    ).toBe("unknown");
+  });
+
+  test("does not let metadata comment text override complete native patterns", () => {
+    expect(
+      classifyOpenCodeApprovalMutation({
+        permission: "bash",
+        patterns: ["ls"],
+        command: "ls # > output.txt",
+      }),
+    ).toBe("read_only");
+  });
+
+  test.each(["ls # > output.txt", "ls;# > output.txt"])(
+    "keeps an unquoted metadata comment on the human approval path: %s",
+    (command) => {
+      expect(
+        classifyOpenCodeApprovalMutation({
+          permission: "bash",
+          patterns: [],
+          command,
+        }),
+      ).toBe("unknown");
+    },
+  );
+
+  test.each(["printf '%s' '# > output.txt'", "printf %s \\#"])(
+    "keeps a quoted or escaped comment marker literal: %s",
+    (command) => {
+      expect(
+        classifyOpenCodeApprovalMutation({
+          permission: "bash",
+          patterns: [command],
+          command,
+        }),
+      ).toBe("read_only");
+    },
+  );
+
   test.each(["./ls -la", "/tmp/ls -la", "./git log --oneline -5", "'C:\\tools\\ls' -la"])(
     "does not trust a path-based executable: %s",
     (command) => {
@@ -124,7 +173,7 @@ describe("OpenCode approval classifier", () => {
     "curl -X GET -o output.txt",
     "git log --all --output=log.txt",
     "sort --compress-program=gzip -o out.txt",
-  ])("finds a write option after an unknown option: %s", (command) => {
+  ])("finds a write option after an earlier non-mutating option: %s", (command) => {
     expect(
       classifyOpenCodeApprovalMutation({
         permission: "bash",
@@ -133,6 +182,46 @@ describe("OpenCode approval classifier", () => {
       }),
     ).toBe("mutating");
   });
+
+  test.each([
+    { command: "sort -- -o output.txt", expected: "read_only" },
+    { command: "git log -- --output=log.txt", expected: "read_only" },
+    { command: "find -- -delete", expected: "read_only" },
+    { command: "curl -- -o", expected: "unknown" },
+    { command: "rg -- --pre", expected: "read_only" },
+  ] as const)(
+    "does not treat an option-like operand after -- as a mutation: $command",
+    ({ command, expected }) => {
+      expect(
+        classifyOpenCodeApprovalMutation({
+          permission: "bash",
+          patterns: [command],
+          command,
+        }),
+      ).toBe(expected);
+    },
+  );
+
+  test.each([
+    { command: "find . -name -delete", expected: "read_only" },
+    { command: "find . -name output.txt -delete", expected: "mutating" },
+    { command: "git log -n --output=log.txt", expected: "read_only" },
+    { command: "git log -n 5 --output=log.txt", expected: "mutating" },
+    { command: "sort --compress-program -o input.txt", expected: "unknown" },
+    { command: "sort --compress-program gzip -o output.txt", expected: "mutating" },
+    { command: "curl -H -o https://example.test", expected: "unknown" },
+  ] as const)(
+    "does not scan an option argument as a separate option: $command",
+    ({ command, expected }) => {
+      expect(
+        classifyOpenCodeApprovalMutation({
+          permission: "bash",
+          patterns: [command],
+          command,
+        }),
+      ).toBe(expected);
+    },
+  );
 
   test("does not treat file-descriptor duplication as a file write", () => {
     expect(
@@ -175,6 +264,19 @@ describe("OpenCode approval classifier", () => {
       }),
     ).toBe("unknown");
   });
+
+  test.each(['find . -delete "$EXTRA"', 'git reset "$REF"', 'curl -X POST "$URL"'])(
+    "keeps a proved mutation despite unresolved expansion syntax: %s",
+    (command) => {
+      expect(
+        classifyOpenCodeApprovalMutation({
+          permission: "bash",
+          patterns: [command],
+          command,
+        }),
+      ).toBe("mutating");
+    },
+  );
 
   test.each([
     "printf '$OPT'",

@@ -21,8 +21,9 @@ const MUTATING_GIT_SUBCOMMANDS = wordSet(
   "add checkout clean commit merge pull push rebase reset stash switch",
 );
 const READ_ONLY_GIT_OPTIONS = wordSet(
-  "-b -p -s -u -z --branch --cached --decorate --graph --name-only --name-status --no-patch --oneline --patch --porcelain --raw --short --staged --stat --summary",
+  "-b -p -s -u -z --all --branch --cached --decorate --graph --name-only --name-status --no-patch --oneline --patch --porcelain --raw --short --staged --stat --summary",
 );
+const READ_ONLY_GIT_OPTIONS_WITH_ARGUMENT = wordSet("-n --max-count");
 const READ_ONLY_GIT_OPTION_PREFIXES = [
   "--column=",
   "--decorate=",
@@ -39,14 +40,24 @@ const MUTATING_FIND_OPTIONS = wordSet(
 const READ_ONLY_FIND_OPTIONS = wordSet(
   "-- -H -L -P -a -and -empty -group -iname -maxdepth -mindepth -mtime -name -newer -not -o -or -path -perm -print -print0 -prune -size -type -user",
 );
+const READ_ONLY_FIND_OPTIONS_WITH_ARGUMENT = wordSet(
+  "-group -iname -maxdepth -mindepth -mtime -name -newer -path -perm -size -type -user",
+);
 
 const MUTATING_CURL_OPTIONS = wordSet(
   "-F -O -T -d -o --data --data-ascii --data-binary --data-raw --data-urlencode --form --json --output --remote-name --upload-file",
 );
 const MUTATING_HTTP_METHODS = wordSet("DELETE PATCH POST PUT");
 
+const READ_ONLY_SORT_OPTIONS = wordSet(
+  "-b -d -f -g -h -i -M -m -n -R -r -s -u -V -z --check --dictionary-order --general-numeric-sort --human-numeric-sort --ignore-case --ignore-leading-blanks --merge --month-sort --numeric-sort --random-sort --reverse --stable --unique --version-sort --zero-terminated",
+);
+const READ_ONLY_SORT_OPTIONS_WITH_ARGUMENT = wordSet(
+  "-k -S -t -T --batch-size --buffer-size --field-separator --files0-from --key --parallel --random-source --sort --temporary-directory",
+);
+
 type TokenizationResult =
-  | { kind: "tokens"; tokens: [string, ...string[]] }
+  | { kind: "tokens"; tokens: [string, ...string[]]; hasUnknownSyntax: boolean }
   | { kind: "mutating_syntax" }
   | { kind: "unknown_syntax" };
 
@@ -147,9 +158,18 @@ const tokenizeNativeCommandPattern = (pattern: string): TokenizationResult => {
       quote = character;
       continue;
     }
-    if (/\s/.test(character)) {
+    if (character === "\n" || character === "\r") {
+      pushToken();
+      hasUnknownSyntax = true;
+      continue;
+    }
+    if (character === " " || character === "\t") {
       pushToken();
       continue;
+    }
+    if (character === "#" && (token.length === 0 || "|&;()<>".includes(pattern[index - 1] ?? ""))) {
+      hasUnknownSyntax = true;
+      break;
     }
     if (character === ">") {
       if (pattern[index + 1] === "&") {
@@ -190,15 +210,12 @@ const tokenizeNativeCommandPattern = (pattern: string): TokenizationResult => {
   }
 
   if (escaped || quote) {
-    return { kind: "unknown_syntax" };
+    hasUnknownSyntax = true;
   }
   pushToken();
-  if (hasUnknownSyntax) {
-    return { kind: "unknown_syntax" };
-  }
   const command = tokens[0];
   return command
-    ? { kind: "tokens", tokens: [command, ...tokens.slice(1)] }
+    ? { kind: "tokens", tokens: [command, ...tokens.slice(1)], hasUnknownSyntax }
     : { kind: "unknown_syntax" };
 };
 
@@ -214,12 +231,21 @@ const classifyGitCommand = (tokens: readonly string[]): AgentApprovalMutation =>
     return "unknown";
   }
 
-  const options = tokens.slice(2).filter((token) => token.startsWith("-"));
-  if (options.some((option) => option === "--output" || option.startsWith("--output="))) {
-    return "mutating";
-  }
-
-  for (const option of options) {
+  for (let index = 2; index < tokens.length; index += 1) {
+    const option = tokens[index];
+    if (!option || option === "--") {
+      break;
+    }
+    if (!option.startsWith("-")) {
+      continue;
+    }
+    if (option === "--output" || option.startsWith("--output=")) {
+      return "mutating";
+    }
+    if (READ_ONLY_GIT_OPTIONS_WITH_ARGUMENT.has(option)) {
+      index += 1;
+      continue;
+    }
     if (/^-\d+$/.test(option)) {
       continue;
     }
@@ -234,16 +260,23 @@ const classifyGitCommand = (tokens: readonly string[]): AgentApprovalMutation =>
 };
 
 const classifyFindCommand = (tokens: readonly string[]): AgentApprovalMutation => {
-  let hasUnknownOption = false;
-  for (const token of tokens.slice(1)) {
+  for (let index = 1; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (!token || token === "--") {
+      break;
+    }
     if (MUTATING_FIND_OPTIONS.has(token)) {
       return "mutating";
     }
+    if (READ_ONLY_FIND_OPTIONS_WITH_ARGUMENT.has(token)) {
+      index += 1;
+      continue;
+    }
     if (token.startsWith("-") && !READ_ONLY_FIND_OPTIONS.has(token)) {
-      hasUnknownOption = true;
+      return "unknown";
     }
   }
-  return hasUnknownOption ? "unknown" : "read_only";
+  return "read_only";
 };
 
 const classifyCurlCommand = (tokens: readonly string[]): AgentApprovalMutation => {
@@ -251,6 +284,9 @@ const classifyCurlCommand = (tokens: readonly string[]): AgentApprovalMutation =
     const token = tokens[index];
     if (token === undefined) {
       continue;
+    }
+    if (token === "--") {
+      break;
     }
     if (token === "--request" || token === "-X") {
       const method = tokens[index + 1]?.toUpperCase();
@@ -281,6 +317,9 @@ const classifyCurlCommand = (tokens: readonly string[]): AgentApprovalMutation =
         return "mutating";
       }
     }
+    if (token.startsWith("-")) {
+      return "unknown";
+    }
   }
   return "unknown";
 };
@@ -293,16 +332,11 @@ const classifyPrintfCommand = (tokens: readonly string[]): AgentApprovalMutation
   return firstArgument === "-v" || /^-v.+/.test(firstArgument) ? "mutating" : "unknown";
 };
 
-const classifyNativeCommandPattern = (pattern: string): AgentApprovalMutation => {
-  const tokenized = tokenizeNativeCommandPattern(pattern.trim());
-  if (tokenized.kind === "mutating_syntax") {
-    return "mutating";
-  }
-  if (tokenized.kind === "unknown_syntax") {
+const classifyCommandTokens = (tokens: readonly string[]): AgentApprovalMutation => {
+  const command = tokens[0];
+  if (!command) {
     return "unknown";
   }
-
-  const command = tokenized.tokens[0];
   if (command.includes("/") || command.includes("\\")) {
     return "unknown";
   }
@@ -313,48 +347,87 @@ const classifyNativeCommandPattern = (pattern: string): AgentApprovalMutation =>
     return "read_only";
   }
   if (command === "git") {
-    return classifyGitCommand(tokenized.tokens);
+    return classifyGitCommand(tokens);
   }
   if (command === "find") {
-    return classifyFindCommand(tokenized.tokens);
+    return classifyFindCommand(tokens);
   }
   if (command === "curl") {
-    return classifyCurlCommand(tokenized.tokens);
+    return classifyCurlCommand(tokens);
   }
   if (command === "printf") {
-    return classifyPrintfCommand(tokenized.tokens);
+    return classifyPrintfCommand(tokens);
   }
   if (command === "rg") {
-    return tokenized.tokens
-      .slice(1)
-      .some((token) =>
+    for (const option of tokens.slice(1)) {
+      if (option === "--") {
+        break;
+      }
+      if (
         ["--hostname-bin", "--pre", "--pre-glob"].some(
-          (option) => token === option || token.startsWith(`${option}=`),
-        ),
-      )
-      ? "unknown"
-      : "read_only";
+          (unsafeOption) => option === unsafeOption || option.startsWith(`${unsafeOption}=`),
+        )
+      ) {
+        return "unknown";
+      }
+    }
+    return "read_only";
   }
   if (command === "sort") {
-    const options = tokenized.tokens.slice(1);
-    if (
-      options.some(
-        (option) =>
-          option === "-o" ||
-          /^-o.+/.test(option) ||
-          option === "--output" ||
-          option.startsWith("--output="),
-      )
-    ) {
-      return "mutating";
+    let hasUnknownOption = false;
+    for (let index = 1; index < tokens.length; index += 1) {
+      const option = tokens[index];
+      if (!option || option === "--") {
+        break;
+      }
+      if (!option.startsWith("-")) {
+        continue;
+      }
+      if (
+        option === "-o" ||
+        /^-o.+/.test(option) ||
+        option === "--output" ||
+        option.startsWith("--output=")
+      ) {
+        return "mutating";
+      }
+      if (option === "--compress-program") {
+        hasUnknownOption = true;
+        index += 1;
+        continue;
+      }
+      if (option.startsWith("--compress-program=")) {
+        hasUnknownOption = true;
+        continue;
+      }
+      if (READ_ONLY_SORT_OPTIONS_WITH_ARGUMENT.has(option)) {
+        index += 1;
+        continue;
+      }
+      if (
+        !READ_ONLY_SORT_OPTIONS.has(option) &&
+        !option.startsWith("--check=") &&
+        !/^-\d+$/.test(option)
+      ) {
+        return "unknown";
+      }
     }
-    return options.some(
-      (option) => option === "--compress-program" || option.startsWith("--compress-program="),
-    )
-      ? "unknown"
-      : "read_only";
+    return hasUnknownOption ? "unknown" : "read_only";
   }
   return "unknown";
+};
+
+const classifyNativeCommandPattern = (pattern: string): AgentApprovalMutation => {
+  const tokenized = tokenizeNativeCommandPattern(pattern.replace(/^[ \t]+|[ \t]+$/g, ""));
+  if (tokenized.kind === "mutating_syntax") {
+    return "mutating";
+  }
+  if (tokenized.kind === "unknown_syntax") {
+    return "unknown";
+  }
+
+  const classification = classifyCommandTokens(tokenized.tokens);
+  return classification === "mutating" || !tokenized.hasUnknownSyntax ? classification : "unknown";
 };
 
 const classifyWorkflowToolName = (name: string | undefined): AgentApprovalMutation | null => {
@@ -411,13 +484,10 @@ export const classifyOpenCodeApprovalMutation = ({
     return "mutating";
   }
   if (normalizedNames.some((name) => SHELL_PERMISSION_NAMES.has(name))) {
-    const commandClassification = command
-      ? classifyNativeCommandPattern(command)
-      : ("unknown" as const);
-    if (commandClassification === "mutating") {
-      return "mutating";
+    if (patterns.length > 0) {
+      return classifyShellPatterns(patterns);
     }
-    return patterns.length > 0 ? classifyShellPatterns(patterns) : commandClassification;
+    return command ? classifyNativeCommandPattern(command) : "unknown";
   }
   if (workflowClassifications.includes("read_only")) {
     return "read_only";
