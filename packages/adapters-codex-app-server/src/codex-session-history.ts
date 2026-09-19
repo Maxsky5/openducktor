@@ -22,7 +22,10 @@ import {
   resolveCodexForkBoundary,
 } from "./codex-fork-boundary";
 import { projectCodexCanonicalEventsToHistory } from "./codex-history-projector";
-import type { CodexThreadInventoryReader } from "./codex-thread-inventory";
+import type {
+  CodexThreadInventoryReader,
+  CodexThreadMaterializationGuard,
+} from "./codex-thread-inventory";
 import type {
   CodexAppServerClient,
   CodexSessionState,
@@ -34,14 +37,12 @@ type CodexSessionHistoryRuntime = {
   runtimeId: string;
 };
 
-type CodexSessionHistoryInput = {
+type CodexSessionHistoryInput = CodexThreadMaterializationGuard & {
   input: LoadAgentSessionHistoryInput;
   session: CodexSessionState | undefined;
   runtime: CodexSessionHistoryRuntime;
   prepareImageGenerations?: CodexImageGenerationPreparer | undefined;
   threadInventory: Pick<CodexThreadInventoryReader, "readThreadHistory" | "readThreadTurnIds">;
-  resolveEmptyRolloutWorkingDirectory?: (() => string | undefined) | undefined;
-  onThreadMaterialized?: (() => void) | undefined;
 };
 
 const codexSystemPromptHistoryMessage = ({

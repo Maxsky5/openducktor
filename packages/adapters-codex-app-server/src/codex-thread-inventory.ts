@@ -13,6 +13,15 @@ import {
 } from "./codex-app-server-threads";
 import type { CodexAppServerClient, CodexThreadHistoryReadResponse } from "./types";
 
+export type CodexThreadMaterializationGuard = {
+  resolveEmptyRolloutWorkingDirectory?: (() => string | undefined) | undefined;
+  onThreadMaterialized?: (() => void) | undefined;
+};
+
+type CodexThreadReadOptions = CodexThreadMaterializationGuard & {
+  unmaterializedWorkingDirectory?: string | undefined;
+};
+
 type PendingInventoryRead = {
   mode: "read" | "refresh";
   promise: Promise<CodexThreadInventory>;
@@ -171,17 +180,15 @@ export class CodexThreadInventoryReader {
       externalSessionId: string;
       workingDirectory: string;
       allowUnmaterialized?: boolean;
-      resolveEmptyRolloutWorkingDirectory?: (() => string | undefined) | undefined;
-      onThreadMaterialized?: (() => void) | undefined;
-    },
+    } & CodexThreadMaterializationGuard,
   ): Promise<CodexThreadHistoryReadResponse> {
-    const response = await this.readThreadWithTurns(
-      client,
-      input.externalSessionId,
-      input.allowUnmaterialized ? input.workingDirectory : undefined,
-      input.resolveEmptyRolloutWorkingDirectory,
-      input.onThreadMaterialized,
-    );
+    const response = await this.readThreadWithTurns(client, input.externalSessionId, {
+      unmaterializedWorkingDirectory: input.allowUnmaterialized
+        ? input.workingDirectory
+        : undefined,
+      resolveEmptyRolloutWorkingDirectory: input.resolveEmptyRolloutWorkingDirectory,
+      onThreadMaterialized: input.onThreadMaterialized,
+    });
     if (!response) {
       throw new AgentRuntimeQueryError(
         "request_failed",
@@ -203,10 +210,13 @@ export class CodexThreadInventoryReader {
   async readThreadWithTurns(
     client: CodexAppServerClient,
     threadId: string,
-    unmaterializedWorkingDirectory?: string,
-    resolveEmptyRolloutWorkingDirectory?: () => string | undefined,
-    onThreadMaterialized?: () => void,
+    options: CodexThreadReadOptions = {},
   ): Promise<CodexThreadHistoryReadResponse | undefined> {
+    const {
+      unmaterializedWorkingDirectory,
+      resolveEmptyRolloutWorkingDirectory,
+      onThreadMaterialized,
+    } = options;
     let response: Awaited<ReturnType<CodexAppServerClient["threadRead"]>>;
     let pagedTurns: CodexAppServerTurn[];
     try {
@@ -214,11 +224,12 @@ export class CodexThreadInventoryReader {
       onThreadMaterialized?.();
       pagedTurns = await this.fetchThreadTurns(client, threadId, "full");
     } catch (error) {
-      const syntheticWorkingDirectory = isCodexEmptyRolloutThreadReadError(error)
-        ? resolveEmptyRolloutWorkingDirectory?.()
-        : isCodexUnmaterializedThreadError(error)
-          ? unmaterializedWorkingDirectory
-          : undefined;
+      let syntheticWorkingDirectory: string | undefined;
+      if (isCodexEmptyRolloutThreadReadError(error)) {
+        syntheticWorkingDirectory = resolveEmptyRolloutWorkingDirectory?.();
+      } else if (isCodexUnmaterializedThreadError(error)) {
+        syntheticWorkingDirectory = unmaterializedWorkingDirectory;
+      }
       if (syntheticWorkingDirectory !== undefined) {
         const thread: CodexThreadHistoryReadResponse["thread"] = {
           id: threadId,
