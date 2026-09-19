@@ -8,6 +8,7 @@ import {
   type SearchAgentFilesInput,
 } from "@openducktor/core";
 import { normalizePathSeparators } from "@openducktor/path-support";
+import type { ClaudeSessionStore } from "./claude-agent-sdk-types";
 
 export const FILE_SEARCH_LIMIT = 30;
 const FILE_FINDER_CACHE_LIMIT = 3;
@@ -31,12 +32,7 @@ type CachedClaudeFileFinder = {
   searchesInFlight: number;
 };
 
-type ClaudeFileSearchSession = { input: { workingDirectory: string } };
-
-type ClaudeFileSearchSessionStore = {
-  subscribeClose(listener: (session: ClaudeFileSearchSession) => void): () => void;
-  values(): IterableIterator<ClaudeFileSearchSession>;
-};
+export type ClaudeFileSearchSessionStore = Pick<ClaudeSessionStore, "subscribeClose" | "values">;
 
 export const trackClaudeFileSearchSessions = ({
   fileSearch,
