@@ -423,13 +423,18 @@ const renderAppShellForTest = (
       error: "Path is empty.",
     });
   }
-  queryClient.setQueryData(filesystemQueryKeys.directory(), {
-    currentPath: "/repo",
-    currentPathIsGitRepo: true,
-    parentPath: "/",
-    homePath: "/repo",
-    entries: [],
-  });
+  // Keep the seeded listing fresh for the whole test. A stale refetch would call the unconfigured host bridge.
+  queryClient.setQueryData(
+    filesystemQueryKeys.directory(),
+    {
+      currentPath: "/repo",
+      currentPathIsGitRepo: true,
+      parentPath: "/",
+      homePath: "/repo",
+      entries: [],
+    },
+    { updatedAt: Date.now() + 60_000 },
+  );
   options.prepareQueryClient?.(queryClient);
 
   return render(
@@ -624,8 +629,10 @@ describe("AppShell", () => {
     expect(
       within(workspaceFooter).getByRole("button", { name: "Back to notifications" }),
     ).toBeTruthy();
-    expect(within(workspaceFooter).getByRole("button", { name: "Open repository" })).toBeTruthy();
-    fireEvent.click(await screen.findByRole("button", { name: "Open repository" }));
+    const openRepositoryButton = await within(workspaceFooter).findByRole("button", {
+      name: "Open repository",
+    });
+    fireEvent.click(openRepositoryButton);
 
     expect(await screen.findByRole("button", { name: "Opening repository..." })).toBeTruthy();
     expect(
@@ -669,7 +676,8 @@ describe("AppShell", () => {
     expect(document.querySelector("main")?.textContent).toBe("Kanban");
     expect(mainFrames).not.toContain("");
     expect(screen.queryByRole("heading", { name: "Open your first workspace" })).toBeNull();
-  });
+    // CI runs this render-heavy flow beside the host suite on 3-4 vCPUs.
+  }, 2_500);
 
   test("keeps the workspace draft in onboarding after a pending add fails", async () => {
     const workspaceAddResult = createDeferred<WorkspaceRecord>();
@@ -706,7 +714,8 @@ describe("AppShell", () => {
     expect(screen.getByTestId("current-route").textContent).toBe("/onboarding");
     expect(screen.getByLabelText<HTMLInputElement>("Repository path").value).toBe("/repo");
     expect(backButton.disabled).toBe(false);
-  });
+    // CI runs this render-heavy flow beside the host suite on 3-4 vCPUs.
+  }, 2_500);
 
   test("moves from welcome to runtime setup without mounting the workspace shell", () => {
     renderAppShellForTest({ workspacePresence: { hasWorkspaces: false } });

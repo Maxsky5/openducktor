@@ -137,14 +137,15 @@ test("external links keep shell behavior and unsafe schemes do not become file l
   }
 });
 
+const lazyMarkdownRenderers = await Promise.all([
+  import("@/components/ui/markdown-renderer-rich"),
+  import("@/components/ui/markdown-renderer-math"),
+  import("@/components/ui/markdown-renderer-math-candidate"),
+  import("@/components/ui/markdown-renderer-mermaid-candidate"),
+]);
+
 test("the final lazy renderers all retain the file action", async () => {
-  const renderers = await Promise.all([
-    import("@/components/ui/markdown-renderer-rich"),
-    import("@/components/ui/markdown-renderer-math"),
-    import("@/components/ui/markdown-renderer-math-candidate"),
-    import("@/components/ui/markdown-renderer-mermaid-candidate"),
-  ]);
-  for (const { default: Renderer } of renderers) {
+  for (const { default: Renderer } of lazyMarkdownRenderers) {
     const open = mock<(href: string, trigger: HTMLAnchorElement) => void>(() => {});
     const view = render(
       <ChatFileLinkContext value={open}>

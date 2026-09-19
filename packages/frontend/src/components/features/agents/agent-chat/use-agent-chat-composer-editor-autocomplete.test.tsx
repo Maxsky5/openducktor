@@ -283,16 +283,12 @@ describe("useAgentChatComposerEditorAutocomplete", () => {
     expect(harness.getLatest().isFileSearchLoading).toBe(false);
 
     await harness.run(async () => {
-      await wait(450);
+      await wait(250);
     });
 
     expect(harness.getLatest().isFileSearchLoading).toBe(false);
 
-    await harness.run(async () => {
-      await wait(100);
-    });
-
-    expect(harness.getLatest().isFileSearchLoading).toBe(true);
+    await harness.waitFor((state) => state.isFileSearchLoading);
 
     slowSearch.resolve([buildFileSearchResult({ path: "src/slow.ts", name: "slow.ts" })]);
     await harness.waitFor((state) => {

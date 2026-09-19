@@ -25,15 +25,20 @@ const workspaceId = "fixture-workspace";
 const taskId = "fixture-task";
 const assetId = "550e8400-e29b-41d4-a716-446655440000";
 
-const run = async (): Promise<TestScopeProductionConfigResult> => {
-  const configScenario = process.argv[2];
-  if (configScenario !== "direct" && configScenario !== "symlink") {
-    throw new Error("Expected a direct or symlink config scenario.");
-  }
-  const homeDir = process.argv[3];
-  if (!homeDir || !path.isAbsolute(homeDir)) {
-    throw new Error("Expected an absolute test home directory.");
-  }
+export type TestScopeProductionConfigScenario = "direct" | "symlink";
+export const TEST_SCOPE_PRODUCTION_CONFIG_SCENARIOS = ["direct", "symlink"] as const;
+
+export type TestScopeProductionConfigCaseResult = TestScopeProductionConfigResult & {
+  configScenario: TestScopeProductionConfigScenario;
+};
+
+const runTestScopeProductionConfigCase = async ({
+  configScenario,
+  homeDir,
+}: {
+  configScenario: TestScopeProductionConfigScenario;
+  homeDir: string;
+}): Promise<TestScopeProductionConfigResult> => {
   const configDir = path.join(homeDir, ".openducktor");
   const configuredConfigDir =
     configScenario === "symlink" ? path.join(homeDir, ".openducktor-test-link") : configDir;
@@ -111,6 +116,23 @@ const run = async (): Promise<TestScopeProductionConfigResult> => {
   return { after: await readState(), before, error, taskState };
 };
 
+export const runTestScopeProductionConfigCases = async ({
+  homeDir,
+}: {
+  homeDir: string;
+}): Promise<TestScopeProductionConfigCaseResult[]> => {
+  const results: TestScopeProductionConfigCaseResult[] = [];
+  for (const configScenario of TEST_SCOPE_PRODUCTION_CONFIG_SCENARIOS) {
+    const result = await runTestScopeProductionConfigCase({ configScenario, homeDir });
+    results.push({ configScenario, ...result });
+  }
+  return results;
+};
+
 if (import.meta.main) {
-  console.log(JSON.stringify(await run()));
+  const homeDir = process.argv[2];
+  if (!homeDir || !path.isAbsolute(homeDir)) {
+    throw new Error("Expected an absolute test home directory.");
+  }
+  console.log(JSON.stringify(await runTestScopeProductionConfigCases({ homeDir })));
 }

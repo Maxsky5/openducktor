@@ -1,14 +1,37 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { useQueryClient } from "@tanstack/react-query";
 import { fireEvent, render, waitFor } from "@testing-library/react";
-import { createElement } from "react";
+import { createElement, type ReactElement, type ReactNode, useLayoutEffect, useState } from "react";
+import { ThemeProvider } from "@/components/layout/theme-provider";
 import { buildCopyPreview } from "@/lib/copy-preview";
+import { QueryProvider } from "@/lib/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
+import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { withCapturedConsole } from "@/test-utils/console-capture";
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { withMockedToast } from "@/test-utils/mock-toast";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { TaskDetailsMarkdownContent } from "./task-details-markdown-content";
 
+const mermaidRenderModule = await import("@/components/ui/markdown-mermaid-render");
+await import("@/components/ui/markdown-renderer-mermaid-candidate");
+
 enableReactActEnvironment();
+
+const StaticThemeProvider = ({ children }: { children: ReactNode }): ReactElement | null => {
+  const queryClient = useQueryClient();
+  const [ready, setReady] = useState(false);
+
+  useLayoutEffect(() => {
+    queryClient.setQueryData(
+      settingsSnapshotQueryOptions().queryKey,
+      createSettingsSnapshotFixture({ theme: "light" }),
+    );
+    setReady(true);
+  }, [queryClient]);
+
+  return ready ? createElement(ThemeProvider, null, children) : null;
+};
 
 const writeClipboardMock = mock(async (_value: string) => {});
 let restoreClipboard: (() => void) | null = null;
@@ -200,8 +223,7 @@ describe("TaskDetailsMarkdownContent", () => {
   });
 
   test("keeps a rendered Mermaid diagram mounted when copy state changes", async () => {
-    const renderModule = await import("@/components/ui/markdown-mermaid-render");
-    const renderSpy = spyOn(renderModule, "renderMermaidSvg").mockResolvedValue(
+    const renderSpy = spyOn(mermaidRenderModule, "renderMermaidSvg").mockResolvedValue(
       '<svg xmlns="http://www.w3.org/2000/svg"><text>Diagram</text></svg>',
     );
 
@@ -209,16 +231,24 @@ describe("TaskDetailsMarkdownContent", () => {
       await withMockedToast(async () => {
         const markdown = "```mermaid\ngraph TD\n  A --> B\n```";
         const rendered = render(
-          createElement(TaskDetailsMarkdownContent, {
-            markdown,
-            empty: "No doc",
-            active: true,
-            copyableMarkdown: markdown,
-          }),
+          createElement(
+            QueryProvider,
+            { useIsolatedClient: true },
+            createElement(
+              StaticThemeProvider,
+              null,
+              createElement(TaskDetailsMarkdownContent, {
+                markdown,
+                empty: "No doc",
+                active: true,
+                copyableMarkdown: markdown,
+              }),
+            ),
+          ),
         );
 
         try {
-          const diagramLabel = await rendered.findByText("Diagram");
+          const diagramLabel = await rendered.findByText("Diagram", {}, { timeout: 3_000 });
           const diagram = diagramLabel.closest("svg");
           expect(diagram).not.toBeNull();
           expect(renderSpy).toHaveBeenCalledTimes(1);
@@ -240,5 +270,6 @@ describe("TaskDetailsMarkdownContent", () => {
     } finally {
       renderSpy.mockRestore();
     }
-  });
+    // CI runs this render-heavy flow beside the host suite on 3-4 vCPUs.
+  }, 5_000);
 });

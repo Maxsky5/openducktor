@@ -815,7 +815,8 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
     } finally {
       await removeTestDirectory(root);
     }
-  });
+    // Starts a real fake OpenCode process, which can outlast the host budget on Windows.
+  }, 10_000);
 
   test("stops the OpenCode runtime process tree including descendants", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-opencode-starter-tree-"));

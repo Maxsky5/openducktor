@@ -440,7 +440,8 @@ test("creates a worktree chat with one request and no confirmation step", async 
     view.unmount();
     configureShellBridge(createUnavailableShellBridge());
   }
-});
+  // CI runs this render-heavy flow beside the host suite on 3-4 vCPUs.
+}, 2_500);
 
 test("requires a safe worktree name and sends an optional custom branch from Advanced", async () => {
   const requests: WorkspaceSessionCreateInput[] = [];
@@ -475,7 +476,8 @@ test("requires a safe worktree name and sends an optional custom branch from Adv
     view.unmount();
     configureShellBridge(createUnavailableShellBridge());
   }
-});
+  // CI runs this render-heavy flow beside the host suite on 3-4 vCPUs.
+}, 2_500);
 
 test("Existing branch accepts slash-separated worktree names and submits a safe directory name", async () => {
   const requests: WorkspaceSessionCreateInput[] = [];
@@ -526,7 +528,8 @@ test("Existing branch accepts slash-separated worktree names and submits a safe 
     view.unmount();
     configureShellBridge(createUnavailableShellBridge());
   }
-});
+  // CI runs this render-heavy flow beside the host suite on 3-4 vCPUs.
+}, 2_500);
 
 test("blocks submission when refreshed data shows the selected branch is now checked out", async () => {
   const requests: WorkspaceSessionCreateInput[] = [];

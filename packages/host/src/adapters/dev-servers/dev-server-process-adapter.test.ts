@@ -57,6 +57,10 @@ const processIsAlive = (pid: number): boolean => {
   }
 };
 
+const removeTempRoot = async (root: string): Promise<void> => {
+  await rm(root, { force: true, maxRetries: 10, recursive: true, retryDelay: 100 });
+};
+
 const firstFailure = async <A, E>(effect: Effect.Effect<A, E>): Promise<E | null> => {
   const exit = await Effect.runPromiseExit(effect);
   if (!Exit.isFailure(exit)) {
@@ -132,7 +136,7 @@ setInterval(() => {}, 1000);
         }),
       ]);
     } finally {
-      await rm(root, { force: true, recursive: true });
+      await removeTempRoot(root);
     }
   });
 
@@ -176,7 +180,7 @@ setInterval(() => {}, 1000);
 
       expect(outputs.join("")).toContain(`shell:${realNestedDir}:from-shell`);
     } finally {
-      await rm(root, { force: true, recursive: true });
+      await removeTempRoot(root);
     }
   });
 
@@ -222,7 +226,7 @@ setInterval(() => {}, 1000);
 
       expect(existsSync(profileMarker)).toBe(false);
     } finally {
-      await rm(root, { force: true, recursive: true });
+      await removeTempRoot(root);
     }
   });
 
@@ -273,7 +277,7 @@ setInterval(() => {}, 1000);
 
       expect(outputs.join("").startsWith("/zshrc-only/bin")).toBe(true);
     } finally {
-      await rm(root, { force: true, recursive: true });
+      await removeTempRoot(root);
     }
   });
 
@@ -473,7 +477,7 @@ setInterval(() => {}, 1000);
         expect(outputs.join("")).toContain(expected);
       }
     } finally {
-      await rm(root, { force: true, recursive: true });
+      await removeTempRoot(root);
     }
   });
 });

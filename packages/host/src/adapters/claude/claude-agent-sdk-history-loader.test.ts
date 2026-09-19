@@ -160,7 +160,8 @@ describe("loadClaudeHistory", () => {
         },
       ]);
     });
-  });
+    // Reads the real transcript store through the Agent SDK, which can outlast the host budget on Windows.
+  }, 10_000);
 
   test("throws for a missing transcript after fresh live work stops", async () => {
     await expect(

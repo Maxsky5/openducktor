@@ -37,6 +37,17 @@ A `renderToStaticMarkup` test that uses Query or app context needs the same prov
 
 Use [withViteTestServer](../packages/openducktor-web/src/vite-test-server.ts) for Vite server tests in the web package. It gives each server a temporary cache and closes the server before cleanup. A test server must not share the running app's cache. Vite can delete that cache when the test uses different dependency settings.
 
+## Parallel runs
+
+- `packages/frontend` and `packages/host` run with `bun test --parallel --no-isolate`.
+- `packages/openducktor-mcp` runs with `bun test --parallel`, so each test file gets an isolated worker process.
+- The other workspaces run serially in one process.
+- The preload gives every parallel worker its own temp directory and config directory.
+- The preload removes the document theme class after each frontend test file.
+- Keep the workspace test timeouts: the host suite uses 5000 ms and the other workspaces use 1000 ms.
+- Fix a slow test at the source. Do not raise a timeout to hide it.
+- Give a single test an explicit per-test timeout only when its own work is heavy, such as a real process spawn or a full render flow. Name the cause in a comment above the timeout.
+
 ## Async and flaky tests
 
 - Use an explicit `waitFor(...)` or test-harness timeout for async Query, portal, or render work.
