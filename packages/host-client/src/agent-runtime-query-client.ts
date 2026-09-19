@@ -1,9 +1,6 @@
 import { AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS } from "@openducktor/contracts";
 import type {
-  ListAgentModelsInput,
-  ListAgentSkillsInput,
-  ListAgentSlashCommandsInput,
-  ListAgentSubagentsInput,
+  LoadAgentRuntimeCatalogInput,
   LoadAgentFileStatusInput,
   LoadAgentSessionDiffInput,
   LoadAgentSessionHistoryInput,
@@ -15,35 +12,8 @@ import type { InvokeFn } from "./invoke-utils";
 export class HostAgentRuntimeQueryClient {
   constructor(private readonly invokeFn: InvokeFn) {}
 
-  agentRuntimeListModels(input: ListAgentModelsInput) {
-    const contract = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.listModels;
-    return this.invokeFn(
-      contract.command,
-      { input: contract.inputSchema.parse(input) },
-      contract.responseSchema,
-    );
-  }
-
-  agentRuntimeListSlashCommands(input: ListAgentSlashCommandsInput) {
-    const contract = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.listSlashCommands;
-    return this.invokeFn(
-      contract.command,
-      { input: contract.inputSchema.parse(input) },
-      contract.responseSchema,
-    );
-  }
-
-  agentRuntimeListSkills(input: ListAgentSkillsInput) {
-    const contract = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.listSkills;
-    return this.invokeFn(
-      contract.command,
-      { input: contract.inputSchema.parse(input) },
-      contract.responseSchema,
-    );
-  }
-
-  agentRuntimeListSubagents(input: ListAgentSubagentsInput) {
-    const contract = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.listSubagents;
+  agentRuntimeLoadCatalog(input: LoadAgentRuntimeCatalogInput) {
+    const contract = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.loadCatalog;
     return this.invokeFn(
       contract.command,
       { input: contract.inputSchema.parse(input) },

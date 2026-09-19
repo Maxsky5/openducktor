@@ -1,9 +1,10 @@
-import type { RepoRuntimeRef, ReusablePrompt, RuntimeDescriptor } from "@openducktor/contracts";
+import type { ReusablePrompt, RuntimeDescriptor } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentModelCatalog,
   AgentModelSelection,
   AgentRole,
+  AgentRuntimeCatalog,
   AgentSkillCatalog,
   AgentSlashCommandCatalog,
   AgentSubagentCatalog,
@@ -40,6 +41,7 @@ import {
 } from "@/features/agent-chat-composer/prompt-input/chat-composer-prompt-input-runtime";
 import { createChatComposerFileSearch } from "@/features/agent-chat-composer/prompt-input/create-chat-composer-file-search";
 import { resolveRuntimePromptInputSupport } from "@/features/agent-chat-composer/prompt-input/runtime-prompt-input-support";
+import { useChatComposerCatalogRefresh } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-catalog-refresh";
 import { useChatComposerSkills } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-skills";
 import { useChatComposerSlashCommands } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-slash-commands";
 import { useChatComposerSubagents } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-subagents";
@@ -47,7 +49,7 @@ import { availableDefaultSessionSelectionFor } from "@/features/session-start/se
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
-import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
+import { retryRuntimeCatalog } from "@/state/queries/runtime-catalog";
 import { useRuntimeModelCatalogs } from "@/state/queries/use-runtime-model-catalogs";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
@@ -64,10 +66,7 @@ type UseAgentStudioChatComposerArgs = {
     selection: AgentModelSelection | null,
   ) => Promise<void> | void;
   favoriteState: ModelPickerFavoriteState;
-  loadCatalog?: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
-  loadSlashCommands?: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentSlashCommandCatalog>;
-  loadSkills?: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentSkillCatalog>;
-  loadSubagents?: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentSubagentCatalog>;
+  loadCatalog?: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
   loadFileSearch?: (
     runtimeRef: RuntimeWorkingDirectoryRef,
     query: string,
@@ -91,14 +90,20 @@ type AgentStudioChatComposerState = {
   slashCommands: AgentSlashCommandCatalog["commands"];
   slashCommandsError: string | null;
   isSlashCommandsLoading: boolean;
+  retrySlashCommands: (() => void) | null;
   skillCatalog: AgentSkillCatalog;
   skills: AgentSkillCatalog["skills"];
   skillsError: string | null;
   isSkillsLoading: boolean;
+  retrySkills: (() => void) | null;
   subagentCatalog: AgentSubagentCatalog;
   subagents: AgentSubagentCatalog["subagents"];
   subagentsError: string | null;
   isSubagentsLoading: boolean;
+  retrySubagents: (() => void) | null;
+  onCatalogMenuOpen: () => void;
+  onAgentSelectorOpen: () => void;
+  onVariantSelectorOpen: () => void;
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
   agentProfileOptions: ComboboxOption[];
   modelPicker: AgentChatComposerModel["modelPicker"];
@@ -167,26 +172,17 @@ export function useAgentStudioChatComposer({
   updateAgentSessionModel,
   favoriteState,
   loadCatalog,
-  loadSlashCommands,
-  loadSkills,
-  loadSubagents,
   loadFileSearch,
 }: UseAgentStudioChatComposerArgs): AgentStudioChatComposerState {
   const {
     availableRuntimeDefinitions,
     allRuntimeDefinitions,
     loadRepoRuntimeCatalog,
-    loadRepoRuntimeSlashCommands,
-    loadRepoRuntimeSkills,
-    loadRepoRuntimeSubagents,
     loadRepoRuntimeFileSearch,
   } = useRuntimeAvailabilityContext();
   const queryClient = useQueryClient();
   const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
-  const loadCatalogForRepo = pickLoader(loadCatalog, loadRepoRuntimeCatalog);
-  const loadSlashCommandsForRepo = pickLoader(loadSlashCommands, loadRepoRuntimeSlashCommands);
-  const loadSkillsForRepo = pickLoader(loadSkills, loadRepoRuntimeSkills);
-  const loadSubagentsForRepo = pickLoader(loadSubagents, loadRepoRuntimeSubagents);
+  const loadRuntimeCatalog = pickLoader(loadCatalog, loadRepoRuntimeCatalog);
   const loadFileSearchForRepo = pickLoader(loadFileSearch, loadRepoRuntimeFileSearch);
   const loadedSession = selectedSession.loadedSession;
   const selectedSessionIdentity = selectedSession.identity;
@@ -306,7 +302,7 @@ export function useAgentStudioChatComposer({
     repoPath: workspaceRepoPath,
     runtimeKinds: modelPickerRuntimeKinds,
     enabledRuntimeKinds: enabledModelPickerRuntimeKinds,
-    loadCatalog: loadCatalogForRepo,
+    loadRuntimeCatalog,
   });
   const modelPickerRuntimes = useMemo<ModelPickerRuntime[]>(() => {
     if (!hasSessionTarget) {
@@ -347,14 +343,19 @@ export function useAgentStudioChatComposer({
           isAvailable: true,
           unavailableReason: "The current session model catalog is unavailable.",
           retry: async (): Promise<void> => {
-            if (!workspaceRepoPath) {
+            if (!workspaceRepoPath || !selectedSessionIdentity) {
               throw new Error(
-                "A repository path is required to refresh the session model catalog.",
+                "A repository path and session are required to refresh the session model catalog.",
               );
             }
-            await queryClient.invalidateQueries({
-              queryKey: runtimeCatalogQueryKeys.repo(workspaceRepoPath, descriptor.kind),
-              exact: true,
+            await retryRuntimeCatalog({
+              queryClient,
+              runtimeRef: {
+                repoPath: workspaceRepoPath,
+                runtimeKind: descriptor.kind,
+                workingDirectory: selectedSessionIdentity.workingDirectory,
+              },
+              loadRuntimeCatalog,
             });
           },
         }),
@@ -363,6 +364,7 @@ export function useAgentStudioChatComposer({
   }, [
     hasSessionTarget,
     isSessionModelCatalogLoading,
+    loadRuntimeCatalog,
     modelPickerRuntimeDefinitions,
     queryClient,
     repoModelPickerResources,
@@ -384,22 +386,25 @@ export function useAgentStudioChatComposer({
     slashCommands,
     slashCommandsError,
     isSlashCommandsLoading,
+    retrySlashCommands,
   } = useChatComposerSlashCommands({
     promptInputRuntime,
     runtimeSupportsSlashCommands,
     reusablePrompts,
-    loadSlashCommandsForRepo,
+    loadRuntimeCatalog,
   });
-  const { skillCatalog, skills, skillsError, isSkillsLoading } = useChatComposerSkills({
-    promptInputRuntime,
-    supportsSkillReferences,
-    loadSkillsForRepo,
-  });
-  const { subagentCatalog, subagents, subagentsError, isSubagentsLoading } =
+  const { skillCatalog, skills, skillsError, isSkillsLoading, retrySkills } = useChatComposerSkills(
+    {
+      promptInputRuntime,
+      supportsSkillReferences,
+      loadRuntimeCatalog,
+    },
+  );
+  const { subagentCatalog, subagents, subagentsError, isSubagentsLoading, retrySubagents } =
     useChatComposerSubagents({
       promptInputRuntime,
       supportsSubagentReferences,
-      loadSubagentsForRepo,
+      loadRuntimeCatalog,
     });
   const {
     selectionCatalog,
@@ -464,6 +469,10 @@ export function useAgentStudioChatComposer({
       }),
     [loadFileSearchForRepo, promptInputRuntime, queryClient, supportsFileSearch],
   );
+  const refreshCatalogIfStale = useChatComposerCatalogRefresh({
+    promptInputRuntime,
+    loadRuntimeCatalog,
+  });
   const isSelectionCatalogLoading = hasSessionTarget
     ? isSessionModelCatalogLoading
     : isLoadingComposerCatalog;
@@ -528,7 +537,14 @@ export function useAgentStudioChatComposer({
     selectionPolicy: modelPickerSelectionPolicy,
     favoriteState,
     onValueChange: handleSelectModelPair,
-    onOpenChange: setIsModelPickerOpen,
+    // The catalog query stays enabled while the composer is mounted, so refresh
+    // the cached catalog when the picker opens and the entry is stale.
+    onOpenChange: (open: boolean) => {
+      setIsModelPickerOpen(open);
+      if (open) {
+        refreshCatalogIfStale();
+      }
+    },
   };
 
   return {
@@ -549,14 +565,20 @@ export function useAgentStudioChatComposer({
     slashCommands,
     slashCommandsError,
     isSlashCommandsLoading,
+    retrySlashCommands,
     skillCatalog,
     skills,
     skillsError,
     isSkillsLoading,
+    retrySkills,
     subagentCatalog,
     subagents,
     subagentsError,
     isSubagentsLoading,
+    retrySubagents,
+    onCatalogMenuOpen: refreshCatalogIfStale,
+    onAgentSelectorOpen: refreshCatalogIfStale,
+    onVariantSelectorOpen: refreshCatalogIfStale,
     searchFiles,
     agentProfileOptions,
     modelPicker,

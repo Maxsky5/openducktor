@@ -1,10 +1,26 @@
 import { expect, mock, test } from "bun:test";
+import { AgentRuntimeQueryError } from "@openducktor/core";
 import { Effect } from "effect";
+import { HostOperationError } from "../../effect/host-errors";
 import { CodexSessionHistoryError } from "../../ports/codex-session-history-error";
 import { createCodexRuntimeTransport } from "./codex-runtime-transport";
 import { toRuntimeQueryError } from "./runtime-query-adapter";
 import { createCodexAppServerTransportRegistry } from "../codex/codex-app-server-transport-registry";
 import { hostInvokeFailureFromError } from "../../interface/router/host-invoke-failure";
+
+const createTransportWithRequest = (
+  request: Parameters<typeof createCodexRuntimeTransport>[0]["request"],
+) =>
+  createCodexRuntimeTransport(
+    {
+      request,
+      listLoadedThreads: () => Effect.dieMessage("Unexpected listLoadedThreads"),
+      listThreads: () => Effect.dieMessage("Unexpected listThreads"),
+      respond: () => Effect.dieMessage("Unexpected respond"),
+      listThreadTurns: () => Effect.dieMessage("Unexpected listThreadTurns"),
+    },
+    "private-runtime",
+  );
 
 test("an actual missing-transport failure keeps native identity inside the host", async () => {
   const registry = createCodexAppServerTransportRegistry();
@@ -84,4 +100,41 @@ test("host-native Codex queries preserve paged history diagnostics", async () =>
   expect(JSON.stringify(queryError.failure)).not.toContain("127.0.0.1");
   expect(JSON.stringify(queryError.failure)).not.toContain("secret");
   expect(queryError.cause).toBe(error);
+});
+
+test("reports a dead Codex transport as an unreachable runtime", async () => {
+  const transportLoss = new HostOperationError({
+    operation: "codexAppServerTransport.request.model/list",
+    message: "Codex app-server request model/list failed for runtime private-runtime",
+    cause: new HostOperationError({
+      operation: "codexAppServerTransport.childProcess",
+      message: "Codex app-server closed for runtime private-runtime",
+    }),
+  });
+  const transport = createTransportWithRequest(() => Effect.fail(transportLoss));
+
+  const error = await transport
+    .request({ method: "model/list", params: {} })
+    .catch((cause: unknown) => cause);
+
+  expect(error).toBeInstanceOf(AgentRuntimeQueryError);
+  expect(error).toMatchObject({ code: "runtime_unavailable" });
+  const queryError = toRuntimeQueryError(
+    "load runtime catalog",
+    { repoPath: "/repo", runtimeKind: "codex", workingDirectory: "/repo" },
+    error,
+  );
+  expect(queryError.failure.code).toBe("runtime_unavailable");
+  expect(JSON.stringify(queryError.failure)).not.toContain("private-runtime");
+});
+
+test("keeps a Codex RPC error isolated to the calling surface", async () => {
+  const rpcError = new HostOperationError({
+    operation: "codexAppServerTransport.request.model/list",
+    message: "Codex app-server request model/list failed",
+    cause: { code: -32602, message: "Invalid params" },
+  });
+  const transport = createTransportWithRequest(() => Effect.fail(rpcError));
+
+  await expect(transport.request({ method: "model/list", params: {} })).rejects.toBe(rpcError);
 });

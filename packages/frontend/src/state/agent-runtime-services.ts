@@ -9,7 +9,14 @@ import type {
 } from "@openducktor/contracts";
 import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
-import type { AcceptedAgentUserMessage, AgentEnginePort } from "@openducktor/core";
+import type {
+  AcceptedAgentUserMessage,
+  AgentEnginePort,
+  AgentRuntimeCatalog,
+  AgentRuntimeCatalogRead,
+  AgentRuntimeCatalogSurface,
+  AgentRuntimeCatalogSurfaceRead,
+} from "@openducktor/core";
 import { agentSessionRefsEqual } from "@openducktor/core";
 import { HostInvokeError } from "@openducktor/host-client";
 import { validateRuntimeDefinitionForOpenDucktor } from "@/lib/agent-runtime";
@@ -42,6 +49,42 @@ export const createAgentRuntimeServices = (hostClient: HostClient = host): Agent
   };
 };
 
+const toSurfaceRead = <Catalog>(
+  surface: AgentRuntimeCatalogSurface<Catalog> | undefined,
+): AgentRuntimeCatalogSurfaceRead<Catalog> | undefined => {
+  if (surface === undefined) {
+    return undefined;
+  }
+  if (surface.status === "available") {
+    return { status: "available", catalog: surface.catalog };
+  }
+  return { status: "failed", cause: surface.message };
+};
+
+const toCatalogRead = (catalog: AgentRuntimeCatalog): AgentRuntimeCatalogRead => {
+  const read: AgentRuntimeCatalogRead = {};
+  if (catalog.runtime !== undefined) {
+    read.runtime = catalog.runtime;
+  }
+  const models = toSurfaceRead(catalog.models);
+  if (models !== undefined) {
+    read.models = models;
+  }
+  const slashCommands = toSurfaceRead(catalog.slashCommands);
+  if (slashCommands !== undefined) {
+    read.slashCommands = slashCommands;
+  }
+  const skills = toSurfaceRead(catalog.skills);
+  if (skills !== undefined) {
+    read.skills = skills;
+  }
+  const subagents = toSurfaceRead(catalog.subagents);
+  if (subagents !== undefined) {
+    read.subagents = subagents;
+  }
+  return read;
+};
+
 const createAgentEngine = (hostClient: HostClient): AgentEnginePort => {
   return {
     describeGeneratedImages: (input) => hostClient.agentSessionDescribeGeneratedImages(input),
@@ -72,10 +115,8 @@ const createAgentEngine = (hostClient: HostClient): AgentEnginePort => {
     releaseSession: (input) => hostClient.agentSessionControlRelease(input),
     forkSession: (input) => hostClient.agentSessionControlFork(input),
     listRuntimeDefinitions: () => Object.values(RUNTIME_DESCRIPTORS_BY_KIND),
-    listAvailableModels: (input) => hostClient.agentRuntimeListModels(input),
-    listAvailableSlashCommands: (input) => hostClient.agentRuntimeListSlashCommands(input),
-    listAvailableSkills: (input) => hostClient.agentRuntimeListSkills(input),
-    listAvailableSubagents: (input) => hostClient.agentRuntimeListSubagents(input),
+    loadRuntimeCatalog: async (input) =>
+      toCatalogRead(await hostClient.agentRuntimeLoadCatalog(input)),
     searchFiles: (input) => hostClient.agentRuntimeSearchFiles(input),
     loadSessionHistory: async (input) => {
       const history = await hostClient.agentRuntimeLoadSessionHistory(input);

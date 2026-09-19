@@ -1,9 +1,27 @@
 import { describe, expect, test } from "bun:test";
 
+import type { AgentModelCatalog } from "@openducktor/core";
 import { defaultRepoRuntimeInput, makeMockClient, OpencodeSdkAdapter } from "./test-support";
 
+const loadModelsCatalog = async (adapter: OpencodeSdkAdapter): Promise<AgentModelCatalog> => {
+  const catalog = await adapter.loadRuntimeCatalog({ ...defaultRepoRuntimeInput });
+  if (catalog.models?.status !== "available") {
+    throw new Error("Expected the models surface to be available.");
+  }
+  return catalog.models.catalog;
+};
+
+const modelsSurfaceFailure = async (adapter: OpencodeSdkAdapter): Promise<Error> => {
+  const catalog = await adapter.loadRuntimeCatalog({ ...defaultRepoRuntimeInput });
+  const cause = catalog.models?.status === "failed" ? catalog.models.cause : undefined;
+  if (!(cause instanceof Error)) {
+    throw new Error("Expected the models surface to fail with an Error cause.");
+  }
+  return cause;
+};
+
 describe("OpencodeSdkAdapter catalog and mcp", () => {
-  test("listAvailableModels returns provider models and primary agents", async () => {
+  test("loadRuntimeCatalog returns provider models and primary agents", async () => {
     const mock = makeMockClient({
       agentsResponse: [
         {
@@ -21,9 +39,7 @@ describe("OpencodeSdkAdapter catalog and mcp", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    const catalog = await adapter.listAvailableModels({
-      ...defaultRepoRuntimeInput,
-    });
+    const catalog = await loadModelsCatalog(adapter);
 
     expect(catalog.models).toHaveLength(1);
     expect(catalog.models[0]).toMatchObject({
@@ -41,7 +57,7 @@ describe("OpencodeSdkAdapter catalog and mcp", () => {
     });
   });
 
-  test("listAvailableModels applies OpenCode default colors for native agents without explicit color", async () => {
+  test("loadRuntimeCatalog applies OpenCode default colors for native agents without explicit color", async () => {
     const expectedNativeDefaultColors = [
       { id: "build", color: "var(--icon-agent-build-base)" },
       { id: "plan", color: "var(--icon-agent-plan-base)" },
@@ -61,9 +77,7 @@ describe("OpencodeSdkAdapter catalog and mcp", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    const catalog = await adapter.listAvailableModels({
-      ...defaultRepoRuntimeInput,
-    });
+    const catalog = await loadModelsCatalog(adapter);
 
     expect(catalog.profiles).toEqual(
       expect.arrayContaining(
@@ -78,7 +92,7 @@ describe("OpencodeSdkAdapter catalog and mcp", () => {
     );
   });
 
-  test("listAvailableModels does not synthesize colors for unsupported native names", async () => {
+  test("loadRuntimeCatalog does not synthesize colors for unsupported native names", async () => {
     const mock = makeMockClient({
       agentsResponse: [
         {
@@ -102,9 +116,7 @@ describe("OpencodeSdkAdapter catalog and mcp", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    const catalog = await adapter.listAvailableModels({
-      ...defaultRepoRuntimeInput,
-    });
+    const catalog = await loadModelsCatalog(adapter);
 
     expect(catalog.profiles).toEqual(
       expect.arrayContaining([
@@ -121,7 +133,7 @@ describe("OpencodeSdkAdapter catalog and mcp", () => {
     expect(docs).not.toHaveProperty("color");
   });
 
-  test("listAvailableModels keeps explicit native color and skips fallback for non-native reserved names", async () => {
+  test("loadRuntimeCatalog keeps explicit native color and skips fallback for non-native reserved names", async () => {
     const mock = makeMockClient({
       agentsResponse: [
         {
@@ -146,9 +158,7 @@ describe("OpencodeSdkAdapter catalog and mcp", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    const catalog = await adapter.listAvailableModels({
-      ...defaultRepoRuntimeInput,
-    });
+    const catalog = await loadModelsCatalog(adapter);
 
     expect(catalog.profiles).toEqual(
       expect.arrayContaining([
@@ -165,7 +175,7 @@ describe("OpencodeSdkAdapter catalog and mcp", () => {
     expect(planProfile).not.toHaveProperty("color");
   });
 
-  test("listAvailableModels rejects malformed agent entries", async () => {
+  test("loadRuntimeCatalog fails the models surface for malformed agent entries", async () => {
     const mock = makeMockClient({
       agentsResponse: [
         null,
@@ -187,10 +197,10 @@ describe("OpencodeSdkAdapter catalog and mcp", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await expect(adapter.listAvailableModels({ ...defaultRepoRuntimeInput })).rejects.toThrow();
+    await expect(modelsSurfaceFailure(adapter)).resolves.toBeDefined();
   });
 
-  test("listAvailableModels preserves agent names exactly as reported by opencode", async () => {
+  test("loadRuntimeCatalog preserves agent names exactly as reported by opencode", async () => {
     const mock = makeMockClient({
       agentsResponse: [
         {
@@ -207,9 +217,7 @@ describe("OpencodeSdkAdapter catalog and mcp", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    const catalog = await adapter.listAvailableModels({
-      ...defaultRepoRuntimeInput,
-    });
+    const catalog = await loadModelsCatalog(adapter);
 
     expect(catalog.profiles).toEqual([
       expect.objectContaining({
@@ -220,7 +228,7 @@ describe("OpencodeSdkAdapter catalog and mcp", () => {
     ]);
   });
 
-  test("listAvailableModels rejects profile lookup failures instead of masking them", async () => {
+  test("loadRuntimeCatalog reports profile lookup failures instead of masking them", async () => {
     const mock = makeMockClient({
       agentsResult: {
         mode: "api_error",
@@ -234,11 +242,7 @@ describe("OpencodeSdkAdapter catalog and mcp", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await expect(
-      adapter.listAvailableModels({
-        repoPath: "/repo",
-        runtimeKind: "opencode",
-      }),
-    ).rejects.toThrow("agent index unavailable");
+    const cause = await modelsSurfaceFailure(adapter);
+    expect(String(cause)).toContain("agent index unavailable");
   });
 });

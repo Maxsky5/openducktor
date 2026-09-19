@@ -1,6 +1,7 @@
 import type { AgentSlashCommand } from "@openducktor/core";
 import { ChevronRight, LoaderCircle, Terminal } from "lucide-react";
 import { type ReactElement, useEffect, useRef } from "react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getComposerPopupOptionId } from "./agent-chat-composer-menu-state";
 
@@ -10,6 +11,7 @@ type AgentChatComposerSlashMenuProps = {
   activeIndex: number;
   slashCommandsError: string | null;
   isSlashCommandsLoading: boolean;
+  onRetry: (() => void) | null;
   onSelectCommand: (command: AgentSlashCommand) => void;
 };
 
@@ -19,6 +21,7 @@ export function AgentChatComposerSlashMenu({
   activeIndex,
   slashCommandsError,
   isSlashCommandsLoading,
+  onRetry,
   onSelectCommand,
 }: AgentChatComposerSlashMenuProps): ReactElement {
   const commandButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -47,8 +50,22 @@ export function AgentChatComposerSlashMenu({
         </div>
       ) : null}
       {slashCommandsError ? (
-        <div role="alert" className="border-b border-border px-3 py-2 text-sm text-destructive">
-          {slashCommandsError}
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-sm text-destructive"
+        >
+          <span className="min-w-0">{slashCommandsError}</span>
+          {onRetry ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 shrink-0 px-2"
+              onClick={onRetry}
+            >
+              Retry
+            </Button>
+          ) : null}
         </div>
       ) : null}
       {commands.length === 0 && !isSlashCommandsLoading && !slashCommandsError ? (

@@ -130,7 +130,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     const originalStopSession = OpencodeSdkAdapter.prototype.stopSession;
     const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
     const originalSendUserMessage = OpencodeSdkAdapter.prototype.sendUserMessage;
-    const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
+    const originalLoadRuntimeCatalog = OpencodeSdkAdapter.prototype.loadRuntimeCatalog;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
 
@@ -156,10 +156,11 @@ describe("use-agent-orchestrator-operations session state", () => {
       sendCalls += 1;
       return acceptedUserMessageForInput(input);
     };
-    OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
-      models: [],
-      defaultModelsByProvider: {},
-      profiles: [],
+    OpencodeSdkAdapter.prototype.loadRuntimeCatalog = async () => ({
+      models: {
+        status: "available",
+        catalog: { models: [], defaultModelsByProvider: {}, profiles: [] },
+      },
     });
     OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
     OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
@@ -257,7 +258,7 @@ describe("use-agent-orchestrator-operations session state", () => {
       OpencodeSdkAdapter.prototype.stopSession = originalStopSession;
       OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
       OpencodeSdkAdapter.prototype.sendUserMessage = originalSendUserMessage;
-      OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
+      OpencodeSdkAdapter.prototype.loadRuntimeCatalog = originalLoadRuntimeCatalog;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
       OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
     }
@@ -273,7 +274,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     const originalQaGetReport = host.qaGetReport;
     const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
 
-    const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
+    const originalLoadRuntimeCatalog = OpencodeSdkAdapter.prototype.loadRuntimeCatalog;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
 
     host.agentSessionsList = async () => [];
@@ -309,10 +310,11 @@ describe("use-agent-orchestrator-operations session state", () => {
       agentDefaults: {},
     });
 
-    OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
-      models: [],
-      defaultModelsByProvider: {},
-      profiles: [],
+    OpencodeSdkAdapter.prototype.loadRuntimeCatalog = async () => ({
+      models: {
+        status: "available",
+        catalog: { models: [], defaultModelsByProvider: {}, profiles: [] },
+      },
     });
     OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
 
@@ -351,7 +353,7 @@ describe("use-agent-orchestrator-operations session state", () => {
       host.qaGetReport = originalQaGetReport;
       host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
 
-      OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
+      OpencodeSdkAdapter.prototype.loadRuntimeCatalog = originalLoadRuntimeCatalog;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
     }
   });
@@ -363,7 +365,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
     const originalSendUserMessage = OpencodeSdkAdapter.prototype.sendUserMessage;
-    const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
+    const originalLoadRuntimeCatalog = OpencodeSdkAdapter.prototype.loadRuntimeCatalog;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
 
@@ -374,10 +376,11 @@ describe("use-agent-orchestrator-operations session state", () => {
       sendCalls += 1;
       return acceptedUserMessageForInput(input);
     };
-    OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
-      models: [],
-      defaultModelsByProvider: {},
-      profiles: [],
+    OpencodeSdkAdapter.prototype.loadRuntimeCatalog = async () => ({
+      models: {
+        status: "available",
+        catalog: { models: [], defaultModelsByProvider: {}, profiles: [] },
+      },
     });
     OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
     OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
@@ -420,7 +423,7 @@ describe("use-agent-orchestrator-operations session state", () => {
       host.planGet = originalPlanGet;
       host.qaGetReport = originalQaGetReport;
       OpencodeSdkAdapter.prototype.sendUserMessage = originalSendUserMessage;
-      OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
+      OpencodeSdkAdapter.prototype.loadRuntimeCatalog = originalLoadRuntimeCatalog;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
       OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
     }
@@ -431,7 +434,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
     const originalUpdateSessionModel = OpencodeSdkAdapter.prototype.updateSessionModel;
-    const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
+    const originalLoadRuntimeCatalog = OpencodeSdkAdapter.prototype.loadRuntimeCatalog;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
 
@@ -440,10 +443,11 @@ describe("use-agent-orchestrator-operations session state", () => {
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
     OpencodeSdkAdapter.prototype.updateSessionModel = async () => {};
-    OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
-      models: [],
-      defaultModelsByProvider: {},
-      profiles: [],
+    OpencodeSdkAdapter.prototype.loadRuntimeCatalog = async () => ({
+      models: {
+        status: "available",
+        catalog: { models: [], defaultModelsByProvider: {}, profiles: [] },
+      },
     });
     OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
     OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
@@ -498,7 +502,7 @@ describe("use-agent-orchestrator-operations session state", () => {
       host.planGet = originalPlanGet;
       host.qaGetReport = originalQaGetReport;
       OpencodeSdkAdapter.prototype.updateSessionModel = originalUpdateSessionModel;
-      OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
+      OpencodeSdkAdapter.prototype.loadRuntimeCatalog = originalLoadRuntimeCatalog;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
       OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
     }
@@ -515,7 +519,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     const originalStartSession = OpencodeSdkAdapter.prototype.startSession;
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
-    const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
+    const originalLoadRuntimeCatalog = OpencodeSdkAdapter.prototype.loadRuntimeCatalog;
 
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
@@ -538,10 +542,11 @@ describe("use-agent-orchestrator-operations session state", () => {
     };
     OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
     OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
-    OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
-      models: [],
-      defaultModelsByProvider: {},
-      profiles: [],
+    OpencodeSdkAdapter.prototype.loadRuntimeCatalog = async () => ({
+      models: {
+        status: "available",
+        catalog: { models: [], defaultModelsByProvider: {}, profiles: [] },
+      },
     });
 
     const harness = createHookHarness({
@@ -606,7 +611,7 @@ describe("use-agent-orchestrator-operations session state", () => {
       OpencodeSdkAdapter.prototype.startSession = originalStartSession;
       OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
-      OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
+      OpencodeSdkAdapter.prototype.loadRuntimeCatalog = originalLoadRuntimeCatalog;
     }
   });
 
@@ -700,7 +705,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
-    const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
+    const originalLoadRuntimeCatalog = OpencodeSdkAdapter.prototype.loadRuntimeCatalog;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
 
@@ -708,10 +713,11 @@ describe("use-agent-orchestrator-operations session state", () => {
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
-    OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
-      models: [],
-      defaultModelsByProvider: {},
-      profiles: [],
+    OpencodeSdkAdapter.prototype.loadRuntimeCatalog = async () => ({
+      models: {
+        status: "available",
+        catalog: { models: [], defaultModelsByProvider: {}, profiles: [] },
+      },
     });
     OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
     OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
@@ -759,7 +765,7 @@ describe("use-agent-orchestrator-operations session state", () => {
       host.specGet = originalSpecGet;
       host.planGet = originalPlanGet;
       host.qaGetReport = originalQaGetReport;
-      OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
+      OpencodeSdkAdapter.prototype.loadRuntimeCatalog = originalLoadRuntimeCatalog;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
       OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
     }
@@ -961,7 +967,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
     const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
-    const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
+    const originalLoadRuntimeCatalog = OpencodeSdkAdapter.prototype.loadRuntimeCatalog;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
     let resumeCalls = 0;
@@ -981,10 +987,11 @@ describe("use-agent-orchestrator-operations session state", () => {
         status: "idle",
       };
     };
-    OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
-      models: [],
-      defaultModelsByProvider: {},
-      profiles: [],
+    OpencodeSdkAdapter.prototype.loadRuntimeCatalog = async () => ({
+      models: {
+        status: "available",
+        catalog: { models: [], defaultModelsByProvider: {}, profiles: [] },
+      },
     });
     OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
     OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
@@ -1020,7 +1027,7 @@ describe("use-agent-orchestrator-operations session state", () => {
       host.planGet = originalPlanGet;
       host.qaGetReport = originalQaGetReport;
       OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
-      OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
+      OpencodeSdkAdapter.prototype.loadRuntimeCatalog = originalLoadRuntimeCatalog;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
       OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
     }

@@ -1,14 +1,22 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { RepoRuntimeRef, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
+import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import {
   CLAUDE_RUNTIME_DESCRIPTOR,
   CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
 } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentSessionStartMode } from "@openducktor/core";
+import type {
+  AgentModelCatalog,
+  AgentRuntimeCatalog,
+  AgentSessionStartMode,
+  RuntimeWorkingDirectoryRef,
+} from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
 import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
-import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createRepoRuntimeHealthFixture,
+  createRuntimeCatalogFixture,
+} from "@/test-utils/shared-test-fixtures";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
@@ -267,6 +275,9 @@ const createBaseProps = (overrides: Partial<HookHarnessArgs> = {}): HookHarnessA
   ...overrides,
 });
 
+const runtimeCatalogFor = (models: AgentModelCatalog): AgentRuntimeCatalog =>
+  createRuntimeCatalogFixture({ models });
+
 const createBuildRepoSettingsForRuntime = (runtimeKind: RuntimeKind): RepoSettingsInput => ({
   ...createRepoSettings({
     build: {
@@ -340,7 +351,7 @@ describe("useSessionStartModalState", () => {
   });
 
   test("waits for runtime readiness before loading the modal catalog", async () => {
-    const loadCatalog = mock(async () => CATALOG);
+    const loadCatalog = mock(async () => runtimeCatalogFor(CATALOG));
     const repoRuntimeHealthContextRef = {
       current: createRepoRuntimeHealthContextValue({
         runtimeHealthByRuntime: {
@@ -387,6 +398,7 @@ describe("useSessionStartModalState", () => {
     expect(loadCatalog).toHaveBeenCalledWith({
       repoPath: "/repo",
       runtimeKind: "opencode",
+      workingDirectory: "/repo",
     });
   });
 
@@ -451,7 +463,7 @@ describe("useSessionStartModalState", () => {
   });
 
   test("requires an explicit pick after the catalog rejects the stale default", async () => {
-    const catalogDeferred = createDeferred<AgentModelCatalog>();
+    const catalogDeferred = createDeferred<AgentRuntimeCatalog>();
     const loadCatalog = mock(async () => catalogDeferred.promise);
     const props = createBaseProps({
       loadCatalog,
@@ -482,7 +494,7 @@ describe("useSessionStartModalState", () => {
     });
 
     await harness.run(() => {
-      catalogDeferred.resolve(CATALOG);
+      catalogDeferred.resolve(runtimeCatalogFor(CATALOG));
     });
     await harness.waitFor((state) => state.selection === null);
 
@@ -560,12 +572,12 @@ describe("useSessionStartModalState", () => {
   });
 
   test("clears previous runtime model while switching to a runtime with a loading catalog", async () => {
-    const catalogDeferred = createDeferred<AgentModelCatalog>();
-    const loadCatalog = mock(async (runtimeRef: RepoRuntimeRef) => {
+    const catalogDeferred = createDeferred<AgentRuntimeCatalog>();
+    const loadCatalog = mock(async (runtimeRef: RuntimeWorkingDirectoryRef) => {
       if (runtimeRef.runtimeKind === "claude") {
         return catalogDeferred.promise;
       }
-      return CATALOG;
+      return runtimeCatalogFor(CATALOG);
     });
     const harness = createHookHarness(
       createBaseProps({
@@ -596,7 +608,7 @@ describe("useSessionStartModalState", () => {
     );
 
     await harness.run(() => {
-      catalogDeferred.resolve(CLAUDE_CATALOG);
+      catalogDeferred.resolve(runtimeCatalogFor(CLAUDE_CATALOG));
     });
     await harness.waitFor(
       (state) =>
@@ -629,11 +641,11 @@ describe("useSessionStartModalState", () => {
   });
 
   test("clears stale model selection and exposes catalog errors when runtime catalog loading fails", async () => {
-    const loadCatalog = mock(async (runtimeRef: RepoRuntimeRef) => {
+    const loadCatalog = mock(async (runtimeRef: RuntimeWorkingDirectoryRef) => {
       if (runtimeRef.runtimeKind === "claude") {
         throw new Error("Claude auth failed");
       }
-      return CATALOG;
+      return runtimeCatalogFor(CATALOG);
     });
     const harness = createHookHarness(
       createBaseProps({
@@ -989,7 +1001,7 @@ describe("useSessionStartModalState", () => {
   });
 
   test("recovers requested runtime selection after runtime definitions load", async () => {
-    const loadCatalog = mock(async () => CATALOG);
+    const loadCatalog = mock(async () => runtimeCatalogFor(CATALOG));
     const baseProps = createBaseProps({
       loadCatalog,
       runtimeDefinitions: [],
@@ -1031,14 +1043,15 @@ describe("useSessionStartModalState", () => {
     expect(loadCatalog).toHaveBeenCalledWith({
       repoPath: "/repo",
       runtimeKind: "opencode",
+      workingDirectory: "/repo",
     });
 
     await harness.unmount();
   });
 
   test("loads the selected runtime catalog instead of reusing the initial catalog", async () => {
-    const loadCatalog = mock(async ({ runtimeKind }: RepoRuntimeRef) => {
-      return runtimeKind === "codex" ? CODEX_CATALOG : CATALOG;
+    const loadCatalog = mock(async ({ runtimeKind }: RuntimeWorkingDirectoryRef) => {
+      return runtimeCatalogFor(runtimeKind === "codex" ? CODEX_CATALOG : CATALOG);
     });
     const harness = createHookHarness(
       createBaseProps({
@@ -1083,14 +1096,15 @@ describe("useSessionStartModalState", () => {
     expect(loadCatalog).toHaveBeenCalledWith({
       repoPath: "/repo",
       runtimeKind: "codex",
+      workingDirectory: "/repo",
     });
 
     await harness.unmount();
   });
 
   test("selects an exact runtime, provider, and model pair in one action", async () => {
-    const loadCatalog = mock(async ({ runtimeKind }: RepoRuntimeRef) => {
-      return runtimeKind === "codex" ? CODEX_CATALOG : CATALOG;
+    const loadCatalog = mock(async ({ runtimeKind }: RuntimeWorkingDirectoryRef) => {
+      return runtimeCatalogFor(runtimeKind === "codex" ? CODEX_CATALOG : CATALOG);
     });
     const harness = createHookHarness(
       createBaseProps({
@@ -1150,9 +1164,16 @@ describe("useSessionStartModalState", () => {
         },
       ],
     };
-    queryClient.setQueryData(runtimeCatalogQueryKeys.repo("/repo", "claude"), staleClaudeCatalog);
-    const loadCatalog = mock(async ({ runtimeKind }: RepoRuntimeRef) => {
-      return runtimeKind === "claude" ? CLAUDE_CATALOG : CATALOG;
+    queryClient.setQueryData(
+      runtimeCatalogQueryKeys.catalog({
+        repoPath: "/repo",
+        runtimeKind: "claude",
+        workingDirectory: "/repo",
+      }),
+      createRuntimeCatalogFixture({ models: staleClaudeCatalog }),
+    );
+    const loadCatalog = mock(async (runtimeRef: RuntimeWorkingDirectoryRef) => {
+      return runtimeCatalogFor(runtimeRef.runtimeKind === "claude" ? CLAUDE_CATALOG : CATALOG);
     });
     const harness = createHookHarness(
       createBaseProps({
@@ -1192,6 +1213,7 @@ describe("useSessionStartModalState", () => {
     expect(loadCatalog).not.toHaveBeenCalledWith({
       repoPath: "/repo",
       runtimeKind: "claude",
+      workingDirectory: "/repo",
     });
     expect(harness.getLatest().variantOptions).toEqual([]);
 
@@ -1589,11 +1611,13 @@ describe("useSessionStartModalState", () => {
   });
 
   test("filters picker runtimes by the selected start mode without selecting fallbacks", async () => {
-    const loadCatalog = mock(async ({ runtimeKind }: RepoRuntimeRef) => ({
-      ...CATALOG,
-      runtime:
-        runtimeKind === FORK_RUNTIME_KIND ? FORK_RUNTIME_DESCRIPTOR : REUSE_RUNTIME_DESCRIPTOR,
-    }));
+    const loadCatalog = mock(async ({ runtimeKind }: RuntimeWorkingDirectoryRef) =>
+      runtimeCatalogFor({
+        ...CATALOG,
+        runtime:
+          runtimeKind === FORK_RUNTIME_KIND ? FORK_RUNTIME_DESCRIPTOR : REUSE_RUNTIME_DESCRIPTOR,
+      }),
+    );
     const harness = createHookHarness(
       createBaseProps({
         loadCatalog,
@@ -1812,8 +1836,8 @@ describe("useSessionStartModalState", () => {
   });
 
   test("uses the source runtime when forking a session without a persisted model", async () => {
-    const loadCatalog = mock(async ({ runtimeKind }: RepoRuntimeRef) =>
-      runtimeKind === "claude" ? CLAUDE_CATALOG : CATALOG,
+    const loadCatalog = mock(async ({ runtimeKind }: RuntimeWorkingDirectoryRef) =>
+      runtimeCatalogFor(runtimeKind === "claude" ? CLAUDE_CATALOG : CATALOG),
     );
     const harness = createHookHarness(
       createBaseProps({
@@ -1860,13 +1884,14 @@ describe("useSessionStartModalState", () => {
     expect(loadCatalog).toHaveBeenCalledWith({
       repoPath: "/repo",
       runtimeKind: "claude",
+      workingDirectory: "/repo",
     });
 
     await harness.unmount();
   });
 
   test("revalidates a fork source model when its catalog loads", async () => {
-    const catalogDeferred = createDeferred<AgentModelCatalog>();
+    const catalogDeferred = createDeferred<AgentRuntimeCatalog>();
     const loadCatalog = mock(async () => catalogDeferred.promise);
     const props = createBaseProps({ loadCatalog });
     delete props.initialCatalog;
@@ -1912,7 +1937,7 @@ describe("useSessionStartModalState", () => {
     });
 
     await harness.run(() => {
-      catalogDeferred.resolve(CATALOG);
+      catalogDeferred.resolve(runtimeCatalogFor(CATALOG));
     });
     await harness.waitFor((state) => !state.isCatalogLoading, 1_000);
 
@@ -1922,7 +1947,7 @@ describe("useSessionStartModalState", () => {
   });
 
   test("preserves a fork source model while its runtime catalog loads", async () => {
-    const catalogDeferred = createDeferred<AgentModelCatalog>();
+    const catalogDeferred = createDeferred<AgentRuntimeCatalog>();
     const loadCatalog = mock(async () => catalogDeferred.promise);
     const harness = createHookHarness(
       createBaseProps({
@@ -1972,22 +1997,24 @@ describe("useSessionStartModalState", () => {
     });
 
     await harness.run(() => {
-      catalogDeferred.resolve({
-        ...CLAUDE_CATALOG,
-        models: [
-          {
-            id: "gpt-5.6-luna",
-            providerId: "claude",
-            providerName: "Claude",
-            modelId: "gpt-5.6-luna",
-            modelName: "GPT-5.6 Luna",
-            variants: ["high"],
+      catalogDeferred.resolve(
+        runtimeCatalogFor({
+          ...CLAUDE_CATALOG,
+          models: [
+            {
+              id: "gpt-5.6-luna",
+              providerId: "claude",
+              providerName: "Claude",
+              modelId: "gpt-5.6-luna",
+              modelName: "GPT-5.6 Luna",
+              variants: ["high"],
+            },
+          ],
+          defaultModelsByProvider: {
+            claude: "gpt-5.6-luna",
           },
-        ],
-        defaultModelsByProvider: {
-          claude: "gpt-5.6-luna",
-        },
-      });
+        }),
+      );
     });
     await harness.waitFor((state) => state.isCatalogLoading === false);
 

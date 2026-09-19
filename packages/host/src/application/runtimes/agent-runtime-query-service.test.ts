@@ -54,11 +54,16 @@ const harness = async (
         ...unexpectedRuntimeQueries,
         resolveSessionParent: (ref) =>
           Effect.succeed(ref.externalSessionId === "cold-child" ? "root" : null),
-        listAvailableModels: (input) =>
+        loadRuntimeCatalog: (input) =>
           Effect.promise(async () => {
             await beforeModels();
             calls.push(input);
-            return { models: [], defaultModelsByProvider: {} };
+            return {
+              models: {
+                status: "available" as const,
+                catalog: { models: [], defaultModelsByProvider: {} },
+              },
+            };
           }),
         loadSessionHistory: (input) =>
           Effect.sync(() => {
@@ -156,9 +161,20 @@ for (const runtimeKind of ["opencode", "claude", "codex"] as const) {
   test(`${runtimeKind} resolves the registered host adapter for a canonical repository`, async () => {
     const h = await harness(runtimeKind);
     await expect(
-      Effect.runPromise(h.service.listAvailableModels({ repoPath: "/alias", runtimeKind })),
-    ).resolves.toEqual({ models: [], defaultModelsByProvider: {} });
-    expect(h.calls).toEqual([{ repoPath, runtimeKind }]);
+      Effect.runPromise(
+        h.service.loadRuntimeCatalog({
+          repoPath: "/alias",
+          runtimeKind,
+          workingDirectory: repoPath,
+        }),
+      ),
+    ).resolves.toEqual({
+      models: {
+        status: "available",
+        catalog: { models: [], defaultModelsByProvider: {} },
+      },
+    });
+    expect(h.calls).toEqual([{ repoPath, runtimeKind, workingDirectory: repoPath }]);
   });
 }
 
@@ -272,7 +288,13 @@ test("rejects missing and mismatched runtime bindings without starting another r
   for (const runtime of [null, { ...h.runtime, runtimeId: "replacement" }]) {
     h.setRuntime(runtime);
     const error = await Effect.runPromise(
-      Effect.flip(h.service.listAvailableModels({ repoPath, runtimeKind: "opencode" })),
+      Effect.flip(
+        h.service.loadRuntimeCatalog({
+          repoPath,
+          runtimeKind: "opencode",
+          workingDirectory: repoPath,
+        }),
+      ),
     );
     expect(error.failure.code).toBe("runtime_unavailable");
   }
@@ -288,7 +310,13 @@ test("rejects a read that overlaps replacement and resolves the new adapter on t
     await release.promise;
   });
   const pending = Effect.runPromise(
-    Effect.flip(h.service.listAvailableModels({ repoPath, runtimeKind: "opencode" })),
+    Effect.flip(
+      h.service.loadRuntimeCatalog({
+        repoPath,
+        runtimeKind: "opencode",
+        workingDirectory: repoPath,
+      }),
+    ),
   );
   await entered.promise;
   await Effect.runPromise(h.adapterRegistry.remove("runtime-1"));
@@ -297,8 +325,13 @@ test("rejects a read that overlaps replacement and resolves the new adapter on t
     {
       queries: {
         ...unexpectedRuntimeQueries,
-        listAvailableModels: () =>
-          Effect.succeed({ models: [], defaultModelsByProvider: { native: "new" } }),
+        loadRuntimeCatalog: () =>
+          Effect.succeed({
+            models: {
+              status: "available" as const,
+              catalog: { models: [], defaultModelsByProvider: { native: "new" } },
+            },
+          }),
       },
     },
   );
@@ -307,8 +340,19 @@ test("rejects a read that overlaps replacement and resolves the new adapter on t
   release.resolve();
   expect((await pending).failure.code).toBe("runtime_unavailable");
   expect(
-    await Effect.runPromise(h.service.listAvailableModels({ repoPath, runtimeKind: "opencode" })),
-  ).toEqual({ models: [], defaultModelsByProvider: { native: "new" } });
+    await Effect.runPromise(
+      h.service.loadRuntimeCatalog({
+        repoPath,
+        runtimeKind: "opencode",
+        workingDirectory: repoPath,
+      }),
+    ),
+  ).toEqual({
+    models: {
+      status: "available",
+      catalog: { models: [], defaultModelsByProvider: { native: "new" } },
+    },
+  });
 });
 
 const historyRef = {

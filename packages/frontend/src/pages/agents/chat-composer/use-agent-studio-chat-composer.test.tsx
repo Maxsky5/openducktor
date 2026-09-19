@@ -11,7 +11,10 @@ import type {
   AgentFileSearchResult,
   AgentModelCatalog,
   AgentModelSelection,
+  AgentRuntimeCatalog,
+  AgentSlashCommandCatalog,
   AgentSubagentCatalog,
+  RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
@@ -64,6 +67,28 @@ const createSessionRuntimeData = (
   contextError: null,
   ...overrides,
 });
+
+const runtimeCatalog = ({
+  models,
+  slashCommands,
+  subagents,
+}: {
+  models?: AgentModelCatalog;
+  slashCommands?: AgentSlashCommandCatalog;
+  subagents?: AgentSubagentCatalog;
+} = {}): AgentRuntimeCatalog => {
+  const catalog: AgentRuntimeCatalog = {};
+  if (models !== undefined) {
+    catalog.models = { status: "available", catalog: models };
+  }
+  if (slashCommands !== undefined) {
+    catalog.slashCommands = { status: "available", catalog: slashCommands };
+  }
+  if (subagents !== undefined) {
+    catalog.subagents = { status: "available", catalog: subagents };
+  }
+  return catalog;
+};
 
 const CATALOG: AgentModelCatalog = {
   runtime: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -270,9 +295,6 @@ const createHookHarness = (
     loadRepoRuntimeCatalog: async () => {
       throw new Error("Test runtime catalog loader was not configured.");
     },
-    loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-    loadRepoRuntimeSkills: async () => ({ skills: [] }),
-    loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
     loadRepoRuntimeFileSearch: async () => [],
   } satisfies React.ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"];
 
@@ -371,7 +393,7 @@ const createBaseProps = (overrides: BasePropsOverrides = {}): HookArgs => {
       retryMutation: () => {},
     },
     updateAgentSessionModel: async () => {},
-    loadCatalog: async () => CATALOG,
+    loadCatalog: async () => runtimeCatalog({ models: CATALOG }),
     ...hookOverrides,
   };
 };
@@ -466,7 +488,7 @@ describe("useAgentStudioChatComposer", () => {
   });
 
   test("does not load the new-session catalog until the selected runtime is ready", async () => {
-    const loadCatalog = mock(async () => CATALOG);
+    const loadCatalog = mock(async () => runtimeCatalog({ models: CATALOG }));
     const expectedSelection = {
       runtimeKind: "opencode",
       providerId: "openai",
@@ -503,7 +525,7 @@ describe("useAgentStudioChatComposer", () => {
           variant: "high",
           profileId: "spec-agent",
         }),
-        loadCatalog: async () => CATALOG_WITHOUT_PROFILES,
+        loadCatalog: async () => runtimeCatalog({ models: CATALOG_WITHOUT_PROFILES }),
       }),
     );
 
@@ -541,7 +563,7 @@ describe("useAgentStudioChatComposer", () => {
 
   test("loads other runtime catalogs when the new-session picker opens and selects an exact pair", async () => {
     const loadCatalog = mock(async ({ runtimeKind }: RepoRuntimeRef) =>
-      runtimeKind === "codex" ? CODEX_CATALOG : CATALOG,
+      runtimeCatalog({ models: runtimeKind === "codex" ? CODEX_CATALOG : CATALOG }),
     );
     const harness = createHookHarness(createBaseProps({ loadCatalog }), {
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
@@ -551,7 +573,11 @@ describe("useAgentStudioChatComposer", () => {
     try {
       await harness.mount();
       await harness.waitFor((state) => state.modelPicker.runtimes[0]?.resource.catalog !== null);
-      expect(loadCatalog).not.toHaveBeenCalledWith({ repoPath: "/repo", runtimeKind: "codex" });
+      expect(loadCatalog).not.toHaveBeenCalledWith({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+      });
 
       await harness.run(() => {
         harness.getLatest().modelPicker.onOpenChange(true);
@@ -570,14 +596,18 @@ describe("useAgentStudioChatComposer", () => {
       });
 
       expect(harness.getLatest().selectionForNewSession?.runtimeKind).toBe("codex");
-      expect(loadCatalog).toHaveBeenCalledWith({ repoPath: "/repo", runtimeKind: "codex" });
+      expect(loadCatalog).toHaveBeenCalledWith({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+      });
     } finally {
       await harness.unmount();
     }
   });
 
   test("shows foreign runtimes as locked without loading their repo catalogs for an existing session", async () => {
-    const loadCatalog = mock(async () => CODEX_CATALOG);
+    const loadCatalog = mock(async () => runtimeCatalog({ models: CODEX_CATALOG }));
     const loadedSession = createLoadedSession();
     const harness = createHookHarness(
       createBaseProps({
@@ -602,7 +632,9 @@ describe("useAgentStudioChatComposer", () => {
       expect(
         harness.getLatest().modelPicker.runtimes.map((runtime) => runtime.descriptor.kind),
       ).toEqual(["opencode", "codex"]);
-      expect(loadCatalog).not.toHaveBeenCalled();
+      expect(loadCatalog).not.toHaveBeenCalledWith(
+        expect.objectContaining({ runtimeKind: "codex" }),
+      );
     } finally {
       await harness.unmount();
     }
@@ -727,13 +759,13 @@ describe("useAgentStudioChatComposer", () => {
   });
 
   test("keeps the selected session model while selected-session runtime data loads", async () => {
-    const loadCatalog = mock(async () => CATALOG);
+    const loadCatalog = mock(async () => runtimeCatalog({ models: CATALOG }));
     const harness = createHookHarness(
       createBaseProps({
         loadedSession: null,
         selectedSessionIdentity: {
           externalSessionId: "external-1",
-          workingDirectory: "/repo",
+          workingDirectory: "/repo/worktrees/session-1",
           runtimeKind: "opencode",
         },
         selectedSessionSummary: createSelectedSessionSummary({
@@ -756,7 +788,11 @@ describe("useAgentStudioChatComposer", () => {
       await harness.mount();
       await harness.waitFor((state) => state.isSlashCommandsLoading === false);
 
-      expect(loadCatalog).toHaveBeenCalledTimes(0);
+      expect(
+        harness
+          .getLatest()
+          .modelPicker.runtimes.find((runtime) => runtime.descriptor.kind === "opencode")?.resource,
+      ).toEqual(expect.objectContaining({ status: "loading", catalog: null }));
       expect(harness.getLatest().isSelectionCatalogLoading).toBe(true);
       expect(harness.getLatest().selectedModelSelection).toEqual({
         runtimeKind: "opencode",
@@ -851,7 +887,7 @@ describe("useAgentStudioChatComposer", () => {
           },
         }),
         repoSettings: createRepoSettings(null),
-        loadCatalog: async () => CODEX_CATALOG,
+        loadCatalog: async () => runtimeCatalog({ models: CODEX_CATALOG }),
       }),
       {
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
@@ -907,10 +943,10 @@ describe("useAgentStudioChatComposer", () => {
   });
 
   test("loads repo subagents through the repo runtime before a session starts", async () => {
-    const loadSubagents = mock(async () => SUBAGENT_CATALOG);
+    const loadCatalog = mock(async () => runtimeCatalog({ subagents: SUBAGENT_CATALOG }));
     const harness = createHookHarness(
       createBaseProps({
-        loadSubagents,
+        loadCatalog,
       }),
       {
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
@@ -923,7 +959,7 @@ describe("useAgentStudioChatComposer", () => {
 
       expect(harness.getLatest().supportsSubagentReferences).toBe(true);
       expect(harness.getLatest().subagents).toEqual(SUBAGENT_CATALOG.subagents);
-      expect(loadSubagents).toHaveBeenCalledWith({
+      expect(loadCatalog).toHaveBeenCalledWith({
         repoPath: "/repo",
         runtimeKind: "opencode",
         workingDirectory: "/repo",
@@ -969,7 +1005,7 @@ describe("useAgentStudioChatComposer", () => {
           variant: "",
           profileId: "",
         }),
-        loadCatalog: async () => CODEX_CATALOG,
+        loadCatalog: async () => runtimeCatalog({ models: CODEX_CATALOG }),
         loadFileSearch,
       }),
       {
@@ -1216,9 +1252,13 @@ describe("useAgentStudioChatComposer", () => {
   });
 
   test("does not query session slash commands without an active repository", async () => {
-    const loadSlashCommands = mock(async () => ({
-      commands: [{ id: "review", trigger: "review", title: "review", hints: [] }],
-    }));
+    const loadCatalog = mock(async () =>
+      runtimeCatalog({
+        slashCommands: {
+          commands: [{ id: "review", trigger: "review", title: "review", hints: [] }],
+        },
+      }),
+    );
     const harness = createHookHarness(
       createBaseProps({
         workspaceRepoPath: null,
@@ -1226,7 +1266,7 @@ describe("useAgentStudioChatComposer", () => {
           runtimeKind: "opencode",
           workingDirectory: "/repo/session-worktree",
         }),
-        loadSlashCommands,
+        loadCatalog,
       }),
       {
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
@@ -1237,7 +1277,7 @@ describe("useAgentStudioChatComposer", () => {
       await harness.mount();
       await harness.waitFor((state) => state.isSlashCommandsLoading === false);
 
-      expect(loadSlashCommands).not.toHaveBeenCalled();
+      expect(loadCatalog).not.toHaveBeenCalled();
       expect(harness.getLatest().slashCommandsError).toBe(
         "Repository path is required to read selected session runtime data.",
       );
@@ -1247,16 +1287,20 @@ describe("useAgentStudioChatComposer", () => {
   });
 
   test("merges runtime slash commands with reusable prompt commands", async () => {
-    const loadSlashCommands = mock(async () => ({
-      commands: [
-        {
-          id: "native-review",
-          trigger: "review",
-          title: "Runtime review",
-          hints: [],
+    const loadCatalog = mock(async () =>
+      runtimeCatalog({
+        slashCommands: {
+          commands: [
+            {
+              id: "native-review",
+              trigger: "review",
+              title: "Runtime review",
+              hints: [],
+            },
+          ],
         },
-      ],
-    }));
+      }),
+    );
     const harness = createHookHarness(
       createBaseProps({
         reusablePrompts: [
@@ -1267,7 +1311,7 @@ describe("useAgentStudioChatComposer", () => {
             content: "Summarize this:\n$ARGUMENTS",
           },
         ],
-        loadSlashCommands,
+        loadCatalog,
       }),
     );
 
@@ -1287,22 +1331,26 @@ describe("useAgentStudioChatComposer", () => {
   });
 
   test("reserves compact while giving reusable prompts precedence over ordinary triggers", async () => {
-    const loadSlashCommands = mock(async () => ({
-      commands: [
-        {
-          id: "native-review",
-          trigger: "review",
-          title: "Runtime review",
-          hints: [],
+    const loadCatalog = mock(async () =>
+      runtimeCatalog({
+        slashCommands: {
+          commands: [
+            {
+              id: "native-review",
+              trigger: "review",
+              title: "Runtime review",
+              hints: [],
+            },
+            {
+              id: "native-compact",
+              trigger: "compact",
+              title: "Runtime compact",
+              hints: [],
+            },
+          ],
         },
-        {
-          id: "native-compact",
-          trigger: "compact",
-          title: "Runtime compact",
-          hints: [],
-        },
-      ],
-    }));
+      }),
+    );
     const harness = createHookHarness(
       createBaseProps({
         reusablePrompts: [
@@ -1313,7 +1361,7 @@ describe("useAgentStudioChatComposer", () => {
             content: "Review this:",
           },
         ],
-        loadSlashCommands,
+        loadCatalog,
       }),
     );
 
@@ -1340,7 +1388,6 @@ describe("useAgentStudioChatComposer", () => {
         },
       },
     };
-    const loadSlashCommands = mock(async () => ({ commands: [] }));
     const harness = createHookHarness(
       createBaseProps({
         reusablePrompts: [
@@ -1351,7 +1398,6 @@ describe("useAgentStudioChatComposer", () => {
             content: "Review this.",
           },
         ],
-        loadSlashCommands,
       }),
       { runtimeDefinitions: [runtimeWithoutSlashCommands] },
     );
@@ -1359,7 +1405,6 @@ describe("useAgentStudioChatComposer", () => {
     try {
       await harness.mount();
 
-      expect(loadSlashCommands).not.toHaveBeenCalled();
       expect(harness.getLatest().supportsSlashCommands).toBe(true);
       expect(harness.getLatest().slashCommands).toEqual([
         {
@@ -1504,7 +1549,7 @@ describe("useAgentStudioChatComposer", () => {
         sessionRuntimeData: createSessionRuntimeData({
           modelCatalog: CATALOG_WITH_TRANSPORT_MODEL_IDS,
         }),
-        loadCatalog: async () => CATALOG_WITH_TRANSPORT_MODEL_IDS,
+        loadCatalog: async () => runtimeCatalog({ models: CATALOG_WITH_TRANSPORT_MODEL_IDS }),
         updateAgentSessionModel,
       }),
     );
@@ -1634,7 +1679,7 @@ describe("useAgentStudioChatComposer", () => {
   });
 
   test("does not load the repo composer catalog while selected-session runtime data is loading", async () => {
-    const loadCatalog = mock(async () => CATALOG);
+    const loadCatalog = mock(async () => runtimeCatalog({ models: CATALOG }));
     const loadedSession = createLoadedSession();
 
     const harness = createHookHarness(
@@ -1650,7 +1695,11 @@ describe("useAgentStudioChatComposer", () => {
     try {
       await harness.mount();
 
-      expect(loadCatalog).toHaveBeenCalledTimes(0);
+      expect(
+        harness
+          .getLatest()
+          .modelPicker.runtimes.find((runtime) => runtime.descriptor.kind === "opencode")?.resource,
+      ).toEqual(expect.objectContaining({ status: "loading", catalog: null }));
       expect(harness.getLatest().isSelectionCatalogLoading).toBe(true);
       expect(harness.getLatest().selectedModelSelection).toEqual({
         runtimeKind: "opencode",
@@ -1673,7 +1722,7 @@ describe("useAgentStudioChatComposer", () => {
         sessionRuntimeData: createSessionRuntimeData({
           isLoadingModelCatalog: true,
         }),
-        loadCatalog: async () => CATALOG,
+        loadCatalog: async () => runtimeCatalog({ models: CATALOG }),
       }),
     );
 
@@ -1686,17 +1735,19 @@ describe("useAgentStudioChatComposer", () => {
   });
 
   test("invalidates the composer catalog, ignores stale repo loads, and drops a default absent from the new catalog", async () => {
-    const repoALoad = createDeferred<AgentModelCatalog>();
-    const repoBLoad = createDeferred<AgentModelCatalog>();
-    const loadCatalog = mock(({ repoPath }: RepoRuntimeRef): Promise<AgentModelCatalog> => {
-      if (repoPath === "/repo-a") {
-        return repoALoad.promise;
-      }
-      if (repoPath === "/repo-b") {
-        return repoBLoad.promise;
-      }
-      return Promise.reject(new Error(`Unexpected repo path: ${repoPath}`));
-    });
+    const repoALoad = createDeferred<AgentRuntimeCatalog>();
+    const repoBLoad = createDeferred<AgentRuntimeCatalog>();
+    const loadCatalog = mock(
+      ({ repoPath }: RuntimeWorkingDirectoryRef): Promise<AgentRuntimeCatalog> => {
+        if (repoPath === "/repo-a") {
+          return repoALoad.promise;
+        }
+        if (repoPath === "/repo-b") {
+          return repoBLoad.promise;
+        }
+        return Promise.reject(new Error(`Unexpected repo path: ${repoPath}`));
+      },
+    );
 
     const harness = createHookHarness(
       createBaseProps({
@@ -1721,17 +1772,19 @@ describe("useAgentStudioChatComposer", () => {
         {
           repoPath: "/repo-a",
           runtimeKind: "opencode",
+          workingDirectory: "/repo-a",
         },
       ]);
       expect(loadCatalog.mock.calls[1]).toEqual([
         {
           repoPath: "/repo-b",
           runtimeKind: "opencode",
+          workingDirectory: "/repo-b",
         },
       ]);
 
       await harness.run(async () => {
-        repoALoad.resolve(CATALOG);
+        repoALoad.resolve(runtimeCatalog({ models: CATALOG }));
         await repoALoad.promise;
       });
 
@@ -1743,7 +1796,7 @@ describe("useAgentStudioChatComposer", () => {
       });
 
       await harness.run(async () => {
-        repoBLoad.resolve(ALTERNATE_CATALOG);
+        repoBLoad.resolve(runtimeCatalog({ models: ALTERNATE_CATALOG }));
         await repoBLoad.promise;
       });
       await harness.waitFor(
@@ -1771,22 +1824,24 @@ describe("useAgentStudioChatComposer", () => {
         profileId: "planner-agent",
       });
     } finally {
-      repoALoad.resolve(CATALOG);
-      repoBLoad.resolve(ALTERNATE_CATALOG);
+      repoALoad.resolve(runtimeCatalog({ models: CATALOG }));
+      repoBLoad.resolve(runtimeCatalog({ models: ALTERNATE_CATALOG }));
       await harness.unmount();
     }
   });
 
   test("uses defaults from the newly selected repository after switching repos", async () => {
-    const loadCatalog = mock(async ({ repoPath }: RepoRuntimeRef): Promise<AgentModelCatalog> => {
-      if (repoPath === "/repo-a") {
-        return CATALOG;
-      }
-      if (repoPath === "/repo-b") {
-        return ALTERNATE_CATALOG;
-      }
-      throw new Error(`Unexpected repo path: ${repoPath}`);
-    });
+    const loadCatalog = mock(
+      async ({ repoPath }: RuntimeWorkingDirectoryRef): Promise<AgentRuntimeCatalog> => {
+        if (repoPath === "/repo-a") {
+          return runtimeCatalog({ models: CATALOG });
+        }
+        if (repoPath === "/repo-b") {
+          return runtimeCatalog({ models: ALTERNATE_CATALOG });
+        }
+        throw new Error(`Unexpected repo path: ${repoPath}`);
+      },
+    );
 
     const harness = createHookHarness(
       createBaseProps({

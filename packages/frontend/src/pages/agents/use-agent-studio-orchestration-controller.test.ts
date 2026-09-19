@@ -148,6 +148,12 @@ const createBaseArgs = (): BuildArgs => {
       subagents: [],
       subagentsError: null,
       isSubagentsLoading: false,
+      retrySlashCommands: null,
+      retrySkills: null,
+      retrySubagents: null,
+      onAgentSelectorOpen: () => {},
+      onVariantSelectorOpen: () => {},
+      onCatalogMenuOpen: () => {},
       searchFiles: async () => [],
       agentProfileOptions: [],
       modelPicker: {

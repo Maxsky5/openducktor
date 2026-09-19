@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { AgentChatComposerSlashMenu } from "./agent-chat-composer-slash-menu";
 
 const COMMANDS = [
@@ -30,6 +30,7 @@ describe("AgentChatComposerSlashMenu", () => {
         activeIndex={0}
         slashCommandsError={null}
         isSlashCommandsLoading={false}
+        onRetry={null}
         onSelectCommand={() => {}}
       />,
     );
@@ -59,6 +60,7 @@ describe("AgentChatComposerSlashMenu", () => {
           activeIndex={0}
           slashCommandsError={null}
           isSlashCommandsLoading={false}
+          onRetry={null}
           onSelectCommand={() => {}}
         />,
       );
@@ -70,6 +72,7 @@ describe("AgentChatComposerSlashMenu", () => {
           activeIndex={1}
           slashCommandsError={null}
           isSlashCommandsLoading={false}
+          onRetry={null}
           onSelectCommand={() => {}}
         />,
       );
@@ -94,6 +97,7 @@ describe("AgentChatComposerSlashMenu", () => {
         activeIndex={0}
         slashCommandsError="Runtime commands failed"
         isSlashCommandsLoading={false}
+        onRetry={null}
         onSelectCommand={() => {}}
       />,
     );
@@ -115,6 +119,7 @@ describe("AgentChatComposerSlashMenu", () => {
         activeIndex={0}
         slashCommandsError={null}
         isSlashCommandsLoading={true}
+        onRetry={null}
         onSelectCommand={() => {}}
       />,
     );
@@ -127,6 +132,25 @@ describe("AgentChatComposerSlashMenu", () => {
     expect(loadingFeedback.textContent).toBe("Loading slash commands…");
   });
 
+  test("retries a failed runtime command read from the error row", () => {
+    const onRetry = mock(() => {});
+    render(
+      <AgentChatComposerSlashMenu
+        listboxId={LISTBOX_ID}
+        commands={[]}
+        activeIndex={0}
+        slashCommandsError="Runtime commands failed"
+        isSlashCommandsLoading={false}
+        onRetry={onRetry}
+        onSelectCommand={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
   test("announces empty feedback outside the controlled listbox", () => {
     render(
       <AgentChatComposerSlashMenu
@@ -135,6 +159,7 @@ describe("AgentChatComposerSlashMenu", () => {
         activeIndex={0}
         slashCommandsError={null}
         isSlashCommandsLoading={false}
+        onRetry={null}
         onSelectCommand={() => {}}
       />,
     );

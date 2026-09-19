@@ -167,11 +167,7 @@ export const createOpenCodeAgentEngineTestAdapter = (
     throw new Error("OpenCode does not support generated image previews.");
   },
   listRuntimeDefinitions: () => adapter.listRuntimeDefinitions(),
-  listAvailableModels: (input) => adapter.listAvailableModels(validateOpenCodeInput(input)),
-  listAvailableSlashCommands: (input) =>
-    adapter.listAvailableSlashCommands(validateOpenCodeInput(input)),
-  listAvailableSkills: (input) => adapter.listAvailableSkills(validateOpenCodeInput(input)),
-  listAvailableSubagents: (input) => adapter.listAvailableSubagents(validateOpenCodeInput(input)),
+  loadRuntimeCatalog: (input) => adapter.loadRuntimeCatalog(validateOpenCodeInput(input)),
   searchFiles: (input) => adapter.searchFiles(validateOpenCodeInput(input)),
   startSession: (input) => adapter.startSession(bindStartInput(input)),
   resumeSession: (input) => adapter.resumeSession(bindResumeInput(input)),

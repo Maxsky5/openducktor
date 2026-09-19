@@ -1,6 +1,6 @@
 import {
   type ForkAgentSessionInput,
-  type ListAgentModelsInput,
+  type LoadAgentRuntimeCatalogInput,
   type ListSessionRuntimeSnapshotsInput,
   type LoadAgentSessionDiffInput,
   type LoadAgentSessionHistoryInput,
@@ -18,7 +18,7 @@ import { resolveCodexRuntimeClientInput } from "./runtime-connection";
 import type { CodexAppServerAdapterOptions, CodexAppServerClient } from "./types";
 
 type RuntimeClientInput =
-  | ListAgentModelsInput
+  | LoadAgentRuntimeCatalogInput
   | StartAgentSessionInput
   | ResumeAgentSessionInput
   | PolicyBoundSessionRef

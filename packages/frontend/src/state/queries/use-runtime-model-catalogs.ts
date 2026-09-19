@@ -1,11 +1,16 @@
-import type { RepoRuntimeRef, RuntimeKind } from "@openducktor/contracts";
-import type { AgentModelCatalog } from "@openducktor/core";
-import { useQueries } from "@tanstack/react-query";
+import type { RuntimeKind } from "@openducktor/contracts";
+import type {
+  AgentModelCatalog,
+  AgentRuntimeCatalog,
+  RuntimeWorkingDirectoryRef,
+} from "@openducktor/core";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { errorMessage } from "@/lib/errors";
 import {
-  repoRuntimeCatalogQueryOptions,
-  skippedRepoRuntimeCatalogQueryOptions,
+  resolveRuntimeCatalogSurface,
+  retryRuntimeCatalog,
+  runtimeCatalogQueryOptions,
+  skippedRuntimeCatalogQueryOptions,
 } from "./runtime-catalog";
 
 export type RuntimeModelCatalogQueryResource = {
@@ -21,26 +26,28 @@ type UseRuntimeModelCatalogsArgs = {
   repoPath: string | null;
   runtimeKinds: readonly RuntimeKind[];
   enabledRuntimeKinds: readonly RuntimeKind[];
-  loadCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
+  loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
 };
 
 export function useRuntimeModelCatalogs({
   repoPath,
   runtimeKinds,
   enabledRuntimeKinds,
-  loadCatalog,
+  loadRuntimeCatalog,
 }: UseRuntimeModelCatalogsArgs) {
+  const queryClient = useQueryClient();
   const uniqueRuntimeKinds = useMemo(() => Array.from(new Set(runtimeKinds)), [runtimeKinds]);
   const enabledRuntimeKindSet = useMemo(() => new Set(enabledRuntimeKinds), [enabledRuntimeKinds]);
   const catalogQueries = useQueries({
     queries: uniqueRuntimeKinds.map((runtimeKind) => {
-      const runtimeRef = repoPath ? { repoPath, runtimeKind } : null;
-      const isEnabled = repoPath !== null && enabledRuntimeKindSet.has(runtimeKind);
+      const runtimeRef: RuntimeWorkingDirectoryRef | null = repoPath
+        ? { repoPath, runtimeKind, workingDirectory: repoPath }
+        : null;
       return {
         ...(runtimeRef
-          ? repoRuntimeCatalogQueryOptions(runtimeRef, loadCatalog)
-          : skippedRepoRuntimeCatalogQueryOptions()),
-        enabled: isEnabled,
+          ? runtimeCatalogQueryOptions(runtimeRef, loadRuntimeCatalog)
+          : skippedRuntimeCatalogQueryOptions()),
+        enabled: runtimeRef !== null && enabledRuntimeKindSet.has(runtimeKind),
       };
     }),
   });
@@ -53,19 +60,33 @@ export function useRuntimeModelCatalogs({
           throw new Error(`Missing model catalog query for runtime '${runtimeKind}'.`);
         }
         const isEnabled = repoPath !== null && enabledRuntimeKindSet.has(runtimeKind);
-        const error = !query.isFetching && query.error ? errorMessage(query.error) : null;
+        const surface = resolveRuntimeCatalogSurface(query.data?.models, query.error);
         return {
           runtimeKind,
-          catalog: error ? null : (query.data ?? null),
+          catalog: surface.catalog,
           isFetching: query.isFetching,
           isEnabled,
-          error,
+          error: surface.error,
           retry: async (): Promise<void> => {
-            await query.refetch();
+            if (repoPath === null) {
+              throw new Error("A repository path is required to retry the model catalog.");
+            }
+            await retryRuntimeCatalog({
+              queryClient,
+              runtimeRef: { repoPath, runtimeKind, workingDirectory: repoPath },
+              loadRuntimeCatalog,
+            });
           },
         };
       }),
-    [catalogQueries, enabledRuntimeKindSet, repoPath, uniqueRuntimeKinds],
+    [
+      catalogQueries,
+      enabledRuntimeKindSet,
+      loadRuntimeCatalog,
+      queryClient,
+      repoPath,
+      uniqueRuntimeKinds,
+    ],
   );
 
   return { resources } satisfies { resources: RuntimeModelCatalogQueryResource[] };

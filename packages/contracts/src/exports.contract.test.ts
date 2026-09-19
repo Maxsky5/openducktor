@@ -446,6 +446,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "runtimeApprovalRequestTypeSchema",
   "runtimeApprovalRequestTypeValues",
   "runtimeCapabilitiesSchema",
+  "agentRuntimeCatalogSchema",
+  "agentRuntimeLoadCatalogInputSchema",
   "runtimeCapabilityClasses",
   "runtimeCapabilityKeySchema",
   "runtimeCapabilityKeyValues",

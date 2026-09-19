@@ -163,6 +163,12 @@ type AgentStudioPageModelsModelSelectionContext = Pick<
   | "subagents"
   | "subagentsError"
   | "isSubagentsLoading"
+  | "retrySlashCommands"
+  | "retrySkills"
+  | "retrySubagents"
+  | "onCatalogMenuOpen"
+  | "onAgentSelectorOpen"
+  | "onVariantSelectorOpen"
   | "searchFiles"
   | "agentProfileOptions"
   | "modelPicker"
@@ -312,6 +318,12 @@ export function useAgentStudioOrchestrationController({
     subagents,
     subagentsError,
     isSubagentsLoading,
+    retrySlashCommands,
+    retrySkills,
+    retrySubagents,
+    onCatalogMenuOpen,
+    onAgentSelectorOpen,
+    onVariantSelectorOpen,
     searchFiles,
     agentProfileOptions,
     modelPicker,
@@ -499,6 +511,12 @@ export function useAgentStudioOrchestrationController({
       subagents,
       subagentsError,
       isSubagentsLoading,
+      retrySlashCommands,
+      retrySkills,
+      retrySubagents,
+      onCatalogMenuOpen,
+      onAgentSelectorOpen,
+      onVariantSelectorOpen,
       searchFiles,
       agentProfileOptions,
       modelPicker,

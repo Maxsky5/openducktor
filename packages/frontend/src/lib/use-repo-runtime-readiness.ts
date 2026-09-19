@@ -35,7 +35,7 @@ export function useRepoRuntimeReadiness({
   const { runtimeHealthByRuntime, isLoadingRepoRuntimeHealth, refreshRepoRuntimeHealth } =
     useRepoRuntimeHealthContext();
   const refreshChecks = useCallback(async (): Promise<void> => {
-    await refreshRepoRuntimeHealth();
+    await refreshRepoRuntimeHealth({ reloadCatalogs: true });
   }, [refreshRepoRuntimeHealth]);
   const readiness = deriveRepoRuntimeReadiness({
     hasActiveWorkspace: hasWorkspace,

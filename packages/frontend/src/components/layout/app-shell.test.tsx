@@ -345,15 +345,6 @@ function AppShellTestEnvironment({
                       loadRepoRuntimeCatalog: async () => {
                         throw new Error("loadRepoRuntimeCatalog is not used in this test");
                       },
-                      loadRepoRuntimeSlashCommands: async () => {
-                        throw new Error("loadRepoRuntimeSlashCommands is not used in this test");
-                      },
-                      loadRepoRuntimeSkills: async () => {
-                        throw new Error("loadRepoRuntimeSkills is not used in this test");
-                      },
-                      loadRepoRuntimeSubagents: async () => {
-                        throw new Error("loadRepoRuntimeSubagents is not used in this test");
-                      },
                       loadRepoRuntimeFileSearch: async () => {
                         throw new Error("loadRepoRuntimeFileSearch is not used in this test");
                       },

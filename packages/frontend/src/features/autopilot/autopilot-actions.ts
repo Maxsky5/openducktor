@@ -1,10 +1,10 @@
+import type { AgentSessionRecord, AutopilotActionId, TaskCard } from "@openducktor/contracts";
 import type {
-  AgentSessionRecord,
-  AutopilotActionId,
-  RepoRuntimeRef,
-  TaskCard,
-} from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
+  AgentModelSelection,
+  AgentRole,
+  AgentRuntimeCatalog,
+  RuntimeWorkingDirectoryRef,
+} from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import type {
   ResolvedSessionStartDecision,
@@ -17,7 +17,7 @@ import { gitProviderReadError, pullRequestHealthError } from "@/lib/git-provider
 import { MISSING_BUILD_TARGET_ERROR } from "@/lib/session-start-errors";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import { repositoryGitProviderContextQueryOptions } from "@/state/queries/git-provider-context";
-import { loadRepoRuntimeCatalogFromQuery } from "@/state/queries/runtime-catalog";
+import { loadRuntimeCatalogFromQuery } from "@/state/queries/runtime-catalog";
 import { loadRepoConfigFromQuery, toRepoSettingsInput } from "@/state/queries/workspace";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
@@ -43,7 +43,7 @@ type ExecuteAutopilotActionArgs = {
   alwaysStartQaReviewsFresh: boolean;
   queryClient: QueryClient;
   loadTaskSessionRecords: (repoPath: string, taskId: string) => Promise<AgentSessionRecord[]>;
-  loadRepoRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
+  loadRepoRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
   resolveTaskWorktree: (
     repoPath: string,
     taskId: string,
@@ -140,7 +140,7 @@ const resolveAutopilotSelection = async ({
   role: AgentRole;
   preferredSelection?: AgentModelSelection | null;
   queryClient: QueryClient;
-  loadRepoRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
+  loadRepoRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
 }): Promise<AgentModelSelection> => {
   if (preferredSelection) {
     return preferredSelection;
@@ -152,7 +152,7 @@ const resolveAutopilotSelection = async ({
     repoSettings: toRepoSettingsInput(repoConfig),
     repoPath: activeWorkspace.repoPath,
     loadRepoRuntimeCatalog: (runtimeRef) =>
-      loadRepoRuntimeCatalogFromQuery(queryClient, runtimeRef, loadRepoRuntimeCatalog),
+      loadRuntimeCatalogFromQuery(queryClient, runtimeRef, loadRepoRuntimeCatalog),
   });
 };
 

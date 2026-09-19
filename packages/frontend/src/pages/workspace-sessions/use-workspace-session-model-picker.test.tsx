@@ -4,7 +4,13 @@ import {
   DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
 } from "@openducktor/contracts";
-import type { AgentModelCatalog } from "@openducktor/core";
+import type {
+  AgentModelCatalog,
+  AgentRuntimeCatalog,
+  RuntimeWorkingDirectoryRef,
+} from "@openducktor/core";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { waitFor } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
@@ -12,9 +18,16 @@ import {
   RuntimeDefinitionsContext,
   type RuntimeDefinitionsContextValue,
 } from "@/state/app-state-contexts";
+import {
+  runtimeCatalogQueryKeys,
+  runtimeCatalogQueryOptions,
+} from "@/state/queries/runtime-catalog";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createRuntimeCatalogFixture,
+  createSettingsSnapshotFixture,
+} from "@/test-utils/shared-test-fixtures";
 import { useWorkspaceSessionModelPicker } from "./use-workspace-session-model-picker";
 
 test("live model picker keeps stable props and refreshes when catalog or selection changes", async () => {
@@ -31,6 +44,7 @@ test("live model picker keeps stable props and refreshes when catalog or selecti
     ],
     defaultModelsByProvider: {},
   };
+  const runtimeCatalog: AgentRuntimeCatalog = createRuntimeCatalogFixture({ models: catalog });
   const definitions: RuntimeDefinitionsContextValue = {
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
@@ -42,10 +56,7 @@ test("live model picker keeps stable props and refreshes when catalog or selecti
     runtimeSettingsError: null,
     hasRuntimeSettingsSnapshot: true,
     refreshRuntimeSettings: async () => {},
-    loadRepoRuntimeCatalog: async () => catalog,
-    loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-    loadRepoRuntimeSkills: async () => ({ skills: [] }),
-    loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
+    loadRepoRuntimeCatalog: async () => runtimeCatalog,
     loadRepoRuntimeFileSearch: async () => [],
   };
   const update = mock(() => {});
@@ -139,6 +150,7 @@ test.each([CLAUDE_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR])(
         { name: "review", mode: "primary" },
       ],
     };
+    const runtimeCatalog: AgentRuntimeCatalog = createRuntimeCatalogFixture({ models: catalog });
     const definitions: RuntimeDefinitionsContextValue = {
       runtimeDefinitions: [descriptor],
       availableRuntimeDefinitions: [descriptor],
@@ -150,10 +162,7 @@ test.each([CLAUDE_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR])(
       runtimeSettingsError: null,
       hasRuntimeSettingsSnapshot: true,
       refreshRuntimeSettings: async () => {},
-      loadRepoRuntimeCatalog: async () => catalog,
-      loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-      loadRepoRuntimeSkills: async () => ({ skills: [] }),
-      loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
+      loadRepoRuntimeCatalog: async () => runtimeCatalog,
       loadRepoRuntimeFileSearch: async () => [],
     };
     const update = mock(() => {});
@@ -249,6 +258,7 @@ test("prefills the creation picker from the repository Default Model when its ca
     ],
     defaultModelsByProvider: {},
   };
+  const runtimeCatalog: AgentRuntimeCatalog = createRuntimeCatalogFixture({ models: catalog });
   const definitions: RuntimeDefinitionsContextValue = {
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
@@ -260,10 +270,7 @@ test("prefills the creation picker from the repository Default Model when its ca
     runtimeSettingsError: null,
     hasRuntimeSettingsSnapshot: true,
     refreshRuntimeSettings: async () => {},
-    loadRepoRuntimeCatalog: async () => catalog,
-    loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-    loadRepoRuntimeSkills: async () => ({ skills: [] }),
-    loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
+    loadRepoRuntimeCatalog: async () => runtimeCatalog,
     loadRepoRuntimeFileSearch: async () => [],
   };
   const wrapper = ({ children }: PropsWithChildren) => (
@@ -302,6 +309,100 @@ test("prefills the creation picker from the repository Default Model when its ca
   }
 });
 
+test("refreshes a stale session catalog when the model picker opens", async () => {
+  const catalog: AgentModelCatalog = {
+    models: [
+      {
+        id: "openai/gpt-5",
+        providerId: "openai",
+        modelId: "gpt-5",
+        modelName: "GPT 5",
+        providerName: "OpenAI",
+        variants: ["low"],
+      },
+    ],
+    defaultModelsByProvider: {},
+  };
+  const runtimeCatalogFixture: AgentRuntimeCatalog = createRuntimeCatalogFixture({
+    models: catalog,
+  });
+  const runtimeRef = {
+    repoPath: "/repo",
+    runtimeKind: "opencode" as const,
+    workingDirectory: "/repo/worktree",
+  };
+  const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+  const loadRuntimeCatalog = mock(
+    async (_runtimeRef: RuntimeWorkingDirectoryRef) => runtimeCatalogFixture,
+  );
+  await client.fetchQuery(runtimeCatalogQueryOptions(runtimeRef, loadRuntimeCatalog));
+  client.setQueryData(runtimeCatalogQueryKeys.catalog(runtimeRef), runtimeCatalogFixture, {
+    updatedAt: 0,
+  });
+  const definitions: RuntimeDefinitionsContextValue = {
+    runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+    isLoadingRuntimeDefinitions: false,
+    runtimeDefinitionsError: null,
+    refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
+    isLoadingRuntimeSettings: false,
+    runtimeSettingsError: null,
+    hasRuntimeSettingsSnapshot: true,
+    refreshRuntimeSettings: async () => {},
+    loadRepoRuntimeCatalog: loadRuntimeCatalog,
+    loadRepoRuntimeFileSearch: async () => [],
+  };
+  const target = {
+    identity: {
+      runtimeKind: "opencode" as const,
+      externalSessionId: "native-1",
+      workingDirectory: "/repo/worktree",
+    },
+    runtimeKind: "opencode" as const,
+    runtimeRef,
+    selection: {
+      runtimeKind: "opencode" as const,
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "low",
+    },
+    catalog,
+    isLoading: false,
+    error: null,
+    retry: async () => {},
+    update: mock(() => {}),
+  };
+  const wrapper = ({ children }: PropsWithChildren) => (
+    <QueryClientProvider client={client}>
+      <RuntimeDefinitionsContext value={definitions}>{children}</RuntimeDefinitionsContext>
+    </QueryClientProvider>
+  );
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
+    }),
+  );
+  const harness = createHookHarness(
+    (session: typeof target) => useWorkspaceSessionModelPicker("/repo", session),
+    target,
+    { wrapper },
+  );
+  try {
+    await harness.mount();
+    await harness.waitFor((state) => state.selection?.modelId === "gpt-5");
+    expect(loadRuntimeCatalog).toHaveBeenCalledTimes(1);
+
+    await harness.run((state) => state.modelPicker.onOpenChange?.());
+    await waitFor(() => expect(loadRuntimeCatalog).toHaveBeenCalledTimes(2));
+    expect(loadRuntimeCatalog.mock.calls[1]).toEqual([runtimeRef]);
+  } finally {
+    await harness.unmount();
+    client.clear();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
 test("does not prefill the creation picker when the Default Model runtime is unavailable", async () => {
   const definitions: RuntimeDefinitionsContextValue = {
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
@@ -317,9 +418,6 @@ test("does not prefill the creation picker when the Default Model runtime is una
     loadRepoRuntimeCatalog: async () => {
       throw new Error("Catalog load must not run for an unavailable runtime.");
     },
-    loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-    loadRepoRuntimeSkills: async () => ({ skills: [] }),
-    loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
     loadRepoRuntimeFileSearch: async () => [],
   };
   const wrapper = ({ children }: PropsWithChildren) => (

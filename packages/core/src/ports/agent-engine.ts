@@ -163,13 +163,20 @@ export type LoadAgentSessionHistoryInput =
 
 export type LoadAgentSessionTodosInput = PolicyBoundSessionRef;
 
-export type ListAgentModelsInput = RepoRuntimeRef;
+export type LoadAgentRuntimeCatalogInput =
+  import("@openducktor/contracts").AgentRuntimeLoadCatalogInput;
 
-export type ListAgentSlashCommandsInput = RuntimeWorkingDirectoryRef;
+export type AgentRuntimeCatalogSurfaceRead<Catalog> =
+  | { status: "available"; catalog: Catalog }
+  | { status: "failed"; cause: unknown };
 
-export type ListAgentSkillsInput = RuntimeWorkingDirectoryRef;
-
-export type ListAgentSubagentsInput = RuntimeWorkingDirectoryRef;
+export type AgentRuntimeCatalogRead = {
+  runtime?: RuntimeDescriptor;
+  models?: AgentRuntimeCatalogSurfaceRead<AgentModelCatalog>;
+  slashCommands?: AgentRuntimeCatalogSurfaceRead<AgentSlashCommandCatalog>;
+  skills?: AgentRuntimeCatalogSurfaceRead<AgentSkillCatalog>;
+  subagents?: AgentRuntimeCatalogSurfaceRead<AgentSubagentCatalog>;
+};
 
 export type SearchAgentFilesInput = import("@openducktor/contracts").AgentRuntimeSearchFilesInput;
 
@@ -237,10 +244,7 @@ export interface AgentRuntimeDefinitionsPort {
 }
 
 export interface AgentCatalogPort {
-  listAvailableModels(input: ListAgentModelsInput): Promise<AgentModelCatalog>;
-  listAvailableSlashCommands(input: ListAgentSlashCommandsInput): Promise<AgentSlashCommandCatalog>;
-  listAvailableSkills(input: ListAgentSkillsInput): Promise<AgentSkillCatalog>;
-  listAvailableSubagents(input: ListAgentSubagentsInput): Promise<AgentSubagentCatalog>;
+  loadRuntimeCatalog(input: LoadAgentRuntimeCatalogInput): Promise<AgentRuntimeCatalogRead>;
   searchFiles(input: SearchAgentFilesInput): Promise<AgentFileSearchResult[]>;
 }
 

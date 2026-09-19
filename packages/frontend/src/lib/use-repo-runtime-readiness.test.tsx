@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import {
   DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
@@ -38,14 +38,15 @@ const createRuntimeDefinitionsValue = (
   refreshRuntimeSettings: async () => {},
   refreshRuntimeDefinitions: async () => runtimeDefinitions,
   loadRepoRuntimeCatalog: async () => ({
-    runtime: runtimeDefinitions[0] ?? OPENCODE_RUNTIME_DESCRIPTOR,
-    agents: [],
-    models: [],
-    defaultModelsByProvider: {},
+    models: {
+      status: "available",
+      catalog: {
+        runtime: runtimeDefinitions[0] ?? OPENCODE_RUNTIME_DESCRIPTOR,
+        models: [],
+        defaultModelsByProvider: {},
+      },
+    },
   }),
-  loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-  loadRepoRuntimeSkills: async () => ({ skills: [] }),
-  loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
   loadRepoRuntimeFileSearch: async () => [],
 });
 
@@ -123,18 +124,15 @@ describe("useRepoRuntimeReadiness", () => {
     }
   });
 
-  test("refreshes the repo runtime health owner", async () => {
-    let refreshCount = 0;
+  test("refreshes the repo runtime health owner and reloads catalogs", async () => {
+    const refreshRepoRuntimeHealth = mock(async () => ({
+      opencode: makeRepoHealth(),
+    }));
     const repoRuntimeHealthValue = {
       ...createRepoRuntimeHealthValue({
         opencode: makeRepoHealth(),
       }),
-      refreshRepoRuntimeHealth: async () => {
-        refreshCount += 1;
-        return {
-          opencode: makeRepoHealth(),
-        };
-      },
+      refreshRepoRuntimeHealth,
     };
     const wrapper = ({ children }: PropsWithChildren): ReactElement =>
       createElement(
@@ -156,7 +154,8 @@ describe("useRepoRuntimeReadiness", () => {
     try {
       await harness.mount();
       await harness.getLatest().refreshChecks();
-      expect(refreshCount).toBe(1);
+      expect(refreshRepoRuntimeHealth).toHaveBeenCalledTimes(1);
+      expect(refreshRepoRuntimeHealth).toHaveBeenCalledWith({ reloadCatalogs: true });
     } finally {
       await harness.unmount();
     }

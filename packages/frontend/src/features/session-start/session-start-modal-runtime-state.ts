@@ -1,5 +1,10 @@
-import type { RepoRuntimeRef, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentSessionStartMode } from "@openducktor/core";
+import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
+import type {
+  AgentModelCatalog,
+  AgentRuntimeCatalog,
+  AgentSessionStartMode,
+  RuntimeWorkingDirectoryRef,
+} from "@openducktor/core";
 import { useCallback, useMemo, useState } from "react";
 import {
   filterRuntimeDefinitionsForStartMode,
@@ -16,7 +21,7 @@ import {
 type UseSessionStartModalRuntimeStateArgs = {
   initialCatalog: AgentModelCatalog | null | undefined;
   isOpen: boolean;
-  loadCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
+  loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
   runtimeDefinitions: RuntimeDescriptor[];
   selectedStartMode: AgentSessionStartMode;
   workspaceRepoPath: string | null;
@@ -38,7 +43,7 @@ const EMPTY_RUNTIME_KINDS: RuntimeKind[] = [];
 export function useSessionStartModalRuntimeState({
   initialCatalog,
   isOpen,
-  loadCatalog,
+  loadRuntimeCatalog,
   runtimeDefinitions,
   selectedStartMode,
   workspaceRepoPath,
@@ -98,7 +103,7 @@ export function useSessionStartModalRuntimeState({
     repoPath: workspaceRepoPath,
     runtimeKinds: eligibleRuntimeKinds,
     enabledRuntimeKinds,
-    loadCatalog,
+    loadRuntimeCatalog,
   });
   const catalogResources = useMemo(
     () =>

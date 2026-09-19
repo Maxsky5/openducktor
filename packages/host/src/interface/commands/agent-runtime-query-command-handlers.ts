@@ -17,22 +17,10 @@ import type { HostCommandArgs } from "./command-inputs";
 
 export const createAgentRuntimeQueryCommandHandlers = (service: AgentRuntimeQueryPort) =>
   ({
-    agent_runtime_list_models: createQueryHandler(
-      AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.listModels,
-      (input) => service.listAvailableModels(input),
+    agent_runtime_load_catalog: createQueryHandler(
+      AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.loadCatalog,
+      (input) => service.loadRuntimeCatalog(input),
       (input, result) => result.runtime === undefined || result.runtime.kind === input.runtimeKind,
-    ),
-    agent_runtime_list_slash_commands: createQueryHandler(
-      AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.listSlashCommands,
-      (input) => service.listAvailableSlashCommands(input),
-    ),
-    agent_runtime_list_skills: createQueryHandler(
-      AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.listSkills,
-      (input) => service.listAvailableSkills(input),
-    ),
-    agent_runtime_list_subagents: createQueryHandler(
-      AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.listSubagents,
-      (input) => service.listAvailableSubagents(input),
     ),
     agent_runtime_search_files: createQueryHandler(
       AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.searchFiles,

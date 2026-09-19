@@ -1,6 +1,5 @@
 import type {
   AgentRuntimes,
-  RepoRuntimeRef,
   RuntimeCheck,
   RuntimeDescriptor,
   TaskCard,
@@ -8,10 +7,7 @@ import type {
 } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
-  AgentModelCatalog,
-  AgentSkillCatalog,
-  AgentSlashCommandCatalog,
-  AgentSubagentCatalog,
+  AgentRuntimeCatalog,
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import {
@@ -71,14 +67,7 @@ export type RuntimeDefinitionsContextValue = {
   runtimeSettingsError: string | null;
   hasRuntimeSettingsSnapshot: boolean;
   refreshRuntimeSettings: () => Promise<void>;
-  loadRepoRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
-  loadRepoRuntimeSlashCommands: (
-    runtimeRef: RuntimeWorkingDirectoryRef,
-  ) => Promise<AgentSlashCommandCatalog>;
-  loadRepoRuntimeSkills: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentSkillCatalog>;
-  loadRepoRuntimeSubagents: (
-    runtimeRef: RuntimeWorkingDirectoryRef,
-  ) => Promise<AgentSubagentCatalog>;
+  loadRepoRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
   loadRepoRuntimeFileSearch: (
     runtimeRef: RuntimeWorkingDirectoryRef,
     query: string,
@@ -171,9 +160,6 @@ export const useRuntimeAvailabilityContext = (): RuntimeAvailabilityContextValue
       hasRuntimeSettingsSnapshot: runtimeContext.hasRuntimeSettingsSnapshot,
       refreshRuntimeSettings: runtimeContext.refreshRuntimeSettings,
       loadRepoRuntimeCatalog: runtimeContext.loadRepoRuntimeCatalog,
-      loadRepoRuntimeSlashCommands: runtimeContext.loadRepoRuntimeSlashCommands,
-      loadRepoRuntimeSkills: runtimeContext.loadRepoRuntimeSkills,
-      loadRepoRuntimeSubagents: runtimeContext.loadRepoRuntimeSubagents,
       loadRepoRuntimeFileSearch: runtimeContext.loadRepoRuntimeFileSearch,
     }),
     [runtimeContext],

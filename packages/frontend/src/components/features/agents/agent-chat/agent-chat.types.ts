@@ -63,7 +63,8 @@ export type AgentChatTranscriptNotice = {
     | "session_loading"
     | "session_failed"
     | "session_history_warning"
-    | "runtime_blocked";
+    | "runtime_blocked"
+    | "catalog_warning";
   severity: "loading" | "error";
   title: string;
   description: string;
@@ -188,14 +189,20 @@ export type AgentChatComposerModel = {
   slashCommands: AgentSlashCommand[];
   slashCommandsError: string | null;
   isSlashCommandsLoading: boolean;
+  retrySlashCommands: (() => void) | null;
   skillCatalog: AgentSkillCatalog | null;
   skills: AgentSkillReference[];
   skillsError: string | null;
   isSkillsLoading: boolean;
+  retrySkills: (() => void) | null;
   subagentCatalog: AgentSubagentCatalog | null;
   subagents: AgentSubagentReference[];
   subagentsError: string | null;
   isSubagentsLoading: boolean;
+  retrySubagents: (() => void) | null;
+  onCatalogMenuOpen: () => void;
+  onAgentSelectorOpen: () => void;
+  onVariantSelectorOpen: () => void;
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
   agentOptions: ComboboxOption[];
   modelPicker: AgentChatModelPicker;

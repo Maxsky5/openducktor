@@ -32,6 +32,7 @@ import { HostInvokeError } from "@openducktor/host-client";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
 import {
   type AgentSessionFixtureOverrides,
+  createRuntimeCatalogFixture,
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type {
@@ -226,44 +227,49 @@ const createTestRuntimeDefinitionsContextValue = () =>
     availableRuntimeDefinitions: TEST_RUNTIME_DEFINITIONS,
     refreshRuntimeDefinitions: async () => TEST_RUNTIME_DEFINITIONS,
     loadRepoRuntimeCatalog: async () => ({
-      runtime: OPENCODE_RUNTIME_DESCRIPTOR,
-      models: [
-        {
-          id: "openai/gpt-5",
-          providerId: "openai",
-          providerName: "OpenAI",
-          modelId: "gpt-5",
-          modelName: "GPT-5",
-          variants: ["default"],
-          contextWindow: 200_000,
-          outputLimit: 8_192,
+      models: {
+        status: "available",
+        catalog: {
+          runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+          models: [
+            {
+              id: "openai/gpt-5",
+              providerId: "openai",
+              providerName: "OpenAI",
+              modelId: "gpt-5",
+              modelName: "GPT-5",
+              variants: ["default"],
+              contextWindow: 200_000,
+              outputLimit: 8_192,
+            },
+          ],
+          defaultModelsByProvider: {
+            openai: "gpt-5",
+          },
+          profiles: [
+            {
+              name: "spec",
+              mode: "primary",
+              hidden: false,
+            },
+            {
+              name: "planner",
+              mode: "primary",
+              hidden: false,
+            },
+            {
+              name: "build",
+              mode: "primary",
+              hidden: false,
+            },
+            {
+              name: "qa",
+              mode: "primary",
+              hidden: false,
+            },
+          ],
         },
-      ],
-      defaultModelsByProvider: {
-        openai: "gpt-5",
       },
-      profiles: [
-        {
-          name: "spec",
-          mode: "primary",
-          hidden: false,
-        },
-        {
-          name: "planner",
-          mode: "primary",
-          hidden: false,
-        },
-        {
-          name: "build",
-          mode: "primary",
-          hidden: false,
-        },
-        {
-          name: "qa",
-          mode: "primary",
-          hidden: false,
-        },
-      ],
     }),
   });
 
@@ -2403,7 +2409,7 @@ describe("prepared composer catalog refresh", () => {
         continueInterruptedTurn: async () => undefined,
       };
       let catalog = args.newSessionCatalog!;
-      const loadCatalog = async () => catalog;
+      const loadCatalog = async () => createRuntimeCatalogFixture({ models: catalog });
       const harness = createCoreHookHarness(
         (props: HookArgs) => {
           const composer = useAgentStudioChatComposer({
@@ -2450,7 +2456,15 @@ describe("prepared composer catalog refresh", () => {
           })),
         };
         await harness.run(async ({ queryClient }) => {
-          queryClient.setQueryData(runtimeCatalogQueryKeys.repo("/repo", "opencode"), catalog);
+          queryClient.setQueriesData(
+            {
+              queryKey: runtimeCatalogQueryKeys.runtimeCatalogScope({
+                repoPath: "/repo",
+                runtimeKind: "opencode",
+              }),
+            },
+            createRuntimeCatalogFixture({ models: catalog }),
+          );
         });
         await harness.waitFor(
           (state) =>

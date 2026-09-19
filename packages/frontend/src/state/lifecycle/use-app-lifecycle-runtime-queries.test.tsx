@@ -33,14 +33,14 @@ const lifecycleArgs: Parameters<typeof useAppLifecycle>[0] = {
   }),
 };
 
-test("refreshes runtime queries while the initial task snapshot is still loading", async () => {
+test("refreshes session reads while the initial task snapshot is still loading", async () => {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
-  const modelsKey = ["runtime-catalog", "/repo", "opencode"];
+  const modelsKey = ["runtime-catalog", "catalog", "/repo", "opencode", "/repo"];
   const historyKey = ["agent-session-history", "/repo", "opencode", "/repo/worktree", "session"];
   const todosKey = ["agent-session-todos", "/repo", "opencode", "/repo/worktree", "session"];
-  const unrelatedKey = ["runtime-catalog", "/repo", "codex"];
+  const unrelatedKey = ["runtime-catalog", "catalog", "/repo", "codex", "/repo"];
   for (const key of [modelsKey, historyKey, unrelatedKey]) client.setQueryData(key, ["cached"]);
   await client
     .fetchQuery({
@@ -51,8 +51,11 @@ test("refreshes runtime queries while the initial task snapshot is still loading
     })
     .catch(() => {});
   const readModels = mock(async () => ["ready"]);
-  const observer = new QueryObserver(client, { queryKey: modelsKey, queryFn: readModels });
-  const unsubscribe = observer.subscribe(() => {});
+  const modelsObserver = new QueryObserver(client, { queryKey: modelsKey, queryFn: readModels });
+  const unsubscribeModels = modelsObserver.subscribe(() => {});
+  const readHistory = mock(async () => ["history-ready"]);
+  const historyObserver = new QueryObserver(client, { queryKey: historyKey, queryFn: readHistory });
+  const unsubscribeHistory = historyObserver.subscribe(() => {});
   const startup = Promise.withResolvers<RuntimeInstanceSummary>();
   const loadWorkspaceTasks = mock(async () => {});
   const args = { ...lifecycleArgs, loadWorkspaceTasks, startRepoRuntime: () => startup.promise };
@@ -65,25 +68,31 @@ test("refreshes runtime queries while the initial task snapshot is still loading
     await harness.mount();
     expect(loadWorkspaceTasks).not.toHaveBeenCalled();
     expect(readModels).not.toHaveBeenCalled();
+    expect(readHistory).not.toHaveBeenCalled();
     startup.resolve(runtime);
-    await waitFor(() => expect(client.getQueryData<string[]>(modelsKey)).toEqual(["ready"]));
-    expect(readModels).toHaveBeenCalledTimes(1);
-    expect(client.getQueryState(historyKey)?.isInvalidated).toBe(true);
+    await waitFor(() =>
+      expect(client.getQueryData<string[]>(historyKey)).toEqual(["history-ready"]),
+    );
+    expect(readHistory).toHaveBeenCalledTimes(1);
     expect(client.getQueryState(todosKey)?.isInvalidated).toBe(true);
+    expect(readModels).not.toHaveBeenCalled();
+    expect(client.getQueryState(modelsKey)?.isInvalidated).toBe(false);
+    expect(client.getQueryData<string[]>(modelsKey)).toEqual(["cached"]);
     expect(client.getQueryState(unrelatedKey)?.isInvalidated).toBe(false);
     expect(loadWorkspaceTasks).not.toHaveBeenCalled();
   } finally {
     startup.resolve(runtime);
     await harness.unmount();
-    unsubscribe();
+    unsubscribeModels();
+    unsubscribeHistory();
     client.clear();
   }
 });
 
 test("ignores a runtime startup completion after the user switches repositories", async () => {
   const client = new QueryClient();
-  const oldKey = ["runtime-catalog", "/repo", "opencode"];
-  const newKey = ["runtime-catalog", "/other", "opencode"];
+  const oldKey = ["agent-session-history", "/repo", "opencode", "/repo/worktree", "session"];
+  const newKey = ["agent-session-history", "/other", "opencode", "/other/worktree", "session"];
   client.setQueryData(oldKey, ["old"]);
   client.setQueryData(newKey, ["other"]);
   const startup = Promise.withResolvers<RuntimeInstanceSummary>();

@@ -176,6 +176,36 @@ describe("deriveAgentChatReadiness", () => {
     });
   });
 
+  test("warns about a failed skill surface for a visible transcript", () => {
+    const retry = () => {};
+    const readiness = deriveAgentChatReadiness({
+      transcriptState: { kind: "visible" },
+      runtimeReadiness: readyRuntimeReadiness,
+      catalogSurfaceFailure: {
+        message: "Catalog offline",
+        action: { label: "Retry", onAction: retry },
+      },
+    });
+
+    expect(readiness.transcriptNotice).toEqual({
+      kind: "catalog_warning",
+      severity: "error",
+      title: "Skills may be incomplete",
+      description: "Catalog offline",
+      action: { label: "Retry", onAction: retry },
+    });
+  });
+
+  test("prefers a history warning over a catalog warning for a visible transcript", () => {
+    const readiness = deriveAgentChatReadiness({
+      transcriptState: { kind: "visible", historyFailure },
+      runtimeReadiness: readyRuntimeReadiness,
+      catalogSurfaceFailure: { message: "Catalog offline" },
+    });
+
+    expect(readiness.transcriptNotice?.kind).toBe("session_history_warning");
+  });
+
   test("omits unavailable history diagnostics and keeps a real page cursor", () => {
     const readiness = deriveAgentChatReadiness({
       transcriptState: {

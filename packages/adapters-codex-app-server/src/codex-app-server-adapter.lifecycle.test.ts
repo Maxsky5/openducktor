@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { resolveCodexEffectivePolicy } from "@openducktor/contracts";
-import { AGENT_ROLE_TOOL_POLICY, type AgentRole } from "@openducktor/core";
+import { AGENT_ROLE_TOOL_POLICY, AgentRuntimeQueryError, type AgentRole } from "@openducktor/core";
 import {
   codexSessionRef,
   codexSessionRuntimeRef,
@@ -16,6 +16,7 @@ import {
 } from "./codex-app-server-adapter.test-harness";
 import { codexSandboxPolicy } from "./codex-session-policy";
 import { CodexAppServerAdapter } from "./index";
+import type { CodexJsonRpcRequest } from "./types";
 
 const expectedThreadPolicy = {
   approvalPolicy: "on-request",
@@ -38,6 +39,27 @@ const codexPolicy = (
   kind: "codex" as const,
   policy: resolveCodexEffectivePolicy(config, role),
 });
+
+class FailingSkillsTransport extends RecordingTransport {
+  async request(request: CodexJsonRpcRequest) {
+    if (request.method === "skills/list") {
+      throw new Error("skill index unavailable");
+    }
+    return super.request(request);
+  }
+}
+
+class UnreachableRuntimeTransport extends RecordingTransport {
+  async request(request: CodexJsonRpcRequest) {
+    if (request.method === "model/list") {
+      throw new AgentRuntimeQueryError(
+        "runtime_unavailable",
+        "The Codex runtime is not reachable. Start the runtime and retry.",
+      );
+    }
+    return super.request(request);
+  }
+}
 
 describe("CodexAppServerAdapter lifecycle", () => {
   test("prepares one host-owned event subscription per runtime", async () => {
@@ -71,13 +93,17 @@ describe("CodexAppServerAdapter lifecycle", () => {
       transportFactory: () => transport,
     });
 
-    const catalog = await adapter.listAvailableModels({
+    const catalog = await adapter.loadRuntimeCatalog({
       repoPath: "/repo",
       runtimeKind: "codex",
+      workingDirectory: "/repo",
     });
 
     expect(catalog.runtime?.kind).toBe("codex");
-    expect(transport.calls.map((call) => call.method)).toEqual(["model/list"]);
+    expect(
+      catalog.models?.status === "available" ? catalog.models.catalog.runtime?.kind : undefined,
+    ).toBe("codex");
+    expect(transport.calls.map((call) => call.method)).toEqual(["model/list", "skills/list"]);
   });
 
   test("returns the Codex runtime definition", () => {
@@ -159,14 +185,62 @@ describe("CodexAppServerAdapter lifecycle", () => {
   test("lists models through the required live runtime id", async () => {
     const { adapter, transports, requireRepoRuntime } = createHarness();
 
-    const catalog = await adapter.listAvailableModels({ repoPath: "/repo", runtimeKind: "codex" });
+    const catalog = await adapter.loadRuntimeCatalog({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+    });
 
     expect(catalog.runtime?.kind).toBe("codex");
+    expect(
+      catalog.models?.status === "available" ? catalog.models.catalog.runtime?.kind : undefined,
+    ).toBe("codex");
     expect(requireRepoRuntime).toHaveBeenCalledTimes(1);
     expect(transports.has("runtime-live")).toBe(true);
     expect(transports.get("runtime-live")?.calls.map((call) => call.method)).toEqual([
       "model/list",
+      "skills/list",
     ]);
+  });
+
+  test("keeps the model surface when the skills surface fails", async () => {
+    const transport = new FailingSkillsTransport("runtime-live", false);
+    const adapter = new CodexAppServerAdapter({
+      repoRuntimeResolver: {
+        requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
+      },
+      transportFactory: () => transport,
+    });
+
+    const catalog = await adapter.loadRuntimeCatalog({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+    });
+
+    expect(catalog.models).toMatchObject({ status: "available" });
+    expect(catalog.skills?.status).toBe("failed");
+    expect(
+      catalog.skills?.status === "failed" ? String(catalog.skills.cause) : undefined,
+    ).toContain("skill index unavailable");
+  });
+
+  test("fails the combined catalog when the runtime transport is unreachable", async () => {
+    const transport = new UnreachableRuntimeTransport("runtime-live", false);
+    const adapter = new CodexAppServerAdapter({
+      repoRuntimeResolver: {
+        requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
+      },
+      transportFactory: () => transport,
+    });
+
+    await expect(
+      adapter.loadRuntimeCatalog({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+      }),
+    ).rejects.toMatchObject({ code: "runtime_unavailable" });
   });
 
   test("resumes and forks sessions through the live runtime id", async () => {
@@ -837,7 +911,11 @@ describe("CodexAppServerAdapter lifecycle", () => {
     });
 
     await expect(
-      adapter.listAvailableModels({ repoPath: "/repo", runtimeKind: "codex" }),
+      adapter.loadRuntimeCatalog({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+      }),
     ).rejects.toThrow("No live repo runtime found for repo '/repo' and runtime 'codex'.");
   });
 

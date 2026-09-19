@@ -6,10 +6,14 @@ import { taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
 import type { ComponentProps } from "react";
 import { useTaskExecutionFilePreviewController } from "../file-preview/use-task-execution-file-preview-controller";
 import { describe, expect, test, spyOn } from "bun:test";
-import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import {
+  CLAUDE_RUNTIME_DESCRIPTOR,
+  CODEX_RUNTIME_DESCRIPTOR,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+} from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { act, createRef, type PropsWithChildren, type ReactElement } from "react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { createRef, type PropsWithChildren, type ReactElement } from "react";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
@@ -36,6 +40,7 @@ import {
   createAgentSessionFixture,
   createChatSettingsFixture,
   createRepoRuntimeHealthFixture,
+  createRuntimeCatalogFixture,
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
@@ -357,6 +362,99 @@ describe("AgentSessionTranscriptDialogHost", () => {
       rendered.unmount();
     }
   });
+
+  test("retries a failed skill catalog from the transcript notice", async () => {
+    const sessionStore = createAgentSessionsStore("/repo-a");
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(
+      settingsSnapshotQueryOptions().queryKey,
+      createSettingsSnapshotFixture(),
+    );
+    let catalogAttempts = 0;
+    let catalogAvailable = false;
+    const runtimeDefinitionsContext = createRuntimeDefinitionsContextValue({
+      runtimeDefinitions: [CLAUDE_RUNTIME_DESCRIPTOR],
+      availableRuntimeDefinitions: [CLAUDE_RUNTIME_DESCRIPTOR],
+      loadRepoRuntimeCatalog: async () => {
+        catalogAttempts += 1;
+        if (!catalogAvailable) {
+          throw new Error("Catalog offline");
+        }
+        return createRuntimeCatalogFixture({ skills: { skills: [] } });
+      },
+    });
+    const repoRuntimeHealthContext = createRepoRuntimeHealthContextValue({
+      runtimeHealthByRuntime: {
+        claude: createRepoRuntimeHealthFixture(),
+      },
+    });
+    const operations: AgentOperationsContextValue = {
+      describeGeneratedImages: async () => {
+        throw new Error("Unexpected image metadata read");
+      },
+      beginGeneratedImageBatch: async () => {
+        throw new Error("Unexpected beginGeneratedImageBatch");
+      },
+      releaseGeneratedImageBatch: async () => {
+        throw new Error("Unexpected releaseGeneratedImageBatch");
+      },
+      readGeneratedImage: async () => {
+        throw new Error("Unexpected generated image read");
+      },
+      readSessionTodos: async () => [],
+      readSessionHistory: async () => [],
+      loadAgentSessionHistory: async () => null,
+      loadAgentSessionContext: async () => undefined,
+      startAgentSession: async () => {
+        throw new Error("Not configured");
+      },
+      sendAgentMessage: async () => undefined,
+      stopAgentSession: async () => undefined,
+      continueInterruptedTurn: async () => undefined,
+      updateAgentSessionModel: () => undefined,
+      replyAgentApproval: async () => undefined,
+      answerAgentQuestion: async () => undefined,
+    };
+    const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+      <QueryClientProvider client={queryClient}>
+        <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsContext}>
+          <RepoRuntimeHealthContext.Provider value={repoRuntimeHealthContext}>
+            <AgentSessionsContext.Provider value={sessionStore}>
+              <AgentOperationsContext.Provider value={operations}>
+                {children}
+              </AgentOperationsContext.Provider>
+            </AgentSessionsContext.Provider>
+          </RepoRuntimeHealthContext.Provider>
+        </RuntimeDefinitionsContext.Provider>
+      </QueryClientProvider>
+    );
+    const rendered = render(
+      <AgentSessionTranscriptDialog
+        workspaceRepoPath="/repo-a"
+        target={{ ...transcriptTarget, runtimeKind: "claude" }}
+        open
+        onOpenChange={() => undefined}
+        onFileSaved={() => undefined}
+        title="Subagent activity"
+        description="View what this subagent did."
+      />,
+      { wrapper },
+    );
+
+    try {
+      expect(await screen.findByText("Skills may be incomplete")).toBeTruthy();
+      catalogAvailable = true;
+      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      expect(screen.queryByText("Skills may be incomplete")).toBeNull();
+      expect(catalogAttempts).toBeGreaterThanOrEqual(2);
+    } finally {
+      rendered.unmount();
+    }
+  }, 10000);
 
   const ActiveWorkspaceTestProvider = ({ children }: PropsWithChildren): ReactElement => (
     <ActiveWorkspaceContext.Provider

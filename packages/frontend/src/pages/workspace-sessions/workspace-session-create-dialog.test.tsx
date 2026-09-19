@@ -20,7 +20,10 @@ import {
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createRuntimeCatalogFixture,
+  createSettingsSnapshotFixture,
+} from "@/test-utils/shared-test-fixtures";
 import { WorkspaceSessionCreateDialog } from "./workspace-session-create-dialog";
 
 function renderCreation(
@@ -92,10 +95,7 @@ function renderCreation(
     hasRuntimeSettingsSnapshot: true,
     refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
     refreshRuntimeSettings: async () => {},
-    loadRepoRuntimeCatalog: async () => catalog,
-    loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-    loadRepoRuntimeSkills: async () => ({ skills: [] }),
-    loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
+    loadRepoRuntimeCatalog: async () => createRuntimeCatalogFixture({ models: catalog }),
     loadRepoRuntimeFileSearch: async () => [],
   };
   configureShellBridge(

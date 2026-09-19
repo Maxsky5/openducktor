@@ -31,6 +31,7 @@ export function WorkspaceSessionModelFields({
             triggerAriaLabelledBy="workspace-session-effort"
             value={model.selection?.variant ?? ""}
             onValueChange={model.handleSelectVariant}
+            onOpenChange={model.onCatalogSelectorOpen}
             options={model.variantOptions}
             disabled={disabled || model.variantOptions.length === 0}
             placeholder="Not supported"
@@ -44,6 +45,7 @@ export function WorkspaceSessionModelFields({
             triggerAriaLabelledBy="workspace-session-profile"
             value={model.selection?.profileId ?? ""}
             onValueChange={model.handleSelectAgentProfile}
+            onOpenChange={model.onCatalogSelectorOpen}
             options={model.agentProfileOptions}
             disabled={disabled}
             placeholder="Runtime default"

@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import type { AgentModelCatalog } from "@openducktor/core";
+import type { AgentModelCatalog, AgentRuntimeCatalog } from "@openducktor/core";
 import type { HostClient } from "@openducktor/host-client";
 import { clearAppQueryClient, appQueryClient } from "@/lib/query-client";
 import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createRuntimeCatalogFixture } from "@/test-utils/shared-test-fixtures";
 import { useDelegationOperations } from "./use-delegation-operations";
 
 const activeWorkspace = {
@@ -31,6 +32,8 @@ const CATALOG: AgentModelCatalog = {
   ],
   defaultModelsByProvider: { openai: "gpt-5" },
 };
+
+const runtimeCatalogFixture = createRuntimeCatalogFixture({ models: CATALOG });
 
 const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   workspaceId: "repo",
@@ -77,7 +80,7 @@ describe("useDelegationOperations", () => {
     configureShellBridge(
       createShellBridgeFixture({ client: { buildStart, workspaceGetRepoConfig } }),
     );
-    const loadRepoRuntimeCatalog = mock(async () => CATALOG);
+    const loadRepoRuntimeCatalog = mock(async () => runtimeCatalogFixture);
     const harness = createHookHarness(
       () =>
         useDelegationOperations({
@@ -97,6 +100,7 @@ describe("useDelegationOperations", () => {
       expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith({
         repoPath: "/repo",
         runtimeKind: "opencode",
+        workingDirectory: "/repo",
       });
       expect(buildStart).toHaveBeenCalledWith("/repo", "task-1", "opencode");
       expect(refreshTaskData).toHaveBeenCalledWith("/repo", "task-1");
@@ -116,7 +120,7 @@ describe("useDelegationOperations", () => {
     configureShellBridge(
       createShellBridgeFixture({ client: { buildStart, workspaceGetRepoConfig } }),
     );
-    const loadRepoRuntimeCatalog = mock(async (): Promise<AgentModelCatalog> => {
+    const loadRepoRuntimeCatalog = mock(async (): Promise<AgentRuntimeCatalog> => {
       throw new Error("The catalog reader must not run for a fresh cached catalog.");
     });
     const harness = createHookHarness(
@@ -128,7 +132,14 @@ describe("useDelegationOperations", () => {
         }),
       undefined,
     );
-    appQueryClient.setQueryData(runtimeCatalogQueryKeys.repo("/repo", "opencode"), CATALOG);
+    appQueryClient.setQueryData(
+      runtimeCatalogQueryKeys.catalog({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo",
+      }),
+      runtimeCatalogFixture,
+    );
 
     try {
       await harness.mount();
@@ -154,7 +165,7 @@ describe("useDelegationOperations", () => {
     configureShellBridge(
       createShellBridgeFixture({ client: { buildStart, workspaceGetRepoConfig } }),
     );
-    const loadRepoRuntimeCatalog = mock(async () => CATALOG);
+    const loadRepoRuntimeCatalog = mock(async () => runtimeCatalogFixture);
     const harness = createHookHarness(
       () =>
         useDelegationOperations({
@@ -198,7 +209,7 @@ describe("useDelegationOperations", () => {
     configureShellBridge(
       createShellBridgeFixture({ client: { buildStart, workspaceGetRepoConfig } }),
     );
-    const loadRepoRuntimeCatalog = mock(async () => CATALOG);
+    const loadRepoRuntimeCatalog = mock(async () => runtimeCatalogFixture);
     const harness = createHookHarness(
       () =>
         useDelegationOperations({
@@ -233,7 +244,7 @@ describe("useDelegationOperations", () => {
     configureShellBridge(
       createShellBridgeFixture({ client: { buildStart, workspaceGetRepoConfig } }),
     );
-    const loadRepoRuntimeCatalog = mock(async (): Promise<AgentModelCatalog> => {
+    const loadRepoRuntimeCatalog = mock(async (): Promise<AgentRuntimeCatalog> => {
       throw new Error("Cannot resolve the selected runtime. Start it from the runtime controls.");
     });
     const harness = createHookHarness(

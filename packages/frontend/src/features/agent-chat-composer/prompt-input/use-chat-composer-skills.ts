@@ -1,53 +1,43 @@
-import type { AgentSkillCatalog, RuntimeWorkingDirectoryRef } from "@openducktor/core";
-import { useQuery } from "@tanstack/react-query";
-import {
-  repoRuntimeSkillsQueryOptions,
-  skippedRepoRuntimeSkillsQueryOptions,
-} from "@/state/queries/runtime-catalog";
+import type {
+  AgentRuntimeCatalog,
+  AgentSkillCatalog,
+  RuntimeWorkingDirectoryRef,
+} from "@openducktor/core";
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
+import { useChatComposerCatalogSurface } from "./use-chat-composer-catalog-surface";
 
 const EMPTY_SKILL_CATALOG: AgentSkillCatalog = { skills: [] };
 
 type UseChatComposerSkillsArgs = {
   promptInputRuntime: ChatComposerPromptInputRuntime;
   supportsSkillReferences: boolean;
-  loadSkillsForRepo: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentSkillCatalog>;
+  loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
 };
 
 export const useChatComposerSkills = ({
   promptInputRuntime,
   supportsSkillReferences,
-  loadSkillsForRepo,
+  loadRuntimeCatalog,
 }: UseChatComposerSkillsArgs) => {
-  const runtimeRef =
-    promptInputRuntime.state === "available" ? promptInputRuntime.runtimeRef : null;
-  const skillsQuery = useQuery({
-    ...(runtimeRef
-      ? repoRuntimeSkillsQueryOptions(runtimeRef, loadSkillsForRepo)
-      : skippedRepoRuntimeSkillsQueryOptions()),
-    enabled: runtimeRef !== null && supportsSkillReferences,
+  const { catalog, error, isLoading, retry } = useChatComposerCatalogSurface({
+    promptInputRuntime,
+    supports: supportsSkillReferences,
+    loadRuntimeCatalog,
+    selectSurface: (runtimeCatalog) => runtimeCatalog?.skills,
+    emptyCatalog: EMPTY_SKILL_CATALOG,
   });
-
-  let catalog = EMPTY_SKILL_CATALOG;
-  let error: string | null = null;
-  let isLoading = false;
-  if (supportsSkillReferences && promptInputRuntime.state === "unavailable") {
-    error = promptInputRuntime.error;
-  } else if (supportsSkillReferences && promptInputRuntime.state === "available") {
-    catalog = skillsQuery.data ?? EMPTY_SKILL_CATALOG;
-    error = skillsQuery.error instanceof Error ? skillsQuery.error.message : null;
-    isLoading = skillsQuery.isLoading;
-  }
 
   return {
     skillCatalog: catalog,
-    skills: supportsSkillReferences ? catalog.skills : [],
+    skills: catalog.skills,
     skillsError: error,
     isSkillsLoading: isLoading,
+    retrySkills: retry,
   } satisfies {
     skillCatalog: AgentSkillCatalog;
     skills: AgentSkillCatalog["skills"];
     skillsError: string | null;
     isSkillsLoading: boolean;
+    retrySkills: (() => void) | null;
   };
 };

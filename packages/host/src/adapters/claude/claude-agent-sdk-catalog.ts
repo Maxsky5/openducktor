@@ -1,6 +1,7 @@
 import {
   type AgentInfo,
   type ModelInfo,
+  type Options,
   type Query,
   query,
   type SDKUserMessage,
@@ -17,13 +18,11 @@ import {
   type AgentEvent,
   type AgentModelCatalog,
   type AgentModelDescriptor,
+  type AgentRuntimeCatalogRead,
   type AgentSkillCatalog,
-  type AgentSlashCommandCatalog,
   type AgentSubagentCatalog,
-  type ListAgentModelsInput,
-  type ListAgentSkillsInput,
-  type ListAgentSlashCommandsInput,
-  type ListAgentSubagentsInput,
+  type LoadAgentRuntimeCatalogInput,
+  readCatalogSurface,
 } from "@openducktor/core";
 import { buildClaudeAgentSdkBaseOptions } from "./claude-agent-sdk-options";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
@@ -32,15 +31,52 @@ import { INIT_TIMEOUT_MS, withTimeout } from "./claude-agent-sdk-utils";
 export { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 export { loadClaudeHistory } from "./claude-agent-sdk-history-loader";
 
+export type ClaudeCatalogQueryFactory = (input: {
+  prompt: AsyncIterable<SDKUserMessage>;
+  options: Options;
+}) => Pick<
+  Query,
+  "close" | "initializationResult" | "supportedAgents" | "supportedCommands" | "supportedModels"
+>;
+
+type ClaudeCatalogQuery = ReturnType<ClaudeCatalogQueryFactory>;
+
 type ClaudeCatalogSession = {
   queue: AsyncInputQueue<SDKUserMessage>;
-  sdkQuery: Query;
+  sdkQuery: ClaudeCatalogQuery;
+};
+
+export const loadClaudeRuntimeCatalog = async (
+  input: LoadAgentRuntimeCatalogInput,
+  processEnv: NodeJS.ProcessEnv | undefined,
+  claudeExecutablePath: string,
+  createQuery: ClaudeCatalogQueryFactory,
+): Promise<AgentRuntimeCatalogRead> => {
+  const session = await openClaudeCatalogSession(
+    input.workingDirectory,
+    {
+      ...processEnv,
+      // The SDK otherwise completes initialization while inherited MCP servers are
+      // still pending, which leaves their prompts out of supportedCommands().
+      // MCP_CONNECT_TIMEOUT_MS caps the blocking wait at 5 seconds.
+      MCP_CONNECTION_NONBLOCKING: "0",
+      MCP_CONNECT_TIMEOUT_MS: "5000",
+    },
+    claudeExecutablePath,
+    createQuery,
+  );
+  try {
+    return await readClaudeCatalogSurfaces(session.sdkQuery);
+  } finally {
+    closeClaudeCatalogSession(session);
+  }
 };
 
 const openClaudeCatalogSession = async (
   cwd: string,
   processEnv: NodeJS.ProcessEnv | undefined,
   claudeExecutablePath: string,
+  createQuery: ClaudeCatalogQueryFactory,
 ): Promise<ClaudeCatalogSession> => {
   const queue = new AsyncInputQueue<SDKUserMessage>();
   const abortController = new AbortController();
@@ -48,7 +84,7 @@ const openClaudeCatalogSession = async (
     ...buildClaudeAgentSdkBaseOptions({ claudeExecutablePath, cwd, processEnv }),
     abortController,
   } satisfies NonNullable<Parameters<typeof query>[0]>["options"];
-  const sdkQuery = query({
+  const sdkQuery = createQuery({
     prompt: queue,
     options,
   });
@@ -71,53 +107,35 @@ const closeClaudeCatalogSession = ({ queue, sdkQuery }: ClaudeCatalogSession): v
   sdkQuery.close();
 };
 
-const readClaudeModels = async (
-  cwd: string,
-  processEnv: NodeJS.ProcessEnv | undefined,
-  claudeExecutablePath: string,
-): Promise<ModelInfo[]> => {
-  const session = await openClaudeCatalogSession(cwd, processEnv, claudeExecutablePath);
-  try {
-    return await session.sdkQuery.supportedModels();
-  } finally {
-    closeClaudeCatalogSession(session);
-  }
+const readClaudeCatalogSurfaces = async (
+  sdkQuery: ClaudeCatalogQuery,
+): Promise<AgentRuntimeCatalogRead> => {
+  let commands: Promise<SlashCommand[]> | undefined;
+  const readCommands = (): Promise<SlashCommand[]> => {
+    commands ??= sdkQuery.supportedCommands();
+    return commands;
+  };
+  const [models, slashCommands, skills, subagents] = await Promise.all([
+    readCatalogSurface(async () => toClaudeModelCatalog(await sdkQuery.supportedModels())),
+    readCatalogSurface(async () => toClaudeSlashCommandCatalog(await readCommands())),
+    readCatalogSurface(async () => toClaudeSkillCatalog(await readCommands())),
+    readCatalogSurface(async () => toClaudeSubagentCatalog(await sdkQuery.supportedAgents())),
+  ]);
+  return {
+    runtime: CLAUDE_RUNTIME_DESCRIPTOR,
+    models,
+    slashCommands,
+    skills,
+    subagents,
+  };
 };
 
-const readClaudeSlashCommands = async (
-  cwd: string,
-  processEnv: NodeJS.ProcessEnv | undefined,
-  claudeExecutablePath: string,
-): Promise<SlashCommand[]> => {
-  const session = await openClaudeCatalogSession(
-    cwd,
-    {
-      ...processEnv,
-      // The SDK otherwise completes initialization while inherited MCP servers are
-      // still pending, which leaves their prompts out of supportedCommands().
-      MCP_CONNECTION_NONBLOCKING: "0",
-    },
-    claudeExecutablePath,
-  );
-  try {
-    return await session.sdkQuery.supportedCommands();
-  } finally {
-    closeClaudeCatalogSession(session);
-  }
-};
-
-const readClaudeSubagents = async (
-  cwd: string,
-  processEnv: NodeJS.ProcessEnv | undefined,
-  claudeExecutablePath: string,
-): Promise<AgentInfo[]> => {
-  const session = await openClaudeCatalogSession(cwd, processEnv, claudeExecutablePath);
-  try {
-    return await session.sdkQuery.supportedAgents();
-  } finally {
-    closeClaudeCatalogSession(session);
-  }
-};
+const toClaudeModelCatalog = (models: ModelInfo[]): AgentModelCatalog => ({
+  runtime: CLAUDE_RUNTIME_DESCRIPTOR,
+  models: models.map((model) => toClaudeModelDescriptor(model)),
+  defaultModelsByProvider: models[0] ? { claude: models[0].value } : {},
+  profiles: [],
+});
 
 export const toClaudeModelDescriptor = (model: ModelInfo): AgentModelDescriptor => ({
   id: model.value,
@@ -141,33 +159,6 @@ export const toClaudeModelDescriptor = (model: ModelInfo): AgentModelDescriptor 
     },
   },
 });
-
-export const listClaudeModels = async (
-  input: ListAgentModelsInput,
-  processEnv: NodeJS.ProcessEnv | undefined,
-  claudeExecutablePath: string,
-): Promise<AgentModelCatalog> => {
-  const models = await readClaudeModels(input.repoPath, processEnv, claudeExecutablePath);
-  return {
-    runtime: CLAUDE_RUNTIME_DESCRIPTOR,
-    models: models.map((model) => toClaudeModelDescriptor(model)),
-    defaultModelsByProvider: models[0] ? { claude: models[0].value } : {},
-    profiles: [],
-  };
-};
-
-export const listClaudeSlashCommands = async (
-  input: ListAgentSlashCommandsInput,
-  processEnv: NodeJS.ProcessEnv | undefined,
-  claudeExecutablePath: string,
-): Promise<AgentSlashCommandCatalog> => {
-  const commands = await readClaudeSlashCommands(
-    input.workingDirectory,
-    processEnv,
-    claudeExecutablePath,
-  );
-  return toClaudeSlashCommandCatalog(commands);
-};
 
 type ClaudeSlashCommandCatalog = Extract<
   AgentEvent,
@@ -338,19 +329,6 @@ export const toClaudeSlashCommandCatalog = (
   return catalog;
 };
 
-export const listClaudeSkills = async (
-  input: ListAgentSkillsInput,
-  processEnv: NodeJS.ProcessEnv | undefined,
-  claudeExecutablePath: string,
-): Promise<AgentSkillCatalog> => {
-  const commands = await readClaudeSlashCommands(
-    input.workingDirectory,
-    processEnv,
-    claudeExecutablePath,
-  );
-  return toClaudeSkillCatalog(commands);
-};
-
 export const toClaudeSkillCatalog = (commands: SlashCommand[]): AgentSkillCatalog => {
   // Claude prompt references are addressable by name. Inherited scopes may expose
   // multiple definitions for that name, so publish the first SDK entry once.
@@ -395,17 +373,4 @@ const toClaudeSubagentCatalog = (agents: AgentInfo[]): AgentSubagentCatalog => {
       })
       .sort((left, right) => left.name.localeCompare(right.name)),
   });
-};
-
-export const listClaudeSubagents = async (
-  input: ListAgentSubagentsInput,
-  processEnv: NodeJS.ProcessEnv | undefined,
-  claudeExecutablePath: string,
-): Promise<AgentSubagentCatalog> => {
-  const agents = await readClaudeSubagents(
-    input.workingDirectory,
-    processEnv,
-    claudeExecutablePath,
-  );
-  return toClaudeSubagentCatalog(agents);
 };

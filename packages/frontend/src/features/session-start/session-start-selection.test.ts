@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import type { AgentModelCatalog } from "@openducktor/core";
+import type { AgentModelCatalog, AgentRuntimeCatalog } from "@openducktor/core";
+import { createRuntimeCatalogFixture } from "@/test-utils/shared-test-fixtures";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   availableDefaultSessionSelectionFor,
@@ -170,7 +171,9 @@ describe("required session default selection", () => {
         profileId: "",
       },
     });
-    const loadRepoRuntimeCatalog = mock(async () => CATALOG);
+    const loadRepoRuntimeCatalog = mock(async () =>
+      createRuntimeCatalogFixture({ models: CATALOG }),
+    );
 
     await expect(
       resolveRequiredDefaultSessionSelection({
@@ -189,11 +192,14 @@ describe("required session default selection", () => {
     expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith({
       repoPath: "/repo",
       runtimeKind: "opencode",
+      workingDirectory: "/repo",
     });
   });
 
   test("fails before loading a catalog when no default exists", async () => {
-    const loadRepoRuntimeCatalog = mock(async () => CATALOG);
+    const loadRepoRuntimeCatalog = mock(async () =>
+      createRuntimeCatalogFixture({ models: CATALOG }),
+    );
 
     await expect(
       resolveRequiredDefaultSessionSelection({
@@ -218,7 +224,9 @@ describe("required session default selection", () => {
         profileId: "",
       },
     });
-    const loadRepoRuntimeCatalog = mock(async () => CATALOG);
+    const loadRepoRuntimeCatalog = mock(async () =>
+      createRuntimeCatalogFixture({ models: CATALOG }),
+    );
 
     await expect(
       resolveRequiredDefaultSessionSelection({
@@ -242,7 +250,9 @@ describe("required session default selection", () => {
         profileId: "",
       },
     });
-    const loadRepoRuntimeCatalog = mock(async () => CATALOG);
+    const loadRepoRuntimeCatalog = mock(async () =>
+      createRuntimeCatalogFixture({ models: CATALOG }),
+    );
 
     await expect(
       resolveRequiredDefaultSessionSelection({
@@ -266,7 +276,9 @@ describe("required session default selection", () => {
         profileId: "removed-agent",
       },
     });
-    const loadRepoRuntimeCatalog = mock(async () => CATALOG);
+    const loadRepoRuntimeCatalog = mock(async () =>
+      createRuntimeCatalogFixture({ models: CATALOG }),
+    );
 
     await expect(
       resolveRequiredDefaultSessionSelection({
@@ -294,7 +306,9 @@ describe("required session default selection", () => {
         profileId: "build-agent",
       },
     });
-    const loadRepoRuntimeCatalog = mock(async () => catalogWithHiddenProfile);
+    const loadRepoRuntimeCatalog = mock(async () =>
+      createRuntimeCatalogFixture({ models: catalogWithHiddenProfile }),
+    );
 
     await expect(
       resolveRequiredDefaultSessionSelection({
@@ -318,7 +332,9 @@ describe("required session default selection", () => {
         profileId: "",
       },
     });
-    const loadRepoRuntimeCatalog = mock(async () => CATALOG);
+    const loadRepoRuntimeCatalog = mock(async () =>
+      createRuntimeCatalogFixture({ models: CATALOG }),
+    );
 
     await expect(
       resolveRequiredDefaultSessionSelection({
@@ -345,7 +361,7 @@ describe("required session default selection", () => {
         profileId: "",
       },
     });
-    const loadRepoRuntimeCatalog = mock(async (): Promise<AgentModelCatalog> => {
+    const loadRepoRuntimeCatalog = mock(async (): Promise<AgentRuntimeCatalog> => {
       throw new Error("Cannot resolve the selected runtime. Start it from the runtime controls.");
     });
 
@@ -358,6 +374,35 @@ describe("required session default selection", () => {
       }),
     ).rejects.toThrow(
       "The saved Builder default or repository Default Model for runtime opencode could not load. Cannot resolve the selected runtime. Start it from the runtime controls. Update the default in Settings > Repositories > Agents.",
+    );
+  });
+
+  test("keeps the model surface failure message when the combined catalog reports it", async () => {
+    const settings = createRepoSettings({
+      defaultModel: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "",
+        profileId: "",
+      },
+    });
+    const loadRepoRuntimeCatalog = mock(async (): Promise<AgentRuntimeCatalog> => ({
+      models: {
+        status: "failed",
+        message: "OpenCode could not load the model catalog. Restart the runtime and retry.",
+      },
+    }));
+
+    await expect(
+      resolveRequiredDefaultSessionSelection({
+        role: "build",
+        repoSettings: settings,
+        repoPath: "/repo",
+        loadRepoRuntimeCatalog,
+      }),
+    ).rejects.toThrow(
+      "The saved Builder default or repository Default Model for runtime opencode could not load. OpenCode could not load the model catalog. Restart the runtime and retry. Update the default in Settings > Repositories > Agents.",
     );
   });
 });

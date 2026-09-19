@@ -3,14 +3,17 @@ import {
   CLAUDE_RUNTIME_DESCRIPTOR,
   CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
-  type RepoRuntimeRef,
   type RuntimeKind,
 } from "@openducktor/contracts";
-import type { AgentModelCatalog } from "@openducktor/core";
+import type {
+  AgentModelCatalog,
+  AgentRuntimeCatalog,
+  RuntimeWorkingDirectoryRef,
+} from "@openducktor/core";
 import type { PropsWithChildren, ReactElement } from "react";
 import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
-import { createDeferred } from "@/test-utils/shared-test-fixtures";
+import { createDeferred, createRuntimeCatalogFixture } from "@/test-utils/shared-test-fixtures";
 import { useRuntimeModelCatalogs } from "./use-runtime-model-catalogs";
 
 const descriptorByRuntime = {
@@ -26,20 +29,23 @@ const catalogFor = (runtimeKind: RuntimeKind): AgentModelCatalog => ({
   defaultModelsByProvider: {},
 });
 
+const runtimeCatalogFor = (runtimeKind: RuntimeKind): AgentRuntimeCatalog =>
+  createRuntimeCatalogFixture({ models: catalogFor(runtimeKind) });
+
 const wrapper = ({ children }: PropsWithChildren): ReactElement => (
   <IsolatedQueryWrapper>{children}</IsolatedQueryWrapper>
 );
 
 describe("useRuntimeModelCatalogs", () => {
   test("marks retained catalog data as loading during a background refetch", async () => {
-    const refetch = createDeferred<AgentModelCatalog>();
+    const refetch = createDeferred<AgentRuntimeCatalog>();
     let loadAttempt = 0;
-    const loadCatalog = mock(async (runtimeRef: RepoRuntimeRef) => {
+    const loadCatalog = mock(async (runtimeRef: RuntimeWorkingDirectoryRef) => {
       loadAttempt += 1;
       if (loadAttempt === 2) {
         return refetch.promise;
       }
-      return catalogFor(runtimeRef.runtimeKind);
+      return runtimeCatalogFor(runtimeRef.runtimeKind);
     });
     const harness = createHookHarness(
       useRuntimeModelCatalogs,
@@ -47,7 +53,7 @@ describe("useRuntimeModelCatalogs", () => {
         repoPath: "/repo",
         runtimeKinds: ["opencode"] as const,
         enabledRuntimeKinds: ["opencode"] as const,
-        loadCatalog,
+        loadRuntimeCatalog: loadCatalog,
       },
       { wrapper },
     );
@@ -67,18 +73,18 @@ describe("useRuntimeModelCatalogs", () => {
       }),
     );
 
-    refetch.resolve(catalogFor("opencode"));
+    refetch.resolve(runtimeCatalogFor("opencode"));
     await harness.waitFor((state) => state.resources[0]?.isFetching === false, 2000);
     expect(harness.getLatest().resources[0]?.catalog).toEqual(catalogFor("opencode"));
     await harness.unmount();
   });
 
   test("keeps each runtime loading and error state independent", async () => {
-    const loadCatalog = mock(async (runtimeRef: RepoRuntimeRef) => {
+    const loadCatalog = mock(async (runtimeRef: RuntimeWorkingDirectoryRef) => {
       if (runtimeRef.runtimeKind === "codex") {
         throw new Error("Codex catalog failed");
       }
-      return catalogFor(runtimeRef.runtimeKind);
+      return runtimeCatalogFor(runtimeRef.runtimeKind);
     });
     const harness = createHookHarness(
       useRuntimeModelCatalogs,
@@ -86,7 +92,7 @@ describe("useRuntimeModelCatalogs", () => {
         repoPath: "/repo",
         runtimeKinds: ["opencode", "codex"] as const,
         enabledRuntimeKinds: ["opencode", "codex"] as const,
-        loadCatalog,
+        loadRuntimeCatalog: loadCatalog,
       },
       { wrapper },
     );
@@ -115,14 +121,14 @@ describe("useRuntimeModelCatalogs", () => {
 
   test("loads only enabled runtimes and supports a user retry", async () => {
     let codexAttempts = 0;
-    const loadCatalog = mock(async (runtimeRef: RepoRuntimeRef) => {
+    const loadCatalog = mock(async (runtimeRef: RuntimeWorkingDirectoryRef) => {
       if (runtimeRef.runtimeKind === "codex") {
         codexAttempts += 1;
         if (codexAttempts === 1) {
           throw new Error("Codex catalog failed");
         }
       }
-      return catalogFor(runtimeRef.runtimeKind);
+      return runtimeCatalogFor(runtimeRef.runtimeKind);
     });
     const harness = createHookHarness(
       useRuntimeModelCatalogs,
@@ -130,7 +136,7 @@ describe("useRuntimeModelCatalogs", () => {
         repoPath: "/repo",
         runtimeKinds: ["opencode", "codex"] as const,
         enabledRuntimeKinds: ["codex"] as const,
-        loadCatalog,
+        loadRuntimeCatalog: loadCatalog,
       },
       { wrapper },
     );
@@ -155,11 +161,11 @@ describe("useRuntimeModelCatalogs", () => {
 
   test("removes retained catalog data from selection after a failed refetch", async () => {
     let readShouldFail = false;
-    const loadCatalog = mock(async (runtimeRef: RepoRuntimeRef) => {
+    const loadCatalog = mock(async (runtimeRef: RuntimeWorkingDirectoryRef) => {
       if (readShouldFail) {
         throw new Error("OpenCode catalog refetch failed");
       }
-      return catalogFor(runtimeRef.runtimeKind);
+      return runtimeCatalogFor(runtimeRef.runtimeKind);
     });
     const harness = createHookHarness(
       useRuntimeModelCatalogs,
@@ -167,7 +173,7 @@ describe("useRuntimeModelCatalogs", () => {
         repoPath: "/repo",
         runtimeKinds: ["opencode"] as const,
         enabledRuntimeKinds: ["opencode"] as const,
-        loadCatalog,
+        loadRuntimeCatalog: loadCatalog,
       },
       { wrapper },
     );

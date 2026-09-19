@@ -1,13 +1,16 @@
 import {
   MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
+  OPENCODE_RUNTIME_DESCRIPTOR,
   slashCommandCatalogSchema,
   subagentCatalogSchema,
 } from "@openducktor/contracts";
-import type {
-  AgentFileSearchResult,
-  AgentModelCatalog,
-  AgentSlashCommandCatalog,
-  AgentSubagentCatalog,
+import {
+  type AgentFileSearchResult,
+  type AgentModelCatalog,
+  type AgentRuntimeCatalogRead,
+  type AgentSlashCommandCatalog,
+  type AgentSubagentCatalog,
+  readCatalogSurface,
 } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
 import { detectAgentFileReferenceKind } from "./file-reference-utils";
@@ -17,6 +20,7 @@ import {
   opencodeFileSearchPayloadSchema,
   opencodeSlashCommandListPayloadSchema,
   type ParsedOpencodeAgent,
+  type ParsedOpencodeSlashCommand,
 } from "./opencode-ingress";
 import { mapProviderListToCatalog } from "./payload-mappers";
 import { toOpenCodeRequestError } from "./request-errors";
@@ -37,6 +41,183 @@ type OpencodeFileSearchInput = OpencodeRuntimeClientInput & {
 type ClientFactoryFor<Namespace extends keyof ReturnType<ClientFactory>> = (
   input: Parameters<ClientFactory>[0],
 ) => Pick<ReturnType<ClientFactory>, Namespace>;
+
+type OpencodeRuntimeCatalogInput = OpencodeRuntimeClientInput & {
+  repoPath: string;
+};
+
+export const loadRuntimeCatalog = async (
+  createClient: ClientFactoryFor<"app" | "config" | "command">,
+  input: OpencodeRuntimeCatalogInput,
+): Promise<AgentRuntimeCatalogRead> => {
+  const client = createClient({
+    runtimeEndpoint: input.runtimeEndpoint,
+    workingDirectory: input.workingDirectory,
+  });
+  const agentLists = new Map<string, Promise<ParsedOpencodeAgent[]>>();
+  const readAgents = (directory: string): Promise<ParsedOpencodeAgent[]> => {
+    const loaded = agentLists.get(directory);
+    if (loaded) {
+      return loaded;
+    }
+    const pending = readAgentList(client, directory);
+    agentLists.set(directory, pending);
+    return pending;
+  };
+  const readModels = async (): Promise<AgentModelCatalog> => {
+    const response = await client.config.providers({ directory: input.repoPath });
+    const providerData = unwrapData(response, "list configured providers");
+    return {
+      ...mapProviderListToCatalog(providerData),
+      profiles: toOpencodeProfiles(await readAgents(input.repoPath)),
+    };
+  };
+  const readSlashCommands = async (): Promise<AgentSlashCommandCatalog> => {
+    try {
+      const payload = unwrapData(
+        await client.command.list({ directory: input.workingDirectory }),
+        "list slash commands",
+      );
+      const parsedPayload = opencodeSlashCommandListPayloadSchema.safeParse(payload);
+      if (!parsedPayload.success) {
+        throw new Error("Invalid slash command payload: expected an array.");
+      }
+      return toOpencodeSlashCommandCatalog(parsedPayload.data);
+    } catch (error) {
+      throw toOpenCodeRequestError("list slash commands", error);
+    }
+  };
+  const readSubagents = async (): Promise<AgentSubagentCatalog> => {
+    try {
+      return toOpencodeSubagentCatalog(await readAgents(input.workingDirectory));
+    } catch (error) {
+      throw toOpenCodeRequestError("list subagents", error);
+    }
+  };
+
+  const [models, slashCommands, subagents] = await Promise.all([
+    readCatalogSurface(readModels),
+    readCatalogSurface(readSlashCommands),
+    readCatalogSurface(readSubagents),
+  ]);
+
+  return {
+    runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+    models,
+    slashCommands,
+    subagents,
+  };
+};
+
+export const searchFiles = async (
+  createClient: ClientFactoryFor<"find">,
+  input: OpencodeFileSearchInput,
+): Promise<AgentFileSearchResult[]> => {
+  try {
+    const client = createClient({
+      runtimeEndpoint: input.runtimeEndpoint,
+      workingDirectory: input.workingDirectory,
+    });
+    const payload = await client.find.files({
+      directory: input.workingDirectory,
+      query: input.query,
+      limit: FILE_SEARCH_LIMIT,
+    });
+
+    const parsedPayload = opencodeFileSearchPayloadSchema.safeParse(
+      unwrapData(payload, "search files"),
+    );
+    if (!parsedPayload.success) {
+      throw new Error("Invalid file search payload: expected an array of file paths.");
+    }
+    return toFileSearchResults(parsedPayload.data, input.workingDirectory);
+  } catch (error) {
+    throw toOpenCodeRequestError("search files", error);
+  }
+};
+
+const toOpencodeProfiles = (
+  agentsData: ParsedOpencodeAgent[],
+): NonNullable<AgentModelCatalog["profiles"]> =>
+  agentsData
+    .map((agent) => {
+      const resolvedColor = resolveAgentColor(agent.name, agent.color, agent.native);
+      const profile: NonNullable<AgentModelCatalog["profiles"]>[number] & { label: string } = {
+        id: agent.name,
+        label: agent.name,
+        mode: agent.mode,
+      };
+      if (agent.description) {
+        profile.description = agent.description;
+      }
+      if (agent.hidden !== undefined) {
+        profile.hidden = agent.hidden;
+      }
+      if (agent.native !== undefined) {
+        profile.native = agent.native;
+      }
+      if (resolvedColor !== undefined) {
+        profile.color = resolvedColor;
+      }
+      return profile;
+    })
+    .sort((a, b) => a.label.localeCompare(b.label));
+
+const toOpencodeSubagentCatalog = (agentsData: ParsedOpencodeAgent[]): AgentSubagentCatalog => {
+  const subagents = agentsData
+    .map((agent) => {
+      const trimmedName = agent.name.trim();
+      if (agent.hidden === true || agent.mode === "primary") {
+        return null;
+      }
+
+      const trimmedDescription = agent.description?.trim();
+      const subagent: NonNullable<AgentSubagentCatalog["subagents"]>[number] & {
+        label: string;
+      } = {
+        id: trimmedName,
+        name: trimmedName,
+        label: trimmedName,
+      };
+      if (trimmedDescription) {
+        subagent.description = trimmedDescription;
+      }
+      return subagent;
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+    .sort((left, right) => left.label.localeCompare(right.label));
+
+  return subagentCatalogSchema.parse({ subagents });
+};
+
+const toOpencodeSlashCommandCatalog = (
+  commands: ParsedOpencodeSlashCommand[],
+): AgentSlashCommandCatalog => {
+  const catalogCommands = commands
+    .map((command) => {
+      const entry: AgentSlashCommandCatalog["commands"][number] = {
+        id: command.name,
+        trigger: command.name,
+        title: command.name,
+        hints: command.hints,
+      };
+      if (command.description) {
+        entry.description = command.description;
+      }
+      if (command.source) {
+        entry.source = command.source;
+      }
+      return entry;
+    })
+    .sort((left, right) => left.trigger.localeCompare(right.trigger));
+
+  return slashCommandCatalogSchema.parse({
+    commands: [
+      MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
+      ...catalogCommands.filter((command) => command.trigger.toLowerCase() !== "compact"),
+    ],
+  });
+};
 
 const resolveAgentColor = (
   agentName: string,
@@ -94,164 +275,4 @@ const toFileSearchResults = (
   workingDirectory: string,
 ): AgentFileSearchResult[] => {
   return payload.map((entry) => toFileSearchResult(entry, workingDirectory));
-};
-
-export const listAvailableModels = async (
-  createClient: ClientFactoryFor<"app" | "config">,
-  input: OpencodeRuntimeClientInput,
-): Promise<AgentModelCatalog> => {
-  const client = createClient({
-    runtimeEndpoint: input.runtimeEndpoint,
-    workingDirectory: input.workingDirectory,
-  });
-  const response = await client.config.providers({
-    directory: input.workingDirectory,
-  });
-  const providerData = unwrapData(response, "list configured providers");
-  const agentsData = await readAgentList(client, input.workingDirectory);
-  const baseCatalog = mapProviderListToCatalog(providerData);
-  const rawAgents = agentsData
-    .map((agent) => {
-      const resolvedColor = resolveAgentColor(agent.name, agent.color, agent.native);
-      const profile: NonNullable<AgentModelCatalog["profiles"]>[number] & { label: string } = {
-        id: agent.name,
-        label: agent.name,
-        mode: agent.mode,
-      };
-      if (agent.description) {
-        profile.description = agent.description;
-      }
-      if (agent.hidden !== undefined) {
-        profile.hidden = agent.hidden;
-      }
-      if (agent.native !== undefined) {
-        profile.native = agent.native;
-      }
-      if (resolvedColor !== undefined) {
-        profile.color = resolvedColor;
-      }
-      return profile;
-    })
-    .sort((a, b) => a.label.localeCompare(b.label));
-
-  return {
-    ...baseCatalog,
-    profiles: rawAgents,
-  };
-};
-
-export const listAvailableSubagents = async (
-  createClient: ClientFactoryFor<"app">,
-  input: OpencodeRuntimeClientInput,
-): Promise<AgentSubagentCatalog> => {
-  try {
-    const client = createClient({
-      runtimeEndpoint: input.runtimeEndpoint,
-      workingDirectory: input.workingDirectory,
-    });
-    const agentsData = await readAgentList(client, input.workingDirectory);
-    const subagents = agentsData
-      .map((agent) => {
-        const trimmedName = agent.name.trim();
-        if (agent.hidden === true || agent.mode === "primary") {
-          return null;
-        }
-
-        const trimmedDescription = agent.description?.trim();
-        const subagent: NonNullable<AgentSubagentCatalog["subagents"]>[number] & {
-          label: string;
-        } = {
-          id: trimmedName,
-          name: trimmedName,
-          label: trimmedName,
-        };
-        if (trimmedDescription) {
-          subagent.description = trimmedDescription;
-        }
-        return subagent;
-      })
-      .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
-      .sort((left, right) => left.label.localeCompare(right.label));
-
-    return subagentCatalogSchema.parse({ subagents });
-  } catch (error) {
-    throw toOpenCodeRequestError("list subagents", error);
-  }
-};
-
-export const listAvailableSlashCommands = async (
-  createClient: ClientFactoryFor<"command">,
-  input: OpencodeRuntimeClientInput,
-): Promise<AgentSlashCommandCatalog> => {
-  try {
-    const client = createClient({
-      runtimeEndpoint: input.runtimeEndpoint,
-      workingDirectory: input.workingDirectory,
-    });
-    const parsedPayload = opencodeSlashCommandListPayloadSchema.safeParse(
-      unwrapData(
-        await client.command.list({ directory: input.workingDirectory }),
-        "list slash commands",
-      ),
-    );
-    if (!parsedPayload.success) {
-      throw new Error("Invalid slash command payload: expected an array.");
-    }
-    const payload = parsedPayload.data;
-
-    const commands = payload
-      .map((command) => {
-        const entry: AgentSlashCommandCatalog["commands"][number] = {
-          id: command.name,
-          trigger: command.name,
-          title: command.name,
-          hints: command.hints,
-        };
-        if (command.description) {
-          entry.description = command.description;
-        }
-        if (command.source) {
-          entry.source = command.source;
-        }
-        return [entry];
-      })
-      .flat()
-      .sort((left, right) => left.trigger.localeCompare(right.trigger));
-
-    return slashCommandCatalogSchema.parse({
-      commands: [
-        MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
-        ...commands.filter((command) => command.trigger.toLowerCase() !== "compact"),
-      ],
-    });
-  } catch (error) {
-    throw toOpenCodeRequestError("list slash commands", error);
-  }
-};
-
-export const searchFiles = async (
-  createClient: ClientFactoryFor<"find">,
-  input: OpencodeFileSearchInput,
-): Promise<AgentFileSearchResult[]> => {
-  try {
-    const client = createClient({
-      runtimeEndpoint: input.runtimeEndpoint,
-      workingDirectory: input.workingDirectory,
-    });
-    const payload = await client.find.files({
-      directory: input.workingDirectory,
-      query: input.query,
-      limit: FILE_SEARCH_LIMIT,
-    });
-
-    const parsedPayload = opencodeFileSearchPayloadSchema.safeParse(
-      unwrapData(payload, "search files"),
-    );
-    if (!parsedPayload.success) {
-      throw new Error("Invalid file search payload: expected an array of file paths.");
-    }
-    return toFileSearchResults(parsedPayload.data, input.workingDirectory);
-  } catch (error) {
-    throw toOpenCodeRequestError("search files", error);
-  }
 };

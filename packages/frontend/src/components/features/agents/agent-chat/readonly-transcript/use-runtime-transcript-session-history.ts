@@ -1,18 +1,21 @@
 import {
+  type AgentRuntimeCatalog,
   type AgentSessionHistoryMessage,
   type AgentSessionScope,
-  type AgentSkillCatalog,
   describeAgentSessionScope,
   type PolicyBoundSessionRef,
   resolveAgentSessionAssociationTransition,
+  type RuntimeKind,
+  type RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
 import { useStableAgentSessionScope } from "@/lib/use-stable-agent-session-scope";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { useAgentOperations } from "@/state/app-state-provider";
+import { toRuntimeWorkingDirectoryRef } from "@/state/operations/agent-orchestrator/support/session-runtime-ref";
 import { resolveSessionRuntimeScope } from "@/state/operations/agent-orchestrator/support/session-runtime-scope";
 import {
   type AgentSessionTranscriptEmptyReason,
@@ -26,7 +29,9 @@ import {
 } from "@/state/queries/agent-session-history";
 import {
   RUNTIME_CATALOG_STALE_TIME_MS,
-  repoRuntimeSkillsQueryOptions,
+  resolveRuntimeCatalogSurface,
+  retryRuntimeCatalog,
+  runtimeCatalogQueryOptions,
 } from "@/state/queries/runtime-catalog";
 import { skippedQueryOptions } from "@/state/queries/skipped-query";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
@@ -42,6 +47,34 @@ import {
 } from "./readonly-transcript-session";
 import { errorMessageFromUnknown } from "./runtime-transcript-error";
 
+const resolveTranscriptCatalogQueryOptions = ({
+  emptyReason,
+  repoReadinessState,
+  targetRuntimeKind,
+  runtimeRef,
+  loadRepoRuntimeCatalog,
+}: {
+  emptyReason: AgentSessionTranscriptEmptyReason | null;
+  repoReadinessState: RepoRuntimeReadinessState;
+  targetRuntimeKind: RuntimeKind | null;
+  runtimeRef: RuntimeWorkingDirectoryRef | null;
+  loadRepoRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
+}) => {
+  if (emptyReason !== null) {
+    return skippedTranscriptCatalogQueryOptions;
+  }
+  if (repoReadinessState !== "ready") {
+    return skippedTranscriptCatalogQueryOptions;
+  }
+  if (targetRuntimeKind !== "claude") {
+    return skippedTranscriptCatalogQueryOptions;
+  }
+  if (runtimeRef === null) {
+    return skippedTranscriptCatalogQueryOptions;
+  }
+  return runtimeCatalogQueryOptions(runtimeRef, loadRepoRuntimeCatalog);
+};
+
 type UseRuntimeTranscriptSessionHistoryArgs = {
   isOpen: boolean;
   repoPath: string | null;
@@ -56,20 +89,24 @@ type RuntimeTranscriptSessionHistory = {
   transcriptState: AgentSessionTranscriptState;
   retryHistory: (() => void) | null;
   isRetryingHistory: boolean;
+  skillSurfaceError: string | null;
+  retrySkills: (() => void) | null;
+  isRetryingSkills: boolean;
   replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"];
   answerAgentQuestion: AgentOperationsContextValue["answerAgentQuestion"];
 };
 
-export function useRuntimeTranscriptSessionHistory({
+const useTranscriptTargetResolution = ({
   isOpen,
   repoPath,
   target,
-  repoReadinessState,
   liveSession,
-}: UseRuntimeTranscriptSessionHistoryArgs): RuntimeTranscriptSessionHistory {
-  const { readSessionHistory, replyAgentApproval, answerAgentQuestion } = useAgentOperations();
-  const { loadRepoRuntimeSkills } = useRuntimeDefinitionsContext();
-  const queryClient = useQueryClient();
+}: {
+  isOpen: boolean;
+  repoPath: string | null;
+  target: AgentSessionTranscriptTarget | null;
+  liveSession: AgentSessionState | null;
+}) => {
   const targetExternalSessionId = target?.externalSessionId ?? null;
   const targetRuntimeKind = target?.runtimeKind ?? null;
   const targetWorkingDirectory = target?.workingDirectory ?? null;
@@ -105,6 +142,26 @@ export function useRuntimeTranscriptSessionHistory({
     matchesAgentSessionIdentity(liveSession, stableTarget)
       ? liveSession
       : null;
+  return { stableTarget, emptyReason, matchingSession, targetRuntimeKind };
+};
+
+export function useRuntimeTranscriptSessionHistory({
+  isOpen,
+  repoPath,
+  target,
+  repoReadinessState,
+  liveSession,
+}: UseRuntimeTranscriptSessionHistoryArgs): RuntimeTranscriptSessionHistory {
+  const { readSessionHistory, replyAgentApproval, answerAgentQuestion } = useAgentOperations();
+  const { loadRepoRuntimeCatalog } = useRuntimeDefinitionsContext();
+  const queryClient = useQueryClient();
+  const { stableTarget, emptyReason, matchingSession, targetRuntimeKind } =
+    useTranscriptTargetResolution({
+      isOpen,
+      repoPath,
+      target,
+      liveSession,
+    });
   const targetScope = stableTarget?.sessionScope ?? null;
   const scopeResult = useMemo(
     () =>
@@ -135,6 +192,18 @@ export function useRuntimeTranscriptSessionHistory({
       : skippedRuntimeSessionRefQueryOptions,
   );
   const runtimeSessionRef = runtimeSessionRefQuery.data ?? null;
+  const runtimeRef = useMemo<RuntimeWorkingDirectoryRef | null>(
+    () =>
+      runtimeSessionRef === null
+        ? null
+        : toRuntimeWorkingDirectoryRef({
+            repoPath: runtimeSessionRef.repoPath,
+            runtimeKind: runtimeSessionRef.runtimeKind,
+            workingDirectory: runtimeSessionRef.workingDirectory,
+            action: "read the transcript runtime catalog",
+          }),
+    [runtimeSessionRef],
+  );
   const runtimePolicyError = runtimeSessionRefQuery.error
     ? errorMessageFromUnknown(runtimeSessionRefQuery.error, "Failed to resolve runtime policy.")
     : null;
@@ -149,13 +218,15 @@ export function useRuntimeTranscriptSessionHistory({
   );
   const { refetch: refetchHistory } = historyQuery;
   const skillsQuery = useQuery(
-    emptyReason === null &&
-      repoReadinessState === "ready" &&
-      targetRuntimeKind === "claude" &&
-      runtimeSessionRef !== null
-      ? repoRuntimeSkillsQueryOptions(runtimeSessionRef, loadRepoRuntimeSkills)
-      : skippedTranscriptSkillsQueryOptions,
+    resolveTranscriptCatalogQueryOptions({
+      emptyReason,
+      repoReadinessState,
+      targetRuntimeKind,
+      runtimeRef,
+      loadRepoRuntimeCatalog,
+    }),
   );
+  const skillSurface = resolveRuntimeCatalogSurface(skillsQuery.data?.skills, skillsQuery.error);
   const session = useMemo(() => {
     let transcriptSession: AgentChatTranscriptSession | null = null;
     if (matchingSession !== null) {
@@ -171,9 +242,9 @@ export function useRuntimeTranscriptSessionHistory({
       });
     }
     return transcriptSession
-      ? withClaudeSkillMentions(transcriptSession, skillsQuery.data?.skills ?? [])
+      ? withClaudeSkillMentions(transcriptSession, skillSurface.catalog?.skills ?? [])
       : null;
-  }, [historyQuery.data, matchingSession, shouldLoadHistory, skillsQuery.data, stableTarget]);
+  }, [historyQuery.data, matchingSession, shouldLoadHistory, skillSurface.catalog, stableTarget]);
   const transcriptState = useMemo<AgentSessionTranscriptState>(() => {
     if (scopeResult.kind === "conflict") {
       return { kind: "failed", message: scopeResult.message };
@@ -208,13 +279,28 @@ export function useRuntimeTranscriptSessionHistory({
   const retryHistory = useCallback(() => {
     void refetchHistory();
   }, [refetchHistory]);
+  const [isRetryingSkills, setIsRetryingSkills] = useState(false);
+  const retrySkills = useCallback(() => {
+    if (runtimeRef === null) {
+      return;
+    }
+    setIsRetryingSkills(true);
+    void retryRuntimeCatalog({
+      queryClient,
+      runtimeRef,
+      loadRuntimeCatalog: loadRepoRuntimeCatalog,
+    }).finally(() => setIsRetryingSkills(false));
+  }, [loadRepoRuntimeCatalog, queryClient, runtimeRef]);
 
   return {
     session,
     interactionSession: matchingSession,
     transcriptState,
-    retryHistory: historyQuery.error ? retryHistory : null,
+    retryHistory: historyQuery.error !== null ? retryHistory : null,
     isRetryingHistory: historyQuery.isFetching,
+    skillSurfaceError: skillSurface.error,
+    retrySkills: skillSurface.error !== null ? retrySkills : null,
+    isRetryingSkills,
     replyAgentApproval,
     answerAgentQuestion,
   };
@@ -269,7 +355,7 @@ const skippedRuntimeSessionRefQueryOptions = skippedQueryOptions<PolicyBoundSess
   refetchOnWindowFocus: false,
 });
 
-const skippedTranscriptSkillsQueryOptions = skippedQueryOptions<AgentSkillCatalog>({
+const skippedTranscriptCatalogQueryOptions = skippedQueryOptions<AgentRuntimeCatalog>({
   queryKey: ["runtime-transcript-skills", "skipped"] as const,
   staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
 });

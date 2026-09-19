@@ -165,9 +165,6 @@ const definitions = (supported: boolean): RuntimeDefinitionsContextValue => {
     loadRepoRuntimeCatalog: async () => {
       throw new Error("unexpected catalog read");
     },
-    loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-    loadRepoRuntimeSkills: async () => ({ skills: [] }),
-    loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
     loadRepoRuntimeFileSearch: async () => [],
   };
 };

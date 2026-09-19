@@ -9,23 +9,17 @@ import type {
   AgentCatalogPort,
   AgentEvent,
   AgentFileSearchResult,
-  AgentModelCatalog,
+  AgentRuntimeCatalogRead,
   AgentSessionHistoryMessage,
   AgentSessionPort,
   AgentSessionRuntimePolicy,
   AgentSessionSummary,
   AgentSessionTodoItem,
-  AgentSkillCatalog,
-  AgentSlashCommandCatalog,
-  AgentSubagentCatalog,
   AgentWorkspaceInspectionPort,
   EventUnsubscribe,
   ContinueInterruptedAgentTurnInput,
   ForkAgentSessionInput,
-  ListAgentModelsInput,
-  ListAgentSkillsInput,
-  ListAgentSlashCommandsInput,
-  ListAgentSubagentsInput,
+  LoadAgentRuntimeCatalogInput,
   LoadAgentFileStatusInput,
   LoadAgentSessionDiffInput,
   LoadAgentSessionHistoryInput,
@@ -49,12 +43,7 @@ import {
   interruptedTurnResumeError,
   withAgentSessionRef,
 } from "@openducktor/core";
-import {
-  listAvailableModels,
-  listAvailableSlashCommands,
-  listAvailableSubagents,
-  searchFiles,
-} from "./catalog-and-mcp";
+import { loadRuntimeCatalog, searchFiles } from "./catalog-and-mcp";
 import { buildDefaultFactory, nowIso } from "./client-factory";
 import { unwrapData } from "./data-utils";
 import {
@@ -716,34 +705,12 @@ export class OpencodeSdkAdapter
     return target.parentID || null;
   }
 
-  async listAvailableModels(input: ListAgentModelsInput): Promise<AgentModelCatalog> {
-    return listAvailableModels(
-      this.createClient,
-      await this.resolveRuntimeClientInput(
-        { ...input, workingDirectory: input.repoPath },
-        "list available models",
-      ),
-    );
-  }
-
-  async listAvailableSlashCommands(
-    input: ListAgentSlashCommandsInput,
-  ): Promise<AgentSlashCommandCatalog> {
-    return listAvailableSlashCommands(
-      this.createClient,
-      await this.resolveRuntimeClientInput(input, "list available slash commands"),
-    );
-  }
-
-  async listAvailableSkills(_input: ListAgentSkillsInput): Promise<AgentSkillCatalog> {
-    throw new Error("OpenCode does not support skill reference catalogs.");
-  }
-
-  async listAvailableSubagents(input: ListAgentSubagentsInput): Promise<AgentSubagentCatalog> {
-    return listAvailableSubagents(
-      this.createClient,
-      await this.resolveRuntimeClientInput(input, "list available subagents"),
-    );
+  async loadRuntimeCatalog(input: LoadAgentRuntimeCatalogInput): Promise<AgentRuntimeCatalogRead> {
+    const runtimeClientInput = await this.resolveRuntimeClientInput(input, "load runtime catalog");
+    return loadRuntimeCatalog(this.createClient, {
+      ...runtimeClientInput,
+      repoPath: input.repoPath,
+    });
   }
 
   async searchFiles(input: SearchAgentFilesInput): Promise<AgentFileSearchResult[]> {

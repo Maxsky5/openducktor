@@ -5,7 +5,11 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeDescriptor,
 } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentSessionTodoItem } from "@openducktor/core";
+import type {
+  AgentModelCatalog,
+  AgentRuntimeCatalog,
+  AgentSessionTodoItem,
+} from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren } from "react";
 import { QueryProvider } from "@/lib/query-provider";
@@ -34,6 +38,10 @@ const emptyCatalog: AgentModelCatalog = {
   profiles: [],
   defaultModelsByProvider: {},
 };
+
+const availableRuntimeCatalog = (catalog: AgentModelCatalog): AgentRuntimeCatalog => ({
+  models: { status: "available", catalog },
+});
 
 const todoFixture: AgentSessionTodoItem = {
   id: "todo-1",
@@ -131,7 +139,7 @@ describe("useSessionRuntimeData", () => {
   });
 
   test("does not query session todos when the runtime does not support todos", async () => {
-    const loadRuntimeCatalog = mock(() => new Promise<AgentModelCatalog>(() => {}));
+    const loadRuntimeCatalog = mock(() => new Promise<AgentRuntimeCatalog>(() => {}));
     const readSessionTodos = mock(async () => {
       throw new Error("todos should not be queried");
     });
@@ -206,7 +214,9 @@ describe("useSessionRuntimeData", () => {
   });
 
   test("keeps cached selected-session runtime data while runtime readiness drops", async () => {
-    const loadRuntimeCatalog = mock(async () => structuredClone(emptyCatalog));
+    const loadRuntimeCatalog = mock(async () =>
+      availableRuntimeCatalog(structuredClone(emptyCatalog)),
+    );
     const readSessionTodos = mock(async () => [structuredClone(todoFixture)]);
     const readyProps: Parameters<typeof useSessionRuntimeData>[0] = {
       repoPath: "/repo",
@@ -247,7 +257,7 @@ describe("useSessionRuntimeData", () => {
   });
 
   test("refreshes the selected-session catalog when runtime readiness returns", async () => {
-    const loadRuntimeCatalog = mock(async () => emptyCatalog);
+    const loadRuntimeCatalog = mock(async () => availableRuntimeCatalog(emptyCatalog));
     const readyProps: Parameters<typeof useSessionRuntimeData>[0] = {
       repoPath: "/repo",
       selectedSession: sessionTarget(),
@@ -270,7 +280,11 @@ describe("useSessionRuntimeData", () => {
       });
       await harness.run(({ queryClient }) =>
         queryClient.invalidateQueries({
-          queryKey: runtimeCatalogQueryKeys.repo("/repo", "opencode"),
+          queryKey: runtimeCatalogQueryKeys.catalog({
+            repoPath: "/repo",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo",
+          }),
           exact: true,
         }),
       );
@@ -289,7 +303,7 @@ describe("useSessionRuntimeData", () => {
   });
 
   test("reads todos from selected-session identity without waiting for hydrated history", async () => {
-    const loadRuntimeCatalog = mock(async () => emptyCatalog);
+    const loadRuntimeCatalog = mock(async () => availableRuntimeCatalog(emptyCatalog));
     const readSessionTodos = mock(async () => [todoFixture]);
     const harness = createHookHarness(
       useSessionRuntimeData,
@@ -324,7 +338,7 @@ describe("useSessionRuntimeData", () => {
   });
 
   test("reads todos whenever selected-session runtime data is supported and ready", async () => {
-    const loadRuntimeCatalog = mock(async () => emptyCatalog);
+    const loadRuntimeCatalog = mock(async () => availableRuntimeCatalog(emptyCatalog));
     const readSessionTodos = mock(async () => [todoFixture]);
     const harness = createHookHarness(
       useSessionRuntimeData,
@@ -360,8 +374,8 @@ describe("useSessionRuntimeData", () => {
   });
 
   test("marks a retained selected-session catalog as loading during a background refresh", async () => {
-    let resolveSuccessfulRefresh: ((catalog: AgentModelCatalog) => void) | undefined;
-    const successfulRefresh = new Promise<AgentModelCatalog>((resolve) => {
+    let resolveSuccessfulRefresh: ((catalog: AgentRuntimeCatalog) => void) | undefined;
+    const successfulRefresh = new Promise<AgentRuntimeCatalog>((resolve) => {
       resolveSuccessfulRefresh = resolve;
     });
     const refreshedCatalog: AgentModelCatalog = {
@@ -377,7 +391,10 @@ describe("useSessionRuntimeData", () => {
         },
       ],
     };
-    const catalogRequests = [Promise.resolve(emptyCatalog), successfulRefresh];
+    const catalogRequests = [
+      Promise.resolve(availableRuntimeCatalog(emptyCatalog)),
+      successfulRefresh,
+    ];
     const loadRuntimeCatalog = mock(() => {
       const request = catalogRequests.shift();
       if (!request) {
@@ -405,14 +422,22 @@ describe("useSessionRuntimeData", () => {
 
       await harness.run(({ queryClient }) => {
         void queryClient.invalidateQueries({
-          queryKey: runtimeCatalogQueryKeys.repo("/repo", "opencode"),
+          queryKey: runtimeCatalogQueryKeys.catalog({
+            repoPath: "/repo",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo",
+          }),
           exact: true,
         });
       });
       await harness.waitFor(() => loadRuntimeCatalog.mock.calls.length === 2);
       expect(
         harness.getLatest().queryClient.isFetching({
-          queryKey: runtimeCatalogQueryKeys.repo("/repo", "opencode"),
+          queryKey: runtimeCatalogQueryKeys.catalog({
+            repoPath: "/repo",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo",
+          }),
           exact: true,
         }),
       ).toBe(1);
@@ -425,7 +450,7 @@ describe("useSessionRuntimeData", () => {
         }),
       );
 
-      resolveSuccessfulRefresh?.(refreshedCatalog);
+      resolveSuccessfulRefresh?.(availableRuntimeCatalog(refreshedCatalog));
       await harness.waitFor(
         (latest) =>
           latest.runtimeData.modelCatalog?.models[0]?.modelId === "gpt-5" &&
@@ -438,10 +463,10 @@ describe("useSessionRuntimeData", () => {
 
   test("reports a failed selected-session background refresh after loading ends", async () => {
     let rejectRefresh: ((reason: Error) => void) | undefined;
-    const failedRefresh = new Promise<AgentModelCatalog>((_resolve, reject) => {
+    const failedRefresh = new Promise<AgentRuntimeCatalog>((_resolve, reject) => {
       rejectRefresh = reject;
     });
-    const catalogRequests = [Promise.resolve(emptyCatalog), failedRefresh];
+    const catalogRequests = [Promise.resolve(availableRuntimeCatalog(emptyCatalog)), failedRefresh];
     const loadRuntimeCatalog = mock(() => {
       const request = catalogRequests.shift();
       if (!request) {
@@ -467,7 +492,11 @@ describe("useSessionRuntimeData", () => {
       await harness.waitFor((latest) => latest.runtimeData.modelCatalog === emptyCatalog);
       await harness.run(({ queryClient }) => {
         void queryClient.invalidateQueries({
-          queryKey: runtimeCatalogQueryKeys.repo("/repo", "opencode"),
+          queryKey: runtimeCatalogQueryKeys.catalog({
+            repoPath: "/repo",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo",
+          }),
           exact: true,
         });
       });
@@ -480,7 +509,7 @@ describe("useSessionRuntimeData", () => {
       );
       expect(harness.getLatest().runtimeData).toEqual(
         expect.objectContaining({
-          modelCatalog: emptyCatalog,
+          modelCatalog: null,
           isLoadingModelCatalog: false,
           catalogError: "Catalog refresh failed",
         }),
@@ -491,7 +520,7 @@ describe("useSessionRuntimeData", () => {
   });
 
   test("keeps the repo catalog readable while the model picker skips its own catalogs", async () => {
-    const loadRuntimeCatalog = mock(async () => emptyCatalog);
+    const loadRuntimeCatalog = mock(async () => availableRuntimeCatalog(emptyCatalog));
     const useSessionChatRuntimeDataAndPicker = (
       args: Parameters<typeof useSessionRuntimeData>[0],
     ) => ({
@@ -500,7 +529,7 @@ describe("useSessionRuntimeData", () => {
         repoPath: args.repoPath,
         runtimeKinds: ["opencode"] as const,
         enabledRuntimeKinds: [] as const,
-        loadCatalog: args.loadRuntimeCatalog,
+        loadRuntimeCatalog: args.loadRuntimeCatalog,
       }).resources,
     });
     const harness = createHookHarness(
@@ -522,7 +551,11 @@ describe("useSessionRuntimeData", () => {
 
       await harness.run(({ queryClient }) =>
         queryClient.invalidateQueries({
-          queryKey: runtimeCatalogQueryKeys.repo("/repo", "opencode"),
+          queryKey: runtimeCatalogQueryKeys.catalog({
+            repoPath: "/repo",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo",
+          }),
           exact: true,
         }),
       );
@@ -546,7 +579,7 @@ describe("useSessionRuntimeData", () => {
   });
 
   test("keeps a valid model catalog when the session todos read fails", async () => {
-    const loadRuntimeCatalog = mock(async () => emptyCatalog);
+    const loadRuntimeCatalog = mock(async () => availableRuntimeCatalog(emptyCatalog));
     const readSessionTodos = mock(async () => {
       throw new Error("Session todos unavailable");
     });
@@ -593,7 +626,7 @@ describe("useSessionRuntimeData", () => {
       ...emptyCatalog,
       runtime: CODEX_RUNTIME_DESCRIPTOR,
     };
-    const loadRuntimeCatalog = mock(async () => codexCatalog);
+    const loadRuntimeCatalog = mock(async () => availableRuntimeCatalog(codexCatalog));
     const readSessionTodos = mock(async () => []);
     const harness = createHookHarness(
       useSessionRuntimeData,
@@ -631,7 +664,7 @@ describe("useSessionRuntimeData", () => {
   });
 
   test("keeps runtime data stable when the selected session identity object is rebuilt", async () => {
-    const loadRuntimeCatalog = mock(async () => emptyCatalog);
+    const loadRuntimeCatalog = mock(async () => availableRuntimeCatalog(emptyCatalog));
     const readSessionTodos = mock(async () => [todoFixture]);
     const props: Parameters<typeof useSessionRuntimeData>[0] = {
       repoPath: "/repo",
@@ -661,8 +694,39 @@ describe("useSessionRuntimeData", () => {
     }
   });
 
+  test("keeps the cached catalog when the selected session changes in the same directory", async () => {
+    const loadRuntimeCatalog = mock(async () => availableRuntimeCatalog(emptyCatalog));
+    const readSessionTodos = mock(async () => [todoFixture]);
+    const props: Parameters<typeof useSessionRuntimeData>[0] = {
+      repoPath: "/repo",
+      selectedSession: sessionTarget(),
+      runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
+      repoReadinessState: "ready",
+      loadRuntimeCatalog,
+      readSessionTodos,
+    };
+    const harness = createHookHarness(useSessionRuntimeData, props, { wrapper });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((latest) => latest.modelCatalog !== null && latest.todos.length === 1);
+
+      await harness.update({
+        ...props,
+        selectedSession: sessionTarget(sessionState({ externalSessionId: "external-2" })),
+      });
+
+      await harness.waitFor(() => readSessionTodos.mock.calls.length === 2);
+      expect(loadRuntimeCatalog).toHaveBeenCalledTimes(1);
+      expect(readSessionTodos).toHaveBeenCalledTimes(2);
+      expect(harness.getLatest().modelCatalog).toEqual(emptyCatalog);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("reports missing workspace repo path without querying runtime data", async () => {
-    const loadRuntimeCatalog = mock(async () => emptyCatalog);
+    const loadRuntimeCatalog = mock(async () => availableRuntimeCatalog(emptyCatalog));
     const readSessionTodos = mock(async () => [todoFixture]);
     const harness = createHookHarness(
       useSessionRuntimeData,
@@ -691,7 +755,7 @@ describe("useSessionRuntimeData", () => {
   });
 
   test("fails fast on invalid selected session runtime context", async () => {
-    const loadRuntimeCatalog = mock(async () => emptyCatalog);
+    const loadRuntimeCatalog = mock(async () => availableRuntimeCatalog(emptyCatalog));
     const readSessionTodos = mock(async () => [todoFixture]);
     const harness = createHookHarness(
       useSessionRuntimeData,

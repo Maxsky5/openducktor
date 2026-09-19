@@ -533,15 +533,17 @@ const runtimeDefinitionsValue = () => ({
   refreshRuntimeSettings: async () => {},
   refreshRuntimeDefinitions: async () => [],
   loadRepoRuntimeCatalog: async () => ({
-    providers: [],
-    models: [],
-    variants: [],
-    profiles: [],
-    defaultModelsByProvider: {},
+    models: {
+      status: "available" as const,
+      catalog: {
+        providers: [],
+        models: [],
+        variants: [],
+        profiles: [],
+        defaultModelsByProvider: {},
+      },
+    },
   }),
-  loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-  loadRepoRuntimeSkills: async () => ({ skills: [] }),
-  loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
   loadRepoRuntimeFileSearch: async () => [],
 });
 

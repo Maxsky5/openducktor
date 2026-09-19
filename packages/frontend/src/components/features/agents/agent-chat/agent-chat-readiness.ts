@@ -11,6 +11,10 @@ type DeriveAgentChatReadinessInput = {
   runtimeReadiness: Pick<RepoRuntimeReadiness, "state" | "message">;
   runtimeBlockedAction?: AgentChatTranscriptNoticeAction | null;
   failedTranscriptAction?: AgentChatTranscriptNoticeAction | null;
+  catalogSurfaceFailure?: {
+    message: string;
+    action?: AgentChatTranscriptNoticeAction | null;
+  } | null;
 };
 
 type AgentChatReadiness = {
@@ -57,6 +61,7 @@ export const deriveAgentChatReadiness = ({
   runtimeReadiness,
   runtimeBlockedAction,
   failedTranscriptAction,
+  catalogSurfaceFailure,
 }: DeriveAgentChatReadinessInput): AgentChatReadiness => {
   let transcriptNotice: AgentChatTranscriptNotice | null = null;
 
@@ -97,6 +102,17 @@ export const deriveAgentChatReadiness = ({
       hasTranscript: true,
       action: failedTranscriptAction,
     });
+  } else if (transcriptState.kind === "visible" && catalogSurfaceFailure) {
+    const notice: AgentChatTranscriptNotice = {
+      kind: "catalog_warning",
+      severity: "error",
+      title: "Skills may be incomplete",
+      description: catalogSurfaceFailure.message,
+    };
+    if (catalogSurfaceFailure.action) {
+      notice.action = catalogSurfaceFailure.action;
+    }
+    transcriptNotice = notice;
   } else if (transcriptState.kind === "failed") {
     if (transcriptState.historyFailure) {
       transcriptNotice = sessionHistoryFailureNotice({

@@ -139,10 +139,16 @@ export type ChecksStateContextValue = {
   refreshChecks: () => Promise<void>;
 };
 
+export type RefreshRepoRuntimeHealthOptions = {
+  reloadCatalogs?: boolean;
+};
+
 export type RepoRuntimeHealthContextValue = {
   runtimeHealthByRuntime: RepoRuntimeHealthMap;
   isLoadingRepoRuntimeHealth: boolean;
-  refreshRepoRuntimeHealth: () => Promise<RepoRuntimeHealthMap>;
+  refreshRepoRuntimeHealth: (
+    options?: RefreshRepoRuntimeHealthOptions,
+  ) => Promise<RepoRuntimeHealthMap>;
 };
 
 export type TasksStateContextValue = {

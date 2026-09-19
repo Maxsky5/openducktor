@@ -5,7 +5,10 @@ import type {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { hasNestedNodeErrorCode } from "../../effect/host-errors";
-import type { AgentRuntimeQueryPort } from "../../ports/agent-runtime-query-port";
+import type {
+  AgentRuntimeQueryPort,
+  NativeAgentRuntimeQueryPort,
+} from "../../ports/agent-runtime-query-port";
 import type {
   AgentSessionLiveAdapterPort,
   AgentSessionLiveAdapterRegistryPort,
@@ -15,6 +18,7 @@ import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { TaskReader } from "../../ports/task-repository-ports";
 import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { resolveRepoPath } from "./runtime-orchestrator-model";
+import { toCatalogResponse } from "./agent-runtime-catalog-response";
 import { requireSessionScope, type QueryInput } from "./runtime-query-scope";
 import { requireRuntimeWorkingDirectory } from "./runtime-working-directory";
 import {
@@ -44,8 +48,9 @@ export const createAgentRuntimeQueryService = (
     method: QueryMethod,
     input: Input,
     invoke: (
-      queries: AgentRuntimeQueryPort,
+      queries: NativeAgentRuntimeQueryPort,
       input: Input,
+      runtime: RuntimeInstanceSummary,
     ) => Effect.Effect<Result, RuntimeQueryError>,
   ): Effect.Effect<Result, RuntimeQueryError> =>
     Effect.gen(function* () {
@@ -103,7 +108,7 @@ export const createAgentRuntimeQueryService = (
               workingDirectory: directory,
             }).pipe(Effect.mapError(directoryFailure));
           }
-          const result = yield* invoke(adapter.queries, request);
+          const result = yield* invoke(adapter.queries, request, runtime);
           const current = yield* resolveAdapter(request, method);
           if (current.adapter !== adapter) {
             return yield* runtimeQueryError(
@@ -119,21 +124,11 @@ export const createAgentRuntimeQueryService = (
     });
 
   return {
-    listAvailableModels: (input) =>
-      read("listAvailableModels", input, (queries, request) =>
-        queries.listAvailableModels(request),
-      ),
-    listAvailableSlashCommands: (input) =>
-      read("listAvailableSlashCommands", input, (queries, request) =>
-        queries.listAvailableSlashCommands(request),
-      ),
-    listAvailableSkills: (input) =>
-      read("listAvailableSkills", input, (queries, request) =>
-        queries.listAvailableSkills(request),
-      ),
-    listAvailableSubagents: (input) =>
-      read("listAvailableSubagents", input, (queries, request) =>
-        queries.listAvailableSubagents(request),
+    loadRuntimeCatalog: (input) =>
+      read("loadRuntimeCatalog", input, (queries, request, runtime) =>
+        queries
+          .loadRuntimeCatalog(request)
+          .pipe(Effect.map((catalogRead) => toCatalogResponse(catalogRead, runtime))),
       ),
     searchFiles: (input) =>
       read("searchFiles", input, (queries, request) => queries.searchFiles(request)),
@@ -205,14 +200,8 @@ export const createAgentRuntimeQueryService = (
 const supportsQuery = (runtime: RuntimeDescriptor, method: QueryMethod): boolean => {
   const { promptInput, optionalSurfaces, history } = runtime.capabilities;
   switch (method) {
-    case "listAvailableModels":
+    case "loadRuntimeCatalog":
       return true;
-    case "listAvailableSlashCommands":
-      return promptInput.supportsSlashCommands;
-    case "listAvailableSkills":
-      return promptInput.supportsSkillReferences;
-    case "listAvailableSubagents":
-      return promptInput.supportsSubagentReferences;
     case "searchFiles":
       return promptInput.supportsFileSearch;
     case "loadSessionHistory":

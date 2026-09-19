@@ -2,16 +2,19 @@ import { describe, expect, mock, test } from "bun:test";
 import {
   DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
-  type RepoRuntimeRef,
   type RuntimeDescriptor,
 } from "@openducktor/contracts";
-import type { AgentModelCatalog } from "@openducktor/core";
+import type {
+  AgentModelCatalog,
+  AgentRuntimeCatalog,
+  RuntimeWorkingDirectoryRef,
+} from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
-import { createDeferred } from "@/test-utils/shared-test-fixtures";
+import { createDeferred, createRuntimeCatalogFixture } from "@/test-utils/shared-test-fixtures";
 import { useSettingsModalCatalogState } from "./use-settings-modal-catalog-state";
 
 enableReactActEnvironment();
@@ -37,9 +40,12 @@ const OPENCODE_CATALOG: AgentModelCatalog = {
   profiles: [{ name: "spec-agent", mode: "primary" }],
 };
 
+const runtimeCatalog = (): AgentRuntimeCatalog =>
+  createRuntimeCatalogFixture({ models: OPENCODE_CATALOG });
+
 const createHookHarness = (
   initialProps: HookArgs,
-  loadRepoRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>,
+  loadRepoRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>,
 ) => {
   const runtimeDefinitionsContext = {
     runtimeDefinitions: [OPENCODE_DESCRIPTOR],
@@ -53,9 +59,6 @@ const createHookHarness = (
     refreshRuntimeSettings: async () => {},
     refreshRuntimeDefinitions: async () => [OPENCODE_DESCRIPTOR],
     loadRepoRuntimeCatalog,
-    loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-    loadRepoRuntimeSkills: async () => ({ skills: [] }),
-    loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
     loadRepoRuntimeFileSearch: async () => [],
   } satisfies React.ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"];
 
@@ -75,7 +78,7 @@ const createHookHarness = (
 
 describe("useSettingsModalCatalogState", () => {
   test("does not fetch catalogs when disabled or missing a repo path", async () => {
-    const loadRepoRuntimeCatalog = mock(async () => OPENCODE_CATALOG);
+    const loadRepoRuntimeCatalog = mock(async () => runtimeCatalog());
 
     const disabledHarness = createHookHarness(
       {
@@ -107,7 +110,7 @@ describe("useSettingsModalCatalogState", () => {
   });
 
   test("fetches the requested runtime kind and exposes runtime getters", async () => {
-    const loadRepoRuntimeCatalog = mock(async () => OPENCODE_CATALOG);
+    const loadRepoRuntimeCatalog = mock(async () => runtimeCatalog());
 
     const harness = createHookHarness(
       {
@@ -124,6 +127,7 @@ describe("useSettingsModalCatalogState", () => {
     expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith({
       repoPath: "/repo",
       runtimeKind: "opencode",
+      workingDirectory: "/repo",
     });
     expect(harness.getLatest().getCatalogForRuntime("opencode")).toEqual(OPENCODE_CATALOG);
     expect(harness.getLatest().isCatalogLoadingForRuntime("opencode")).toBe(false);
@@ -132,7 +136,7 @@ describe("useSettingsModalCatalogState", () => {
   });
 
   test("deduplicates repeated runtime kinds", async () => {
-    const loadRepoRuntimeCatalog = mock(async () => OPENCODE_CATALOG);
+    const loadRepoRuntimeCatalog = mock(async () => runtimeCatalog());
 
     const harness = createHookHarness(
       {
@@ -149,13 +153,14 @@ describe("useSettingsModalCatalogState", () => {
     expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith({
       repoPath: "/repo",
       runtimeKind: "opencode",
+      workingDirectory: "/repo",
     });
 
     await harness.unmount();
   });
 
   test("exposes loading and errors for the requested runtime", async () => {
-    const catalogDeferred = createDeferred<AgentModelCatalog>();
+    const catalogDeferred = createDeferred<AgentRuntimeCatalog>();
     const loadRepoRuntimeCatalog = mock(async () => catalogDeferred.promise);
 
     const loadingHarness = createHookHarness(
@@ -172,7 +177,7 @@ describe("useSettingsModalCatalogState", () => {
     expect(loadingHarness.getLatest().isLoadingCatalog).toBe(true);
     expect(loadingHarness.getLatest().getCatalogForRuntime("opencode")).toBeNull();
 
-    catalogDeferred.resolve(OPENCODE_CATALOG);
+    catalogDeferred.resolve(runtimeCatalog());
     await loadingHarness.waitFor((state) => state.isCatalogLoadingForRuntime("opencode") === false);
 
     expect(loadingHarness.getLatest().getCatalogForRuntime("opencode")).toEqual(OPENCODE_CATALOG);

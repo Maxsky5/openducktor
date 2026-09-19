@@ -9,7 +9,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { taskQueryKeys } from "@/state/queries/tasks";
-import { invalidateRuntimeQueries } from "@/state/queries/runtime-query-invalidation";
+import { invalidateRuntimeSessionQueries } from "@/state/queries/runtime-query-invalidation";
 import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
 import type { TaskStreamController } from "@/state/tasks/task-stream-controller";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
@@ -96,7 +96,7 @@ export function useAppLifecycle({
       isCurrent: () => activeWorkspaceRef.current?.repoPath === repoPath,
       startRepoRuntime,
       onRuntimeReady: (runtime) =>
-        invalidateRuntimeQueries(
+        invalidateRuntimeSessionQueries(
           queryClient,
           { repoPath: runtime.repoPath, runtimeKind: runtime.kind },
           "ready",

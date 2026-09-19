@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { Agent, Command } from "@opencode-ai/sdk/v2/client";
-import { listAvailableSlashCommands, listAvailableSubagents, searchFiles } from "./catalog-and-mcp";
+import { loadRuntimeCatalog, searchFiles } from "./catalog-and-mcp";
 
 const commandFixture = (overrides: Partial<Command>): Command => ({
   hints: [],
@@ -17,8 +17,63 @@ const agentFixture = (overrides: Partial<Agent>): Agent => ({
   ...overrides,
 });
 
-describe("catalog-and-mcp listAvailableSlashCommands", () => {
-  test("normalizes command payloads into a slash catalog", async () => {
+type CatalogPayload = {
+  data: unknown;
+  error?: unknown;
+  response?: { status?: number; statusText?: string };
+};
+
+type CatalogClient = {
+  app: { agents: (input: { directory: string }) => Promise<CatalogPayload> };
+  config: {
+    providers: (input: { directory: string }) => Promise<CatalogPayload>;
+  };
+  command: { list: (input: { directory: string }) => Promise<CatalogPayload> };
+};
+
+const catalogClient = (overrides: Partial<CatalogClient>): CatalogClient => ({
+  app: {
+    agents: async () => {
+      throw new Error("Unexpected agent list read.");
+    },
+  },
+  config: {
+    providers: async () => {
+      throw new Error("Unexpected provider list read.");
+    },
+  },
+  command: {
+    list: async () => {
+      throw new Error("Unexpected command list read.");
+    },
+  },
+  ...overrides,
+});
+
+const loadCatalog = (
+  client: CatalogClient,
+  directory = "/repo",
+): ReturnType<typeof loadRuntimeCatalog> => {
+  return loadRuntimeCatalog(
+    // SAFETY: The test client implements the three catalog namespaces used by the loader.
+    (() => client) as never,
+    {
+      runtimeEndpoint: "http://127.0.0.1:1234",
+      workingDirectory: directory,
+      repoPath: directory,
+    },
+  );
+};
+
+const failureMessage = (surface: { status: string; cause?: unknown } | undefined): string => {
+  if (surface?.status !== "failed") {
+    throw new Error(`Expected a failed surface, received ${surface?.status ?? "no surface"}.`);
+  }
+  return String(surface.cause);
+};
+
+describe("catalog-and-mcp combined runtime catalog", () => {
+  test("normalizes command payloads into the slash command surface", async () => {
     const list = mock(async () => ({
       data: [
         commandFixture({
@@ -32,55 +87,58 @@ describe("catalog-and-mcp listAvailableSlashCommands", () => {
       ],
       error: undefined,
     }));
-    const createClient = mock(() => ({ command: { list } }));
 
-    const catalog = await listAvailableSlashCommands(createClient, {
-      runtimeEndpoint: "http://127.0.0.1:1234",
-      workingDirectory: "/repo",
-    });
+    const catalog = await loadCatalog(catalogClient({ command: { list } }));
 
-    expect(createClient).toHaveBeenCalledWith({
-      runtimeEndpoint: "http://127.0.0.1:1234",
-      workingDirectory: "/repo",
-    });
     expect(list).toHaveBeenCalledWith({ directory: "/repo" });
-    expect(catalog.commands).toEqual([
-      {
-        id: "system:compact",
-        trigger: "compact",
-        title: "Compact session",
-        description: "Summarize the current session to reduce context size",
-        source: "system",
-        hints: [],
+    expect(catalog.slashCommands).toEqual({
+      status: "available",
+      catalog: {
+        commands: [
+          {
+            id: "system:compact",
+            trigger: "compact",
+            title: "Compact session",
+            description: "Summarize the current session to reduce context size",
+            source: "system",
+            hints: [],
+          },
+          {
+            id: "mcp-prompt",
+            trigger: "mcp-prompt",
+            title: "mcp-prompt",
+            source: "mcp",
+            hints: [],
+          },
+          {
+            id: "review",
+            trigger: "review",
+            title: "review",
+            description: "Review changes",
+            source: "command",
+            hints: ["$ARG"],
+          },
+          {
+            id: "skill-run",
+            trigger: "skill-run",
+            title: "skill-run",
+            source: "skill",
+            hints: ["one", "two"],
+          },
+        ],
       },
-      {
-        id: "mcp-prompt",
-        trigger: "mcp-prompt",
-        title: "mcp-prompt",
-        source: "mcp",
-        hints: [],
-      },
-      {
-        id: "review",
-        trigger: "review",
-        title: "review",
-        description: "Review changes",
-        source: "command",
-        hints: ["$ARG"],
-      },
-      {
-        id: "skill-run",
-        trigger: "skill-run",
-        title: "skill-run",
-        source: "skill",
-        hints: ["one", "two"],
-      },
-    ]);
+    });
+  });
+
+  test("stamps the OpenCode runtime descriptor on the combined read", async () => {
+    const catalog = await loadCatalog(catalogClient({}));
+
+    expect(catalog.runtime?.kind).toBe("opencode");
   });
 
   test("reserves compact case-insensitively after a successful runtime read", async () => {
-    const catalog = await listAvailableSlashCommands(
-      () => ({
+    const catalog = await loadCatalog(
+      catalogClient({
         command: {
           list: async () => ({
             data: [
@@ -90,15 +148,19 @@ describe("catalog-and-mcp listAvailableSlashCommands", () => {
           }),
         },
       }),
-      { runtimeEndpoint: "http://127.0.0.1:1234", workingDirectory: "/repo" },
     );
 
-    expect(catalog.commands.map((command) => command.id)).toEqual(["system:compact", "review"]);
+    expect(catalog.slashCommands).toMatchObject({ status: "available" });
+    const commands =
+      catalog.slashCommands?.status === "available"
+        ? catalog.slashCommands.catalog.commands.map((command) => command.id)
+        : [];
+    expect(commands).toEqual(["system:compact", "review"]);
   });
 
   test("accepts nullable metadata and lazy templates from the runtime", async () => {
-    const catalog = await listAvailableSlashCommands(
-      () => ({
+    const catalog = await loadCatalog(
+      catalogClient({
         command: {
           list: async () => ({
             data: [
@@ -116,62 +178,136 @@ describe("catalog-and-mcp listAvailableSlashCommands", () => {
           }),
         },
       }),
-      { runtimeEndpoint: "http://127.0.0.1:1234", workingDirectory: "/repo" },
     );
 
-    expect(catalog.commands.map((command) => command.id)).toEqual(["system:compact", "review"]);
+    const ids =
+      catalog.slashCommands?.status === "available"
+        ? catalog.slashCommands.catalog.commands.map((command) => command.id)
+        : [];
+    expect(ids).toEqual(["system:compact", "review"]);
   });
 
-  test("fails when the slash command payload is not an array", async () => {
-    await expect(
-      listAvailableSlashCommands(() => ({ command: { list: async () => ({ data: {} }) } }), {
-        runtimeEndpoint: "http://127.0.0.1:1234",
-        workingDirectory: "/repo",
-      }),
-    ).rejects.toThrow(
+  test("fails the slash command surface when the payload is not an array", async () => {
+    const catalog = await loadCatalog(
+      catalogClient({ command: { list: async () => ({ data: {} }) } }),
+    );
+
+    expect(failureMessage(catalog.slashCommands)).toContain(
       "OpenCode request failed: list slash commands: Invalid slash command payload: expected an array.",
     );
   });
 
   test("wraps command listing failures with context", async () => {
-    await expect(
-      listAvailableSlashCommands(
-        () => ({
-          command: {
-            list: async () => {
-              throw new Error("boom");
-            },
+    const catalog = await loadCatalog(
+      catalogClient({
+        command: {
+          list: async () => {
+            throw new Error("boom");
           },
-        }),
-        {
-          runtimeEndpoint: "http://127.0.0.1:1234",
-          workingDirectory: "/repo",
         },
+      }),
+    );
+
+    expect(failureMessage(catalog.slashCommands)).toContain(
+      "OpenCode request failed: list slash commands: boom",
+    );
+  });
+
+  test("rejects the combined read when the runtime connection is lost", async () => {
+    const transportLoss = {
+      data: undefined,
+      error: new TypeError("fetch failed"),
+      response: undefined,
+    };
+
+    await expect(
+      loadCatalog(
+        catalogClient({
+          app: { agents: async () => transportLoss },
+          config: { providers: async () => transportLoss },
+          command: { list: async () => transportLoss },
+        }),
       ),
-    ).rejects.toThrow("OpenCode request failed: list slash commands: boom");
+    ).rejects.toThrow(expect.objectContaining({ code: "runtime_unavailable" }));
+  });
+
+  test("fails a surface without removing the other surfaces from the catalog", async () => {
+    const catalog = await loadCatalog(
+      catalogClient({
+        app: {
+          agents: async () => ({
+            data: [agentFixture({ name: "reviewer", hidden: false })],
+          }),
+        },
+        command: {
+          list: async () => {
+            throw new Error("boom");
+          },
+        },
+      }),
+    );
+
+    expect(catalog.slashCommands?.status).toBe("failed");
+    expect(catalog.subagents).toMatchObject({
+      status: "available",
+      catalog: { subagents: [{ id: "reviewer", name: "reviewer", label: "reviewer" }] },
+    });
+  });
+
+  test("reuses one agent list read when the repository root is the working directory", async () => {
+    const agents = mock(async () => ({
+      data: [agentFixture({ name: "reviewer", hidden: false })],
+    }));
+
+    await loadCatalog(catalogClient({ app: { agents } }));
+
+    expect(agents).toHaveBeenCalledTimes(1);
+    expect(agents).toHaveBeenCalledWith({ directory: "/repo" });
+  });
+
+  test("reads the agent list once per directory when the working directory differs", async () => {
+    const agents = mock(async (input: { directory: string }) => ({
+      data: input.directory === "/repo" ? [] : [agentFixture({ name: "reviewer", hidden: false })],
+    }));
+
+    await loadRuntimeCatalog(
+      // SAFETY: The test client implements the three catalog namespaces used by the loader.
+      (() =>
+        catalogClient({
+          app: { agents },
+          config: {
+            providers: async () => ({ data: { default: {}, providers: [] } }),
+          },
+        })) as never,
+      {
+        runtimeEndpoint: "http://127.0.0.1:1234",
+        workingDirectory: "/worktrees/task",
+        repoPath: "/repo",
+      },
+    );
+
+    expect(agents).toHaveBeenCalledTimes(2);
+    expect(agents).toHaveBeenCalledWith({ directory: "/repo" });
+    expect(agents).toHaveBeenCalledWith({ directory: "/worktrees/task" });
   });
 
   test("rejects duplicate slash command triggers at runtime", async () => {
-    await expect(
-      listAvailableSlashCommands(
-        () => ({
-          command: {
-            list: async () => ({
-              data: [commandFixture({ name: "review" }), commandFixture({ name: "review" })],
-            }),
-          },
-        }),
-        {
-          runtimeEndpoint: "http://127.0.0.1:1234",
-          workingDirectory: "/repo",
+    const catalog = await loadCatalog(
+      catalogClient({
+        command: {
+          list: async () => ({
+            data: [commandFixture({ name: "review" }), commandFixture({ name: "review" })],
+          }),
         },
-      ),
-    ).rejects.toThrow(/Duplicate slash command trigger: review/);
-  });
-});
+      }),
+    );
 
-describe("catalog-and-mcp listAvailableSubagents", () => {
-  test("filters visible non-primary agents into a subagent catalog", async () => {
+    expect(failureMessage(catalog.slashCommands)).toMatch(
+      /Duplicate slash command trigger: review/,
+    );
+  });
+
+  test("filters visible non-primary agents into the subagent surface", async () => {
     const agents = mock(async () => ({
       data: [
         agentFixture({
@@ -185,66 +321,89 @@ describe("catalog-and-mcp listAvailableSubagents", () => {
       ],
       error: undefined,
     }));
-    const createClient = mock(() => ({ app: { agents } }));
 
-    const catalog = await listAvailableSubagents(createClient, {
-      runtimeEndpoint: "http://127.0.0.1:1234",
-      workingDirectory: "/repo",
-    });
+    const catalog = await loadCatalog(catalogClient({ app: { agents } }));
 
-    expect(createClient).toHaveBeenCalledWith({
-      runtimeEndpoint: "http://127.0.0.1:1234",
-      workingDirectory: "/repo",
-    });
     expect(agents).toHaveBeenCalledWith({ directory: "/repo" });
-    expect(catalog.subagents).toEqual([
-      {
-        id: "planner",
-        name: "planner",
-        label: "planner",
-      },
-      {
-        id: "reviewer",
-        name: "reviewer",
-        label: "reviewer",
-        description: "Review changes",
-      },
-    ]);
-  });
-
-  test("rejects malformed agent payloads", async () => {
-    await expect(
-      listAvailableSubagents(
-        () => ({
-          app: { agents: async () => ({ data: [{ description: "missing name" }] }) },
-        }),
-        {
-          runtimeEndpoint: "http://127.0.0.1:1234",
-          workingDirectory: "/repo",
-        },
-      ),
-    ).rejects.toThrow("OpenCode request failed: list subagents:");
-  });
-
-  test("rejects duplicate subagent ids after trimming runtime names", async () => {
-    await expect(
-      listAvailableSubagents(
-        () => ({
-          app: {
-            agents: async () => ({
-              data: [
-                agentFixture({ name: " reviewer" }),
-                agentFixture({ name: "reviewer ", mode: "all" }),
-              ],
-            }),
+    expect(catalog.subagents).toEqual({
+      status: "available",
+      catalog: {
+        subagents: [
+          {
+            id: "planner",
+            name: "planner",
+            label: "planner",
           },
-        }),
-        {
-          runtimeEndpoint: "http://127.0.0.1:1234",
-          workingDirectory: "/repo",
+          {
+            id: "reviewer",
+            name: "reviewer",
+            label: "reviewer",
+            description: "Review changes",
+          },
+        ],
+      },
+    });
+  });
+
+  test("fails the subagent surface for malformed agent payloads", async () => {
+    const catalog = await loadCatalog(
+      catalogClient({
+        app: { agents: async () => ({ data: [{ description: "missing name" }] }) },
+      }),
+    );
+
+    expect(failureMessage(catalog.subagents)).toContain("OpenCode request failed: list subagents:");
+  });
+
+  test("fails the subagent surface for duplicate ids after trimming runtime names", async () => {
+    const catalog = await loadCatalog(
+      catalogClient({
+        app: {
+          agents: async () => ({
+            data: [
+              agentFixture({ name: " reviewer" }),
+              agentFixture({ name: "reviewer ", mode: "all" }),
+            ],
+          }),
         },
-      ),
-    ).rejects.toThrow(/Duplicate subagent id: reviewer/);
+      }),
+    );
+
+    expect(failureMessage(catalog.subagents)).toMatch(/Duplicate subagent id: reviewer/);
+  });
+
+  test("omits the skills surface because OpenCode has no skill catalog", async () => {
+    const catalog = await loadCatalog(catalogClient({}));
+
+    expect(catalog.skills).toBeUndefined();
+  });
+
+  test("reads every supported surface in one combined request", async () => {
+    const providers = mock(async () => ({
+      data: { default: {}, providers: [] },
+      error: undefined,
+    }));
+    const commands = mock(async () => ({
+      data: [commandFixture({ name: "review" })],
+      error: undefined,
+    }));
+    const agents = mock(async () => ({
+      data: [agentFixture({ name: "reviewer", hidden: false })],
+    }));
+
+    const catalog = await loadCatalog(
+      catalogClient({ app: { agents }, config: { providers }, command: { list: commands } }),
+    );
+
+    expect(Object.keys(catalog).sort()).toEqual([
+      "models",
+      "runtime",
+      "slashCommands",
+      "subagents",
+    ]);
+    expect(providers).toHaveBeenCalledTimes(1);
+    expect(commands).toHaveBeenCalledTimes(1);
+    expect(agents).toHaveBeenCalledTimes(1);
   });
 });
 

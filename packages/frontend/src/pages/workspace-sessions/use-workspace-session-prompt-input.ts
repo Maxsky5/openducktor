@@ -6,6 +6,7 @@ import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { resolveChatComposerPromptInputRuntime } from "@/features/agent-chat-composer/prompt-input/chat-composer-prompt-input-runtime";
 import { createChatComposerFileSearch } from "@/features/agent-chat-composer/prompt-input/create-chat-composer-file-search";
 import { resolveRuntimePromptInputSupport } from "@/features/agent-chat-composer/prompt-input/runtime-prompt-input-support";
+import { useChatComposerCatalogRefresh } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-catalog-refresh";
 import { useChatComposerSkills } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-skills";
 import { useChatComposerSlashCommands } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-slash-commands";
 import { useChatComposerSubagents } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-subagents";
@@ -58,17 +59,17 @@ export function useWorkspaceSessionPromptInput({
     promptInputRuntime,
     runtimeSupportsSlashCommands: support.runtimeSupportsSlashCommands,
     reusablePrompts,
-    loadSlashCommandsForRepo: runtime.loadRepoRuntimeSlashCommands,
+    loadRuntimeCatalog: runtime.loadRepoRuntimeCatalog,
   });
   const skills = useChatComposerSkills({
     promptInputRuntime,
     supportsSkillReferences: support.supportsSkillReferences,
-    loadSkillsForRepo: runtime.loadRepoRuntimeSkills,
+    loadRuntimeCatalog: runtime.loadRepoRuntimeCatalog,
   });
   const subagents = useChatComposerSubagents({
     promptInputRuntime,
     supportsSubagentReferences: support.supportsSubagentReferences,
-    loadSubagentsForRepo: runtime.loadRepoRuntimeSubagents,
+    loadRuntimeCatalog: runtime.loadRepoRuntimeCatalog,
   });
   const searchFiles = useMemo(
     () =>
@@ -85,6 +86,10 @@ export function useWorkspaceSessionPromptInput({
       support.supportsFileSearch,
     ],
   );
+  const refreshCatalogIfStale = useChatComposerCatalogRefresh({
+    promptInputRuntime,
+    loadRuntimeCatalog: runtime.loadRepoRuntimeCatalog,
+  });
 
-  return { support, slashCommands, skills, subagents, searchFiles };
+  return { support, slashCommands, skills, subagents, searchFiles, refreshCatalogIfStale };
 }

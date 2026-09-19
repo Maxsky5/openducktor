@@ -1,6 +1,7 @@
 import type { AgentFileSearchResult, AgentSubagentReference } from "@openducktor/core";
 import { Bot, ChevronRight, LoaderCircle } from "lucide-react";
 import { type ReactElement, useEffect, useRef } from "react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   getComposerPopupOptionId,
@@ -19,6 +20,7 @@ type AgentChatComposerReferenceMenuProps = {
   supportsSubagentReferences: boolean;
   subagentsError: string | null;
   isSubagentsLoading: boolean;
+  onRetrySubagents: (() => void) | null;
   onSelectFile: (result: AgentFileSearchResult) => void;
   onSelectSubagent: (subagent: AgentSubagentReference) => void;
 };
@@ -33,6 +35,7 @@ export function AgentChatComposerReferenceMenu({
   supportsSubagentReferences,
   subagentsError,
   isSubagentsLoading,
+  onRetrySubagents,
   onSelectFile,
   onSelectSubagent,
 }: AgentChatComposerReferenceMenuProps): ReactElement | null {
@@ -67,8 +70,22 @@ export function AgentChatComposerReferenceMenu({
         </div>
       ) : null}
       {subagentsError ? (
-        <div role="alert" className="border-b border-border px-3 py-2 text-sm text-destructive">
-          {subagentsError}
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-sm text-destructive"
+        >
+          <span className="min-w-0">{subagentsError}</span>
+          {onRetrySubagents ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 shrink-0 px-2"
+              onClick={onRetrySubagents}
+            >
+              Retry
+            </Button>
+          ) : null}
         </div>
       ) : null}
       {showFileSearchLoading ? (

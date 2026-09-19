@@ -2,11 +2,9 @@ import { z } from "zod";
 import {
   agentFileDiffsSchema,
   agentFileStatusesSchema,
-  agentModelCatalogSchema,
   agentSessionHistorySchema,
   agentSessionTodosSchema,
 } from "./agent-engine-schemas";
-import { repoRuntimeRefSchema } from "./agent-runtime-schemas";
 import { agentFileReferenceSchema } from "./agent-session-event-schemas";
 import {
   agentModelSelectionSchema,
@@ -15,9 +13,10 @@ import {
   runtimeWorkingDirectoryRefSchema,
 } from "./agent-session-schemas";
 import { codexEffectivePolicySchema, type CodexEffectivePolicy } from "./config-schemas";
-import { skillCatalogSchema } from "./skill-schemas";
-import { slashCommandCatalogSchema } from "./slash-command-schemas";
-import { subagentCatalogSchema } from "./subagent-schemas";
+import {
+  agentRuntimeCatalogSchema,
+  agentRuntimeLoadCatalogInputSchema,
+} from "./runtime-catalog-schemas";
 
 const opencodePolicySchema = z.object({ kind: z.literal("opencode") }).strict();
 const claudePolicySchema = z.object({ kind: z.literal("claude") }).strict();
@@ -106,25 +105,10 @@ export type AgentRuntimeQueryCommandContract<Input = unknown, Response = unknown
 };
 
 export const AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS = {
-  listModels: {
-    command: "agent_runtime_list_models",
-    inputSchema: repoRuntimeRefSchema,
-    responseSchema: agentModelCatalogSchema,
-  },
-  listSlashCommands: {
-    command: "agent_runtime_list_slash_commands",
-    inputSchema: runtimeWorkingDirectoryRefSchema,
-    responseSchema: slashCommandCatalogSchema,
-  },
-  listSkills: {
-    command: "agent_runtime_list_skills",
-    inputSchema: runtimeWorkingDirectoryRefSchema,
-    responseSchema: skillCatalogSchema,
-  },
-  listSubagents: {
-    command: "agent_runtime_list_subagents",
-    inputSchema: runtimeWorkingDirectoryRefSchema,
-    responseSchema: subagentCatalogSchema,
+  loadCatalog: {
+    command: "agent_runtime_load_catalog",
+    inputSchema: agentRuntimeLoadCatalogInputSchema,
+    responseSchema: agentRuntimeCatalogSchema,
   },
   searchFiles: {
     command: "agent_runtime_search_files",

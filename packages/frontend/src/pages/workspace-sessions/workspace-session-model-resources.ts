@@ -1,4 +1,8 @@
-import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
+import type {
+  AgentModelCatalog,
+  AgentModelSelection,
+  RuntimeWorkingDirectoryRef,
+} from "@openducktor/core";
 import {
   toModelPickerCatalogResource,
   unavailableModelPickerCatalogResource,
@@ -10,6 +14,7 @@ import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 export type SessionModelTarget = {
   identity: AgentSessionIdentity | null;
   runtimeKind?: AgentSessionIdentity["runtimeKind"];
+  runtimeRef?: RuntimeWorkingDirectoryRef;
   updateDraft?: (selection: AgentModelSelection | null) => void;
   selection: AgentModelSelection | null;
   catalog: AgentModelCatalog | null;

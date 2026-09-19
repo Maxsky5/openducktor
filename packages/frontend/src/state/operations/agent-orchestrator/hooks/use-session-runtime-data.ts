@@ -1,12 +1,9 @@
+import type { AgentSessionAssociation, RuntimeDescriptor } from "@openducktor/contracts";
 import type {
-  AgentSessionAssociation,
-  RepoRuntimeRef,
-  RuntimeDescriptor,
-} from "@openducktor/contracts";
-import type {
-  AgentModelCatalog,
+  AgentRuntimeCatalog,
   AgentSessionTodoItem,
   PolicyBoundSessionRef,
+  RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -17,8 +14,9 @@ import {
   skippedSessionTodosQueryOptions,
 } from "@/state/queries/agent-session-todos";
 import {
-  repoRuntimeCatalogQueryOptions,
-  skippedRepoRuntimeCatalogQueryOptions,
+  resolveRuntimeCatalogSurface,
+  runtimeCatalogQueryOptions,
+  skippedRuntimeCatalogQueryOptions,
 } from "@/state/queries/runtime-catalog";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import {
@@ -38,7 +36,7 @@ type UseSessionRuntimeDataArgs = {
   selectedSession: SessionRuntimeDataTarget | null;
   runtimeDefinitions: RuntimeDescriptor[];
   repoReadinessState: RepoRuntimeReadinessState;
-  loadRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
+  loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
   readSessionTodos: (session: PolicyBoundSessionRef) => Promise<AgentSessionTodoItem[]>;
 };
 
@@ -148,8 +146,8 @@ export const useSessionRuntimeData = ({
 
   const catalogQuery = useQuery({
     ...(catalogRef
-      ? repoRuntimeCatalogQueryOptions(catalogRef, loadRuntimeCatalog)
-      : skippedRepoRuntimeCatalogQueryOptions()),
+      ? runtimeCatalogQueryOptions(catalogRef, loadRuntimeCatalog)
+      : skippedRuntimeCatalogQueryOptions()),
     enabled: catalogRef !== null && isRuntimeReady,
     notifyOnChangeProps: ["data", "error", "isFetching"],
   });
@@ -166,22 +164,20 @@ export const useSessionRuntimeData = ({
       return EMPTY_SELECTED_SESSION_RUNTIME_DATA;
     }
 
-    const catalogQueryError =
-      !catalogQuery.isFetching && catalogQuery.error instanceof Error
-        ? catalogQuery.error.message
-        : null;
+    const modelSurface = resolveRuntimeCatalogSurface(
+      catalogQuery.data?.models,
+      catalogQuery.error,
+    );
     const todosQueryError = todosQuery.error instanceof Error ? todosQuery.error.message : null;
     const contextError = runtimeDataRefs.kind === "unavailable" ? runtimeDataRefs.error : null;
-    const resolvedCatalog = catalogQuery.data ?? null;
-    const resolvedTodos = todosQuery.data ?? [];
     const isLoadingModelCatalog =
       isRuntimeReady && runtimeDataRefs.kind === "available" && catalogQuery.isFetching;
 
     return {
-      modelCatalog: resolvedCatalog,
-      todos: resolvedTodos,
+      modelCatalog: modelSurface.catalog,
+      todos: todosQuery.data ?? [],
       isLoadingModelCatalog,
-      catalogError: catalogQueryError,
+      catalogError: modelSurface.error,
       todosError: todosQueryError,
       runtimePolicyError,
       contextError,

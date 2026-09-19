@@ -3,11 +3,12 @@ import {
   MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
   type ReusablePrompt,
 } from "@openducktor/contracts";
-import type { AgentSlashCommand, AgentSlashCommandCatalog } from "@openducktor/core";
+import type { AgentSlashCommand, LoadAgentRuntimeCatalogInput } from "@openducktor/core";
 import { createElement, type PropsWithChildren } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
+import { createRuntimeCatalogFixture } from "@/test-utils/shared-test-fixtures";
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
 import {
   filterSlashCommandsForComposerScope,
@@ -19,8 +20,6 @@ enableReactActEnvironment();
 
 const wrapper = ({ children }: PropsWithChildren) =>
   createElement(QueryProvider, { useIsolatedClient: true }, children);
-
-const EMPTY_CATALOG: AgentSlashCommandCatalog = { commands: [] };
 
 const sessionRuntime: ChatComposerPromptInputRuntime = {
   state: "available",
@@ -145,14 +144,14 @@ describe("use-chat-composer-slash-commands", () => {
 
 describe("useChatComposerSlashCommands", () => {
   test("keeps reusable prompt commands without querying an unsupported runtime", async () => {
-    const loadSlashCommandsForRepo = mock(async () => EMPTY_CATALOG);
+    const loadRuntimeCatalog = mock(async () => createRuntimeCatalogFixture());
     const harness = createHookHarness(
       useChatComposerSlashCommands,
       {
         promptInputRuntime: sessionRuntime,
         runtimeSupportsSlashCommands: false,
         reusablePrompts: [reusablePromptFixture],
-        loadSlashCommandsForRepo,
+        loadRuntimeCatalog,
       },
       { wrapper },
     );
@@ -160,7 +159,7 @@ describe("useChatComposerSlashCommands", () => {
     try {
       await harness.mount();
 
-      expect(loadSlashCommandsForRepo).not.toHaveBeenCalled();
+      expect(loadRuntimeCatalog).not.toHaveBeenCalled();
       expect(harness.getLatest()).toEqual(
         expect.objectContaining({
           supportsSlashCommands: true,
@@ -183,14 +182,16 @@ describe("useChatComposerSlashCommands", () => {
       title: "Runtime review",
       hints: [],
     };
-    const loadSlashCommandsForRepo = mock(async () => ({ commands: [runtimeCommand] }));
+    const loadRuntimeCatalog = mock(async () =>
+      createRuntimeCatalogFixture({ slashCommands: { commands: [runtimeCommand] } }),
+    );
     const harness = createHookHarness(
       useChatComposerSlashCommands,
       {
         promptInputRuntime: sessionRuntime,
         runtimeSupportsSlashCommands: true,
         reusablePrompts: [],
-        loadSlashCommandsForRepo,
+        loadRuntimeCatalog,
       },
       { wrapper },
     );
@@ -199,8 +200,49 @@ describe("useChatComposerSlashCommands", () => {
       await harness.mount();
       await harness.waitFor((state) => state.slashCommands.length === 1);
 
-      expect(loadSlashCommandsForRepo).toHaveBeenCalledWith(sessionRuntime.runtimeRef);
+      expect(loadRuntimeCatalog).toHaveBeenCalledWith(sessionRuntime.runtimeRef);
       expect(harness.getLatest().slashCommands).toEqual([runtimeCommand]);
+      expect(harness.getLatest().slashCommandsError).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("retries the combined catalog after a failed read", async () => {
+    const runtimeCommand: AgentSlashCommand = {
+      id: "runtime-review",
+      trigger: "runtime-review",
+      title: "Runtime review",
+      hints: [],
+    };
+    let attempts = 0;
+    const loadRuntimeCatalog = mock(async (_input: LoadAgentRuntimeCatalogInput) => {
+      attempts += 1;
+      return attempts === 1
+        ? { slashCommands: { status: "failed" as const, message: "Slash command list offline." } }
+        : createRuntimeCatalogFixture({ slashCommands: { commands: [runtimeCommand] } });
+    });
+    const harness = createHookHarness(
+      useChatComposerSlashCommands,
+      {
+        promptInputRuntime: sessionRuntime,
+        runtimeSupportsSlashCommands: true,
+        reusablePrompts: [],
+        loadRuntimeCatalog,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.slashCommandsError === "Slash command list offline.");
+      expect(harness.getLatest().retrySlashCommands).not.toBeNull();
+
+      await harness.run((state) => state.retrySlashCommands?.());
+      await harness.waitFor((state) => state.slashCommands.length === 1);
+
+      expect(loadRuntimeCatalog).toHaveBeenCalledTimes(2);
+      expect(loadRuntimeCatalog.mock.calls[1]).toEqual([sessionRuntime.runtimeRef]);
       expect(harness.getLatest().slashCommandsError).toBeNull();
     } finally {
       await harness.unmount();

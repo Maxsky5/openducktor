@@ -5,18 +5,17 @@ import {
   type RuntimeKind,
 } from "@openducktor/contracts";
 import type {
+  AgentRuntimeCatalog,
   AgentSlashCommand,
   AgentSlashCommandCatalog,
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
-import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toReusablePromptSlashCommand } from "@/components/features/agents/agent-chat/agent-chat-reusable-prompts";
-import {
-  repoRuntimeSlashCommandsQueryOptions,
-  skippedRepoRuntimeSlashCommandsQueryOptions,
-} from "@/state/queries/runtime-catalog";
+import { resolveRuntimeCatalogSurface, retryRuntimeCatalog } from "@/state/queries/runtime-catalog";
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
+import { useChatComposerRuntimeCatalogQuery } from "./use-chat-composer-runtime-catalog-query";
 
 export const mergeSlashCommands = (
   runtimeSlashCommands: AgentSlashCommand[],
@@ -61,25 +60,25 @@ export const useChatComposerSlashCommands = ({
   promptInputRuntime,
   runtimeSupportsSlashCommands,
   reusablePrompts,
-  loadSlashCommandsForRepo,
+  loadRuntimeCatalog,
 }: {
   promptInputRuntime: ChatComposerPromptInputRuntime;
   runtimeSupportsSlashCommands: boolean;
   reusablePrompts: ReusablePrompt[];
-  loadSlashCommandsForRepo: (
-    runtimeRef: RuntimeWorkingDirectoryRef,
-  ) => Promise<AgentSlashCommandCatalog>;
+  loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
 }) => {
-  const runtimeRef =
-    promptInputRuntime.state === "available" ? promptInputRuntime.runtimeRef : null;
-  const slashCommandsQuery = useQuery({
-    ...(runtimeRef
-      ? repoRuntimeSlashCommandsQueryOptions(runtimeRef, loadSlashCommandsForRepo)
-      : skippedRepoRuntimeSlashCommandsQueryOptions()),
-    enabled: runtimeRef !== null && runtimeSupportsSlashCommands,
+  const queryClient = useQueryClient();
+  const slashCommandsQuery = useChatComposerRuntimeCatalogQuery({
+    promptInputRuntime,
+    supports: runtimeSupportsSlashCommands,
+    loadRuntimeCatalog,
   });
+  const resolved = resolveRuntimeCatalogSurface(
+    slashCommandsQuery.data?.slashCommands,
+    slashCommandsQuery.error,
+  );
   const runtimeSlashCommandCatalog =
-    promptInputRuntime.state === "available" ? (slashCommandsQuery.data ?? null) : null;
+    promptInputRuntime.state === "available" ? resolved.catalog : null;
   const reusablePromptSlashCommands = useMemo(
     () => reusablePrompts.map(toReusablePromptSlashCommand),
     [reusablePrompts],
@@ -109,10 +108,23 @@ export const useChatComposerSlashCommands = ({
   if (runtimeSupportsSlashCommands && promptInputRuntime.state === "unavailable") {
     slashCommandsError = promptInputRuntime.error;
   } else if (runtimeSupportsSlashCommands && promptInputRuntime.state === "available") {
-    slashCommandsError =
-      slashCommandsQuery.error instanceof Error ? slashCommandsQuery.error.message : null;
+    slashCommandsError = resolved.error;
     isSlashCommandsLoading = slashCommandsQuery.isLoading;
   }
+  // OpenCode supports slash commands but not skills, so this surface retries the
+  // catalog on its own.
+  const runtimeRef =
+    promptInputRuntime.state === "available" ? promptInputRuntime.runtimeRef : null;
+  const retrySlashCommands =
+    runtimeSupportsSlashCommands && runtimeRef !== null
+      ? () => {
+          void retryRuntimeCatalog({
+            queryClient,
+            runtimeRef,
+            loadRuntimeCatalog,
+          });
+        }
+      : null;
 
   return {
     supportsSlashCommands: runtimeSupportsSlashCommands || reusablePrompts.length > 0,
@@ -120,11 +132,13 @@ export const useChatComposerSlashCommands = ({
     slashCommands,
     slashCommandsError,
     isSlashCommandsLoading,
+    retrySlashCommands,
   } satisfies {
     supportsSlashCommands: boolean;
     slashCommandCatalog: AgentSlashCommandCatalog;
     slashCommands: AgentSlashCommandCatalog["commands"];
     slashCommandsError: string | null;
     isSlashCommandsLoading: boolean;
+    retrySlashCommands: (() => void) | null;
   };
 };

@@ -1,5 +1,12 @@
-import type { RepoRuntimeRef, RuntimeDescriptor } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
+import type { RuntimeDescriptor } from "@openducktor/contracts";
+import type {
+  AgentModelCatalog,
+  AgentModelSelection,
+  AgentRole,
+  AgentRuntimeCatalog,
+  RuntimeWorkingDirectoryRef,
+} from "@openducktor/core";
+import { resolveRuntimeCatalogSurface } from "@/state/queries/runtime-catalog";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { errorMessage } from "@/lib/errors";
 import {
@@ -80,7 +87,7 @@ export const resolveRequiredDefaultSessionSelection = async ({
   role: AgentRole;
   repoSettings: RepoSettingsInput | null;
   repoPath: string;
-  loadRepoRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
+  loadRepoRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
 }): Promise<RuntimeBoundModelSelection> => {
   const savedDefaultSelection = defaultSessionSelectionFor(repoSettings, role);
   if (!savedDefaultSelection) {
@@ -90,7 +97,16 @@ export const resolveRequiredDefaultSessionSelection = async ({
   const runtimeKind = savedDefaultSelection.runtimeKind;
   let catalog: AgentModelCatalog;
   try {
-    catalog = await loadRepoRuntimeCatalog({ repoPath, runtimeKind });
+    const runtimeCatalog = await loadRepoRuntimeCatalog({
+      repoPath,
+      runtimeKind,
+      workingDirectory: repoPath,
+    });
+    const modelSurface = resolveRuntimeCatalogSurface(runtimeCatalog.models, null);
+    if (modelSurface.catalog === null) {
+      throw new Error(modelSurface.error ?? `Runtime '${runtimeKind}' returned no model catalog.`);
+    }
+    catalog = modelSurface.catalog;
   } catch (cause) {
     throw new Error(
       unavailableSessionDefaultCatalogError({

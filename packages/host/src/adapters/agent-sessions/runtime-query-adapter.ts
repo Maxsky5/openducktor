@@ -25,14 +25,8 @@ export const createRuntimeQueryAdapter = (
   return {
     resolveSessionParent: (input) =>
       read("read session parent", input, () => native.resolveSessionParent(input)),
-    listAvailableModels: (input) =>
-      read("list models", input, () => native.listAvailableModels(input)),
-    listAvailableSlashCommands: (input) =>
-      read("list slash commands", input, () => native.listAvailableSlashCommands(input)),
-    listAvailableSkills: (input) =>
-      read("list skills", input, () => native.listAvailableSkills(input)),
-    listAvailableSubagents: (input) =>
-      read("list subagents", input, () => native.listAvailableSubagents(input)),
+    loadRuntimeCatalog: (input) =>
+      read("load runtime catalog", input, () => native.loadRuntimeCatalog(input)),
     searchFiles: (input) => read("search files", input, () => native.searchFiles(input)),
     loadSessionHistory: (input) =>
       read("load session history", input, () => native.loadSessionHistory(input)),

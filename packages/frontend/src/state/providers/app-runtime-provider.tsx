@@ -1,14 +1,7 @@
-import {
-  DEFAULT_AGENT_RUNTIMES,
-  type RepoRuntimeRef,
-  type RuntimeDescriptor,
-} from "@openducktor/contracts";
+import { DEFAULT_AGENT_RUNTIMES, type RuntimeDescriptor } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
-  AgentModelCatalog,
-  AgentSkillCatalog,
-  AgentSlashCommandCatalog,
-  AgentSubagentCatalog,
+  AgentRuntimeCatalog,
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -25,14 +18,7 @@ import { runtimeDefinitionsQueryOptions, runtimeQueryKeys } from "../queries/run
 import { settingsSnapshotQueryOptions } from "../queries/workspace";
 
 type AppRuntimeProviderProps = PropsWithChildren<{
-  loadRepoRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
-  loadRepoRuntimeSlashCommands: (
-    runtimeRef: RuntimeWorkingDirectoryRef,
-  ) => Promise<AgentSlashCommandCatalog>;
-  loadRepoRuntimeSkills: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentSkillCatalog>;
-  loadRepoRuntimeSubagents: (
-    runtimeRef: RuntimeWorkingDirectoryRef,
-  ) => Promise<AgentSubagentCatalog>;
+  loadRepoRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
   loadRepoRuntimeFileSearch: (
     runtimeRef: RuntimeWorkingDirectoryRef,
     query: string,
@@ -42,9 +28,6 @@ type AppRuntimeProviderProps = PropsWithChildren<{
 export function AppRuntimeProvider({
   children,
   loadRepoRuntimeCatalog,
-  loadRepoRuntimeSlashCommands,
-  loadRepoRuntimeSkills,
-  loadRepoRuntimeSubagents,
   loadRepoRuntimeFileSearch,
 }: AppRuntimeProviderProps): ReactElement {
   const [activeWorkspace, setActiveWorkspace] =
@@ -110,9 +93,6 @@ export function AppRuntimeProvider({
         }
       },
       loadRepoRuntimeCatalog,
-      loadRepoRuntimeSlashCommands,
-      loadRepoRuntimeSkills,
-      loadRepoRuntimeSubagents,
       loadRepoRuntimeFileSearch,
     }),
     [
@@ -120,9 +100,6 @@ export function AppRuntimeProvider({
       availableRuntimeDefinitions,
       loadRepoRuntimeCatalog,
       loadRepoRuntimeFileSearch,
-      loadRepoRuntimeSlashCommands,
-      loadRepoRuntimeSkills,
-      loadRepoRuntimeSubagents,
       isLoadingRuntimeDefinitions,
       isLoadingRuntimeSettings,
       hasSettingsSnapshot,

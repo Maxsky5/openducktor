@@ -27,20 +27,19 @@ import type {
   AgentModelCatalog,
   AgentPendingApprovalRequest,
   AgentPendingQuestionRequest,
+  AgentRuntimeCatalogRead,
   AgentSessionHistoryMessage,
   AgentSessionPort,
   AgentSessionRuntimeSnapshot,
   AgentSessionSummary,
   AgentSessionTodoItem,
   AgentSkillCatalog,
+  AgentSlashCommandCatalog,
   AgentWorkspaceInspectionPort,
   EventUnsubscribe,
   ContinueInterruptedAgentTurnInput,
   ForkAgentSessionInput,
-  ListAgentModelsInput,
-  ListAgentSkillsInput,
-  ListAgentSlashCommandsInput,
-  ListAgentSubagentsInput,
+  LoadAgentRuntimeCatalogInput,
   ListSessionRuntimeSnapshotsInput,
   LoadAgentFileStatusInput,
   LoadAgentSessionDiffInput,
@@ -61,6 +60,7 @@ import {
   agentSessionRefsEqual,
   classifyAgentSessionActivity,
   classifySystemSlashCommandInvocation,
+  readCatalogSurface,
   withAgentSessionRef,
 } from "@openducktor/core";
 import { requireCodexPendingRequestKey } from "./codex-app-server-approvals";
@@ -366,11 +366,6 @@ export class CodexAppServerAdapter
       );
     }
     return respondServerRequest;
-  }
-
-  async listAvailableModels(input: ListAgentModelsInput): Promise<AgentModelCatalog> {
-    const { client, runtimeId } = await this.runtimeClients.resolve(input, "list available models");
-    return toCatalog(await this.models.list(client, runtimeId));
   }
 
   private clearThreadInventory(runtimeId: string): void {
@@ -748,23 +743,34 @@ export class CodexAppServerAdapter
     flushQueuedUserMessagesLaterImpl(this.turnLifecycleContext(), activeTurn);
   }
 
-  async listAvailableSlashCommands(_input: ListAgentSlashCommandsInput) {
-    return slashCommandCatalogSchema.parse({
-      commands: [MANUAL_SESSION_COMPACTION_SLASH_COMMAND],
-    });
-  }
+  async loadRuntimeCatalog(input: LoadAgentRuntimeCatalogInput): Promise<AgentRuntimeCatalogRead> {
+    const { client, runtimeId } = await this.runtimeClients.resolve(input, "load runtime catalog");
+    const readModels = async (): Promise<AgentModelCatalog> =>
+      toCatalog(await this.models.list(client, runtimeId));
+    const readSlashCommands = async (): Promise<AgentSlashCommandCatalog> =>
+      slashCommandCatalogSchema.parse({
+        commands: [MANUAL_SESSION_COMPACTION_SLASH_COMMAND],
+      });
+    const readSkills = async (): Promise<AgentSkillCatalog> => {
+      const response = await client.skillsList({
+        cwds: [input.workingDirectory],
+        forceReload: false,
+      });
+      return toCodexSkillCatalog(response);
+    };
 
-  async listAvailableSkills(input: ListAgentSkillsInput): Promise<AgentSkillCatalog> {
-    const { client } = await this.runtimeClients.resolve(input, "list available skills");
-    const response = await client.skillsList({
-      cwds: [input.workingDirectory],
-      forceReload: false,
-    });
-    return toCodexSkillCatalog(response);
-  }
+    const [models, slashCommands, skills] = await Promise.all([
+      readCatalogSurface(readModels),
+      readCatalogSurface(readSlashCommands),
+      readCatalogSurface(readSkills),
+    ]);
 
-  async listAvailableSubagents(_input: ListAgentSubagentsInput) {
-    return unsupported("listAvailableSubagents");
+    return {
+      runtime: CODEX_RUNTIME_DESCRIPTOR,
+      models,
+      slashCommands,
+      skills,
+    };
   }
 
   async searchFiles(input: SearchAgentFilesInput): Promise<AgentFileSearchResult[]> {

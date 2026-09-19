@@ -36,7 +36,7 @@ export const useSettingsModalCatalogState = ({
     repoPath: selectedRepoPath,
     runtimeKinds,
     enabledRuntimeKinds: enabled ? runtimeKinds : EMPTY_RUNTIME_KINDS,
-    loadCatalog: loadRepoRuntimeCatalog,
+    loadRuntimeCatalog: loadRepoRuntimeCatalog,
   });
   const { catalogsByRuntime, catalogErrorsByRuntime, loadingRuntimeKinds } = useMemo(() => {
     const catalogs: Record<string, AgentModelCatalog | null> = {};

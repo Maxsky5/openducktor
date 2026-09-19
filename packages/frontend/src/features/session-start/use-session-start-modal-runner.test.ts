@@ -7,6 +7,7 @@ import {
   createRuntimeDefinitionsContextValue,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
+import { createRuntimeCatalogFixture } from "@/test-utils/shared-test-fixtures";
 import {
   buildSessionStartModalDecision,
   requireSourceSessionRuntimeKind,
@@ -45,6 +46,8 @@ const CATALOG: AgentModelCatalog = {
   defaultModelsByProvider: { anthropic: "claude-sonnet" },
   profiles: [{ name: "build-agent", mode: "primary", hidden: false }],
 };
+
+const runtimeCatalogFixture = createRuntimeCatalogFixture({ models: CATALOG });
 
 const sourceSession = (externalSessionId: string, runtimeKind: RuntimeKind = "opencode") => ({
   externalSessionId,
@@ -253,7 +256,7 @@ describe("useSessionStartModalRunner", () => {
         runtimeDefinitionsContext: createRuntimeDefinitionsContextValue({
           runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
           availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-          loadRepoRuntimeCatalog: async () => CATALOG,
+          loadRepoRuntimeCatalog: async () => runtimeCatalogFixture,
         }),
       },
     );
@@ -309,7 +312,7 @@ describe("useSessionStartModalRunner", () => {
         runtimeDefinitionsContext: createRuntimeDefinitionsContextValue({
           runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
           availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-          loadRepoRuntimeCatalog: async () => CATALOG,
+          loadRepoRuntimeCatalog: async () => runtimeCatalogFixture,
         }),
       },
     );
@@ -453,7 +456,7 @@ test("prompt resolution ignores replaced requests and confirmation holds a synch
       runtimeDefinitionsContext: createRuntimeDefinitionsContextValue({
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
         availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-        loadRepoRuntimeCatalog: async () => CATALOG,
+        loadRepoRuntimeCatalog: async () => runtimeCatalogFixture,
       }),
     },
   );
@@ -541,7 +544,7 @@ test("ignores out-of-order branch prompt results and blocks unresolved confirmat
       runtimeDefinitionsContext: createRuntimeDefinitionsContextValue({
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
         availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-        loadRepoRuntimeCatalog: async () => CATALOG,
+        loadRepoRuntimeCatalog: async () => runtimeCatalogFixture,
       }),
     },
   );
@@ -661,7 +664,7 @@ for (const changedScope of ["task", "workspace", "role"] as const) {
       runtimeDefinitionsContext: createRuntimeDefinitionsContextValue({
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
         availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-        loadRepoRuntimeCatalog: async () => CATALOG,
+        loadRepoRuntimeCatalog: async () => runtimeCatalogFixture,
       }),
     });
     const request = {

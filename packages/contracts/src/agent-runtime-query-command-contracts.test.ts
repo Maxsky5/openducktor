@@ -76,3 +76,10 @@ test("retires native frontend query bridges", () => {
     ),
   ).toBe(false);
 });
+
+test("keeps the combined catalog read on the complete-catalog input contract", () => {
+  const input = { repoPath: "/repo", runtimeKind: "opencode", workingDirectory: "/repo/worktree" };
+  const schema = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.loadCatalog.inputSchema;
+  expect(schema.parse(input)).toEqual(input);
+  expect(schema.safeParse({ ...input, surfaces: ["models"] }).success).toBe(false);
+});
