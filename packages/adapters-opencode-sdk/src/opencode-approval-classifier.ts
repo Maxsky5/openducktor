@@ -53,6 +53,7 @@ const READ_ONLY_SORT_OPTIONS = words(
 const READ_ONLY_SORT_OPTIONS_WITH_VALUE = words(
   "-k -S -t -T --batch-size --buffer-size --field-separator --files0-from --key --parallel --random-source --sort --temporary-directory",
 );
+const UNKNOWN_SORT_OPTIONS_WITH_VALUE = words("--compress-program");
 
 const MUTATING_CURL_OPTIONS = words(
   "-F -O -T -d --data --data-ascii --data-binary --data-raw --data-urlencode --form --json --remote-name --upload-file",
@@ -233,6 +234,9 @@ const classifyFind = (tokens: SimpleCommand): AgentApprovalMutation => {
       index += 1;
       continue;
     }
+    if (option && /^-O[0-3]$/.test(option)) {
+      continue;
+    }
     if (option?.startsWith("-") && !READ_ONLY_FIND_OPTIONS.has(option)) {
       return "unknown";
     }
@@ -241,6 +245,7 @@ const classifyFind = (tokens: SimpleCommand): AgentApprovalMutation => {
 };
 
 const classifySort = (tokens: SimpleCommand): AgentApprovalMutation => {
+  let hasUnknownOption = false;
   for (let index = 1; index < tokens.length; index += 1) {
     const option = tokens[index];
     if (option === "--") {
@@ -258,11 +263,20 @@ const classifySort = (tokens: SimpleCommand): AgentApprovalMutation => {
       index += 1;
       continue;
     }
+    if (option && UNKNOWN_SORT_OPTIONS_WITH_VALUE.has(option)) {
+      hasUnknownOption = true;
+      index += 1;
+      continue;
+    }
+    if (option && hasAttachedLongOption(option, UNKNOWN_SORT_OPTIONS_WITH_VALUE)) {
+      hasUnknownOption = true;
+      continue;
+    }
     if (option?.startsWith("-") && !READ_ONLY_SORT_OPTIONS.has(option) && !/^-\d+$/.test(option)) {
       return "unknown";
     }
   }
-  return "read_only";
+  return hasUnknownOption ? "unknown" : "read_only";
 };
 
 const classifyCurl = (tokens: SimpleCommand): AgentApprovalMutation => {

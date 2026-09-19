@@ -40,7 +40,22 @@ describe("OpenCode approval classifier", () => {
       expected: "mutating",
     },
     { name: "find delete", patterns: ["find . -delete"], expected: "mutating" },
+    {
+      name: "find delete after an optimization option",
+      patterns: ["find -O3 . -delete"],
+      expected: "mutating",
+    },
     { name: "sort output", patterns: ["sort input.txt -o output.txt"], expected: "mutating" },
+    {
+      name: "sort output after a compression program",
+      patterns: ["sort --compress-program=gzip input.txt -o output.txt"],
+      expected: "mutating",
+    },
+    {
+      name: "sort output after a separate compression program",
+      patterns: ["sort --compress-program gzip input.txt -o output.txt"],
+      expected: "mutating",
+    },
     {
       name: "safe reads",
       patterns: ["ls -la", "git log --oneline -5"],
@@ -111,12 +126,20 @@ describe("OpenCode approval classifier", () => {
     "find -- . -delete",
     "find -- -delete",
     "find . -unlisted value",
+    "find . -unlisted -delete",
+    "sort --compress-program=gzip input.txt",
+    "sort --compress-program gzip input.txt",
+    "sort --unlisted -o output.txt",
     "rg --pre helper pattern",
     "curl -o- https://example.test",
     "curl --trace-ascii=- https://example.test",
     "echo >",
   ])("keeps an unproved command unknown: %s", (command) => {
     expect(classifyShell([command], command)).toBe("unknown");
+  });
+
+  test("keeps a read-only find command with an optimization option read-only", () => {
+    expect(classifyShell(["find -O3 . -print"])).toBe("read_only");
   });
 
   test("uses metadata command only when native patterns are absent", () => {
