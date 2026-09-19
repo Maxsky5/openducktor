@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Model, Provider } from "@opencode-ai/sdk/v2/client";
+import { agentModelCatalogSchema } from "@openducktor/contracts";
 import {
   mapProviderListToCatalog,
   normalizeModelInput,
@@ -178,5 +179,23 @@ describe("payload-mappers", () => {
         },
       },
     ]);
+  });
+
+  test("mapProviderListToCatalog omits an unavailable output limit", () => {
+    const catalog = mapProviderListToCatalog({
+      providers: [
+        providerFixture({
+          "deepseek-v4.1-flash": modelFixture({
+            id: "deepseek-v4.1-flash",
+            name: "DeepSeek V4.1 Flash",
+            limit: { context: 128_000, output: 0 },
+          }),
+        }),
+      ],
+      default: {},
+    });
+
+    expect(agentModelCatalogSchema.safeParse(catalog).success).toBe(true);
+    expect(catalog.models[0]).not.toHaveProperty("outputLimit");
   });
 });

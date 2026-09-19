@@ -80,7 +80,7 @@ export const mapProviderListToCatalog = (payload: ConfigProvidersResponse): Agen
       const variants = rawModel.variants ? Object.keys(rawModel.variants) : [];
       const attachmentSupport = normalizeModelAttachmentSupport(rawModel);
 
-      return {
+      const model: AgentModelCatalog["models"][number] = {
         id: `${provider.id}/${modelId}`,
         providerId: provider.id,
         providerName: provider.name,
@@ -88,10 +88,13 @@ export const mapProviderListToCatalog = (payload: ConfigProvidersResponse): Agen
         modelName: rawModel.name,
         variants,
         contextWindow: rawModel.limit.context,
-        outputLimit: rawModel.limit.output,
         attachmentSupport,
         liveSessionUpdates: { profile: false },
       };
+      if (rawModel.limit.output !== 0) {
+        model.outputLimit = rawModel.limit.output;
+      }
+      return model;
     });
   });
 
