@@ -35,6 +35,14 @@ const filesystemListDirectoryMock = mock(
   async (_input?: ListDirectoryInput): Promise<DirectoryListing> => createListing(),
 );
 
+// TanStack Query sends query updates on the next task.
+const flushQueryResult = async <T,>(result: Promise<T>): Promise<void> => {
+  await act(async () => {
+    await result;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+};
+
 describe("FolderPickerDialog", () => {
   let FolderPickerDialog: (props: {
     open: boolean;
@@ -294,10 +302,7 @@ describe("FolderPickerDialog", () => {
       expect(onConfirm).not.toHaveBeenCalled();
 
       resolveRefresh(createListing());
-      await act(async () => {
-        await refreshListing;
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      });
+      await flushQueryResult(refreshListing);
 
       await waitFor(() => {
         expect(screen.queryByRole("button", { name: "codex" })).toBeNull();
@@ -402,13 +407,13 @@ describe("FolderPickerDialog", () => {
   });
 
   test("removes the previous directory entries as soon as navigation starts", async () => {
-    let resolveNextDirectory = (_listing: DirectoryListing): void => undefined;
-    const nextDirectory = new Promise<DirectoryListing>((resolve) => {
-      resolveNextDirectory = resolve;
+    let resolveNext = (_listing: DirectoryListing): void => undefined;
+    const nextListing = new Promise<DirectoryListing>((resolve) => {
+      resolveNext = resolve;
     });
     filesystemListDirectoryMock.mockImplementation(async (input?: ListDirectoryInput) => {
       const path = pathFromInput(input);
-      if (path === "/Users/dev/next") return nextDirectory;
+      if (path === "/Users/dev/next") return nextListing;
       return createListing({
         entries: [
           {
@@ -443,7 +448,7 @@ describe("FolderPickerDialog", () => {
       expect(confirmButton.disabled).toBe(true);
 
       await act(async () => {
-        resolveNextDirectory(
+        resolveNext(
           createListing({
             currentPath: "/Users/dev/next",
             parentPath: "/Users/dev",
@@ -616,7 +621,7 @@ describe("FolderPickerDialog", () => {
   });
 
   test("retries the same manual path after an error and restores confirmation when it resolves", async () => {
-    let missingPathAttempts = 0;
+    let missingLoads = 0;
     let resolveRetry = (_listing: DirectoryListing): void => undefined;
     const retryListing = new Promise<DirectoryListing>((resolve) => {
       resolveRetry = resolve;
@@ -624,8 +629,8 @@ describe("FolderPickerDialog", () => {
     filesystemListDirectoryMock.mockImplementation(async (input?: ListDirectoryInput) => {
       const path = pathFromInput(input);
       if (path === "/missing") {
-        missingPathAttempts += 1;
-        if (missingPathAttempts === 1) {
+        missingLoads += 1;
+        if (missingLoads === 1) {
           throw new Error("Directory does not exist: /missing");
         }
         return retryListing;
@@ -662,7 +667,7 @@ describe("FolderPickerDialog", () => {
       fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /load path/i }));
 
       await waitFor(() => {
-        expect(missingPathAttempts).toBe(2);
+        expect(missingLoads).toBe(2);
         expect(
           screen.getByRole<HTMLButtonElement>("button", { name: /select folder/i }).disabled,
         ).toBe(true);
@@ -671,10 +676,7 @@ describe("FolderPickerDialog", () => {
       });
 
       resolveRetry(createListing({ currentPath: "/missing" }));
-      await act(async () => {
-        await retryListing;
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      });
+      await flushQueryResult(retryListing);
 
       await waitFor(() => {
         expect(screen.queryByText("Loading directories…")).toBeNull();
