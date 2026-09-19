@@ -102,10 +102,7 @@ export const resolveRequiredDefaultSessionSelection = async ({
       runtimeKind,
       workingDirectory: repoPath,
     });
-    const modelsSurface = resolveRuntimeCatalogSurface(runtimeCatalog.models, {
-      error: null,
-      isFetching: false,
-    });
+    const modelsSurface = resolveRuntimeCatalogSurface(runtimeCatalog.models, null);
     if (modelsSurface.catalog === null) {
       throw new Error(modelsSurface.error ?? `Runtime '${runtimeKind}' returned no model catalog.`);
     }

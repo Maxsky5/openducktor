@@ -61,10 +61,7 @@ export function useRuntimeModelCatalogs({
         }
         const isEnabled = repoPath !== null && enabledRuntimeKindSet.has(runtimeKind);
         const isFetching = query.isFetching;
-        const surface = resolveRuntimeCatalogSurface(query.data?.models, {
-          error: query.error,
-          isFetching,
-        });
+        const surface = resolveRuntimeCatalogSurface(query.data?.models, query.error);
         return {
           runtimeKind,
           catalog: surface.catalog,

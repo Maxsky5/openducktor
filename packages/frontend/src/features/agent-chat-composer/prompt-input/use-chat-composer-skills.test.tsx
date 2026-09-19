@@ -225,6 +225,23 @@ describe("useChatComposerSkills", () => {
 
       expect(harness.getLatest().composer.skills).toEqual([]);
       expect(harness.getLatest().composer.skillCatalog).toEqual(EMPTY_CATALOG);
+
+      let rejectRetry: ((reason: Error) => void) | undefined;
+      const retry = new Promise<AgentRuntimeCatalog>((_resolve, reject) => {
+        rejectRetry = reject;
+      });
+      catalogRequests.push(retry);
+      await harness.run((state) => {
+        state.composer.retrySkills?.();
+      });
+      await harness.waitFor((state) => state.liveQuery.isFetching);
+
+      expect(harness.getLatest().composer.skills).toEqual([]);
+      expect(harness.getLatest().composer.skillsError).toBe("catalog offline");
+
+      rejectRetry?.(new Error("catalog offline"));
+      await harness.waitFor((state) => !state.liveQuery.isFetching);
+      expect(harness.getLatest().composer.skills).toEqual([]);
     } finally {
       await harness.unmount();
     }

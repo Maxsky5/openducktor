@@ -164,10 +164,10 @@ export const useSessionRuntimeData = ({
       return EMPTY_SELECTED_SESSION_RUNTIME_DATA;
     }
 
-    const modelSurface = resolveRuntimeCatalogSurface(catalogQuery.data?.models, {
-      error: catalogQuery.error,
-      isFetching: catalogQuery.isFetching,
-    });
+    const modelSurface = resolveRuntimeCatalogSurface(
+      catalogQuery.data?.models,
+      catalogQuery.error,
+    );
     const catalogQueryError = modelSurface.error;
     const todosQueryError = todosQuery.error instanceof Error ? todosQuery.error.message : null;
     const contextError = runtimeDataRefs.kind === "unavailable" ? runtimeDataRefs.error : null;
