@@ -16,14 +16,21 @@ type KanbanTaskCardViewState = {
   changeTaskCardView: (taskCardView: KanbanTaskCardView) => void;
 };
 
-export function useKanbanTaskCardView(): KanbanTaskCardViewState {
+type KanbanTaskCardViewHost = Pick<
+  typeof host,
+  "workspaceGetSettingsSnapshot" | "workspaceUpdateKanbanTaskCardView"
+>;
+
+export function useKanbanTaskCardView(
+  hostClient: KanbanTaskCardViewHost = host,
+): KanbanTaskCardViewState {
   const queryClient = useQueryClient();
-  const settingsOptions = settingsSnapshotQueryOptions();
+  const settingsOptions = settingsSnapshotQueryOptions(hostClient);
   const settingsQuery = useQuery(settingsOptions);
   const mutation = useMutation<SettingsSnapshot, Error, KanbanTaskCardView, MutationContext>({
     mutationKey: ["settings", "kanban-task-card-view"],
     scope: { id: "kanban-task-card-view" },
-    mutationFn: (taskCardView) => host.workspaceUpdateKanbanTaskCardView(taskCardView),
+    mutationFn: (taskCardView) => hostClient.workspaceUpdateKanbanTaskCardView(taskCardView),
     onMutate: async (taskCardView) => {
       await queryClient.cancelQueries({ queryKey: settingsOptions.queryKey });
       const previousSnapshot = queryClient.getQueryData<SettingsSnapshot>(settingsOptions.queryKey);

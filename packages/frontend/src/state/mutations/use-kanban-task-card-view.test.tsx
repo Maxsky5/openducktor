@@ -1,6 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { PropsWithChildren, ReactElement } from "react";
-import { host } from "@/state/operations/host";
 import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
@@ -16,11 +15,12 @@ describe("useKanbanTaskCardView", () => {
       kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "normal" },
     });
     const write = createDeferred<never>();
-    const originalRead = host.workspaceGetSettingsSnapshot;
-    const originalWrite = host.workspaceUpdateKanbanTaskCardView;
-    host.workspaceGetSettingsSnapshot = mock(async () => initialSnapshot);
-    host.workspaceUpdateKanbanTaskCardView = mock(async () => write.promise);
-    const harness = createHookHarness(useKanbanTaskCardView, undefined, { wrapper });
+    const workspaceGetSettingsSnapshot = mock(async () => initialSnapshot);
+    const workspaceUpdateKanbanTaskCardView = mock(async () => write.promise);
+    const testHost = { workspaceGetSettingsSnapshot, workspaceUpdateKanbanTaskCardView };
+    const harness = createHookHarness(() => useKanbanTaskCardView(testHost), undefined, {
+      wrapper,
+    });
 
     try {
       await harness.mount();
@@ -30,11 +30,9 @@ describe("useKanbanTaskCardView", () => {
 
       write.reject(new Error("Disk is read-only"));
       await harness.waitFor((state) => state.taskCardView === "normal" && !state.isPending, 2000);
-      expect(host.workspaceUpdateKanbanTaskCardView).toHaveBeenCalledWith("compact");
+      expect(workspaceUpdateKanbanTaskCardView).toHaveBeenCalledWith("compact");
     } finally {
       await harness.unmount();
-      host.workspaceGetSettingsSnapshot = originalRead;
-      host.workspaceUpdateKanbanTaskCardView = originalWrite;
     }
   });
 });
