@@ -22,7 +22,7 @@ const SHELL_NON_EXECUTING_OPTIONS = words(
 
 const READ_ONLY_GIT_SUBCOMMANDS = words("diff log show status");
 const MUTATING_GIT_SUBCOMMANDS = words(
-  "add checkout clean commit merge pull push rebase reset stash switch",
+  "add checkout clean commit merge pull push rebase reset restore rm stash switch",
 );
 const READ_ONLY_GIT_OPTIONS = words(
   "-b -p -s -u -z --all --branch --cached --decorate --graph --name-only --name-status --no-patch --oneline --patch --porcelain --raw --short --staged --stat --summary",
@@ -57,15 +57,20 @@ const READ_ONLY_SORT_OPTIONS_WITH_VALUE = words(
 const MUTATING_CURL_OPTIONS = words(
   "-F -O -T -d --data --data-ascii --data-binary --data-raw --data-urlencode --form --json --remote-name --upload-file",
 );
-const CURL_FILE_OUTPUT_OPTIONS = words("-D -c -o --cookie-jar --dump-header --output --trace");
+const CURL_FILE_OUTPUT_OPTIONS = words(
+  "-D -c -o --cookie-jar --dump-header --output --trace --trace-ascii",
+);
 const CURL_OPTIONS_WITH_VALUE = words("-H -K --config --header");
 const MUTATING_HTTP_METHODS = words("DELETE PATCH POST PUT");
 
 type SimpleCommand = [string, ...string[]];
 
-const SIMPLE_OUTPUT_REDIRECTION =
-  /^(.*?)(?:^|\s)\d*>{1,2}\s*(?:[^\s'"$`()|&;<>]+|'[^'$`]*'|"[^"$`]*")\s*$/;
 const UNSUPPORTED_SHELL_SYNTAX = "|&;<>`$(){}*?[]#\n\r";
+
+type SimpleCommandScan = {
+  tokens: SimpleCommand;
+  outputRedirect: boolean;
+};
 
 const hasAttachedLongOption = (option: string, names: ReadonlySet<string>): boolean => {
   for (const name of names) {
@@ -76,23 +81,42 @@ const hasAttachedLongOption = (option: string, names: ReadonlySet<string>): bool
   return false;
 };
 
-const readSimpleCommand = (value: string): SimpleCommand | null => {
+const readAttachedShortOptionValue = (
+  option: string,
+  names: ReadonlySet<string>,
+): string | null => {
+  for (const name of names) {
+    if (/^-[^-]$/.test(name) && option.startsWith(name) && option.length > name.length) {
+      return option.slice(name.length);
+    }
+  }
+  return null;
+};
+
+const readSimpleCommand = (value: string): SimpleCommandScan | null => {
   const tokens: string[] = [];
   let token = "";
   let tokenStarted = false;
   let quote: "'" | '"' | null = null;
   let escaped = false;
+  let readingRedirectTarget = false;
+  let outputRedirect = false;
 
   const pushToken = (): void => {
     if (!tokenStarted) {
       return;
     }
-    tokens.push(token);
+    if (!readingRedirectTarget) {
+      tokens.push(token);
+    }
     token = "";
     tokenStarted = false;
+    readingRedirectTarget = false;
   };
 
-  for (const character of value.trim()) {
+  const input = value.trim();
+  for (let index = 0; index < input.length; index += 1) {
+    const character = input.charAt(index);
     if (escaped) {
       token += character;
       tokenStarted = true;
@@ -118,6 +142,18 @@ const readSimpleCommand = (value: string): SimpleCommand | null => {
       tokenStarted = true;
       continue;
     }
+    if (character === ">") {
+      if (readingRedirectTarget && !tokenStarted) {
+        return null;
+      }
+      pushToken();
+      if (input[index + 1] === ">") {
+        index += 1;
+      }
+      readingRedirectTarget = true;
+      outputRedirect = true;
+      continue;
+    }
     if (UNSUPPORTED_SHELL_SYNTAX.includes(character)) {
       return null;
     }
@@ -129,12 +165,12 @@ const readSimpleCommand = (value: string): SimpleCommand | null => {
     tokenStarted = true;
   }
 
-  if (escaped || quote) {
+  if (escaped || quote || (readingRedirectTarget && !tokenStarted)) {
     return null;
   }
   pushToken();
   const command = tokens[0];
-  return command ? [command, ...tokens.slice(1)] : null;
+  return command ? { tokens: [command, ...tokens.slice(1)], outputRedirect } : null;
 };
 
 const classifyGit = (tokens: SimpleCommand): AgentApprovalMutation => {
@@ -188,7 +224,7 @@ const classifyFind = (tokens: SimpleCommand): AgentApprovalMutation => {
   for (let index = 1; index < tokens.length; index += 1) {
     const option = tokens[index];
     if (option === "--") {
-      break;
+      return "unknown";
     }
     if (option && MUTATING_FIND_ACTIONS.has(option)) {
       return "mutating";
@@ -260,6 +296,10 @@ const classifyCurl = (tokens: SimpleCommand): AgentApprovalMutation => {
       }
       return "mutating";
     }
+    const attachedFileOutput = readAttachedShortOptionValue(option, CURL_FILE_OUTPUT_OPTIONS);
+    if (attachedFileOutput !== null) {
+      return attachedFileOutput === "-" ? "unknown" : "mutating";
+    }
     if (hasAttachedLongOption(option, CURL_FILE_OUTPUT_OPTIONS)) {
       if (option.endsWith("=-") || option === "--trace=%") {
         return "unknown";
@@ -324,6 +364,23 @@ const classifySimpleCommand = (tokens: SimpleCommand): AgentApprovalMutation => 
   if (command === "sort") {
     return classifySort(tokens);
   }
+  if (command === "sed") {
+    return tokens
+      .slice(1)
+      .some(
+        (option) =>
+          option.startsWith("-i") || option === "--in-place" || option.startsWith("--in-place="),
+      )
+      ? "mutating"
+      : "unknown";
+  }
+  if (command === "perl") {
+    return tokens
+      .slice(1)
+      .some((option) => option.startsWith("-i") || option === "-pi" || option.startsWith("-pi."))
+      ? "mutating"
+      : "unknown";
+  }
   if (command === "curl") {
     return classifyCurl(tokens);
   }
@@ -339,12 +396,11 @@ const classifySimpleCommand = (tokens: SimpleCommand): AgentApprovalMutation => 
 };
 
 const classifyNativeCommand = (pattern: string): AgentApprovalMutation => {
-  const outputRedirection = pattern.match(SIMPLE_OUTPUT_REDIRECTION);
-  if (outputRedirection?.[1] && readSimpleCommand(outputRedirection[1])) {
-    return "mutating";
-  }
   const command = readSimpleCommand(pattern);
-  return command ? classifySimpleCommand(command) : "unknown";
+  if (!command) {
+    return "unknown";
+  }
+  return command.outputRedirect ? "mutating" : classifySimpleCommand(command.tokens);
 };
 
 const classifyWorkflowTool = (name: string | undefined): AgentApprovalMutation | null => {

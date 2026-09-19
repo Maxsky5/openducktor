@@ -55,6 +55,7 @@ describe("OpenCode approval classifier", () => {
     "cat input.txt & rm output.txt",
     "echo $(curl -X POST https://evil.test)",
     "cat <(curl https://example.test)",
+    "printf data>output.txt | sh",
     "[[ z > a ]]",
     "(( 2 > 1 ))",
     "cat <<EOF\na > b\nEOF",
@@ -66,9 +67,31 @@ describe("OpenCode approval classifier", () => {
     'find . "" -delete',
     "sort input.txt '' -o output.txt",
     'git log "" --output=log.txt',
-  ])("finds an explicit mutation after an empty argument: %s", (command) => {
+    "printf data>output.txt",
+    "printf data>>output.txt",
+    "printf data>'output file.txt'",
+    "printf data 2>errors.txt",
+    "git restore file.txt",
+    "git rm file.txt",
+    "sed -i s/old/new/ file.txt",
+    "sed --in-place=.bak s/old/new/ file.txt",
+    "perl -i -pe s/old/new/ file.txt",
+    "perl -pi.bak -e s/old/new/ file.txt",
+    "curl -oout.txt https://example.test",
+    "curl -ccookies.txt https://example.test",
+    "curl -Dheaders.txt https://example.test",
+    "curl --trace-ascii trace.txt https://example.test",
+    "curl --trace-ascii=trace.txt https://example.test",
+  ])("finds explicit mutation syntax: %s", (command) => {
     expect(classifyShell([command], command)).toBe("mutating");
   });
+
+  test.each(["echo 'a>b'", 'echo "a>b"', String.raw`echo a\>b`])(
+    "keeps a quoted or escaped greater-than sign read-only: %s",
+    (command) => {
+      expect(classifyShell([command], command)).toBe("read_only");
+    },
+  );
 
   test.each([
     "bash -n script.sh",
@@ -85,8 +108,13 @@ describe("OpenCode approval classifier", () => {
     "python build.py",
     "./ls -la",
     "git log --since yesterday",
+    "find -- . -delete",
+    "find -- -delete",
     "find . -unlisted value",
     "rg --pre helper pattern",
+    "curl -o- https://example.test",
+    "curl --trace-ascii=- https://example.test",
+    "echo >",
   ])("keeps an unproved command unknown: %s", (command) => {
     expect(classifyShell([command], command)).toBe("unknown");
   });
