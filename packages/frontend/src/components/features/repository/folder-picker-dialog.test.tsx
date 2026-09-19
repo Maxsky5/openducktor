@@ -487,7 +487,14 @@ describe("FolderPickerDialog", () => {
             currentPath: "/Users/dev",
             parentPath: "/Users",
             homePath: "/Users/home",
-            entries: [],
+            entries: [
+              {
+                name: "cached-entry",
+                path: "/Users/dev/cached-entry",
+                isDirectory: true,
+                isGitRepo: false,
+              },
+            ],
           });
         case "/Users/home":
           return createListing({
@@ -502,7 +509,14 @@ describe("FolderPickerDialog", () => {
             currentPathIsGitRepo: true,
             parentPath: "/Users/dev",
             homePath: "/Users/home",
-            entries: [],
+            entries: [
+              {
+                name: "repo-entry",
+                path: "/Users/dev/repo-one/repo-entry",
+                isDirectory: true,
+                isGitRepo: false,
+              },
+            ],
           });
         default:
           throw new Error(`Unexpected path: ${String(path)}`);
@@ -519,6 +533,7 @@ describe("FolderPickerDialog", () => {
         screen.getByRole<HTMLButtonElement>("button", { name: /go to parent folder/i }),
       );
       await screen.findByText("/Users/dev");
+      expect(screen.getByRole("button", { name: "cached-entry" })).toBeTruthy();
       expect(screen.getByLabelText<HTMLInputElement>("Open path").value).toBe("");
 
       fireEvent.click(
@@ -533,6 +548,7 @@ describe("FolderPickerDialog", () => {
       fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /load path/i }));
 
       await screen.findByText("/Users/dev/repo-one");
+      expect(screen.getByRole("button", { name: "repo-entry" })).toBeTruthy();
       expect(screen.getByLabelText<HTMLInputElement>("Open path").value).toBe(
         "/Users/dev/repo-one",
       );
@@ -540,7 +556,11 @@ describe("FolderPickerDialog", () => {
       fireEvent.click(
         screen.getByRole<HTMLButtonElement>("button", { name: /go to parent folder/i }),
       );
-      await screen.findByText("/Users/dev");
+
+      expect(screen.getByText("/Users/dev")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "cached-entry" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "repo-entry" })).toBeNull();
+      expect(screen.queryByText("Loading directories…")).toBeNull();
       expect(screen.getByLabelText<HTMLInputElement>("Open path").value).toBe(
         "/Users/dev/repo-one",
       );
