@@ -331,19 +331,37 @@ function CompactTaskMeta({
 
   return (
     <div className="flex min-w-0 items-center gap-2">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span
-            className="inline-flex size-5 shrink-0 items-center justify-center text-muted-foreground"
-            aria-label={`Issue type: ${issueTypeStyle.label}`}
-            role="img"
-            tabIndex={0}
-          >
-            <IssueTypeIcon className="size-4" aria-hidden="true" />
-          </span>
-        </TooltipTrigger>
-        <TooltipContent side="top">{issueTypeStyle.label}</TooltipContent>
-      </Tooltip>
+      <div className="flex shrink-0 items-center gap-1.5">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              className={cn(
+                "inline-flex size-5 shrink-0 items-center justify-center",
+                issueTypeStyle.iconClassName,
+              )}
+              aria-label={`Issue type: ${issueTypeStyle.label}`}
+              role="img"
+              tabIndex={0}
+            >
+              <IssueTypeIcon className="size-4" aria-hidden="true" />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top">{issueTypeStyle.label}</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              className={cn("size-2.5 shrink-0 rounded-full", priorityStyle.dotClassName)}
+              aria-label={`Priority: ${priorityStyle.hint}`}
+              role="img"
+              tabIndex={0}
+            />
+          </TooltipTrigger>
+          <TooltipContent side="top">
+            {priorityStyle.label}: {priorityStyle.hint}
+          </TooltipContent>
+        </Tooltip>
+      </div>
       <button
         type="button"
         aria-label={`Open details for ${task.title}`}
@@ -353,14 +371,6 @@ function CompactTaskMeta({
       >
         {task.title}
       </button>
-      <span
-        className="inline-flex h-5 shrink-0 items-center gap-1 text-xs font-medium text-muted-foreground"
-        aria-label={`Priority: ${priorityStyle.hint}`}
-        title={priorityStyle.hint}
-      >
-        <span className={cn("size-1.5 rounded-full", priorityStyle.dotClassName)} />
-        {priorityStyle.label}
-      </span>
     </div>
   );
 }

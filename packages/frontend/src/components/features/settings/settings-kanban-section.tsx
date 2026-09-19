@@ -1,14 +1,13 @@
 import {
   KANBAN_EMPTY_COLUMN_DISPLAY_VALUES,
-  type KanbanTaskCardView,
   type KanbanEmptyColumnDisplay,
   type KanbanSettings,
 } from "@openducktor/contracts";
 import type { ReactElement } from "react";
+import { TaskCardViewControl } from "@/components/features/kanban/task-card-view-control";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { SettingsSegmentedOptionRow } from "./settings-segmented-option-row";
 
 type SettingsKanbanSectionProps = {
   kanban: KanbanSettings;
@@ -36,11 +35,6 @@ const EMPTY_COLUMN_DISPLAY_OPTIONS: ComboboxOption[] = [
 
 const isKanbanEmptyColumnDisplay = (value: string): value is KanbanEmptyColumnDisplay =>
   KANBAN_EMPTY_COLUMN_DISPLAY_VALUES.some((candidate) => candidate === value);
-
-const TASK_CARD_VIEW_OPTIONS = [
-  { value: "normal", label: "Normal" },
-  { value: "compact", label: "Compact" },
-] as const;
 
 export function SettingsKanbanSection({
   kanban,
@@ -112,16 +106,21 @@ export function SettingsKanbanSection({
           </p>
         </div>
       </div>
-      <SettingsSegmentedOptionRow<KanbanTaskCardView>
-        title="Task card view"
-        description="Choose the task-card density used on the Kanban board."
-        value={kanban.taskCardView}
-        options={TASK_CARD_VIEW_OPTIONS}
-        disabled={disabled}
-        onValueChange={(taskCardView) => {
-          onUpdateKanban((current) => ({ ...current, taskCardView }));
-        }}
-      />
+      <div className="grid gap-3 rounded-md border border-border bg-card p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+        <div className="flex min-w-0 flex-col gap-1">
+          <p className="text-sm font-medium text-foreground">Task card view</p>
+          <p className="text-xs text-muted-foreground">
+            Choose the task-card density used on the Kanban board.
+          </p>
+        </div>
+        <TaskCardViewControl
+          value={kanban.taskCardView}
+          disabled={disabled}
+          onValueChange={(taskCardView) => {
+            onUpdateKanban((current) => ({ ...current, taskCardView }));
+          }}
+        />
+      </div>
     </div>
   );
 }

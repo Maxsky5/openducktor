@@ -386,6 +386,8 @@ describe("KanbanTaskCard active sessions", () => {
     expect(html).toContain('aria-label="Priority: High"');
     expect(html).toContain('aria-label="Copy task ID"');
     expect(html).toContain("Compact card title");
+    expect(html).toContain("text-sky-600");
+    expect(html).toContain("bg-orange-500");
     expect(html).toContain("1 subtask");
     expect(html).toContain('data-density="compact"');
     expect(html).toContain("rounded-lg shadow-none");
@@ -394,5 +396,12 @@ describe("KanbanTaskCard active sessions", () => {
     expect(html).not.toContain("frontend");
     expect(html).not.toContain("phase:open");
     expect(html).not.toContain(">TASK-COMPACT<");
+    expect(html).not.toContain(">P1<");
+    expect(html.indexOf('aria-label="Issue type: Feature"')).toBeLessThan(
+      html.indexOf('aria-label="Priority: High"'),
+    );
+    expect(html.indexOf('aria-label="Priority: High"')).toBeLessThan(
+      html.indexOf('aria-label="Open details for Compact card title"'),
+    );
   });
 });

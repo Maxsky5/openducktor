@@ -25,6 +25,13 @@ describe("settings kanban section", () => {
     expect(html).toContain("Empty columns");
     expect(html).toContain("Choose whether empty lanes stay visible");
     expect(html).toContain("Task card view");
+    expect(html).toContain('role="radiogroup"');
+    expect(html).toContain('aria-label="Normal"');
+    expect(html).toContain('aria-label="Compact"');
+    expect(html).toContain("lucide-rows-3");
+    expect(html).toContain("lucide-rows-2");
+    expect(html).not.toContain(">Normal<");
+    expect(html).not.toContain(">Compact<");
     expect(html).toContain('value="3"');
   });
 });

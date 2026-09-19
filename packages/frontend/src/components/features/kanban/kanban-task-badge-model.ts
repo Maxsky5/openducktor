@@ -6,24 +6,28 @@ export const ISSUE_TYPE_STYLES = {
   bug: {
     label: "Bug",
     icon: Bug,
+    iconClassName: "text-rose-600 dark:text-rose-400",
     className:
       "border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300",
   },
   feature: {
     label: "Feature",
     icon: Sparkles,
+    iconClassName: "text-sky-600 dark:text-sky-400",
     className:
       "border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300",
   },
   epic: {
     label: "Epic",
     icon: Layers3,
+    iconClassName: "text-violet-600 dark:text-violet-400",
     className:
       "border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300",
   },
   task: {
     label: "Task",
     icon: CheckSquare,
+    iconClassName: "text-emerald-600 dark:text-emerald-400",
     className: "border-border bg-muted text-foreground",
   },
 } satisfies Record<
@@ -31,6 +35,7 @@ export const ISSUE_TYPE_STYLES = {
   {
     label: string;
     icon: LucideIcon;
+    iconClassName: string;
     className: string;
   }
 >;

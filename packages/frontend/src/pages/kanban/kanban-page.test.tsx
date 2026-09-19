@@ -965,9 +965,13 @@ describe("KanbanPage session start modal flow", () => {
       expect(renderer.getByRole("radiogroup", { name: "Task card view" })).not.toBeNull();
       const normalOption = renderer.getByRole("radio", { name: "Normal" });
       const compactOption = renderer.getByRole("radio", { name: "Compact" });
+      expect(renderer.getByRole("radiogroup", { name: "Task card view" }).className).toContain(
+        "h-10",
+      );
       expect(normalOption.getAttribute("data-state")).toBe("checked");
       expect(normalOption.textContent).toBe("");
       expect(compactOption.textContent).toBe("");
+      expect(normalOption.className).toContain("size-8");
       expect(normalOption.querySelector("svg.lucide-rows-3")).not.toBeNull();
       expect(compactOption.querySelector("svg.lucide-rows-2")).not.toBeNull();
       fireEvent.click(compactOption);
