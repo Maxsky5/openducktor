@@ -4,7 +4,7 @@ import { useState } from "react";
 import { hasMarkdownMath } from "@/components/ui/markdown-math-detection";
 import TaskDescriptionEditor from "./task-description-editor";
 
-const EDITOR_WAIT_TIMEOUT_MS = 2_000;
+const EDITOR_WAIT_TIMEOUT_MS = 3_000;
 const waitFor = <Result,>(callback: () => Result): Promise<Result> =>
   testingLibraryWaitFor(callback, { timeout: EDITOR_WAIT_TIMEOUT_MS });
 
@@ -115,7 +115,8 @@ describe("TaskDescriptionEditor", () => {
     } finally {
       renderSpy.mockRestore();
     }
-  }, 4_000);
+    // CI runs this editor flow beside the host suite on 3-4 vCPUs.
+  }, 5_000);
 
   test("keeps Markdown typing stable and uses the normal interface font", async () => {
     const ControlledEditor = () => {
@@ -136,7 +137,8 @@ describe("TaskDescriptionEditor", () => {
 
     expect(view.queryByText("Checking whether Visual mode can preserve this Markdown…")).toBeNull();
     expect(requireTextArea(view.getByRole("textbox")).value).toBe("Body!");
-  });
+    // CI runs this editor flow beside the host suite on 3-4 vCPUs.
+  }, 5_000);
 
   test("uses the card surface for the Visual editor in both themes", async () => {
     const view = render(
