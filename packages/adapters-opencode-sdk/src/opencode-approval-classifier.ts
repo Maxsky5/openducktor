@@ -50,6 +50,63 @@ type TokenizationResult =
   | { kind: "mutating_syntax" }
   | { kind: "unknown_syntax" };
 
+const hasProvenAlternateOutputFileTarget = (
+  pattern: string,
+  redirectIndex: number,
+  currentToken: string,
+): boolean => {
+  if (/^\d+$/.test(currentToken)) {
+    return false;
+  }
+
+  let targetIndex = redirectIndex + 2;
+  while (pattern[targetIndex] === " " || pattern[targetIndex] === "\t") {
+    targetIndex += 1;
+  }
+  if (!pattern[targetIndex] || pattern[targetIndex] === "#") {
+    return false;
+  }
+
+  let target = "";
+  let quote: "'" | '"' | null = null;
+  let escaped = false;
+  for (let index = targetIndex; index < pattern.length; index += 1) {
+    const character = pattern.charAt(index);
+    if (escaped) {
+      target += character;
+      escaped = false;
+      continue;
+    }
+    if (character === "\\" && quote !== "'") {
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (character === quote) {
+        quote = null;
+        continue;
+      }
+      if (quote === '"' && (character === "$" || character === "`")) {
+        return false;
+      }
+      target += character;
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      quote = character;
+      continue;
+    }
+    if (/\s/.test(character) || "|&;<>".includes(character)) {
+      break;
+    }
+    if ("$`*?[]{}()".includes(character)) {
+      return false;
+    }
+    target += character;
+  }
+  return !escaped && !quote && target !== "" && target !== "-" && !/^\d+$/.test(target);
+};
+
 const tokenizeNativeCommandPattern = (pattern: string): TokenizationResult => {
   const tokens: string[] = [];
   let token = "";
@@ -80,10 +137,7 @@ const tokenizeNativeCommandPattern = (pattern: string): TokenizationResult => {
         quote = null;
         continue;
       }
-      if (
-        quote === '"' &&
-        (character === "`" || (character === "$" && pattern[index + 1] === "("))
-      ) {
+      if (quote === '"' && (character === "`" || character === "$")) {
         hasUnknownSyntax = true;
       }
       token += character;
@@ -99,6 +153,9 @@ const tokenizeNativeCommandPattern = (pattern: string): TokenizationResult => {
     }
     if (character === ">") {
       if (pattern[index + 1] === "&") {
+        if (hasProvenAlternateOutputFileTarget(pattern, index, token)) {
+          return { kind: "mutating_syntax" };
+        }
         hasUnknownSyntax = true;
         continue;
       }
@@ -111,7 +168,13 @@ const tokenizeNativeCommandPattern = (pattern: string): TokenizationResult => {
       character === ";" ||
       character === "(" ||
       character === ")" ||
-      (character === "$" && pattern[index + 1] === "(")
+      character === "$" ||
+      character === "{" ||
+      character === "}" ||
+      character === "*" ||
+      character === "?" ||
+      character === "[" ||
+      character === "]"
     ) {
       hasUnknownSyntax = true;
       continue;
@@ -140,7 +203,7 @@ const tokenizeNativeCommandPattern = (pattern: string): TokenizationResult => {
 };
 
 const classifyGitCommand = (tokens: readonly string[]): AgentApprovalMutation => {
-  const subcommand = tokens[1]?.toLowerCase();
+  const subcommand = tokens[1];
   if (!subcommand) {
     return "unknown";
   }
@@ -239,7 +302,7 @@ const classifyNativeCommandPattern = (pattern: string): AgentApprovalMutation =>
     return "unknown";
   }
 
-  const command = tokenized.tokens[0].toLowerCase();
+  const command = tokenized.tokens[0];
   if (command.includes("/") || command.includes("\\")) {
     return "unknown";
   }

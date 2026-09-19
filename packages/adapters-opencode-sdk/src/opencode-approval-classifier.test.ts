@@ -154,6 +154,95 @@ describe("OpenCode approval classifier", () => {
     ).toBe("mutating");
   });
 
+  test.each([
+    "find . $ACTION",
+    "find . ${ACTION}",
+    "find . ${ACTION:--delete}",
+    "printf ${OPT:--v} PATH .",
+    'printf "$OPT"',
+    "sort input.txt ${OPT:--o} output.txt",
+    "find . $1",
+    "find . {-print,-delete}",
+    "find . *",
+    "find . ?",
+    "find . [a-z]*",
+  ])("does not trust an unresolved shell expansion: %s", (command) => {
+    expect(
+      classifyOpenCodeApprovalMutation({
+        permission: "bash",
+        patterns: [command],
+        command,
+      }),
+    ).toBe("unknown");
+  });
+
+  test.each([
+    "printf '$OPT'",
+    "printf \\$OPT",
+    "printf '*'",
+    "printf \\*",
+    "printf '{a,b}'",
+    "printf \\{a,b\\}",
+  ])("keeps a literal expansion marker read-only: %s", (command) => {
+    expect(
+      classifyOpenCodeApprovalMutation({
+        permission: "bash",
+        patterns: [command],
+        command,
+      }),
+    ).toBe("read_only");
+  });
+
+  test.each([
+    "CAT input.txt",
+    "RM output.txt",
+    "LS -la",
+    "GIT log --oneline -5",
+    "FIND . -print",
+    "CURL https://example.test",
+    "PRINTF %s data",
+    "RG pattern",
+    "SORT input.txt",
+    "git LOG --oneline -5",
+  ])("does not case-fold a POSIX command token: %s", (command) => {
+    expect(
+      classifyOpenCodeApprovalMutation({
+        permission: "bash",
+        patterns: [command],
+        command,
+      }),
+    ).toBe("unknown");
+  });
+
+  test.each([
+    "ls >& output.txt",
+    "ls >&output.txt",
+    "ls >&'output file.txt'",
+    'ls >&"output file.txt"',
+    "ls >&output\\ file.txt",
+  ])("classifies an alternate file-output redirect: %s", (command) => {
+    expect(
+      classifyOpenCodeApprovalMutation({
+        permission: "bash",
+        patterns: [command],
+        command,
+      }),
+    ).toBe("mutating");
+  });
+
+  test.each(["ls >&2", "ls >&-", "ls 2>&output.txt", "ls >&$TARGET", 'ls >&"$TARGET"'])(
+    "keeps an unproved descriptor redirect unknown: %s",
+    (command) => {
+      expect(
+        classifyOpenCodeApprovalMutation({
+          permission: "bash",
+          patterns: [command],
+          command,
+        }),
+      ).toBe("unknown");
+    },
+  );
+
   test("classifies canonical OpenCode workflow tool aliases", () => {
     expect(
       classifyOpenCodeApprovalMutation({
