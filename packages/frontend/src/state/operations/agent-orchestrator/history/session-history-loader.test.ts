@@ -15,6 +15,10 @@ import type {
   AgentSessionState,
 } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
+import {
+  applyAsyncQuestionAnnotation,
+  applyAsyncQuestionUserMessage,
+} from "../support/async-questions";
 import { upsertImageGenerationMessage } from "../support/image-generation-messages";
 import { createSessionMessagesState } from "../support/messages";
 import { createTaskCardFixture } from "../test-utils";
@@ -995,6 +999,80 @@ describe("session history loader", () => {
       "Previous transcript",
       "Resume after QA rejection",
     ]);
+  });
+
+  test("does not reopen stale history after an ordinary message during the read", async () => {
+    const historyPromise = Promise.withResolvers<AgentSessionHistoryMessage[]>();
+    const readStarted = Promise.withResolvers<void>();
+    const harness = createHistoryLoadHarness();
+    const historyQuestion = {
+      questionItemId: '["request_user_input_async","question-history",0]',
+      sourceMessageId: "question-history",
+      questionIndex: 0,
+      title: "History question",
+      options: ["Yes", "No"],
+    };
+    const liveQuestion = {
+      questionItemId: '["request_user_input_async","question-live",0]',
+      sourceMessageId: "question-live",
+      questionIndex: 0,
+      title: "Live question",
+      options: ["Yes", "No"],
+    };
+
+    const loadPromise = loadSelectedSessionBaselineHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => {
+          readStarted.resolve();
+          return historyPromise.promise;
+        },
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+    await readStarted.promise;
+
+    harness.updateSession(sessionTarget, (current) => ({
+      ...current,
+      ...applyAsyncQuestionUserMessage(
+        {
+          pendingAsyncQuestions: current.pendingAsyncQuestions ?? [],
+          handledAsyncQuestionIds: current.handledAsyncQuestionIds ?? new Set(),
+          asyncQuestionSkipRevision: current.asyncQuestionSkipRevision,
+        },
+        undefined,
+      ),
+    }));
+    harness.updateSession(sessionTarget, (current) => ({
+      ...current,
+      ...applyAsyncQuestionAnnotation(
+        {
+          pendingAsyncQuestions: current.pendingAsyncQuestions ?? [],
+          handledAsyncQuestionIds: current.handledAsyncQuestionIds ?? new Set(),
+          asyncQuestionSkipRevision: current.asyncQuestionSkipRevision,
+        },
+        { status: "pending", questions: [liveQuestion] },
+      ),
+    }));
+
+    historyPromise.resolve([
+      {
+        messageId: historyQuestion.sourceMessageId,
+        role: "assistant",
+        timestamp: "2026-09-19T10:00:00.000Z",
+        text: historyQuestion.title,
+        parts: [],
+        asyncQuestion: { status: "pending", questions: [historyQuestion] },
+      },
+    ]);
+    await loadPromise;
+
+    expect(harness.session.pendingAsyncQuestions).toEqual([liveQuestion]);
+    expect(harness.session.handledAsyncQuestionIds).toContain(historyQuestion.questionItemId);
   });
 
   test("keeps a local accepted user send when baseline history confirms it", async () => {

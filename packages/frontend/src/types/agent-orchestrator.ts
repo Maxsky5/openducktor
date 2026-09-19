@@ -221,6 +221,8 @@ export type AgentSessionState = {
   pendingQuestions: AgentQuestionRequest[];
   pendingAsyncQuestions?: readonly AgentAsyncQuestion[];
   handledAsyncQuestionIds?: ReadonlySet<string>;
+  /** Transient order marker for ordinary user messages that skip pending async questions. */
+  asyncQuestionSkipRevision?: number | undefined;
   selectedModel: AgentModelSelection | null;
   runtimeAvailability?: AgentSessionRuntimeAvailability;
   pendingUserMessageStartedAt?: number | undefined;

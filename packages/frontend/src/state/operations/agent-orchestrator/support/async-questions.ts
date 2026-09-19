@@ -8,6 +8,7 @@ import type { AgentSessionHistoryMessage } from "@openducktor/core";
 export type AgentAsyncQuestionProjection = {
   pendingAsyncQuestions: readonly AgentAsyncQuestion[];
   handledAsyncQuestionIds: ReadonlySet<string>;
+  asyncQuestionSkipRevision?: number | undefined;
 };
 
 export const emptyAgentAsyncQuestionProjection = (): AgentAsyncQuestionProjection => ({
@@ -48,6 +49,9 @@ export const applyAsyncQuestionUserMessage = (
       (question) => !handled.has(question.questionItemId),
     ),
     handledAsyncQuestionIds: handled,
+    asyncQuestionSkipRevision: replies
+      ? current.asyncQuestionSkipRevision
+      : (current.asyncQuestionSkipRevision ?? 0) + 1,
   };
 };
 
@@ -85,8 +89,20 @@ export const mergeAsyncQuestionHistory = (
   current: AgentAsyncQuestionProjection,
   atReadStart?: AgentAsyncQuestionProjection,
 ): AgentAsyncQuestionProjection => {
-  let merged = markAsyncQuestionsHandled(history, current.handledAsyncQuestionIds);
+  let merged: AgentAsyncQuestionProjection = {
+    ...markAsyncQuestionsHandled(history, current.handledAsyncQuestionIds),
+    asyncQuestionSkipRevision: Math.max(
+      history.asyncQuestionSkipRevision ?? 0,
+      current.asyncQuestionSkipRevision ?? 0,
+    ),
+  };
   if (!atReadStart) return merged;
+  if ((current.asyncQuestionSkipRevision ?? 0) > (atReadStart.asyncQuestionSkipRevision ?? 0)) {
+    merged = markAsyncQuestionsHandled(
+      merged,
+      merged.pendingAsyncQuestions.map((question) => question.questionItemId),
+    );
+  }
   const pendingAtReadStart = new Set(
     atReadStart.pendingAsyncQuestions.map((question) => question.questionItemId),
   );

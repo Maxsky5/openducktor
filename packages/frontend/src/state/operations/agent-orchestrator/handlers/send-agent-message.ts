@@ -192,6 +192,7 @@ const upsertAcceptedUserMessage = (
       {
         pendingAsyncQuestions: current.pendingAsyncQuestions ?? [],
         handledAsyncQuestionIds: current.handledAsyncQuestionIds ?? new Set(),
+        asyncQuestionSkipRevision: current.asyncQuestionSkipRevision,
       },
       acceptedUserMessage.asyncQuestionReplies,
     );

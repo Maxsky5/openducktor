@@ -238,6 +238,7 @@ export const handleUserMessage = (
       {
         pendingAsyncQuestions: current.pendingAsyncQuestions ?? [],
         handledAsyncQuestionIds: current.handledAsyncQuestionIds ?? new Set(),
+        asyncQuestionSkipRevision: current.asyncQuestionSkipRevision,
       },
       event.asyncQuestionReplies,
     );
