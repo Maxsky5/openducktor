@@ -332,7 +332,7 @@ export const createClaudeLiveSessionAdapterPreparer =
           Effect.suspend(() => {
             const operation = "claude-live-session.continue-interrupted-turn";
             const sessionRef = toClaudeLiveSessionRef(input);
-            let continuationAccepted = false;
+            let continuationAdmitted = false;
             return requireSessionWorkingDirectory(input, "continue-interrupted-turn").pipe(
               Effect.flatMap(() =>
                 runSummary(operation, () =>
@@ -341,14 +341,14 @@ export const createClaudeLiveSessionAdapterPreparer =
                     .pipe(
                       Effect.tap(() =>
                         Effect.sync(() => {
-                          continuationAccepted = true;
+                          continuationAdmitted = true;
                         }),
                       ),
                     ),
                 ),
               ),
               Effect.mapError((cause) =>
-                continuationAccepted
+                continuationAdmitted
                   ? new AgentSessionResumeError({
                       reason: "continuation_failed",
                       sessionRef,
