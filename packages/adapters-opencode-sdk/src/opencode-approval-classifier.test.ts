@@ -209,6 +209,39 @@ describe("OpenCode approval classifier", () => {
   });
 
   test.each([
+    "bash -n script.sh",
+    "sh -n script.sh",
+    "git stash list",
+    "git clean -n",
+    "git clean --dry-run",
+    "git clean -f --dry-run",
+  ])("keeps a no-write command mode on the human approval path: %s", (command) => {
+    expect(
+      classifyOpenCodeApprovalMutation({
+        permission: "bash",
+        patterns: [command],
+        command,
+      }),
+    ).toBe("unknown");
+  });
+
+  test.each([
+    "bash script.sh",
+    "sh script.sh",
+    "git stash push",
+    "git clean -f",
+    "git clean -- -n",
+  ])("keeps a state-changing command mode mutating: %s", (command) => {
+    expect(
+      classifyOpenCodeApprovalMutation({
+        permission: "bash",
+        patterns: [command],
+        command,
+      }),
+    ).toBe("mutating");
+  });
+
+  test.each([
     "curl -X GET -o output.txt",
     "curl -sO https://example.test/file",
     "curl -sXPOST https://example.test",

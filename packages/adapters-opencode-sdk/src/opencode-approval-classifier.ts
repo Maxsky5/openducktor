@@ -264,6 +264,19 @@ const classifyGitCommand = (tokens: readonly string[]): AgentApprovalMutation =>
   if (!subcommand) {
     return "unknown";
   }
+  if (subcommand === "stash" && tokens[2] === "list") {
+    return "unknown";
+  }
+  if (subcommand === "clean") {
+    for (const option of tokens.slice(2)) {
+      if (option === "--" || !option.startsWith("-")) {
+        break;
+      }
+      if (option === "-n" || option === "--dry-run") {
+        return "unknown";
+      }
+    }
+  }
   if (MUTATING_GIT_SUBCOMMANDS.has(subcommand)) {
     return "mutating";
   }
@@ -465,6 +478,9 @@ const classifyCommandTokens = (tokens: readonly string[]): AgentApprovalMutation
     return "unknown";
   }
   if (command.includes("/") || command.includes("\\")) {
+    return "unknown";
+  }
+  if ((command === "bash" || command === "sh") && tokens[1] === "-n") {
     return "unknown";
   }
   if (MUTATING_COMMANDS.has(command)) {

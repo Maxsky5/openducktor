@@ -68,4 +68,18 @@ describe("OpenCode approval translation", () => {
 
     expect(request.mutation).toBe("mutating");
   });
+
+  test.each(["bash -n script.sh", "sh -n script.sh", "git stash list", "git clean --dry-run"])(
+    "keeps a no-write V1 bash request pending for human approval: %s",
+    (command) => {
+      const request = normalizeOpenCodeApprovalRequest({
+        requestId: "req-no-write-mode",
+        permission: "bash",
+        patterns: [command],
+        metadata: { command },
+      });
+
+      expect(request.mutation).toBe("unknown");
+    },
+  );
 });
