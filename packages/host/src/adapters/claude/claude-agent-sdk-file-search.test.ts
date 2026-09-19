@@ -15,6 +15,7 @@ import {
   trackClaudeFileSearchSessions,
   waitForClaudeFileScan,
   type ClaudeWorkspaceFileFinder,
+  type ClaudeWorkspaceFileSearch,
 } from "./claude-agent-sdk-file-search";
 
 const score: Score = {
@@ -174,6 +175,13 @@ const createFinderFactory = () => {
   return { createFinder, created, destroyed };
 };
 
+const searchFiles = (
+  fileSearch: ClaudeWorkspaceFileSearch,
+  workingDirectory: string,
+  query: string,
+): Promise<AgentFileSearchResult[]> =>
+  fileSearch.search({ repoPath: "/repo", runtimeKind: "claude", workingDirectory, query });
+
 describe("createClaudeWorkspaceFileSearch", () => {
   test("prewarms one finder per working directory and reuses it", async () => {
     const { createFinder, created, destroyed } = createFinderFactory();
@@ -184,26 +192,16 @@ describe("createClaudeWorkspaceFileSearch", () => {
 
     expect(created).toEqual(["/repo/a"]);
     expect(destroyed).toEqual([]);
-    await expect(
-      fileSearch.search({
-        repoPath: "/repo",
-        runtimeKind: "claude",
-        workingDirectory: "/repo/a",
-        query: "index",
-      }),
-    ).resolves.toEqual([{ id: "index", path: "index", name: "index", kind: "default" }]);
+    await expect(searchFiles(fileSearch, "/repo/a", "index")).resolves.toEqual([
+      { id: "index", path: "index", name: "index", kind: "default" },
+    ]);
   });
 
   test("creates a finder on demand for a directory that was not prewarmed", async () => {
     const { createFinder, created } = createFinderFactory();
     const fileSearch = createClaudeWorkspaceFileSearch({ createFinder });
 
-    await fileSearch.search({
-      repoPath: "/repo",
-      runtimeKind: "claude",
-      workingDirectory: "/repo/b",
-      query: "index",
-    });
+    await searchFiles(fileSearch, "/repo/b", "index");
 
     expect(created).toEqual(["/repo/b"]);
   });
@@ -236,29 +234,21 @@ describe("createClaudeWorkspaceFileSearch", () => {
 
   test("destroys a released finder after its in-flight search finishes", async () => {
     const destroyed: string[] = [];
-    let resolveSearch: ((results: AgentFileSearchResult[]) => void) | undefined;
+    const pendingSearch = Promise.withResolvers<AgentFileSearchResult[]>();
     const fileSearch = createClaudeWorkspaceFileSearch({
       createFinder: () => ({
-        search: () =>
-          new Promise((resolve) => {
-            resolveSearch = resolve;
-          }),
+        search: () => pendingSearch.promise,
         destroy: () => {
           destroyed.push("/repo/a");
         },
       }),
     });
 
-    const pending = fileSearch.search({
-      repoPath: "/repo",
-      runtimeKind: "claude",
-      workingDirectory: "/repo/a",
-      query: "index",
-    });
+    const pending = searchFiles(fileSearch, "/repo/a", "index");
     fileSearch.release("/repo/a");
     expect(destroyed).toEqual([]);
 
-    resolveSearch?.([]);
+    pendingSearch.resolve([]);
     await expect(pending).resolves.toEqual([]);
     expect(destroyed).toEqual(["/repo/a"]);
   });
@@ -276,12 +266,7 @@ describe("createClaudeWorkspaceFileSearch", () => {
       }),
     });
 
-    const pending = fileSearch.search({
-      repoPath: "/repo",
-      runtimeKind: "claude",
-      workingDirectory: "/repo/a",
-      query: "index",
-    });
+    const pending = searchFiles(fileSearch, "/repo/a", "index");
     fileSearch.release("/repo/a");
 
     await expect(pending).rejects.toThrow("search failed");
@@ -298,24 +283,21 @@ describe("createClaudeWorkspaceFileSearch", () => {
     });
 
     expect(() => fileSearch.prewarm("/repo/a")).not.toThrow();
-    await expect(
-      fileSearch.search({
-        repoPath: "/repo",
-        runtimeKind: "claude",
-        workingDirectory: "/repo/a",
-        query: "index",
-      }),
-    ).rejects.toThrow("fff native library not found");
+    await expect(searchFiles(fileSearch, "/repo/a", "index")).rejects.toThrow(
+      "fff native library not found",
+    );
     expect(attempts).toBe(2);
   });
 });
 
 describe("trackClaudeFileSearchSessions", () => {
+  type ClosedSession = { input: { workingDirectory: string } };
+
   const createSessionStore = (workingDirectories: string[]) => {
-    const listeners = new Set<(session: { input: { workingDirectory: string } }) => void>();
-    let live = workingDirectories.map((workingDirectory) => ({ input: { workingDirectory } }));
+    const listeners = new Set<(session: ClosedSession) => void>();
+    const live = workingDirectories.map((workingDirectory) => ({ input: { workingDirectory } }));
     return {
-      subscribeClose: (listener: (session: { input: { workingDirectory: string } }) => void) => {
+      subscribeClose: (listener: (session: ClosedSession) => void) => {
         listeners.add(listener);
         return () => {
           listeners.delete(listener);
