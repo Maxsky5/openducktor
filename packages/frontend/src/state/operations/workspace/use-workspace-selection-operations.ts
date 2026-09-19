@@ -6,7 +6,12 @@ import type {
   WorkspaceRecord,
   WorkspaceRemovalInput,
 } from "@openducktor/contracts";
-import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  isCancelledError,
+  type QueryClient,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
@@ -111,6 +116,9 @@ const resolveActiveWorkspaceFromRecords = ({
   );
 };
 
+const ignoreCancelledError = (error: Error | null): Error | null =>
+  error && isCancelledError(error) ? null : error;
+
 const refreshAfterRemovalFailure = async (queryClient: QueryClient): Promise<void> => {
   try {
     await invalidateWorkspaceCaches(queryClient);
@@ -140,7 +148,9 @@ export function useWorkspaceSelectionOperations({
   const workspaces = workspaceListQuery.data ?? [];
   const closedWorkspaces = workspaceCatalogQuery.data?.closedWorkspaces ?? [];
   const incompleteRemovals = workspaceCatalogQuery.data?.incompleteRemovals ?? [];
-  const workspaceQueryError = workspaceListQuery.error ?? workspaceCatalogQuery.error;
+  const workspaceQueryError =
+    ignoreCancelledError(workspaceListQuery.error) ??
+    ignoreCancelledError(workspaceCatalogQuery.error);
   const workspaceLoadError = workspaceQueryError
     ? new Error(errorMessage(workspaceQueryError), { cause: workspaceQueryError })
     : null;
@@ -305,9 +315,11 @@ export function useWorkspaceSelectionOperations({
             }),
           );
         } catch (refreshError) {
-          toast.error("Failed to reorder repositories, and workspace reload also failed", {
-            description: errorMessage(refreshError),
-          });
+          if (!isCancelledError(refreshError)) {
+            toast.error("Failed to reorder repositories, and workspace reload also failed", {
+              description: errorMessage(refreshError),
+            });
+          }
         }
       }
     },

@@ -711,6 +711,65 @@ describe("use-workspace-selection-operations", () => {
     }
   });
 
+  test("does not report a failure when a newer switch cancels the stale reorder reload", async () => {
+    const reorderDeferred = createDeferred<ReturnType<typeof workspace>[]>();
+    const selectDeferred = createDeferred<ReturnType<typeof workspace>>();
+    const reloadDeferred = createDeferred<ReturnType<typeof workspace>[]>();
+    const reloadStarted = createDeferred<void>();
+    let listCalls = 0;
+    workspaceHost.workspaceList = mock(async () => {
+      listCalls += 1;
+      if (listCalls === 1) {
+        return [workspace("/repo-a", true), workspace("/repo-b")];
+      }
+      reloadStarted.resolve();
+      return reloadDeferred.promise;
+    });
+    workspaceHost.workspaceReorder = mock(async () => reorderDeferred.promise);
+    workspaceHost.workspaceSelect = mock(async () => selectDeferred.promise);
+    const toastError = spyOn(toast, "error").mockImplementation(() => "");
+    const harness = createSelectionHarness({
+      activeRepo: "/repo-a",
+      setActiveRepo: () => {},
+      clearTaskData: () => {},
+      clearActiveTaskStoreCheck: () => {},
+      clearBranchData: () => {},
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.workspaces.length === 2);
+
+      await harness.run(async (value) => {
+        const pendingReorder = value.reorderWorkspaces(["repo-b", "repo-a"]);
+        const pendingSwitch = value.selectWorkspace("repo-b");
+
+        reorderDeferred.reject(new Error("Reorder rejected"));
+        await reloadStarted.promise;
+        expect(listCalls).toBe(2);
+
+        selectDeferred.resolve(workspace("/repo-b", true));
+        await pendingSwitch;
+        await pendingReorder;
+      });
+
+      expect(toastError).toHaveBeenCalledTimes(1);
+      expect(toastError).toHaveBeenCalledWith("Failed to reorder repositories", {
+        description: "Reorder rejected",
+      });
+      expect(harness.getLatest().workspaces).toEqual([
+        workspace("/repo-b", true),
+        workspace("/repo-a"),
+      ]);
+    } finally {
+      selectDeferred.resolve(workspace("/repo-b", true));
+      reorderDeferred.reject(new Error("Reorder rejected"));
+      reloadDeferred.resolve([workspace("/repo-a", true)]);
+      await harness.unmount();
+      toastError.mockRestore();
+    }
+  });
+
   test("drops repository-path and workspace-id caches after committed removal", async () => {
     workspaceHost.workspaceRemove = mock(async () => ({
       catalog: {
