@@ -70,14 +70,30 @@ const finderWithoutProbeResult = `{
   },
 }`;
 
+type TestPlatform = "linux" | "macos" | "windows";
+
+const nativePackageNamesByPlatform = {
+  linux: ["@ff-labs/fff-bin-linux-x64-gnu", "@yuuang/ffi-rs-linux-x64-gnu"],
+  macos: ["@ff-labs/fff-bin-darwin-x64", "@yuuang/ffi-rs-darwin-x64"],
+  windows: ["@ff-labs/fff-bin-win32-x64", "@yuuang/ffi-rs-win32-x64-msvc"],
+} satisfies Record<TestPlatform, string[]>;
+
+const writePackage = async (appDirectory: string, packageName: string): Promise<void> => {
+  const packageDirectory = join(appDirectory, "node_modules", ...packageName.split("/"));
+  await mkdir(packageDirectory, { recursive: true });
+  await writeFile(join(packageDirectory, "package.json"), JSON.stringify({ name: packageName }));
+};
+
 const writePackagedFffModule = async ({
   platform,
   releaseDirectory,
   source,
+  omitNativePackage = false,
 }: {
-  platform: "linux" | "macos" | "windows";
+  platform: TestPlatform;
   releaseDirectory: string;
   source: string;
+  omitNativePackage?: boolean;
 }): Promise<string> => {
   const appDirectory = join(releaseDirectory, "asar-source");
   const moduleDirectory = join(appDirectory, "node_modules", "@ff-labs", "fff-node");
@@ -87,6 +103,12 @@ const writePackagedFffModule = async ({
     JSON.stringify({ name: "@ff-labs/fff-node", main: "index.cjs" }),
   );
   await writeFile(join(moduleDirectory, "index.cjs"), source);
+  await writePackage(appDirectory, "ffi-rs");
+  if (!omitNativePackage) {
+    for (const packageName of nativePackageNamesByPlatform[platform]) {
+      await writePackage(appDirectory, packageName);
+    }
+  }
   const resourcesDirectory = resolvePackagedAppResourcesDirectory({
     arch: "x64",
     platform,
@@ -94,7 +116,7 @@ const writePackagedFffModule = async ({
   });
   await mkdir(resourcesDirectory, { recursive: true });
   await createPackageWithOptions(appDirectory, join(resourcesDirectory, "app.asar"), {
-    unpack: "**/node_modules/@ff-labs/fff-node/**",
+    unpack: "**/node_modules/**",
   });
   return join(
     resolvePackagedFffNodeModulesDirectory({ arch: "x64", platform, releaseDirectory }),
@@ -102,6 +124,17 @@ const writePackagedFffModule = async ({
     "fff-node",
   );
 };
+
+const verifyPayload = (
+  platform: TestPlatform,
+  releaseDirectory: string,
+): Promise<{ modulePath: string }> =>
+  verifyPackagedFffFileSearch({
+    arch: "x64",
+    platform,
+    releaseDirectory,
+    host: { arch: "x64", platform },
+  });
 
 const writePackagedAsarWithoutFff = async ({
   platform,
@@ -164,9 +197,7 @@ describe("verifyPackagedFffFileSearch", () => {
       source: fffModuleSource(successfulFinder),
     });
 
-    await expect(
-      verifyPackagedFffFileSearch({ arch: "x64", platform: "linux", releaseDirectory }),
-    ).resolves.toEqual({
+    await expect(verifyPayload("linux", releaseDirectory)).resolves.toEqual({
       modulePath: realpathSync(join(moduleDirectory, "index.cjs")),
     });
   });
@@ -174,11 +205,7 @@ describe("verifyPackagedFffFileSearch", () => {
   test("rejects a missing packaged payload with the expected location", async () => {
     const releaseDirectory = await makeReleaseDirectory();
 
-    const error = await verifyPackagedFffFileSearch({
-      arch: "x64",
-      platform: "linux",
-      releaseDirectory,
-    }).catch(caughtError);
+    const error = await verifyPayload("linux", releaseDirectory).catch(caughtError);
 
     expect(error).toMatchObject({
       _tag: "ElectronOperationError",
@@ -192,13 +219,40 @@ describe("verifyPackagedFffFileSearch", () => {
     );
   });
 
+  test("rejects a target that does not match the host", async () => {
+    const releaseDirectory = await makeReleaseDirectory();
+
+    await expect(
+      verifyPackagedFffFileSearch({
+        arch: "x64",
+        platform: "linux",
+        releaseDirectory,
+        host: { arch: "arm64", platform: "macos" },
+      }),
+    ).rejects.toThrow("must be verified on a matching host");
+  });
+
   test("rejects a payload whose archive does not contain the package", async () => {
     const releaseDirectory = await makeReleaseDirectory();
     await writePackagedAsarWithoutFff({ platform: "linux", releaseDirectory });
 
-    await expect(
-      verifyPackagedFffFileSearch({ arch: "x64", platform: "linux", releaseDirectory }),
-    ).rejects.toThrow("the app.asar archive does not contain");
+    await expect(verifyPayload("linux", releaseDirectory)).rejects.toThrow(
+      "the app.asar archive does not contain",
+    );
+  });
+
+  test("rejects a payload whose archive does not contain a native package", async () => {
+    const releaseDirectory = await makeReleaseDirectory();
+    await writePackagedFffModule({
+      platform: "linux",
+      releaseDirectory,
+      source: fffModuleSource(successfulFinder),
+      omitNativePackage: true,
+    });
+
+    await expect(verifyPayload("linux", releaseDirectory)).rejects.toThrow(
+      "@ff-labs/fff-bin-linux-x64-gnu",
+    );
   });
 
   test("rejects a payload that resolves outside the packaged app", async () => {
@@ -229,13 +283,9 @@ describe("verifyPackagedFffFileSearch", () => {
       { force: true, recursive: true },
     );
 
-    await expect(
-      verifyPackagedFffFileSearch({
-        arch: "x64",
-        platform: "linux",
-        releaseDirectory: packagedReleaseDirectory,
-      }),
-    ).rejects.toThrow("resolved the Claude file search module outside the packaged app");
+    await expect(verifyPayload("linux", packagedReleaseDirectory)).rejects.toThrow(
+      "resolved the Claude file search module outside the packaged app",
+    );
   });
 
   test("rejects a payload that fails to create the finder", async () => {
@@ -246,9 +296,9 @@ describe("verifyPackagedFffFileSearch", () => {
       source: fffModuleSource(`{ ok: false, error: 'native library missing' }`),
     });
 
-    await expect(
-      verifyPackagedFffFileSearch({ arch: "x64", platform: "macos", releaseDirectory }),
-    ).rejects.toThrow("native library missing");
+    await expect(verifyPayload("macos", releaseDirectory)).rejects.toThrow(
+      "native library missing",
+    );
   });
 
   test("rejects a payload whose scan times out", async () => {
@@ -259,9 +309,7 @@ describe("verifyPackagedFffFileSearch", () => {
       source: fffModuleSource(timedOutFinder),
     });
 
-    await expect(
-      verifyPackagedFffFileSearch({ arch: "x64", platform: "macos", releaseDirectory }),
-    ).rejects.toThrow("did not finish within");
+    await expect(verifyPayload("macos", releaseDirectory)).rejects.toThrow("did not finish within");
   });
 
   test("rejects a payload whose scan does not find the probe file", async () => {
@@ -272,8 +320,8 @@ describe("verifyPackagedFffFileSearch", () => {
       source: fffModuleSource(finderWithoutProbeResult),
     });
 
-    await expect(
-      verifyPackagedFffFileSearch({ arch: "x64", platform: "windows", releaseDirectory }),
-    ).rejects.toThrow(`did not find ${probeFileName}`);
+    await expect(verifyPayload("windows", releaseDirectory)).rejects.toThrow(
+      `did not find ${probeFileName}`,
+    );
   });
 });

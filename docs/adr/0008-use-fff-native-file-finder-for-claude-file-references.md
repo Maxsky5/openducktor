@@ -16,8 +16,8 @@ Large repositories need ranked fuzzy results. The walker returned none for commo
 Use `@ff-labs/fff-node` in the host Claude adapter.
 
 - One `FileFinder` per working directory. Prewarm it when a session opens, destroy it when the last session for that directory closes, and cap live finders at three with least-recently-used eviction.
-- Search with `mixedSearch`. Drop the empty root result, map directory paths with a trailing slash to `kind: "directory"`, normalize path separators, and limit results to 30.
-- Do not fall back to another search. A finder load failure surfaces through the composer error.
+- Search with `mixedSearch`. Drop the empty root result, map directory results to `kind: "directory"`, strip the trailing slash from directory paths, normalize path separators, and limit results to 30.
+- Do not fall back to another search. A finder load failure fails the session start, or surfaces through the composer error when the finder loads during a search.
 - Externalize the package in the Electron main build. Unpack the fff package and the native ffi packages from the asar archive, and rewrite a resolved `app.asar` module path to `app.asar.unpacked` before loading it. fff resolves its shared library inside the archive, and ffi-rs opens it outside the Electron `dlopen` patch, so the archive path cannot work.
 - Keep the OpenCode, Codex, and workspace file tree search paths unchanged.
 - Keep frecency out of scope. It needs a persisted database.
@@ -34,9 +34,11 @@ Use `@ff-labs/fff-node` in the host Claude adapter.
 
 The package adds one native dependency per platform. CI must install the platform package and run the host tests under Bun. A packaged macOS build must keep the binary packages outside the asar archive.
 
-The Electron package build verifies the unpacked payload after electron-builder. It loads the packaged module, scans a probe file, and fails the build when the payload is missing or resolves outside the packaged app.
+The Electron package build verifies the unpacked payload after electron-builder. It loads the packaged module, scans a probe file, and fails the build when the payload is missing or resolves outside the packaged app. It also checks that the archive unpacks `@ff-labs/fff-node`, `ffi-rs`, and the native packages for the target platform.
 
-The Claude service owns finder lifetime. A failed prewarm stays silent so the session opens, and the first `@` query reports the load error. The cache destroys a finder released during a search when the last search settles.
+Packaging needs a host that matches the target platform and architecture. The native payload only loads on its target, so the verifier rejects a cross-target run before the probe and names the required host.
+
+The Claude service owns finder lifetime. The service prewarms the finder before it creates the session, so a load failure fails the session start with an actionable error. The cache destroys a finder released during a search when the last search settles.
 
 ## References
 
