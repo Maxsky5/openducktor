@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { sep } from "node:path";
-import type { DirItem, FileItem, MixedSearchResult } from "@ff-labs/fff-node";
+import type { DirItem, FileFinder, FileItem, MixedSearchResult } from "@ff-labs/fff-node";
 import {
   type AgentFileSearchResult,
   detectAgentFileReferenceKind,
@@ -96,6 +96,21 @@ const loadFileFinderModule = (): typeof import("@ff-labs/fff-node") => {
   return require(modulePath) as typeof import("@ff-labs/fff-node");
 };
 
+export const waitForClaudeFileScan = async (
+  finder: Pick<FileFinder, "waitForScan">,
+  workingDirectory: string,
+): Promise<void> => {
+  const completed = await finder.waitForScan(FILE_FINDER_SCAN_TIMEOUT_MS);
+  if (!completed.ok) {
+    throw new Error(`Claude file search could not index '${workingDirectory}': ${completed.error}`);
+  }
+  if (!completed.value) {
+    throw new Error(
+      `Claude file search is still indexing '${workingDirectory}'. Search again after indexing finishes.`,
+    );
+  }
+};
+
 export const createNativeClaudeFileFinder = (
   workingDirectory: string,
 ): ClaudeWorkspaceFileFinder => {
@@ -105,10 +120,9 @@ export const createNativeClaudeFileFinder = (
     throw new Error(`Claude file search could not index '${workingDirectory}': ${created.error}`);
   }
   const finder = created.value;
-  const scanComplete = finder.waitForScan(FILE_FINDER_SCAN_TIMEOUT_MS).then(() => undefined);
   return {
     search: async (query) => {
-      await scanComplete;
+      await waitForClaudeFileScan(finder, workingDirectory);
       const result = finder.mixedSearch(query, { pageSize: FILE_SEARCH_LIMIT });
       if (!result.ok) {
         throw new Error(`Claude file search failed in '${workingDirectory}': ${result.error}`);

@@ -12,6 +12,7 @@ import {
   resolveUnpackedAsarModulePath,
   toClaudeFileSearchResults,
   trackClaudeFileSearchSessions,
+  waitForClaudeFileScan,
   type ClaudeWorkspaceFileFinder,
 } from "./claude-agent-sdk-file-search";
 
@@ -305,6 +306,29 @@ describe("trackClaudeFileSearchSessions", () => {
     sessionStore.close(1);
 
     expect(destroyed).toEqual(["/repo/b"]);
+  });
+});
+
+describe("waitForClaudeFileScan", () => {
+  test("resolves when the scan completes", async () => {
+    await expect(
+      waitForClaudeFileScan({ waitForScan: async () => ({ ok: true, value: true }) }, "/repo/a"),
+    ).resolves.toBeUndefined();
+  });
+
+  test("reports a timeout while the index still scans", async () => {
+    await expect(
+      waitForClaudeFileScan({ waitForScan: async () => ({ ok: true, value: false }) }, "/repo/a"),
+    ).rejects.toThrow("still indexing '/repo/a'");
+  });
+
+  test("reports a scan failure", async () => {
+    await expect(
+      waitForClaudeFileScan(
+        { waitForScan: async () => ({ ok: false, error: "native scan failed" }) },
+        "/repo/a",
+      ),
+    ).rejects.toThrow("native scan failed");
   });
 });
 
