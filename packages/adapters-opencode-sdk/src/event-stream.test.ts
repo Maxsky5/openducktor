@@ -313,6 +313,24 @@ test("projects current OpenCode pending-input event families", async () => {
   ]);
 });
 
+test("classifies every native V2 bash resource", async () => {
+  const emitted = await runEventStream([
+    permissionV2AskedEvent({
+      requestId: "permission-v2-pipeline",
+      action: "bash",
+      resources: ["git show HEAD:file", "sh"],
+      metadata: { command: "git show HEAD:file | sh" },
+    }),
+  ]);
+
+  expect(emitted).toContainEqual(
+    expect.objectContaining({
+      type: "approval_required",
+      mutation: "mutating",
+    }),
+  );
+});
+
 const buildQueuedSignature = (message: string, model?: AgentModelSelection | null): string => {
   const parts: AgentUserMessagePart[] = [{ kind: "text", text: message }];
   return buildQueuedRequestSignature(parts, model ?? undefined);

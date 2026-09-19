@@ -1,16 +1,12 @@
-import {
-  OPENCODE_RUNTIME_DESCRIPTOR,
-  type RuntimeApprovalReplyOutcome,
-} from "@openducktor/contracts";
+import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import type { OpenCodeProtocolObject } from "./guards";
-import { type AgentPendingApprovalRequest, classifyAgentApprovalMutation } from "@openducktor/core";
+import type { AgentPendingApprovalRequest } from "@openducktor/core";
 import { z } from "zod";
+import { classifyOpenCodeApprovalMutation } from "./opencode-approval-classifier";
 
 type OpenCodePermissionReply = "once" | "always" | "reject";
 
 const OPENCODE_APPROVAL_OUTCOMES = ["approve_once", "approve_session", "reject"] as const;
-const OPENCODE_ODT_WORKFLOW_TOOL_ALIASES =
-  OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical;
 
 const readOptionalString = (
   record: OpenCodeProtocolObject | undefined,
@@ -64,12 +60,11 @@ export const toAgentApprovalRequestFromOpenCodePermission = ({
     title,
     summary,
     action: { name: permission },
-    mutation: classifyAgentApprovalMutation({
-      actionName: permission,
+    mutation: classifyOpenCodeApprovalMutation({
+      permission,
       toolName,
-      affectedPaths: patterns,
+      patterns,
       command,
-      workflowToolAliasesByCanonical: OPENCODE_ODT_WORKFLOW_TOOL_ALIASES,
     }),
     supportedReplyOutcomes: [...OPENCODE_APPROVAL_OUTCOMES],
     metadata: {
