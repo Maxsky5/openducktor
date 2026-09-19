@@ -52,7 +52,9 @@ const MUTATING_CURL_OPTIONS = wordSet(
 const MUTATING_HTTP_METHODS = wordSet("DELETE PATCH POST PUT");
 const MUTATING_CURL_SHORT_OPTIONS = wordSet("F O T d o");
 const CURL_SHORT_OPTIONS_WITH_ARGUMENT = wordSet("H K");
-const CURL_SHORT_OPTIONS_WITHOUT_ARGUMENT = wordSet("s S");
+const CURL_SHORT_OPTIONS_WITHOUT_ARGUMENT = wordSet(
+  "# 0 1 2 3 4 6 : B G I J L M N R S V Z a f g i j k l n p q s v",
+);
 const CURL_LONG_OPTIONS_WITH_ARGUMENT = wordSet("--config --header");
 const CURL_LONG_OPTIONS_WITHOUT_ARGUMENT = wordSet("--show-error --silent");
 
@@ -125,6 +127,20 @@ const hasProvenAlternateOutputFileTarget = (
   return !escaped && !quote && target !== "" && target !== "-" && !/^\d+$/.test(target);
 };
 
+const hasOutputProcessSubstitutionTarget = (pattern: string, redirectIndex: number): boolean => {
+  let targetIndex = redirectIndex + 1;
+  if (pattern[targetIndex] === "(") {
+    return true;
+  }
+  if (pattern[targetIndex] === ">" || pattern[targetIndex] === "|") {
+    targetIndex += 1;
+  }
+  while (pattern[targetIndex] === " " || pattern[targetIndex] === "\t") {
+    targetIndex += 1;
+  }
+  return pattern[targetIndex] === ">" && pattern[targetIndex + 1] === "(";
+};
+
 const tokenizeNativeCommandPattern = (pattern: string): TokenizationResult => {
   const tokens: string[] = [];
   let token = "";
@@ -179,6 +195,10 @@ const tokenizeNativeCommandPattern = (pattern: string): TokenizationResult => {
       break;
     }
     if (character === ">") {
+      if (hasOutputProcessSubstitutionTarget(pattern, index)) {
+        hasUnknownSyntax = true;
+        continue;
+      }
       if (pattern[index + 1] === "&") {
         if (hasProvenAlternateOutputFileTarget(pattern, index, token)) {
           return { kind: "mutating_syntax" };
@@ -208,6 +228,10 @@ const tokenizeNativeCommandPattern = (pattern: string): TokenizationResult => {
     }
     if (character === "&") {
       if (pattern[index + 1] === ">") {
+        if (hasOutputProcessSubstitutionTarget(pattern, index + 1)) {
+          hasUnknownSyntax = true;
+          continue;
+        }
         return { kind: "mutating_syntax" };
       }
       hasUnknownSyntax = true;
