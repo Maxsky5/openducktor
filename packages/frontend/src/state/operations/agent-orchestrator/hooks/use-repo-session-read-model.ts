@@ -18,11 +18,8 @@ import {
   retryAgentSessionListQueries,
 } from "@/state/queries/agent-sessions";
 import { workspaceSessionListQueryOptions } from "@/state/queries/workspace-sessions";
-import {
-  runtimeCatalogQueryKeys,
-  writeSlashCommandCatalogUpdate,
-} from "@/state/queries/runtime-catalog";
-import { invalidateRuntimeSessionQueries } from "@/state/queries/runtime-query-invalidation";
+import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
+import { invalidateRuntimeQueries } from "@/state/queries/runtime-query-invalidation";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import {
   type AgentSessionReadModelLoadState,
@@ -844,17 +841,19 @@ export const useRepoSessionReadModel = ({
       if (envelope.type === "runtime_changed") {
         runOrchestratorSideEffect(
           "agent-session-live-runtime-changed",
-          invalidateRuntimeSessionQueries(queryClient, envelope.scope, envelope.state),
+          invalidateRuntimeQueries(queryClient, envelope.scope, envelope.state),
           { tags: envelope.scope },
         );
         return;
       }
       if (envelope.type === "slash_command_catalog_updated") {
+        // Claude derives skills from the same command list, so re-read the combined
+        // catalog for the exact runtime directory instead of writing one surface.
         runOrchestratorSideEffect(
-          "agent-session-live-write-slash-command-catalog",
-          Promise.resolve(
-            writeSlashCommandCatalogUpdate(queryClient, envelope.scope, envelope.catalog),
-          ),
+          "agent-session-live-invalidate-slash-command-catalog",
+          queryClient.invalidateQueries({
+            queryKey: runtimeCatalogQueryKeys.runtimeCatalogScope(envelope.scope),
+          }),
           {
             tags: {
               repoPath: envelope.scope.repoPath,

@@ -2232,27 +2232,12 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
-  test("writes the slash command update into the cached combined catalog", async () => {
+  test("invalidates the combined catalog for the pushed slash command scope", async () => {
     const state = createState((emit) => {
       emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
     });
     const invalidateQueries = mock(async () => undefined);
     state.queryClient.invalidateQueries = invalidateQueries;
-    const queryKey = ["runtime-catalog", "catalog", "/repo", "claude", "/repo/worktree"] as const;
-    state.queryClient.setQueryData<AgentRuntimeCatalog>(queryKey, {
-      models: { status: "failed", message: "models unavailable" },
-    });
-    const catalog = {
-      commands: [
-        {
-          id: "review",
-          trigger: "review",
-          title: "review",
-          source: "command" as const,
-          hints: [],
-        },
-      ],
-    };
 
     try {
       await state.harness.mount();
@@ -2265,15 +2250,47 @@ describe("useRepoSessionReadModel", () => {
             runtimeKind: "claude",
             workingDirectory: "/repo/worktree",
           },
-          catalog,
+          catalog: { commands: [] },
         } satisfies AgentSessionLiveEnvelope);
       });
 
-      expect(state.queryClient.getQueryData<AgentRuntimeCatalog>(queryKey)).toEqual({
-        models: { status: "failed", message: "models unavailable" },
-        slashCommands: { status: "available", catalog },
+      expect(invalidateQueries).toHaveBeenCalledTimes(1);
+      expect(invalidateQueries).toHaveBeenNthCalledWith(1, {
+        queryKey: ["runtime-catalog", "catalog", "/repo", "claude", "/repo/worktree"],
       });
-      expect(invalidateQueries).not.toHaveBeenCalled();
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("invalidates session and catalog reads when the runtime changes", async () => {
+    const state = createState((emit) => {
+      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    });
+    const catalogKey = ["runtime-catalog", "catalog", "/repo", "claude", "/repo"];
+    const otherCatalogKey = ["runtime-catalog", "catalog", "/repo", "codex", "/repo"];
+    state.queryClient.setQueryData<AgentRuntimeCatalog>(catalogKey, {
+      models: { status: "failed", message: "models unavailable" },
+    });
+    state.queryClient.setQueryData<AgentRuntimeCatalog>(otherCatalogKey, {
+      models: { status: "failed", message: "models unavailable" },
+    });
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.run(async () => {
+        state.emit({
+          type: "runtime_changed",
+          scope: { repoPath: "/repo", runtimeKind: "claude" },
+          state: "stopped",
+        });
+      });
+
+      await waitFor(() =>
+        expect(state.queryClient.getQueryState(catalogKey)?.isInvalidated).toBe(true),
+      );
+      expect(state.queryClient.getQueryState(otherCatalogKey)?.isInvalidated).toBe(false);
     } finally {
       await state.harness.unmount();
     }

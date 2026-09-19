@@ -97,6 +97,66 @@ test("reuses a fresh catalog without another host read", async () => {
   }
 });
 
+test("reloads an invalidated catalog when the runtime is ready", async () => {
+  const client = new QueryClient();
+  client.setQueryData(repoCatalogKey("/repo"), runtimeCatalog);
+  await client.invalidateQueries({ queryKey: repoCatalogKey("/repo") });
+  const loadRepoRuntimeCatalog = mock(
+    async (_runtimeRef: RuntimeWorkingDirectoryRef) => runtimeCatalog,
+  );
+  const harness = createHarness(client, {
+    activeWorkspace: { workspaceId: "workspace", workspaceName: "Repo", repoPath: "/repo" },
+    enabledRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    runtimeHealthByRuntime: {
+      opencode: createRepoRuntimeHealthFixture({ status: "ready" }),
+    },
+    loadRepoRuntimeCatalog,
+  });
+
+  try {
+    await harness.mount();
+    await waitFor(() => expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(1));
+
+    expect(client.getQueryState(repoCatalogKey("/repo"))?.isInvalidated).toBe(false);
+  } finally {
+    await harness.unmount();
+    client.clear();
+  }
+});
+
+test("loads a catalog when a runtime becomes ready after startup", async () => {
+  const client = new QueryClient();
+  const loadRepoRuntimeCatalog = mock(
+    async (_runtimeRef: RuntimeWorkingDirectoryRef) => runtimeCatalog,
+  );
+  const args = {
+    activeWorkspace: { workspaceId: "workspace", workspaceName: "Repo", repoPath: "/repo" },
+    enabledRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    runtimeHealthByRuntime: {
+      opencode: createRepoRuntimeHealthFixture({ status: "not_started" }),
+    },
+    loadRepoRuntimeCatalog,
+  };
+  const harness = createHarness(client, args);
+
+  try {
+    await harness.mount();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(0);
+
+    await harness.update({
+      ...args,
+      runtimeHealthByRuntime: {
+        opencode: createRepoRuntimeHealthFixture({ status: "ready" }),
+      },
+    });
+    await waitFor(() => expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(1));
+  } finally {
+    await harness.unmount();
+    client.clear();
+  }
+});
+
 test("loads the new repository catalogs after a workspace switch", async () => {
   const client = new QueryClient();
   const loadRepoRuntimeCatalog = mock(
