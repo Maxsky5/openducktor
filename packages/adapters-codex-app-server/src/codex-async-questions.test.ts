@@ -35,6 +35,29 @@ describe("Codex asynchronous questions", () => {
     });
   });
 
+  test.each([
+    ["missing questions", undefined],
+    ["null questions", null],
+    ["empty questions", []],
+  ])("classifies async items with %s as invalid", (_label, questions) => {
+    const item: Parameters<typeof parseCodexAsyncQuestionItem>[0] = {
+      type: "agentMessage",
+      id: "call-invalid",
+      text: "",
+      phase: "commentary",
+      memoryCitation: null,
+      delivery: "async",
+      questions,
+    };
+    if (questions === undefined) delete item.questions;
+
+    expect(parseCodexAsyncQuestionItem(item)).toEqual({
+      kind: "invalid",
+      error:
+        "OpenDucktor could not open this structured question. Answer through the main chat composer.",
+    });
+  });
+
   test("round-trips only complete contextual reply envelopes", () => {
     const reply = { questionItemId: "question-1", question: "Which?", answer: "Staging" };
     expect(parseCodexAsyncQuestionReplies(encodeCodexAsyncQuestionReply(reply))).toEqual([reply]);

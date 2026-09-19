@@ -1,23 +1,30 @@
 import type { AgentAsyncQuestion } from "@openducktor/contracts";
 import { CircleHelp, LoaderCircle } from "lucide-react";
-import { type ReactElement, useState } from "react";
+import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import { useAgentAsyncQuestionDraft } from "./agent-async-question-draft-store";
 
 export function AgentAsyncQuestionCard({
+  sessionIdentity,
   question,
   disabled,
   isSubmitting,
   error,
   onSubmit,
 }: {
+  sessionIdentity: AgentSessionIdentity;
   question: AgentAsyncQuestion;
   disabled: boolean;
   isSubmitting: boolean;
   error?: string;
   onSubmit: (question: AgentAsyncQuestion, answer: string) => Promise<void>;
 }): ReactElement {
-  const [answer, setAnswer] = useState("");
+  const { answer, setAnswer, clearAnswer } = useAgentAsyncQuestionDraft(
+    sessionIdentity,
+    question.questionItemId,
+  );
   const canSubmit = !disabled && !isSubmitting && answer.trim().length > 0;
 
   return (
@@ -51,9 +58,16 @@ export function AgentAsyncQuestionCard({
         ) : null}
         <form
           className="flex items-center gap-2"
-          onSubmit={(event) => {
+          onSubmit={async (event) => {
             event.preventDefault();
-            if (canSubmit) void onSubmit(question, answer);
+            if (canSubmit) {
+              try {
+                await onSubmit(question, answer);
+                clearAnswer();
+              } catch {
+                return;
+              }
+            }
           }}
         >
           <Input

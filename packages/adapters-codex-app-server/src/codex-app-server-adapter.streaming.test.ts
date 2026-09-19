@@ -131,6 +131,81 @@ describe("CodexAppServerAdapter streaming", () => {
     }
   });
 
+  test.each([
+    {
+      label: "a contextual answer",
+      parts: [
+        {
+          kind: "async_question_reply" as const,
+          questionItemId: '["request_user_input_async","async-question-rejected",0]',
+          question: "Which environment should I use?",
+          answer: "Staging",
+        },
+      ],
+    },
+    {
+      label: "an ordinary message",
+      parts: [{ kind: "text" as const, text: "Use the safest option" }],
+    },
+  ])("retains pending questions when idle turn/start rejects %s", async ({ parts }) => {
+    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+    const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });
+    await adapter.startSession(codexStartSessionInput());
+    const events: AgentEvent[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => events.push(event),
+    );
+
+    try {
+      emitNotification({
+        method: "item/completed",
+        params: {
+          threadId: "thread/start-runtime-live",
+          turnId: "turn-live",
+          completedAtMs: 1_777_766_419_650,
+          item: {
+            type: "agentMessage",
+            id: "async-question-rejected",
+            phase: "commentary",
+            text: "Which environment should I use?",
+            memoryCitation: null,
+            delivery: "async",
+            questions: [
+              {
+                title: "Which environment should I use?",
+                options: ["Staging", "Production"],
+              },
+            ],
+          },
+        },
+      });
+      await flushCodexAdapterWork();
+
+      const send = adapter.sendUserMessage(
+        codexUserMessageInput({ externalSessionId: "thread/start-runtime-live", parts }),
+      );
+      await flushCodexAdapterWork();
+      const transport = transports.get("runtime-live");
+      if (!transport) throw new Error("Expected the runtime transport.");
+      transport.turnStartDeferred.reject(new Error("turn start rejected"));
+
+      await expect(send).rejects.toThrow("turn start rejected");
+      await expect(
+        adapter.readSessionRuntimeSnapshot(codexSessionRuntimeRef("thread/start-runtime-live")),
+      ).resolves.toMatchObject({
+        pendingAsyncQuestions: [
+          expect.objectContaining({
+            questionItemId: '["request_user_input_async","async-question-rejected",0]',
+          }),
+        ],
+      });
+      expect(events.some((event) => event.type === "user_message")).toBe(false);
+    } finally {
+      unsubscribe();
+    }
+  });
+
   test.each(["image", "localImage"] as const)(
     "delivers streamed %s user messages with null detail without session errors",
     async (imageType) => {

@@ -34,7 +34,7 @@ export const codexAsyncQuestionItemId = (messageId: string, questionIndex: numbe
 export const parseCodexAsyncQuestionItem = (
   item: CodexAgentMessageItem,
 ): ParsedCodexAsyncQuestion => {
-  if (item.delivery !== "async" || item.questions === undefined || item.questions === null) {
+  if (item.delivery !== "async") {
     return { kind: "not_async_question" };
   }
   const parsed = z.array(sourceQuestionSchema).min(1).safeParse(item.questions);

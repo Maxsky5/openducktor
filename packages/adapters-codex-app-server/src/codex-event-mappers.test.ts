@@ -110,6 +110,83 @@ describe("Codex event mapper pipeline", () => {
     ]);
   });
 
+  test("projects current nullable agent messages with live and history parity", () => {
+    const item = {
+      type: "agentMessage" as const,
+      id: "message-1",
+      text: "Work continues",
+      phase: "commentary" as const,
+      memoryCitation: null,
+      delivery: null,
+      questions: null,
+    };
+    const live = projectCodexCanonicalEvents(
+      createCodexEventMapperPipeline().runLive(
+        { kind: "item_completed", item },
+        { source: "live", threadId: "thread-1", turnId: "turn-1" },
+      ),
+    );
+    const history = projectCodexCanonicalEventsToHistory(
+      createCodexEventMapperPipeline().runThreadItem(
+        { item, index: 0 },
+        { source: "thread_read", threadId: "thread-1" },
+      ),
+    );
+
+    expect(live).toEqual([
+      expect.objectContaining({ type: "assistant_message", message: "Work continues" }),
+    ]);
+    expect(history).toEqual([
+      expect.objectContaining({ role: "assistant", text: "Work continues" }),
+    ]);
+  });
+
+  test("keeps malformed async questions visible with an actionable error", () => {
+    const item = {
+      type: "agentMessage" as const,
+      id: "question-message-invalid",
+      text: "",
+      phase: "commentary" as const,
+      memoryCitation: null,
+      delivery: "async" as const,
+      questions: null,
+    };
+    const live = projectCodexCanonicalEvents(
+      createCodexEventMapperPipeline().runLive(
+        { kind: "item_completed", item },
+        { source: "live", threadId: "thread-1", turnId: "turn-1" },
+      ),
+    );
+    const history = projectCodexCanonicalEventsToHistory(
+      createCodexEventMapperPipeline().runThreadItem(
+        { item, index: 0 },
+        { source: "thread_read", threadId: "thread-1" },
+      ),
+    );
+
+    const expectedAsyncQuestion = {
+      status: "invalid",
+      error:
+        "OpenDucktor could not open this structured question. Answer through the main chat composer.",
+    };
+    expect(live).toEqual([
+      expect.objectContaining({
+        type: "assistant_message",
+        messageId: "question-message-invalid",
+        message: "",
+        asyncQuestion: expectedAsyncQuestion,
+      }),
+    ]);
+    expect(history).toEqual([
+      expect.objectContaining({
+        role: "assistant",
+        messageId: "question-message-invalid",
+        text: "",
+        asyncQuestion: expectedAsyncQuestion,
+      }),
+    ]);
+  });
+
   test("projects contextual question replies as readable user messages", () => {
     const pipeline = createCodexEventMapperPipeline();
     const result = projectCodexCanonicalEventsToHistory(

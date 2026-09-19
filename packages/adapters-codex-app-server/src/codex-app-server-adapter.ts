@@ -734,22 +734,23 @@ export class CodexAppServerAdapter
       }
       return acceptedUserMessage;
     }
+    const replyParts = input.parts.filter((part) => part.kind === "async_question_reply");
+    const pendingQuestionItemIds =
+      replyParts.length > 0
+        ? replyParts.map((part) => part.questionItemId)
+        : this.asyncQuestions
+            .pendingForSession(session.runtimeId, session.threadId)
+            .map((question) => question.questionItemId);
     const accepted = await startCodexTurnForSession(
       this.turnLifecycleContext(),
       input.externalSessionId,
       input.parts,
       acceptedUserMessage,
       input.model,
+      pendingQuestionItemIds.length > 0,
     );
-    const replyParts = input.parts.filter((part) => part.kind === "async_question_reply");
-    if (replyParts.length > 0) {
-      this.asyncQuestions.resolve(
-        session.runtimeId,
-        session.threadId,
-        replyParts.map((part) => part.questionItemId),
-      );
-    } else {
-      this.asyncQuestions.skipPending(session.runtimeId, session.threadId);
+    if (pendingQuestionItemIds.length > 0) {
+      this.asyncQuestions.resolve(session.runtimeId, session.threadId, pendingQuestionItemIds);
     }
     return accepted;
   }
