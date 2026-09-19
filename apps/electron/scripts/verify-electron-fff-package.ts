@@ -35,6 +35,49 @@ export const resolvePackagedFffNodeModulesDirectory = ({
     "node_modules",
   );
 
+export const verifyPackagedFffFileSearchEffect = ({
+  arch,
+  platform,
+  releaseDirectory,
+}: VerifyPackagedFffFileSearchInput): Effect.Effect<
+  VerifiedPackagedFffFileSearch,
+  ElectronOperationError<PackagedFffErrorDetails>
+> =>
+  Effect.gen(function* () {
+    const nodeModulesDirectory = resolvePackagedFffNodeModulesDirectory({
+      arch,
+      platform,
+      releaseDirectory,
+    });
+    const verified = yield* Effect.tryPromise({
+      try: async () => {
+        const loaded = loadPackagedFffModule(nodeModulesDirectory);
+        await probePackagedFffScan(loaded.module);
+        return { modulePath: loaded.modulePath };
+      },
+      catch: (cause) =>
+        new ElectronOperationError({
+          operation: "electron.fff.verify-packaged",
+          message: `Invalid packaged Claude file search payload for ${platform}: ${errorMessage(
+            cause,
+          )}. Expected the unpacked payload under ${nodeModulesDirectory}`,
+          path: nodeModulesDirectory,
+          platform,
+          cause,
+          details: { nodeModulesDirectory },
+        }),
+    });
+
+    return verified;
+  });
+
+export const verifyPackagedFffFileSearch = ({
+  arch,
+  platform,
+  releaseDirectory,
+}: VerifyPackagedFffFileSearchInput): Promise<VerifiedPackagedFffFileSearch> =>
+  runElectronEffect(verifyPackagedFffFileSearchEffect({ arch, platform, releaseDirectory }));
+
 type LoadedPackagedFffModule = {
   modulePath: string;
   module: typeof import("@ff-labs/fff-node");
@@ -91,46 +134,3 @@ const probePackagedFffScan = async (module: typeof import("@ff-labs/fff-node")):
     await rm(workspace, { force: true, recursive: true });
   }
 };
-
-export const verifyPackagedFffFileSearchEffect = ({
-  arch,
-  platform,
-  releaseDirectory,
-}: VerifyPackagedFffFileSearchInput): Effect.Effect<
-  VerifiedPackagedFffFileSearch,
-  ElectronOperationError<PackagedFffErrorDetails>
-> =>
-  Effect.gen(function* () {
-    const nodeModulesDirectory = resolvePackagedFffNodeModulesDirectory({
-      arch,
-      platform,
-      releaseDirectory,
-    });
-    const verified = yield* Effect.tryPromise({
-      try: async () => {
-        const loaded = loadPackagedFffModule(nodeModulesDirectory);
-        await probePackagedFffScan(loaded.module);
-        return { modulePath: loaded.modulePath };
-      },
-      catch: (cause) =>
-        new ElectronOperationError({
-          operation: "electron.fff.verify-packaged",
-          message: `Invalid packaged Claude file search payload for ${platform}: ${errorMessage(
-            cause,
-          )}. Expected the unpacked payload under ${nodeModulesDirectory}`,
-          path: nodeModulesDirectory,
-          platform,
-          cause,
-          details: { nodeModulesDirectory },
-        }),
-    });
-
-    return verified;
-  });
-
-export const verifyPackagedFffFileSearch = ({
-  arch,
-  platform,
-  releaseDirectory,
-}: VerifyPackagedFffFileSearchInput): Promise<VerifiedPackagedFffFileSearch> =>
-  runElectronEffect(verifyPackagedFffFileSearchEffect({ arch, platform, releaseDirectory }));
