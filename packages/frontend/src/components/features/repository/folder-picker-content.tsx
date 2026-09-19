@@ -109,55 +109,65 @@ function FolderPickerDirectoryBrowser({
         </div>
       </div>
 
-      <ScrollArea className="h-80 min-h-0 flex-1">
-        <div className="p-1">
-          {isInitialLoad ? (
+      <div
+        data-slot="folder-picker-directory-tree"
+        className="relative min-h-0 flex-1"
+        aria-busy={isInitialLoad}
+      >
+        <div data-slot="folder-picker-directory-scroll" className="absolute inset-0">
+          <ScrollArea className="size-full">
+            <div className="p-1">
+              {!isInitialLoad && listing && filteredEntries.length === 0 ? (
+                <div className="px-3 py-6 text-sm text-muted-foreground">
+                  No entries match this view.
+                </div>
+              ) : null}
+
+              {filteredEntries.map((entry) => (
+                <Button
+                  key={entry.path}
+                  type="button"
+                  variant="ghost"
+                  className={cn(
+                    "h-9 w-full justify-between gap-3 rounded-md px-3 text-left",
+                    !entry.isDirectory && selectedFilePath === entry.path && "bg-accent",
+                  )}
+                  disabled={isSubmitting}
+                  aria-pressed={entry.isDirectory ? undefined : selectedFilePath === entry.path}
+                  data-selected={entry.isDirectory ? undefined : selectedFilePath === entry.path}
+                  onClick={() =>
+                    entry.isDirectory ? onLoadDirectory(entry.path) : onSelectFile(entry.path)
+                  }
+                >
+                  <span className="flex min-w-0 items-center gap-2.5">
+                    {entry.isDirectory ? (
+                      <Folder className="size-4 shrink-0 text-primary" />
+                    ) : (
+                      <File className="size-4 shrink-0 text-muted-foreground" />
+                    )}
+                    <span className="min-w-0 truncate text-sm text-foreground">{entry.name}</span>
+                  </span>
+                  {entry.isGitRepo ? (
+                    <Badge variant="success" className="shrink-0 gap-1 whitespace-nowrap">
+                      <GitBranch className="size-3" />
+                      Git repo
+                    </Badge>
+                  ) : null}
+                </Button>
+              ))}
+            </div>
+          </ScrollArea>
+        </div>
+
+        {isInitialLoad ? (
+          <div data-slot="folder-picker-directory-loading" className="absolute inset-0 bg-card p-1">
             <div className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground">
               <LoaderCircle className="size-4 animate-spin" />
               Loading directories…
             </div>
-          ) : null}
-
-          {!isInitialLoad && listing && filteredEntries.length === 0 ? (
-            <div className="px-3 py-6 text-sm text-muted-foreground">
-              No entries match this view.
-            </div>
-          ) : null}
-
-          {filteredEntries.map((entry) => (
-            <Button
-              key={entry.path}
-              type="button"
-              variant="ghost"
-              className={cn(
-                "h-9 w-full justify-between gap-3 rounded-md px-3 text-left",
-                !entry.isDirectory && selectedFilePath === entry.path && "bg-accent",
-              )}
-              disabled={isSubmitting}
-              aria-pressed={entry.isDirectory ? undefined : selectedFilePath === entry.path}
-              data-selected={entry.isDirectory ? undefined : selectedFilePath === entry.path}
-              onClick={() =>
-                entry.isDirectory ? onLoadDirectory(entry.path) : onSelectFile(entry.path)
-              }
-            >
-              <span className="flex min-w-0 items-center gap-2.5">
-                {entry.isDirectory ? (
-                  <Folder className="size-4 shrink-0 text-primary" />
-                ) : (
-                  <File className="size-4 shrink-0 text-muted-foreground" />
-                )}
-                <span className="min-w-0 truncate text-sm text-foreground">{entry.name}</span>
-              </span>
-              {entry.isGitRepo ? (
-                <Badge variant="success" className="shrink-0 gap-1 whitespace-nowrap">
-                  <GitBranch className="size-3" />
-                  Git repo
-                </Badge>
-              ) : null}
-            </Button>
-          ))}
-        </div>
-      </ScrollArea>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

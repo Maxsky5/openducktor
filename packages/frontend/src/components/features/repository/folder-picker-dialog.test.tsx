@@ -113,9 +113,16 @@ describe("FolderPickerDialog", () => {
       const dialog = screen.getByRole("dialog");
       expect(dialog.classList.contains("h-[calc(100dvh-2rem)]")).toBe(true);
 
+      const tree = dialog.querySelector('[data-slot="folder-picker-directory-tree"]');
+      expect(tree?.classList.contains("min-h-0")).toBe(true);
+      expect(tree?.classList.contains("flex-1")).toBe(true);
+
+      const directoryScroll = dialog.querySelector('[data-slot="folder-picker-directory-scroll"]');
+      expect(directoryScroll?.classList.contains("absolute")).toBe(true);
+      expect(directoryScroll?.classList.contains("inset-0")).toBe(true);
+
       const directoryList = dialog.querySelector('[data-slot="scroll-area"]');
-      expect(directoryList?.classList.contains("min-h-0")).toBe(true);
-      expect(directoryList?.classList.contains("flex-1")).toBe(true);
+      expect(directoryList?.classList.contains("size-full")).toBe(true);
 
       const feedback = dialog.querySelector('[data-slot="folder-picker-feedback"]');
       expect(feedback?.classList.contains("min-h-[2.625rem]")).toBe(true);
@@ -424,7 +431,7 @@ describe("FolderPickerDialog", () => {
     }
   });
 
-  test("removes previous entries without dimming picker fields", async () => {
+  test("removes previous entries without remounting or shrinking the directory tree", async () => {
     let resolveNext = (_listing: DirectoryListing): void => undefined;
     const nextListing = new Promise<DirectoryListing>((resolve) => {
       resolveNext = resolve;
@@ -459,10 +466,24 @@ describe("FolderPickerDialog", () => {
         name: "Go to parent folder",
       });
       const home = screen.getByRole<HTMLButtonElement>("button", { name: "Go to home folder" });
+      const tree = document.querySelector<HTMLElement>(
+        '[data-slot="folder-picker-directory-tree"]',
+      );
+      if (!tree) throw new Error("Missing directory tree");
+      expect(tree.classList.contains("min-h-0")).toBe(true);
+      expect(tree.classList.contains("flex-1")).toBe(true);
       fireEvent.click(nextButton);
 
       expect(screen.getByText("/Users/dev/next")).toBeTruthy();
       expect(screen.getByText("Loading directories…")).toBeTruthy();
+      expect(document.querySelector('[data-slot="folder-picker-directory-tree"]')).toBe(tree);
+      expect(tree.getAttribute("aria-busy")).toBe("true");
+      const loading = document.querySelector<HTMLElement>(
+        '[data-slot="folder-picker-directory-loading"]',
+      );
+      if (!loading) throw new Error("Missing directory loading layer");
+      expect(loading.classList.contains("absolute")).toBe(true);
+      expect(loading.classList.contains("inset-0")).toBe(true);
       expect(screen.queryByRole("button", { name: "old-entry" })).toBeNull();
       expect(screen.queryByRole("button", { name: "next" })).toBeNull();
       expect(screen.getByLabelText("Open path")).toBe(manualPath);
@@ -496,6 +517,8 @@ describe("FolderPickerDialog", () => {
         );
       });
       expect(await screen.findByRole("button", { name: "new-entry" })).toBeTruthy();
+      expect(document.querySelector('[data-slot="folder-picker-directory-tree"]')).toBe(tree);
+      expect(tree.getAttribute("aria-busy")).toBe("false");
     } finally {
       rendered.unmount();
     }
