@@ -13,6 +13,8 @@ import { withMockedToast } from "@/test-utils/mock-toast";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { TaskDetailsMarkdownContent } from "./task-details-markdown-content";
 
+const mermaidRenderModule = await import("@/components/ui/markdown-mermaid-render");
+
 enableReactActEnvironment();
 
 const StaticThemeProvider = ({ children }: { children: ReactNode }): ReactElement | null => {
@@ -220,8 +222,7 @@ describe("TaskDetailsMarkdownContent", () => {
   });
 
   test("keeps a rendered Mermaid diagram mounted when copy state changes", async () => {
-    const renderModule = await import("@/components/ui/markdown-mermaid-render");
-    const renderSpy = spyOn(renderModule, "renderMermaidSvg").mockResolvedValue(
+    const renderSpy = spyOn(mermaidRenderModule, "renderMermaidSvg").mockResolvedValue(
       '<svg xmlns="http://www.w3.org/2000/svg"><text>Diagram</text></svg>',
     );
 
