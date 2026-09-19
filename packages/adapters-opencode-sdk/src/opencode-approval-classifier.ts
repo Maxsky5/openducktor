@@ -67,6 +67,15 @@ const SIMPLE_OUTPUT_REDIRECTION =
   /^(.*?)(?:^|\s)\d*>{1,2}\s*(?:[^\s'"$`()|&;<>]+|'[^'$`]*'|"[^"$`]*")\s*$/;
 const UNSUPPORTED_SHELL_SYNTAX = "|&;<>`$(){}*?[]#\n\r";
 
+const hasAttachedLongOption = (option: string, names: ReadonlySet<string>): boolean => {
+  for (const name of names) {
+    if (name.startsWith("--") && option.startsWith(`${name}=`)) {
+      return true;
+    }
+  }
+  return false;
+};
+
 const readSimpleCommand = (value: string): SimpleCommand | null => {
   const tokens: string[] = [];
   let token = "";
@@ -245,23 +254,22 @@ const classifyCurl = (tokens: SimpleCommand): AgentApprovalMutation => {
       continue;
     }
     if (CURL_FILE_OUTPUT_OPTIONS.has(option)) {
-      return tokens[index + 1] && tokens[index + 1] !== "-" ? "mutating" : "unknown";
+      const output = tokens[index + 1];
+      if (!output || output === "-") {
+        return "unknown";
+      }
+      return "mutating";
     }
-    if (
-      [...CURL_FILE_OUTPUT_OPTIONS].some(
-        (name) => name.startsWith("--") && option.startsWith(`${name}=`),
-      )
-    ) {
-      return option.endsWith("=-") || option === "--trace=%" ? "unknown" : "mutating";
+    if (hasAttachedLongOption(option, CURL_FILE_OUTPUT_OPTIONS)) {
+      if (option.endsWith("=-") || option === "--trace=%") {
+        return "unknown";
+      }
+      return "mutating";
     }
     if (MUTATING_CURL_OPTIONS.has(option)) {
       return "mutating";
     }
-    if (
-      [...MUTATING_CURL_OPTIONS].some(
-        (name) => name.startsWith("--") && option.startsWith(`${name}=`),
-      )
-    ) {
+    if (hasAttachedLongOption(option, MUTATING_CURL_OPTIONS)) {
       return "mutating";
     }
     if (/^-[^-]*[FOTd]/.test(option)) {
@@ -378,21 +386,17 @@ export const classifyOpenCodeApprovalMutation = ({
   patterns,
   command,
 }: OpenCodeApprovalMutationInput): AgentApprovalMutation => {
-  const workflowClassifications = [permission, toolName].flatMap((name) => {
-    const classification = classifyWorkflowTool(name);
-    return classification ? [classification] : [];
-  });
+  const names = toolName === undefined ? [permission] : [permission, toolName];
+  const workflowClassifications = names.map(classifyWorkflowTool);
   if (workflowClassifications.includes("mutating")) {
     return "mutating";
   }
 
-  const names = [permission, toolName]
-    .flatMap((name) => (name === undefined ? [] : [name.trim().toLowerCase()]))
-    .filter(Boolean);
-  if (names.some((name) => MUTATING_PERMISSIONS.has(name))) {
+  const normalizedNames = names.map((name) => name.trim().toLowerCase()).filter(Boolean);
+  if (normalizedNames.some((name) => MUTATING_PERMISSIONS.has(name))) {
     return "mutating";
   }
-  if (names.some((name) => SHELL_PERMISSIONS.has(name))) {
+  if (normalizedNames.some((name) => SHELL_PERMISSIONS.has(name))) {
     if (patterns.length > 0) {
       return classifyAll(patterns);
     }
@@ -401,7 +405,7 @@ export const classifyOpenCodeApprovalMutation = ({
   if (workflowClassifications.includes("read_only")) {
     return "read_only";
   }
-  if (names.some((name) => READ_ONLY_PERMISSIONS.has(name))) {
+  if (normalizedNames.some((name) => READ_ONLY_PERMISSIONS.has(name))) {
     return "read_only";
   }
   return "unknown";

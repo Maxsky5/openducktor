@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { classifyOpenCodeApprovalMutation } from "./opencode-approval-classifier";
 
-const classifyShell = (patterns: string[], command = patterns.join(" | ")) =>
+const classifyShell = (
+  patterns: string[],
+  command = patterns.join(" | "),
+): ReturnType<typeof classifyOpenCodeApprovalMutation> =>
   classifyOpenCodeApprovalMutation({ permission: "bash", patterns, command });
 
 describe("OpenCode approval classifier", () => {
