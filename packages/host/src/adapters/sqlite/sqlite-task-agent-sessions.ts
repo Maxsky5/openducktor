@@ -3,7 +3,10 @@ import { eq, inArray } from "drizzle-orm";
 import { Effect } from "effect";
 import { z } from "zod";
 import { hasSameAgentSessionIdentity } from "../../domain/agent-session-identity";
-import { compactAgentSessionRecord } from "../../domain/agent-session-records";
+import {
+  compactAgentSessionRecord,
+  toJsonSafeAgentSessionRecord,
+} from "../../domain/agent-session-records";
 import { HostResourceError } from "../../effect/host-errors";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import { agentSessionsFromRow, encodeJson } from "./sqlite-json-codecs";
@@ -30,6 +33,9 @@ const compactAgentSessionForStorage = (
     }),
   );
 };
+
+const encodeSessionBatch = (sessions: AgentSessionRecord[]): string =>
+  encodeJson(z.json().parse(sessions.map(toJsonSafeAgentSessionRecord)));
 
 export const listAgentSessionsForTasks = (
   session: TaskStoreSession,
@@ -86,7 +92,7 @@ export const clearAgentSessionsByRoles = (
         database
           .update(tasks)
           .set({
-            agentSessionsJson: encodeJson(z.json().parse(remaining)),
+            agentSessionsJson: encodeSessionBatch(remaining),
             updatedAt,
           })
           .where(eq(tasks.id, input.taskId)),
@@ -120,7 +126,7 @@ export const upsertAgentSession = (
         database
           .update(tasks)
           .set({
-            agentSessionsJson: encodeJson(z.json().parse(nextSessions)),
+            agentSessionsJson: encodeSessionBatch(nextSessions),
             updatedAt,
           })
           .where(eq(tasks.id, input.taskId)),
@@ -164,7 +170,7 @@ export const updateAgentSessionModel = (
         database
           .update(tasks)
           .set({
-            agentSessionsJson: encodeJson(z.json().parse(nextSessions)),
+            agentSessionsJson: encodeSessionBatch(nextSessions),
             updatedAt,
           })
           .where(eq(tasks.id, input.taskId)),
@@ -192,7 +198,7 @@ export const deleteAgentSession = (
         database
           .update(tasks)
           .set({
-            agentSessionsJson: encodeJson(z.json().parse(remaining)),
+            agentSessionsJson: encodeSessionBatch(remaining),
             updatedAt,
           })
           .where(eq(tasks.id, input.taskId)),

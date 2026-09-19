@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { AgentSessionRecord } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import {
@@ -250,21 +251,22 @@ describe("SQLite task session batches with nullable optional selection fields", 
     return { ...harness, taskId };
   };
 
-  const expectLegacySessionSelection = async (
+  const readSessions = async (
     store: TaskStorePort,
     repoPath: string,
     taskId: string,
-  ) => {
+  ): Promise<AgentSessionRecord[]> => {
     const metadata = await Effect.runPromise(store.getTaskMetadata({ repoPath, taskId }));
-    const legacy = metadata.agentSessions.find(
-      (entry) => entry.externalSessionId === "legacy-session",
-    );
+    return metadata.agentSessions;
+  };
+
+  const expectLegacySelection = (sessions: AgentSessionRecord[]): void => {
+    const legacy = sessions.find((entry) => entry.externalSessionId === "legacy-session");
     expect(legacy?.selectedModel).toStrictEqual({
       runtimeKind: "codex",
       providerId: "openai",
       modelId: "gpt-6-astra",
     });
-    return metadata.agentSessions;
   };
 
   test("upserts a session next to an unchanged sibling with nullable fields", async () => {
@@ -284,7 +286,8 @@ describe("SQLite task session batches with nullable optional selection fields", 
         ),
       ).resolves.toBe(true);
 
-      const sessions = await expectLegacySessionSelection(store, repoPath, taskId);
+      const sessions = await readSessions(store, repoPath, taskId);
+      expectLegacySelection(sessions);
       expect(sessions.map((session) => session.externalSessionId)).toEqual([
         "added-session",
         "target-session",
@@ -313,7 +316,8 @@ describe("SQLite task session batches with nullable optional selection fields", 
         ),
       ).resolves.toBe(true);
 
-      const sessions = await expectLegacySessionSelection(store, repoPath, taskId);
+      const sessions = await readSessions(store, repoPath, taskId);
+      expectLegacySelection(sessions);
       expect(
         sessions.find((session) => session.externalSessionId === "target-session")?.selectedModel,
       ).toStrictEqual({
@@ -333,7 +337,8 @@ describe("SQLite task session batches with nullable optional selection fields", 
         Effect.runPromise(store.clearAgentSessionsByRoles({ repoPath, taskId, roles: ["qa"] })),
       ).resolves.toBe(true);
 
-      const sessions = await expectLegacySessionSelection(store, repoPath, taskId);
+      const sessions = await readSessions(store, repoPath, taskId);
+      expectLegacySelection(sessions);
       expect(sessions.map((session) => session.externalSessionId)).toEqual(["legacy-session"]);
     } finally {
       await cleanup();
@@ -347,7 +352,8 @@ describe("SQLite task session batches with nullable optional selection fields", 
         Effect.runPromise(store.deleteAgentSession({ repoPath, taskId, identity: targetIdentity })),
       ).resolves.toBe(true);
 
-      const sessions = await expectLegacySessionSelection(store, repoPath, taskId);
+      const sessions = await readSessions(store, repoPath, taskId);
+      expectLegacySelection(sessions);
       expect(sessions.map((session) => session.externalSessionId)).toEqual(["legacy-session"]);
     } finally {
       await cleanup();

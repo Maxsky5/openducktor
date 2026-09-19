@@ -1,7 +1,6 @@
 import { type AgentSessionRecord, agentSessionRecordSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { z, type JSONType } from "zod";
-import { toJsonSafeAgentSessionRecord } from "../../domain/agent-session-records";
 import { normalizeLabels } from "../../domain/task/task-labels";
 import { errorMessage } from "../../effect/host-errors";
 import {
@@ -134,9 +133,7 @@ export const agentSessionsFromRow = (
     row.id,
   ).pipe(
     Effect.map((sessions) =>
-      sessions
-        .map(toJsonSafeAgentSessionRecord)
-        .sort((left, right) => right.startedAt.localeCompare(left.startedAt)),
+      sessions.sort((left, right) => right.startedAt.localeCompare(left.startedAt)),
     ),
   );
 
