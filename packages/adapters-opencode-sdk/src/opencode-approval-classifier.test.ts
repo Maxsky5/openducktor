@@ -58,7 +58,13 @@ describe("OpenCode approval classifier", () => {
     },
     {
       name: "safe reads",
-      patterns: ["ls -la", "git log --oneline -5", "git -C /repo log --oneline", "cat < input.txt"],
+      patterns: [
+        "ls -la",
+        "git log --oneline -5",
+        "git -C /repo log --oneline",
+        "cat < input.txt",
+        "sort -T/tmp input.txt",
+      ],
       expected: "read_only",
     },
   ] as const)("classifies every native V1 pattern for $name", ({ patterns, expected }) => {
@@ -75,6 +81,7 @@ describe("OpenCode approval classifier", () => {
     "(( 2 > 1 ))",
     "cat <<EOF\na > b\nEOF",
     "cat <&0 > output.txt",
+    "printf x >| output.txt | sh",
   ])("keeps one compound V2 resource unknown: %s", (command) => {
     expect(classifyShell([command], command)).toBe("unknown");
   });
@@ -82,9 +89,11 @@ describe("OpenCode approval classifier", () => {
   test.each([
     'find . "" -delete',
     "sort input.txt '' -o output.txt",
+    "sort -T/tmp input.txt -o output.txt",
     'git log "" --output=log.txt',
     "printf data>output.txt",
     "printf data>>output.txt",
+    "printf data>|output.txt",
     "printf data>'output file.txt'",
     "printf data 2>errors.txt",
     "git restore file.txt",
@@ -102,6 +111,7 @@ describe("OpenCode approval classifier", () => {
     "curl --trace-ascii=trace.txt https://example.test",
     "curl --etag-save etag.txt https://example.test",
     "curl --libcurl generated.c file:///etc/hosts",
+    "curl --form-string name=value https://example.test",
     "dd if=input.img of=output.img",
     "cat < input.txt > output.txt",
     "rm output.txt",

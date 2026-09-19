@@ -56,7 +56,7 @@ const READ_ONLY_SORT_OPTIONS_WITH_VALUE = words(
 const UNKNOWN_SORT_OPTIONS_WITH_VALUE = words("--compress-program");
 
 const MUTATING_CURL_OPTIONS = words(
-  "-F -O -T -d --data --data-ascii --data-binary --data-raw --data-urlencode --form --json --remote-name --upload-file",
+  "-F -O -T -d --data --data-ascii --data-binary --data-raw --data-urlencode --form --form-string --json --remote-name --upload-file",
 );
 const CURL_FILE_OUTPUT_OPTIONS = words(
   "-D -c -o --cookie-jar --dump-header --etag-save --libcurl --output --trace --trace-ascii",
@@ -148,7 +148,7 @@ const readSimpleCommand = (value: string): SimpleCommandScan | null => {
         return null;
       }
       pushToken();
-      if (input[index + 1] === ">") {
+      if (input[index + 1] === ">" || input[index + 1] === "|") {
         index += 1;
       }
       readingRedirectTarget = true;
@@ -285,6 +285,12 @@ const classifySort = (tokens: SimpleCommand): AgentApprovalMutation => {
     }
     if (option && READ_ONLY_SORT_OPTIONS_WITH_VALUE.has(option)) {
       index += 1;
+      continue;
+    }
+    if (
+      option &&
+      readAttachedShortOptionValue(option, READ_ONLY_SORT_OPTIONS_WITH_VALUE) !== null
+    ) {
       continue;
     }
     if (option && UNKNOWN_SORT_OPTIONS_WITH_VALUE.has(option)) {
