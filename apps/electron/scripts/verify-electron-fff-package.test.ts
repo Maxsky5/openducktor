@@ -251,7 +251,7 @@ describe("verifyPackagedFffFileSearch", () => {
     });
 
     await expect(verifyPayload("linux", releaseDirectory)).rejects.toThrow(
-      "@ff-labs/fff-bin-linux-x64-gnu",
+      join("@ff-labs", "fff-bin-linux-x64-gnu"),
     );
   });
 
