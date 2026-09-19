@@ -87,6 +87,73 @@ describe("OpenCode approval classifier", () => {
     ).toBe("unknown");
   });
 
+  test.each(["./ls -la", "/tmp/ls -la", "./git log --oneline -5", "'C:\\tools\\ls' -la"])(
+    "does not trust a path-based executable: %s",
+    (command) => {
+      expect(
+        classifyOpenCodeApprovalMutation({
+          permission: "bash",
+          patterns: [command],
+          command,
+        }),
+      ).toBe("unknown");
+    },
+  );
+
+  test("classifies a state-changing printf option before a later command", () => {
+    expect(
+      classifyOpenCodeApprovalMutation({
+        permission: "bash",
+        patterns: ["printf -v PATH .", "ls"],
+        command: "printf -v PATH .; ls",
+      }),
+    ).toBe("mutating");
+  });
+
+  test("keeps plain printf output read-only", () => {
+    expect(
+      classifyOpenCodeApprovalMutation({
+        permission: "bash",
+        patterns: ["printf '%s' data"],
+        command: "printf '%s' data",
+      }),
+    ).toBe("read_only");
+  });
+
+  test.each([
+    "curl -X GET -o output.txt",
+    "git log --all --output=log.txt",
+    "sort --compress-program=gzip -o out.txt",
+  ])("finds a write option after an unknown option: %s", (command) => {
+    expect(
+      classifyOpenCodeApprovalMutation({
+        permission: "bash",
+        patterns: [command],
+        command,
+      }),
+    ).toBe("mutating");
+  });
+
+  test("does not treat file-descriptor duplication as a file write", () => {
+    expect(
+      classifyOpenCodeApprovalMutation({
+        permission: "bash",
+        patterns: ["ls -la 2>&1"],
+        command: "ls -la 2>&1",
+      }),
+    ).toBe("unknown");
+  });
+
+  test("finds a file write after file-descriptor duplication", () => {
+    expect(
+      classifyOpenCodeApprovalMutation({
+        permission: "bash",
+        patterns: ["ls -la 2>&1 > output.txt"],
+        command: "ls -la 2>&1 > output.txt",
+      }),
+    ).toBe("mutating");
+  });
+
   test("classifies canonical OpenCode workflow tool aliases", () => {
     expect(
       classifyOpenCodeApprovalMutation({

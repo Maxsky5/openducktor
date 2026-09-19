@@ -11,7 +11,7 @@ const SHELL_PERMISSION_NAMES = wordSet("bash shell");
 const MUTATING_PERMISSION_NAMES = wordSet("edit write patch apply_patch");
 const READ_ONLY_PERMISSION_NAMES = wordSet("read glob grep list webfetch websearch lsp skill");
 
-const READ_ONLY_COMMANDS = wordSet("cat echo grep head ls printf pwd readlink stat tail test wc");
+const READ_ONLY_COMMANDS = wordSet("cat echo grep head ls pwd readlink stat tail test wc");
 const MUTATING_COMMANDS = wordSet(
   "bash chmod chown cp mkdir mv nc ncat netcat rm rmdir sh tee touch truncate zsh",
 );
@@ -41,7 +41,7 @@ const READ_ONLY_FIND_OPTIONS = wordSet(
 );
 
 const MUTATING_CURL_OPTIONS = wordSet(
-  "-F -O -T -X -d -o --data --data-ascii --data-binary --data-raw --data-urlencode --form --json --output --remote-name --request --upload-file",
+  "-F -O -T -d -o --data --data-ascii --data-binary --data-raw --data-urlencode --form --json --output --remote-name --upload-file",
 );
 const MUTATING_HTTP_METHODS = wordSet("DELETE PATCH POST PUT");
 
@@ -55,6 +55,7 @@ const tokenizeNativeCommandPattern = (pattern: string): TokenizationResult => {
   let token = "";
   let quote: "'" | '"' | null = null;
   let escaped = false;
+  let hasUnknownSyntax = false;
 
   const pushToken = (): void => {
     if (token.length > 0) {
@@ -83,7 +84,7 @@ const tokenizeNativeCommandPattern = (pattern: string): TokenizationResult => {
         quote === '"' &&
         (character === "`" || (character === "$" && pattern[index + 1] === "("))
       ) {
-        return { kind: "unknown_syntax" };
+        hasUnknownSyntax = true;
       }
       token += character;
       continue;
@@ -97,19 +98,30 @@ const tokenizeNativeCommandPattern = (pattern: string): TokenizationResult => {
       continue;
     }
     if (character === ">") {
+      if (pattern[index + 1] === "&") {
+        hasUnknownSyntax = true;
+        continue;
+      }
       return { kind: "mutating_syntax" };
     }
     if (
       character === "`" ||
       character === "<" ||
       character === "|" ||
-      character === "&" ||
       character === ";" ||
       character === "(" ||
       character === ")" ||
       (character === "$" && pattern[index + 1] === "(")
     ) {
-      return { kind: "unknown_syntax" };
+      hasUnknownSyntax = true;
+      continue;
+    }
+    if (character === "&") {
+      if (pattern[index + 1] === ">") {
+        return { kind: "mutating_syntax" };
+      }
+      hasUnknownSyntax = true;
+      continue;
     }
     token += character;
   }
@@ -118,13 +130,14 @@ const tokenizeNativeCommandPattern = (pattern: string): TokenizationResult => {
     return { kind: "unknown_syntax" };
   }
   pushToken();
+  if (hasUnknownSyntax) {
+    return { kind: "unknown_syntax" };
+  }
   const command = tokens[0];
   return command
     ? { kind: "tokens", tokens: [command, ...tokens.slice(1)] }
     : { kind: "unknown_syntax" };
 };
-
-const commandBasename = (command: string): string => command.split(/[\\/]/).at(-1) ?? command;
 
 const classifyGitCommand = (tokens: readonly string[]): AgentApprovalMutation => {
   const subcommand = tokens[1]?.toLowerCase();
@@ -138,10 +151,12 @@ const classifyGitCommand = (tokens: readonly string[]): AgentApprovalMutation =>
     return "unknown";
   }
 
-  for (const option of tokens.slice(2).filter((token) => token.startsWith("-"))) {
-    if (option === "--output" || option.startsWith("--output=")) {
-      return "mutating";
-    }
+  const options = tokens.slice(2).filter((token) => token.startsWith("-"));
+  if (options.some((option) => option === "--output" || option.startsWith("--output="))) {
+    return "mutating";
+  }
+
+  for (const option of options) {
     if (/^-\d+$/.test(option)) {
       continue;
     }
@@ -174,11 +189,22 @@ const classifyCurlCommand = (tokens: readonly string[]): AgentApprovalMutation =
     if (token === undefined) {
       continue;
     }
-    if (MUTATING_CURL_OPTIONS.has(token)) {
-      if (token === "--request" || token === "-X") {
-        const method = tokens[index + 1]?.toUpperCase();
-        return method && MUTATING_HTTP_METHODS.has(method) ? "mutating" : "unknown";
+    if (token === "--request" || token === "-X") {
+      const method = tokens[index + 1]?.toUpperCase();
+      if (method && MUTATING_HTTP_METHODS.has(method)) {
+        return "mutating";
       }
+      index += 1;
+      continue;
+    }
+    if (token.startsWith("--request=")) {
+      const method = token.slice("--request=".length).toUpperCase();
+      if (MUTATING_HTTP_METHODS.has(method)) {
+        return "mutating";
+      }
+      continue;
+    }
+    if (MUTATING_CURL_OPTIONS.has(token)) {
       return "mutating";
     }
     if (token.startsWith("-X") && MUTATING_HTTP_METHODS.has(token.slice(2).toUpperCase())) {
@@ -196,6 +222,14 @@ const classifyCurlCommand = (tokens: readonly string[]): AgentApprovalMutation =
   return "unknown";
 };
 
+const classifyPrintfCommand = (tokens: readonly string[]): AgentApprovalMutation => {
+  const firstArgument = tokens[1];
+  if (!firstArgument || firstArgument === "--" || !firstArgument.startsWith("-")) {
+    return "read_only";
+  }
+  return firstArgument === "-v" || /^-v.+/.test(firstArgument) ? "mutating" : "unknown";
+};
+
 const classifyNativeCommandPattern = (pattern: string): AgentApprovalMutation => {
   const tokenized = tokenizeNativeCommandPattern(pattern.trim());
   if (tokenized.kind === "mutating_syntax") {
@@ -205,7 +239,10 @@ const classifyNativeCommandPattern = (pattern: string): AgentApprovalMutation =>
     return "unknown";
   }
 
-  const command = commandBasename(tokenized.tokens[0]).toLowerCase();
+  const command = tokenized.tokens[0].toLowerCase();
+  if (command.includes("/") || command.includes("\\")) {
+    return "unknown";
+  }
   if (MUTATING_COMMANDS.has(command)) {
     return "mutating";
   }
@@ -221,6 +258,9 @@ const classifyNativeCommandPattern = (pattern: string): AgentApprovalMutation =>
   if (command === "curl") {
     return classifyCurlCommand(tokenized.tokens);
   }
+  if (command === "printf") {
+    return classifyPrintfCommand(tokenized.tokens);
+  }
   if (command === "rg") {
     return tokenized.tokens
       .slice(1)
@@ -233,20 +273,23 @@ const classifyNativeCommandPattern = (pattern: string): AgentApprovalMutation =>
       : "read_only";
   }
   if (command === "sort") {
-    for (const option of tokenized.tokens.slice(1)) {
-      if (
-        option === "-o" ||
-        /^-o.+/.test(option) ||
-        option === "--output" ||
-        option.startsWith("--output=")
-      ) {
-        return "mutating";
-      }
-      if (option === "--compress-program" || option.startsWith("--compress-program=")) {
-        return "unknown";
-      }
+    const options = tokenized.tokens.slice(1);
+    if (
+      options.some(
+        (option) =>
+          option === "-o" ||
+          /^-o.+/.test(option) ||
+          option === "--output" ||
+          option.startsWith("--output="),
+      )
+    ) {
+      return "mutating";
     }
-    return "read_only";
+    return options.some(
+      (option) => option === "--compress-program" || option.startsWith("--compress-program="),
+    )
+      ? "unknown"
+      : "read_only";
   }
   return "unknown";
 };
