@@ -344,3 +344,23 @@ describe("external workspace session import", () => {
     expect(h.state.signal?.aborted).toBe(true);
   });
 });
+
+test("import releases the directory guard before runtime admission reads the same directory", async () => {
+  const h = await setup();
+  const originalPrepare = h.adapter.externalSessions.prepare;
+  h.adapter.externalSessions.prepare = (ref) =>
+    originalPrepare(ref).pipe(
+      Effect.map((handle) => ({
+        ...handle,
+        commit: h.lifecycle.runWorktreeRead(ref.workingDirectory, handle.commit).pipe(
+          Effect.timeoutFail({
+            duration: "1 second",
+            onTimeout: () => failure("Admission deadlocked on the import directory guard"),
+          }),
+        ),
+      })),
+    );
+  const imported = await Effect.runPromise(h.service.importSession(h.input));
+  expect(imported.openError).toBeNull();
+  expect(h.calls).toEqual(["inspect", "prepare", "save", "commit", "publish", "dispose"]);
+});
