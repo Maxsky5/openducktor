@@ -65,20 +65,30 @@ describe("Codex user message projection", () => {
         text: "Inspect this screenshot",
         displayParts: [
           { kind: "text", text: "Inspect this screenshot" },
-          expect.objectContaining({
+          {
             kind: "attachment",
-            attachment: expect.objectContaining({ path: IMAGE_PATH }),
-          }),
+            attachment: {
+              id: "codex-local-image:user-text-image:1",
+              kind: "image",
+              name: "Screenshot.png",
+              path: IMAGE_PATH,
+            },
+          },
         ],
       }),
       expect.objectContaining({
         messageId: "user-image-only",
         text: "",
         displayParts: [
-          expect.objectContaining({
+          {
             kind: "attachment",
-            attachment: expect.objectContaining({ path: IMAGE_PATH }),
-          }),
+            attachment: {
+              id: "codex-local-image:user-image-only:0",
+              kind: "image",
+              name: "Screenshot.png",
+              path: IMAGE_PATH,
+            },
+          },
         ],
       }),
     ]);
@@ -101,10 +111,15 @@ describe("Codex user message projection", () => {
         messageId: "user-image-only",
         text: "",
         displayParts: [
-          expect.objectContaining({
+          {
             kind: "attachment",
-            attachment: expect.objectContaining({ path: IMAGE_PATH }),
-          }),
+            attachment: {
+              id: "codex-local-image:user-image-only:0",
+              kind: "image",
+              name: "Screenshot.png",
+              path: IMAGE_PATH,
+            },
+          },
         ],
       }),
     ]);

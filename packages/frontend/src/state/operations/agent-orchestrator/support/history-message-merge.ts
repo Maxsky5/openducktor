@@ -8,6 +8,7 @@ import {
   findSessionMessageById,
   forEachSessionMessage,
   getSessionMessagesSlice,
+  haveSameUserMessageAttachmentIdentity,
   isFinalAssistantChatMessage,
   someSessionMessage,
 } from "./messages";
@@ -103,7 +104,8 @@ const confirmsLocalAcceptedUserMessage = (
     !isUserMessage(currentMessage) ||
     loadedMessage.meta.state !== "read" ||
     currentMessage.meta.state !== "read" ||
-    loadedMessage.content !== currentMessage.content
+    loadedMessage.content !== currentMessage.content ||
+    !haveSameUserMessageAttachmentIdentity(loadedMessage, currentMessage)
   ) {
     return null;
   }

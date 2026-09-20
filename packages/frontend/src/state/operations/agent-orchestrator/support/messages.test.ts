@@ -28,6 +28,37 @@ const createSession = (messages: SessionMessagesFixtureInput) => ({
   messages: createSessionMessagesFixture("session-1", messages),
 });
 
+const imageUserMessage = ({
+  id,
+  image,
+  timestamp,
+}: {
+  id: string;
+  image: "a" | "b";
+  timestamp: string;
+}): AgentChatMessage & { role: "user" } => ({
+  id,
+  role: "user",
+  content: "Inspect this image",
+  timestamp,
+  meta: {
+    kind: "user",
+    state: "read",
+    parts: [
+      { kind: "text", text: "Inspect this image" },
+      {
+        kind: "attachment",
+        attachment: {
+          id: `${id}-attachment`,
+          kind: "image",
+          name: `image-${image}.png`,
+          path: `/tmp/image-${image}.png`,
+        },
+      },
+    ],
+  },
+});
+
 describe("agent-orchestrator/support/messages", () => {
   test("upserts messages by id", () => {
     const messages: AgentChatMessage[] = [
@@ -93,6 +124,68 @@ describe("agent-orchestrator/support/messages", () => {
 
     expect(getSessionMessageCount(createSession(updated))).toBe(1);
     expect(sessionMessageAt(createSession(updated), 0)?.id).toBe("runtime-user-1");
+  });
+
+  test("matches a synthetic Codex user message by attachment identity", () => {
+    const session = createSession([
+      imageUserMessage({
+        id: "codex-user-image-a",
+        image: "a",
+        timestamp: "2026-02-22T08:00:00.900Z",
+      }),
+      imageUserMessage({
+        id: "codex-user-image-b",
+        image: "b",
+        timestamp: "2026-02-22T08:00:00.100Z",
+      }),
+    ]);
+
+    const updated = upsertUserSessionMessage(
+      session,
+      imageUserMessage({
+        id: "runtime-user-image-a",
+        image: "a",
+        timestamp: "2026-02-22T08:00:00.150Z",
+      }),
+    );
+
+    expect(
+      sessionMessagesToArray(createSession(updated)).map((message) => ({
+        id: message.id,
+        path:
+          message.meta?.kind === "user" && message.meta.parts?.[1]?.kind === "attachment"
+            ? message.meta.parts[1].attachment.path
+            : undefined,
+      })),
+    ).toEqual([
+      { id: "runtime-user-image-a", path: "/tmp/image-a.png" },
+      { id: "codex-user-image-b", path: "/tmp/image-b.png" },
+    ]);
+  });
+
+  test("keeps messages with different attachments distinct when timestamps match", () => {
+    const timestamp = "2026-02-22T08:00:00.000Z";
+    const session = createSession([
+      imageUserMessage({
+        id: "codex-user-image-a",
+        image: "a",
+        timestamp,
+      }),
+    ]);
+
+    const updated = upsertUserSessionMessage(
+      session,
+      imageUserMessage({
+        id: "runtime-user-image-b",
+        image: "b",
+        timestamp,
+      }),
+    );
+
+    expect(sessionMessagesToArray(createSession(updated)).map((message) => message.id)).toEqual([
+      "codex-user-image-a",
+      "runtime-user-image-b",
+    ]);
   });
 
   test("does not merge a repeated prompt into a previous real Codex user message", () => {
