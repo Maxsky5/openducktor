@@ -61,6 +61,7 @@ function SortableBrowserTab({
     <div
       {...item.attributes}
       ref={setNodeRef}
+      data-slot="browser-tab"
       data-active={selected ? "true" : "false"}
       data-dragging={isDragging ? "true" : "false"}
       className={cn(browserTabShellClassName(selected), "touch-none", isDragging && "opacity-0")}

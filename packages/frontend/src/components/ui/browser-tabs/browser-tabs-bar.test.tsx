@@ -30,10 +30,15 @@ function setupStrip(
           items={ids.map((id) => ({
             value: id,
             content: id,
+            action: <button type="button">Close {id}</button>,
             triggerProps: {
               ref: (node) => {
                 if (!node) return;
                 node.getBoundingClientRect = () => {
+                  const [left, width] = positions.get(id)!;
+                  return new DOMRect(50 + left - viewport.scrollLeft, 20, width - 32, 32);
+                };
+                node.parentElement!.getBoundingClientRect = () => {
                   const [left, width] = positions.get(id)!;
                   return new DOMRect(50 + left - viewport.scrollLeft, 20, width, 32);
                 };
@@ -53,6 +58,19 @@ function setupStrip(
 }
 
 describe("BrowserTabsBar active tab visibility", () => {
+  test("reveals the close action when the label is already fully visible", () => {
+    const view = setupStrip("last", undefined, 148);
+    try {
+      expect(view.viewport.scrollLeft).toBe(180);
+      const tab = view.getByRole("tab", { name: "last" });
+      expect(tab.parentElement!.getBoundingClientRect().right).toBe(
+        view.viewport.getBoundingClientRect().right,
+      );
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("reveals the initial active tab without moving vertically or taking focus", () => {
     const focused = document.activeElement;
     const view = setupStrip("last");
@@ -121,8 +139,8 @@ describe("BrowserTabsBar active tab visibility", () => {
     const first = view.getByRole("tab", { name: "first" });
     view.unmount();
     await act(async () => {
-      first.setAttribute("data-state", "inactive");
-      last.setAttribute("data-state", "active");
+      first.parentElement!.setAttribute("data-active", "false");
+      last.parentElement!.setAttribute("data-active", "true");
     });
     expect(view.viewport.scrollLeft).toBe(0);
   });

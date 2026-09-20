@@ -24,7 +24,9 @@ export function BrowserTabsBar({
     if (!content || !viewport) return;
 
     const revealActiveTab = () => {
-      const activeTab = content.querySelector<HTMLElement>('[role="tab"][data-state="active"]');
+      const activeTab = content.querySelector<HTMLElement>(
+        '[data-slot="browser-tab"][data-active="true"]',
+      );
       if (!activeTab || viewport.clientWidth === 0) return;
 
       const viewportLeft = viewport.getBoundingClientRect().left + viewport.clientLeft;
@@ -45,7 +47,7 @@ export function BrowserTabsBar({
       subtree: true,
       childList: true,
       attributes: true,
-      attributeFilter: ["data-state"],
+      attributeFilter: ["data-active"],
     });
     const resize = new ResizeObserver(revealActiveTab);
     resize.observe(viewport);
