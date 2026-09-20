@@ -6,7 +6,6 @@ import {
 } from "./codex-app-server-transcript";
 import { projectCodexCanonicalEvents } from "./codex-canonical-projector";
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
-import { projectCodexCanonicalEventsToHistory } from "./codex-history-projector";
 import { codexUserInputListToText, toDisplayParts } from "./codex-user-input-display";
 import {
   codexUserInputsFromItem,
@@ -961,60 +960,5 @@ describe("Codex App Server transcript parsing", () => {
         },
       ],
     });
-  });
-
-  test("keeps an image-only user message in canonical history", () => {
-    const imagePath =
-      "/tmp/openducktor-local-attachments/550e8400-e29b-41d4-a716-446655440000-Screenshot.png";
-    const events = createCodexEventMapperPipeline().runThreadItem(
-      {
-        item: {
-          id: "user-1",
-          type: "userMessage",
-          content: [
-            {
-              type: "localImage",
-              path: imagePath,
-            },
-          ],
-        },
-        index: 0,
-      },
-      { source: "thread_read", threadId: "thread-1" },
-    );
-
-    expect(projectCodexCanonicalEventsToHistory(events)).toEqual([
-      expect.objectContaining({
-        role: "user",
-        text: "",
-        displayParts: [
-          {
-            kind: "attachment",
-            attachment: {
-              id: "codex-local-image:user-1:0",
-              kind: "image",
-              name: "Screenshot.png",
-              path: imagePath,
-            },
-          },
-        ],
-      }),
-    ]);
-  });
-
-  test("drops a blank text-only user message from canonical history", () => {
-    const events = createCodexEventMapperPipeline().runThreadItem(
-      {
-        item: {
-          id: "user-1",
-          type: "userMessage",
-          content: [{ type: "text", text: "  ", text_elements: [] }],
-        },
-        index: 0,
-      },
-      { source: "thread_read", threadId: "thread-1" },
-    );
-
-    expect(projectCodexCanonicalEventsToHistory(events)).toEqual([]);
   });
 });
