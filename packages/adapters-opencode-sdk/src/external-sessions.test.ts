@@ -22,7 +22,7 @@ test("OpenCode V2 discovery paginates metadata and passive preparation waits for
       const url = new URL(request.url);
       calls.push(url.pathname);
       const body = url.pathname.endsWith("/native")
-        ? native
+        ? { data: native }
         : {
             data: [
               native,

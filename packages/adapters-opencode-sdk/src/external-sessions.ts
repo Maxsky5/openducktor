@@ -35,7 +35,7 @@ export const createOpenCodeExternalSessions = (input: {
       unwrapData(
         await client.v2.session.get({ sessionID: ref.externalSessionId }),
         "inspect external session",
-      ),
+      ).data,
     );
     if (row.parentID || row.location.workspaceID)
       throw new Error("Only local root conversations can be imported.");
