@@ -21,7 +21,7 @@ import type {
   SendAgentUserMessageInput,
   SessionRef,
   StartAgentSessionInput,
-  UpdateAgentSessionModelInput,
+  UpdateControlledAgentSessionModelInput,
 } from "@openducktor/core";
 import type { Effect } from "effect";
 import type {
@@ -85,7 +85,8 @@ export type ClaudeAgentSdkService = {
     input: LoadAgentSessionHistoryInput,
   ): Effect.Effect<AgentSessionContextUsage | null, ClaudeAgentSdkServiceError>;
   updateSessionModel(
-    input: UpdateAgentSessionModelInput,
+    input: UpdateControlledAgentSessionModelInput,
+    runtimeId: string,
   ): Effect.Effect<void, ClaudeAgentSdkServiceError>;
   sendUserMessage(
     input: SendAgentUserMessageInput,

@@ -34,6 +34,7 @@ const setup = async () => {
     detached: boolean;
     rows: WorkspaceSessionExternal[];
     signal: AbortSignal | null;
+    directoryErrors: Map<string, HostOperationError>;
   };
   const state: ImportTestState = {
     failPrepare: false,
@@ -42,6 +43,7 @@ const setup = async () => {
     detached: false,
     rows: [],
     signal: null,
+    directoryErrors: new Map(),
   };
   const row = (id: string, directory = "/repo"): WorkspaceSessionExternal => ({
     externalSessionId: id,
@@ -126,7 +128,10 @@ const setup = async () => {
         }),
     },
     git: createGitPortTestDouble({
-      canonicalizePath: (path) => Effect.succeed(path === "/alias" ? "/tree" : path),
+      canonicalizePath: (path) => {
+        const error = state.directoryErrors.get(path);
+        return error ? Effect.fail(error) : Effect.succeed(path === "/alias" ? "/tree" : path);
+      },
       listWorktrees: () =>
         Effect.succeed([
           { worktreePath: "/tree", branch: "feature", head: "abc", detached: false },
@@ -194,6 +199,69 @@ describe("external workspace session import", () => {
     await Effect.runPromise(h.service.release(h.list));
     expect(h.state.signal?.aborted).toBe(true);
   });
+
+  test.each(["ENOENT", "ENOTDIR"])(
+    "excludes a known unavailable source directory (%s)",
+    async (code) => {
+      const h = await setup();
+      h.state.rows = [h.row("available"), h.row("unavailable", "/missing")];
+      h.state.directoryErrors.set(
+        "/missing",
+        new HostOperationError({
+          operation: "git.canonicalizePath",
+          message: "Source directory is unavailable",
+          cause: Object.assign(new Error("Path does not exist"), { code }),
+        }),
+      );
+      const result = await Effect.runPromise(h.service.list(h.list));
+      expect(result.sessions.map((row) => row.externalSessionId)).toEqual(["available"]);
+    },
+  );
+
+  test("excludes a missing registered worktree while keeping repository sessions", async () => {
+    const h = await setup();
+    h.state.rows = [h.row("available"), h.row("deleted-worktree", "/tree")];
+    h.state.directoryErrors.set(
+      "/tree",
+      new HostOperationError({
+        operation: "git.canonicalizePath",
+        message: "Worktree directory no longer exists",
+        cause: Object.assign(new Error("Missing worktree"), { code: "ENOENT" }),
+      }),
+    );
+    const result = await Effect.runPromise(h.service.list(h.list));
+    expect(result.sessions.map((row) => row.externalSessionId)).toEqual(["available"]);
+  });
+
+  test.each(["EACCES", "EIO", undefined])(
+    "fails discovery for unexpected directory lookup errors (%s)",
+    async (code) => {
+      const h = await setup();
+      h.state.rows = [h.row("available"), h.row("unreadable", "/denied")];
+      const cause = Object.assign(new Error("Directory lookup failed"), { code });
+      h.state.directoryErrors.set(
+        "/denied",
+        new HostOperationError({
+          operation: "git.canonicalizePath",
+          message: cause.message,
+          cause,
+        }),
+      );
+      await expect(Effect.runPromise(h.service.list(h.list))).rejects.toThrow(
+        "Cannot check session directory '/denied': Directory lookup failed. Check directory access and retry discovery.",
+      );
+      // The catalog stays failed even when the search would only match an earlier valid row.
+      await expect(
+        Effect.runPromise(h.service.list({ ...h.list, search: "available" })),
+      ).rejects.toThrow("Directory lookup failed");
+      await Effect.runPromise(h.service.release(h.list));
+      h.state.directoryErrors.clear();
+      const retried = await Effect.runPromise(
+        h.service.list({ ...h.list, catalogRequestId: crypto.randomUUID() }),
+      );
+      expect(retried.sessions.map((row) => row.externalSessionId)).toEqual(["available"]);
+    },
+  );
 
   test("saves original metadata before live admission and deduplicates concurrent imports", async () => {
     const h = await setup();

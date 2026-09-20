@@ -13,6 +13,8 @@ import {
   type HostError,
   toHostOperationError,
   HostValidationError,
+  HostOperationError,
+  hasNestedNodeErrorCode,
 } from "../../effect/host-errors";
 import type { AgentSessionLiveAdapterRegistryPort } from "../../ports/agent-session-live-adapter-port";
 import type { WorkspaceSessionServiceDependencies } from "./workspace-session-service";
@@ -116,6 +118,20 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
         worktreeState: "present",
       } satisfies WorkspaceSessionExecutionTarget;
     });
+  const candidateDirectory = (directory: string) =>
+    git.canonicalizePath(directory).pipe(
+      Effect.catchAll((cause) => {
+        if (hasNestedNodeErrorCode(cause, "ENOENT") || hasNestedNodeErrorCode(cause, "ENOTDIR"))
+          return Effect.succeed(null);
+        return Effect.fail(
+          new HostOperationError({
+            operation: "workspaceSessionImport.directory",
+            message: `Cannot check session directory '${directory}': ${cause.message}. Check directory access and retry discovery.`,
+            cause,
+          }),
+        );
+      }),
+    );
   const collect = (
     entry: Catalog,
     adapter: Parameters<AgentSessionLiveAdapterRegistryPort["register"]>[0],
@@ -132,7 +148,10 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
       );
       const worktrees = yield* git.listWorktrees(entry.repoPath);
       const allowed = new Set([entry.repoPath]);
-      for (const tree of worktrees) allowed.add(yield* git.canonicalizePath(tree.worktreePath));
+      for (const tree of worktrees) {
+        const directory = yield* candidateDirectory(tree.worktreePath);
+        if (directory !== null) allowed.add(directory);
+      }
       const eligibleDirectories = new Map<string, boolean>();
       const records = new Map<string, WorkspaceSessionExternal>();
       const cursors = new Set<string>();
@@ -163,8 +182,8 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
           if (owned.has(row.externalSessionId)) continue;
           let eligible = eligibleDirectories.get(row.workingDirectory);
           if (eligible === undefined) {
-            const path = yield* Effect.either(git.canonicalizePath(row.workingDirectory));
-            eligible = path._tag === "Right" && allowed.has(path.right);
+            const path = yield* candidateDirectory(row.workingDirectory);
+            eligible = path !== null && allowed.has(path);
             eligibleDirectories.set(row.workingDirectory, eligible);
           }
           if (!eligible || records.has(row.externalSessionId)) continue;

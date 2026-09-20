@@ -26,6 +26,7 @@ export type ClaudeSessionLaunchInput = {
    * transcript tail and starts its hidden continuation turn.
    */
   resumeInterruptedTurn?: boolean;
+  preserveNativeSettings?: boolean;
   startedMessage: string;
   title?: string;
 };

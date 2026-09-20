@@ -1,3 +1,4 @@
+import { updateClaudeSessionModel } from "./claude-session-model-update";
 import {
   prepareClaudeExternalSession,
   type ClaudeExternalPreparation,
@@ -21,7 +22,7 @@ import type {
   SendAgentUserMessageInput,
   SessionRef,
   StartAgentSessionInput,
-  UpdateAgentSessionModelInput,
+  UpdateControlledAgentSessionModelInput,
 } from "@openducktor/core";
 import { Effect } from "effect";
 import { HostValidationError, toHostOperationError } from "../../effect/host-errors";
@@ -47,7 +48,7 @@ import {
   createClaudeAgentSdkSession,
   type CreateClaudeAgentSdkSessionInput,
 } from "./claude-agent-sdk-session-factory";
-import { applyClaudeSessionModel, sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
+import { sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
 import {
   type ClaudeSessionLaunchInput,
   continuedClaudeSessionLaunch,
@@ -262,22 +263,10 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     });
   }
 
-  updateSessionModel(input: UpdateAgentSessionModelInput) {
-    return fromPromise("claudeRuntime.updateSessionModel", async () => {
-      const session = this.sessionStore.get(input.externalSessionId);
-      if (!session) {
-        return;
-      }
-      assertClaudeSessionRef(session, input, "update session model");
-      const model =
-        input.model && session.model?.profileId !== undefined
-          ? { ...input.model, profileId: session.model.profileId }
-          : input.model;
-      await applyClaudeSessionModel(session, model);
-      if (session.modelAfterQueuedTurns !== undefined) {
-        session.modelAfterQueuedTurns = model ?? null;
-      }
-      session.summary = { ...session.summary };
+  updateSessionModel(input: UpdateControlledAgentSessionModelInput, runtimeId: string) {
+    return updateClaudeSessionModel(input, {
+      sessionStore: this.sessionStore,
+      attach: (request, launch) => this.createSession(request, runtimeId, launch),
     });
   }
 

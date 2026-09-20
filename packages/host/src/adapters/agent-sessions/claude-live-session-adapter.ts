@@ -450,7 +450,7 @@ export const createClaudeLiveSessionAdapterPreparer =
         updateSessionModel: (input) =>
           eventCoordinator.runControlMutation(
             service
-              .updateSessionModel(input)
+              .updateSessionModel(input, runtime.runtimeId)
               .pipe(
                 Effect.mapError(
                   sessionError("claude-live-session.update-session-model", input.externalSessionId),

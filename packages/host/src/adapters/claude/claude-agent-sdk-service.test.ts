@@ -1,4 +1,7 @@
-import { describe, expect, mock, test } from "bun:test";
+import * as todos from "./claude-agent-sdk-todos";
+import * as sessionFactory from "./claude-agent-sdk-session-factory";
+import * as nativeSessions from "./claude-external-sessions";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import { AgentRuntimeQueryError, InterruptedTurnResumeError } from "@openducktor/core";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
@@ -651,17 +654,21 @@ describe("createClaudeAgentSdkService", () => {
 
     await expect(
       Effect.runPromise(
-        service.updateSessionModel({
-          repoPath: "/repo/",
-          runtimeKind: "claude",
-          workingDirectory: "/repo/worktree/",
-          externalSessionId: "session-1",
-          model: {
-            providerId: "claude",
-            modelId: "claude-opus-4-6",
-            variant: "xhigh",
+        service.updateSessionModel(
+          {
+            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+            repoPath: "/repo/",
+            runtimeKind: "claude",
+            workingDirectory: "/repo/worktree/",
+            externalSessionId: "session-1",
+            model: {
+              providerId: "claude",
+              modelId: "claude-opus-4-6",
+              variant: "xhigh",
+            },
           },
-        }),
+          "runtime-1",
+        ),
       ),
     ).resolves.toBeUndefined();
 
@@ -688,17 +695,21 @@ describe("createClaudeAgentSdkService", () => {
     const service = createService(session);
 
     await Effect.runPromise(
-      service.updateSessionModel({
-        repoPath: "/repo/",
-        runtimeKind: "claude",
-        workingDirectory: "/repo/worktree/",
-        externalSessionId: "session-1",
-        model: {
-          providerId: "claude",
-          modelId: "claude-opus-4-6",
-          variant: "xhigh",
+      service.updateSessionModel(
+        {
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          repoPath: "/repo/",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree/",
+          externalSessionId: "session-1",
+          model: {
+            providerId: "claude",
+            modelId: "claude-opus-4-6",
+            variant: "xhigh",
+          },
         },
-      }),
+        "runtime-1",
+      ),
     );
 
     expect(session.model).toEqual({
@@ -738,38 +749,167 @@ describe("createClaudeAgentSdkService", () => {
     };
 
     await Effect.runPromise(
-      service.updateSessionModel({
-        repoPath: "/repo/",
-        runtimeKind: "claude",
-        workingDirectory: "/repo/worktree/",
-        externalSessionId: "session-1",
-        model: latestModel,
-      }),
+      service.updateSessionModel(
+        {
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          repoPath: "/repo/",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree/",
+          externalSessionId: "session-1",
+          model: latestModel,
+        },
+        "runtime-1",
+      ),
     );
 
     expect(session.model).toEqual(latestModel);
     expect(session.modelAfterQueuedTurns).toEqual(latestModel);
   });
 
-  test("defers model changes for cold Claude sessions", async () => {
-    const service = createService(null);
+  test.each([
+    ["repository", false],
+    ["workflow", false],
+    ["repository", true],
+  ] as const)(
+    "attaches a cold %s conversation before applying its model (default=%s)",
+    async (kind, reset) => {
+      const sessionScope =
+        kind === "repository"
+          ? { kind: "repository" as const }
+          : { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+      const ref = {
+        repoPath: "/repo/",
+        workingDirectory: "/repo/worktree/",
+        runtimeKind: "claude" as const,
+        externalSessionId: "session-1",
+        sessionScope,
+      };
+      const store = createClaudeAgentSdkSessionStore();
+      const operations: string[] = [];
+      const setModel = mock(async (_model?: string) => {
+        operations.push("setModel");
+      });
+      const applyFlagSettings = mock(async () => {});
+      const inspect = spyOn(nativeSessions, "inspectClaudeExternalSession").mockResolvedValue({
+        ...ref,
+        title: "Native title",
+        updatedAt: null,
+      });
+      const loadTodos = spyOn(todos, "loadClaudeTodos").mockResolvedValue([]);
+      const attach = spyOn(sessionFactory, "createClaudeAgentSdkSession").mockImplementation(
+        async (request) => {
+          operations.push("attach");
+          expect(request.runtimeId).toBe("runtime-claude");
+          expect(request.input).toMatchObject({ ...ref, systemPrompt: "" });
+          expect(request.input.model).toBeUndefined();
+          expect(request.sessionInput).toEqual({
+            externalSessionId: "session-1",
+            options: { resume: "session-1" },
+            preserveNativeSettings: true,
+            startedMessage: "Resumed session",
+          });
+          const session = createSession({
+            input: request.input,
+            model: undefined,
+            runtimeId: request.runtimeId,
+            query: createClaudeQueryFixture({ setModel, applyFlagSettings, close: () => {} }),
+          });
+          session.summary = {
+            ...session.summary,
+            sessionAssociation: sessionScope,
+            title: "Native title",
+          };
+          request.sessionStore.set(session);
+          return session.summary;
+        },
+      );
+      const service = createService(null, undefined, store, {
+        resolveMcpBridgeConnection: () =>
+          Effect.succeed({
+            workspaceId: "workspace-1",
+            hostUrl: "http://127.0.0.1:1",
+            hostToken: "test-token",
+          }),
+      });
+      try {
+        const model = reset
+          ? null
+          : { providerId: "claude", modelId: "claude-opus-4-6", variant: "xhigh" };
+        await Effect.runPromise(service.updateSessionModel({ ...ref, model }, "runtime-claude"));
+        expect(operations).toEqual(["attach", "setModel"]);
+        expect(inspect).toHaveBeenCalledWith(expect.objectContaining(ref));
+        expect(setModel).toHaveBeenCalledWith(model?.modelId);
+        expect(applyFlagSettings).toHaveBeenCalledWith({ effortLevel: model?.variant ?? null });
+        expect(store.get("session-1")?.model).toEqual(model ?? undefined);
+        expect(store.get("session-1")?.summary.title).toBe("Native title");
+        // The existing host save-failure compensation can restore the previous selection.
+        await Effect.runPromise(
+          service.updateSessionModel({ ...ref, model: null }, "runtime-claude"),
+        );
+        expect(attach).toHaveBeenCalledTimes(1);
+        expect(setModel).toHaveBeenLastCalledWith(undefined);
+        expect(store.get("session-1")?.model).toBeUndefined();
+      } finally {
+        const session = store.get("session-1");
+        if (session) store.close(session);
+        service.dispose();
+        attach.mockRestore();
+        loadTodos.mockRestore();
+        inspect.mockRestore();
+      }
+    },
+  );
 
-    await expect(
-      Effect.runPromise(
-        service.updateSessionModel({
-          repoPath: "/repo/",
-          runtimeKind: "claude",
-          workingDirectory: "/repo/worktree/",
-          externalSessionId: "session-1",
-          model: {
-            providerId: "claude",
-            modelId: "claude-opus-4-6",
-            variant: "xhigh",
-          },
-        }),
-      ),
-    ).resolves.toBeUndefined();
-  });
+  test.each(["inspect", "attach"] as const)(
+    "rejects a cold model update when native %s fails",
+    async (stage) => {
+      const ref = {
+        repoPath: "/repo/",
+        workingDirectory: "/repo/worktree/",
+        runtimeKind: "claude" as const,
+        externalSessionId: "session-1",
+        sessionScope: { kind: "repository" as const },
+      };
+      const store = createClaudeAgentSdkSessionStore();
+      const inspect = spyOn(nativeSessions, "inspectClaudeExternalSession").mockImplementation(
+        async () => {
+          if (stage === "inspect") throw new Error("Native session is missing");
+          return { ...ref, title: null, updatedAt: null };
+        },
+      );
+      const loadTodos = spyOn(todos, "loadClaudeTodos").mockResolvedValue([]);
+      const attach = spyOn(sessionFactory, "createClaudeAgentSdkSession").mockRejectedValue(
+        new Error("Native attachment refused"),
+      );
+      const service = createService(null, undefined, store, {
+        resolveMcpBridgeConnection: () =>
+          Effect.succeed({
+            workspaceId: "workspace-1",
+            hostUrl: "http://127.0.0.1:1",
+            hostToken: "test-token",
+          }),
+      });
+      try {
+        await expect(
+          Effect.runPromise(
+            service.updateSessionModel(
+              { ...ref, model: { providerId: "claude", modelId: "claude-opus-4-6" } },
+              "runtime-claude",
+            ),
+          ),
+        ).rejects.toThrow(
+          stage === "inspect" ? "Native session is missing" : "Native attachment refused",
+        );
+        expect(store.get("session-1")).toBeUndefined();
+        expect(attach).toHaveBeenCalledTimes(stage === "inspect" ? 0 : 1);
+      } finally {
+        service.dispose();
+        attach.mockRestore();
+        loadTodos.mockRestore();
+        inspect.mockRestore();
+      }
+    },
+  );
 
   test("prepares live Claude question replies before completing them", async () => {
     const resolvedAnswers: string[][][] = [];

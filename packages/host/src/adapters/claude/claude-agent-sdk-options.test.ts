@@ -192,6 +192,42 @@ const preToolUseHook = async (
   );
 };
 
+test.each(["repository", "workflow"] as const)(
+  "model-only attachment preserves native settings for %s sessions",
+  async (kind) => {
+    const session = kind === "repository" ? createRepositorySession() : createSession("spec");
+    const options = await buildClaudeAgentSdkOptions({
+      input: session.input,
+      session,
+      preserveNativeSettings: true,
+      sessionOptions: { resume: "session-1" },
+      serviceInput: createServiceInput(),
+      now: () => "2026-09-20T00:00:00.000Z",
+      randomId: () => "id",
+      emit: () => {},
+      resolvedDependencies: {
+        claudeExecutablePath: process.execPath,
+        mcpBridgeConnection: {
+          workspaceId: "workspace-1",
+          hostUrl: "http://127.0.0.1:1",
+          hostToken: "test-token",
+        },
+        mcpCommand: [process.execPath],
+      },
+    });
+    expect(options.resume).toBe("session-1");
+    expect(options).not.toHaveProperty("systemPrompt");
+    expect(options).not.toHaveProperty("permissionMode");
+    expect(options).not.toHaveProperty("allowDangerouslySkipPermissions");
+    expect(options).not.toHaveProperty("model");
+    expect(options).not.toHaveProperty("title");
+    expect(options).not.toHaveProperty("forkSession");
+    expect(options.env?.[CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV]).toBeUndefined();
+    expect(options.hooks?.PreToolUse).toHaveLength(1);
+    session.abortController.abort();
+  },
+);
+
 describe("buildClaudeAgentSdkBaseOptions", () => {
   test("injects the interrupted-turn resume switch only when it is requested", () => {
     const withoutSwitch = buildClaudeAgentSdkBaseOptions({
