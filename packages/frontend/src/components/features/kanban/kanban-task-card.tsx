@@ -365,7 +365,7 @@ function CompactTaskMeta({
       <button
         type="button"
         aria-label={`Open details for ${task.title}`}
-        className="min-w-0 flex-1 truncate rounded-sm text-left text-sm font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        className="min-w-0 flex-1 cursor-pointer truncate rounded-sm text-left text-sm font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         title={task.title}
         onClick={() => onOpenDetails(task.id)}
       >

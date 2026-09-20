@@ -403,6 +403,9 @@ describe("KanbanTaskCard active sessions", () => {
     expect(html.indexOf('aria-label="Priority: High"')).toBeLessThan(
       html.indexOf('aria-label="Open details for Compact card title"'),
     );
+    expect(html).toContain(
+      'aria-label="Open details for Compact card title" class="min-w-0 flex-1 cursor-pointer',
+    );
   });
 
   test("uses the normal task badge color for a compact task icon", () => {
