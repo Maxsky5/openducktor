@@ -66,11 +66,11 @@ describe("createGitCliAdapter", () => {
       { name: "backup", url: "https://github.com/openai/openducktor.git" },
     ]);
   });
-  test("lists only materialized tracked and untracked files", async () => {
+  test("lists materialized files and reports Git links as directories", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
         "ls-files -t -s -co --exclude-standard -z -- .":
-          "H 100644 abc123 0\tsrc/index.ts\0S 040000 def456 0\tpackages/sparse.ts\0? untracked file.ts\0H 100644 fed321 0\t padded.ts \0",
+          "H 100644 abc123 0\tsrc/index.ts\0S 040000 def456 0\tpackages/sparse.ts\0? untracked file.ts\0H 100644 fed321 0\t padded.ts \0H 120000 abc456 0\tbroken-link\0H 160000 abc789 0\tpackages/nested-checkout\0H 100644 def123 0\tsrc/line\nbreak.ts\0",
       }),
     });
 
@@ -78,28 +78,8 @@ describe("createGitCliAdapter", () => {
       { kind: "file", path: "src/index.ts" },
       { kind: "file", path: "untracked file.ts" },
       { kind: "file", path: " padded.ts " },
-    ]);
-  });
-  test("reports tracked Git links as directories", async () => {
-    const git = createGitCliAdapter({
-      runner: createRunner({
-        "ls-files -t -s -co --exclude-standard -z -- .":
-          "H 160000 abc123 0\tpackages/nested-checkout\0",
-      }),
-    });
-
-    await expect(Effect.runPromise(git.listFiles("/repo"))).resolves.toEqual([
+      { kind: "file", path: "broken-link" },
       { kind: "directory", path: "packages/nested-checkout" },
-    ]);
-  });
-  test("preserves line breaks in tracked file paths", async () => {
-    const git = createGitCliAdapter({
-      runner: createRunner({
-        "ls-files -t -s -co --exclude-standard -z -- .": "H 100644 abc123 0\tsrc/line\nbreak.ts\0",
-      }),
-    });
-
-    await expect(Effect.runPromise(git.listFiles("/repo"))).resolves.toEqual([
       { kind: "file", path: "src/line\nbreak.ts" },
     ]);
   });
