@@ -373,7 +373,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
 
     await screen.findByText("const second = true;");
     expect(screen.getByText("src/second.ts")).toBeTruthy();
-    expect(screen.getByLabelText("Selected file preview").getAttribute("aria-busy")).toBeNull();
+    expect(screen.getByLabelText("Selected file preview").getAttribute("aria-busy")).toBe("false");
   });
 
   test("does not reuse a closed preview snapshot when reopening another file", async () => {

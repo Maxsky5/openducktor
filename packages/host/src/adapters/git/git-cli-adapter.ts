@@ -92,7 +92,12 @@ const parseMaterializedGitFiles = (
         continue;
       }
       if (tag === "?") {
-        files.push({ kind: "file", path: entry.slice(2) });
+        const path = entry.slice(2);
+        const isDirectory = path.endsWith("/");
+        files.push({
+          kind: isDirectory ? "directory" : "file",
+          path: isDirectory ? path.slice(0, -1) : path,
+        });
         continue;
       }
       const stagedEntry = /^(\d{6}) [0-9a-f]+ \d\t(.+)$/su.exec(entry.slice(2));
