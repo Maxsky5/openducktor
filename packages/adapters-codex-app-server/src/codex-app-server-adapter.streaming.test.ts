@@ -51,9 +51,18 @@ describe("CodexAppServerAdapter streaming", () => {
     const { adapter, transports } = createHarness({ subscribeEvents });
     await adapter.startSession(codexStartSessionInput());
     const events: AgentEvent[] = [];
+    let replyAccepted = false;
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
-      (event) => events.push(event),
+      (event) => {
+        if (
+          !replyAccepted &&
+          (event.type === "question_resolved" || event.type === "assistant_part")
+        ) {
+          throw new Error("The background reply published before Codex accepted it.");
+        }
+        events.push(event);
+      },
     );
 
     try {
@@ -113,11 +122,14 @@ describe("CodexAppServerAdapter streaming", () => {
         requestId: "async-question-1",
         answers: [["Staging"]],
       });
+      replyAccepted = true;
       await flushCodexAdapterWork();
 
-      const turnStart = transports
+      const turnStarts = transports
         .get("runtime-live")
-        ?.calls.findLast((call) => call.method === "turn/start");
+        ?.calls.filter((call) => call.method === "turn/start");
+      expect(turnStarts).toHaveLength(1);
+      const turnStart = turnStarts?.[0];
       expect(turnStart?.params).toMatchObject({
         input: [
           {
@@ -160,56 +172,6 @@ describe("CodexAppServerAdapter streaming", () => {
           }),
         }),
       );
-    } finally {
-      unsubscribe();
-    }
-  });
-
-  test("does not fail an accepted background reply while it waits for the native transcript item", async () => {
-    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
-    const { adapter, transports } = createHarness({ subscribeEvents });
-    await adapter.startSession(codexStartSessionInput());
-    const requestId = "async-question-delayed-transcript";
-    const unsubscribe = await adapter.subscribeEvents(
-      codexSessionRuntimeRef("thread/start-runtime-live"),
-      (event) => {
-        if (event.type === "question_resolved" || event.type === "assistant_part") {
-          throw new Error(`Unknown Codex question request '${requestId}'.`);
-        }
-      },
-    );
-
-    try {
-      emitNotification({
-        method: "item/completed",
-        params: {
-          threadId: "thread/start-runtime-live",
-          turnId: "turn-live",
-          completedAtMs: 1_777_766_419_650,
-          item: {
-            type: "agentMessage",
-            id: requestId,
-            phase: "commentary",
-            text: "Which environment should I use?",
-            memoryCitation: null,
-            delivery: "async",
-            questions: [{ title: "Which environment should I use?", options: null }],
-          },
-        },
-      });
-      await flushCodexAdapterWork();
-
-      const { parts: _parts, ...session } = codexUserMessageInput({
-        externalSessionId: "thread/start-runtime-live",
-        parts: [],
-      });
-      await expect(
-        adapter.replyQuestion({ ...session, requestId, answers: [["Staging"]] }),
-      ).resolves.toMatchObject({ type: "user_message" });
-
-      expect(
-        transports.get("runtime-live")?.calls.filter((call) => call.method === "turn/start"),
-      ).toHaveLength(1);
     } finally {
       unsubscribe();
     }
