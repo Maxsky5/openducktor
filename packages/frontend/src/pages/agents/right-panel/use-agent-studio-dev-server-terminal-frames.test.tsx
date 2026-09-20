@@ -104,6 +104,7 @@ describe("dev server terminal frame publication", () => {
       const writes: string[] = [];
       let screen = "";
       const createTerminalBinding = () => ({
+        dispose: () => {},
         terminal: {
           options: {},
           open: () => {},

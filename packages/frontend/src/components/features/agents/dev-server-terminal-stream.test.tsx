@@ -40,6 +40,7 @@ const createStreamHarness = async (initialChunks = [chunk(0)]) => {
   const writes: string[] = [];
   let resets = 0;
   const createTerminalBinding = () => ({
+    dispose: () => {},
     terminal: {
       options: {},
       open: () => {},

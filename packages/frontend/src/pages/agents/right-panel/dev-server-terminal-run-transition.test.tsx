@@ -48,6 +48,7 @@ test.each(["first chunk", "starting status", "starting status with delayed rende
     let screen = "";
     const writes: string[] = [];
     const createTerminalBinding = () => ({
+      dispose: () => {},
       terminal: {
         options: {},
         open: () => {},
