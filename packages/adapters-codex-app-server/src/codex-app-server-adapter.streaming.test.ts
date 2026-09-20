@@ -1,5 +1,8 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { CodexAppServerTurnStartResult } from "@openducktor/contracts";
+import {
+  agentSessionTranscriptEventSchema,
+  type CodexAppServerTurnStartResult,
+} from "@openducktor/contracts";
 import type { AgentEvent } from "@openducktor/core";
 import {
   codexSessionRuntimeRef,
@@ -49,11 +52,18 @@ describe("CodexAppServerAdapter streaming", () => {
   test("keeps asynchronous questions pending without blocking the turn and sends contextual replies", async () => {
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
     const mutations: CodexLiveSessionMutation[] = [];
+    const failures: unknown[] = [];
     const { adapter, transports } = createHarness(
       {
         subscribeEvents,
         onLiveSessionMutation: (mutation) => {
+          for (const event of mutation.transcriptEvents) {
+            agentSessionTranscriptEventSchema.parse(event);
+          }
           mutations.push(mutation);
+        },
+        onRuntimeEventQueueFailure: ({ error }) => {
+          failures.push(error);
         },
       },
       { deferTurnStart: true },
@@ -195,15 +205,12 @@ describe("CodexAppServerAdapter streaming", () => {
       expect(events).toContainEqual(
         expect.objectContaining({ type: "question_resolved", requestId: "async-question-1" }),
       );
+      expect(failures).toEqual([]);
       expect(mutations).toContainEqual(
         expect.objectContaining({
           snapshotMode: "delta",
           snapshots: [expect.objectContaining({ pendingQuestions: [] })],
           transcriptEvents: expect.arrayContaining([
-            expect.objectContaining({
-              type: "question_resolved",
-              requestId: "async-question-1",
-            }),
             expect.objectContaining({
               type: "assistant_part",
               part: expect.objectContaining({
@@ -214,6 +221,9 @@ describe("CodexAppServerAdapter streaming", () => {
             }),
           ]),
         }),
+      );
+      expect(mutations.flatMap(({ transcriptEvents }) => transcriptEvents)).not.toContainEqual(
+        expect.objectContaining({ type: "question_resolved" }),
       );
     } finally {
       unsubscribe();
@@ -226,7 +236,7 @@ describe("CodexAppServerAdapter streaming", () => {
     const { adapter } = createHarness({
       subscribeEvents,
       onLiveSessionMutation: (mutation) => {
-        if (mutation.transcriptEvents.some((event) => event.type === "question_resolved")) {
+        if (mutation.transcriptEvents.some((event) => event.type === "assistant_part")) {
           throw new Error("live update failed");
         }
       },

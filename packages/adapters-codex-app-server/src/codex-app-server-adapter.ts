@@ -14,6 +14,7 @@ import {
   type AgentSessionLiveSnapshot,
   type CodexAppServerThreadResumeParams,
   agentSessionLiveSnapshotSchema,
+  isAgentSessionTranscriptEventType,
   CODEX_RUNTIME_DESCRIPTOR,
   MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
   type RuntimeDescriptor,
@@ -1283,12 +1284,13 @@ export class CodexAppServerAdapter
           externalSessionId: input.externalSessionId,
           timestamp,
         });
-        completionEvents.push({
+        const toolEvent: AgentEvent = {
           type: "assistant_part",
           externalSessionId: input.externalSessionId,
           timestamp,
           part: requireNormalizedCodexToolInvocation(invocation),
-        });
+        };
+        completionEvents.push(toolEvent);
       }
       for (const event of completionEvents) {
         this.emitSessionEvent(input.externalSessionId, event);
@@ -1306,9 +1308,9 @@ export class CodexAppServerAdapter
                 input.runtimeId,
                 new Set([input.externalSessionId]),
               ),
-              transcriptEvents: completionEvents.map((event) =>
-                withAgentSessionRef(sessionRef, event),
-              ),
+              transcriptEvents: completionEvents
+                .filter((event) => isAgentSessionTranscriptEventType(event.type))
+                .map((event) => withAgentSessionRef(sessionRef, event)),
               catalogInvalidated: false,
             }),
           )
