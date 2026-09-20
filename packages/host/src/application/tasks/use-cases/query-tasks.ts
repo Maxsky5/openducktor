@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { HostDependencyError } from "../../../effect/host-errors";
+import { HostDependencyError, HostInvariantError } from "../../../effect/host-errors";
 import { requireAgentSessionDependencies } from "../support/required-task-dependencies";
 import {
   enrichTasks,
@@ -57,9 +57,18 @@ export const createTaskQueryUseCases = ({
 
   agentSessionsList(input) {
     return Effect.gen(function* () {
-      const metadata = yield* taskStore.getTaskMetadata(input);
-
-      return metadata.agentSessions;
+      const [taskSessions] = yield* taskStore.listAgentSessionsForTasks({
+        repoPath: input.repoPath,
+        taskIds: [input.taskId],
+      });
+      if (!taskSessions) {
+        return yield* new HostInvariantError({
+          invariant: "task-agent-sessions-result",
+          message: `Task store returned no session result for task: ${input.taskId}`,
+          details: input,
+        });
+      }
+      return taskSessions.agentSessions;
     });
   },
 
