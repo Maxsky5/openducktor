@@ -267,25 +267,25 @@ export const createWorkspaceFilesService = (
           ]),
         );
         const fileEntries: WorkspaceFileTreeEntry[] = [];
-        const metadataReads = yield* Effect.forEach(filePaths, (filePath) =>
+        const pendingMetadataReads = yield* Effect.forEach(filePaths, (filePath) =>
           Effect.gen(function* () {
-            const metadata = statFile(filesystem, canonicalRoot, filePath);
-            const result = yield* Deferred.make<
+            const metadataRead = statFile(filesystem, canonicalRoot, filePath);
+            const completion = yield* Deferred.make<
               FilesystemStats,
-              Effect.Effect.Error<typeof metadata>
+              Effect.Effect.Error<typeof metadataRead>
             >();
-            return { filePath, metadata, result };
+            return { filePath, metadataRead, completion };
           }),
         );
         yield* Effect.forkScoped(
           Effect.forEach(
-            metadataReads,
-            ({ metadata, result }) => Effect.intoDeferred(metadata, result),
+            pendingMetadataReads,
+            ({ metadataRead, completion }) => Effect.intoDeferred(metadataRead, completion),
             { concurrency: FILE_TREE_METADATA_CONCURRENCY, discard: true },
           ),
         );
-        for (const { filePath, result } of metadataReads) {
-          const metadataResult = yield* Effect.either(Deferred.await(result));
+        for (const { filePath, completion } of pendingMetadataReads) {
+          const metadataResult = yield* Effect.either(Deferred.await(completion));
           const gitStatus = gitStatusByPath.get(filePath) ?? null;
           if (metadataResult._tag === "Left") {
             if (gitStatus !== "deleted") {

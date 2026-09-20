@@ -295,9 +295,12 @@ describe("createWorkspaceFilesService", () => {
     );
   });
 
-  test.each([false, true])(
-    "returns an early error without waiting for later reads (started: %s)",
-    async (waitForLaterRead) => {
+  test.each([
+    ["before later work starts", false],
+    ["after later work starts", true],
+  ])(
+    "returns an early error without waiting for later reads: %s",
+    async (_timing, waitForLaterRead) => {
       await Effect.runPromise(
         Effect.gen(function* () {
           const laterStarted = yield* Deferred.make<void>();

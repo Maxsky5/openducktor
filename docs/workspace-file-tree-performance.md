@@ -2,7 +2,7 @@
 
 Task: `openduckto-h099d`. Serial baseline: `5fa09d3dc0936ffc091b394e6a09adcb7e33de2b`.
 
-The file-tree service runs at most four file metadata reads at once per request with `Effect.forEach`. A scoped producer puts each result into a `Deferred`. The consumer reads these results in sorted path order and assembles entries. It returns the first non-deleted error as soon as earlier paths have resolved. Closing the scope interrupts later in-flight Effects and stops queued work. Deleted-file handling, directory entries, and no-follow symlink metadata stay unchanged. Results exist only for the current request; there is no persistent cache.
+The file-tree service runs at most four file metadata reads at once per request with `Effect.forEach`. A scoped producer completes one `Deferred` for each path. An ordered consumer assembles the entries and returns the first non-deleted error after earlier paths resolve. Closing the scope interrupts later in-flight Effects and stops queued work. Deleted-file handling, directory entries, and no-follow symlink metadata stay unchanged. Results exist only for the current request; there is no persistent cache.
 
 ## QA correction
 
