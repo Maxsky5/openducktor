@@ -30,6 +30,7 @@ type SessionActionsDependencies = {
   sessionStartGateRef: { current: SessionStartGate<AgentSessionIdentity> };
   sessionTurnState: SessionTurnState;
   updateSession: UpdateSession;
+  closeBackgroundQuestions: PendingInputActionDependencies["closeBackgroundQuestions"];
   canonicalizePath: RuntimeDependencies["canonicalizePath"];
   startWorkflowSession: RuntimeDependencies["startWorkflowSession"];
   ensureExistingSessionRuntime: EnsureExistingSessionRuntime;
@@ -56,6 +57,7 @@ export const createAgentSessionActions = ({
   sessionStartGateRef,
   sessionTurnState,
   updateSession,
+  closeBackgroundQuestions,
   canonicalizePath,
   startWorkflowSession,
   ensureExistingSessionRuntime,
@@ -152,6 +154,7 @@ export const createAgentSessionActions = ({
     liveSessionHost,
     readSessionSnapshot,
     updateSession,
+    closeBackgroundQuestions,
     turnMetadata: sessionTurnState.metadata,
     recordTurnUserMessageTimestamp: sessionTurnState.timing.recordTurnUserMessageTimestamp,
     readTurnUserMessageStartedAtMs: sessionTurnState.timing.readTurnUserMessageStartedAtMs,

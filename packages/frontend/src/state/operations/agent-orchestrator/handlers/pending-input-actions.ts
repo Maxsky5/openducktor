@@ -11,7 +11,6 @@ import type {
   AgentSessionState,
 } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
-import { closeBackgroundQuestions } from "../support/background-questions";
 import { type ReadSessionSnapshot, requireWorkspaceRepoPath } from "../support/session-invariants";
 import type { SessionTurnMetadata } from "../support/session-turn-metadata";
 
@@ -23,6 +22,7 @@ export type PendingInputActionDependencies = {
   >;
   readSessionSnapshot: ReadSessionSnapshot;
   updateSession: UpdateSession;
+  closeBackgroundQuestions: (session: AgentSessionIdentity, requestIds: readonly string[]) => void;
   turnMetadata: SessionTurnMetadata;
   recordTurnUserMessageTimestamp: (
     sessionKey: string,
@@ -103,7 +103,7 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
     answers: string[][],
     sessionScope?: AgentSessionScope,
   ): Promise<void> => {
-    const { responseSession, sessions } = preparePendingInputReply({
+    const { responseSession } = preparePendingInputReply({
       dependencies,
       currentSession: identity,
       request,
@@ -133,12 +133,7 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
       handledRequestIds = acceptedMessage.resolvedQuestionRequestIds ?? handledRequestIds;
     }
     if (request.blocking === false) {
-      for (const session of sessions) {
-        dependencies.updateSession(session, (current) => ({
-          ...current,
-          ...closeBackgroundQuestions(current, handledRequestIds),
-        }));
-      }
+      dependencies.closeBackgroundQuestions(responseSession, handledRequestIds);
     }
   };
 

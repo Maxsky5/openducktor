@@ -35,7 +35,10 @@ import {
   loadRepoPromptOverrides,
   loadTaskDocuments,
 } from "./runtime/runtime";
-import { toContextUsage } from "./session-read-model/agent-session-live-projection";
+import {
+  closeProjectedBackgroundQuestions,
+  toContextUsage,
+} from "./session-read-model/agent-session-live-projection";
 import { createLoadSourceSession } from "./session-read-model/source-session-loader";
 import { createDefaultAgentOrchestratorDependencies } from "./support/orchestrator-dependency-defaults";
 import type { AgentOrchestratorDependencies } from "./support/orchestrator-ports";
@@ -100,6 +103,16 @@ export function useAgentOrchestratorOperations({
   );
   const updateSession = useCallback<UpdateSession>(
     (identity, updater) => sessionStore.updateSession(identity, updater),
+    [sessionStore],
+  );
+  const closeBackgroundQuestions = useCallback(
+    (
+      identity: Parameters<typeof closeProjectedBackgroundQuestions>[1],
+      requestIds: readonly string[],
+    ) =>
+      sessionStore.setSessionCollection((current) =>
+        closeProjectedBackgroundQuestions(current, identity, requestIds),
+      ),
     [sessionStore],
   );
   const ensureSession = useCallback<EnsureSession>(
@@ -235,6 +248,7 @@ export function useAgentOrchestratorOperations({
         sessionStartGateRef,
         sessionTurnState,
         updateSession,
+        closeBackgroundQuestions,
         canonicalizePath: runtimeHostPort.gitCanonicalizePath,
         startWorkflowSession: async (input) => {
           try {
@@ -263,6 +277,7 @@ export function useAgentOrchestratorOperations({
     [
       agentEngine,
       currentWorkspaceRepoPathRef,
+      closeBackgroundQuestions,
       ensureExistingSessionRuntime,
       hostPort,
       invalidateSessionStopQueries,

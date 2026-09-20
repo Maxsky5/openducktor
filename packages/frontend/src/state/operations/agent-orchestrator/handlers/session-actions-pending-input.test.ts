@@ -308,6 +308,72 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     expect(current.handledBackgroundQuestionIds).toEqual(new Set([request.requestId]));
   });
 
+  test("closes a grandchild background question in each ancestor after reply", async () => {
+    const ownerRequest = {
+      ...questionRequest("grandchild-question"),
+      blocking: false as const,
+    };
+    const responseSession = {
+      externalSessionId: "grandchild-session",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/tmp/repo/worktree",
+      sessionAssociation: { kind: "repository" as const },
+    };
+    const rootRequest: AgentQuestionRequest = {
+      ...ownerRequest,
+      responseSession,
+      source: {
+        kind: "subagent",
+        parentExternalSessionId: "root-session",
+        childExternalSessionId: "grandchild-session",
+      },
+    };
+    const childRequest: AgentQuestionRequest = {
+      ...ownerRequest,
+      responseSession,
+      source: {
+        kind: "subagent",
+        parentExternalSessionId: "child-session",
+        childExternalSessionId: "grandchild-session",
+      },
+    };
+    const root = buildSession({
+      externalSessionId: "root-session",
+      runtimeKind: "codex",
+      sessionAssociation: { kind: "repository" },
+      pendingQuestions: [rootRequest],
+    });
+    const child = buildSession({
+      externalSessionId: "child-session",
+      runtimeKind: "codex",
+      sessionAssociation: { kind: "repository" },
+      liveParentExternalSessionId: "root-session",
+      pendingQuestions: [childRequest],
+    });
+    const grandchild = buildSession({
+      externalSessionId: "grandchild-session",
+      runtimeKind: "codex",
+      sessionAssociation: { kind: "repository" },
+      liveParentExternalSessionId: "child-session",
+      pendingQuestions: [ownerRequest],
+    });
+    const sessionsRef = createSessionsRef([root, child, grandchild]);
+    const actions = createSessionActions({
+      workspaceRepoPath: "/active/repository",
+      sessionsRef,
+      liveSessionHost: {
+        agentSessionLiveReplyApproval: async () => {},
+        agentSessionLiveReplyQuestion: async () => {},
+      },
+    });
+
+    await actions.answerAgentQuestion(toAgentSessionIdentity(root), rootRequest, [["yes"]]);
+
+    expect(getSession(sessionsRef, "root-session").pendingQuestions).toEqual([]);
+    expect(getSession(sessionsRef, "child-session").pendingQuestions).toEqual([]);
+    expect(getSession(sessionsRef, "grandchild-session").pendingQuestions).toEqual([]);
+  });
+
   test("keeps an accepted background reply when the host cannot publish it", async () => {
     const request = { ...questionRequest("question-1"), blocking: false as const };
     const session = buildSession({

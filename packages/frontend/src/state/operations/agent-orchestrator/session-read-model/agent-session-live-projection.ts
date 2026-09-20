@@ -27,6 +27,7 @@ import type {
   AgentSessionRuntimeTarget,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
+import { closeBackgroundQuestions } from "../support/background-questions";
 import { createSessionMessagesState } from "../support/messages";
 import { projectSessionTranscriptActivity } from "./agent-session-live-activity";
 
@@ -453,6 +454,19 @@ export const rebuildProjectedPendingInput = (
   return rebuilt;
 };
 
+export const closeProjectedBackgroundQuestions = (
+  collection: AgentSessionCollection,
+  identity: AgentSessionIdentity,
+  requestIds: readonly string[],
+): AgentSessionCollection => {
+  const session = getAgentSession(collection, identity);
+  if (!session || requestIds.length === 0) {
+    return collection;
+  }
+  const closed = closeBackgroundQuestions(session, requestIds);
+  return rebuildProjectedPendingInput(replaceAgentSession(collection, { ...session, ...closed }));
+};
+
 const settleRemovedDirectSession = (session: AgentSessionState): AgentSessionState => {
   const activity = settleAbsentSessionActivity(session);
   return {
@@ -557,12 +571,19 @@ export const applyAgentSessionLiveDelta = ({
   envelope: LiveProjectionEnvelope;
 }): AgentSessionCollection => {
   if (envelope.type === "transcript_event") {
-    const session = getAgentSession(current, toSessionIdentity(envelope.event.sessionRef));
+    const identity = toSessionIdentity(envelope.event.sessionRef);
+    const session = getAgentSession(current, identity);
     if (!session) return current;
     const next = projectSessionTranscriptActivity(session, envelope.event);
-    return next === session
-      ? current
-      : rebuildProjectedPendingInput(replaceAgentSession(current, next));
+    const projected = next === session ? current : replaceAgentSession(current, next);
+    if (envelope.event.type === "user_message") {
+      return closeProjectedBackgroundQuestions(
+        projected,
+        identity,
+        envelope.event.resolvedQuestionRequestIds ?? [],
+      );
+    }
+    return next === session ? current : rebuildProjectedPendingInput(projected);
   }
   if (envelope.type === "session_upsert") {
     const identity = toSessionIdentity(envelope.session.ref);

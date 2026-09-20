@@ -923,6 +923,50 @@ describe("agent session live projection", () => {
     expect(getAgentSession(removed, identity("child-thread"))?.pendingQuestions).toEqual([]);
   });
 
+  test("clears descendant question mirrors when a child user message handles the question", () => {
+    const initial = build({
+      snapshots: [
+        snapshot("root-thread"),
+        snapshot("child-thread", { parentExternalSessionId: "root-thread" }),
+        snapshot("grandchild-thread", {
+          parentExternalSessionId: "child-thread",
+          pendingQuestions: [
+            {
+              requestId: "grandchild-question",
+              blocking: false,
+              questions: [
+                {
+                  header: "Continue?",
+                  question: "Should the grandchild continue?",
+                  options: [{ label: "Yes", description: "Continue." }],
+                },
+              ],
+            },
+          ],
+        }),
+      ],
+    });
+
+    const handled = delta(initial, {
+      type: "transcript_event",
+      event: {
+        type: "user_message",
+        sessionRef: snapshot("grandchild-thread").ref,
+        externalSessionId: "grandchild-thread",
+        messageId: "answer-1",
+        timestamp: "2026-07-16T08:00:01.000Z",
+        message: "Yes",
+        parts: [{ kind: "text", text: "Yes" }],
+        state: "read",
+        resolvedQuestionRequestIds: ["grandchild-question"],
+      },
+    });
+
+    expect(getAgentSession(handled, identity("root-thread"))?.pendingQuestions).toEqual([]);
+    expect(getAgentSession(handled, identity("child-thread"))?.pendingQuestions).toEqual([]);
+    expect(getAgentSession(handled, identity("grandchild-thread"))?.pendingQuestions).toEqual([]);
+  });
+
   test("keeps sibling descendant pending requests isolated", () => {
     const sessions = build({
       snapshots: [
