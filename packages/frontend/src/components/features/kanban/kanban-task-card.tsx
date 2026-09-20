@@ -676,7 +676,6 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
 
   return (
     <article
-      data-density={taskCardView}
       className={cn(
         "group min-w-0 border border-border/90 bg-card/95 hover:border-info-border",
         isCompact

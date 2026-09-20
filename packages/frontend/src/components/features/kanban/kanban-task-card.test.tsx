@@ -389,7 +389,6 @@ describe("KanbanTaskCard active sessions", () => {
     expect(html).toContain("text-sky-600");
     expect(html).toContain("bg-orange-500");
     expect(html).toContain("1 subtask");
-    expect(html).toContain('data-density="compact"');
     expect(html).toContain("rounded-lg shadow-none");
     expect(html).toContain("[&amp;_button]:h-7");
     expect(html).not.toContain("border-t border-border pt-2.5");
@@ -436,7 +435,9 @@ describe("KanbanTaskCard active sessions", () => {
       ),
     );
 
-    expect(html).toContain("text-foreground");
+    expect(html).toContain(
+      'class="inline-flex size-5 shrink-0 items-center justify-center text-foreground" aria-label="Issue type: Task"',
+    );
     expect(html).not.toContain("text-emerald-600");
   });
 });
