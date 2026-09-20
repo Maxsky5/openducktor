@@ -261,6 +261,71 @@ describe("useKanbanVirtualization", () => {
     await harness.unmount();
   });
 
+  test("clears normal card measurements and recomputes the virtual window in compact mode", async () => {
+    const mockWindow = installMockWindow();
+    const tasks = createTasks(30);
+    const compactRenderTotals: number[] = [];
+    const harness = createSharedHookHarness(
+      (props: HookArgs) => {
+        const state = useKanbanVirtualization(props);
+        if (props.taskCardView === "compact" && state.renderModel.kind === "virtualized") {
+          compactRenderTotals.push(state.renderModel.totalHeight);
+        }
+        return state;
+      },
+      { tasks, taskCardView: "normal" },
+    );
+
+    try {
+      await harness.mount();
+      await harness.run(() => {
+        harness.getLatest().containerRef(
+          createContainerElement({
+            getBoundingClientRect: () => new DOMRect(0, -1200),
+          }),
+        );
+      });
+      await harness.run(() => {
+        for (const task of tasks) {
+          harness.getLatest().onMeasuredHeight(task.id, 300);
+        }
+      });
+
+      const normalState = harness.getLatest();
+      const normalRenderModel = getVirtualizedRenderModel(normalState);
+      const normalVisibleTaskIds = normalRenderModel.visibleTasks.map((task) => task.id);
+      expect(normalRenderModel.totalHeight).toBe(9348);
+      expect(normalRenderModel.topSpacerHeight).toBeGreaterThan(0);
+      expect(normalRenderModel.bottomSpacerHeight).toBeGreaterThan(0);
+
+      await harness.update({ tasks, taskCardView: "compact" });
+
+      const compactState = harness.getLatest();
+      const compactRenderModel = getVirtualizedRenderModel(compactState);
+      expect(compactRenderTotals[0]).toBe(3828);
+      expect(compactState.measurementVersion).toBeGreaterThan(normalState.measurementVersion);
+      expect(compactRenderModel.totalHeight).toBe(3828);
+      expect(compactRenderModel.topSpacerHeight).not.toBe(normalRenderModel.topSpacerHeight);
+      expect(compactRenderModel.bottomSpacerHeight).not.toBe(normalRenderModel.bottomSpacerHeight);
+      expect(compactRenderModel.visibleTasks.map((task) => task.id)).not.toEqual(
+        normalVisibleTaskIds,
+      );
+
+      const compactMeasurementVersion = compactState.measurementVersion;
+      await harness.run(() => {
+        for (const task of tasks) {
+          harness.getLatest().onMeasuredHeight(task.id, 100);
+        }
+      });
+      const measuredCompactState = harness.getLatest();
+      expect(measuredCompactState.measurementVersion).toBeGreaterThan(compactMeasurementVersion);
+      expect(getVirtualizedRenderModel(measuredCompactState).totalHeight).toBe(3348);
+    } finally {
+      await harness.unmount();
+      mockWindow.restore();
+    }
+  });
+
   test("switches render mode when task count crosses virtualization threshold", async () => {
     const harness = createHarness({ tasks: createTasks(29) });
     await harness.mount();

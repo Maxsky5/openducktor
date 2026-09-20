@@ -287,6 +287,7 @@ describe("HostClient", () => {
       "workspaceReplaceAgentStudioState",
       "workspaceGetSettingsSnapshot",
       "workspaceUpdateAgentModelFavorites",
+      "workspaceUpdateKanbanTaskCardView",
       "workspaceUpdateGlobalGitConfig",
       "workspaceDetectGithubRepository",
       "workspaceGetGitProviderContext",
@@ -1305,6 +1306,31 @@ describe("HostClient", () => {
       {
         command: "workspace_update_agent_model_favorites",
         args: { favorites },
+      },
+    ]);
+  });
+
+  test("workspaceUpdateKanbanTaskCardView returns the canonical settings snapshot", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "workspace_update_kanban_task_card_view") {
+        return {
+          theme: "light",
+          git: { defaultMergeMethod: "merge_commit" },
+          kanban: { doneVisibleDays: 1, taskCardView: "compact" },
+          workspaces: {},
+          globalPromptOverrides: {},
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const snapshot = await client.workspaceUpdateKanbanTaskCardView("compact");
+
+    expect(snapshot.kanban.taskCardView).toBe("compact");
+    expect(calls).toEqual([
+      {
+        command: "workspace_update_kanban_task_card_view",
+        args: { taskCardView: "compact" },
       },
     ]);
   });

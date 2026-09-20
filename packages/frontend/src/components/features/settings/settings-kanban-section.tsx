@@ -4,6 +4,7 @@ import {
   type KanbanSettings,
 } from "@openducktor/contracts";
 import type { ReactElement } from "react";
+import { TaskCardViewControl } from "@/components/features/kanban/task-card-view-control";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -104,6 +105,24 @@ export function SettingsKanbanSection({
             Choose whether empty lanes stay visible, disappear, or collapse to a themed marker.
           </p>
         </div>
+      </div>
+      <div className="grid gap-3 rounded-md border border-border bg-card p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+        <div className="flex min-w-0 flex-col gap-1">
+          <p id="kanban-task-card-view-label" className="text-sm font-medium text-foreground">
+            Task card view
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Choose the task-card density used on the Kanban board.
+          </p>
+        </div>
+        <TaskCardViewControl
+          aria-labelledby="kanban-task-card-view-label"
+          value={kanban.taskCardView}
+          disabled={disabled}
+          onValueChange={(taskCardView) => {
+            onUpdateKanban((current) => ({ ...current, taskCardView }));
+          }}
+        />
       </div>
     </div>
   );

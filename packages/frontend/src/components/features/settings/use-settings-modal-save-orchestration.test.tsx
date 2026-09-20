@@ -67,6 +67,8 @@ const createArgs = (
   saveSettingsSnapshot: mock(async () => {}),
   loadSettingsSnapshot: mock(async () => createSnapshot()),
   isAgentModelFavoritesMutationPending: false,
+  isKanbanTaskCardViewMutationPending: false,
+  wasKanbanTaskCardViewEdited: false,
   ...overrides,
 });
 
@@ -174,7 +176,33 @@ describe("useSettingsModalSaveOrchestration", () => {
     await harness.unmount();
   });
 
-  test("merges the latest persisted favorites into a full snapshot save", async () => {
+  test("blocks a full snapshot save while the task card view is being written", async () => {
+    const saveSettingsSnapshot = mock(async () => {});
+    const harness = createHookHarness(
+      createArgs(
+        {
+          isKanbanTaskCardViewMutationPending: true,
+          saveSettingsSnapshot,
+        },
+        { ...EMPTY_DIRTY_SECTIONS, chat: true },
+      ),
+    );
+
+    await harness.mount();
+    let didSave = true;
+    await harness.run(async (state) => {
+      didSave = await state.submit();
+    });
+
+    expect(didSave).toBe(false);
+    expect(harness.getLatest().saveError).toBe(
+      "Wait for the task card view update to finish before saving settings.",
+    );
+    expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
+    await harness.unmount();
+  });
+
+  test("merges independently saved fields into a full snapshot save", async () => {
     const snapshotDraft = createSnapshot();
     snapshotDraft.agentModelFavorites = [
       { runtimeKind: "claude", providerId: "anthropic", modelId: "stale" },
@@ -183,6 +211,7 @@ describe("useSettingsModalSaveOrchestration", () => {
     latestSnapshot.agentModelFavorites = [
       { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
     ];
+    latestSnapshot.kanban.taskCardView = "compact";
     const saveSettingsSnapshot = mock(async () => {});
     const harness = createHookHarness(
       createArgs(
@@ -203,6 +232,39 @@ describe("useSettingsModalSaveOrchestration", () => {
     expect(saveSettingsSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({
         agentModelFavorites: latestSnapshot.agentModelFavorites,
+        kanban: expect.objectContaining({ taskCardView: "compact" }),
+      }),
+    );
+    await harness.unmount();
+  });
+
+  test("keeps an explicit final task card view that matches the loaded value", async () => {
+    const loadedSnapshot = createSnapshot();
+    const snapshotDraft = createSnapshot();
+    const latestSnapshot = createSnapshot();
+    latestSnapshot.kanban.taskCardView = "compact";
+    const saveSettingsSnapshot = mock(async () => {});
+    const harness = createHookHarness(
+      createArgs(
+        {
+          loadedSnapshot,
+          snapshotDraft,
+          loadSettingsSnapshot: mock(async () => latestSnapshot),
+          saveSettingsSnapshot,
+          wasKanbanTaskCardViewEdited: true,
+        },
+        { ...EMPTY_DIRTY_SECTIONS, kanban: true },
+      ),
+    );
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await state.submit();
+    });
+
+    expect(saveSettingsSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kanban: expect.objectContaining({ taskCardView: "normal" }),
       }),
     );
     await harness.unmount();

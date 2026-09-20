@@ -575,7 +575,7 @@ describe("settings modal content", () => {
 
   test("renders kanban section when section is kanban", () => {
     const snapshot = createMockSnapshot({
-      kanban: { doneVisibleDays: 7, emptyColumnDisplay: "collapsed" },
+      kanban: { doneVisibleDays: 7, emptyColumnDisplay: "collapsed", taskCardView: "compact" },
     });
     const controller = createMockController(snapshot);
 

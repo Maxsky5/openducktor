@@ -28,6 +28,8 @@ type UseSettingsModalSaveOrchestrationArgs = {
   saveSettingsSnapshot: (snapshot: SettingsSnapshotSaveInput) => Promise<void>;
   loadSettingsSnapshot: () => Promise<SettingsSnapshot>;
   isAgentModelFavoritesMutationPending: boolean;
+  isKanbanTaskCardViewMutationPending: boolean;
+  wasKanbanTaskCardViewEdited: boolean;
 };
 
 type SettingsModalSaveOrchestration = {
@@ -50,6 +52,8 @@ export const useSettingsModalSaveOrchestration = ({
   saveSettingsSnapshot,
   loadSettingsSnapshot,
   isAgentModelFavoritesMutationPending,
+  isKanbanTaskCardViewMutationPending,
+  wasKanbanTaskCardViewEdited,
 }: UseSettingsModalSaveOrchestrationArgs): SettingsModalSaveOrchestration => {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -137,6 +141,15 @@ export const useSettingsModalSaveOrchestration = ({
       return false;
     }
 
+    if (!saveReadyGit && isKanbanTaskCardViewMutationPending) {
+      const reason = "Wait for the task card view update to finish before saving settings.";
+      setSaveError(reason);
+      toast.error("Cannot save settings", {
+        description: reason,
+      });
+      return false;
+    }
+
     saveInFlightRef.current = true;
     setIsSaving(true);
 
@@ -145,10 +158,14 @@ export const useSettingsModalSaveOrchestration = ({
         await saveGlobalGitConfig(saveReadyGit);
       } else {
         const latestSnapshot = await loadSettingsSnapshot();
+        const taskCardView = wasKanbanTaskCardViewEdited
+          ? snapshotDraft.kanban.taskCardView
+          : latestSnapshot.kanban.taskCardView;
         const saveReadySnapshot = prepareSettingsSnapshotForSave(
           {
             ...snapshotDraft,
             agentModelFavorites: latestSnapshot.agentModelFavorites,
+            kanban: { ...snapshotDraft.kanban, taskCardView },
           },
           { saveCustomAgentRoles: dirtySections.customAgentRoles },
         );
@@ -170,6 +187,7 @@ export const useSettingsModalSaveOrchestration = ({
   }, [
     dirtySections,
     isAgentModelFavoritesMutationPending,
+    isKanbanTaskCardViewMutationPending,
     loadSettingsSnapshot,
     loadedSnapshot,
     onRuntimeAvailabilityError,
@@ -177,6 +195,7 @@ export const useSettingsModalSaveOrchestration = ({
     saveSettingsSnapshot,
     snapshotDraft,
     validation,
+    wasKanbanTaskCardViewEdited,
   ]);
 
   return {

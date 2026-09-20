@@ -9,6 +9,7 @@ type TaskIdBadgeProps = {
   taskId: string;
   className?: string;
   iconSize?: number;
+  iconOnly?: boolean;
 };
 
 const getTaskIdDescription = (value: string): string => value;
@@ -17,6 +18,7 @@ function TaskIdBadgeComponent({
   taskId,
   className,
   iconSize = 12,
+  iconOnly = false,
 }: TaskIdBadgeProps): ReactElement {
   const { copied, copyToClipboard } = useCopyToClipboard({
     getSuccessDescription: getTaskIdDescription,
@@ -34,7 +36,9 @@ function TaskIdBadgeComponent({
 
   return (
     <div className={cn("inline-flex items-center gap-1", className)}>
-      <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{taskId}</span>
+      {iconOnly ? null : (
+        <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{taskId}</span>
+      )}
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -42,7 +46,10 @@ function TaskIdBadgeComponent({
               type="button"
               variant="ghost"
               size="icon"
-              className="size-4 text-muted-foreground hover:bg-muted hover:text-foreground"
+              className={cn(
+                iconOnly ? "size-6" : "size-4",
+                "text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
               onClick={handleCopy}
               data-testid="copy-task-id"
               aria-label="Copy task ID"
@@ -58,7 +65,7 @@ function TaskIdBadgeComponent({
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top">
-            <p>Copy</p>
+            <p>{iconOnly ? (copied ? "Copied" : "Copy task ID") : "Copy"}</p>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>

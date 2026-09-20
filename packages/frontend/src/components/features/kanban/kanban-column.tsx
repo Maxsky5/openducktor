@@ -3,6 +3,7 @@ import type {
   KanbanColumn as KanbanColumnData,
   KanbanColumnId,
 } from "@openducktor/core";
+import type { KanbanTaskCardView } from "@openducktor/contracts";
 import { Inbox } from "lucide-react";
 import { type ComponentProps, memo, type ReactElement, useEffect, useRef } from "react";
 import {
@@ -28,6 +29,7 @@ const EMPTY_HISTORICAL_SESSIONS: HistoricalSessions = [];
 
 type KanbanColumnProps = {
   column: KanbanColumnData;
+  taskCardView?: KanbanTaskCardView;
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
   historicalSessionsByTaskId: Map<string, HistoricalSessions>;
   activeTaskSessionContextByTaskId: ActiveTaskSessionContextByTaskId;
@@ -72,28 +74,9 @@ type TaskCardHandlers = Pick<
   | "onResetImplementation"
 >;
 
-const MeasuredTaskCard = memo(function MeasuredTaskCard({
-  task,
-  taskSessions,
-  historicalSessions,
-  hasActiveSession,
-  activeSessionRole,
-  activeSessionActivityState,
-  taskActivityState,
-  measurementVersion,
-  onMeasuredHeight,
-  onOpenDetails,
-  onDelegate,
-  onOpenSession,
-  onPlan,
-  onQaStart,
-  onQaOpen,
-  onBuild,
-  onHumanApprove,
-  onHumanRequestChanges,
-  onResetImplementation,
-}: {
+type MeasuredTaskCardProps = {
   task: KanbanColumnData["tasks"][number];
+  taskCardView: KanbanTaskCardView;
   taskSessions: TaskSessions | undefined;
   historicalSessions: HistoricalSessions | undefined;
   hasActiveSession: boolean;
@@ -102,38 +85,48 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
   taskActivityState: KanbanTaskActivityState;
   measurementVersion: number;
   onMeasuredHeight: (taskId: string, height: number) => void;
-} & TaskCardHandlers): ReactElement {
-  const taskWrapperRef = useRef<HTMLDivElement | null>(null);
+} & TaskCardHandlers;
+
+const createTaskMeasurementTrigger = (props: MeasuredTaskCardProps): string => {
   const taskMeasurementKey = [
-    task.updatedAt ?? "",
-    task.title,
-    task.status,
-    task.issueType,
-    task.priority,
-    task.subtaskIds.join(","),
-    task.availableActions.join(","),
-    task.pullRequest?.number ?? "",
-    task.pullRequest?.state ?? "",
-    task.pullRequest?.url ?? "",
+    props.task.updatedAt ?? "",
+    props.task.title,
+    props.task.status,
+    props.task.issueType,
+    props.task.priority,
+    props.task.subtaskIds.join(","),
+    props.task.availableActions.join(","),
+    props.task.pullRequest?.number ?? "",
+    props.task.pullRequest?.state ?? "",
+    props.task.pullRequest?.url ?? "",
   ].join("|");
   const taskSessionsMeasurementKey =
-    taskSessions
+    props.taskSessions
       ?.map((session) => `${session.externalSessionId}:${session.role}:${session.activityState}`)
       .join("|") ?? "";
   const historicalSessionsMeasurementKey =
-    historicalSessions
+    props.historicalSessions
       ?.map((session) => `${session.externalSessionId}:${session.role}:${session.startedAt}`)
       .join("|") ?? "";
-  const measurementTrigger = [
-    measurementVersion,
-    taskActivityState,
+
+  return [
+    props.measurementVersion,
+    props.taskCardView,
+    props.taskActivityState,
     taskMeasurementKey,
     taskSessionsMeasurementKey,
     historicalSessionsMeasurementKey,
-    hasActiveSession ? "active" : "idle",
-    activeSessionRole ?? "",
-    activeSessionActivityState ?? "",
+    props.hasActiveSession ? "active" : "idle",
+    props.activeSessionRole ?? "",
+    props.activeSessionActivityState ?? "",
   ].join("::");
+};
+
+const useMeasuredTaskCard = (props: MeasuredTaskCardProps) => {
+  const taskWrapperRef = useRef<HTMLDivElement | null>(null);
+  const measurementTrigger = createTaskMeasurementTrigger(props);
+  const taskId = props.task.id;
+  const { onMeasuredHeight } = props;
 
   useEffect(() => {
     const element = taskWrapperRef.current;
@@ -148,7 +141,7 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
     const reportHeight = (): void => {
       const nextHeight = Math.ceil(element.getBoundingClientRect().height);
       if (nextHeight > 0) {
-        onMeasuredHeight(task.id, nextHeight);
+        onMeasuredHeight(taskId, nextHeight);
       }
     };
 
@@ -164,28 +157,48 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
     return () => {
       window.cancelAnimationFrame(frameHandle);
     };
-  }, [measurementTrigger, onMeasuredHeight, task.id]);
+  }, [measurementTrigger, onMeasuredHeight, taskId]);
+
+  return taskWrapperRef;
+};
+
+const toKanbanTaskCardProps = (
+  props: MeasuredTaskCardProps,
+): ComponentProps<typeof KanbanTaskCard> => {
+  const cardProps: ComponentProps<typeof KanbanTaskCard> = {
+    task: props.task,
+    taskCardView: props.taskCardView,
+    taskSessions: props.taskSessions,
+    historicalSessions: props.historicalSessions,
+    hasActiveSession: props.hasActiveSession,
+    taskActivityState: props.taskActivityState,
+    onOpenDetails: props.onOpenDetails,
+    onDelegate: props.onDelegate,
+    onOpenSession: props.onOpenSession,
+    onPlan: props.onPlan,
+    onBuild: props.onBuild,
+  };
+  if (props.activeSessionRole) cardProps.activeSessionRole = props.activeSessionRole;
+  if (props.onQaStart) cardProps.onQaStart = props.onQaStart;
+  if (props.onQaOpen) cardProps.onQaOpen = props.onQaOpen;
+  if (props.onHumanApprove) cardProps.onHumanApprove = props.onHumanApprove;
+  if (props.onHumanRequestChanges) {
+    cardProps.onHumanRequestChanges = props.onHumanRequestChanges;
+  }
+  if (props.onResetImplementation) {
+    cardProps.onResetImplementation = props.onResetImplementation;
+  }
+  return cardProps;
+};
+
+const MeasuredTaskCard = memo(function MeasuredTaskCard(
+  props: MeasuredTaskCardProps,
+): ReactElement {
+  const taskWrapperRef = useMeasuredTaskCard(props);
 
   return (
     <div ref={taskWrapperRef}>
-      <KanbanTaskCard
-        task={task}
-        taskSessions={taskSessions}
-        historicalSessions={historicalSessions}
-        hasActiveSession={hasActiveSession}
-        {...(activeSessionRole ? { activeSessionRole } : {})}
-        taskActivityState={taskActivityState}
-        onOpenDetails={onOpenDetails}
-        onDelegate={onDelegate}
-        onOpenSession={onOpenSession}
-        onPlan={onPlan}
-        onBuild={onBuild}
-        {...(onQaStart ? { onQaStart } : {})}
-        {...(onQaOpen ? { onQaOpen } : {})}
-        {...(onHumanApprove ? { onHumanApprove } : {})}
-        {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
-        {...(onResetImplementation ? { onResetImplementation } : {})}
-      />
+      <KanbanTaskCard {...toKanbanTaskCardProps(props)} />
     </div>
   );
 });
@@ -244,6 +257,7 @@ function LaneEmptyState({ id }: { id: KanbanColumnId }): ReactElement {
 
 export function KanbanColumn({
   column,
+  taskCardView = "normal",
   taskSessionsByTaskId,
   historicalSessionsByTaskId,
   activeTaskSessionContextByTaskId,
@@ -267,6 +281,7 @@ export function KanbanColumn({
     onMeasuredHeight: handleMeasuredHeight,
   } = useKanbanVirtualization({
     tasks: column.tasks,
+    taskCardView,
   });
   const isVirtualized = renderModel.kind === "virtualized";
 
@@ -294,6 +309,7 @@ export function KanbanColumn({
                   <MeasuredTaskCard
                     key={task.id}
                     task={task}
+                    taskCardView={taskCardView}
                     taskSessions={taskSessionsByTaskId.get(task.id) ?? EMPTY_TASK_SESSIONS}
                     historicalSessions={
                       historicalSessionsByTaskId.get(task.id) ?? EMPTY_HISTORICAL_SESSIONS
@@ -335,6 +351,7 @@ export function KanbanColumn({
                 <KanbanTaskCard
                   key={task.id}
                   task={task}
+                  taskCardView={taskCardView}
                   taskSessions={taskSessionsByTaskId.get(task.id) ?? EMPTY_TASK_SESSIONS}
                   historicalSessions={
                     historicalSessionsByTaskId.get(task.id) ?? EMPTY_HISTORICAL_SESSIONS

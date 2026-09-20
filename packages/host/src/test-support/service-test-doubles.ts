@@ -178,6 +178,10 @@ export const createWorkspaceSettingsServiceTestDouble = <
     "workspace settings service",
     "updateAgentModelFavorites",
   ),
+  updateKanbanTaskCardView: unexpectedEffectCall(
+    "workspace settings service",
+    "updateKanbanTaskCardView",
+  ),
   updateGlobalGitConfig: unexpectedEffectCall(
     "workspace settings service",
     "updateGlobalGitConfig",

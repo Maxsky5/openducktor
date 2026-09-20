@@ -33,4 +33,14 @@ describe("TaskIdBadge", () => {
     const taskIdIndex = html.indexOf("TASK-ABC");
     expect(copyIndex).toBeGreaterThan(taskIdIndex);
   });
+
+  test("renders only the accessible copy control in icon-only mode", () => {
+    const html = renderToStaticMarkup(
+      createElement(TaskIdBadge, { taskId: "TASK-COMPACT", iconOnly: true }),
+    );
+
+    expect(html).not.toContain(">TASK-COMPACT<");
+    expect(html).toContain('aria-label="Copy task ID"');
+    expect(html).toContain("size-6");
+  });
 });

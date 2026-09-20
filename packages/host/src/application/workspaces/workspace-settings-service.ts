@@ -381,6 +381,25 @@ const createUnserializedWorkspaceSettingsService = (
       });
     });
   },
+  updateKanbanTaskCardView(taskCardView) {
+    return Effect.gen(function* () {
+      const config = yield* loadGlobalConfig(settingsConfig);
+      const nextConfig = yield* parseConfig(globalConfigSchema, {
+        ...config,
+        kanban: { ...config.kanban, taskCardView },
+      });
+
+      yield* settingsConfig.writeConfig(nextConfig);
+      return yield* Effect.try({
+        try: () => toSettingsSnapshot(nextConfig),
+        catch: (cause) =>
+          new HostValidationError({
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      });
+    });
+  },
   setTheme(theme) {
     return Effect.gen(function* () {
       const config = yield* loadGlobalConfig(settingsConfig);

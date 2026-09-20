@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { createElement, type PropsWithChildren } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { TaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
@@ -553,6 +553,33 @@ describe("TaskDetailsSheet", () => {
     );
 
     expect(html).not.toContain('<span class="sr-only">Close</span>');
+  });
+
+  test("focuses the sheet instead of the copy button when it opens", async () => {
+    const { TaskDetailsSheet } = await import("./task-details-sheet");
+    const task = createTaskCardFixture({ id: "TASK-1", title: "Task 1" });
+
+    const { unmount } = render(
+      createElement(
+        IsolatedProviders,
+        null,
+        createElement(TaskDetailsSheet, {
+          task,
+          allTasks: [task],
+          open: true,
+          onOpenChange: () => {},
+        }),
+      ),
+    );
+
+    try {
+      const sheet = screen.getByRole("dialog");
+      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+      expect(document.activeElement).toBe(sheet);
+      expect(screen.queryByRole("tooltip", { name: "Copy" })).toBeNull();
+    } finally {
+      unmount();
+    }
   });
 
   test("dispatches a workflow action through the task workflow context", async () => {

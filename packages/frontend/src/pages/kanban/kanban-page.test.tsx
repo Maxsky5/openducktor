@@ -939,8 +939,9 @@ describe("KanbanPage session start modal flow", () => {
     },
   );
 
-  kanbanTest("uses the same New task label and icon as the sidebar", async () => {
+  kanbanTest("shows the task card view control and the shared New task button", async () => {
     const onCreateTask = mock(() => {});
+    const onTaskCardViewChange = mock(() => {});
     const renderer = render(
       <WorkspaceStateContext
         value={createWorkspaceStateValue({ settingsSnapshot: currentSettingsSnapshotFixture })}
@@ -950,6 +951,9 @@ describe("KanbanPage session start modal flow", () => {
             model={{
               isLoadingTasks: false,
               isSwitchingWorkspace: false,
+              taskCardView: "normal",
+              isTaskCardViewPending: false,
+              onTaskCardViewChange,
               onCreateTask,
               onRefreshTasks: () => {},
             }}
@@ -958,12 +962,67 @@ describe("KanbanPage session start modal flow", () => {
       </WorkspaceStateContext>,
     );
     try {
+      expect(renderer.getByRole("radiogroup", { name: "Task card view" })).not.toBeNull();
+      const normalOption = renderer.getByRole("radio", { name: "Normal" });
+      const compactOption = renderer.getByRole("radio", { name: "Compact" });
+      expect(renderer.getByRole("radiogroup", { name: "Task card view" }).className).toContain(
+        "h-10",
+      );
+      expect(normalOption.getAttribute("data-state")).toBe("checked");
+      expect(normalOption.textContent).toBe("");
+      expect(compactOption.textContent).toBe("");
+      expect(normalOption.className).toContain("size-8");
+      expect(normalOption.querySelector("svg.lucide-rows-2")).not.toBeNull();
+      expect(compactOption.querySelector("svg.lucide-rows-3")).not.toBeNull();
+      fireEvent.click(compactOption);
+      expect(onTaskCardViewChange).toHaveBeenCalledWith("compact");
+
       const newTask = renderer.getByRole("button", { name: "New task" });
       expect(newTask.querySelectorAll("svg")).toHaveLength(1);
       expect(newTask.querySelector("svg.lucide-plus")).not.toBeNull();
       expect(renderer.queryByRole("button", { name: "Create Task" })).toBeNull();
       fireEvent.click(newTask);
       expect(onCreateTask).toHaveBeenCalledTimes(1);
+    } finally {
+      renderer.unmount();
+    }
+  });
+
+  kanbanTest("keeps the task card view control visually stable while saving", async () => {
+    const onTaskCardViewChange = mock(() => {});
+    const renderer = render(
+      <WorkspaceStateContext
+        value={createWorkspaceStateValue({ settingsSnapshot: currentSettingsSnapshotFixture })}
+      >
+        <ChecksStateContext value={createChecksStateValue()}>
+          <KanbanPageHeader
+            model={{
+              isLoadingTasks: false,
+              isSwitchingWorkspace: false,
+              taskCardView: "compact",
+              isTaskCardViewPending: true,
+              onTaskCardViewChange,
+              onCreateTask: () => {},
+              onRefreshTasks: () => {},
+            }}
+          />
+        </ChecksStateContext>
+      </WorkspaceStateContext>,
+    );
+    try {
+      const group = renderer.getByRole("radiogroup", { name: "Task card view" });
+      const normalOption = renderer.getByRole("radio", { name: "Normal" });
+      const compactOption = renderer.getByRole("radio", { name: "Compact" });
+
+      expect(group.parentElement?.getAttribute("aria-busy")).toBe("true");
+      expect(group.getAttribute("aria-disabled")).toBe("true");
+      expect(normalOption.getAttribute("aria-disabled")).toBe("true");
+      expect(compactOption.getAttribute("aria-disabled")).toBe("true");
+      expect(normalOption.hasAttribute("disabled")).toBe(false);
+      expect(compactOption.hasAttribute("disabled")).toBe(false);
+      expect(renderer.queryByRole("status")).toBeNull();
+      fireEvent.click(normalOption);
+      expect(onTaskCardViewChange).not.toHaveBeenCalled();
     } finally {
       renderer.unmount();
     }

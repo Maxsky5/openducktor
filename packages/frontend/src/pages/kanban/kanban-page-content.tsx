@@ -28,6 +28,7 @@ function renderKanbanColumn(
     <KanbanColumn
       key={column.id}
       column={column}
+      taskCardView={model.taskCardView}
       taskSessionsByTaskId={model.taskSessionsByTaskId}
       historicalSessionsByTaskId={model.historicalSessionsByTaskId}
       activeTaskSessionContextByTaskId={model.activeTaskSessionContextByTaskId}

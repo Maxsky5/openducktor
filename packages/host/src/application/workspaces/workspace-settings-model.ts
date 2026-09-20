@@ -4,6 +4,7 @@ import {
   type CustomAgentRoleInput,
   DEFAULT_BRANCH_PREFIX,
   type GlobalGitConfig,
+  type KanbanTaskCardView,
   globalConfigSchema,
   type RepoConfig,
   type RepoDevServerScript,
@@ -111,6 +112,9 @@ export type WorkspaceSettingsService = {
   ): Effect.Effect<WorkspaceRecord[], WorkspaceSettingsError>;
   updateAgentModelFavorites(
     favorites: AgentModelFavorite[],
+  ): Effect.Effect<SettingsSnapshot, WorkspaceSettingsError>;
+  updateKanbanTaskCardView(
+    taskCardView: KanbanTaskCardView,
   ): Effect.Effect<SettingsSnapshot, WorkspaceSettingsError>;
   setTheme(theme: ThemePreference): Effect.Effect<void, WorkspaceSettingsError>;
   updateGlobalGitConfig(git: GlobalGitConfig): Effect.Effect<void, WorkspaceSettingsError>;

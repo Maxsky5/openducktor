@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 import { createTaskCardFixture } from "@/pages/agents/agent-studio-test-utils";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { KanbanTaskCard } from "./kanban-task-card";
 
 const noop = (): void => {};
@@ -347,5 +348,96 @@ describe("KanbanTaskCard active sessions", () => {
 
     expect(html).toContain("PR #110");
     expect(html).toContain("text-emerald");
+  });
+
+  test("renders compact task identity without labels or visible task id", () => {
+    const task = createTaskCardFixture({
+      id: "TASK-COMPACT",
+      title: "Compact card title",
+      issueType: "feature",
+      priority: 1,
+      labels: ["frontend", "phase:open"],
+      subtaskIds: ["SUB-1"],
+      availableActions: ["set_spec"],
+    });
+
+    const html = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ["/kanban"] },
+        createElement(
+          TooltipProvider,
+          null,
+          createElement(KanbanTaskCard, {
+            task,
+            taskCardView: "compact",
+            taskActivityState: "idle",
+            taskSessions: [],
+            onOpenDetails: noop,
+            onDelegate: noop,
+            onPlan: noop,
+            onBuild: noop,
+          }),
+        ),
+      ),
+    );
+
+    expect(html).toContain('aria-label="Issue type: Feature"');
+    expect(html).toContain('aria-label="Priority: High"');
+    expect(html).toContain('aria-label="Copy task ID"');
+    expect(html).toContain("Compact card title");
+    expect(html).toContain("text-sky-600");
+    expect(html).toContain("bg-orange-500");
+    expect(html).toContain("1 subtask");
+    expect(html).toContain("rounded-lg shadow-none");
+    expect(html).toContain("[&amp;_button]:h-7");
+    expect(html).not.toContain("border-t border-border pt-2.5");
+    expect(html).not.toContain("frontend");
+    expect(html).not.toContain("phase:open");
+    expect(html).not.toContain(">TASK-COMPACT<");
+    expect(html).not.toContain(">P1<");
+    expect(html.indexOf('aria-label="Issue type: Feature"')).toBeLessThan(
+      html.indexOf('aria-label="Priority: High"'),
+    );
+    expect(html.indexOf('aria-label="Priority: High"')).toBeLessThan(
+      html.indexOf('aria-label="Open details for Compact card title"'),
+    );
+    expect(html).toContain(
+      'aria-label="Open details for Compact card title" class="min-w-0 flex-1 cursor-pointer',
+    );
+  });
+
+  test("uses the normal task badge color for a compact task icon", () => {
+    const task = createTaskCardFixture({
+      id: "TASK-COMPACT-COLOR",
+      issueType: "task",
+      availableActions: ["set_spec"],
+    });
+
+    const html = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ["/kanban"] },
+        createElement(
+          TooltipProvider,
+          null,
+          createElement(KanbanTaskCard, {
+            task,
+            taskCardView: "compact",
+            taskActivityState: "idle",
+            taskSessions: [],
+            onOpenDetails: noop,
+            onDelegate: noop,
+            onPlan: noop,
+            onBuild: noop,
+          }),
+        ),
+      ),
+    );
+
+    expect(html).toContain(
+      'class="inline-flex size-5 shrink-0 items-center justify-center text-foreground" aria-label="Issue type: Task"',
+    );
+    expect(html).not.toContain("text-emerald-600");
   });
 });

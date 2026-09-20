@@ -2,6 +2,7 @@ import {
   agentModelFavoritesSchema,
   customAgentRoleInputSchema,
   globalGitConfigSchema,
+  kanbanTaskCardViewSchema,
   repoHooksSchema,
   settingsSnapshotSaveInputSchema,
   themePreferenceSchema,
@@ -138,6 +139,7 @@ export const createWorkspaceSettingsCommandHandlers = (
     | "selectWorkspace"
     | "setTheme"
     | "updateAgentModelFavorites"
+    | "updateKanbanTaskCardView"
     | "updateGlobalGitConfig"
     | "updateRepoConfig"
     | "updateRepoHooks"
@@ -295,6 +297,14 @@ export const createWorkspaceSettingsCommandHandlers = (
           agentModelFavoritesSchema,
           requireObjectArgs("workspace_update_agent_model_favorites", args, "favorites"),
           "favorites",
+        ),
+      ),
+    workspace_update_kanban_task_card_view: (args) =>
+      workspaceSettingsService.updateKanbanTaskCardView(
+        requireParsedInput(
+          kanbanTaskCardViewSchema,
+          requireObjectArgs("workspace_update_kanban_task_card_view", args, "taskCardView"),
+          "taskCardView",
         ),
       ),
     set_theme: (args) =>

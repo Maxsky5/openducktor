@@ -1,4 +1,4 @@
-import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
+import type { AgentSessionRecord, KanbanTaskCardView, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { ExternalLink, PlayCircle, Tag } from "lucide-react";
 import { memo, type ReactElement, useId, useMemo } from "react";
@@ -31,11 +31,14 @@ import { TaskLabelChip } from "@/components/ui/task-label-chip";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { toDisplayTaskLabels } from "@/lib/task-labels";
+import { isQaRejectedTask } from "@/lib/task-qa";
 import { cn } from "@/lib/utils";
 import { AGENT_ROLE_LABELS } from "@/types";
+import { getPriorityStyle, ISSUE_TYPE_STYLES } from "./kanban-task-badge-model";
 
 type KanbanTaskCardProps = {
   task: TaskCard;
+  taskCardView?: KanbanTaskCardView;
   taskSessions?: KanbanTaskSession[] | undefined;
   historicalSessions?: AgentSessionRecord[] | undefined;
   hasActiveSession?: boolean;
@@ -165,6 +168,7 @@ const areKanbanTaskCardPropsEqual = (
   previous.hasActiveSession === next.hasActiveSession &&
   previous.activeSessionRole === next.activeSessionRole &&
   previous.taskActivityState === next.taskActivityState &&
+  previous.taskCardView === next.taskCardView &&
   previous.onOpenDetails === next.onOpenDetails &&
   previous.onDelegate === next.onDelegate &&
   previous.onOpenSession === next.onOpenSession &&
@@ -314,6 +318,176 @@ function TaskMeta({ task }: { task: TaskCard }): ReactElement {
   );
 }
 
+function CompactTaskMeta({
+  task,
+  onOpenDetails,
+}: {
+  task: TaskCard;
+  onOpenDetails: (taskId: string) => void;
+}): ReactElement {
+  const issueTypeStyle = ISSUE_TYPE_STYLES[task.issueType] ?? ISSUE_TYPE_STYLES.task;
+  const IssueTypeIcon = issueTypeStyle.icon;
+  const priorityStyle = getPriorityStyle(task.priority);
+
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1.5">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              className={cn(
+                "inline-flex size-5 shrink-0 items-center justify-center",
+                issueTypeStyle.iconClassName,
+              )}
+              aria-label={`Issue type: ${issueTypeStyle.label}`}
+              role="img"
+              tabIndex={0}
+            >
+              <IssueTypeIcon className="size-4" aria-hidden="true" />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top">{issueTypeStyle.label}</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              className={cn("size-2.5 shrink-0 rounded-full", priorityStyle.dotClassName)}
+              aria-label={`Priority: ${priorityStyle.hint}`}
+              role="img"
+              tabIndex={0}
+            />
+          </TooltipTrigger>
+          <TooltipContent side="top">
+            {priorityStyle.label}: {priorityStyle.hint}
+          </TooltipContent>
+        </Tooltip>
+      </div>
+      <button
+        type="button"
+        aria-label={`Open details for ${task.title}`}
+        className="min-w-0 flex-1 cursor-pointer truncate rounded-sm text-left text-sm font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        title={task.title}
+        onClick={() => onOpenDetails(task.id)}
+      >
+        {task.title}
+      </button>
+    </div>
+  );
+}
+
+function NormalTaskIdentity({
+  task,
+  onOpenDetails,
+}: {
+  task: TaskCard;
+  onOpenDetails: (taskId: string) => void;
+}): ReactElement {
+  return (
+    <div className="flex w-full min-w-0 items-start justify-between gap-1.5">
+      <div className="mb-1 min-w-0 flex-1">
+        <button
+          type="button"
+          aria-label={`Open details for ${task.title}`}
+          className="block w-full cursor-pointer rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          onClick={() => onOpenDetails(task.id)}
+        >
+          <span
+            className="mb-1 line-clamp-2 break-words text-sm font-semibold leading-tight text-foreground"
+            title={task.title}
+          >
+            {task.title}
+          </span>
+        </button>
+        <div className="flex items-center justify-between gap-1.5">
+          <TaskIdBadge taskId={task.id} />
+          <button
+            type="button"
+            className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-md border border-transparent px-1.5 py-0.5 text-[11px] text-muted-foreground transition group-hover:border-border group-hover:bg-muted group-hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            onClick={() => onOpenDetails(task.id)}
+          >
+            <ExternalLink className="size-3" />
+            Open
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CompactTaskIdentity({
+  task,
+  onOpenDetails,
+}: {
+  task: TaskCard;
+  onOpenDetails: (taskId: string) => void;
+}): ReactElement {
+  return (
+    <div className="flex min-w-0 items-center gap-1">
+      <div className="min-w-0 flex-1">
+        <CompactTaskMeta task={task} onOpenDetails={onOpenDetails} />
+      </div>
+      <TaskIdBadge taskId={task.id} iconOnly />
+    </div>
+  );
+}
+
+function CompactTaskStatus({ task }: { task: TaskCard }): ReactElement | null {
+  const hasStatus = task.subtaskIds.length > 0 || Boolean(task.pullRequest);
+  if (!hasStatus && !isQaRejectedTask(task)) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <QaRejectedBadge task={task} />
+      {task.subtaskIds.length > 0 ? (
+        <Badge variant="secondary" className="h-6 rounded-full px-2 text-xs">
+          {task.subtaskIds.length === 1 ? "1 subtask" : `${task.subtaskIds.length} subtasks`}
+        </Badge>
+      ) : null}
+      {task.pullRequest ? (
+        <TaskPullRequestLink pullRequest={task.pullRequest} className="h-6 px-2 py-0 text-xs" />
+      ) : null}
+    </div>
+  );
+}
+
+const taskActionsContainerClassName = (compact: boolean): string =>
+  cn("cursor-default", compact ? "mt-1.5" : "mt-2 border-t border-border pt-2.5");
+
+const taskActionsGroupClassName = (compact: boolean): string =>
+  compact ? "gap-1.5 [&_button]:h-7 [&_button]:rounded-md" : "";
+
+const taskActionsPrimaryClassName = ({
+  compact,
+  hasActiveSession,
+  isWaitingInput,
+}: {
+  compact: boolean;
+  hasActiveSession: boolean;
+  isWaitingInput: boolean;
+}): string => {
+  if (hasActiveSession) {
+    return cn(
+      compact
+        ? "h-7 rounded-md px-2 py-0 text-xs font-medium shadow-none"
+        : "h-9 rounded-lg px-2 py-1 text-[11px] font-semibold shadow-none",
+      getSessionChipClassName(isWaitingInput),
+    );
+  }
+
+  return compact
+    ? "h-7 rounded-md px-2 text-xs font-medium shadow-none"
+    : "h-9 rounded-lg font-semibold shadow-sm";
+};
+
+const taskActionSessionStatusClassName = (compact: boolean, isWaitingInput: boolean): string =>
+  cn(
+    compact ? "text-xs" : "text-[10px]",
+    "font-medium",
+    getSessionStatusTextClassName(isWaitingInput),
+  );
+
 function TaskActions({
   task,
   onPlan,
@@ -330,6 +504,7 @@ function TaskActions({
   hasActiveSession,
   activeSessionRole,
   taskActivityState,
+  compact = false,
 }: {
   task: TaskCard;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
@@ -346,6 +521,7 @@ function TaskActions({
   hasActiveSession: boolean;
   activeSessionRole?: AgentRole;
   taskActivityState: KanbanTaskActivityState;
+  compact?: boolean;
 }): ReactElement | null {
   if (task.status === "closed") {
     return null;
@@ -432,9 +608,8 @@ function TaskActions({
         return;
     }
   };
-
   return (
-    <div className="mt-2 cursor-default border-t border-border pt-2.5">
+    <div className={taskActionsContainerClassName(compact)}>
       <TaskWorkflowActionGroup
         task={task}
         includeActions={TASK_CARD_WORKFLOW_ACTIONS}
@@ -445,24 +620,19 @@ function TaskActions({
         size="sm"
         expandPrimary
         compactMenuTrigger
-        primaryClassName={cn(
-          hasActiveSession
-            ? [
-                "h-9 rounded-lg px-2 py-1 text-[11px] font-semibold shadow-none",
-                getSessionChipClassName(primarySessionIsWaitingInput),
-              ]
-            : "h-9 rounded-lg font-semibold shadow-sm",
-        )}
+        className={taskActionsGroupClassName(compact)}
+        primaryClassName={taskActionsPrimaryClassName({
+          compact,
+          hasActiveSession,
+          isWaitingInput: primarySessionIsWaitingInput,
+        })}
         primaryContent={
           hasActiveSession && primaryActiveSession ? (
             <>
               <PlayCircle className="size-3" />
               {AGENT_ROLE_LABELS[primaryActiveSession.role] ?? primaryActiveSession.role}
               <span
-                className={cn(
-                  "text-[10px] font-medium",
-                  getSessionStatusTextClassName(primarySessionIsWaitingInput),
-                )}
+                className={taskActionSessionStatusClassName(compact, primarySessionIsWaitingInput)}
               >
                 {getSessionStatusLabel({
                   session: primaryActiveSession,
@@ -479,6 +649,7 @@ function TaskActions({
 
 export const KanbanTaskCard = memo(function KanbanTaskCard({
   task,
+  taskCardView = "normal",
   taskSessions = [],
   historicalSessions = [],
   hasActiveSession,
@@ -501,11 +672,15 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
     hasActiveSession: hasActiveSessionValue,
     isWaitingInput,
   });
+  const isCompact = taskCardView === "compact";
 
   return (
     <article
       className={cn(
-        "group min-w-0 rounded-xl border border-border/90 bg-card/95 shadow-sm hover:border-info-border hover:shadow-md",
+        "group min-w-0 border border-border/90 bg-card/95 hover:border-info-border",
+        isCompact
+          ? "rounded-lg shadow-none hover:shadow-sm"
+          : "rounded-xl shadow-sm hover:shadow-md",
         cardActivityClassName,
       )}
     >
@@ -513,36 +688,18 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
         <BorderRay turnDurationMs={2000} strokeWidth={4} className="kanban-active-session-ray" />
       ) : null}
 
-      <div className="kanban-active-session-content flex min-w-0 flex-col gap-y-1 p-3.5">
-        <div className="flex w-full min-w-0 items-start justify-between gap-1.5">
-          <div className="min-w-0 flex-1 mb-1">
-            <button
-              type="button"
-              aria-label={`Open details for ${task.title}`}
-              className="block w-full cursor-pointer rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-              onClick={() => onOpenDetails(task.id)}
-            >
-              <span
-                className="mb-1 line-clamp-2 break-words text-sm font-semibold leading-tight text-foreground"
-                title={task.title}
-              >
-                {task.title}
-              </span>
-            </button>
-            <div className="flex justify-between items-center gap-1.5">
-              <TaskIdBadge taskId={task.id} />
-              <button
-                type="button"
-                className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-md border border-transparent px-1.5 py-0.5 text-[11px] text-muted-foreground transition group-hover:border-border group-hover:bg-muted group-hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-                onClick={() => onOpenDetails(task.id)}
-              >
-                <ExternalLink className="size-3" />
-                Open
-              </button>
-            </div>
-          </div>
-        </div>
-        <TaskMeta task={task} />
+      <div
+        className={cn(
+          "kanban-active-session-content flex min-w-0 flex-col gap-y-1",
+          isCompact ? "p-2" : "p-3.5",
+        )}
+      >
+        {isCompact ? (
+          <CompactTaskIdentity task={task} onOpenDetails={onOpenDetails} />
+        ) : (
+          <NormalTaskIdentity task={task} onOpenDetails={onOpenDetails} />
+        )}
+        {isCompact ? <CompactTaskStatus task={task} /> : <TaskMeta task={task} />}
         <TaskActions
           task={task}
           taskSessions={taskSessions}
@@ -550,6 +707,7 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
           hasActiveSession={hasActiveSessionValue}
           {...(activeSessionRole ? { activeSessionRole } : {})}
           taskActivityState={taskActivityState}
+          compact={isCompact}
           onPlan={onPlan}
           onBuild={onBuild}
           onDelegate={onDelegate}

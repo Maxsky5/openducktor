@@ -26,6 +26,7 @@ import {
 import { invalidEnabledRuntime } from "@/state/operations/runtime-executables/runtime-executable-validation";
 import type { RuntimeExecutableValidationState } from "@/state/queries/use-runtime-executable-validation";
 import { AGENT_MODEL_FAVORITES_MUTATION_KEY } from "@/state/mutations/agent-model-favorites";
+import { KANBAN_TASK_CARD_VIEW_MUTATION_KEY } from "@/state/mutations/kanban-task-card-view";
 import { useAgentModelFavorites } from "@/state/mutations/use-agent-model-favorites";
 import {
   validateCustomAgentRoleDrafts,
@@ -194,6 +195,8 @@ export const useSettingsModalController = ({
   const favoriteState = useAgentModelFavorites({ saveAgentModelFavorites });
   const isAgentModelFavoritesMutationPending =
     useIsMutating({ mutationKey: AGENT_MODEL_FAVORITES_MUTATION_KEY }) > 0;
+  const isKanbanTaskCardViewMutationPending =
+    useIsMutating({ mutationKey: KANBAN_TASK_CARD_VIEW_MUTATION_KEY }) > 0;
   const workspacePolicy = useWorkspacePolicy(
     activeWorkspace?.repoPath ?? null,
     workspaceSelectionPolicy,
@@ -344,6 +347,31 @@ export const useSettingsModalController = ({
     selectedWorkspaceId,
     setSnapshotDraft,
   });
+  const [taskCardViewEditState, setTaskCardViewEditState] = useState({
+    loadedSnapshot,
+    open,
+    wasEdited: false,
+  });
+  if (
+    taskCardViewEditState.loadedSnapshot !== loadedSnapshot ||
+    taskCardViewEditState.open !== open
+  ) {
+    setTaskCardViewEditState({ loadedSnapshot, open, wasEdited: false });
+  }
+  const applyTrackedGlobalKanbanSettingsUpdate = useCallback(
+    (updater: (current: SettingsSnapshot["kanban"]) => SettingsSnapshot["kanban"]): void => {
+      applyGlobalKanbanSettingsUpdate((current) => {
+        const next = updater(current);
+        if (next.taskCardView !== current.taskCardView) {
+          setTaskCardViewEditState((state) =>
+            state.wasEdited ? state : { ...state, wasEdited: true },
+          );
+        }
+        return next;
+      });
+    },
+    [applyGlobalKanbanSettingsUpdate],
+  );
 
   const { dirtySections, markDirty } = useSettingsModalDirtyState({
     open,
@@ -438,6 +466,8 @@ export const useSettingsModalController = ({
     saveSettingsSnapshot,
     loadSettingsSnapshot,
     isAgentModelFavoritesMutationPending,
+    isKanbanTaskCardViewMutationPending,
+    wasKanbanTaskCardViewEdited: taskCardViewEditState.wasEdited,
   });
   const draftActions = useMemo(
     () => ({
@@ -451,7 +481,7 @@ export const useSettingsModalController = ({
       updateAgentRuntimes: applyAgentRuntimesUpdate,
       updateReusablePrompts: applyReusablePromptsUpdate,
       updateCustomAgentRoles: applyCustomAgentRolesUpdate,
-      updateGlobalKanbanSettings: applyGlobalKanbanSettingsUpdate,
+      updateGlobalKanbanSettings: applyTrackedGlobalKanbanSettingsUpdate,
       updateGlobalAutopilotSettings: applyGlobalAutopilotSettingsUpdate,
       updateGlobalPromptOverrides: applyGlobalPromptOverridesUpdate,
       updateRepoPromptOverrides: applyRepoPromptOverridesUpdate,
@@ -471,7 +501,7 @@ export const useSettingsModalController = ({
       applyAgentRuntimesUpdate,
       applyReusablePromptsUpdate,
       applyCustomAgentRolesUpdate,
-      applyGlobalKanbanSettingsUpdate,
+      applyTrackedGlobalKanbanSettingsUpdate,
       applyGlobalAutopilotSettingsUpdate,
       applyGlobalPromptOverridesUpdate,
       applyRepoPromptOverridesUpdate,

@@ -1,5 +1,6 @@
 import { Loader2, Plus, RefreshCcw } from "lucide-react";
 import type { ReactElement } from "react";
+import { TaskCardViewControl } from "@/components/features/kanban/task-card-view-control";
 import { Button } from "@/components/ui/button";
 import { useChecksState, useWorkspaceState } from "@/state";
 import { isKanbanTaskCreationDisabled } from "./kanban-page-header-model";
@@ -17,7 +18,14 @@ export function KanbanPageHeader({ model }: KanbanPageHeaderProps): ReactElement
   return (
     <div className="electron-titlebar-safe-area flex flex-wrap items-center justify-between gap-3 pl-2 pr-4">
       <h2 className="text-lg font-semibold tracking-tight text-foreground">Kanban Board</h2>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="flex items-center gap-2" aria-busy={model.isTaskCardViewPending}>
+          <TaskCardViewControl
+            value={model.taskCardView}
+            disabled={model.isTaskCardViewPending}
+            onValueChange={model.onTaskCardViewChange}
+          />
+        </div>
         <Button
           type="button"
           size="default"
