@@ -1,5 +1,5 @@
 import type { Stats } from "node:fs";
-import { lstat, readlink, realpath } from "node:fs/promises";
+import { lstat, realpath } from "node:fs/promises";
 import path from "node:path";
 import { Effect } from "effect";
 import { hasNestedNodeErrorCode, toHostOperationError } from "../../effect/host-errors";
@@ -19,8 +19,9 @@ const resolveRemovalPath = async (inputPath: string): Promise<string> => {
       stats = null;
     }
     if (stats?.isSymbolicLink()) {
-      const target = await readlink(absolutePath);
-      return resolveRemovalPath(path.resolve(path.dirname(absolutePath), target));
+      throw new Error(
+        `Cannot verify dangling worktree alias ${absolutePath}. Inspect the alias and remove it manually only if it still belongs to the removed worktree, then retry archive. Turn off worktree removal to archive without deleting it.`,
+      );
     }
     const parent = path.dirname(absolutePath);
     if (parent === absolutePath) throw cause;
@@ -28,7 +29,7 @@ const resolveRemovalPath = async (inputPath: string): Promise<string> => {
   }
 };
 
-// Missing paths are expected after a confirmed partial removal. Other errors must fail it.
+// Absent paths permit partial-removal retries. Dangling links do not prove the original identity.
 export const resolveWorktreeRemovalPath: WorktreeFilePort["resolveWorktreeRemovalPath"] = (
   inputPath,
 ) =>

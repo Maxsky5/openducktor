@@ -12,6 +12,7 @@ import {
   mkdtemp,
   readFile,
   realpath,
+  readlink,
   rm,
   symlink,
   unlink,
@@ -496,11 +497,14 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     "branch snapshot save",
     "replacement directory",
     "replacement worktree",
+    "replacement dangling alias",
   ] as const)("imports, retries after %s, and restores a native symlink path", async (scenario) => {
     const failureStage =
       scenario === "changed branch"
         ? "branch deletion"
-        : scenario === "replacement directory" || scenario === "replacement worktree"
+        : scenario === "replacement directory" ||
+            scenario === "replacement worktree" ||
+            scenario === "replacement dangling alias"
           ? "alias cleanup"
           : scenario;
     await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=restored\n");
@@ -629,11 +633,17 @@ describe("Workspace Session commands with real Git and SQLite", () => {
           handlers: createWorkspaceSessionCommandHandlers(retryService, () => Effect.void),
         }),
       );
-      if (scenario === "replacement directory" || scenario === "replacement worktree") {
+      if (
+        scenario === "replacement directory" ||
+        scenario === "replacement worktree" ||
+        scenario === "replacement dangling alias"
+      ) {
         await unlink(alias);
         if (scenario === "replacement directory") {
           await mkdir(alias);
           await writeFile(path.join(alias, "keep.txt"), "keep");
+        } else if (scenario === "replacement dangling alias") {
+          await symlink(path.join(root, "unrelated-missing"), alias, "junction");
         } else {
           const replacementPath = path.join(root, "replacement-worktree");
           gitCommand("worktree", "add", "-b", "feature/replacement", replacementPath);
@@ -645,12 +655,23 @@ describe("Workspace Session commands with real Git and SQLite", () => {
         expect(gitCommand("branch", "--list", confirmedBranch)).toContain(confirmedBranch);
         if (scenario === "replacement directory")
           expect(await readFile(path.join(alias, "keep.txt"), "utf8")).toBe("keep");
+        else if (scenario === "replacement dangling alias")
+          expect(await readlink(alias)).toBe(path.join(root, "unrelated-missing"));
         else expect(runGit(alias, "branch", "--show-current")).toBe("feature/replacement");
         expect(await h.router.invoke("workspace_session_get", ref)).toEqual({
           ...session,
           executionTarget: confirmedTarget,
         });
         return;
+      }
+      if (scenario === "alias cleanup") {
+        await expect(retryRouter.invoke("workspace_session_archive", archiveInput)).rejects.toThrow(
+          "Cannot verify dangling worktree alias",
+        );
+        expect(await readlink(alias)).toBe(directory);
+        expect(gitCommand("branch", "--list", confirmedBranch)).toContain(confirmedBranch);
+        // Model the explicit user repair requested by the error, then retry.
+        await unlink(alias);
       }
       const archived = await retryRouter.invoke("workspace_session_archive", archiveInput);
       expect(archived.executionTarget).toEqual({

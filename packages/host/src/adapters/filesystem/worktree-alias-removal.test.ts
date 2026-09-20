@@ -57,12 +57,14 @@ describe("worktree alias removal", () => {
     await expect(lstat(alias)).rejects.toThrow("ENOENT");
   });
 
-  test("prepares dangling alias cleanup again after an earlier removal failed", async () => {
+  test("requires manual inspection before retrying dangling alias cleanup", async () => {
     await symlink(worktree, alias, "junction");
     await rm(worktree, { recursive: true });
-    const prepared = await Effect.runPromise(prepareWorktreeAliasRemoval(alias, worktree));
-    await Effect.runPromise(prepared.remove);
-    await expect(lstat(alias)).rejects.toThrow("ENOENT");
+    await expect(Effect.runPromise(prepareWorktreeAliasRemoval(alias, worktree))).rejects.toThrow(
+      "Cannot verify dangling worktree alias",
+    );
+    expect(await readlink(alias)).toBe(worktree);
+    await unlink(alias);
     const repeated = await Effect.runPromise(prepareWorktreeAliasRemoval(alias, worktree));
     await Effect.runPromise(repeated.remove);
   });

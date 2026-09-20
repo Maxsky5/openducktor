@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readlink, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
@@ -14,7 +14,7 @@ describe("worktree removal path resolution", () => {
     await rm(root, { force: true, recursive: true });
   });
 
-  test("retains the canonical location through dangling relative and chained links", async () => {
+  test("rejects dangling relative and chained links without following a new identity", async () => {
     const worktree = path.join(root, "worktree");
     const alias = path.join(root, "alias");
     const second = path.join(root, "second");
@@ -23,10 +23,14 @@ describe("worktree removal path resolution", () => {
     await symlink(alias, second, "junction");
     expect(await Effect.runPromise(resolveWorktreeRemovalPath(second))).toBe(worktree);
     await rm(worktree, { recursive: true });
-    expect(await Effect.runPromise(resolveWorktreeRemovalPath(second))).toBe(worktree);
-    expect(await Effect.runPromise(resolveWorktreeRemovalPath(path.join(second, "missing")))).toBe(
-      path.join(worktree, "missing"),
+    await expect(Effect.runPromise(resolveWorktreeRemovalPath(second))).rejects.toThrow(
+      "Cannot verify dangling worktree alias",
     );
+    await expect(
+      Effect.runPromise(resolveWorktreeRemovalPath(path.join(second, "missing"))),
+    ).rejects.toThrow("Cannot verify dangling worktree alias");
+    expect(await readlink(alias)).toBe("worktree");
+    expect(await readlink(second)).toBe(alias);
   });
 
   test("resolves an absent path under a symlinked parent", async () => {
