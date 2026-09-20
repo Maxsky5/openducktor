@@ -1955,6 +1955,7 @@ describe("useAgentStudioSessionActions", () => {
       localSessionIdentity("session-9"),
       questionRequest,
       [["yes"]],
+      { kind: "workflow", taskId: "task-1", role: "spec" },
     );
 
     await harness.unmount();

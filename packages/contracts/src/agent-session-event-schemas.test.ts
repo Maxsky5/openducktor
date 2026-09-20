@@ -33,7 +33,7 @@ describe("agent session transcript event contract", () => {
         message: "hello",
         parts: [{ kind: "text", text: "hello" }],
         state: "read",
-        asyncQuestionItemIds: [],
+        resolvedQuestionRequestIds: [],
       },
       {
         ...base,

@@ -12,7 +12,7 @@ export type AgentSessionRuntimeActivity = AgentSessionActivity;
 export type AgentSessionActivityInput = {
   runtimeActivity: AgentSessionRuntimeActivity;
   pendingApprovals: readonly unknown[];
-  pendingQuestions: readonly unknown[];
+  pendingQuestions: readonly Pick<AgentPendingQuestionRequest, "blocking">[];
 };
 
 /**
@@ -27,7 +27,7 @@ export const classifyAgentSessionActivity = ({
   pendingApprovals,
   pendingQuestions,
 }: AgentSessionActivityInput): AgentSessionActivity => {
-  if (pendingQuestions.length > 0) {
+  if (pendingQuestions.some((request) => request.blocking !== false)) {
     return "waiting_for_question";
   }
   if (pendingApprovals.length > 0) {
@@ -52,7 +52,6 @@ export type AgentSessionRuntimeSnapshotSource = {
   runtimeActivity: AgentSessionRuntimeActivity;
   pendingApprovals: AgentPendingApprovalRequest[];
   pendingQuestions: AgentPendingQuestionRequest[];
-  pendingAsyncQuestions?: AgentSessionRuntimeSnapshot["pendingAsyncQuestions"];
 };
 
 export const toAgentSessionRuntimeSnapshot = (
@@ -80,7 +79,6 @@ export const toAgentSessionRuntimeSnapshot = (
     startedAt: snapshot.startedAt,
     pendingApprovals: snapshot.pendingApprovals,
     pendingQuestions: snapshot.pendingQuestions,
-    pendingAsyncQuestions: snapshot.pendingAsyncQuestions ?? [],
   };
   if (snapshot.parentExternalSessionId) {
     runtimeSnapshot.parentExternalSessionId = snapshot.parentExternalSessionId;
@@ -96,5 +94,4 @@ export const toMissingAgentSessionRuntimeSnapshot = (
   ref,
   pendingApprovals: [],
   pendingQuestions: [],
-  pendingAsyncQuestions: [],
 });

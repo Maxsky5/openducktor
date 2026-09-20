@@ -1,4 +1,3 @@
-import type { AgentAsyncQuestion } from "@openducktor/contracts";
 import {
   type AgentPendingApprovalRequest,
   type AgentPendingQuestionRequest,
@@ -62,7 +61,6 @@ const toRuntimeSnapshot = (
   session: CodexSessionState,
   pendingApprovals: AgentPendingApprovalRequest[],
   pendingQuestions: AgentPendingQuestionRequest[],
-  pendingAsyncQuestions: AgentAsyncQuestion[],
   parentExternalSessionId?: string,
 ): AgentSessionRuntimeSnapshot => {
   const sessionAssociation = session.summary.sessionAssociation;
@@ -86,7 +84,6 @@ const toRuntimeSnapshot = (
     startedAt: session.summary.startedAt,
     pendingApprovals,
     pendingQuestions,
-    pendingAsyncQuestions,
   };
   if (parentExternalSessionId) {
     snapshot.parentExternalSessionId = parentExternalSessionId;
@@ -100,13 +97,11 @@ export const toRuntimeSnapshotFromThread = (
   pendingInput: {
     pendingApprovals?: AgentPendingApprovalRequest[];
     pendingQuestions?: AgentPendingQuestionRequest[];
-    pendingAsyncQuestions?: AgentAsyncQuestion[];
   } = {},
 ): AgentSessionRuntimeSnapshot => {
   const parentExternalSessionId = thread.parentThreadId ?? thread.subAgentSource?.parentThreadId;
   const pendingApprovals = pendingInput.pendingApprovals ?? [];
   const pendingQuestions = pendingInput.pendingQuestions ?? [];
-  const pendingAsyncQuestions = pendingInput.pendingAsyncQuestions ?? [];
   const snapshot: AgentSessionRuntimeSnapshot = {
     availability: "runtime",
     classification: classifyAgentSessionActivity({
@@ -124,7 +119,6 @@ export const toRuntimeSnapshotFromThread = (
     startedAt: thread.startedAt,
     pendingApprovals,
     pendingQuestions,
-    pendingAsyncQuestions,
   };
   if (parentExternalSessionId) {
     snapshot.parentExternalSessionId = parentExternalSessionId;
@@ -155,7 +149,6 @@ export const toRefreshedRuntimeSnapshot = ({
   input,
   pendingApprovals,
   pendingQuestions,
-  pendingAsyncQuestions,
   hasActiveTurn,
 }: {
   session: CodexSessionState;
@@ -163,12 +156,10 @@ export const toRefreshedRuntimeSnapshot = ({
   input?: ReadSessionRuntimeSnapshotInput;
   pendingApprovals: AgentPendingApprovalRequest[];
   pendingQuestions: AgentPendingQuestionRequest[];
-  pendingAsyncQuestions: AgentAsyncQuestion[];
   hasActiveTurn: boolean;
 }): AgentSessionRuntimeSnapshot => {
   const thread = inventory.threadsById.get(session.threadId) ?? null;
-  const hasPendingInput =
-    pendingApprovals.length > 0 || pendingQuestions.length > 0 || pendingAsyncQuestions.length > 0;
+  const hasPendingInput = pendingApprovals.length > 0 || pendingQuestions.length > 0;
   const ref = input ?? codexRuntimeSnapshotRef(session);
   const runtimeSnapshotSource = resolveCodexRuntimeSnapshotSource({
     session,
@@ -183,7 +174,6 @@ export const toRefreshedRuntimeSnapshot = ({
       session,
       pendingApprovals,
       pendingQuestions,
-      pendingAsyncQuestions,
       parentExternalSessionIdFromThread(session, thread),
     );
   }
@@ -199,5 +189,4 @@ export const missingRuntimeSnapshot = (input: SessionRef): AgentSessionRuntimeSn
   ref: input,
   pendingApprovals: [],
   pendingQuestions: [],
-  pendingAsyncQuestions: [],
 });

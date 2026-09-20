@@ -23,11 +23,8 @@ export const projectCodexCanonicalEventsToHistory = (
       if (resolvedModel) {
         message.model = resolvedModel;
       }
-      if (event.asyncQuestionReplies) {
-        message.asyncQuestionReplies = event.asyncQuestionReplies;
-      }
-      if (event.asyncQuestionItemIds !== undefined) {
-        message.asyncQuestionItemIds = event.asyncQuestionItemIds;
+      if (event.resolvedQuestionRequestIds !== undefined) {
+        message.resolvedQuestionRequestIds = event.resolvedQuestionRequestIds;
       }
       messages.push(message);
       continue;
@@ -44,8 +41,8 @@ export const projectCodexCanonicalEventsToHistory = (
       if (resolvedModel) {
         message.model = resolvedModel;
       }
-      if (event.asyncQuestion) {
-        message.asyncQuestion = event.asyncQuestion;
+      if (event.questionRequest) {
+        message.questionRequest = event.questionRequest;
       }
       if (event.totalTokens !== undefined) {
         message.totalTokens = event.totalTokens;

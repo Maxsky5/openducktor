@@ -163,7 +163,6 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
             title: "Edit a file",
           },
         ],
-        pendingAsyncQuestions: [],
         pendingQuestions: [
           {
             requestId: "opencode-pending-2",
@@ -676,7 +675,6 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       startedAt: "2026-07-16T10:02:00.000Z",
       pendingApprovals: [],
       pendingQuestions: [],
-      pendingAsyncQuestions: [],
       contextUsage: null,
     };
     const otherAdapter: AgentSessionLiveAdapterPort = {

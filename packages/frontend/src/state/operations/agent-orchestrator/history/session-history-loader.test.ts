@@ -15,10 +15,6 @@ import type {
   AgentSessionState,
 } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
-import {
-  applyAsyncQuestionAnnotation,
-  applyAsyncQuestionUserMessage,
-} from "../support/async-questions";
 import { upsertImageGenerationMessage } from "../support/image-generation-messages";
 import { createSessionMessagesState } from "../support/messages";
 import { createTaskCardFixture } from "../test-utils";
@@ -1006,18 +1002,32 @@ describe("session history loader", () => {
     const readStarted = Promise.withResolvers<void>();
     const harness = createHistoryLoadHarness();
     const historyQuestion = {
-      questionItemId: '["request_user_input_async","question-history",0]',
-      sourceMessageId: "question-history",
-      questionIndex: 0,
-      title: "History question",
-      options: ["Yes", "No"],
+      requestId: "question-history",
+      blocking: false,
+      questions: [
+        {
+          header: "History",
+          question: "History question",
+          options: [
+            { label: "Yes", description: "Yes" },
+            { label: "No", description: "No" },
+          ],
+        },
+      ],
     };
     const liveQuestion = {
-      questionItemId: '["request_user_input_async","question-live",0]',
-      sourceMessageId: "question-live",
-      questionIndex: 0,
-      title: "Live question",
-      options: ["Yes", "No"],
+      requestId: "question-live",
+      blocking: false,
+      questions: [
+        {
+          header: "Live",
+          question: "Live question",
+          options: [
+            { label: "Yes", description: "Yes" },
+            { label: "No", description: "No" },
+          ],
+        },
+      ],
     };
 
     const loadPromise = loadSelectedSessionBaselineHistoryIntoStore({
@@ -1038,46 +1048,24 @@ describe("session history loader", () => {
 
     harness.updateSession(sessionTarget, (current) => ({
       ...current,
-      ...applyAsyncQuestionUserMessage(
-        {
-          pendingAsyncQuestions: current.pendingAsyncQuestions ?? [],
-          handledAsyncQuestionIds: current.handledAsyncQuestionIds ?? new Set(),
-          asyncQuestionSkipMessages: current.asyncQuestionSkipMessages ?? [],
-        },
-        undefined,
-        {
-          messageId: "live-user-message",
-          timestamp: "2026-09-19T10:01:00.000Z",
-          text: "Continue",
-        },
-      ),
-    }));
-    harness.updateSession(sessionTarget, (current) => ({
-      ...current,
-      ...applyAsyncQuestionAnnotation(
-        {
-          pendingAsyncQuestions: current.pendingAsyncQuestions ?? [],
-          handledAsyncQuestionIds: current.handledAsyncQuestionIds ?? new Set(),
-          asyncQuestionSkipMessages: current.asyncQuestionSkipMessages ?? [],
-        },
-        { status: "pending", questions: [liveQuestion] },
-      ),
+      pendingQuestions: [liveQuestion],
+      handledBackgroundQuestionIds: new Set([historyQuestion.requestId]),
     }));
 
     historyPromise.resolve([
       {
-        messageId: historyQuestion.sourceMessageId,
+        messageId: historyQuestion.requestId,
         role: "assistant",
         timestamp: "2026-09-19T10:00:00.000Z",
-        text: historyQuestion.title,
+        text: "History question",
         parts: [],
-        asyncQuestion: { status: "pending", questions: [historyQuestion] },
+        questionRequest: historyQuestion,
       },
     ]);
     await loadPromise;
 
-    expect(harness.session.pendingAsyncQuestions).toEqual([liveQuestion]);
-    expect(harness.session.handledAsyncQuestionIds).toContain(historyQuestion.questionItemId);
+    expect(harness.session.pendingQuestions).toEqual([liveQuestion]);
+    expect(harness.session.handledBackgroundQuestionIds).toContain(historyQuestion.requestId);
   });
 
   test("keeps a local accepted user send when baseline history confirms it", async () => {

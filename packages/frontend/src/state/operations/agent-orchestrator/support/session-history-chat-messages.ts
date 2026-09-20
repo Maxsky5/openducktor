@@ -26,11 +26,7 @@ import {
   isSubagentMessage,
 } from "./subagent-messages";
 import { normalizeToolInput, normalizeToolText } from "./tool-messages";
-import {
-  mergeAsyncQuestionHistory,
-  projectAsyncQuestionsFromHistory,
-  type AgentAsyncQuestionProjection,
-} from "./async-questions";
+import { mergeBackgroundQuestions, projectBackgroundQuestions } from "./background-questions";
 
 type HistoryPart = AgentSessionHistoryMessage["parts"][number];
 type LegacySubtaskHistoryPart = {
@@ -296,7 +292,7 @@ export const historyToChatMessages = (
 
     const content = message.text;
     const isStructuredAsyncQuestion =
-      message.role === "assistant" && message.asyncQuestion?.status === "pending";
+      message.role === "assistant" && message.questionRequest !== undefined;
     const isFinalAssistantMessage =
       message.role === "assistant" && isFinalAssistantHistoryMessage(message);
     const completedAtMs = Date.parse(message.timestamp);
@@ -411,15 +407,6 @@ export const historyToChatMessages = (
       next.push(primaryMessage);
     }
 
-    if (message.role === "assistant" && message.asyncQuestion?.status === "invalid") {
-      next.push({
-        id: `async-question-error:${message.messageId}`,
-        role: "system",
-        content: message.asyncQuestion.error,
-        timestamp: message.timestamp,
-      });
-    }
-
     if (message.role === "user" && (content.length > 0 || userDisplayParts.length > 0)) {
       const parsed = Date.parse(message.timestamp);
       userAnchorAtMs = Number.isNaN(parsed) ? userAnchorAtMs : parsed;
@@ -440,27 +427,31 @@ export const applyLoadedSessionHistory = (
   session: AgentSessionState,
   history: AgentSessionHistoryMessage[],
   messagesAtReadStart?: AgentSessionState["messages"],
-  asyncQuestionsAtReadStart?: AgentAsyncQuestionProjection,
 ): AgentSessionState => {
   const historyMessages = historyToChatMessages(history, {
     role: session.sessionAssociation.kind === "workflow" ? session.sessionAssociation.role : null,
   });
   const loadedMessages = createSessionMessagesState(session.externalSessionId, historyMessages);
-  const asyncQuestions = mergeAsyncQuestionHistory(
-    projectAsyncQuestionsFromHistory(history),
-    {
-      pendingAsyncQuestions: session.pendingAsyncQuestions ?? [],
-      handledAsyncQuestionIds: session.handledAsyncQuestionIds ?? new Set(),
-      asyncQuestionSkipMessages: session.asyncQuestionSkipMessages ?? [],
-    },
-    asyncQuestionsAtReadStart,
-  );
+  const backgroundQuestions = mergeBackgroundQuestions(projectBackgroundQuestions(history), {
+    pendingQuestions: session.pendingQuestions.filter((request) => request.blocking === false),
+    handledQuestionIds: session.handledBackgroundQuestionIds ?? new Set(),
+  });
+  const mergedQuestions = [
+    ...session.pendingQuestions.filter((request) => request.blocking !== false),
+    ...backgroundQuestions.pendingQuestions,
+  ];
+  const pendingQuestions =
+    mergedQuestions.length === session.pendingQuestions.length &&
+    mergedQuestions.every((request, index) => request === session.pendingQuestions[index])
+      ? session.pendingQuestions
+      : mergedQuestions;
 
   return {
     ...session,
     historyLoadState: "loaded",
     historyLoadFailure: null,
-    ...asyncQuestions,
+    pendingQuestions,
+    handledBackgroundQuestionIds: backgroundQuestions.handledQuestionIds,
     messages: settleImageGenerationMessages({
       ...session,
       messages: mergeHistoryMessages(

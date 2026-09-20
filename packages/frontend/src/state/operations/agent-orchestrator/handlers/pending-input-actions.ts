@@ -1,4 +1,5 @@
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
+import type { AgentSessionScope } from "@openducktor/core";
 import type { HostClient } from "@openducktor/host-client";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { resolveAgentPendingInputParticipants } from "@/state/agent-session-pending-input-participants";
@@ -95,20 +96,25 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
     identity: AgentSessionIdentity,
     request: AgentQuestionRequest,
     answers: string[][],
+    sessionScope?: AgentSessionScope,
   ): Promise<void> => {
     const responseSession = preparePendingInputReply({
       dependencies,
       currentSession: identity,
       request,
     });
-    await dependencies.liveSessionHost.agentSessionLiveReplyQuestion({
-      repoPath: requireWorkspaceRepoPath(dependencies.workspaceRepoPath),
-      externalSessionId: responseSession.externalSessionId,
-      runtimeKind: responseSession.runtimeKind,
-      workingDirectory: responseSession.workingDirectory,
-      requestId: request.requestId,
-      answers,
-    });
+    const input: Parameters<typeof dependencies.liveSessionHost.agentSessionLiveReplyQuestion>[0] =
+      {
+        repoPath: requireWorkspaceRepoPath(dependencies.workspaceRepoPath),
+        externalSessionId: responseSession.externalSessionId,
+        runtimeKind: responseSession.runtimeKind,
+        workingDirectory: responseSession.workingDirectory,
+        requestId: request.requestId,
+        answers,
+      };
+    if (request.blocking !== undefined) input.blocking = request.blocking;
+    if (sessionScope !== undefined) input.sessionScope = sessionScope;
+    await dependencies.liveSessionHost.agentSessionLiveReplyQuestion(input);
   };
 
   return {

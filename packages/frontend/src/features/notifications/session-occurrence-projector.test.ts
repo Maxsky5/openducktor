@@ -22,7 +22,6 @@ const snapshot = (overrides: Partial<AgentSessionLiveSnapshot> = {}): AgentSessi
   startedAt: "2026-08-31T10:00:00.000Z",
   executionEpisodeId: "episode-1",
   pendingApprovals: [],
-  pendingAsyncQuestions: [],
   pendingQuestions: [],
   contextUsage: null,
   ...overrides,
@@ -123,36 +122,51 @@ describe("session occurrence projector", () => {
     expect(projector.accept({ type: "session_upsert", session: next })).toEqual([]);
   });
 
-  test("notifies once for a new asynchronous question and uses snapshots as a baseline", () => {
+  test("notifies once for a new background question and uses snapshots as a baseline", () => {
     const projector = createProjector();
     const existingQuestion = {
-      questionItemId: '["request_user_input_async","message-1",0]',
-      sourceMessageId: "message-1",
-      questionIndex: 0,
-      title: "Existing question",
-      options: ["A", "B"],
+      requestId: "message-1",
+      blocking: false,
+      questions: [
+        {
+          header: "Choice",
+          question: "Existing question",
+          options: [
+            { label: "A", description: "A" },
+            { label: "B", description: "B" },
+          ],
+        },
+      ],
     };
     projector.accept({
       type: "snapshot",
       repoPath: "/repo",
-      sessions: [snapshot({ pendingAsyncQuestions: [existingQuestion] })],
+      sessions: [snapshot({ pendingQuestions: [existingQuestion] })],
     });
     expect(
       projector.accept({
         type: "session_upsert",
-        session: snapshot({ pendingAsyncQuestions: [existingQuestion] }),
+        session: snapshot({ pendingQuestions: [existingQuestion] }),
       }),
     ).toEqual([]);
 
     const newQuestion = {
       ...existingQuestion,
-      questionItemId: '["request_user_input_async","message-2",0]',
-      sourceMessageId: "message-2",
-      title: "Which provider should we use?",
+      requestId: "message-2",
+      questions: [
+        {
+          header: "Provider",
+          question: "Which provider should we use?",
+          options: [
+            { label: "A", description: "A" },
+            { label: "B", description: "B" },
+          ],
+        },
+      ],
     };
     const occurrences = projector.accept({
       type: "session_upsert",
-      session: snapshot({ pendingAsyncQuestions: [existingQuestion, newQuestion] }),
+      session: snapshot({ pendingQuestions: [existingQuestion, newQuestion] }),
     });
     expect(occurrences).toMatchObject([
       {
@@ -161,39 +175,40 @@ describe("session occurrence projector", () => {
         navigationTarget: {
           type: "pending_input",
           inputKind: "question",
-          requestId: "async:message-2",
+          requestId: "message-2",
         },
       },
     ]);
     expect(
       projector.accept({
         type: "session_upsert",
-        session: snapshot({ pendingAsyncQuestions: [existingQuestion, newQuestion] }),
+        session: snapshot({ pendingQuestions: [existingQuestion, newQuestion] }),
       }),
     ).toEqual([]);
   });
 
-  test("groups asynchronous questions from one Codex message", () => {
+  test("groups background questions from one Codex message", () => {
     const projector = createProjector();
     projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
 
     const occurrences = projector.accept({
       type: "session_upsert",
       session: snapshot({
-        pendingAsyncQuestions: [
+        pendingQuestions: [
           {
-            questionItemId: '["request_user_input_async","message-1",0]',
-            sourceMessageId: "message-1",
-            questionIndex: 0,
-            title: "Which provider should we use?",
-            options: ["OpenAI", "Anthropic"],
-          },
-          {
-            questionItemId: '["request_user_input_async","message-1",1]',
-            sourceMessageId: "message-1",
-            questionIndex: 1,
-            title: "Which model should we use?",
-            options: null,
+            requestId: "message-1",
+            blocking: false,
+            questions: [
+              {
+                header: "Provider",
+                question: "Which provider should we use?",
+                options: [
+                  { label: "OpenAI", description: "OpenAI" },
+                  { label: "Anthropic", description: "Anthropic" },
+                ],
+              },
+              { header: "Model", question: "Which model should we use?", options: [] },
+            ],
           },
         ],
       }),
@@ -206,7 +221,7 @@ describe("session occurrence projector", () => {
         navigationTarget: {
           type: "pending_input",
           inputKind: "question",
-          requestId: "async:message-1",
+          requestId: "message-1",
         },
       },
     ]);
@@ -288,14 +303,19 @@ describe("session occurrence projector", () => {
               },
             ],
           },
-        ],
-        pendingAsyncQuestions: [
           {
-            questionItemId: '["request_user_input_async","async-question",0]',
-            sourceMessageId: "async-question",
-            questionIndex: 0,
-            title: "Which runtime should we use?",
-            options: ["Codex", "OpenCode"],
+            requestId: "async-question",
+            blocking: false,
+            questions: [
+              {
+                header: "Runtime",
+                question: "Which runtime should we use?",
+                options: [
+                  { label: "Codex", description: "Codex" },
+                  { label: "OpenCode", description: "OpenCode" },
+                ],
+              },
+            ],
           },
         ],
       });
@@ -330,13 +350,13 @@ describe("session occurrence projector", () => {
         pendingApprovals: [
           { requestId: "permission", requestType: "permission_grant", title: "Read" },
         ],
-        pendingAsyncQuestions: [
+        pendingQuestions: [
           {
-            questionItemId: '["request_user_input_async","async-question",0]',
-            sourceMessageId: "async-question",
-            questionIndex: 0,
-            title: "Which runtime should we use?",
-            options: null,
+            requestId: "async-question",
+            blocking: false,
+            questions: [
+              { header: "Runtime", question: "Which runtime should we use?", options: [] },
+            ],
           },
         ],
       });

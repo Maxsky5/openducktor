@@ -1,8 +1,4 @@
 import { z } from "zod";
-import {
-  agentAsyncQuestionAnnotationSchema,
-  agentAsyncQuestionReplySchema,
-} from "./agent-async-question-schemas";
 import { isoTimestampSchema } from "./string-schemas";
 import { agentImageGenerationPartSchema } from "./agent-image-generation-schemas";
 import {
@@ -10,7 +6,10 @@ import {
   runtimeApprovalRequestTypeSchema,
   runtimeSubagentExecutionModeSchema,
 } from "./agent-runtime-schemas";
-import { agentSessionQuestionItemSchema } from "./agent-session-pending-schemas";
+import {
+  agentSessionPendingQuestionRequestSchema,
+  agentSessionQuestionItemSchema,
+} from "./agent-session-pending-schemas";
 import {
   type AgentSessionLiveRef,
   agentModelSelectionSchema,
@@ -288,6 +287,7 @@ const transcriptPendingQuestionRequestFields = {
   requestId: z.string(),
   requestInstanceId: z.string().optional(),
   questions: z.array(agentSessionQuestionItemSchema),
+  blocking: z.boolean().optional(),
 } satisfies ZodSchemaFields;
 const inferredTranscriptPendingQuestionRequestSchema = z
   .object(transcriptPendingQuestionRequestFields)
@@ -311,8 +311,7 @@ export const agentUserMessageEventSchema = transcriptEventSchema({
   parts: z.array(agentUserMessageDisplayPartSchema),
   state: z.enum(["queued", "read"]),
   model: agentModelSelectionSchema.optional(),
-  asyncQuestionReplies: z.array(agentAsyncQuestionReplySchema).optional(),
-  asyncQuestionItemIds: z.array(z.string().trim().min(1)).optional(),
+  resolvedQuestionRequestIds: z.array(z.string().trim().min(1)).optional(),
 });
 
 const inferredAgentRuntimeEventSchema = z.discriminatedUnion("type", [
@@ -334,7 +333,7 @@ const inferredAgentRuntimeEventSchema = z.discriminatedUnion("type", [
     totalTokens: finiteNonNegativeNumberSchema.optional(),
     contextWindow: finiteNonNegativeNumberSchema.optional(),
     model: agentModelSelectionSchema.optional(),
-    asyncQuestion: agentAsyncQuestionAnnotationSchema.optional(),
+    questionRequest: agentSessionPendingQuestionRequestSchema.optional(),
   }),
   transcriptEventSchema({
     type: z.literal("transcript_retracted"),

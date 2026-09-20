@@ -107,7 +107,7 @@ export function projectWorkspaceSessionChatState({
             activityState,
             runtimeStatusMessage: session.runtimeStatusMessage,
             messages: session.messages,
-            pendingAsyncQuestions: session.pendingAsyncQuestions ?? [],
+            pendingQuestions: session.pendingQuestions,
           }
         : null,
     transcriptTarget: identity

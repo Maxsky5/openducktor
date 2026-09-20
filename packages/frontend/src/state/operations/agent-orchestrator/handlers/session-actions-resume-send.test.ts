@@ -63,7 +63,6 @@ test.each(["opencode", "codex", "claude"] as const)(
         startedAt: session.startedAt,
         pendingApprovals: [],
         pendingQuestions: [],
-        pendingAsyncQuestions: [],
         contextUsage: null,
       };
       sessionsRef.current = applyAgentSessionLiveDelta({

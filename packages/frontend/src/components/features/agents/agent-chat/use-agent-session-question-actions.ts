@@ -1,4 +1,4 @@
-import type { AgentSessionScope, AgentUserMessagePart } from "@openducktor/core";
+import type { AgentSessionScope } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentQuestionRequest, AgentSessionIdentity } from "@/types/agent-orchestrator";
@@ -15,35 +15,7 @@ type UseAgentSessionQuestionActionsArgs = {
   pendingQuestions: readonly AgentQuestionRequest[];
   canAnswerQuestions: boolean;
   answerAgentQuestion: AgentOperationsContextValue["answerAgentQuestion"];
-  sendAgentMessage: AgentOperationsContextValue["sendAgentMessage"];
   sessionScope?: AgentSessionScope | null | undefined;
-};
-
-const toAsyncQuestionReplyParts = (
-  request: AgentQuestionRequest,
-  answers: string[][],
-): AgentUserMessagePart[] | null => {
-  const questionItemIds = request.asyncQuestionItemIds;
-  if (!questionItemIds) {
-    return null;
-  }
-  if (questionItemIds.length !== request.questions.length) {
-    throw new Error("The pending question data is incomplete. Reload the session and try again.");
-  }
-
-  return request.questions.map((question, index) => {
-    const answer = answers[index]?.[0]?.trim() ?? "";
-    const questionItemId = questionItemIds[index];
-    if (!questionItemId || answer.length === 0) {
-      throw new Error("Answer each question before you submit.");
-    }
-    return {
-      kind: "async_question_reply",
-      questionItemId,
-      question: question.question,
-      answer,
-    };
-  });
 };
 
 export function useAgentSessionQuestionActions({
@@ -51,7 +23,6 @@ export function useAgentSessionQuestionActions({
   pendingQuestions,
   canAnswerQuestions,
   answerAgentQuestion,
-  sendAgentMessage,
   sessionScope,
 }: UseAgentSessionQuestionActionsArgs) {
   const [submittingQuestionBySessionKey, setSubmittingQuestionBySessionKey] = useState<
@@ -99,16 +70,7 @@ export function useAgentSessionQuestionActions({
         setAgentSessionRequestValue(current, sessionKey, requestId, true),
       );
       try {
-        const replyParts = toAsyncQuestionReplyParts(request, answers);
-        if (replyParts) {
-          await sendAgentMessage(
-            sessionActionTarget,
-            replyParts,
-            sessionScope ? { sessionScope } : undefined,
-          );
-        } else {
-          await answerAgentQuestion(sessionActionTarget, request, answers);
-        }
+        await answerAgentQuestion(sessionActionTarget, request, answers, sessionScope ?? undefined);
       } finally {
         setSubmittingQuestionBySessionKey((current) =>
           removeAgentSessionRequestValue(current, sessionKey, requestId),
@@ -118,7 +80,6 @@ export function useAgentSessionQuestionActions({
     [
       answerAgentQuestion,
       canAnswerQuestions,
-      sendAgentMessage,
       sessionExternalSessionId,
       sessionKey,
       sessionRuntimeKind,

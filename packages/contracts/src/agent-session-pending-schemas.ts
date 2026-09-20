@@ -18,3 +18,12 @@ export const agentSessionQuestionItemSchema = z
   .strict();
 
 export type AgentTranscriptQuestionItem = z.infer<typeof agentSessionQuestionItemSchema>;
+
+export const agentSessionPendingQuestionRequestSchema = z
+  .object({
+    requestId: z.string(),
+    requestInstanceId: z.string().optional(),
+    questions: z.array(agentSessionQuestionItemSchema),
+    blocking: z.boolean().optional(),
+  })
+  .strict();

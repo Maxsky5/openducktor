@@ -3,6 +3,7 @@ import type { AgentUserMessagePart } from "@openducktor/core";
 import { utf8ByteLength } from "./codex-user-input-display";
 import {
   CODEX_ASYNC_QUESTION_SKIP_CARRIER,
+  type CodexAsyncQuestionReply,
   encodeCodexAsyncQuestionReplies,
   encodeCodexAsyncQuestionSkips,
 } from "./codex-async-questions";
@@ -29,44 +30,19 @@ const toCodexUserInput = (part: AgentUserMessagePart): CodexUserInput => {
   if (part.kind === "attachment" && part.attachment.kind === "image") {
     return { type: "localImage", path: part.attachment.path };
   }
-  if (part.kind === "async_question_reply") {
-    return toCodexAsyncQuestionReplyInput([part]);
-  }
-
   throw new Error(`Codex app-server does not support '${part.kind}' user message parts.`);
 };
 
-const toCodexAsyncQuestionReplyInput = (
-  parts: Extract<AgentUserMessagePart, { kind: "async_question_reply" }>[],
+export const toCodexAsyncQuestionReplyInput = (
+  replies: readonly CodexAsyncQuestionReply[],
 ): CodexUserInput => ({
   type: "text",
-  text: encodeCodexAsyncQuestionReplies(
-    parts.map((part) => ({
-      questionItemId: part.questionItemId,
-      question: part.question,
-      answer: part.answer.trim(),
-    })),
-  ),
+  text: encodeCodexAsyncQuestionReplies(replies),
   text_elements: [],
 });
 
-export const toCodexUserInputList = (parts: AgentUserMessagePart[]): CodexUserInput[] => {
-  const replies = parts.filter(
-    (part): part is Extract<AgentUserMessagePart, { kind: "async_question_reply" }> =>
-      part.kind === "async_question_reply",
-  );
-  let addedReplies = false;
-  return parts.flatMap((part): CodexUserInput[] => {
-    if (part.kind !== "async_question_reply") {
-      return [toCodexUserInput(part)];
-    }
-    if (addedReplies) {
-      return [];
-    }
-    addedReplies = true;
-    return [toCodexAsyncQuestionReplyInput(replies)];
-  });
-};
+export const toCodexUserInputList = (parts: AgentUserMessagePart[]): CodexUserInput[] =>
+  parts.map(toCodexUserInput);
 
 const wordlikeTextStartPattern = /[\p{L}\p{N}_]/u;
 
@@ -98,21 +74,9 @@ const toCodexMarkedTextInput = (
 
 export const toCodexTurnInputList = (
   parts: AgentUserMessagePart[],
-  asyncQuestionItemIds?: readonly string[],
+  resolvedQuestionRequestIds?: readonly string[],
 ): CodexUserInput[] => {
-  const replies = parts.filter(
-    (part): part is Extract<AgentUserMessagePart, { kind: "async_question_reply" }> =>
-      part.kind === "async_question_reply",
-  );
-  let addedReplies = false;
   const inputs = parts.flatMap((part, index): CodexUserInput[] => {
-    if (part.kind === "async_question_reply") {
-      if (addedReplies) {
-        return [];
-      }
-      addedReplies = true;
-      return [toCodexAsyncQuestionReplyInput(replies)];
-    }
     if (part.kind === "file_reference") {
       const marker = `@${part.file.path}`;
       const placeholder = `@${part.file.name || part.file.path}`;
@@ -126,9 +90,9 @@ export const toCodexTurnInputList = (
     const text = codexMarkerNeedsTrailingSpaceBefore(parts[index + 1]) ? `${marker} ` : marker;
     return [toCodexMarkedTextInput(text, marker, marker), toCodexUserInput(part)];
   });
-  if (asyncQuestionItemIds === undefined) return inputs;
+  if (resolvedQuestionRequestIds === undefined) return inputs;
 
-  const placeholder = encodeCodexAsyncQuestionSkips(asyncQuestionItemIds);
+  const placeholder = encodeCodexAsyncQuestionSkips(resolvedQuestionRequestIds);
   const textIndex = inputs.findIndex((input) => input.type === "text");
   if (textIndex >= 0) {
     const textInput = inputs[textIndex];

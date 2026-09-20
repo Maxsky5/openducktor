@@ -45,11 +45,7 @@ import type { CodexTimedThreadItem } from "./codex-event-mapper";
 import { codexUserInputListToText, toDisplayParts } from "./codex-user-input-display";
 import { codexUserInputsFromItem, toCodexUserInputList } from "./codex-user-inputs";
 import type { CodexNotificationRecord, CodexSessionState } from "./types";
-import {
-  type CodexAsyncQuestionState,
-  codexAsyncQuestionReplyText,
-  parseCodexAsyncQuestionItem,
-} from "./codex-async-questions";
+import { type CodexAsyncQuestionState, parseCodexAsyncQuestionItem } from "./codex-async-questions";
 
 type CodexAgentMessageItem = Extract<CodexTimedThreadItem, { type: "agentMessage" }>;
 
@@ -139,24 +135,33 @@ const emitCanonicalEvents = (
     }
   }
   for (const event of events) {
-    if (event.kind === "assistant_message" && event.asyncQuestion?.status === "pending") {
+    if (event.kind === "assistant_message" && event.questionRequest) {
       const runtimeId = context.runtimeIdForThread(event.threadId);
       if (!runtimeId) continue;
-      context.asyncQuestions.add(runtimeId, event.threadId, event.asyncQuestion.questions);
+      context.asyncQuestions.add(runtimeId, event.threadId, event.questionRequest);
+      emitCodexSessionEvent(context, event.threadId, {
+        ...event.questionRequest,
+        type: "question_required",
+        externalSessionId: event.threadId,
+        timestamp: event.timestamp ?? new Date().toISOString(),
+      });
     }
     if (event.kind === "user_message") {
       const runtimeId = context.runtimeIdForThread(event.threadId);
       if (!runtimeId) continue;
-      if (event.asyncQuestionReplies) {
-        context.asyncQuestions.resolve(
-          runtimeId,
-          event.threadId,
-          event.asyncQuestionReplies.map((reply) => reply.questionItemId),
-        );
-      } else if (event.asyncQuestionItemIds !== undefined) {
-        context.asyncQuestions.resolve(runtimeId, event.threadId, event.asyncQuestionItemIds);
-      } else {
-        context.asyncQuestions.skipPending(runtimeId, event.threadId);
+      const resolvedQuestionRequestIds =
+        event.resolvedQuestionRequestIds ??
+        context.asyncQuestions
+          .pendingForSession(runtimeId, event.threadId)
+          .map((request) => request.requestId);
+      context.asyncQuestions.resolve(runtimeId, event.threadId, resolvedQuestionRequestIds);
+      for (const requestId of resolvedQuestionRequestIds) {
+        emitCodexSessionEvent(context, event.threadId, {
+          type: "question_resolved",
+          requestId,
+          externalSessionId: event.threadId,
+          timestamp: event.timestamp ?? new Date().toISOString(),
+        });
       }
     }
   }
@@ -290,36 +295,23 @@ export const createCodexAcceptedUserMessage = ({
   session,
   parts,
   model,
-  asyncQuestionItemIds,
+  resolvedQuestionRequestIds,
 }: {
   session: CodexSessionState;
   parts: AgentUserMessagePart[];
   model: AgentModelSelection | undefined;
-  asyncQuestionItemIds: readonly string[];
+  resolvedQuestionRequestIds: readonly string[];
 }): AcceptedAgentUserMessage => {
-  const asyncQuestionReplies = parts
-    .filter((part) => part.kind === "async_question_reply")
-    .map((part) => ({
-      questionItemId: part.questionItemId,
-      question: part.question,
-      answer: part.answer.trim(),
-    }));
   const event: AcceptedAgentUserMessage = {
     type: "user_message",
     externalSessionId: session.threadId,
     timestamp: new Date().toISOString(),
     messageId: createCodexAcceptedUserMessageId(),
-    message:
-      asyncQuestionReplies.length > 0
-        ? codexAsyncQuestionReplyText(asyncQuestionReplies)
-        : serializeAgentUserMessagePartsToText(parts),
+    message: serializeAgentUserMessagePartsToText(parts),
     parts: toDisplayParts(parts),
     state: "read",
-    asyncQuestionItemIds: [...asyncQuestionItemIds],
+    resolvedQuestionRequestIds: [...resolvedQuestionRequestIds],
   };
-  if (asyncQuestionReplies.length > 0) {
-    event.asyncQuestionReplies = asyncQuestionReplies;
-  }
 
   if (model) {
     event.model = model;

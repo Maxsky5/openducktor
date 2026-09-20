@@ -104,7 +104,6 @@ const createHarness = async (
           startedAt: "2026-07-16T10:00:00.000Z",
           pendingApprovals: [],
           pendingQuestions: [],
-          pendingAsyncQuestions: [],
           contextUsage: null,
         };
         snapshots.push(snapshot);

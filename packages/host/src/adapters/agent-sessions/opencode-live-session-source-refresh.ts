@@ -80,7 +80,6 @@ export const applyOpenCodeSessionSources = ({
       startedAt: source.startedAt,
       pendingApprovals: approvals.map(({ request }) => request),
       pendingQuestions: questions.map(({ request }) => request),
-      pendingAsyncQuestions: [],
       contextUsage: contextUsageBySessionId.get(source.externalSessionId) ?? null,
     };
     if (source.parentExternalSessionId) {

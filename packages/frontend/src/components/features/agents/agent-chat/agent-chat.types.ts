@@ -1,6 +1,5 @@
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import type {
-  AgentAsyncQuestion,
   ChatSettings,
   RuntimeApprovalReplyOutcome,
   RuntimeKind,
@@ -49,7 +48,7 @@ export type AgentChatTranscriptSession = AgentSessionIdentity & {
   activityState: AgentSessionActivityState | null;
   runtimeStatusMessage: string | null;
   messages: SessionMessagesState;
-  pendingAsyncQuestions: readonly AgentAsyncQuestion[];
+  pendingQuestions: AgentQuestionRequest[];
 };
 
 export type AgentChatTranscriptNoticeAction = {

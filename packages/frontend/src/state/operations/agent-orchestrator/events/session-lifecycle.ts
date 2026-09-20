@@ -32,10 +32,6 @@ import {
 import { toUserChatMessage } from "../support/user-message-event";
 import type { SessionEvent, SessionLifecycleEventContext } from "./session-event-types";
 import { settleSessionToIdle } from "./session-helpers";
-import {
-  applyAsyncQuestionAnnotation,
-  applyAsyncQuestionUserMessage,
-} from "../support/async-questions";
 
 const clearTurnTracking = (
   context: Pick<SessionLifecycleEventContext, "session" | "turn" | "store">,
@@ -105,46 +101,6 @@ export const handleAssistantMessage = (
   context: Pick<SessionLifecycleEventContext, "session" | "store" | "turn">,
   event: AssistantMessageEvent,
 ): void => {
-  const asyncQuestion = event.asyncQuestion;
-  if (asyncQuestion) {
-    context.store.updateSession(context.session.identity, (current) => {
-      const asyncState = applyAsyncQuestionAnnotation(
-        {
-          pendingAsyncQuestions: current.pendingAsyncQuestions ?? [],
-          handledAsyncQuestionIds: current.handledAsyncQuestionIds ?? new Set(),
-          asyncQuestionSkipMessages: current.asyncQuestionSkipMessages ?? [],
-        },
-        asyncQuestion,
-      );
-      if (asyncQuestion.status === "pending") {
-        return { ...current, ...asyncState };
-      }
-      const messages =
-        event.message.trim().length > 0
-          ? upsertSessionMessage(current, {
-              id: event.messageId,
-              role: "assistant",
-              content: event.message,
-              timestamp: event.timestamp,
-              meta: toAssistantMessageMeta(current),
-            })
-          : current.messages;
-      return {
-        ...current,
-        ...asyncState,
-        messages: appendSessionMessage(
-          { ...current, messages },
-          {
-            id: `async-question-error:${event.messageId}`,
-            role: "system",
-            content: asyncQuestion.error,
-            timestamp: event.timestamp,
-          },
-        ),
-      };
-    });
-    return;
-  }
   context.store.updateSession(context.session.identity, (current) => {
     const settledMessages = settleDanglingTodoToolMessages(current, event.timestamp);
     const settledOwner = {
@@ -235,19 +191,17 @@ export const handleUserMessage = (
 ): void => {
   context.turn.recordTurnUserMessageTimestamp(context.session.key, event.timestamp);
   context.store.updateSession(context.session.identity, (current) => {
-    const asyncState = applyAsyncQuestionUserMessage(
-      {
-        pendingAsyncQuestions: current.pendingAsyncQuestions ?? [],
-        handledAsyncQuestionIds: current.handledAsyncQuestionIds ?? new Set(),
-        asyncQuestionSkipMessages: current.asyncQuestionSkipMessages ?? [],
-      },
-      event.asyncQuestionReplies,
-      { messageId: event.messageId, timestamp: event.timestamp, text: event.message },
-      event.asyncQuestionItemIds,
-    );
+    const handledBackgroundQuestionIds = new Set(current.handledBackgroundQuestionIds ?? []);
+    for (const requestId of event.resolvedQuestionRequestIds ?? []) {
+      handledBackgroundQuestionIds.add(requestId);
+    }
     return {
       ...current,
-      ...asyncState,
+      handledBackgroundQuestionIds,
+      pendingQuestions: current.pendingQuestions.filter(
+        (request) =>
+          request.blocking !== false || !handledBackgroundQuestionIds.has(request.requestId),
+      ),
       messages: upsertUserSessionMessage(current, toUserChatMessage(event)),
     };
   });

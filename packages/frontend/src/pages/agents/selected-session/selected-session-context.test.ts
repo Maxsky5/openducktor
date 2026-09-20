@@ -425,13 +425,20 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     const session = createSession({
       runtimeKind: "codex",
       status: "running",
-      pendingAsyncQuestions: [
+      pendingQuestions: [
         {
-          questionItemId: "question-1",
-          sourceMessageId: "message-1",
-          questionIndex: 0,
-          title: "Which environment?",
-          options: ["Staging", "Production"],
+          requestId: "message-1",
+          blocking: false,
+          questions: [
+            {
+              header: "Environment",
+              question: "Which environment?",
+              options: [
+                { label: "Staging", description: "Staging" },
+                { label: "Production", description: "Production" },
+              ],
+            },
+          ],
         },
       ],
     });
@@ -446,7 +453,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     expect(context.pendingInput.pendingQuestions.canSubmit).toBe(true);
     expect(context.pendingInput.pendingQuestionRequests).toMatchObject([
       {
-        requestId: "async:message-1",
+        requestId: "message-1",
         questions: [
           {
             question: "Which environment?",

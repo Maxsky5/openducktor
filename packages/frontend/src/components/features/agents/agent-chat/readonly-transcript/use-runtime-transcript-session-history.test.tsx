@@ -370,16 +370,23 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     }
   });
 
-  test("keeps an async question that arrives while history is loading", async () => {
+  test("keeps a background question that arrives while history is loading", async () => {
     const history = Promise.withResolvers<AgentSessionHistoryMessage[]>();
     const readSessionHistory = mock(() => history.promise);
     const harness = createHarness(session({ runtimeKind: "opencode" }), readSessionHistory);
     const question = {
-      questionItemId: '["request_user_input_async","question-live",0]',
-      sourceMessageId: "question-live",
-      questionIndex: 0,
-      title: "Which environment?",
-      options: ["Staging", "Production"],
+      requestId: "question-live",
+      blocking: false,
+      questions: [
+        {
+          header: "Environment",
+          question: "Which environment?",
+          options: [
+            { label: "Staging", description: "Staging" },
+            { label: "Production", description: "Production" },
+          ],
+        },
+      ],
     };
 
     try {
@@ -394,14 +401,14 @@ describe("useRuntimeTranscriptSessionHistory", () => {
           workingDirectory: "/repo/worktree",
         },
         repoReadinessState: "ready",
-        liveSession: session({ runtimeKind: "opencode", pendingAsyncQuestions: [question] }),
+        liveSession: session({ runtimeKind: "opencode", pendingQuestions: [question] }),
       });
       await harness.run(() => {
         history.resolve([]);
       });
       await harness.waitFor((state) => !state.isRetryingHistory);
 
-      expect(harness.getLatest().session?.pendingAsyncQuestions).toEqual([question]);
+      expect(harness.getLatest().session?.pendingQuestions).toEqual([question]);
     } finally {
       await harness.unmount();
     }

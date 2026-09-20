@@ -28,7 +28,7 @@ import {
   codexUserMessageItemFixture,
 } from "./test-fixtures/codex-protocol";
 import {
-  encodeCodexAsyncQuestionReply,
+  encodeCodexAsyncQuestionReplies,
   parseCodexAsyncQuestionSkipIds,
 } from "./codex-async-questions";
 import { toCodexTurnInputList } from "./codex-user-inputs";
@@ -85,32 +85,28 @@ describe("CodexAppServerAdapter streaming", () => {
       expect(events).toContainEqual(
         expect.objectContaining({
           type: "assistant_message",
-          asyncQuestion: {
-            status: "pending",
-            questions: [expect.objectContaining({ questionItemId })],
-          },
+          questionRequest: expect.objectContaining({
+            requestId: "async-question-1",
+            blocking: false,
+          }),
         }),
       );
       await expect(
         adapter.readSessionRuntimeSnapshot(codexSessionRuntimeRef("thread/start-runtime-live")),
       ).resolves.toMatchObject({
         classification: "running",
-        pendingAsyncQuestions: [expect.objectContaining({ questionItemId })],
+        pendingQuestions: [expect.objectContaining({ requestId: "async-question-1" })],
       });
 
-      await adapter.sendUserMessage(
-        codexUserMessageInput({
-          externalSessionId: "thread/start-runtime-live",
-          parts: [
-            {
-              kind: "async_question_reply",
-              questionItemId,
-              question: "Which environment should I use?",
-              answer: "Staging",
-            },
-          ],
-        }),
-      );
+      const { parts: _parts, ...session } = codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [],
+      });
+      await adapter.replyQuestion({
+        ...session,
+        requestId: "async-question-1",
+        answers: [["Staging"]],
+      });
       await flushCodexAdapterWork();
 
       const turnStart = transports
@@ -120,23 +116,25 @@ describe("CodexAppServerAdapter streaming", () => {
         input: [
           {
             type: "text",
-            text: encodeCodexAsyncQuestionReply({
-              questionItemId,
-              question: "Which environment should I use?",
-              answer: "Staging",
-            }),
+            text: encodeCodexAsyncQuestionReplies([
+              {
+                questionItemId,
+                question: "Which environment should I use?",
+                answer: "Staging",
+              },
+            ]),
           },
         ],
       });
       await expect(
         adapter.readSessionRuntimeSnapshot(codexSessionRuntimeRef("thread/start-runtime-live")),
-      ).resolves.toMatchObject({ pendingAsyncQuestions: [] });
+      ).resolves.toMatchObject({ pendingQuestions: [] });
     } finally {
       unsubscribe();
     }
   });
 
-  test("resolves only the answered question from an IDE-wrapped live reply", async () => {
+  test("resolves a question request from an IDE-wrapped live reply", async () => {
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
     const { adapter } = createHarness({ subscribeEvents });
     await adapter.startSession(codexStartSessionInput());
@@ -170,12 +168,13 @@ describe("CodexAppServerAdapter streaming", () => {
       await flushCodexAdapterWork();
 
       const firstQuestionId = '["request_user_input_async","async-question-pair",0]';
-      const secondQuestionId = '["request_user_input_async","async-question-pair",1]';
-      const reply = encodeCodexAsyncQuestionReply({
-        questionItemId: firstQuestionId,
-        question: "Which environment?",
-        answer: "Staging",
-      });
+      const reply = encodeCodexAsyncQuestionReplies([
+        {
+          questionItemId: firstQuestionId,
+          question: "Which environment?",
+          answer: "Staging",
+        },
+      ]);
       emitNotification({
         method: "item/completed",
         params: {
@@ -200,16 +199,12 @@ describe("CodexAppServerAdapter streaming", () => {
         expect.objectContaining({
           type: "user_message",
           message: "> Which environment?\n\nStaging",
-          asyncQuestionReplies: [
-            expect.objectContaining({ questionItemId: firstQuestionId, answer: "Staging" }),
-          ],
+          resolvedQuestionRequestIds: ["async-question-pair"],
         }),
       );
       await expect(
         adapter.readSessionRuntimeSnapshot(codexSessionRuntimeRef("thread/start-runtime-live")),
-      ).resolves.toMatchObject({
-        pendingAsyncQuestions: [expect.objectContaining({ questionItemId: secondQuestionId })],
-      });
+      ).resolves.toMatchObject({ pendingQuestions: [] });
     } finally {
       unsubscribe();
     }
@@ -218,20 +213,13 @@ describe("CodexAppServerAdapter streaming", () => {
   test.each([
     {
       label: "a contextual answer",
-      parts: [
-        {
-          kind: "async_question_reply" as const,
-          questionItemId: '["request_user_input_async","async-question-rejected",0]',
-          question: "Which environment should I use?",
-          answer: "Staging",
-        },
-      ],
+      answer: true,
     },
     {
       label: "an ordinary message",
-      parts: [{ kind: "text" as const, text: "Use the safest option" }],
+      answer: false,
     },
-  ])("retains pending questions when idle turn/start rejects %s", async ({ parts }) => {
+  ])("retains pending questions when idle turn/start rejects $label", async ({ answer }) => {
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
     const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });
     await adapter.startSession(codexStartSessionInput());
@@ -266,9 +254,24 @@ describe("CodexAppServerAdapter streaming", () => {
       });
       await flushCodexAdapterWork();
 
-      const send = adapter.sendUserMessage(
-        codexUserMessageInput({ externalSessionId: "thread/start-runtime-live", parts }),
-      );
+      const send = answer
+        ? (() => {
+            const { parts: _parts, ...session } = codexUserMessageInput({
+              externalSessionId: "thread/start-runtime-live",
+              parts: [],
+            });
+            return adapter.replyQuestion({
+              ...session,
+              requestId: "async-question-rejected",
+              answers: [["Staging"]],
+            });
+          })()
+        : adapter.sendUserMessage(
+            codexUserMessageInput({
+              externalSessionId: "thread/start-runtime-live",
+              parts: [{ kind: "text", text: "Use the safest option" }],
+            }),
+          );
       await flushCodexAdapterWork();
       const transport = transports.get("runtime-live");
       if (!transport) throw new Error("Expected the runtime transport.");
@@ -278,11 +281,7 @@ describe("CodexAppServerAdapter streaming", () => {
       await expect(
         adapter.readSessionRuntimeSnapshot(codexSessionRuntimeRef("thread/start-runtime-live")),
       ).resolves.toMatchObject({
-        pendingAsyncQuestions: [
-          expect.objectContaining({
-            questionItemId: '["request_user_input_async","async-question-rejected",0]',
-          }),
-        ],
+        pendingQuestions: [expect.objectContaining({ requestId: "async-question-rejected" })],
       });
       expect(events.some((event) => event.type === "user_message")).toBe(false);
     } finally {
@@ -295,7 +294,6 @@ describe("CodexAppServerAdapter streaming", () => {
     const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });
     await adapter.startSession(codexStartSessionInput());
     const unsubscribe = await observeSessionState(adapter, "thread/start-runtime-live");
-    const questionItemId = '["request_user_input_async","history-question",0]';
 
     try {
       const input = {
@@ -303,7 +301,7 @@ describe("CodexAppServerAdapter streaming", () => {
           externalSessionId: "thread/start-runtime-live",
           parts: [{ kind: "text", text: "Use the safest option" }],
         }),
-        asyncQuestionItemIds: [questionItemId],
+        resolvedQuestionRequestIds: ["history-question"],
       };
       const send = adapter.sendUserMessage(input);
       await flushCodexAdapterWork();
@@ -317,7 +315,7 @@ describe("CodexAppServerAdapter streaming", () => {
     }
   });
 
-  test("includes the async question snapshot in its item/completed mutation", async () => {
+  test("includes the background question in its item/completed snapshot", async () => {
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
     const mutations: CodexLiveSessionMutation[] = [];
     const { adapter } = createHarness({
@@ -359,61 +357,8 @@ describe("CodexAppServerAdapter streaming", () => {
       );
       expect(mutation?.snapshots).toMatchObject([
         {
-          asyncQuestionsAuthoritative: true,
-          pendingAsyncQuestions: [
-            {
-              questionItemId: '["request_user_input_async","async-question-notification",0]',
-            },
-          ],
-        },
-      ]);
-    } finally {
-      unsubscribe();
-    }
-  });
-
-  test("keeps the first live async question on a resumed session non-authoritative", async () => {
-    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
-    const mutations: CodexLiveSessionMutation[] = [];
-    const { adapter } = createHarness({
-      subscribeEvents,
-      onLiveSessionMutation: (mutation) => {
-        mutations.push(mutation);
-      },
-    });
-    await adapter.resumeSession(codexSessionRuntimeRef("thread-saved"));
-    const unsubscribe = await observeSessionState(adapter, "thread-saved");
-
-    try {
-      emitNotification({
-        method: "item/completed",
-        params: {
-          threadId: "thread-saved",
-          turnId: "turn-live",
-          completedAtMs: 1_777_766_419_650,
-          item: {
-            type: "agentMessage",
-            id: "async-question-after-history",
-            phase: "commentary",
-            text: "Which region should I use?",
-            memoryCitation: null,
-            delivery: "async",
-            questions: [{ title: "Which region should I use?", options: ["Europe", "US"] }],
-          },
-        },
-      });
-      await flushCodexAdapterWork();
-
-      const mutation = mutations.findLast((candidate) =>
-        candidate.transcriptEvents.some((event) => event.type === "assistant_message"),
-      );
-      expect(mutation?.snapshots).toMatchObject([
-        {
-          asyncQuestionsAuthoritative: false,
-          pendingAsyncQuestions: [
-            {
-              questionItemId: '["request_user_input_async","async-question-after-history",0]',
-            },
+          pendingQuestions: [
+            expect.objectContaining({ requestId: "async-question-notification", blocking: false }),
           ],
         },
       ]);
@@ -477,28 +422,28 @@ describe("CodexAppServerAdapter streaming", () => {
       });
 
       const accepted = await send;
-      const capturedQuestionItemId = '["request_user_input_async","async-question-before-send",0]';
-      expect(accepted).toMatchObject({ asyncQuestionItemIds: [capturedQuestionItemId] });
+      const capturedQuestionRequestId = "async-question-before-send";
+      expect(accepted).toMatchObject({
+        resolvedQuestionRequestIds: [capturedQuestionRequestId],
+      });
       const turnStart = transport.calls.findLast((call) => call.method === "turn/start");
       if (!turnStart || !Array.isArray(turnStart.params.input)) {
         throw new Error("Expected a turn/start call with user input.");
       }
       expect(parseCodexAsyncQuestionSkipIds(turnStart.params.input)).toEqual([
-        capturedQuestionItemId,
+        capturedQuestionRequestId,
       ]);
       expect(events).toContainEqual(
         expect.objectContaining({
           type: "user_message",
-          asyncQuestionItemIds: [capturedQuestionItemId],
+          resolvedQuestionRequestIds: [capturedQuestionRequestId],
         }),
       );
       await expect(
         adapter.readSessionRuntimeSnapshot(codexSessionRuntimeRef("thread/start-runtime-live")),
       ).resolves.toMatchObject({
-        pendingAsyncQuestions: [
-          {
-            questionItemId: '["request_user_input_async","async-question-during-admission",0]',
-          },
+        pendingQuestions: [
+          expect.objectContaining({ requestId: "async-question-during-admission" }),
         ],
       });
     } finally {

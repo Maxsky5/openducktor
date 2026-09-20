@@ -169,7 +169,6 @@ export const createClaudeLiveSessionState = ({
       startedAt: isRoot ? session.startedAt : timestamp,
       pendingApprovals: [],
       pendingQuestions: [],
-      pendingAsyncQuestions: [],
       contextUsage: null,
     };
     if (session.summary.sessionAssociation.kind === "repository") {
@@ -484,7 +483,6 @@ export const createClaudeLiveSessionState = ({
         startedAt: summary.startedAt,
         pendingApprovals: current?.pendingApprovals ?? [],
         pendingQuestions: current?.pendingQuestions ?? [],
-        pendingAsyncQuestions: [],
         contextUsage: current?.contextUsage ?? null,
       };
       if (summary.sessionAssociation.kind === "repository") {

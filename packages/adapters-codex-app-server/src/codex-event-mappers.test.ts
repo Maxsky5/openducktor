@@ -88,25 +88,32 @@ describe("Codex event mapper pipeline", () => {
       ),
     );
 
-    const expectedQuestion = {
-      questionItemId: '["request_user_input_async","question-message-1",0]',
-      sourceMessageId: "question-message-1",
-      questionIndex: 0,
-      title: "Which environment should I use?",
-      options: ["Staging", "Production"],
+    const expectedQuestionRequest = {
+      requestId: "question-message-1",
+      blocking: false,
+      questions: [
+        {
+          header: "",
+          question: "Which environment should I use?",
+          options: [
+            { label: "Staging", description: "" },
+            { label: "Production", description: "" },
+          ],
+        },
+      ],
     };
     expect(live).toEqual([
       expect.objectContaining({
         type: "assistant_message",
         messageId: "question-message-1",
-        asyncQuestion: { status: "pending", questions: [expectedQuestion] },
+        questionRequest: expectedQuestionRequest,
       }),
     ]);
     expect(history).toEqual([
       expect.objectContaining({
         role: "assistant",
         messageId: "question-message-1",
-        asyncQuestion: { status: "pending", questions: [expectedQuestion] },
+        questionRequest: expectedQuestionRequest,
       }),
     ]);
   });
@@ -174,8 +181,8 @@ describe("Codex event mapper pipeline", () => {
     expect(history).toEqual([
       expect.objectContaining({ role: "assistant", text: "I am still working on this." }),
     ]);
-    expect(live[0]).not.toHaveProperty("asyncQuestion");
-    expect(history[0]).not.toHaveProperty("asyncQuestion");
+    expect(live[0]).not.toHaveProperty("questionRequest");
+    expect(history[0]).not.toHaveProperty("questionRequest");
   });
 
   test("keeps malformed async questions visible with an actionable error", () => {
@@ -201,25 +208,20 @@ describe("Codex event mapper pipeline", () => {
       ),
     );
 
-    const expectedAsyncQuestion = {
-      status: "invalid",
-      error:
-        "OpenDucktor could not open this structured question. Answer through the main chat composer.",
-    };
+    const error =
+      "OpenDucktor could not open this structured question. Answer through the main chat composer.";
     expect(live).toEqual([
       expect.objectContaining({
         type: "assistant_message",
         messageId: "question-message-invalid",
-        message: "",
-        asyncQuestion: expectedAsyncQuestion,
+        message: error,
       }),
     ]);
     expect(history).toEqual([
       expect.objectContaining({
         role: "assistant",
         messageId: "question-message-invalid",
-        text: "",
-        asyncQuestion: expectedAsyncQuestion,
+        text: error,
       }),
     ]);
   });
@@ -236,7 +238,7 @@ describe("Codex event mapper pipeline", () => {
             content: [
               {
                 type: "text",
-                text: '<send_user_message_question_reply>{"answer":"Staging","question":"Which environment?","questionItemId":"question-1"}</send_user_message_question_reply>',
+                text: '<send_user_message_question_reply>{"answer":"Staging","question":"Which environment?","questionItemId":"[\\"request_user_input_async\\",\\"question-1\\",0]"}</send_user_message_question_reply>',
                 text_elements: [],
               },
             ],
@@ -250,20 +252,18 @@ describe("Codex event mapper pipeline", () => {
       expect.objectContaining({
         role: "user",
         text: "> Which environment?\n\nStaging",
-        asyncQuestionReplies: [
-          { questionItemId: "question-1", question: "Which environment?", answer: "Staging" },
-        ],
+        resolvedQuestionRequestIds: ["question-1"],
       }),
     ]);
   });
 
   test("projects captured async question skip IDs from Codex history", () => {
-    const questionItemIds = ['["request_user_input_async","question-message",0]'];
+    const requestIds = ["question-message"];
     const item = {
       type: "userMessage" as const,
       id: "ordinary-message",
       clientId: null,
-      content: toCodexTurnInputList([{ kind: "text", text: "Continue" }], questionItemIds),
+      content: toCodexTurnInputList([{ kind: "text", text: "Continue" }], requestIds),
     };
     const pipeline = createCodexEventMapperPipeline();
     const live = projectCodexCanonicalEvents(
@@ -280,14 +280,14 @@ describe("Codex event mapper pipeline", () => {
       expect.objectContaining({
         type: "user_message",
         message: "Continue",
-        asyncQuestionItemIds: questionItemIds,
+        resolvedQuestionRequestIds: requestIds,
       }),
     ]);
     expect(history).toEqual([
       expect.objectContaining({
         role: "user",
         text: "Continue",
-        asyncQuestionItemIds: questionItemIds,
+        resolvedQuestionRequestIds: requestIds,
       }),
     ]);
   });
@@ -324,26 +324,18 @@ describe("Codex event mapper pipeline", () => {
         { source: "thread_read", threadId: "thread-1" },
       ),
     );
-    const expectedReplies = [
-      {
-        questionItemId: firstQuestionId,
-        question: "Which environment?",
-        answer: "Staging",
-      },
-    ];
-
     expect(live).toEqual([
       expect.objectContaining({
         type: "user_message",
         message: "> Which environment?\n\nStaging",
-        asyncQuestionReplies: expectedReplies,
+        resolvedQuestionRequestIds: ["question-message"],
       }),
     ]);
     expect(history).toEqual([
       expect.objectContaining({
         role: "user",
         text: "> Which environment?\n\nStaging",
-        asyncQuestionReplies: expectedReplies,
+        resolvedQuestionRequestIds: ["question-message"],
       }),
     ]);
   });

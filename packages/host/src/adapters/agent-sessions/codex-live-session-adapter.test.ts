@@ -125,7 +125,6 @@ const liveSnapshot = (): AgentSessionLiveSnapshot => ({
     },
   ],
   pendingQuestions: [],
-  pendingAsyncQuestions: [],
   contextUsage: null,
 });
 
@@ -290,6 +289,7 @@ const createControllerHarness = ({
             output: "{}",
           },
         }),
+        replyQuestion: async () => undefined,
         releaseRuntime: () => {
           snapshots = [];
           releaseRuntime();
@@ -670,7 +670,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
         ...ref,
         sessionScope,
         parts: [{ kind: "text", text: "Hello" }],
-        asyncQuestionItemIds: ['["request_user_input_async","question-1",0]'],
+        resolvedQuestionRequestIds: ["question-1"],
       }),
     );
 
@@ -686,9 +686,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
         }),
       ]);
     }
-    expect(harness.controlInputs.sends[0]?.asyncQuestionItemIds).toEqual([
-      '["request_user_input_async","question-1",0]',
-    ]);
+    expect(harness.controlInputs.sends[0]?.resolvedQuestionRequestIds).toEqual(["question-1"]);
   });
 
   test("requires scope and accepts repository scope for direct Codex controls", async () => {

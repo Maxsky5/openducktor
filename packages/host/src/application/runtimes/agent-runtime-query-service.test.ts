@@ -398,7 +398,6 @@ test("accepts retained child ancestry backed by an ODT root record", async () =>
       startedAt: h.runtime.startedAt,
       pendingApprovals: [],
       pendingQuestions: [],
-      pendingAsyncQuestions: [],
       contextUsage: null,
     },
   ]);
@@ -423,7 +422,6 @@ test("rejects retained child ancestry without an ODT ownership record", async ()
       startedAt: h.runtime.startedAt,
       pendingApprovals: [],
       pendingQuestions: [],
-      pendingAsyncQuestions: [],
       contextUsage: null,
     },
   ]);

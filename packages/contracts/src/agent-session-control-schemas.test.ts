@@ -183,11 +183,11 @@ describe("agent session control contracts", () => {
       agentSessionControlSendInputSchema.parse({
         ...ref,
         parts: [{ kind: "text", text: "hello" }],
-        asyncQuestionItemIds: ['["request_user_input_async","question-1",0]'],
+        resolvedQuestionRequestIds: ["question-1"],
       }),
     ).toMatchObject({
       ...ref,
-      asyncQuestionItemIds: ['["request_user_input_async","question-1",0]'],
+      resolvedQuestionRequestIds: ["question-1"],
     });
   });
 

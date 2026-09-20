@@ -11,7 +11,6 @@ import { AgentChatSurface } from "@/components/features/agents/agent-chat/agent-
 import { deriveAgentChatReadiness } from "@/components/features/agents/agent-chat/agent-chat-readiness";
 import { resolveAgentChatRuntimePresentation } from "@/components/features/agents/agent-chat/agent-chat-runtime-presentation";
 import { resolveAgentChatTranscriptPresentation } from "@/components/features/agents/agent-chat/agent-chat-transcript-presentation";
-import { toAgentQuestionRequests } from "@/lib/agent-question-requests";
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
 import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
 import { useAgentSessionQuestionActions } from "@/components/features/agents/agent-chat/use-agent-session-question-actions";
@@ -220,16 +219,13 @@ export function WorkspaceSessionChat({
     canReplyToApprovals: canInteract,
     replyAgentApproval: operations.replyAgentApproval,
   });
-  const questionRequests = useMemo(
-    () => toAgentQuestionRequests(pendingQuestions, session?.pendingAsyncQuestions ?? []),
-    [pendingQuestions, session?.pendingAsyncQuestions],
-  );
+  const questionRequests = pendingQuestions;
   const questionActions = useAgentSessionQuestionActions({
     sessionIdentity: identity,
     pendingQuestions: questionRequests,
     canAnswerQuestions: canInteract,
     answerAgentQuestion: operations.answerAgentQuestion,
-    sendAgentMessage: operations.sendAgentMessage,
+    sessionScope: { kind: "repository" },
   });
   const transcript = resolveAgentChatTranscriptPresentation({
     repoPath: workspace.repoPath,

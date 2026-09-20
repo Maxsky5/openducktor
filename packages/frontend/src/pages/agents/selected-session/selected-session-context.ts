@@ -5,7 +5,6 @@ import type {
 } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { TaskExecutionDocument } from "@/components/features/agents";
-import { toAgentQuestionRequests } from "@/lib/agent-question-requests";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   getAgentSessionWaitingInputPlaceholder,
@@ -183,10 +182,8 @@ export const buildAgentStudioSelectedSessionContext = ({
     : null;
   const pendingApprovalRequests =
     loadedSession?.pendingApprovals ?? EMPTY_PENDING_APPROVAL_REQUESTS;
-  const pendingQuestionRequests = toAgentQuestionRequests(
-    loadedSession?.pendingQuestions ?? EMPTY_PENDING_QUESTION_REQUESTS,
-    loadedSession?.pendingAsyncQuestions ?? [],
-  );
+  const pendingQuestionRequests =
+    loadedSession?.pendingQuestions ?? EMPTY_PENDING_QUESTION_REQUESTS;
   const hasPendingQuestions = hasAgentSessionPendingQuestions({
     pendingQuestions: pendingQuestionRequests,
   });

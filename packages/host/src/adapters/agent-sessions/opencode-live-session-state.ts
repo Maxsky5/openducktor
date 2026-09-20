@@ -124,7 +124,6 @@ export const createOpenCodeLiveSessionState = ({
         parentExternalSessionId: parentExternalSessionId,
         pendingApprovals: [],
         pendingQuestions: [],
-        pendingAsyncQuestions: [],
         contextUsage: contextUsageBySessionId.get(childExternalSessionId) ?? null,
       },
       "opencode-live-session.create-child-event-state",

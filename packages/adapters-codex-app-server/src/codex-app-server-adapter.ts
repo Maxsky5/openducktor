@@ -121,8 +121,13 @@ import {
   flushQueuedUserMessagesLater as flushQueuedUserMessagesLaterImpl,
   startCodexContinuationTurn,
   startCodexTurnForSession,
+  startCodexTurnWithInputForSession,
 } from "./codex-turn-lifecycle";
-import { assertCodexUserMessagePartsSupported } from "./codex-user-inputs";
+import {
+  assertCodexUserMessagePartsSupported,
+  toCodexAsyncQuestionReplyInput,
+} from "./codex-user-inputs";
+import { codexAsyncQuestionReplyText } from "./codex-async-questions";
 import { searchCodexFiles } from "./file-search";
 import {
   CodexModels,
@@ -199,10 +204,19 @@ const toLivePendingApproval = (
 
 const toLivePendingQuestion = (
   request: AgentPendingQuestionRequest,
-): AgentSessionLivePendingQuestionRequest => ({
-  requestId: request.requestId,
-  questions: toCodexToolQuestions(request.questions),
-});
+): AgentSessionLivePendingQuestionRequest => {
+  const liveRequest: AgentSessionLivePendingQuestionRequest = {
+    requestId: request.requestId,
+    questions: toCodexToolQuestions(request.questions),
+  };
+  if (request.requestInstanceId !== undefined) {
+    liveRequest.requestInstanceId = request.requestInstanceId;
+  }
+  if (request.blocking !== undefined) {
+    liveRequest.blocking = request.blocking;
+  }
+  return liveRequest;
+};
 
 export class CodexAppServerAdapter
   implements AgentCatalogPort, AgentSessionPort, AgentWorkspaceInspectionPort
@@ -425,7 +439,6 @@ export class CodexAppServerAdapter
     const { summary } = session;
     this.localSessions.remember(session);
     this.freshSessions.add(session);
-    this.asyncQuestions.initializeFreshSession(runtimeId, session.threadId);
     this.runtimeEvents.initializeFreshThreadContextUsage(runtimeId, session.threadId);
     await client.threadSetName({
       threadId: session.threadId,
@@ -719,24 +732,21 @@ export class CodexAppServerAdapter
     session: CodexSessionState,
     systemInvocation: ReturnType<typeof classifySystemSlashCommandInvocation>,
   ): Promise<AcceptedAgentUserMessage> {
-    const replyParts = input.parts.filter((part) => part.kind === "async_question_reply");
-    let questionItemIds: readonly string[];
+    let resolvedQuestionRequestIds: readonly string[];
     if (systemInvocation.kind === "manual_session_compaction") {
-      questionItemIds = [];
-    } else if (input.asyncQuestionItemIds !== undefined) {
-      questionItemIds = input.asyncQuestionItemIds;
-    } else if (replyParts.length > 0) {
-      questionItemIds = replyParts.map((part) => part.questionItemId);
+      resolvedQuestionRequestIds = [];
+    } else if (input.resolvedQuestionRequestIds !== undefined) {
+      resolvedQuestionRequestIds = input.resolvedQuestionRequestIds;
     } else {
-      questionItemIds = this.asyncQuestions
+      resolvedQuestionRequestIds = this.asyncQuestions
         .pendingForSession(session.runtimeId, session.threadId)
-        .map((question) => question.questionItemId);
+        .map((request) => request.requestId);
     }
     const acceptedUserMessage = createCodexAcceptedUserMessage({
       session,
       parts: input.parts,
       model: input.model ?? session.model ?? undefined,
-      asyncQuestionItemIds: questionItemIds,
+      resolvedQuestionRequestIds,
     });
     if (systemInvocation.kind === "manual_session_compaction") {
       await this.runtimeEvents.ensureRuntimeEventSubscription(session.runtimeId);
@@ -755,10 +765,10 @@ export class CodexAppServerAdapter
       input.parts,
       acceptedUserMessage,
       input.model,
-      questionItemIds.length > 0,
-      replyParts.length === 0 ? questionItemIds : undefined,
+      resolvedQuestionRequestIds.length > 0,
+      resolvedQuestionRequestIds,
     );
-    this.asyncQuestions.resolve(session.runtimeId, session.threadId, questionItemIds);
+    this.asyncQuestions.resolve(session.runtimeId, session.threadId, resolvedQuestionRequestIds);
     return accepted;
   }
 
@@ -1193,7 +1203,6 @@ export class CodexAppServerAdapter
 
   async replyQuestion(input: ReplyQuestionInput): Promise<void> {
     assertCodexRuntimePolicyBinding(input, "reply to Codex question");
-    requireCodexPendingRequestKey(input.requestId, "question");
     const session = this.policyBoundSession(
       input,
       { lookup: "reply to question for", context: "reply to question" },
@@ -1211,6 +1220,37 @@ export class CodexAppServerAdapter
   }
 
   async replyLiveQuestion(input: CodexLiveQuestionReplyInput): Promise<AgentEvent> {
+    const backgroundReplies = this.asyncQuestions.repliesForSession(
+      input.runtimeId,
+      input.externalSessionId,
+      input.requestId,
+      input.answers,
+    );
+    if (backgroundReplies) {
+      const session = this.localSessions.get(input.externalSessionId);
+      if (!session || session.runtimeId !== input.runtimeId) {
+        throw new Error(
+          `Cannot answer Codex question '${input.requestId}' because its session is not loaded. Reload the session and try again.`,
+        );
+      }
+      const text = codexAsyncQuestionReplyText(backgroundReplies);
+      const parts = [{ kind: "text" as const, text }];
+      const acceptedUserMessage = createCodexAcceptedUserMessage({
+        session,
+        parts,
+        model: session.model ?? undefined,
+        resolvedQuestionRequestIds: [input.requestId],
+      });
+      const accepted = await startCodexTurnWithInputForSession(
+        this.turnLifecycleContext(),
+        input.externalSessionId,
+        parts,
+        [toCodexAsyncQuestionReplyInput(backgroundReplies)],
+        acceptedUserMessage,
+      );
+      this.asyncQuestions.resolve(input.runtimeId, input.externalSessionId, [input.requestId]);
+      return accepted;
+    }
     requireCodexPendingRequestKey(input.requestId, "question");
     const pending = this.pendingInput.claimQuestionForSession(
       input.requestId,
@@ -1283,13 +1323,10 @@ export class CodexAppServerAdapter
     const pendingApprovals = this.pendingInput
       .pendingApprovalsForSession(session.threadId, session.runtimeId)
       .map(toLivePendingApproval);
-    const pendingQuestions = this.pendingInput
-      .pendingQuestionsForSession(session.threadId, session.runtimeId)
-      .map(toLivePendingQuestion);
-    const pendingAsyncQuestions = this.asyncQuestions.pendingForSession(
-      session.runtimeId,
-      session.threadId,
-    );
+    const pendingQuestions = [
+      ...this.pendingInput.pendingQuestionsForSession(session.threadId, session.runtimeId),
+      ...this.asyncQuestions.pendingForSession(session.runtimeId, session.threadId),
+    ].map(toLivePendingQuestion);
     const runtimeActivity =
       session.liveStatus?.classification ??
       (session.summary.status === "running" || session.summary.status === "starting"
@@ -1307,11 +1344,6 @@ export class CodexAppServerAdapter
       startedAt: session.summary.startedAt,
       pendingApprovals,
       pendingQuestions,
-      pendingAsyncQuestions,
-      asyncQuestionsAuthoritative: this.asyncQuestions.isAuthoritative(
-        session.runtimeId,
-        session.threadId,
-      ),
       contextUsage: this.runtimeEvents.latestContextUsage(session.runtimeId, session.threadId),
     };
     if (session.summary.sessionAssociation.kind === "repository") {
@@ -1333,13 +1365,16 @@ export class CodexAppServerAdapter
     const pendingApprovals = this.pendingInput
       .pendingApprovalsForSession(route.childExternalSessionId, parentSession.runtimeId)
       .map(toLivePendingApproval);
-    const pendingQuestions = this.pendingInput
-      .pendingQuestionsForSession(route.childExternalSessionId, parentSession.runtimeId)
-      .map(toLivePendingQuestion);
-    const pendingAsyncQuestions = this.asyncQuestions.pendingForSession(
-      parentSession.runtimeId,
-      route.childExternalSessionId,
-    );
+    const pendingQuestions = [
+      ...this.pendingInput.pendingQuestionsForSession(
+        route.childExternalSessionId,
+        parentSession.runtimeId,
+      ),
+      ...this.asyncQuestions.pendingForSession(
+        parentSession.runtimeId,
+        route.childExternalSessionId,
+      ),
+    ].map(toLivePendingQuestion);
     const contextUsage = this.runtimeEvents.latestContextUsage(
       parentSession.runtimeId,
       route.childExternalSessionId,
@@ -1364,11 +1399,6 @@ export class CodexAppServerAdapter
       parentExternalSessionId: route.parentExternalSessionId,
       pendingApprovals,
       pendingQuestions,
-      pendingAsyncQuestions,
-      asyncQuestionsAuthoritative: this.asyncQuestions.isAuthoritative(
-        parentSession.runtimeId,
-        route.childExternalSessionId,
-      ),
       contextUsage,
     };
     if (parentSession.summary.sessionAssociation.kind === "repository") {

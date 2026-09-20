@@ -1,5 +1,4 @@
 import { settleImageGenerationMessages } from "@/state/operations/agent-orchestrator/support/image-generation-settlement";
-import type { AgentAsyncQuestion } from "@openducktor/contracts";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { mergeHistoryMessages } from "@/state/operations/agent-orchestrator/support/history-message-merge";
@@ -7,11 +6,14 @@ import { haveSameMessageTimestamp } from "@/state/operations/agent-orchestrator/
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { historyToChatMessages } from "@/state/operations/agent-orchestrator/support/session-history-chat-messages";
 import {
-  type AgentAsyncQuestionProjection,
-  mergeAsyncQuestionHistory,
-  projectAsyncQuestionsFromHistory,
-} from "@/state/operations/agent-orchestrator/support/async-questions";
-import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
+  mergeBackgroundQuestions,
+  projectBackgroundQuestions,
+} from "@/state/operations/agent-orchestrator/support/background-questions";
+import type {
+  AgentChatMessage,
+  AgentQuestionRequest,
+  AgentSessionState,
+} from "@/types/agent-orchestrator";
 import type { AgentChatTranscriptSession } from "../agent-chat.types";
 import type { AgentSessionTranscriptTarget } from "../agent-session-transcript-target";
 
@@ -50,12 +52,12 @@ export const createReadonlyTranscriptSession = ({
   workingDirectory,
   history,
 }: ReadonlyTranscriptSessionInput): AgentChatTranscriptSession => {
-  const asyncQuestions = projectAsyncQuestionsFromHistory(history);
+  const backgroundQuestions = projectBackgroundQuestions(history);
   return {
     ...toAgentSessionIdentity({ externalSessionId, runtimeKind, workingDirectory }),
     activityState: null,
     runtimeStatusMessage: null,
-    pendingAsyncQuestions: asyncQuestions.pendingAsyncQuestions,
+    pendingQuestions: [...backgroundQuestions.pendingQuestions],
     messages: createSessionMessagesState(
       externalSessionId,
       historyToChatMessages(history, {
@@ -86,9 +88,9 @@ const areMessageListsEquivalent = (
   });
 };
 
-const areAsyncQuestionsEquivalent = (
-  left: readonly AgentAsyncQuestion[],
-  right: readonly AgentAsyncQuestion[],
+const areQuestionsEquivalent = (
+  left: readonly AgentQuestionRequest[],
+  right: readonly AgentQuestionRequest[],
 ): boolean => {
   if (left.length !== right.length) {
     return false;
@@ -97,11 +99,9 @@ const areAsyncQuestionsEquivalent = (
     const nextQuestion = right[index];
     return (
       nextQuestion !== undefined &&
-      question.questionItemId === nextQuestion.questionItemId &&
-      question.sourceMessageId === nextQuestion.sourceMessageId &&
-      question.questionIndex === nextQuestion.questionIndex &&
-      question.title === nextQuestion.title &&
-      JSON.stringify(question.options) === JSON.stringify(nextQuestion.options)
+      question.requestId === nextQuestion.requestId &&
+      question.blocking === nextQuestion.blocking &&
+      JSON.stringify(question.questions) === JSON.stringify(nextQuestion.questions)
     );
   });
 };
@@ -112,18 +112,16 @@ const areStringSetsEquivalent = (left: ReadonlySet<string>, right: ReadonlySet<s
 export const mergeReadonlyRuntimeHistory = (
   session: AgentSessionState,
   history: AgentSessionHistoryMessage[],
-  asyncQuestionsAtReadStart?: AgentAsyncQuestionProjection,
 ): AgentSessionState => {
   const historyMessages = historyToChatMessages(history, { role: null });
-  const asyncQuestions = mergeAsyncQuestionHistory(
-    projectAsyncQuestionsFromHistory(history),
-    {
-      pendingAsyncQuestions: session.pendingAsyncQuestions ?? [],
-      handledAsyncQuestionIds: session.handledAsyncQuestionIds ?? new Set(),
-      asyncQuestionSkipMessages: session.asyncQuestionSkipMessages ?? [],
-    },
-    asyncQuestionsAtReadStart,
-  );
+  const backgroundQuestions = mergeBackgroundQuestions(projectBackgroundQuestions(history), {
+    pendingQuestions: session.pendingQuestions.filter((request) => request.blocking === false),
+    handledQuestionIds: session.handledBackgroundQuestionIds ?? new Set(),
+  });
+  const pendingQuestions = [
+    ...session.pendingQuestions.filter((request) => request.blocking !== false),
+    ...backgroundQuestions.pendingQuestions,
+  ];
   const mergedMessageState = settleImageGenerationMessages({
     ...session,
     messages: mergeHistoryMessages(
@@ -137,13 +135,10 @@ export const mergeReadonlyRuntimeHistory = (
   if (
     session.historyLoadState === "loaded" &&
     areMessageListsEquivalent(session.messages.items, mergedMessages) &&
-    areAsyncQuestionsEquivalent(
-      session.pendingAsyncQuestions ?? [],
-      asyncQuestions.pendingAsyncQuestions,
-    ) &&
+    areQuestionsEquivalent(session.pendingQuestions, pendingQuestions) &&
     areStringSetsEquivalent(
-      session.handledAsyncQuestionIds ?? new Set(),
-      asyncQuestions.handledAsyncQuestionIds,
+      session.handledBackgroundQuestionIds ?? new Set(),
+      backgroundQuestions.handledQuestionIds,
     )
   ) {
     return session;
@@ -154,6 +149,7 @@ export const mergeReadonlyRuntimeHistory = (
     startedAt: history[0]?.timestamp ?? session.startedAt,
     historyLoadState: "loaded",
     messages: mergedMessageState,
-    ...asyncQuestions,
+    pendingQuestions,
+    handledBackgroundQuestionIds: backgroundQuestions.handledQuestionIds,
   };
 };

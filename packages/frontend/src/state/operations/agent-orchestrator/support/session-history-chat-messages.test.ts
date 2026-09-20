@@ -14,16 +14,18 @@ const historyOwner = (messages: AgentChatMessage[]) => ({
 });
 
 describe("agent-orchestrator/support/session-history-chat-messages", () => {
-  test("hides structured question source text and keeps malformed fallback text actionable", () => {
+  test("hides a question source row and keeps normal assistant text", () => {
     const pendingQuestion = {
-      status: "pending" as const,
+      requestId: "question-1",
+      blocking: false,
       questions: [
         {
-          questionItemId: '["request_user_input_async","question-1",0]',
-          sourceMessageId: "question-1",
-          questionIndex: 0,
-          title: "Which environment?",
-          options: ["Staging", "Production"],
+          header: "Environment",
+          question: "Which environment?",
+          options: [
+            { label: "Staging", description: "Staging" },
+            { label: "Production", description: "Production" },
+          ],
         },
       ],
     };
@@ -35,7 +37,7 @@ describe("agent-orchestrator/support/session-history-chat-messages", () => {
           timestamp: "2026-09-19T10:00:00.000Z",
           text: "Which environment?",
           parts: [],
-          asyncQuestion: pendingQuestion,
+          questionRequest: pendingQuestion,
         },
         {
           role: "assistant",
@@ -43,11 +45,6 @@ describe("agent-orchestrator/support/session-history-chat-messages", () => {
           timestamp: "2026-09-19T10:01:00.000Z",
           text: "Readable fallback question",
           parts: [],
-          asyncQuestion: {
-            status: "invalid",
-            error:
-              "OpenDucktor could not open this structured question. Answer through the main chat composer.",
-          },
         },
       ],
       { role: "build" },
@@ -55,12 +52,6 @@ describe("agent-orchestrator/support/session-history-chat-messages", () => {
 
     expect(messages).toMatchObject([
       { id: "question-2", role: "assistant", content: "Readable fallback question" },
-      {
-        id: "async-question-error:question-2",
-        role: "system",
-        content:
-          "OpenDucktor could not open this structured question. Answer through the main chat composer.",
-      },
     ]);
   });
 

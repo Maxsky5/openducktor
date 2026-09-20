@@ -22,7 +22,6 @@ const snapshot = (
   startedAt: "2026-08-16T10:00:00.000Z",
   pendingApprovals: [],
   pendingQuestions: [],
-  pendingAsyncQuestions: [],
   contextUsage: null,
 });
 

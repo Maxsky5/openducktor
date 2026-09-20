@@ -53,11 +53,10 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   target: createTarget(),
   pendingApprovalRequests: [],
   pendingQuestionRequests: [],
-  pendingAsyncQuestions: [],
+  historyQuestionRequests: [],
   isRuntimeReady: true,
   replyAgentApproval: async () => {},
   answerAgentQuestion: async () => {},
-  sendAgentMessage: async () => {},
   ...overrides,
 });
 
@@ -155,7 +154,12 @@ describe("useRuntimeTranscriptInteractions", () => {
         (state) => state.pendingQuestions.isSubmittingByRequestId["question-1"] === true,
       );
 
-      expect(answerAgentQuestion).toHaveBeenCalledWith(createTarget(), pendingQuestion, [["A"]]);
+      expect(answerAgentQuestion).toHaveBeenCalledWith(
+        createTarget(),
+        pendingQuestion,
+        [["A"]],
+        undefined,
+      );
 
       await harness.run(async () => {
         deferredAnswer.resolve(undefined);
@@ -174,22 +178,18 @@ describe("useRuntimeTranscriptInteractions", () => {
     }
   });
 
-  test("maps a Codex background question and sends its answer as user input", async () => {
-    const sendAgentMessage = mock(async () => {});
+  test("answers a history background question through the standard action", async () => {
+    const answerAgentQuestion = mock(async () => {});
     const target = createTarget({ runtimeKind: "codex" });
+    const question = {
+      ...createQuestionRequest("message-1"),
+      blocking: false,
+    };
     const harness = createHookHarness(
       createBaseArgs({
         target,
-        pendingAsyncQuestions: [
-          {
-            questionItemId: "question-1",
-            sourceMessageId: "message-1",
-            questionIndex: 0,
-            title: "Which environment?",
-            options: ["Staging"],
-          },
-        ],
-        sendAgentMessage,
+        historyQuestionRequests: [question],
+        answerAgentQuestion,
         sessionScope: { kind: "repository" },
       }),
     );
@@ -199,26 +199,17 @@ describe("useRuntimeTranscriptInteractions", () => {
 
       expect(harness.getLatest().pendingQuestionRequests).toMatchObject([
         {
-          requestId: "async:message-1",
-          questions: [{ question: "Which environment?" }],
+          requestId: "message-1",
+          blocking: false,
         },
       ]);
       await harness.run(async (state) => {
-        await state.pendingQuestions.onSubmit("async:message-1", [["Staging"]]);
+        await state.pendingQuestions.onSubmit("message-1", [["Staging"]]);
       });
 
-      expect(sendAgentMessage).toHaveBeenCalledWith(
-        target,
-        [
-          {
-            kind: "async_question_reply",
-            questionItemId: "question-1",
-            question: "Which environment?",
-            answer: "Staging",
-          },
-        ],
-        { sessionScope: { kind: "repository" } },
-      );
+      expect(answerAgentQuestion).toHaveBeenCalledWith(target, question, [["Staging"]], {
+        kind: "repository",
+      });
     } finally {
       await harness.unmount();
     }

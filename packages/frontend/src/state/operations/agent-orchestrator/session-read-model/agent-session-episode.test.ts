@@ -33,7 +33,6 @@ describe("ordered session execution episodes", () => {
           startedAt: session.startedAt,
           pendingApprovals: [],
           pendingQuestions: [],
-          pendingAsyncQuestions: [],
           contextUsage: null,
         };
         const next = applyAgentSessionLiveDelta({
@@ -70,7 +69,6 @@ describe("ordered session execution episodes", () => {
             { requestId: "permission", requestType: "command_execution", title: "Run" },
           ],
           pendingQuestions: [{ requestId: "question", questions: [] }],
-          pendingAsyncQuestions: [],
           contextUsage: null,
         };
         const next = applyAgentSessionLiveDelta({

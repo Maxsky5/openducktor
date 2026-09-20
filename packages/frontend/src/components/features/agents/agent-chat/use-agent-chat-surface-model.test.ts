@@ -58,7 +58,7 @@ describe("useAgentChatSurfaceModel", () => {
       ...transcriptTarget,
       activityState: null,
       runtimeStatusMessage: null,
-      pendingAsyncQuestions: [],
+      pendingQuestions: [],
       messages: createSessionMessagesState(transcriptTarget.externalSessionId),
     };
     const runtimePresentation = {

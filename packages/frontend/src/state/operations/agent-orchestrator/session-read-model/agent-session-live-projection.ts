@@ -27,7 +27,6 @@ import type {
   AgentSessionRuntimeTarget,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
-import { applyAsyncQuestionAnnotation } from "../support/async-questions";
 import { createSessionMessagesState } from "../support/messages";
 import { projectSessionTranscriptActivity } from "./agent-session-live-activity";
 
@@ -210,6 +209,12 @@ const toQuestionRequest = (
     return projectedQuestion;
   });
   const questionRequest: AgentQuestionRequest = { requestId: request.requestId, questions };
+  if (request.requestInstanceId !== undefined) {
+    questionRequest.requestInstanceId = request.requestInstanceId;
+  }
+  if (request.blocking !== undefined) {
+    questionRequest.blocking = request.blocking;
+  }
   if (routing) {
     questionRequest.source = routing.source;
     questionRequest.responseSession = routing.responseSession;
@@ -298,24 +303,30 @@ const applyDirectSnapshot = (
       : toContextUsage(snapshot.contextUsage);
   const activity = projectSessionSnapshotActivity(current, snapshot);
   const directApprovals = snapshot.pendingApprovals.map((request) => toApprovalRequest(request));
-  const directQuestions = snapshot.pendingQuestions.map((request) => toQuestionRequest(request));
-  const handledAsyncQuestionIds = current.handledAsyncQuestionIds ?? new Set<string>();
-  const asyncQuestions = snapshot.asyncQuestionsAuthoritative
-    ? {
-        pendingAsyncQuestions: snapshot.pendingAsyncQuestions.filter(
-          (question) => !handledAsyncQuestionIds.has(question.questionItemId),
-        ),
-        handledAsyncQuestionIds,
-        asyncQuestionSkipMessages: current.asyncQuestionSkipMessages ?? [],
-      }
-    : applyAsyncQuestionAnnotation(
-        {
-          pendingAsyncQuestions: current.pendingAsyncQuestions ?? [],
-          handledAsyncQuestionIds,
-          asyncQuestionSkipMessages: current.asyncQuestionSkipMessages ?? [],
-        },
-        { status: "pending", questions: snapshot.pendingAsyncQuestions },
-      );
+  const handledBackgroundQuestionIds = current.handledBackgroundQuestionIds ?? new Set<string>();
+  const snapshotQuestions = snapshot.pendingQuestions
+    .filter(
+      (request) =>
+        request.blocking !== false || !handledBackgroundQuestionIds.has(request.requestId),
+    )
+    .map((request) => toQuestionRequest(request));
+  const backgroundQuestions = new Map(
+    current.pendingQuestions
+      .filter(
+        (request) =>
+          request.source === undefined &&
+          request.blocking === false &&
+          !handledBackgroundQuestionIds.has(request.requestId),
+      )
+      .map((request) => [request.requestId, request]),
+  );
+  for (const request of snapshotQuestions) {
+    if (request.blocking === false) backgroundQuestions.set(request.requestId, request);
+  }
+  const directQuestions = [
+    ...snapshotQuestions.filter((request) => request.blocking !== false),
+    ...backgroundQuestions.values(),
+  ];
   const childApprovals = current.pendingApprovals.filter((request) => request.source !== undefined);
   const childQuestions = current.pendingQuestions.filter((request) => request.source !== undefined);
 
@@ -329,7 +340,7 @@ const applyDirectSnapshot = (
     liveParentExternalSessionId: snapshot.parentExternalSessionId,
     pendingApprovals: [...directApprovals, ...childApprovals],
     pendingQuestions: [...directQuestions, ...childQuestions],
-    ...asyncQuestions,
+    handledBackgroundQuestionIds,
     contextUsage,
   };
 };
@@ -350,8 +361,7 @@ const createObservedSession = (snapshot: AgentSessionLiveSnapshot): AgentSession
       contextUsage: null,
       pendingApprovals: [],
       pendingQuestions: [],
-      pendingAsyncQuestions: [],
-      handledAsyncQuestionIds: new Set(),
+      handledBackgroundQuestionIds: new Set(),
       selectedModel: null,
     },
     snapshot,
@@ -466,7 +476,9 @@ const resetSessionLiveStateForSnapshot = (
   runtimeStatusMessage: null,
   livePresence: hasLiveSnapshot ? "present" : "absent",
   pendingApprovals: [],
-  pendingQuestions: [],
+  pendingQuestions: session.pendingQuestions.filter(
+    (request) => request.source === undefined && request.blocking === false,
+  ),
   contextUsage: null,
 });
 

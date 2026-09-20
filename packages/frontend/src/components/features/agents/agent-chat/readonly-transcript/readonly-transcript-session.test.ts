@@ -171,13 +171,20 @@ describe("createReadonlyTranscriptSession", () => {
     });
   });
 
-  test("projects a structured async question when history adds no chat row", () => {
+  test("projects a background question when history adds no chat row", () => {
     const question = {
-      questionItemId: '["request_user_input_async","question-1",0]',
-      sourceMessageId: "question-1",
-      questionIndex: 0,
-      title: "Which environment?",
-      options: ["Staging", "Production"],
+      requestId: "question-1",
+      blocking: false,
+      questions: [
+        {
+          header: "Environment",
+          question: "Which environment?",
+          options: [
+            { label: "Staging", description: "Staging" },
+            { label: "Production", description: "Production" },
+          ],
+        },
+      ],
     };
     const session = createAgentSessionFixture({
       externalSessionId: "session-1",
@@ -193,24 +200,31 @@ describe("createReadonlyTranscriptSession", () => {
         messageId: "question-1",
         role: "assistant",
         timestamp: "2026-09-19T10:00:00.000Z",
-        text: question.title,
+        text: "Which environment?",
         parts: [],
-        asyncQuestion: { status: "pending", questions: [question] },
+        questionRequest: question,
       },
     ]);
 
     expect(merged).not.toBe(session);
     expect(merged.messages.items).toEqual([]);
-    expect(merged.pendingAsyncQuestions).toEqual([question]);
+    expect(merged.pendingQuestions).toEqual([question]);
   });
 
   test("does not reopen a handled question from stale read-only history", () => {
     const question = {
-      questionItemId: '["request_user_input_async","question-stale",0]',
-      sourceMessageId: "question-stale",
-      questionIndex: 0,
-      title: "Which environment?",
-      options: ["Staging", "Production"],
+      requestId: "question-stale",
+      blocking: false,
+      questions: [
+        {
+          header: "Environment",
+          question: "Which environment?",
+          options: [
+            { label: "Staging", description: "Staging" },
+            { label: "Production", description: "Production" },
+          ],
+        },
+      ],
     };
     const session = createAgentSessionFixture({
       externalSessionId: "session-1",
@@ -219,8 +233,7 @@ describe("createReadonlyTranscriptSession", () => {
       sessionAssociation: { kind: "unbound" },
       historyLoadState: "loaded",
       messages: createSessionMessagesState("session-1"),
-      pendingAsyncQuestions: [],
-      handledAsyncQuestionIds: new Set([question.questionItemId]),
+      handledBackgroundQuestionIds: new Set([question.requestId]),
     });
 
     const merged = mergeReadonlyRuntimeHistory(session, [
@@ -228,42 +241,44 @@ describe("createReadonlyTranscriptSession", () => {
         messageId: "question-stale",
         role: "assistant",
         timestamp: "2026-09-19T10:00:00.000Z",
-        text: question.title,
+        text: "Which environment?",
         parts: [],
-        asyncQuestion: { status: "pending", questions: [question] },
+        questionRequest: question,
       },
     ]);
 
-    expect(merged.pendingAsyncQuestions).toEqual([]);
-    expect(merged.handledAsyncQuestionIds).toEqual(new Set([question.questionItemId]));
+    expect(merged.pendingQuestions).toEqual([]);
+    expect(merged.handledBackgroundQuestionIds).toEqual(new Set([question.requestId]));
   });
 
-  test("preserves an async question that arrives while read-only history is loading", () => {
+  test("preserves a background question that arrives while history loads", () => {
     const question = {
-      questionItemId: '["request_user_input_async","question-live",0]',
-      sourceMessageId: "question-live",
-      questionIndex: 0,
-      title: "Which environment?",
-      options: ["Staging", "Production"],
+      requestId: "question-live",
+      blocking: false,
+      questions: [
+        {
+          header: "Environment",
+          question: "Which environment?",
+          options: [
+            { label: "Staging", description: "Staging" },
+            { label: "Production", description: "Production" },
+          ],
+        },
+      ],
     };
     const atReadStart = createAgentSessionFixture({
       externalSessionId: "session-1",
       runtimeKind: "codex",
       workingDirectory: "/repo",
       sessionAssociation: { kind: "unbound" },
-      pendingAsyncQuestions: [],
     });
     const current = {
       ...atReadStart,
-      pendingAsyncQuestions: [question],
+      pendingQuestions: [question],
     };
 
-    const merged = mergeReadonlyRuntimeHistory(current, [], {
-      pendingAsyncQuestions: atReadStart.pendingAsyncQuestions ?? [],
-      handledAsyncQuestionIds: atReadStart.handledAsyncQuestionIds ?? new Set(),
-      asyncQuestionSkipMessages: atReadStart.asyncQuestionSkipMessages ?? [],
-    });
+    const merged = mergeReadonlyRuntimeHistory(current, []);
 
-    expect(merged.pendingAsyncQuestions).toEqual([question]);
+    expect(merged.pendingQuestions).toEqual([question]);
   });
 });

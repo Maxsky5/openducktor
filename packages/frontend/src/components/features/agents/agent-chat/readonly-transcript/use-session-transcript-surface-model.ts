@@ -5,11 +5,7 @@ import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { repoRuntimeReadinessTargetForRuntime } from "@/lib/repo-runtime-readiness";
 import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import {
-  useAgentOperations,
-  useAgentSession,
-  useAgentSessionVisiblePendingInput,
-} from "@/state/app-state-provider";
+import { useAgentSession, useAgentSessionVisiblePendingInput } from "@/state/app-state-provider";
 import {
   resolveRuntimeCatalogSurface,
   runtimeCatalogQueryOptions,
@@ -41,7 +37,6 @@ export function useSessionTranscriptSurfaceModel({
   const hasWorkspace = workspaceRepoPath !== null;
   const liveSession = useAgentSession(isOpen ? target : null);
   const visiblePendingInput = useAgentSessionVisiblePendingInput(isOpen ? target : null);
-  const { sendAgentMessage } = useAgentOperations();
   const { loadRepoRuntimeCatalog, runtimeDefinitions } = useRuntimeDefinitionsContext();
   const { chatSettings, chatSettingsError } = useWorkspaceChatSettings({
     hasWorkspace,
@@ -64,11 +59,10 @@ export function useSessionTranscriptSurfaceModel({
     target,
     pendingApprovalRequests: visiblePendingInput.pendingApprovals,
     pendingQuestionRequests: visiblePendingInput.pendingQuestions,
-    pendingAsyncQuestions: sessionHistory.session?.pendingAsyncQuestions ?? [],
+    historyQuestionRequests: sessionHistory.session?.pendingQuestions ?? [],
     isRuntimeReady: runtimeReadiness.state === "ready",
     replyAgentApproval: sessionHistory.replyAgentApproval,
     answerAgentQuestion: sessionHistory.answerAgentQuestion,
-    sendAgentMessage,
     sessionScope: target?.sessionScope ?? null,
   });
 

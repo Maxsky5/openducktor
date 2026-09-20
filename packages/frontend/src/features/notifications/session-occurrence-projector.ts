@@ -11,7 +11,6 @@ import type {
   NotificationSessionIdentity,
 } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { toAgentQuestionRequests } from "@/lib/agent-question-requests";
 import { pendingInputIdentity } from "@/lib/pending-input-identity";
 
 type NotificationTaskIdentity = {
@@ -34,7 +33,6 @@ type SessionProjection = {
   isSubagent: boolean;
   lastAssistantMessage: { id: string; text: string } | null;
   pendingApprovals: Set<string>;
-  pendingAsyncQuestions: Set<string>;
   pendingQuestions: Set<string>;
   running: boolean;
   ref: AgentSessionLiveSnapshot["ref"];
@@ -42,10 +40,8 @@ type SessionProjection = {
 
 type UnownedPendingInputs = {
   approvals: Set<string>;
-  asyncQuestions: Set<string>;
   questions: Set<string>;
   liveApprovals: Set<string>;
-  liveAsyncQuestions: Set<string>;
   liveQuestions: Set<string>;
 };
 
@@ -67,9 +63,6 @@ const createProjection = (
   isSubagent: snapshot.parentExternalSessionId !== undefined,
   lastAssistantMessage: null,
   pendingApprovals: new Set(snapshot.pendingApprovals.map(pendingInputIdentity)),
-  pendingAsyncQuestions: new Set(
-    snapshot.pendingAsyncQuestions.map((question) => question.questionItemId),
-  ),
   pendingQuestions: new Set(snapshot.pendingQuestions.map(pendingInputIdentity)),
   running: snapshot.activity !== "idle",
   ref: snapshot.ref,
@@ -133,23 +126,13 @@ export const createSessionOccurrenceProjector = ({
     }
     const previous = unownedInputs.get(key);
     const approvals = new Set(snapshot.pendingApprovals.map(pendingInputIdentity));
-    const asyncQuestions = new Set(
-      snapshot.pendingAsyncQuestions.map((question) => question.questionItemId),
-    );
     const questions = new Set(snapshot.pendingQuestions.map(pendingInputIdentity));
     unownedInputs.set(key, {
       approvals,
-      asyncQuestions,
       questions,
       liveApprovals: new Set(
         [...approvals].filter(
           (id) => previous?.liveApprovals.has(id) || (live && !previous?.approvals.has(id)),
-        ),
-      ),
-      liveAsyncQuestions: new Set(
-        [...asyncQuestions].filter(
-          (id) =>
-            previous?.liveAsyncQuestions.has(id) || (live && !previous?.asyncQuestions.has(id)),
         ),
       ),
       liveQuestions: new Set(
@@ -311,10 +294,8 @@ export const createSessionOccurrenceProjector = ({
       if (previous?.association) {
         unownedInputs.set(key, {
           approvals: previous.pendingApprovals,
-          asyncQuestions: previous.pendingAsyncQuestions,
           questions: previous.pendingQuestions,
           liveApprovals: new Set(),
-          liveAsyncQuestions: new Set(),
           liveQuestions: new Set(),
         });
       }
@@ -344,9 +325,6 @@ export const createSessionOccurrenceProjector = ({
       unownedInputs.delete(key);
       unownedTerminals.delete(key);
       projection.pendingApprovals = new Set(snapshot.pendingApprovals.map(pendingInputIdentity));
-      projection.pendingAsyncQuestions = new Set(
-        snapshot.pendingAsyncQuestions.map((question) => question.questionItemId),
-      );
       projection.pendingQuestions = new Set(snapshot.pendingQuestions.map(pendingInputIdentity));
       return [];
     }
@@ -355,17 +333,10 @@ export const createSessionOccurrenceProjector = ({
     if (ownershipResolved) {
       observeUnownedInputs(snapshot, true);
       projection.pendingApprovals = new Set(snapshot.pendingApprovals.map(pendingInputIdentity));
-      projection.pendingAsyncQuestions = new Set(
-        snapshot.pendingAsyncQuestions.map((question) => question.questionItemId),
-      );
       projection.pendingQuestions = new Set(snapshot.pendingQuestions.map(pendingInputIdentity));
       occurrences.push(...reconcilePendingOwnership(projection, snapshot));
     }
     const nextApprovals = pendingRequestsByIdentity(snapshot.pendingApprovals);
-    const nextAsyncQuestions = new Map(
-      snapshot.pendingAsyncQuestions.map((question) => [question.questionItemId, question]),
-    );
-    const nextAsyncQuestionRequests = toAgentQuestionRequests([], snapshot.pendingAsyncQuestions);
     const nextQuestions = pendingRequestsByIdentity(snapshot.pendingQuestions);
     for (const [identity, request] of nextApprovals) {
       if (association && !projection.pendingApprovals.has(identity)) {
@@ -377,18 +348,7 @@ export const createSessionOccurrenceProjector = ({
         occurrences.push(projectPendingInput(projection, { inputKind: "question", request }));
       }
     }
-    for (const request of nextAsyncQuestionRequests) {
-      if (
-        association &&
-        request.asyncQuestionItemIds?.some(
-          (questionItemId) => !projection.pendingAsyncQuestions.has(questionItemId),
-        )
-      ) {
-        occurrences.push(projectPendingInput(projection, { inputKind: "question", request }));
-      }
-    }
     projection.pendingApprovals = new Set(nextApprovals.keys());
-    projection.pendingAsyncQuestions = new Set(nextAsyncQuestions.keys());
     projection.pendingQuestions = new Set(nextQuestions.keys());
 
     if (snapshot.activity !== "idle" && !projection.errorNotified && !projection.idleNotified) {
@@ -413,15 +373,6 @@ export const createSessionOccurrenceProjector = ({
     }
     for (const [identity, request] of pendingRequestsByIdentity(snapshot.pendingQuestions)) {
       if (pending.liveQuestions.has(identity)) {
-        occurrences.push(projectPendingInput(projection, { inputKind: "question", request }));
-      }
-    }
-    for (const request of toAgentQuestionRequests([], snapshot.pendingAsyncQuestions)) {
-      if (
-        request.asyncQuestionItemIds?.some((questionItemId) =>
-          pending.liveAsyncQuestions.has(questionItemId),
-        )
-      ) {
         occurrences.push(projectPendingInput(projection, { inputKind: "question", request }));
       }
     }

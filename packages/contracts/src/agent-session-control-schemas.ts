@@ -72,14 +72,6 @@ export const agentSessionUserMessagePartSchema = z.discriminatedUnion("kind", [
       attachment: attachmentReferenceSchema,
     })
     .strict(),
-  z
-    .object({
-      kind: z.literal("async_question_reply"),
-      questionItemId: nonEmptyStringSchema,
-      question: nonEmptyStringSchema,
-      answer: nonEmptyStringSchema,
-    })
-    .strict(),
 ]);
 export type AgentSessionUserMessagePart = z.infer<typeof agentSessionUserMessagePartSchema>;
 
@@ -150,7 +142,7 @@ export const agentSessionControlSendInputSchema = agentSessionLiveRefSchema
   .extend({
     sessionScope: agentSessionScopeSchema,
     parts: z.array(agentSessionUserMessagePartSchema).min(1),
-    asyncQuestionItemIds: z.array(nonEmptyStringSchema).optional(),
+    resolvedQuestionRequestIds: z.array(nonEmptyStringSchema).optional(),
     model: agentModelSelectionSchema.optional(),
     systemPrompt: z.string().optional(),
   })

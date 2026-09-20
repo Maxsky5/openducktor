@@ -28,6 +28,15 @@ export type CodexSessionRuntimeSnapshotReaderDeps = {
 const directoriesFromInput = (directories: readonly string[] | undefined): Set<string> =>
   new Set(directories ?? []);
 
+const questionsForSession = (
+  deps: CodexSessionRuntimeSnapshotReaderDeps,
+  runtimeId: string,
+  threadId: string,
+) => [
+  ...deps.pendingInput.pendingQuestionsForSession(threadId, runtimeId),
+  ...deps.asyncQuestions.pendingForSession(runtimeId, threadId),
+];
+
 const toLocalRuntimeSnapshot = async (
   deps: CodexSessionRuntimeSnapshotReaderDeps,
   session: CodexSessionState,
@@ -44,14 +53,7 @@ const toLocalRuntimeSnapshot = async (
       session.threadId,
       session.runtimeId,
     ),
-    pendingQuestions: deps.pendingInput.pendingQuestionsForSession(
-      session.threadId,
-      session.runtimeId,
-    ),
-    pendingAsyncQuestions: deps.asyncQuestions.pendingForSession(
-      session.runtimeId,
-      session.threadId,
-    ),
+    pendingQuestions: questionsForSession(deps, session.runtimeId, session.threadId),
     hasActiveTurn: deps.hasActiveTurn(session.threadId),
   };
   if (input) {
@@ -95,14 +97,7 @@ export const listCodexSessionRuntimeSnapshots = async (
           session.threadId,
           session.runtimeId,
         ),
-        pendingQuestions: deps.pendingInput.pendingQuestionsForSession(
-          session.threadId,
-          session.runtimeId,
-        ),
-        pendingAsyncQuestions: deps.asyncQuestions.pendingForSession(
-          session.runtimeId,
-          session.threadId,
-        ),
+        pendingQuestions: questionsForSession(deps, session.runtimeId, session.threadId),
         hasActiveTurn: deps.hasActiveTurn(session.threadId),
       }),
     ),
@@ -133,7 +128,6 @@ export const readCodexSessionRuntimeSnapshot = async (
   }
   return toRuntimeSnapshotFromThread(snapshot, input, {
     pendingApprovals: deps.pendingInput.pendingApprovalsForSession(snapshot.id, runtimeId),
-    pendingQuestions: deps.pendingInput.pendingQuestionsForSession(snapshot.id, runtimeId),
-    pendingAsyncQuestions: deps.asyncQuestions.pendingForSession(runtimeId, snapshot.id),
+    pendingQuestions: questionsForSession(deps, runtimeId, snapshot.id),
   });
 };

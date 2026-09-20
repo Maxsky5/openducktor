@@ -26,6 +26,7 @@ import type {
 } from "@openducktor/contracts";
 import type {
   AgentModelSelection,
+  AgentSessionScope,
   AgentSessionHistoryMessage,
   AgentSessionTodoItem,
   AgentUserMessagePart,
@@ -248,5 +249,6 @@ export type AgentOperationsContextValue = {
     session: AgentSessionIdentity,
     request: AgentQuestionRequest,
     answers: string[][],
+    sessionScope?: AgentSessionScope,
   ) => Promise<void>;
 };

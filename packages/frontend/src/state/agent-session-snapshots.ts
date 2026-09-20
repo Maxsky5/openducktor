@@ -32,13 +32,10 @@ const sortByStartedAtDesc = (left: AgentSessionState, right: AgentSessionState):
   left.startedAt > right.startedAt ? -1 : left.startedAt < right.startedAt ? 1 : 0;
 
 const getSummaryActivityState = (session: AgentSessionState): AgentSessionActivityState =>
-  (session.pendingAsyncQuestions?.length ?? 0) > 0
-    ? "waiting_input"
-    : getAgentSessionActivityStateFromSession(session);
+  getAgentSessionActivityStateFromSession(session);
 
 const getPendingQuestionCount = (session: AgentSessionState): number =>
-  session.pendingQuestions.length +
-  new Set(session.pendingAsyncQuestions?.map((question) => question.sourceMessageId)).size;
+  session.pendingQuestions.length;
 
 export function toAgentSessionSummary(session: WorkflowAgentSessionState): AgentSessionSummary;
 export function toAgentSessionSummary(session: AgentSessionState): AgentSessionSummary;

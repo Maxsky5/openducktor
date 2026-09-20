@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { agentAsyncQuestionSchema } from "./agent-async-question-schemas";
 import { isoTimestampSchema } from "./string-schemas";
 import {
   runtimeApprovalReplyOutcomeSchema,
@@ -10,7 +9,7 @@ import {
   agentSessionTranscriptEventSchema,
   agentToolDataSchema,
 } from "./agent-session-event-schemas";
-import { agentSessionQuestionItemSchema } from "./agent-session-pending-schemas";
+import { agentSessionPendingQuestionRequestSchema } from "./agent-session-pending-schemas";
 import {
   agentModelSelectionSchema,
   agentSessionLiveRefSchema,
@@ -85,12 +84,8 @@ export type AgentSessionLivePendingApprovalRequest = z.infer<
   typeof agentSessionLivePendingApprovalRequestSchema
 >;
 
-export const agentSessionLivePendingQuestionRequestSchema = z
-  .object({
-    requestId: agentPendingRequestIdSchema,
-    questions: z.array(agentSessionQuestionItemSchema),
-  })
-  .strict();
+export const agentSessionLivePendingQuestionRequestSchema =
+  agentSessionPendingQuestionRequestSchema;
 export type AgentSessionLivePendingQuestionRequest = z.infer<
   typeof agentSessionLivePendingQuestionRequestSchema
 >;
@@ -106,8 +101,6 @@ export const agentSessionLiveSnapshotSchema = z
     parentExternalSessionId: nonEmptyStringSchema.optional(),
     pendingApprovals: z.array(agentSessionLivePendingApprovalRequestSchema),
     pendingQuestions: z.array(agentSessionLivePendingQuestionRequestSchema),
-    pendingAsyncQuestions: z.array(agentAsyncQuestionSchema),
-    asyncQuestionsAuthoritative: z.boolean().optional(),
     contextUsage: agentSessionContextUsageSchema.nullable(),
     model: agentModelSelectionSchema.optional(),
   })
@@ -256,6 +249,8 @@ export type AgentSessionLiveReplyApprovalInput = z.infer<
 export const agentSessionLiveReplyQuestionInputSchema = agentSessionLiveRefSchema.extend({
   requestId: agentPendingRequestIdSchema,
   answers: z.array(z.array(z.string())),
+  blocking: z.boolean().optional(),
+  sessionScope: agentSessionScopeSchema.optional(),
 });
 export type AgentSessionLiveReplyQuestionInput = z.infer<
   typeof agentSessionLiveReplyQuestionInputSchema

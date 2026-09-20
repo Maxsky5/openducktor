@@ -144,7 +144,7 @@ export type ForkAgentSessionInput = StartAgentSessionInput & {
 
 export type SendAgentUserMessageInput = PolicyBoundSessionControlRef & {
   parts: AgentUserMessagePart[];
-  asyncQuestionItemIds?: string[];
+  resolvedQuestionRequestIds?: string[];
   model?: AgentModelSelection;
 };
 
@@ -208,7 +208,6 @@ export type AgentSessionRuntimeSnapshot =
       startedAt: string;
       pendingApprovals: AgentPendingApprovalRequest[];
       pendingQuestions: AgentPendingQuestionRequest[];
-      pendingAsyncQuestions: import("@openducktor/contracts").AgentAsyncQuestion[];
     }
   | {
       availability: "missing";
@@ -216,7 +215,6 @@ export type AgentSessionRuntimeSnapshot =
       ref: SessionRef;
       pendingApprovals: [];
       pendingQuestions: [];
-      pendingAsyncQuestions: [];
     };
 
 export type ReplyApprovalInput = PolicyBoundSessionRef & {

@@ -607,7 +607,7 @@ export class CodexRuntimeSessionEvents {
     if (
       notification?.method === "item/completed" &&
       notification.params.item.type === "agentMessage" &&
-      parseCodexAsyncQuestionItem(notification.params.item).kind === "questions"
+      parseCodexAsyncQuestionItem(notification.params.item).kind === "question"
     ) {
       this.markSnapshotChanged(event.runtimeId, threadId);
     }

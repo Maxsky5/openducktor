@@ -2,18 +2,32 @@ import { describe, expect, test } from "bun:test";
 import {
   CodexAsyncQuestionState,
   codexAsyncQuestionItemId,
-  encodeCodexAsyncQuestionReply,
+  encodeCodexAsyncQuestionReplies,
   parseCodexAsyncQuestionItem,
-  parseCodexAsyncQuestionReplyInputs,
   parseCodexAsyncQuestionReplies,
+  parseCodexAsyncQuestionReplyInputs,
   parseCodexAsyncQuestionSkipIds,
   stripCodexAsyncQuestionSkipMarker,
 } from "./codex-async-questions";
-import { createCodexAcceptedUserMessage } from "./codex-app-server-streaming";
 import { toCodexTurnInputList } from "./codex-user-inputs";
 
-describe("Codex asynchronous questions", () => {
-  test("parses source questions and creates stable IDs", () => {
+const request = {
+  requestId: "call-1",
+  blocking: false,
+  questions: [
+    {
+      header: "",
+      question: "Which environment?",
+      options: [
+        { label: "Staging", description: "" },
+        { label: "Production", description: "" },
+      ],
+    },
+  ],
+};
+
+describe("Codex background questions", () => {
+  test("maps a Codex async message to a normal non-blocking request", () => {
     expect(
       parseCodexAsyncQuestionItem({
         type: "agentMessage",
@@ -24,42 +38,24 @@ describe("Codex asynchronous questions", () => {
         delivery: "async",
         questions: [{ title: "Which environment?", options: ["Staging", "Production"] }],
       }),
-    ).toEqual({
-      kind: "questions",
-      questions: [
-        {
-          questionItemId: codexAsyncQuestionItemId("call-1", 0),
-          sourceMessageId: "call-1",
-          questionIndex: 0,
-          title: "Which environment?",
-          options: ["Staging", "Production"],
-        },
-      ],
-    });
+    ).toEqual({ kind: "question", request });
   });
 
-  test.each([
-    ["missing questions", undefined],
-    ["null questions", null],
-  ])("treats async messages with %s as plain assistant messages", (_label, questions) => {
-    const item: Parameters<typeof parseCodexAsyncQuestionItem>[0] = {
-      type: "agentMessage",
-      id: "message-async",
-      text: "Work continues",
-      phase: "commentary",
-      memoryCitation: null,
-      delivery: "async",
-      questions,
-    };
-    if (questions === undefined) delete item.questions;
-
-    expect(parseCodexAsyncQuestionItem(item)).toEqual({ kind: "not_async_question" });
+  test("keeps non-question async messages as normal assistant messages", () => {
+    expect(
+      parseCodexAsyncQuestionItem({
+        type: "agentMessage",
+        id: "message-1",
+        text: "Work continues",
+        phase: "commentary",
+        memoryCitation: null,
+        delivery: "async",
+        questions: null,
+      }),
+    ).toEqual({ kind: "not_async_question" });
   });
 
-  test.each([
-    ["an empty question list", []],
-    ["an empty option list", [{ title: "Which environment?", options: [] }]],
-  ])("classifies %s as invalid", (_label, questions) => {
+  test("rejects malformed question lists", () => {
     expect(
       parseCodexAsyncQuestionItem({
         type: "agentMessage",
@@ -68,7 +64,7 @@ describe("Codex asynchronous questions", () => {
         phase: "commentary",
         memoryCitation: null,
         delivery: "async",
-        questions,
+        questions: [],
       }),
     ).toEqual({
       kind: "invalid",
@@ -77,265 +73,47 @@ describe("Codex asynchronous questions", () => {
     });
   });
 
-  test("round-trips only complete contextual reply envelopes", () => {
-    const reply = { questionItemId: "question-1", question: "Which?", answer: "Staging" };
-    expect(parseCodexAsyncQuestionReplies(encodeCodexAsyncQuestionReply(reply))).toEqual([reply]);
-    expect(
-      parseCodexAsyncQuestionReplies(`${encodeCodexAsyncQuestionReply(reply)} trailing`),
-    ).toBeNull();
-  });
+  test("round-trips native Codex reply envelopes", () => {
+    const reply = {
+      questionItemId: codexAsyncQuestionItemId("call-1", 0),
+      question: "Which environment?",
+      answer: "Staging",
+    };
+    const encoded = encodeCodexAsyncQuestionReplies([reply]);
 
-  test("preserves question and option text while checking for blank values", () => {
-    expect(
-      parseCodexAsyncQuestionItem({
-        type: "agentMessage",
-        id: "call-spaces",
-        text: "Choose",
-        phase: "commentary",
-        memoryCitation: null,
-        delivery: "async",
-        questions: [{ title: "  Keep title spacing  ", options: [" First ", "Second"] }],
-      }),
-    ).toEqual({
-      kind: "questions",
-      questions: [
-        {
-          questionItemId: codexAsyncQuestionItemId("call-spaces", 0),
-          sourceMessageId: "call-spaces",
-          questionIndex: 0,
-          title: "  Keep title spacing  ",
-          options: [" First ", "Second"],
-        },
-      ],
-    });
-  });
-
-  test("parses one reply text input and ignores Codex skill and mention inputs", () => {
-    const reply = { questionItemId: "question-1", question: "Which?", answer: "Staging" };
-
+    expect(parseCodexAsyncQuestionReplies(encoded)).toEqual([reply]);
     expect(
       parseCodexAsyncQuestionReplyInputs([
         { type: "skill", name: "review", path: "/skills/review" },
-        { type: "text", text: encodeCodexAsyncQuestionReply(reply), text_elements: [] },
-        { type: "mention", name: "config.ts", path: "/repo/config.ts" },
+        { type: "text", text: encoded, text_elements: [] },
       ]),
     ).toEqual([reply]);
-    expect(
-      parseCodexAsyncQuestionReplyInputs([
-        { type: "text", text: encodeCodexAsyncQuestionReply(reply), text_elements: [] },
-        { type: "text", text: "extra", text_elements: [] },
-      ]),
-    ).toBeNull();
+    expect(parseCodexAsyncQuestionReplies(`${encoded} trailing`)).toBeNull();
   });
 
-  test("stores captured skip IDs without changing user text", () => {
-    const questionItemIds = [codexAsyncQuestionItemId("call-1", 0)];
-    const inputs = toCodexTurnInputList([{ kind: "text", text: "Continue" }], questionItemIds);
+  test("stores resolved request IDs without changing visible text", () => {
+    const inputs = toCodexTurnInputList([{ kind: "text", text: "Continue" }], ["call-1"]);
 
-    expect(inputs[0]).toMatchObject({ type: "text", text: "Continue" });
-    expect(parseCodexAsyncQuestionSkipIds(inputs)).toEqual(questionItemIds);
+    expect(parseCodexAsyncQuestionSkipIds(inputs)).toEqual(["call-1"]);
     expect(stripCodexAsyncQuestionSkipMarker(inputs)).toEqual([
       { type: "text", text: "Continue", text_elements: [] },
     ]);
   });
 
-  test("stores an empty captured list on image-only input", () => {
-    const inputs = toCodexTurnInputList(
-      [
-        {
-          kind: "attachment",
-          attachment: {
-            id: "image-1",
-            path: "/tmp/image.png",
-            name: "image.png",
-            kind: "image",
-          },
-        },
-      ],
-      [],
-    );
-
-    expect(parseCodexAsyncQuestionSkipIds(inputs)).toEqual([]);
-    expect(stripCodexAsyncQuestionSkipMarker(inputs)).toEqual([
-      { type: "localImage", path: "/tmp/image.png" },
-    ]);
-  });
-
-  test("rejects malformed captured skip metadata", () => {
-    expect(() =>
-      parseCodexAsyncQuestionSkipIds([
-        {
-          type: "text",
-          text: "Continue",
-          text_elements: [
-            {
-              byteRange: { start: 8, end: 8 },
-              placeholder: "openducktor.async-question-skips:not-json",
-            },
-          ],
-        },
-      ]),
-    ).toThrow("Codex user message has an invalid async question skip marker.");
-  });
-
-  test("does not reopen handled questions", () => {
+  test("builds native replies from normal question answers", () => {
     const state = new CodexAsyncQuestionState();
-    const question = {
-      questionItemId: codexAsyncQuestionItemId("call-1", 0),
-      sourceMessageId: "call-1",
-      questionIndex: 0,
-      title: "Which?",
-      options: null,
-    };
-    state.add("runtime", "thread", [question]);
-    state.resolve("runtime", "thread", [question.questionItemId]);
-    state.add("runtime", "thread", [question]);
-    expect(state.pendingForSession("runtime", "thread")).toEqual([]);
-  });
+    state.add("runtime", "thread", request);
 
-  test("resolves all source questions from a legacy source-message reply ID", () => {
-    const state = new CodexAsyncQuestionState();
-    const questions = [0, 1].map((questionIndex) => ({
-      questionItemId: codexAsyncQuestionItemId("call-legacy", questionIndex),
-      sourceMessageId: "call-legacy",
-      questionIndex,
-      title: `Question ${questionIndex + 1}`,
-      options: null,
-    }));
-
-    state.add("runtime", "thread", questions);
-    state.resolve("runtime", "thread", ["call-legacy"]);
-
-    expect(state.pendingForSession("runtime", "thread")).toEqual([]);
-  });
-
-  test("does not add questions after an early legacy source-message reply", () => {
-    const state = new CodexAsyncQuestionState();
-    const question = {
-      questionItemId: codexAsyncQuestionItemId("call-early", 0),
-      sourceMessageId: "call-early",
-      questionIndex: 0,
-      title: "Which?",
-      options: null,
-    };
-
-    state.resolve("runtime", "thread", ["call-early"]);
-    state.add("runtime", "thread", [question]);
-
-    expect(state.pendingForSession("runtime", "thread")).toEqual([]);
-  });
-
-  test("reports authority only after the tracker knows the full pending baseline", () => {
-    const state = new CodexAsyncQuestionState();
-    const question = {
-      questionItemId: codexAsyncQuestionItemId("call-live", 0),
-      sourceMessageId: "call-live",
-      questionIndex: 0,
-      title: "Which region?",
-      options: null,
-    };
-
-    state.add("runtime", "resumed-thread", [question]);
-    expect(state.isAuthoritative("runtime", "resumed-thread")).toBe(false);
-
-    state.skipPending("runtime", "resumed-thread");
-    expect(state.isAuthoritative("runtime", "resumed-thread")).toBe(true);
-
-    state.initializeFreshSession("runtime", "fresh-thread");
-    state.add("runtime", "fresh-thread", [question]);
-    expect(state.isAuthoritative("runtime", "fresh-thread")).toBe(true);
-  });
-
-  test("encodes an accepted answer through normal Codex user input", () => {
-    const part = {
-      kind: "async_question_reply" as const,
-      questionItemId: codexAsyncQuestionItemId("call-1", 0),
-      question: "Which environment?",
-      answer: " Staging ",
-    };
-    const inputs = toCodexTurnInputList([part]);
-    expect(inputs).toEqual([
+    expect(state.repliesForSession("runtime", "thread", "call-1", [["Staging"]])).toEqual([
       {
-        type: "text",
-        text: encodeCodexAsyncQuestionReply({
-          questionItemId: part.questionItemId,
-          question: part.question,
-          answer: "Staging",
-        }),
-        text_elements: [],
-      },
-    ]);
-
-    expect(
-      createCodexAcceptedUserMessage({
-        session: {
-          runtimeId: "runtime-1",
-          repoPath: "/repo",
-          threadId: "thread-1",
-          workingDirectory: "/repo",
-          summary: {
-            externalSessionId: "thread-1",
-            runtimeKind: "codex",
-            workingDirectory: "/repo",
-            startedAt: "2026-09-19T10:00:00.000Z",
-            status: "running",
-            sessionAssociation: { kind: "repository" },
-            selectedModel: null,
-          },
-          model: null,
-          liveStatus: { classification: "running" },
-        },
-        parts: [part],
-        model: undefined,
-        asyncQuestionItemIds: [part.questionItemId],
-      }),
-    ).toMatchObject({
-      type: "user_message",
-      message: "> Which environment?\n\nStaging",
-      parts: [{ kind: "text", text: "> Which environment?\n\nStaging" }],
-      asyncQuestionReplies: [
-        {
-          questionItemId: part.questionItemId,
-          question: "Which environment?",
-          answer: "Staging",
-        },
-      ],
-    });
-  });
-
-  test("encodes one Codex text input for all answers from one question request", () => {
-    const parts = [
-      {
-        kind: "async_question_reply" as const,
         questionItemId: codexAsyncQuestionItemId("call-1", 0),
         question: "Which environment?",
         answer: "Staging",
       },
-      {
-        kind: "async_question_reply" as const,
-        questionItemId: codexAsyncQuestionItemId("call-1", 1),
-        question: "Which suite?",
-        answer: "Full suite",
-      },
-    ];
-
-    const inputs = toCodexTurnInputList(parts);
-
-    expect(inputs).toHaveLength(1);
-    expect(inputs[0]?.type).toBe("text");
-    expect(
-      inputs[0]?.type === "text" ? parseCodexAsyncQuestionReplies(inputs[0].text) : null,
-    ).toEqual([
-      {
-        questionItemId: parts[0].questionItemId,
-        question: parts[0].question,
-        answer: parts[0].answer,
-      },
-      {
-        questionItemId: parts[1].questionItemId,
-        question: parts[1].question,
-        answer: parts[1].answer,
-      },
     ]);
+
+    state.resolve("runtime", "thread", ["call-1"]);
+    state.add("runtime", "thread", request);
+    expect(state.pendingForSession("runtime", "thread")).toEqual([]);
   });
 });

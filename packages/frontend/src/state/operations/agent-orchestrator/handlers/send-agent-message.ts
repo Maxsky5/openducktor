@@ -9,7 +9,7 @@ import {
 } from "@openducktor/core";
 import { agentSessionIdentityKey, matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { AgentMessageSendError } from "@/lib/agent-message-send-error";
-import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
+import { isAgentSessionBlockedOnInput } from "@/lib/agent-session-waiting-input";
 import { errorMessage } from "@/lib/errors";
 import { getAcceptedMessageAfterSendFailure } from "@/state/agent-runtime-services";
 import { HostInvokeError } from "@openducktor/host-client";
@@ -35,7 +35,6 @@ import { removeRunningSessionCompactionNotices } from "../support/session-notice
 import { toBoundRuntimeSessionRef } from "../support/session-runtime-ref";
 import type { SessionTurnMetadata } from "../support/session-turn-metadata";
 import { toUserChatMessage } from "../support/user-message-event";
-import { applyAsyncQuestionUserMessage } from "../support/async-questions";
 import type { PreparedSessionSend } from "./prepare-session-send";
 
 const withSendScope = (
@@ -209,27 +208,21 @@ const appendSendFailureNotice = (
 const upsertAcceptedUserMessage = (
   session: AgentSessionState,
   acceptedUserMessage: Awaited<ReturnType<AgentEnginePort["sendUserMessage"]>>,
-  asyncQuestionItemIds: readonly string[],
+  resolvedQuestionRequestIds: readonly string[],
   updateSession: UpdateSession,
 ): void => {
   updateSession(session, (current) => {
-    const asyncState = applyAsyncQuestionUserMessage(
-      {
-        pendingAsyncQuestions: current.pendingAsyncQuestions ?? [],
-        handledAsyncQuestionIds: current.handledAsyncQuestionIds ?? new Set(),
-        asyncQuestionSkipMessages: current.asyncQuestionSkipMessages ?? [],
-      },
-      acceptedUserMessage.asyncQuestionReplies,
-      {
-        messageId: acceptedUserMessage.messageId,
-        timestamp: acceptedUserMessage.timestamp,
-        text: acceptedUserMessage.message,
-      },
-      asyncQuestionItemIds,
-    );
+    const handledBackgroundQuestionIds = new Set(current.handledBackgroundQuestionIds ?? []);
+    for (const requestId of resolvedQuestionRequestIds) {
+      handledBackgroundQuestionIds.add(requestId);
+    }
     return {
       ...current,
-      ...asyncState,
+      handledBackgroundQuestionIds,
+      pendingQuestions: current.pendingQuestions.filter(
+        (request) =>
+          request.blocking !== false || !handledBackgroundQuestionIds.has(request.requestId),
+      ),
       messages: upsertUserSessionMessage(current, toUserChatMessage(acceptedUserMessage)),
     };
   });
@@ -288,7 +281,7 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
         throw new Error(`Session '${externalSessionId}' is still stopped after resume.`);
       }
     }
-    if (isAgentSessionWaitingInput(currentSession)) {
+    if (isAgentSessionBlockedOnInput(currentSession)) {
       rejectSendWhileWaitingForInput(currentSession, dependencies);
     }
 
@@ -303,7 +296,7 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
         });
 
     const loadedReadySession = dependencies.readSessionSnapshot(currentSession);
-    if (!loadedReadySession || isAgentSessionWaitingInput(loadedReadySession)) {
+    if (!loadedReadySession || isAgentSessionBlockedOnInput(loadedReadySession)) {
       if (!loadedReadySession) {
         settleStartingSession(
           currentSession,
@@ -321,13 +314,9 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
     const sendAttempt = isBusyQueuedSend
       ? undefined
       : markSessionRunningForSend(readySession, dependencies);
-    const replyQuestionItemIds = normalizedParts.flatMap((part) =>
-      part.kind === "async_question_reply" ? [part.questionItemId] : [],
-    );
-    const asyncQuestionItemIds =
-      replyQuestionItemIds.length > 0
-        ? replyQuestionItemIds
-        : (readySession.pendingAsyncQuestions ?? []).map((question) => question.questionItemId);
+    const resolvedQuestionRequestIds = readySession.pendingQuestions
+      .filter((request) => request.blocking === false)
+      .map((request) => request.requestId);
 
     try {
       const runtimeSessionRef = toBoundRuntimeSessionRef(
@@ -338,7 +327,7 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
       const sendInput: Parameters<typeof dependencies.adapter.sendUserMessage>[0] = {
         ...runtimeSessionRef,
         parts: normalizedParts,
-        asyncQuestionItemIds,
+        resolvedQuestionRequestIds,
       };
       if (readySession.selectedModel) {
         sendInput.model = readySession.selectedModel;
@@ -351,7 +340,7 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
         upsertAcceptedUserMessage(
           readySession,
           acceptedUserMessage,
-          asyncQuestionItemIds,
+          resolvedQuestionRequestIds,
           dependencies.updateSession,
         );
       }
@@ -370,7 +359,7 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
           upsertAcceptedUserMessage(
             readySession,
             acceptedMessage,
-            asyncQuestionItemIds,
+            resolvedQuestionRequestIds,
             dependencies.updateSession,
           );
         }

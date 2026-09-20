@@ -152,12 +152,6 @@ export type AgentUserMessagePart =
   | {
       kind: "attachment";
       attachment: AgentAttachmentReference;
-    }
-  | {
-      kind: "async_question_reply";
-      questionItemId: string;
-      question: string;
-      answer: string;
     };
 
 export type AgentUserMessageSourceText = {

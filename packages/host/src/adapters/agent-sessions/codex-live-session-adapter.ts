@@ -309,20 +309,44 @@ export const createCodexLiveSessionAdapterPreparer =
           }).pipe(Effect.tap(() => refreshProjection()));
         },
         replyQuestion: (input) =>
-          Effect.tryPromise({
-            try: () =>
-              controller.replyLiveQuestion({
-                runtimeId: runtime.runtimeId,
-                externalSessionId: input.externalSessionId,
-                requestId: input.requestId,
-                answers: input.answers,
-              }),
-            catch: sessionError("codex-live-session.reply-question", input.externalSessionId),
-          }).pipe(
-            Effect.flatMap((event) =>
-              refreshProjection([{ ...event, sessionRef: toCodexLiveSessionRef(input) }]),
-            ),
-          ),
+          input.blocking === false
+            ? (input.sessionScope === undefined
+                ? Effect.fail(
+                    new HostValidationError({
+                      field: "sessionScope",
+                      message: "A background Codex question reply requires session scope.",
+                    }),
+                  )
+                : bindControlPolicy(
+                    { ...input, sessionScope: input.sessionScope, runtimeKind: "codex" as const },
+                    "reply-background-question",
+                  )
+              ).pipe(
+                Effect.flatMap((boundInput) =>
+                  Effect.tryPromise({
+                    try: () => controller.replyQuestion(boundInput),
+                    catch: sessionError(
+                      "codex-live-session.reply-background-question",
+                      input.externalSessionId,
+                    ),
+                  }),
+                ),
+                Effect.zipRight(refreshProjection()),
+              )
+            : Effect.tryPromise({
+                try: () =>
+                  controller.replyLiveQuestion({
+                    runtimeId: runtime.runtimeId,
+                    externalSessionId: input.externalSessionId,
+                    requestId: input.requestId,
+                    answers: input.answers,
+                  }),
+                catch: sessionError("codex-live-session.reply-question", input.externalSessionId),
+              }).pipe(
+                Effect.flatMap((event) =>
+                  refreshProjection([{ ...event, sessionRef: toCodexLiveSessionRef(input) }]),
+                ),
+              ),
         settleRuntimeTranscript: images.settleRuntimeTranscript,
         releaseRuntime,
         startSession: (input) =>
@@ -397,14 +421,14 @@ export const createCodexLiveSessionAdapterPreparer =
         sendUserMessage: (input) =>
           bindControlPolicy(input, "send-user-message").pipe(
             Effect.flatMap((boundInput) => {
-              const { asyncQuestionItemIds, model, parts, systemPrompt, ...requiredInput } =
+              const { resolvedQuestionRequestIds, model, parts, systemPrompt, ...requiredInput } =
                 boundInput;
               const request: Parameters<typeof controller.sendUserMessage>[0] = {
                 ...requiredInput,
                 parts: parts.map(toCodexUserMessagePart),
               };
-              if (asyncQuestionItemIds !== undefined) {
-                request.asyncQuestionItemIds = asyncQuestionItemIds;
+              if (resolvedQuestionRequestIds !== undefined) {
+                request.resolvedQuestionRequestIds = resolvedQuestionRequestIds;
               }
               if (model !== undefined) {
                 request.model = model;

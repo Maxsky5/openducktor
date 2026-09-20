@@ -39,7 +39,6 @@ const snapshot = (
   startedAt: "2026-07-16T08:00:00.000Z",
   pendingApprovals: [],
   pendingQuestions: [],
-  pendingAsyncQuestions: [],
   contextUsage: null,
   ...overrides,
 });
@@ -217,15 +216,22 @@ describe("agent session live projection", () => {
     expect(getAgentSession(updated, identity("thread-1"))?.title).toBe("Renamed");
   });
 
-  test("does not reopen an async question handled before a stale snapshot", () => {
+  test("does not reopen a background question handled before a stale snapshot", () => {
     const question = {
-      questionItemId: '["request_user_input_async","question-1",0]',
-      sourceMessageId: "question-1",
-      questionIndex: 0,
-      title: "Which environment?",
-      options: ["Staging", "Production"],
+      requestId: "question-1",
+      blocking: false,
+      questions: [
+        {
+          header: "Environment",
+          question: "Which environment?",
+          options: [
+            { label: "Staging", description: "Staging" },
+            { label: "Production", description: "Production" },
+          ],
+        },
+      ],
     };
-    const liveSnapshot = snapshot("thread-1", { pendingAsyncQuestions: [question] });
+    const liveSnapshot = snapshot("thread-1", { pendingQuestions: [question] });
     const initial = build({ snapshots: [liveSnapshot] });
     const session = getAgentSession(initial, identity("thread-1"));
     if (!session) {
@@ -233,32 +239,31 @@ describe("agent session live projection", () => {
     }
     const handled = replaceAgentSession(initial, {
       ...session,
-      pendingAsyncQuestions: [],
-      handledAsyncQuestionIds: new Set([question.questionItemId]),
-      asyncQuestionSkipMessages: [
-        {
-          messageId: "ordinary-message",
-          timestamp: "2026-09-19T10:01:00.000Z",
-          text: "Continue",
-        },
-      ],
+      pendingQuestions: [],
+      handledBackgroundQuestionIds: new Set([question.requestId]),
     });
 
     const refreshed = build({ current: handled, snapshots: [liveSnapshot] });
     const refreshedSession = getAgentSession(refreshed, identity("thread-1"));
 
-    expect(refreshedSession?.pendingAsyncQuestions).toEqual([]);
-    expect(refreshedSession?.handledAsyncQuestionIds).toContain(question.questionItemId);
-    expect(refreshedSession?.asyncQuestionSkipMessages).toHaveLength(1);
+    expect(refreshedSession?.pendingQuestions).toEqual([]);
+    expect(refreshedSession?.handledBackgroundQuestionIds).toContain(question.requestId);
   });
 
   test("keeps a history question pending when the runtime snapshot has no tracker state", () => {
     const question = {
-      questionItemId: '["request_user_input_async","question-history",0]',
-      sourceMessageId: "question-history",
-      questionIndex: 0,
-      title: "Which environment?",
-      options: ["Staging", "Production"],
+      requestId: "question-history",
+      blocking: false,
+      questions: [
+        {
+          header: "Environment",
+          question: "Which environment?",
+          options: [
+            { label: "Staging", description: "Staging" },
+            { label: "Production", description: "Production" },
+          ],
+        },
+      ],
     };
     const emptySnapshot = snapshot("thread-1");
     const initial = build({ snapshots: [emptySnapshot] });
@@ -268,30 +273,44 @@ describe("agent session live projection", () => {
     }
     const restored = replaceAgentSession(initial, {
       ...session,
-      pendingAsyncQuestions: [question],
+      pendingQuestions: [question],
     });
 
     const refreshed = build({ current: restored, snapshots: [emptySnapshot] });
     const refreshedSession = getAgentSession(refreshed, identity("thread-1"));
 
-    expect(refreshedSession?.pendingAsyncQuestions).toEqual([question]);
-    expect(refreshedSession?.handledAsyncQuestionIds).toEqual(new Set());
+    expect(refreshedSession?.pendingQuestions).toEqual([question]);
+    expect(refreshedSession?.handledBackgroundQuestionIds).toEqual(new Set());
   });
 
   test("merges a new live question into questions restored from history", () => {
     const historyQuestion = {
-      questionItemId: '["request_user_input_async","question-history",0]',
-      sourceMessageId: "question-history",
-      questionIndex: 0,
-      title: "Which environment?",
-      options: ["Staging", "Production"],
+      requestId: "question-history",
+      blocking: false,
+      questions: [
+        {
+          header: "Environment",
+          question: "Which environment?",
+          options: [
+            { label: "Staging", description: "Staging" },
+            { label: "Production", description: "Production" },
+          ],
+        },
+      ],
     };
     const liveQuestion = {
-      questionItemId: '["request_user_input_async","question-live",0]',
-      sourceMessageId: "question-live",
-      questionIndex: 0,
-      title: "Which region?",
-      options: ["Europe", "US"],
+      requestId: "question-live",
+      blocking: false,
+      questions: [
+        {
+          header: "Region",
+          question: "Which region?",
+          options: [
+            { label: "Europe", description: "Europe" },
+            { label: "US", description: "US" },
+          ],
+        },
+      ],
     };
     const emptySnapshot = snapshot("thread-1");
     const initial = build({ snapshots: [emptySnapshot] });
@@ -301,42 +320,18 @@ describe("agent session live projection", () => {
     }
     const restored = replaceAgentSession(initial, {
       ...session,
-      pendingAsyncQuestions: [historyQuestion],
+      pendingQuestions: [historyQuestion],
     });
     const partialLiveSnapshot = snapshot("thread-1", {
-      pendingAsyncQuestions: [liveQuestion],
-      asyncQuestionsAuthoritative: false,
+      pendingQuestions: [liveQuestion],
     });
 
     const refreshed = build({ current: restored, snapshots: [partialLiveSnapshot] });
 
-    expect(getAgentSession(refreshed, identity("thread-1"))?.pendingAsyncQuestions).toEqual([
+    expect(getAgentSession(refreshed, identity("thread-1"))?.pendingQuestions).toEqual([
       historyQuestion,
       liveQuestion,
     ]);
-  });
-
-  test("clears a pending async question from an authoritative empty snapshot", () => {
-    const question = {
-      questionItemId: '["request_user_input_async","question-remote",0]',
-      sourceMessageId: "question-remote",
-      questionIndex: 0,
-      title: "Which environment?",
-      options: ["Staging", "Production"],
-    };
-    const pendingSnapshot = snapshot("thread-1", {
-      pendingAsyncQuestions: [question],
-    });
-    const initial = build({ snapshots: [pendingSnapshot] });
-    const authoritativeEmptySnapshot: AgentSessionLiveSnapshot = {
-      ...pendingSnapshot,
-      pendingAsyncQuestions: [],
-      asyncQuestionsAuthoritative: true,
-    };
-
-    const refreshed = build({ current: initial, snapshots: [authoritativeEmptySnapshot] });
-
-    expect(getAgentSession(refreshed, identity("thread-1"))?.pendingAsyncQuestions).toEqual([]);
   });
 
   test.each(["stopped", "error"] as const)(

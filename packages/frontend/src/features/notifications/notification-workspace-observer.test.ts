@@ -84,7 +84,6 @@ const liveSnapshot = (pendingRequestIds: string[]): AgentSessionLiveSnapshotEnve
         title: "Read",
       })),
       pendingQuestions: [],
-      pendingAsyncQuestions: [],
       contextUsage: null,
       executionEpisodeId: "episode-1",
     },
@@ -1275,7 +1274,6 @@ test("retains full-identity workflow associations when the next session read fai
     title: "Builder",
     pendingApprovals: [],
     pendingQuestions: [],
-    pendingAsyncQuestions: [],
     contextUsage: null,
     executionEpisodeId: "episode-1",
   };

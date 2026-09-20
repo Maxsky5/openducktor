@@ -22,6 +22,10 @@ export const hasAgentSessionPendingQuestions = (session: AgentSessionPendingQues
 export const isAgentSessionWaitingInput = (session: AgentSessionPendingInput): boolean =>
   hasAgentSessionPendingApprovals(session) || hasAgentSessionPendingQuestions(session);
 
+export const isAgentSessionBlockedOnInput = (session: AgentSessionPendingInput): boolean =>
+  hasAgentSessionPendingApprovals(session) ||
+  session.pendingQuestions.some((question) => question.blocking !== false);
+
 const getAgentSessionWaitingInputPlaceholderFromCounts = ({
   pendingApprovalCount,
   pendingQuestionCount,

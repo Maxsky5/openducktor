@@ -45,20 +45,18 @@ describe("createAgentActivitySnapshot", () => {
 
   test("marks a running session with a background question as waiting for input", () => {
     const liveSession = session({
-      pendingAsyncQuestions: [
+      pendingQuestions: [
         {
-          questionItemId: "question-1",
-          sourceMessageId: "message-1",
-          questionIndex: 0,
-          title: "Which test should I run?",
-          options: null,
-        },
-        {
-          questionItemId: "question-2",
-          sourceMessageId: "message-1",
-          questionIndex: 1,
-          title: "Which environment should I use?",
-          options: null,
+          requestId: "message-1",
+          blocking: false,
+          questions: [
+            { header: "Test", question: "Which test should I run?", options: [] },
+            {
+              header: "Environment",
+              question: "Which environment should I use?",
+              options: [],
+            },
+          ],
         },
       ],
     });
@@ -68,7 +66,7 @@ describe("createAgentActivitySnapshot", () => {
       workspaceRepoPath: "/repo",
     });
 
-    expect(getAgentSessionActivityStateFromSession(liveSession)).toBe("running");
+    expect(getAgentSessionActivityStateFromSession(liveSession)).toBe("waiting_input");
     expect(snapshot.sessions[0]).toMatchObject({
       activityState: "waiting_input",
       pendingQuestionCount: 1,

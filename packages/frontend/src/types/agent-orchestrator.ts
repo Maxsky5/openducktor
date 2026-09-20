@@ -1,5 +1,4 @@
 import type {
-  AgentAsyncQuestion,
   AgentComputerUse,
   AgentImageGenerationPart,
   AgentSessionAssociation,
@@ -14,6 +13,7 @@ import type {
 import type {
   AgentModelSelection,
   AgentPendingApprovalRequest,
+  AgentPendingQuestionRequest,
   AgentRole,
   AgentSessionScope,
   AgentSubagentExecutionMode,
@@ -129,12 +129,6 @@ export type AgentChatMessageMeta =
       parentExternalSessionId: string;
     };
 
-export type AgentAsyncQuestionSkipMessage = {
-  messageId: string;
-  timestamp: string;
-  text: string;
-};
-
 export type AgentChatMessage = {
   id: string;
   role: "user" | "assistant" | "system" | "thinking" | "tool";
@@ -173,18 +167,7 @@ type AgentPendingInputRouting = {
 
 export type AgentApprovalRequest = AgentPendingApprovalRequest & AgentPendingInputRouting;
 
-export type AgentQuestionRequest = {
-  requestId: string;
-  requestInstanceId?: string;
-  asyncQuestionItemIds?: readonly string[];
-  questions: Array<{
-    header: string;
-    question: string;
-    options: Array<{ label: string; description: string }>;
-    multiple?: boolean;
-    custom?: boolean;
-  }>;
-} & AgentPendingInputRouting;
+export type AgentQuestionRequest = AgentPendingQuestionRequest & AgentPendingInputRouting;
 
 export type AgentSessionContextUsage = {
   totalTokens: number;
@@ -228,10 +211,7 @@ export type AgentSessionState = {
   contextUsageError?: string | null;
   pendingApprovals: AgentApprovalRequest[];
   pendingQuestions: AgentQuestionRequest[];
-  pendingAsyncQuestions?: readonly AgentAsyncQuestion[];
-  handledAsyncQuestionIds?: ReadonlySet<string>;
-  /** Transient identity and order for user messages that skip pending async questions. */
-  asyncQuestionSkipMessages?: readonly AgentAsyncQuestionSkipMessage[];
+  handledBackgroundQuestionIds?: ReadonlySet<string>;
   selectedModel: AgentModelSelection | null;
   runtimeAvailability?: AgentSessionRuntimeAvailability;
   pendingUserMessageStartedAt?: number | undefined;

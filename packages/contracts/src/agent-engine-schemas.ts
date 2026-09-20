@@ -1,14 +1,11 @@
 import { z } from "zod";
-import {
-  agentAsyncQuestionAnnotationSchema,
-  agentAsyncQuestionReplySchema,
-} from "./agent-async-question-schemas";
 import { runtimeDescriptorSchema } from "./agent-runtime-schemas";
 import {
   agentSessionTodoItemSchema,
   agentStreamPartSchema,
   agentUserMessageDisplayPartSchema,
 } from "./agent-session-event-schemas";
+import { agentSessionPendingQuestionRequestSchema } from "./agent-session-pending-schemas";
 import { agentModelSelectionSchema } from "./agent-session-schemas";
 import { fileDiffSchema, fileStatusSchema } from "./git-schemas";
 
@@ -118,8 +115,7 @@ export const agentSessionHistoryMessageSchema = z.discriminatedUnion("role", [
       displayParts: z.array(agentUserMessageDisplayPartSchema),
       state: z.enum(["queued", "read"]),
       model: agentModelSelectionSchema.optional(),
-      asyncQuestionReplies: z.array(agentAsyncQuestionReplySchema).optional(),
-      asyncQuestionItemIds: z.array(nonEmptyStringSchema).optional(),
+      resolvedQuestionRequestIds: z.array(nonEmptyStringSchema).optional(),
       parts: z.array(agentStreamPartSchema),
     })
     .strict(),
@@ -131,7 +127,7 @@ export const agentSessionHistoryMessageSchema = z.discriminatedUnion("role", [
       totalTokens: z.number().optional(),
       contextWindow: z.number().optional(),
       model: agentModelSelectionSchema.optional(),
-      asyncQuestion: agentAsyncQuestionAnnotationSchema.optional(),
+      questionRequest: agentSessionPendingQuestionRequestSchema.optional(),
       parts: z.array(agentStreamPartSchema),
     })
     .strict(),

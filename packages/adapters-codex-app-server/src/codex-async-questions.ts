@@ -1,11 +1,6 @@
 import { z } from "zod";
-import {
-  agentAsyncQuestionMatchesReplyId,
-  type AgentAsyncQuestion,
-  type AgentAsyncQuestionReply,
-  type CodexAppServerThreadItem,
-  type CodexAppServerUserInput,
-} from "@openducktor/contracts";
+import type { CodexAppServerThreadItem, CodexAppServerUserInput } from "@openducktor/contracts";
+import type { AgentPendingQuestionRequest } from "@openducktor/core";
 
 const OPEN_TAG = "<send_user_message_question_reply>";
 const CLOSE_TAG = "</send_user_message_question_reply>";
@@ -18,37 +13,50 @@ const CODEX_ASYNC_QUESTION_FALLBACK_ERROR =
 
 type CodexAgentMessageItem = Extract<CodexAppServerThreadItem, { type: "agentMessage" }>;
 
+export type CodexAsyncQuestionReply = {
+  questionItemId: string;
+  question: string;
+  answer: string;
+};
+
 const sourceQuestionSchema = z.object({
-  title: z.string().refine((value) => value.trim().length > 0),
-  options: z
-    .array(z.string().refine((value) => value.trim().length > 0))
-    .min(1)
-    .nullable(),
+  title: z.string().trim().min(1),
+  options: z.array(z.string().trim().min(1)).min(1).nullable(),
 });
 
 const replySchema = z.object({
-  questionItemId: z.string().refine((value) => value.trim().length > 0),
-  question: z.string().refine((value) => value.trim().length > 0),
-  answer: z.string().refine((value) => value.trim().length > 0),
+  questionItemId: z.string().trim().min(1),
+  question: z.string().trim().min(1),
+  answer: z.string().trim().min(1),
 });
 
 const skipIdsSchema = z.array(z.string().trim().min(1));
+const questionItemIdSchema = z.tuple([
+  z.literal("request_user_input_async"),
+  z.string().trim().min(1),
+  z.number().int().nonnegative(),
+]);
 
 export type ParsedCodexAsyncQuestion =
   | { kind: "not_async_question" }
-  | { kind: "questions"; questions: AgentAsyncQuestion[] }
+  | { kind: "question"; request: AgentPendingQuestionRequest }
   | { kind: "invalid"; error: string };
 
-export const codexAsyncQuestionItemId = (messageId: string, questionIndex: number): string =>
-  JSON.stringify(["request_user_input_async", messageId, questionIndex]);
+export const codexAsyncQuestionItemId = (requestId: string, questionIndex: number): string =>
+  JSON.stringify(["request_user_input_async", requestId, questionIndex]);
+
+export const codexAsyncQuestionRequestId = (questionItemId: string): string | null => {
+  try {
+    return questionItemIdSchema.parse(JSON.parse(questionItemId))[1];
+  } catch {
+    return null;
+  }
+};
 
 export const parseCodexAsyncQuestionItem = (
   item: CodexAgentMessageItem,
 ): ParsedCodexAsyncQuestion => {
-  if (item.delivery !== "async") {
-    return { kind: "not_async_question" };
-  }
-  if (item.questions == null) {
+  if (item.delivery !== "async" || item.questions == null) {
     return { kind: "not_async_question" };
   }
   const parsed = z.array(sourceQuestionSchema).min(1).safeParse(item.questions);
@@ -56,22 +64,21 @@ export const parseCodexAsyncQuestionItem = (
     return { kind: "invalid", error: CODEX_ASYNC_QUESTION_FALLBACK_ERROR };
   }
   return {
-    kind: "questions",
-    questions: parsed.data.map((question, questionIndex) => ({
-      questionItemId: codexAsyncQuestionItemId(item.id, questionIndex),
-      sourceMessageId: item.id,
-      questionIndex,
-      title: question.title,
-      options: question.options,
-    })),
+    kind: "question",
+    request: {
+      requestId: item.id,
+      blocking: false,
+      questions: parsed.data.map((question) => ({
+        header: "",
+        question: question.title,
+        options: (question.options ?? []).map((label) => ({ label, description: "" })),
+      })),
+    },
   };
 };
 
-export const encodeCodexAsyncQuestionReply = (reply: AgentAsyncQuestionReply): string =>
-  `${OPEN_TAG}${JSON.stringify(reply)}${CLOSE_TAG}`;
-
 export const encodeCodexAsyncQuestionReplies = (
-  replies: readonly AgentAsyncQuestionReply[],
+  replies: readonly CodexAsyncQuestionReply[],
 ): string => {
   if (replies.length === 0) {
     throw new Error("Codex async question replies cannot be empty.");
@@ -79,8 +86,8 @@ export const encodeCodexAsyncQuestionReplies = (
   return `${OPEN_TAG}${JSON.stringify(replies.length === 1 ? replies[0] : replies)}${CLOSE_TAG}`;
 };
 
-export const encodeCodexAsyncQuestionSkips = (questionItemIds: readonly string[]): string =>
-  `${SKIP_MARKER_PREFIX}${JSON.stringify(questionItemIds)}`;
+export const encodeCodexAsyncQuestionSkips = (requestIds: readonly string[]): string =>
+  `${SKIP_MARKER_PREFIX}${JSON.stringify(requestIds)}`;
 
 export const parseCodexAsyncQuestionSkipIds = (
   inputs: readonly CodexAppServerUserInput[],
@@ -123,33 +130,23 @@ export const stripCodexAsyncQuestionSkipMarker = (
   });
 
 const unwrapCodexIdeContext = (text: string): string | null => {
-  if (!text.startsWith(IDE_CONTEXT_PREFIX)) {
-    return text;
-  }
+  if (!text.startsWith(IDE_CONTEXT_PREFIX)) return text;
   const delimiterIndex = text.lastIndexOf(IDE_REQUEST_DELIMITER);
-  if (delimiterIndex < 0) {
-    return null;
-  }
+  if (delimiterIndex < 0) return null;
   return text.slice(delimiterIndex + IDE_REQUEST_DELIMITER.length).trim();
 };
 
-export const parseCodexAsyncQuestionReplies = (text: string): AgentAsyncQuestionReply[] | null => {
+export const parseCodexAsyncQuestionReplies = (text: string): CodexAsyncQuestionReply[] | null => {
   const trimmed = unwrapCodexIdeContext(text.trim());
-  if (trimmed === null) {
+  if (trimmed === null || !trimmed.startsWith(OPEN_TAG) || !trimmed.endsWith(CLOSE_TAG)) {
     return null;
   }
-  if (!trimmed.startsWith(OPEN_TAG) || !trimmed.endsWith(CLOSE_TAG)) {
-    return null;
-  }
-  const json = trimmed.slice(OPEN_TAG.length, -CLOSE_TAG.length);
   try {
-    const value: unknown = JSON.parse(json);
+    const value: unknown = JSON.parse(trimmed.slice(OPEN_TAG.length, -CLOSE_TAG.length));
     const parsed = (Array.isArray(value) ? z.array(replySchema).min(1) : replySchema).safeParse(
       value,
     );
-    if (!parsed.success) {
-      return null;
-    }
+    if (!parsed.success) return null;
     return Array.isArray(parsed.data) ? parsed.data : [parsed.data];
   } catch {
     return null;
@@ -158,99 +155,77 @@ export const parseCodexAsyncQuestionReplies = (text: string): AgentAsyncQuestion
 
 export const parseCodexAsyncQuestionReplyInputs = (
   inputs: readonly CodexAppServerUserInput[],
-): AgentAsyncQuestionReply[] | null => {
+): CodexAsyncQuestionReply[] | null => {
   const replyInputs = inputs.filter((input) => input.type !== "skill" && input.type !== "mention");
-  if (replyInputs.length !== 1) {
-    return null;
-  }
-  const replyInput = replyInputs[0];
-  if (replyInput?.type !== "text") {
-    return null;
-  }
-  return parseCodexAsyncQuestionReplies(replyInput.text);
+  if (replyInputs.length !== 1 || replyInputs[0]?.type !== "text") return null;
+  return parseCodexAsyncQuestionReplies(replyInputs[0].text);
 };
 
-export const codexAsyncQuestionReplyText = (replies: AgentAsyncQuestionReply[]): string =>
+export const codexAsyncQuestionReplyText = (replies: readonly CodexAsyncQuestionReply[]): string =>
   replies.map((reply) => `> ${reply.question}\n\n${reply.answer}`).join("\n\n");
 
-type AsyncQuestionSessionState = {
-  baselineComplete: boolean;
-  pending: Map<string, AgentAsyncQuestion>;
+type BackgroundQuestionState = {
+  pending: Map<string, AgentPendingQuestionRequest>;
   handled: Set<string>;
-  seenSourceMessages: Set<string>;
 };
 
 const sessionKey = (runtimeId: string, threadId: string): string =>
   JSON.stringify([runtimeId, threadId]);
 
 export class CodexAsyncQuestionState {
-  private readonly sessions = new Map<string, AsyncQuestionSessionState>();
+  private readonly sessions = new Map<string, BackgroundQuestionState>();
 
-  private state(runtimeId: string, threadId: string): AsyncQuestionSessionState {
+  private state(runtimeId: string, threadId: string): BackgroundQuestionState {
     const key = sessionKey(runtimeId, threadId);
     const existing = this.sessions.get(key);
-    if (existing) {
-      return existing;
-    }
-    const created: AsyncQuestionSessionState = {
-      baselineComplete: false,
+    if (existing) return existing;
+    const created: BackgroundQuestionState = {
       pending: new Map(),
       handled: new Set(),
-      seenSourceMessages: new Set(),
     };
     this.sessions.set(key, created);
     return created;
   }
 
-  initializeFreshSession(runtimeId: string, threadId: string): void {
-    this.state(runtimeId, threadId).baselineComplete = true;
-  }
-
-  add(runtimeId: string, threadId: string, questions: AgentAsyncQuestion[]): void {
+  add(runtimeId: string, threadId: string, request: AgentPendingQuestionRequest): void {
     const state = this.state(runtimeId, threadId);
-    const sourceMessageId = questions[0]?.sourceMessageId;
-    if (!sourceMessageId || state.seenSourceMessages.has(sourceMessageId)) {
-      return;
-    }
-    state.seenSourceMessages.add(sourceMessageId);
-    for (const question of questions) {
-      if (
-        !state.handled.has(question.questionItemId) &&
-        !state.handled.has(question.sourceMessageId)
-      ) {
-        state.pending.set(question.questionItemId, question);
-      }
-    }
+    if (!state.handled.has(request.requestId)) state.pending.set(request.requestId, request);
   }
 
-  resolve(runtimeId: string, threadId: string, questionItemIds: readonly string[]): void {
+  resolve(runtimeId: string, threadId: string, requestIds: readonly string[]): void {
     const state = this.state(runtimeId, threadId);
-    for (const replyId of questionItemIds) {
-      state.handled.add(replyId);
-      for (const [questionItemId, question] of state.pending) {
-        if (agentAsyncQuestionMatchesReplyId(question, replyId)) {
-          state.pending.delete(questionItemId);
-          state.handled.add(questionItemId);
-        }
-      }
+    for (const requestId of requestIds) {
+      state.handled.add(requestId);
+      state.pending.delete(requestId);
     }
   }
 
-  skipPending(runtimeId: string, threadId: string): void {
-    const state = this.state(runtimeId, threadId);
-    for (const questionItemId of state.pending.keys()) {
-      state.handled.add(questionItemId);
-    }
-    state.pending.clear();
-    state.baselineComplete = true;
-  }
-
-  pendingForSession(runtimeId: string, threadId: string): AgentAsyncQuestion[] {
+  pendingForSession(runtimeId: string, threadId: string): AgentPendingQuestionRequest[] {
     return [...(this.sessions.get(sessionKey(runtimeId, threadId))?.pending.values() ?? [])];
   }
 
-  isAuthoritative(runtimeId: string, threadId: string): boolean {
-    return this.sessions.get(sessionKey(runtimeId, threadId))?.baselineComplete ?? false;
+  repliesForSession(
+    runtimeId: string,
+    threadId: string,
+    requestId: string,
+    answers: readonly string[][],
+  ): CodexAsyncQuestionReply[] | null {
+    const request = this.sessions.get(sessionKey(runtimeId, threadId))?.pending.get(requestId);
+    if (!request) return null;
+    if (answers.length !== request.questions.length) {
+      throw new Error(
+        `Codex question request '${requestId}' expected ${request.questions.length} answer set(s) but received ${answers.length}.`,
+      );
+    }
+    return request.questions.map((question, index) => {
+      const answer = answers[index]?.[0]?.trim() ?? "";
+      if (answer.length === 0) throw new Error("Answer each question before you submit.");
+      return {
+        questionItemId: codexAsyncQuestionItemId(requestId, index),
+        question: question.question,
+        answer,
+      };
+    });
   }
 
   clearSession(runtimeId: string, threadId: string): void {
@@ -260,9 +235,7 @@ export class CodexAsyncQuestionState {
   clearRuntime(runtimeId: string): void {
     for (const key of this.sessions.keys()) {
       const parsed: unknown = JSON.parse(key);
-      if (Array.isArray(parsed) && parsed[0] === runtimeId) {
-        this.sessions.delete(key);
-      }
+      if (Array.isArray(parsed) && parsed[0] === runtimeId) this.sessions.delete(key);
     }
   }
 }

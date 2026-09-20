@@ -94,7 +94,6 @@ const baseSession: AgentSessionState = {
   messages: createSessionMessagesState(TEST_EXTERNAL_SESSION_IDS.chatDefault, [baseMessage]),
   pendingApprovals: [],
   pendingQuestions: [],
-  pendingAsyncQuestions: [],
   selectedModel: baseSelection,
 };
 

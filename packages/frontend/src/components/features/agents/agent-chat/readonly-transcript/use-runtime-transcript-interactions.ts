@@ -1,4 +1,4 @@
-import type { AgentAsyncQuestion, RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
+import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import type { AgentSessionScope } from "@openducktor/core";
 import { useMemo } from "react";
 import {
@@ -13,17 +13,15 @@ import type {
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { useAgentSessionApprovalActions } from "../use-agent-session-approval-actions";
 import { useAgentSessionQuestionActions } from "../use-agent-session-question-actions";
-import { toAgentQuestionRequests } from "@/lib/agent-question-requests";
 
 type UseRuntimeTranscriptInteractionsArgs = {
   target: AgentSessionIdentity | null;
   pendingApprovalRequests: readonly AgentApprovalRequest[];
   pendingQuestionRequests: readonly AgentQuestionRequest[];
-  pendingAsyncQuestions: readonly AgentAsyncQuestion[];
+  historyQuestionRequests: readonly AgentQuestionRequest[];
   isRuntimeReady: boolean;
   replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"];
   answerAgentQuestion: AgentOperationsContextValue["answerAgentQuestion"];
-  sendAgentMessage: AgentOperationsContextValue["sendAgentMessage"];
   sessionScope?: AgentSessionScope | null | undefined;
 };
 
@@ -47,11 +45,10 @@ export function useRuntimeTranscriptInteractions({
   target,
   pendingApprovalRequests,
   pendingQuestionRequests,
-  pendingAsyncQuestions,
+  historyQuestionRequests,
   isRuntimeReady,
   replyAgentApproval,
   answerAgentQuestion,
-  sendAgentMessage,
   sessionScope,
 }: UseRuntimeTranscriptInteractionsArgs): RuntimeTranscriptInteractions {
   const canReplyToRuntimeRequest = isRuntimeReady && target !== null;
@@ -64,8 +61,15 @@ export function useRuntimeTranscriptInteractions({
     });
 
   const questionRequests = useMemo(
-    () => toAgentQuestionRequests(pendingQuestionRequests, pendingAsyncQuestions),
-    [pendingAsyncQuestions, pendingQuestionRequests],
+    () => [
+      ...new Map(
+        [...pendingQuestionRequests, ...historyQuestionRequests].map((request) => [
+          request.requestId,
+          request,
+        ]),
+      ).values(),
+    ],
+    [historyQuestionRequests, pendingQuestionRequests],
   );
   const { isSubmittingQuestionByRequestId, onSubmitQuestionAnswers } =
     useAgentSessionQuestionActions({
@@ -73,7 +77,6 @@ export function useRuntimeTranscriptInteractions({
       pendingQuestions: questionRequests,
       canAnswerQuestions: isRuntimeReady,
       answerAgentQuestion,
-      sendAgentMessage,
       sessionScope,
     });
 

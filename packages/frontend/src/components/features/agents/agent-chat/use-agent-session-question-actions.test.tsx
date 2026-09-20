@@ -23,7 +23,6 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   pendingQuestions: [createQuestionRequest("req-1")],
   canAnswerQuestions: true,
   answerAgentQuestion: async () => {},
-  sendAgentMessage: async () => {},
   ...overrides,
 });
 
@@ -85,6 +84,7 @@ describe("useAgentSessionQuestionActions", () => {
         sessionIdentity(),
         expect.objectContaining({ requestId: "req-1" }),
         [["yes"]],
+        undefined,
       );
 
       await harness.run(async () => {
@@ -138,15 +138,15 @@ describe("useAgentSessionQuestionActions", () => {
           responseSession: childSession,
         }),
         [["Yes"]],
+        undefined,
       );
     } finally {
       await harness.unmount();
     }
   });
 
-  test("sends background question answers as one user message", async () => {
+  test("answers a background question through the standard question action", async () => {
     const answerAgentQuestion = mock(async () => {});
-    const sendAgentMessage = mock(async () => {});
     const identity = sessionIdentity("codex-session", "codex");
     const harness = createHookHarness(
       useAgentSessionQuestionActions,
@@ -154,8 +154,8 @@ describe("useAgentSessionQuestionActions", () => {
         sessionIdentity: identity,
         pendingQuestions: [
           {
-            requestId: "async:message-1",
-            asyncQuestionItemIds: ["question-1", "question-2"],
+            requestId: "message-1",
+            blocking: false,
             questions: [
               { header: "", question: "First question?", options: [] },
               { header: "", question: "Second question?", options: [] },
@@ -163,7 +163,6 @@ describe("useAgentSessionQuestionActions", () => {
           },
         ],
         answerAgentQuestion,
-        sendAgentMessage,
         sessionScope: { kind: "repository" },
       }),
     );
@@ -171,30 +170,14 @@ describe("useAgentSessionQuestionActions", () => {
     try {
       await harness.mount();
       await harness.run(async (state) => {
-        await state.onSubmitQuestionAnswers("async:message-1", [
-          ["First answer"],
-          ["Second answer"],
-        ]);
+        await state.onSubmitQuestionAnswers("message-1", [["First answer"], ["Second answer"]]);
       });
 
-      expect(answerAgentQuestion).not.toHaveBeenCalled();
-      expect(sendAgentMessage).toHaveBeenCalledWith(
+      expect(answerAgentQuestion).toHaveBeenCalledWith(
         identity,
-        [
-          {
-            kind: "async_question_reply",
-            questionItemId: "question-1",
-            question: "First question?",
-            answer: "First answer",
-          },
-          {
-            kind: "async_question_reply",
-            questionItemId: "question-2",
-            question: "Second question?",
-            answer: "Second answer",
-          },
-        ],
-        { sessionScope: { kind: "repository" } },
+        expect.objectContaining({ requestId: "message-1", blocking: false }),
+        [["First answer"], ["Second answer"]],
+        { kind: "repository" },
       );
     } finally {
       await harness.unmount();
@@ -203,10 +186,9 @@ describe("useAgentSessionQuestionActions", () => {
 
   test("keeps submit action stable when the session identity object is rebuilt", async () => {
     const answerAgentQuestion = mock(async () => {});
-    const sendAgentMessage = mock(async () => {});
     const harness = createHookHarness(
       useAgentSessionQuestionActions,
-      createBaseArgs({ answerAgentQuestion, sendAgentMessage }),
+      createBaseArgs({ answerAgentQuestion }),
     );
 
     try {
@@ -217,7 +199,6 @@ describe("useAgentSessionQuestionActions", () => {
         createBaseArgs({
           sessionIdentity: sessionIdentity(),
           answerAgentQuestion,
-          sendAgentMessage,
         }),
       );
 

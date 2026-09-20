@@ -20,9 +20,6 @@ const encodeOpenCodePartToText = (part: AgentUserMessagePart): string | null => 
   if (part.kind === "skill_mention") {
     throw new Error("OpenCode does not support skill reference user message parts.");
   }
-  if (part.kind === "async_question_reply") {
-    throw new Error("OpenCode does not support Codex asynchronous question replies.");
-  }
   if (part.kind === "subagent_reference") {
     return `@${part.subagent.name}`;
   }

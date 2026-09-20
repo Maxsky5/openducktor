@@ -1,6 +1,7 @@
 import { isCodexContextualUserMessage } from "../codex-app-server-shared";
 import {
   codexAsyncQuestionReplyText,
+  codexAsyncQuestionRequestId,
   parseCodexAsyncQuestionItem,
   parseCodexAsyncQuestionReplyInputs,
   parseCodexAsyncQuestionSkipIds,
@@ -36,7 +37,7 @@ export const userMessageMapper: CodexEventMapper = {
       return emptyCodexMappingResult();
     }
     const sourceParts = codexUserInputsFromItem(input.item);
-    const asyncQuestionItemIds = parseCodexAsyncQuestionSkipIds(sourceParts);
+    const skippedQuestionRequestIds = parseCodexAsyncQuestionSkipIds(sourceParts);
     const parts = stripCodexAsyncQuestionSkipMarker(sourceParts);
     const message = codexUserInputListToText(parts);
     const asyncQuestionReplies = parseCodexAsyncQuestionReplyInputs(parts);
@@ -65,11 +66,13 @@ export const userMessageMapper: CodexEventMapper = {
       displayParts,
       state: "read",
     };
-    if (asyncQuestionReplies) {
-      event.asyncQuestionReplies = asyncQuestionReplies;
-    }
-    if (asyncQuestionItemIds !== undefined) {
-      event.asyncQuestionItemIds = asyncQuestionItemIds;
+    const answeredQuestionRequestIds = asyncQuestionReplies?.flatMap((reply) => {
+      const requestId = codexAsyncQuestionRequestId(reply.questionItemId);
+      return requestId ? [requestId] : [];
+    });
+    const resolvedQuestionRequestIds = answeredQuestionRequestIds ?? skippedQuestionRequestIds;
+    if (resolvedQuestionRequestIds !== undefined) {
+      event.resolvedQuestionRequestIds = [...new Set(resolvedQuestionRequestIds)];
     }
     if (timestamp) {
       event.timestamp = timestamp;
@@ -110,16 +113,10 @@ export const assistantMessageMapper: CodexEventMapper = {
       messageId,
       message,
     };
-    if (asyncQuestion.kind === "questions") {
-      assistantMessageEvent.asyncQuestion = {
-        status: "pending",
-        questions: asyncQuestion.questions,
-      };
+    if (asyncQuestion.kind === "question") {
+      assistantMessageEvent.questionRequest = asyncQuestion.request;
     } else if (asyncQuestion.kind === "invalid") {
-      assistantMessageEvent.asyncQuestion = {
-        status: "invalid",
-        error: asyncQuestion.error,
-      };
+      assistantMessageEvent.message = asyncQuestion.error;
     }
     if (timestamp) {
       assistantMessageEvent.timestamp = timestamp;
