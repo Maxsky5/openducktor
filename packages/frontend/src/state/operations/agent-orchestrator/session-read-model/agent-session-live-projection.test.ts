@@ -152,6 +152,30 @@ describe("projectSessionSnapshotActivity", () => {
       });
     },
   );
+
+  test.each(["stopped", "error"] as const)(
+    "preserves terminal %s with a background question",
+    (status) => {
+      expect(
+        projectSessionSnapshotActivity(
+          {
+            status,
+            runtimeStatusMessage: "Previous runtime message",
+            executionEpisodeId: "episode-1",
+          },
+          snapshot("a", {
+            executionEpisodeId: "episode-1",
+            pendingQuestions: [{ requestId: "q", blocking: false, questions: [] }],
+          }),
+        ),
+      ).toEqual({
+        status,
+        pendingUserMessageStartedAt: undefined,
+        runtimeStatusMessage: "Previous runtime message",
+        executionEpisodeId: "episode-1",
+      });
+    },
+  );
 });
 
 describe("agent session live projection", () => {

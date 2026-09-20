@@ -101,12 +101,13 @@ export const projectSessionSnapshotActivity = (
   const isNewEpisode =
     snapshot.executionEpisodeId !== undefined &&
     snapshot.executionEpisodeId !== current.executionEpisodeId;
-  const hasPendingInput =
-    snapshot.pendingApprovals.length > 0 || snapshot.pendingQuestions.length > 0;
+  const hasBlockingInput =
+    snapshot.pendingApprovals.length > 0 ||
+    snapshot.pendingQuestions.some((request) => request.blocking !== false);
   const activity = projectObservedSessionActivity(
     current,
     agentSessionStatusFromActivity(snapshot.activity),
-    !isNewEpisode && !hasPendingInput,
+    !isNewEpisode && !hasBlockingInput,
   );
   return {
     executionEpisodeId: snapshot.executionEpisodeId ?? current.executionEpisodeId,

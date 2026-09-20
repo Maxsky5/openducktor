@@ -290,6 +290,24 @@ export const createSessionOccurrenceProjector = ({
     });
   };
 
+  const findOwnedAncestor = (snapshot: AgentSessionLiveSnapshot): SessionProjection | null => {
+    let parentExternalSessionId = snapshot.parentExternalSessionId;
+    const visited = new Set([snapshot.ref.externalSessionId]);
+    while (parentExternalSessionId && !visited.has(parentExternalSessionId)) {
+      visited.add(parentExternalSessionId);
+      const parent = sessions.get(
+        agentSessionIdentityKey({
+          ...snapshot.ref,
+          externalSessionId: parentExternalSessionId,
+        }),
+      );
+      if (!parent) return null;
+      if (parent.association) return parent;
+      parentExternalSessionId = parent.snapshot.parentExternalSessionId;
+    }
+    return null;
+  };
+
   const projectChildBackgroundQuestions = (
     snapshot: AgentSessionLiveSnapshot,
     previousQuestions: ReadonlySet<string>,
@@ -311,38 +329,27 @@ export const createSessionOccurrenceProjector = ({
       deferredChildQuestions.delete(childKey);
       return [];
     }
-    const parent = sessions.get(
-      agentSessionIdentityKey({
-        ...snapshot.ref,
-        externalSessionId: snapshot.parentExternalSessionId,
-      }),
-    );
-    if (!parent?.association) {
+    const owner = findOwnedAncestor(snapshot);
+    if (!owner) {
       deferredChildQuestions.set(childKey, deferred);
       return [];
     }
 
     deferredChildQuestions.delete(childKey);
     return [...deferred.values()].map((request) =>
-      projectPendingInput(parent, { inputKind: "question", request }),
+      projectPendingInput(owner, { inputKind: "question", request }),
     );
   };
 
-  const projectDeferredChildQuestions = (parent: SessionProjection): NotificationOccurrence[] => {
-    if (!parent.association || parent.isSubagent) return [];
+  const projectDeferredChildQuestions = (): NotificationOccurrence[] => {
     const occurrences: NotificationOccurrence[] = [];
     for (const childKey of deferredChildQuestions.keys()) {
       const child = sessions.get(childKey);
-      if (
-        child?.snapshot.parentExternalSessionId === parent.ref.externalSessionId &&
-        child.ref.repoPath === parent.ref.repoPath &&
-        child.ref.runtimeKind === parent.ref.runtimeKind &&
-        child.ref.workingDirectory === parent.ref.workingDirectory
-      ) {
-        occurrences.push(
-          ...projectChildBackgroundQuestions(child.snapshot, child.pendingQuestions),
-        );
+      if (!child) {
+        deferredChildQuestions.delete(childKey);
+        continue;
       }
+      occurrences.push(...projectChildBackgroundQuestions(child.snapshot, child.pendingQuestions));
     }
     return occurrences;
   };
@@ -368,11 +375,14 @@ export const createSessionOccurrenceProjector = ({
       const owned = createProjection(snapshot, association);
       sessions.set(key, owned);
       if (owned.isSubagent) {
-        return projectChildBackgroundQuestions(snapshot, new Set());
+        return [
+          ...projectChildBackgroundQuestions(snapshot, new Set()),
+          ...projectDeferredChildQuestions(),
+        ];
       }
       return [
         ...(association ? reconcilePendingOwnership(owned, snapshot) : []),
-        ...projectDeferredChildQuestions(owned),
+        ...projectDeferredChildQuestions(),
       ];
     }
 
@@ -394,7 +404,7 @@ export const createSessionOccurrenceProjector = ({
       const occurrences = projectChildBackgroundQuestions(snapshot, projection.pendingQuestions);
       projection.pendingApprovals = new Set(snapshot.pendingApprovals.map(pendingInputIdentity));
       projection.pendingQuestions = new Set(snapshot.pendingQuestions.map(pendingInputIdentity));
-      return occurrences;
+      return [...occurrences, ...projectDeferredChildQuestions()];
     }
 
     const occurrences: NotificationOccurrence[] = [];
@@ -425,7 +435,7 @@ export const createSessionOccurrenceProjector = ({
     return [
       ...reconcileTerminalOwnership(projection),
       ...occurrences,
-      ...projectDeferredChildQuestions(projection),
+      ...projectDeferredChildQuestions(),
     ];
   };
 

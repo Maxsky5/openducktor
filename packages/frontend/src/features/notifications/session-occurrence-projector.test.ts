@@ -42,6 +42,16 @@ const createProjector = () =>
     resolveTask: (taskId) => ({ id: taskId, title: "Build notifications" }),
   });
 
+const createRootOwnedProjector = () =>
+  createSessionOccurrenceProjector({
+    repositoryLabel: "Repo",
+    resolveAssociation: (candidate) =>
+      candidate.externalSessionId === ref.externalSessionId
+        ? { kind: "workflow", taskId: "task-1", role: "build" }
+        : null,
+    resolveTask: (taskId) => ({ id: taskId, title: "Build notifications" }),
+  });
+
 describe("session occurrence projector", () => {
   test.each([
     ["API request failed", "API request failed"],
@@ -565,6 +575,72 @@ describe("session occurrence projector", () => {
         requestId: "question-child-background",
       },
     });
+  });
+
+  test("routes a nested child background question to its owned root", () => {
+    const projector = createRootOwnedProjector();
+    const child = snapshot({
+      ref: { ...ref, externalSessionId: "child-session" },
+      parentExternalSessionId: ref.externalSessionId,
+    });
+    const grandchild = snapshot({
+      ref: { ...ref, externalSessionId: "grandchild-session" },
+      parentExternalSessionId: child.ref.externalSessionId,
+      pendingQuestions: [
+        {
+          requestId: "question-grandchild-background",
+          blocking: false,
+          questions: [{ header: "Runtime", question: "Which runtime?", options: [] }],
+        },
+      ],
+    });
+    projector.accept({
+      type: "snapshot",
+      repoPath: "/repo",
+      sessions: [snapshot(), child],
+    });
+
+    expect(projector.accept({ type: "session_upsert", session: grandchild })).toMatchObject([
+      {
+        kind: "agent.question_asked",
+        navigationTarget: {
+          session: { externalSessionId: ref.externalSessionId },
+          requestId: "question-grandchild-background",
+        },
+      },
+    ]);
+  });
+
+  test("releases a nested child question when the missing parent appears", () => {
+    const projector = createRootOwnedProjector();
+    const child = snapshot({
+      ref: { ...ref, externalSessionId: "child-session" },
+      parentExternalSessionId: ref.externalSessionId,
+    });
+    const grandchild = snapshot({
+      ref: { ...ref, externalSessionId: "grandchild-session" },
+      parentExternalSessionId: child.ref.externalSessionId,
+      pendingQuestions: [
+        {
+          requestId: "question-grandchild-background",
+          blocking: false,
+          questions: [{ header: "Runtime", question: "Which runtime?", options: [] }],
+        },
+      ],
+    });
+    projector.accept({ type: "session_upsert", session: snapshot() });
+
+    expect(projector.accept({ type: "session_upsert", session: grandchild })).toEqual([]);
+    expect(projector.accept({ type: "session_upsert", session: child })).toMatchObject([
+      {
+        kind: "agent.question_asked",
+        navigationTarget: {
+          session: { externalSessionId: ref.externalSessionId },
+          requestId: "question-grandchild-background",
+        },
+      },
+    ]);
+    expect(projector.accept({ type: "session_upsert", session: child })).toEqual([]);
   });
 
   test("defers a child background question until its parent appears", () => {

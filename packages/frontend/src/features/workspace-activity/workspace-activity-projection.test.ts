@@ -90,6 +90,13 @@ describe("shared snapshot activity policy", () => {
       overrides: { pendingQuestions: [{ requestId: "q", questions: [] }] },
       terminalPreserved: false,
     },
+    {
+      name: "background question",
+      overrides: {
+        pendingQuestions: [{ requestId: "q", blocking: false, questions: [] }],
+      },
+      terminalPreserved: true,
+    },
   ] satisfies {
     name: string;
     overrides: Partial<AgentSessionLiveSnapshot>;
