@@ -158,6 +158,7 @@ const emitCanonicalEvents = (
         context.asyncQuestions
           .pendingForSession(runtimeId, event.threadId)
           .map((request) => request.requestId);
+      event.resolvedQuestionRequestIds = resolvedQuestionRequestIds;
       context.asyncQuestions.resolve(runtimeId, event.threadId, resolvedQuestionRequestIds);
       for (const requestId of resolvedQuestionRequestIds) {
         emitCodexSessionEvent(context, event.threadId, {

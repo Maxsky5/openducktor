@@ -1,16 +1,21 @@
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import type { AgentSessionScope } from "@openducktor/core";
-import type { HostClient } from "@openducktor/host-client";
+import { HostInvokeError, type HostClient } from "@openducktor/host-client";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { resolveAgentPendingInputParticipants } from "@/state/agent-session-pending-input-participants";
+import { getAcceptedMessageAfterSendFailure } from "@/state/agent-runtime-services";
 import type {
   AgentApprovalRequest,
   AgentQuestionRequest,
   AgentSessionIdentity,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
+import type { UpdateSession } from "../events/session-event-types";
+import { closeBackgroundQuestions } from "../support/background-questions";
+import { upsertUserSessionMessage } from "../support/messages";
 import { type ReadSessionSnapshot, requireWorkspaceRepoPath } from "../support/session-invariants";
 import type { SessionTurnMetadata } from "../support/session-turn-metadata";
+import { toUserChatMessage } from "../support/user-message-event";
 
 export type PendingInputActionDependencies = {
   workspaceRepoPath: string | null;
@@ -19,6 +24,7 @@ export type PendingInputActionDependencies = {
     "agentSessionLiveReplyApproval" | "agentSessionLiveReplyQuestion"
   >;
   readSessionSnapshot: ReadSessionSnapshot;
+  updateSession: UpdateSession;
   turnMetadata: SessionTurnMetadata;
   recordTurnUserMessageTimestamp: (
     sessionKey: string,
@@ -51,7 +57,8 @@ const preparePendingInputReply = ({
   currentSession: AgentSessionIdentity;
   request: AgentApprovalRequest | AgentQuestionRequest;
 }) => {
-  const { responseSession } = resolveAgentPendingInputParticipants(currentSession, request);
+  const participants = resolveAgentPendingInputParticipants(currentSession, request);
+  const { responseSession } = participants;
   const responseState = dependencies.readSessionSnapshot(responseSession);
   if (!responseState && !request.responseSession) {
     throw new Error(
@@ -62,7 +69,7 @@ const preparePendingInputReply = ({
   if (responseState) {
     markTurnUserAnchorIfMissing(dependencies, responseSession, responseState.selectedModel);
   }
-  return responseSession;
+  return participants;
 };
 
 export const createPendingInputActions = (dependencies: PendingInputActionDependencies) => {
@@ -72,7 +79,7 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
     outcome: RuntimeApprovalReplyOutcome,
     message?: string,
   ): Promise<void> => {
-    const responseSession = preparePendingInputReply({
+    const { responseSession } = preparePendingInputReply({
       dependencies,
       currentSession: identity,
       request,
@@ -98,7 +105,7 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
     answers: string[][],
     sessionScope?: AgentSessionScope,
   ): Promise<void> => {
-    const responseSession = preparePendingInputReply({
+    const { responseSession, sessions } = preparePendingInputReply({
       dependencies,
       currentSession: identity,
       request,
@@ -114,7 +121,29 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
       };
     if (request.blocking !== undefined) input.blocking = request.blocking;
     if (sessionScope !== undefined) input.sessionScope = sessionScope;
-    await dependencies.liveSessionHost.agentSessionLiveReplyQuestion(input);
+    try {
+      await dependencies.liveSessionHost.agentSessionLiveReplyQuestion(input);
+    } catch (error) {
+      const repoPath = requireWorkspaceRepoPath(dependencies.workspaceRepoPath);
+      const acceptedMessage =
+        error instanceof HostInvokeError
+          ? getAcceptedMessageAfterSendFailure(error, { ...responseSession, repoPath })
+          : null;
+      if (!acceptedMessage) throw error;
+
+      const handledRequestIds = acceptedMessage.resolvedQuestionRequestIds ?? [request.requestId];
+      const responseSessionKey = agentSessionIdentityKey(responseSession);
+      for (const session of sessions) {
+        dependencies.updateSession(session, (current) => ({
+          ...current,
+          ...closeBackgroundQuestions(current, handledRequestIds),
+          messages:
+            agentSessionIdentityKey(session) === responseSessionKey
+              ? upsertUserSessionMessage(current, toUserChatMessage(acceptedMessage))
+              : current.messages,
+        }));
+      }
+    }
   };
 
   return {

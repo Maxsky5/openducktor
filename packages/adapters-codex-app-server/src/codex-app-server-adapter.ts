@@ -1221,36 +1221,45 @@ export class CodexAppServerAdapter
   }
 
   async replyLiveQuestion(input: CodexLiveQuestionReplyInput): Promise<AgentEvent> {
-    const backgroundReplies = this.asyncQuestions.repliesForSession(
+    const backgroundReplies = this.asyncQuestions.claimRepliesForSession(
       input.runtimeId,
       input.externalSessionId,
       input.requestId,
       input.answers,
     );
     if (backgroundReplies) {
-      const session = this.localSessions.get(input.externalSessionId);
-      if (!session || session.runtimeId !== input.runtimeId) {
-        throw new Error(
-          `Cannot answer Codex question '${input.requestId}' because its session is not loaded. Reload the session and try again.`,
+      try {
+        const session = this.localSessions.get(input.externalSessionId);
+        if (!session || session.runtimeId !== input.runtimeId) {
+          throw new Error(
+            `Cannot answer Codex question '${input.requestId}' because its session is not loaded. Reload the session and try again.`,
+          );
+        }
+        const text = codexAsyncQuestionReplyText(backgroundReplies);
+        const parts = [{ kind: "text" as const, text }];
+        const acceptedUserMessage = createCodexAcceptedUserMessage({
+          session,
+          parts,
+          model: session.model ?? undefined,
+          resolvedQuestionRequestIds: [input.requestId],
+        });
+        const accepted = await startCodexTurnWithInputForSession(
+          this.turnLifecycleContext(),
+          input.externalSessionId,
+          parts,
+          [toCodexAsyncQuestionReplyInput(backgroundReplies)],
+          acceptedUserMessage,
         );
+        this.asyncQuestions.resolve(input.runtimeId, input.externalSessionId, [input.requestId]);
+        return accepted;
+      } catch (error) {
+        this.asyncQuestions.releaseReplyClaim(
+          input.runtimeId,
+          input.externalSessionId,
+          input.requestId,
+        );
+        throw error;
       }
-      const text = codexAsyncQuestionReplyText(backgroundReplies);
-      const parts = [{ kind: "text" as const, text }];
-      const acceptedUserMessage = createCodexAcceptedUserMessage({
-        session,
-        parts,
-        model: session.model ?? undefined,
-        resolvedQuestionRequestIds: [input.requestId],
-      });
-      const accepted = await startCodexTurnWithInputForSession(
-        this.turnLifecycleContext(),
-        input.externalSessionId,
-        parts,
-        [toCodexAsyncQuestionReplyInput(backgroundReplies)],
-        acceptedUserMessage,
-      );
-      this.asyncQuestions.resolve(input.runtimeId, input.externalSessionId, [input.requestId]);
-      return accepted;
     }
     requireCodexPendingRequestKey(input.requestId, "question");
     const pending = this.pendingInput.claimQuestionForSession(

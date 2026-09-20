@@ -167,6 +167,7 @@ export const codexAsyncQuestionReplyText = (replies: readonly CodexAsyncQuestion
 type BackgroundQuestionState = {
   pending: Map<string, AgentPendingQuestionRequest>;
   handled: Set<string>;
+  replyClaims: Set<string>;
 };
 
 const sessionKey = (runtimeId: string, threadId: string): string =>
@@ -182,6 +183,7 @@ export class CodexAsyncQuestionState {
     const created: BackgroundQuestionState = {
       pending: new Map(),
       handled: new Set(),
+      replyClaims: new Set(),
     };
     this.sessions.set(key, created);
     return created;
@@ -197,6 +199,7 @@ export class CodexAsyncQuestionState {
     for (const requestId of requestIds) {
       state.handled.add(requestId);
       state.pending.delete(requestId);
+      state.replyClaims.delete(requestId);
     }
   }
 
@@ -228,20 +231,25 @@ export class CodexAsyncQuestionState {
     for (const request of pending.values()) this.add(runtimeId, threadId, request);
   }
 
-  repliesForSession(
+  claimRepliesForSession(
     runtimeId: string,
     threadId: string,
     requestId: string,
     answers: readonly string[][],
   ): CodexAsyncQuestionReply[] | null {
-    const request = this.sessions.get(sessionKey(runtimeId, threadId))?.pending.get(requestId);
+    const state = this.sessions.get(sessionKey(runtimeId, threadId));
+    if (!state) return null;
+    const request = state.pending.get(requestId);
     if (!request) return null;
+    if (state.replyClaims.has(requestId)) {
+      throw new Error(`Codex background question '${requestId}' already has a reply in flight.`);
+    }
     if (answers.length !== request.questions.length) {
       throw new Error(
         `Codex question request '${requestId}' expected ${request.questions.length} answer set(s) but received ${answers.length}.`,
       );
     }
-    return request.questions.map((question, index) => {
+    const replies = request.questions.map((question, index) => {
       const answer = answers[index]?.[0]?.trim() ?? "";
       if (answer.length === 0) throw new Error("Answer each question before you submit.");
       return {
@@ -250,6 +258,12 @@ export class CodexAsyncQuestionState {
         answer,
       };
     });
+    state.replyClaims.add(requestId);
+    return replies;
+  }
+
+  releaseReplyClaim(runtimeId: string, threadId: string, requestId: string): void {
+    this.sessions.get(sessionKey(runtimeId, threadId))?.replyClaims.delete(requestId);
   }
 
   clearSession(runtimeId: string, threadId: string): void {

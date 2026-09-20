@@ -3,7 +3,9 @@ import type {
   AgentSessionLiveReplyApprovalInput,
   AgentSessionLiveReplyQuestionInput,
 } from "@openducktor/contracts";
+import { HostInvokeError } from "@openducktor/host-client";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
 import type {
   AgentApprovalRequest,
   AgentQuestionRequest,
@@ -280,6 +282,63 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       },
     ]);
     expect(getSession(sessionsRef).pendingQuestions).toEqual([request]);
+  });
+
+  test("keeps an accepted background reply when the host cannot publish it", async () => {
+    const request = { ...questionRequest("question-1"), blocking: false as const };
+    const session = buildSession({
+      runtimeKind: "codex",
+      sessionAssociation: { kind: "repository" },
+      pendingQuestions: [request],
+    });
+    const sessionsRef = createSessionsRef([session]);
+    const acceptedMessage = {
+      type: "user_message" as const,
+      externalSessionId: session.externalSessionId,
+      timestamp: "2026-09-20T12:00:00.000Z",
+      messageId: "accepted-question-reply",
+      message: "> Continue?\n\nyes",
+      parts: [],
+      state: "read" as const,
+      resolvedQuestionRequestIds: [request.requestId],
+    };
+    const actions = createSessionActions({
+      workspaceRepoPath: "/active/repository",
+      sessionsRef,
+      liveSessionHost: {
+        agentSessionLiveReplyApproval: async () => {},
+        agentSessionLiveReplyQuestion: async () => {
+          throw new HostInvokeError(
+            "The runtime accepted the message, but the session update failed.",
+            {
+              kind: "agent_session_message_accepted",
+              stage: "live_update",
+              acceptedMessage,
+              sessionRef: {
+                repoPath: "/active/repository",
+                runtimeKind: session.runtimeKind,
+                workingDirectory: session.workingDirectory,
+                externalSessionId: session.externalSessionId,
+              },
+            },
+          );
+        },
+      },
+    });
+
+    await expect(
+      actions.answerAgentQuestion(toAgentSessionIdentity(session), request, [["yes"]]),
+    ).resolves.toBeUndefined();
+
+    const current = getSession(sessionsRef);
+    expect(current.pendingQuestions).toEqual([]);
+    expect(sessionMessagesToArray(current)).toContainEqual(
+      expect.objectContaining({
+        id: acceptedMessage.messageId,
+        role: "user",
+        content: acceptedMessage.message,
+      }),
+    );
   });
 
   test("routes a UI-shaped repository question through the active workspace", async () => {

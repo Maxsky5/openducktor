@@ -151,6 +151,7 @@ export const createAgentSessionActions = ({
     workspaceRepoPath,
     liveSessionHost,
     readSessionSnapshot,
+    updateSession,
     turnMetadata: sessionTurnState.metadata,
     recordTurnUserMessageTimestamp: sessionTurnState.timing.recordTurnUserMessageTimestamp,
     readTurnUserMessageStartedAtMs: sessionTurnState.timing.readTurnUserMessageStartedAtMs,

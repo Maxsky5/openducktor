@@ -104,12 +104,20 @@ describe("Codex background questions", () => {
     const state = new CodexAsyncQuestionState();
     state.add("runtime", "thread", request);
 
-    expect(state.repliesForSession("runtime", "thread", "call-1", [["Staging"]])).toEqual([
+    expect(state.claimRepliesForSession("runtime", "thread", "call-1", [["Staging"]])).toEqual([
       {
         questionItemId: codexAsyncQuestionItemId("call-1", 0),
         question: "Which environment?",
         answer: "Staging",
       },
+    ]);
+    expect(() =>
+      state.claimRepliesForSession("runtime", "thread", "call-1", [["Production"]]),
+    ).toThrow("already has a reply in flight");
+
+    state.releaseReplyClaim("runtime", "thread", "call-1");
+    expect(state.claimRepliesForSession("runtime", "thread", "call-1", [["Production"]])).toEqual([
+      expect.objectContaining({ answer: "Production" }),
     ]);
 
     state.resolve("runtime", "thread", ["call-1"]);
