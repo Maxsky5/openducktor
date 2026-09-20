@@ -286,6 +286,28 @@ export const createSessionOccurrenceProjector = ({
     });
   };
 
+  const projectChildBackgroundQuestions = (
+    snapshot: AgentSessionLiveSnapshot,
+    previousQuestions: ReadonlySet<string>,
+  ): NotificationOccurrence[] => {
+    if (!snapshot.parentExternalSessionId) return [];
+    const parent = sessions.get(
+      agentSessionIdentityKey({
+        ...snapshot.ref,
+        externalSessionId: snapshot.parentExternalSessionId,
+      }),
+    );
+    if (!parent?.association) return [];
+
+    const occurrences: NotificationOccurrence[] = [];
+    for (const [identity, request] of pendingRequestsByIdentity(snapshot.pendingQuestions)) {
+      if (request.blocking === false && !previousQuestions.has(identity)) {
+        occurrences.push(projectPendingInput(parent, { inputKind: "question", request }));
+      }
+    }
+    return occurrences;
+  };
+
   const applyUpsert = (snapshot: AgentSessionLiveSnapshot): NotificationOccurrence[] => {
     const key = agentSessionIdentityKey(snapshot.ref);
     const association = resolveAssociation(snapshot.ref);
@@ -306,6 +328,9 @@ export const createSessionOccurrenceProjector = ({
       if (unownedInputs.has(key)) observeUnownedInputs(snapshot, true);
       const owned = createProjection(snapshot, association);
       sessions.set(key, owned);
+      if (owned.isSubagent) {
+        return projectChildBackgroundQuestions(snapshot, new Set());
+      }
       return association ? reconcilePendingOwnership(owned, snapshot) : [];
     }
 
@@ -324,9 +349,10 @@ export const createSessionOccurrenceProjector = ({
     if (projection.isSubagent) {
       unownedInputs.delete(key);
       unownedTerminals.delete(key);
+      const occurrences = projectChildBackgroundQuestions(snapshot, projection.pendingQuestions);
       projection.pendingApprovals = new Set(snapshot.pendingApprovals.map(pendingInputIdentity));
       projection.pendingQuestions = new Set(snapshot.pendingQuestions.map(pendingInputIdentity));
-      return [];
+      return occurrences;
     }
 
     const occurrences: NotificationOccurrence[] = [];

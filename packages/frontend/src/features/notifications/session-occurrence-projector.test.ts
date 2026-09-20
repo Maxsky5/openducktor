@@ -523,6 +523,50 @@ describe("session occurrence projector", () => {
     ).toEqual([]);
   });
 
+  test("routes a child background question notification to its parent session", () => {
+    const projector = createProjector();
+    const childRef = { ...ref, externalSessionId: "child-session" };
+    const child = snapshot({
+      ref: childRef,
+      parentExternalSessionId: ref.externalSessionId,
+    });
+    projector.accept({
+      type: "snapshot",
+      repoPath: "/repo",
+      sessions: [snapshot(), child],
+    });
+
+    const [occurrence] = projector.accept({
+      type: "session_upsert",
+      session: {
+        ...child,
+        pendingQuestions: [
+          {
+            requestId: "question-child-background",
+            blocking: false,
+            questions: [
+              {
+                header: "Runtime",
+                question: "Which runtime should the child use?",
+                options: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(occurrence).toMatchObject({
+      kind: "agent.question_asked",
+      status: "Which runtime should the child use?",
+      navigationTarget: {
+        type: "pending_input",
+        session: { externalSessionId: ref.externalSessionId },
+        requestId: "question-child-background",
+      },
+    });
+  });
+
   test("merges error frames, gives error priority over idle, and allows a later episode", () => {
     const projector = createProjector();
     projector.accept({
