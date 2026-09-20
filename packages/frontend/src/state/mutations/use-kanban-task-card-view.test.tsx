@@ -114,4 +114,55 @@ describe("useKanbanTaskCardView", () => {
       await harness.unmount();
     }
   });
+
+  test("allows a card view write after a refetch error retains cached settings", async () => {
+    const initialSnapshot = createSettingsSnapshotFixture({
+      kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "normal" },
+    });
+    const savedSnapshot = createSettingsSnapshotFixture({
+      kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "compact" },
+    });
+    const write = createDeferred<typeof savedSnapshot>();
+    let shouldFailSettingsRead = false;
+    const workspaceGetSettingsSnapshot = mock(async () => {
+      if (shouldFailSettingsRead) {
+        throw new Error("Settings unavailable");
+      }
+      return initialSnapshot;
+    });
+    const workspaceUpdateKanbanTaskCardView = mock(async () => write.promise);
+    const testHost = { workspaceGetSettingsSnapshot, workspaceUpdateKanbanTaskCardView };
+    const harness = createHookHarness(
+      () => ({ ...useKanbanTaskCardView(testHost), queryClient: useQueryClient() }),
+      undefined,
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.taskCardView === "normal", 2000);
+      shouldFailSettingsRead = true;
+      await harness.run(async (state) => {
+        await state.queryClient.invalidateQueries({
+          queryKey: workspaceQueryKeys.settingsSnapshot(),
+          exact: true,
+        });
+      });
+      await harness.waitFor(
+        (state) =>
+          state.queryClient.getQueryState(workspaceQueryKeys.settingsSnapshot())?.status ===
+            "error" && state.taskCardView === "normal",
+        2000,
+      );
+
+      await harness.run((state) => state.changeTaskCardView("compact"));
+      await harness.waitFor((state) => state.taskCardView === "compact" && state.isPending, 2000);
+      expect(workspaceUpdateKanbanTaskCardView).toHaveBeenCalledWith("compact");
+
+      write.resolve(savedSnapshot);
+      await harness.waitFor((state) => !state.isPending, 2000);
+    } finally {
+      await harness.unmount();
+    }
+  });
 });

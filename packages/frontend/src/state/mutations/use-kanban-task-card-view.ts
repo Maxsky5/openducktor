@@ -42,12 +42,12 @@ export function useKanbanTaskCardView(
 
   const changeTaskCardView = useCallback(
     (taskCardView: KanbanTaskCardView): void => {
-      if (!settingsQuery.data || settingsQuery.isError || isPending) {
+      if (!settingsQuery.data || isPending) {
         return;
       }
       mutate(taskCardView);
     },
-    [isPending, mutate, settingsQuery.data, settingsQuery.isError],
+    [isPending, mutate, settingsQuery.data],
   );
 
   return {
