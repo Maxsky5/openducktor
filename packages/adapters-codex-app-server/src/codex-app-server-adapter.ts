@@ -127,7 +127,7 @@ import {
   assertCodexUserMessagePartsSupported,
   toCodexAsyncQuestionReplyInput,
 } from "./codex-user-inputs";
-import { codexAsyncQuestionReplyText } from "./codex-async-questions";
+import { codexAsyncQuestionReplyText, codexAsyncQuestionReplyTools } from "./codex-async-questions";
 import { searchCodexFiles } from "./file-search";
 import {
   CodexModels,
@@ -1228,31 +1228,42 @@ export class CodexAppServerAdapter
       input.answers,
     );
     if (backgroundReplies) {
+      let cancelExpectedEcho: (() => void) | undefined;
+      const session = this.localSessions.get(input.externalSessionId);
+      if (!session || session.runtimeId !== input.runtimeId) {
+        this.asyncQuestions.releaseReplyClaim(
+          input.runtimeId,
+          input.externalSessionId,
+          input.requestId,
+        );
+        throw new Error(
+          `Cannot answer Codex question '${input.requestId}' because its session is not loaded. Reload the session and try again.`,
+        );
+      }
+      const text = codexAsyncQuestionReplyText(backgroundReplies);
+      const parts = [{ kind: "text" as const, text }];
+      const acceptedUserMessage = createCodexAcceptedUserMessage({
+        session,
+        parts,
+        model: session.model ?? undefined,
+        resolvedQuestionRequestIds: [input.requestId],
+      });
+      const nativeInput = [toCodexAsyncQuestionReplyInput(backgroundReplies)];
+      let accepted: AcceptedAgentUserMessage;
       try {
-        const session = this.localSessions.get(input.externalSessionId);
-        if (!session || session.runtimeId !== input.runtimeId) {
-          throw new Error(
-            `Cannot answer Codex question '${input.requestId}' because its session is not loaded. Reload the session and try again.`,
-          );
-        }
-        const text = codexAsyncQuestionReplyText(backgroundReplies);
-        const parts = [{ kind: "text" as const, text }];
-        const acceptedUserMessage = createCodexAcceptedUserMessage({
-          session,
-          parts,
-          model: session.model ?? undefined,
-          resolvedQuestionRequestIds: [input.requestId],
-        });
-        const accepted = await startCodexTurnWithInputForSession(
+        cancelExpectedEcho = this.runtimeEvents.expectUserMessageEcho(
+          acceptedUserMessage,
+          nativeInput,
+        );
+        accepted = await startCodexTurnWithInputForSession(
           this.turnLifecycleContext(),
           input.externalSessionId,
           parts,
-          [toCodexAsyncQuestionReplyInput(backgroundReplies)],
+          nativeInput,
           acceptedUserMessage,
         );
-        this.asyncQuestions.resolve(input.runtimeId, input.externalSessionId, [input.requestId]);
-        return accepted;
       } catch (error) {
+        cancelExpectedEcho?.();
         this.asyncQuestions.releaseReplyClaim(
           input.runtimeId,
           input.externalSessionId,
@@ -1260,6 +1271,25 @@ export class CodexAppServerAdapter
         );
         throw error;
       }
+      const replyTools = codexAsyncQuestionReplyTools(backgroundReplies);
+      const resolvedRequestIds = replyTools.map(({ requestId }) => requestId);
+      this.asyncQuestions.resolve(input.runtimeId, input.externalSessionId, resolvedRequestIds);
+      const timestamp = new Date().toISOString();
+      for (const { requestId, invocation } of replyTools) {
+        this.emitSessionEvent(input.externalSessionId, {
+          type: "question_resolved",
+          requestId,
+          externalSessionId: input.externalSessionId,
+          timestamp,
+        });
+        this.emitSessionEvent(input.externalSessionId, {
+          type: "assistant_part",
+          externalSessionId: input.externalSessionId,
+          timestamp,
+          part: requireNormalizedCodexToolInvocation(invocation),
+        });
+      }
+      return accepted;
     }
     requireCodexPendingRequestKey(input.requestId, "question");
     const pending = this.pendingInput.claimQuestionForSession(

@@ -510,7 +510,6 @@ export const createSessionOccurrenceProjector = ({
     },
     accept(envelope: AgentSessionLiveEnvelope): NotificationOccurrence[] {
       if (envelope.type === "snapshot") {
-        deferredChildQuestions.clear();
         if (envelope.isConnectionSnapshot) {
           unownedInputs.clear();
           unownedTerminals.clear();
@@ -549,6 +548,7 @@ export const createSessionOccurrenceProjector = ({
         for (const key of unownedTerminals.keys()) {
           if (!retained.has(key)) unownedTerminals.delete(key);
         }
+        occurrences.push(...projectDeferredChildQuestions());
         return occurrences;
       }
       if (envelope.type === "session_upsert") {

@@ -671,6 +671,38 @@ describe("session occurrence projector", () => {
     expect(projector.accept({ type: "session_upsert", session: snapshot() })).toEqual([]);
   });
 
+  test("releases a deferred child question after a snapshot restores its parent", () => {
+    const projector = createProjector();
+    const child = snapshot({
+      ref: { ...ref, externalSessionId: "child-session" },
+      parentExternalSessionId: ref.externalSessionId,
+      pendingQuestions: [
+        {
+          requestId: "question-child-background",
+          blocking: false,
+          questions: [{ header: "Runtime", question: "Which runtime?", options: [] }],
+        },
+      ],
+    });
+
+    expect(projector.accept({ type: "session_upsert", session: child })).toEqual([]);
+    const restored = {
+      type: "snapshot" as const,
+      repoPath: "/repo",
+      sessions: [snapshot(), child],
+    };
+    expect(projector.accept(restored)).toMatchObject([
+      {
+        kind: "agent.question_asked",
+        navigationTarget: {
+          session: { externalSessionId: ref.externalSessionId },
+          requestId: "question-child-background",
+        },
+      },
+    ]);
+    expect(projector.accept(restored)).toEqual([]);
+  });
+
   test("drops a deferred child question that resolves before its parent appears", () => {
     const projector = createProjector();
     const childRef = { ...ref, externalSessionId: "child-session" };

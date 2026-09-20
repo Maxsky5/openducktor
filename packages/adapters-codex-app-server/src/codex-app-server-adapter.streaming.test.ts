@@ -48,21 +48,12 @@ const observeSessionState = async (
 describe("CodexAppServerAdapter streaming", () => {
   test("keeps asynchronous questions pending without blocking the turn and sends contextual replies", async () => {
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
-    const { adapter, transports } = createHarness({ subscribeEvents });
+    const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });
     await adapter.startSession(codexStartSessionInput());
     const events: AgentEvent[] = [];
-    let replyAccepted = false;
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
-      (event) => {
-        if (
-          !replyAccepted &&
-          (event.type === "question_resolved" || event.type === "assistant_part")
-        ) {
-          throw new Error("The background reply published before Codex accepted it.");
-        }
-        events.push(event);
-      },
+      (event) => events.push(event),
     );
 
     try {
@@ -117,17 +108,52 @@ describe("CodexAppServerAdapter streaming", () => {
           answer: "Staging",
         },
       ]);
-      const accepted = await adapter.replyQuestion({
+      const reply = adapter.replyQuestion({
         ...session,
         requestId: "async-question-1",
         answers: [["Staging"]],
       });
-      replyAccepted = true;
       await flushCodexAdapterWork();
 
-      const turnStarts = transports
-        .get("runtime-live")
-        ?.calls.filter((call) => call.method === "turn/start");
+      emitNotification({
+        method: "item/completed",
+        params: {
+          threadId: "thread/start-runtime-live",
+          turnId: "turn-live",
+          completedAtMs: 1_777_766_419_700,
+          item: codexUserMessageItemFixture({
+            id: "early-native-async-reply",
+            content: [{ type: "text", text: nativeReply, text_elements: [] }],
+          }),
+        },
+      });
+      await flushCodexAdapterWork();
+
+      expect(events.some((event) => event.type === "question_resolved")).toBe(false);
+      expect(
+        events.some(
+          (event) =>
+            event.type === "assistant_part" &&
+            event.part.kind === "tool" &&
+            event.part.tool === "request_user_input" &&
+            event.part.status === "completed",
+        ),
+      ).toBe(false);
+      await expect(
+        adapter.readSessionRuntimeSnapshot(codexSessionRuntimeRef("thread/start-runtime-live")),
+      ).resolves.toMatchObject({
+        pendingQuestions: [expect.objectContaining({ requestId: "async-question-1" })],
+      });
+
+      const transport = transports.get("runtime-live");
+      if (!transport) throw new Error("Expected the runtime transport.");
+      transport.turnStartDeferred.resolve({
+        turn: codexTurnFixture({ id: "turn-accepted", items: [], status: "inProgress" }),
+      });
+      const accepted = await reply;
+      await flushCodexAdapterWork();
+
+      const turnStarts = transport.calls.filter((call) => call.method === "turn/start");
       expect(turnStarts).toHaveLength(1);
       const turnStart = turnStarts?.[0];
       expect(turnStart?.params).toMatchObject({
@@ -142,35 +168,22 @@ describe("CodexAppServerAdapter streaming", () => {
         adapter.readSessionRuntimeSnapshot(codexSessionRuntimeRef("thread/start-runtime-live")),
       ).resolves.toMatchObject({ pendingQuestions: [] });
 
-      emitNotification({
-        method: "item/completed",
-        params: {
-          threadId: "thread/start-runtime-live",
-          turnId: "turn-live",
-          completedAtMs: 1_777_766_419_700,
-          item: codexUserMessageItemFixture({
-            id: "native-async-reply",
-            content: [{ type: "text", text: nativeReply, text_elements: [] }],
-          }),
-        },
-      });
-      await flushCodexAdapterWork();
-
       expect(accepted).toMatchObject({
         type: "user_message",
         message: "> Which environment should I use?\n\nStaging",
       });
       expect(events.filter((event) => event.type === "user_message")).toEqual([]);
+      expect(
+        events.filter(
+          (event) =>
+            event.type === "assistant_part" &&
+            event.part.kind === "tool" &&
+            event.part.tool === "request_user_input" &&
+            event.part.status === "completed",
+        ),
+      ).toHaveLength(1);
       expect(events).toContainEqual(
-        expect.objectContaining({
-          type: "assistant_part",
-          part: expect.objectContaining({
-            kind: "tool",
-            tool: "request_user_input",
-            toolType: "question",
-            status: "completed",
-          }),
-        }),
+        expect.objectContaining({ type: "question_resolved", requestId: "async-question-1" }),
       );
     } finally {
       unsubscribe();
@@ -451,6 +464,34 @@ describe("CodexAppServerAdapter streaming", () => {
       await flushCodexAdapterWork();
       const transport = transports.get("runtime-live");
       if (!transport) throw new Error("Expected the runtime transport.");
+      if (answer) {
+        const nativeReply = encodeCodexAsyncQuestionReplies([
+          {
+            questionItemId: '["request_user_input_async","async-question-rejected",0]',
+            question: "Which environment should I use?",
+            answer: "Staging",
+          },
+        ]);
+        emitNotification({
+          method: "item/completed",
+          params: {
+            threadId: "thread/start-runtime-live",
+            turnId: "turn-live",
+            completedAtMs: 1_777_766_419_700,
+            item: codexUserMessageItemFixture({
+              id: "early-rejected-native-reply",
+              content: [{ type: "text", text: nativeReply, text_elements: [] }],
+            }),
+          },
+        });
+        await flushCodexAdapterWork();
+        expect(events.some((event) => event.type === "question_resolved")).toBe(false);
+        await expect(
+          adapter.readSessionRuntimeSnapshot(codexSessionRuntimeRef("thread/start-runtime-live")),
+        ).resolves.toMatchObject({
+          pendingQuestions: [expect.objectContaining({ requestId: "async-question-rejected" })],
+        });
+      }
       transport.turnStartDeferred.reject(new Error("turn start rejected"));
 
       await expect(send).rejects.toThrow("turn start rejected");

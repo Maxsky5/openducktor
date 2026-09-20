@@ -647,6 +647,16 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       return acceptedUserMessage(input);
     };
     const requestId = "history-question";
+    const childRequest: AgentQuestionRequest = {
+      requestId: "child-question",
+      blocking: false,
+      questions: [{ header: "Child", question: "Which child option?", options: [] }],
+      source: {
+        kind: "subagent",
+        parentExternalSessionId: "session-1",
+        childExternalSessionId: "child-session",
+      },
+    };
     const sessionsRef = createSessionsRef([
       buildSession({
         status: "idle",
@@ -666,6 +676,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
               },
             ],
           },
+          childRequest,
         ],
       }),
     ]);
@@ -681,7 +692,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       ]);
 
       expect(inputs[0]).toMatchObject({ resolvedQuestionRequestIds: [requestId] });
-      expect(getSession(sessionsRef)?.pendingQuestions).toEqual([]);
+      expect(getSession(sessionsRef)?.pendingQuestions).toEqual([childRequest]);
       expect(getSession(sessionsRef)?.handledBackgroundQuestionIds).toEqual(new Set([requestId]));
     } finally {
       adapter.sendUserMessage = originalSendUserMessage;

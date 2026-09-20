@@ -310,7 +310,7 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
     const resolvedQuestionRequestIds =
       readySession.historyLoadState === "loaded"
         ? readySession.pendingQuestions
-            .filter((request) => request.blocking === false)
+            .filter((request) => request.blocking === false && request.source === undefined)
             .map((request) => request.requestId)
         : undefined;
 
