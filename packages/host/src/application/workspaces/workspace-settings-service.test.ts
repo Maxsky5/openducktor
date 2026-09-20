@@ -404,6 +404,28 @@ describe("createWorkspaceSettingsService", () => {
       kanban: snapshot.kanban,
     });
   });
+
+  test("propagates a failed kanban task card view write", async () => {
+    const settingsConfig = createFakeSettingsConfig({ config: globalConfig() });
+    const failure = new HostOperationError({
+      operation: "config.write",
+      message: "Config directory is read-only",
+    });
+    const service = createWorkspaceSettingsService({
+      ...settingsConfig,
+      writeConfig: () => Effect.fail(failure),
+    });
+
+    const result = await Effect.runPromise(
+      Effect.either(service.updateKanbanTaskCardView("compact")),
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag === "Left") expect(result.left).toBe(failure);
+    expect((await Effect.runPromise(service.getSettingsSnapshot())).kanban.taskCardView).toBe(
+      "normal",
+    );
+  });
   test("reloads exact agent model favorites through a fresh disk adapter and service", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-settings-restart-"));
     const configPath = path.join(tempDir, "config.json");

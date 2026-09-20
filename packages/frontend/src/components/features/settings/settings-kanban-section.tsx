@@ -108,12 +108,15 @@ export function SettingsKanbanSection({
       </div>
       <div className="grid gap-3 rounded-md border border-border bg-card p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
         <div className="flex min-w-0 flex-col gap-1">
-          <p className="text-sm font-medium text-foreground">Task card view</p>
+          <p id="kanban-task-card-view-label" className="text-sm font-medium text-foreground">
+            Task card view
+          </p>
           <p className="text-xs text-muted-foreground">
             Choose the task-card density used on the Kanban board.
           </p>
         </div>
         <TaskCardViewControl
+          aria-labelledby="kanban-task-card-view-label"
           value={kanban.taskCardView}
           disabled={disabled}
           onValueChange={(taskCardView) => {

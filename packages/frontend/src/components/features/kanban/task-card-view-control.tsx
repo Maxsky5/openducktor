@@ -7,6 +7,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 type TaskCardViewControlProps = {
   value: KanbanTaskCardView | null;
   disabled?: boolean;
+  "aria-labelledby"?: string;
   onValueChange: (value: KanbanTaskCardView) => void;
 };
 
@@ -18,6 +19,7 @@ const TASK_CARD_VIEW_OPTIONS = [
 export function TaskCardViewControl({
   value,
   disabled = false,
+  "aria-labelledby": ariaLabelledBy,
   onValueChange,
 }: TaskCardViewControlProps): ReactElement {
   const isUnavailable = disabled || value === null;
@@ -25,7 +27,8 @@ export function TaskCardViewControl({
   return (
     <TooltipProvider>
       <RadioGroup
-        aria-label="Task card view"
+        aria-label={ariaLabelledBy ? undefined : "Task card view"}
+        aria-labelledby={ariaLabelledBy}
         aria-disabled={isUnavailable}
         value={value ?? ""}
         data-variant="segmented"

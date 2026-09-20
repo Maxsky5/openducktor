@@ -712,6 +712,9 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
     await expect(router.invoke("set_theme", { theme: "blue" })).rejects.toThrow(
       /config: Invalid option.*\(found "blue"\)/,
     );
+    await expect(
+      router.invoke("workspace_update_kanban_task_card_view", { taskCardView: "dense" }),
+    ).rejects.toThrow(/config: Invalid option.*\(found "dense"\)/);
     await expect(router.invoke("workspace_select")).rejects.toThrow(
       "workspace_select expects argument 'workspaceId'.",
     );

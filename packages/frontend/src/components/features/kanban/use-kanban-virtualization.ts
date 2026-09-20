@@ -284,14 +284,21 @@ export function useKanbanVirtualization({
       return [];
     }
 
+    const canUseMeasuredHeights = measurementState.taskCardView === taskCardView;
     return tasks.map(
       (task) =>
-        measurementState.heightsByTaskId[task.id] ??
+        (canUseMeasuredHeights ? measurementState.heightsByTaskId[task.id] : undefined) ??
         (taskCardView === "compact"
           ? VIRTUAL_COMPACT_CARD_ESTIMATED_HEIGHT_PX
           : VIRTUAL_CARD_ESTIMATED_HEIGHT_PX),
     );
-  }, [measurementState.heightsByTaskId, shouldVirtualize, taskCardView, tasks]);
+  }, [
+    measurementState.heightsByTaskId,
+    measurementState.taskCardView,
+    shouldVirtualize,
+    taskCardView,
+    tasks,
+  ]);
 
   const virtualLayout = useMemo(
     () => buildVirtualColumnLayout(itemHeights, VIRTUAL_CARD_GAP_PX),

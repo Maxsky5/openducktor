@@ -46,9 +46,23 @@ export function useKanbanTaskCardView(
     onSuccess: (snapshot) => {
       queryClient.setQueryData(settingsOptions.queryKey, snapshot);
     },
-    onError: (error, _taskCardView, context) => {
+    onError: (error, taskCardView, context) => {
       if (context) {
-        queryClient.setQueryData(settingsOptions.queryKey, context.previousSnapshot);
+        queryClient.setQueryData<SettingsSnapshot>(settingsOptions.queryKey, (currentSnapshot) => {
+          if (!currentSnapshot) {
+            return context.previousSnapshot;
+          }
+          if (currentSnapshot.kanban.taskCardView !== taskCardView) {
+            return currentSnapshot;
+          }
+          return {
+            ...currentSnapshot,
+            kanban: {
+              ...currentSnapshot.kanban,
+              taskCardView: context.previousSnapshot.kanban.taskCardView,
+            },
+          };
+        });
       }
       toast.error("Failed to save task card view", { description: errorMessage(error) });
     },

@@ -264,7 +264,17 @@ describe("useKanbanVirtualization", () => {
   test("clears normal card measurements and recomputes the virtual window in compact mode", async () => {
     const mockWindow = installMockWindow();
     const tasks = createTasks(30);
-    const harness = createHarness({ tasks, taskCardView: "normal" });
+    const compactRenderTotals: number[] = [];
+    const harness = createSharedHookHarness(
+      (props: HookArgs) => {
+        const state = useKanbanVirtualization(props);
+        if (props.taskCardView === "compact" && state.renderModel.kind === "virtualized") {
+          compactRenderTotals.push(state.renderModel.totalHeight);
+        }
+        return state;
+      },
+      { tasks, taskCardView: "normal" },
+    );
 
     try {
       await harness.mount();
@@ -292,6 +302,7 @@ describe("useKanbanVirtualization", () => {
 
       const compactState = harness.getLatest();
       const compactRenderModel = getVirtualizedRenderModel(compactState);
+      expect(compactRenderTotals[0]).toBe(3828);
       expect(compactState.measurementVersion).toBeGreaterThan(normalState.measurementVersion);
       expect(compactRenderModel.totalHeight).toBe(3828);
       expect(compactRenderModel.topSpacerHeight).not.toBe(normalRenderModel.topSpacerHeight);
@@ -299,6 +310,16 @@ describe("useKanbanVirtualization", () => {
       expect(compactRenderModel.visibleTasks.map((task) => task.id)).not.toEqual(
         normalVisibleTaskIds,
       );
+
+      const compactMeasurementVersion = compactState.measurementVersion;
+      await harness.run(() => {
+        for (const task of tasks) {
+          harness.getLatest().onMeasuredHeight(task.id, 100);
+        }
+      });
+      const measuredCompactState = harness.getLatest();
+      expect(measuredCompactState.measurementVersion).toBeGreaterThan(compactMeasurementVersion);
+      expect(getVirtualizedRenderModel(measuredCompactState).totalHeight).toBe(3348);
     } finally {
       await harness.unmount();
       mockWindow.restore();

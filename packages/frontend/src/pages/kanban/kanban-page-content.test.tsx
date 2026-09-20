@@ -165,4 +165,27 @@ describe("KanbanPageContent", () => {
     expect(html).toContain("In progress");
     expect(html).toContain("Visible task");
   });
+
+  test("passes compact task card view through to populated columns", () => {
+    const html = renderToStaticMarkup(
+      createElement(KanbanPageContent, {
+        model: {
+          ...model,
+          taskCardView: "compact",
+          columns: [
+            {
+              id: "in_progress",
+              title: "In progress",
+              tasks: [visibleTask],
+            },
+          ],
+          taskActivityStateByTaskId: visibleTaskActivityState,
+        },
+      }),
+    );
+
+    expect(html).toContain('aria-label="Copy task ID"');
+    expect(html).not.toContain(">TASK-1<");
+    expect(html).toContain("rounded-lg shadow-none");
+  });
 });
