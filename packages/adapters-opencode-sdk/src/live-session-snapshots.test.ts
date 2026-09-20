@@ -10,6 +10,14 @@ describe("OpenCode live session snapshots", () => {
       ...baseClient,
       session: {
         ...baseClient.session,
+        get: async ({ sessionID, directory }) => ({
+          data: createOpencodeSessionFixture({
+            id: sessionID,
+            directory: directory ?? "/worktree",
+          }),
+          error: undefined,
+        }),
+        children: async () => ({ data: [], error: undefined }),
         list: async () => ({
           data: [
             createOpencodeSessionFixture({
@@ -47,6 +55,14 @@ describe("OpenCode live session snapshots", () => {
       await listOpencodeRuntimeSnapshotSources({
         createClient: () => makeClient(calls),
         runtimeEndpoint: "http://runtime-1",
+        roots: [
+          {
+            repoPath: "/worktree",
+            runtimeKind: "opencode",
+            externalSessionId: "session-1",
+            workingDirectory: "/worktree",
+          },
+        ],
         now: () => "2026-07-16T10:02:00.000Z",
         readDirectory: async () => null,
       }),
@@ -60,6 +76,14 @@ describe("OpenCode live session snapshots", () => {
     const result = await listOpencodeRuntimeSnapshotSources({
       createClient: () => makeClient(calls),
       runtimeEndpoint: "http://runtime-1",
+      roots: [
+        {
+          repoPath: "/worktree",
+          runtimeKind: "opencode",
+          externalSessionId: "session-1",
+          workingDirectory: "/worktree",
+        },
+      ],
       now: () => "2026-07-16T10:02:00.000Z",
       readDirectory: async (_directory, read) => {
         reading = true;
@@ -77,38 +101,21 @@ describe("OpenCode live session snapshots", () => {
     expect(reading).toBe(false);
   });
 
-  test("requests the full session list when OpenCode fills its first page", async () => {
+  test("does not enumerate or admit unowned sessions", async () => {
     const calls: string[] = [];
-    const listLimits: number[] = [];
-    const sessions = Array.from({ length: 101 }, (_, index) =>
-      createOpencodeSessionFixture({
-        id: `session-${index + 1}`,
-        directory: "/worktree",
-      }),
-    );
-    const baseClient = makeClient(calls);
-    const client: OpencodeClient = {
-      ...baseClient,
-      session: {
-        ...baseClient.session,
-        list: async (input) => {
-          const limit = input?.limit ?? 100;
-          listLimits.push(limit);
-          return { data: sessions.slice(0, limit), error: undefined };
-        },
-      },
+    const client = makeClient(calls);
+    client.session.list = async () => {
+      throw new Error("Broad enumeration is forbidden");
     };
-
     const result = await listOpencodeRuntimeSnapshotSources({
       createClient: () => client,
       runtimeEndpoint: "http://runtime-1",
       now: () => "2026-07-16T10:02:00.000Z",
+      roots: [],
       readDirectory: async (_directory, read) => read(),
     });
-
-    expect(listLimits).toEqual([100, 200]);
-    expect(result.sources).toHaveLength(101);
-    expect(result.failures).toEqual([]);
+    expect(result).toEqual({ sources: [], failures: [] });
+    expect(calls).toEqual([]);
   });
 
   test("keeps the directory guard until all started calls settle", async () => {
@@ -141,6 +148,14 @@ describe("OpenCode live session snapshots", () => {
     const listing = listOpencodeRuntimeSnapshotSources({
       createClient: () => client,
       runtimeEndpoint: "http://runtime-1",
+      roots: [
+        {
+          repoPath: "/worktree",
+          runtimeKind: "opencode",
+          externalSessionId: "session-1",
+          workingDirectory: "/worktree",
+        },
+      ],
       now: () => "2026-07-16T10:02:00.000Z",
       readDirectory: async (_directory, read) => {
         reading = true;
@@ -197,6 +212,20 @@ describe("OpenCode live session snapshots", () => {
     const result = await listOpencodeRuntimeSnapshotSources({
       createClient: () => client,
       runtimeEndpoint: "http://runtime-1",
+      roots: [
+        {
+          repoPath: "/healthy",
+          runtimeKind: "opencode",
+          externalSessionId: "healthy-session",
+          workingDirectory: "/healthy",
+        },
+        {
+          repoPath: "/healthy",
+          runtimeKind: "opencode",
+          externalSessionId: "failed-session",
+          workingDirectory: "/failed",
+        },
+      ],
       now: () => "2026-07-16T10:02:00.000Z",
       readDirectory: async (_directory, read) => read(),
     });

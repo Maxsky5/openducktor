@@ -1,4 +1,11 @@
 import {
+  workspaceSessionExternalListResultSchema,
+  workspaceSessionImportResultSchema,
+  type WorkspaceSessionExternalListInput,
+  type WorkspaceSessionImportInput,
+} from "@openducktor/contracts";
+import { z } from "zod";
+import {
   type WorkspaceSession,
   type WorkspaceSessionArchiveInput,
   type WorkspaceSessionArchivePreview,
@@ -16,6 +23,20 @@ import { arrayResultSchema, type InvokeFn } from "./invoke-utils";
 
 export class HostWorkspaceSessionClient {
   constructor(private readonly invoke: InvokeFn) {}
+
+  workspaceSessionExternalList(input: WorkspaceSessionExternalListInput) {
+    return this.invoke(
+      "workspace_session_external_list",
+      input,
+      workspaceSessionExternalListResultSchema,
+    );
+  }
+  workspaceSessionExternalRelease(input: { workspaceId: string; catalogRequestId: string }) {
+    return this.invoke("workspace_session_external_release", input, z.boolean());
+  }
+  workspaceSessionImport(input: WorkspaceSessionImportInput) {
+    return this.invoke("workspace_session_import", input, workspaceSessionImportResultSchema);
+  }
 
   workspaceSessionListActive(workspaceId: string): Promise<WorkspaceSession[]> {
     return this.invoke(

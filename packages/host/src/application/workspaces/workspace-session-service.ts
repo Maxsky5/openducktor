@@ -32,7 +32,10 @@ import {
   withRestoredWorkspaceSessionWorktree,
 } from "./workspace-session-worktree-lifecycle";
 
+import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
+
 export type WorkspaceSessionServiceDependencies = WorkspaceSessionTargetDependencies & {
+  lifecycle: TaskSessionLifecycleCoordinator;
   operationGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
   store: WorkspaceSessionStorePort;
   settings: Pick<WorkspaceSettingsService, "getRepoConfig" | "listCustomAgentRoles">;
@@ -261,65 +264,83 @@ export const createWorkspaceSessionService = (
     archive: (input: WorkspaceSessionArchiveInput) =>
       operationGate.run(
         input,
-        Effect.gen(function* () {
-          const { ref, session } = yield* recordFor(input);
-          if (session.archivedAt !== null) return session;
-          const target = session.executionTarget;
-          if (input.removeWorktree) {
-            if (target.kind !== "local_worktree") {
-              return yield* new HostValidationError({
-                field: "removeWorktree",
-                message: "Cannot remove a repository checkout when archiving a chat.",
-              });
+        Effect.scoped(
+          Effect.gen(function* () {
+            const { ref, session } = yield* recordFor(input);
+            if (session.archivedAt !== null) return session;
+            let target = session.executionTarget;
+            if (input.removeWorktree) {
+              const path = yield* git.canonicalizePath(target.workingDirectory);
+              yield* dependencies.lifecycle.acquireWorktreeLifecycle([path]);
             }
-            const config = yield* settings.getRepoConfig(input.workspaceId);
-            yield* readWorkspaceSessionArchivePreview(
-              dependencies,
-              { ...config, repoPath: ref.repoPath },
-              target,
-            );
-          } else if (session.externalSessionId !== null) {
-            yield* validateWorkspaceSessionTarget(dependencies, ref.repoPath, target);
-          }
-          if (session.externalSessionId !== null) {
-            const runtimeRef = {
-              repoPath: ref.repoPath,
-              runtimeKind: session.runtimeKind,
-              externalSessionId: session.externalSessionId,
-              workingDirectory: target.workingDirectory,
-            };
-            const observed = yield* live.read(runtimeRef);
-            if (observed.type === "live" && observed.session.activity !== "idle") {
-              if (!input.confirmStop)
+            if (input.removeWorktree) {
+              if (target.kind !== "local_worktree") {
                 return yield* new HostValidationError({
-                  message: "This Workspace Session is running. Confirm Stop before archiving it.",
-                  field: "confirmStop",
+                  field: "removeWorktree",
+                  message: "Cannot remove a repository checkout when archiving a chat.",
                 });
-              yield* live.stopSession(runtimeRef);
+              }
+              const config = yield* settings.getRepoConfig(input.workspaceId);
+              const preview = yield* readWorkspaceSessionArchivePreview(
+                dependencies,
+                { ...config, repoPath: ref.repoPath },
+                target,
+              );
+              if (
+                !input.worktreeConfirmation ||
+                input.worktreeConfirmation.workingDirectory !== target.workingDirectory ||
+                input.worktreeConfirmation.branchName !== preview.branchName
+              ) {
+                return yield* new HostValidationError({
+                  field: "worktreeConfirmation",
+                  message:
+                    "The worktree or branch changed. Reopen Archive chat and confirm the current branch.",
+                });
+              }
+              target = { ...target, branchName: preview.branchName };
+            } else if (session.externalSessionId !== null) {
+              yield* validateWorkspaceSessionTarget(dependencies, ref.repoPath, target);
             }
-          }
-          return yield* Effect.uninterruptible(
-            Effect.gen(function* () {
-              const executionTarget =
-                input.removeWorktree && target.kind === "local_worktree"
-                  ? yield* removeWorkspaceSessionWorktree(dependencies, ref.repoPath, target)
-                  : target;
-              return yield* store
-                .archive({ ...ref, executionTarget, archivedAt: yield* Clock.currentTimeMillis })
-                .pipe(
-                  Effect.mapError(
-                    (cause) =>
-                      new HostOperationError({
-                        operation: "workspaceSession.archive.persist",
-                        message:
-                          "Could not save the archived chat. Retry archiving to finish the operation.",
-                        cause,
-                      }),
-                  ),
-                );
-            }),
-          );
-        }),
+            if (session.externalSessionId !== null) {
+              const runtimeRef = {
+                repoPath: ref.repoPath,
+                runtimeKind: session.runtimeKind,
+                externalSessionId: session.externalSessionId,
+                workingDirectory: target.workingDirectory,
+              };
+              const observed = yield* live.read(runtimeRef);
+              if (observed.type === "live" && observed.session.activity !== "idle") {
+                if (!input.confirmStop)
+                  return yield* new HostValidationError({
+                    message: "This Workspace Session is running. Confirm Stop before archiving it.",
+                    field: "confirmStop",
+                  });
+                yield* live.stopSession(runtimeRef);
+              }
+            }
+            return yield* Effect.uninterruptible(
+              Effect.gen(function* () {
+                const executionTarget =
+                  input.removeWorktree && target.kind === "local_worktree"
+                    ? yield* removeWorkspaceSessionWorktree(dependencies, ref.repoPath, target)
+                    : target;
+                return yield* store
+                  .archive({ ...ref, executionTarget, archivedAt: yield* Clock.currentTimeMillis })
+                  .pipe(
+                    Effect.mapError(
+                      (cause) =>
+                        new HostOperationError({
+                          operation: "workspaceSession.archive.persist",
+                          message:
+                            "Could not save the archived chat. Retry archiving to finish the operation.",
+                          cause,
+                        }),
+                    ),
+                  );
+              }),
+            );
+          }),
+        ),
       ),
     restore: (input: WorkspaceSessionRefInput) =>
       operationGate.run(

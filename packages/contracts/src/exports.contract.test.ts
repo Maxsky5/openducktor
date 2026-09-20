@@ -95,6 +95,13 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "customAgentRoleInputSchema",
   "customAgentRoleSchema",
   "workspaceSessionActivitySchema",
+  "workspaceSessionExternalSchema",
+  "workspaceSessionExternalReleaseInputSchema",
+  "workspaceSessionExternalListInputSchema",
+  "workspaceSessionExternalListResultSchema",
+  "workspaceSessionImportInputSchema",
+  "workspaceSessionImportResultSchema",
+
   "workspaceSessionArchiveInputSchema",
   "workspaceSessionArchivePreviewSchema",
   "workspaceSessionBranchNameSchema",

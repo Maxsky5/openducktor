@@ -26,3 +26,5 @@ export * from "./types/agent-orchestrator";
 export * from "./types/planner";
 
 export type { AgentSessionQueryParentPort } from "./ports/agent-session-query-parent";
+
+export * from "./ports/external-runtime-sessions";

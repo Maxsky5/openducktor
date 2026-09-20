@@ -261,6 +261,20 @@ OpenDucktor request IDs are opaque handles. Keep native reply IDs inside the ada
 | Queued messages | One user-message ID keeps queued state live and in history. |
 | Compaction | Map requested, started, completed, and failed states without showing synthetic control messages. |
 
+## External workspace session import
+
+The workspace session import dialog selects a runtime before discovery. Search covers eligible native metadata, including titles, IDs, and working directories. Each response contains at most 100 rows; the dialog requests 50 rows and renders one page. Discovery does not read transcripts or add sessions to live state.
+
+`ExternalRuntimeSessionsPort` separates metadata discovery from exact session preparation. The host accepts only the canonical repository root or an existing registered worktree. It preserves the native working-directory string, including a valid symlink alias. Durable ownership checks include active and archived workspace sessions and all task sessions. SQLite checks ownership again in the insert transaction.
+
+Import prepares the original native session without a new conversation, fork, prompt, or title change. It commits live ownership only after the workspace record is saved. A failure after saving returns the saved record and an open error so the user can retry opening it. Cold history and context reads preserve native settings. OpenCode live inventory reads owned roots and their verified children instead of listing unrelated native sessions.
+
+Catalogs expire after 10 minutes. The host limits each catalog to 100,000 scanned records and 64 MiB of metadata, with at most eight catalogs and 2,000 page cursors per catalog. Closing the dialog, changing its runtime, stopping the runtime, or shutting down the host releases the catalog. The host returns an error when a bound is reached.
+
+Claude discovery uses the supported SDK `listSessions` API. That API can omit unreadable sessions without exposing the underlying listing error. This accepted SDK limitation does not disable Claude import. Exact inspection and session preparation still return errors that the SDK exposes.
+
+Imports and worktree deletion share a path lock. Archive preview reads the current branch. Deletion requires confirmation of that path and branch and checks the branch again before removal. A detached worktree can host an imported session, but OpenDucktor does not remove it through session archive.
+
 ## Code map
 
 | Part | Path |

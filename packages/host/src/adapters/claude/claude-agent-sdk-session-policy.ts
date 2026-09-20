@@ -52,7 +52,9 @@ export const resumedClaudeSessionLaunch = (
   externalSessionId: string,
 ): ClaudeSessionLaunchInput => ({
   externalSessionId,
-  ...sessionPresentation("Resumed", scope),
+  ...(scope.kind === "repository"
+    ? { startedMessage: "Resumed session" }
+    : sessionPresentation("Resumed", scope)),
   options: { resume: externalSessionId },
 });
 

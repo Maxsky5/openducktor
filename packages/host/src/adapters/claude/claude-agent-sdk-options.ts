@@ -187,7 +187,16 @@ export const buildClaudeAgentSdkOptions = async ({
     },
     agentProgressSummaries: true,
   };
-  if (permissionMode === "bypassPermissions") {
+  if (
+    sessionOptions.resume &&
+    !sessionOptions.forkSession &&
+    input.sessionScope?.kind === "repository" &&
+    !("systemPrompt" in input && input.systemPrompt)
+  ) {
+    delete options.systemPrompt;
+    delete options.permissionMode;
+  }
+  if (options.permissionMode === "bypassPermissions") {
     options.allowDangerouslySkipPermissions = true;
   }
   if (model?.modelId) {

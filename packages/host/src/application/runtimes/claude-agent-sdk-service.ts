@@ -37,6 +37,18 @@ export type ClaudePendingInputResolution = {
 };
 
 export type ClaudeAgentSdkService = {
+  prepareExternalSession(
+    input: SessionRef,
+    runtimeId: string,
+  ): Effect.Effect<
+    {
+      metadata: import("@openducktor/contracts").WorkspaceSessionExternal;
+      commit: Effect.Effect<AgentSessionSummary, ClaudeAgentSdkServiceError>;
+      dispose: Effect.Effect<void, ClaudeAgentSdkServiceError>;
+    },
+    ClaudeAgentSdkServiceError
+  >;
+
   resolveSessionParent(input: SessionRef): Effect.Effect<string | null, ClaudeAgentSdkServiceError>;
   startSession(
     input: StartAgentSessionInput,

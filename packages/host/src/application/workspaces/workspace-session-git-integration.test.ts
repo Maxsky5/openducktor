@@ -1,3 +1,4 @@
+import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
 import { cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
@@ -119,6 +120,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     };
     const store = createSqliteWorkspaceSessionStore(database.contextProvider);
     const service = createWorkspaceSessionService({
+      lifecycle: createTaskSessionLifecycleCoordinator(),
       operationGate: createWorkspaceSessionOperationGate(),
       ...targetDependencies,
       store,
@@ -355,6 +357,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       ...ref,
       confirmStop: true,
       removeWorktree: true,
+      worktreeConfirmation: { workingDirectory: directory, branchName },
     });
     expect(result.executionTarget).toMatchObject({
       kind: "local_worktree",

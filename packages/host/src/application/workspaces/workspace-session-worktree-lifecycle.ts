@@ -27,31 +27,31 @@ export const readWorkspaceSessionArchivePreview = (
         message: "Cannot remove the repository checkout as a session worktree.",
       });
     }
-    const checkout = yield* git.getCurrentBranch(config.repoPath);
-    if (
-      target.branchName === checkoutBranch(config.defaultTargetBranch) ||
-      target.branchName === checkout.name
-    ) {
-      return yield* new HostValidationError({
-        field: "removeWorktree",
-        message: `Cannot delete protected branch ${target.branchName}. Turn off worktree removal to archive this chat.`,
-      });
-    }
     const worktreeExists = yield* settingsConfig.pathExists(target.workingDirectory);
     if (!worktreeExists) {
       return { branchName: target.branchName, worktreeExists: false, hasUncommittedChanges: false };
     }
     yield* validateWorkspaceSessionTarget(dependencies, config.repoPath, target);
     const current = yield* git.getCurrentBranch(target.workingDirectory);
-    if (current.detached || current.name !== target.branchName) {
+    if (current.detached || !current.name) {
       return yield* new HostValidationError({
         field: "removeWorktree",
-        message: `The worktree is no longer on ${target.branchName}. Switch it back or turn off worktree removal.`,
+        message: "This worktree has detached HEAD. Turn off worktree removal to archive this chat.",
+      });
+    }
+    const checkout = yield* git.getCurrentBranch(config.repoPath);
+    if (
+      current.name === checkoutBranch(config.defaultTargetBranch) ||
+      current.name === checkout.name
+    ) {
+      return yield* new HostValidationError({
+        field: "removeWorktree",
+        message: `Cannot delete protected branch ${current.name}. Turn off worktree removal to archive this chat.`,
       });
     }
     const changes = yield* git.getStatus(target.workingDirectory);
     return {
-      branchName: target.branchName,
+      branchName: current.name,
       worktreeExists: true,
       hasUncommittedChanges: changes.length > 0,
     };
@@ -63,8 +63,19 @@ export const removeWorkspaceSessionWorktree = (
   target: WorktreeTarget,
 ) =>
   Effect.gen(function* () {
+    if (target.branchName === null)
+      return yield* new HostValidationError({
+        field: "branchName",
+        message: "Cannot remove a detached worktree. Turn off worktree removal.",
+      });
     // An explicit archive retry can finish a previous partial cleanup.
     if (yield* git.isRegisteredWorktree(repoPath, target.workingDirectory)) {
+      const current = yield* git.getCurrentBranch(target.workingDirectory);
+      if (current.detached || current.name !== target.branchName)
+        return yield* new HostValidationError({
+          field: "branchName",
+          message: "The worktree branch changed. Reopen Archive chat to confirm it.",
+        });
       yield* git.removeWorktree(repoPath, target.workingDirectory, true);
     }
     if (yield* git.referenceExists(repoPath, `refs/heads/${target.branchName}`)) {
@@ -83,6 +94,12 @@ export const withRestoredWorkspaceSessionWorktree = <A, E>(
     Effect.gen(function* () {
       const { git, settingsConfig, worktreeFiles, systemCommands } = dependencies;
       const { repoPath } = config;
+      const branchName = target.branchName;
+      if (branchName === null)
+        return yield* new HostValidationError({
+          field: "branchName",
+          message: "Cannot restore a removed worktree without a branch.",
+        });
       if (
         (yield* settingsConfig.pathExists(target.workingDirectory)) ||
         (yield* git.isRegisteredWorktree(repoPath, target.workingDirectory))
@@ -109,7 +126,7 @@ export const withRestoredWorkspaceSessionWorktree = <A, E>(
       const result = yield* Effect.exit(
         Effect.gen(function* () {
           yield* git
-            .createWorktree(repoPath, target.workingDirectory, target.branchName, true, startPoint)
+            .createWorktree(repoPath, target.workingDirectory, branchName, true, startPoint)
             .pipe(
               Effect.mapError(
                 (cause) =>

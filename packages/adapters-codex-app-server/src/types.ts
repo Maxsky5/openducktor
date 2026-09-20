@@ -182,6 +182,7 @@ export type CodexSessionState = {
   threadId: string;
   workingDirectory: string;
   runtimePolicy: AgentSessionRuntimePolicy;
+  preserveNativeSettings?: boolean;
   liveStatus?: {
     classification: AgentSessionActivity;
   };

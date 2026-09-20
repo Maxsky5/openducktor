@@ -1,3 +1,4 @@
+import type { createWorkspaceSessionImportCommandHandlers } from "../commands/workspace-session-import-command-handlers";
 import type { createGeneratedImageCommandHandlers } from "../commands/generated-image-command-handlers";
 import type { Effect } from "effect";
 import type { createAgentSessionLiveCommandHandlers } from "../commands/agent-session-live-command-handlers";
@@ -28,6 +29,7 @@ import type { HostCommandName } from "../commands/host-command-registry";
 type AllHostCommandHandlers = ReturnType<typeof createGeneratedImageCommandHandlers> &
   ReturnType<typeof createAgentSessionLiveCommandHandlers> &
   ReturnType<typeof createAgentRuntimeQueryCommandHandlers> &
+  ReturnType<typeof createWorkspaceSessionImportCommandHandlers> &
   ReturnType<typeof createWorkspaceSessionCommandHandlers> &
   ReturnType<typeof createDevServerCommandHandlers> &
   ReturnType<typeof createFilesystemCommandHandlers> &

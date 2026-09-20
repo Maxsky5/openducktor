@@ -1,3 +1,4 @@
+import { createCodexExternalRuntimeSessions } from "./codex-external-runtime-sessions";
 import { createCodexRuntimeTransport } from "./codex-runtime-transport";
 import { createRuntimeQueryAdapter } from "./runtime-query-adapter";
 import { createCodexImageOperations } from "./codex-image-operations";
@@ -223,6 +224,12 @@ export const createCodexLiveSessionAdapterPreparer = ({
           });
 
       const adapter: AgentSessionRuntimeAdapterPort = {
+        externalSessions: createCodexExternalRuntimeSessions(
+          controller,
+          runtime.repoPath,
+          resolveRuntimePolicy,
+          refreshProjection,
+        ),
         queries: createRuntimeQueryAdapter(controller),
         ...createCodexImageOperations(controller, sessionError),
         supportsSessionControl: true,
@@ -475,7 +482,16 @@ export const createCodexLiveSessionAdapterPreparer = ({
           ),
         updateSessionModel: (input) =>
           Effect.tryPromise({
-            try: () => controller.updateSessionModel(input),
+            try: async () => {
+              const policy = await Effect.runPromise(resolveRuntimePolicy({ kind: "repository" }));
+              return controller.updateSessionModel(input, {
+                repoPath: input.repoPath,
+                runtimeKind: "codex",
+                workingDirectory: input.workingDirectory,
+                externalSessionId: input.externalSessionId,
+                runtimePolicy: { kind: "codex", policy },
+              });
+            },
             catch: sessionError("codex-live-session.update-session-model", input.externalSessionId),
           }).pipe(Effect.tap(() => refreshProjection())),
         stopSession: (input) =>

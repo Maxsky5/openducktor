@@ -1,4 +1,7 @@
-import { CODEX_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import {
+  CODEX_RUNTIME_DESCRIPTOR,
+  type CodexAppServerThreadResumeParams,
+} from "@openducktor/contracts";
 import type { PolicyBoundSessionRef, SessionRef } from "@openducktor/core";
 import { agentSessionRefsEqual } from "@openducktor/core";
 import type { CodexLocalSessionState } from "./codex-local-session-state";
@@ -64,16 +67,16 @@ export class CodexContextUsageLoader {
           runtime.runtimeId,
           input.externalSessionId,
           async () => {
-            const response = await this.wait(
-              guard,
-              runtime.client.threadResume({
-                ...codexTransportPolicy(policy),
-                config: sessionPolicy.threadConfig,
-                threadId: input.externalSessionId,
-                cwd: input.workingDirectory,
-                excludeTurns: false,
-              }),
-            );
+            const resumeInput: CodexAppServerThreadResumeParams = {
+              threadId: input.externalSessionId,
+              excludeTurns: false,
+            };
+            if (input.sessionScope?.kind !== "repository") {
+              Object.assign(resumeInput, codexTransportPolicy(policy));
+              resumeInput.config = sessionPolicy.threadConfig;
+              resumeInput.cwd = input.workingDirectory;
+            }
+            const response = await this.wait(guard, runtime.client.threadResume(resumeInput));
             this.assertActive(guard);
             const recoveredSession = sessionStateFromExistingThread(
               input,
@@ -81,6 +84,7 @@ export class CodexContextUsageLoader {
               input.model,
               response,
             );
+            recoveredSession.preserveNativeSettings = input.sessionScope?.kind === "repository";
             this.deps.localSessions.remember(
               preserveRuntimeContextForExistingThread(
                 recoveredSession,
@@ -136,15 +140,18 @@ export class CodexContextUsageLoader {
           input.runtimeId,
           input.externalSessionId,
           async () => {
+            const resumeInput: CodexAppServerThreadResumeParams = {
+              threadId: input.externalSessionId,
+              excludeTurns: false,
+            };
+            if (sessionScope.kind !== "repository") {
+              Object.assign(resumeInput, codexTransportPolicy(sessionPolicy.runtimePolicy));
+              resumeInput.config = sessionPolicy.threadConfig;
+              resumeInput.cwd = session.workingDirectory;
+            }
             const response = await this.wait(
               guard,
-              this.deps.runtimeClients.clientForRuntime(input.runtimeId).threadResume({
-                ...codexTransportPolicy(sessionPolicy.runtimePolicy),
-                config: sessionPolicy.threadConfig,
-                threadId: input.externalSessionId,
-                cwd: session.workingDirectory,
-                excludeTurns: false,
-              }),
+              this.deps.runtimeClients.clientForRuntime(input.runtimeId).threadResume(resumeInput),
             );
             this.assertActive(guard);
             const recoveredSession = sessionStateFromExistingThread(
@@ -161,6 +168,7 @@ export class CodexContextUsageLoader {
               targetSession?.model,
               response,
             );
+            recoveredSession.preserveNativeSettings = sessionScope.kind === "repository";
             const currentSession = this.deps.localSessions.get(input.externalSessionId);
             if (!currentSession) {
               recoveredSession.contextOwnerThreadId = session.threadId;

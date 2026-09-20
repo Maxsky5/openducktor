@@ -26,7 +26,7 @@ export const validateWorkspaceSessionTarget = (
 ) =>
   Effect.gen(function* () {
     const canonicalPath = yield* git.canonicalizePath(target.workingDirectory);
-    if (canonicalPath !== target.workingDirectory || !(yield* git.isGitRepository(canonicalPath))) {
+    if (!(yield* git.isGitRepository(canonicalPath))) {
       return yield* Effect.fail(
         new HostValidationError({
           message: `Workspace Session directory is not the saved canonical Git directory: ${target.workingDirectory}`,
@@ -35,7 +35,7 @@ export const validateWorkspaceSessionTarget = (
       );
     }
     if (target.kind === "local_repo_root") {
-      if (canonicalPath !== repoPath) {
+      if (canonicalPath !== (yield* git.canonicalizePath(repoPath))) {
         return yield* Effect.fail(
           new HostValidationError({
             message: "Workspace Session checkout no longer matches its Workspace.",

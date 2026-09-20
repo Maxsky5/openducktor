@@ -24,6 +24,24 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     expect(mock.session.updateCalls).toEqual([]);
     expect(mock.session.promptCalls).toEqual([]);
   });
+  test("preserves native title and permissions when resuming an imported chat without a role", async () => {
+    const mock = makeMockClient({ sessionId: "native" });
+    const get = mock.client.session.get;
+    mock.client.session.get = async (...args) => {
+      const result = await get(...args);
+      return { ...result, data: { ...result.data!, title: "External native title" } };
+    };
+    const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
+    const input = { ...sessionRef("native"), sessionScope: repositoryScope, runtimePolicy };
+    expect((await adapter.resumeSession(input)).title).toBe("External native title");
+    await adapter.resumeSession(input);
+    await adapter.sendUserMessage({ ...input, parts: [{ kind: "text", text: "Continue" }] });
+    expect(mock.session.updateCalls).toEqual([]);
+    expect(mock.session.createCalls).toEqual([]);
+    expect(mock.session.promptAsyncCalls).toHaveLength(1);
+    await adapter.releaseSession(input);
+  });
+
   test("connects the trusted MCP and applies its full catalog across the repository lifecycle", async () => {
     const mock = makeMockClient({
       sessionId: "repository-session",

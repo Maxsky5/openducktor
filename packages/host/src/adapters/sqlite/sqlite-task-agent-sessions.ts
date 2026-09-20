@@ -1,3 +1,4 @@
+import { listRuntimeSessionOwners } from "./sqlite-runtime-session-owners";
 import { type AgentSessionRecord, type TaskAgentSessions } from "@openducktor/contracts";
 import { eq, inArray } from "drizzle-orm";
 import { Effect } from "effect";
@@ -101,6 +102,17 @@ export const upsertAgentSession = (
 ): Effect.Effect<boolean, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
     const compactSession = yield* compactAgentSessionForStorage(input.session);
+    const owner = (yield* listRuntimeSessionOwners(session)).find(
+      (owner) =>
+        owner.kind === "workspace" &&
+        owner.runtimeKind === compactSession.runtimeKind &&
+        owner.externalSessionId === compactSession.externalSessionId,
+    );
+    if (owner)
+      return yield* new SqliteTaskStoreDataError({
+        field: "agentSessionsJson",
+        message: "This runtime conversation already belongs to a workspace chat.",
+      });
     const row = yield* requireTaskRow(session, input.taskId, input.repoPath);
     const sessions = yield* agentSessionsFromRow(row);
     const existingIndex = sessions.findIndex((entry) =>

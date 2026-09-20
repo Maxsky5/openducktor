@@ -276,12 +276,14 @@ export class OpencodeSdkAdapter
       sessionID: input.externalSessionId,
     });
     const detailData = unwrapData(detail, "get session");
-    await applySessionPolicy({
-      client,
-      externalSessionId: input.externalSessionId,
-      policy,
-      workingDirectory: input.workingDirectory,
-    });
+    const preserveNativeSettings = input.sessionScope?.kind === "repository" && !input.systemPrompt;
+    if (!preserveNativeSettings)
+      await applySessionPolicy({
+        client,
+        externalSessionId: input.externalSessionId,
+        policy,
+        workingDirectory: input.workingDirectory,
+      });
     const detailRecord = opencodeSessionDetailPayloadSchema.parse(detailData);
     const startedAt = toIsoFromEpoch(detailRecord.time.created, this.now);
     const sessionInput = toSessionInput(input);
@@ -302,7 +304,9 @@ export class OpencodeSdkAdapter
     if (this.logEvent) {
       registrationInput.logEvent = this.logEvent;
     }
-    return registerSession(registrationInput);
+    const summary = registerSession(registrationInput);
+    if (preserveNativeSettings) summary.title = detailRecord.title;
+    return summary;
   }
 
   async continueInterruptedTurn(
@@ -499,7 +503,8 @@ export class OpencodeSdkAdapter
       });
       detailRecord = opencodeSessionDetailPayloadSchema.parse(unwrapData(detail, "get session"));
     }
-    if (policy) {
+    const preserveNativeSettings = input.sessionScope?.kind === "repository" && !input.systemPrompt;
+    if (policy && !preserveNativeSettings) {
       await applySessionPolicy({
         client,
         externalSessionId: input.externalSessionId,
@@ -529,6 +534,7 @@ export class OpencodeSdkAdapter
       registrationInput.logEvent = this.logEvent;
     }
     const summary = registerSession(registrationInput);
+    if (preserveNativeSettings) summary.title = detailRecord.title;
 
     try {
       const subscriptionInput: Parameters<typeof subscribeSessionToRuntimeEvents>[0] = {

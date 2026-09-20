@@ -1,3 +1,7 @@
+import {
+  prepareClaudeExternalSession,
+  type ClaudeExternalPreparation,
+} from "./claude-external-session-preparation";
 import { resolveClaudeQuerySession } from "./claude-agent-sdk-query-session";
 import { randomUUID } from "node:crypto";
 import { query } from "@anthropic-ai/claude-agent-sdk";
@@ -248,6 +252,16 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     });
   }
 
+  prepareExternalSession(input: SessionRef, runtimeId: string) {
+    return prepareClaudeExternalSession(input, {
+      now: this.now,
+      sessionStore: this.sessionStore,
+      emit: this.emit.bind(this),
+      createSession: (request, launch, preparation) =>
+        this.createSession(request, runtimeId, launch, undefined, preparation),
+    });
+  }
+
   updateSessionModel(input: UpdateAgentSessionModelInput) {
     return fromPromise("claudeRuntime.updateSessionModel", async () => {
       const session = this.sessionStore.get(input.externalSessionId);
@@ -368,6 +382,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     runtimeId: string,
     sessionInput: ClaudeSessionLaunchInput,
     onContinuationAdmission?: () => void,
+    preparation?: ClaudeExternalPreparation,
   ) {
     return Effect.gen(this, function* () {
       const resumeSessionId = sessionInput.options.resume;
@@ -394,7 +409,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
         this.fileSearch.prewarm(input.workingDirectory);
       });
       const createSessionInput: CreateClaudeAgentSdkSessionInput = {
-        emit: this.emit.bind(this),
+        emit: preparation?.emit ?? this.emit.bind(this),
         initialTodos,
         input,
         now: this.now,
@@ -407,7 +422,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
         runtimeId,
         serviceInput: this.input,
         sessionInput,
-        sessionStore: this.sessionStore,
+        sessionStore: preparation?.store ?? this.sessionStore,
       };
       if (onContinuationAdmission) {
         createSessionInput.onContinuationAdmission = onContinuationAdmission;

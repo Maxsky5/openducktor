@@ -1,3 +1,4 @@
+import { createAgentSessionRecord } from "../../ports/task-store-port-contract.test-support";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import type { WorkspaceSession } from "@openducktor/contracts";
@@ -5,6 +6,7 @@ import { Effect } from "effect";
 import { createSqliteTaskRepositoryContextManager } from "./sqlite-task-repository-context";
 import {
   createSqliteTaskStoreHarness,
+  insertRawTask,
   type SqliteTaskStoreTestHarness,
 } from "./sqlite-task-store-test-support";
 import { createSqliteWorkspaceSessionStore } from "./sqlite-workspace-session-store";
@@ -39,6 +41,94 @@ describe("SQLite Workspace Session store", () => {
   const scope = () => ({ repoPath: harness.repoPath, workspaceId: "fairnest" });
   const ref = (sessionId = "one") => ({ ...scope(), sessionId });
   const store = () => createSqliteWorkspaceSessionStore(harness.contextProvider);
+
+  test("checks all archived chats and closed task ownership in the import transaction", async () => {
+    const repository = store();
+    await Effect.runPromise(repository.listActive(scope()));
+    insertRawTask({
+      databasePath: harness.databasePath,
+      taskId: "closed-task",
+      status: "closed",
+      agentSessionsJson: JSON.stringify([
+        createAgentSessionRecord({ runtimeKind: "codex", externalSessionId: "task-owned" }),
+      ]),
+    });
+    await expect(
+      Effect.runPromise(
+        repository.importSession({
+          ...scope(),
+          session: { ...makeSession(), externalSessionId: "task-owned" },
+        }),
+      ),
+    ).rejects.toThrow("closed-task");
+    for (let index = 0; index < 101; index++)
+      await Effect.runPromise(
+        repository.create({
+          ...scope(),
+          session: { ...makeSession(`archived-${index}`), archivedAt: index + 1 },
+        }),
+      );
+    expect(await Effect.runPromise(repository.listArchived(scope()))).toHaveLength(100);
+    await expect(
+      Effect.runPromise(
+        repository.importSession({
+          ...scope(),
+          session: { ...makeSession(), externalSessionId: "runtime-archived-0" },
+        }),
+      ),
+    ).rejects.toThrow("archived chat");
+  });
+
+  test("serializes task ownership against import without leaving two owners", async () => {
+    const repository = store();
+    const task = await Effect.runPromise(
+      harness.store.createTask({
+        repoPath: harness.repoPath,
+        task: { title: "Owner", issueType: "task", priority: 2, aiReviewEnabled: false },
+      }),
+    );
+    const attempts = await Promise.allSettled([
+      Effect.runPromise(repository.importSession({ ...scope(), session: makeSession() })),
+      Effect.runPromise(
+        harness.store.upsertAgentSession({
+          repoPath: harness.repoPath,
+          taskId: task.id,
+          session: createAgentSessionRecord({
+            runtimeKind: "codex",
+            externalSessionId: "runtime-one",
+          }),
+        }),
+      ),
+    ]);
+    expect(attempts.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(await Effect.runPromise(repository.listRuntimeOwners(scope()))).toHaveLength(1);
+  });
+
+  test("deduplicates competing imports and protects draft binding", async () => {
+    const repository = store();
+    const [first, second] = await Promise.all([
+      Effect.runPromise(repository.importSession({ ...scope(), session: makeSession() })),
+      Effect.runPromise(
+        repository.importSession({
+          ...scope(),
+          session: { ...makeSession("two"), externalSessionId: "runtime-one" },
+        }),
+      ),
+    ]);
+    expect(first.session.id).toBe(second.session.id);
+    expect(Number(first.created) + Number(second.created)).toBe(1);
+    await Effect.runPromise(
+      repository.create({
+        ...scope(),
+        session: { ...makeSession("draft"), externalSessionId: null },
+      }),
+    );
+    await expect(
+      Effect.runPromise(
+        repository.bindRuntimeSession({ ...ref("draft"), externalSessionId: "runtime-one" }),
+      ),
+    ).rejects.toThrow("already belongs");
+  });
 
   test("stores worktree removal with the archive and clears it with restoration", async () => {
     const session = makeSession();

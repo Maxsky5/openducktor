@@ -23,6 +23,9 @@ import type {
 
 export type CodexSessionController = Pick<
   CodexAppServerAdapter,
+  | "listExternalSessions"
+  | "inspectExternalSession"
+  | "prepareExternalSession"
   | "resolveSessionParent"
   | "loadRuntimeCatalog"
   | "searchFiles"

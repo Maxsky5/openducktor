@@ -382,9 +382,13 @@ describe("CodexAppServerAdapter repository sessions", () => {
           parts: [{ kind: "text", text: "Continue" }],
         }),
       ),
-    ).rejects.toThrow("name failed");
+    ).resolves.toBeDefined();
     expect(restoredTransport.calls.find((call) => call.method === "thread/resume")?.params).toEqual(
-      expect.objectContaining({ config: repositoryThreadConfig }),
+      {
+        threadId: "thread-history",
+        excludeTurns: true,
+        developerInstructions: "Use the repo rules.",
+      },
     );
   });
 

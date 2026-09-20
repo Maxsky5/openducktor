@@ -1,4 +1,5 @@
 import type {
+  SessionRef,
   AgentPendingApprovalRequest,
   AgentPendingQuestionRequest,
   AgentSessionAssociation,
@@ -18,6 +19,7 @@ export type ListOpencodeRuntimeSnapshotSourcesInput = {
   createClient: ClientFactory;
   runtimeEndpoint: string;
   directories?: string[];
+  roots?: SessionRef[];
   readDirectory: ReadOpencodeDirectory;
   now: () => string;
 };
@@ -102,8 +104,6 @@ const opencodeSessionStatusMapSchema = z.record(z.string(), opencodeSessionStatu
 type OpencodeSessionStatus = z.output<typeof opencodeSessionStatusSchema>;
 type OpencodeSessionStatusMap = z.output<typeof opencodeSessionStatusMapSchema>;
 
-const OPENCODE_SESSION_LIST_LIMIT = 100;
-
 const toOpencodeRuntimeActivity = (
   status: OpencodeSessionStatus | undefined,
 ): AgentSessionRuntimeActivity => {
@@ -179,29 +179,65 @@ const mergeOpencodePendingInputBySession = (
   return merged satisfies OpencodeLiveSessionPendingInputBySessionId;
 };
 
-const listAllOpencodeSessions = async (
+const readOwnedSessions = async (
   client: ReturnType<ClientFactory>,
-): Promise<ParsedOpencodeSession[]> => {
-  let limit = OPENCODE_SESSION_LIST_LIMIT;
-  for (;;) {
-    const payload = await client.session.list({ limit });
-    const sessions = parseOpencodeSessionListPayload(unwrapData(payload, "list sessions"));
-    if (sessions.length < limit) {
-      return sessions;
+  roots: SessionRef[],
+  readDirectory: ReadOpencodeDirectory,
+): Promise<{ sessions: ParsedOpencodeSession[]; failures: OpencodeRuntimeSnapshotFailure[] }> => {
+  const sessions = new Map<string, ParsedOpencodeSession>();
+  const failures: OpencodeRuntimeSnapshotFailure[] = [];
+  for (const root of roots) {
+    if (sessions.has(root.externalSessionId)) continue;
+    const tree = new Map<string, ParsedOpencodeSession>();
+    const visit = async (id: string, directory: string, parent?: string): Promise<void> => {
+      if (tree.has(id)) return;
+      const row = parseOpencodeSessionListPayload([
+        unwrapData(await client.session.get({ sessionID: id, directory }), "read owned session"),
+      ])[0]!;
+      if (row.id !== id || row.directory !== directory)
+        throw new Error(`OpenCode returned a different identity or directory for ${id}.`);
+      if (parent ? row.parentID !== parent : Boolean(row.parentID))
+        throw new Error(`Invalid parent for OpenCode session ${id}.`);
+      tree.set(id, row);
+      const children = parseOpencodeSessionListPayload(
+        unwrapData(
+          await client.session.children({ sessionID: id, directory }),
+          "read session children",
+        ),
+      );
+      for (const child of children) {
+        if (child.parentID !== id)
+          throw new Error(`Invalid parent for OpenCode session ${child.id}.`);
+        await visit(child.id, child.directory, id);
+      }
+    };
+    try {
+      await readDirectory(root.workingDirectory, async () => {
+        await visit(root.externalSessionId, root.workingDirectory);
+        for (const [id, row] of tree) sessions.set(id, row);
+      });
+    } catch (cause) {
+      failures.push({
+        externalSessionId: root.externalSessionId,
+        workingDirectory: root.workingDirectory,
+        message: cause instanceof Error ? cause.message : String(cause),
+      });
     }
-    limit *= 2;
   }
+  return { sessions: [...sessions.values()], failures };
 };
 
 export const listOpencodeRuntimeSnapshotSources = async ({
   createClient,
   runtimeEndpoint,
   directories,
+  roots = [],
   readDirectory,
   now,
 }: ListOpencodeRuntimeSnapshotSourcesInput): Promise<OpencodeRuntimeSnapshotRead> => {
   const unscopedClient = createClient({ runtimeEndpoint });
-  const sessions = await listAllOpencodeSessions(unscopedClient);
+  const owned = await readOwnedSessions(unscopedClient, roots, readDirectory);
+  const sessions = owned.sessions;
   const requestedDirectorySet =
     directories && directories.length > 0
       ? new Set(
@@ -302,5 +338,5 @@ export const listOpencodeRuntimeSnapshotSources = async ({
     }
     return [snapshot];
   });
-  return { sources, failures };
+  return { sources, failures: [...owned.failures, ...failures] };
 };

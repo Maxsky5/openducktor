@@ -116,5 +116,50 @@ export const workspaceSessionRenameInputSchema = workspaceSessionRefInputSchema.
 export const workspaceSessionArchiveInputSchema = workspaceSessionRefInputSchema.extend({
   confirmStop: z.boolean().default(false),
   removeWorktree: z.boolean().default(false),
+  worktreeConfirmation: z
+    .strictObject({ workingDirectory: z.string().min(1), branchName: z.string().min(1) })
+    .optional(),
 });
 export type WorkspaceSessionArchiveInput = z.infer<typeof workspaceSessionArchiveInputSchema>;
+
+export const workspaceSessionExternalSchema = z.strictObject({
+  externalSessionId: z.string().min(1),
+  runtimeKind: runtimeKindSchema,
+  workingDirectory: z.string().min(1),
+  title: z.string().nullable(),
+  updatedAt: z.number().int().nullable(),
+});
+export type WorkspaceSessionExternal = z.infer<typeof workspaceSessionExternalSchema>;
+export const workspaceSessionExternalReleaseInputSchema = workspaceSessionListInputSchema.extend({
+  catalogRequestId: z.string().uuid(),
+});
+export const workspaceSessionExternalListInputSchema =
+  workspaceSessionExternalReleaseInputSchema.extend({
+    runtimeKind: runtimeKindSchema,
+    search: z.string().max(1000).default(""),
+    cursor: z.string().max(200).optional(),
+    pageSize: z.number().int().min(1).max(100).default(50),
+  });
+export type WorkspaceSessionExternalListInput = z.infer<
+  typeof workspaceSessionExternalListInputSchema
+>;
+export const workspaceSessionExternalListResultSchema = z.strictObject({
+  catalogId: z.string(),
+  sessions: z.array(workspaceSessionExternalSchema),
+  nextCursor: z.string().nullable(),
+});
+export type WorkspaceSessionExternalListResult = z.infer<
+  typeof workspaceSessionExternalListResultSchema
+>;
+export const workspaceSessionImportInputSchema = workspaceSessionListInputSchema.extend({
+  runtimeKind: runtimeKindSchema,
+  externalSessionId: z.string().min(1),
+  workingDirectory: z.string().min(1),
+});
+export type WorkspaceSessionImportInput = z.infer<typeof workspaceSessionImportInputSchema>;
+export const workspaceSessionImportResultSchema = z.strictObject({
+  session: workspaceSessionSchema,
+  created: z.boolean(),
+  openError: z.string().nullable(),
+});
+export type WorkspaceSessionImportResult = z.infer<typeof workspaceSessionImportResultSchema>;

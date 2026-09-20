@@ -12,7 +12,20 @@ export type WorkspaceSessionStoreScope = { repoPath: string; workspaceId: string
 export type WorkspaceSessionStoreRef = WorkspaceSessionStoreScope & { sessionId: string };
 type Result<A = WorkspaceSession> = Effect.Effect<A, TaskStoreError>;
 
+export type RuntimeSessionOwner = {
+  runtimeKind: RuntimeKind;
+  externalSessionId: string;
+} & (
+  | { kind: "workspace"; sessionId: string; archived: boolean }
+  | { kind: "task"; taskId: string; role: string }
+);
+
 export type WorkspaceSessionStorePort = {
+  listRuntimeOwners(input: WorkspaceSessionStoreScope): Result<RuntimeSessionOwner[]>;
+  importSession(
+    input: WorkspaceSessionStoreScope & { session: WorkspaceSession },
+  ): Result<{ session: WorkspaceSession; created: boolean }>;
+
   get(input: WorkspaceSessionStoreRef): Result;
   listActive(input: WorkspaceSessionStoreScope): Result<WorkspaceSession[]>;
   listArchived(input: WorkspaceSessionStoreScope): Result<WorkspaceSession[]>;

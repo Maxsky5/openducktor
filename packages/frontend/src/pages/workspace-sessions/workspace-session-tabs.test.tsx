@@ -111,9 +111,18 @@ test.each([true, false])(
       await waitFor(() => expect(submit.hasAttribute("disabled")).toBe(false), { timeout: 800 });
       fireEvent.click(submit);
       await waitFor(() => expect(view.queryByRole("dialog") === null).toBe(true), { timeout: 800 });
-      expect(requests).toEqual([
-        { workspaceId: view.workspaceId, sessionId: "Second", confirmStop: true, removeWorktree },
-      ]);
+      const expectedRequest: WorkspaceSessionArchiveInput = {
+        workspaceId: view.workspaceId,
+        sessionId: "Second",
+        confirmStop: true,
+        removeWorktree,
+      };
+      if (removeWorktree)
+        expectedRequest.worktreeConfirmation = {
+          workingDirectory: "/worktrees/second",
+          branchName: "feature/second",
+        };
+      expect(requests).toEqual([expectedRequest]);
       expect(view.getAllByRole("tab")).toHaveLength(1);
       expect(view.getByRole("tab", { name: /First/ }).getAttribute("aria-selected")).toBe("true");
     } finally {
@@ -851,6 +860,10 @@ test("a slow worktree archive keeps its loader on the tab while the dialog is pe
         sessionId: "Second",
         confirmStop: true,
         removeWorktree: true,
+        worktreeConfirmation: {
+          workingDirectory: "/worktrees/second",
+          branchName: "feature/second",
+        },
       },
     ]);
     expect(view.getByRole("dialog", { name: "Archive chat" })).toBeTruthy();
@@ -928,6 +941,10 @@ test("a failed direct archive does not show its error in the next worktree dialo
         sessionId: "Second",
         confirmStop: true,
         removeWorktree: true,
+        worktreeConfirmation: {
+          workingDirectory: "/worktrees/second",
+          branchName: "feature/second",
+        },
       },
     ]);
   } finally {

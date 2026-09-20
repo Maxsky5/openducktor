@@ -1,3 +1,6 @@
+import { createWorkspaceSessionOwnedRootsReader } from "./workspace-session-owned-roots";
+import { createWorkspaceSessionImportService } from "../../application/workspaces/workspace-session-import-service";
+import { createWorkspaceSessionImportCommandHandlers } from "../../interface/commands/workspace-session-import-command-handlers";
 import {
   createLiveSessionPublisher,
   createRuntimeLifecyclePublisher,
@@ -153,6 +156,11 @@ export const assembleNodeEffectHostCommandRouter = (
     adapterRegistry: liveSessionAdapterRegistry,
     withProcessStartAdmission: workspaceAdmissionService.withProcessStartAdmission,
     persistence: workspaceSessions.persistence,
+    readOwnedRoots: createWorkspaceSessionOwnedRootsReader({
+      store: assets.workspaceSessionStore,
+      taskStore,
+      settings: workspaceSettingsService,
+    }),
     faultLog: createLiveSessionFaultLogger(lifecycleLogger),
     publish: createLiveSessionPublisher(eventBus),
   });
@@ -390,6 +398,7 @@ export const assembleNodeEffectHostCommandRouter = (
     logger: lifecycleLogger,
   });
   const workspaceSessionService = createWorkspaceSessionService({
+    lifecycle: taskSessionLifecycleCoordinator,
     operationGate: workspaceSessions.operationGate,
     store: assets.workspaceSessionStore,
     settings: workspaceSettingsService,
@@ -400,6 +409,32 @@ export const assembleNodeEffectHostCommandRouter = (
     worktreeFiles,
     systemCommands,
   });
+  const workspaceSessionImports = createWorkspaceSessionImportService({
+    store: assets.workspaceSessionStore,
+    settings: workspaceSettingsService,
+    runtime: runtimeOrchestratorWithEffectiveRegistry,
+    git,
+    registry: liveSessionAdapterRegistry,
+    publishUpdated: workspaceSessions.publishUpdated,
+    lifecycle: taskSessionLifecycleCoordinator,
+  });
+  const unsubscribeImportCatalogs = eventBus?.subscribe(
+    "openducktor://agent-session-live-event",
+    (envelope) => {
+      if (
+        envelope.channel === "openducktor://agent-session-live-event" &&
+        envelope.payload.type === "runtime_changed" &&
+        envelope.payload.state === "stopped"
+      ) {
+        Effect.runFork(
+          workspaceSessionImports.releaseRuntime(
+            envelope.payload.scope.repoPath,
+            envelope.payload.scope.runtimeKind,
+          ),
+        );
+      }
+    },
+  );
   const hostRouterLifecycle = createNodeHostRouterLifecycle({
     assets,
     azureDevOpsConnection,
@@ -418,7 +453,11 @@ export const assembleNodeEffectHostCommandRouter = (
       workspaceAdmissionService
         .initialize()
         .pipe(Effect.zipRight(hostRouterLifecycle.initialize())),
-    dispose: hostRouterLifecycle.dispose,
+    dispose: () =>
+      Effect.sync(() => unsubscribeImportCatalogs?.()).pipe(
+        Effect.zipRight(workspaceSessionImports.shutdown()),
+        Effect.zipRight(hostRouterLifecycle.dispose()),
+      ),
     handlers: {
       ...createAgentSessionLiveCommandHandlers(agentSessionCommandService, localAttachmentService),
       ...createAgentRuntimeQueryCommandHandlers(
@@ -462,6 +501,7 @@ export const assembleNodeEffectHostCommandRouter = (
       ...createTaskWorktreeCommandHandlers(taskWorktreeService),
       ...createTerminalCommandHandlers(terminalService),
       ...createWorkspaceSettingsCommandHandlers(workspaceSettingsService),
+      ...createWorkspaceSessionImportCommandHandlers(workspaceSessionImports),
       ...createWorkspaceSessionCommandHandlers(
         workspaceSessionService,
         workspaceSessions.publishUpdated,

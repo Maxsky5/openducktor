@@ -118,6 +118,7 @@ export type AgentSessionLiveStateService = {
 };
 
 export type CreateAgentSessionLiveStateServiceInput = {
+  readonly readOwnedRoots?: (repoPath: string) => Effect.Effect<AgentSessionLiveRef[], HostError>;
   readonly persistence?: AgentSessionPersistencePort;
   readonly adapterRegistry: AgentSessionLiveAdapterRegistryPort;
   readonly withProcessStartAdmission?: WithProcessStartAdmission | undefined;
@@ -128,6 +129,7 @@ export type CreateAgentSessionLiveStateServiceInput = {
 
 export const createAgentSessionLiveStateService = ({
   adapterRegistry,
+  readOwnedRoots,
   withProcessStartAdmission,
   faultLog,
   publish,
@@ -258,9 +260,14 @@ export const createAgentSessionLiveStateService = ({
     refresh: (input) =>
       refreshGate.run(
         Effect.gen(function* () {
+          const roots = readOwnedRoots ? yield* readOwnedRoots(input.repoPath) : [];
           yield* Effect.forEach(
             adapterRegistry.listForRepo(input.repoPath),
-            (adapter) => adapter.refreshSnapshots?.(input.repoPath) ?? Effect.void,
+            (adapter) =>
+              adapter.refreshSnapshots?.(
+                input.repoPath,
+                roots.filter((root) => root.runtimeKind === adapter.binding.runtimeKind),
+              ) ?? Effect.void,
           );
           yield* coordinator.run(
             Effect.gen(function* () {

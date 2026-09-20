@@ -1,4 +1,4 @@
-import type { WorkspaceSession } from "@openducktor/contracts";
+import type { WorkspaceSession, WorkspaceSessionArchiveInput } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { LoaderCircle } from "lucide-react";
 import { useId, useState } from "react";
@@ -25,7 +25,10 @@ type Props = {
   record: WorkspaceSession;
   isArchiving: boolean;
   error: Error | null;
-  onArchive: (removeWorktree: boolean) => void;
+  onArchive: (
+    removeWorktree: boolean,
+    confirmation?: WorkspaceSessionArchiveInput["worktreeConfirmation"],
+  ) => void;
   onClose: () => void;
 };
 
@@ -53,7 +56,16 @@ export function WorkspaceSessionArchiveDialog({
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            if (canArchive) onArchive(removeWorktree);
+            if (canArchive)
+              onArchive(
+                removeWorktree,
+                removeWorktree && preview.data?.branchName
+                  ? {
+                      workingDirectory: record.executionTarget.workingDirectory,
+                      branchName: preview.data.branchName,
+                    }
+                  : undefined,
+              );
           }}
         >
           <DialogHeader>
@@ -79,15 +91,10 @@ export function WorkspaceSessionArchiveDialog({
               </p>
               {removeWorktree && (
                 <p className="text-sm text-muted-foreground">
-                  Branch{" "}
-                  <span className="font-mono">
-                    {record.executionTarget.kind === "local_worktree"
-                      ? record.executionTarget.branchName
-                      : ""}
-                  </span>{" "}
-                  will be deleted. Commits that exist only on this branch may be lost. Restoring
-                  this chat creates a fresh worktree from the default branch. It does not recover
-                  deleted changes.
+                  Branch <span className="font-mono">{preview.data?.branchName ?? "…"}</span> will
+                  be deleted. Commits that exist only on this branch may be lost. Restoring this
+                  chat creates a fresh worktree from the default branch. It does not recover deleted
+                  changes.
                 </p>
               )}
               {!removeWorktree && (

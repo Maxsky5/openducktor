@@ -13,17 +13,22 @@ const workingDirectorySchema = z.string().regex(/^(?:\/|[a-zA-Z]:[\\/]|\\\\)/, {
 
 export const workspaceSessionExecutionTargetSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("local_repo_root"), workingDirectory: workingDirectorySchema }),
-  z.strictObject({
-    kind: z.literal("local_worktree"),
-    workingDirectory: workingDirectorySchema,
-    branchName: identitySchema,
-    worktreeState: z.enum(["present", "removed"]),
-  }),
+  z
+    .strictObject({
+      kind: z.literal("local_worktree"),
+      workingDirectory: workingDirectorySchema,
+      branchName: identitySchema.nullable(),
+      worktreeState: z.enum(["present", "removed"]),
+    })
+    .refine((target) => target.worktreeState !== "removed" || target.branchName !== null, {
+      message: "A removed worktree must retain its branch name.",
+      path: ["branchName"],
+    }),
 ]);
 export type WorkspaceSessionExecutionTarget = z.infer<typeof workspaceSessionExecutionTargetSchema>;
 
 export const workspaceSessionArchivePreviewSchema = z.strictObject({
-  branchName: identitySchema,
+  branchName: identitySchema.nullable(),
   worktreeExists: z.boolean(),
   hasUncommittedChanges: z.boolean(),
 });
@@ -55,7 +60,7 @@ export const workspaceSessionSchema = z
     roleSnapshot: workspaceSessionRoleSnapshotSchema.nullable(),
     selectedModel: agentSessionModelSelectionSchema.nullable(),
     generatedTitle: workspaceSessionGeneratedTitleSchema.nullable(),
-    manualTitle: z.string().min(1).max(WORKSPACE_SESSION_MANUAL_TITLE_LIMIT).nullable(),
+    manualTitle: z.string().min(1).nullable(),
     createdAt: z.number().int(),
     updatedAt: z.number().int(),
     archivedAt: z.number().int().nullable(),

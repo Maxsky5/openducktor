@@ -1,8 +1,10 @@
+import { listRuntimeSessionOwners } from "./sqlite-runtime-session-owners";
 import {
   WORKSPACE_SESSION_ARCHIVE_LIMIT,
   type WorkspaceSession,
   workspaceSessionActivitySchema,
   workspaceSessionSchema,
+  workspaceSessionRenameInputSchema,
 } from "@openducktor/contracts";
 import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
 import { Effect } from "effect";
@@ -111,7 +113,12 @@ export const createSqliteWorkspaceSessionStore = (
       session.transaction(operation, (transaction) =>
         Effect.gen(function* () {
           const current = yield* getRecord(transaction, ref.sessionId);
-          const next = yield* validateRecord(change(current));
+          const changed = yield* Effect.try({
+            try: () => change(current),
+            catch: (cause) =>
+              new HostValidationError({ message: "Invalid Workspace Session update.", cause }),
+          });
+          const next = yield* validateRecord(changed);
           const row = encodeRecord(next);
           if (JSON.stringify(row) !== JSON.stringify(encodeRecord(current))) {
             yield* transaction.execute(
@@ -129,6 +136,51 @@ export const createSqliteWorkspaceSessionStore = (
     );
 
   return {
+    listRuntimeOwners: (input) =>
+      withDatabase(input, "workspaceSessionStore.owners", (session) =>
+        listRuntimeSessionOwners(session).pipe(
+          Effect.mapError((cause) => new HostValidationError({ message: cause.message, cause })),
+        ),
+      ),
+    importSession: (input) =>
+      withDatabase(input, "workspaceSessionStore.import", (session) =>
+        session.transaction("workspaceSessionStore.import", (transaction) =>
+          Effect.gen(function* () {
+            const record = yield* validateRecord(input.session);
+            if (record.externalSessionId === null)
+              return yield* new HostValidationError({
+                field: "externalSessionId",
+                message: "An imported session requires a native conversation ID.",
+              });
+            const owners = yield* listRuntimeSessionOwners(transaction).pipe(
+              Effect.mapError(
+                (cause) => new HostValidationError({ message: cause.message, cause }),
+              ),
+            );
+            const owner = owners.find(
+              (owner) =>
+                owner.runtimeKind === record.runtimeKind &&
+                owner.externalSessionId === record.externalSessionId,
+            );
+            if (owner) {
+              if (owner.kind === "workspace" && !owner.archived)
+                return { session: yield* getRecord(transaction, owner.sessionId), created: false };
+              return yield* new HostValidationError({
+                field: "externalSessionId",
+                message:
+                  owner.kind === "task"
+                    ? `This conversation belongs to task ${owner.taskId} (${owner.role}). Open it from that task.`
+                    : "This conversation belongs to an archived chat. Restore it from archived sessions.",
+              });
+            }
+            yield* transaction.execute(
+              (db) => db.insert(workspaceSessions).values(encodeRecord(record)),
+              "workspaceSessionStore.import",
+            );
+            return { session: record, created: true };
+          }),
+        ),
+      ),
     get: (input) =>
       withDatabase(input, "workspaceSessionStore.get", (session) =>
         getRecord(session, input.sessionId),
@@ -186,14 +238,34 @@ export const createSqliteWorkspaceSessionStore = (
       ),
     create: (input) =>
       withDatabase(input, "workspaceSessionStore.create", (session) =>
-        Effect.gen(function* () {
-          const record = yield* validateRecord(input.session);
-          yield* session.execute(
-            (database) => database.insert(workspaceSessions).values(encodeRecord(record)),
-            "workspaceSessionStore.create",
-          );
-          return record;
-        }),
+        session.transaction("workspaceSessionStore.create", (transaction) =>
+          Effect.gen(function* () {
+            const record = yield* validateRecord(input.session);
+            if (record.externalSessionId !== null) {
+              const owners = yield* listRuntimeSessionOwners(transaction).pipe(
+                Effect.mapError(
+                  (cause) => new HostValidationError({ message: cause.message, cause }),
+                ),
+              );
+              if (
+                owners.some(
+                  (owner) =>
+                    owner.runtimeKind === record.runtimeKind &&
+                    owner.externalSessionId === record.externalSessionId,
+                )
+              )
+                return yield* new HostValidationError({
+                  field: "externalSessionId",
+                  message: "This runtime conversation already belongs to a chat or task.",
+                });
+            }
+            yield* transaction.execute(
+              (database) => database.insert(workspaceSessions).values(encodeRecord(record)),
+              "workspaceSessionStore.create",
+            );
+            return record;
+          }),
+        ),
       ),
     bindRuntimeSession: (input) =>
       withDatabase(input, "workspaceSessionStore.bindRuntimeSession", (session) =>
@@ -206,6 +278,20 @@ export const createSqliteWorkspaceSessionStore = (
                 message: "Only an active draft can bind a runtime session.",
               });
             }
+            const owner = (yield* listRuntimeSessionOwners(transaction).pipe(
+              Effect.mapError(
+                (cause) => new HostValidationError({ message: cause.message, cause }),
+              ),
+            )).find(
+              (owner) =>
+                owner.runtimeKind === current.runtimeKind &&
+                owner.externalSessionId === input.externalSessionId,
+            );
+            if (owner)
+              return yield* new HostValidationError({
+                field: "externalSessionId",
+                message: "This runtime conversation already belongs to another chat or task.",
+              });
             const next = yield* validateRecord({
               ...current,
               externalSessionId: input.externalSessionId,
@@ -224,7 +310,7 @@ export const createSqliteWorkspaceSessionStore = (
       ),
     rename: (input) =>
       update(input, "workspaceSessionStore.rename", (current) => {
-        const title = input.manualTitle?.trim().replace(/\s+/g, " ");
+        const title = workspaceSessionRenameInputSchema.shape.manualTitle.parse(input.manualTitle);
         return { ...current, manualTitle: title || null };
       }),
     archive: (input) =>

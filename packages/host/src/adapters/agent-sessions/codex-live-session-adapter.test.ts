@@ -209,6 +209,15 @@ const createControllerHarness = ({
       options = nextOptions;
       return {
         ...unexpectedNativeRuntimeQueries,
+        listExternalSessions: async () => {
+          throw new Error("Unexpected listing");
+        },
+        inspectExternalSession: async () => {
+          throw new Error("Unexpected inspection");
+        },
+        prepareExternalSession: async () => {
+          throw new Error("Unexpected preparation");
+        },
         beginGeneratedImageBatch: async () => {
           throw new Error("Unexpected beginGeneratedImageBatch");
         },

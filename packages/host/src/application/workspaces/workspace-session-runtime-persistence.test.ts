@@ -1,3 +1,4 @@
+import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type {
   AcceptedAgentUserMessage,
@@ -554,6 +555,7 @@ describe("Workspace Session persistence through the shared command module", () =
       repoPath: database.repoPath,
     });
     const workspace = createWorkspaceSessionService({
+      lifecycle: createTaskSessionLifecycleCoordinator(),
       operationGate: h.operationGate,
       store: h.store,
       settings: {
@@ -630,6 +632,10 @@ describe("Workspace Session persistence through the shared command module", () =
           workspaceId: "fairnest",
           sessionId: "session-1",
           removeWorktree: true,
+          worktreeConfirmation: {
+            workingDirectory: h.ref.workingDirectory,
+            branchName: "feature/session",
+          },
           confirmStop: false,
         })
         .pipe(Effect.asVoid);

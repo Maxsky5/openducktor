@@ -1,0 +1,265 @@
+import {
+  runtimeKindSchema,
+  type WorkspaceSessionExternalListInput,
+  type RuntimeKind,
+  WorkspaceSession,
+  WorkspaceSessionExternal,
+} from "@openducktor/contracts";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { LoaderCircle } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { errorMessage } from "@/lib/errors";
+import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
+import { host } from "@/state/operations/host";
+import { updateWorkspaceSessionQueries } from "@/state/queries/workspace-sessions";
+import { workspaceSessionExternalQueryOptions } from "@/state/queries/workspace-session-import";
+import { useMountedRef } from "./use-mounted-ref";
+import { WorkspaceSessionImportResults } from "./workspace-session-import-results";
+
+type Props = {
+  workspaceId: string;
+  onClose: () => void;
+  onImported: (session: WorkspaceSession) => void;
+};
+export function WorkspaceSessionImportDialog(props: Props) {
+  const runtime = useRuntimeAvailabilityContext();
+  const [selectedRuntime, setSelectedRuntime] = useState<RuntimeKind | null>(null);
+  const [pending, setPending] = useState(false);
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !pending) props.onClose();
+      }}
+    >
+      <DialogContent
+        className="my-0 gap-0 p-0 sm:max-w-2xl"
+        onEscapeKeyDown={(event) => {
+          if (pending) event.preventDefault();
+        }}
+        onInteractOutside={(event) => {
+          if (pending) event.preventDefault();
+        }}
+      >
+        <DialogHeader className="border-b border-border px-6 py-4">
+          <DialogTitle>Import session</DialogTitle>
+          <DialogDescription>
+            Continue an existing conversation from this repository or one of its worktrees.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody className="flex flex-col gap-4 px-6 py-4">
+          <Label id="session-import-runtime">Runtime</Label>
+          <Combobox
+            value={selectedRuntime ?? ""}
+            onValueChange={(value) => setSelectedRuntime(runtimeKindSchema.parse(value))}
+            disabled={pending || runtime.isLoadingRuntimeDefinitions}
+            triggerAriaLabelledBy="session-import-runtime"
+            placeholder="Choose a runtime"
+            searchable={false}
+            options={runtime.allRuntimeDefinitions.map((definition) => ({
+              value: definition.kind,
+              label: definition.label,
+              description: runtime.availableRuntimeDefinitions.some(
+                (available) => available.kind === definition.kind,
+              )
+                ? ""
+                : "Install and enable this runtime in Settings if unavailable.",
+            }))}
+          />
+          {runtime.runtimeDefinitionsError && (
+            <p role="alert" className="text-sm text-destructive">
+              {errorMessage(runtime.runtimeDefinitionsError)}
+            </p>
+          )}
+          {selectedRuntime && (
+            <RuntimeSessionResults
+              key={selectedRuntime}
+              {...props}
+              runtimeKind={selectedRuntime}
+              setPending={setPending}
+            />
+          )}
+        </DialogBody>
+        <DialogFooter className="border-t border-border px-6 py-4">
+          <Button variant="outline" disabled={pending} onClick={props.onClose}>
+            Cancel
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function RuntimeSessionResults({
+  workspaceId,
+  runtimeKind,
+  onClose,
+  onImported,
+  setPending,
+}: Props & { runtimeKind: RuntimeKind; setPending: (pending: boolean) => void }) {
+  const [catalogRequestId, setCatalogRequestId] = useState(() => crypto.randomUUID());
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [cursors, setCursors] = useState<Array<string | undefined>>([undefined]);
+  const [page, setPage] = useState(0);
+  const [selected, setSelected] = useState<WorkspaceSessionExternal | null>(null);
+  const [releaseError, setReleaseError] = useState<string | null>(null);
+  const submitting = useRef(false);
+  const mounted = useMountedRef();
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search), 250);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+  useEffect(
+    () => () => {
+      void host
+        .workspaceSessionExternalRelease({ workspaceId, catalogRequestId })
+        .catch((error) => {
+          if (mounted.current) setReleaseError(errorMessage(error));
+        });
+    },
+    [workspaceId, catalogRequestId, mounted],
+  );
+  const cursor = cursors[page];
+  const queryInput: WorkspaceSessionExternalListInput = {
+    workspaceId,
+    runtimeKind,
+    catalogRequestId,
+    search: debouncedSearch,
+    pageSize: 50,
+  };
+  if (cursor) queryInput.cursor = cursor;
+  const result = useQuery({
+    ...workspaceSessionExternalQueryOptions(queryInput),
+    enabled: search === debouncedSearch,
+  });
+  const mutation = useMutation({
+    mutationFn: (session: WorkspaceSessionExternal) =>
+      host.workspaceSessionImport({
+        workspaceId,
+        runtimeKind,
+        externalSessionId: session.externalSessionId,
+        workingDirectory: session.workingDirectory,
+      }),
+    onSuccess: (saved) => {
+      updateWorkspaceSessionQueries(queryClient, workspaceId, saved.session);
+      if (mounted.current && !saved.openError) {
+        onImported(saved.session);
+        onClose();
+      }
+    },
+    onSettled: () => {
+      submitting.current = false;
+      if (mounted.current) setPending(false);
+    },
+  });
+  const pending = mutation.isPending;
+  const lookupPending = search !== debouncedSearch || result.isPending || result.isFetching;
+  const rows = !lookupPending && !result.isError ? result.data?.sessions : undefined;
+  const submit = (session: WorkspaceSessionExternal) => {
+    if (submitting.current) return;
+    submitting.current = true;
+    setSelected(session);
+    setPending(true);
+    mutation.mutate(session);
+  };
+  return (
+    <>
+      <Label htmlFor="session-import-search">Search sessions</Label>
+      <Input
+        id="session-import-search"
+        value={search}
+        disabled={pending}
+        placeholder="Title, session ID, or directory"
+        onChange={(event) => {
+          setSearch(event.target.value);
+          setPage(0);
+          setCursors([undefined]);
+        }}
+      />
+      {lookupPending && (
+        <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+          <LoaderCircle className="size-4 animate-spin" />
+          Loading sessions…
+        </p>
+      )}
+      {result.isError && search === debouncedSearch && (
+        <div role="alert" className="flex flex-col gap-2">
+          <p className="text-sm text-destructive">{errorMessage(result.error)}</p>
+          <Button
+            variant="outline"
+            disabled={pending}
+            onClick={() => {
+              setPage(0);
+              setCursors([undefined]);
+              setCatalogRequestId(crypto.randomUUID());
+            }}
+          >
+            Retry
+          </Button>
+        </div>
+      )}
+      {releaseError && (
+        <p role="alert" className="text-sm text-destructive">
+          {releaseError}
+        </p>
+      )}
+      <WorkspaceSessionImportResults
+        rows={rows}
+        search={search}
+        pending={pending}
+        selectedSessionId={selected?.externalSessionId}
+        page={page}
+        hasNextPage={Boolean(result.data?.nextCursor)}
+        onImport={submit}
+        onPrevious={() => setPage(page - 1)}
+        onNext={() => {
+          const next = result.data?.nextCursor;
+          if (next) {
+            setCursors([...cursors.slice(0, page + 1), next]);
+            setPage(page + 1);
+          }
+        }}
+      />
+      {mutation.isError && (
+        <div role="alert" className="flex flex-col gap-2">
+          <p className="text-sm text-destructive">{errorMessage(mutation.error)}</p>
+          {selected && (
+            <Button variant="outline" onClick={() => submit(selected)}>
+              Retry import
+            </Button>
+          )}
+        </div>
+      )}
+      {mutation.data?.openError && (
+        <div role="alert" className="flex flex-col gap-2">
+          <p className="text-sm text-destructive">{mutation.data.openError}</p>
+          <Button
+            onClick={() => {
+              if (mutation.data) {
+                onImported(mutation.data.session);
+                onClose();
+              }
+            }}
+          >
+            Open saved chat
+          </Button>
+        </div>
+      )}
+    </>
+  );
+}
