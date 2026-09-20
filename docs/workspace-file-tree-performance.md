@@ -10,7 +10,7 @@ The first implementation collected all metadata before checking errors. QA showe
 
 ## Measurements
 
-Refreshed after the QA correction on 2026-09-08 with Darwin 25.5.0 arm64, Bun 1.3.10, and Effect 3.22.1. The repo requests Bun 1.3.14; that version was not installed for this run. The fixture has 10,000 real text files in 100 directories, staged in a local Git repository. Both Git and filesystem adapters use real I/O. Each successful tree request made 10,001 stat calls, including the root, and returned 10,100 entries.
+Refreshed on 2026-09-20 with Darwin 25.5.0 arm64, Bun 1.4.2, and Effect 3.22.2. These versions match the checked-in package manager and installed dependency. The fixture has 10,000 real text files in 100 directories, staged in a local Git repository. Both Git and filesystem adapters use real I/O. Each successful tree request made 10,001 stat calls, including the root, and returned 10,100 entries.
 
 Each candidate ran in 20 fresh Bun processes. Candidate order rotated each round. Each process measured its first tree read, then a second tree read with a text-file command that starts at the first no-follow metadata read. It then measured the same text-file command with no tree request active. Times include the command handler, Git reads, metadata reads, sorting, and response validation. They exclude process startup, module imports, the host router, and Electron IPC. p50 is the median; p95 is the 19th sorted sample of 20. All times are milliseconds.
 
@@ -18,13 +18,13 @@ Each candidate ran in 20 fresh Bun processes. Candidate order rotated each round
 
 | Limit | Cold p50 / p95 | Warm p50 / p95 | Competing text-file command p50 / p95 | Idle text-file command p50 / p95 |
 | --- | --- | --- | --- | --- |
-| Serial baseline | 298.8 / 483.3 | 270.7 / 388.0 | 29.8 / 37.1 | 27.8 / 34.3 |
-| 4 | 217.2 / 302.7 | 189.2 / 337.0 | 40.3 / 50.3 | 26.7 / 51.0 |
-| 8 | 206.0 / 277.4 | 182.1 / 240.2 | 52.7 / 102.1 | 28.0 / 36.6 |
-| 16 | 203.4 / 283.5 | 169.8 / 277.8 | 90.0 / 104.1 | 24.1 / 37.8 |
-| 32 | 203.0 / 430.9 | 171.0 / 394.0 | 101.5 / 138.0 | 25.7 / 37.9 |
+| Serial baseline | 256.7 / 1016.7 | 238.3 / 764.7 | 28.3 / 63.0 | 25.3 / 38.4 |
+| 4 | 189.2 / 256.8 | 160.9 / 237.6 | 29.6 / 36.9 | 26.4 / 36.6 |
+| 8 | 183.2 / 321.8 | 152.3 / 230.1 | 29.3 / 57.7 | 25.5 / 40.9 |
+| 16 | 182.6 / 465.1 | 152.7 / 272.6 | 30.0 / 37.6 | 25.5 / 37.9 |
+| 32 | 182.4 / 459.7 | 157.5 / 344.1 | 33.5 / 48.7 | 26.8 / 42.7 |
 
-Limit 4 reduces the warm tree median by about 30% and gives the lowest competing-command median among the concurrent limits. Higher limits reduce tree time further but delay the competing request. At limit 4 the competing command median is 40.3 ms, versus 26.7 ms with no tree request active. The limit applies to each tree request, not to all host requests combined. These measurements replace the first implementation's measurements because the scheduling code changed.
+Limit 4 reduces the warm tree median by about 32% and has the lowest cold-tree p95 and competing-command p95 among the concurrent limits. Limit 8 reduces the warm median by about 36%, but its competing-command p95 rises to 57.7 ms. Limits 16 and 32 do not improve the warm median over limit 8 and have worse tree tail times. At limit 4 the competing-command median is 29.6 ms, versus 26.4 ms with no tree request active. The limit applies to each tree request, not to all host requests combined.
 
 ## Reproduce
 
@@ -59,7 +59,7 @@ The probe prints JSON with first-read and second-read duration, stat count, peak
 The gate-controlled test starts four reads while 996 paths remain queued. Before the gate opens it checks four active reads and five total stat calls, including the root. It then checks peak concurrency four, 1,001 total stat calls, sorted paths, and correctly paired metadata. Other tests force out-of-order completion across files, directories, deleted files, and a broken symlink; check first-path error selection; and interrupt active reads before queued paths start. The QA regressions check that later blocked reads cannot delay a known error and that the service interrupts its owned work without opening the blocked gate.
 
 ```sh
-bun test packages/host/src/application/filesystem/workspace-files-service.test.ts packages/host/src/interface/commands/workspace-files-command-handlers.test.ts
+bun test packages/host/src/application/filesystem/workspace-files-service.test.ts packages/host/src/application/filesystem/workspace-files-service-concurrency.test.ts packages/host/src/interface/commands/workspace-files-command-handlers.test.ts
 ```
 
 ## Repository verification
