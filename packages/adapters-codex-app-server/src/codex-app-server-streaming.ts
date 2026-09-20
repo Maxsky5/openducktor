@@ -43,8 +43,8 @@ import {
 import type { CodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import type { CodexTimedThreadItem } from "./codex-event-mapper";
 import { codexUserInputListToText, toDisplayParts } from "./codex-user-input-display";
-import { codexUserInputsFromItem, toCodexUserInputList } from "./codex-user-inputs";
-import type { CodexNotificationRecord, CodexSessionState } from "./types";
+import { codexUserInputsFromItem } from "./codex-user-inputs";
+import type { CodexNotificationRecord, CodexSessionState, CodexUserInput } from "./types";
 import { type CodexAsyncQuestionState, parseCodexAsyncQuestionItem } from "./codex-async-questions";
 
 type CodexAgentMessageItem = Extract<CodexTimedThreadItem, { type: "agentMessage" }>;
@@ -330,10 +330,10 @@ export const createCodexAcceptedUserMessage = ({
 export const expectCodexUserMessageEcho = (
   context: CodexStreamingContext,
   event: AcceptedAgentUserMessage,
-  sourceParts: AgentUserMessagePart[],
+  input: CodexUserInput[],
 ): (() => void) => {
   const echo: CodexUserMessageEcho = {
-    text: codexUserInputListToText(toCodexUserInputList(sourceParts)),
+    text: codexUserInputListToText(input),
   };
   const pendingEchoes =
     context.syntheticUserMessageEchoesByThreadId.get(event.externalSessionId) ?? [];

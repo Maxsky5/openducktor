@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { CodexAppServerThreadItem, CodexAppServerUserInput } from "@openducktor/contracts";
-import type { AgentPendingQuestionRequest } from "@openducktor/core";
+import type { AgentPendingQuestionRequest, AgentSessionHistoryMessage } from "@openducktor/core";
 
 const OPEN_TAG = "<send_user_message_question_reply>";
 const CLOSE_TAG = "</send_user_message_question_reply>";
@@ -202,6 +202,30 @@ export class CodexAsyncQuestionState {
 
   pendingForSession(runtimeId: string, threadId: string): AgentPendingQuestionRequest[] {
     return [...(this.sessions.get(sessionKey(runtimeId, threadId))?.pending.values() ?? [])];
+  }
+
+  loadHistory(
+    runtimeId: string,
+    threadId: string,
+    messages: readonly AgentSessionHistoryMessage[],
+  ): void {
+    const pending = new Map<string, AgentPendingQuestionRequest>();
+    const handled = new Set<string>();
+    for (const message of messages) {
+      if (message.role === "assistant" && message.questionRequest?.blocking === false) {
+        const request = message.questionRequest;
+        if (!handled.has(request.requestId)) pending.set(request.requestId, request);
+        continue;
+      }
+      if (message.role !== "user") continue;
+      const requestIds = message.resolvedQuestionRequestIds ?? [...pending.keys()];
+      for (const requestId of requestIds) {
+        handled.add(requestId);
+        pending.delete(requestId);
+      }
+    }
+    this.resolve(runtimeId, threadId, [...handled]);
+    for (const request of pending.values()) this.add(runtimeId, threadId, request);
   }
 
   repliesForSession(

@@ -16,7 +16,6 @@ import type {
   AgentEvent,
   AgentModelSelection,
   AgentSessionTodoItem,
-  AgentUserMessagePart,
   SessionRef,
 } from "@openducktor/core";
 import { agentSessionStatusFromActivity, withAgentSessionRef } from "@openducktor/core";
@@ -68,6 +67,7 @@ import type {
   CodexServerRequestRecord,
   CodexSessionContextUsage,
   CodexSessionState,
+  CodexUserInput,
 } from "./types";
 
 type CodexRuntimeSessionEventsDepsBase = {
@@ -501,11 +501,8 @@ export class CodexRuntimeSessionEvents {
     }
   }
 
-  expectUserMessageEcho(
-    event: AcceptedAgentUserMessage,
-    sourceParts: AgentUserMessagePart[],
-  ): () => void {
-    return expectCodexUserMessageEcho(this.streamingContext(), event, sourceParts);
+  expectUserMessageEcho(event: AcceptedAgentUserMessage, input: CodexUserInput[]): () => void {
+    return expectCodexUserMessageEcho(this.streamingContext(), event, input);
   }
 
   emitUserMessage(event: AcceptedAgentUserMessage): AcceptedAgentUserMessage {

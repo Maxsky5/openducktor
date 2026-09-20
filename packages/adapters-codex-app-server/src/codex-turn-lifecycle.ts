@@ -34,10 +34,7 @@ export type CodexTurnLifecycleContext = {
   bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string, startedAtMs?: number): boolean;
   bindPendingInputToActiveTurn(externalSessionId: string, activeTurn: ActiveCodexTurn): void;
   setSessionLiveStatus(session: CodexSessionState, liveStatus: CodexThreadStatusSnapshot): void;
-  expectUserMessageEcho(
-    event: AcceptedAgentUserMessage,
-    sourceParts: AgentUserMessagePart[],
-  ): () => void;
+  expectUserMessageEcho(event: AcceptedAgentUserMessage, input: CodexUserInput[]): () => void;
   emitUserMessage(event: AcceptedAgentUserMessage): AcceptedAgentUserMessage;
   emitSessionEvent(externalSessionId: string, event: AgentEvent): void;
   codexPolicyForSession(session: CodexSessionState): CodexEffectivePolicy;
@@ -131,7 +128,7 @@ const steerActiveTurn = async (
   if (activeTurn.isTurnSettled()) {
     return null;
   }
-  const cancelExpectedEcho = context.expectUserMessageEcho(acceptedUserMessage, parts);
+  const cancelExpectedEcho = context.expectUserMessageEcho(acceptedUserMessage, input);
   try {
     if (!activeTurn.turnId) {
       if (requireNativeAdmission) {
@@ -289,7 +286,7 @@ const runCodexTurn = async (
   );
 
   const cancelExpectedEcho = acceptedUserMessage
-    ? context.expectUserMessageEcho(acceptedUserMessage, parts)
+    ? context.expectUserMessageEcho(acceptedUserMessage, input)
     : null;
   activeTurnState.turnStartRequestSentAtMs = Date.now();
   const turnStartPromise = client

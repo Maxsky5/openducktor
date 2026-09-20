@@ -16,6 +16,7 @@ import {
   requestThreadId,
 } from "./codex-app-server-adapter.test-harness";
 import type { CodexJsonRpcRequest, CodexJsonRpcTransport } from "./index";
+import { encodeCodexAsyncQuestionReplies } from "./codex-async-questions";
 import { codexRpcRequestError, EMPTY_ROLLOUT_MESSAGE } from "./test-fixtures/codex-rpc-error";
 import {
   codexAgentMessageItemFixture,
@@ -75,6 +76,74 @@ const paginatedThreadListResponse = (threads: ThreadListFixture[]) => ({
 });
 
 describe("CodexAppServerAdapter history loading", () => {
+  test("restores an unanswered background question for a resumed session", async () => {
+    const thread = {
+      id: "thread-idle",
+      cwd: "/repo",
+      turns: [
+        {
+          id: "turn-question",
+          status: "completed" as const,
+          items: [
+            codexAgentMessageItemFixture({
+              id: "history-question",
+              text: "Which environment should I use?",
+              delivery: "async",
+              questions: [
+                {
+                  title: "Which environment should I use?",
+                  options: ["Staging", "Production"],
+                },
+              ],
+            }),
+          ],
+        },
+      ],
+    };
+    const baseTransport = new RecordingTransport("runtime-live", false);
+    const transport: CodexJsonRpcTransport = {
+      request: async (request) => {
+        if (request.method === "thread/read") return paginatedThreadReadResponse(thread);
+        if (request.method === "thread/turns/list") return paginatedTurnsListResponse(thread);
+        return baseTransport.request(request);
+      },
+    };
+    const { subscribeEvents } = createRuntimeStreamSubscription();
+    const adapter = createAdapterWithTransport(transport, { subscribeEvents });
+    const ref = codexSessionRuntimeRef("thread-idle");
+    await adapter.resumeSession(ref);
+
+    const history = await adapter.loadSessionHistory(ref);
+    expect(history).toContainEqual(
+      expect.objectContaining({
+        messageId: "history-question",
+        questionRequest: expect.objectContaining({ requestId: "history-question" }),
+      }),
+    );
+
+    await adapter.replyQuestion({
+      ...ref,
+      requestId: "history-question",
+      answers: [["Staging"]],
+    });
+
+    const turnStart = baseTransport.calls.findLast((call) => call.method === "turn/start");
+    expect(turnStart?.params).toMatchObject({
+      input: [
+        {
+          type: "text",
+          text: encodeCodexAsyncQuestionReplies([
+            {
+              questionItemId: '["request_user_input_async","history-question",0]',
+              question: "Which environment should I use?",
+              answer: "Staging",
+            },
+          ]),
+        },
+      ],
+    });
+  });
+
   test("validates cold child ancestry with a passive targeted read", async () => {
     const requests: CodexJsonRpcRequest[] = [];
     const adapter = createAdapterWithTransport({

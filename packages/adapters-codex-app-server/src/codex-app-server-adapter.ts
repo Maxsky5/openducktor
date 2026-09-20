@@ -831,6 +831,7 @@ export class CodexAppServerAdapter
       prepareImageGenerations: this.options.prepareImageGenerations,
       ...this.freshThreadReadGuard(session),
     });
+    this.asyncQuestions.loadHistory(runtime.runtimeId, input.externalSessionId, history);
     if (!mergeImage) return history;
     return history.map((message) =>
       message.role === "assistant"

@@ -101,7 +101,14 @@ describe("CodexAppServerAdapter streaming", () => {
         externalSessionId: "thread/start-runtime-live",
         parts: [],
       });
-      await adapter.replyQuestion({
+      const nativeReply = encodeCodexAsyncQuestionReplies([
+        {
+          questionItemId,
+          question: "Which environment should I use?",
+          answer: "Staging",
+        },
+      ]);
+      const accepted = await adapter.replyQuestion({
         ...session,
         requestId: "async-question-1",
         answers: [["Staging"]],
@@ -115,19 +122,34 @@ describe("CodexAppServerAdapter streaming", () => {
         input: [
           {
             type: "text",
-            text: encodeCodexAsyncQuestionReplies([
-              {
-                questionItemId,
-                question: "Which environment should I use?",
-                answer: "Staging",
-              },
-            ]),
+            text: nativeReply,
           },
         ],
       });
       await expect(
         adapter.readSessionRuntimeSnapshot(codexSessionRuntimeRef("thread/start-runtime-live")),
       ).resolves.toMatchObject({ pendingQuestions: [] });
+
+      emitNotification({
+        method: "item/completed",
+        params: {
+          threadId: "thread/start-runtime-live",
+          turnId: "turn-live",
+          completedAtMs: 1_777_766_419_700,
+          item: codexUserMessageItemFixture({
+            id: "native-async-reply",
+            content: [{ type: "text", text: nativeReply, text_elements: [] }],
+          }),
+        },
+      });
+      await flushCodexAdapterWork();
+
+      expect(events.filter((event) => event.type === "user_message")).toEqual([
+        expect.objectContaining({
+          messageId: accepted.messageId,
+          message: "> Which environment should I use?\n\nStaging",
+        }),
+      ]);
     } finally {
       unsubscribe();
     }
