@@ -1012,6 +1012,7 @@ export class CodexRuntimeSessionEvents {
         this.recordStartedItemTimestamp(runtimeId, threadId, itemId, startedAtMs),
       takeStartedItemTimestamp: (runtimeId, threadId, itemId) =>
         this.takeStartedItemTimestamp(runtimeId, threadId, itemId),
+      markSnapshotChanged: (runtimeId, threadId) => this.markSnapshotChanged(runtimeId, threadId),
       emitSessionEvent: (externalSessionId, event) => {
         if (scopedSession?.threadId === externalSessionId) {
           this.emitSessionEventForSession(scopedSession, event);

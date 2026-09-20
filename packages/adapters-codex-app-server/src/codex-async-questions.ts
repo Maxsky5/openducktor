@@ -46,7 +46,7 @@ export type ParsedCodexAsyncQuestion =
 export const codexAsyncQuestionItemId = (requestId: string, questionIndex: number): string =>
   JSON.stringify(["request_user_input_async", requestId, questionIndex]);
 
-export const codexAsyncQuestionRequestId = (questionItemId: string): string | null => {
+const codexAsyncQuestionRequestId = (questionItemId: string): string | null => {
   try {
     return questionItemIdSchema.parse(JSON.parse(questionItemId))[1];
   } catch {

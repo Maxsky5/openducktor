@@ -83,6 +83,7 @@ export type CodexStreamingContext = {
     startedAtMs: number,
   ): void;
   takeStartedItemTimestamp(runtimeId: string, threadId: string, itemId: string): number | undefined;
+  markSnapshotChanged(runtimeId: string, threadId: string): void;
   emitSessionEvent(externalSessionId: string, event: AgentEvent): void;
   bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string, startedAtMs?: number): boolean;
   flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void;
@@ -165,6 +166,9 @@ const emitCanonicalEvents = (
         event.resolvedQuestionRequestIds = resolvedQuestionRequestIds;
       }
       context.asyncQuestions.resolve(runtimeId, event.threadId, resolvedQuestionRequestIds);
+      if (resolvedQuestionRequestIds.length > 0) {
+        context.markSnapshotChanged(runtimeId, event.threadId);
+      }
       for (const requestId of resolvedQuestionRequestIds) {
         emitCodexSessionEvent(context, event.threadId, {
           type: "question_resolved",

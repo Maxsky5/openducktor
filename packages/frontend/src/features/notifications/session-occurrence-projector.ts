@@ -117,6 +117,10 @@ export const createSessionOccurrenceProjector = ({
   const sessions = new Map<string, SessionProjection>();
   const unownedInputs = new Map<string, UnownedPendingInputs>();
   const unownedTerminals = new Map<string, Map<string, NotificationOccurrence>>();
+  const deferredChildQuestions = new Map<
+    string,
+    Map<string, AgentSessionLivePendingQuestionRequest>
+  >();
 
   const observeUnownedInputs = (snapshot: AgentSessionLiveSnapshot, live: boolean): void => {
     const key = agentSessionIdentityKey(snapshot.ref);
@@ -291,18 +295,53 @@ export const createSessionOccurrenceProjector = ({
     previousQuestions: ReadonlySet<string>,
   ): NotificationOccurrence[] => {
     if (!snapshot.parentExternalSessionId) return [];
+    const childKey = agentSessionIdentityKey(snapshot.ref);
+    const pending = pendingRequestsByIdentity(snapshot.pendingQuestions);
+    const deferred = deferredChildQuestions.get(childKey) ?? new Map();
+    for (const identity of deferred.keys()) {
+      const request = pending.get(identity);
+      if (!request || request.blocking !== false) deferred.delete(identity);
+    }
+    for (const [identity, request] of pending) {
+      if (request.blocking === false && !previousQuestions.has(identity)) {
+        deferred.set(identity, request);
+      }
+    }
+    if (deferred.size === 0) {
+      deferredChildQuestions.delete(childKey);
+      return [];
+    }
     const parent = sessions.get(
       agentSessionIdentityKey({
         ...snapshot.ref,
         externalSessionId: snapshot.parentExternalSessionId,
       }),
     );
-    if (!parent?.association) return [];
+    if (!parent?.association) {
+      deferredChildQuestions.set(childKey, deferred);
+      return [];
+    }
 
+    deferredChildQuestions.delete(childKey);
+    return [...deferred.values()].map((request) =>
+      projectPendingInput(parent, { inputKind: "question", request }),
+    );
+  };
+
+  const projectDeferredChildQuestions = (parent: SessionProjection): NotificationOccurrence[] => {
+    if (!parent.association || parent.isSubagent) return [];
     const occurrences: NotificationOccurrence[] = [];
-    for (const [identity, request] of pendingRequestsByIdentity(snapshot.pendingQuestions)) {
-      if (request.blocking === false && !previousQuestions.has(identity)) {
-        occurrences.push(projectPendingInput(parent, { inputKind: "question", request }));
+    for (const childKey of deferredChildQuestions.keys()) {
+      const child = sessions.get(childKey);
+      if (
+        child?.snapshot.parentExternalSessionId === parent.ref.externalSessionId &&
+        child.ref.repoPath === parent.ref.repoPath &&
+        child.ref.runtimeKind === parent.ref.runtimeKind &&
+        child.ref.workingDirectory === parent.ref.workingDirectory
+      ) {
+        occurrences.push(
+          ...projectChildBackgroundQuestions(child.snapshot, child.pendingQuestions),
+        );
       }
     }
     return occurrences;
@@ -331,7 +370,10 @@ export const createSessionOccurrenceProjector = ({
       if (owned.isSubagent) {
         return projectChildBackgroundQuestions(snapshot, new Set());
       }
-      return association ? reconcilePendingOwnership(owned, snapshot) : [];
+      return [
+        ...(association ? reconcilePendingOwnership(owned, snapshot) : []),
+        ...projectDeferredChildQuestions(owned),
+      ];
     }
 
     const ownershipResolved = !projection.association && association !== null;
@@ -380,7 +422,11 @@ export const createSessionOccurrenceProjector = ({
     if (snapshot.activity !== "idle" && !projection.errorNotified && !projection.idleNotified) {
       projection.running = true;
     }
-    return [...reconcileTerminalOwnership(projection), ...occurrences];
+    return [
+      ...reconcileTerminalOwnership(projection),
+      ...occurrences,
+      ...projectDeferredChildQuestions(projection),
+    ];
   };
 
   const reconcilePendingOwnership = (
@@ -454,6 +500,7 @@ export const createSessionOccurrenceProjector = ({
     },
     accept(envelope: AgentSessionLiveEnvelope): NotificationOccurrence[] {
       if (envelope.type === "snapshot") {
+        deferredChildQuestions.clear();
         if (envelope.isConnectionSnapshot) {
           unownedInputs.clear();
           unownedTerminals.clear();
@@ -498,9 +545,11 @@ export const createSessionOccurrenceProjector = ({
         return applyUpsert(envelope.session);
       }
       if (envelope.type === "session_removed") {
-        sessions.delete(agentSessionIdentityKey(envelope.ref));
-        unownedInputs.delete(agentSessionIdentityKey(envelope.ref));
-        unownedTerminals.delete(agentSessionIdentityKey(envelope.ref));
+        const key = agentSessionIdentityKey(envelope.ref);
+        sessions.delete(key);
+        unownedInputs.delete(key);
+        unownedTerminals.delete(key);
+        deferredChildQuestions.delete(key);
         return [];
       }
       if (envelope.type === "transcript_event") {

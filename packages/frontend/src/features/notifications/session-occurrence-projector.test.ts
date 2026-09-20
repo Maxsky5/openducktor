@@ -567,6 +567,93 @@ describe("session occurrence projector", () => {
     });
   });
 
+  test("defers a child background question until its parent appears", () => {
+    const projector = createProjector();
+    const childRef = { ...ref, externalSessionId: "child-session" };
+    const child = snapshot({
+      ref: childRef,
+      parentExternalSessionId: ref.externalSessionId,
+      pendingQuestions: [
+        {
+          requestId: "question-child-background",
+          blocking: false,
+          questions: [{ header: "Runtime", question: "Which runtime?", options: [] }],
+        },
+      ],
+    });
+
+    expect(projector.accept({ type: "session_upsert", session: child })).toEqual([]);
+    expect(projector.accept({ type: "session_upsert", session: snapshot() })).toMatchObject([
+      {
+        kind: "agent.question_asked",
+        navigationTarget: {
+          session: { externalSessionId: ref.externalSessionId },
+          requestId: "question-child-background",
+        },
+      },
+    ]);
+    expect(projector.accept({ type: "session_upsert", session: snapshot() })).toEqual([]);
+  });
+
+  test("drops a deferred child question that resolves before its parent appears", () => {
+    const projector = createProjector();
+    const childRef = { ...ref, externalSessionId: "child-session" };
+    const child = snapshot({
+      ref: childRef,
+      parentExternalSessionId: ref.externalSessionId,
+      pendingQuestions: [
+        {
+          requestId: "question-child-background",
+          blocking: false,
+          questions: [{ header: "Runtime", question: "Which runtime?", options: [] }],
+        },
+      ],
+    });
+
+    projector.accept({ type: "session_upsert", session: child });
+    projector.accept({
+      type: "session_upsert",
+      session: { ...child, pendingQuestions: [] },
+    });
+
+    expect(projector.accept({ type: "session_upsert", session: snapshot() })).toEqual([]);
+  });
+
+  test("publishes a deferred child question when its parent gains ownership", () => {
+    let parentOwned = false;
+    const projector = createSessionOccurrenceProjector({
+      repositoryLabel: "Repo",
+      resolveAssociation: (candidate) =>
+        candidate.externalSessionId === ref.externalSessionId && parentOwned
+          ? { kind: "workflow", taskId: "task-1", role: "build" }
+          : null,
+      resolveTask: (taskId) => ({ id: taskId, title: "Build notifications" }),
+    });
+    const child = snapshot({
+      ref: { ...ref, externalSessionId: "child-session" },
+      parentExternalSessionId: ref.externalSessionId,
+      pendingQuestions: [
+        {
+          requestId: "question-child-background",
+          blocking: false,
+          questions: [{ header: "Runtime", question: "Which runtime?", options: [] }],
+        },
+      ],
+    });
+
+    projector.accept({ type: "session_upsert", session: child });
+    projector.accept({ type: "session_upsert", session: snapshot() });
+    parentOwned = true;
+
+    expect(projector.reconcileAssociations()).toMatchObject([
+      {
+        kind: "agent.question_asked",
+        navigationTarget: { requestId: "question-child-background" },
+      },
+    ]);
+    expect(projector.reconcileAssociations()).toEqual([]);
+  });
+
   test("merges error frames, gives error priority over idle, and allows a later episode", () => {
     const projector = createProjector();
     projector.accept({

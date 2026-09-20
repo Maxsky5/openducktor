@@ -111,9 +111,14 @@ describe("deriveAgentStudioSessionActionState", () => {
     });
   });
 
-  test("keeps waiting-input sessions out of busy follow-up policy", () => {
+  test("blocks the composer for blocking questions", () => {
     const state = deriveAgentStudioSessionActionState({
-      selectedSession: createSelectedSession({ activityState: "waiting_input" }),
+      selectedSession: createSelectedSession({
+        activityState: "waiting_input",
+        loadedSession: createAgentSessionFixture({
+          pendingQuestions: [{ requestId: "question-1", questions: [] }],
+        }),
+      }),
       runtimeDefinitions: [RUNTIME_DESCRIPTORS_BY_KIND.opencode],
     });
 
@@ -123,6 +128,45 @@ describe("deriveAgentStudioSessionActionState", () => {
       canQueueBusyFollowups: false,
       busySendBlockedReason: null,
     });
+  });
+
+  test("keeps the composer enabled for background questions", () => {
+    const state = deriveAgentStudioSessionActionState({
+      selectedSession: createSelectedSession({
+        activityState: "waiting_input",
+        loadedSession: createAgentSessionFixture({
+          pendingQuestions: [{ requestId: "question-1", blocking: false, questions: [] }],
+        }),
+      }),
+      runtimeDefinitions: [RUNTIME_DESCRIPTORS_BY_KIND.opencode],
+    });
+
+    expect(state).toMatchObject({
+      isSessionWorking: false,
+      isWaitingInput: false,
+      canQueueBusyFollowups: false,
+      busySendBlockedReason: null,
+    });
+  });
+
+  test("blocks the composer for approvals", () => {
+    const state = deriveAgentStudioSessionActionState({
+      selectedSession: createSelectedSession({
+        activityState: "waiting_input",
+        loadedSession: createAgentSessionFixture({
+          pendingApprovals: [
+            {
+              requestId: "approval-1",
+              requestType: "permission_grant",
+              title: "Approve read",
+            },
+          ],
+        }),
+      }),
+      runtimeDefinitions: [RUNTIME_DESCRIPTORS_BY_KIND.opencode],
+    });
+
+    expect(state.isWaitingInput).toBe(true);
   });
 
   test("offers resume only from the effective runtime definitions", () => {

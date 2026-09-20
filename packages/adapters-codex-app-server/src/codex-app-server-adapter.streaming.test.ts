@@ -289,7 +289,13 @@ describe("CodexAppServerAdapter streaming", () => {
 
   test("resolves a question request from an IDE-wrapped live reply", async () => {
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
-    const { adapter } = createHarness({ subscribeEvents });
+    const mutations: CodexLiveSessionMutation[] = [];
+    const { adapter } = createHarness({
+      subscribeEvents,
+      onLiveSessionMutation: (mutation) => {
+        mutations.push(mutation);
+      },
+    });
     await adapter.startSession(codexStartSessionInput());
     const events: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
@@ -319,6 +325,7 @@ describe("CodexAppServerAdapter streaming", () => {
         },
       });
       await flushCodexAdapterWork();
+      mutations.length = 0;
 
       const firstQuestionId = '["request_user_input_async","async-question-pair",0]';
       const reply = encodeCodexAsyncQuestionReplies([
@@ -366,6 +373,11 @@ describe("CodexAppServerAdapter streaming", () => {
         }),
       );
       expect(events.filter((event) => event.type === "user_message")).toEqual([]);
+      expect(mutations).toContainEqual(
+        expect.objectContaining({
+          snapshots: [expect.objectContaining({ pendingQuestions: [] })],
+        }),
+      );
       await expect(
         adapter.readSessionRuntimeSnapshot(codexSessionRuntimeRef("thread/start-runtime-live")),
       ).resolves.toMatchObject({ pendingQuestions: [] });
