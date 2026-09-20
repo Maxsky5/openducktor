@@ -374,10 +374,6 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
             return yield* invalid(
               `This conversation belongs to task ${task.taskId} (${task.role}).`,
             );
-          if (task?.kind === "workspace")
-            return yield* invalid(
-              "This conversation already belongs to an OpenDucktor chat. Open it in its original installation.",
-            );
           yield* runtime
             .runtimeEnsure({ repoPath: scope.repoPath, runtimeKind: input.runtimeKind })
             .pipe(

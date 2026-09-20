@@ -55,7 +55,6 @@ export type SqliteDrizzleConnection<TSchema extends Record<string, AnySQLiteTabl
 export type OpenSqliteDrizzleConnectionInput<TSchema extends Record<string, AnySQLiteTable>> = {
   readonly config: DrizzleConfig<TSchema>;
   readonly configureWal: boolean;
-  readonly readOnly?: boolean;
   readonly databasePath: string;
   readonly runtime?: SqliteDriverRuntime;
 };
@@ -177,7 +176,6 @@ const makeSqliteDrizzleSession = <TSchema extends Record<string, AnySQLiteTable>
 export const openSqliteDrizzleConnection = <TSchema extends Record<string, AnySQLiteTable>>({
   config,
   configureWal,
-  readOnly = false,
   databasePath,
   runtime = currentSqliteDriverRuntime(),
 }: OpenSqliteDrizzleConnectionInput<TSchema>): Effect.Effect<
@@ -186,7 +184,7 @@ export const openSqliteDrizzleConnection = <TSchema extends Record<string, AnySQ
   Scope.Scope
 > =>
   Effect.gen(function* () {
-    const sqlite = yield* openSqliteDatabase(databasePath, runtime, readOnly);
+    const sqlite = yield* openSqliteDatabase(databasePath, runtime);
     const closeCompletion = yield* Deferred.make<void, HostOperationErrorAggregate>();
     let closeStarted = false;
     const close = Effect.uninterruptible(
@@ -215,7 +213,7 @@ export const openSqliteDrizzleConnection = <TSchema extends Record<string, AnySQ
         ),
       ),
     );
-    if (!readOnly) yield* configureDatabase(sqlite, configureWal);
+    yield* configureDatabase(sqlite, configureWal);
 
     const database = drizzle(makeRemoteCallback(sqlite), config);
     return {

@@ -85,29 +85,3 @@ test("closes a retained connection exactly once", async () => {
 
   expect(queryAfterClose._tag).toBe("Left");
 });
-
-test("read-only connections reject writes and do not change journal mode", async () => {
-  const databasePath = await createDatabasePath();
-  const database = new Database(databasePath, { create: true });
-  database.exec("CREATE TABLE evidence (value TEXT)");
-  database.close();
-  await expect(
-    Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const connection = yield* openSqliteDrizzleConnection({
-            config: {},
-            configureWal: true,
-            readOnly: true,
-            databasePath,
-          });
-          yield* connection.session.execute(
-            (db) => db.run(sql`INSERT INTO evidence VALUES ('write')`),
-            "test.read-only-write",
-          );
-        }),
-      ),
-    ),
-  ).rejects.toThrow("Failed query");
-  expect(readJournalMode(databasePath)).toBe("delete");
-});
