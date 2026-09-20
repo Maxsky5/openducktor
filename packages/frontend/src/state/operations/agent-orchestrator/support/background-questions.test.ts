@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
-import { mergeBackgroundQuestions, projectBackgroundQuestions } from "./background-questions";
+import {
+  closeBackgroundQuestions,
+  mergeBackgroundQuestionHistory,
+  projectBackgroundQuestions,
+} from "./background-questions";
 
 const question = (requestId: string) => ({
   requestId,
@@ -61,13 +65,40 @@ describe("background question projection", () => {
     const current = question("question-2");
 
     expect(
-      mergeBackgroundQuestions(
-        { pendingQuestions: [stale], handledQuestionIds: new Set() },
-        { pendingQuestions: [current], handledQuestionIds: new Set([stale.requestId]) },
+      mergeBackgroundQuestionHistory(
+        [
+          {
+            role: "assistant",
+            messageId: "question-1",
+            timestamp: "2026-09-19T10:00:00.000Z",
+            text: "Question one",
+            parts: [],
+            questionRequest: stale,
+          },
+        ],
+        {
+          pendingQuestions: [current],
+          handledBackgroundQuestionIds: new Set([stale.requestId]),
+        },
       ),
     ).toEqual({
       pendingQuestions: [current],
-      handledQuestionIds: new Set([stale.requestId]),
+      handledBackgroundQuestionIds: new Set([stale.requestId]),
+    });
+  });
+
+  test("closes answered questions and keeps blocking questions", () => {
+    const background = question("question-1");
+    const blocking = { ...question("question-2"), blocking: true };
+
+    expect(
+      closeBackgroundQuestions(
+        { pendingQuestions: [background, blocking], handledBackgroundQuestionIds: new Set() },
+        [background.requestId],
+      ),
+    ).toEqual({
+      pendingQuestions: [blocking],
+      handledBackgroundQuestionIds: new Set([background.requestId]),
     });
   });
 });

@@ -6,7 +6,7 @@ import { haveSameMessageTimestamp } from "@/state/operations/agent-orchestrator/
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { historyToChatMessages } from "@/state/operations/agent-orchestrator/support/session-history-chat-messages";
 import {
-  mergeBackgroundQuestions,
+  mergeBackgroundQuestionHistory,
   projectBackgroundQuestions,
 } from "@/state/operations/agent-orchestrator/support/background-questions";
 import type {
@@ -114,14 +114,7 @@ export const mergeReadonlyRuntimeHistory = (
   history: AgentSessionHistoryMessage[],
 ): AgentSessionState => {
   const historyMessages = historyToChatMessages(history, { role: null });
-  const backgroundQuestions = mergeBackgroundQuestions(projectBackgroundQuestions(history), {
-    pendingQuestions: session.pendingQuestions.filter((request) => request.blocking === false),
-    handledQuestionIds: session.handledBackgroundQuestionIds ?? new Set(),
-  });
-  const pendingQuestions = [
-    ...session.pendingQuestions.filter((request) => request.blocking !== false),
-    ...backgroundQuestions.pendingQuestions,
-  ];
+  const questionState = mergeBackgroundQuestionHistory(history, session);
   const mergedMessageState = settleImageGenerationMessages({
     ...session,
     messages: mergeHistoryMessages(
@@ -135,10 +128,10 @@ export const mergeReadonlyRuntimeHistory = (
   if (
     session.historyLoadState === "loaded" &&
     areMessageListsEquivalent(session.messages.items, mergedMessages) &&
-    areQuestionsEquivalent(session.pendingQuestions, pendingQuestions) &&
+    areQuestionsEquivalent(session.pendingQuestions, questionState.pendingQuestions) &&
     areStringSetsEquivalent(
       session.handledBackgroundQuestionIds ?? new Set(),
-      backgroundQuestions.handledQuestionIds,
+      questionState.handledBackgroundQuestionIds ?? new Set(),
     )
   ) {
     return session;
@@ -149,7 +142,6 @@ export const mergeReadonlyRuntimeHistory = (
     startedAt: history[0]?.timestamp ?? session.startedAt,
     historyLoadState: "loaded",
     messages: mergedMessageState,
-    pendingQuestions,
-    handledBackgroundQuestionIds: backgroundQuestions.handledQuestionIds,
+    ...questionState,
   };
 };

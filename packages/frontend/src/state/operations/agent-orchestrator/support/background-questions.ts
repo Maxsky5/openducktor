@@ -1,15 +1,15 @@
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
-import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
+import type { AgentQuestionRequest, AgentSessionState } from "@/types/agent-orchestrator";
 
-export type BackgroundQuestionProjection = {
+type BackgroundQuestionProjection = {
   pendingQuestions: readonly AgentQuestionRequest[];
   handledQuestionIds: ReadonlySet<string>;
 };
 
-export const emptyBackgroundQuestionProjection = (): BackgroundQuestionProjection => ({
-  pendingQuestions: [],
-  handledQuestionIds: new Set(),
-});
+type BackgroundQuestionState = Pick<
+  AgentSessionState,
+  "pendingQuestions" | "handledBackgroundQuestionIds"
+>;
 
 export const projectBackgroundQuestions = (
   history: readonly AgentSessionHistoryMessage[],
@@ -32,7 +32,7 @@ export const projectBackgroundQuestions = (
   return { pendingQuestions: [...pending.values()], handledQuestionIds: handled };
 };
 
-export const mergeBackgroundQuestions = (
+const mergeBackgroundQuestions = (
   history: BackgroundQuestionProjection,
   current: BackgroundQuestionProjection,
 ): BackgroundQuestionProjection => {
@@ -45,4 +45,44 @@ export const mergeBackgroundQuestions = (
     if (!handledQuestionIds.has(request.requestId)) pending.set(request.requestId, request);
   }
   return { pendingQuestions: [...pending.values()], handledQuestionIds };
+};
+
+export const mergeBackgroundQuestionHistory = (
+  history: readonly AgentSessionHistoryMessage[],
+  current: BackgroundQuestionState,
+): BackgroundQuestionState => {
+  const background = mergeBackgroundQuestions(projectBackgroundQuestions(history), {
+    pendingQuestions: current.pendingQuestions.filter((request) => request.blocking === false),
+    handledQuestionIds: current.handledBackgroundQuestionIds ?? new Set(),
+  });
+  const merged = [
+    ...current.pendingQuestions.filter((request) => request.blocking !== false),
+    ...background.pendingQuestions,
+  ];
+  const pendingQuestions =
+    merged.length === current.pendingQuestions.length &&
+    merged.every((request, index) => request === current.pendingQuestions[index])
+      ? current.pendingQuestions
+      : merged;
+  return {
+    pendingQuestions,
+    handledBackgroundQuestionIds: background.handledQuestionIds,
+  };
+};
+
+export const closeBackgroundQuestions = (
+  current: BackgroundQuestionState,
+  requestIds: readonly string[],
+): BackgroundQuestionState => {
+  const handledBackgroundQuestionIds = new Set(current.handledBackgroundQuestionIds ?? []);
+  for (const requestId of requestIds) {
+    handledBackgroundQuestionIds.add(requestId);
+  }
+  return {
+    handledBackgroundQuestionIds,
+    pendingQuestions: current.pendingQuestions.filter(
+      (request) =>
+        request.blocking !== false || !handledBackgroundQuestionIds.has(request.requestId),
+    ),
+  };
 };

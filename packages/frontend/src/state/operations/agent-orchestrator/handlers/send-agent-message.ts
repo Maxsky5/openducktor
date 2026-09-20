@@ -21,6 +21,7 @@ import type {
 } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
 import { createRepoStaleGuard, now, throwIfRepoStale } from "../support/core";
+import { closeBackgroundQuestions } from "../support/background-questions";
 import {
   appendSessionMessage,
   someSessionMessage,
@@ -211,21 +212,11 @@ const upsertAcceptedUserMessage = (
   resolvedQuestionRequestIds: readonly string[],
   updateSession: UpdateSession,
 ): void => {
-  updateSession(session, (current) => {
-    const handledBackgroundQuestionIds = new Set(current.handledBackgroundQuestionIds ?? []);
-    for (const requestId of resolvedQuestionRequestIds) {
-      handledBackgroundQuestionIds.add(requestId);
-    }
-    return {
-      ...current,
-      handledBackgroundQuestionIds,
-      pendingQuestions: current.pendingQuestions.filter(
-        (request) =>
-          request.blocking !== false || !handledBackgroundQuestionIds.has(request.requestId),
-      ),
-      messages: upsertUserSessionMessage(current, toUserChatMessage(acceptedUserMessage)),
-    };
-  });
+  updateSession(session, (current) => ({
+    ...current,
+    ...closeBackgroundQuestions(current, resolvedQuestionRequestIds),
+    messages: upsertUserSessionMessage(current, toUserChatMessage(acceptedUserMessage)),
+  }));
 };
 
 export const createSendAgentMessage = (dependencies: SendAgentMessageDependencies) => {

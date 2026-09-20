@@ -26,7 +26,7 @@ import {
   isSubagentMessage,
 } from "./subagent-messages";
 import { normalizeToolInput, normalizeToolText } from "./tool-messages";
-import { mergeBackgroundQuestions, projectBackgroundQuestions } from "./background-questions";
+import { mergeBackgroundQuestionHistory } from "./background-questions";
 
 type HistoryPart = AgentSessionHistoryMessage["parts"][number];
 type LegacySubtaskHistoryPart = {
@@ -432,26 +432,13 @@ export const applyLoadedSessionHistory = (
     role: session.sessionAssociation.kind === "workflow" ? session.sessionAssociation.role : null,
   });
   const loadedMessages = createSessionMessagesState(session.externalSessionId, historyMessages);
-  const backgroundQuestions = mergeBackgroundQuestions(projectBackgroundQuestions(history), {
-    pendingQuestions: session.pendingQuestions.filter((request) => request.blocking === false),
-    handledQuestionIds: session.handledBackgroundQuestionIds ?? new Set(),
-  });
-  const mergedQuestions = [
-    ...session.pendingQuestions.filter((request) => request.blocking !== false),
-    ...backgroundQuestions.pendingQuestions,
-  ];
-  const pendingQuestions =
-    mergedQuestions.length === session.pendingQuestions.length &&
-    mergedQuestions.every((request, index) => request === session.pendingQuestions[index])
-      ? session.pendingQuestions
-      : mergedQuestions;
+  const questionState = mergeBackgroundQuestionHistory(history, session);
 
   return {
     ...session,
     historyLoadState: "loaded",
     historyLoadFailure: null,
-    pendingQuestions,
-    handledBackgroundQuestionIds: backgroundQuestions.handledQuestionIds,
+    ...questionState,
     messages: settleImageGenerationMessages({
       ...session,
       messages: mergeHistoryMessages(
