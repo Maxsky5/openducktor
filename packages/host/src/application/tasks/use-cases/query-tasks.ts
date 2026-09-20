@@ -57,18 +57,18 @@ export const createTaskQueryUseCases = ({
 
   agentSessionsList(input) {
     return Effect.gen(function* () {
-      const [task] = yield* taskStore.listAgentSessionsForTasks({
+      const [taskSessions] = yield* taskStore.listAgentSessionsForTasks({
         repoPath: input.repoPath,
         taskIds: [input.taskId],
       });
-      if (!task) {
+      if (!taskSessions) {
         return yield* new HostInvariantError({
           invariant: "task-agent-sessions-result",
           message: `Task store returned no session result for task: ${input.taskId}`,
           details: input,
         });
       }
-      return task.agentSessions;
+      return taskSessions.agentSessions;
     });
   },
 

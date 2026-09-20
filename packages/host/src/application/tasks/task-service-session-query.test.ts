@@ -8,6 +8,12 @@ import { createAgentSessionRecord } from "../../ports/task-store-port-contract.t
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import { createTaskService } from "./task-service";
 
+const expectSingleAgentSessionSelect = (queries: string[]): void => {
+  expect(queries).toHaveLength(1);
+  expect(queries[0]).toMatch(/^select "id", "agent_sessions_json" from "tasks"/i);
+  expect(queries.join("\n")).not.toContain("task_documents");
+};
+
 describe("single-task session queries", () => {
   test("requires a result from the single-ID batch call", async () => {
     const calls: unknown[] = [];
@@ -70,9 +76,7 @@ describe("single-task session queries", () => {
             });
             const service = createTaskService({ taskStore });
             expect(yield* service.agentSessionsList(input)).toEqual([]);
-            expect(queries).toHaveLength(1);
-            expect(queries[0]).toMatch(/^select "id", "agent_sessions_json" from "tasks"/i);
-            expect(queries.join("\n")).not.toContain("task_documents");
+            expectSingleAgentSessionSelect(queries);
 
             const older = createAgentSessionRecord({
               externalSessionId: "older",
@@ -86,9 +90,7 @@ describe("single-task session queries", () => {
             yield* store.upsertAgentSession({ ...input, session: older });
             queries.length = 0;
             expect(yield* service.agentSessionsList(input)).toEqual([newer, older]);
-            expect(queries).toHaveLength(1);
-            expect(queries[0]).toMatch(/^select "id", "agent_sessions_json" from "tasks"/i);
-            expect(queries.join("\n")).not.toContain("task_documents");
+            expectSingleAgentSessionSelect(queries);
 
             queries.length = 0;
             const failure = yield* Effect.flip(
@@ -100,8 +102,7 @@ describe("single-task session queries", () => {
               message: "Task not found: missing-task",
               details: { repoPath, taskId: "missing-task" },
             });
-            expect(queries).toHaveLength(1);
-            expect(queries.join("\n")).not.toContain("task_documents");
+            expectSingleAgentSessionSelect(queries);
 
             const metadata = yield* service.getTaskMetadata(input);
             expect(metadata).toMatchObject({
