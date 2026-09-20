@@ -25,20 +25,30 @@ export function WorkspaceSessionImportResults({
   onPrevious,
   onNext,
 }: Props) {
+  if (!rows) return null;
+  const hasPages = page > 0 || hasNextPage;
   return (
-    <>
-      {rows?.length === 0 && (
-        <p role="status" className="py-8 text-center text-sm text-muted-foreground">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      {pending && (
+        <p role="status" className="sr-only">
+          Importing session…
+        </p>
+      )}
+      {rows.length === 0 && (
+        <p
+          role="status"
+          className="flex flex-1 items-center justify-center py-8 text-center text-sm text-muted-foreground"
+        >
           {search ? "No sessions match your search" : "No external sessions found"}
         </p>
       )}
-      {rows && rows.length > 0 && (
+      {rows.length > 0 && (
         <ul
           aria-label="External sessions"
-          className="max-h-80 overflow-y-auto divide-y divide-border rounded-md border border-border"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain divide-y divide-border rounded-md border border-border"
         >
           {rows.map((session) => (
-            <li key={session.externalSessionId} className="flex items-start gap-3 p-3">
+            <li key={session.externalSessionId} className="flex items-center gap-3 p-3">
               <div className="min-w-0 flex-1">
                 <p
                   className="truncate text-sm font-medium"
@@ -52,22 +62,27 @@ export function WorkspaceSessionImportResults({
                 >
                   {session.workingDirectory}
                 </p>
-                <p
-                  className="truncate text-xs text-muted-foreground"
-                  title={session.externalSessionId}
-                >
-                  {session.externalSessionId}
-                </p>
-                {session.updatedAt !== null && (
-                  <time
-                    className="text-xs text-muted-foreground"
-                    dateTime={new Date(session.updatedAt).toISOString()}
-                  >
-                    {new Date(session.updatedAt).toLocaleString()}
-                  </time>
-                )}
+                <div className="mt-1 flex items-baseline gap-3 text-xs text-muted-foreground">
+                  <p className="min-w-0 flex-1 truncate" title={session.externalSessionId}>
+                    {session.externalSessionId}
+                  </p>
+                  {session.updatedAt !== null && (
+                    <time
+                      className="shrink-0"
+                      title={new Date(session.updatedAt).toLocaleString()}
+                      dateTime={new Date(session.updatedAt).toISOString()}
+                    >
+                      {new Date(session.updatedAt).toLocaleDateString(undefined, {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </time>
+                  )}
+                </div>
               </div>
               <Button
+                className="shrink-0"
                 size="sm"
                 variant="outline"
                 disabled={pending}
@@ -75,27 +90,41 @@ export function WorkspaceSessionImportResults({
                 aria-label={`Import ${session.title ?? session.externalSessionId}`}
               >
                 {pending && selectedSessionId === session.externalSessionId ? (
-                  <LoaderCircle className="animate-spin" />
+                  <LoaderCircle className="motion-safe:animate-spin" />
                 ) : (
                   <Import />
                 )}
-                Import
+                {pending && selectedSessionId === session.externalSessionId
+                  ? "Importing…"
+                  : "Import"}
               </Button>
             </li>
           ))}
         </ul>
       )}
-      {rows && (
-        <div className="flex items-center justify-between">
-          <Button variant="outline" size="sm" disabled={pending || page === 0} onClick={onPrevious}>
-            Previous
-          </Button>
-          <span className="text-xs text-muted-foreground">Page {page + 1}</span>
-          <Button variant="outline" size="sm" disabled={pending || !hasNextPage} onClick={onNext}>
-            Next
-          </Button>
+      {(rows.length > 0 || hasPages) && (
+        <div className="flex shrink-0 items-center justify-between">
+          {hasPages && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pending || page === 0}
+              onClick={onPrevious}
+            >
+              Previous
+            </Button>
+          )}
+          <span className="text-xs text-muted-foreground">
+            {hasPages ? `Page ${page + 1} · ` : ""}
+            {rows.length} {rows.length === 1 ? "session" : "sessions"}
+          </span>
+          {hasPages && (
+            <Button variant="outline" size="sm" disabled={pending || !hasNextPage} onClick={onNext}>
+              Next
+            </Button>
+          )}
         </div>
       )}
-    </>
+    </div>
   );
 }

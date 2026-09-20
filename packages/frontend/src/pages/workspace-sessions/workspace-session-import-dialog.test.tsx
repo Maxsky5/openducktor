@@ -212,3 +212,45 @@ test("keeps discovery open through Strict Mode effect replay and releases it on 
     view.client.clear();
   }
 });
+
+test("clears a search and returns focus without opening a new catalog", async () => {
+  const view = renderImport();
+  try {
+    await choose(view, "OpenCode");
+    await view.findByRole("button", { name: "Import Native title" });
+    const catalogId = view.calls[0]?.catalogRequestId;
+    const input = view.getByRole("textbox", { name: "Search sessions" });
+    fireEvent.change(input, { target: { value: "Native" } });
+    await waitFor(() => expect(view.calls.at(-1)?.search).toBe("Native"));
+    fireEvent.click(view.getByRole("button", { name: "Clear search" }));
+    expect(input instanceof HTMLInputElement && input.value).toBe("");
+    expect(document.activeElement).toBe(input);
+    await view.findByRole("button", { name: "Import Native title" });
+    expect(view.queryByRole("button", { name: "Clear search" })).toBeNull();
+    expect(view.calls.every((call) => call.catalogRequestId === catalogId)).toBe(true);
+  } finally {
+    view.unmount();
+    view.client.clear();
+  }
+});
+
+test("shows import progress and prevents dismissal until import settles", async () => {
+  const pending = deferred<WorkspaceSessionImportResult>();
+  const view = renderImport({ workspaceSessionImport: () => pending.promise });
+  try {
+    await choose(view, "OpenCode");
+    fireEvent.click(await view.findByRole("button", { name: "Import Native title" }));
+    await view.findByText("Importing…");
+    for (const name of ["Close", "Cancel", "Runtime", "Import Native title"]) {
+      expect(view.getByRole("button", { name }).hasAttribute("disabled")).toBe(true);
+    }
+    fireEvent.keyDown(view.getByRole("dialog"), { key: "Escape" });
+    expect(view.closed()).toBe(0);
+    await act(async () => pending.resolve({ session: saved, created: true, openError: null }));
+    await waitFor(() => expect(view.opened).toEqual([saved]));
+    expect(view.closed()).toBe(1);
+  } finally {
+    view.unmount();
+    view.client.clear();
+  }
+});
