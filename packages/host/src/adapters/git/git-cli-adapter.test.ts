@@ -106,6 +106,17 @@ describe("createGitCliAdapter", () => {
       "Git returned an invalid tagged file entry",
     );
   });
+  test("fails when a staged file entry is malformed", async () => {
+    const git = createGitCliAdapter({
+      runner: createRunner({
+        "ls-files -t -s -co --exclude-standard -z -- .": "H src/index.ts\0",
+      }),
+    });
+
+    await expect(Effect.runPromise(git.listFiles("/repo"))).rejects.toThrow(
+      "Git returned an invalid staged file entry",
+    );
+  });
   test("parses porcelain status rows", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({

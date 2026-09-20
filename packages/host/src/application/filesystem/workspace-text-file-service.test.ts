@@ -62,9 +62,10 @@ describe("createWorkspaceTextFileService", () => {
     const rootPath = await createRoot();
     const filePath = path.join(rootPath, "file.txt");
     await writeFile(filePath, "before");
+    const requestedPaths: Array<string | undefined> = [];
     const service = createWorkspaceTextFileService(
       createFilesystemAdapter(),
-      createGitPort(["file.txt"]),
+      createGitPort(["file.txt"], requestedPaths),
     );
     const loaded = await Effect.runPromise(
       service.readTextFile({ rootPath, relativePath: "file.txt" }),
@@ -83,6 +84,7 @@ describe("createWorkspaceTextFileService", () => {
     expect(await readFile(filePath, "utf8")).toBe("after\n");
     expect(saved).toMatchObject({ contents: "after\n", size: 6 });
     expect(saved.revision).not.toBe(loaded.revision);
+    expect(requestedPaths).toEqual(["file.txt", "file.txt"]);
   });
 
   test("checks only the selected Git path before reading it", async () => {
@@ -97,6 +99,24 @@ describe("createWorkspaceTextFileService", () => {
     await Effect.runPromise(service.readTextFile({ rootPath, relativePath: "selected.txt" }));
 
     expect(requestedPaths).toEqual(["selected.txt"]);
+  });
+
+  test("checks the selected path and its contained symlink target", async () => {
+    const rootPath = await createRoot();
+    await writeFile(path.join(rootPath, "target.txt"), "target");
+    await symlink("target.txt", path.join(rootPath, "link.txt"));
+    const requestedPaths: Array<string | undefined> = [];
+    const service = createWorkspaceTextFileService(
+      createFilesystemAdapter(),
+      createGitPort(["link.txt", "target.txt"], requestedPaths),
+    );
+
+    const loaded = await Effect.runPromise(
+      service.readTextFile({ rootPath, relativePath: "link.txt" }),
+    );
+
+    expect(loaded).toMatchObject({ kind: "text", contents: "target" });
+    expect(requestedPaths).toEqual(["link.txt", "target.txt"]);
   });
 
   test("preserves a UTF-8 BOM when saving edited contents", async () => {

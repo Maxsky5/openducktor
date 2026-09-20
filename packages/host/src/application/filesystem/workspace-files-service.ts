@@ -195,6 +195,7 @@ export const createWorkspaceFilesService = (
         const materializedFilePaths = new Set(listedKindByPath.keys());
         const filePathSet = new Set(materializedFilePaths);
         const gitStatusByPath = new Map<string, WorkspaceFileGitStatus | null>();
+        const unstagedTypechangePaths = new Set<string>();
         for (const change of targetChanges) {
           const workspaceChange = projectGitChangeToWorkspace(
             filesystem,
@@ -225,6 +226,9 @@ export const createWorkspaceFilesService = (
           if (!workspaceChange) {
             continue;
           }
+          if (status.status === "typechange" && !status.staged) {
+            unstagedTypechangePaths.add(workspaceChange.path);
+          }
           const normalizedStatus = yield* normalizeGitStatus(workspaceChange.status);
           filePathSet.add(workspaceChange.path);
           gitStatusByPath.set(
@@ -249,7 +253,20 @@ export const createWorkspaceFilesService = (
         const fileEntries: WorkspaceFileTreeEntry[] = [];
         for (const filePath of filePaths) {
           const gitStatus = gitStatusByPath.get(filePath) ?? null;
-          if (listedKindByPath.get(filePath) === "directory") {
+          if (directoryEntries.has(filePath)) {
+            directoryEntries.set(filePath, {
+              path: filePath,
+              kind: "directory",
+              size: null,
+              mtimeMs: null,
+              gitStatus,
+            });
+            continue;
+          }
+          if (
+            listedKindByPath.get(filePath) === "directory" &&
+            !unstagedTypechangePaths.has(filePath)
+          ) {
             directoryEntries.set(filePath, {
               path: filePath,
               kind: "directory",

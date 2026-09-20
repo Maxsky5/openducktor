@@ -8,7 +8,7 @@ import type {
   WorkspaceTextFileWriteResult,
 } from "@openducktor/contracts";
 import { HostInvokeError, type HostClient } from "@openducktor/host-client";
-import { File, type CodeViewFileItem } from "@pierre/diffs";
+import { File, type CodeViewFileItem, type RenderFileResult } from "@pierre/diffs";
 import type { Editor, EditorType } from "@pierre/diffs/edit";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -42,6 +42,10 @@ let writeTextFileMock: ReturnType<typeof mock>;
 let codeViewMountCount = 0;
 let codeViewUnmountCount = 0;
 const actualPreviewPierre = await import("./task-execution-file-preview-pierre");
+type PreviewWorkerPool = Pick<
+  NonNullable<ReturnType<typeof actualPreviewPierre.useWorkerPool>>,
+  "getFileResultCache" | "primeFileHighlightCache" | "subscribeToStatChanges"
+>;
 type PreviewCodeViewProps = Parameters<typeof actualPreviewPierre.CodeView>[0];
 type PreviewEditorOptions = NonNullable<PreviewCodeViewProps["editorOptions"]>;
 type PreviewEditor = Editor<EditorType, undefined, undefined>;
@@ -80,6 +84,7 @@ const attachEditor = (options: PreviewEditorOptions | undefined, editor: Preview
 let secondFileReadMode: "pending" | "resolve" = "pending";
 let previewTheme: "light" | "dark" = "light";
 let latestQueryClient: QueryClient | null = null;
+let workerPoolMock: PreviewWorkerPool | undefined;
 
 const runAsyncUiAction = async (action: () => void): Promise<void> => {
   await act(async () => {
@@ -199,6 +204,7 @@ beforeEach(async () => {
   secondFileReadMode = "pending";
   previewTheme = "light";
   latestQueryClient = null;
+  workerPoolMock = undefined;
 
   readTextFileMock = mock<HostClient["filesystemReadTextFile"]>((input) => {
     if (input.relativePath === secondFile.relativePath) {
@@ -238,6 +244,10 @@ beforeEach(async () => {
       themePreference: previewTheme,
       setThemePreference: () => {},
     })),
+    spyOn(actualPreviewPierre, "useWorkerPool").mockImplementation(() => {
+      // SAFETY: The preview reads only the three worker-pool methods in PreviewWorkerPool.
+      return workerPoolMock as ReturnType<typeof actualPreviewPierre.useWorkerPool>;
+    }),
     spyOn(actualPreviewPierre, "EditProvider").mockImplementation(({ children, createEditor }) => {
       editProviderFactories.push(createEditor);
       return <>{children}</>;
@@ -319,6 +329,51 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(screen.queryByText("Loading...")).toBeNull();
     expect(screen.queryByText("Loading file...")).toBeNull();
     expect(firstCodeViewItem()?.edit).toBe(false);
+  });
+
+  test("keeps the previous file visible until the next file is highlighted", async () => {
+    let notifyStatsChanged: (() => void) | undefined;
+    const highlightedCacheKeys = new Set([
+      JSON.stringify([taskExecutionSelectedFileKey(firstFile), "revision:const first = true;"]),
+    ]);
+    const cachedResult: RenderFileResult = {
+      result: { code: [], themeStyles: "", baseThemeType: undefined },
+      options: { theme: "one-light", useTokenTransformer: false, tokenizeMaxLineLength: 0 },
+    };
+    workerPoolMock = {
+      getFileResultCache: mock((file) =>
+        file.cacheKey && highlightedCacheKeys.has(file.cacheKey) ? cachedResult : undefined,
+      ),
+      primeFileHighlightCache: mock(async () => undefined),
+      subscribeToStatChanges: mock((callback) => {
+        notifyStatsChanged = callback;
+        return () => undefined;
+      }),
+    };
+    secondFileReadMode = "resolve";
+    const onClose = mock(() => {});
+    const view = render(renderPreview({ selectedFile: firstFile, onClose }));
+
+    await screen.findByText("const first = true;");
+    view.rerender(
+      renderPreview({ selectedFile: secondFile, preservePreviousSnapshot: true, onClose }),
+    );
+
+    await waitFor(() => expect(readTextFileMock).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("src/first.ts")).toBeTruthy();
+    expect(screen.getByText("const first = true;")).toBeTruthy();
+    expect(screen.getByLabelText("Selected file preview").getAttribute("aria-busy")).toBe("true");
+
+    const secondCacheKey = JSON.stringify([
+      taskExecutionSelectedFileKey(secondFile),
+      "revision:const second = true;",
+    ]);
+    highlightedCacheKeys.add(secondCacheKey);
+    act(() => notifyStatsChanged?.());
+
+    await screen.findByText("const second = true;");
+    expect(screen.getByText("src/second.ts")).toBeTruthy();
+    expect(screen.getByLabelText("Selected file preview").getAttribute("aria-busy")).toBeNull();
   });
 
   test("does not reuse a closed preview snapshot when reopening another file", async () => {

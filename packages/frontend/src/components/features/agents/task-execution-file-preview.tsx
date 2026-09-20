@@ -709,6 +709,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     <section
       className="flex h-full min-h-0 flex-col bg-card"
       aria-label="Selected file preview"
+      aria-busy={isSwitchingFiles || undefined}
       onKeyDown={handlePreviewShortcut}
     >
       <FilePreviewHeader

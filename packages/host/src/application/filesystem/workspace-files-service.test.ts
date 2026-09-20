@@ -668,6 +668,61 @@ describe("createWorkspaceFilesService", () => {
     ]);
   });
 
+  test("emits one directory when a tracked file is replaced by a directory", async () => {
+    const service = createWorkspaceFilesService(
+      createFakeFilesystem({ stats: { "/repo": { isDirectory: true } } }),
+      createFakeGitPort({
+        files: ["foo", "foo/bar.ts"],
+        statuses: [
+          { path: "foo", status: "deleted", staged: false },
+          { path: "foo/bar.ts", status: "untracked", staged: false },
+        ],
+      }),
+    );
+
+    const tree = await Effect.runPromise(service.listTree({ rootPath: "/repo" }));
+
+    expect(tree.entries.filter((entry) => entry.path === "foo")).toEqual([
+      {
+        path: "foo",
+        kind: "directory",
+        size: null,
+        mtimeMs: null,
+        gitStatus: "deleted",
+      },
+    ]);
+    expect(tree.entries).toContainEqual({
+      path: "foo/bar.ts",
+      kind: "file",
+      size: null,
+      mtimeMs: null,
+      gitStatus: "untracked",
+    });
+  });
+
+  test("emits a file when a tracked Git link becomes a regular file", async () => {
+    const service = createWorkspaceFilesService(
+      createFakeFilesystem({ stats: { "/repo": { isDirectory: true } } }),
+      createFakeGitPort({
+        files: ["nested-checkout"],
+        directories: ["nested-checkout"],
+        statuses: [{ path: "nested-checkout", status: "typechange", staged: false }],
+      }),
+    );
+
+    const tree = await Effect.runPromise(service.listTree({ rootPath: "/repo" }));
+
+    expect(tree.entries).toEqual([
+      {
+        path: "nested-checkout",
+        kind: "file",
+        size: null,
+        mtimeMs: null,
+        gitStatus: "modified",
+      },
+    ]);
+  });
+
   test("adapts known Git-only statuses without a generic fallback", async () => {
     const service = createWorkspaceFilesService(
       createFakeFilesystem({

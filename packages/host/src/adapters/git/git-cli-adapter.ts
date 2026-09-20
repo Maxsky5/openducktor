@@ -107,7 +107,7 @@ const parseMaterializedGitFiles = (
       }
       files.push({
         kind: stagedEntry[1] === "160000" ? "directory" : "file",
-        path: stagedEntry[2] ?? "",
+        path: stagedEntry[2]!,
       });
     }
     return files;
