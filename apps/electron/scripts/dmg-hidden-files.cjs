@@ -11,7 +11,9 @@ function parkHiddenDmgSupportFiles(context) {
 
   const dmg = context.packager.config.dmg;
   if (dmg == null || !Array.isArray(dmg.contents)) {
-    return;
+    throw new Error(
+      "Cannot prepare the macOS install window: set dmg.contents to an array in electron-builder.yml.",
+    );
   }
 
   for (const [index, name] of supportFileNames.entries()) {

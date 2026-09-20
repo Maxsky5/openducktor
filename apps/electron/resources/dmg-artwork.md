@@ -19,8 +19,8 @@ Finder supplies the 104-point icons at `(170, 170)` and `(528, 170)`, as configu
 Run these commands from the repository root with `rsvg-convert` from librsvg:
 
 ```sh
-rtk rsvg-convert -w 700 -h 406 -o apps/electron/resources/dmg-background.png apps/electron/resources/dmg-background.svg
-rtk rsvg-convert -w 1400 -h 812 -o apps/electron/resources/dmg-background@2x.png apps/electron/resources/dmg-background.svg
+rsvg-convert -w 700 -h 406 -o apps/electron/resources/dmg-background.png apps/electron/resources/dmg-background.svg
+rsvg-convert -w 1400 -h 812 -o apps/electron/resources/dmg-background@2x.png apps/electron/resources/dmg-background.svg
 ```
 
 Commit both rendered PNGs after a source change. Check the composition at its actual size in Finder. Check the standard and Retina renders for line clarity and label clearance. Keep the configured icon centers and the SVG layout in sync.

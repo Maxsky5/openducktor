@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { readFile, stat } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
@@ -49,7 +50,7 @@ const { parkHiddenDmgSupportFiles } = (await import(
 )) as {
   parkHiddenDmgSupportFiles: (context: {
     electronPlatformName: string;
-    packager: { config: { dmg?: { contents?: DmgContent[] } } };
+    packager: { config: { dmg?: { contents?: unknown } } };
   }) => void;
 };
 
@@ -87,8 +88,8 @@ describe("macOS DMG install window", () => {
     const standard = await readPngSize(backgroundPath);
     const retina = await readPngSize(backgroundPath.replace(/\.png$/, "@2x.png"));
 
-    expect(standard.width).toBeGreaterThan(0);
-    expect(standard.height).toBeGreaterThan(0);
+    expect(standard).toEqual({ width: 700, height: 406 });
+    expect(retina).toEqual({ width: 1400, height: 812 });
     expect(retina.width).toBe(standard.width * 2);
     expect(retina.height).toBe(standard.height * 2);
   });
@@ -125,12 +126,18 @@ describe("macOS DMG install window", () => {
     expect(iconFile.isFile()).toBe(true);
   });
 
-  it("parks hidden support files outside the background window before packing", async () => {
-    const dmg = await readElectronBuilderDmg();
+  it("loads the configured beforePack hook and parks hidden support files outside the window", async () => {
+    const config = await readElectronBuilderConfig();
+    const dmg = config.dmg;
     const { height } = await readPngSize(resolveProjectFile(dmg.background));
     const contents = dmg.contents.map((entry) => ({ ...entry }));
 
-    parkInto(contents);
+    // SAFETY: The runtime assertion checks the CommonJS default export used by electron-builder.
+    const { default: beforePack } = createRequire(import.meta.url)(
+      resolveProjectFile(config.beforePack),
+    ) as { default: typeof parkHiddenDmgSupportFiles };
+    expect(beforePack).toBeFunction();
+    beforePack({ electronPlatformName: "darwin", packager: { config: { dmg: { contents } } } });
 
     const parked = contents.filter((entry) => entry.type === "position");
     expect(parked.map((entry) => entry.path).sort()).toEqual([
@@ -155,10 +162,20 @@ describe("macOS DMG install window", () => {
     expect(entries).toHaveLength(4);
   });
 
-  it("references an existing beforePack hook", async () => {
-    const config = await readElectronBuilderConfig();
-    const hookFile = await stat(resolveProjectFile(config.beforePack));
+  it.each([{}, { dmg: {} }, { dmg: { contents: "invalid" } }])(
+    "rejects invalid macOS DMG configuration: %j",
+    (config) => {
+      expect(() =>
+        parkHiddenDmgSupportFiles({ electronPlatformName: "darwin", packager: { config } }),
+      ).toThrow(
+        "Cannot prepare the macOS install window: set dmg.contents to an array in electron-builder.yml.",
+      );
+    },
+  );
 
-    expect(hookFile.isFile()).toBe(true);
+  it.each(["win32", "linux"])("does not require DMG configuration on %s", (platform) => {
+    expect(() =>
+      parkHiddenDmgSupportFiles({ electronPlatformName: platform, packager: { config: {} } }),
+    ).not.toThrow();
   });
 });
