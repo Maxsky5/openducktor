@@ -332,13 +332,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
 
     const current = getSession(sessionsRef);
     expect(current.pendingQuestions).toEqual([]);
-    expect(sessionMessagesToArray(current)).toContainEqual(
-      expect.objectContaining({
-        id: acceptedMessage.messageId,
-        role: "user",
-        content: acceptedMessage.message,
-      }),
-    );
+    expect(sessionMessagesToArray(current)).toEqual([]);
   });
 
   test("routes a UI-shaped repository question through the active workspace", async () => {

@@ -643,15 +643,13 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
           createRuntimeRegistration: (binding) =>
             new AgentSessionLiveRegistration(binding, (mutation) =>
               mutation.pipe(
-                Effect.flatMap(({ value, changes }) =>
-                  changes.some((change) => change.type === "transcript_event")
-                    ? Effect.fail(
-                        new HostOperationError({
-                          operation: "test.publish",
-                          message: "Publication failed",
-                        }),
-                      )
-                    : Effect.succeed(value),
+                Effect.flatMap(() =>
+                  Effect.fail(
+                    new HostOperationError({
+                      operation: "test.publish",
+                      message: "Publication failed",
+                    }),
+                  ),
                 ),
               ),
             ),

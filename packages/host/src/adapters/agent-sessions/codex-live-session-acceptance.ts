@@ -9,12 +9,13 @@ type RefreshProjection = (
   transcriptEvents?: CodexLiveSessionMutation["transcriptEvents"],
 ) => Effect.Effect<void, HostError>;
 
-export const publishAcceptedCodexMessage = (
+const refreshAcceptedCodexMessage = (
   acceptedMessage: AcceptedAgentUserMessage,
   sessionRef: AgentSessionLiveRef,
   refreshProjection: RefreshProjection,
+  transcriptEvents?: CodexLiveSessionMutation["transcriptEvents"],
 ): Effect.Effect<AcceptedAgentUserMessage, HostError> =>
-  refreshProjection([{ ...acceptedMessage, sessionRef }]).pipe(
+  refreshProjection(transcriptEvents).pipe(
     Effect.as(acceptedMessage),
     Effect.mapError(
       (cause) =>
@@ -24,3 +25,19 @@ export const publishAcceptedCodexMessage = (
         ),
     ),
   );
+
+export const publishAcceptedCodexMessage = (
+  acceptedMessage: AcceptedAgentUserMessage,
+  sessionRef: AgentSessionLiveRef,
+  refreshProjection: RefreshProjection,
+): Effect.Effect<AcceptedAgentUserMessage, HostError> =>
+  refreshAcceptedCodexMessage(acceptedMessage, sessionRef, refreshProjection, [
+    { ...acceptedMessage, sessionRef },
+  ]);
+
+export const refreshAfterAcceptedCodexMessage = (
+  acceptedMessage: AcceptedAgentUserMessage,
+  sessionRef: AgentSessionLiveRef,
+  refreshProjection: RefreshProjection,
+): Effect.Effect<AcceptedAgentUserMessage, HostError> =>
+  refreshAcceptedCodexMessage(acceptedMessage, sessionRef, refreshProjection);

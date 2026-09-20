@@ -78,7 +78,7 @@ import { CodexContextUsageLoader } from "./codex-context-usage-loader";
 import { fileDiffsFromUnifiedDiff } from "./codex-file-diffs";
 import { CodexLocalSessionState } from "./codex-local-session-state";
 import { CodexPendingInputState } from "./codex-pending-input-state";
-import { CodexAsyncQuestionState } from "./codex-async-questions";
+import { CodexAsyncQuestionState, codexAsyncQuestionReplyTools } from "./codex-async-questions";
 import { findRetainedSessionOwner } from "./codex-retained-session-owner";
 import { releaseCodexRuntimeState } from "./codex-runtime-cleanup";
 import { CodexRuntimeClientResolver } from "./codex-runtime-client-resolver";
@@ -1229,6 +1229,12 @@ export class CodexAppServerAdapter
     );
     if (backgroundReplies) {
       try {
+        const replyTool = codexAsyncQuestionReplyTools(backgroundReplies).find(
+          (tool) => tool.requestId === input.requestId,
+        );
+        if (!replyTool) {
+          throw new Error(`Codex question '${input.requestId}' produced no transcript reply.`);
+        }
         const session = this.localSessions.get(input.externalSessionId);
         if (!session || session.runtimeId !== input.runtimeId) {
           throw new Error(
@@ -1251,6 +1257,19 @@ export class CodexAppServerAdapter
           acceptedUserMessage,
         );
         this.asyncQuestions.resolve(input.runtimeId, input.externalSessionId, [input.requestId]);
+        const timestamp = new Date().toISOString();
+        this.emitSessionEvent(input.externalSessionId, {
+          type: "question_resolved",
+          requestId: input.requestId,
+          externalSessionId: input.externalSessionId,
+          timestamp,
+        });
+        this.emitSessionEvent(input.externalSessionId, {
+          type: "assistant_part",
+          externalSessionId: input.externalSessionId,
+          timestamp,
+          part: requireNormalizedCodexToolInvocation(replyTool.invocation),
+        });
         return accepted;
       } catch (error) {
         this.asyncQuestions.releaseReplyClaim(

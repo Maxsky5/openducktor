@@ -121,6 +121,7 @@ const steerActiveTurn = async (
   parts: AgentUserMessagePart[],
   acceptedUserMessage: AcceptedAgentUserMessage,
   requireNativeAdmission: boolean,
+  publishAcceptedMessage: boolean,
   resolvedQuestionRequestIds?: readonly string[],
   nativeInput?: CodexUserInput[],
 ): Promise<AcceptedAgentUserMessage | null> => {
@@ -145,13 +146,19 @@ const steerActiveTurn = async (
           );
         }
         await steerRetainedTurn(context, activeTurn, input, activeTurn.turnId);
-        return emitAcceptedUserMessage(context, acceptedUserMessage);
+        return publishAcceptedMessage
+          ? emitAcceptedUserMessage(context, acceptedUserMessage)
+          : acceptedUserMessage;
       }
       activeTurn.queuedUserMessages.push(input);
-      return emitAcceptedUserMessage(context, acceptedUserMessage);
+      return publishAcceptedMessage
+        ? emitAcceptedUserMessage(context, acceptedUserMessage)
+        : acceptedUserMessage;
     }
     await steerRetainedTurn(context, activeTurn, input, activeTurn.turnId);
-    return emitAcceptedUserMessage(context, acceptedUserMessage);
+    return publishAcceptedMessage
+      ? emitAcceptedUserMessage(context, acceptedUserMessage)
+      : acceptedUserMessage;
   } catch (error) {
     cancelExpectedEcho();
     throw error;
@@ -191,6 +198,7 @@ const runCodexTurn = async (
   requireNativeAdmission = false,
   resolvedQuestionRequestIds?: readonly string[],
   nativeInput?: CodexUserInput[],
+  publishAcceptedMessage = true,
 ): Promise<CodexTurnStart> => {
   const session = context.sessions.get(externalSessionId);
   if (!session) {
@@ -213,6 +221,7 @@ const runCodexTurn = async (
       parts,
       acceptedUserMessage,
       requireNativeAdmission,
+      publishAcceptedMessage,
       resolvedQuestionRequestIds,
       nativeInput,
     );
@@ -326,7 +335,7 @@ const runCodexTurn = async (
     });
   activeTurnState.turnStartPromise = turnStartPromise;
 
-  if (acceptedUserMessage && !requireNativeAdmission) {
+  if (acceptedUserMessage && !requireNativeAdmission && publishAcceptedMessage) {
     context.emitUserMessage(acceptedUserMessage);
   }
   return { acceptedUserMessage, turnStartPromise, cancelExpectedEcho };
@@ -395,6 +404,7 @@ export const startCodexTurnWithInputForSession = async (
     true,
     undefined,
     input,
+    false,
   );
   if (!started.acceptedUserMessage) {
     throw new Error(`Codex session '${externalSessionId}' did not accept the user message.`);
@@ -409,7 +419,7 @@ export const startCodexTurnWithInputForSession = async (
         `Codex ended the turn for session '${externalSessionId}' as '${result.turn.status}' before it accepted the message. Retry the message.`,
       );
     }
-    return emitAcceptedUserMessage(context, started.acceptedUserMessage);
+    return started.acceptedUserMessage;
   } catch (error) {
     started.cancelExpectedEcho?.();
     if (sessionIsRetained(context, session)) {

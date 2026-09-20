@@ -34,7 +34,10 @@ import type {
   PreparedCodexLiveSessionAdapter,
 } from "./codex-live-session-adapter-contract";
 import { createCodexLiveSessionEventHub } from "./codex-live-session-event-hub";
-import { publishAcceptedCodexMessage } from "./codex-live-session-acceptance";
+import {
+  publishAcceptedCodexMessage,
+  refreshAfterAcceptedCodexMessage,
+} from "./codex-live-session-acceptance";
 import { toCodexUserMessagePart } from "./codex-live-session-inputs";
 import { createCodexLiveSessionProjection } from "./codex-live-session-projection";
 import {
@@ -339,7 +342,7 @@ export const createCodexLiveSessionAdapterPreparer =
                   ),
                 ),
                 Effect.flatMap((event) =>
-                  publishAcceptedCodexMessage(
+                  refreshAfterAcceptedCodexMessage(
                     event,
                     toCodexLiveSessionRef(input),
                     refreshProjection,

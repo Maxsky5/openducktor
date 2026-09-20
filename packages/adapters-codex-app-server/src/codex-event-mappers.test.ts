@@ -229,7 +229,7 @@ describe("Codex event mapper pipeline", () => {
     ]);
   });
 
-  test("projects contextual question replies as readable user messages", () => {
+  test("projects contextual question replies as completed question tools", () => {
     const pipeline = createCodexEventMapperPipeline();
     const result = projectCodexCanonicalEventsToHistory(
       pipeline.runThreadItem(
@@ -254,8 +254,31 @@ describe("Codex event mapper pipeline", () => {
     expect(result).toEqual([
       expect.objectContaining({
         role: "user",
-        text: "> Which environment?\n\nStaging",
+        text: "",
         resolvedQuestionRequestIds: ["question-1"],
+      }),
+      expect.objectContaining({
+        role: "assistant",
+        text: "",
+        parts: [
+          expect.objectContaining({
+            kind: "tool",
+            tool: "request_user_input",
+            toolType: "question",
+            status: "completed",
+            metadata: expect.objectContaining({
+              requestId: "question-1",
+              questions: [
+                expect.objectContaining({
+                  question: "Which environment?",
+                }),
+              ],
+              answers: expect.objectContaining({
+                '["request_user_input_async","question-1",0]': { answers: ["Staging"] },
+              }),
+            }),
+          }),
+        ],
       }),
     ]);
   });
@@ -329,16 +352,31 @@ describe("Codex event mapper pipeline", () => {
     );
     expect(live).toEqual([
       expect.objectContaining({
-        type: "user_message",
-        message: "> Which environment?\n\nStaging",
-        resolvedQuestionRequestIds: ["question-message"],
+        type: "assistant_part",
+        part: expect.objectContaining({
+          kind: "tool",
+          tool: "request_user_input",
+          toolType: "question",
+          status: "completed",
+        }),
       }),
     ]);
     expect(history).toEqual([
       expect.objectContaining({
         role: "user",
-        text: "> Which environment?\n\nStaging",
+        text: "",
         resolvedQuestionRequestIds: ["question-message"],
+      }),
+      expect.objectContaining({
+        role: "assistant",
+        parts: [
+          expect.objectContaining({
+            kind: "tool",
+            tool: "request_user_input",
+            toolType: "question",
+            status: "completed",
+          }),
+        ],
       }),
     ]);
   });

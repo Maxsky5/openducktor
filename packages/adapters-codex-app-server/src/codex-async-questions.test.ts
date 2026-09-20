@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   CodexAsyncQuestionState,
   codexAsyncQuestionItemId,
+  codexAsyncQuestionReplyTools,
   encodeCodexAsyncQuestionReplies,
   parseCodexAsyncQuestionItem,
   parseCodexAsyncQuestionReplies,
@@ -89,6 +90,40 @@ describe("Codex background questions", () => {
       ]),
     ).toEqual([reply]);
     expect(parseCodexAsyncQuestionReplies(`${encoded} trailing`)).toBeNull();
+  });
+
+  test("maps native replies to completed question tools", () => {
+    const firstId = codexAsyncQuestionItemId("call-1", 0);
+    const secondId = codexAsyncQuestionItemId("call-1", 1);
+
+    expect(
+      codexAsyncQuestionReplyTools([
+        { questionItemId: firstId, question: "Which environment?", answer: "Staging" },
+        { questionItemId: secondId, question: "Which region?", answer: "Europe" },
+      ]),
+    ).toEqual([
+      {
+        requestId: "call-1",
+        invocation: expect.objectContaining({
+          messageId: "codex-question-call-1",
+          callId: "call-1",
+          rawToolName: "request_user_input",
+          status: "completed",
+          input: {
+            questions: [
+              { header: "", question: "Which environment?", options: [] },
+              { header: "", question: "Which region?", options: [] },
+            ],
+          },
+          metadata: expect.objectContaining({
+            answers: {
+              [firstId]: { answers: ["Staging"] },
+              [secondId]: { answers: ["Europe"] },
+            },
+          }),
+        }),
+      },
+    ]);
   });
 
   test("stores resolved request IDs without changing visible text", () => {

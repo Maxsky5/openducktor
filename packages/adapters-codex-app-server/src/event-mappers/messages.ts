@@ -1,7 +1,6 @@
 import { isCodexContextualUserMessage } from "../codex-app-server-shared";
 import {
-  codexAsyncQuestionReplyText,
-  codexAsyncQuestionRequestId,
+  codexAsyncQuestionReplyTools,
   parseCodexAsyncQuestionItem,
   parseCodexAsyncQuestionReplyInputs,
   parseCodexAsyncQuestionSkipIds,
@@ -11,6 +10,7 @@ import { codexItemTypeMatches, terminalHistoryPart } from "../codex-app-server-t
 import type {
   CodexCanonicalAssistantMessageEvent,
   CodexCanonicalStreamPartEvent,
+  CodexCanonicalToolEvent,
   CodexCanonicalUserMessageEvent,
   CodexMappingResult,
 } from "../codex-canonical-events";
@@ -45,34 +45,41 @@ export const userMessageMapper: CodexEventMapper = {
       return { handled: true, events: [] };
     }
     const messageId = input.item.id;
-    const visibleMessage = asyncQuestionReplies
-      ? codexAsyncQuestionReplyText(asyncQuestionReplies)
-      : message;
-    const displayParts = asyncQuestionReplies
-      ? [{ kind: "text" as const, text: visibleMessage }]
-      : codexUserInputsToDisplayParts(parts, messageId);
+    const timestamp = ctx.timestamp ?? input.timestamp;
+    if (asyncQuestionReplies) {
+      const events = codexAsyncQuestionReplyTools(asyncQuestionReplies).map(
+        ({ requestId, invocation }): CodexCanonicalToolEvent => {
+          const event: CodexCanonicalToolEvent = {
+            kind: "tool",
+            source: ctx.source,
+            mapper: "user_message",
+            threadId: ctx.threadId,
+            invocation,
+            resolvedQuestionRequestIds: [requestId],
+          };
+          if (timestamp) event.timestamp = timestamp;
+          return event;
+        },
+      );
+      return { handled: true, events };
+    }
+    const displayParts = codexUserInputsToDisplayParts(parts, messageId);
     const hasAttachment = displayParts.some((part) => part.kind === "attachment");
     if (message.trim().length === 0 && !hasAttachment) {
       return emptyCodexMappingResult();
     }
-    const timestamp = ctx.timestamp ?? input.timestamp;
     const event: CodexCanonicalUserMessageEvent = {
       kind: "user_message",
       source: ctx.source,
       mapper: "user_message",
       threadId: ctx.threadId,
       messageId,
-      message: visibleMessage,
+      message,
       displayParts,
       state: "read",
     };
-    const answeredQuestionRequestIds = asyncQuestionReplies?.flatMap((reply) => {
-      const requestId = codexAsyncQuestionRequestId(reply.questionItemId);
-      return requestId ? [requestId] : [];
-    });
-    const resolvedQuestionRequestIds = answeredQuestionRequestIds ?? skippedQuestionRequestIds;
-    if (resolvedQuestionRequestIds !== undefined) {
-      event.resolvedQuestionRequestIds = [...new Set(resolvedQuestionRequestIds)];
+    if (skippedQuestionRequestIds !== undefined) {
+      event.resolvedQuestionRequestIds = [...new Set(skippedQuestionRequestIds)];
     }
     if (timestamp) {
       event.timestamp = timestamp;

@@ -150,7 +150,10 @@ const emitCanonicalEvents = (
         timestamp: event.timestamp ?? new Date().toISOString(),
       });
     }
-    if (event.kind === "user_message") {
+    if (
+      event.kind === "user_message" ||
+      (event.kind === "tool" && event.resolvedQuestionRequestIds !== undefined)
+    ) {
       const runtimeId = context.runtimeIdForThread(event.threadId);
       if (!runtimeId) continue;
       const resolvedQuestionRequestIds =
@@ -158,7 +161,9 @@ const emitCanonicalEvents = (
         context.asyncQuestions
           .pendingForSession(runtimeId, event.threadId)
           .map((request) => request.requestId);
-      event.resolvedQuestionRequestIds = resolvedQuestionRequestIds;
+      if (event.kind === "user_message") {
+        event.resolvedQuestionRequestIds = resolvedQuestionRequestIds;
+      }
       context.asyncQuestions.resolve(runtimeId, event.threadId, resolvedQuestionRequestIds);
       for (const requestId of resolvedQuestionRequestIds) {
         emitCodexSessionEvent(context, event.threadId, {

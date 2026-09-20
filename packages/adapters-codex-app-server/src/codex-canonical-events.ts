@@ -21,6 +21,7 @@ export type CodexCanonicalEventBase = {
 export type CodexCanonicalToolEvent = CodexCanonicalEventBase & {
   kind: "tool";
   invocation: NormalizedCodexToolInvocation;
+  resolvedQuestionRequestIds?: string[];
 };
 
 export type CodexCanonicalStreamPartEvent = CodexCanonicalEventBase & {

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { CodexAppServerThreadItem, CodexAppServerUserInput } from "@openducktor/contracts";
 import type { AgentPendingQuestionRequest, AgentSessionHistoryMessage } from "@openducktor/core";
+import type { NormalizedCodexToolInvocation } from "./codex-tool-normalizer";
 
 const OPEN_TAG = "<send_user_message_question_reply>";
 const CLOSE_TAG = "</send_user_message_question_reply>";
@@ -163,6 +164,49 @@ export const parseCodexAsyncQuestionReplyInputs = (
 
 export const codexAsyncQuestionReplyText = (replies: readonly CodexAsyncQuestionReply[]): string =>
   replies.map((reply) => `> ${reply.question}\n\n${reply.answer}`).join("\n\n");
+
+type CodexAsyncQuestionReplyTool = {
+  requestId: string;
+  invocation: NormalizedCodexToolInvocation;
+};
+
+export const codexAsyncQuestionReplyTools = (
+  replies: readonly CodexAsyncQuestionReply[],
+): CodexAsyncQuestionReplyTool[] => {
+  const repliesByRequestId = new Map<string, CodexAsyncQuestionReply[]>();
+  for (const reply of replies) {
+    const requestId = codexAsyncQuestionRequestId(reply.questionItemId);
+    if (!requestId) continue;
+    const groupedReplies = repliesByRequestId.get(requestId) ?? [];
+    groupedReplies.push(reply);
+    repliesByRequestId.set(requestId, groupedReplies);
+  }
+
+  return [...repliesByRequestId].map(([requestId, groupedReplies]) => {
+    const questions = groupedReplies.map((reply) => ({
+      header: "",
+      question: reply.question,
+      options: [],
+    }));
+    const answers = Object.fromEntries(
+      groupedReplies.map((reply) => [reply.questionItemId, { answers: [reply.answer] }]),
+    );
+    const partId = `codex-question-${requestId}`;
+    return {
+      requestId,
+      invocation: {
+        messageId: partId,
+        partId,
+        callId: requestId,
+        rawToolName: "request_user_input",
+        status: "completed",
+        input: { questions },
+        output: JSON.stringify({ answers }),
+        metadata: { requestId, questions, answers },
+      },
+    };
+  });
+};
 
 type BackgroundQuestionState = {
   pending: Map<string, AgentPendingQuestionRequest>;

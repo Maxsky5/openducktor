@@ -12,10 +12,8 @@ import type {
 } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
 import { closeBackgroundQuestions } from "../support/background-questions";
-import { upsertUserSessionMessage } from "../support/messages";
 import { type ReadSessionSnapshot, requireWorkspaceRepoPath } from "../support/session-invariants";
 import type { SessionTurnMetadata } from "../support/session-turn-metadata";
-import { toUserChatMessage } from "../support/user-message-event";
 
 export type PendingInputActionDependencies = {
   workspaceRepoPath: string | null;
@@ -132,15 +130,10 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
       if (!acceptedMessage) throw error;
 
       const handledRequestIds = acceptedMessage.resolvedQuestionRequestIds ?? [request.requestId];
-      const responseSessionKey = agentSessionIdentityKey(responseSession);
       for (const session of sessions) {
         dependencies.updateSession(session, (current) => ({
           ...current,
           ...closeBackgroundQuestions(current, handledRequestIds),
-          messages:
-            agentSessionIdentityKey(session) === responseSessionKey
-              ? upsertUserSessionMessage(current, toUserChatMessage(acceptedMessage))
-              : current.messages,
         }));
       }
     }

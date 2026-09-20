@@ -144,12 +144,22 @@ describe("CodexAppServerAdapter streaming", () => {
       });
       await flushCodexAdapterWork();
 
-      expect(events.filter((event) => event.type === "user_message")).toEqual([
+      expect(accepted).toMatchObject({
+        type: "user_message",
+        message: "> Which environment should I use?\n\nStaging",
+      });
+      expect(events.filter((event) => event.type === "user_message")).toEqual([]);
+      expect(events).toContainEqual(
         expect.objectContaining({
-          messageId: accepted.messageId,
-          message: "> Which environment should I use?\n\nStaging",
+          type: "assistant_part",
+          part: expect.objectContaining({
+            kind: "tool",
+            tool: "request_user_input",
+            toolType: "question",
+            status: "completed",
+          }),
         }),
-      ]);
+      );
     } finally {
       unsubscribe();
     }
@@ -328,11 +338,22 @@ describe("CodexAppServerAdapter streaming", () => {
 
       expect(events).toContainEqual(
         expect.objectContaining({
-          type: "user_message",
-          message: "> Which environment?\n\nStaging",
-          resolvedQuestionRequestIds: ["async-question-pair"],
+          type: "assistant_part",
+          part: expect.objectContaining({
+            kind: "tool",
+            tool: "request_user_input",
+            toolType: "question",
+            status: "completed",
+          }),
         }),
       );
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "question_resolved",
+          requestId: "async-question-pair",
+        }),
+      );
+      expect(events.filter((event) => event.type === "user_message")).toEqual([]);
       await expect(
         adapter.readSessionRuntimeSnapshot(codexSessionRuntimeRef("thread/start-runtime-live")),
       ).resolves.toMatchObject({ pendingQuestions: [] });
