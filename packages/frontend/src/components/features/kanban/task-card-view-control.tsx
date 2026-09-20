@@ -11,8 +11,8 @@ type TaskCardViewControlProps = {
 };
 
 const TASK_CARD_VIEW_OPTIONS = [
-  { value: "normal", label: "Normal", icon: Rows3 },
-  { value: "compact", label: "Compact", icon: Rows2 },
+  { value: "normal", label: "Normal", icon: Rows2 },
+  { value: "compact", label: "Compact", icon: Rows3 },
 ] as const;
 
 export function TaskCardViewControl({
@@ -20,15 +20,20 @@ export function TaskCardViewControl({
   disabled = false,
   onValueChange,
 }: TaskCardViewControlProps): ReactElement {
+  const isUnavailable = disabled || value === null;
+
   return (
     <TooltipProvider>
       <RadioGroup
         aria-label="Task card view"
+        aria-disabled={isUnavailable}
         value={value ?? ""}
-        disabled={disabled || value === null}
         data-variant="segmented"
         className="flex h-10 w-auto items-center gap-1 rounded-lg bg-muted p-1"
         onValueChange={(nextValue) => {
+          if (isUnavailable) {
+            return;
+          }
           const option = TASK_CARD_VIEW_OPTIONS.find((candidate) => candidate.value === nextValue);
           if (option && option.value !== value) {
             onValueChange(option.value);
@@ -44,6 +49,7 @@ export function TaskCardViewControl({
                   <RadioGroupSegmentItem
                     value={option.value}
                     aria-label={option.label}
+                    aria-disabled={isUnavailable}
                     className="size-8 flex-none p-0 text-foreground/70 [&_svg]:size-4"
                   >
                     <Icon aria-hidden="true" />

@@ -28,8 +28,7 @@ describe("settings kanban section", () => {
     expect(html).toContain('role="radiogroup"');
     expect(html).toContain('aria-label="Normal"');
     expect(html).toContain('aria-label="Compact"');
-    expect(html).toContain("lucide-rows-3");
-    expect(html).toContain("lucide-rows-2");
+    expect(html.indexOf("lucide-rows-2")).toBeLessThan(html.indexOf("lucide-rows-3"));
     expect(html).not.toContain(">Normal<");
     expect(html).not.toContain(">Compact<");
     expect(html).toContain('value="3"');

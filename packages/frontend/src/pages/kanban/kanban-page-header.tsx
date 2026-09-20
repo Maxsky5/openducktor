@@ -25,12 +25,6 @@ export function KanbanPageHeader({ model }: KanbanPageHeaderProps): ReactElement
             disabled={model.isTaskCardViewPending}
             onValueChange={model.onTaskCardViewChange}
           />
-          {model.isTaskCardViewPending ? (
-            <span className="text-muted-foreground" role="status">
-              <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-              <span className="sr-only">Saving task card view</span>
-            </span>
-          ) : null}
         </div>
         <Button
           type="button"

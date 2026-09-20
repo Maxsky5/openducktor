@@ -404,4 +404,36 @@ describe("KanbanTaskCard active sessions", () => {
       html.indexOf('aria-label="Open details for Compact card title"'),
     );
   });
+
+  test("uses the normal task badge color for a compact task icon", () => {
+    const task = createTaskCardFixture({
+      id: "TASK-COMPACT-COLOR",
+      issueType: "task",
+      availableActions: ["set_spec"],
+    });
+
+    const html = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ["/kanban"] },
+        createElement(
+          TooltipProvider,
+          null,
+          createElement(KanbanTaskCard, {
+            task,
+            taskCardView: "compact",
+            taskActivityState: "idle",
+            taskSessions: [],
+            onOpenDetails: noop,
+            onDelegate: noop,
+            onPlan: noop,
+            onBuild: noop,
+          }),
+        ),
+      ),
+    );
+
+    expect(html).toContain("text-foreground");
+    expect(html).not.toContain("text-emerald-600");
+  });
 });

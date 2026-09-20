@@ -27,7 +27,7 @@ export const ISSUE_TYPE_STYLES = {
   task: {
     label: "Task",
     icon: CheckSquare,
-    iconClassName: "text-emerald-600 dark:text-emerald-400",
+    iconClassName: "text-foreground",
     className: "border-border bg-muted text-foreground",
   },
 } satisfies Record<
