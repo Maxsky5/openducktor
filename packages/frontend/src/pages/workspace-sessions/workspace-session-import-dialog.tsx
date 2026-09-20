@@ -110,7 +110,8 @@ function RuntimeSessionResults({
   onImported,
   setPending,
 }: Props & { runtimeKind: RuntimeKind; setPending: (pending: boolean) => void }) {
-  const [catalogRequestId, setCatalogRequestId] = useState(() => crypto.randomUUID());
+  const [catalogRequestId, setCatalogRequestId] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [cursors, setCursors] = useState<Array<string | undefined>>([undefined]);
@@ -124,25 +125,28 @@ function RuntimeSessionResults({
     const timer = window.setTimeout(() => setDebouncedSearch(search), 250);
     return () => window.clearTimeout(timer);
   }, [search]);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    const requestId = crypto.randomUUID();
+    setCatalogRequestId(requestId);
+    return () => {
       void host
-        .workspaceSessionExternalRelease({ workspaceId, catalogRequestId })
+        .workspaceSessionExternalRelease({ workspaceId, catalogRequestId: requestId })
         .catch((error) => {
-          if (mounted.current) setReleaseError(errorMessage(error));
+          setReleaseError(errorMessage(error));
         });
-    },
-    [workspaceId, catalogRequestId, mounted],
-  );
+    };
+  }, [workspaceId, attempt]);
   const cursor = cursors[page];
-  const queryInput: WorkspaceSessionExternalListInput = {
-    workspaceId,
-    runtimeKind,
-    catalogRequestId,
-    search: debouncedSearch,
-    pageSize: 50,
-  };
-  if (cursor) queryInput.cursor = cursor;
+  const queryInput: WorkspaceSessionExternalListInput | null = catalogRequestId
+    ? {
+        workspaceId,
+        runtimeKind,
+        catalogRequestId,
+        search: debouncedSearch,
+        pageSize: 50,
+      }
+    : null;
+  if (queryInput && cursor) queryInput.cursor = cursor;
   const result = useQuery({
     ...workspaceSessionExternalQueryOptions(queryInput),
     enabled: search === debouncedSearch,
@@ -206,7 +210,7 @@ function RuntimeSessionResults({
             onClick={() => {
               setPage(0);
               setCursors([undefined]);
-              setCatalogRequestId(crypto.randomUUID());
+              setAttempt((value) => value + 1);
             }}
           >
             Retry

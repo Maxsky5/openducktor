@@ -58,3 +58,22 @@ test("OpenCode V2 discovery paginates metadata and passive preparation waits for
     "directory changed",
   );
 });
+
+test.each([null, undefined])("OpenCode accepts terminal cursor %s", async (next) => {
+  const client = createOpencodeClient({
+    baseUrl: "http://runtime",
+    fetch: async () =>
+      new Response(JSON.stringify({ data: [], cursor: { next } }), {
+        headers: { "content-type": "application/json" },
+      }),
+  });
+  const sessions = createOpenCodeExternalSessions({
+    createClient: () => client,
+    runtimeEndpoint: "http://runtime",
+    admit: async () => {},
+  });
+  expect(await sessions.list({ signal: new AbortController().signal })).toEqual({
+    sessions: [],
+    nextCursor: null,
+  });
+});

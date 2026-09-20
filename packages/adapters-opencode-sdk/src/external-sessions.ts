@@ -13,7 +13,7 @@ const metadataSchema = z.object({
 });
 const pageSchema = z.object({
   data: z.array(metadataSchema),
-  cursor: z.object({ next: z.string().optional() }),
+  cursor: z.object({ next: z.string().nullish() }),
 });
 const metadata = (row: z.infer<typeof metadataSchema>) =>
   workspaceSessionExternalSchema.parse({

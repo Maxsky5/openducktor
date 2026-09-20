@@ -11,7 +11,7 @@ import {
 } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { act, type ComponentProps } from "react";
+import { act, Fragment, StrictMode, type ComponentProps } from "react";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { createQueryClient } from "@/lib/query-client";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
@@ -67,7 +67,8 @@ const deferred = <T,>() => {
   });
   return { promise, resolve };
 };
-const renderImport = (overrides: Partial<HostClient> = {}) => {
+const renderImport = (overrides: Partial<HostClient> = {}, strict = false) => {
+  const Wrapper = strict ? StrictMode : Fragment;
   const calls: WorkspaceSessionExternalListInput[] = [];
   const releases: string[] = [];
   const opened: WorkspaceSession[] = [];
@@ -90,17 +91,19 @@ const renderImport = (overrides: Partial<HostClient> = {}) => {
   );
   const client = createQueryClient();
   const view = render(
-    <QueryClientProvider client={client}>
-      <RuntimeDefinitionsContext value={context}>
-        <WorkspaceSessionImportDialog
-          workspaceId="workspace"
-          onClose={() => {
-            closed++;
-          }}
-          onImported={(session) => opened.push(session)}
-        />
-      </RuntimeDefinitionsContext>
-    </QueryClientProvider>,
+    <Wrapper>
+      <QueryClientProvider client={client}>
+        <RuntimeDefinitionsContext value={context}>
+          <WorkspaceSessionImportDialog
+            workspaceId="workspace"
+            onClose={() => {
+              closed++;
+            }}
+            onImported={(session) => opened.push(session)}
+          />
+        </RuntimeDefinitionsContext>
+      </QueryClientProvider>
+    </Wrapper>,
   );
   return { ...view, calls, releases, opened, client, closed: () => closed };
 };
@@ -183,6 +186,27 @@ test("keeps a saved chat available when admission reports an error", async () =>
     fireEvent.click(await view.findByRole("button", { name: "Open saved chat" }));
     expect(imports).toBe(1);
     expect(view.opened).toEqual([saved]);
+  } finally {
+    view.unmount();
+    view.client.clear();
+  }
+});
+
+test("keeps discovery open through Strict Mode effect replay and releases it on unmount", async () => {
+  const view = renderImport({}, true);
+  try {
+    await choose(view, "OpenCode");
+    await view.findByRole("button", { name: "Import Native title" });
+    const activeId = view.calls.at(-1)?.catalogRequestId;
+    if (!activeId) throw new Error("Expected discovery to start");
+    expect(view.releases).not.toContain(activeId);
+    fireEvent.change(view.getByRole("textbox", { name: "Search sessions" }), {
+      target: { value: "Native" },
+    });
+    await waitFor(() => expect(view.calls.at(-1)?.search).toBe("Native"));
+    expect(view.calls.at(-1)?.catalogRequestId).toBe(activeId);
+    view.unmount();
+    expect(view.releases).toContain(activeId);
   } finally {
     view.unmount();
     view.client.clear();
