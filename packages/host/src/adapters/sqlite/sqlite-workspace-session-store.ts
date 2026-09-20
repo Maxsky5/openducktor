@@ -308,6 +308,11 @@ export const createSqliteWorkspaceSessionStore = (
           }),
         ),
       ),
+    setExecutionTarget: (input) =>
+      update(input, "workspaceSessionStore.setExecutionTarget", (current) => ({
+        ...current,
+        executionTarget: input.executionTarget,
+      })),
     rename: (input) =>
       update(input, "workspaceSessionStore.rename", (current) => {
         const title = workspaceSessionRenameInputSchema.shape.manualTitle.parse(input.manualTitle);

@@ -20,6 +20,7 @@ import {
 const createCleanupWorktreeFiles = (calls: unknown[]): WorktreeFilePort =>
   ({
     prepareWorktreeAliasRemoval: () => Effect.dieMessage("Unexpected alias removal"),
+    resolveWorktreeRemovalPath: () => Effect.dieMessage("Unexpected removal path resolution"),
     ensureDirectory() {
       return Effect.dieMessage("unexpected ensure directory");
     },

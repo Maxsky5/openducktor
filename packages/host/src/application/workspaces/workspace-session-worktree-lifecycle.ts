@@ -82,6 +82,13 @@ export const removeWorkspaceSessionWorktree = (
         message: "Cannot remove a detached worktree. Turn off worktree removal.",
       });
     yield* validateRemovableBranch(dependencies, config, target.branchName);
+    const aliasRemoval =
+      target.workingDirectory === worktreePath
+        ? null
+        : yield* dependencies.worktreeFiles.prepareWorktreeAliasRemoval(
+            target.workingDirectory,
+            worktreePath,
+          );
     // An explicit archive retry can finish a previous partial cleanup.
     if (yield* git.isRegisteredWorktree(repoPath, worktreePath)) {
       const current = yield* git.getCurrentBranch(worktreePath);
@@ -90,16 +97,9 @@ export const removeWorkspaceSessionWorktree = (
           field: "branchName",
           message: "The worktree branch changed. Reopen Archive chat to confirm it.",
         });
-      const aliasRemoval =
-        target.workingDirectory === worktreePath
-          ? null
-          : yield* dependencies.worktreeFiles.prepareWorktreeAliasRemoval(
-              target.workingDirectory,
-              worktreePath,
-            );
       yield* git.removeWorktree(repoPath, worktreePath, true);
-      if (aliasRemoval) yield* aliasRemoval.remove;
     }
+    if (aliasRemoval) yield* aliasRemoval.remove;
     if (yield* git.referenceExists(repoPath, `refs/heads/${target.branchName}`)) {
       yield* git.deleteLocalBranch(repoPath, target.branchName, true);
     }

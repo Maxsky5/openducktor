@@ -34,6 +34,9 @@ export type WorkspaceSessionStorePort = {
   ): Result<WorkspaceSession | null>;
   create(input: WorkspaceSessionStoreScope & { session: WorkspaceSession }): Result;
   bindRuntimeSession(input: WorkspaceSessionStoreRef & { externalSessionId: string }): Result;
+  setExecutionTarget(
+    input: WorkspaceSessionStoreRef & { executionTarget: WorkspaceSessionExecutionTarget },
+  ): Result;
   rename(input: WorkspaceSessionStoreRef & { manualTitle: string | null }): Result;
   archive(
     input: WorkspaceSessionStoreRef & {

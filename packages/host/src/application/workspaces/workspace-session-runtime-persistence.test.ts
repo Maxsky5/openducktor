@@ -603,7 +603,9 @@ describe("Workspace Session persistence through the shared command module", () =
           }),
       }),
       settingsConfig: createSettingsConfigTestDouble({ pathExists: () => Effect.succeed(true) }),
-      worktreeFiles: createWorktreeFilePortTestDouble({}),
+      worktreeFiles: createWorktreeFilePortTestDouble({
+        resolveWorktreeRemovalPath: (value) => Effect.succeed(value),
+      }),
       systemCommands: {
         resolveCommandPath: () => Effect.dieMessage("unused"),
         versionCommand: () => Effect.dieMessage("unused"),

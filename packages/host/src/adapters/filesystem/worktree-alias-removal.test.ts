@@ -57,6 +57,16 @@ describe("worktree alias removal", () => {
     await expect(lstat(alias)).rejects.toThrow("ENOENT");
   });
 
+  test("prepares dangling alias cleanup again after an earlier removal failed", async () => {
+    await symlink(worktree, alias, "junction");
+    await rm(worktree, { recursive: true });
+    const prepared = await Effect.runPromise(prepareWorktreeAliasRemoval(alias, worktree));
+    await Effect.runPromise(prepared.remove);
+    await expect(lstat(alias)).rejects.toThrow("ENOENT");
+    const repeated = await Effect.runPromise(prepareWorktreeAliasRemoval(alias, worktree));
+    await Effect.runPromise(repeated.remove);
+  });
+
   test("does not remove a symlink in the worktree's parent path", async () => {
     const parentAlias = path.join(root, "parent-alias");
     await symlink(root, parentAlias, "junction");

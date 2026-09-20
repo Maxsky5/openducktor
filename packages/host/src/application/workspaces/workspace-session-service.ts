@@ -271,7 +271,9 @@ export const createWorkspaceSessionService = (
             let target = session.executionTarget;
             let worktreePath = target.workingDirectory;
             if (input.removeWorktree) {
-              worktreePath = yield* git.canonicalizePath(target.workingDirectory);
+              worktreePath = yield* dependencies.worktreeFiles.resolveWorktreeRemovalPath(
+                target.workingDirectory,
+              );
               yield* dependencies.lifecycle.acquireWorktreeLifecycle([worktreePath]);
             }
             if (input.removeWorktree) {
@@ -321,6 +323,14 @@ export const createWorkspaceSessionService = (
             }
             return yield* Effect.uninterruptible(
               Effect.gen(function* () {
+                if (
+                  input.removeWorktree &&
+                  target.kind === "local_worktree" &&
+                  session.executionTarget.kind === "local_worktree" &&
+                  target.branchName !== session.executionTarget.branchName
+                ) {
+                  yield* store.setExecutionTarget({ ...ref, executionTarget: target });
+                }
                 const executionTarget =
                   input.removeWorktree && target.kind === "local_worktree"
                     ? yield* removeWorkspaceSessionWorktree(

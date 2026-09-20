@@ -190,6 +190,7 @@ describe("host-owned Workspace Session lifecycle", () => {
         pathExists: (value) => Effect.succeed(paths.has(value)),
       }),
       worktreeFiles: createWorktreeFilePortTestDouble({
+        resolveWorktreeRemovalPath: (value) => Effect.succeed(value),
         ensureDirectory: () => Effect.void,
         copyConfiguredPaths: (_repo, _directory, copyPaths) =>
           Effect.sync(() => {

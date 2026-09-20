@@ -15,6 +15,7 @@ export type PreparedWorktreeAliasRemoval = {
 };
 
 export type WorktreeFilePort = {
+  resolveWorktreeRemovalPath(path: string): Effect.Effect<string, HostOperationErrorAggregate>;
   prepareWorktreeAliasRemoval(
     aliasPath: string,
     canonicalWorktreePath: string,
