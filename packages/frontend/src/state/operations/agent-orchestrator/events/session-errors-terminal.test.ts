@@ -213,7 +213,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
     });
   });
 
-  test("records session_error as an error notice and clears pending requests", async () => {
+  test("records session_error, clears blocking input, and keeps background questions", async () => {
     const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
@@ -255,6 +255,19 @@ describe("agent-orchestrator session errors and terminal state", () => {
               },
             ],
           },
+          {
+            requestId: "background-question",
+            blocking: false,
+            questions: [
+              {
+                header: "Environment",
+                question: "Which environment?",
+                options: [],
+                multiple: false,
+                custom: true,
+              },
+            ],
+          },
         ],
       }),
     ]);
@@ -285,7 +298,9 @@ describe("agent-orchestrator session errors and terminal state", () => {
 
     expect(findSession(sessionsRef, "session-1")?.status).toBe("error");
     expect(findSession(sessionsRef, "session-1")?.pendingApprovals).toHaveLength(0);
-    expect(findSession(sessionsRef, "session-1")?.pendingQuestions).toHaveLength(0);
+    expect(findSession(sessionsRef, "session-1")?.pendingQuestions).toEqual([
+      expect.objectContaining({ requestId: "background-question", blocking: false }),
+    ]);
     const lastMessage = getLastSessionMessage(sessionsRef);
     expect(lastMessage?.content).toBe("Aborted");
     expect(lastMessage?.meta).toEqual({
