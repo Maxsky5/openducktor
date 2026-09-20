@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="406" viewBox="0 0 700 406" role="img" aria-labelledby="title description">
+  <title id="title">OpenDucktor workflow installer</title>
+  <desc id="description">Four violet workflow nodes connect the native app icon to Applications. Pale rounded paths and dashed construction guides frame the workflow. Finder supplies the icons, file labels, and window chrome.</desc>
+  <defs>
+    <radialGradient id="background" cx="50%" cy="44%" r="75%">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F6F7F9"/>
+    </radialGradient>
+    <linearGradient id="node" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F5F2FF"/>
+    </linearGradient>
+    <linearGradient id="violet" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#967CFF"/>
+      <stop offset="1" stop-color="#6540FF"/>
+    </linearGradient>
+    <filter id="node-shadow" x="-30%" y="-30%" width="160%" height="180%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#8773CC" flood-opacity=".08"/>
+    </filter>
+  </defs>
+
+  <rect width="700" height="406" fill="url(#background)"/>
+
+  <!-- The upper 374 points form the composition; the rest allows for Finder's title bar. -->
+  <g fill="none" stroke="#D9DCE3" stroke-width=".7" stroke-dasharray="3 3">
+    <path d="M170 8V366M528 8V366"/>
+    <path d="M18 178H682"/>
+    <path d="M130 79H568M130 281H568"/>
+    <path d="M349 53V311"/>
+    <path d="M130 68V91M568 68V91M130 269V292M568 269V292"/>
+    <path d="M69 129V153M629 129V153"/>
+  </g>
+
+  <g fill="none" stroke="#C3C6D0" stroke-width=".8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M223 134H242Q256 134 256 120V90Q256 74 272 74H428Q444 74 444 90V120Q444 134 458 134H475"/>
+    <path d="M223 233H241Q255 233 255 247V265Q255 281 271 281H428Q444 281 444 265V247Q444 233 458 233H475"/>
+    <path d="M69 139H80Q91 139 91 150V164Q91 178 105 178H127"/>
+    <path d="M574 178H592Q606 178 606 164V150Q606 139 618 139H629"/>
+  </g>
+
+  <g fill="#FAFBFC" stroke="#737984" stroke-width=".85">
+    <rect x="127.5" y="76.5" width="5" height="5"/>
+    <rect x="565.5" y="76.5" width="5" height="5"/>
+    <rect x="346.5" y="71.5" width="5" height="5"/>
+    <rect x="127.5" y="278.5" width="5" height="5"/>
+    <rect x="565.5" y="278.5" width="5" height="5"/>
+    <rect x="346.5" y="278.5" width="5" height="5"/>
+    <rect x="66.5" y="136.5" width="5" height="5"/>
+    <rect x="626.5" y="136.5" width="5" height="5"/>
+  </g>
+  <g fill="#D1D5DD">
+    <rect x="348" y="52" width="2" height="2" rx=".4"/>
+    <rect x="348" y="310" width="2" height="2" rx=".4"/>
+  </g>
+
+  <!-- Native icons occupy (170, 170) and (528, 170); keep their labels clear. -->
+  <path d="M228 170H468M461 163L468 170 461 177" fill="none" stroke="#5B22FF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+  <g fill="#FFFFFF" stroke="#6233FF" stroke-width="1.6">
+    <circle cx="286" cy="170" r="2.7"/>
+    <circle cx="340" cy="170" r="2.7"/>
+    <circle cx="394" cy="170" r="2.7"/>
+  </g>
+  <g fill="url(#node)" stroke="#B9A7FF" stroke-width=".7" filter="url(#node-shadow)">
+    <rect x="246" y="156" width="28" height="28" rx="6"/>
+    <rect x="299" y="156" width="28" height="28" rx="6"/>
+    <rect x="353" y="156" width="28" height="28" rx="6"/>
+    <rect x="407" y="156" width="28" height="28" rx="6"/>
+  </g>
+  <path d="M256 170H264M260 166V174" fill="none" stroke="#8968FF" stroke-width="1.5" stroke-linecap="round"/>
+  <circle cx="313" cy="170" r="3.8" fill="url(#violet)"/>
+  <path d="M367 166.2L370.8 170 367 173.8 363.2 170Z" fill="#A18AFF" stroke="#6E49FF" stroke-width="1.4" stroke-linejoin="round"/>
+  <g fill="url(#violet)">
+    <circle cx="417" cy="170" r="1.15"/>
+    <circle cx="421" cy="170" r="1.15"/>
+    <circle cx="425" cy="170" r="1.15"/>
+  </g>
+</svg>
