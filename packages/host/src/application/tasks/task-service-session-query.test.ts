@@ -8,10 +8,17 @@ import { createAgentSessionRecord } from "../../ports/task-store-port-contract.t
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import { createTaskService } from "./task-service";
 
-const expectSingleAgentSessionSelect = (queries: string[]): void => {
+type LoggedQuery = {
+  readonly params: unknown[];
+  readonly sql: string;
+};
+
+const expectSingleAgentSessionSelect = (queries: LoggedQuery[], taskId: string): void => {
   expect(queries).toHaveLength(1);
-  expect(queries[0]).toMatch(/^select "id", "agent_sessions_json" from "tasks"/i);
-  expect(queries.join("\n")).not.toContain("task_documents");
+  expect(queries[0]?.sql).toMatch(/^select "id", "agent_sessions_json" from "tasks"/i);
+  expect(queries[0]?.sql).toContain('where "tasks"."id" in (?)');
+  expect(queries[0]?.params).toEqual([taskId]);
+  expect(queries[0]?.sql).not.toContain("task_documents");
 };
 
 describe("single-task session queries", () => {
@@ -55,15 +62,15 @@ describe("single-task session queries", () => {
       await Effect.runPromise(
         Effect.scoped(
           Effect.gen(function* () {
-            const queries: string[] = [];
+            const queries: LoggedQuery[] = [];
             const connection = yield* openSqliteDrizzleConnection({
               databasePath: harness.databasePath,
               configureWal: false,
               config: {
                 schema: taskStoreSchema,
                 logger: {
-                  logQuery(query) {
-                    queries.push(query);
+                  logQuery(sql, params) {
+                    queries.push({ params, sql });
                   },
                 },
               },
@@ -76,7 +83,7 @@ describe("single-task session queries", () => {
             });
             const service = createTaskService({ taskStore });
             expect(yield* service.agentSessionsList(input)).toEqual([]);
-            expectSingleAgentSessionSelect(queries);
+            expectSingleAgentSessionSelect(queries, input.taskId);
 
             const older = createAgentSessionRecord({
               externalSessionId: "older",
@@ -90,7 +97,7 @@ describe("single-task session queries", () => {
             yield* store.upsertAgentSession({ ...input, session: older });
             queries.length = 0;
             expect(yield* service.agentSessionsList(input)).toEqual([newer, older]);
-            expectSingleAgentSessionSelect(queries);
+            expectSingleAgentSessionSelect(queries, input.taskId);
 
             queries.length = 0;
             const failure = yield* Effect.flip(
@@ -102,7 +109,7 @@ describe("single-task session queries", () => {
               message: "Task not found: missing-task",
               details: { repoPath, taskId: "missing-task" },
             });
-            expectSingleAgentSessionSelect(queries);
+            expectSingleAgentSessionSelect(queries, "missing-task");
 
             const metadata = yield* service.getTaskMetadata(input);
             expect(metadata).toMatchObject({
