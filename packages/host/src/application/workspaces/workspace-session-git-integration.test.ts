@@ -1,8 +1,11 @@
+import { createWorkspaceSessionImportService } from "./workspace-session-import-service";
+import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
+import { createAgentSessionRuntimeAdapterTestDouble } from "../../test-support/service-test-doubles";
 import { removeWorkspaceSessionWorktree } from "./workspace-session-worktree-lifecycle";
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -27,7 +30,10 @@ import {
   createEffectHostCommandRouter,
   toPromiseHostCommandRouter,
 } from "../../interface/router/host-command-router";
-import { createWorkspaceSessionService } from "./workspace-session-service";
+import {
+  createWorkspaceSessionService,
+  type WorkspaceSessionServiceDependencies,
+} from "./workspace-session-service";
 import { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
 
 const commitIdentity = [
@@ -120,7 +126,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       systemCommands: createSystemCommandRunner(),
     };
     const store = createSqliteWorkspaceSessionStore(database.contextProvider);
-    const service = createWorkspaceSessionService({
+    const dependencies: WorkspaceSessionServiceDependencies = {
       lifecycle: createTaskSessionLifecycleCoordinator(),
       operationGate: createWorkspaceSessionOperationGate(),
       ...targetDependencies,
@@ -159,7 +165,8 @@ describe("Workspace Session commands with real Git and SQLite", () => {
         stopSession: () => Effect.dieMessage("Idle sessions must not be stopped"),
         read: (ref) => Effect.succeed({ type: "missing", ref }),
       },
-    });
+    };
+    const service = createWorkspaceSessionService(dependencies);
     const router = toPromiseHostCommandRouter(
       createEffectHostCommandRouter({
         handlers: createWorkspaceSessionCommandHandlers(service, (_workspaceId, session) =>
@@ -178,7 +185,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       worktree: { mode: "from_name", name: "named-chat", branchName: null },
       manualTitle: null,
     };
-    return { router, createInput, starts, events, targetDependencies };
+    return { router, createInput, starts, events, targetDependencies, dependencies };
   };
 
   test("creates from_branch at the selected branch HEAD instead of the source checkout HEAD", async () => {
@@ -469,6 +476,80 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     expect(h.events).toEqual([]);
   });
 
+  test("imports a native symlink path and removes its real worktree without changing the saved alias", async () => {
+    const directory = path.join(root, "external-worktree");
+    const alias = path.join(root, "native-alias");
+    gitCommand("worktree", "add", "-b", "feature/external", directory);
+    await symlink(directory, alias, "junction");
+    const h = setup({ hooks: false });
+    const registry = createLiveSessionAdapterRegistry();
+    const metadata = {
+      externalSessionId: "external-alias",
+      runtimeKind: "opencode" as const,
+      workingDirectory: alias,
+      title: "Native alias",
+      updatedAt: 123,
+    };
+    await Effect.runPromise(
+      registry.register(
+        createAgentSessionRuntimeAdapterTestDouble(
+          { runtimeId: "test-runtime", repoPath, runtimeKind: "opencode" },
+          {
+            externalSessions: {
+              list: () => Effect.succeed({ sessions: [metadata], nextCursor: null }),
+              inspect: () => Effect.succeed(metadata),
+              prepare: (ref) => {
+                expect(ref.workingDirectory).toBe(alias);
+                return Effect.succeed({ metadata, commit: Effect.void, dispose: Effect.void });
+              },
+            },
+          },
+        ),
+      ),
+    );
+    const importer = createWorkspaceSessionImportService({
+      ...h.dependencies,
+      registry,
+      publishUpdated: () => Effect.void,
+    });
+    try {
+      const { session } = await Effect.runPromise(
+        importer.importSession({
+          workspaceId: "fairnest",
+          runtimeKind: "opencode",
+          externalSessionId: metadata.externalSessionId,
+          workingDirectory: alias,
+        }),
+      );
+      expect(session.executionTarget).toEqual({
+        kind: "local_worktree",
+        workingDirectory: alias,
+        branchName: "feature/external",
+        worktreeState: "present",
+      });
+      const ref = { workspaceId: "fairnest", sessionId: session.id };
+      const preview = await h.router.invoke("workspace_session_archive_preview", ref);
+      expect(preview).toMatchObject({ branchName: "feature/external", worktreeExists: true });
+      const archived = await h.router.invoke("workspace_session_archive", {
+        ...ref,
+        removeWorktree: true,
+        worktreeConfirmation: { workingDirectory: alias, branchName: "feature/external" },
+      });
+      expect(archived.executionTarget).toEqual({
+        kind: "local_worktree",
+        workingDirectory: alias,
+        branchName: "feature/external",
+        worktreeState: "removed",
+      });
+      expect(registeredWorktreePaths()).not.toContain(directory);
+      expect(gitCommand("branch", "--list", "feature/external")).toBe("");
+      await expect(realpath(alias)).rejects.toThrow("ENOENT");
+      expect(await h.router.invoke("workspace_session_get", ref)).toEqual(archived);
+    } finally {
+      await Effect.runPromise(importer.shutdown());
+    }
+  });
+
   test("keeps the default branch after its session worktree disappears", async () => {
     await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
     gitCommand("checkout", "-b", "other-checkout");
@@ -493,7 +574,12 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     });
     await expect(
       Effect.runPromise(
-        removeWorkspaceSessionWorktree(h.targetDependencies, config, session.executionTarget),
+        removeWorkspaceSessionWorktree(
+          h.targetDependencies,
+          config,
+          session.executionTarget,
+          directory,
+        ),
       ),
     ).rejects.toThrow("protected branch main");
     await expect(

@@ -269,9 +269,10 @@ export const createWorkspaceSessionService = (
             const { ref, session } = yield* recordFor(input);
             if (session.archivedAt !== null) return session;
             let target = session.executionTarget;
+            let worktreePath = target.workingDirectory;
             if (input.removeWorktree) {
-              const path = yield* git.canonicalizePath(target.workingDirectory);
-              yield* dependencies.lifecycle.acquireWorktreeLifecycle([path]);
+              worktreePath = yield* git.canonicalizePath(target.workingDirectory);
+              yield* dependencies.lifecycle.acquireWorktreeLifecycle([worktreePath]);
             }
             if (input.removeWorktree) {
               if (target.kind !== "local_worktree") {
@@ -329,6 +330,7 @@ export const createWorkspaceSessionService = (
                           repoPath: ref.repoPath,
                         },
                         target,
+                        worktreePath,
                       )
                     : target;
                 return yield* store

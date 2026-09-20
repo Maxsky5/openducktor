@@ -1,3 +1,4 @@
+import type { CodexAppServerThread } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import {
   createAdapterWithTransport,
@@ -5,6 +6,28 @@ import {
   codexThreadFixture,
   defaultCodexEffectivePolicy,
 } from "./codex-app-server-adapter.test-harness";
+
+// Codex 0.155 filters.rs has no source kind that matches SessionSource::Custom.
+const matchesNativeSourceFilter = (
+  source: CodexAppServerThread["source"],
+  sourceKinds: readonly string[] | null | undefined,
+): boolean => {
+  const filters = sourceKinds?.length ? sourceKinds : ["cli", "vscode"];
+  switch (source) {
+    case "cli":
+    case "vscode":
+    case "exec":
+    case "appServer":
+    case "unknown":
+      return filters.includes(source);
+    default:
+      if ("custom" in source) return false;
+      return (
+        filters.includes("subAgent") ||
+        (source.subAgent === "review" && filters.includes("subAgentReview"))
+      );
+  }
+};
 
 const ref = {
   repoPath: "/repo",
@@ -69,13 +92,24 @@ describe("external Codex sessions", () => {
   });
 
   test.each([
-    { source: "cli" as const, parentThreadId: "parent", accepted: false },
-    { source: { custom: "external" }, parentThreadId: null, accepted: true },
-    { source: { custom: "external" }, parentThreadId: "parent", accepted: false },
-    { source: { subAgent: "review" as const }, parentThreadId: null, accepted: false },
+    { source: "cli" as const, parentThreadId: null, accepted: true, discoverable: true },
+    { source: "cli" as const, parentThreadId: "parent", accepted: false, discoverable: false },
+    { source: { custom: "external" }, parentThreadId: null, accepted: true, discoverable: false },
+    {
+      source: { custom: "external" },
+      parentThreadId: "parent",
+      accepted: false,
+      discoverable: false,
+    },
+    {
+      source: { subAgent: "review" as const },
+      parentThreadId: null,
+      accepted: false,
+      discoverable: false,
+    },
   ])(
     "uses parent and source metadata for catalog and exact import: %j",
-    async ({ source, parentThreadId, accepted }) => {
+    async ({ source, parentThreadId, accepted, discoverable }) => {
       class SourceTransport extends RecordingTransport {
         async request(request: Parameters<RecordingTransport["request"]>[0]) {
           const thread = codexThreadFixture({
@@ -86,7 +120,11 @@ describe("external Codex sessions", () => {
             status: { type: "idle" },
           });
           if (request.method === "thread/list")
-            return { data: [thread], nextCursor: null, backwardsCursor: null };
+            return {
+              data: matchesNativeSourceFilter(source, request.params.sourceKinds) ? [thread] : [],
+              nextCursor: null,
+              backwardsCursor: null,
+            };
           if (request.method === "thread/read") return { thread };
           return super.request(request);
         }
@@ -98,7 +136,7 @@ describe("external Codex sessions", () => {
         signal: new AbortController().signal,
       });
       expect(page.sessions.map((session) => session.externalSessionId)).toEqual(
-        accepted ? [ref.externalSessionId] : [],
+        discoverable ? [ref.externalSessionId] : [],
       );
       const preparation = adapter.prepareExternalSession({
         ...ref,

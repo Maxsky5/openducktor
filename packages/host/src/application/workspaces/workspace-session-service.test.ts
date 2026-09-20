@@ -331,7 +331,14 @@ describe("host-owned Workspace Session lifecycle", () => {
         ),
       ).rejects.toThrow("Cannot delete protected branch");
       await expect(
-        Effect.runPromise(removeWorkspaceSessionWorktree(dependencies, protectedConfig, target)),
+        Effect.runPromise(
+          removeWorkspaceSessionWorktree(
+            dependencies,
+            protectedConfig,
+            target,
+            target.workingDirectory,
+          ),
+        ),
       ).rejects.toThrow("Cannot delete protected branch");
       await expect(
         Effect.runPromise(

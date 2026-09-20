@@ -71,6 +71,7 @@ export const removeWorkspaceSessionWorktree = (
   dependencies: WorkspaceSessionTargetDependencies,
   config: RepoConfig,
   target: WorktreeTarget,
+  worktreePath: string,
 ) =>
   Effect.gen(function* () {
     const { git } = dependencies;
@@ -82,14 +83,14 @@ export const removeWorkspaceSessionWorktree = (
       });
     yield* validateRemovableBranch(dependencies, config, target.branchName);
     // An explicit archive retry can finish a previous partial cleanup.
-    if (yield* git.isRegisteredWorktree(repoPath, target.workingDirectory)) {
-      const current = yield* git.getCurrentBranch(target.workingDirectory);
+    if (yield* git.isRegisteredWorktree(repoPath, worktreePath)) {
+      const current = yield* git.getCurrentBranch(worktreePath);
       if (current.detached || current.name !== target.branchName)
         return yield* new HostValidationError({
           field: "branchName",
           message: "The worktree branch changed. Reopen Archive chat to confirm it.",
         });
-      yield* git.removeWorktree(repoPath, target.workingDirectory, true);
+      yield* git.removeWorktree(repoPath, worktreePath, true);
     }
     if (yield* git.referenceExists(repoPath, `refs/heads/${target.branchName}`)) {
       yield* git.deleteLocalBranch(repoPath, target.branchName, true);
@@ -178,7 +179,7 @@ export const withRestoredWorkspaceSessionWorktree = <A, E>(
       if (Exit.isSuccess(result)) return result.value;
       if (!acquired) return yield* Effect.failCause(result.cause);
       const cleanup = yield* Effect.exit(
-        removeWorkspaceSessionWorktree(dependencies, config, target),
+        removeWorkspaceSessionWorktree(dependencies, config, target, target.workingDirectory),
       );
       if (Exit.isFailure(cleanup)) {
         return yield* new HostOperationError({
