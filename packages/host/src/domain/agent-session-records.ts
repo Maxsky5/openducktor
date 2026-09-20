@@ -1,7 +1,11 @@
-import { type AgentSessionRecord, agentSessionRecordSchema } from "@openducktor/contracts";
+import {
+  type AgentSessionModelSelection,
+  type AgentSessionRecord,
+  agentSessionRecordSchema,
+} from "@openducktor/contracts";
 
 type CompactableAgentSessionModelSelection =
-  | (Omit<NonNullable<AgentSessionRecord["selectedModel"]>, "runtimeKind"> & {
+  | (Omit<AgentSessionModelSelection, "runtimeKind"> & {
       runtimeKind: string;
     })
   | null;

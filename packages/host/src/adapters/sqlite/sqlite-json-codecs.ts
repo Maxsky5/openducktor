@@ -1,4 +1,8 @@
-import { type AgentSessionRecord, agentSessionRecordSchema } from "@openducktor/contracts";
+import {
+  type AgentSessionModelSelection,
+  type AgentSessionRecord,
+  agentSessionRecordSchema,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import { z, type JSONType } from "zod";
 import { normalizeLabels } from "../../domain/task/task-labels";
@@ -117,6 +121,36 @@ export const labelsFromRow = (row: TaskRow): Effect.Effect<string[], SqliteTaskS
     },
     "labels_json",
     row.id,
+  );
+
+const withoutUndefinedSelectionFields = (
+  selectedModel: AgentSessionModelSelection | null,
+): AgentSessionModelSelection | null => {
+  if (selectedModel === null) {
+    return null;
+  }
+  const selection: AgentSessionModelSelection = {
+    runtimeKind: selectedModel.runtimeKind,
+    providerId: selectedModel.providerId,
+    modelId: selectedModel.modelId,
+  };
+  if (selectedModel.variant !== undefined) {
+    selection.variant = selectedModel.variant;
+  }
+  if (selectedModel.profileId !== undefined) {
+    selection.profileId = selectedModel.profileId;
+  }
+  return selection;
+};
+
+export const encodeAgentSessionBatch = (sessions: AgentSessionRecord[]): string =>
+  encodeJson(
+    jsonValueSchema.parse(
+      sessions.map((session) => ({
+        ...session,
+        selectedModel: withoutUndefinedSelectionFields(session.selectedModel),
+      })),
+    ),
   );
 
 export const agentSessionsFromRow = (
