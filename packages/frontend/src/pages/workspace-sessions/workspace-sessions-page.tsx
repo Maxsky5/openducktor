@@ -1,24 +1,11 @@
-import { DndContext, DragOverlay } from "@dnd-kit/core";
-import { horizontalListSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, Check, History, LoaderCircle, Plus } from "lucide-react";
-import { type ComponentProps, type ReactElement, useEffect, useState } from "react";
+import { type ReactElement, useEffect, useState } from "react";
 import { useLocation, useNavigationType, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
-import {
-  horizontalTabDropAnimation,
-  horizontalTabSortTransition,
-  useHorizontalSortableTabs,
-} from "@/components/ui/use-horizontal-sortable-tabs";
-import {
-  StudioTabStrip,
-  StudioTabsList,
-  StudioTabTrigger,
-} from "@/components/features/agents/studio-tab-strip";
-import { studioTabShellClassName } from "@/components/features/agents/studio-tab-styles";
+import { BrowserTabs, BrowserTabsBar } from "@/components/ui/browser-tabs";
 import { isAgentSessionActivityActive } from "@/lib/agent-session-activity-state";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { errorMessage } from "@/lib/errors";
@@ -52,35 +39,6 @@ import { useWorkspaceSessionNavigation } from "./use-workspace-session-navigatio
 import { useWorkspaceSessionSelection } from "./use-workspace-session-selection";
 import { useWorkspaceSessionTabOrder } from "./use-workspace-session-tab-order";
 
-type WorkspaceSessionTabProps = {
-  record: WorkspaceSession;
-  selected: boolean;
-  pending: boolean;
-  confirming: boolean;
-  archiving: boolean;
-  onArchive?: (record: WorkspaceSession) => void;
-  onSelect?: (id: string) => void;
-  shouldSuppressSelection?: (id: string) => boolean;
-};
-
-function WorkspaceSessionTab(props: WorkspaceSessionTabProps): ReactElement {
-  const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: props.record.id,
-    transition: horizontalTabSortTransition,
-  });
-  return (
-    <WorkspaceSessionTabView
-      {...props}
-      shellProps={{
-        ...listeners,
-        ref: setNodeRef,
-        className: isDragging ? "opacity-0" : undefined,
-        style: { transform: CSS.Transform.toString(transform), transition },
-      }}
-    />
-  );
-}
-
 const archiveButtonLabel = (title: string, confirming: boolean, archiving: boolean): string => {
   if (archiving) return `Archiving ${title}`;
   if (confirming) return `Confirm stop and archive ${title}`;
@@ -93,17 +51,7 @@ const iconSwapClassName = (visible: boolean): string =>
     visible ? "scale-100 opacity-100 blur-[0px]" : "scale-25 opacity-0 blur-[2px]",
   );
 
-function WorkspaceSessionTabView({
-  record,
-  selected,
-  pending,
-  confirming,
-  archiving,
-  onArchive,
-  onSelect,
-  shouldSuppressSelection,
-  shellProps,
-}: WorkspaceSessionTabProps & { shellProps?: ComponentProps<"div"> }): ReactElement {
+function WorkspaceSessionTabContent({ record }: { record: WorkspaceSession }): ReactElement {
   const { repositorySessions } = useAgentActivitySnapshot();
   const identity = workspaceSessionIdentity(record);
   const identityKey = identity ? agentSessionIdentityKey(identity) : null;
@@ -116,99 +64,67 @@ function WorkspaceSessionTabView({
   const statusLabel = statusAvailable ? (activity ?? "idle") : "Status unavailable";
   const running = isAgentSessionActivityActive(activity);
   const title = workspaceSessionTitle(record);
-  const archiveLabel = archiveButtonLabel(title, confirming, archiving);
   return (
-    <div
-      {...shellProps}
-      className={cn(studioTabShellClassName(selected), "touch-none", shellProps?.className)}
-      data-workspace-session-tab-id={record.id}
-    >
-      <StudioTabTrigger
-        value={record.id}
-        title={title}
-        onMouseDown={(event) => event.preventDefault()}
-        onMouseUp={(event) => {
-          if (shouldSuppressSelection?.(record.id)) {
-            event.preventDefault();
-            event.stopPropagation();
-            return;
-          }
-          onSelect?.(record.id);
-        }}
-      >
-        <span
-          aria-label={statusLabel}
-          className={cn(
-            "mx-1 size-2 shrink-0 rounded-full bg-input",
-            running && "bg-status-running",
-            activity === "waiting_input" && "bg-warning-accent",
-            activity === "error" && "bg-destructive",
-          )}
-        />
-        <span className="max-w-48 truncate">{title}</span>
-      </StudioTabTrigger>
-      <Button
-        variant="ghost"
-        size="icon"
+    <>
+      <span
+        aria-label={statusLabel}
         className={cn(
-          "relative mr-1 size-6 shrink-0 text-muted-foreground opacity-60 group-hover:opacity-100 focus-visible:opacity-100 data-[active=true]:opacity-100",
-          confirming && "text-foreground opacity-100",
-          archiving && "text-foreground disabled:opacity-100",
+          "mx-1 size-2 shrink-0 rounded-full bg-input",
+          running && "bg-status-running",
+          activity === "waiting_input" && "bg-warning-accent",
+          activity === "error" && "bg-destructive",
         )}
-        data-active={selected}
-        aria-label={archiveLabel}
-        aria-busy={archiving}
-        title={archiveLabel}
-        disabled={pending}
-        onMouseDown={(event) => event.stopPropagation()}
-        onPointerDown={(event) => event.stopPropagation()}
-        onClick={() => onArchive?.(record)}
-      >
-        <span className="grid">
-          <Archive aria-hidden="true" className={iconSwapClassName(!confirming && !archiving)} />
-          <Check aria-hidden="true" className={iconSwapClassName(confirming && !archiving)} />
-          <LoaderCircle
-            aria-hidden="true"
-            className={cn(iconSwapClassName(archiving), "motion-safe:animate-spin")}
-          />
-        </span>
-      </Button>
-    </div>
+      />
+      <span className="max-w-48 truncate">{title}</span>
+    </>
+  );
+}
+
+function WorkspaceSessionTabArchiveAction({
+  record,
+  selected,
+  pending,
+  confirming,
+  archiving,
+  onArchive,
+}: {
+  record: WorkspaceSession;
+  selected: boolean;
+  pending: boolean;
+  confirming: boolean;
+  archiving: boolean;
+  onArchive: (record: WorkspaceSession) => void;
+}): ReactElement {
+  const archiveLabel = archiveButtonLabel(workspaceSessionTitle(record), confirming, archiving);
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className={cn(
+        "relative mr-1 size-6 shrink-0 text-muted-foreground opacity-60 group-hover:opacity-100 focus-visible:opacity-100 data-[active=true]:opacity-100",
+        confirming && "text-foreground opacity-100",
+        archiving && "text-foreground disabled:opacity-100",
+      )}
+      data-active={selected}
+      aria-label={archiveLabel}
+      aria-busy={archiving}
+      title={archiveLabel}
+      disabled={pending}
+      onClick={() => onArchive(record)}
+    >
+      <span className="grid">
+        <Archive aria-hidden="true" className={iconSwapClassName(!confirming && !archiving)} />
+        <Check aria-hidden="true" className={iconSwapClassName(confirming && !archiving)} />
+        <LoaderCircle
+          aria-hidden="true"
+          className={cn(iconSwapClassName(archiving), "motion-safe:animate-spin")}
+        />
+      </span>
+    </Button>
   );
 }
 
 type WorkspaceSessionsProps = { workspace: ActiveWorkspace };
-
-function WorkspaceSessionTabDragPreview({
-  record,
-  selectedId,
-  pending,
-  confirming,
-  archiving,
-}: {
-  record: WorkspaceSession | undefined;
-  selectedId: string | null;
-  pending: boolean;
-  confirming: boolean;
-  archiving: boolean;
-}): ReactElement | null {
-  if (!record) return null;
-  return (
-    <div aria-hidden="true" inert>
-      <Tabs value={selectedId ?? ""}>
-        <StudioTabsList>
-          <WorkspaceSessionTabView
-            record={record}
-            selected={record.id === selectedId}
-            pending={pending}
-            confirming={confirming}
-            archiving={archiving}
-          />
-        </StudioTabsList>
-      </Tabs>
-    </div>
-  );
-}
 
 function WorkspaceSessionTabs({
   sessions,
@@ -246,46 +162,29 @@ function WorkspaceSessionTabs({
     setConfirmingId(null);
     onArchive(record);
   };
-  const tabIds = sessions.map((record) => record.id);
-  const drag = useHorizontalSortableTabs({ itemIds: tabIds, onReorder });
-  const activeDragRecord = sessions.find((record) => record.id === drag.activeId);
   return (
-    <DndContext
-      sensors={drag.sensors}
-      collisionDetection={drag.collisionDetection}
-      measuring={drag.measuring}
-      modifiers={drag.modifiers}
-      onDragStart={drag.handleDragStart}
-      onDragEnd={drag.handleDragEnd}
-      onDragCancel={drag.handleDragCancel}
-    >
-      <SortableContext items={tabIds} strategy={horizontalListSortingStrategy}>
-        <StudioTabsList aria-label="Workspace session tabs">
-          {sessions.map((record) => (
-            <WorkspaceSessionTab
-              key={record.id}
-              record={record}
-              selected={record.id === selectedId}
-              pending={pending}
-              confirming={confirmingId === record.id}
-              archiving={archivingId === record.id}
-              onSelect={onSelect}
-              onArchive={handleArchive}
-              shouldSuppressSelection={drag.shouldSuppressSelection}
-            />
-          ))}
-        </StudioTabsList>
-      </SortableContext>
-      <DragOverlay dropAnimation={horizontalTabDropAnimation} zIndex={40}>
-        <WorkspaceSessionTabDragPreview
-          record={activeDragRecord}
-          selectedId={selectedId}
-          pending={pending}
-          confirming={confirmingId === activeDragRecord?.id}
-          archiving={archivingId === activeDragRecord?.id}
-        />
-      </DragOverlay>
-    </DndContext>
+    <BrowserTabs
+      aria-label="Workspace session tabs"
+      selectedValue={selectedId}
+      onSelect={onSelect}
+      onReorder={onReorder}
+      items={sessions.map((record) => ({
+        value: record.id,
+        content: <WorkspaceSessionTabContent record={record} />,
+        triggerProps: { title: workspaceSessionTitle(record) },
+        attributes: { "data-workspace-session-tab-id": record.id },
+        action: (
+          <WorkspaceSessionTabArchiveAction
+            record={record}
+            selected={record.id === selectedId}
+            pending={pending}
+            confirming={confirmingId === record.id}
+            archiving={archivingId === record.id}
+            onArchive={handleArchive}
+          />
+        ),
+      }))}
+    />
   );
 }
 
@@ -381,7 +280,8 @@ function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactElement 
       onValueChange={(sessionId) => updateNavigation({ sessionId }, false)}
       className="h-full min-h-0 min-w-0 gap-0 overflow-hidden"
     >
-      <StudioTabStrip
+      <BrowserTabsBar
+        className="agent-studio-titlebar-safe-area electron-titlebar-safe-area bg-studio-chrome"
         createAction={
           <Button
             variant="ghost"
@@ -416,7 +316,7 @@ function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactElement 
           onSelect={(sessionId) => updateNavigation({ sessionId }, false)}
           onArchive={handleTabArchive}
         />
-      </StudioTabStrip>
+      </BrowserTabsBar>
       <WorkspaceSessionReadModelNotice />
       {archiveTarget === null && <WorkspaceSessionArchiveError error={archive.error} />}
       {selected ? (

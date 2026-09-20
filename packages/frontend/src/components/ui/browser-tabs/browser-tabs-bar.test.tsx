@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { act, render, waitFor } from "@testing-library/react";
 import { Tabs } from "@/components/ui/tabs";
-import { StudioTabStrip, StudioTabsList, StudioTabTrigger } from "./studio-tab-strip";
+import { BrowserTabs, BrowserTabsBar } from "./index";
 
 function setupStrip(
   initialValue: string,
@@ -25,26 +25,26 @@ function setupStrip(
   };
   const tree = (value: string, ids: string[]) => (
     <Tabs value={value}>
-      <StudioTabStrip scrollRef={setViewport} createAction={<button type="button">New tab</button>}>
-        <StudioTabsList>
-          {ids.map((id) => (
-            <div key={id}>
-              <StudioTabTrigger
-                value={id}
-                ref={(node) => {
-                  if (!node) return;
-                  node.getBoundingClientRect = () => {
-                    const [left, width] = positions.get(id)!;
-                    return new DOMRect(50 + left - viewport.scrollLeft, 20, width, 32);
-                  };
-                }}
-              >
-                {id}
-              </StudioTabTrigger>
-            </div>
-          ))}
-        </StudioTabsList>
-      </StudioTabStrip>
+      <BrowserTabsBar scrollRef={setViewport} createAction={<button type="button">New tab</button>}>
+        <BrowserTabs
+          selectedValue={value}
+          onSelect={() => {}}
+          onReorder={() => {}}
+          items={ids.map((id) => ({
+            value: id,
+            content: id,
+            triggerProps: {
+              ref: (node) => {
+                if (!node) return;
+                node.getBoundingClientRect = () => {
+                  const [left, width] = positions.get(id)!;
+                  return new DOMRect(50 + left - viewport.scrollLeft, 20, width, 32);
+                };
+              },
+            },
+          }))}
+        />
+      </BrowserTabsBar>
     </Tabs>
   );
   const view = render(tree(initialValue, initialIds));
@@ -55,7 +55,7 @@ function setupStrip(
   };
 }
 
-describe("StudioTabStrip active tab visibility", () => {
+describe("BrowserTabsBar active tab visibility", () => {
   test("reveals the initial active tab without moving vertically or taking focus", () => {
     const focused = document.activeElement;
     const view = setupStrip("last");

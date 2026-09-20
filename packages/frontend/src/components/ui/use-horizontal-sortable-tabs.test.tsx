@@ -1,9 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
 import { act, render } from "@testing-library/react";
 import type { ReactElement } from "react";
-import { useAgentStudioTaskTabReorderDrag } from "./use-agent-studio-task-tab-reorder-drag";
+import { useHorizontalSortableTabs } from "./use-horizontal-sortable-tabs";
 
-type HookValue = ReturnType<typeof useAgentStudioTaskTabReorderDrag>;
+type HookValue = ReturnType<typeof useHorizontalSortableTabs>;
 
 const dragStartEvent = (taskId: string): Parameters<HookValue["handleDragStart"]>[0] => ({
   active: { id: taskId },
@@ -27,9 +27,9 @@ const createHarness = ({
   let latest: HookValue | null = null;
 
   function TestComponent(): ReactElement {
-    latest = useAgentStudioTaskTabReorderDrag({
-      tabTaskIds,
-      onReorderTab,
+    latest = useHorizontalSortableTabs({
+      itemIds: tabTaskIds,
+      onReorder: onReorderTab,
     });
 
     return <div data-testid="task-tab-reorder-drag-harness" />;
@@ -52,7 +52,7 @@ const createHarness = ({
   };
 };
 
-describe("useAgentStudioTaskTabReorderDrag", () => {
+describe("useHorizontalSortableTabs", () => {
   test("reorders a tab before a target when dragged left", () => {
     const harness = createHarness({
       tabTaskIds: ["task-1", "task-2"],
@@ -102,25 +102,25 @@ describe("useAgentStudioTaskTabReorderDrag", () => {
       harness.getLatest().handleDragStart(dragStartEvent("task-2"));
     });
 
-    expect(harness.getLatest().activeTaskId).toBe("task-2");
+    expect(harness.getLatest().activeId).toBe("task-2");
 
     act(() => {
       harness.getLatest().handleDragCancel();
     });
 
-    expect(harness.getLatest().activeTaskId).toBeNull();
+    expect(harness.getLatest().activeId).toBeNull();
 
     act(() => {
       harness.getLatest().handleDragStart(dragStartEvent("task-2"));
     });
 
-    expect(harness.getLatest().activeTaskId).toBe("task-2");
+    expect(harness.getLatest().activeId).toBe("task-2");
 
     act(() => {
       harness.getLatest().handleDragEnd(dragEndEvent("task-2", null));
     });
 
-    expect(harness.getLatest().activeTaskId).toBeNull();
+    expect(harness.getLatest().activeId).toBeNull();
     harness.unmount();
   });
 });
