@@ -201,7 +201,7 @@ describe("useSettingsModalSaveOrchestration", () => {
     await harness.unmount();
   });
 
-  test("merges the latest persisted favorites into a full snapshot save", async () => {
+  test("merges independently saved fields into a full snapshot save", async () => {
     const snapshotDraft = createSnapshot();
     snapshotDraft.agentModelFavorites = [
       { runtimeKind: "claude", providerId: "anthropic", modelId: "stale" },
@@ -210,6 +210,7 @@ describe("useSettingsModalSaveOrchestration", () => {
     latestSnapshot.agentModelFavorites = [
       { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
     ];
+    latestSnapshot.kanban.taskCardView = "compact";
     const saveSettingsSnapshot = mock(async () => {});
     const harness = createHookHarness(
       createArgs(
@@ -230,6 +231,38 @@ describe("useSettingsModalSaveOrchestration", () => {
     expect(saveSettingsSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({
         agentModelFavorites: latestSnapshot.agentModelFavorites,
+        kanban: expect.objectContaining({ taskCardView: "compact" }),
+      }),
+    );
+    await harness.unmount();
+  });
+
+  test("keeps a task card view changed in Settings", async () => {
+    const loadedSnapshot = createSnapshot();
+    const snapshotDraft = createSnapshot();
+    snapshotDraft.kanban.taskCardView = "compact";
+    const latestSnapshot = createSnapshot();
+    const saveSettingsSnapshot = mock(async () => {});
+    const harness = createHookHarness(
+      createArgs(
+        {
+          loadedSnapshot,
+          snapshotDraft,
+          loadSettingsSnapshot: mock(async () => latestSnapshot),
+          saveSettingsSnapshot,
+        },
+        { ...EMPTY_DIRTY_SECTIONS, kanban: true },
+      ),
+    );
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await state.submit();
+    });
+
+    expect(saveSettingsSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kanban: expect.objectContaining({ taskCardView: "compact" }),
       }),
     );
     await harness.unmount();

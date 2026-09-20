@@ -156,10 +156,15 @@ export const useSettingsModalSaveOrchestration = ({
         await saveGlobalGitConfig(saveReadyGit);
       } else {
         const latestSnapshot = await loadSettingsSnapshot();
+        const taskCardView =
+          loadedSnapshot && snapshotDraft.kanban.taskCardView === loadedSnapshot.kanban.taskCardView
+            ? latestSnapshot.kanban.taskCardView
+            : snapshotDraft.kanban.taskCardView;
         const saveReadySnapshot = prepareSettingsSnapshotForSave(
           {
             ...snapshotDraft,
             agentModelFavorites: latestSnapshot.agentModelFavorites,
+            kanban: { ...snapshotDraft.kanban, taskCardView },
           },
           { saveCustomAgentRoles: dirtySections.customAgentRoles },
         );
