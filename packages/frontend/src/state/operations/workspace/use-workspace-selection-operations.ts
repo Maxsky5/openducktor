@@ -94,6 +94,24 @@ const orderWorkspaceRecords = (
   return orderedRecords;
 };
 
+const restoreWorkspaceOrder = (
+  records: WorkspaceRecord[],
+  order: WorkspaceRecord[],
+): WorkspaceRecord[] => {
+  const recordsById = new Map(records.map((record) => [record.workspaceId, record]));
+  const orderedRecords = order.flatMap((record) => {
+    const currentRecord = recordsById.get(record.workspaceId);
+    return currentRecord ? [currentRecord] : [];
+  });
+
+  if (orderedRecords.length === records.length) {
+    return orderedRecords;
+  }
+
+  const orderedIds = new Set(orderedRecords.map((record) => record.workspaceId));
+  return [...orderedRecords, ...records.filter((record) => !orderedIds.has(record.workspaceId))];
+};
+
 const resolveActiveWorkspaceFromRecords = ({
   records,
   activeWorkspace,
@@ -275,6 +293,7 @@ export function useWorkspaceSelectionOperations({
 
   const reorderWorkspaces = useCallback(
     async (workspaceIds: string[]): Promise<void> => {
+      const switchVersion = workspaceSwitchVersionRef.current;
       const reorderVersion = ++workspaceReorderVersionRef.current;
       const previousRecords =
         queryClient.getQueryData<WorkspaceRecord[]>(workspaceQueryKeys.list()) ?? [];
@@ -287,7 +306,10 @@ export function useWorkspaceSelectionOperations({
       try {
         const records = await hostClient.workspaceReorder(workspaceIds);
 
-        if (workspaceReorderVersionRef.current === reorderVersion) {
+        if (
+          workspaceSwitchVersionRef.current === switchVersion &&
+          workspaceReorderVersionRef.current === reorderVersion
+        ) {
           applyWorkspaceRecords(records);
         }
       } catch (error) {
@@ -296,34 +318,15 @@ export function useWorkspaceSelectionOperations({
         });
 
         if (workspaceReorderVersionRef.current === reorderVersion) {
-          if (optimisticRecords) {
-            writeWorkspaceRecords(previousRecords);
-            const selectedWorkspace = resolveActiveWorkspaceFromRecords({
-              records: previousRecords,
-              activeWorkspace: activeWorkspaceRef.current,
-            });
-            setActiveWorkspace(selectedWorkspace);
-          }
-          return;
+          const currentRecords =
+            queryClient.getQueryData<WorkspaceRecord[]>(workspaceQueryKeys.list()) ?? [];
+          applyWorkspaceRecords(restoreWorkspaceOrder(currentRecords, previousRecords));
         }
 
-        try {
-          applyWorkspaceRecords(
-            await queryClient.fetchQuery({
-              ...workspaceListQueryOptions(hostClient),
-              staleTime: 0,
-            }),
-          );
-        } catch (refreshError) {
-          if (!isCancelledError(refreshError)) {
-            toast.error("Failed to reorder repositories, and workspace reload also failed", {
-              description: errorMessage(refreshError),
-            });
-          }
-        }
+        throw error;
       }
     },
-    [applyWorkspaceRecords, hostClient, queryClient, setActiveWorkspace, writeWorkspaceRecords],
+    [applyWorkspaceRecords, hostClient, queryClient, writeWorkspaceRecords],
   );
 
   const refreshWorkspaces = useCallback(async (): Promise<void> => {
@@ -365,7 +368,6 @@ export function useWorkspaceSelectionOperations({
   const selectWorkspace = useCallback(
     async (workspaceId: string): Promise<void> => {
       const switchVersion = ++workspaceSwitchVersionRef.current;
-      workspaceReorderVersionRef.current += 1;
 
       setIsSwitchingWorkspace(true);
 
@@ -398,7 +400,6 @@ export function useWorkspaceSelectionOperations({
       }
       workspaceLifecycleInFlightRef.current = true;
       workspaceSwitchVersionRef.current += 1;
-      workspaceReorderVersionRef.current += 1;
       setIsSwitchingWorkspace(true);
       try {
         const success = await run();

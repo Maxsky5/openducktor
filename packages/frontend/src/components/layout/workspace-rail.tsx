@@ -338,7 +338,7 @@ export function WorkspaceRail({
       return;
     }
 
-    void reorderWorkspaces(arrayMove(workspaceIds, draggedIndex, overIndex));
+    void reorderWorkspaces(arrayMove(workspaceIds, draggedIndex, overIndex)).catch(() => undefined);
   };
 
   return (

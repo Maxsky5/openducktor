@@ -4,11 +4,13 @@ import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { taskQueryKeys } from "../../queries/tasks";
+import { workspaceQueryKeys } from "../../queries/workspace";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useWorkspaceSelectionOperations } from "./use-workspace-selection-operations";
 import {
   createDeferred,
   createWorkspaceHostClient,
+  flush,
   workspace,
 } from "./workspace-hook-test-fixtures";
 import { IsolatedQueryWrapper } from "./workspace-hook-test-utils";
@@ -596,9 +598,11 @@ describe("use-workspace-selection-operations", () => {
       });
       await harness.waitFor((state) => state.workspaces.length === 3);
 
-      await harness.run(async (value) => {
-        await value.reorderWorkspaces(["repo-c", "repo-a", "repo-b"]);
-      });
+      await expect(
+        harness.run(async (value) => {
+          await value.reorderWorkspaces(["repo-c", "repo-a", "repo-b"]);
+        }),
+      ).rejects.toThrow("Reorder rejected");
       await harness.waitFor((state) => state.workspaces.at(0)?.workspaceId === "repo-a");
 
       expect(harness.getLatest().workspaces).toEqual([
@@ -615,7 +619,7 @@ describe("use-workspace-selection-operations", () => {
     }
   });
 
-  test("reloads the workspace list when a stale reorder fails after a switch", async () => {
+  test("restores the previous order locally when a stale reorder fails after a switch", async () => {
     const reorderStarted = createDeferred<void>();
     const reorderDeferred = createDeferred<ReturnType<typeof workspace>[]>();
     let listCalls = 0;
@@ -636,20 +640,18 @@ describe("use-workspace-selection-operations", () => {
       await harness.mount();
       await harness.waitFor((state) => state.workspaces.length === 2);
 
-      const pendingReorder = harness.run(async (value) => {
-        await value.reorderWorkspaces(["repo-b", "repo-a"]);
-      });
-      await reorderStarted.promise;
-
       await harness.run(async (value) => {
-        await value.selectWorkspace("repo-b");
-      });
+        const pendingReorder = value.reorderWorkspaces(["repo-b", "repo-a"]);
+        await reorderStarted.promise;
 
-      reorderDeferred.reject(new Error("Reorder rejected"));
-      await pendingReorder;
+        await value.selectWorkspace("repo-b");
+
+        reorderDeferred.reject(new Error("Reorder rejected"));
+        await expect(pendingReorder).rejects.toThrow("Reorder rejected");
+      });
       await harness.waitFor((state) => state.workspaces.at(0)?.workspaceId === "repo-a");
 
-      expect(listCalls).toBe(2);
+      expect(listCalls).toBe(1);
       expect(toastError).toHaveBeenCalledWith("Failed to reorder repositories", {
         description: "Reorder rejected",
       });
@@ -664,54 +666,95 @@ describe("use-workspace-selection-operations", () => {
     }
   });
 
-  test("does not report a failure when a newer switch cancels the stale reorder reload", async () => {
-    const reorderDeferred = createDeferred<ReturnType<typeof workspace>[]>();
-    const selectDeferred = createDeferred<ReturnType<typeof workspace>>();
-    const reloadDeferred = createDeferred<ReturnType<typeof workspace>[]>();
-    const reloadStarted = createDeferred<void>();
-    let listCalls = 0;
-    workspaceHost.workspaceList = mock(async () => {
-      listCalls += 1;
-      if (listCalls === 1) {
-        return [workspace("/repo-a", true), workspace("/repo-b")];
+  test("keeps a newer optimistic order when an earlier reorder fails", async () => {
+    const firstReorderStarted = createDeferred<void>();
+    const secondReorderStarted = createDeferred<void>();
+    const firstReorder = createDeferred<ReturnType<typeof workspace>[]>();
+    const secondReorder = createDeferred<ReturnType<typeof workspace>[]>();
+    let reorderCalls = 0;
+    workspaceHost.workspaceReorder = mock(async () => {
+      reorderCalls += 1;
+      if (reorderCalls === 1) {
+        firstReorderStarted.resolve();
+        return firstReorder.promise;
       }
-      reloadStarted.resolve();
-      return reloadDeferred.promise;
+
+      secondReorderStarted.resolve();
+      return secondReorder.promise;
     });
-    workspaceHost.workspaceReorder = mock(async () => reorderDeferred.promise);
-    workspaceHost.workspaceSelect = mock(async () => selectDeferred.promise);
+    workspaceHost.workspaceList = mock(async () => [
+      workspace("/repo-a", true),
+      workspace("/repo-b"),
+    ]);
     const toastError = spyOn(toast, "error").mockImplementation(() => "");
     const harness = createRepoSelectionHarness("/repo-a");
 
     try {
       await harness.mount();
       await harness.waitFor((state) => state.workspaces.length === 2);
+      const queryClient = harness.getQueryClient();
+      const readWorkspaceList = (): WorkspaceRecord[] | undefined =>
+        queryClient.getQueryData<WorkspaceRecord[]>(workspaceQueryKeys.list());
 
       await harness.run(async (value) => {
-        const pendingReorder = value.reorderWorkspaces(["repo-b", "repo-a"]);
-        const pendingSwitch = value.selectWorkspace("repo-b");
+        const pendingFirst = value.reorderWorkspaces(["repo-b", "repo-a"]);
+        const firstSettled = pendingFirst.catch(() => undefined);
+        await firstReorderStarted.promise;
+        expect(readWorkspaceList()).toEqual([workspace("/repo-b"), workspace("/repo-a", true)]);
 
-        reorderDeferred.reject(new Error("Reorder rejected"));
-        await reloadStarted.promise;
-        expect(listCalls).toBe(2);
+        const pendingSecond = value.reorderWorkspaces(["repo-a", "repo-b"]);
+        await secondReorderStarted.promise;
+        expect(readWorkspaceList()).toEqual([workspace("/repo-a", true), workspace("/repo-b")]);
 
-        selectDeferred.resolve(workspace("/repo-b", true));
-        await pendingSwitch;
-        await pendingReorder;
+        firstReorder.reject(new Error("Reorder rejected"));
+        await expect(pendingFirst).rejects.toThrow("Reorder rejected");
+        expect(readWorkspaceList()).toEqual([workspace("/repo-a", true), workspace("/repo-b")]);
+        expect(toastError).toHaveBeenCalledTimes(1);
+
+        secondReorder.resolve([workspace("/repo-a", true), workspace("/repo-b")]);
+        await pendingSecond;
+        await firstSettled;
       });
 
-      expect(toastError).toHaveBeenCalledTimes(1);
-      expect(toastError).toHaveBeenCalledWith("Failed to reorder repositories", {
-        description: "Reorder rejected",
-      });
       expect(harness.getLatest().workspaces).toEqual([
-        workspace("/repo-b", true),
-        workspace("/repo-a"),
+        workspace("/repo-a", true),
+        workspace("/repo-b"),
       ]);
     } finally {
-      selectDeferred.resolve(workspace("/repo-b", true));
-      reorderDeferred.reject(new Error("Reorder rejected"));
-      reloadDeferred.resolve([workspace("/repo-a", true)]);
+      firstReorder.reject(new Error("Reorder rejected"));
+      secondReorder.resolve([workspace("/repo-a", true), workspace("/repo-b")]);
+      await harness.unmount();
+      toastError.mockRestore();
+    }
+  });
+
+  test("does not report a workspace load failure when a switch cancels the read", async () => {
+    const listStarted = createDeferred<void>();
+    const listDeferred = createDeferred<ReturnType<typeof workspace>[]>();
+    workspaceHost.workspaceList = mock(async () => {
+      listStarted.resolve();
+      return listDeferred.promise;
+    });
+    workspaceHost.workspaceSelect = mock(async () => workspace("/repo-b", true));
+    const toastError = spyOn(toast, "error").mockImplementation(() => "");
+    const harness = createRepoSelectionHarness("/repo-a");
+
+    try {
+      await harness.mount();
+      await listStarted.promise;
+
+      await harness.run(async (value) => {
+        await value.selectWorkspace("repo-b");
+      });
+      await flush();
+
+      const listState = harness.getQueryClient().getQueryState(workspaceQueryKeys.list());
+      expect(listState?.fetchStatus).toBe("idle");
+      expect(listState?.error).toBeTruthy();
+      expect(harness.getLatest().workspaceLoadError).toBeNull();
+      expect(toastError).not.toHaveBeenCalled();
+    } finally {
+      listDeferred.resolve([workspace("/repo-a"), workspace("/repo-b", true)]);
       await harness.unmount();
       toastError.mockRestore();
     }
