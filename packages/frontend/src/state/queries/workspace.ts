@@ -126,10 +126,6 @@ export const writeWorkspaceListToQuery = (
     },
     { revert: false },
   );
-  if (Array.isArray(recordsOrUpdater)) {
-    queryClient.setQueryData<WorkspaceRecord[]>(workspaceQueryKeys.list(), recordsOrUpdater);
-    return;
-  }
   queryClient.setQueryData<WorkspaceRecord[]>(workspaceQueryKeys.list(), recordsOrUpdater);
 };
 
@@ -147,13 +143,9 @@ export const writeWorkspaceCatalogToQuery = (
   queryClient.setQueryData<WorkspaceCatalog>(workspaceQueryKeys.catalog(), catalog);
 };
 
-export const markWorkspaceCachesChanged = async (queryClient: QueryClient): Promise<void> => {
-  await queryClient.invalidateQueries({
-    queryKey: workspaceQueryKeys.list(),
-  });
-  await queryClient.invalidateQueries({
-    queryKey: workspaceQueryKeys.catalog(),
-  });
+export const invalidateWorkspaceSettingsSnapshot = async (
+  queryClient: QueryClient,
+): Promise<void> => {
   await queryClient.invalidateQueries({
     queryKey: workspaceQueryKeys.settingsSnapshot(),
     exact: true,
@@ -165,16 +157,39 @@ export const markWorkspaceCachesChanged = async (queryClient: QueryClient): Prom
   });
 };
 
+export const invalidateWorkspaceCaches = async (queryClient: QueryClient): Promise<void> => {
+  await queryClient.invalidateQueries({
+    queryKey: workspaceQueryKeys.list(),
+  });
+  await queryClient.invalidateQueries({
+    queryKey: workspaceQueryKeys.catalog(),
+  });
+  await invalidateWorkspaceSettingsSnapshot(queryClient);
+};
+
 const queryKeyHasIdentity = (queryKey: readonly unknown[], identity: string): boolean =>
   JSON.stringify(queryKey).includes(JSON.stringify(identity));
+
+const sharedWorkspaceQueryKeys = new Set([
+  JSON.stringify(workspaceQueryKeys.list()),
+  JSON.stringify(workspaceQueryKeys.catalog()),
+]);
 
 export const dropWorkspaceQueries = (
   queryClient: QueryClient,
   identity: { repoPath: string; workspaceId: string },
 ): void => {
-  const matchesRemovedWorkspace = (query: { queryKey: readonly unknown[] }): boolean =>
-    queryKeyHasIdentity(query.queryKey, identity.workspaceId) ||
-    queryKeyHasIdentity(query.queryKey, identity.repoPath);
+  const matchesRemovedWorkspace = (query: { queryKey: readonly unknown[] }): boolean => {
+    const serializedKey = JSON.stringify(query.queryKey);
+    if (sharedWorkspaceQueryKeys.has(serializedKey)) {
+      return false;
+    }
+
+    return (
+      queryKeyHasIdentity(query.queryKey, identity.workspaceId) ||
+      queryKeyHasIdentity(query.queryKey, identity.repoPath)
+    );
+  };
   void queryClient.cancelQueries({ predicate: matchesRemovedWorkspace }, { revert: false });
   queryClient.removeQueries({ predicate: matchesRemovedWorkspace });
 };

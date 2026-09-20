@@ -601,13 +601,20 @@ describe("use-workspace-operations", () => {
     const workspaceList = mock(async (): Promise<WorkspaceRecord[]> => [
       workspace("/repo-a", true),
     ]);
+    const workspaceCatalogGet = mock(async () => ({
+      openWorkspaces: [workspace("/repo-a", true)],
+      closedWorkspaces: [],
+      incompleteRemovals: [],
+    }));
 
     const original = {
       workspaceSelect: workspaceHost.workspaceSelect,
       workspaceList: workspaceHost.workspaceList,
+      workspaceCatalogGet: workspaceHost.workspaceCatalogGet,
     };
     workspaceHost.workspaceSelect = workspaceSelect;
     workspaceHost.workspaceList = workspaceList;
+    workspaceHost.workspaceCatalogGet = workspaceCatalogGet;
 
     const harness = createHookHarness({
       activeRepo: null,
@@ -629,7 +636,6 @@ describe("use-workspace-operations", () => {
 
       const selectResult = await withTimeout(selectPromise, 20);
       expect(selectResult).toBeUndefined();
-      expect(workspaceList).toHaveBeenCalled();
       await selectPromise;
       await Promise.resolve();
 
@@ -637,14 +643,17 @@ describe("use-workspace-operations", () => {
       expect(clearTaskData).toHaveBeenCalled();
       expect(clearActiveTaskStoreCheck).toHaveBeenCalled();
       expect(workspaceSelect).toHaveBeenCalledWith("repo-a");
+      expect(workspaceList).toHaveBeenCalledTimes(1);
+      expect(workspaceCatalogGet).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
       workspaceHost.workspaceSelect = original.workspaceSelect;
       workspaceHost.workspaceList = original.workspaceList;
+      workspaceHost.workspaceCatalogGet = original.workspaceCatalogGet;
     }
   });
 
-  test("selectWorkspace clears cached settings snapshot for next read", async () => {
+  test("selectWorkspace keeps the cached settings snapshot for the next read", async () => {
     const setActiveRepo = mock(() => {});
     const clearTaskData = mock(() => {});
     const clearActiveTaskStoreCheck = mock(() => {});
@@ -655,7 +664,8 @@ describe("use-workspace-operations", () => {
       workspace("/repo-a", true),
     );
     hostClient.workspaceList = mock(async (): Promise<WorkspaceRecord[]> => [
-      workspace("/repo-a", true),
+      workspace("/repo-old", true),
+      workspace("/repo-a"),
     ]);
     let latest: ReturnType<typeof useWorkspaceOperations> | null = null;
 
@@ -666,7 +676,7 @@ describe("use-workspace-operations", () => {
 
     const Harness = () => {
       latest = useWorkspaceOperations({
-        ...normalizeHookArgs({ activeRepo: null, setActiveRepo }),
+        ...normalizeHookArgs({ activeRepo: "/repo-old", setActiveRepo }),
         clearTaskData,
         clearActiveTaskStoreCheck,
         hostClient,
@@ -685,10 +695,6 @@ describe("use-workspace-operations", () => {
         expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(1);
       });
 
-      workspaceGetSettingsSnapshot.mockImplementationOnce(async () =>
-        settingsSnapshot(["/repo-old", "/repo-a"]),
-      );
-
       if (!latest) {
         throw new Error("Hook not mounted");
       }
@@ -696,10 +702,9 @@ describe("use-workspace-operations", () => {
       await act(async () => {
         await latest?.selectWorkspace("repo-a");
       });
+      await flush();
 
-      await waitFor(() => {
-        expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(2);
-      });
+      expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(1);
     } finally {
       rendered.unmount();
     }
@@ -955,7 +960,7 @@ describe("use-workspace-operations", () => {
     }
   });
 
-  test("keeps switched repo active when workspace refresh fails after a successful switch", async () => {
+  test("keeps switched repo active when the workspace list read fails", async () => {
     const workspaceSelect = mock(async (): Promise<WorkspaceRecord> => workspace("/repo-a", true));
     const workspaceList = mock(async (): Promise<WorkspaceRecord[]> => {
       throw new Error("workspace list failed");
@@ -1060,9 +1065,11 @@ describe("use-workspace-operations", () => {
       expect(latestActiveRepo === "/repo-a").toBe(true);
       expect(gitGetCurrentBranch).toHaveBeenCalledWith("/repo-a");
       expect(gitGetBranches).toHaveBeenCalledWith("/repo-a");
-      expect(toastError).toHaveBeenCalledWith("Repository switched, but workspace refresh failed", {
-        description: "workspace list failed",
-      });
+      expect(workspaceList).toHaveBeenCalledTimes(1);
+      expect(toastError).not.toHaveBeenCalledWith(
+        "Repository switched, but workspace refresh failed",
+        expect.anything(),
+      );
 
       if (!latest) {
         throw new Error("Hook not mounted");

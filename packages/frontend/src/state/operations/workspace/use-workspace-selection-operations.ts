@@ -6,17 +6,24 @@ import type {
   WorkspaceRecord,
   WorkspaceRemovalInput,
 } from "@openducktor/contracts";
-import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  isCancelledError,
+  type QueryClient,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import type { ActiveWorkspace, WorkspaceSelectionOperationsInput } from "@/types/state-slices";
 import {
   dropWorkspaceQueries,
+  invalidateWorkspaceCaches,
+  invalidateWorkspaceSettingsSnapshot,
   loadWorkspaceListFromQuery,
-  markWorkspaceCachesChanged,
   workspaceCatalogQueryOptions,
   workspaceListQueryOptions,
+  workspaceQueryKeys,
   writeWorkspaceCatalogToQuery,
   writeWorkspaceListToQuery,
 } from "../../queries/workspace";
@@ -87,6 +94,24 @@ const orderWorkspaceRecords = (
   return orderedRecords;
 };
 
+const restoreWorkspaceOrder = (
+  records: WorkspaceRecord[],
+  order: WorkspaceRecord[],
+): WorkspaceRecord[] => {
+  const recordsById = new Map(records.map((record) => [record.workspaceId, record]));
+  const orderedRecords = order.flatMap((record) => {
+    const currentRecord = recordsById.get(record.workspaceId);
+    return currentRecord ? [currentRecord] : [];
+  });
+
+  if (orderedRecords.length === records.length) {
+    return orderedRecords;
+  }
+
+  const orderedIds = new Set(orderedRecords.map((record) => record.workspaceId));
+  return [...orderedRecords, ...records.filter((record) => !orderedIds.has(record.workspaceId))];
+};
+
 const resolveActiveWorkspaceFromRecords = ({
   records,
   activeWorkspace,
@@ -110,9 +135,12 @@ const resolveActiveWorkspaceFromRecords = ({
   );
 };
 
+const ignoreCancelledError = (error: Error | null): Error | null =>
+  error && isCancelledError(error) ? null : error;
+
 const refreshAfterRemovalFailure = async (queryClient: QueryClient): Promise<void> => {
   try {
-    await markWorkspaceCachesChanged(queryClient);
+    await invalidateWorkspaceCaches(queryClient);
   } catch (error) {
     toast.error("Workspace removal failed, and workspace refresh also failed", {
       description: errorMessage(error),
@@ -139,14 +167,16 @@ export function useWorkspaceSelectionOperations({
   const workspaces = workspaceListQuery.data ?? [];
   const closedWorkspaces = workspaceCatalogQuery.data?.closedWorkspaces ?? [];
   const incompleteRemovals = workspaceCatalogQuery.data?.incompleteRemovals ?? [];
-  const workspaceQueryError = workspaceListQuery.error ?? workspaceCatalogQuery.error;
+  const workspaceQueryError =
+    ignoreCancelledError(workspaceListQuery.error) ??
+    ignoreCancelledError(workspaceCatalogQuery.error);
   const workspaceLoadError = workspaceQueryError
     ? new Error(errorMessage(workspaceQueryError), { cause: workspaceQueryError })
     : null;
-  const workspacesRef = useRef(workspaces);
 
-  activeWorkspaceRef.current = activeWorkspace;
-  workspacesRef.current = workspaces;
+  useLayoutEffect(() => {
+    activeWorkspaceRef.current = activeWorkspace;
+  }, [activeWorkspace]);
 
   const writeWorkspaceRecords = useCallback(
     (
@@ -171,30 +201,6 @@ export function useWorkspaceSelectionOperations({
       }
     },
     [clearActiveTaskStoreCheck, clearBranchData, clearTaskData],
-  );
-
-  const markWorkspaceActiveLocally = useCallback(
-    (workspaceId: string): void => {
-      writeWorkspaceRecords((current = []) => {
-        let hasMatch = false;
-        const next = current.map((workspace) => {
-          const isActive = workspace.workspaceId === workspaceId;
-          hasMatch ||= isActive;
-
-          if (workspace.isActive === isActive) {
-            return workspace;
-          }
-
-          return {
-            ...workspace,
-            isActive,
-          };
-        });
-
-        return hasMatch ? next : current;
-      });
-    },
-    [writeWorkspaceRecords],
   );
 
   const applyActiveWorkspaceFromRecords = useCallback(
@@ -287,8 +293,10 @@ export function useWorkspaceSelectionOperations({
 
   const reorderWorkspaces = useCallback(
     async (workspaceIds: string[]): Promise<void> => {
+      const switchVersion = workspaceSwitchVersionRef.current;
       const reorderVersion = ++workspaceReorderVersionRef.current;
-      const previousRecords = workspacesRef.current;
+      const previousRecords =
+        queryClient.getQueryData<WorkspaceRecord[]>(workspaceQueryKeys.list()) ?? [];
       const optimisticRecords = orderWorkspaceRecords(previousRecords, workspaceIds);
 
       if (optimisticRecords) {
@@ -298,28 +306,27 @@ export function useWorkspaceSelectionOperations({
       try {
         const records = await hostClient.workspaceReorder(workspaceIds);
 
-        if (workspaceReorderVersionRef.current === reorderVersion) {
+        if (
+          workspaceSwitchVersionRef.current === switchVersion &&
+          workspaceReorderVersionRef.current === reorderVersion
+        ) {
           applyWorkspaceRecords(records);
         }
       } catch (error) {
-        if (workspaceReorderVersionRef.current === reorderVersion) {
-          if (optimisticRecords) {
-            writeWorkspaceRecords(previousRecords);
-            const selectedWorkspace = resolveActiveWorkspaceFromRecords({
-              records: previousRecords,
-              activeWorkspace: activeWorkspaceRef.current,
-            });
-            setActiveWorkspace(selectedWorkspace);
-          }
+        toast.error("Failed to reorder repositories", {
+          description: errorMessage(error),
+        });
 
-          toast.error("Failed to reorder repositories", {
-            description: errorMessage(error),
-          });
-          throw error;
+        if (workspaceReorderVersionRef.current === reorderVersion) {
+          const currentRecords =
+            queryClient.getQueryData<WorkspaceRecord[]>(workspaceQueryKeys.list()) ?? [];
+          applyWorkspaceRecords(restoreWorkspaceOrder(currentRecords, previousRecords));
         }
+
+        throw error;
       }
     },
-    [applyWorkspaceRecords, hostClient, setActiveWorkspace, writeWorkspaceRecords],
+    [applyWorkspaceRecords, hostClient, queryClient, writeWorkspaceRecords],
   );
 
   const refreshWorkspaces = useCallback(async (): Promise<void> => {
@@ -329,10 +336,6 @@ export function useWorkspaceSelectionOperations({
     ]);
     applyWorkspaceRecords(data);
   }, [applyWorkspaceRecords, hostClient, queryClient]);
-
-  const refreshWorkspaceCachesAfterMutation = useCallback(async (): Promise<void> => {
-    await markWorkspaceCachesChanged(queryClient);
-  }, [queryClient]);
 
   const addWorkspace = useCallback(
     async (input: WorkspaceSelectionOperationsInput): Promise<void> => {
@@ -354,46 +357,31 @@ export function useWorkspaceSelectionOperations({
       }
       const workspace = await hostClient.workspaceAdd(workspaceInput);
       applyWorkspaceRecord(workspace);
-      await refreshWorkspaceCachesAfterMutation();
+      await invalidateWorkspaceSettingsSnapshot(queryClient);
       toast.success("Repository added", {
         description: workspace.repoPath,
       });
     },
-    [applyWorkspaceRecord, hostClient, refreshWorkspaceCachesAfterMutation],
+    [applyWorkspaceRecord, hostClient, queryClient],
   );
 
   const selectWorkspace = useCallback(
     async (workspaceId: string): Promise<void> => {
       const switchVersion = ++workspaceSwitchVersionRef.current;
-      workspaceReorderVersionRef.current += 1;
 
       setIsSwitchingWorkspace(true);
 
       try {
         const selectedWorkspace = await hostClient.workspaceSelect(workspaceId);
-        await refreshWorkspaceCachesAfterMutation();
 
         if (workspaceSwitchVersionRef.current === switchVersion) {
-          clearStateForWorkspaceTransition(selectedWorkspace);
-          setActiveWorkspace(selectedWorkspace);
-
-          try {
-            await refreshWorkspaces();
-          } catch (error) {
-            if (workspaceSwitchVersionRef.current === switchVersion) {
-              markWorkspaceActiveLocally(selectedWorkspace.workspaceId);
-              toast.error("Repository switched, but workspace refresh failed", {
-                description: errorMessage(error),
-              });
-            }
-          }
+          applyWorkspaceRecord(selectedWorkspace);
         }
       } catch (error) {
         if (workspaceSwitchVersionRef.current === switchVersion) {
           toast.error("Failed to switch repository", {
             description: errorMessage(error),
           });
-          setIsSwitchingWorkspace(false);
           throw error;
         }
       } finally {
@@ -402,14 +390,7 @@ export function useWorkspaceSelectionOperations({
         }
       }
     },
-    [
-      clearStateForWorkspaceTransition,
-      hostClient,
-      markWorkspaceActiveLocally,
-      refreshWorkspaceCachesAfterMutation,
-      refreshWorkspaces,
-      setActiveWorkspace,
-    ],
+    [applyWorkspaceRecord, hostClient],
   );
 
   const runLifecycleAction = useCallback(
@@ -419,14 +400,13 @@ export function useWorkspaceSelectionOperations({
       }
       workspaceLifecycleInFlightRef.current = true;
       workspaceSwitchVersionRef.current += 1;
-      workspaceReorderVersionRef.current += 1;
       setIsSwitchingWorkspace(true);
       try {
         const success = await run();
         try {
-          await refreshWorkspaceCachesAfterMutation();
+          await invalidateWorkspaceSettingsSnapshot(queryClient);
         } catch (error) {
-          toast.error("Workspace changed, but workspace refresh failed", {
+          toast.error("Workspace changed, but settings refresh failed", {
             description: errorMessage(error),
           });
         }
@@ -436,7 +416,7 @@ export function useWorkspaceSelectionOperations({
         setIsSwitchingWorkspace(false);
       }
     },
-    [refreshWorkspaceCachesAfterMutation],
+    [queryClient],
   );
 
   const closeWorkspace = useCallback(
