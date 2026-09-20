@@ -9,7 +9,10 @@ import {
   agentSessionTranscriptEventSchema,
   agentToolDataSchema,
 } from "./agent-session-event-schemas";
-import { agentSessionPendingQuestionRequestSchema } from "./agent-session-pending-schemas";
+import {
+  agentPendingRequestIdSchema,
+  agentSessionPendingQuestionRequestSchema,
+} from "./agent-session-pending-schemas";
 import {
   agentModelSelectionSchema,
   agentSessionLiveRefSchema,
@@ -43,8 +46,6 @@ export const agentSessionActivitySchema = z.enum([
   "idle",
 ]);
 export type AgentSessionActivity = z.infer<typeof agentSessionActivitySchema>;
-
-const agentPendingRequestIdSchema = nonEmptyStringSchema;
 
 export const agentSessionLivePendingApprovalRequestSchema = z
   .object({

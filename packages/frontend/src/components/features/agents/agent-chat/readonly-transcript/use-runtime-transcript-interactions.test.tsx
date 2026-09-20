@@ -51,6 +51,7 @@ const createTarget = (overrides: Partial<AgentSessionIdentity> = {}): AgentSessi
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   target: createTarget(),
+  hasLiveSession: true,
   pendingApprovalRequests: [],
   pendingQuestionRequests: [],
   historyQuestionRequests: [],
@@ -210,6 +211,54 @@ describe("useRuntimeTranscriptInteractions", () => {
       expect(answerAgentQuestion).toHaveBeenCalledWith(target, question, [["Staging"]], {
         kind: "repository",
       });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps a history-only question visible but disables its answer action", async () => {
+    const answerAgentQuestion = mock(async () => {});
+    const question = { ...createQuestionRequest("history-question"), blocking: false };
+    const harness = createHookHarness(
+      createBaseArgs({
+        hasLiveSession: false,
+        historyQuestionRequests: [question],
+        answerAgentQuestion,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      expect(harness.getLatest().pendingQuestionRequests).toEqual([question]);
+      expect(harness.getLatest().pendingQuestions.canSubmit).toBe(false);
+      await harness.run(async (state) => {
+        await state.pendingQuestions.onSubmit("history-question", [["A"]]);
+      });
+      expect(answerAgentQuestion).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("uses the live request when history has the same request id", async () => {
+    const historyQuestion = createQuestionRequest("shared-question");
+    const liveQuestion = {
+      ...historyQuestion,
+      responseSession: {
+        ...createTarget({ externalSessionId: "child-session" }),
+        sessionAssociation: { kind: "repository" as const },
+      },
+    };
+    const harness = createHookHarness(
+      createBaseArgs({
+        pendingQuestionRequests: [liveQuestion],
+        historyQuestionRequests: [historyQuestion],
+      }),
+    );
+
+    try {
+      await harness.mount();
+      expect(harness.getLatest().pendingQuestionRequests).toEqual([liveQuestion]);
     } finally {
       await harness.unmount();
     }

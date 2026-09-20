@@ -87,6 +87,34 @@ describe("background question projection", () => {
     });
   });
 
+  test("treats a user message without a marker as handling earlier questions", () => {
+    const pending = question("question-1");
+    const history: AgentSessionHistoryMessage[] = [
+      {
+        role: "assistant",
+        messageId: pending.requestId,
+        timestamp: "2026-09-19T10:00:00.000Z",
+        text: "Question one",
+        parts: [],
+        questionRequest: pending,
+      },
+      {
+        role: "user",
+        messageId: "answer-1",
+        timestamp: "2026-09-19T10:00:01.000Z",
+        text: "Continue",
+        displayParts: [{ kind: "text", text: "Continue" }],
+        state: "read",
+        parts: [],
+      },
+    ];
+
+    expect(projectBackgroundQuestions(history)).toEqual({
+      pendingQuestions: [],
+      handledQuestionIds: new Set([pending.requestId]),
+    });
+  });
+
   test("closes answered questions and keeps blocking questions", () => {
     const background = question("question-1");
     const blocking = { ...question("question-2"), blocking: true };

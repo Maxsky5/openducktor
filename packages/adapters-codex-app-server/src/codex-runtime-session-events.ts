@@ -29,8 +29,10 @@ import {
 import type { ActiveCodexTurn } from "./codex-app-server-shared";
 import {
   type CodexStreamingContext,
+  type CodexUserMessageEcho,
   type CompletedAgentMessage,
   emitCodexUserMessage,
+  expectCodexUserMessageEcho,
   handleCodexPendingNotifications,
 } from "./codex-app-server-streaming";
 import type { CodexThreadStatusSnapshot } from "./codex-app-server-threads";
@@ -168,7 +170,7 @@ export class CodexRuntimeSessionEvents {
     string,
     Map<string, Set<string>>
   >();
-  private readonly syntheticUserMessageTextsByThreadId = new Map<string, string[]>();
+  private readonly syntheticUserMessageEchoesByThreadId = new Map<string, CodexUserMessageEcho[]>();
   private readonly completedAgentMessagesByTurnKey = new Map<string, CompletedAgentMessage>();
   private readonly tokenUsageByTurnKey = new Map<string, CodexTokenUsageTotals>();
   private readonly modelByTurnKey = new Map<string, AgentModelSelection>();
@@ -431,7 +433,7 @@ export class CodexRuntimeSessionEvents {
       }
     }
     this.clearHandledStreamRequestKeys(externalSessionId, runtimeId);
-    this.syntheticUserMessageTextsByThreadId.delete(externalSessionId);
+    this.syntheticUserMessageEchoesByThreadId.delete(externalSessionId);
     this.latestTodosBySessionId.delete(externalSessionId);
     this.clearSessionDiffs(externalSessionId, runtimeId);
     this.contextUsage.clearSession(externalSessionId, runtimeId);
@@ -499,11 +501,15 @@ export class CodexRuntimeSessionEvents {
     }
   }
 
-  emitUserMessage(
+  expectUserMessageEcho(
     event: AcceptedAgentUserMessage,
     sourceParts: AgentUserMessagePart[],
-  ): AcceptedAgentUserMessage {
-    return emitCodexUserMessage(this.streamingContext(), event, sourceParts);
+  ): () => void {
+    return expectCodexUserMessageEcho(this.streamingContext(), event, sourceParts);
+  }
+
+  emitUserMessage(event: AcceptedAgentUserMessage): AcceptedAgentUserMessage {
+    return emitCodexUserMessage(this.streamingContext(), event);
   }
 
   private applyLearnedSubagentRoute(route: CodexSubagentRoute): void {
@@ -973,7 +979,7 @@ export class CodexRuntimeSessionEvents {
   private streamingContext(scopedSession?: CodexSessionState): CodexStreamingContext {
     return {
       activeTurnsBySessionId: this.deps.activeTurnsBySessionId,
-      syntheticUserMessageTextsByThreadId: this.syntheticUserMessageTextsByThreadId,
+      syntheticUserMessageEchoesByThreadId: this.syntheticUserMessageEchoesByThreadId,
       completedAgentMessagesByTurnKey: this.completedAgentMessagesByTurnKey,
       tokenUsageByTurnKey: this.tokenUsageByTurnKey,
       modelByTurnKey: this.modelByTurnKey,

@@ -84,13 +84,12 @@ describe("CodexAppServerAdapter streaming", () => {
       const questionItemId = '["request_user_input_async","async-question-1",0]';
       expect(events).toContainEqual(
         expect.objectContaining({
-          type: "assistant_message",
-          questionRequest: expect.objectContaining({
-            requestId: "async-question-1",
-            blocking: false,
-          }),
+          type: "question_required",
+          requestId: "async-question-1",
+          blocking: false,
         }),
       );
+      expect(events.some((event) => event.type === "assistant_message")).toBe(false);
       await expect(
         adapter.readSessionRuntimeSnapshot(codexSessionRuntimeRef("thread/start-runtime-live")),
       ).resolves.toMatchObject({
@@ -315,6 +314,107 @@ describe("CodexAppServerAdapter streaming", () => {
     }
   });
 
+  test("suppresses a native user echo that arrives before turn admission", async () => {
+    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+    const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });
+    await adapter.startSession(codexStartSessionInput());
+    const events: AgentEvent[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => events.push(event),
+    );
+
+    try {
+      const send = adapter.sendUserMessage({
+        ...codexUserMessageInput({
+          externalSessionId: "thread/start-runtime-live",
+          parts: [{ kind: "text", text: "Use staging" }],
+        }),
+        resolvedQuestionRequestIds: ["history-question"],
+      });
+      await flushCodexAdapterWork();
+
+      emitNotification({
+        method: "item/completed",
+        params: {
+          threadId: "thread/start-runtime-live",
+          turnId: "turn-live",
+          completedAtMs: 1_777_766_419_700,
+          item: codexUserMessageItemFixture({
+            id: "native-echo",
+            content: [{ type: "text", text: "Use staging", text_elements: [] }],
+          }),
+        },
+      });
+      await flushCodexAdapterWork();
+      expect(events.filter((event) => event.type === "user_message")).toEqual([]);
+
+      const transport = transports.get("runtime-live");
+      if (!transport) throw new Error("Expected the runtime transport.");
+      transport.turnStartDeferred.resolve({
+        turn: codexTurnFixture({ id: "turn-accepted", items: [], status: "inProgress" }),
+      });
+      const accepted = await send;
+      await flushCodexAdapterWork();
+
+      expect(events.filter((event) => event.type === "user_message")).toEqual([
+        expect.objectContaining({
+          messageId: accepted.messageId,
+          message: accepted.message,
+          resolvedQuestionRequestIds: ["history-question"],
+        }),
+      ]);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  test("shows a native user message after rejected admission drops its echo reservation", async () => {
+    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+    const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });
+    await adapter.startSession(codexStartSessionInput());
+    const events: AgentEvent[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => events.push(event),
+    );
+
+    try {
+      const send = adapter.sendUserMessage({
+        ...codexUserMessageInput({
+          externalSessionId: "thread/start-runtime-live",
+          parts: [{ kind: "text", text: "Use staging" }],
+        }),
+        resolvedQuestionRequestIds: ["history-question"],
+      });
+      await flushCodexAdapterWork();
+      const transport = transports.get("runtime-live");
+      if (!transport) throw new Error("Expected the runtime transport.");
+      transport.turnStartDeferred.reject(new Error("turn start rejected"));
+      await expect(send).rejects.toThrow("turn start rejected");
+
+      emitNotification({
+        method: "item/completed",
+        params: {
+          threadId: "thread/start-runtime-live",
+          turnId: "turn-live",
+          completedAtMs: 1_777_766_419_700,
+          item: codexUserMessageItemFixture({
+            id: "later-native-message",
+            content: [{ type: "text", text: "Use staging", text_elements: [] }],
+          }),
+        },
+      });
+      await flushCodexAdapterWork();
+
+      expect(events.filter((event) => event.type === "user_message")).toEqual([
+        expect.objectContaining({ messageId: "later-native-message", message: "Use staging" }),
+      ]);
+    } finally {
+      unsubscribe();
+    }
+  });
+
   test("includes the background question in its item/completed snapshot", async () => {
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
     const mutations: CodexLiveSessionMutation[] = [];
@@ -353,7 +453,7 @@ describe("CodexAppServerAdapter streaming", () => {
       await flushCodexAdapterWork();
 
       const mutation = mutations.findLast((candidate) =>
-        candidate.transcriptEvents.some((event) => event.type === "assistant_message"),
+        candidate.snapshots.some((snapshot) => snapshot.pendingQuestions.length > 0),
       );
       expect(mutation?.snapshots).toMatchObject([
         {

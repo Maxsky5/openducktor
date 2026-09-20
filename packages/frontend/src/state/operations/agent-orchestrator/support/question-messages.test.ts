@@ -70,6 +70,9 @@ describe("agent-orchestrator-question-messages", () => {
       throw new Error("Expected tool meta on latest message");
     }
     expect(latest.meta.metadata?.requestId).toBe("question-1");
+    expect(latest.meta.metadata?.questions).toEqual([
+      expect.objectContaining({ multiple: false, custom: false }),
+    ]);
     const answers = latest.meta.metadata?.answers;
     if (!Array.isArray(answers) || !Array.isArray(answers[0])) {
       throw new Error("Expected nested question answers in tool metadata.");

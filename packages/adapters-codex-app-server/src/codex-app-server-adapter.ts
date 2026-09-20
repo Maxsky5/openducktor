@@ -1201,15 +1201,15 @@ export class CodexAppServerAdapter
     }
   }
 
-  async replyQuestion(input: ReplyQuestionInput): Promise<void> {
+  async replyQuestion(input: ReplyQuestionInput): Promise<AgentEvent> {
     assertCodexRuntimePolicyBinding(input, "reply to Codex question");
     const session = this.policyBoundSession(
       input,
       { lookup: "reply to question for", context: "reply to question" },
       true,
     );
-    const reply = async (boundSession: CodexSessionState): Promise<void> => {
-      await this.replyLiveQuestion({
+    const reply = (boundSession: CodexSessionState): Promise<AgentEvent> => {
+      return this.replyLiveQuestion({
         runtimeId: boundSession.runtimeId,
         externalSessionId: input.externalSessionId,
         requestId: input.requestId,
@@ -1591,8 +1591,9 @@ export class CodexAppServerAdapter
         this.runtimeEvents.bindPendingInputToActiveTurn(externalSessionId, activeTurn),
       setSessionLiveStatus: (session, liveStatus) =>
         this.runtimeEvents.setSessionLiveStatus(session, liveStatus),
-      emitUserMessage: (event, sourceParts) =>
-        this.runtimeEvents.emitUserMessage(event, sourceParts),
+      expectUserMessageEcho: (event, sourceParts) =>
+        this.runtimeEvents.expectUserMessageEcho(event, sourceParts),
+      emitUserMessage: (event) => this.runtimeEvents.emitUserMessage(event),
       emitSessionEvent: (externalSessionId, event) =>
         this.emitSessionEvent(externalSessionId, event),
       codexPolicyForSession: (session) =>

@@ -57,6 +57,7 @@ export function useSessionTranscriptSurfaceModel({
   });
   const transcriptInteractions = useRuntimeTranscriptInteractions({
     target,
+    hasLiveSession: sessionHistory.interactionSession !== null,
     pendingApprovalRequests: visiblePendingInput.pendingApprovals,
     pendingQuestionRequests: visiblePendingInput.pendingQuestions,
     historyQuestionRequests: sessionHistory.session?.pendingQuestions ?? [],

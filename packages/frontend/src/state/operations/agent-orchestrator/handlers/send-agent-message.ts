@@ -209,12 +209,14 @@ const appendSendFailureNotice = (
 const upsertAcceptedUserMessage = (
   session: AgentSessionState,
   acceptedUserMessage: Awaited<ReturnType<AgentEnginePort["sendUserMessage"]>>,
-  resolvedQuestionRequestIds: readonly string[],
+  resolvedQuestionRequestIds: readonly string[] | undefined,
   updateSession: UpdateSession,
 ): void => {
+  const handledRequestIds =
+    acceptedUserMessage.resolvedQuestionRequestIds ?? resolvedQuestionRequestIds ?? [];
   updateSession(session, (current) => ({
     ...current,
-    ...closeBackgroundQuestions(current, resolvedQuestionRequestIds),
+    ...closeBackgroundQuestions(current, handledRequestIds),
     messages: upsertUserSessionMessage(current, toUserChatMessage(acceptedUserMessage)),
   }));
 };
@@ -305,9 +307,12 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
     const sendAttempt = isBusyQueuedSend
       ? undefined
       : markSessionRunningForSend(readySession, dependencies);
-    const resolvedQuestionRequestIds = readySession.pendingQuestions
-      .filter((request) => request.blocking === false)
-      .map((request) => request.requestId);
+    const resolvedQuestionRequestIds =
+      readySession.historyLoadState === "loaded"
+        ? readySession.pendingQuestions
+            .filter((request) => request.blocking === false)
+            .map((request) => request.requestId)
+        : undefined;
 
     try {
       const runtimeSessionRef = toBoundRuntimeSessionRef(
@@ -318,8 +323,10 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
       const sendInput: Parameters<typeof dependencies.adapter.sendUserMessage>[0] = {
         ...runtimeSessionRef,
         parts: normalizedParts,
-        resolvedQuestionRequestIds,
       };
+      if (resolvedQuestionRequestIds !== undefined) {
+        sendInput.resolvedQuestionRequestIds = resolvedQuestionRequestIds;
+      }
       if (readySession.selectedModel) {
         sendInput.model = readySession.selectedModel;
       }

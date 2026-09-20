@@ -8,7 +8,7 @@ import {
 } from "./agent-runtime-schemas";
 import {
   agentSessionPendingQuestionRequestSchema,
-  agentSessionQuestionItemSchema,
+  agentSessionPendingQuestionRequestFields,
 } from "./agent-session-pending-schemas";
 import {
   type AgentSessionLiveRef,
@@ -283,14 +283,8 @@ export type AgentTranscriptPendingApprovalRequest = z.infer<
   typeof inferredTranscriptPendingApprovalRequestSchema
 >;
 
-const transcriptPendingQuestionRequestFields = {
-  requestId: z.string(),
-  requestInstanceId: z.string().optional(),
-  questions: z.array(agentSessionQuestionItemSchema),
-  blocking: z.boolean().optional(),
-} satisfies ZodSchemaFields;
 const inferredTranscriptPendingQuestionRequestSchema = z
-  .object(transcriptPendingQuestionRequestFields)
+  .object(agentSessionPendingQuestionRequestFields)
   .strict();
 export type AgentTranscriptPendingQuestionRequest = z.infer<
   typeof inferredTranscriptPendingQuestionRequestSchema
@@ -388,7 +382,7 @@ const inferredAgentRuntimeEventSchema = z.discriminatedUnion("type", [
   }),
   transcriptEventSchema({
     type: z.literal("question_required"),
-    ...transcriptPendingQuestionRequestFields,
+    ...agentSessionPendingQuestionRequestFields,
     parentExternalSessionId: z.string().optional(),
     childExternalSessionId: z.string().optional(),
     subagentCorrelationKey: z.string().optional(),

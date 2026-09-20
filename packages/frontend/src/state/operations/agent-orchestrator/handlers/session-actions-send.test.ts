@@ -596,8 +596,10 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalSendUserMessage = adapter.sendUserMessage;
     const callOrder: string[] = [];
+    let sentInput: Parameters<typeof adapter.sendUserMessage>[0] | null = null;
     adapter.sendUserMessage = async (input) => {
       callOrder.push("send");
+      sentInput = input;
       return acceptedUserMessage(input);
     };
 
@@ -623,6 +625,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]);
 
       expect(callOrder).toEqual(["send"]);
+      expect(sentInput).not.toHaveProperty("resolvedQuestionRequestIds");
       expect(sessionMessagesToArray(getSession(sessionsRef))).toEqual([
         expect.objectContaining({
           role: "user",
@@ -647,6 +650,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const sessionsRef = createSessionsRef([
       buildSession({
         status: "idle",
+        historyLoadState: "loaded",
         pendingQuestions: [
           {
             requestId,
@@ -730,7 +734,11 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
         questions: [{ header: "Question", question: "Question during send", options: [] }],
       };
       const sessionsRef = createSessionsRef([
-        buildSession({ status: "idle", pendingQuestions: beforeSend }),
+        buildSession({
+          status: "idle",
+          historyLoadState: "loaded",
+          pendingQuestions: beforeSend,
+        }),
       ]);
       const unsubscribe = await listenToAgentSessionEvents({
         adapter,

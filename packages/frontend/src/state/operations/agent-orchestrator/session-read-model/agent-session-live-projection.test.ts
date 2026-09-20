@@ -250,6 +250,27 @@ describe("agent session live projection", () => {
     expect(refreshedSession?.handledBackgroundQuestionIds).toContain(question.requestId);
   });
 
+  test("drops a handled history question before rebuilding an empty live snapshot", () => {
+    const question = {
+      requestId: "question-history",
+      blocking: false,
+      questions: [{ header: "Environment", question: "Which environment?", options: [] }],
+    };
+    const emptySnapshot = snapshot("thread-1");
+    const initial = build({ snapshots: [emptySnapshot] });
+    const session = getAgentSession(initial, identity("thread-1"));
+    if (!session) throw new Error("Expected the live session.");
+    const stale = replaceAgentSession(initial, {
+      ...session,
+      pendingQuestions: [question],
+      handledBackgroundQuestionIds: new Set([question.requestId]),
+    });
+
+    const refreshed = build({ current: stale, snapshots: [emptySnapshot] });
+
+    expect(getAgentSession(refreshed, identity("thread-1"))?.pendingQuestions).toEqual([]);
+  });
+
   test("keeps a history question pending when the runtime snapshot has no tracker state", () => {
     const question = {
       requestId: "question-history",

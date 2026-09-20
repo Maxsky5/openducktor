@@ -24,7 +24,8 @@ export const projectBackgroundQuestions = (
       continue;
     }
     if (message.role !== "user") continue;
-    for (const requestId of message.resolvedQuestionRequestIds ?? []) {
+    const handledRequestIds = message.resolvedQuestionRequestIds ?? [...pending.keys()];
+    for (const requestId of handledRequestIds) {
       handled.add(requestId);
       pending.delete(requestId);
     }

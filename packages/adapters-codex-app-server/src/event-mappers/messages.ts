@@ -104,6 +104,28 @@ export const assistantMessageMapper: CodexEventMapper = {
     }
     const messageId = input.item.id;
     const timestamp = ctx.timestamp ?? input.timestamp;
+    if (asyncQuestion.kind === "invalid") {
+      const event: CodexCanonicalStreamPartEvent = {
+        kind: "stream_part",
+        source: ctx.source,
+        mapper: "assistant_message",
+        threadId: ctx.threadId,
+        part: {
+          kind: "text",
+          messageId,
+          partId: `${messageId}:question-error`,
+          text: asyncQuestion.error,
+          completed: true,
+        },
+      };
+      if (timestamp) {
+        event.timestamp = timestamp;
+      }
+      return {
+        handled: true,
+        events: [event],
+      };
+    }
     const events: CodexMappingResult["events"] = [];
     const assistantMessageEvent: CodexCanonicalAssistantMessageEvent = {
       kind: "assistant_message",
@@ -115,8 +137,6 @@ export const assistantMessageMapper: CodexEventMapper = {
     };
     if (asyncQuestion.kind === "question") {
       assistantMessageEvent.questionRequest = asyncQuestion.request;
-    } else if (asyncQuestion.kind === "invalid") {
-      assistantMessageEvent.message = asyncQuestion.error;
     }
     if (timestamp) {
       assistantMessageEvent.timestamp = timestamp;

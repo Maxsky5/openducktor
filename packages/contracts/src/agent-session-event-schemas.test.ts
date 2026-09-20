@@ -154,6 +154,29 @@ describe("agent session transcript event contract", () => {
     ).toBe(false);
   });
 
+  test("rejects empty question request ids", () => {
+    expect(
+      agentRuntimeEventSchema.safeParse({
+        ...base,
+        type: "question_required",
+        requestId: "   ",
+        questions: [{ header: "Choice", question: "Pick", options: [] }],
+      }).success,
+    ).toBe(false);
+    expect(
+      agentRuntimeEventSchema.safeParse({
+        ...base,
+        type: "assistant_message",
+        messageId: "message-1",
+        message: "Pick",
+        questionRequest: {
+          requestId: "",
+          questions: [{ header: "Choice", question: "Pick", options: [] }],
+        },
+      }).success,
+    ).toBe(false);
+  });
+
   test("keeps retained projection state changes out of transcript envelopes", () => {
     const liveProjectionEvents = [
       { ...base, type: "session_context_updated", totalTokens: 12 },

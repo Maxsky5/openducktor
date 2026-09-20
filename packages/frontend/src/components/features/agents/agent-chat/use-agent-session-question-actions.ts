@@ -1,5 +1,5 @@
 import type { AgentSessionScope } from "@openducktor/core";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentQuestionRequest, AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
@@ -41,9 +41,10 @@ export function useAgentSessionQuestionActions({
     [pendingQuestions],
   );
   const pendingQuestionByRequestIdRef = useRef(pendingQuestionByRequestId);
-  useEffect(() => {
+  useLayoutEffect(() => {
     pendingQuestionByRequestIdRef.current = pendingQuestionByRequestId;
   }, [pendingQuestionByRequestId]);
+  const submittingQuestionKeysRef = useRef(new Set<string>());
 
   const onSubmitQuestionAnswers = useCallback(
     async (requestId: string, answers: string[][]): Promise<void> => {
@@ -65,6 +66,11 @@ export function useAgentSessionQuestionActions({
       if (!request) {
         return;
       }
+      const submitKey = `${sessionKey}\u0000${requestId}`;
+      if (submittingQuestionKeysRef.current.has(submitKey)) {
+        return;
+      }
+      submittingQuestionKeysRef.current.add(submitKey);
 
       setSubmittingQuestionBySessionKey((current) =>
         setAgentSessionRequestValue(current, sessionKey, requestId, true),
@@ -72,6 +78,7 @@ export function useAgentSessionQuestionActions({
       try {
         await answerAgentQuestion(sessionActionTarget, request, answers, sessionScope ?? undefined);
       } finally {
+        submittingQuestionKeysRef.current.delete(submitKey);
         setSubmittingQuestionBySessionKey((current) =>
           removeAgentSessionRequestValue(current, sessionKey, requestId),
         );

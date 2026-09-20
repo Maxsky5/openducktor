@@ -99,6 +99,32 @@ describe("useAgentSessionQuestionActions", () => {
     }
   });
 
+  test("submits one answer while the same question is already in flight", async () => {
+    const answerDeferred = createDeferred<void>();
+    const answerAgentQuestion = mock(async () => answerDeferred.promise);
+    const harness = createHookHarness(
+      useAgentSessionQuestionActions,
+      createBaseArgs({ answerAgentQuestion }),
+    );
+
+    try {
+      await harness.mount();
+      let first: Promise<void> | null = null;
+      let second: Promise<void> | null = null;
+      await harness.run((state) => {
+        first = state.onSubmitQuestionAnswers("req-1", [["yes"]]);
+        second = state.onSubmitQuestionAnswers("req-1", [["yes"]]);
+      });
+
+      expect(answerAgentQuestion).toHaveBeenCalledTimes(1);
+      answerDeferred.resolve(undefined);
+      await Promise.all([first, second]);
+    } finally {
+      answerDeferred.resolve(undefined);
+      await harness.unmount();
+    }
+  });
+
   test("passes surfaced question requests to the operation boundary", async () => {
     const answerAgentQuestion = mock(async () => {});
     const parentSession = sessionIdentity("parent-session");

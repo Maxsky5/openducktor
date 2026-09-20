@@ -212,16 +212,19 @@ describe("Codex event mapper pipeline", () => {
       "OpenDucktor could not open this structured question. Answer through the main chat composer.";
     expect(live).toEqual([
       expect.objectContaining({
-        type: "assistant_message",
-        messageId: "question-message-invalid",
-        message: error,
+        type: "assistant_part",
+        part: expect.objectContaining({
+          kind: "text",
+          messageId: "question-message-invalid",
+          text: error,
+        }),
       }),
     ]);
     expect(history).toEqual([
       expect.objectContaining({
         role: "assistant",
         messageId: "question-message-invalid",
-        text: error,
+        parts: [expect.objectContaining({ kind: "text", text: error })],
       }),
     ]);
   });

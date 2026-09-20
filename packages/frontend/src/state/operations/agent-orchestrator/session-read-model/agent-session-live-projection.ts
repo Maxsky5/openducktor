@@ -477,7 +477,10 @@ const resetSessionLiveStateForSnapshot = (
   livePresence: hasLiveSnapshot ? "present" : "absent",
   pendingApprovals: [],
   pendingQuestions: session.pendingQuestions.filter(
-    (request) => request.source === undefined && request.blocking === false,
+    (request) =>
+      request.source === undefined &&
+      request.blocking === false &&
+      !session.handledBackgroundQuestionIds?.has(request.requestId),
   ),
   contextUsage: null,
 });

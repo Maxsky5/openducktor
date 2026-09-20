@@ -13,6 +13,7 @@ const toAnsweredQuestionData = ({
   question,
   options,
   multiple,
+  custom,
   answers,
 }: AnsweredQuestion): AgentToolData => {
   const data: AgentToolData = {
@@ -24,6 +25,7 @@ const toAnsweredQuestionData = ({
     answers,
   };
   if (multiple !== undefined) data.multiple = multiple;
+  if (custom !== undefined) data.custom = custom;
   return data;
 };
 

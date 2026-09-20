@@ -3,7 +3,6 @@ import { createRuntimeQueryAdapter } from "./runtime-query-adapter";
 import { createCodexImageOperations } from "./codex-image-operations";
 import { createCodexImageSettlement } from "./codex-live-session-images";
 import { toAgentSessionResumeError } from "../../ports/agent-session-resume-error";
-import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
 import {
   CodexAppServerAdapter,
   type CodexAppServerAdapterOptions,
@@ -35,6 +34,7 @@ import type {
   PreparedCodexLiveSessionAdapter,
 } from "./codex-live-session-adapter-contract";
 import { createCodexLiveSessionEventHub } from "./codex-live-session-event-hub";
+import { publishAcceptedCodexMessage } from "./codex-live-session-acceptance";
 import { toCodexUserMessagePart } from "./codex-live-session-inputs";
 import { createCodexLiveSessionProjection } from "./codex-live-session-projection";
 import {
@@ -331,7 +331,20 @@ export const createCodexLiveSessionAdapterPreparer =
                     ),
                   }),
                 ),
-                Effect.zipRight(refreshProjection()),
+                Effect.flatMap((event) =>
+                  parseCodexLiveSessionOutput(
+                    acceptedAgentUserMessageSchema,
+                    event,
+                    "codex-live-session.normalize-background-question-reply",
+                  ),
+                ),
+                Effect.flatMap((event) =>
+                  publishAcceptedCodexMessage(
+                    event,
+                    toCodexLiveSessionRef(input),
+                    refreshProjection,
+                  ).pipe(Effect.asVoid),
+                ),
               )
             : Effect.tryPromise({
                 try: () =>
@@ -449,23 +462,10 @@ export const createCodexLiveSessionAdapterPreparer =
                 acceptedAgentUserMessageSchema,
                 value,
                 "codex-live-session.normalize-user-message",
-              ).pipe(Effect.as(value)),
+              ),
             ),
             Effect.flatMap((value) =>
-              refreshProjection([{ ...value, sessionRef: toCodexLiveSessionRef(input) }]).pipe(
-                Effect.as(value),
-                Effect.mapError(
-                  (cause) =>
-                    new AgentSessionMessageAcceptedError(
-                      {
-                        sessionRef: toCodexLiveSessionRef(input),
-                        acceptedMessage: value,
-                        stage: "live_update",
-                      },
-                      cause,
-                    ),
-                ),
-              ),
+              publishAcceptedCodexMessage(value, toCodexLiveSessionRef(input), refreshProjection),
             ),
           ),
         updateSessionModel: (input) =>

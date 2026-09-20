@@ -289,7 +289,16 @@ const createControllerHarness = ({
             output: "{}",
           },
         }),
-        replyQuestion: async () => undefined,
+        replyQuestion: async () => ({
+          type: "user_message" as const,
+          externalSessionId: "thread-1",
+          timestamp: "2026-07-16T10:02:00.000Z",
+          messageId: "question-reply-1",
+          message: "Answer",
+          parts: [{ kind: "text" as const, text: "Answer" }],
+          state: "read" as const,
+          resolvedQuestionRequestIds: ["question-1"],
+        }),
         releaseRuntime: () => {
           snapshots = [];
           releaseRuntime();
@@ -620,6 +629,62 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       failure: { sessionRef: ref, stage: "live_update", acceptedMessage: { type: "user_message" } },
     });
     expect(harness.controlInputs.sends).toHaveLength(1);
+  });
+
+  test("retains a background question reply when the live projection cannot publish", async () => {
+    const harness = createControllerHarness();
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation");
+        },
+        liveSessionLifecycle: {
+          ...createLifecycle([]),
+          createRuntimeRegistration: (binding) =>
+            new AgentSessionLiveRegistration(binding, (mutation) =>
+              mutation.pipe(
+                Effect.flatMap(({ value, changes }) =>
+                  changes.some((change) => change.type === "transcript_event")
+                    ? Effect.fail(
+                        new HostOperationError({
+                          operation: "test.publish",
+                          message: "Publication failed",
+                        }),
+                      )
+                    : Effect.succeed(value),
+                ),
+              ),
+            ),
+        },
+        codexAppServer,
+        onBackgroundFailure: noBackgroundFailure,
+        resolveRuntimePolicy,
+        createController: harness.createController,
+      })(runtime),
+    );
+
+    const result = await Effect.runPromise(
+      Effect.either(
+        prepared.adapter.replyQuestion({
+          ...ref,
+          sessionScope: { kind: "repository" },
+          requestId: "question-1",
+          answers: [["Answer"]],
+          blocking: false,
+        }),
+      ),
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag !== "Left") throw new Error("Expected publication failure");
+    expect(result.left).toBeInstanceOf(AgentSessionMessageAcceptedError);
+    expect(result.left).toMatchObject({
+      failure: {
+        sessionRef: ref,
+        stage: "live_update",
+        acceptedMessage: { type: "user_message", messageId: "question-reply-1" },
+      },
+    });
   });
 
   test("resolves and injects Codex policy behind the normalized control boundary", async () => {

@@ -60,9 +60,13 @@ export type CompletedAgentMessage = {
   model?: AgentModelSelection;
 };
 
+export type CodexUserMessageEcho = {
+  readonly text: string;
+};
+
 export type CodexStreamingContext = {
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
-  syntheticUserMessageTextsByThreadId: Map<string, string[]>;
+  syntheticUserMessageEchoesByThreadId: Map<string, CodexUserMessageEcho[]>;
   completedAgentMessagesByTurnKey: Map<string, CompletedAgentMessage>;
   tokenUsageByTurnKey: Map<string, CodexTokenUsageTotals>;
   modelByTurnKey: Map<string, AgentModelSelection>;
@@ -165,7 +169,10 @@ const emitCanonicalEvents = (
       }
     }
   }
-  for (const event of projectCodexCanonicalEvents(events)) {
+  const liveEvents = events.filter(
+    (event) => event.kind !== "assistant_message" || event.questionRequest === undefined,
+  );
+  for (const event of projectCodexCanonicalEvents(liveEvents)) {
     emitCodexSessionEvent(context, event.externalSessionId, event);
   }
 };
@@ -195,20 +202,20 @@ const consumeSyntheticUserMessage = (
   externalSessionId: string,
   message: string,
 ): boolean => {
-  const pendingTexts = context.syntheticUserMessageTextsByThreadId.get(externalSessionId);
-  if (!pendingTexts || pendingTexts.length === 0) {
+  const pendingEchoes = context.syntheticUserMessageEchoesByThreadId.get(externalSessionId);
+  if (!pendingEchoes || pendingEchoes.length === 0) {
     return false;
   }
   const normalizedMessage = normalizeSyntheticUserMessageText(message);
-  const index = pendingTexts.findIndex(
-    (pendingText) => normalizeSyntheticUserMessageText(pendingText) === normalizedMessage,
+  const index = pendingEchoes.findIndex(
+    (echo) => normalizeSyntheticUserMessageText(echo.text) === normalizedMessage,
   );
   if (index === -1) {
     return false;
   }
-  pendingTexts.splice(index, 1);
-  if (pendingTexts.length === 0) {
-    context.syntheticUserMessageTextsByThreadId.delete(externalSessionId);
+  pendingEchoes.splice(index, 1);
+  if (pendingEchoes.length === 0) {
+    context.syntheticUserMessageEchoesByThreadId.delete(externalSessionId);
   }
   return true;
 };
@@ -320,19 +327,35 @@ export const createCodexAcceptedUserMessage = ({
   return event;
 };
 
-export const emitCodexUserMessage = (
+export const expectCodexUserMessageEcho = (
   context: CodexStreamingContext,
   event: AcceptedAgentUserMessage,
   sourceParts: AgentUserMessagePart[],
-): AcceptedAgentUserMessage => {
-  const codexEchoText = codexUserInputListToText(toCodexUserInputList(sourceParts));
-  const pendingTexts =
-    context.syntheticUserMessageTextsByThreadId.get(event.externalSessionId) ?? [];
-  pendingTexts.push(codexEchoText);
-  if (pendingTexts.length > MAX_CODEX_EVENT_BACKLOG_PER_SESSION) {
-    pendingTexts.splice(0, pendingTexts.length - MAX_CODEX_EVENT_BACKLOG_PER_SESSION);
+): (() => void) => {
+  const echo: CodexUserMessageEcho = {
+    text: codexUserInputListToText(toCodexUserInputList(sourceParts)),
+  };
+  const pendingEchoes =
+    context.syntheticUserMessageEchoesByThreadId.get(event.externalSessionId) ?? [];
+  pendingEchoes.push(echo);
+  if (pendingEchoes.length > MAX_CODEX_EVENT_BACKLOG_PER_SESSION) {
+    pendingEchoes.splice(0, pendingEchoes.length - MAX_CODEX_EVENT_BACKLOG_PER_SESSION);
   }
-  context.syntheticUserMessageTextsByThreadId.set(event.externalSessionId, pendingTexts);
+  context.syntheticUserMessageEchoesByThreadId.set(event.externalSessionId, pendingEchoes);
+  return () => {
+    const index = pendingEchoes.indexOf(echo);
+    if (index === -1) return;
+    pendingEchoes.splice(index, 1);
+    if (pendingEchoes.length === 0) {
+      context.syntheticUserMessageEchoesByThreadId.delete(event.externalSessionId);
+    }
+  };
+};
+
+export const emitCodexUserMessage = (
+  context: CodexStreamingContext,
+  event: AcceptedAgentUserMessage,
+): AcceptedAgentUserMessage => {
   emitCodexSessionEvent(context, event.externalSessionId, event);
   return event;
 };

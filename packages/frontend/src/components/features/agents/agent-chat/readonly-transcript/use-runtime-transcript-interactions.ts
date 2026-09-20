@@ -16,6 +16,7 @@ import { useAgentSessionQuestionActions } from "../use-agent-session-question-ac
 
 type UseRuntimeTranscriptInteractionsArgs = {
   target: AgentSessionIdentity | null;
+  hasLiveSession: boolean;
   pendingApprovalRequests: readonly AgentApprovalRequest[];
   pendingQuestionRequests: readonly AgentQuestionRequest[];
   historyQuestionRequests: readonly AgentQuestionRequest[];
@@ -43,6 +44,7 @@ type RuntimeTranscriptInteractions = {
 
 export function useRuntimeTranscriptInteractions({
   target,
+  hasLiveSession,
   pendingApprovalRequests,
   pendingQuestionRequests,
   historyQuestionRequests,
@@ -63,7 +65,7 @@ export function useRuntimeTranscriptInteractions({
   const questionRequests = useMemo(
     () => [
       ...new Map(
-        [...pendingQuestionRequests, ...historyQuestionRequests].map((request) => [
+        [...historyQuestionRequests, ...pendingQuestionRequests].map((request) => [
           request.requestId,
           request,
         ]),
@@ -75,7 +77,7 @@ export function useRuntimeTranscriptInteractions({
     useAgentSessionQuestionActions({
       sessionIdentity: target,
       pendingQuestions: questionRequests,
-      canAnswerQuestions: isRuntimeReady,
+      canAnswerQuestions: isRuntimeReady && hasLiveSession,
       answerAgentQuestion,
       sessionScope,
     });
@@ -86,6 +88,7 @@ export function useRuntimeTranscriptInteractions({
     pendingQuestions: {
       canSubmit:
         canReplyToRuntimeRequest &&
+        hasLiveSession &&
         hasAgentSessionPendingQuestions({ pendingQuestions: questionRequests }),
       isSubmittingByRequestId: isSubmittingQuestionByRequestId,
       onSubmit: onSubmitQuestionAnswers,
