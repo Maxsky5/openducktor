@@ -1275,19 +1275,46 @@ export class CodexAppServerAdapter
       const resolvedRequestIds = replyTools.map(({ requestId }) => requestId);
       this.asyncQuestions.resolve(input.runtimeId, input.externalSessionId, resolvedRequestIds);
       const timestamp = new Date().toISOString();
+      const completionEvents: AgentEvent[] = [];
       for (const { requestId, invocation } of replyTools) {
-        this.emitSessionEvent(input.externalSessionId, {
+        completionEvents.push({
           type: "question_resolved",
           requestId,
           externalSessionId: input.externalSessionId,
           timestamp,
         });
-        this.emitSessionEvent(input.externalSessionId, {
+        completionEvents.push({
           type: "assistant_part",
           externalSessionId: input.externalSessionId,
           timestamp,
           part: requireNormalizedCodexToolInvocation(invocation),
         });
+      }
+      for (const event of completionEvents) {
+        this.emitSessionEvent(input.externalSessionId, event);
+      }
+      const publishLiveSessionMutation = this.options.onLiveSessionMutation;
+      if (publishLiveSessionMutation) {
+        const sessionRef = codexSessionRef(session);
+        void Promise.resolve()
+          .then(() =>
+            publishLiveSessionMutation({
+              runtimeId: input.runtimeId,
+              snapshotMode: "delta",
+              removedRefs: [],
+              snapshots: this.changedLiveSessionSnapshots(
+                input.runtimeId,
+                new Set([input.externalSessionId]),
+              ),
+              transcriptEvents: completionEvents.map((event) =>
+                withAgentSessionRef(sessionRef, event),
+              ),
+              catalogInvalidated: false,
+            }),
+          )
+          .catch((error) => {
+            this.options.onRuntimeEventQueueFailure?.({ runtimeId: input.runtimeId, error });
+          });
       }
       return accepted;
     }

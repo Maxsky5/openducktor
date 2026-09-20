@@ -48,7 +48,16 @@ const observeSessionState = async (
 describe("CodexAppServerAdapter streaming", () => {
   test("keeps asynchronous questions pending without blocking the turn and sends contextual replies", async () => {
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
-    const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });
+    const mutations: CodexLiveSessionMutation[] = [];
+    const { adapter, transports } = createHarness(
+      {
+        subscribeEvents,
+        onLiveSessionMutation: (mutation) => {
+          mutations.push(mutation);
+        },
+      },
+      { deferTurnStart: true },
+    );
     await adapter.startSession(codexStartSessionInput());
     const events: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
@@ -144,6 +153,7 @@ describe("CodexAppServerAdapter streaming", () => {
       ).resolves.toMatchObject({
         pendingQuestions: [expect.objectContaining({ requestId: "async-question-1" })],
       });
+      mutations.length = 0;
 
       const transport = transports.get("runtime-live");
       if (!transport) throw new Error("Expected the runtime transport.");
@@ -185,6 +195,85 @@ describe("CodexAppServerAdapter streaming", () => {
       expect(events).toContainEqual(
         expect.objectContaining({ type: "question_resolved", requestId: "async-question-1" }),
       );
+      expect(mutations).toContainEqual(
+        expect.objectContaining({
+          snapshotMode: "delta",
+          snapshots: [expect.objectContaining({ pendingQuestions: [] })],
+          transcriptEvents: expect.arrayContaining([
+            expect.objectContaining({
+              type: "question_resolved",
+              requestId: "async-question-1",
+            }),
+            expect.objectContaining({
+              type: "assistant_part",
+              part: expect.objectContaining({
+                kind: "tool",
+                tool: "request_user_input",
+                status: "completed",
+              }),
+            }),
+          ]),
+        }),
+      );
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  test("reports a live update failure after Codex accepts a background reply", async () => {
+    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+    const failures: unknown[] = [];
+    const { adapter } = createHarness({
+      subscribeEvents,
+      onLiveSessionMutation: (mutation) => {
+        if (mutation.transcriptEvents.some((event) => event.type === "question_resolved")) {
+          throw new Error("live update failed");
+        }
+      },
+      onRuntimeEventQueueFailure: ({ error }) => {
+        failures.push(error);
+      },
+    });
+    await adapter.startSession(codexStartSessionInput());
+    const unsubscribe = await observeSessionState(adapter, "thread/start-runtime-live");
+
+    try {
+      emitNotification({
+        method: "item/completed",
+        params: {
+          threadId: "thread/start-runtime-live",
+          turnId: "turn-live",
+          completedAtMs: 1_777_766_419_650,
+          item: {
+            type: "agentMessage",
+            id: "async-question-live-update-failure",
+            phase: "commentary",
+            text: "Which environment should I use?",
+            memoryCitation: null,
+            delivery: "async",
+            questions: [{ title: "Which environment should I use?", options: null }],
+          },
+        },
+      });
+      await flushCodexAdapterWork();
+
+      const { parts: _parts, ...session } = codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [],
+      });
+      await expect(
+        adapter.replyQuestion({
+          ...session,
+          requestId: "async-question-live-update-failure",
+          answers: [["Staging"]],
+        }),
+      ).resolves.toMatchObject({ type: "user_message" });
+      await flushCodexAdapterWork();
+
+      expect(failures).toEqual([expect.objectContaining({ message: "live update failed" })]);
+      await expect(
+        adapter.readSessionRuntimeSnapshot(codexSessionRuntimeRef("thread/start-runtime-live")),
+      ).resolves.toMatchObject({ pendingQuestions: [] });
     } finally {
       unsubscribe();
     }
