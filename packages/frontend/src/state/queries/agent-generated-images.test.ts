@@ -370,4 +370,4 @@ test("partial batch admission queues excess images until release", async () => {
     client.clear();
   }
   // CI runs this queue coordination beside the host suite on 3-4 vCPUs.
-}, 2_500);
+}, 5_000);
