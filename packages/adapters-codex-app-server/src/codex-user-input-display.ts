@@ -72,6 +72,9 @@ const userInputText = (input: CodexUserInput): string => {
   if (input.type === "image" || input.type === "audio") {
     return input.url;
   }
+  if (input.type === "localImage") {
+    return "";
+  }
   return input.path;
 };
 

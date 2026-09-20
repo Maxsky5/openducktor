@@ -78,12 +78,30 @@ describe("CodexAppServerAdapter streaming", () => {
         await flushCodexAdapterWork();
 
         expect(events.filter((event) => event.type === "session_error")).toEqual([]);
-        expect(events.filter((event) => event.type === "user_message")).toEqual([
+        const userMessages = events.filter((event) => event.type === "user_message");
+        expect(userMessages).toEqual([
           expect.objectContaining({
             messageId: "user-image-1",
             parts: expect.arrayContaining([{ kind: "text", text: "Review this image" }]),
           }),
         ]);
+        if (imageType === "localImage") {
+          expect(userMessages[0]).toMatchObject({
+            message: "Review this image",
+            parts: [
+              { kind: "text", text: "Review this image" },
+              {
+                kind: "attachment",
+                attachment: {
+                  id: "codex-local-image:user-image-1:1",
+                  kind: "image",
+                  name: "screenshot.png",
+                  path: "/tmp/screenshot.png",
+                },
+              },
+            ],
+          });
+        }
       } finally {
         unsubscribe();
       }

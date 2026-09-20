@@ -32,6 +32,40 @@ const mergedMessageState = (
   );
 };
 
+const imageUserMessage = ({
+  id,
+  image,
+  timestamp,
+  providerId = "current",
+}: {
+  id: string;
+  image: "a" | "b";
+  timestamp: string;
+  providerId?: string;
+}): AgentChatMessage => ({
+  id,
+  role: "user",
+  content: "Inspect this image",
+  timestamp,
+  meta: {
+    kind: "user",
+    state: "read",
+    providerId,
+    parts: [
+      { kind: "text", text: "Inspect this image" },
+      {
+        kind: "attachment",
+        attachment: {
+          id: `${id}-attachment`,
+          kind: "image",
+          name: `image-${image}.png`,
+          path: `/tmp/image-${image}.png`,
+        },
+      },
+    ],
+  },
+});
+
 describe("agent-orchestrator/support/history-message-merge", () => {
   test("deduplicates a live turn failure when hydration returns the same result", () => {
     const errorNotice = {
@@ -1273,6 +1307,59 @@ describe("agent-orchestrator/support/history-message-merge", () => {
     expect(merged.map((message) => message.id)).toEqual([
       "codex-user-1772355600120-1",
       "codex-user-1772355600900-1",
+    ]);
+  });
+
+  test("matches repeated image messages by attachment identity", () => {
+    const merged = mergedMessages(
+      [
+        imageUserMessage({
+          id: "runtime-user-image-a",
+          image: "a",
+          timestamp: "2026-03-01T09:00:00.100Z",
+          providerId: "history-image-a",
+        }),
+        imageUserMessage({
+          id: "runtime-user-image-b",
+          image: "b",
+          timestamp: "2026-03-01T09:00:00.900Z",
+          providerId: "history-image-b",
+        }),
+      ],
+      [
+        imageUserMessage({
+          id: "codex-user-image-a",
+          image: "a",
+          timestamp: "2026-03-01T09:00:00.900Z",
+        }),
+        imageUserMessage({
+          id: "codex-user-image-b",
+          image: "b",
+          timestamp: "2026-03-01T09:00:00.100Z",
+        }),
+      ],
+    );
+
+    expect(
+      merged.map((message) => ({
+        id: message.id,
+        providerId: message.meta?.kind === "user" ? message.meta.providerId : undefined,
+        path:
+          message.meta?.kind === "user" && message.meta.parts?.[1]?.kind === "attachment"
+            ? message.meta.parts[1].attachment.path
+            : undefined,
+      })),
+    ).toEqual([
+      {
+        id: "codex-user-image-a",
+        providerId: "history-image-a",
+        path: "/tmp/image-a.png",
+      },
+      {
+        id: "codex-user-image-b",
+        providerId: "history-image-b",
+        path: "/tmp/image-b.png",
+      },
     ]);
   });
 

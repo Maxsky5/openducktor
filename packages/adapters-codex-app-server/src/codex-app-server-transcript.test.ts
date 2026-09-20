@@ -928,7 +928,7 @@ describe("Codex App Server transcript parsing", () => {
 
     expect(message).toMatchObject({
       role: "user",
-      text: "Inspect this screenshot /tmp/openducktor-local-attachments/550e8400-e29b-41d4-a716-446655440000-Screenshot 2026-05-20.png /tmp/openducktor-local-attachments/Screenshot 2026-05-20.png C:\\Temp\\openducktor-local-attachments\\550e8400-e29b-41d4-a716-446655440000-Windows Screenshot.png",
+      text: "Inspect this screenshot",
       displayParts: [
         { kind: "text", text: "Inspect this screenshot" },
         {

@@ -1,3 +1,4 @@
+import type { AgentUserMessageDisplayPart } from "@openducktor/core";
 import type { AgentChatMessage, SessionMessagesState } from "@/types/agent-orchestrator";
 import { applyMessageTimestamp, haveSameMessageTimestamp } from "./message-timestamp";
 import { sessionMessageTimestampInsertionIndex } from "./message-timestamp-ordering";
@@ -99,6 +100,33 @@ const updateMessageAtIndex = (
 
 const CODEX_SYNTHETIC_USER_MESSAGE_CONFIRMATION_WINDOW_MS = 10_000;
 
+const userMessageAttachments = (
+  message: AgentChatMessage,
+): readonly Extract<AgentUserMessageDisplayPart, { kind: "attachment" }>["attachment"][] => {
+  if (message.meta?.kind !== "user") {
+    return [];
+  }
+
+  return (message.meta.parts ?? []).flatMap((part) =>
+    part.kind === "attachment" ? [part.attachment] : [],
+  );
+};
+
+export const haveSameUserMessageAttachmentIdentity = (
+  left: AgentChatMessage,
+  right: AgentChatMessage,
+): boolean => {
+  const leftAttachments = userMessageAttachments(left);
+  const rightAttachments = userMessageAttachments(right);
+  return (
+    leftAttachments.length === rightAttachments.length &&
+    leftAttachments.every((attachment, index) => {
+      const otherAttachment = rightAttachments[index];
+      return attachment.kind === otherAttachment?.kind && attachment.path === otherAttachment.path;
+    })
+  );
+};
+
 const isCodexSyntheticUserMessageId = (messageId: string): boolean =>
   messageId.startsWith("codex-user-");
 
@@ -114,6 +142,7 @@ const confirmsCodexSyntheticUserMessage = (
   if (
     existing.role !== "user" ||
     existing.content !== incoming.content ||
+    !haveSameUserMessageAttachmentIdentity(existing, incoming) ||
     !isCodexSyntheticUserMessageId(existing.id) ||
     isCodexSyntheticUserMessageId(incoming.id)
   ) {
@@ -419,7 +448,9 @@ export const upsertUserSessionMessage = (
     owner,
     "user",
     (existing) =>
-      (existing.content === message.content && existing.timestamp === message.timestamp) ||
+      (existing.content === message.content &&
+        existing.timestamp === message.timestamp &&
+        haveSameUserMessageAttachmentIdentity(existing, message)) ||
       confirmsCodexSyntheticUserMessage(existing, message),
   );
   if (equivalentIndex >= 0) {
