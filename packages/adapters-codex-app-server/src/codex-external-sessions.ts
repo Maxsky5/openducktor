@@ -3,6 +3,7 @@ import type { ExternalRuntimeSessionPage, SessionRef } from "@openducktor/core";
 import type { CodexAppServerClient } from "./types";
 
 const isRoot = (thread: CodexAppServerThread): boolean => {
+  if (thread.parentThreadId !== null) return false;
   switch (thread.source) {
     case "cli":
     case "vscode":
@@ -11,7 +12,7 @@ const isRoot = (thread: CodexAppServerThread): boolean => {
     case "unknown":
       return true;
     default:
-      return false;
+      return "custom" in thread.source;
   }
 };
 const metadata = (thread: CodexAppServerThread): WorkspaceSessionExternal => ({

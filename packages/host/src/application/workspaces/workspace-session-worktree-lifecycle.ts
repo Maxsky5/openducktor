@@ -14,6 +14,24 @@ import {
 
 type WorktreeTarget = Extract<WorkspaceSessionExecutionTarget, { kind: "local_worktree" }>;
 
+const validateRemovableBranch = (
+  { git }: WorkspaceSessionTargetDependencies,
+  config: RepoConfig,
+  branchName: string | null,
+): Effect.Effect<void, HostError> =>
+  Effect.gen(function* () {
+    const checkout = yield* git.getCurrentBranch(config.repoPath);
+    if (
+      branchName !== null &&
+      (branchName === checkoutBranch(config.defaultTargetBranch) || branchName === checkout.name)
+    ) {
+      return yield* new HostValidationError({
+        field: "removeWorktree",
+        message: `Cannot delete protected branch ${branchName}. Turn off worktree removal to archive this chat.`,
+      });
+    }
+  });
+
 export const readWorkspaceSessionArchivePreview = (
   dependencies: WorkspaceSessionTargetDependencies,
   config: RepoConfig,
@@ -29,6 +47,7 @@ export const readWorkspaceSessionArchivePreview = (
     }
     const worktreeExists = yield* settingsConfig.pathExists(target.workingDirectory);
     if (!worktreeExists) {
+      yield* validateRemovableBranch(dependencies, config, target.branchName);
       return { branchName: target.branchName, worktreeExists: false, hasUncommittedChanges: false };
     }
     yield* validateWorkspaceSessionTarget(dependencies, config.repoPath, target);
@@ -39,16 +58,7 @@ export const readWorkspaceSessionArchivePreview = (
         message: "This worktree has detached HEAD. Turn off worktree removal to archive this chat.",
       });
     }
-    const checkout = yield* git.getCurrentBranch(config.repoPath);
-    if (
-      current.name === checkoutBranch(config.defaultTargetBranch) ||
-      current.name === checkout.name
-    ) {
-      return yield* new HostValidationError({
-        field: "removeWorktree",
-        message: `Cannot delete protected branch ${current.name}. Turn off worktree removal to archive this chat.`,
-      });
-    }
+    yield* validateRemovableBranch(dependencies, config, current.name);
     const changes = yield* git.getStatus(target.workingDirectory);
     return {
       branchName: current.name,
@@ -58,16 +68,19 @@ export const readWorkspaceSessionArchivePreview = (
   });
 
 export const removeWorkspaceSessionWorktree = (
-  { git }: WorkspaceSessionTargetDependencies,
-  repoPath: string,
+  dependencies: WorkspaceSessionTargetDependencies,
+  config: RepoConfig,
   target: WorktreeTarget,
 ) =>
   Effect.gen(function* () {
+    const { git } = dependencies;
+    const { repoPath } = config;
     if (target.branchName === null)
       return yield* new HostValidationError({
         field: "branchName",
         message: "Cannot remove a detached worktree. Turn off worktree removal.",
       });
+    yield* validateRemovableBranch(dependencies, config, target.branchName);
     // An explicit archive retry can finish a previous partial cleanup.
     if (yield* git.isRegisteredWorktree(repoPath, target.workingDirectory)) {
       const current = yield* git.getCurrentBranch(target.workingDirectory);
@@ -165,7 +178,7 @@ export const withRestoredWorkspaceSessionWorktree = <A, E>(
       if (Exit.isSuccess(result)) return result.value;
       if (!acquired) return yield* Effect.failCause(result.cause);
       const cleanup = yield* Effect.exit(
-        removeWorkspaceSessionWorktree(dependencies, repoPath, target),
+        removeWorkspaceSessionWorktree(dependencies, config, target),
       );
       if (Exit.isFailure(cleanup)) {
         return yield* new HostOperationError({

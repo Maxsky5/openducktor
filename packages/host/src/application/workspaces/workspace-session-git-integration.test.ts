@@ -1,3 +1,4 @@
+import { removeWorkspaceSessionWorktree } from "./workspace-session-worktree-lifecycle";
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
@@ -466,6 +467,45 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       await h.router.invoke("workspace_session_list_active", { workspaceId: "fairnest" }),
     ).toEqual([]);
     expect(h.events).toEqual([]);
+  });
+
+  test("keeps the default branch after its session worktree disappears", async () => {
+    await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
+    gitCommand("checkout", "-b", "other-checkout");
+    const h = setup();
+    const { session } = await h.router.invoke("workspace_session_create", {
+      ...h.createInput,
+      worktree: { mode: "from_branch", name: "missing-main-review", branchName: "main" },
+    });
+    const directory = session.executionTarget.workingDirectory;
+    gitCommand("worktree", "remove", "--force", directory);
+    const branchHead = gitCommand("rev-parse", "refs/heads/main");
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    await expect(h.router.invoke("workspace_session_archive_preview", ref)).rejects.toThrow(
+      "protected branch main",
+    );
+    if (session.executionTarget.kind !== "local_worktree") throw new Error("Expected worktree");
+    const config = repoConfigSchema.parse({
+      workspaceId: "fairnest",
+      workspaceName: "Test",
+      repoPath,
+      defaultTargetBranch: { branch: "main" },
+    });
+    await expect(
+      Effect.runPromise(
+        removeWorkspaceSessionWorktree(h.targetDependencies, config, session.executionTarget),
+      ),
+    ).rejects.toThrow("protected branch main");
+    await expect(
+      h.router.invoke("workspace_session_archive", {
+        ...ref,
+        removeWorktree: true,
+        worktreeConfirmation: { workingDirectory: directory, branchName: "main" },
+      }),
+    ).rejects.toThrow("ENOENT");
+    expect(gitCommand("rev-parse", "refs/heads/main")).toBe(branchHead);
+    expect(gitCommand("branch", "--show-current")).toBe("other-checkout");
+    expect(await h.router.invoke("workspace_session_get", ref)).toEqual(session);
   });
 
   test("keeps a protected default-branch worktree when removal is refused", async () => {

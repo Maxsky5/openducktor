@@ -68,6 +68,55 @@ describe("external Codex sessions", () => {
     await adapter.releaseRuntime("runtime-live");
   });
 
+  test.each([
+    { source: "cli" as const, parentThreadId: "parent", accepted: false },
+    { source: { custom: "external" }, parentThreadId: null, accepted: true },
+    { source: { custom: "external" }, parentThreadId: "parent", accepted: false },
+    { source: { subAgent: "review" as const }, parentThreadId: null, accepted: false },
+  ])(
+    "uses parent and source metadata for catalog and exact import: %j",
+    async ({ source, parentThreadId, accepted }) => {
+      class SourceTransport extends RecordingTransport {
+        async request(request: Parameters<RecordingTransport["request"]>[0]) {
+          const thread = codexThreadFixture({
+            id: ref.externalSessionId,
+            cwd: ref.workingDirectory,
+            source,
+            parentThreadId,
+            status: { type: "idle" },
+          });
+          if (request.method === "thread/list")
+            return { data: [thread], nextCursor: null, backwardsCursor: null };
+          if (request.method === "thread/read") return { thread };
+          return super.request(request);
+        }
+      }
+      const transport = new SourceTransport("runtime-live", false);
+      const adapter = createAdapterWithTransport(transport);
+      const page = await adapter.listExternalSessions({
+        ...ref,
+        signal: new AbortController().signal,
+      });
+      expect(page.sessions.map((session) => session.externalSessionId)).toEqual(
+        accepted ? [ref.externalSessionId] : [],
+      );
+      const preparation = adapter.prepareExternalSession({
+        ...ref,
+        sessionScope: { kind: "repository" },
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      });
+      if (accepted) {
+        const prepared = await preparation;
+        await prepared.dispose();
+      } else {
+        await expect(preparation).rejects.toThrow("Subagent conversations cannot be imported");
+        expect(transport.calls.some((call) => call.method === "thread/resume")).toBe(false);
+      }
+      expect(adapter.listLiveSessionSnapshots("runtime-live")).toEqual([]);
+      await adapter.releaseRuntime("runtime-live");
+    },
+  );
+
   test("prepares an exact passive resume and admits only on commit", async () => {
     const transport = new RecordingTransport("runtime-live", false);
     const adapter = createAdapterWithTransport(transport);

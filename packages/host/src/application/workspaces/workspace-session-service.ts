@@ -322,7 +322,14 @@ export const createWorkspaceSessionService = (
               Effect.gen(function* () {
                 const executionTarget =
                   input.removeWorktree && target.kind === "local_worktree"
-                    ? yield* removeWorkspaceSessionWorktree(dependencies, ref.repoPath, target)
+                    ? yield* removeWorkspaceSessionWorktree(
+                        dependencies,
+                        {
+                          ...(yield* settings.getRepoConfig(input.workspaceId)),
+                          repoPath: ref.repoPath,
+                        },
+                        target,
+                      )
                     : target;
                 return yield* store
                   .archive({ ...ref, executionTarget, archivedAt: yield* Clock.currentTimeMillis })

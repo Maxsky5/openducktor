@@ -1,3 +1,7 @@
+import {
+  readWorkspaceSessionArchivePreview,
+  removeWorkspaceSessionWorktree,
+} from "./workspace-session-worktree-lifecycle";
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import path from "node:path";
@@ -285,6 +289,71 @@ describe("host-owned Workspace Session lifecycle", () => {
       registered,
     };
   };
+
+  test.each(["default target", "checkout"] as const)(
+    "protects the %s branch when the stored worktree is missing",
+    async (protectedBy) => {
+      const h = setup();
+      const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
+      if (session.executionTarget.kind !== "local_worktree") throw new Error("Expected worktree");
+      const target = session.executionTarget;
+      const branchName = target.branchName;
+      if (branchName === null) throw new Error("Expected named branch");
+      h.paths.clear();
+      h.registered.clear();
+      const config = await Effect.runPromise(h.dependencies.settings.getRepoConfig("fairnest"));
+      const protectedConfig = {
+        ...config,
+        defaultTargetBranch: {
+          branch: protectedBy === "default target" ? branchName : "other",
+        },
+      };
+      const dependencies = {
+        ...h.dependencies,
+        settings: {
+          ...h.dependencies.settings,
+          getRepoConfig: () => Effect.succeed(protectedConfig),
+        },
+        git: {
+          ...h.dependencies.git,
+          getCurrentBranch: () =>
+            Effect.succeed({
+              name: protectedBy === "checkout" ? branchName : "other",
+              detached: false,
+            }),
+        },
+      };
+      const service = createWorkspaceSessionService(dependencies);
+      h.calls.length = 0;
+      await expect(
+        Effect.runPromise(
+          readWorkspaceSessionArchivePreview(dependencies, protectedConfig, target),
+        ),
+      ).rejects.toThrow("Cannot delete protected branch");
+      await expect(
+        Effect.runPromise(removeWorkspaceSessionWorktree(dependencies, protectedConfig, target)),
+      ).rejects.toThrow("Cannot delete protected branch");
+      await expect(
+        Effect.runPromise(
+          service.archive({
+            workspaceId: "fairnest",
+            sessionId: session.id,
+            confirmStop: true,
+            removeWorktree: true,
+            worktreeConfirmation: {
+              workingDirectory: target.workingDirectory,
+              branchName,
+            },
+          }),
+        ),
+      ).rejects.toThrow("Cannot delete protected branch");
+      expect(h.calls).not.toContain("delete-branch");
+      expect(h.branches.has(`refs/heads/${target.branchName}`)).toBe(true);
+      expect(
+        await Effect.runPromise(service.get({ workspaceId: "fairnest", sessionId: session.id })),
+      ).toEqual(session);
+    },
+  );
 
   test("first-send startup completes through the real runtime registry cancellation race", async () => {
     const h = setup();
