@@ -1107,10 +1107,14 @@ describe("createAgentSessionCommandService", () => {
 
   test("stores a model switch without an undefined profile key when no profile is stored", async () => {
     const storedModels: unknown[] = [];
+    const runtimeModels: unknown[] = [];
     const service = createModelUpdateService({
       runtimeKind: "codex",
       selectedModel: { runtimeKind: "codex", providerId: "openai", modelId: "gpt-6-astra" },
-      updateRuntimeModel: () => Effect.void,
+      updateRuntimeModel: (input) =>
+        Effect.sync(() => {
+          runtimeModels.push(input.model);
+        }),
       updateStoredModel: (input) =>
         Effect.sync(() => {
           storedModels.push(input.selectedModel);
@@ -1129,6 +1133,7 @@ describe("createAgentSessionCommandService", () => {
       }),
     );
 
+    expect(runtimeModels).toEqual([{ providerId: "openai", modelId: "gpt-5.6-sol" }]);
     expect(storedModels).toStrictEqual([
       { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5.6-sol" },
     ]);
