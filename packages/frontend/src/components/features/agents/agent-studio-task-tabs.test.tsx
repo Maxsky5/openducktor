@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Tabs } from "@/components/ui/tabs";
+import { BrowserTabsRoot } from "@/components/ui/browser-tabs";
 import { buildTask } from "./agent-chat/agent-chat-test-fixtures";
 import { AgentStudioTaskTabs } from "./agent-studio-task-tabs";
 
@@ -29,7 +29,6 @@ const buildModel = () => ({
   ],
   availableTabTasks: [buildTask({ id: "task-4", title: "Stabilize desktop startup" })],
   isLoadingAvailableTabTasks: false,
-  onSelectTab: () => {},
   onCreateTab: () => {},
   onCloseTab: () => {},
   onReorderTab: () => {},
@@ -40,8 +39,8 @@ describe("AgentStudioTaskTabs", () => {
   test("renders browser-style tabs and status icons", () => {
     const html = renderToStaticMarkup(
       createElement(
-        Tabs,
-        { value: "task-1" },
+        BrowserTabsRoot,
+        { value: "task-1", onValueChange: () => {} },
         createElement(AgentStudioTaskTabs, { model: buildModel() }),
       ),
     );
@@ -79,8 +78,8 @@ describe("AgentStudioTaskTabs", () => {
 
     const { unmount } = render(
       createElement(
-        Tabs,
-        { value: "task-1" },
+        BrowserTabsRoot,
+        { value: "task-1", onValueChange: () => {} },
         createElement(AgentStudioTaskTabs, { model: buildModel() }),
       ),
     );
@@ -115,8 +114,8 @@ describe("AgentStudioTaskTabs", () => {
   test("shows empty-state copy when no tabs are open", () => {
     const html = renderToStaticMarkup(
       createElement(
-        Tabs,
-        { value: "__empty__" },
+        BrowserTabsRoot,
+        { value: "__empty__", onValueChange: () => {} },
         createElement(AgentStudioTaskTabs, {
           model: {
             ...buildModel(),
@@ -134,8 +133,8 @@ describe("AgentStudioTaskTabs", () => {
   test("renders right panel toggle when provided", () => {
     const html = renderToStaticMarkup(
       createElement(
-        Tabs,
-        { value: "task-1" },
+        BrowserTabsRoot,
+        { value: "task-1", onValueChange: () => {} },
         createElement(AgentStudioTaskTabs, {
           model: buildModel(),
           rightPanelToggleModel: {
@@ -151,8 +150,8 @@ describe("AgentStudioTaskTabs", () => {
 
     const { unmount } = render(
       createElement(
-        Tabs,
-        { value: "task-1" },
+        BrowserTabsRoot,
+        { value: "task-1", onValueChange: () => {} },
         createElement(AgentStudioTaskTabs, {
           model: buildModel(),
           rightPanelToggleModel: {
@@ -177,8 +176,8 @@ describe("AgentStudioTaskTabs", () => {
   test("renders the terminal toggle as an icon-only action", () => {
     render(
       createElement(
-        Tabs,
-        { value: "task-1" },
+        BrowserTabsRoot,
+        { value: "task-1", onValueChange: () => {} },
         createElement(AgentStudioTaskTabs, {
           model: buildModel(),
           terminalPanelToggleModel: {
@@ -198,8 +197,8 @@ describe("AgentStudioTaskTabs", () => {
   test("uses the execution panel hover treatment for the terminal toggle", () => {
     render(
       createElement(
-        Tabs,
-        { value: "task-1" },
+        BrowserTabsRoot,
+        { value: "task-1", onValueChange: () => {} },
         createElement(AgentStudioTaskTabs, {
           model: buildModel(),
           terminalPanelToggleModel: {
@@ -231,8 +230,8 @@ describe("AgentStudioTaskTabs", () => {
   test("keeps new-tab button enabled while tab tasks are loading", () => {
     const html = renderToStaticMarkup(
       createElement(
-        Tabs,
-        { value: "__empty__" },
+        BrowserTabsRoot,
+        { value: "__empty__", onValueChange: () => {} },
         createElement(AgentStudioTaskTabs, {
           model: {
             ...buildModel(),
@@ -251,8 +250,8 @@ describe("AgentStudioTaskTabs", () => {
   test("shows loaded tasks immediately when opening the new-tab dialog", async () => {
     render(
       createElement(
-        Tabs,
-        { value: "task-1" },
+        BrowserTabsRoot,
+        { value: "task-1", onValueChange: () => {} },
         createElement(AgentStudioTaskTabs, { model: buildModel() }),
       ),
     );
@@ -268,8 +267,8 @@ describe("AgentStudioTaskTabs", () => {
   test("keeps the new-tab button outside the horizontal scroll region", () => {
     render(
       createElement(
-        Tabs,
-        { value: "task-1" },
+        BrowserTabsRoot,
+        { value: "task-1", onValueChange: () => {} },
         createElement(AgentStudioTaskTabs, {
           model: buildModel(),
           rightPanelToggleModel: {
@@ -298,12 +297,11 @@ describe("AgentStudioTaskTabs", () => {
 
     render(
       createElement(
-        Tabs,
+        BrowserTabsRoot,
         { value: "task-1", onValueChange: onSelectTab },
         createElement(AgentStudioTaskTabs, {
           model: {
             ...buildModel(),
-            onSelectTab,
           },
         }),
       ),

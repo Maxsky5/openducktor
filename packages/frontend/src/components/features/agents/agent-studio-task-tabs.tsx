@@ -1,9 +1,6 @@
-import { DndContext, DragOverlay } from "@dnd-kit/core";
-import { horizontalListSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import type { TaskCard } from "@openducktor/contracts";
 import { Circle, CircleAlert, LoaderCircle, Plus, SquareTerminal, X } from "lucide-react";
-import { type ReactElement, useMemo, useRef, useState } from "react";
+import { type ReactElement, useState } from "react";
 import { TaskSelector } from "@/components/features/tasks";
 import { Button } from "@/components/ui/button";
 import { RunningStatusDot } from "@/components/ui/running-status-dot";
@@ -16,19 +13,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { StudioTabStrip, StudioTabsList, StudioTabTrigger } from "./studio-tab-strip";
-import { studioTabLabelClassName, studioTabShellClassName } from "./studio-tab-styles";
-import {
-  horizontalTabDropAnimation,
-  horizontalTabSortTransition,
-} from "@/components/ui/use-horizontal-sortable-tabs";
+import { BrowserTabs, BrowserTabsBar } from "@/components/ui/browser-tabs";
 import { cn } from "@/lib/utils";
 import {
   agentStudioPanelToggleButtonClassName,
   TaskExecutionPanelToggleButton,
   type TaskExecutionPanelToggleModel,
 } from "./task-execution-panel";
-import { useAgentStudioTaskTabReorderDrag } from "./use-agent-studio-task-tab-reorder-drag";
 
 export type AgentStudioTaskTabStatus = "working" | "idle" | "waiting_input";
 
@@ -43,7 +34,6 @@ export type AgentStudioTaskTabsModel = {
   tabs: AgentStudioTaskTab[];
   availableTabTasks: TaskCard[];
   isLoadingAvailableTabTasks: boolean;
-  onSelectTab: (taskId: string) => void;
   onCreateTab: (taskId: string) => void;
   onCloseTab: (taskId: string) => void;
   onReorderTab: (draggedTaskId: string, targetTaskId: string, position: "before" | "after") => void;
@@ -55,9 +45,6 @@ export type TerminalPanelToggleModel = {
   disabled: boolean;
   onToggle: () => void;
 };
-
-const taskTabShellClassName = (tab: AgentStudioTaskTab): string =>
-  cn(studioTabShellClassName(tab.isActive), "touch-none");
 
 function AgentStudioTaskTabContent({ tab }: { tab: AgentStudioTaskTab }): ReactElement {
   const statusLabel = statusLabelByTab(tab.status);
@@ -96,95 +83,6 @@ const statusIconByTab = (status: AgentStudioTaskTabStatus): ReactElement => {
   return <Circle className="size-3.5 fill-input text-input" />;
 };
 
-function AgentStudioTaskTabDragOverlay({ tab }: { tab: AgentStudioTaskTab }): ReactElement {
-  return (
-    <div
-      aria-hidden="true"
-      data-active={tab.isActive ? "true" : "false"}
-      data-dragging="true"
-      data-task-tab-id={tab.taskId}
-      className={cn(taskTabShellClassName(tab), "z-50 after:hidden")}
-    >
-      <div className={cn(studioTabLabelClassName, "inline-flex")}>
-        <AgentStudioTaskTabContent tab={tab} />
-      </div>
-      <span
-        className="pointer-events-none mr-1 rounded-md p-1 text-muted-foreground opacity-60"
-        data-active={tab.isActive ? "true" : "false"}
-      >
-        <X className="size-3.5" />
-      </span>
-    </div>
-  );
-}
-
-function SortableAgentStudioTaskTab({
-  tab,
-  isActiveDrag,
-  shouldSuppressSelection,
-  onSelectTab,
-  onCloseTab,
-}: {
-  tab: AgentStudioTaskTab;
-  isActiveDrag: boolean;
-  shouldSuppressSelection: boolean;
-  onSelectTab: (taskId: string) => void;
-  onCloseTab: (taskId: string) => void;
-}): ReactElement {
-  const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: tab.taskId,
-    transition: horizontalTabSortTransition,
-  });
-  const isDragSource = isDragging || isActiveDrag;
-
-  return (
-    <div
-      ref={setNodeRef}
-      data-active={tab.isActive ? "true" : "false"}
-      data-dragging={isDragSource ? "true" : "false"}
-      data-task-tab-id={tab.taskId}
-      className={cn(taskTabShellClassName(tab), isDragSource && "opacity-0")}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-      }}
-      {...listeners}
-    >
-      <StudioTabTrigger
-        id={`agent-studio-tab-${tab.taskId}`}
-        value={tab.taskId}
-        onMouseDown={(event) => event.preventDefault()}
-        onMouseUp={(event) => {
-          if (shouldSuppressSelection) {
-            event.preventDefault();
-            event.stopPropagation();
-            return;
-          }
-          onSelectTab(tab.taskId);
-        }}
-      >
-        <AgentStudioTaskTabContent tab={tab} />
-      </StudioTabTrigger>
-      <button
-        type="button"
-        className="mr-1 cursor-pointer rounded-md p-1 text-muted-foreground opacity-60 transition-none hover:bg-secondary hover:text-foreground group-hover:opacity-100 data-[active=true]:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-        data-active={tab.isActive ? "true" : "false"}
-        tabIndex={tab.isActive ? 0 : -1}
-        aria-label={`Close tab for ${tab.taskTitle}`}
-        onMouseDown={(event) => event.stopPropagation()}
-        onPointerDown={(event) => event.stopPropagation()}
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          onCloseTab(tab.taskId);
-        }}
-      >
-        <X className="size-3.5" />
-      </button>
-    </div>
-  );
-}
-
 export function AgentStudioTaskTabs({
   model,
   rightPanelToggleModel,
@@ -198,7 +96,6 @@ export function AgentStudioTaskTabs({
     tabs,
     availableTabTasks,
     isLoadingAvailableTabTasks,
-    onSelectTab,
     onCreateTab,
     onCloseTab,
     onReorderTab,
@@ -206,22 +103,6 @@ export function AgentStudioTaskTabs({
   } = model;
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [pendingTaskId, setPendingTaskId] = useState("");
-  const scrollRegionRef = useRef<HTMLDivElement | null>(null);
-  const tabTaskIds = useMemo(() => tabs.map((tab) => tab.taskId), [tabs]);
-  const {
-    activeTaskId,
-    sensors,
-    collisionDetection,
-    measuring,
-    modifiers,
-    handleDragStart,
-    handleDragEnd,
-    handleDragCancel,
-    shouldSuppressSelection,
-  } = useAgentStudioTaskTabReorderDrag({
-    tabTaskIds,
-    onReorderTab,
-  });
   const selectedTaskId = availableTabTasks.some((task) => task.id === pendingTaskId)
     ? pendingTaskId
     : (availableTabTasks[0]?.id ?? "");
@@ -229,14 +110,11 @@ export function AgentStudioTaskTabs({
   const canOpenCreateDialog = agentStudioReady;
   const hasCreatableTasks = availableTabTasks.length > 0;
   const hasAnyTab = tabs.length > 0;
-  const activeDragTab = activeTaskId
-    ? (tabs.find((tab) => tab.taskId === activeTaskId) ?? null)
-    : null;
 
   return (
     <>
-      <StudioTabStrip
-        scrollRef={scrollRegionRef}
+      <BrowserTabsBar
+        className="agent-studio-titlebar-safe-area electron-titlebar-safe-area bg-studio-chrome"
         createAction={
           <Button
             type="button"
@@ -280,40 +158,34 @@ export function AgentStudioTaskTabs({
         }
       >
         {hasAnyTab ? (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={collisionDetection}
-            measuring={measuring}
-            modifiers={modifiers}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-            onDragCancel={handleDragCancel}
-          >
-            <SortableContext items={tabTaskIds} strategy={horizontalListSortingStrategy}>
-              <StudioTabsList aria-label="Task workflow tabs">
-                {tabs.map((tab) => (
-                  <SortableAgentStudioTaskTab
-                    key={tab.taskId}
-                    tab={tab}
-                    isActiveDrag={activeTaskId === tab.taskId}
-                    shouldSuppressSelection={shouldSuppressSelection(tab.taskId)}
-                    onSelectTab={onSelectTab}
-                    onCloseTab={onCloseTab}
-                  />
-                ))}
-              </StudioTabsList>
-            </SortableContext>
-
-            <DragOverlay dropAnimation={horizontalTabDropAnimation} zIndex={40}>
-              {activeDragTab ? <AgentStudioTaskTabDragOverlay tab={activeDragTab} /> : null}
-            </DragOverlay>
-          </DndContext>
+          <BrowserTabs
+            aria-label="Task workflow tabs"
+            onReorder={onReorderTab}
+            items={tabs.map((tab) => ({
+              value: tab.taskId,
+              content: <AgentStudioTaskTabContent tab={tab} />,
+              triggerProps: { id: `agent-studio-tab-${tab.taskId}` },
+              attributes: { "data-task-tab-id": tab.taskId },
+              action: (
+                <button
+                  type="button"
+                  className="mr-1 cursor-pointer rounded-md p-1 text-muted-foreground opacity-60 transition-none hover:bg-secondary hover:text-foreground group-hover:opacity-100 data-[active=true]:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  data-active={tab.isActive ? "true" : "false"}
+                  tabIndex={tab.isActive ? 0 : -1}
+                  aria-label={`Close tab for ${tab.taskTitle}`}
+                  onClick={() => onCloseTab(tab.taskId)}
+                >
+                  <X className="size-3.5" />
+                </button>
+              ),
+            }))}
+          />
         ) : (
           <p className="text-sm text-muted-foreground">
             Open a task tab to start working with an agent.
           </p>
         )}
-      </StudioTabStrip>
+      </BrowserTabsBar>
 
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
         <DialogContent className="max-w-xl">

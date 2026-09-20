@@ -130,7 +130,6 @@ type AgentStudioPageModelsTabsContext = Pick<
   | "taskTabs"
   | "availableTabTasks"
   | "isLoadingTasks"
-  | "handleSelectTab"
   | "handleCreateTab"
   | "handleCloseTab"
   | "handleReorderTab"
@@ -200,14 +199,7 @@ export const buildAgentStudioPageModelsArgs = ({
   runtimeDefinitions,
   composer,
 }: BuildAgentStudioPageModelsArgsInput): Parameters<typeof useAgentStudioPageModels>[0] => {
-  const {
-    activeTaskTabId,
-    handleSelectTab,
-    handleCreateTab,
-    handleCloseTab,
-    handleReorderTab,
-    ...taskTabs
-  } = tabs;
+  const { activeTaskTabId, handleCreateTab, handleCloseTab, handleReorderTab, ...taskTabs } = tabs;
   const {
     handleSelectAgentProfile,
     handleSelectVariant,
@@ -221,7 +213,6 @@ export const buildAgentStudioPageModelsArgs = ({
     selectedSession,
     taskTabs: {
       ...taskTabs,
-      onSelectTab: handleSelectTab,
       onCreateTab: handleCreateTab,
       onCloseTab: handleCloseTab,
       onReorderTab: handleReorderTab,
@@ -262,7 +253,6 @@ export function useAgentStudioOrchestrationController({
     taskTabs,
     availableTabTasks,
     isLoadingTasks,
-    handleSelectTab,
     handleCreateTab,
     handleCloseTab,
     handleReorderTab,
@@ -460,7 +450,6 @@ export function useAgentStudioOrchestrationController({
       taskTabs,
       availableTabTasks,
       isLoadingTasks,
-      handleSelectTab,
       handleCreateTab,
       handleCloseTab,
       handleReorderTab,

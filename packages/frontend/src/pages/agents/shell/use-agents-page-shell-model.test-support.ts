@@ -124,7 +124,6 @@ export const createAgentStudioTaskTabsModelFixture = (): AgentStudioTaskTabsMode
   tabs: [],
   availableTabTasks: [],
   isLoadingAvailableTabTasks: false,
-  onSelectTab: () => {},
   onCreateTab: () => {},
   onCloseTab: () => {},
   onReorderTab: () => {},
