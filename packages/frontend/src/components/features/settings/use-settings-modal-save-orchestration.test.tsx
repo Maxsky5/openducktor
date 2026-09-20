@@ -68,6 +68,7 @@ const createArgs = (
   loadSettingsSnapshot: mock(async () => createSnapshot()),
   isAgentModelFavoritesMutationPending: false,
   isKanbanTaskCardViewMutationPending: false,
+  wasKanbanTaskCardViewEdited: false,
   ...overrides,
 });
 
@@ -237,11 +238,11 @@ describe("useSettingsModalSaveOrchestration", () => {
     await harness.unmount();
   });
 
-  test("keeps a task card view changed in Settings", async () => {
+  test("keeps an explicit final task card view that matches the loaded value", async () => {
     const loadedSnapshot = createSnapshot();
     const snapshotDraft = createSnapshot();
-    snapshotDraft.kanban.taskCardView = "compact";
     const latestSnapshot = createSnapshot();
+    latestSnapshot.kanban.taskCardView = "compact";
     const saveSettingsSnapshot = mock(async () => {});
     const harness = createHookHarness(
       createArgs(
@@ -250,6 +251,7 @@ describe("useSettingsModalSaveOrchestration", () => {
           snapshotDraft,
           loadSettingsSnapshot: mock(async () => latestSnapshot),
           saveSettingsSnapshot,
+          wasKanbanTaskCardViewEdited: true,
         },
         { ...EMPTY_DIRTY_SECTIONS, kanban: true },
       ),
@@ -262,7 +264,7 @@ describe("useSettingsModalSaveOrchestration", () => {
 
     expect(saveSettingsSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({
-        kanban: expect.objectContaining({ taskCardView: "compact" }),
+        kanban: expect.objectContaining({ taskCardView: "normal" }),
       }),
     );
     await harness.unmount();

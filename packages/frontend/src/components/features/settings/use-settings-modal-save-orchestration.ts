@@ -29,6 +29,7 @@ type UseSettingsModalSaveOrchestrationArgs = {
   loadSettingsSnapshot: () => Promise<SettingsSnapshot>;
   isAgentModelFavoritesMutationPending: boolean;
   isKanbanTaskCardViewMutationPending: boolean;
+  wasKanbanTaskCardViewEdited: boolean;
 };
 
 type SettingsModalSaveOrchestration = {
@@ -52,6 +53,7 @@ export const useSettingsModalSaveOrchestration = ({
   loadSettingsSnapshot,
   isAgentModelFavoritesMutationPending,
   isKanbanTaskCardViewMutationPending,
+  wasKanbanTaskCardViewEdited,
 }: UseSettingsModalSaveOrchestrationArgs): SettingsModalSaveOrchestration => {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -156,10 +158,9 @@ export const useSettingsModalSaveOrchestration = ({
         await saveGlobalGitConfig(saveReadyGit);
       } else {
         const latestSnapshot = await loadSettingsSnapshot();
-        const taskCardView =
-          loadedSnapshot && snapshotDraft.kanban.taskCardView === loadedSnapshot.kanban.taskCardView
-            ? latestSnapshot.kanban.taskCardView
-            : snapshotDraft.kanban.taskCardView;
+        const taskCardView = wasKanbanTaskCardViewEdited
+          ? snapshotDraft.kanban.taskCardView
+          : latestSnapshot.kanban.taskCardView;
         const saveReadySnapshot = prepareSettingsSnapshotForSave(
           {
             ...snapshotDraft,
@@ -194,6 +195,7 @@ export const useSettingsModalSaveOrchestration = ({
     saveSettingsSnapshot,
     snapshotDraft,
     validation,
+    wasKanbanTaskCardViewEdited,
   ]);
 
   return {

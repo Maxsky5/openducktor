@@ -347,6 +347,31 @@ export const useSettingsModalController = ({
     selectedWorkspaceId,
     setSnapshotDraft,
   });
+  const [taskCardViewEditState, setTaskCardViewEditState] = useState({
+    loadedSnapshot,
+    open,
+    wasEdited: false,
+  });
+  if (
+    taskCardViewEditState.loadedSnapshot !== loadedSnapshot ||
+    taskCardViewEditState.open !== open
+  ) {
+    setTaskCardViewEditState({ loadedSnapshot, open, wasEdited: false });
+  }
+  const applyTrackedGlobalKanbanSettingsUpdate = useCallback(
+    (updater: (current: SettingsSnapshot["kanban"]) => SettingsSnapshot["kanban"]): void => {
+      applyGlobalKanbanSettingsUpdate((current) => {
+        const next = updater(current);
+        if (next.taskCardView !== current.taskCardView) {
+          setTaskCardViewEditState((state) =>
+            state.wasEdited ? state : { ...state, wasEdited: true },
+          );
+        }
+        return next;
+      });
+    },
+    [applyGlobalKanbanSettingsUpdate],
+  );
 
   const { dirtySections, markDirty } = useSettingsModalDirtyState({
     open,
@@ -442,6 +467,7 @@ export const useSettingsModalController = ({
     loadSettingsSnapshot,
     isAgentModelFavoritesMutationPending,
     isKanbanTaskCardViewMutationPending,
+    wasKanbanTaskCardViewEdited: taskCardViewEditState.wasEdited,
   });
   const draftActions = useMemo(
     () => ({
@@ -455,7 +481,7 @@ export const useSettingsModalController = ({
       updateAgentRuntimes: applyAgentRuntimesUpdate,
       updateReusablePrompts: applyReusablePromptsUpdate,
       updateCustomAgentRoles: applyCustomAgentRolesUpdate,
-      updateGlobalKanbanSettings: applyGlobalKanbanSettingsUpdate,
+      updateGlobalKanbanSettings: applyTrackedGlobalKanbanSettingsUpdate,
       updateGlobalAutopilotSettings: applyGlobalAutopilotSettingsUpdate,
       updateGlobalPromptOverrides: applyGlobalPromptOverridesUpdate,
       updateRepoPromptOverrides: applyRepoPromptOverridesUpdate,
@@ -475,7 +501,7 @@ export const useSettingsModalController = ({
       applyAgentRuntimesUpdate,
       applyReusablePromptsUpdate,
       applyCustomAgentRolesUpdate,
-      applyGlobalKanbanSettingsUpdate,
+      applyTrackedGlobalKanbanSettingsUpdate,
       applyGlobalAutopilotSettingsUpdate,
       applyGlobalPromptOverridesUpdate,
       applyRepoPromptOverridesUpdate,
