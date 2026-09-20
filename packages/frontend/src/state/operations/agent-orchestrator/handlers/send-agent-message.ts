@@ -2,8 +2,10 @@ import {
   type AgentEnginePort,
   type AgentUserMessagePart,
   classifySystemSlashCommandInvocation,
+  describeAgentSessionScope,
   hasMeaningfulAgentUserMessageParts,
   normalizeAgentUserMessageParts,
+  resolveAgentSessionAssociationTransition,
 } from "@openducktor/core";
 import { agentSessionIdentityKey, matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { AgentMessageSendError } from "@/lib/agent-message-send-error";
@@ -35,6 +37,28 @@ import type { SessionTurnMetadata } from "../support/session-turn-metadata";
 import { toUserChatMessage } from "../support/user-message-event";
 import { applyAsyncQuestionUserMessage } from "../support/async-questions";
 import type { PreparedSessionSend } from "./prepare-session-send";
+
+const withSendScope = (
+  session: AgentSessionState,
+  sessionScope: AgentMessageSendOptions["sessionScope"],
+): AgentSessionState => {
+  if (!sessionScope) {
+    return session;
+  }
+  const transition = resolveAgentSessionAssociationTransition(
+    session.sessionAssociation,
+    sessionScope,
+  );
+  if (transition.kind === "conflict") {
+    throw new Error(
+      `Cannot send message for session '${session.externalSessionId}' because its registered ${describeAgentSessionScope(transition.previous)} does not match the requested ${describeAgentSessionScope(transition.incoming)}.`,
+    );
+  }
+  return {
+    ...session,
+    sessionAssociation: transition.association,
+  };
+};
 
 export type SendAgentMessageDependencies = {
   workspaceRepoPath: string | null;
@@ -226,7 +250,10 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
     const isManualCompactionSend =
       classifySystemSlashCommandInvocation(normalizedParts).kind === "manual_session_compaction";
 
-    let currentSession = requireLoadedSession(dependencies.readSessionSnapshot, identity);
+    let currentSession = withSendScope(
+      requireLoadedSession(dependencies.readSessionSnapshot, identity),
+      options?.sessionScope,
+    );
     const externalSessionId = currentSession.externalSessionId;
     if (currentSession.status === "stopped") {
       const repoPath = requireWorkspaceRepoPath(dependencies.workspaceRepoPath);
@@ -253,7 +280,10 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
           ? { ...current, status: resumed.status, runtimeStatusMessage: null }
           : current,
       );
-      currentSession = requireLoadedSession(dependencies.readSessionSnapshot, identity);
+      currentSession = withSendScope(
+        requireLoadedSession(dependencies.readSessionSnapshot, identity),
+        options?.sessionScope,
+      );
       if (currentSession.status === "stopped") {
         throw new Error(`Session '${externalSessionId}' is still stopped after resume.`);
       }
@@ -272,9 +302,9 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
           updateSession: dependencies.updateSession,
         });
 
-    const readySession = dependencies.readSessionSnapshot(currentSession);
-    if (!readySession || isAgentSessionWaitingInput(readySession)) {
-      if (!readySession) {
+    const loadedReadySession = dependencies.readSessionSnapshot(currentSession);
+    if (!loadedReadySession || isAgentSessionWaitingInput(loadedReadySession)) {
+      if (!loadedReadySession) {
         settleStartingSession(
           currentSession,
           "idle",
@@ -283,8 +313,9 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
         );
         return;
       }
-      rejectSendWhileWaitingForInput(readySession, dependencies);
+      rejectSendWhileWaitingForInput(loadedReadySession, dependencies);
     }
+    const readySession = withSendScope(loadedReadySession, options?.sessionScope);
 
     const isBusyQueuedSend = readySession.status === "running";
     const sendAttempt = isBusyQueuedSend

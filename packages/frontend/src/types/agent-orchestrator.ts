@@ -15,6 +15,7 @@ import type {
   AgentModelSelection,
   AgentPendingApprovalRequest,
   AgentRole,
+  AgentSessionScope,
   AgentSubagentExecutionMode,
   AgentSubagentStatus,
   AgentUserMessageDisplayPart,
@@ -147,6 +148,7 @@ export type AgentChatMessage = {
 export type AgentMessageSendOptions = {
   preserveTextWhitespace?: boolean;
   errorAttentionId?: string;
+  sessionScope?: AgentSessionScope;
 };
 
 export type SessionMessagesState = {

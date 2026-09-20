@@ -71,6 +71,7 @@ export function useSessionTranscriptSurfaceModel({
   });
   const asyncQuestions = useAgentAsyncQuestionActions({
     sessionIdentity: sessionHistory.interactionSession,
+    sessionScope: target?.sessionScope ?? null,
     canSubmit: runtimeReadiness.state === "ready",
     sendAgentMessage,
   });

@@ -1,4 +1,5 @@
 import type { AgentAsyncQuestion } from "@openducktor/contracts";
+import type { AgentSessionScope } from "@openducktor/core";
 import { useCallback, useMemo, useState } from "react";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
@@ -12,10 +13,12 @@ export type AgentAsyncQuestionActions = {
 
 export const useAgentAsyncQuestionActions = ({
   sessionIdentity,
+  sessionScope,
   canSubmit,
   sendAgentMessage,
 }: {
   sessionIdentity: AgentSessionIdentity | null;
+  sessionScope?: AgentSessionScope | null;
   canSubmit: boolean;
   sendAgentMessage: AgentOperationsContextValue["sendAgentMessage"];
 }): AgentAsyncQuestionActions => {
@@ -34,14 +37,18 @@ export const useAgentAsyncQuestionActions = ({
       setSubmitting((current) => ({ ...current, [question.questionItemId]: true }));
       setErrors((current) => ({ ...current, [question.questionItemId]: "" }));
       try {
-        await sendAgentMessage(sessionIdentity, [
-          {
-            kind: "async_question_reply",
-            questionItemId: question.questionItemId,
-            question: question.title,
-            answer: acceptedAnswer,
-          },
-        ]);
+        await sendAgentMessage(
+          sessionIdentity,
+          [
+            {
+              kind: "async_question_reply",
+              questionItemId: question.questionItemId,
+              question: question.title,
+              answer: acceptedAnswer,
+            },
+          ],
+          sessionScope ? { sessionScope } : undefined,
+        );
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
         setErrors((current) => ({
@@ -53,7 +60,7 @@ export const useAgentAsyncQuestionActions = ({
         setSubmitting((current) => ({ ...current, [question.questionItemId]: false }));
       }
     },
-    [canSubmit, sendAgentMessage, sessionIdentity],
+    [canSubmit, sendAgentMessage, sessionIdentity, sessionScope],
   );
 
   return useMemo(
