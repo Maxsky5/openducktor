@@ -28,6 +28,7 @@ type UseSettingsModalSaveOrchestrationArgs = {
   saveSettingsSnapshot: (snapshot: SettingsSnapshotSaveInput) => Promise<void>;
   loadSettingsSnapshot: () => Promise<SettingsSnapshot>;
   isAgentModelFavoritesMutationPending: boolean;
+  isKanbanTaskCardViewMutationPending: boolean;
 };
 
 type SettingsModalSaveOrchestration = {
@@ -50,6 +51,7 @@ export const useSettingsModalSaveOrchestration = ({
   saveSettingsSnapshot,
   loadSettingsSnapshot,
   isAgentModelFavoritesMutationPending,
+  isKanbanTaskCardViewMutationPending,
 }: UseSettingsModalSaveOrchestrationArgs): SettingsModalSaveOrchestration => {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -137,6 +139,15 @@ export const useSettingsModalSaveOrchestration = ({
       return false;
     }
 
+    if (!saveReadyGit && isKanbanTaskCardViewMutationPending) {
+      const reason = "Wait for the task card view update to finish before saving settings.";
+      setSaveError(reason);
+      toast.error("Cannot save settings", {
+        description: reason,
+      });
+      return false;
+    }
+
     saveInFlightRef.current = true;
     setIsSaving(true);
 
@@ -170,6 +181,7 @@ export const useSettingsModalSaveOrchestration = ({
   }, [
     dirtySections,
     isAgentModelFavoritesMutationPending,
+    isKanbanTaskCardViewMutationPending,
     loadSettingsSnapshot,
     loadedSnapshot,
     onRuntimeAvailabilityError,

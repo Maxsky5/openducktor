@@ -5,10 +5,7 @@ import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { host } from "@/state/operations/host";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
-
-type MutationContext = {
-  previousSnapshot: SettingsSnapshot;
-};
+import { KANBAN_TASK_CARD_VIEW_MUTATION_KEY } from "./kanban-task-card-view";
 
 type KanbanTaskCardViewState = {
   taskCardView: KanbanTaskCardView | null;
@@ -27,43 +24,17 @@ export function useKanbanTaskCardView(
   const queryClient = useQueryClient();
   const settingsOptions = settingsSnapshotQueryOptions(hostClient);
   const settingsQuery = useQuery(settingsOptions);
-  const mutation = useMutation<SettingsSnapshot, Error, KanbanTaskCardView, MutationContext>({
-    mutationKey: ["settings", "kanban-task-card-view"],
-    scope: { id: "kanban-task-card-view" },
+  const mutation = useMutation<SettingsSnapshot, Error, KanbanTaskCardView>({
+    mutationKey: KANBAN_TASK_CARD_VIEW_MUTATION_KEY,
+    scope: { id: KANBAN_TASK_CARD_VIEW_MUTATION_KEY[1] },
     mutationFn: (taskCardView) => hostClient.workspaceUpdateKanbanTaskCardView(taskCardView),
-    onMutate: async (taskCardView) => {
+    onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: settingsOptions.queryKey });
-      const previousSnapshot = queryClient.getQueryData<SettingsSnapshot>(settingsOptions.queryKey);
-      if (!previousSnapshot) {
-        throw new Error("Cannot update the task card view before Kanban settings are available.");
-      }
-      queryClient.setQueryData<SettingsSnapshot>(settingsOptions.queryKey, {
-        ...previousSnapshot,
-        kanban: { ...previousSnapshot.kanban, taskCardView },
-      });
-      return { previousSnapshot };
     },
     onSuccess: (snapshot) => {
       queryClient.setQueryData(settingsOptions.queryKey, snapshot);
     },
-    onError: (error, taskCardView, context) => {
-      if (context) {
-        queryClient.setQueryData<SettingsSnapshot>(settingsOptions.queryKey, (currentSnapshot) => {
-          if (!currentSnapshot) {
-            return context.previousSnapshot;
-          }
-          if (currentSnapshot.kanban.taskCardView !== taskCardView) {
-            return currentSnapshot;
-          }
-          return {
-            ...currentSnapshot,
-            kanban: {
-              ...currentSnapshot.kanban,
-              taskCardView: context.previousSnapshot.kanban.taskCardView,
-            },
-          };
-        });
-      }
+    onError: (error) => {
       toast.error("Failed to save task card view", { description: errorMessage(error) });
     },
   });
@@ -80,7 +51,8 @@ export function useKanbanTaskCardView(
   );
 
   return {
-    taskCardView: settingsQuery.data?.kanban.taskCardView ?? null,
+    taskCardView:
+      (isPending ? mutation.variables : null) ?? settingsQuery.data?.kanban.taskCardView ?? null,
     isPending,
     changeTaskCardView,
   };

@@ -67,6 +67,7 @@ const createArgs = (
   saveSettingsSnapshot: mock(async () => {}),
   loadSettingsSnapshot: mock(async () => createSnapshot()),
   isAgentModelFavoritesMutationPending: false,
+  isKanbanTaskCardViewMutationPending: false,
   ...overrides,
 });
 
@@ -169,6 +170,32 @@ describe("useSettingsModalSaveOrchestration", () => {
     expect(didSave).toBe(false);
     expect(harness.getLatest().saveError).toBe(
       "Wait for the model favorites update to finish before saving settings.",
+    );
+    expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
+    await harness.unmount();
+  });
+
+  test("blocks a full snapshot save while the task card view is being written", async () => {
+    const saveSettingsSnapshot = mock(async () => {});
+    const harness = createHookHarness(
+      createArgs(
+        {
+          isKanbanTaskCardViewMutationPending: true,
+          saveSettingsSnapshot,
+        },
+        { ...EMPTY_DIRTY_SECTIONS, chat: true },
+      ),
+    );
+
+    await harness.mount();
+    let didSave = true;
+    await harness.run(async (state) => {
+      didSave = await state.submit();
+    });
+
+    expect(didSave).toBe(false);
+    expect(harness.getLatest().saveError).toBe(
+      "Wait for the task card view update to finish before saving settings.",
     );
     expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
     await harness.unmount();
