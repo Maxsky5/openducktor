@@ -79,7 +79,7 @@ test.each(["first chunk", "starting status", "starting status with delayed rende
         onRendererError={onRendererError}
       />
     );
-    const hydrate = (chunks: DevServerTerminalChunk[]) =>
+    const load = (chunks: DevServerTerminalChunk[]) =>
       act(() => {
         harness.getLatest().hydrateTerminalBuffersFromState(
           buildState({
@@ -102,9 +102,9 @@ test.each(["first chunk", "starting status", "starting status with delayed rende
           "frontend",
         );
       });
-    hydrate([chunk(1, 0), chunk(1, 1), chunk(1, 2)]);
+    load([chunk(1, 0), chunk(1, 1), chunk(1, 2)]);
     const view = render(element());
-    const publish = async () => {
+    const draw = async () => {
       await act(async () => {
         view.rerender(element());
       });
@@ -112,13 +112,13 @@ test.each(["first chunk", "starting status", "starting status with delayed rende
     try {
       await act(async () => {});
       expect(screen).toBe("1:0,1:1,1:2,");
-      hydrate([]);
-      await publish();
+      load([]);
+      await draw();
       const notice = "[Dev server output was truncated. Showing retained output.]\r\n";
       expect(screen).toBe(notice);
       const resetToken = harness.getLatest().selectedScriptTerminalBuffer?.resetToken;
-      hydrate([]);
-      await publish();
+      load([]);
+      await draw();
       expect(harness.getLatest().selectedScriptTerminalBuffer?.resetToken).toBe(resetToken);
       if (order !== "first chunk") {
         act(() => {
@@ -134,22 +134,22 @@ test.each(["first chunk", "starting status", "starting status with delayed rende
           );
         });
         if (order === "starting status") {
-          await publish();
+          await draw();
           expect(screen).toBe("");
         }
       }
       append(0);
       flushFrame();
-      await publish();
-      await publish();
+      await draw();
+      await draw();
       expect(screen).toBe("2:0,");
       expect(harness.getLatest().selectedScriptTerminalBuffer?.resetToken).toBe(
         (resetToken ?? 0) + 1,
       );
       append(1);
       flushFrame();
-      await publish();
-      await publish();
+      await draw();
+      await draw();
       expect(screen).toBe("2:0,2:1,");
       expect(writes).toEqual(["1:0,1:1,1:2,", notice, "2:0,", "2:1,"]);
     } finally {

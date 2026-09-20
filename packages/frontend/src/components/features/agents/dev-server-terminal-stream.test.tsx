@@ -84,7 +84,7 @@ const createStreamHarness = async (initialChunks = [chunk(0)]) => {
     writes,
     screen: () => screen,
     resets: () => resets,
-    publish: async (suspend = false) => {
+    draw: async (suspend = false) => {
       await act(async () => {
         startTransition(() => {
           view.rerender(element(suspend));
@@ -96,25 +96,25 @@ const createStreamHarness = async (initialChunks = [chunk(0)]) => {
 };
 
 describe("dev server terminal stream", () => {
-  test("renders retained bursts and sequence gaps in order exactly once", async () => {
+  test("renders kept bursts and sequence gaps in order exactly once", async () => {
     const harness = await createStreamHarness();
     try {
       for (let sequence = 3; sequence <= 300; sequence += 3) {
         appendDevServerTerminalChunk(harness.store, chunk(sequence));
       }
-      await harness.publish();
-      await harness.publish();
+      await harness.draw();
+      await harness.draw();
       expect(harness.writes).toHaveLength(2);
       expect(harness.screen()).toBe(
         Array.from({ length: 101 }, (_, index) => `${index * 3},`).join(""),
       );
       expect(harness.resets()).toBe(1);
-      // Several publications can pass before the terminal renders again.
+      // Several frames can pass before the terminal renders again.
       for (let sequence = 303; sequence <= 600; sequence += 3) {
         appendDevServerTerminalChunk(harness.store, chunk(sequence));
         if (sequence === 450) getDevServerTerminalBuffer(harness.store, "frontend");
       }
-      await harness.publish();
+      await harness.draw();
       expect(harness.screen()).toBe(
         Array.from({ length: 201 }, (_, index) => `${index * 3},`).join(""),
       );
@@ -128,12 +128,12 @@ describe("dev server terminal stream", () => {
     const harness = await createStreamHarness();
     try {
       appendDevServerTerminalChunk(harness.store, chunk(1));
-      await harness.publish(true);
+      await harness.draw(true);
       expect(harness.screen()).toBe("0,");
       appendDevServerTerminalChunk(harness.store, chunk(2));
-      await harness.publish(true);
+      await harness.draw(true);
       expect(harness.screen()).toBe("0,");
-      await harness.publish();
+      await harness.draw();
       expect(harness.screen()).toBe("0,1,2,");
       expect(harness.writes).toEqual(["0,", "1,2,"]);
       expect(harness.resets()).toBe(1);
@@ -142,13 +142,13 @@ describe("dev server terminal stream", () => {
     }
   });
 
-  test("reports overflow when an empty terminal waits for its first publication", async () => {
+  test("reports overflow when an empty terminal waits for its first frame", async () => {
     const harness = await createStreamHarness([]);
     try {
       for (let sequence = 0; sequence <= 2_000; sequence += 1) {
         appendDevServerTerminalChunk(harness.store, chunk(sequence));
       }
-      await harness.publish();
+      await harness.draw();
       expect(harness.screen()).toStartWith("[Dev server output was truncated.");
       expect(harness.screen()).toEndWith("1999,2000,");
     } finally {
@@ -156,24 +156,24 @@ describe("dev server terminal stream", () => {
     }
   });
 
-  test("shows retention loss after rendering pauses and resumes exactly once", async () => {
+  test("shows dropped output after rendering pauses and resumes exactly once", async () => {
     const harness = await createStreamHarness();
     try {
       for (let sequence = 1; sequence <= 2_001; sequence += 1) {
         appendDevServerTerminalChunk(harness.store, chunk(sequence));
       }
-      await harness.publish();
+      await harness.draw();
       expect(harness.screen()).toBe(
         "[Dev server output was truncated. Showing retained output.]\r\n" +
           Array.from({ length: 2_000 }, (_, index) => `${index + 2},`).join(""),
       );
       expect(harness.resets()).toBe(2);
       appendDevServerTerminalChunk(harness.store, chunk(2_004));
-      await harness.publish();
+      await harness.draw();
       expect(harness.writes.at(-1)).toBe("2004,");
       expect(harness.resets()).toBe(2);
       replaceDevServerTerminalBuffer(harness.store, "frontend", [chunk(0)]);
-      await harness.publish();
+      await harness.draw();
       expect(harness.screen()).toBe("0,");
       expect(harness.resets()).toBe(3);
     } finally {
@@ -181,13 +181,13 @@ describe("dev server terminal stream", () => {
     }
   });
 
-  test("does not flag loss when the last rendered entry itself was evicted", async () => {
+  test("does not flag loss when the last rendered entry itself was dropped", async () => {
     const harness = await createStreamHarness();
     try {
       for (let sequence = 1; sequence <= 2_000; sequence += 1) {
         appendDevServerTerminalChunk(harness.store, chunk(sequence));
       }
-      await harness.publish();
+      await harness.draw();
       expect(harness.resets()).toBe(1);
       expect(harness.screen()).toBe(
         Array.from({ length: 2_001 }, (_, index) => `${index},`).join(""),
@@ -199,34 +199,34 @@ describe("dev server terminal stream", () => {
 });
 
 test.each([false, true])(
-  "reports same-run replacement loss once with empty replay %s",
+  "reports same-run replay loss once with empty output %s",
   async (empty) => {
     const harness = await createStreamHarness();
     try {
       appendDevServerTerminalChunk(harness.store, chunk(1));
       appendDevServerTerminalChunk(harness.store, chunk(2));
-      await harness.publish(true);
-      const retained = empty ? [] : [chunk(2)];
+      await harness.draw(true);
+      const kept = empty ? [] : [chunk(2)];
       applyDevServerTerminalBufferReplacement(harness.store, "frontend", {
         runIdentity: chunk(0).runIdentity,
-        terminalChunks: retained,
+        terminalChunks: kept,
         snapshotWindow: {
-          count: retained.length,
+          count: kept.length,
           firstSequence: empty ? null : 2,
           lastSequence: empty ? null : 2,
         },
       });
-      await harness.publish();
+      await harness.draw();
       const expected =
         "[Dev server output was truncated. Showing retained output.]\r\n" + (empty ? "" : "2,");
       expect(harness.screen()).toBe(expected);
-      await harness.publish();
-      await harness.publish();
+      await harness.draw();
+      await harness.draw();
       expect(harness.resets()).toBe(2);
       expect(harness.writes).toEqual(["0,", expected]);
       appendDevServerTerminalChunk(harness.store, chunk(3));
-      await harness.publish();
-      await harness.publish();
+      await harness.draw();
+      await harness.draw();
       expect(harness.screen()).toBe(`${expected}3,`);
       expect(harness.writes).toEqual(["0,", expected, "3,"]);
       expect(harness.resets()).toBe(2);

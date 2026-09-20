@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { DevServerTerminalChunk } from "@openducktor/contracts";
-import { readDevServerTerminalOutput } from "./dev-server-terminal-output";
+import { readTerminalOutput } from "./dev-server-terminal-output";
 
 const chunk = (sequence: number): DevServerTerminalChunk => ({
   scriptId: "frontend",
@@ -10,14 +10,14 @@ const chunk = (sequence: number): DevServerTerminalChunk => ({
   timestamp: "2026-03-25T10:00:00.000Z",
 });
 
-describe("readDevServerTerminalOutput", () => {
+describe("readTerminalOutput", () => {
   test("reads all replay entries and handles noncontiguous sequences", () => {
     const entries = [chunk(2), chunk(9), chunk(15)];
-    expect(readDevServerTerminalOutput(entries, null)).toBe("2\r\n9\r\n15\r\n");
-    expect(readDevServerTerminalOutput(entries, 2)).toBe("9\r\n15\r\n");
-    expect(readDevServerTerminalOutput(entries, 10)).toBe("15\r\n");
-    expect(readDevServerTerminalOutput(entries, 15)).toBe("");
-    expect(readDevServerTerminalOutput([], null)).toBe("");
+    expect(readTerminalOutput(entries, null)).toBe("2\r\n9\r\n15\r\n");
+    expect(readTerminalOutput(entries, 2)).toBe("9\r\n15\r\n");
+    expect(readTerminalOutput(entries, 10)).toBe("15\r\n");
+    expect(readTerminalOutput(entries, 15)).toBe("");
+    expect(readTerminalOutput([], null)).toBe("");
   });
 
   test("visits only the binary search path and unseen tail at capacity", () => {
@@ -32,7 +32,7 @@ describe("readDevServerTerminalOutput", () => {
         },
       });
     });
-    expect(readDevServerTerminalOutput(countedEntries, 1_899 * 3)).toBe(
+    expect(readTerminalOutput(countedEntries, 1_899 * 3)).toBe(
       entries
         .slice(1_900)
         .map((entry) => entry.data)
@@ -40,7 +40,7 @@ describe("readDevServerTerminalOutput", () => {
     );
     expect(visits).toBeLessThanOrEqual(111);
     visits = 0;
-    expect(readDevServerTerminalOutput(countedEntries, 1_999 * 3)).toBe("");
+    expect(readTerminalOutput(countedEntries, 1_999 * 3)).toBe("");
     expect(visits).toBeLessThanOrEqual(11);
   });
 });

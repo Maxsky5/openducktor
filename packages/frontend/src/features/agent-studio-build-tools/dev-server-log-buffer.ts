@@ -18,7 +18,7 @@ export type AgentStudioDevServerTerminalChunkEntry = DevServerTerminalChunk;
 export type AgentStudioDevServerTerminalBuffer = {
   entries: readonly AgentStudioDevServerTerminalChunkEntry[];
   lastSequence: number | null;
-  evictedThroughSequence: number | null;
+  lastDroppedSequence: number | null;
   resetToken: number;
 };
 
@@ -48,7 +48,7 @@ type DevServerTerminalBufferState = {
   lastSnapshotSequence: number | null;
   size: number;
   lastSequence: number | null;
-  evictedThroughSequence: number | null;
+  lastDroppedSequence: number | null;
   resetToken: number;
   runIdentity: DevServerRunIdentity | null;
   snapshotEntryCount: number;
@@ -155,7 +155,7 @@ const createDevServerTerminalBufferState = (): DevServerTerminalBufferState => (
   size: 0,
   lastSequence: null,
   resetToken: 0,
-  evictedThroughSequence: null,
+  lastDroppedSequence: null,
   runIdentity: null,
   snapshotEntryCount: 0,
 });
@@ -206,11 +206,11 @@ export const appendDevServerTerminalChunk = (
     buffer.entries[insertionIndex] = terminalChunk;
     buffer.size += 1;
   } else {
-    const evictedEntry = buffer.entries[buffer.head];
-    if (!evictedEntry) {
+    const droppedEntry = buffer.entries[buffer.head];
+    if (!droppedEntry) {
       throw new Error(`Missing dev server terminal chunk at ring head ${buffer.head}.`);
     }
-    buffer.evictedThroughSequence = evictedEntry.sequence;
+    buffer.lastDroppedSequence = droppedEntry.sequence;
     buffer.entries[buffer.head] = terminalChunk;
     buffer.head = (buffer.head + 1) % MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS;
   }
@@ -227,7 +227,7 @@ export const replaceDevServerTerminalBuffer = (
 ): void => {
   const buffer = getOrCreateDevServerTerminalBufferState(store, scriptId);
   const trimmedChunks = trimDevServerTerminalChunks(terminalChunks);
-  // Empty replay can still leave a rendered loss notice and a consumed cursor.
+  // Empty output can still leave a loss notice and cursor on screen.
   const shouldResetTerminal =
     !areDevServerRunIdentitiesEqual(buffer.runIdentity, runIdentity) ||
     buffer.size > 0 ||
@@ -237,7 +237,7 @@ export const replaceDevServerTerminalBuffer = (
   buffer.head = 0;
   buffer.size = 0;
   buffer.lastSequence = null;
-  buffer.evictedThroughSequence = null;
+  buffer.lastDroppedSequence = null;
   buffer.firstSnapshotSequence = null;
   buffer.lastSnapshotSequence = null;
   buffer.runIdentity = runIdentity;
@@ -261,23 +261,19 @@ export const applyDevServerTerminalBufferReplacement = (
   scriptId: string,
   replacement: DevServerTerminalBufferReplacement,
 ): void => {
-  const previousBuffer = store.get(scriptId);
-  let evictedThroughSequence: number | null = null;
-  if (
-    previousBuffer &&
-    areDevServerRunIdentitiesEqual(previousBuffer.runIdentity, replacement.runIdentity)
-  ) {
-    // Reconciliation can shorten a replay within the same run. Keep evidence of
-    // earlier eviction and of known entries that this replacement removes.
-    evictedThroughSequence = previousBuffer.evictedThroughSequence;
-    const retainedSequences = new Set(
+  const oldBuffer = store.get(scriptId);
+  let lastDroppedSequence: number | null = null;
+  if (oldBuffer && areDevServerRunIdentitiesEqual(oldBuffer.runIdentity, replacement.runIdentity)) {
+    // A same-run replay can drop chunks before the next render.
+    lastDroppedSequence = oldBuffer.lastDroppedSequence;
+    const keptSequences = new Set(
       replacement.terminalChunks
         .slice(-MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS)
         .map((chunk) => chunk.sequence),
     );
-    for (const entry of readCurrentBufferEntries(previousBuffer)) {
-      if (!retainedSequences.has(entry.sequence)) {
-        evictedThroughSequence = Math.max(evictedThroughSequence ?? entry.sequence, entry.sequence);
+    for (const entry of readCurrentBufferEntries(oldBuffer)) {
+      if (!keptSequences.has(entry.sequence)) {
+        lastDroppedSequence = Math.max(lastDroppedSequence ?? entry.sequence, entry.sequence);
       }
     }
   }
@@ -290,7 +286,7 @@ export const applyDevServerTerminalBufferReplacement = (
   );
 
   const buffer = getOrCreateDevServerTerminalBufferState(store, scriptId);
-  buffer.evictedThroughSequence = evictedThroughSequence;
+  buffer.lastDroppedSequence = lastDroppedSequence;
   buffer.firstSnapshotSequence = replacement.snapshotWindow.firstSequence;
   buffer.lastSnapshotSequence = replacement.snapshotWindow.lastSequence;
   buffer.runIdentity = replacement.runIdentity;
@@ -357,7 +353,7 @@ export const getDevServerTerminalBuffer = (
     entries: readCurrentBufferEntries(buffer),
     lastSequence: buffer.lastSequence,
     resetToken: buffer.resetToken,
-    evictedThroughSequence: buffer.evictedThroughSequence,
+    lastDroppedSequence: buffer.lastDroppedSequence,
   };
 };
 

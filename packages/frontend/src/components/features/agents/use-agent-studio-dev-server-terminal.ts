@@ -2,7 +2,7 @@ import type { FitAddon } from "@xterm/addon-fit";
 import type { ITerminalOptions, Terminal } from "@xterm/xterm";
 import { useCallback, useEffect, useRef } from "react";
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
-import { readDevServerTerminalOutput } from "@/features/agent-studio-build-tools/dev-server-terminal-output";
+import { readTerminalOutput } from "@/features/agent-studio-build-tools/dev-server-terminal-output";
 import { createTerminalBinding } from "@/features/terminals/shared-terminal-binding";
 import {
   createTerminalOptions,
@@ -203,21 +203,21 @@ const renderTerminalBuffer = ({
   const didResetTokenChange = renderedStateRef.current.resetToken !== nextResetToken;
   const shouldReplay = didTerminalIdentityChange || didResetTokenChange;
 
-  // A sequence cursor only applies to the terminal generation that rendered it.
+  // A cursor belongs to the terminal state that set it.
   const lastRenderedSequence = shouldReplay ? null : renderedStateRef.current.lastSequence;
-  const evictedThroughSequence = terminalBuffer?.evictedThroughSequence ?? null;
-  const didLoseUnseenOutput =
-    evictedThroughSequence !== null &&
-    (lastRenderedSequence === null || lastRenderedSequence < evictedThroughSequence);
+  const lastDroppedSequence = terminalBuffer?.lastDroppedSequence ?? null;
+  const lostUnreadOutput =
+    lastDroppedSequence !== null &&
+    (lastRenderedSequence === null || lastRenderedSequence < lastDroppedSequence);
 
-  // An empty or shorter replay can acknowledge loss beyond its last entry.
-  const consumedThroughSequence =
-    evictedThroughSequence !== null &&
-    (nextLastSequence === null || nextLastSequence < evictedThroughSequence)
-      ? evictedThroughSequence
+  // Empty output can still move the cursor past dropped chunks.
+  const nextCursor =
+    lastDroppedSequence !== null &&
+    (nextLastSequence === null || nextLastSequence < lastDroppedSequence)
+      ? lastDroppedSequence
       : nextLastSequence;
 
-  if (shouldReplay || didLoseUnseenOutput) {
+  if (shouldReplay || lostUnreadOutput) {
     const hasRenderedCurrentBinding = renderedStateRef.current.terminalIdentityKey !== null;
     const activeBinding = hasRenderedCurrentBinding ? recreateTerminalBinding() : binding;
     if (!activeBinding) {
@@ -226,24 +226,21 @@ const renderTerminalBuffer = ({
 
     activeBinding.terminal.reset();
     activeBinding.terminal.clear();
-    const truncationNotice = didLoseUnseenOutput
+    const lossNotice = lostUnreadOutput
       ? "[Dev server output was truncated. Showing retained output.]\r\n"
       : "";
-    writeTerminalOutput(
-      activeBinding.terminal,
-      truncationNotice + readDevServerTerminalOutput(entries, null),
-    );
+    writeTerminalOutput(activeBinding.terminal, lossNotice + readTerminalOutput(entries, null));
     activeBinding.fitAddon.fit();
     renderedStateRef.current = {
       terminalIdentityKey,
       resetToken: nextResetToken,
-      lastSequence: consumedThroughSequence,
+      lastSequence: nextCursor,
     };
     return;
   }
 
-  writeTerminalOutput(binding.terminal, readDevServerTerminalOutput(entries, lastRenderedSequence));
-  renderedStateRef.current.lastSequence = consumedThroughSequence;
+  writeTerminalOutput(binding.terminal, readTerminalOutput(entries, lastRenderedSequence));
+  renderedStateRef.current.lastSequence = nextCursor;
 };
 
 export const useDevServerTerminalBinding = ({
@@ -258,9 +255,6 @@ export const useDevServerTerminalBinding = ({
     lastSequence: null,
   });
   const renderQueueRef = useRef<Promise<void> | null>(null);
-  if (renderQueueRef.current === null) {
-    renderQueueRef.current = Promise.resolve();
-  }
   const renderGenerationRef = useRef(0);
   const terminalObserversCleanupRef = useRef<(() => void) | null>(null);
 

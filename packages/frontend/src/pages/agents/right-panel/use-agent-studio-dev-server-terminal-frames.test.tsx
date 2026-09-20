@@ -56,8 +56,8 @@ afterEach(() => {
   frames.clear();
 });
 
-describe("dev server terminal frame publication", () => {
-  test("publishes one immutable full-buffer snapshot for a 100-chunk burst", () => {
+describe("dev server terminal frame batching", () => {
+  test("shows one fixed full buffer for a 100-chunk burst", () => {
     const harness = createHarness();
     const readBuffer = spyOn(logBuffer, "getDevServerTerminalBuffer");
     try {
@@ -85,10 +85,10 @@ describe("dev server terminal frame publication", () => {
       expect(harness.getLatest().selectedScriptTerminalBuffer).toBe(previous);
       flushFrame();
       expect(readBuffer).toHaveBeenCalledTimes(1);
-      const published = harness.getLatest().selectedScriptTerminalBuffer;
-      expect(published?.entries).toHaveLength(2_000);
-      expect(published?.entries[0]?.sequence).toBe(100);
-      expect(published?.lastSequence).toBe(2_099);
+      const shownBuffer = harness.getLatest().selectedScriptTerminalBuffer;
+      expect(shownBuffer?.entries).toHaveLength(2_000);
+      expect(shownBuffer?.entries[0]?.sequence).toBe(100);
+      expect(shownBuffer?.lastSequence).toBe(2_099);
       expect(previous?.entries[0]?.sequence).toBe(0);
       expect(previous?.lastSequence).toBe(1_999);
     } finally {
@@ -168,16 +168,16 @@ describe("dev server terminal frame publication", () => {
         flushFrame();
         const buffer = harness.getLatest().selectedScriptTerminalBuffer;
         expect(buffer?.resetToken).toBe((previousResetToken ?? 0) + 1);
-        expect(buffer?.evictedThroughSequence).toBe(0);
+        expect(buffer?.lastDroppedSequence).toBe(0);
         expect(buffer?.entries).toHaveLength(2_000);
         await act(async () => {
           view.rerender(element());
         });
-        const retainedReplay =
+        const keptReplay =
           "[Dev server output was truncated. Showing retained output.]\r\n" +
           Array.from({ length: 2_000 }, (_, index) => `${index + 1},`).join("");
-        expect(screen).toBe(retainedReplay);
-        expect(writes).toEqual([`frontend-${priorSequence}\r\n`, retainedReplay]);
+        expect(screen).toBe(keptReplay);
+        expect(writes).toEqual([`frontend-${priorSequence}\r\n`, keptReplay]);
         act(() => {
           harness.getLatest().applyTerminalBuffersFromEvent(newRunEvent(2_001), "frontend");
         });
@@ -188,8 +188,8 @@ describe("dev server terminal frame publication", () => {
         await act(async () => {
           view.rerender(element());
         });
-        expect(screen).toBe(`${retainedReplay}2001,`);
-        expect(writes).toEqual([`frontend-${priorSequence}\r\n`, retainedReplay, "2001,"]);
+        expect(screen).toBe(`${keptReplay}2001,`);
+        expect(writes).toEqual([`frontend-${priorSequence}\r\n`, keptReplay, "2001,"]);
       } finally {
         view.unmount();
         harness.unmount();
@@ -197,7 +197,7 @@ describe("dev server terminal frame publication", () => {
     },
   );
 
-  test("cancels pending publication on selection, clear, scope change, and unmount", () => {
+  test("cancels a queued frame on selection, clear, scope change, and unmount", () => {
     const harness = createHarness();
     try {
       act(() => {
@@ -245,7 +245,7 @@ describe("dev server terminal frame publication", () => {
     expect(frames.size).toBe(0);
   });
 
-  test("publishes a reset immediately and cancels the old queued frame", () => {
+  test("shows a reset at once and cancels the old queued frame", () => {
     const harness = createHarness();
     try {
       act(() => {
@@ -286,7 +286,7 @@ test.each(["delayed prefix", "host tail", "host tail without ring overflow"])(
   (scenario) => {
     const harness = createHarness();
     const end = scenario === "host tail without ring overflow" ? 100 : 2_001;
-    const firstRetained = scenario === "delayed prefix" ? 2 : 50;
+    const firstKept = scenario === "delayed prefix" ? 2 : 50;
     try {
       act(() => {
         harness.getLatest().applyTerminalBuffersFromEvent(event(0), "frontend");
@@ -302,9 +302,7 @@ test.each(["delayed prefix", "host tail", "host tail without ring overflow"])(
         bufferedTerminalChunks:
           scenario === "delayed prefix"
             ? [chunk(0), chunk(1)]
-            : Array.from({ length: end - firstRetained + 1 }, (_, index) =>
-                chunk(index + firstRetained),
-              ),
+            : Array.from({ length: end - firstKept + 1 }, (_, index) => chunk(index + firstKept)),
       });
       act(() => {
         if (scenario === "delayed prefix") {
@@ -324,15 +322,15 @@ test.each(["delayed prefix", "host tail", "host tail without ring overflow"])(
           );
         }
       });
-      const published = harness.getLatest().selectedScriptTerminalBuffer;
+      const shownBuffer = harness.getLatest().selectedScriptTerminalBuffer;
       expect(frames.size).toBe(0);
-      expect(published?.evictedThroughSequence).toBe(firstRetained - 1);
-      expect(published?.entries[0]?.sequence).toBe(firstRetained);
-      expect(published?.lastSequence).toBe(end);
+      expect(shownBuffer?.lastDroppedSequence).toBe(firstKept - 1);
+      expect(shownBuffer?.entries[0]?.sequence).toBe(firstKept);
+      expect(shownBuffer?.lastSequence).toBe(end);
       act(() => {
         pendingFrame?.(0);
       });
-      expect(harness.getLatest().selectedScriptTerminalBuffer).toBe(published);
+      expect(harness.getLatest().selectedScriptTerminalBuffer).toBe(shownBuffer);
     } finally {
       harness.unmount();
     }

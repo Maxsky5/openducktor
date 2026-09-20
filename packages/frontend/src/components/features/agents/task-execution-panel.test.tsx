@@ -263,7 +263,7 @@ const devServerModel: AgentStudioDevServerPanelModel = {
     })),
     lastSequence: selectedScript.bufferedTerminalChunks.at(-1)?.sequence ?? null,
     resetToken: 0,
-    evictedThroughSequence: null,
+    lastDroppedSequence: null,
   } satisfies AgentStudioDevServerTerminalBuffer,
   error: null,
   isStartPending: false,

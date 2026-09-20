@@ -258,18 +258,18 @@ describe("dev-server-log-buffer", () => {
     );
   });
 
-  test("records actual evictions without treating sequence gaps as lost output", () => {
+  test("records dropped chunks without treating sequence gaps as lost output", () => {
     const store = createDevServerTerminalBufferStore();
     for (let index = 0; index < 2_000; index += 1) {
       appendDevServerTerminalChunk(store, buildChunk(index * 3));
     }
     const before = getDevServerTerminalBuffer(store, "frontend");
-    expect(before?.evictedThroughSequence).toBeNull();
+    expect(before?.lastDroppedSequence).toBeNull();
     appendDevServerTerminalChunk(store, buildChunk(6_000));
-    expect(getDevServerTerminalBuffer(store, "frontend")?.evictedThroughSequence).toBe(0);
-    expect(before?.evictedThroughSequence).toBeNull();
+    expect(getDevServerTerminalBuffer(store, "frontend")?.lastDroppedSequence).toBe(0);
+    expect(before?.lastDroppedSequence).toBeNull();
     replaceDevServerTerminalBuffer(store, "frontend", [buildChunk(9_000)]);
-    expect(getDevServerTerminalBuffer(store, "frontend")?.evictedThroughSequence).toBeNull();
+    expect(getDevServerTerminalBuffer(store, "frontend")?.lastDroppedSequence).toBeNull();
   });
 
   test("replaces and prunes script buffers when syncing state", () => {
@@ -1272,7 +1272,7 @@ describe("dev-server-log-buffer", () => {
   });
 });
 
-test("same-run reconciliation tracks removed entries, not numeric sequence gaps", () => {
+test("same-run replay tracks dropped entries, not sequence gaps", () => {
   const store = createDevServerTerminalBufferStore();
   replaceDevServerTerminalBuffer(store, "frontend", [buildChunk(0), buildChunk(3), buildChunk(9)]);
   const replace = (sequences: number[], runId = "frontend:1") => {
@@ -1290,13 +1290,13 @@ test("same-run reconciliation tracks removed entries, not numeric sequence gaps"
     });
   };
   replace([0, 3, 9, 15]);
-  expect(getDevServerTerminalBuffer(store, "frontend")?.evictedThroughSequence).toBeNull();
+  expect(getDevServerTerminalBuffer(store, "frontend")?.lastDroppedSequence).toBeNull();
   replace([0, 9, 15]);
-  expect(getDevServerTerminalBuffer(store, "frontend")?.evictedThroughSequence).toBe(3);
+  expect(getDevServerTerminalBuffer(store, "frontend")?.lastDroppedSequence).toBe(3);
   replace([0, 9, 15, 20]);
-  expect(getDevServerTerminalBuffer(store, "frontend")?.evictedThroughSequence).toBe(3);
+  expect(getDevServerTerminalBuffer(store, "frontend")?.lastDroppedSequence).toBe(3);
   replace([0], "frontend:2");
-  expect(getDevServerTerminalBuffer(store, "frontend")?.evictedThroughSequence).toBeNull();
+  expect(getDevServerTerminalBuffer(store, "frontend")?.lastDroppedSequence).toBeNull();
 });
 
 test("empty replacement changes terminal generation only when the run changes", () => {

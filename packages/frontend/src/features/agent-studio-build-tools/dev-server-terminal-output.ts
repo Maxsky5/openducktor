@@ -1,20 +1,20 @@
 import type { AgentStudioDevServerTerminalChunkEntry } from "./dev-server-log-buffer";
 
-export const readDevServerTerminalOutput = (
+export const readTerminalOutput = (
   entries: readonly AgentStudioDevServerTerminalChunkEntry[],
-  lastRenderedSequence: number | null,
+  afterSequence: number | null,
 ): string => {
   let start = 0;
-  if (lastRenderedSequence !== null) {
+  if (afterSequence !== null) {
     let end = entries.length;
-    // Sequences increase but can contain gaps. Find the first unseen entry.
+    // Sequences rise but may skip values. Find the first unread entry.
     while (start < end) {
       const middle = Math.floor((start + end) / 2);
       const entry = entries[middle];
       if (!entry) {
         throw new Error(`Missing dev server terminal chunk at offset ${middle}.`);
       }
-      if (entry.sequence <= lastRenderedSequence) {
+      if (entry.sequence <= afterSequence) {
         start = middle + 1;
       } else {
         end = middle;
