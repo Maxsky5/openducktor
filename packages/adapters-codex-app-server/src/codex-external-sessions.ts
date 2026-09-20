@@ -26,26 +26,53 @@ export const listCodexExternalSessions = async (
   client: CodexAppServerClient,
   input: { cursor?: string; signal: AbortSignal },
 ): Promise<ExternalRuntimeSessionPage> => {
-  input.signal.throwIfAborted();
-  const decoded: { archived: boolean; cursor?: string } = input.cursor
+  type Stream = { cursor?: string | null; rows: WorkspaceSessionExternal[] };
+  const streams: [Stream, Stream] = input.cursor
     ? JSON.parse(input.cursor)
-    : { archived: false };
-  const request: Parameters<CodexAppServerClient["threadList"]>[0] = {
-    limit: 100,
-    archived: decoded.archived,
-    modelProviders: [],
-    sourceKinds: ["cli", "vscode", "exec", "appServer", "unknown"],
-  };
-  if (decoded.cursor) request.cursor = decoded.cursor;
-  const result = await client.threadList(request);
-  input.signal.throwIfAborted();
+    : [{ rows: [] }, { rows: [] }];
+  const sessions = new Map<string, WorkspaceSessionExternal>();
+  while (sessions.size < 100) {
+    input.signal.throwIfAborted();
+    await Promise.all(
+      streams.map(async (stream, index) => {
+        if (stream.rows.length || stream.cursor === null) return;
+        const request: Parameters<CodexAppServerClient["threadList"]>[0] = {
+          limit: 100,
+          archived: index === 1,
+          sortKey: "updated_at",
+          useStateDbOnly: true,
+          modelProviders: [],
+          sourceKinds: ["cli", "vscode", "exec", "appServer", "unknown"],
+        };
+        if (stream.cursor) request.cursor = stream.cursor;
+        const result = await client.threadList(request);
+        input.signal.throwIfAborted();
+        if (result.nextCursor && result.nextCursor === stream.cursor)
+          throw new Error("Codex repeated a session page. Update Codex and retry.");
+        stream.cursor = result.nextCursor;
+        stream.rows = result.data.filter(isRoot).map(metadata);
+      }),
+    );
+    const ready = streams.filter((stream) => stream.rows.length > 0);
+    if (!ready.length) {
+      if (streams.every((stream) => stream.cursor === null)) break;
+      continue;
+    }
+    // An empty unfinished stream needs its next page before the two streams can be merged.
+    if (streams.some((stream) => !stream.rows.length && stream.cursor !== null)) continue;
+    ready.sort(
+      (a, b) =>
+        (b.rows[0]!.updatedAt ?? -Infinity) - (a.rows[0]!.updatedAt ?? -Infinity) ||
+        a.rows[0]!.externalSessionId.localeCompare(b.rows[0]!.externalSessionId),
+    );
+    const row = ready[0]!.rows.shift()!;
+    sessions.set(row.externalSessionId, row);
+  }
   return {
-    sessions: result.data.filter(isRoot).map(metadata),
-    nextCursor: result.nextCursor
-      ? JSON.stringify({ archived: decoded.archived, cursor: result.nextCursor })
-      : decoded.archived
-        ? null
-        : JSON.stringify({ archived: true }),
+    sessions: [...sessions.values()],
+    nextCursor: streams.some((stream) => stream.rows.length || stream.cursor !== null)
+      ? JSON.stringify(streams)
+      : null,
   };
 };
 export const inspectCodexExternalSession = async (

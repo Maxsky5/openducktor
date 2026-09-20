@@ -1,5 +1,6 @@
 import type { WorkspaceSessionExternal } from "@openducktor/contracts";
 import { Import, LoaderCircle } from "lucide-react";
+import { formatCiRelativeTime } from "@/components/features/agents/task-execution-ci-relative-time-format";
 import { Button } from "@/components/ui/button";
 
 type Props = {
@@ -50,12 +51,23 @@ export function WorkspaceSessionImportResults({
           {rows.map((session) => (
             <li key={session.externalSessionId} className="flex items-center gap-3 p-3">
               <div className="min-w-0 flex-1">
-                <p
-                  className="truncate text-sm font-medium"
-                  title={session.title ?? session.externalSessionId}
-                >
-                  {session.title ?? session.externalSessionId}
-                </p>
+                <div className="flex items-baseline justify-between gap-3">
+                  <p
+                    className="min-w-0 truncate text-sm font-medium"
+                    title={session.title ?? session.externalSessionId}
+                  >
+                    {session.title ?? session.externalSessionId}
+                  </p>
+                  {session.updatedAt !== null && (
+                    <time
+                      className="shrink-0 text-xs font-normal text-muted-foreground"
+                      title={new Date(session.updatedAt).toLocaleString()}
+                      dateTime={new Date(session.updatedAt).toISOString()}
+                    >
+                      {formatCiRelativeTime(new Date(session.updatedAt).toISOString())}
+                    </time>
+                  )}
+                </div>
                 <p
                   className="truncate text-xs text-muted-foreground"
                   title={session.workingDirectory}
@@ -66,19 +78,6 @@ export function WorkspaceSessionImportResults({
                   <p className="min-w-0 flex-1 truncate" title={session.externalSessionId}>
                     {session.externalSessionId}
                   </p>
-                  {session.updatedAt !== null && (
-                    <time
-                      className="shrink-0"
-                      title={new Date(session.updatedAt).toLocaleString()}
-                      dateTime={new Date(session.updatedAt).toISOString()}
-                    >
-                      {new Date(session.updatedAt).toLocaleDateString(undefined, {
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
-                      })}
-                    </time>
-                  )}
                 </div>
               </div>
               <Button

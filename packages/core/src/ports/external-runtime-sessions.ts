@@ -1,4 +1,4 @@
-import type { WorkspaceSessionExternal } from "@openducktor/contracts";
+import type { WorkspaceSessionExternal, WorkspaceSession } from "@openducktor/contracts";
 import type { SessionRef } from "../types/agent-orchestrator";
 
 /** Metadata discovery never admits a live root or reads conversation history. */
@@ -8,6 +8,7 @@ export type ExternalRuntimeSessionPage = {
 };
 export type PreparedExternalRuntimeSession = {
   metadata: WorkspaceSessionExternal;
+  selectedModel?: WorkspaceSession["selectedModel"] | undefined;
   commit(): Promise<void>;
   dispose(): Promise<void>;
 };

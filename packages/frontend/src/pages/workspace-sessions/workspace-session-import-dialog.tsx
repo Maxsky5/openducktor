@@ -8,6 +8,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-icon";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import {
@@ -85,6 +86,7 @@ export function WorkspaceSessionImportDialog(props: Props) {
               options={runtime.allRuntimeDefinitions.map((definition) => ({
                 value: definition.kind,
                 label: definition.label,
+                icon: <AgentRuntimeIcon runtimeKind={definition.kind} />,
                 description: runtime.availableRuntimeDefinitions.some(
                   (available) => available.kind === definition.kind,
                 )

@@ -43,6 +43,7 @@ export type ClaudeAgentSdkService = {
   ): Effect.Effect<
     {
       metadata: import("@openducktor/contracts").WorkspaceSessionExternal;
+      selectedModel?: import("@openducktor/contracts").WorkspaceSession["selectedModel"];
       commit: Effect.Effect<AgentSessionSummary, ClaudeAgentSdkServiceError>;
       dispose: Effect.Effect<void, ClaudeAgentSdkServiceError>;
     },

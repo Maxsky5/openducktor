@@ -1,7 +1,10 @@
 import type { AgentSessionSummary, SessionRef } from "@openducktor/core";
 import { Effect } from "effect";
 import type { ClaudeAgentSdkServiceError } from "./claude-agent-sdk-types";
-import { inspectClaudeExternalSession } from "./claude-external-sessions";
+import {
+  inspectClaudeExternalSession,
+  inspectClaudeExternalModel,
+} from "./claude-external-sessions";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
 import type { ClaudeSessionLaunchInput } from "./claude-agent-sdk-session-policy";
 import type {
@@ -31,6 +34,9 @@ export const prepareClaudeExternalSession = (
   return Effect.gen(function* () {
     const metadata = yield* fromPromise("claudeRuntime.inspectExternalSession", () =>
       inspectClaudeExternalSession(input),
+    );
+    const selectedModel = yield* fromPromise("claudeRuntime.inspectExternalModel", () =>
+      inspectClaudeExternalModel(input),
     );
     const privateStore = createClaudeAgentSdkSessionStore({ now: dependencies.now });
     const events: Array<{ session: ClaudeSessionContext; event: ClaudeAgentSdkEvent }> = [];
@@ -67,6 +73,7 @@ export const prepareClaudeExternalSession = (
     );
     return {
       metadata,
+      selectedModel,
       commit: fromPromise("claudeRuntime.commitImport", async () => {
         const session = privateStore.get(input.externalSessionId);
         if (!session)

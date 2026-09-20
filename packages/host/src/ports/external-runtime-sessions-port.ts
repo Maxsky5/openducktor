@@ -1,4 +1,4 @@
-import type { WorkspaceSessionExternal } from "@openducktor/contracts";
+import type { WorkspaceSessionExternal, WorkspaceSession } from "@openducktor/contracts";
 import type {
   ExternalRuntimeSessionsPort as NativePort,
   SessionRef,
@@ -8,6 +8,7 @@ import type { Effect } from "effect";
 import type { HostError } from "../effect/host-errors";
 export type PreparedExternalSession = {
   metadata: WorkspaceSessionExternal;
+  selectedModel?: WorkspaceSession["selectedModel"] | undefined;
   commit: Effect.Effect<void, HostError>;
   dispose: Effect.Effect<void, HostError>;
 };

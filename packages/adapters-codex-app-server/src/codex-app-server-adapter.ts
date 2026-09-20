@@ -1074,6 +1074,7 @@ export class CodexAppServerAdapter
     session.summary = { ...session.summary, title: metadata.title ?? input.externalSessionId };
     return {
       metadata,
+      selectedModel: session.model ? { ...session.model, runtimeKind: "codex" } : null,
       commit: async () => {
         this.localSessions.remember(session);
       },

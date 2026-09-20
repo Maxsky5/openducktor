@@ -64,30 +64,60 @@ describe("external Codex sessions", () => {
     const adapter = createAdapterWithTransport(transport);
     const signal = new AbortController().signal;
     const first = await adapter.listExternalSessions({ ...ref, signal });
-    const second = await adapter.listExternalSessions({
-      ...ref,
-      signal,
-      cursor: first.nextCursor!,
-    });
-    const archived = await adapter.listExternalSessions({
-      ...ref,
-      signal,
-      cursor: second.nextCursor!,
-    });
-    expect([
-      first.sessions[0]?.externalSessionId,
-      second.sessions[0]?.externalSessionId,
-      archived.sessions[0]?.externalSessionId,
-    ]).toEqual(["first", "second", "archived"]);
-    expect(first.sessions).toHaveLength(1);
-    expect(archived.nextCursor).toBeNull();
+    expect(first.sessions.map((row) => row.externalSessionId)).toEqual([
+      "archived",
+      "first",
+      "second",
+    ]);
+    expect(first.nextCursor).toBeNull();
     expect(adapter.listLiveSessionSnapshots("runtime-live")).toEqual([]);
     expect(transport.calls.every((call) => call.method === "thread/list")).toBe(true);
     expect(transport.calls[0]?.params).toMatchObject({
       modelProviders: [],
       limit: 100,
       archived: false,
+      sortKey: "updated_at",
+      useStateDbOnly: true,
     });
+    await adapter.releaseRuntime("runtime-live");
+  });
+
+  test("merges active and archived history by recency without draining either stream", async () => {
+    class PagedTransport extends RecordingTransport {
+      async request(request: Parameters<RecordingTransport["request"]>[0]) {
+        if (request.method !== "thread/list") return super.request(request);
+        this.calls.push(request);
+        const start = Number(request.params.cursor ?? "0");
+        return {
+          data: Array.from({ length: 100 }, (_, index) => {
+            const updatedAt = 2000 - (start + index) * 2 - (request.params.archived ? 1 : 0);
+            return codexThreadFixture({
+              id: String(updatedAt),
+              updatedAt,
+              source: "cli",
+              status: { type: "idle" },
+            });
+          }),
+          nextCursor: String(start + 100),
+          backwardsCursor: null,
+        };
+      }
+    }
+    const transport = new PagedTransport("runtime-live", false);
+    const adapter = createAdapterWithTransport(transport);
+    const signal = new AbortController().signal;
+    const first = await adapter.listExternalSessions({ ...ref, signal });
+    expect(first.sessions.map((row) => row.externalSessionId)).toEqual(
+      Array.from({ length: 100 }, (_, index) => String(2000 - index)),
+    );
+    expect(transport.calls).toHaveLength(2);
+    if (!first.nextCursor) throw new Error("Expected another metadata page");
+    const second = await adapter.listExternalSessions({ ...ref, signal, cursor: first.nextCursor });
+    expect(second.sessions.map((row) => row.externalSessionId)).toEqual(
+      Array.from({ length: 100 }, (_, index) => String(1900 - index)),
+    );
+    // Refill the exhausted active stream to compare its head with the last archived row.
+    expect(transport.calls).toHaveLength(3);
     await adapter.releaseRuntime("runtime-live");
   });
 

@@ -13,6 +13,8 @@ test("OpenCode V2 discovery paginates metadata and passive preparation waits for
   const native = {
     id: "native",
     title: "Native title",
+    agent: "plan",
+    model: { providerID: "openai", id: "native-model", variant: "high" },
     location: { directory: "/repo" },
     time: { updated: 123 },
   };
@@ -49,6 +51,13 @@ test("OpenCode V2 discovery paginates metadata and passive preparation waits for
   );
   expect(page.nextCursor).toBe("page-two");
   const prepared = await sessions.prepare(ref);
+  expect(prepared.selectedModel).toEqual({
+    runtimeKind: "opencode",
+    providerId: "openai",
+    modelId: "native-model",
+    profileId: "plan",
+    variant: "high",
+  });
   expect(admitted).toEqual([]);
   await prepared.commit();
   await prepared.dispose();

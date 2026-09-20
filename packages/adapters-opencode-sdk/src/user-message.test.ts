@@ -907,6 +907,45 @@ describe("OpencodeSdkAdapter user message", () => {
     });
   });
 
+  test("updateSessionModel applies an explicitly selected profile for subsequent prompts", async () => {
+    const mock = makeMockClient({});
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "spec", {
+      providerId: "anthropic",
+      modelId: "claude-sonnet-4",
+      profileId: "Hephaestus",
+    });
+    await adapter.updateSessionModel({
+      externalSessionId: "session-opencode-1",
+      model: {
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "high",
+        profileId: "plan",
+      },
+    });
+
+    await adapter.sendUserMessage({
+      ...sessionRuntimeRef("session-opencode-1"),
+      parts: [{ kind: "text", text: "Continue" }],
+    });
+
+    expect(mock.session.promptCalls).toHaveLength(0);
+    expect(mock.session.promptAsyncCalls).toHaveLength(1);
+    expect(mock.session.promptAsyncCalls[0]).toMatchObject({
+      model: {
+        providerID: "openai",
+        modelID: "gpt-5",
+      },
+      variant: "high",
+      agent: "plan",
+    });
+  });
+
   test("sendUserMessage caches workflow tool discovery but checks MCP health for each prompt", async () => {
     const mock = makeMockClient({});
     const adapter = new OpencodeSdkAdapter({

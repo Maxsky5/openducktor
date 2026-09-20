@@ -89,7 +89,7 @@ export const mapProviderListToCatalog = (payload: ConfigProvidersResponse): Agen
         variants,
         contextWindow: rawModel.limit.context,
         attachmentSupport,
-        liveSessionUpdates: { profile: false },
+        liveSessionUpdates: { profile: true },
       };
       if (rawModel.limit.output !== 0) {
         model.outputLimit = rawModel.limit.output;

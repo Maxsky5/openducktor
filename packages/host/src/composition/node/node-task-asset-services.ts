@@ -1,3 +1,5 @@
+import { withOtherInstallationSessionOwners } from "../../adapters/sqlite/sqlite-other-installation-session-owners";
+import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
 import { Effect } from "effect";
 import { rm } from "node:fs/promises";
 import path from "node:path";
@@ -128,7 +130,15 @@ export const createNodeTaskAssetServices = ({
   const taskStoreRoot = path.join(configDir.root, "task-stores");
 
   return {
-    workspaceSessionStore: createSqliteWorkspaceSessionStore(contextManager.withDatabase),
+    workspaceSessionStore: withOtherInstallationSessionOwners(
+      createSqliteWorkspaceSessionStore(contextManager.withDatabase),
+      configDir.scope === "test"
+        ? []
+        : [
+            resolveOpenDucktorBaseDir("production", {}),
+            resolveOpenDucktorBaseDir("dev", {}),
+          ].filter((root) => path.resolve(root) !== path.resolve(configDir.root)),
+    ),
     startupSweep: () =>
       taskAssetRecoveryService
         .startupSweep()

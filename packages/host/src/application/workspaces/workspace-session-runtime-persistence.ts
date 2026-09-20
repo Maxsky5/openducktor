@@ -201,7 +201,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
                 selectedModel: {
                   ...model,
                   runtimeKind: input.runtimeKind,
-                  profileId: known.session.selectedModel?.profileId,
+                  profileId: model.profileId ?? known.session.selectedModel?.profileId,
                 },
               }),
             ),

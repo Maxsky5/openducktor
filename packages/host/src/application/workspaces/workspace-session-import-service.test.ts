@@ -364,3 +364,27 @@ test("import releases the directory guard before runtime admission reads the sam
   expect(imported.openError).toBeNull();
   expect(h.calls).toEqual(["inspect", "prepare", "save", "commit", "publish", "dispose"]);
 });
+
+test("returns the first import page without draining native history", async () => {
+  const h = await setup();
+  h.state.rows = Array.from({ length: 3000 }, (_, index) => h.row(`external-${index}`));
+  const first = await Effect.runPromise(h.service.list(h.list));
+  expect(first.sessions).toHaveLength(50);
+  expect(h.calls.filter((call) => call === "list")).toHaveLength(1);
+});
+
+test("persists native model, profile and effort from import preparation", async () => {
+  const h = await setup();
+  const prepare = h.adapter.externalSessions.prepare;
+  const selectedModel = {
+    runtimeKind: "opencode" as const,
+    providerId: "openai",
+    modelId: "native-model",
+    profileId: "plan",
+    variant: "high",
+  };
+  h.adapter.externalSessions.prepare = (ref) =>
+    prepare(ref).pipe(Effect.map((handle) => ({ ...handle, selectedModel })));
+  const imported = await Effect.runPromise(h.service.importSession(h.input));
+  expect(imported.session.selectedModel).toEqual(selectedModel);
+});

@@ -22,6 +22,11 @@ test.each([false, true])(
       title: "Native title",
       updatedAt: 1,
     });
+    const model = spyOn(native, "inspectClaudeExternalModel").mockResolvedValue({
+      runtimeKind: "claude",
+      providerId: "claude",
+      modelId: "native-claude",
+    });
     const store = createClaudeAgentSdkSessionStore();
     let closes = 0;
     const events: ClaudeAgentSdkEvent[] = [];
@@ -65,6 +70,7 @@ test.each([false, true])(
             }),
         }),
       );
+      expect(handle.selectedModel?.modelId).toBe("native-claude");
       expect(store.get("native")).toBeUndefined();
       expect(events).toEqual([]);
       if (commit) {
@@ -81,6 +87,7 @@ test.each([false, true])(
       }
     } finally {
       inspect.mockRestore();
+      model.mockRestore();
     }
   },
 );

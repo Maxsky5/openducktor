@@ -23,6 +23,7 @@ export const createExternalRuntimeSessionsAdapter = (
     }).pipe(
       Effect.map((handle) => ({
         metadata: handle.metadata,
+        selectedModel: handle.selectedModel,
         commit: Effect.tryPromise({
           try: () => handle.commit(),
           catch: (cause) => toHostOperationError(cause, "externalSessions.commit"),

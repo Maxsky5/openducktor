@@ -1182,6 +1182,7 @@ describe("createAgentSessionCommandService", () => {
       {
         providerId: "openai",
         modelId: "gpt-5",
+        profileId: "build",
       },
     ]);
   });
@@ -1226,7 +1227,7 @@ describe("createAgentSessionCommandService", () => {
 
     expect(runtimeModels).toEqual([
       { providerId: "openai", modelId: "gpt-5.1" },
-      { providerId: "openai", modelId: "gpt-5" },
+      { providerId: "openai", modelId: "gpt-5", profileId: "build" },
     ]);
   });
 

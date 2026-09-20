@@ -126,7 +126,7 @@ describe("payload-mappers", () => {
           pdf: false,
         },
         liveSessionUpdates: {
-          profile: false,
+          profile: true,
         },
       },
     ]);
@@ -175,7 +175,7 @@ describe("payload-mappers", () => {
           pdf: true,
         },
         liveSessionUpdates: {
-          profile: false,
+          profile: true,
         },
       },
     ]);

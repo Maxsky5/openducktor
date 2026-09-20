@@ -21,6 +21,7 @@ export const createClaudeExternalRuntimeSessions = (
       const handle = await Effect.runPromise(service.prepareExternalSession(input, runtimeId));
       return {
         metadata: handle.metadata,
+        selectedModel: handle.selectedModel,
         commit: () => Effect.runPromise(publish(handle.commit)).then(() => undefined),
         dispose: () => Effect.runPromise(handle.dispose),
       };

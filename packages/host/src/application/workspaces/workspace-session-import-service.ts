@@ -37,6 +37,20 @@ type Catalog = {
   fiber?: Fiber.RuntimeFiber<void, never>;
   expiry?: Fiber.RuntimeFiber<void, never>;
   cursors: Map<string, { search: string; offset: number; pageSize: number }>;
+  gate: Effect.Semaphore;
+  readers: Set<Fiber.RuntimeFiber<WorkspaceSessionExternal[], HostError>>;
+  failure?: HostError;
+  discovery?: {
+    owned: Set<string>;
+    allowed: Set<string>;
+    eligibleDirectories: Map<string, boolean>;
+    records: Map<string, WorkspaceSessionExternal>;
+    cursors: Set<string>;
+    cursor?: string | undefined;
+    done: boolean;
+    bytes: number;
+    scanned: number;
+  };
 };
 type Dependencies = Pick<WorkspaceSessionServiceDependencies, "store" | "runtime" | "git"> & {
   settings: Pick<WorkspaceSessionServiceDependencies["settings"], "getRepoConfig">;
@@ -89,6 +103,7 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
         invalid("Session discovery was closed. Reopen Import session."),
       );
       if (entry.fiber) yield* Fiber.interruptFork(entry.fiber);
+      yield* Effect.forEach(entry.readers, Fiber.interruptFork, { discard: true });
       if (entry.expiry) yield* Fiber.interruptFork(entry.expiry);
     });
   const targetFor = (repoPath: string, workingDirectory: string) =>
@@ -135,38 +150,55 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
   const collect = (
     entry: Catalog,
     adapter: Parameters<AgentSessionLiveAdapterRegistryPort["register"]>[0],
+    search: string,
+    count: number,
   ) =>
     Effect.gen(function* () {
-      const owners = yield* store.listRuntimeOwners({
-        workspaceId: entry.workspaceId,
-        repoPath: entry.repoPath,
-      });
-      const owned = new Set(
-        owners
-          .filter((owner) => owner.runtimeKind === entry.runtimeKind)
-          .map((owner) => owner.externalSessionId),
-      );
-      const worktrees = yield* git.listWorktrees(entry.repoPath);
-      const allowed = new Set([entry.repoPath]);
-      for (const tree of worktrees) {
-        const directory = yield* candidateDirectory(tree.worktreePath);
-        if (directory !== null) allowed.add(directory);
+      if (entry.failure) return yield* entry.failure;
+      if (!entry.discovery) {
+        const owners = yield* store.listRuntimeOwners({
+          workspaceId: entry.workspaceId,
+          repoPath: entry.repoPath,
+        });
+        const owned = new Set(
+          owners
+            .filter((owner) => owner.runtimeKind === entry.runtimeKind)
+            .map((owner) => owner.externalSessionId),
+        );
+        const worktrees = yield* git.listWorktrees(entry.repoPath);
+        const allowed = new Set([entry.repoPath]);
+        for (const tree of worktrees) {
+          const directory = yield* candidateDirectory(tree.worktreePath);
+          if (directory !== null) allowed.add(directory);
+        }
+        entry.discovery = {
+          owned,
+          allowed,
+          eligibleDirectories: new Map(),
+          records: new Map(),
+          cursors: new Set(),
+          done: false,
+          bytes: 0,
+          scanned: 0,
+        };
       }
-      const eligibleDirectories = new Map<string, boolean>();
-      const records = new Map<string, WorkspaceSessionExternal>();
-      const cursors = new Set<string>();
-      let cursor: string | undefined;
-      let bytes = 0;
-      let scanned = 0;
-      do {
+      const state = entry.discovery;
+      const { owned, allowed, eligibleDirectories, records, cursors } = state;
+      const matches = () =>
+        [...records.values()].filter((row) =>
+          [row.title, row.externalSessionId, row.workingDirectory].some((value) =>
+            value?.toLowerCase().includes(search),
+          ),
+        );
+      while (!state.done && matches().length < count) {
         const request: Parameters<typeof adapter.externalSessions.list>[0] = {
           signal: entry.controller.signal,
         };
-        if (cursor) request.cursor = cursor;
+        if (state.cursor) request.cursor = state.cursor;
         const page = yield* adapter.externalSessions.list(request);
         for (const raw of page.sessions) {
-          bytes += JSON.stringify(raw).length * 2;
-          if (++scanned > MAX_RECORDS || bytes > MAX_BYTES)
+          state.bytes += JSON.stringify(raw).length * 2;
+          if (++state.scanned > MAX_RECORDS || state.bytes > MAX_BYTES)
             return yield* invalid(
               "Session discovery exceeds the metadata capacity. Reduce native history and retry.",
             );
@@ -190,26 +222,23 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
 
           records.set(row.externalSessionId, row);
         }
-        cursor = page.nextCursor ?? undefined;
-        if (cursor) {
-          if (cursors.has(cursor))
+        state.cursor = page.nextCursor ?? undefined;
+        state.done = !state.cursor;
+        if (state.cursor) {
+          if (cursors.has(state.cursor))
             return yield* invalid(
               "The runtime repeated a session page. Update the runtime and retry discovery.",
             );
-          cursors.add(cursor);
+          cursors.add(state.cursor);
         }
-      } while (cursor);
+      }
       const current = yield* registry.resolveForScope({
         repoPath: entry.repoPath,
         runtimeKind: adapter.binding.runtimeKind,
       });
       if (current.binding !== adapter.binding)
         return yield* invalid("The selected runtime restarted. Reload sessions.");
-      return [...records.values()].sort(
-        (a, b) =>
-          (b.updatedAt ?? -Infinity) - (a.updatedAt ?? -Infinity) ||
-          a.externalSessionId.localeCompare(b.externalSessionId),
-      );
+      return [...records.values()];
     });
   const list = (
     input: WorkspaceSessionExternalListInput,
@@ -230,6 +259,8 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
           controller: new AbortController(),
           result: Deferred.unsafeMake<WorkspaceSessionExternal[], HostError>(FiberId.none),
           cursors: new Map(),
+          gate: Effect.unsafeMakeSemaphore(1),
+          readers: new Set(),
         };
         catalogs.set(input.catalogRequestId, entry);
         const selected = entry;
@@ -248,7 +279,7 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
             runtimeKind: input.runtimeKind,
           });
           selected.runtimeId = adapter.binding.runtimeId;
-          return yield* collect(selected, adapter);
+          return yield* collect(selected, adapter, input.search.toLowerCase(), input.pageSize);
         });
         selected.fiber = yield* Effect.forkDaemon(
           discover.pipe(
@@ -263,7 +294,7 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
       }
       if (entry.workspaceId !== input.workspaceId || entry.runtimeKind !== input.runtimeKind)
         return yield* invalid("Workspace or runtime changed. Reload sessions.");
-      const records = yield* Deferred.await(entry.result);
+      yield* Deferred.await(entry.result);
       const current = yield* registry.resolveForScope({
         repoPath: entry.repoPath,
         runtimeKind: input.runtimeKind,
@@ -276,13 +307,34 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
         : { search, offset: 0, pageSize: input.pageSize };
       if (!page || page.search !== search || page.pageSize !== input.pageSize)
         return yield* invalid("The search cursor is invalid. Reload sessions.");
+      const selected = entry;
+      const reader = yield* Effect.forkDaemon(
+        entry.gate.withPermits(1)(
+          collect(entry, current, search, page.offset + input.pageSize).pipe(
+            Effect.tapError((error) =>
+              Effect.sync(() => {
+                selected.failure = error;
+              }),
+            ),
+          ),
+        ),
+      );
+      entry.readers.add(reader);
+      const records = yield* Fiber.join(reader).pipe(
+        Effect.ensuring(
+          Fiber.interrupt(reader).pipe(
+            Effect.zipRight(Effect.sync(() => selected.readers.delete(reader))),
+          ),
+        ),
+      );
       const matches = records.filter((row) =>
         [row.title, row.externalSessionId, row.workingDirectory].some((value) =>
           value?.toLowerCase().includes(search),
         ),
       );
       const end = page.offset + input.pageSize;
-      const nextCursor = end < matches.length ? crypto.randomUUID() : null;
+      const nextCursor =
+        end < matches.length || !entry.discovery?.done ? crypto.randomUUID() : null;
       if (entry.cursors.size >= 2000)
         return yield* invalid("The search catalog reached its page limit. Reload sessions.");
       if (nextCursor)
@@ -321,6 +373,10 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
           if (task?.kind === "task")
             return yield* invalid(
               `This conversation belongs to task ${task.taskId} (${task.role}).`,
+            );
+          if (task?.kind === "workspace")
+            return yield* invalid(
+              "This conversation already belongs to an OpenDucktor chat. Open it in its original installation.",
             );
           yield* runtime
             .runtimeEnsure({ repoPath: scope.repoPath, runtimeKind: input.runtimeKind })
@@ -375,7 +431,7 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
                         manualTitle: handle.metadata.title || null,
                         generatedTitle: null,
                         roleSnapshot: null,
-                        selectedModel: null,
+                        selectedModel: handle.selectedModel ?? null,
                         createdAt: now,
                         updatedAt: now,
                         archivedAt: null,

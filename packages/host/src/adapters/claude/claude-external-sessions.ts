@@ -1,6 +1,7 @@
-import { getSessionInfo, listSessions } from "@anthropic-ai/claude-agent-sdk";
+import { getSessionInfo, getSessionMessages, listSessions } from "@anthropic-ai/claude-agent-sdk";
 import type { ExternalRuntimeSessionPage, SessionRef } from "@openducktor/core";
-import type { WorkspaceSessionExternal } from "@openducktor/contracts";
+import { z } from "zod";
+import type { WorkspaceSession, WorkspaceSessionExternal } from "@openducktor/contracts";
 
 const metadata = (
   row: Awaited<ReturnType<typeof listSessions>>[number],
@@ -43,4 +44,17 @@ export const inspectClaudeExternalSession = async (
   )
     throw new Error("Claude conversation directory changed or is unknown. Reload sessions.");
   return value;
+};
+
+export const inspectClaudeExternalModel = async (
+  ref: SessionRef,
+): Promise<WorkspaceSession["selectedModel"]> => {
+  const messages = await getSessionMessages(ref.externalSessionId, { dir: ref.workingDirectory });
+  for (const entry of messages.toReversed()) {
+    if (entry.type !== "assistant") continue;
+    const { model: modelId } = z.object({ model: z.string().optional() }).parse(entry.message);
+    if (modelId && modelId !== "<synthetic>")
+      return { runtimeKind: "claude", providerId: "claude", modelId };
+  }
+  return null;
 };

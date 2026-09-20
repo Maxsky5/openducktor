@@ -217,24 +217,26 @@ const adaptNodeDatabase = (database: NodeSqliteDatabase): SqliteDatabase => ({
 
 const openBunSqliteDatabase = (
   databasePath: string,
+  readOnly: boolean,
 ): Effect.Effect<SqliteDatabase, HostOperationErrorAggregate> =>
   Effect.gen(function* () {
     const { Database } = yield* loadBunSqliteModule();
     const database = yield* runSqliteOperation(
       "sqlite.openBunDatabase",
-      () => new Database(databasePath, { create: true }),
+      () => new Database(databasePath, { create: !readOnly, readonly: readOnly }),
     );
     return adaptBunDatabase(database);
   });
 
 const openNodeSqliteDatabase = (
   databasePath: string,
+  readOnly: boolean,
 ): Effect.Effect<SqliteDatabase, HostOperationErrorAggregate> =>
   Effect.gen(function* () {
     const { DatabaseSync } = yield* loadNodeSqliteModule();
     const database = yield* runSqliteOperation(
       "sqlite.openNodeDatabase",
-      () => new DatabaseSync(databasePath),
+      () => new DatabaseSync(databasePath, { readOnly }),
     );
     return adaptNodeDatabase(database);
   });
@@ -242,5 +244,8 @@ const openNodeSqliteDatabase = (
 export const openSqliteDatabase = (
   databasePath: string,
   runtime: SqliteDriverRuntime = currentSqliteDriverRuntime(),
+  readOnly = false,
 ): Effect.Effect<SqliteDatabase, HostOperationErrorAggregate> =>
-  runtime === "bun" ? openBunSqliteDatabase(databasePath) : openNodeSqliteDatabase(databasePath);
+  runtime === "bun"
+    ? openBunSqliteDatabase(databasePath, readOnly)
+    : openNodeSqliteDatabase(databasePath, readOnly);

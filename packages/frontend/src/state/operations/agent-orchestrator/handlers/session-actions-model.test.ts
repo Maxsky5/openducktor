@@ -94,6 +94,7 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
           providerId: "openai",
           modelId: "gpt-5",
           variant: "high",
+          profileId: "build",
         },
       });
       expect(getSession(sessionsRef)?.selectedModel?.modelId).toBe("gpt-5");
