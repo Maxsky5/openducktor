@@ -119,6 +119,7 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
       };
     if (request.blocking !== undefined) input.blocking = request.blocking;
     if (sessionScope !== undefined) input.sessionScope = sessionScope;
+    let handledRequestIds: readonly string[] = [request.requestId];
     try {
       await dependencies.liveSessionHost.agentSessionLiveReplyQuestion(input);
     } catch (error) {
@@ -129,7 +130,9 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
           : null;
       if (!acceptedMessage) throw error;
 
-      const handledRequestIds = acceptedMessage.resolvedQuestionRequestIds ?? [request.requestId];
+      handledRequestIds = acceptedMessage.resolvedQuestionRequestIds ?? handledRequestIds;
+    }
+    if (request.blocking === false) {
       for (const session of sessions) {
         dependencies.updateSession(session, (current) => ({
           ...current,

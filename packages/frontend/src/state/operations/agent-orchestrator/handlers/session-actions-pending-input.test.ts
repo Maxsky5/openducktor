@@ -284,6 +284,30 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     expect(getSession(sessionsRef).pendingQuestions).toEqual([request]);
   });
 
+  test("closes a background question after the host accepts its reply", async () => {
+    const request = { ...questionRequest("question-1"), blocking: false as const };
+    const session = buildSession({
+      runtimeKind: "codex",
+      sessionAssociation: { kind: "repository" },
+      pendingQuestions: [request],
+    });
+    const sessionsRef = createSessionsRef([session]);
+    const actions = createSessionActions({
+      workspaceRepoPath: "/active/repository",
+      sessionsRef,
+      liveSessionHost: {
+        agentSessionLiveReplyApproval: async () => {},
+        agentSessionLiveReplyQuestion: async () => {},
+      },
+    });
+
+    await actions.answerAgentQuestion(toAgentSessionIdentity(session), request, [["yes"]]);
+
+    const current = getSession(sessionsRef);
+    expect(current.pendingQuestions).toEqual([]);
+    expect(current.handledBackgroundQuestionIds).toEqual(new Set([request.requestId]));
+  });
+
   test("keeps an accepted background reply when the host cannot publish it", async () => {
     const request = { ...questionRequest("question-1"), blocking: false as const };
     const session = buildSession({
