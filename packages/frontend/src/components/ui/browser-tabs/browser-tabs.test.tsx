@@ -1,6 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
-import { Tabs } from "@/components/ui/tabs";
+import { useState } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { TabsContent } from "@/components/ui/tabs";
+import { BrowserTabsRoot } from "./browser-tabs-root";
 import { BrowserTabs, type BrowserTabItem } from "./browser-tabs";
 import { BrowserTabsBar } from "./browser-tabs-bar";
 
@@ -21,22 +24,68 @@ function renderBrowserTabs() {
     },
   ];
   const view = render(
-    <Tabs value="first" onValueChange={onSelect}>
+    <BrowserTabsRoot value="first" onValueChange={onSelect}>
       <BrowserTabsBar>
-        <BrowserTabs
-          aria-label="Example tabs"
-          items={items}
-          selectedValue="first"
-          onSelect={onSelect}
-          onReorder={onReorder}
-        />
+        <BrowserTabs aria-label="Example tabs" items={items} onReorder={onReorder} />
       </BrowserTabsBar>
-    </Tabs>,
+    </BrowserTabsRoot>,
   );
   return { ...view, onSelect, onAction, onReorder };
 }
 
 describe("BrowserTabs", () => {
+  test("shares controlled selection with tab styling and panel content", () => {
+    const onValueChange = mock((_value: string) => {});
+    function ControlledTabs() {
+      const [value, setValue] = useState("first");
+      return (
+        <BrowserTabsRoot
+          value={value}
+          onValueChange={(next) => {
+            onValueChange(next);
+            setValue(next);
+          }}
+        >
+          <BrowserTabs
+            items={[
+              { value: "first", content: "First" },
+              { value: "second", content: "Second" },
+            ]}
+            onReorder={() => {}}
+          />
+          <TabsContent value="first">First panel</TabsContent>
+          <TabsContent value="second">Second panel</TabsContent>
+        </BrowserTabsRoot>
+      );
+    }
+    const view = render(<ControlledTabs />);
+    try {
+      const first = view.getByRole("tab", { name: "First" });
+      const second = view.getByRole("tab", { name: "Second" });
+      fireEvent.mouseDown(second, { button: 0 });
+      fireEvent.mouseUp(second, { button: 0 });
+      expect(onValueChange).toHaveBeenCalledTimes(1);
+      expect(onValueChange).toHaveBeenLastCalledWith("second");
+      expect(second.getAttribute("aria-selected")).toBe("true");
+      expect(second.parentElement?.getAttribute("data-active")).toBe("true");
+      expect(first.parentElement?.getAttribute("data-active")).toBe("false");
+      expect(view.getByRole("tabpanel").textContent).toBe("Second panel");
+      fireEvent.keyDown(first, { key: "Enter" });
+      expect(onValueChange).toHaveBeenCalledTimes(2);
+      expect(first.getAttribute("aria-selected")).toBe("true");
+      expect(first.parentElement?.getAttribute("data-active")).toBe("true");
+      expect(view.getByRole("tabpanel").textContent).toBe("First panel");
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("requires BrowserTabsRoot instead of accepting independent selection props", () => {
+    expect(() => renderToStaticMarkup(<BrowserTabs items={[]} onReorder={() => {}} />)).toThrow(
+      "BrowserTabs must be rendered within BrowserTabsRoot.",
+    );
+  });
+
   test("selects on mouse release and supports keyboard activation through Tabs", () => {
     const view = renderBrowserTabs();
     try {

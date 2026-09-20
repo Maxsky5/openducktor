@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/use-horizontal-sortable-tabs";
 import { cn } from "@/lib/utils";
 import { browserTabLabelClassName, browserTabShellClassName } from "./browser-tab-styles";
+import { useBrowserTabsSelection } from "./browser-tabs-root";
 
 export type BrowserTabItem = {
   value: string;
@@ -90,19 +91,16 @@ function SortableBrowserTab({
   );
 }
 
-/** Reorderable browser-style tabs. Render within the same Tabs root as the page content. */
+/** Reorderable browser-style tabs. Render within BrowserTabsRoot. */
 export function BrowserTabs({
   items,
-  selectedValue,
-  onSelect,
   onReorder,
   ...listProps
 }: {
   items: BrowserTabItem[];
-  selectedValue: string | null;
-  onSelect: (value: string) => void;
   onReorder: (draggedId: string, targetId: string, position: HorizontalTabDropPosition) => void;
 } & Omit<ComponentProps<typeof TabsList>, "children" | "onSelect">) {
+  const { value: selectedValue, onValueChange } = useBrowserTabsSelection();
   const itemIds = items.map((item) => item.value);
   const drag = useHorizontalSortableTabs({ itemIds, onReorder });
   const preview = items.find((item) => item.value === drag.activeId);
@@ -130,7 +128,7 @@ export function BrowserTabs({
               item={item}
               selected={item.value === selectedValue}
               shouldSuppressSelection={drag.shouldSuppressSelection}
-              onSelect={onSelect}
+              onSelect={onValueChange}
             />
           ))}
         </TabsList>
@@ -138,7 +136,7 @@ export function BrowserTabs({
       <DragOverlay dropAnimation={horizontalTabDropAnimation} zIndex={40}>
         {preview ? (
           <div aria-hidden="true" inert>
-            <Tabs value={selectedValue ?? ""}>
+            <Tabs value={selectedValue}>
               <TabsList className="h-auto rounded-none bg-transparent p-0">
                 <div
                   className={cn(

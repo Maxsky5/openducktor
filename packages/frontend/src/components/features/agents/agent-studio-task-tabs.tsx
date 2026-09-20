@@ -34,7 +34,6 @@ export type AgentStudioTaskTabsModel = {
   tabs: AgentStudioTaskTab[];
   availableTabTasks: TaskCard[];
   isLoadingAvailableTabTasks: boolean;
-  onSelectTab: (taskId: string) => void;
   onCreateTab: (taskId: string) => void;
   onCloseTab: (taskId: string) => void;
   onReorderTab: (draggedTaskId: string, targetTaskId: string, position: "before" | "after") => void;
@@ -97,7 +96,6 @@ export function AgentStudioTaskTabs({
     tabs,
     availableTabTasks,
     isLoadingAvailableTabTasks,
-    onSelectTab,
     onCreateTab,
     onCloseTab,
     onReorderTab,
@@ -162,8 +160,6 @@ export function AgentStudioTaskTabs({
         {hasAnyTab ? (
           <BrowserTabs
             aria-label="Task workflow tabs"
-            selectedValue={tabs.find((tab) => tab.isActive)?.taskId ?? null}
-            onSelect={onSelectTab}
             onReorder={onReorderTab}
             items={tabs.map((tab) => ({
               value: tab.taskId,

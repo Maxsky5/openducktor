@@ -21,7 +21,6 @@ type AgentStudioTaskTabsContext = {
   taskTabs: AgentStudioTaskTabsModel["tabs"];
   availableTabTasks: TaskCard[];
   isLoadingTasks: boolean;
-  onSelectTab: (taskId: string) => void;
   onCreateTab: (taskId: string) => void;
   onCloseTab: (taskId: string) => void;
   onReorderTab: (draggedTaskId: string, targetTaskId: string, position: "before" | "after") => void;
@@ -63,7 +62,6 @@ export function useAgentStudioPageModels({
         taskTabs: taskTabs.taskTabs,
         availableTabTasks: taskTabs.availableTabTasks,
         isLoadingTasks: taskTabs.isLoadingTasks,
-        onSelectTab: taskTabs.onSelectTab,
         onCreateTab: taskTabs.onCreateTab,
         onCloseTab: taskTabs.onCloseTab,
         onReorderTab: taskTabs.onReorderTab,
@@ -76,7 +74,6 @@ export function useAgentStudioPageModels({
       taskTabs.onCloseTab,
       taskTabs.onCreateTab,
       taskTabs.onReorderTab,
-      taskTabs.onSelectTab,
       taskTabs.taskTabs,
     ],
   );

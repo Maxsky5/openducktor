@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { act, render, waitFor } from "@testing-library/react";
-import { Tabs } from "@/components/ui/tabs";
-import { BrowserTabs, BrowserTabsBar } from "./index";
+import { BrowserTabs, BrowserTabsBar, BrowserTabsRoot } from "./index";
 
 function setupStrip(
   initialValue: string,
@@ -24,11 +23,9 @@ function setupStrip(
     viewport.getBoundingClientRect = () => new DOMRect(50, 20, 200, 40);
   };
   const tree = (value: string, ids: string[]) => (
-    <Tabs value={value}>
+    <BrowserTabsRoot value={value} onValueChange={() => {}}>
       <BrowserTabsBar scrollRef={setViewport} createAction={<button type="button">New tab</button>}>
         <BrowserTabs
-          selectedValue={value}
-          onSelect={() => {}}
           onReorder={() => {}}
           items={ids.map((id) => ({
             value: id,
@@ -45,7 +42,7 @@ function setupStrip(
           }))}
         />
       </BrowserTabsBar>
-    </Tabs>
+    </BrowserTabsRoot>
   );
   const view = render(tree(initialValue, initialIds));
   return {

@@ -4,8 +4,7 @@ import { Archive, Check, History, LoaderCircle, Plus } from "lucide-react";
 import { type ReactElement, useEffect, useState } from "react";
 import { useLocation, useNavigationType, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
-import { Tabs } from "@/components/ui/tabs";
-import { BrowserTabs, BrowserTabsBar } from "@/components/ui/browser-tabs";
+import { BrowserTabs, BrowserTabsBar, BrowserTabsRoot } from "@/components/ui/browser-tabs";
 import { isAgentSessionActivityActive } from "@/lib/agent-session-activity-state";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { errorMessage } from "@/lib/errors";
@@ -113,12 +112,17 @@ function WorkspaceSessionTabArchiveAction({
       onClick={() => onArchive(record)}
     >
       <span className="grid">
-        <Archive aria-hidden="true" className={iconSwapClassName(!confirming && !archiving)} />
-        <Check aria-hidden="true" className={iconSwapClassName(confirming && !archiving)} />
-        <LoaderCircle
-          aria-hidden="true"
-          className={cn(iconSwapClassName(archiving), "motion-safe:animate-spin")}
-        />
+        <span className={cn("inline-flex", iconSwapClassName(!confirming && !archiving))}>
+          <Archive aria-hidden="true" />
+        </span>
+        <span className={cn("inline-flex", iconSwapClassName(confirming && !archiving))}>
+          <Check aria-hidden="true" />
+        </span>
+        <span className={cn("inline-flex", iconSwapClassName(archiving))}>
+          <span className="inline-flex motion-safe:animate-spin">
+            <LoaderCircle aria-hidden="true" />
+          </span>
+        </span>
       </span>
     </Button>
   );
@@ -132,7 +136,6 @@ function WorkspaceSessionTabs({
   archivingId,
   pending,
   onReorder,
-  onSelect,
   onArchive,
 }: {
   sessions: WorkspaceSession[];
@@ -140,7 +143,6 @@ function WorkspaceSessionTabs({
   archivingId: string | null;
   pending: boolean;
   onReorder: (draggedId: string, targetId: string, position: "before" | "after") => void;
-  onSelect: (id: string) => void;
   onArchive: (record: WorkspaceSession) => void;
 }): ReactElement {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
@@ -165,8 +167,6 @@ function WorkspaceSessionTabs({
   return (
     <BrowserTabs
       aria-label="Workspace session tabs"
-      selectedValue={selectedId}
-      onSelect={onSelect}
       onReorder={onReorder}
       items={sessions.map((record) => ({
         value: record.id,
@@ -275,7 +275,7 @@ function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactElement 
       </div>
     );
   return (
-    <Tabs
+    <BrowserTabsRoot
       value={selectedId ?? ""}
       onValueChange={(sessionId) => updateNavigation({ sessionId }, false)}
       className="h-full min-h-0 min-w-0 gap-0 overflow-hidden"
@@ -313,7 +313,6 @@ function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactElement 
           archivingId={archivingId}
           pending={archive.isPending}
           onReorder={reorder}
-          onSelect={(sessionId) => updateNavigation({ sessionId }, false)}
           onArchive={handleTabArchive}
         />
       </BrowserTabsBar>
@@ -360,7 +359,7 @@ function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactElement 
           }}
         />
       )}
-    </Tabs>
+    </BrowserTabsRoot>
   );
 }
 

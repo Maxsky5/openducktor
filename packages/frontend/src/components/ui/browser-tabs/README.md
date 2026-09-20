@@ -4,15 +4,13 @@
 
 ## Composition
 
-Use the existing shadcn `Tabs` root to share selection and keyboard behavior with the page content. Pass the same selected value and selection handler to `Tabs` and `BrowserTabs`.
+`BrowserTabsRoot` wraps the shadcn `Tabs` root and provides selection through React context. Set the controlled value and change handler once on this root. `BrowserTabs` reads them from context for tab styling and mouse selection; shadcn handles keyboard selection and content association.
 
 ```tsx
-<Tabs value={selectedValue} onValueChange={selectTab}>
+<BrowserTabsRoot value={selectedValue} onValueChange={selectTab}>
   <BrowserTabsBar createAction={<NewTabButton />} actions={<PageActions />}>
     <BrowserTabs
       aria-label="Open documents"
-      selectedValue={selectedValue}
-      onSelect={selectTab}
       onReorder={reorderTabs}
       items={documents.map((document) => ({
         value: document.id,
@@ -22,7 +20,7 @@ Use the existing shadcn `Tabs` root to share selection and keyboard behavior wit
     />
   </BrowserTabsBar>
   <TabsContent value={selectedValue}>{content}</TabsContent>
-</Tabs>
+</BrowserTabsRoot>
 ```
 
 ## Ownership

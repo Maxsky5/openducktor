@@ -1,7 +1,8 @@
 import { AlertTriangle, RefreshCcw } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { TabsContent } from "@/components/ui/tabs";
+import { BrowserTabsRoot } from "@/components/ui/browser-tabs";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
 type AgentsPageShellProps = {
@@ -105,7 +106,7 @@ export function AgentsPageShell({
   }
 
   return (
-    <Tabs
+    <BrowserTabsRoot
       value={activeTabValue}
       onValueChange={onTabValueChange}
       className="h-full min-h-0 max-h-full gap-0 overflow-hidden bg-card"
@@ -133,6 +134,6 @@ export function AgentsPageShell({
         {workspace}
       </TabsContent>
       {modalContent}
-    </Tabs>
+    </BrowserTabsRoot>
   );
 }

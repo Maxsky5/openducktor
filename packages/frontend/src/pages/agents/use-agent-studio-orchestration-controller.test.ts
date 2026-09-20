@@ -22,7 +22,6 @@ import {
 
 type BuildArgs = Parameters<typeof buildAgentStudioPageModelsArgs>[0];
 
-const onSelectTab = () => {};
 const onCreateTab = () => {};
 const onCloseTab = () => {};
 const onReorderTab = () => {};
@@ -121,7 +120,6 @@ const createBaseArgs = (): BuildArgs => {
       taskTabs: [],
       availableTabTasks: [task],
       isLoadingTasks: false,
-      handleSelectTab: onSelectTab,
       handleCreateTab: onCreateTab,
       handleCloseTab: onCloseTab,
       handleReorderTab: onReorderTab,
@@ -215,7 +213,6 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(mapped.selectedSession.selectedSession.transcriptState).toEqual({
       kind: "visible",
     });
-    expect(mapped.taskTabs.onSelectTab).toBe(onSelectTab);
     expect(mapped.taskTabs.onCreateTab).toBe(onCreateTab);
     expect(mapped.taskTabs.onCloseTab).toBe(onCloseTab);
     expect(mapped.taskTabs.onReorderTab).toBe(onReorderTab);
