@@ -1,4 +1,6 @@
-import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
+import type { AgentAsyncQuestion, RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
+import type { AgentSessionScope } from "@openducktor/core";
+import { useMemo } from "react";
 import {
   hasAgentSessionPendingApprovals,
   hasAgentSessionPendingQuestions,
@@ -11,14 +13,18 @@ import type {
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { useAgentSessionApprovalActions } from "../use-agent-session-approval-actions";
 import { useAgentSessionQuestionActions } from "../use-agent-session-question-actions";
+import { toAgentQuestionRequests } from "@/lib/agent-question-requests";
 
 type UseRuntimeTranscriptInteractionsArgs = {
   target: AgentSessionIdentity | null;
   pendingApprovalRequests: readonly AgentApprovalRequest[];
   pendingQuestionRequests: readonly AgentQuestionRequest[];
+  pendingAsyncQuestions: readonly AgentAsyncQuestion[];
   isRuntimeReady: boolean;
   replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"];
   answerAgentQuestion: AgentOperationsContextValue["answerAgentQuestion"];
+  sendAgentMessage: AgentOperationsContextValue["sendAgentMessage"];
+  sessionScope?: AgentSessionScope | null | undefined;
 };
 
 type RuntimeTranscriptInteractions = {
@@ -41,9 +47,12 @@ export function useRuntimeTranscriptInteractions({
   target,
   pendingApprovalRequests,
   pendingQuestionRequests,
+  pendingAsyncQuestions,
   isRuntimeReady,
   replyAgentApproval,
   answerAgentQuestion,
+  sendAgentMessage,
+  sessionScope,
 }: UseRuntimeTranscriptInteractionsArgs): RuntimeTranscriptInteractions {
   const canReplyToRuntimeRequest = isRuntimeReady && target !== null;
   const { isSubmittingApprovalByRequestId, approvalReplyErrorByRequestId, onReplyApproval } =
@@ -54,21 +63,27 @@ export function useRuntimeTranscriptInteractions({
       replyAgentApproval,
     });
 
+  const questionRequests = useMemo(
+    () => toAgentQuestionRequests(pendingQuestionRequests, pendingAsyncQuestions),
+    [pendingAsyncQuestions, pendingQuestionRequests],
+  );
   const { isSubmittingQuestionByRequestId, onSubmitQuestionAnswers } =
     useAgentSessionQuestionActions({
       sessionIdentity: target,
-      pendingQuestions: pendingQuestionRequests,
+      pendingQuestions: questionRequests,
       canAnswerQuestions: isRuntimeReady,
       answerAgentQuestion,
+      sendAgentMessage,
+      sessionScope,
     });
 
   return {
     pendingApprovalRequests,
-    pendingQuestionRequests,
+    pendingQuestionRequests: questionRequests,
     pendingQuestions: {
       canSubmit:
         canReplyToRuntimeRequest &&
-        hasAgentSessionPendingQuestions({ pendingQuestions: pendingQuestionRequests }),
+        hasAgentSessionPendingQuestions({ pendingQuestions: questionRequests }),
       isSubmittingByRequestId: isSubmittingQuestionByRequestId,
       onSubmit: onSubmitQuestionAnswers,
     },

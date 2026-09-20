@@ -11,8 +11,8 @@ import { AgentChatSurface } from "@/components/features/agents/agent-chat/agent-
 import { deriveAgentChatReadiness } from "@/components/features/agents/agent-chat/agent-chat-readiness";
 import { resolveAgentChatRuntimePresentation } from "@/components/features/agents/agent-chat/agent-chat-runtime-presentation";
 import { resolveAgentChatTranscriptPresentation } from "@/components/features/agents/agent-chat/agent-chat-transcript-presentation";
+import { toAgentQuestionRequests } from "@/lib/agent-question-requests";
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
-import { useAgentAsyncQuestionActions } from "@/components/features/agents/agent-chat/use-agent-async-question-actions";
 import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
 import { useAgentSessionQuestionActions } from "@/components/features/agents/agent-chat/use-agent-session-question-actions";
 import { useSelectedSessionContextUsage } from "@/features/agent-chat-composer/context-usage/use-selected-session-context-usage";
@@ -220,15 +220,15 @@ export function WorkspaceSessionChat({
     canReplyToApprovals: canInteract,
     replyAgentApproval: operations.replyAgentApproval,
   });
+  const questionRequests = useMemo(
+    () => toAgentQuestionRequests(pendingQuestions, session?.pendingAsyncQuestions ?? []),
+    [pendingQuestions, session?.pendingAsyncQuestions],
+  );
   const questionActions = useAgentSessionQuestionActions({
     sessionIdentity: identity,
-    pendingQuestions,
+    pendingQuestions: questionRequests,
     canAnswerQuestions: canInteract,
     answerAgentQuestion: operations.answerAgentQuestion,
-  });
-  const asyncQuestions = useAgentAsyncQuestionActions({
-    sessionIdentity: identity,
-    canSubmit: canInteract,
     sendAgentMessage: operations.sendAgentMessage,
   });
   const transcript = resolveAgentChatTranscriptPresentation({
@@ -267,8 +267,7 @@ export function WorkspaceSessionChat({
     runtimePresentation,
     emptyState: null,
     pendingApprovalRequests: pendingApprovals,
-    pendingQuestionRequests: pendingQuestions,
-    asyncQuestions,
+    pendingQuestionRequests: questionRequests,
     todos: runtimeData.todos,
     sessionAgentColors: picker.agentAccentColorsByProfileId,
     approvals: {

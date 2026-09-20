@@ -161,7 +161,7 @@ describe("session occurrence projector", () => {
         navigationTarget: {
           type: "pending_input",
           inputKind: "question",
-          requestId: newQuestion.questionItemId,
+          requestId: "async:message-2",
         },
       },
     ]);
@@ -171,6 +171,45 @@ describe("session occurrence projector", () => {
         session: snapshot({ pendingAsyncQuestions: [existingQuestion, newQuestion] }),
       }),
     ).toEqual([]);
+  });
+
+  test("groups asynchronous questions from one Codex message", () => {
+    const projector = createProjector();
+    projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+
+    const occurrences = projector.accept({
+      type: "session_upsert",
+      session: snapshot({
+        pendingAsyncQuestions: [
+          {
+            questionItemId: '["request_user_input_async","message-1",0]',
+            sourceMessageId: "message-1",
+            questionIndex: 0,
+            title: "Which provider should we use?",
+            options: ["OpenAI", "Anthropic"],
+          },
+          {
+            questionItemId: '["request_user_input_async","message-1",1]',
+            sourceMessageId: "message-1",
+            questionIndex: 1,
+            title: "Which model should we use?",
+            options: null,
+          },
+        ],
+      }),
+    });
+
+    expect(occurrences).toMatchObject([
+      {
+        kind: "agent.question_asked",
+        status: "Which provider should we use? +1 more question",
+        navigationTarget: {
+          type: "pending_input",
+          inputKind: "question",
+          requestId: "async:message-1",
+        },
+      },
+    ]);
   });
 
   test("keeps the remaining question count within the status limit", () => {

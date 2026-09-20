@@ -31,6 +31,15 @@ export type RepositoryAgentSessionSummary = Omit<AgentSessionSummary, "taskId" |
 const sortByStartedAtDesc = (left: AgentSessionState, right: AgentSessionState): number =>
   left.startedAt > right.startedAt ? -1 : left.startedAt < right.startedAt ? 1 : 0;
 
+const getSummaryActivityState = (session: AgentSessionState): AgentSessionActivityState =>
+  (session.pendingAsyncQuestions?.length ?? 0) > 0
+    ? "waiting_input"
+    : getAgentSessionActivityStateFromSession(session);
+
+const getPendingQuestionCount = (session: AgentSessionState): number =>
+  session.pendingQuestions.length +
+  new Set(session.pendingAsyncQuestions?.map((question) => question.sourceMessageId)).size;
+
 export function toAgentSessionSummary(session: WorkflowAgentSessionState): AgentSessionSummary;
 export function toAgentSessionSummary(session: AgentSessionState): AgentSessionSummary;
 export function toAgentSessionSummary(session: AgentSessionState): AgentSessionSummary {
@@ -44,11 +53,11 @@ export function toAgentSessionSummary(session: AgentSessionState): AgentSessionS
     ...toAgentSessionIdentity(session),
     taskId: session.sessionAssociation.taskId,
     role: session.sessionAssociation.role,
-    activityState: getAgentSessionActivityStateFromSession(session),
+    activityState: getSummaryActivityState(session),
     startedAt: session.startedAt,
     selectedModel: session.selectedModel,
     pendingApprovalCount: session.pendingApprovals.length,
-    pendingQuestionCount: session.pendingQuestions.length,
+    pendingQuestionCount: getPendingQuestionCount(session),
   };
   if (session.title) {
     summary.title = session.title;
@@ -112,9 +121,9 @@ const repositoryActivitySummaries = (
       ...toAgentSessionIdentity(session),
       startedAt: session.startedAt,
       selectedModel: session.selectedModel,
-      activityState: getAgentSessionActivityStateFromSession(session),
+      activityState: getSummaryActivityState(session),
       pendingApprovalCount: session.pendingApprovals.length,
-      pendingQuestionCount: session.pendingQuestions.length,
+      pendingQuestionCount: getPendingQuestionCount(session),
     };
     if (session.title) summary.title = session.title;
     const prior = previousByIdentity.get(agentSessionIdentityKey(session));

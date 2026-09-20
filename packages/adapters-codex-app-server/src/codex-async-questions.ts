@@ -70,6 +70,15 @@ export const parseCodexAsyncQuestionItem = (
 export const encodeCodexAsyncQuestionReply = (reply: AgentAsyncQuestionReply): string =>
   `${OPEN_TAG}${JSON.stringify(reply)}${CLOSE_TAG}`;
 
+export const encodeCodexAsyncQuestionReplies = (
+  replies: readonly AgentAsyncQuestionReply[],
+): string => {
+  if (replies.length === 0) {
+    throw new Error("Codex async question replies cannot be empty.");
+  }
+  return `${OPEN_TAG}${JSON.stringify(replies.length === 1 ? replies[0] : replies)}${CLOSE_TAG}`;
+};
+
 export const encodeCodexAsyncQuestionSkips = (questionItemIds: readonly string[]): string =>
   `${SKIP_MARKER_PREFIX}${JSON.stringify(questionItemIds)}`;
 

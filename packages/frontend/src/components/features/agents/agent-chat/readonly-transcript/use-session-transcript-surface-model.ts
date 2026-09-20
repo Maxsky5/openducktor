@@ -21,7 +21,6 @@ import { resolveAgentChatRuntimePresentation } from "../agent-chat-runtime-prese
 import { resolveAgentChatTranscriptPresentation } from "../agent-chat-transcript-presentation";
 import type { AgentSessionTranscriptTarget } from "../agent-session-transcript-target";
 import { useAgentChatSurfaceModel } from "../use-agent-chat-surface-model";
-import { useAgentAsyncQuestionActions } from "../use-agent-async-question-actions";
 import { deriveRuntimeTranscriptSurfaceState } from "./runtime-transcript-surface-state";
 import { useRuntimeTranscriptInteractions } from "./use-runtime-transcript-interactions";
 import { useRuntimeTranscriptSessionHistory } from "./use-runtime-transcript-session-history";
@@ -65,15 +64,12 @@ export function useSessionTranscriptSurfaceModel({
     target,
     pendingApprovalRequests: visiblePendingInput.pendingApprovals,
     pendingQuestionRequests: visiblePendingInput.pendingQuestions,
+    pendingAsyncQuestions: sessionHistory.session?.pendingAsyncQuestions ?? [],
     isRuntimeReady: runtimeReadiness.state === "ready",
     replyAgentApproval: sessionHistory.replyAgentApproval,
     answerAgentQuestion: sessionHistory.answerAgentQuestion,
-  });
-  const asyncQuestions = useAgentAsyncQuestionActions({
-    sessionIdentity: sessionHistory.interactionSession,
-    sessionScope: target?.sessionScope ?? null,
-    canSubmit: runtimeReadiness.state === "ready",
     sendAgentMessage,
+    sessionScope: target?.sessionScope ?? null,
   });
 
   const transcriptSurfaceState = deriveRuntimeTranscriptSurfaceState({
@@ -200,7 +196,6 @@ export function useSessionTranscriptSurfaceModel({
     emptyState: transcriptSurfaceState.emptyState,
     pendingApprovalRequests: transcriptInteractions.pendingApprovalRequests,
     pendingQuestionRequests: transcriptInteractions.pendingQuestionRequests,
-    asyncQuestions,
     todos: EMPTY_TODOS,
     pendingQuestions: transcriptInteractions.pendingQuestions,
     approvals: transcriptInteractions.approvals,

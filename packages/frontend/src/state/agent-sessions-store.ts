@@ -1,5 +1,4 @@
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { clearAgentAsyncQuestionDrafts } from "@/state/agent-async-question-draft-store";
 import {
   type AgentSessionCollection,
   type AgentSessionCollectionUpdater,
@@ -84,12 +83,6 @@ export const createAgentSessionsStore = (
     const { collection: nextCollection, result } = commit(sessionCollection);
     if (areAgentSessionCollectionsEquivalent(sessionCollection, nextCollection)) {
       return result;
-    }
-
-    for (const session of listAgentSessions(sessionCollection)) {
-      if (!getAgentSession(nextCollection, session)) {
-        clearAgentAsyncQuestionDrafts(session);
-      }
     }
 
     sessionCollection = nextCollection;

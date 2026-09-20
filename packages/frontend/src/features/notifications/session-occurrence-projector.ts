@@ -1,6 +1,5 @@
 import { normalizeSessionErrorMessage } from "@/lib/session-error-message";
 import type {
-  AgentAsyncQuestion,
   AgentSessionLiveEnvelope,
   AgentSessionLivePendingApprovalRequest,
   AgentSessionLivePendingQuestionRequest,
@@ -12,6 +11,7 @@ import type {
   NotificationSessionIdentity,
 } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { toAgentQuestionRequests } from "@/lib/agent-question-requests";
 import { pendingInputIdentity } from "@/lib/pending-input-identity";
 
 type NotificationTaskIdentity = {
@@ -303,22 +303,6 @@ export const createSessionOccurrenceProjector = ({
     });
   };
 
-  const projectAsyncQuestion = (
-    projection: SessionProjection,
-    question: AgentAsyncQuestion,
-  ): NotificationOccurrence =>
-    sessionOccurrence(projection, {
-      kind: "agent.question_asked",
-      suffix: question.questionItemId,
-      status: toNotificationStatus(question.title),
-      navigationTarget: {
-        type: "pending_input",
-        ...sessionTarget(projection),
-        inputKind: "question",
-        requestId: question.questionItemId,
-      },
-    });
-
   const applyUpsert = (snapshot: AgentSessionLiveSnapshot): NotificationOccurrence[] => {
     const key = agentSessionIdentityKey(snapshot.ref);
     const association = resolveAssociation(snapshot.ref);
@@ -381,6 +365,7 @@ export const createSessionOccurrenceProjector = ({
     const nextAsyncQuestions = new Map(
       snapshot.pendingAsyncQuestions.map((question) => [question.questionItemId, question]),
     );
+    const nextAsyncQuestionRequests = toAgentQuestionRequests([], snapshot.pendingAsyncQuestions);
     const nextQuestions = pendingRequestsByIdentity(snapshot.pendingQuestions);
     for (const [identity, request] of nextApprovals) {
       if (association && !projection.pendingApprovals.has(identity)) {
@@ -392,9 +377,14 @@ export const createSessionOccurrenceProjector = ({
         occurrences.push(projectPendingInput(projection, { inputKind: "question", request }));
       }
     }
-    for (const [questionItemId, question] of nextAsyncQuestions) {
-      if (association && !projection.pendingAsyncQuestions.has(questionItemId)) {
-        occurrences.push(projectAsyncQuestion(projection, question));
+    for (const request of nextAsyncQuestionRequests) {
+      if (
+        association &&
+        request.asyncQuestionItemIds?.some(
+          (questionItemId) => !projection.pendingAsyncQuestions.has(questionItemId),
+        )
+      ) {
+        occurrences.push(projectPendingInput(projection, { inputKind: "question", request }));
       }
     }
     projection.pendingApprovals = new Set(nextApprovals.keys());
@@ -426,9 +416,13 @@ export const createSessionOccurrenceProjector = ({
         occurrences.push(projectPendingInput(projection, { inputKind: "question", request }));
       }
     }
-    for (const question of snapshot.pendingAsyncQuestions) {
-      if (pending.liveAsyncQuestions.has(question.questionItemId)) {
-        occurrences.push(projectAsyncQuestion(projection, question));
+    for (const request of toAgentQuestionRequests([], snapshot.pendingAsyncQuestions)) {
+      if (
+        request.asyncQuestionItemIds?.some((questionItemId) =>
+          pending.liveAsyncQuestions.has(questionItemId),
+        )
+      ) {
+        occurrences.push(projectPendingInput(projection, { inputKind: "question", request }));
       }
     }
     return occurrences;

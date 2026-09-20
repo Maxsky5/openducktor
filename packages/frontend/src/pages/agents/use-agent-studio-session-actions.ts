@@ -16,6 +16,7 @@ import { hasSettledLatestTurn } from "@/lib/agent-session-interrupted-turn";
 import { useInterruptedTurnResume } from "@/components/features/agents/agent-chat/use-interrupted-turn-resume";
 import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
 import { useAgentSessionQuestionActions } from "@/components/features/agents/agent-chat/use-agent-session-question-actions";
+import { toAgentQuestionRequests } from "@/lib/agent-question-requests";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type {
   RunSessionStartWorkflow,
@@ -231,9 +232,13 @@ export function useAgentStudioSessionActions({
   const { isSubmittingQuestionByRequestId, onSubmitQuestionAnswers } =
     useAgentSessionQuestionActions({
       sessionIdentity: selectedSessionIdentity,
-      pendingQuestions: loadedSession?.pendingQuestions ?? EMPTY_PENDING_QUESTION_REQUESTS,
+      pendingQuestions: toAgentQuestionRequests(
+        loadedSession?.pendingQuestions ?? EMPTY_PENDING_QUESTION_REQUESTS,
+        loadedSession?.pendingAsyncQuestions ?? [],
+      ),
       canAnswerQuestions: agentStudioReady,
       answerAgentQuestion,
+      sendAgentMessage,
     });
   const { isSubmittingApprovalByRequestId, approvalReplyErrorByRequestId, onReplyApproval } =
     useAgentSessionApprovalActions({

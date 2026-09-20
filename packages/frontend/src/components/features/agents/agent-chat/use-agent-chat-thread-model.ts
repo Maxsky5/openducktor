@@ -9,7 +9,6 @@ import type {
   AgentChatThreadModel,
   AgentChatTranscriptPresentation,
 } from "./agent-chat.types";
-import type { AgentAsyncQuestionActions } from "./use-agent-async-question-actions";
 
 const EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS = Object.freeze<Record<string, number>>({});
 const EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS = Object.freeze<Record<string, number>>({});
@@ -43,7 +42,6 @@ type UseAgentChatThreadModelArgs = {
   emptyState: AgentChatEmptyStateModel | null;
   pendingApprovalRequests: readonly AgentApprovalRequest[];
   pendingQuestionRequests: readonly AgentQuestionRequest[];
-  asyncQuestions: AgentAsyncQuestionActions;
   todos: readonly AgentSessionTodoItem[];
   sessionAccentColor?: string | undefined;
   pendingQuestions: AgentChatPendingQuestionActions;
@@ -68,7 +66,6 @@ export function useAgentChatThreadModel({
   emptyState,
   pendingApprovalRequests,
   pendingQuestionRequests,
-  asyncQuestions,
   todos,
   sessionAccentColor,
   pendingQuestions,
@@ -115,7 +112,6 @@ export function useAgentChatThreadModel({
       sessionAgentColors,
       pendingApprovalRequests,
       pendingQuestionRequests,
-      asyncQuestions,
       subagentPendingApprovalCountBySessionKey:
         subagentPendingApprovalCountBySessionKey ?? EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS,
       subagentPendingQuestionCountBySessionKey:
@@ -152,7 +148,6 @@ export function useAgentChatThreadModel({
       modelCatalog,
       pendingApprovalRequests,
       pendingQuestionRequests,
-      asyncQuestions,
       pendingQuestions,
       runtimePresentation,
       scrollToBottomOnSendRef,

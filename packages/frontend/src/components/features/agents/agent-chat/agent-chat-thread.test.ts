@@ -12,6 +12,7 @@ import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { AGENT_CHAT_ROW_WINDOW_SIZE } from "./agent-chat-row-windows";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
+import { toAgentQuestionRequests } from "@/lib/agent-question-requests";
 import type { AgentChatTranscriptNotice } from "./agent-chat.types";
 import {
   type AgentChatThreadModelInput,
@@ -566,6 +567,36 @@ describe("AgentChatThread", () => {
 
     expect(html).toContain("Need your input");
     expect(html).toContain("Input needed");
+  });
+
+  test("renders Codex background questions through the standard question card", () => {
+    const asyncQuestions = [
+      {
+        questionItemId: "question-1",
+        sourceMessageId: "message-1",
+        questionIndex: 0,
+        title: "Which test should I run?",
+        options: ["Unit tests", "Full suite"],
+      },
+    ];
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          transcript: buildSessionTranscript(
+            buildSession({
+              pendingAsyncQuestions: asyncQuestions,
+            }),
+          ),
+          pendingQuestionRequests: toAgentQuestionRequests([], asyncQuestions),
+        },
+      }),
+    );
+
+    expect(html).toContain("Input needed");
+    expect(html).toContain("Which test should I run?");
+    expect(html).toContain("Unit tests");
+    expect(html).not.toContain("Codex asked while it keeps working");
   });
 
   test("renders approval cards for pending approval requests", () => {

@@ -16,7 +16,6 @@ import { resolveAgentChatTranscriptPresentation } from "@/components/features/ag
 import { withClaudeSkillMentions } from "@/components/features/agents/agent-chat/claude-skill-mentions";
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
 import type { AgentChatComposerConfig } from "@/components/features/agents/agent-chat/use-agent-chat-composer-model";
-import { useAgentAsyncQuestionActions } from "@/components/features/agents/agent-chat/use-agent-async-question-actions";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import type { AgentStudioContextUsage } from "@/features/agent-chat-composer/context-usage/context-usage-resolution";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
@@ -308,11 +307,6 @@ export function useAgentStudioChatModel({
       selectedSessionTranscriptState,
     ],
   );
-  const asyncQuestions = useAgentAsyncQuestionActions({
-    sessionIdentity: selectedSessionIdentity,
-    canSubmit: chatReadiness.interactionEnabled,
-    sendAgentMessage: sessionActions.sendAgentMessage,
-  });
   const runtimePresentation = useMemo(
     () =>
       resolveAgentChatRuntimePresentation({
@@ -521,7 +515,6 @@ export function useAgentStudioChatModel({
     emptyState: surfaceState.emptyState,
     pendingApprovalRequests,
     pendingQuestionRequests,
-    asyncQuestions,
     todos: selectedSessionRuntimeData.todos,
     sessionAccentColor,
     pendingQuestions,

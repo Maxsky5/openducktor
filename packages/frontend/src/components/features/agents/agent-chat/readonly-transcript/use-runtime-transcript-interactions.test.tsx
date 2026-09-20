@@ -53,9 +53,11 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   target: createTarget(),
   pendingApprovalRequests: [],
   pendingQuestionRequests: [],
+  pendingAsyncQuestions: [],
   isRuntimeReady: true,
   replyAgentApproval: async () => {},
   answerAgentQuestion: async () => {},
+  sendAgentMessage: async () => {},
   ...overrides,
 });
 
@@ -168,6 +170,56 @@ describe("useRuntimeTranscriptInteractions", () => {
       );
     } finally {
       deferredAnswer.resolve(undefined);
+      await harness.unmount();
+    }
+  });
+
+  test("maps a Codex background question and sends its answer as user input", async () => {
+    const sendAgentMessage = mock(async () => {});
+    const target = createTarget({ runtimeKind: "codex" });
+    const harness = createHookHarness(
+      createBaseArgs({
+        target,
+        pendingAsyncQuestions: [
+          {
+            questionItemId: "question-1",
+            sourceMessageId: "message-1",
+            questionIndex: 0,
+            title: "Which environment?",
+            options: ["Staging"],
+          },
+        ],
+        sendAgentMessage,
+        sessionScope: { kind: "repository" },
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(harness.getLatest().pendingQuestionRequests).toMatchObject([
+        {
+          requestId: "async:message-1",
+          questions: [{ question: "Which environment?" }],
+        },
+      ]);
+      await harness.run(async (state) => {
+        await state.pendingQuestions.onSubmit("async:message-1", [["Staging"]]);
+      });
+
+      expect(sendAgentMessage).toHaveBeenCalledWith(
+        target,
+        [
+          {
+            kind: "async_question_reply",
+            questionItemId: "question-1",
+            question: "Which environment?",
+            answer: "Staging",
+          },
+        ],
+        { sessionScope: { kind: "repository" } },
+      );
+    } finally {
       await harness.unmount();
     }
   });

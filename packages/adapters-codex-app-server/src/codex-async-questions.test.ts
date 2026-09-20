@@ -302,4 +302,40 @@ describe("Codex asynchronous questions", () => {
       ],
     });
   });
+
+  test("encodes one Codex text input for all answers from one question request", () => {
+    const parts = [
+      {
+        kind: "async_question_reply" as const,
+        questionItemId: codexAsyncQuestionItemId("call-1", 0),
+        question: "Which environment?",
+        answer: "Staging",
+      },
+      {
+        kind: "async_question_reply" as const,
+        questionItemId: codexAsyncQuestionItemId("call-1", 1),
+        question: "Which suite?",
+        answer: "Full suite",
+      },
+    ];
+
+    const inputs = toCodexTurnInputList(parts);
+
+    expect(inputs).toHaveLength(1);
+    expect(inputs[0]?.type).toBe("text");
+    expect(
+      inputs[0]?.type === "text" ? parseCodexAsyncQuestionReplies(inputs[0].text) : null,
+    ).toEqual([
+      {
+        questionItemId: parts[0].questionItemId,
+        question: parts[0].question,
+        answer: parts[0].answer,
+      },
+      {
+        questionItemId: parts[1].questionItemId,
+        question: parts[1].question,
+        answer: parts[1].answer,
+      },
+    ]);
+  });
 });

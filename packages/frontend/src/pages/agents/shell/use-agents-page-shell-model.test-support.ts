@@ -31,12 +31,6 @@ export const createAgentChatModelFixture = (): AgentChatModel => {
       sessionAgentColors: {},
       pendingApprovalRequests: [],
       pendingQuestionRequests: [],
-      asyncQuestions: {
-        canSubmit: false,
-        isSubmittingByQuestionId: {},
-        errorByQuestionId: {},
-        onSubmit: () => Promise.resolve(),
-      },
       todos: [],
       canSubmitQuestionAnswers: false,
       isSubmittingQuestionByRequestId: {},

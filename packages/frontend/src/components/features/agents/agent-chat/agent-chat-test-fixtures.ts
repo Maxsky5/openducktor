@@ -169,7 +169,6 @@ type AgentChatThreadFixtureDefaults =
   | "modelCatalog"
   | "pendingApprovalRequests"
   | "pendingQuestionRequests"
-  | "asyncQuestions"
   | "todos"
   | "sessionAccentColor"
   | "runtimePresentation";
@@ -213,12 +212,6 @@ export const completeThreadModel = (model: AgentChatThreadModelInput): AgentChat
     runtimePresentation: model.runtimePresentation ?? buildBaseModel().runtimePresentation,
     pendingApprovalRequests: model.pendingApprovalRequests ?? [],
     pendingQuestionRequests: model.pendingQuestionRequests ?? [],
-    asyncQuestions: model.asyncQuestions ?? {
-      canSubmit: false,
-      isSubmittingByQuestionId: {},
-      errorByQuestionId: {},
-      onSubmit: () => Promise.resolve(),
-    },
     todos: model.todos ?? [],
   };
 };

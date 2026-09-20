@@ -421,6 +421,42 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     });
   });
 
+  test("shows a Codex background question as pending input", () => {
+    const session = createSession({
+      runtimeKind: "codex",
+      status: "running",
+      pendingAsyncQuestions: [
+        {
+          questionItemId: "question-1",
+          sourceMessageId: "message-1",
+          questionIndex: 0,
+          title: "Which environment?",
+          options: ["Staging", "Production"],
+        },
+      ],
+    });
+
+    const context = buildAgentStudioSelectedSessionContext(
+      createInput({
+        selectedSession: { loadedSession: session },
+        sessionsForTask: [toAgentSessionSummary(session)],
+      }),
+    );
+
+    expect(context.pendingInput.pendingQuestions.canSubmit).toBe(true);
+    expect(context.pendingInput.pendingQuestionRequests).toMatchObject([
+      {
+        requestId: "async:message-1",
+        questions: [
+          {
+            question: "Which environment?",
+            options: [{ label: "Staging" }, { label: "Production" }],
+          },
+        ],
+      },
+    ]);
+  });
+
   test("indexes parent-visible subagent pending input by child session identity", () => {
     const childSession = toAgentSessionIdentity({
       externalSessionId: "session-child",

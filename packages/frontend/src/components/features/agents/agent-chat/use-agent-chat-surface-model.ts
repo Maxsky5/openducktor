@@ -21,18 +21,10 @@ import {
   type AgentChatPendingQuestionActions,
   useAgentChatThreadModel,
 } from "./use-agent-chat-thread-model";
-import type { AgentAsyncQuestionActions } from "./use-agent-async-question-actions";
 
 export { invokeStopAgentSession };
 
 const EMPTY_SESSION_AGENT_COLORS = Object.freeze<Record<string, string>>({});
-const EMPTY_ASYNC_QUESTION_ACTIONS: AgentAsyncQuestionActions = Object.freeze({
-  canSubmit: false,
-  isSubmittingByQuestionId: Object.freeze({}),
-  errorByQuestionId: Object.freeze({}),
-  onSubmit: () => Promise.resolve(),
-});
-
 type UseAgentChatSurfaceModelArgs = {
   modelCatalog?: AgentModelCatalog | null;
   transcript: AgentChatTranscriptPresentation;
@@ -43,7 +35,6 @@ type UseAgentChatSurfaceModelArgs = {
   emptyState: AgentChatEmptyStateModel | null;
   pendingApprovalRequests: readonly AgentApprovalRequest[];
   pendingQuestionRequests: readonly AgentQuestionRequest[];
-  asyncQuestions?: AgentAsyncQuestionActions;
   todos: readonly AgentSessionTodoItem[];
   sessionAccentColor?: string | undefined;
   pendingQuestions: AgentChatPendingQuestionActions;
@@ -65,7 +56,6 @@ export function useAgentChatSurfaceModel({
   emptyState,
   pendingApprovalRequests,
   pendingQuestionRequests,
-  asyncQuestions,
   todos,
   sessionAccentColor,
   pendingQuestions,
@@ -120,7 +110,6 @@ export function useAgentChatSurfaceModel({
     emptyState,
     pendingApprovalRequests,
     pendingQuestionRequests,
-    asyncQuestions: asyncQuestions ?? EMPTY_ASYNC_QUESTION_ACTIONS,
     todos,
     sessionAccentColor,
     pendingQuestions,

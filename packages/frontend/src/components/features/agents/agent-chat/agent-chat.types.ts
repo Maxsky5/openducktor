@@ -34,7 +34,6 @@ import type {
 import type { AgentSessionActivityState } from "@/types/agent-session-activity";
 import type { AgentChatComposerDraft } from "./agent-chat-composer-draft";
 import type { AgentChatDraftScope } from "./agent-chat-draft-scope";
-import type { AgentAsyncQuestionActions } from "./use-agent-async-question-actions";
 import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
 
 export type AgentChatEmptyStateModel = {
@@ -129,7 +128,6 @@ export type AgentChatThreadModel = {
   sessionAgentColors: Record<string, string>;
   pendingApprovalRequests: readonly AgentApprovalRequest[];
   pendingQuestionRequests: readonly AgentQuestionRequest[];
-  asyncQuestions: AgentAsyncQuestionActions;
   subagentPendingApprovalCountBySessionKey?: Record<string, number>;
   subagentPendingQuestionCountBySessionKey?: Record<string, number>;
   todos: readonly AgentSessionTodoItem[];

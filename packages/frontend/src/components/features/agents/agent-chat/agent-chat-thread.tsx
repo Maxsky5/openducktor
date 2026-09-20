@@ -12,10 +12,6 @@ import {
 } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import {
-  agentAsyncQuestionDraftKey,
-  pruneAgentAsyncQuestionDrafts,
-} from "@/state/agent-async-question-draft-store";
 import { AgentChatInterruptedTurnResume } from "./agent-chat-interrupted-turn-resume";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatTurnGroup } from "./agent-chat-turn-group";
@@ -23,7 +19,6 @@ import { AgentSessionApprovalCard } from "./agent-session-approval-card";
 import { AgentSessionQuestionCard } from "./agent-session-question-card";
 import { buildQuestionCardKey } from "./agent-session-question-keys";
 import { AgentSessionTodoPanel } from "./agent-session-todo-panel";
-import { AgentAsyncQuestionCard } from "./agent-async-question-card";
 import { getActionableSessionTodo, getVisibleSessionTodos } from "./agent-session-todo-panel-model";
 import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
 import { ScrollToBottomButton } from "./scroll-to-bottom-button";
@@ -51,10 +46,6 @@ type AgentChatTranscriptProps = {
   transcriptNotice: AgentChatThreadModel["transcript"]["notice"];
   runtimePresentation: AgentChatThreadModel["runtimePresentation"];
 };
-
-const NO_PENDING_ASYNC_QUESTIONS: NonNullable<
-  AgentChatThreadModel["transcript"]["session"]
->["pendingAsyncQuestions"] = [];
 
 const AgentChatTranscriptNotice = memo(function AgentChatTranscriptNotice({
   notice,
@@ -124,16 +115,11 @@ const AgentChatTranscriptNotice = memo(function AgentChatTranscriptNotice({
 });
 
 type AgentChatBottomStackProps = {
-  sessionIdentity: NonNullable<AgentChatThreadModel["transcript"]["session"]>;
   externalSessionId: string;
   interruptedTurnResume: AgentChatThreadModel["interruptedTurnResume"];
   resumeDisabled: boolean;
   pendingQuestions: AgentChatThreadModel["pendingQuestionRequests"];
   pendingApprovals: AgentChatThreadModel["pendingApprovalRequests"];
-  pendingAsyncQuestions: NonNullable<
-    AgentChatThreadModel["transcript"]["session"]
-  >["pendingAsyncQuestions"];
-  asyncQuestions: AgentChatThreadModel["asyncQuestions"];
   todos: readonly AgentSessionTodoItem[];
   sessionAuxiliaryError: string | null;
   runtimeStatusMessage: string | null;
@@ -225,14 +211,11 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
 });
 
 const AgentChatBottomStack = memo(function AgentChatBottomStack({
-  sessionIdentity,
   externalSessionId,
   interruptedTurnResume,
   resumeDisabled,
   pendingQuestions,
   pendingApprovals,
-  pendingAsyncQuestions,
-  asyncQuestions,
   todos,
   sessionAuxiliaryError,
   runtimeStatusMessage,
@@ -275,20 +258,6 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
           disabled={!canSubmitQuestionAnswers}
           isSubmitting={Boolean(isSubmittingQuestionByRequestId[request.requestId])}
           onSubmit={onSubmitQuestionAnswers}
-        />
-      ))}
-
-      {pendingAsyncQuestions.map((question) => (
-        <AgentAsyncQuestionCard
-          key={agentAsyncQuestionDraftKey(sessionIdentity, question.questionItemId)}
-          sessionIdentity={sessionIdentity}
-          question={question}
-          disabled={!asyncQuestions.canSubmit}
-          isSubmitting={Boolean(asyncQuestions.isSubmittingByQuestionId[question.questionItemId])}
-          {...(asyncQuestions.errorByQuestionId[question.questionItemId]
-            ? { error: asyncQuestions.errorByQuestionId[question.questionItemId] }
-            : {})}
-          onSubmit={asyncQuestions.onSubmit}
         />
       ))}
 
@@ -363,7 +332,6 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     sessionAgentColors,
     pendingApprovalRequests,
     pendingQuestionRequests,
-    asyncQuestions,
     subagentPendingApprovalCountBySessionKey,
     subagentPendingQuestionCountBySessionKey,
     todos,
@@ -423,22 +391,13 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const rowRefByKey = rowRefByKeyRef.current;
   const { registerRowElement } = useAgentChatRowMotion();
   const hasVisibleTodo = getActionableSessionTodo(getVisibleSessionTodos(todos)) !== null;
-  const pendingAsyncQuestions = session?.pendingAsyncQuestions ?? NO_PENDING_ASYNC_QUESTIONS;
-  useEffect(() => {
-    if (session) {
-      pruneAgentAsyncQuestionDrafts(
-        session,
-        pendingAsyncQuestions.map((question) => question.questionItemId),
-      );
-    }
-  }, [pendingAsyncQuestions, session]);
   const hasWaitingInput = pendingQuestionRequests.length > 0 || pendingApprovalRequests.length > 0;
   const runtimeStatusMessage = isSessionWorking && session ? session.runtimeStatusMessage : null;
   const transcriptEmptyState = session === null ? emptyState : null;
   const hasBottomStack = resolveHasBottomStack({
     hasSession: Boolean(session),
     hasWaitingInput,
-    hasVisibleTodo: hasVisibleTodo || pendingAsyncQuestions.length > 0,
+    hasVisibleTodo,
     sessionAuxiliaryError,
     runtimeStatusMessage,
     hasInterruptedTurnResume: interruptedTurnResume !== undefined,
@@ -526,14 +485,11 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         {hasBottomStack && session ? (
           <div ref={bottomStackRef}>
             <AgentChatBottomStack
-              sessionIdentity={session}
               externalSessionId={session.externalSessionId}
               interruptedTurnResume={interruptedTurnResume}
               resumeDisabled={!isInteractionEnabled || isSending || isStarting}
               pendingQuestions={pendingQuestionRequests}
               pendingApprovals={pendingApprovalRequests}
-              pendingAsyncQuestions={pendingAsyncQuestions}
-              asyncQuestions={asyncQuestions}
               todos={todos}
               canSubmitQuestionAnswers={canSubmitQuestionAnswers}
               isSubmittingQuestionByRequestId={isSubmittingQuestionByRequestId}
