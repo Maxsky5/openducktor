@@ -18,6 +18,7 @@ publish:
 directories:
   output: release
 
+beforePack: scripts/dmg-hidden-files.cjs
 afterAllArtifactBuild: scripts/print-package-artifacts.cjs
 
 files:
@@ -60,6 +61,20 @@ mac:
   target:
     - dmg
     - zip
+
+dmg:
+  background: resources/dmg-background.png
+  icon: resources/icon.icns
+  iconSize: 104
+  iconTextSize: 13
+  contents:
+    - x: 170
+      y: 170
+      type: file
+    - x: 528
+      y: 170
+      type: link
+      path: /Applications
 
 win:
   artifactName: OpenDucktor-${version}-${os}-${arch}.${ext}
