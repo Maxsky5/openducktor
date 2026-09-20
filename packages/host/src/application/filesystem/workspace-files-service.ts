@@ -155,7 +155,6 @@ export const createWorkspaceFilesService = (
       return Effect.gen(function* () {
         const canonicalRoot = yield* canonicalizeWorkspaceRoot(filesystem, input.rootPath);
         const listedFiles = yield* loadWorkspaceFileEntries(gitPort, canonicalRoot);
-        const listedFilePaths = listedFiles.map((entry) => entry.path);
         const repositoryRoot = yield* gitPort.getRepositoryRoot(canonicalRoot).pipe(
           Effect.mapError((cause) =>
             workspaceFileValidationError(
@@ -192,8 +191,8 @@ export const createWorkspaceFilesService = (
             ),
           ),
         );
-        const materializedFilePaths = new Set(listedFilePaths);
         const listedKindByPath = new Map(listedFiles.map((entry) => [entry.path, entry.kind]));
+        const materializedFilePaths = new Set(listedKindByPath.keys());
         const filePathSet = new Set(materializedFilePaths);
         const gitStatusByPath = new Map<string, WorkspaceFileGitStatus | null>();
         for (const change of targetChanges) {

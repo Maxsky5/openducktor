@@ -42,16 +42,16 @@ const measure = async <Value>(operation: () => Promise<Value>) => {
   };
 };
 const readTree = async () => {
-  const result = await measure(() =>
+  const { value, ...measurement } = await measure(() =>
     Effect.runPromise(commands.filesystem_list_tree({ rootPath })),
   );
-  return { ...result, entries: result.value.entries.length, value: undefined };
+  return { ...measurement, entries: value.entries.length };
 };
 const readFile = async () => {
-  const result = await measure(() =>
+  const { value, ...measurement } = await measure(() =>
     Effect.runPromise(commands.filesystem_read_text_file({ rootPath, relativePath })),
   );
-  return { ...result, kind: result.value.kind, value: undefined };
+  return { ...measurement, kind: value.kind };
 };
 console.log(
   JSON.stringify({
