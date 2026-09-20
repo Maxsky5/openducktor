@@ -170,13 +170,26 @@ export const invalidateWorkspaceCaches = async (queryClient: QueryClient): Promi
 const queryKeyHasIdentity = (queryKey: readonly unknown[], identity: string): boolean =>
   JSON.stringify(queryKey).includes(JSON.stringify(identity));
 
+const sharedWorkspaceQueryKeys = new Set([
+  JSON.stringify(workspaceQueryKeys.list()),
+  JSON.stringify(workspaceQueryKeys.catalog()),
+]);
+
 export const dropWorkspaceQueries = (
   queryClient: QueryClient,
   identity: { repoPath: string; workspaceId: string },
 ): void => {
-  const matchesRemovedWorkspace = (query: { queryKey: readonly unknown[] }): boolean =>
-    queryKeyHasIdentity(query.queryKey, identity.workspaceId) ||
-    queryKeyHasIdentity(query.queryKey, identity.repoPath);
+  const matchesRemovedWorkspace = (query: { queryKey: readonly unknown[] }): boolean => {
+    const serializedKey = JSON.stringify(query.queryKey);
+    if (sharedWorkspaceQueryKeys.has(serializedKey)) {
+      return false;
+    }
+
+    return (
+      queryKeyHasIdentity(query.queryKey, identity.workspaceId) ||
+      queryKeyHasIdentity(query.queryKey, identity.repoPath)
+    );
+  };
   void queryClient.cancelQueries({ predicate: matchesRemovedWorkspace }, { revert: false });
   queryClient.removeQueries({ predicate: matchesRemovedWorkspace });
 };

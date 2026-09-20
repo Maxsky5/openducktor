@@ -794,6 +794,59 @@ describe("use-workspace-selection-operations", () => {
     }
   });
 
+  test("keeps the list and catalog caches when the removed workspace id matches a shared key", async () => {
+    let listCalls = 0;
+    let catalogCalls = 0;
+    workspaceHost.workspaceList = mock(async () => {
+      listCalls += 1;
+      return [];
+    });
+    workspaceHost.workspaceCatalogGet = mock(async () => {
+      catalogCalls += 1;
+      return {
+        openWorkspaces: [],
+        closedWorkspaces: [],
+        incompleteRemovals: [],
+      };
+    });
+    workspaceHost.workspaceRemove = mock(async () => ({
+      catalog: {
+        openWorkspaces: [],
+        closedWorkspaces: [],
+        incompleteRemovals: [],
+      },
+      removedWorktrees: [],
+    }));
+    const harness = createRepoSelectionHarness("/list");
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        () => harness.getQueryClient().getQueryState(workspaceQueryKeys.list())?.data !== undefined,
+      );
+      const queryClient = harness.getQueryClient();
+
+      await harness.run((value) =>
+        value.removeWorkspace({
+          workspaceId: "list",
+          expectedRepoPath: "/list",
+          removeTaskWorktrees: false,
+        }),
+      );
+
+      expect(queryClient.getQueryData<WorkspaceRecord[]>(workspaceQueryKeys.list())).toEqual([]);
+      expect(queryClient.getQueryData<WorkspaceCatalog>(workspaceQueryKeys.catalog())).toEqual({
+        openWorkspaces: [],
+        closedWorkspaces: [],
+        incompleteRemovals: [],
+      });
+      expect(listCalls).toBe(1);
+      expect(catalogCalls).toBe(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   type LifecycleCatalogCase = {
     name: string;
     activeRepo: string | null;
