@@ -54,6 +54,7 @@ const DETAIL_ACTIONS: readonly TaskWorkflowAction[] = [
 const EMPTY_TASK_SESSIONS: KanbanTaskSession[] = [];
 
 export function TaskDetailsSheet(props: TaskDetailsSheetProps): ReactElement {
+  const sheetContentRef = useRef<HTMLDivElement>(null);
   const workflowActions = useTaskWorkflowActions();
   const {
     activeWorkspace = null,
@@ -115,10 +116,15 @@ export function TaskDetailsSheet(props: TaskDetailsSheetProps): ReactElement {
   return (
     <Sheet modal={false} open={open} onOpenChange={onOpenChange}>
       <SheetContent
+        ref={sheetContentRef}
         side="right"
         closeButton={null}
         visualOverlay
         className="h-full max-h-screen gap-0 p-0 sm:max-w-[680px]"
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          sheetContentRef.current?.focus({ preventScroll: true });
+        }}
       >
         <SheetTitle className="sr-only">{task.title}</SheetTitle>
         <SheetDescription className="sr-only">
