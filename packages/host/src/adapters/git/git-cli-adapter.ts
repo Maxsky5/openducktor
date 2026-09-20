@@ -55,7 +55,7 @@ import {
   buildWorktreeStatusData,
   buildWorktreeStatusSummaryData,
 } from "../../infrastructure/git/git-worktree-status";
-import type { GitPort, GitRemote } from "../../ports/git-port";
+import type { GitFileListEntry, GitPort, GitRemote } from "../../ports/git-port";
 
 export type {
   GitCommandResult,
@@ -69,11 +69,11 @@ export type CreateGitCliAdapterInput = (
   processEnv?: NodeJS.ProcessEnv;
 };
 
-const parseMaterializedGitFilePaths = (
+const parseMaterializedGitFiles = (
   output: string,
-): Effect.Effect<string[], HostOperationError<{ entry: string }>> =>
+): Effect.Effect<GitFileListEntry[], HostOperationError<{ entry: string }>> =>
   Effect.gen(function* () {
-    const filePaths: string[] = [];
+    const files: GitFileListEntry[] = [];
     for (const entry of output.split("\0")) {
       if (entry.length === 0) {
         continue;
@@ -87,11 +87,30 @@ const parseMaterializedGitFilePaths = (
           }),
         );
       }
-      if (entry[0] !== "S") {
-        filePaths.push(entry.slice(2));
+      const tag = entry[0];
+      if (tag === "S") {
+        continue;
       }
+      if (tag === "?") {
+        files.push({ kind: "file", path: entry.slice(2) });
+        continue;
+      }
+      const stagedEntry = /^(\d{6}) [0-9a-f]+ \d\t(.+)$/su.exec(entry.slice(2));
+      if (!stagedEntry) {
+        return yield* Effect.fail(
+          new HostOperationError({
+            operation: "git.listFiles",
+            message: "Git returned an invalid staged file entry.",
+            details: { entry },
+          }),
+        );
+      }
+      files.push({
+        kind: stagedEntry[1] === "160000" ? "directory" : "file",
+        path: stagedEntry[2] ?? "",
+      });
     }
-    return filePaths;
+    return files;
   });
 
 export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort => {
@@ -174,18 +193,20 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
     listBranches(workingDirectory) {
       return listBranchesUnchecked(runner, workingDirectory);
     },
-    listFiles(workingDirectory) {
+    listFiles(workingDirectory, relativePath) {
       return Effect.gen(function* () {
+        const pathspec = relativePath === undefined ? "." : `:(literal)${relativePath}`;
         const output = yield* runGit(runner, workingDirectory, [
           "ls-files",
           "-t",
+          "-s",
           "-co",
           "--exclude-standard",
           "-z",
           "--",
-          ".",
+          pathspec,
         ]);
-        return yield* parseMaterializedGitFilePaths(output);
+        return yield* parseMaterializedGitFiles(output);
       });
     },
     getCurrentBranch(workingDirectory) {

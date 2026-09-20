@@ -303,7 +303,7 @@ function ChatPreviewHarness(): ReactElement {
 }
 
 describe("TaskExecutionSelectedFilePreview", () => {
-  test("keeps the previous file visible while the next selected file is loading", async () => {
+  test("keeps the previous highlighted file visible while the next file prepares", async () => {
     const onClose = mock(() => {});
     const view = render(renderPreview({ selectedFile: firstFile, onClose }));
 
@@ -316,7 +316,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     await waitFor(() => expect(readTextFileMock).toHaveBeenCalledTimes(2));
     expect(screen.getByText("src/first.ts")).toBeTruthy();
     expect(screen.getByText("const first = true;")).toBeTruthy();
-    expect(screen.getByText("Loading...")).toBeTruthy();
+    expect(screen.queryByText("Loading...")).toBeNull();
     expect(screen.queryByText("Loading file...")).toBeNull();
     expect(firstCodeViewItem()?.edit).toBe(false);
   });

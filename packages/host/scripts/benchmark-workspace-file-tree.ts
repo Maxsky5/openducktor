@@ -13,59 +13,51 @@ if (!rootPath || !relativePath) {
 }
 const filesystem = createFilesystemAdapter();
 const git = createGitCliAdapter({ resolveCommand: () => Effect.succeed("git") });
-let active = 0;
-let peak = 0;
-let calls = 0;
-let onMetadataRead: (() => void) | undefined;
+let statCalls = 0;
+let snapshotReads = 0;
 const measuredFilesystem: FilesystemPort = {
   ...filesystem,
-  stat: (path, options) =>
-    Effect.gen(function* () {
-      calls += 1;
-      active += 1;
-      peak = Math.max(peak, active);
-      if (options?.followSymbolicLinks === false) {
-        onMetadataRead?.();
-        onMetadataRead = undefined;
-      }
-      return yield* filesystem.stat(path, options).pipe(
-        Effect.ensuring(
-          Effect.sync(() => {
-            active -= 1;
-          }),
-        ),
-      );
-    }),
+  stat: (path, options) => {
+    statCalls += 1;
+    return filesystem.stat(path, options);
+  },
+  readFileSnapshot: (path, maxBytes) => {
+    snapshotReads += 1;
+    return filesystem.readFileSnapshot(path, maxBytes);
+  },
 };
-const treeCommands = createWorkspaceFilesCommandHandlers(
+const commands = createWorkspaceFilesCommandHandlers(
   createWorkspaceFilesService(measuredFilesystem, git),
 );
-const probeCommands = createWorkspaceFilesCommandHandlers(
-  createWorkspaceFilesService(filesystem, git),
-);
-const readProbe = async () => {
+const measure = async <Value>(operation: () => Promise<Value>) => {
+  statCalls = 0;
+  snapshotReads = 0;
   const start = performance.now();
-  await Effect.runPromise(probeCommands.filesystem_read_text_file({ rootPath, relativePath }));
-  return performance.now() - start;
+  const value = await operation();
+  return {
+    elapsed: performance.now() - start,
+    statCalls,
+    snapshotReads,
+    value,
+  };
 };
-const readTree = async (withProbe: boolean) => {
-  calls = 0;
-  peak = 0;
-  let probe: Promise<number> | undefined;
-  if (withProbe)
-    onMetadataRead = () => {
-      probe = readProbe();
-    };
-  const start = performance.now();
-  const tree = await Effect.runPromise(treeCommands.filesystem_list_tree({ rootPath }));
-  const elapsed = performance.now() - start;
-  const probeMs = await probe;
-  return { elapsed, probeMs, peak, calls, entries: tree.entries.length };
+const readTree = async () => {
+  const result = await measure(() =>
+    Effect.runPromise(commands.filesystem_list_tree({ rootPath })),
+  );
+  return { ...result, entries: result.value.entries.length, value: undefined };
+};
+const readFile = async () => {
+  const result = await measure(() =>
+    Effect.runPromise(commands.filesystem_read_text_file({ rootPath, relativePath })),
+  );
+  return { ...result, kind: result.value.kind, value: undefined };
 };
 console.log(
   JSON.stringify({
-    cold: await readTree(false),
-    warm: await readTree(true),
-    idleProbeMs: await readProbe(),
+    firstTree: await readTree(),
+    secondTree: await readTree(),
+    firstFile: await readFile(),
+    secondFile: await readFile(),
   }),
 );

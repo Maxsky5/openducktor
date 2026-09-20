@@ -69,21 +69,56 @@ describe("createGitCliAdapter", () => {
   test("lists only materialized tracked and untracked files", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
-        "ls-files -t -co --exclude-standard -z -- .":
-          "H src/index.ts\0S packages/sparse.ts\0? untracked file.ts\0H  padded.ts \0",
+        "ls-files -t -s -co --exclude-standard -z -- .":
+          "H 100644 abc123 0\tsrc/index.ts\0S 040000 def456 0\tpackages/sparse.ts\0? untracked file.ts\0H 100644 fed321 0\t padded.ts \0",
       }),
     });
 
     await expect(Effect.runPromise(git.listFiles("/repo"))).resolves.toEqual([
-      "src/index.ts",
-      "untracked file.ts",
-      " padded.ts ",
+      { kind: "file", path: "src/index.ts" },
+      { kind: "file", path: "untracked file.ts" },
+      { kind: "file", path: " padded.ts " },
+    ]);
+  });
+  test("reports tracked Git links as directories", async () => {
+    const git = createGitCliAdapter({
+      runner: createRunner({
+        "ls-files -t -s -co --exclude-standard -z -- .":
+          "H 160000 abc123 0\tpackages/nested-checkout\0",
+      }),
+    });
+
+    await expect(Effect.runPromise(git.listFiles("/repo"))).resolves.toEqual([
+      { kind: "directory", path: "packages/nested-checkout" },
+    ]);
+  });
+  test("preserves line breaks in tracked file paths", async () => {
+    const git = createGitCliAdapter({
+      runner: createRunner({
+        "ls-files -t -s -co --exclude-standard -z -- .": "H 100644 abc123 0\tsrc/line\nbreak.ts\0",
+      }),
+    });
+
+    await expect(Effect.runPromise(git.listFiles("/repo"))).resolves.toEqual([
+      { kind: "file", path: "src/line\nbreak.ts" },
+    ]);
+  });
+  test("limits a file lookup to one literal path", async () => {
+    const git = createGitCliAdapter({
+      runner: createRunner({
+        "ls-files -t -s -co --exclude-standard -z -- :(literal)src/[index].ts":
+          "H 100644 abc123 0\tsrc/[index].ts\0",
+      }),
+    });
+
+    await expect(Effect.runPromise(git.listFiles("/repo", "src/[index].ts"))).resolves.toEqual([
+      { kind: "file", path: "src/[index].ts" },
     ]);
   });
   test("fails when tagged file output is malformed", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
-        "ls-files -t -co --exclude-standard -z -- .": "src/index.ts\0",
+        "ls-files -t -s -co --exclude-standard -z -- .": "src/index.ts\0",
       }),
     });
 

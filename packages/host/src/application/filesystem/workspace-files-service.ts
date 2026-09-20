@@ -7,13 +7,13 @@ import {
   type WorkspaceTextFileWriteResult,
   workspaceFileTreeSchema,
 } from "@openducktor/contracts";
-import { Deferred, Effect } from "effect";
+import { Effect } from "effect";
 import { HostValidationError, type HostValidationErrorAggregate } from "../../effect/host-errors";
-import type { FilesystemPort, FilesystemStats } from "../../ports/filesystem-port";
+import type { FilesystemPort } from "../../ports/filesystem-port";
 import type { GitPort } from "../../ports/git-port";
 import {
   canonicalizeWorkspaceRoot,
-  loadWorkspaceFilePaths,
+  loadWorkspaceFileEntries,
   workspaceFileValidationError,
 } from "./workspace-file-access";
 import { toWorkspaceRelativeGitPath } from "./workspace-files-paths";
@@ -46,8 +46,6 @@ type ProjectedWorkspaceGitChange = {
   path: string;
   status: string;
 };
-
-const FILE_TREE_METADATA_CONCURRENCY = 4;
 
 const PIERRE_GIT_STATUSES: ReadonlySet<string> = new Set([
   "added",
@@ -144,25 +142,6 @@ const directoryPathsForFiles = (filePaths: readonly string[]): string[] => {
   return [...directories].sort(compareWorkspacePaths);
 };
 
-const statFile = (
-  filesystem: FilesystemPort,
-  canonicalRoot: string,
-  relativePath: string,
-): Effect.Effect<
-  FilesystemStats,
-  HostValidationError<{ rootPath: string; relativePath: string }>
-> =>
-  filesystem
-    .stat(filesystem.join(canonicalRoot, relativePath), { followSymbolicLinks: false })
-    .pipe(
-      Effect.mapError((cause) =>
-        workspaceFileValidationError(cause, `Unable to inspect file '${relativePath}'.`, {
-          rootPath: canonicalRoot,
-          relativePath,
-        }),
-      ),
-    );
-
 export const createWorkspaceFilesService = (
   filesystem: FilesystemPort,
   gitPort: Pick<
@@ -175,7 +154,8 @@ export const createWorkspaceFilesService = (
     listTree(input) {
       return Effect.gen(function* () {
         const canonicalRoot = yield* canonicalizeWorkspaceRoot(filesystem, input.rootPath);
-        const listedFilePaths = yield* loadWorkspaceFilePaths(gitPort, canonicalRoot);
+        const listedFiles = yield* loadWorkspaceFileEntries(gitPort, canonicalRoot);
+        const listedFilePaths = listedFiles.map((entry) => entry.path);
         const repositoryRoot = yield* gitPort.getRepositoryRoot(canonicalRoot).pipe(
           Effect.mapError((cause) =>
             workspaceFileValidationError(
@@ -213,6 +193,7 @@ export const createWorkspaceFilesService = (
           ),
         );
         const materializedFilePaths = new Set(listedFilePaths);
+        const listedKindByPath = new Map(listedFiles.map((entry) => [entry.path, entry.kind]));
         const filePathSet = new Set(materializedFilePaths);
         const gitStatusByPath = new Map<string, WorkspaceFileGitStatus | null>();
         for (const change of targetChanges) {
@@ -267,44 +248,11 @@ export const createWorkspaceFilesService = (
           ]),
         );
         const fileEntries: WorkspaceFileTreeEntry[] = [];
-        const pendingMetadataReads = yield* Effect.forEach(filePaths, (filePath) =>
-          Effect.gen(function* () {
-            const metadataRead = statFile(filesystem, canonicalRoot, filePath);
-            const completion = yield* Deferred.make<
-              FilesystemStats,
-              Effect.Effect.Error<typeof metadataRead>
-            >();
-            return { filePath, metadataRead, completion };
-          }),
-        );
-        yield* Effect.forkScoped(
-          Effect.forEach(
-            pendingMetadataReads,
-            ({ metadataRead, completion }) => Effect.intoDeferred(metadataRead, completion),
-            { concurrency: FILE_TREE_METADATA_CONCURRENCY, discard: true },
-          ),
-        );
-        for (const { filePath, completion } of pendingMetadataReads) {
-          const metadataResult = yield* Effect.either(Deferred.await(completion));
+        for (const filePath of filePaths) {
           const gitStatus = gitStatusByPath.get(filePath) ?? null;
-          if (metadataResult._tag === "Left") {
-            if (gitStatus !== "deleted") {
-              return yield* Effect.fail(metadataResult.left);
-            }
-            fileEntries.push({
+          if (listedKindByPath.get(filePath) === "directory") {
+            directoryEntries.set(filePath, {
               path: filePath,
-              kind: "file",
-              size: null,
-              mtimeMs: null,
-              gitStatus,
-            });
-            continue;
-          }
-          const metadata = metadataResult.right;
-          if (metadata.isDirectory) {
-            const directoryPath = filePath.replace(/\/+$/u, "");
-            directoryEntries.set(directoryPath, {
-              path: directoryPath,
               kind: "directory",
               size: null,
               mtimeMs: null,
@@ -315,8 +263,8 @@ export const createWorkspaceFilesService = (
           fileEntries.push({
             path: filePath,
             kind: "file",
-            size: metadata.size ?? null,
-            mtimeMs: metadata.mtimeMs ?? null,
+            size: null,
+            mtimeMs: null,
             gitStatus,
           });
         }
@@ -329,7 +277,7 @@ export const createWorkspaceFilesService = (
             ...fileEntries,
           ],
         });
-      }).pipe(Effect.scoped);
+      });
     },
     readTextFile(input) {
       return textFiles.readTextFile(input);

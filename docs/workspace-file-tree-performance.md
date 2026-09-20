@@ -1,67 +1,97 @@
-# Workspace file-tree metadata concurrency
+# Workspace file-tree performance
 
-Task: `openduckto-h099d`. Serial baseline: `5fa09d3dc0936ffc091b394e6a09adcb7e33de2b`.
+Task: `openduckto-h099d`.
 
-The file-tree service runs at most four file metadata reads at once per request with `Effect.forEach`. A scoped producer completes one `Deferred` for each path. An ordered consumer assembles the entries and returns the first non-deleted error after earlier paths resolve. Closing the scope interrupts later in-flight Effects and stops queued work. Deleted-file handling, directory entries, and no-follow symlink metadata stay unchanged. Results exist only for the current request; there is no persistent cache.
+## Design
 
-## QA correction
+The file-tree service reads all visible paths from the Git index and working tree with one `git ls-files` command.
 
-The first implementation collected all metadata before checking errors. QA showed that an error for `a` could wait forever for a stalled read of `b`. The ordered consumer removes that barrier while retaining first-path error selection. Two gate-controlled regressions failed before the correction and now pass: an immediate error with later blocked work, and an error after a later read starts. A third test holds an earlier path open, skips a deleted-file failure, then verifies that the next non-deleted error returns without waiting for a final stalled read.
+The command includes Git modes, so the adapter can report Git links as directories without a filesystem metadata call for each path.
+
+The tree sets `size` and `mtimeMs` to `null` because the file explorer does not use these values.
+
+The service still reads the workspace root metadata once to confirm that the root is a directory.
+
+When the user opens a file, the host uses a literal Git pathspec to check only that path.
+
+The host then reads one bounded snapshot that contains the bytes, file type, size, modification time, and revision.
+
+If the path is a symbolic link, the host checks the canonical target with one more literal Git pathspec.
+
+The frontend selects the clicked tree item before the file request completes.
+
+It keeps the previous highlighted preview visible until the next file and its syntax highlight data are ready.
+
+The preview then replaces the old file in one render and does not show a loading label during the switch.
 
 ## Measurements
 
-Refreshed on 2026-09-20 with Darwin 25.5.0 arm64, Bun 1.4.2, and Effect 3.22.2. These versions match the checked-in package manager and installed dependency. The fixture has 10,000 real text files in 100 directories, staged in a local Git repository. Both Git and filesystem adapters use real I/O. Each successful tree request made 10,001 stat calls, including the root, and returned 10,100 entries.
+The measurement ran on 2026-09-20 with Darwin 25.5.0 arm64, Bun 1.4.2, and Effect 3.22.2.
 
-Each candidate ran in 20 fresh Bun processes. Candidate order rotated each round. Each process measured its first tree read, then a second tree read with a text-file command that starts at the first no-follow metadata read. It then measured the same text-file command with no tree request active. Times include the command handler, Git reads, metadata reads, sorting, and response validation. They exclude process startup, module imports, the host router, and Electron IPC. p50 is the median; p95 is the 19th sorted sample of 20. All times are milliseconds.
+The fixture contains 10,000 tracked text files in 100 directories.
 
-"Cold" means the first tree read in a fresh process. "Warm" means the second read in that process. The OS filesystem cache was not flushed. These results do not measure physical-disk cold-cache latency or full transport responsiveness. Other work on this machine can affect timing, so the results do not establish a stable p95 improvement.
+Each candidate ran in 20 fresh Bun processes.
 
-| Limit | Cold p50 / p95 | Warm p50 / p95 | Competing text-file command p50 / p95 | Idle text-file command p50 / p95 |
-| --- | --- | --- | --- | --- |
-| Serial baseline | 256.7 / 1016.7 | 238.3 / 764.7 | 28.3 / 63.0 | 25.3 / 38.4 |
-| 4 | 189.2 / 256.8 | 160.9 / 237.6 | 29.6 / 36.9 | 26.4 / 36.6 |
-| 8 | 183.2 / 321.8 | 152.3 / 230.1 | 29.3 / 57.7 | 25.5 / 40.9 |
-| 16 | 182.6 / 465.1 | 152.7 / 272.6 | 30.0 / 37.6 | 25.5 / 37.9 |
-| 32 | 182.4 / 459.7 | 157.5 / 344.1 | 33.5 / 48.7 | 26.8 / 42.7 |
+Times include the command handler, Git commands, filesystem operations, sorting, and schema validation.
 
-Limit 4 reduces the warm tree median by about 32% and has the lowest cold-tree p95 and competing-command p95 among the concurrent limits. Limit 8 reduces the warm median by about 36%, but its competing-command p95 rises to 57.7 ms. Limits 16 and 32 do not improve the warm median over limit 8 and have worse tree tail times. At limit 4 the competing-command median is 29.6 ms, versus 26.4 ms with no tree request active. The limit applies to each tree request, not to all host requests combined.
+Times exclude process startup, module imports, the host router, Electron IPC, React rendering, and syntax highlighting.
+
+The operating system cache was not cleared between processes.
+
+| Operation | p50, ms | p95, ms | Filesystem `stat` calls | Snapshot reads |
+| --- | ---: | ---: | ---: | ---: |
+| First tree read | 77.7 | 86.2 | 1 | 0 |
+| Second tree read | 70.7 | 77.1 | 1 | 0 |
+| First selected-file read | 19.9 | 38.1 | 1 | 1 |
+| Second selected-file read | 17.2 | 25.7 | 1 | 1 |
+
+Each tree result contained 10,100 entries.
+
+The prior bounded-concurrency implementation had a cold tree p50 of 189.2 ms and a warm tree p50 of 160.9 ms on the same fixture design.
+
+The current implementation reduces those medians by about 59% and 56%.
+
+It also reduces the tree metadata count from 10,001 `stat` calls to one root `stat` call.
 
 ## Reproduce
 
-Create an isolated fixture with this script. It writes only under a new temporary directory and prints that path:
+Create an isolated fixture:
 
 ```sh
 python3 - <<'PY'
 import pathlib
 import subprocess
 import tempfile
-root = pathlib.Path(tempfile.mkdtemp(prefix='odt-file-tree-'))
+
+root = pathlib.Path(tempfile.mkdtemp(prefix="odt-file-tree-"))
 for index in range(10000):
-    file = root / f'dir-{index // 100:03}' / f'file-{index:05}.txt'
+    file = root / f"dir-{index // 100:03}" / f"file-{index:05}.txt"
     file.parent.mkdir(exist_ok=True)
-    file.write_text('benchmark file\n')
-subprocess.run(['git', 'init', '-q', str(root)], check=True)
-subprocess.run(['git', '-C', str(root), 'add', '.'], check=True)
+    file.write_text("benchmark file\n")
+subprocess.run(["git", "init", "-q", str(root)], check=True)
+subprocess.run(["git", "-C", str(root), "add", "."], check=True)
 print(root)
 PY
 ```
 
-Run the checked-in probe in a fresh process for each sample. Replace the fixture path with the printed path:
+Run the checked-in probe and replace the fixture path with the printed path:
 
 ```sh
 bun run packages/host/scripts/benchmark-workspace-file-tree.ts /tmp/odt-file-tree-EXAMPLE dir-000/file-00000.txt
 ```
 
-The probe prints JSON with first-read and second-read duration, stat count, peak concurrency, entry count, competing text-file command duration, and a separate idle text-file command duration. For the candidate comparison, temporary service copies used limits 4, 8, 16, and 32; a copy from the task base supplied the serial baseline. The temporary copies used the same imports and code except for the concurrency limit. No production configuration or test option was added.
+The probe prints the first and second tree-read times, the first and second selected-file-read times, the entry count, the `stat` count, and the snapshot-read count.
 
 ## Regression checks
 
-The gate-controlled test starts four reads while 996 paths remain queued. Before the gate opens it checks four active reads and five total stat calls, including the root. It then checks peak concurrency four, 1,001 total stat calls, sorted paths, and correctly paired metadata. Other tests force out-of-order completion across files, directories, deleted files, and a broken symlink; check first-path error selection; and interrupt active reads before queued paths start. The QA regressions check that later blocked reads cannot delay a known error and that the service interrupts its owned work without opening the blocked gate.
+The host tests verify that a tree read does not inspect each file and that tree entries have nullable metadata.
+
+The Git adapter tests verify regular files, untracked files, sparse paths, Git link directories, and literal selected-path queries.
+
+The text-file tests verify selected-path queries, bounded reads, symbolic-link target checks, binary files, file-size limits, and revision-safe writes.
+
+The frontend tests verify immediate tree selection and keep the previous highlighted preview visible until the selected file is ready.
 
 ```sh
-bun test packages/host/src/application/filesystem/workspace-files-service.test.ts packages/host/src/application/filesystem/workspace-files-service-concurrency.test.ts packages/host/src/interface/commands/workspace-files-command-handlers.test.ts
+bun test packages/host/src/adapters/git/git-cli-adapter.test.ts packages/host/src/application/filesystem/workspace-files-service.test.ts packages/host/src/application/filesystem/workspace-text-file-service.test.ts packages/frontend/src/components/features/agents/task-execution-file-preview.test.tsx packages/frontend/src/components/features/agents/task-execution-panel.test.tsx
 ```
-
-## Repository verification
-
-The focused run passes 37 tests with 1,074 assertions. After this correction, all five full repository commands passed: `bun run format:check`, `bun run lint`, `bun run typecheck`, `bun run test`, and `bun run build`. The full test suite passed on its first run for this correction. The build ran before the test suite.

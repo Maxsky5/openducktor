@@ -19,10 +19,21 @@ const createRoot = async (): Promise<string> => {
   return rootPath;
 };
 
-const createGitPort = (files: string[]): Parameters<typeof createWorkspaceTextFileService>[1] =>
+const createGitPort = (
+  files: string[],
+  requestedPaths?: Array<string | undefined>,
+): Parameters<typeof createWorkspaceTextFileService>[1] =>
   ({
     isGitRepository: () => Effect.succeed(true),
-    listFiles: () => Effect.succeed(files),
+    listFiles: (_rootPath, relativePath) => {
+      requestedPaths?.push(relativePath);
+      return Effect.succeed(
+        (relativePath === undefined
+          ? files
+          : files.filter((filePath) => filePath === relativePath)
+        ).map((filePath) => ({ kind: "file" as const, path: filePath })),
+      );
+    },
   }) satisfies Parameters<typeof createWorkspaceTextFileService>[1];
 
 const writeError = async (
@@ -72,6 +83,20 @@ describe("createWorkspaceTextFileService", () => {
     expect(await readFile(filePath, "utf8")).toBe("after\n");
     expect(saved).toMatchObject({ contents: "after\n", size: 6 });
     expect(saved.revision).not.toBe(loaded.revision);
+  });
+
+  test("checks only the selected Git path before reading it", async () => {
+    const rootPath = await createRoot();
+    await writeFile(path.join(rootPath, "selected.txt"), "selected");
+    const requestedPaths: Array<string | undefined> = [];
+    const service = createWorkspaceTextFileService(
+      createFilesystemAdapter(),
+      createGitPort(["selected.txt", "other.txt"], requestedPaths),
+    );
+
+    await Effect.runPromise(service.readTextFile({ rootPath, relativePath: "selected.txt" }));
+
+    expect(requestedPaths).toEqual(["selected.txt"]);
   });
 
   test("preserves a UTF-8 BOM when saving edited contents", async () => {

@@ -8,7 +8,6 @@ import { createWorkspaceFilesService } from "../workspace-files-service";
 
 type FakeFilesystemInput = {
   canonical?: Record<string, string>;
-  linkStats?: Record<string, FilesystemStats>;
   relative?: (from: string, to: string) => string;
   readLimits?: number[];
   statOptions?: Array<{ followSymbolicLinks: boolean; path: string }>;
@@ -27,7 +26,6 @@ export const hostOperationError = (message: string): HostOperationError =>
 
 export const createFakeFilesystem = ({
   canonical = {},
-  linkStats = {},
   relative,
   readLimits,
   statOptions,
@@ -80,7 +78,7 @@ export const createFakeFilesystem = ({
   stat: (path, options) => {
     const followSymbolicLinks = options?.followSymbolicLinks ?? true;
     statOptions?.push({ followSymbolicLinks, path });
-    const value = followSymbolicLinks ? stats[path] : (linkStats[path] ?? stats[path]);
+    const value = stats[path];
     return value ? Effect.succeed(value) : Effect.fail(hostOperationError(`Missing stat ${path}`));
   },
   exists: () => Effect.succeed(true),
@@ -109,6 +107,7 @@ export const createFakeGitPort = ({
   statuses = [],
   diffs = [],
   changedFiles,
+  directories = [],
 }: {
   isRepository?: boolean;
   repositoryRoot?: string;
@@ -116,11 +115,20 @@ export const createFakeGitPort = ({
   statuses?: GitFileStatus[];
   diffs?: FileDiff[];
   changedFiles?: GitChangedFile[];
+  directories?: string[];
 } = {}): Parameters<typeof createWorkspaceFilesService>[1] & Pick<GitPort, "getDiff"> =>
   ({
     isGitRepository: () => Effect.succeed(isRepository),
     getRepositoryRoot: () => Effect.succeed(repositoryRoot),
-    listFiles: () => Effect.succeed(files),
+    listFiles: (_rootPath, relativePath) =>
+      Effect.succeed(
+        files
+          .map((path) => ({
+            kind: directories.includes(path) ? ("directory" as const) : ("file" as const),
+            path,
+          }))
+          .filter((entry) => relativePath === undefined || entry.path === relativePath),
+      ),
     getStatus: () => Effect.succeed(statuses),
     getDiff: () => Effect.succeed(diffs),
     listChangedFiles: () =>
