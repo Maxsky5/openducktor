@@ -165,6 +165,56 @@ describe("CodexAppServerAdapter streaming", () => {
     }
   });
 
+  test("does not fail an accepted background reply while it waits for the native transcript item", async () => {
+    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+    const { adapter, transports } = createHarness({ subscribeEvents });
+    await adapter.startSession(codexStartSessionInput());
+    const requestId = "async-question-delayed-transcript";
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => {
+        if (event.type === "question_resolved" || event.type === "assistant_part") {
+          throw new Error(`Unknown Codex question request '${requestId}'.`);
+        }
+      },
+    );
+
+    try {
+      emitNotification({
+        method: "item/completed",
+        params: {
+          threadId: "thread/start-runtime-live",
+          turnId: "turn-live",
+          completedAtMs: 1_777_766_419_650,
+          item: {
+            type: "agentMessage",
+            id: requestId,
+            phase: "commentary",
+            text: "Which environment should I use?",
+            memoryCitation: null,
+            delivery: "async",
+            questions: [{ title: "Which environment should I use?", options: null }],
+          },
+        },
+      });
+      await flushCodexAdapterWork();
+
+      const { parts: _parts, ...session } = codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-live",
+        parts: [],
+      });
+      await expect(
+        adapter.replyQuestion({ ...session, requestId, answers: [["Staging"]] }),
+      ).resolves.toMatchObject({ type: "user_message" });
+
+      expect(
+        transports.get("runtime-live")?.calls.filter((call) => call.method === "turn/start"),
+      ).toHaveLength(1);
+    } finally {
+      unsubscribe();
+    }
+  });
+
   test("rejects a second background reply while native admission is pending", async () => {
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
     const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });

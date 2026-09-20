@@ -129,7 +129,9 @@ const steerActiveTurn = async (
   if (activeTurn.isTurnSettled()) {
     return null;
   }
-  const cancelExpectedEcho = context.expectUserMessageEcho(acceptedUserMessage, input);
+  const cancelExpectedEcho = publishAcceptedMessage
+    ? context.expectUserMessageEcho(acceptedUserMessage, input)
+    : () => undefined;
   try {
     if (!activeTurn.turnId) {
       if (requireNativeAdmission) {
@@ -294,9 +296,10 @@ const runCodexTurn = async (
     }),
   );
 
-  const cancelExpectedEcho = acceptedUserMessage
-    ? context.expectUserMessageEcho(acceptedUserMessage, input)
-    : null;
+  const cancelExpectedEcho =
+    acceptedUserMessage && publishAcceptedMessage
+      ? context.expectUserMessageEcho(acceptedUserMessage, input)
+      : null;
   activeTurnState.turnStartRequestSentAtMs = Date.now();
   const turnStartPromise = client
     .turnStart({
