@@ -1,7 +1,7 @@
 import { DndContext, DragOverlay } from "@dnd-kit/core";
 import { horizontalListSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { ComponentProps, ReactNode } from "react";
+import type { ComponentProps, ReactElement, ReactNode } from "react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   horizontalTabDropAnimation,
@@ -24,7 +24,10 @@ export type BrowserTabItem = {
   attributes?: { [key: `data-${string}`]: string };
 };
 
-function BrowserTabTrigger({ className, ...props }: ComponentProps<typeof TabsTrigger>) {
+function BrowserTabTrigger({
+  className,
+  ...props
+}: ComponentProps<typeof TabsTrigger>): ReactElement {
   return (
     <TabsTrigger
       className={cn(
@@ -37,17 +40,19 @@ function BrowserTabTrigger({ className, ...props }: ComponentProps<typeof TabsTr
   );
 }
 
+type SortableBrowserTabProps = {
+  item: BrowserTabItem;
+  selected: boolean;
+  shouldSuppressSelection: (value: string) => boolean;
+  onSelect: (value: string) => void;
+};
+
 function SortableBrowserTab({
   item,
   selected,
   shouldSuppressSelection,
   onSelect,
-}: {
-  item: BrowserTabItem;
-  selected: boolean;
-  shouldSuppressSelection: (value: string) => boolean;
-  onSelect: (value: string) => void;
-}) {
+}: SortableBrowserTabProps): ReactElement {
   const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.value,
     transition: horizontalTabSortTransition,
@@ -91,15 +96,44 @@ function SortableBrowserTab({
   );
 }
 
+type BrowserTabDragPreviewProps = {
+  item: BrowserTabItem;
+  selectedValue: string;
+};
+
+function BrowserTabDragPreview({ item, selectedValue }: BrowserTabDragPreviewProps): ReactElement {
+  return (
+    <div aria-hidden="true" inert>
+      <Tabs value={selectedValue}>
+        <TabsList className="h-auto rounded-none bg-transparent p-0">
+          <div className={cn(browserTabShellClassName(item.value === selectedValue), "touch-none")}>
+            <BrowserTabTrigger
+              value={item.value}
+              title={item.triggerProps?.title}
+              className={item.triggerProps?.className}
+            >
+              {item.content}
+            </BrowserTabTrigger>
+            {item.action ? <span className="inline-flex shrink-0">{item.action}</span> : null}
+          </div>
+        </TabsList>
+      </Tabs>
+    </div>
+  );
+}
+
+type BrowserTabsProps = {
+  items: BrowserTabItem[];
+  onReorder: (draggedId: string, targetId: string, position: HorizontalTabDropPosition) => void;
+} & Omit<ComponentProps<typeof TabsList>, "children" | "onSelect">;
+
 /** Reorderable browser-style tabs. Render within BrowserTabsRoot. */
 export function BrowserTabs({
   items,
   onReorder,
+  className,
   ...listProps
-}: {
-  items: BrowserTabItem[];
-  onReorder: (draggedId: string, targetId: string, position: HorizontalTabDropPosition) => void;
-} & Omit<ComponentProps<typeof TabsList>, "children" | "onSelect">) {
+}: BrowserTabsProps): ReactElement {
   const { value: selectedValue, onValueChange } = useBrowserTabsSelection();
   const itemIds = items.map((item) => item.value);
   const drag = useHorizontalSortableTabs({ itemIds, onReorder });
@@ -119,7 +153,7 @@ export function BrowserTabs({
           {...listProps}
           className={cn(
             "h-auto min-h-8 w-max justify-start gap-1 rounded-none bg-transparent p-0",
-            listProps.className,
+            className,
           )}
         >
           {items.map((item) => (
@@ -134,31 +168,7 @@ export function BrowserTabs({
         </TabsList>
       </SortableContext>
       <DragOverlay dropAnimation={horizontalTabDropAnimation} zIndex={40}>
-        {preview ? (
-          <div aria-hidden="true" inert>
-            <Tabs value={selectedValue}>
-              <TabsList className="h-auto rounded-none bg-transparent p-0">
-                <div
-                  className={cn(
-                    browserTabShellClassName(preview.value === selectedValue),
-                    "touch-none",
-                  )}
-                >
-                  <BrowserTabTrigger
-                    value={preview.value}
-                    title={preview.triggerProps?.title}
-                    className={preview.triggerProps?.className}
-                  >
-                    {preview.content}
-                  </BrowserTabTrigger>
-                  {preview.action ? (
-                    <span className="inline-flex shrink-0">{preview.action}</span>
-                  ) : null}
-                </div>
-              </TabsList>
-            </Tabs>
-          </div>
-        ) : null}
+        {preview ? <BrowserTabDragPreview item={preview} selectedValue={selectedValue} /> : null}
       </DragOverlay>
     </DndContext>
   );

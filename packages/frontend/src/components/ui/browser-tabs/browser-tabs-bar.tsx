@@ -1,5 +1,13 @@
-import { type ReactNode, type Ref, useLayoutEffect, useRef } from "react";
+import { type ReactElement, type ReactNode, type Ref, useLayoutEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
+
+type BrowserTabsBarProps = {
+  children: ReactNode;
+  createAction?: ReactNode;
+  actions?: ReactNode;
+  scrollRef?: Ref<HTMLDivElement>;
+  className?: string;
+};
 
 export function BrowserTabsBar({
   children,
@@ -7,13 +15,7 @@ export function BrowserTabsBar({
   actions,
   scrollRef,
   className,
-}: {
-  children: ReactNode;
-  createAction?: ReactNode;
-  actions?: ReactNode;
-  scrollRef?: Ref<HTMLDivElement>;
-  className?: string;
-}) {
+}: BrowserTabsBarProps): ReactElement {
   const contentRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {

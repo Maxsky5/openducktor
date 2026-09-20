@@ -1,4 +1,4 @@
-import { type ComponentProps, createContext, use, useMemo } from "react";
+import { type ComponentProps, createContext, type ReactElement, use, useMemo } from "react";
 import { Tabs } from "@/components/ui/tabs";
 
 type BrowserTabsSelection = {
@@ -8,13 +8,15 @@ type BrowserTabsSelection = {
 
 const BrowserTabsContext = createContext<BrowserTabsSelection | null>(null);
 
+type BrowserTabsRootProps = BrowserTabsSelection &
+  Omit<ComponentProps<typeof Tabs>, "value" | "defaultValue" | "onValueChange">;
+
 export function BrowserTabsRoot({
   value,
   onValueChange,
   children,
   ...props
-}: BrowserTabsSelection &
-  Omit<ComponentProps<typeof Tabs>, "value" | "defaultValue" | "onValueChange">) {
+}: BrowserTabsRootProps): ReactElement {
   const selection = useMemo(() => ({ value, onValueChange }), [value, onValueChange]);
   return (
     <BrowserTabsContext value={selection}>
