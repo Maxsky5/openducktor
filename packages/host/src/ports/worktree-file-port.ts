@@ -10,7 +10,15 @@ export type ResolvedPathWithinRoot =
   | { canonicalPath: string; cleanupPath: string; isSymlink: boolean; kind: "descendant" }
   | { canonicalPath: string; cleanupPath: string; isSymlink: boolean; kind: "outside" };
 
+export type PreparedWorktreeAliasRemoval = {
+  remove: Effect.Effect<void, WorktreeFileError>;
+};
+
 export type WorktreeFilePort = {
+  prepareWorktreeAliasRemoval(
+    aliasPath: string,
+    canonicalWorktreePath: string,
+  ): Effect.Effect<PreparedWorktreeAliasRemoval, WorktreeFileError>;
   ensureDirectory(path: string): Effect.Effect<void, HostOperationErrorAggregate>;
   copyConfiguredPaths(
     repoPath: string,

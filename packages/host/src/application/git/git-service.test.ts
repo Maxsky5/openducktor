@@ -588,6 +588,7 @@ const createFakeSettingsConfig = (
   },
 });
 const createFakeWorktreeFiles = (calls: string[] = []): WorktreeFilePort => ({
+  prepareWorktreeAliasRemoval: () => Effect.dieMessage("Unexpected alias removal"),
   ensureDirectory(path) {
     return Effect.tryPromise({
       try: async () => {

@@ -275,7 +275,7 @@ Codex discovery uses `thread/list` for active and archived sessions. Codex 0.155
 
 Claude discovery uses the supported SDK `listSessions` API. That API can omit unreadable sessions without exposing the underlying listing error. This accepted SDK limitation does not disable Claude import. Exact inspection and session preparation still return errors that the SDK exposes.
 
-Imports and worktree deletion share a canonical path lock. Git registration checks and removal use that locked canonical path. The saved session and removal confirmation retain the runtime's original path, including a symlink alias. Archive preview reads the current branch. Deletion requires confirmation of that path and branch and checks the branch again before removal. A detached worktree can host an imported session, but OpenDucktor does not remove it through session archive.
+Imports and worktree deletion share a canonical path lock. Git registration checks and removal use that locked canonical path. The saved session and removal confirmation retain the runtime's original path, including a symlink alias. Before Git removal, cleanup verifies a final symlink against the locked worktree. After Git removal, cleanup unlinks that alias only if it is unchanged. Restore can then create a worktree directory at the same saved path. Symlinks in parent directories stay in place. Archive preview reads the current branch. Deletion requires confirmation of that path and branch and checks the branch again before removal. A detached worktree can host an imported session, but OpenDucktor does not remove it through session archive.
 
 ## Code map
 

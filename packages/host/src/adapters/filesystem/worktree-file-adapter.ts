@@ -1,3 +1,4 @@
+import { prepareWorktreeAliasRemoval } from "./worktree-alias-removal";
 import { cp, lstat, mkdir, readdir, readlink, realpath, rm, symlink } from "node:fs/promises";
 import path from "node:path";
 import { Effect } from "effect";
@@ -346,6 +347,7 @@ const copyPath = (
     });
   });
 export const createWorktreeFileAdapter = (): WorktreeFilePort => ({
+  prepareWorktreeAliasRemoval,
   ensureDirectory(inputPath) {
     return Effect.tryPromise({
       try: () => mkdir(inputPath, { recursive: true }),

@@ -200,6 +200,10 @@ export const createWorktreeFilePortTestDouble = <Overrides extends Partial<Workt
   copyConfiguredPaths: unexpectedEffectCall("worktree file port", "copyConfiguredPaths"),
   ensureDirectory: unexpectedEffectCall("worktree file port", "ensureDirectory"),
   pathIsWithinRoot: unexpectedEffectCall("worktree file port", "pathIsWithinRoot"),
+  prepareWorktreeAliasRemoval: unexpectedEffectCall(
+    "worktree file port",
+    "prepareWorktreeAliasRemoval",
+  ),
   removePathIfPresent: unexpectedEffectCall("worktree file port", "removePathIfPresent"),
   resolvePathWithinRoot: unexpectedEffectCall("worktree file port", "resolvePathWithinRoot"),
   resolveWorktreePath: () => unexpectedSyncCall("worktree file port", "resolveWorktreePath"),

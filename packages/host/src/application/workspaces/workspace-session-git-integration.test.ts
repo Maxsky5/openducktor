@@ -476,7 +476,8 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     expect(h.events).toEqual([]);
   });
 
-  test("imports a native symlink path and removes its real worktree without changing the saved alias", async () => {
+  test("imports, archives, and restores a native symlink path without changing the saved identity", async () => {
+    await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=restored\n");
     const directory = path.join(root, "external-worktree");
     const alias = path.join(root, "native-alias");
     gitCommand("worktree", "add", "-b", "feature/external", directory);
@@ -545,6 +546,13 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       expect(gitCommand("branch", "--list", "feature/external")).toBe("");
       await expect(realpath(alias)).rejects.toThrow("ENOENT");
       expect(await h.router.invoke("workspace_session_get", ref)).toEqual(archived);
+      const restored = await h.router.invoke("workspace_session_restore", ref);
+      expect(restored.executionTarget).toEqual(session.executionTarget);
+      expect(restored.externalSessionId).toBe(session.externalSessionId);
+      expect(restored.archivedAt).toBeNull();
+      expect(registeredWorktreePaths()).toContain(await realpath(alias));
+      expect(runGit(alias, "branch", "--show-current")).toBe("feature/external");
+      expect(await h.router.invoke("workspace_session_get", ref)).toEqual(restored);
     } finally {
       await Effect.runPromise(importer.shutdown());
     }

@@ -90,7 +90,15 @@ export const removeWorkspaceSessionWorktree = (
           field: "branchName",
           message: "The worktree branch changed. Reopen Archive chat to confirm it.",
         });
+      const aliasRemoval =
+        target.workingDirectory === worktreePath
+          ? null
+          : yield* dependencies.worktreeFiles.prepareWorktreeAliasRemoval(
+              target.workingDirectory,
+              worktreePath,
+            );
       yield* git.removeWorktree(repoPath, worktreePath, true);
+      if (aliasRemoval) yield* aliasRemoval.remove;
     }
     if (yield* git.referenceExists(repoPath, `refs/heads/${target.branchName}`)) {
       yield* git.deleteLocalBranch(repoPath, target.branchName, true);
