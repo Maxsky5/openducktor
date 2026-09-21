@@ -79,6 +79,7 @@ import { CodexContextUsageLoader } from "./codex-context-usage-loader";
 import { fileDiffsFromUnifiedDiff } from "./codex-file-diffs";
 import { CodexLocalSessionState } from "./codex-local-session-state";
 import { CodexPendingInputState } from "./codex-pending-input-state";
+import { CodexQuestionHistory } from "./codex-question-history";
 import { CodexAsyncQuestionState } from "./codex-async-questions";
 import { findRetainedSessionOwner } from "./codex-retained-session-owner";
 import { releaseCodexRuntimeState } from "./codex-runtime-cleanup";
@@ -226,6 +227,7 @@ export class CodexAppServerAdapter
   private readonly sessionEvents = new CodexSessionEventBus();
   private readonly pendingInput = new CodexPendingInputState();
   private readonly asyncQuestions = new CodexAsyncQuestionState();
+  private readonly questionHistory: CodexQuestionHistory;
   private readonly activeTurnsBySessionId = new Map<string, ActiveCodexTurn>();
   // An empty rollout is safe only for reads started before this process first reads the thread.
   private readonly freshSessions = new WeakSet<CodexSessionState>();
@@ -238,6 +240,7 @@ export class CodexAppServerAdapter
   private readonly subagents = new CodexSubagentLinkState();
 
   constructor(private readonly options: CodexAppServerAdapterOptions) {
+    this.questionHistory = options.questionHistory ?? new CodexQuestionHistory();
     this.runtimeClients = new CodexRuntimeClientResolver(options);
     this.generatedImages = new CodexGeneratedImageResolver(
       this.runtimeClients,
@@ -824,7 +827,7 @@ export class CodexAppServerAdapter
     const mergeImage = this.options.subscribeEvents
       ? this.runtimeEvents.prepareImageHistory(runtime.runtimeId, input.externalSessionId)
       : undefined;
-    const history = await loadCodexSessionHistory({
+    const nativeHistory = await loadCodexSessionHistory({
       input,
       session,
       runtime,
@@ -832,6 +835,11 @@ export class CodexAppServerAdapter
       prepareImageGenerations: this.options.prepareImageGenerations,
       ...this.freshThreadReadGuard(session),
     });
+    const history = this.questionHistory.merge(
+      runtime.runtimeId,
+      input.externalSessionId,
+      nativeHistory,
+    );
     this.asyncQuestions.loadHistory(runtime.runtimeId, input.externalSessionId, history);
     if (!mergeImage) return history;
     return history.map((message) =>
@@ -1345,25 +1353,27 @@ export class CodexAppServerAdapter
       );
       const output = JSON.stringify({ answers });
       const questions = toCodexToolQuestions(pending.request.questions);
+      const timestamp = new Date().toISOString();
+      const part = requireNormalizedCodexToolInvocation({
+        messageId: `codex-question-${questionToolCallId}`,
+        partId: `codex-question-${questionToolCallId}`,
+        callId: questionToolCallId,
+        rawToolName: "request_user_input",
+        status: "completed",
+        input: { questions },
+        output,
+        metadata: {
+          codexServerRequest: true,
+          requestId: input.requestId,
+          questions,
+          answers,
+        },
+      });
       completedQuestionEvent = {
         type: "assistant_part",
         externalSessionId: input.externalSessionId,
-        timestamp: new Date().toISOString(),
-        part: requireNormalizedCodexToolInvocation({
-          messageId: `codex-question-${questionToolCallId}`,
-          partId: `codex-question-${questionToolCallId}`,
-          callId: questionToolCallId,
-          rawToolName: "request_user_input",
-          status: "completed",
-          input: { questions },
-          output,
-          metadata: {
-            codexServerRequest: true,
-            requestId: input.requestId,
-            questions,
-            answers,
-          },
-        }),
+        timestamp,
+        part,
       };
       await this.requireServerRequestResponder(pending.runtimeId)(
         pending.runtimeId,
@@ -1381,6 +1391,13 @@ export class CodexAppServerAdapter
       pending.threadId,
       pending.nativeRequest.id,
     );
+    this.questionHistory.add(pending.runtimeId, input.externalSessionId, {
+      messageId: completedQuestionEvent.part.messageId,
+      role: "assistant",
+      timestamp: completedQuestionEvent.timestamp,
+      text: "",
+      parts: [completedQuestionEvent.part],
+    });
     this.emitSessionEvent(input.externalSessionId, completedQuestionEvent);
     if (activeTurn && !activeTurn.isTurnSettled()) {
       void this.runtimeEvents.continueTurnAfterPendingInput(activeTurn);

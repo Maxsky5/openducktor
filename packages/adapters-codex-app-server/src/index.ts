@@ -1,4 +1,5 @@
 export { CodexAppServerAdapter, createCodexAppServerClient } from "./codex-app-server-adapter";
+export { CodexQuestionHistory } from "./codex-question-history";
 export type {
   CodexAppServerAdapterOptions,
   CodexAppServerClient,

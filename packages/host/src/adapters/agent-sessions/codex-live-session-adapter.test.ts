@@ -372,8 +372,39 @@ const createControllerHarness = ({
 };
 
 describe("createCodexLiveSessionAdapterPreparer", () => {
+  test("shares question history when it rebuilds a runtime adapter", async () => {
+    const harness = createControllerHarness();
+    const histories: CodexAppServerAdapterOptions["questionHistory"][] = [];
+    const prepare = createCodexLiveSessionAdapterPreparer({
+      prepareImageGenerations: async () => {
+        throw new Error("Unexpected image preparation.");
+      },
+      liveSessionLifecycle: createLifecycle([]),
+      codexAppServer,
+      onBackgroundFailure: noBackgroundFailure,
+      resolveRuntimePolicy,
+      createController: (options) => {
+        histories.push(options.questionHistory);
+        return harness.createController(options);
+      },
+    });
+
+    const first = await Effect.runPromise(prepare(runtime));
+    await Effect.runPromise(first.discard());
+    const second = await Effect.runPromise(prepare(runtime));
+    await Effect.runPromise(second.discard());
+
+    expect(histories).toHaveLength(2);
+    expect(histories[0]).toBeDefined();
+    expect(histories[1]).toBe(histories[0]);
+  });
+
   test("preserves a control model change through text deltas and removes only the released session", async () => {
-    const originalModel = { providerId: "openai", modelId: "gpt-5", variant: "medium" };
+    const originalModel = {
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "medium",
+    };
     const nextModel = { ...originalModel, variant: "high" };
     const initial = { ...liveSnapshot(), model: originalModel };
     const idle = {

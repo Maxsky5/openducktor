@@ -66,6 +66,7 @@ import type {
   StartAgentSessionInput,
 } from "@openducktor/core";
 import type { CodexPolicyLogEntry } from "./codex-session-policy";
+import type { CodexQuestionHistory } from "./codex-question-history";
 import type {
   CodexRuntimeNotification,
   CodexRuntimeServerRequest,
@@ -221,6 +222,7 @@ type CodexAppServerAdapterBaseOptions = {
   onCatalogInvalidated?: (event: CodexCatalogInvalidation) => void | Promise<void>;
   prepareImageGenerations?: CodexImageGenerationPreparer;
   logSessionPolicy?: (entry: CodexPolicyLogEntry) => void;
+  questionHistory?: CodexQuestionHistory;
 };
 
 export type CodexAppServerEventSubscriber = (

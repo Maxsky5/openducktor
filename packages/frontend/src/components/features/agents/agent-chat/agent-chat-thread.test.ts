@@ -1156,6 +1156,8 @@ describe("AgentChatThread", () => {
 
     const bottomStack = rendered.container.querySelector(".agent-chat-bottom-stack");
     expect(bottomStack?.className).toContain("pb-3");
+    expect(bottomStack?.parentElement?.className).toContain("min-h-0");
+    expect(bottomStack?.parentElement?.className).toContain("overflow-y-auto");
 
     rendered.unmount();
   });

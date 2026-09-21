@@ -483,7 +483,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         />
 
         {hasBottomStack && session ? (
-          <div ref={bottomStackRef}>
+          <div ref={bottomStackRef} className="min-h-0 overflow-y-auto">
             <AgentChatBottomStack
               externalSessionId={session.externalSessionId}
               interruptedTurnResume={interruptedTurnResume}

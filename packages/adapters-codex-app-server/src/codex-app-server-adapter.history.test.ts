@@ -1,9 +1,15 @@
-import { describe, expect, test } from "bun:test";
-import type { CodexAppServerThread, CodexAppServerTurn } from "@openducktor/contracts";
+import { describe, expect, mock, test } from "bun:test";
+import {
+  CODEX_APP_SERVER_SERVER_REQUEST_METHOD,
+  type CodexAppServerThread,
+  type CodexAppServerTurn,
+} from "@openducktor/contracts";
+import type { AgentEvent } from "@openducktor/core";
 import {
   createAdapterWithTransport,
   codexSessionRef,
   codexSessionRuntimeRef,
+  codexStartSessionInput,
   codexThreadStartResultFixture,
   codexThreadFixture,
   codexTurnFixture,
@@ -14,8 +20,13 @@ import {
   flushCodexAdapterWork,
   RecordingTransport,
   requestThreadId,
+  waitForEvent,
 } from "./codex-app-server-adapter.test-harness";
-import type { CodexJsonRpcRequest, CodexJsonRpcTransport } from "./index";
+import {
+  CodexQuestionHistory,
+  type CodexJsonRpcRequest,
+  type CodexJsonRpcTransport,
+} from "./index";
 import { encodeCodexAsyncQuestionReplies } from "./codex-async-questions";
 import { codexRpcRequestError, EMPTY_ROLLOUT_MESSAGE } from "./test-fixtures/codex-rpc-error";
 import {
@@ -76,6 +87,84 @@ const paginatedThreadListResponse = (threads: ThreadListFixture[]) => ({
 });
 
 describe("CodexAppServerAdapter history loading", () => {
+  test("keeps an answered blocking question when history reloads", async () => {
+    const runtimeStream = createRuntimeStreamSubscription();
+    const respondServerRequest = mock(async () => undefined);
+    const questionHistory = new CodexQuestionHistory();
+    const { adapter } = createHarness({
+      questionHistory,
+      respondServerRequest,
+      subscribeEvents: runtimeStream.subscribeEvents,
+    });
+    const ref = codexSessionRuntimeRef("thread/start-runtime-live");
+    await adapter.startSession(codexStartSessionInput());
+    const events: AgentEvent[] = [];
+    await adapter.subscribeEvents(ref, (event) => events.push(event));
+
+    runtimeStream.emitServerRequest({
+      id: 91,
+      method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_TOOL_REQUEST_USER_INPUT,
+      params: {
+        autoResolutionMs: null,
+        isBlocking: true,
+        threadId: ref.externalSessionId,
+        turnId: "turn-blocking-question",
+        itemId: "question-tool-call",
+        questions: [
+          {
+            id: "pizza-size",
+            header: "Pizza",
+            question: "Which size do you want?",
+            isOther: false,
+            isSecret: false,
+            options: [
+              { label: "Small", description: "Small pizza" },
+              { label: "Large", description: "Large pizza" },
+            ],
+          },
+        ],
+      },
+    });
+    const question = await waitForEvent(
+      events,
+      (event): event is Extract<AgentEvent, { type: "question_required" }> =>
+        event.type === "question_required",
+    );
+    await adapter.replyLiveQuestion({
+      runtimeId: "runtime-live",
+      externalSessionId: ref.externalSessionId,
+      requestId: question.requestId,
+      answers: [["Large"]],
+    });
+
+    const { adapter: reloadedAdapter } = createHarness({ questionHistory });
+    const history = await reloadedAdapter.loadSessionHistory(ref);
+    expect(history).toContainEqual(
+      expect.objectContaining({
+        messageId: `codex-question-${question.requestInstanceId}`,
+        role: "assistant",
+        parts: [
+          expect.objectContaining({
+            kind: "tool",
+            tool: "request_user_input",
+            status: "completed",
+            metadata: expect.objectContaining({
+              rawToolName: "request_user_input",
+            }),
+            input: {
+              questions: [
+                expect.objectContaining({
+                  header: "Pizza",
+                  question: "Which size do you want?",
+                }),
+              ],
+            },
+          }),
+        ],
+      }),
+    );
+  });
+
   test("restores an unanswered background question for a resumed session", async () => {
     const thread = {
       id: "thread-idle",

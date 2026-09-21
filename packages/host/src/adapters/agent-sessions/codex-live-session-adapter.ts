@@ -5,6 +5,7 @@ import { createCodexImageSettlement } from "./codex-live-session-images";
 import { toAgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import {
   CodexAppServerAdapter,
+  CodexQuestionHistory,
   type CodexAppServerAdapterOptions,
   type CodexLiveSessionMutation,
 } from "@openducktor/adapters-codex-app-server";
@@ -54,16 +55,17 @@ export type {
 const defaultCreateController = (options: CodexAppServerAdapterOptions): CodexSessionController =>
   new CodexAppServerAdapter(options);
 
-export const createCodexLiveSessionAdapterPreparer =
-  ({
-    liveSessionLifecycle,
-    codexAppServer,
-    onBackgroundFailure,
-    resolveRuntimePolicy,
-    prepareImageGenerations,
-    createController = defaultCreateController,
-  }: CreateCodexLiveSessionAdapterPreparerInput): CodexLiveSessionAdapterPreparer =>
-  (runtimeInput) =>
+export const createCodexLiveSessionAdapterPreparer = ({
+  liveSessionLifecycle,
+  codexAppServer,
+  onBackgroundFailure,
+  resolveRuntimePolicy,
+  prepareImageGenerations,
+  createController = defaultCreateController,
+}: CreateCodexLiveSessionAdapterPreparerInput): CodexLiveSessionAdapterPreparer => {
+  const questionHistory = new CodexQuestionHistory();
+
+  return (runtimeInput) =>
     Effect.gen(function* () {
       const runtime = yield* requireCodexStdioRuntime(runtimeInput);
       const eventHub = createCodexLiveSessionEventHub(runtime.runtimeId);
@@ -75,6 +77,7 @@ export const createCodexLiveSessionAdapterPreparer =
       const controller = yield* Effect.try({
         try: () =>
           createController({
+            questionHistory,
             prepareImageGenerations,
             repoRuntimeResolver: {
               requireRepoRuntime: async () => runtime,
@@ -493,3 +496,4 @@ export const createCodexLiveSessionAdapterPreparer =
         discard: () => releaseRuntime().pipe(Effect.asVoid),
       } satisfies PreparedCodexLiveSessionAdapter;
     });
+};
