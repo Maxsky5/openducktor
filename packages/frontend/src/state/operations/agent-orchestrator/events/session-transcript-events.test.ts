@@ -581,41 +581,38 @@ describe("agent-orchestrator session transcript events", () => {
       "text:response-final:response-final:text",
     ]);
 
-    const loadedSession = applyLoadedSessionHistory(
-      { ...liveSession, historyLoadState: "loading" },
-      [
-        {
-          messageId: "user-1",
-          role: "user",
-          state: "read",
-          timestamp: "2026-02-22T08:00:00.000Z",
-          text: "Run the audit.",
-          displayParts: [{ kind: "text", text: "Run the audit." }],
-          parts: [],
-        },
-        {
-          messageId: "response-final",
-          role: "assistant",
-          timestamp: "2026-02-22T08:00:02.000Z",
-          text: "Complete final answer",
-          parts: [
-            {
-              kind: "step",
-              messageId: "response-final",
-              partId: "response-final:finish",
-              phase: "finish",
-              reason: "stop",
-            },
-          ],
-          model: {
-            providerId: "claude",
-            modelId: "claude-opus-5",
-            variant: "high",
-            runtimeKind: "claude",
+    const loadedSession = applyLoadedSessionHistory(liveSession, [
+      {
+        messageId: "user-1",
+        role: "user",
+        state: "read",
+        timestamp: "2026-02-22T08:00:00.000Z",
+        text: "Run the audit.",
+        displayParts: [{ kind: "text", text: "Run the audit." }],
+        parts: [],
+      },
+      {
+        messageId: "response-final",
+        role: "assistant",
+        timestamp: "2026-02-22T08:00:02.000Z",
+        text: "Complete final answer",
+        parts: [
+          {
+            kind: "step",
+            messageId: "response-final",
+            partId: "response-final:finish",
+            phase: "finish",
+            reason: "stop",
           },
+        ],
+        model: {
+          providerId: "claude",
+          modelId: "claude-opus-5",
+          variant: "high",
+          runtimeKind: "claude",
         },
-      ],
-    );
+      },
+    ]);
 
     expect(sessionMessagesToArray(loadedSession).map((message) => message.id)).toEqual([
       "user-1",

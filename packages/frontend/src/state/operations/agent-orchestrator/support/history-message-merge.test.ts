@@ -310,7 +310,7 @@ describe("agent-orchestrator/support/history-message-merge", () => {
     });
   });
 
-  test("deduplicates a live part-keyed final assistant row against the hydrated whole-message row", () => {
+  test("deduplicates the final Claude assistant row against its live text part row", () => {
     const merged = mergedMessages(
       [
         {
@@ -363,7 +363,7 @@ describe("agent-orchestrator/support/history-message-merge", () => {
     });
   });
 
-  test("deduplicates a live part-keyed streaming row against the hydrated whole-message row", () => {
+  test("deduplicates a streaming Claude assistant row against its live text part row", () => {
     const merged = mergedMessages(
       [
         {

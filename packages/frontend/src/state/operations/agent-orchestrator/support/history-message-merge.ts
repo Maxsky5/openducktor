@@ -46,21 +46,12 @@ const sameIdCurrentMessageOrEmpty = (
   return [currentMessage];
 };
 
-const assistantRuntimeMessageId = (message: AgentChatMessage): string | null => {
-  if (message.role !== "assistant" || message.meta?.kind !== "assistant") {
-    return null;
-  }
-  return message.meta.sourceMessageId ?? message.id;
-};
-
 /**
- * Hydrated whole-message assistant rows (no part id) use the runtime message id as
- * their row id. The live projection keys the same message by a text part when the
- * host emits one, and by the runtime id otherwise. Match both projections by the
- * runtime message identity on assistant metadata, so a history read never adds a
- * second row for one assistant message.
+ * Match the live row by source message id: a live assistant row can be keyed by a text
+ * part id, while the hydrated whole-message row uses the runtime message id. Loaded part
+ * rows carry their own part id, so this lookup skips them.
  */
-const findMatchingCurrentAssistantMessages = ({
+const findCurrentAssistantMessageBySourceMessageId = ({
   currentOwner,
   loadedMessage,
   absorbedCurrentMessageIds,
@@ -82,7 +73,10 @@ const findMatchingCurrentAssistantMessages = ({
     if (!candidate || absorbedCurrentMessageIds.has(candidate.id)) {
       continue;
     }
-    if (assistantRuntimeMessageId(candidate) === loadedMessage.id) {
+    if (
+      candidate.meta?.kind === "assistant" &&
+      candidate.meta.sourceMessageId === loadedMessage.id
+    ) {
       return [candidate];
     }
   }
@@ -247,7 +241,7 @@ const findMatchingCurrentMessages = ({
   );
   return sameIdMatches.length > 0
     ? sameIdMatches
-    : findMatchingCurrentAssistantMessages({
+    : findCurrentAssistantMessageBySourceMessageId({
         currentOwner,
         loadedMessage,
         absorbedCurrentMessageIds,
