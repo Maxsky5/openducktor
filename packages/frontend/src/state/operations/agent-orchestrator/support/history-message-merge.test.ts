@@ -1578,12 +1578,57 @@ describe("agent-orchestrator/support/history-message-merge", () => {
     ]);
   });
 
-  test("merges a long transcript without rescanning it for every loaded message", () => {
+  test("keeps an undated current message after the newest loaded message", () => {
+    const merged = mergedMessages(
+      [
+        {
+          id: "assistant-1",
+          role: "assistant",
+          content: "History history",
+          timestamp: "2026-03-01T09:00:01.000Z",
+          meta: { kind: "assistant", agentRole: "build", isFinal: true },
+        },
+        {
+          id: "assistant-2",
+          role: "assistant",
+          content: "History newer",
+          timestamp: "2026-03-01T09:00:03.000Z",
+          meta: { kind: "assistant", agentRole: "build", isFinal: true },
+        },
+      ],
+      [
+        {
+          id: "assistant-3",
+          role: "assistant",
+          content: "Unmatched current row",
+          timestamp: "2026-03-01T09:00:02.000Z",
+          meta: { kind: "assistant", agentRole: "build", isFinal: false },
+        },
+        {
+          id: "assistant-undated",
+          role: "assistant",
+          content: "Current row without a timestamp",
+          timestamp: "not-a-timestamp",
+          meta: { kind: "assistant", agentRole: "build", isFinal: false },
+        },
+      ],
+    );
+
+    expect(merged.map((message) => message.id)).toEqual([
+      "assistant-1",
+      "assistant-3",
+      "assistant-2",
+      "assistant-undated",
+    ]);
+  });
+
+  test("merges a long transcript without rescanning or splicing it for every message", () => {
     // Regression guard for the Agent Studio tab-switch freeze. The merge used
-    // to rescan the current transcript and re-parse its timestamps for every
-    // loaded message, which is quadratic and blocks the renderer on sessions
-    // with thousands of live messages. This budget is far above the linear
-    // merge cost and far below the quadratic one.
+    // to rescan the current transcript and splice the merged list for every
+    // unmatched message, which is quadratic. At the 64,000-message scale below
+    // the quadratic merge needed about 4.4 seconds and blocked the renderer.
+    // The linear merge needs tens of milliseconds, so these budgets fail on
+    // quadratic growth and hold on linear growth.
     const baseMs = Date.parse("2026-09-21T10:00:00.000Z");
     const buildTranscript = (count: number, indexOffset: number): AgentChatMessage[] =>
       Array.from({ length: count }, (_value, index) => {
@@ -1625,16 +1670,19 @@ describe("agent-orchestrator/support/history-message-merge", () => {
         } satisfies AgentChatMessage;
       });
 
-    const currentMessages = buildTranscript(8000, 0);
-    const loadedMessages = buildTranscript(600, 7600);
+    const mergeDurationMs = (currentCount: number): number => {
+      const currentMessages = buildTranscript(currentCount, 0);
+      const loadedMessages = buildTranscript(600, currentCount - 400);
+      const startedAt = performance.now();
+      const merged = mergedMessageState(loadedMessages, currentMessages);
+      const durationMs = performance.now() - startedAt;
+      // The loaded history overlaps the last 400 current messages, so the merge
+      // absorbs them into the loaded rows.
+      expect(merged.items).toHaveLength(currentCount + 200);
+      return durationMs;
+    };
 
-    const startedAt = performance.now();
-    const merged = mergedMessageState(loadedMessages, currentMessages);
-    const durationMs = performance.now() - startedAt;
-
-    // The loaded history overlaps the last 400 current messages, so the merge
-    // absorbs them into the loaded rows.
-    expect(merged.items).toHaveLength(8200);
-    expect(durationMs).toBeLessThan(800);
-  }, 5000);
+    expect(mergeDurationMs(8000)).toBeLessThan(250);
+    expect(mergeDurationMs(64_000)).toBeLessThan(600);
+  }, 30_000);
 });

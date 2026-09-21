@@ -6,10 +6,7 @@ import {
   toolMessageMatchKeys,
 } from "./history-tool-message-merge";
 import { applyPreferredMessageTimestamp } from "./message-timestamp";
-import {
-  messageTimestampMs,
-  sessionMessageTimestampInsertionIndex,
-} from "./message-timestamp-ordering";
+import { messageTimestampMs } from "./message-timestamp-ordering";
 import {
   createSessionMessagesState,
   forEachSessionMessage,
@@ -483,6 +480,107 @@ const mergeSameMessageId = (
   return currentMessage;
 };
 
+type OrderedIncomingMessage = {
+  message: AgentChatMessage;
+  timestampMs: number | null;
+  order: number;
+};
+
+const timestampSortValue = (timestampMs: number | null): number =>
+  timestampMs ?? Number.NEGATIVE_INFINITY;
+
+const compareIncomingMessages = (
+  left: OrderedIncomingMessage,
+  right: OrderedIncomingMessage,
+): number => {
+  const difference = timestampSortValue(left.timestampMs) - timestampSortValue(right.timestampMs);
+  return difference === 0 ? left.order - right.order : difference;
+};
+
+const isOrderedByTimestamp = (messages: readonly OrderedIncomingMessage[]): boolean => {
+  for (let index = 1; index < messages.length; index += 1) {
+    const previous = messages[index - 1];
+    const current = messages[index];
+    if (previous && current && compareIncomingMessages(previous, current) > 0) {
+      return false;
+    }
+  }
+  return true;
+};
+
+/**
+ * Merge the current messages that the loaded history does not cover into the
+ * merged list with one ordered pass. The previous implementation searched and
+ * spliced the merged list for every message, which is quadratic and blocks the
+ * renderer on long sessions.
+ *
+ * A message without a usable timestamp has no place in the order. The previous
+ * implementation appended such a message after the merged list as it stood, so
+ * it stays after every message that is not newer than the list at that point.
+ */
+const mergeUnmatchedCurrentMessages = (
+  mergedMessages: readonly AgentChatMessage[],
+  mergedTimestampsMs: readonly (number | null)[],
+  currentMessages: readonly AgentChatMessage[],
+  minimumInsertionIndex: number,
+): AgentChatMessage[] => {
+  let highestMergedTimestampMs: number | null = null;
+  for (let index = minimumInsertionIndex; index < mergedTimestampsMs.length; index += 1) {
+    const timestampMs = mergedTimestampsMs[index];
+    if (timestampMs !== null && timestampMs !== undefined) {
+      highestMergedTimestampMs =
+        highestMergedTimestampMs === null
+          ? timestampMs
+          : Math.max(highestMergedTimestampMs, timestampMs);
+    }
+  }
+
+  const incoming: OrderedIncomingMessage[] = [];
+  for (const [order, message] of currentMessages.entries()) {
+    const timestampMs = messageTimestampMs(message);
+    if (timestampMs === null) {
+      incoming.push({ message, timestampMs: highestMergedTimestampMs, order });
+      continue;
+    }
+    if (highestMergedTimestampMs === null || timestampMs >= highestMergedTimestampMs) {
+      highestMergedTimestampMs = timestampMs;
+    }
+    incoming.push({ message, timestampMs, order });
+  }
+  if (!isOrderedByTimestamp(incoming)) {
+    incoming.sort(compareIncomingMessages);
+  }
+
+  const messages: AgentChatMessage[] = [];
+  let incomingIndex = 0;
+  for (let mergedIndex = 0; mergedIndex < mergedMessages.length; mergedIndex += 1) {
+    const message = mergedMessages[mergedIndex];
+    if (message === undefined) {
+      continue;
+    }
+    const timestampMs = mergedTimestampsMs[mergedIndex] ?? null;
+    if (mergedIndex >= minimumInsertionIndex && timestampMs !== null) {
+      while (incomingIndex < incoming.length) {
+        const next = incoming[incomingIndex];
+        if (next === undefined || timestampSortValue(next.timestampMs) >= timestampMs) {
+          break;
+        }
+        messages.push(next.message);
+        incomingIndex += 1;
+      }
+    }
+    messages.push(message);
+  }
+  for (; incomingIndex < incoming.length; incomingIndex += 1) {
+    const next = incoming[incomingIndex];
+    if (next) {
+      messages.push(next.message);
+    }
+  }
+
+  return messages;
+};
+
 export const mergeHistoryMessages = (
   externalSessionId: string,
   loadedMessages: AgentSessionState["messages"],
@@ -537,6 +635,7 @@ export const mergeHistoryMessages = (
     pushMergedMessage(mergedMessage);
   });
 
+  const unmatchedCurrentMessages: AgentChatMessage[] = [];
   forEachSessionMessage(currentOwner, (message) => {
     if (loadedMessageIds.has(message.id) || absorbedCurrentMessageIds.has(message.id)) {
       return;
@@ -544,18 +643,17 @@ export const mergeHistoryMessages = (
     if (isSessionSystemPromptMessage(message)) {
       return;
     }
-    const incomingMs = messageTimestampMs(message);
-    if (incomingMs === null) {
-      pushMergedMessage(message);
-      return;
-    }
-    const insertIndex = sessionMessageTimestampInsertionIndex(mergedMessages, message, {
-      timestampsMs: mergedTimestampsMs,
-      minimumInsertionIndex,
-    });
-    mergedMessages.splice(insertIndex, 0, message);
-    mergedTimestampsMs.splice(insertIndex, 0, incomingMs);
+    unmatchedCurrentMessages.push(message);
   });
+  const resultMessages =
+    unmatchedCurrentMessages.length === 0
+      ? mergedMessages
+      : mergeUnmatchedCurrentMessages(
+          mergedMessages,
+          mergedTimestampsMs,
+          unmatchedCurrentMessages,
+          minimumInsertionIndex,
+        );
 
-  return createSessionMessagesState(externalSessionId, mergedMessages, currentMessages.version + 1);
+  return createSessionMessagesState(externalSessionId, resultMessages, currentMessages.version + 1);
 };
