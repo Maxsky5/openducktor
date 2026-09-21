@@ -4,7 +4,7 @@ import type { FileDiff } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import type { FilesystemPort, FilesystemStats } from "../../ports/filesystem-port";
-import type { GitChangedFile, GitFileStatus } from "../../ports/git-port";
+import type { GitChangedFile, GitFileListEntry, GitFileStatus } from "../../ports/git-port";
 import { createWorkspaceFilesService } from "./workspace-files-service";
 
 type FakeFilesystemInput = {
@@ -73,6 +73,7 @@ const createFakeGitPort = ({
   diffs = [],
   changedFiles,
   directories = [],
+  worktreeDirectories = [],
 }: {
   isRepository?: boolean;
   repositoryRoot?: string;
@@ -81,6 +82,7 @@ const createFakeGitPort = ({
   diffs?: FileDiff[];
   changedFiles?: GitChangedFile[];
   directories?: string[];
+  worktreeDirectories?: string[];
 } = {}): Parameters<typeof createWorkspaceFilesService>[1] => ({
   isGitRepository: () => Effect.succeed(isRepository),
   getRepositoryRoot: () => Effect.succeed(repositoryRoot),
@@ -88,10 +90,16 @@ const createFakeGitPort = ({
     Effect.succeed(
       files
         .filter((path) => relativePath === undefined || path === relativePath)
-        .map((path) => ({
-          kind: directories.includes(path) ? ("directory" as const) : ("file" as const),
-          path,
-        })),
+        .map((path) => {
+          const entry: GitFileListEntry = {
+            kind: directories.includes(path) ? "directory" : "file",
+            path,
+          };
+          if (worktreeDirectories.includes(path)) {
+            entry.worktreeKind = "directory";
+          }
+          return entry;
+        }),
     ),
   getStatus: () => Effect.succeed(statuses),
   listChangedFiles: () =>
@@ -741,6 +749,29 @@ describe("createWorkspaceFilesService", () => {
       {
         path: "nested-checkout",
         kind: "file",
+        size: null,
+        mtimeMs: null,
+        gitStatus: "modified",
+      },
+    ]);
+  });
+
+  test("emits a directory when a tracked file becomes an embedded repository", async () => {
+    const service = createWorkspaceFilesService(
+      createFakeFilesystem({ stats: { "/repo": { isDirectory: true } } }),
+      createFakeGitPort({
+        files: ["nested-checkout"],
+        worktreeDirectories: ["nested-checkout"],
+        statuses: [{ path: "nested-checkout", status: "typechange", staged: false }],
+      }),
+    );
+
+    const tree = await Effect.runPromise(service.listTree({ rootPath: "/repo" }));
+
+    expect(tree.entries).toEqual([
+      {
+        path: "nested-checkout",
+        kind: "directory",
         size: null,
         mtimeMs: null,
         gitStatus: "modified",

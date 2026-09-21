@@ -50,6 +50,7 @@ export type GitFileStatus = FileStatus & {
 export type GitFileListEntry = {
   kind: "directory" | "file";
   path: string;
+  worktreeKind?: "directory" | "file";
 };
 export type GitWorktreeStatusData = {
   currentBranch: GitCurrentBranch;

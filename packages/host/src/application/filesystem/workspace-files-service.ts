@@ -204,8 +204,8 @@ export const createWorkspaceFilesService = (
             ),
           ),
         );
-        const listedKindByPath = new Map(listedFiles.map((entry) => [entry.path, entry.kind]));
-        const materializedFilePaths = new Set(listedKindByPath.keys());
+        const listedEntryByPath = new Map(listedFiles.map((entry) => [entry.path, entry]));
+        const materializedFilePaths = new Set(listedEntryByPath.keys());
         const filePathSet = new Set(materializedFilePaths);
         const gitStatusByPath = new Map<string, WorkspaceFileGitStatus | null>();
         const unstagedTypechangePaths = new Set<string>();
@@ -253,6 +253,15 @@ export const createWorkspaceFilesService = (
             mergeGitStatus(gitStatusByPath.get(workspaceChange.path), normalizedStatus),
           );
         }
+        const listedKindByPath = new Map(
+          [...listedEntryByPath].map(([path, entry]) => [
+            path,
+            entry.worktreeKind ??
+              (entry.kind === "directory" && unstagedTypechangePaths.has(path)
+                ? "file"
+                : entry.kind),
+          ]),
+        );
         const filePaths = [...filePathSet].sort(compareWorkspacePaths);
         const materializedRegularFilePaths = new Set<string>();
         for (const [filePath, kind] of listedKindByPath) {
@@ -289,10 +298,7 @@ export const createWorkspaceFilesService = (
             });
             continue;
           }
-          if (
-            listedKindByPath.get(filePath) === "directory" &&
-            !unstagedTypechangePaths.has(filePath)
-          ) {
+          if (listedKindByPath.get(filePath) === "directory") {
             directoryEntries.set(filePath, {
               path: filePath,
               kind: "directory",

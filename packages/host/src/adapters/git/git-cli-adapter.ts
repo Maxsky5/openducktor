@@ -73,7 +73,7 @@ const parseMaterializedGitFiles = (
   output: string,
 ): Effect.Effect<GitFileListEntry[], HostOperationError<{ entry: string }>> =>
   Effect.gen(function* () {
-    const files: GitFileListEntry[] = [];
+    const filesByPath = new Map<string, GitFileListEntry>();
     for (const entry of output.split("\0")) {
       if (entry.length === 0) {
         continue;
@@ -91,12 +91,26 @@ const parseMaterializedGitFiles = (
       if (tag === "S") {
         continue;
       }
+      if (tag === "K") {
+        const path = entry.slice(2);
+        const isDirectory = path.endsWith("/");
+        const normalizedPath = isDirectory ? path.slice(0, -1) : path;
+        const worktreeKind = isDirectory ? "directory" : "file";
+        const listedEntry = filesByPath.get(normalizedPath);
+        filesByPath.set(normalizedPath, {
+          kind: listedEntry?.kind ?? worktreeKind,
+          path: normalizedPath,
+          worktreeKind,
+        });
+        continue;
+      }
       if (tag === "?") {
         const path = entry.slice(2);
         const isDirectory = path.endsWith("/");
-        files.push({
+        const normalizedPath = isDirectory ? path.slice(0, -1) : path;
+        filesByPath.set(normalizedPath, {
           kind: isDirectory ? "directory" : "file",
-          path: isDirectory ? path.slice(0, -1) : path,
+          path: normalizedPath,
         });
         continue;
       }
@@ -110,12 +124,18 @@ const parseMaterializedGitFiles = (
           }),
         );
       }
-      files.push({
+      const path = stagedEntry[2]!;
+      const worktreeKind = filesByPath.get(path)?.worktreeKind;
+      const listedFile: GitFileListEntry = {
         kind: stagedEntry[1] === "160000" ? "directory" : "file",
-        path: stagedEntry[2]!,
-      });
+        path,
+      };
+      if (worktreeKind) {
+        listedFile.worktreeKind = worktreeKind;
+      }
+      filesByPath.set(path, listedFile);
     }
-    return files;
+    return [...filesByPath.values()];
   });
 
 export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort => {
@@ -206,6 +226,7 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
           "-t",
           "-s",
           "-co",
+          "-k",
           "--exclude-standard",
           "-z",
           "--",

@@ -69,7 +69,7 @@ describe("createGitCliAdapter", () => {
   test("lists materialized files and reports Git links as directories", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
-        "ls-files -t -s -co --exclude-standard -z -- .":
+        "ls-files -t -s -co -k --exclude-standard -z -- .":
           "H 100644 abc123 0\tsrc/index.ts\0S 040000 def456 0\tpackages/sparse.ts\0? untracked file.ts\0? nested-repo/\0H 100644 fed321 0\t padded.ts \0H 120000 abc456 0\tbroken-link\0H 160000 abc789 0\tpackages/nested-checkout\0H 100644 def123 0\tsrc/line\nbreak.ts\0",
       }),
     });
@@ -84,10 +84,21 @@ describe("createGitCliAdapter", () => {
       { kind: "file", path: "src/line\nbreak.ts" },
     ]);
   });
+  test("preserves a live directory that replaces an indexed file", async () => {
+    const git = createGitCliAdapter({
+      runner: createRunner({
+        "ls-files -t -s -co -k --exclude-standard -z -- .": "K entry/\0H 100644 abc123 0\tentry\0",
+      }),
+    });
+
+    await expect(Effect.runPromise(git.listFiles("/repo"))).resolves.toEqual([
+      { kind: "file", path: "entry", worktreeKind: "directory" },
+    ]);
+  });
   test("limits a file lookup to one literal path", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
-        "ls-files -t -s -co --exclude-standard -z -- :(literal)src/[index].ts":
+        "ls-files -t -s -co -k --exclude-standard -z -- :(literal)src/[index].ts":
           "H 100644 abc123 0\tsrc/[index].ts\0",
       }),
     });
@@ -99,7 +110,7 @@ describe("createGitCliAdapter", () => {
   test("fails when tagged file output is malformed", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
-        "ls-files -t -s -co --exclude-standard -z -- .": "src/index.ts\0",
+        "ls-files -t -s -co -k --exclude-standard -z -- .": "src/index.ts\0",
       }),
     });
 
@@ -110,7 +121,7 @@ describe("createGitCliAdapter", () => {
   test("fails when a staged file entry is malformed", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
-        "ls-files -t -s -co --exclude-standard -z -- .": "H src/index.ts\0",
+        "ls-files -t -s -co -k --exclude-standard -z -- .": "H src/index.ts\0",
       }),
     });
 
