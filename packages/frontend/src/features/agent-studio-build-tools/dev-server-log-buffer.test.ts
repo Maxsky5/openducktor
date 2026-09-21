@@ -6,6 +6,7 @@ import type {
 } from "@openducktor/contracts";
 import {
   appendDevServerTerminalChunk,
+  applyDevServerTerminalBufferReplacement,
   createDevServerTerminalBufferStore,
   getDevServerTerminalBuffer,
   getDevServerTerminalBufferReplacementContext,
@@ -255,6 +256,20 @@ describe("dev-server-log-buffer", () => {
     expect(previousSnapshot?.entries.at(-1)?.data).toBe(
       `line-${MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS - 1}`,
     );
+  });
+
+  test("records dropped chunks without treating sequence gaps as lost output", () => {
+    const store = createDevServerTerminalBufferStore();
+    for (let index = 0; index < 2_000; index += 1) {
+      appendDevServerTerminalChunk(store, buildChunk(index * 3));
+    }
+    const before = getDevServerTerminalBuffer(store, "frontend");
+    expect(before?.lastDroppedSequence).toBeNull();
+    appendDevServerTerminalChunk(store, buildChunk(6_000));
+    expect(getDevServerTerminalBuffer(store, "frontend")?.lastDroppedSequence).toBe(0);
+    expect(before?.lastDroppedSequence).toBeNull();
+    replaceDevServerTerminalBuffer(store, "frontend", [buildChunk(9_000)]);
+    expect(getDevServerTerminalBuffer(store, "frontend")?.lastDroppedSequence).toBeNull();
   });
 
   test("replaces and prunes script buffers when syncing state", () => {
@@ -1255,4 +1270,46 @@ describe("dev-server-log-buffer", () => {
     expect(getDevServerTerminalBuffer(store, "removed")).toBeNull();
     expect(getDevServerTerminalBuffer(store, "frontend")?.entries[0]?.data).toBe("fresh\r\n");
   });
+});
+
+test("same-run replay tracks dropped entries, not sequence gaps", () => {
+  const store = createDevServerTerminalBufferStore();
+  replaceDevServerTerminalBuffer(store, "frontend", [buildChunk(0), buildChunk(3), buildChunk(9)]);
+  const replace = (sequences: number[], runId = "frontend:1") => {
+    const chunks = sequences.map((sequence) =>
+      buildChunk(sequence, { runIdentity: { runId, runOrder: testRunOrder(runId) } }),
+    );
+    applyDevServerTerminalBufferReplacement(store, "frontend", {
+      terminalChunks: chunks,
+      runIdentity: chunks[0]?.runIdentity ?? null,
+      snapshotWindow: {
+        count: chunks.length,
+        firstSequence: sequences[0] ?? null,
+        lastSequence: sequences.at(-1) ?? null,
+      },
+    });
+  };
+  replace([0, 3, 9, 15]);
+  expect(getDevServerTerminalBuffer(store, "frontend")?.lastDroppedSequence).toBeNull();
+  replace([0, 9, 15]);
+  expect(getDevServerTerminalBuffer(store, "frontend")?.lastDroppedSequence).toBe(3);
+  replace([0, 9, 15, 20]);
+  expect(getDevServerTerminalBuffer(store, "frontend")?.lastDroppedSequence).toBe(3);
+  replace([0], "frontend:2");
+  expect(getDevServerTerminalBuffer(store, "frontend")?.lastDroppedSequence).toBeNull();
+});
+
+test("empty replacement changes terminal generation only when the run changes", () => {
+  const store = createDevServerTerminalBufferStore();
+  const firstRun = buildChunk(0).runIdentity;
+  const secondRun = { runId: "frontend:2", runOrder: testRunOrder("frontend:2") };
+  replaceDevServerTerminalBuffer(store, "frontend", [], firstRun);
+  const firstToken = getDevServerTerminalBuffer(store, "frontend")?.resetToken;
+  replaceDevServerTerminalBuffer(store, "frontend", [], firstRun);
+  expect(getDevServerTerminalBuffer(store, "frontend")?.resetToken).toBe(firstToken);
+  replaceDevServerTerminalBuffer(store, "frontend", [], secondRun);
+  const secondToken = getDevServerTerminalBuffer(store, "frontend")?.resetToken;
+  expect(secondToken).toBe((firstToken ?? 0) + 1);
+  replaceDevServerTerminalBuffer(store, "frontend", [], secondRun);
+  expect(getDevServerTerminalBuffer(store, "frontend")?.resetToken).toBe(secondToken);
 });

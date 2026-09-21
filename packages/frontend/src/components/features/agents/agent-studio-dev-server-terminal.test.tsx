@@ -127,6 +127,7 @@ describe("AgentStudioDevServerTerminal", () => {
           ],
           lastSequence: 0,
           resetToken: 0,
+          lastDroppedSequence: null,
         }}
         onRendererError={onRendererError}
         createTerminalBinding={createTerminalBinding}
@@ -188,6 +189,7 @@ describe("AgentStudioDevServerTerminal", () => {
           ],
           lastSequence: 0,
           resetToken: 0,
+          lastDroppedSequence: null,
         }}
         onRendererError={onRendererError}
         createTerminalBinding={createTerminalBinding}
@@ -227,6 +229,7 @@ describe("AgentStudioDevServerTerminal", () => {
           ],
           lastSequence: 1,
           resetToken: 0,
+          lastDroppedSequence: null,
         }}
         onRendererError={onRendererError}
         createTerminalBinding={createTerminalBinding}
@@ -257,6 +260,7 @@ describe("AgentStudioDevServerTerminal", () => {
           ],
           lastSequence: 4,
           resetToken: 1,
+          lastDroppedSequence: null,
         }}
         onRendererError={onRendererError}
         createTerminalBinding={createTerminalBinding}
@@ -317,6 +321,7 @@ describe("AgentStudioDevServerTerminal", () => {
           ],
           lastSequence: 0,
           resetToken: 0,
+          lastDroppedSequence: null,
         }}
         onRendererError={onRendererError}
         createTerminalBinding={createTerminalBinding}
@@ -356,6 +361,7 @@ describe("AgentStudioDevServerTerminal", () => {
           ],
           lastSequence: 1,
           resetToken: 0,
+          lastDroppedSequence: null,
         }}
         onRendererError={onRendererError}
         createTerminalBinding={createTerminalBinding}
@@ -405,6 +411,7 @@ describe("AgentStudioDevServerTerminal", () => {
           ],
           lastSequence: 2,
           resetToken: 0,
+          lastDroppedSequence: null,
         }}
         onRendererError={onRendererError}
         createTerminalBinding={createTerminalBinding}
@@ -461,6 +468,7 @@ describe("AgentStudioDevServerTerminal", () => {
           ],
           lastSequence: 0,
           resetToken: 0,
+          lastDroppedSequence: null,
         }}
         onRendererError={onRendererError}
         createTerminalBinding={createTerminalBinding}
@@ -490,6 +498,7 @@ describe("AgentStudioDevServerTerminal", () => {
           ],
           lastSequence: 0,
           resetToken: 1,
+          lastDroppedSequence: null,
         }}
         onRendererError={onRendererError}
         createTerminalBinding={createTerminalBinding}
@@ -549,6 +558,7 @@ describe("AgentStudioDevServerTerminal", () => {
           ],
           lastSequence: 7,
           resetToken: 0,
+          lastDroppedSequence: null,
         }}
         onRendererError={onRendererError}
         createTerminalBinding={createTerminalBinding}
@@ -578,6 +588,7 @@ describe("AgentStudioDevServerTerminal", () => {
           ],
           lastSequence: 0,
           resetToken: 0,
+          lastDroppedSequence: null,
         }}
         onRendererError={onRendererError}
         createTerminalBinding={createTerminalBinding}
@@ -657,6 +668,7 @@ describe("AgentStudioDevServerTerminal", () => {
           ],
           lastSequence: 1,
           resetToken: 0,
+          lastDroppedSequence: null,
         }}
         onRendererError={onRendererError}
         createTerminalBinding={createTerminalBinding}
@@ -707,6 +719,7 @@ describe("AgentStudioDevServerTerminal", () => {
           ],
           lastSequence: 2,
           resetToken: 0,
+          lastDroppedSequence: null,
         }}
         onRendererError={onRendererError}
         createTerminalBinding={createTerminalBinding}
@@ -737,6 +750,7 @@ describe("AgentStudioDevServerTerminal", () => {
           ],
           lastSequence: 0,
           resetToken: 1,
+          lastDroppedSequence: null,
         }}
         onRendererError={onRendererError}
         createTerminalBinding={createTerminalBinding}
@@ -777,6 +791,7 @@ describe("AgentStudioDevServerTerminal", () => {
           ],
           lastSequence: 0,
           resetToken: 0,
+          lastDroppedSequence: null,
         }}
         onRendererError={onRendererError}
         createTerminalBinding={terminalHarness.createTerminalBinding}
@@ -806,6 +821,7 @@ describe("AgentStudioDevServerTerminal", () => {
           ],
           lastSequence: 0,
           resetToken: 0,
+          lastDroppedSequence: null,
         }}
         onRendererError={onRendererError}
         createTerminalBinding={terminalHarness.createTerminalBinding}
@@ -843,6 +859,7 @@ describe("AgentStudioDevServerTerminal", () => {
           ],
           lastSequence: 0,
           resetToken: 0,
+          lastDroppedSequence: null,
         }}
         onRendererError={onRendererError}
         createTerminalBinding={terminalHarness.createTerminalBinding}
@@ -882,6 +899,7 @@ describe("AgentStudioDevServerTerminal", () => {
           ],
           lastSequence: 1,
           resetToken: 0,
+          lastDroppedSequence: null,
         }}
         onRendererError={onRendererError}
         createTerminalBinding={terminalHarness.createTerminalBinding}
@@ -911,6 +929,7 @@ describe("AgentStudioDevServerTerminal", () => {
           ],
           lastSequence: 0,
           resetToken: 0,
+          lastDroppedSequence: null,
         }}
         onRendererError={onRendererError}
         createTerminalBinding={terminalHarness.createTerminalBinding}
@@ -992,6 +1011,7 @@ describe("AgentStudioDevServerTerminal", () => {
           ],
           lastSequence: 0,
           resetToken: 0,
+          lastDroppedSequence: null,
         }}
         onRendererError={onRendererError}
         createTerminalBinding={createTerminalBinding}
@@ -1032,6 +1052,7 @@ describe("AgentStudioDevServerTerminal", () => {
           ],
           lastSequence: 1,
           resetToken: 0,
+          lastDroppedSequence: null,
         }}
         onRendererError={onRendererError}
         createTerminalBinding={createTerminalBinding}
@@ -1107,6 +1128,7 @@ describe("AgentStudioDevServerTerminal", () => {
             ],
             lastSequence: 0,
             resetToken: 0,
+            lastDroppedSequence: null,
           }}
           onRendererError={onRendererError}
           createTerminalBinding={createTerminalBinding}

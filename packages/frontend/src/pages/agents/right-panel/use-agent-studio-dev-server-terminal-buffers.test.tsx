@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
-import { act, render } from "@testing-library/react";
+import { act, render, waitFor } from "@testing-library/react";
 import { Suspense, startTransition, useState } from "react";
 import { buildScript, buildState } from "./use-agent-studio-dev-server-panel-test-fixtures";
 import { renderDevServerPanelHook } from "./use-agent-studio-dev-server-panel-test-harness";
@@ -102,7 +102,7 @@ describe("useAgentStudioDevServerTerminalBuffers", () => {
     }
   });
 
-  test("keeps committed task buffers when a different task render suspends", () => {
+  test("keeps committed task buffers when a different task render suspends", async () => {
     type Scope = Parameters<typeof useAgentStudioDevServerTerminalBuffers>[0];
     type HookResult = ReturnType<typeof useAgentStudioDevServerTerminalBuffers>;
     const suspendedTask = new Promise<void>(() => {});
@@ -195,10 +195,14 @@ describe("useAgentStudioDevServerTerminalBuffers", () => {
         );
       });
 
-      expect(getLatest().selectedScriptTerminalBuffer?.entries.map((entry) => entry.data)).toEqual([
-        "task seven output\r\n",
-        "task seven still live\r\n",
-      ]);
+      await waitFor(
+        () => {
+          expect(
+            getLatest().selectedScriptTerminalBuffer?.entries.map((entry) => entry.data),
+          ).toEqual(["task seven output\r\n", "task seven still live\r\n"]);
+        },
+        { timeout: 200 },
+      );
     } finally {
       view.unmount();
     }

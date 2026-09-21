@@ -2,6 +2,7 @@ import type { FitAddon } from "@xterm/addon-fit";
 import type { ITerminalOptions, Terminal } from "@xterm/xterm";
 import { useCallback, useEffect, useRef } from "react";
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
+import { readTerminalOutput } from "@/features/agent-studio-build-tools/dev-server-terminal-output";
 import { createTerminalBinding } from "@/features/terminals/shared-terminal-binding";
 import {
   createTerminalOptions,
@@ -181,25 +182,6 @@ const disposeTerminalBinding = (
   resetTerminalRenderQueue(renderedStateRef, renderQueueRef, renderGenerationRef);
 };
 
-const readTerminalReplayOutput = (
-  entries: AgentStudioDevServerTerminalBuffer["entries"],
-): string => {
-  return entries.map((entry) => entry.data).join("");
-};
-
-const readAppendedTerminalOutput = (
-  entries: AgentStudioDevServerTerminalBuffer["entries"],
-  lastRenderedSequence: number | null,
-): string => {
-  let output = "";
-  for (const entry of entries) {
-    if (lastRenderedSequence === null || entry.sequence > lastRenderedSequence) {
-      output += entry.data;
-    }
-  }
-  return output;
-};
-
 const renderTerminalBuffer = ({
   binding,
   terminalIdentityKey,
@@ -219,8 +201,23 @@ const renderTerminalBuffer = ({
   const didTerminalIdentityChange =
     renderedStateRef.current.terminalIdentityKey !== terminalIdentityKey;
   const didResetTokenChange = renderedStateRef.current.resetToken !== nextResetToken;
+  const shouldReplay = didTerminalIdentityChange || didResetTokenChange;
 
-  if (didTerminalIdentityChange || didResetTokenChange) {
+  // A cursor belongs to the terminal state that set it.
+  const lastRenderedSequence = shouldReplay ? null : renderedStateRef.current.lastSequence;
+  const lastDroppedSequence = terminalBuffer?.lastDroppedSequence ?? null;
+  const lostUnreadOutput =
+    lastDroppedSequence !== null &&
+    (lastRenderedSequence === null || lastRenderedSequence < lastDroppedSequence);
+
+  // Empty output can still move the cursor past dropped chunks.
+  const nextCursor =
+    lastDroppedSequence !== null &&
+    (nextLastSequence === null || nextLastSequence < lastDroppedSequence)
+      ? lastDroppedSequence
+      : nextLastSequence;
+
+  if (shouldReplay || lostUnreadOutput) {
     const hasRenderedCurrentBinding = renderedStateRef.current.terminalIdentityKey !== null;
     const activeBinding = hasRenderedCurrentBinding ? recreateTerminalBinding() : binding;
     if (!activeBinding) {
@@ -229,21 +226,21 @@ const renderTerminalBuffer = ({
 
     activeBinding.terminal.reset();
     activeBinding.terminal.clear();
-    writeTerminalOutput(activeBinding.terminal, readTerminalReplayOutput(entries));
+    const lossNotice = lostUnreadOutput
+      ? "[Dev server output was truncated. Showing retained output.]\r\n"
+      : "";
+    writeTerminalOutput(activeBinding.terminal, lossNotice + readTerminalOutput(entries, null));
     activeBinding.fitAddon.fit();
     renderedStateRef.current = {
       terminalIdentityKey,
       resetToken: nextResetToken,
-      lastSequence: nextLastSequence,
+      lastSequence: nextCursor,
     };
     return;
   }
 
-  writeTerminalOutput(
-    binding.terminal,
-    readAppendedTerminalOutput(entries, renderedStateRef.current.lastSequence),
-  );
-  renderedStateRef.current.lastSequence = nextLastSequence;
+  writeTerminalOutput(binding.terminal, readTerminalOutput(entries, lastRenderedSequence));
+  renderedStateRef.current.lastSequence = nextCursor;
 };
 
 export const useDevServerTerminalBinding = ({
@@ -258,9 +255,6 @@ export const useDevServerTerminalBinding = ({
     lastSequence: null,
   });
   const renderQueueRef = useRef<Promise<void> | null>(null);
-  if (renderQueueRef.current === null) {
-    renderQueueRef.current = Promise.resolve();
-  }
   const renderGenerationRef = useRef(0);
   const terminalObserversCleanupRef = useRef<(() => void) | null>(null);
 

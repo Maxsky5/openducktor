@@ -20,6 +20,7 @@ const buildTerminalBuffer = (script: DevServerScriptState): AgentStudioDevServer
   entries: script.bufferedTerminalChunks,
   lastSequence: script.bufferedTerminalChunks.at(-1)?.sequence ?? null,
   resetToken: 0,
+  lastDroppedSequence: null,
 });
 
 const baseModel = (

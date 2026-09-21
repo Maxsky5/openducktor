@@ -372,6 +372,7 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
       entries: selectedScriptContent.bufferedTerminalChunks,
       lastSequence: selectedScriptContent.bufferedTerminalChunks.at(-1)?.sequence ?? null,
       resetToken: 0,
+      lastDroppedSequence: null,
     };
   }, [model.selectedScriptTerminalBuffer, selectedScriptContent]);
   const selectedScriptTerminalChunkCount = selectedScriptTerminalBuffer?.entries.length ?? 0;

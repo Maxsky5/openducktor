@@ -1,5 +1,5 @@
 import type { DevServerEvent, DevServerGroupState } from "@openducktor/contracts";
-import { useCallback, useState } from "react";
+import { useCallback, useLayoutEffect, useState } from "react";
 import {
   type AgentStudioDevServerTerminalBuffer,
   appendDevServerTerminalChunk,
@@ -34,12 +34,16 @@ type SelectedScriptTerminalBufferState = {
 };
 
 type DevServerTerminalBufferOwner = {
+  mounted: boolean;
+  pendingFrame: number | null;
   pendingMutationReplaySync: PendingMutationReplaySync | null;
   scopeKey: string;
   terminalBuffers: DevServerTerminalBufferStore;
 };
 
 const createDevServerTerminalBufferOwner = (scopeKey: string): DevServerTerminalBufferOwner => ({
+  mounted: false,
+  pendingFrame: null,
   pendingMutationReplaySync: null,
   scopeKey,
   terminalBuffers: createDevServerTerminalBufferStore(),
@@ -111,14 +115,50 @@ export const useAgentStudioDevServerTerminalBuffers = (
   const activeScopeKey = terminalBufferOwner.scopeKey;
   const terminalBuffers = terminalBufferOwner.terminalBuffers;
 
+  const cancelPendingFrame = useCallback((): void => {
+    if (terminalBufferOwner.pendingFrame !== null) {
+      cancelAnimationFrame(terminalBufferOwner.pendingFrame);
+      terminalBufferOwner.pendingFrame = null;
+    }
+  }, [terminalBufferOwner]);
+
+  useLayoutEffect(() => {
+    terminalBufferOwner.mounted = true;
+    return () => {
+      terminalBufferOwner.mounted = false;
+      cancelPendingFrame();
+    };
+  }, [cancelPendingFrame, terminalBufferOwner]);
+
   const syncSelectedScriptTerminalBuffer = useCallback(
     (scriptId: string | null): void => {
+      cancelPendingFrame();
+      if (!terminalBufferOwner.mounted) {
+        return;
+      }
       setSelectedScriptTerminalBufferState({
         buffer: getDevServerTerminalBuffer(terminalBuffers, scriptId),
         scopeKey: activeScopeKey,
       });
     },
-    [activeScopeKey, terminalBuffers],
+    [activeScopeKey, cancelPendingFrame, terminalBufferOwner, terminalBuffers],
+  );
+
+  const queueSelectedBuffer = useCallback(
+    (scriptId: string): void => {
+      if (!terminalBufferOwner.mounted || terminalBufferOwner.pendingFrame !== null) {
+        return;
+      }
+      const frame = requestAnimationFrame(() => {
+        if (terminalBufferOwner.pendingFrame !== frame) {
+          return;
+        }
+        terminalBufferOwner.pendingFrame = null;
+        syncSelectedScriptTerminalBuffer(scriptId);
+      });
+      terminalBufferOwner.pendingFrame = frame;
+    },
+    [syncSelectedScriptTerminalBuffer, terminalBufferOwner],
   );
 
   const replaceTerminalBuffersFromState = useCallback(
@@ -325,11 +365,21 @@ export const useAgentStudioDevServerTerminalBuffers = (
           ? event.script.scriptId
           : event.terminalChunk.scriptId;
       if (selectedScriptId && touchedScriptId === selectedScriptId) {
-        syncSelectedScriptTerminalBuffer(selectedScriptId);
+        if (event.type === "terminal_chunk") {
+          queueSelectedBuffer(selectedScriptId);
+        } else {
+          syncSelectedScriptTerminalBuffer(selectedScriptId);
+        }
       }
       return true;
     },
-    [hydrateTerminalBuffersFromState, scope, syncSelectedScriptTerminalBuffer, terminalBuffers],
+    [
+      hydrateTerminalBuffersFromState,
+      queueSelectedBuffer,
+      scope,
+      syncSelectedScriptTerminalBuffer,
+      terminalBuffers,
+    ],
   );
 
   const cancelMutationReplaySync = useCallback((): void => {
@@ -337,10 +387,11 @@ export const useAgentStudioDevServerTerminalBuffers = (
   }, [terminalBufferOwner]);
 
   const clearTerminalBuffers = useCallback((): void => {
+    cancelPendingFrame();
     terminalBuffers.clear();
     terminalBufferOwner.pendingMutationReplaySync = null;
     setSelectedScriptTerminalBufferState({ buffer: null, scopeKey: activeScopeKey });
-  }, [activeScopeKey, terminalBufferOwner, terminalBuffers]);
+  }, [activeScopeKey, cancelPendingFrame, terminalBufferOwner, terminalBuffers]);
   const selectedScriptTerminalBuffer =
     selectedScriptTerminalBufferState?.scopeKey === activeScopeKey
       ? selectedScriptTerminalBufferState.buffer
