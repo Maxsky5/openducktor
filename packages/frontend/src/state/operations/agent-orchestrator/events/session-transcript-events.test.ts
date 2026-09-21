@@ -719,14 +719,17 @@ describe("agent-orchestrator session transcript events", () => {
     );
     expect(assistantMessages).toHaveLength(1);
     expect(assistantMessages[0]).toMatchObject({
+      id: "text:response-final:response-final:text",
       content: "Complete final answer",
-      meta: expect.objectContaining({
+      meta: {
         kind: "assistant",
         isFinal: true,
+        partId: "response-final:text",
+        sourceMessageId: "response-final",
         providerId: "claude",
         modelId: "claude-opus-5",
         variant: "high",
-      }),
+      },
     });
   });
 });

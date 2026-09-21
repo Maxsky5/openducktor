@@ -52,7 +52,7 @@ const sameIdCurrentMessageOrEmpty = (
  * part id, while the hydrated whole-message row uses the runtime message id. Loaded part
  * rows carry their own part id, so this lookup skips them.
  */
-const findCurrentAssistantMessageBySourceMessageId = ({
+const findCurrentAssistantMessagesForLoadedHistory = ({
   currentOwner,
   loadedMessage,
   absorbedCurrentMessageIds,
@@ -238,7 +238,7 @@ const findMatchingCurrentMessages = ({
   if (sameIdMatches.length > 0) {
     return sameIdMatches;
   }
-  return findCurrentAssistantMessageBySourceMessageId({
+  return findCurrentAssistantMessagesForLoadedHistory({
     currentOwner,
     loadedMessage,
     absorbedCurrentMessageIds,
