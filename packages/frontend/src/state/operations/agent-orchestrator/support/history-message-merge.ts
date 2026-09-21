@@ -1,17 +1,23 @@
 import { mergeAgentImageGeneration } from "@openducktor/core";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
-import { matchesLoadedTool, mergeToolMessages } from "./history-tool-message-merge";
+import {
+  matchesLoadedTool,
+  mergeToolMessages,
+  toolMessageMatchKeys,
+} from "./history-tool-message-merge";
 import { applyPreferredMessageTimestamp } from "./message-timestamp";
-import { sessionMessageTimestampInsertionIndex } from "./message-timestamp-ordering";
+import {
+  messageTimestampMs,
+  sessionMessageTimestampInsertionIndex,
+} from "./message-timestamp-ordering";
 import {
   createSessionMessagesState,
-  findLastSessionMessageByRole,
-  findSessionMessageById,
   forEachSessionMessage,
-  getSessionMessagesSlice,
+  getSessionMessages,
   haveSameUserMessageAttachmentIdentity,
   isFinalAssistantChatMessage,
   someSessionMessage,
+  type SessionMessageOwner,
 } from "./messages";
 import { isSessionSystemPromptMessage } from "./session-prompt";
 import {
@@ -47,17 +53,167 @@ const sameIdCurrentMessageOrEmpty = (
   return [currentMessage];
 };
 
+type IndexedCurrentMessage = {
+  index: number;
+  message: AgentChatMessage;
+};
+
+/**
+ * Lookup tables for the current messages. Without them the merge rescans the
+ * whole current list for every loaded message, which is quadratic and stalls the
+ * renderer on long sessions.
+ */
+type CurrentMessageIndex = {
+  owner: SessionMessageOwner;
+  firstById: Map<string, AgentChatMessage>;
+  assistantMessagesBySourceMessageId: Map<string, IndexedCurrentMessage[]>;
+  toolMessagesByCallId: Map<string, IndexedCurrentMessage[]>;
+  toolMessagesByPartKey: Map<string, IndexedCurrentMessage[]>;
+  readUserMessagesByMatchKey: Map<string, IndexedCurrentMessage[]>;
+};
+
+const appendIndexedMessage = (
+  index: Map<string, IndexedCurrentMessage[]>,
+  key: string,
+  entry: IndexedCurrentMessage,
+): void => {
+  const existing = index.get(key);
+  if (existing) {
+    existing.push(entry);
+    return;
+  }
+  index.set(key, [entry]);
+};
+
+const userMessageMatchKey = (message: AgentChatMessage): string | null => {
+  if (message.meta?.kind !== "user") {
+    return null;
+  }
+  const attachments = (message.meta.parts ?? [])
+    .flatMap((part) => (part.kind === "attachment" ? [part.attachment] : []))
+    .map((attachment) => `${attachment.kind}\u0001${attachment.path}`)
+    .join("\u0002");
+  return `${message.content}\u0000${attachments}`;
+};
+
+const buildCurrentMessageIndex = (currentOwner: SessionMessageOwner): CurrentMessageIndex => {
+  const messages = getSessionMessages(currentOwner);
+  const index: CurrentMessageIndex = {
+    owner: currentOwner,
+    firstById: new Map(),
+    assistantMessagesBySourceMessageId: new Map(),
+    toolMessagesByCallId: new Map(),
+    toolMessagesByPartKey: new Map(),
+    readUserMessagesByMatchKey: new Map(),
+  };
+
+  // Same-id lookups keep the first occurrence, like a linear forward scan.
+  for (let messageIndex = 0; messageIndex < messages.length; messageIndex += 1) {
+    const message = messages[messageIndex];
+    if (message && !index.firstById.has(message.id)) {
+      index.firstById.set(message.id, message);
+    }
+  }
+
+  // Walk backwards so every entry list is ordered by descending message index.
+  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
+    const message = messages[messageIndex];
+    if (!message) {
+      continue;
+    }
+    const entry: IndexedCurrentMessage = { index: messageIndex, message };
+    const toolKeys = toolMessageMatchKeys(message);
+    if (toolKeys) {
+      if (toolKeys.callId.length > 0) {
+        appendIndexedMessage(index.toolMessagesByCallId, toolKeys.callId, entry);
+      }
+      if (toolKeys.partKey !== null) {
+        appendIndexedMessage(index.toolMessagesByPartKey, toolKeys.partKey, entry);
+      }
+      continue;
+    }
+    if (message.role === "user" && message.meta?.kind === "user" && message.meta.state === "read") {
+      const matchKey = userMessageMatchKey(message);
+      if (matchKey !== null) {
+        appendIndexedMessage(index.readUserMessagesByMatchKey, matchKey, entry);
+      }
+      continue;
+    }
+    if (
+      message.role === "assistant" &&
+      message.meta?.kind === "assistant" &&
+      message.meta.sourceMessageId !== undefined
+    ) {
+      appendIndexedMessage(
+        index.assistantMessagesBySourceMessageId,
+        message.meta.sourceMessageId,
+        entry,
+      );
+    }
+  }
+
+  return index;
+};
+
+const mergeIndexedMessagesByDescendingIndex = (
+  left: readonly IndexedCurrentMessage[],
+  right: readonly IndexedCurrentMessage[],
+): IndexedCurrentMessage[] => {
+  if (left.length === 0) {
+    return right.length === 0 ? [] : [...right];
+  }
+  if (right.length === 0) {
+    return [...left];
+  }
+
+  const merged: IndexedCurrentMessage[] = [];
+  let leftIndex = 0;
+  let rightIndex = 0;
+  while (leftIndex < left.length && rightIndex < right.length) {
+    const leftEntry = left[leftIndex];
+    const rightEntry = right[rightIndex];
+    if (!leftEntry) {
+      leftIndex += 1;
+      continue;
+    }
+    if (!rightEntry) {
+      rightIndex += 1;
+      continue;
+    }
+    if (leftEntry.index >= rightEntry.index) {
+      merged.push(leftEntry);
+      leftIndex += 1;
+    } else {
+      merged.push(rightEntry);
+      rightIndex += 1;
+    }
+  }
+  for (; leftIndex < left.length; leftIndex += 1) {
+    const entry = left[leftIndex];
+    if (entry) {
+      merged.push(entry);
+    }
+  }
+  for (; rightIndex < right.length; rightIndex += 1) {
+    const entry = right[rightIndex];
+    if (entry) {
+      merged.push(entry);
+    }
+  }
+  return merged;
+};
+
 /**
  * Match the live row by source message id: a live assistant row can be keyed by a text
  * part id, while the hydrated whole-message row uses the runtime message id. Loaded part
  * rows carry their own part id, so this lookup skips them.
  */
 const findCurrentAssistantMessagesForLoadedHistory = ({
-  currentOwner,
+  currentIndex,
   loadedMessage,
   absorbedCurrentMessageIds,
 }: {
-  currentOwner: Pick<AgentSessionState, "externalSessionId" | "messages">;
+  currentIndex: CurrentMessageIndex;
   loadedMessage: AgentChatMessage;
   absorbedCurrentMessageIds: ReadonlySet<string>;
 }): AgentChatMessage[] => {
@@ -68,39 +224,43 @@ const findCurrentAssistantMessagesForLoadedHistory = ({
     return [];
   }
 
-  const match = findLastSessionMessageByRole(
-    currentOwner,
-    "assistant",
-    (message) =>
-      message.meta?.kind === "assistant" &&
-      message.meta.sourceMessageId === loadedMessage.id &&
-      !absorbedCurrentMessageIds.has(message.id),
-  );
-  return match ? [match] : [];
+  const candidates = currentIndex.assistantMessagesBySourceMessageId.get(loadedMessage.id) ?? [];
+  for (const candidate of candidates) {
+    if (!absorbedCurrentMessageIds.has(candidate.message.id)) {
+      return [candidate.message];
+    }
+  }
+  return [];
 };
 
 const findMatchingCurrentToolMessages = ({
-  currentOwner,
+  currentIndex,
   loadedMessage,
   sameIdCurrentMessage,
   absorbedCurrentMessageIds,
 }: {
-  currentOwner: Pick<AgentSessionState, "externalSessionId" | "messages">;
+  currentIndex: CurrentMessageIndex;
   loadedMessage: AgentChatMessage;
   sameIdCurrentMessage: AgentChatMessage | undefined;
   absorbedCurrentMessageIds: ReadonlySet<string>;
 }): AgentChatMessage[] => {
   const matches = sameIdCurrentMessageOrEmpty(sameIdCurrentMessage, absorbedCurrentMessageIds);
   const seenIds = new Set(matches.map((message) => message.id));
-  const currentSlice = getSessionMessagesSlice(currentOwner, 0);
-  for (let index = currentSlice.length - 1; index >= 0; index -= 1) {
-    const candidate = currentSlice[index];
-    if (!candidate || seenIds.has(candidate.id) || absorbedCurrentMessageIds.has(candidate.id)) {
+  const keys = toolMessageMatchKeys(loadedMessage);
+  if (keys === null) {
+    return matches;
+  }
+  const candidates = mergeIndexedMessagesByDescendingIndex(
+    keys.callId.length > 0 ? (currentIndex.toolMessagesByCallId.get(keys.callId) ?? []) : [],
+    keys.partKey !== null ? (currentIndex.toolMessagesByPartKey.get(keys.partKey) ?? []) : [],
+  );
+  for (const candidate of candidates) {
+    if (seenIds.has(candidate.message.id) || absorbedCurrentMessageIds.has(candidate.message.id)) {
       continue;
     }
-    if (matchesLoadedTool(loadedMessage, candidate)) {
-      matches.push(candidate);
-      seenIds.add(candidate.id);
+    if (matchesLoadedTool(loadedMessage, candidate.message)) {
+      matches.push(candidate.message);
+      seenIds.add(candidate.message.id);
     }
   }
   return matches;
@@ -118,14 +278,6 @@ const LOCAL_ACCEPTED_USER_CONFIRMATION_WINDOW_MS = 10_000;
 const userMessageTimestampMs = (timestamp: string): number | null => {
   const parsed = Date.parse(timestamp);
   return Number.isNaN(parsed) ? null : parsed;
-};
-
-const insertMessageByTimestamp = (
-  messages: AgentChatMessage[],
-  message: AgentChatMessage,
-): void => {
-  const insertIndex = sessionMessageTimestampInsertionIndex(messages, message);
-  messages.splice(insertIndex, 0, message);
 };
 
 const confirmsLocalAcceptedUserMessage = (
@@ -154,12 +306,12 @@ const confirmsLocalAcceptedUserMessage = (
 };
 
 const findConfirmedLocalAcceptedUserMessage = ({
-  currentOwner,
+  currentIndex,
   loadedMessage,
   sameIdCurrentMessage,
   absorbedCurrentMessageIds,
 }: {
-  currentOwner: Pick<AgentSessionState, "externalSessionId" | "messages">;
+  currentIndex: CurrentMessageIndex;
   loadedMessage: AgentChatMessage;
   sameIdCurrentMessage: AgentChatMessage | undefined;
   absorbedCurrentMessageIds: ReadonlySet<string>;
@@ -169,20 +321,23 @@ const findConfirmedLocalAcceptedUserMessage = ({
     return matches;
   }
 
-  const currentSlice = getSessionMessagesSlice(currentOwner, 0);
+  const matchKey = userMessageMatchKey(loadedMessage);
+  if (matchKey === null) {
+    return [];
+  }
+  const candidates = currentIndex.readUserMessagesByMatchKey.get(matchKey) ?? [];
   type NearestMessageMatch = { message: AgentChatMessage; distanceMs: number };
   let nearestMatch: NearestMessageMatch | null = null;
-  for (let index = currentSlice.length - 1; index >= 0; index -= 1) {
-    const candidate = currentSlice[index];
-    if (!candidate || absorbedCurrentMessageIds.has(candidate.id)) {
+  for (const candidate of candidates) {
+    if (absorbedCurrentMessageIds.has(candidate.message.id)) {
       continue;
     }
-    const distanceMs = confirmsLocalAcceptedUserMessage(loadedMessage, candidate);
+    const distanceMs = confirmsLocalAcceptedUserMessage(loadedMessage, candidate.message);
     if (distanceMs === null) {
       continue;
     }
     if (!nearestMatch || distanceMs < nearestMatch.distanceMs) {
-      nearestMatch = { message: candidate, distanceMs };
+      nearestMatch = { message: candidate.message, distanceMs };
     }
   }
 
@@ -194,19 +349,19 @@ const findConfirmedLocalAcceptedUserMessage = ({
 };
 
 const findMatchingCurrentMessages = ({
-  currentOwner,
+  currentIndex,
   loadedMessage,
   sameIdCurrentMessage,
   absorbedCurrentMessageIds,
 }: {
-  currentOwner: Pick<AgentSessionState, "externalSessionId" | "messages">;
+  currentIndex: CurrentMessageIndex;
   loadedMessage: AgentChatMessage;
   sameIdCurrentMessage: AgentChatMessage | undefined;
   absorbedCurrentMessageIds: ReadonlySet<string>;
 }): AgentChatMessage[] => {
   if (isSubagentMessage(loadedMessage)) {
     return findCurrentSubagentMessagesForLoadedHistory({
-      currentOwner,
+      currentOwner: currentIndex.owner,
       loadedMessage,
       sameIdCurrentMessage,
       absorbedCurrentMessageIds,
@@ -215,7 +370,7 @@ const findMatchingCurrentMessages = ({
 
   if (isUserMessage(loadedMessage)) {
     return findConfirmedLocalAcceptedUserMessage({
-      currentOwner,
+      currentIndex,
       loadedMessage,
       sameIdCurrentMessage,
       absorbedCurrentMessageIds,
@@ -224,7 +379,7 @@ const findMatchingCurrentMessages = ({
 
   if (loadedMessage.meta?.kind === "tool") {
     return findMatchingCurrentToolMessages({
-      currentOwner,
+      currentIndex,
       loadedMessage,
       sameIdCurrentMessage,
       absorbedCurrentMessageIds,
@@ -239,7 +394,7 @@ const findMatchingCurrentMessages = ({
     return sameIdMatches;
   }
   return findCurrentAssistantMessagesForLoadedHistory({
-    currentOwner,
+    currentIndex,
     loadedMessage,
     absorbedCurrentMessageIds,
   });
@@ -336,10 +491,21 @@ export const mergeHistoryMessages = (
 ): AgentSessionState["messages"] => {
   const currentOwner = { externalSessionId, messages: currentMessages };
   const loadedOwner = { externalSessionId, messages: loadedMessages };
+  const currentIndex = buildCurrentMessageIndex(currentOwner);
   const loadedHasSystemPrompt = someSessionMessage(loadedOwner, isSessionSystemPromptMessage);
   const loadedMessageIds = new Set<string>();
   const absorbedCurrentMessageIds = new Set<string>();
   const mergedMessages: AgentChatMessage[] = [];
+  const mergedTimestampsMs: (number | null)[] = [];
+  let minimumInsertionIndex = 0;
+
+  const pushMergedMessage = (message: AgentChatMessage): void => {
+    mergedMessages.push(message);
+    mergedTimestampsMs.push(messageTimestampMs(message));
+    if (isSessionSystemPromptMessage(message)) {
+      minimumInsertionIndex = mergedMessages.length;
+    }
+  };
 
   if (!loadedHasSystemPrompt) {
     forEachSessionMessage(currentOwner, (message) => {
@@ -347,14 +513,14 @@ export const mergeHistoryMessages = (
         return;
       }
       absorbedCurrentMessageIds.add(message.id);
-      mergedMessages.push(message);
+      pushMergedMessage(message);
     });
   }
 
   forEachSessionMessage(loadedOwner, (message) => {
-    const sameIdCurrentMessage = findSessionMessageById(currentOwner, message.id);
+    const sameIdCurrentMessage = currentIndex.firstById.get(message.id);
     const matchingCurrentMessages = findMatchingCurrentMessages({
-      currentOwner,
+      currentIndex,
       loadedMessage: message,
       sameIdCurrentMessage,
       absorbedCurrentMessageIds,
@@ -368,7 +534,7 @@ export const mergeHistoryMessages = (
         mergeSameMessageId(currentMerged, matchingCurrentMessage, messagesAtReadStart),
       message,
     );
-    mergedMessages.push(mergedMessage);
+    pushMergedMessage(mergedMessage);
   });
 
   forEachSessionMessage(currentOwner, (message) => {
@@ -378,7 +544,17 @@ export const mergeHistoryMessages = (
     if (isSessionSystemPromptMessage(message)) {
       return;
     }
-    insertMessageByTimestamp(mergedMessages, message);
+    const incomingMs = messageTimestampMs(message);
+    if (incomingMs === null) {
+      pushMergedMessage(message);
+      return;
+    }
+    const insertIndex = sessionMessageTimestampInsertionIndex(mergedMessages, message, {
+      timestampsMs: mergedTimestampsMs,
+      minimumInsertionIndex,
+    });
+    mergedMessages.splice(insertIndex, 0, message);
+    mergedTimestampsMs.splice(insertIndex, 0, incomingMs);
   });
 
   return createSessionMessagesState(externalSessionId, mergedMessages, currentMessages.version + 1);

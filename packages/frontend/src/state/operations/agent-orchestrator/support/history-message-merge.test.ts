@@ -1577,4 +1577,64 @@ describe("agent-orchestrator/support/history-message-merge", () => {
       "runtime-user-newer",
     ]);
   });
+
+  test("merges a long transcript without rescanning it for every loaded message", () => {
+    // Regression guard for the Agent Studio tab-switch freeze. The merge used
+    // to rescan the current transcript and re-parse its timestamps for every
+    // loaded message, which is quadratic and blocks the renderer on sessions
+    // with thousands of live messages. This budget is far above the linear
+    // merge cost and far below the quadratic one.
+    const baseMs = Date.parse("2026-09-21T10:00:00.000Z");
+    const buildTranscript = (count: number, indexOffset: number): AgentChatMessage[] =>
+      Array.from({ length: count }, (_value, index) => {
+        const absoluteIndex = indexOffset + index;
+        const timestamp = new Date(baseMs + absoluteIndex * 1000).toISOString();
+        const kind = absoluteIndex % 4;
+        if (kind === 0) {
+          return {
+            id: `user-${absoluteIndex}`,
+            role: "user",
+            content: `user message ${absoluteIndex}`,
+            timestamp,
+            meta: { kind: "user", state: "read" },
+          } satisfies AgentChatMessage;
+        }
+        if (kind === 1) {
+          return {
+            id: `assistant-${absoluteIndex}`,
+            role: "assistant",
+            content: `assistant message ${absoluteIndex}`,
+            timestamp,
+            meta: { kind: "assistant", isFinal: true },
+          } satisfies AgentChatMessage;
+        }
+        return {
+          id: `tool:turn-${absoluteIndex}:call-${absoluteIndex}`,
+          role: "tool",
+          content: "",
+          timestamp,
+          meta: {
+            kind: "tool",
+            partId: `part-${absoluteIndex}`,
+            callId: `call-${absoluteIndex}`,
+            tool: "bash",
+            toolType: "generic" as const,
+            status: "completed",
+            output: `tool output ${absoluteIndex}`,
+          },
+        } satisfies AgentChatMessage;
+      });
+
+    const currentMessages = buildTranscript(8000, 0);
+    const loadedMessages = buildTranscript(600, 7600);
+
+    const startedAt = performance.now();
+    const merged = mergedMessageState(loadedMessages, currentMessages);
+    const durationMs = performance.now() - startedAt;
+
+    // The loaded history overlaps the last 400 current messages, so the merge
+    // absorbs them into the loaded rows.
+    expect(merged.items).toHaveLength(8200);
+    expect(durationMs).toBeLessThan(800);
+  }, 5000);
 });

@@ -6,7 +6,7 @@ import {
 } from "./message-timestamp";
 import {
   findLastSessionMessageByRole,
-  getSessionMessagesSlice,
+  getSessionMessages,
   removeSessionMessageById,
   type SessionMessageOwner,
   upsertSessionMessage,
@@ -163,7 +163,7 @@ const resolveSubagentMessageUpdateTarget = (
   const partScopedRowMatches =
     correlationMessage || sessionMessage
       ? []
-      : getSessionMessagesSlice(owner, 0).filter(
+      : getSessionMessages(owner).filter(
           (message): message is SubagentMessage =>
             isSubagentMessage(message) &&
             canLinkSessionScopedSubagentToPartScopedRow(incoming, message),
@@ -411,7 +411,7 @@ export const findCurrentSubagentMessagesForLoadedHistory = ({
     seenIds.add(sameIdCurrentMessage.id);
   }
 
-  const currentSlice = getSessionMessagesSlice(currentOwner, 0);
+  const currentSlice = getSessionMessages(currentOwner);
   const bridgedSessionRows: AgentChatMessage[] = [];
   for (let index = currentSlice.length - 1; index >= 0; index -= 1) {
     const candidate = currentSlice[index];

@@ -214,6 +214,10 @@ export const getSessionMessageAt = (
   return getMessageData(owner)[index];
 };
 
+export const getSessionMessages = (owner: SessionMessageOwner): readonly AgentChatMessage[] => {
+  return getMessageData(owner);
+};
+
 export const getSessionMessagesSlice = (
   owner: SessionMessageOwner,
   start: number,
