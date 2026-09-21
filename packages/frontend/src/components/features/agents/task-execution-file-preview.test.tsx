@@ -376,6 +376,22 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(screen.getByLabelText("Selected file preview").getAttribute("aria-busy")).toBe("false");
   });
 
+  test("clears the busy state when the next file fails to load", async () => {
+    const onClose = mock(() => {});
+    const view = render(renderPreview({ selectedFile: firstFile, onClose }));
+
+    await screen.findByText("const first = true;");
+    readTextFileMock.mockImplementationOnce(async () => {
+      throw new Error("Second file failed.");
+    });
+    view.rerender(
+      renderPreview({ selectedFile: secondFile, preservePreviousSnapshot: true, onClose }),
+    );
+
+    await screen.findByText("Second file failed.");
+    expect(screen.getByLabelText("Selected file preview").getAttribute("aria-busy")).toBe("false");
+  });
+
   test("does not reuse a closed preview snapshot when reopening another file", async () => {
     const onClose = mock(() => {});
     const view = render(renderPreview({ selectedFile: firstFile, onClose, previewSessionKey: 0 }));

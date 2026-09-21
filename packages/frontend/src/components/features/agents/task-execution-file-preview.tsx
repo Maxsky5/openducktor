@@ -458,7 +458,7 @@ function resolveFilePreviewPresentation({
     visibleSnapshot !== null &&
     (visibleSnapshot.selectedFile.rootPath !== selectedFile.rootPath ||
       visibleSnapshot.selectedFile.relativePath !== selectedFile.relativePath) &&
-    (isFileFetching || !isCurrentSnapshotReady);
+    (isFileFetching || (!isFileError && !isCurrentSnapshotReady));
   const codeViewFileId = visibleSnapshot?.codeViewFile?.id ?? null;
   const hasActiveEditorSession =
     codeViewFileId !== null &&
