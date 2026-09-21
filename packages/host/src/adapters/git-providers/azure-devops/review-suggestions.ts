@@ -21,7 +21,6 @@ import {
 
 type SuggestionPosition = {
   line: number;
-  offset: number | null;
 };
 
 type AzureReviewCommentContentInput = {
@@ -55,44 +54,6 @@ const replacementLines = (replacement: string): string[] => {
   return normalized.length === 0 ? [] : normalized.split("\n");
 };
 
-const applySuggestion = (
-  currentLines: string[],
-  replacement: string,
-  startOffset: number | null,
-  endOffset: number | null,
-): string[] | null => {
-  const nextLines = replacementLines(replacement);
-  if (startOffset === null && endOffset === null) {
-    return nextLines;
-  }
-  if (startOffset === null || endOffset === null || startOffset < 1 || endOffset < 1) {
-    return null;
-  }
-  const firstLine = currentLines.at(0);
-  const lastLine = currentLines.at(-1);
-  if (
-    !firstLine ||
-    !lastLine ||
-    startOffset > firstLine.length + 1 ||
-    endOffset > lastLine.length
-  ) {
-    return null;
-  }
-  const prefix = firstLine.slice(0, startOffset - 1);
-  const suffix = lastLine.slice(endOffset);
-  if (nextLines.length === 0) {
-    return [`${prefix}${suffix}`];
-  }
-  if (nextLines.length === 1) {
-    return [`${prefix}${nextLines[0]}${suffix}`];
-  }
-  return [
-    `${prefix}${nextLines[0]}`,
-    ...nextLines.slice(1, -1),
-    `${nextLines.at(-1) ?? ""}${suffix}`,
-  ];
-};
-
 const buildSuggestionPatch = (
   fileContent: string,
   start: SuggestionPosition,
@@ -108,10 +69,7 @@ const buildSuggestionPatch = (
   if (currentLines.length !== expectedLineCount) {
     return null;
   }
-  const nextLines = applySuggestion(currentLines, replacement, start.offset, end.offset);
-  if (!nextLines) {
-    return null;
-  }
+  const nextLines = replacementLines(replacement);
   return [
     `@@ -${start.line},${currentLines.length} +${start.line},${nextLines.length} @@`,
     ...currentLines.map((line) => `-${line}`),
@@ -249,8 +207,7 @@ const suggestionPosition = (value: AzureDevOpsJsonRecord): SuggestionPosition | 
   if (line === undefined) {
     return null;
   }
-  const offset = azureDevOpsPositiveIntegerSchema.safeParse(value.offset).data ?? null;
-  return { line, offset };
+  return { line };
 };
 
 const asValidationError = (cause: unknown): HostValidationErrorAggregate =>

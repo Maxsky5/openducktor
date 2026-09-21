@@ -232,7 +232,9 @@ describe("Azure DevOps review adapter", () => {
   });
 
   test("maps Azure code suggestions to the shared suggestion patch model", async () => {
-    const originalLine = '    "serverError": "Erreur du serveur Google.",';
+    const originalLine =
+      '      "serverError": "Erreur du serveur de connexion. Veuillez réessayer.",';
+    const suggestedLine = '      "serverError": "Erreur de connexion. Veuillez réessayer.",';
     const client: AzureDevOpsRestClient = {
       request: (_config, _repository, request) => {
         if (request.operation === "resolve repository for review") {
@@ -266,13 +268,12 @@ describe("Azure DevOps review adapter", () => {
                 threadContext: {
                   filePath: "/src/locales/fr.json",
                   rightFileStart: { line: 211, offset: 1 },
-                  rightFileEnd: { line: 211, offset: originalLine.length },
+                  rightFileEnd: { line: 211, offset: originalLine.length + 1 },
                 },
                 comments: [
                   {
                     id: 13,
-                    content:
-                      'Use that label instead:\n\n```suggestion\n    "serverError": "Erreur du serveur de connexion.",\n```',
+                    content: `Use that **label** instead:\n\n\`\`\`suggestion\n${suggestedLine}\n\`\`\`\n`,
                     author: { displayName: "Maxime" },
                   },
                 ],
@@ -291,13 +292,9 @@ describe("Azure DevOps review adapter", () => {
     expect(context.comments).toContainEqual(
       expect.objectContaining({
         id: "12:13",
-        body: "Use that label instead:",
+        body: "Use that **label** instead:",
         suggestionPatches: [
-          [
-            "@@ -211,1 +211,1 @@",
-            `-${originalLine}`,
-            '+    "serverError": "Erreur du serveur de connexion.",',
-          ].join("\n"),
+          ["@@ -211,1 +211,1 @@", `-${originalLine}`, `+${suggestedLine}`].join("\n"),
         ],
         suggestionWarning: null,
       }),
