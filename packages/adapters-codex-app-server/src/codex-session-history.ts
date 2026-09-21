@@ -16,7 +16,6 @@ import { type CodexThreadItemInput } from "./codex-event-mapper";
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import {
   type CodexForkBoundary,
-  CODEX_FORK_BOUNDARY_MESSAGE_ID_PREFIX,
   codexForkBoundaryHistoryMessage,
   codexForkedFromThreadId,
   codexForkHistoryIsChildOwned,
@@ -43,34 +42,6 @@ type CodexSessionHistoryInput = CodexThreadReadGuard & {
   threadInventory: Pick<CodexThreadInventoryReader, "readThreadHistory" | "readThreadTurnIds">;
 };
 
-const CODEX_SYSTEM_PROMPT_MESSAGE_ID_PREFIX = "codex-system-prompt:";
-
-/**
- * Synthetic rows that carry session context, not transcript turns. Keep them
- * when the message limit cuts the head of a long history.
- */
-const isCodexHistoryContextMessage = (message: AgentSessionHistoryMessage): boolean =>
-  message.messageId.startsWith(CODEX_SYSTEM_PROMPT_MESSAGE_ID_PREFIX) ||
-  message.messageId.startsWith(CODEX_FORK_BOUNDARY_MESSAGE_ID_PREFIX);
-
-export const finalizeCodexSessionHistory = (
-  input: LoadAgentSessionHistoryInput,
-  history: AgentSessionHistoryMessage[],
-): AgentSessionHistoryMessage[] => {
-  const limit = input.limit;
-  if (limit === undefined || limit <= 0 || history.length <= limit) {
-    return history;
-  }
-
-  const limitedHistory = history.slice(-limit);
-  const droppedContextMessages = history
-    .slice(0, history.length - limit)
-    .filter(isCodexHistoryContextMessage);
-  return droppedContextMessages.length === 0
-    ? limitedHistory
-    : [...droppedContextMessages, ...limitedHistory];
-};
-
 const codexSystemPromptHistoryMessage = ({
   threadId,
   startedAt,
@@ -86,7 +57,7 @@ const codexSystemPromptHistoryMessage = ({
   }
 
   return {
-    messageId: `${CODEX_SYSTEM_PROMPT_MESSAGE_ID_PREFIX}${threadId}`,
+    messageId: `codex-system-prompt:${threadId}`,
     role: "system",
     timestamp: startedAt,
     text: `${AGENT_SESSION_SYSTEM_PROMPT_PREFIX}${trimmedSystemPrompt}`,
@@ -295,16 +266,13 @@ export const loadCodexSessionHistory = async ({
       }),
     );
   }
-  return finalizeCodexSessionHistory(
+  return projectCodexThreadReadToHistory({
     input,
-    projectCodexThreadReadToHistory({
-      input,
-      session,
-      response,
-      eventMapperPipeline: createCodexEventMapperPipeline(),
-      runtimeId,
-      forkBoundary,
-      preparedImages,
-    }),
-  );
+    session,
+    response,
+    eventMapperPipeline: createCodexEventMapperPipeline(),
+    runtimeId,
+    forkBoundary,
+    preparedImages,
+  });
 };

@@ -2,7 +2,6 @@ import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import type { CodexThreadHistoryReadResponse } from "./types";
 
 const CODEX_FORK_BOUNDARY_TITLE = "Session forked here";
-export const CODEX_FORK_BOUNDARY_MESSAGE_ID_PREFIX = "codex-fork-boundary:";
 
 export type CodexForkBoundary = {
   childThreadId: string;
@@ -102,7 +101,7 @@ export const resolveCodexForkBoundary = (
 export const codexForkBoundaryHistoryMessage = (
   boundary: CodexForkBoundary,
 ): AgentSessionHistoryMessage => ({
-  messageId: `${CODEX_FORK_BOUNDARY_MESSAGE_ID_PREFIX}${boundary.childThreadId}`,
+  messageId: `codex-fork-boundary:${boundary.childThreadId}`,
   role: "system",
   timestamp: boundary.timestamp,
   text: CODEX_FORK_BOUNDARY_TITLE,
