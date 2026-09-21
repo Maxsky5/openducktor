@@ -54,7 +54,6 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   hasLiveSession: true,
   pendingApprovalRequests: [],
   pendingQuestionRequests: [],
-  historyQuestionRequests: [],
   isRuntimeReady: true,
   replyAgentApproval: async () => {},
   answerAgentQuestion: async () => {},
@@ -179,7 +178,7 @@ describe("useRuntimeTranscriptInteractions", () => {
     }
   });
 
-  test("answers a history background question through the standard action", async () => {
+  test("answers a background question through the standard action", async () => {
     const answerAgentQuestion = mock(async () => {});
     const target = createTarget({ runtimeKind: "codex" });
     const question = {
@@ -189,7 +188,7 @@ describe("useRuntimeTranscriptInteractions", () => {
     const harness = createHookHarness(
       createBaseArgs({
         target,
-        historyQuestionRequests: [question],
+        pendingQuestionRequests: [question],
         answerAgentQuestion,
         sessionScope: { kind: "repository" },
       }),
@@ -216,13 +215,13 @@ describe("useRuntimeTranscriptInteractions", () => {
     }
   });
 
-  test("keeps a history-only question visible but disables its answer action", async () => {
+  test("disables question answers without a live session", async () => {
     const answerAgentQuestion = mock(async () => {});
     const question = { ...createQuestionRequest("history-question"), blocking: false };
     const harness = createHookHarness(
       createBaseArgs({
         hasLiveSession: false,
-        historyQuestionRequests: [question],
+        pendingQuestionRequests: [question],
         answerAgentQuestion,
       }),
     );
@@ -235,30 +234,6 @@ describe("useRuntimeTranscriptInteractions", () => {
         await state.pendingQuestions.onSubmit("history-question", [["A"]]);
       });
       expect(answerAgentQuestion).not.toHaveBeenCalled();
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("uses the live request when history has the same request id", async () => {
-    const historyQuestion = createQuestionRequest("shared-question");
-    const liveQuestion = {
-      ...historyQuestion,
-      responseSession: {
-        ...createTarget({ externalSessionId: "child-session" }),
-        sessionAssociation: { kind: "repository" as const },
-      },
-    };
-    const harness = createHookHarness(
-      createBaseArgs({
-        pendingQuestionRequests: [liveQuestion],
-        historyQuestionRequests: [historyQuestion],
-      }),
-    );
-
-    try {
-      await harness.mount();
-      expect(harness.getLatest().pendingQuestionRequests).toEqual([liveQuestion]);
     } finally {
       await harness.unmount();
     }

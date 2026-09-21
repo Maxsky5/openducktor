@@ -60,7 +60,6 @@ export function useSessionTranscriptSurfaceModel({
     hasLiveSession: sessionHistory.interactionSession !== null,
     pendingApprovalRequests: visiblePendingInput.pendingApprovals,
     pendingQuestionRequests: visiblePendingInput.pendingQuestions,
-    historyQuestionRequests: sessionHistory.session?.pendingQuestions ?? [],
     isRuntimeReady: runtimeReadiness.state === "ready",
     replyAgentApproval: sessionHistory.replyAgentApproval,
     answerAgentQuestion: sessionHistory.answerAgentQuestion,

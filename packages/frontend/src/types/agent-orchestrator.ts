@@ -211,7 +211,6 @@ export type AgentSessionState = {
   contextUsageError?: string | null;
   pendingApprovals: AgentApprovalRequest[];
   pendingQuestions: AgentQuestionRequest[];
-  handledBackgroundQuestionIds?: ReadonlySet<string>;
   selectedModel: AgentModelSelection | null;
   runtimeAvailability?: AgentSessionRuntimeAvailability;
   pendingUserMessageStartedAt?: number | undefined;

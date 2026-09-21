@@ -305,7 +305,6 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
 
     const current = getSession(sessionsRef);
     expect(current.pendingQuestions).toEqual([]);
-    expect(current.handledBackgroundQuestionIds).toEqual(new Set([request.requestId]));
   });
 
   test("closes a grandchild background question in each ancestor after reply", async () => {

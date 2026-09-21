@@ -1048,8 +1048,8 @@ describe("session history loader", () => {
 
     harness.updateSession(sessionTarget, (current) => ({
       ...current,
+      livePresence: "present",
       pendingQuestions: [liveQuestion],
-      handledBackgroundQuestionIds: new Set([historyQuestion.requestId]),
     }));
 
     historyPromise.resolve([
@@ -1065,7 +1065,6 @@ describe("session history loader", () => {
     await loadPromise;
 
     expect(harness.session.pendingQuestions).toEqual([liveQuestion]);
-    expect(harness.session.handledBackgroundQuestionIds).toContain(historyQuestion.requestId);
   });
 
   test("keeps a local accepted user send when baseline history confirms it", async () => {

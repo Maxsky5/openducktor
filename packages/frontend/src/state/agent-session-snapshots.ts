@@ -31,12 +31,6 @@ export type RepositoryAgentSessionSummary = Omit<AgentSessionSummary, "taskId" |
 const sortByStartedAtDesc = (left: AgentSessionState, right: AgentSessionState): number =>
   left.startedAt > right.startedAt ? -1 : left.startedAt < right.startedAt ? 1 : 0;
 
-const getSummaryActivityState = (session: AgentSessionState): AgentSessionActivityState =>
-  getAgentSessionActivityStateFromSession(session);
-
-const getPendingQuestionCount = (session: AgentSessionState): number =>
-  session.pendingQuestions.length;
-
 export function toAgentSessionSummary(session: WorkflowAgentSessionState): AgentSessionSummary;
 export function toAgentSessionSummary(session: AgentSessionState): AgentSessionSummary;
 export function toAgentSessionSummary(session: AgentSessionState): AgentSessionSummary {
@@ -50,11 +44,11 @@ export function toAgentSessionSummary(session: AgentSessionState): AgentSessionS
     ...toAgentSessionIdentity(session),
     taskId: session.sessionAssociation.taskId,
     role: session.sessionAssociation.role,
-    activityState: getSummaryActivityState(session),
+    activityState: getAgentSessionActivityStateFromSession(session),
     startedAt: session.startedAt,
     selectedModel: session.selectedModel,
     pendingApprovalCount: session.pendingApprovals.length,
-    pendingQuestionCount: getPendingQuestionCount(session),
+    pendingQuestionCount: session.pendingQuestions.length,
   };
   if (session.title) {
     summary.title = session.title;
@@ -118,9 +112,9 @@ const repositoryActivitySummaries = (
       ...toAgentSessionIdentity(session),
       startedAt: session.startedAt,
       selectedModel: session.selectedModel,
-      activityState: getSummaryActivityState(session),
+      activityState: getAgentSessionActivityStateFromSession(session),
       pendingApprovalCount: session.pendingApprovals.length,
-      pendingQuestionCount: getPendingQuestionCount(session),
+      pendingQuestionCount: session.pendingQuestions.length,
     };
     if (session.title) summary.title = session.title;
     const prior = previousByIdentity.get(agentSessionIdentityKey(session));

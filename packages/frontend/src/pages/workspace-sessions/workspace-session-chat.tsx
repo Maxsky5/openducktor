@@ -222,10 +222,9 @@ export function WorkspaceSessionChat({
     canReplyToApprovals: canInteract,
     replyAgentApproval: operations.replyAgentApproval,
   });
-  const questionRequests = pendingQuestions;
   const questionActions = useAgentSessionQuestionActions({
     sessionIdentity: identity,
-    pendingQuestions: questionRequests,
+    pendingQuestions,
     canAnswerQuestions: canInteract,
     answerAgentQuestion: operations.answerAgentQuestion,
     sessionScope: { kind: "repository" },
@@ -266,7 +265,7 @@ export function WorkspaceSessionChat({
     runtimePresentation,
     emptyState: null,
     pendingApprovalRequests: pendingApprovals,
-    pendingQuestionRequests: questionRequests,
+    pendingQuestionRequests: pendingQuestions,
     todos: runtimeData.todos,
     sessionAgentColors: picker.agentAccentColorsByProfileId,
     approvals: {

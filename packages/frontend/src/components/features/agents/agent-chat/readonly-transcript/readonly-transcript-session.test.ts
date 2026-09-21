@@ -171,7 +171,7 @@ describe("createReadonlyTranscriptSession", () => {
     });
   });
 
-  test("projects a background question when history adds no chat row", () => {
+  test("projects a background question for a history-only session", () => {
     const question = {
       requestId: "question-1",
       blocking: false,
@@ -186,32 +186,27 @@ describe("createReadonlyTranscriptSession", () => {
         },
       ],
     };
-    const session = createAgentSessionFixture({
+    const session = createReadonlyTranscriptSession({
       externalSessionId: "session-1",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      sessionAssociation: { kind: "unbound" },
-      historyLoadState: "loaded",
-      messages: createSessionMessagesState("session-1"),
+      history: [
+        {
+          messageId: "question-1",
+          role: "assistant",
+          timestamp: "2026-09-19T10:00:00.000Z",
+          text: "Which environment?",
+          parts: [],
+          questionRequest: question,
+        },
+      ],
     });
 
-    const merged = mergeReadonlyRuntimeHistory(session, [
-      {
-        messageId: "question-1",
-        role: "assistant",
-        timestamp: "2026-09-19T10:00:00.000Z",
-        text: "Which environment?",
-        parts: [],
-        questionRequest: question,
-      },
-    ]);
-
-    expect(merged).not.toBe(session);
-    expect(merged.messages.items).toEqual([]);
-    expect(merged.pendingQuestions).toEqual([question]);
+    expect(session.messages.items).toEqual([]);
+    expect(session.pendingQuestions).toEqual([question]);
   });
 
-  test("does not reopen a handled question from stale read-only history", () => {
+  test("keeps live question state when read-only history is stale", () => {
     const question = {
       requestId: "question-stale",
       blocking: false,
@@ -231,9 +226,9 @@ describe("createReadonlyTranscriptSession", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       sessionAssociation: { kind: "unbound" },
+      livePresence: "present",
       historyLoadState: "loaded",
       messages: createSessionMessagesState("session-1"),
-      handledBackgroundQuestionIds: new Set([question.requestId]),
     });
 
     const merged = mergeReadonlyRuntimeHistory(session, [
@@ -248,7 +243,6 @@ describe("createReadonlyTranscriptSession", () => {
     ]);
 
     expect(merged.pendingQuestions).toEqual([]);
-    expect(merged.handledBackgroundQuestionIds).toEqual(new Set([question.requestId]));
   });
 
   test("preserves a background question that arrives while history loads", () => {

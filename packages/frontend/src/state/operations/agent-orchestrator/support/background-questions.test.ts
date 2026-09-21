@@ -1,10 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
-import {
-  closeBackgroundQuestions,
-  mergeBackgroundQuestionHistory,
-  projectBackgroundQuestions,
-} from "./background-questions";
+import { closeBackgroundQuestions, projectBackgroundQuestions } from "./background-questions";
 
 const question = (requestId: string) => ({
   requestId,
@@ -54,37 +50,7 @@ describe("background question projection", () => {
       },
     ];
 
-    expect(projectBackgroundQuestions(history)).toEqual({
-      pendingQuestions: [second],
-      handledQuestionIds: new Set([first.requestId]),
-    });
-  });
-
-  test("does not reopen a handled question when history is stale", () => {
-    const stale = question("question-1");
-    const current = question("question-2");
-
-    expect(
-      mergeBackgroundQuestionHistory(
-        [
-          {
-            role: "assistant",
-            messageId: "question-1",
-            timestamp: "2026-09-19T10:00:00.000Z",
-            text: "Question one",
-            parts: [],
-            questionRequest: stale,
-          },
-        ],
-        {
-          pendingQuestions: [current],
-          handledBackgroundQuestionIds: new Set([stale.requestId]),
-        },
-      ),
-    ).toEqual({
-      pendingQuestions: [current],
-      handledBackgroundQuestionIds: new Set([stale.requestId]),
-    });
+    expect(projectBackgroundQuestions(history)).toEqual([second]);
   });
 
   test("treats a user message without a marker as handling earlier questions", () => {
@@ -109,10 +75,7 @@ describe("background question projection", () => {
       },
     ];
 
-    expect(projectBackgroundQuestions(history)).toEqual({
-      pendingQuestions: [],
-      handledQuestionIds: new Set([pending.requestId]),
-    });
+    expect(projectBackgroundQuestions(history)).toEqual([]);
   });
 
   test("closes answered questions and keeps blocking questions", () => {
@@ -120,13 +83,11 @@ describe("background question projection", () => {
     const blocking = { ...question("question-2"), blocking: true };
 
     expect(
-      closeBackgroundQuestions(
-        { pendingQuestions: [background, blocking], handledBackgroundQuestionIds: new Set() },
-        [background.requestId],
-      ),
+      closeBackgroundQuestions({ pendingQuestions: [background, blocking] }, [
+        background.requestId,
+      ]),
     ).toEqual({
       pendingQuestions: [blocking],
-      handledBackgroundQuestionIds: new Set([background.requestId]),
     });
   });
 });

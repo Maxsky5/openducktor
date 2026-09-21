@@ -693,7 +693,6 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
 
       expect(inputs[0]).toMatchObject({ resolvedQuestionRequestIds: [requestId] });
       expect(getSession(sessionsRef)?.pendingQuestions).toEqual([childRequest]);
-      expect(getSession(sessionsRef)?.handledBackgroundQuestionIds).toEqual(new Set([requestId]));
     } finally {
       adapter.sendUserMessage = originalSendUserMessage;
     }
@@ -783,7 +782,6 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
         expect(input.resolvedQuestionRequestIds).toEqual(capturedIds);
         expect(emittedEvents[0]?.resolvedQuestionRequestIds).toEqual(capturedIds);
         expect(getSession(sessionsRef)?.pendingQuestions).toEqual([duringSend]);
-        expect(getSession(sessionsRef)?.handledBackgroundQuestionIds).toEqual(new Set(capturedIds));
       } finally {
         unsubscribe();
       }

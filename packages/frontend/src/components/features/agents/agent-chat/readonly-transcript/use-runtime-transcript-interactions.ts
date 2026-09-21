@@ -1,6 +1,5 @@
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import type { AgentSessionScope } from "@openducktor/core";
-import { useMemo } from "react";
 import {
   hasAgentSessionPendingApprovals,
   hasAgentSessionPendingQuestions,
@@ -19,7 +18,6 @@ type UseRuntimeTranscriptInteractionsArgs = {
   hasLiveSession: boolean;
   pendingApprovalRequests: readonly AgentApprovalRequest[];
   pendingQuestionRequests: readonly AgentQuestionRequest[];
-  historyQuestionRequests: readonly AgentQuestionRequest[];
   isRuntimeReady: boolean;
   replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"];
   answerAgentQuestion: AgentOperationsContextValue["answerAgentQuestion"];
@@ -47,7 +45,6 @@ export function useRuntimeTranscriptInteractions({
   hasLiveSession,
   pendingApprovalRequests,
   pendingQuestionRequests,
-  historyQuestionRequests,
   isRuntimeReady,
   replyAgentApproval,
   answerAgentQuestion,
@@ -62,21 +59,10 @@ export function useRuntimeTranscriptInteractions({
       replyAgentApproval,
     });
 
-  const questionRequests = useMemo(
-    () => [
-      ...new Map(
-        [...historyQuestionRequests, ...pendingQuestionRequests].map((request) => [
-          request.requestId,
-          request,
-        ]),
-      ).values(),
-    ],
-    [historyQuestionRequests, pendingQuestionRequests],
-  );
   const { isSubmittingQuestionByRequestId, onSubmitQuestionAnswers } =
     useAgentSessionQuestionActions({
       sessionIdentity: target,
-      pendingQuestions: questionRequests,
+      pendingQuestions: pendingQuestionRequests,
       canAnswerQuestions: isRuntimeReady && hasLiveSession,
       answerAgentQuestion,
       sessionScope,
@@ -84,12 +70,12 @@ export function useRuntimeTranscriptInteractions({
 
   return {
     pendingApprovalRequests,
-    pendingQuestionRequests: questionRequests,
+    pendingQuestionRequests,
     pendingQuestions: {
       canSubmit:
         canReplyToRuntimeRequest &&
         hasLiveSession &&
-        hasAgentSessionPendingQuestions({ pendingQuestions: questionRequests }),
+        hasAgentSessionPendingQuestions({ pendingQuestions: pendingQuestionRequests }),
       isSubmittingByRequestId: isSubmittingQuestionByRequestId,
       onSubmit: onSubmitQuestionAnswers,
     },

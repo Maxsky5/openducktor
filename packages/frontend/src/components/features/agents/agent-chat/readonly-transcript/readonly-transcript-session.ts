@@ -5,15 +5,8 @@ import { mergeHistoryMessages } from "@/state/operations/agent-orchestrator/supp
 import { haveSameMessageTimestamp } from "@/state/operations/agent-orchestrator/support/message-timestamp";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { historyToChatMessages } from "@/state/operations/agent-orchestrator/support/session-history-chat-messages";
-import {
-  mergeBackgroundQuestionHistory,
-  projectBackgroundQuestions,
-} from "@/state/operations/agent-orchestrator/support/background-questions";
-import type {
-  AgentChatMessage,
-  AgentQuestionRequest,
-  AgentSessionState,
-} from "@/types/agent-orchestrator";
+import { projectBackgroundQuestions } from "@/state/operations/agent-orchestrator/support/background-questions";
+import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentChatTranscriptSession } from "../agent-chat.types";
 import type { AgentSessionTranscriptTarget } from "../agent-session-transcript-target";
 
@@ -52,12 +45,11 @@ export const createReadonlyTranscriptSession = ({
   workingDirectory,
   history,
 }: ReadonlyTranscriptSessionInput): AgentChatTranscriptSession => {
-  const backgroundQuestions = projectBackgroundQuestions(history);
   return {
     ...toAgentSessionIdentity({ externalSessionId, runtimeKind, workingDirectory }),
     activityState: null,
     runtimeStatusMessage: null,
-    pendingQuestions: [...backgroundQuestions.pendingQuestions],
+    pendingQuestions: projectBackgroundQuestions(history),
     messages: createSessionMessagesState(
       externalSessionId,
       historyToChatMessages(history, {
@@ -88,33 +80,11 @@ const areMessageListsEquivalent = (
   });
 };
 
-const areQuestionsEquivalent = (
-  left: readonly AgentQuestionRequest[],
-  right: readonly AgentQuestionRequest[],
-): boolean => {
-  if (left.length !== right.length) {
-    return false;
-  }
-  return left.every((question, index) => {
-    const nextQuestion = right[index];
-    return (
-      nextQuestion !== undefined &&
-      question.requestId === nextQuestion.requestId &&
-      question.blocking === nextQuestion.blocking &&
-      JSON.stringify(question.questions) === JSON.stringify(nextQuestion.questions)
-    );
-  });
-};
-
-const areStringSetsEquivalent = (left: ReadonlySet<string>, right: ReadonlySet<string>): boolean =>
-  left.size === right.size && [...left].every((value) => right.has(value));
-
 export const mergeReadonlyRuntimeHistory = (
   session: AgentSessionState,
   history: AgentSessionHistoryMessage[],
 ): AgentSessionState => {
   const historyMessages = historyToChatMessages(history, { role: null });
-  const questionState = mergeBackgroundQuestionHistory(history, session);
   const mergedMessageState = settleImageGenerationMessages({
     ...session,
     messages: mergeHistoryMessages(
@@ -127,12 +97,7 @@ export const mergeReadonlyRuntimeHistory = (
 
   if (
     session.historyLoadState === "loaded" &&
-    areMessageListsEquivalent(session.messages.items, mergedMessages) &&
-    areQuestionsEquivalent(session.pendingQuestions, questionState.pendingQuestions) &&
-    areStringSetsEquivalent(
-      session.handledBackgroundQuestionIds ?? new Set(),
-      questionState.handledBackgroundQuestionIds ?? new Set(),
-    )
+    areMessageListsEquivalent(session.messages.items, mergedMessages)
   ) {
     return session;
   }
@@ -142,6 +107,5 @@ export const mergeReadonlyRuntimeHistory = (
     startedAt: history[0]?.timestamp ?? session.startedAt,
     historyLoadState: "loaded",
     messages: mergedMessageState,
-    ...questionState,
   };
 };

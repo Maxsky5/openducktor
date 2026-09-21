@@ -305,30 +305,7 @@ const applyDirectSnapshot = (
       : toContextUsage(snapshot.contextUsage);
   const activity = projectSessionSnapshotActivity(current, snapshot);
   const directApprovals = snapshot.pendingApprovals.map((request) => toApprovalRequest(request));
-  const handledBackgroundQuestionIds = current.handledBackgroundQuestionIds ?? new Set<string>();
-  const snapshotQuestions = snapshot.pendingQuestions
-    .filter(
-      (request) =>
-        request.blocking !== false || !handledBackgroundQuestionIds.has(request.requestId),
-    )
-    .map((request) => toQuestionRequest(request));
-  const backgroundQuestions = new Map(
-    current.pendingQuestions
-      .filter(
-        (request) =>
-          request.source === undefined &&
-          request.blocking === false &&
-          !handledBackgroundQuestionIds.has(request.requestId),
-      )
-      .map((request) => [request.requestId, request]),
-  );
-  for (const request of snapshotQuestions) {
-    if (request.blocking === false) backgroundQuestions.set(request.requestId, request);
-  }
-  const directQuestions = [
-    ...snapshotQuestions.filter((request) => request.blocking !== false),
-    ...backgroundQuestions.values(),
-  ];
+  const directQuestions = snapshot.pendingQuestions.map((request) => toQuestionRequest(request));
   const childApprovals = current.pendingApprovals.filter((request) => request.source !== undefined);
   const childQuestions = current.pendingQuestions.filter((request) => request.source !== undefined);
 
@@ -342,7 +319,6 @@ const applyDirectSnapshot = (
     liveParentExternalSessionId: snapshot.parentExternalSessionId,
     pendingApprovals: [...directApprovals, ...childApprovals],
     pendingQuestions: [...directQuestions, ...childQuestions],
-    handledBackgroundQuestionIds,
     contextUsage,
   };
 };
@@ -363,7 +339,6 @@ const createObservedSession = (snapshot: AgentSessionLiveSnapshot): AgentSession
       contextUsage: null,
       pendingApprovals: [],
       pendingQuestions: [],
-      handledBackgroundQuestionIds: new Set(),
       selectedModel: null,
     },
     snapshot,
@@ -491,12 +466,7 @@ const resetSessionLiveStateForSnapshot = (
   runtimeStatusMessage: null,
   livePresence: hasLiveSnapshot ? "present" : "absent",
   pendingApprovals: [],
-  pendingQuestions: session.pendingQuestions.filter(
-    (request) =>
-      request.source === undefined &&
-      request.blocking === false &&
-      !session.handledBackgroundQuestionIds?.has(request.requestId),
-  ),
+  pendingQuestions: [],
   contextUsage: null,
 });
 

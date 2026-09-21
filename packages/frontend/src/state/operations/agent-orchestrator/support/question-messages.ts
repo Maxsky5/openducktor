@@ -16,14 +16,7 @@ const toAnsweredQuestionData = ({
   custom,
   answers,
 }: AnsweredQuestion): AgentToolData => {
-  const data: AgentToolData = {
-    header,
-    question,
-    options: options.map(({ label, description }) =>
-      description === undefined ? { label } : { label, description },
-    ),
-    answers,
-  };
+  const data: AgentToolData = { header, question, options, answers };
   if (multiple !== undefined) data.multiple = multiple;
   if (custom !== undefined) data.custom = custom;
   return data;
