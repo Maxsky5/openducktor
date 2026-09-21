@@ -101,6 +101,36 @@ describe("createWorkspaceTextFileService", () => {
     expect(requestedPaths).toEqual(["selected.txt"]);
   });
 
+  test("uses filesystem semantics when the canonical path case differs", async () => {
+    const rootPath = await createRoot();
+    const directoryPath = path.join(rootPath, "src");
+    const requestedPath = path.join(directoryPath, "File.ts");
+    const canonicalPath = path.join(directoryPath, "file.ts");
+    await mkdir(directoryPath);
+    await writeFile(canonicalPath, "content");
+    const requestedPaths: Array<string | undefined> = [];
+    const filesystem = createFilesystemAdapter();
+    const service = createWorkspaceTextFileService(
+      {
+        ...filesystem,
+        canonicalize: (inputPath) =>
+          inputPath === requestedPath
+            ? Effect.succeed(canonicalPath)
+            : filesystem.canonicalize(inputPath),
+        relative: (from, to) =>
+          from.toLowerCase() === to.toLowerCase() ? "" : filesystem.relative(from, to),
+      },
+      createGitPort(["src/File.ts"], requestedPaths),
+    );
+
+    const loaded = await Effect.runPromise(
+      service.readTextFile({ rootPath, relativePath: "src/File.ts" }),
+    );
+
+    expect(loaded).toMatchObject({ kind: "text", contents: "content" });
+    expect(requestedPaths).toEqual(["src/File.ts"]);
+  });
+
   test("checks the selected path and its contained symlink target", async () => {
     const rootPath = await createRoot();
     await writeFile(path.join(rootPath, "target.txt"), "target");

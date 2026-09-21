@@ -700,6 +700,31 @@ describe("createWorkspaceFilesService", () => {
     });
   });
 
+  test("emits a materialized file instead of its deleted descendants", async () => {
+    const service = createWorkspaceFilesService(
+      createFakeFilesystem({ stats: { "/repo": { isDirectory: true } } }),
+      createFakeGitPort({
+        files: ["foo", "foo/bar.ts"],
+        statuses: [
+          { path: "foo", status: "untracked", staged: false },
+          { path: "foo/bar.ts", status: "deleted", staged: false },
+        ],
+      }),
+    );
+
+    const tree = await Effect.runPromise(service.listTree({ rootPath: "/repo" }));
+
+    expect(tree.entries).toEqual([
+      {
+        path: "foo",
+        kind: "file",
+        size: null,
+        mtimeMs: null,
+        gitStatus: "untracked",
+      },
+    ]);
+  });
+
   test("emits a file when a tracked Git link becomes a regular file", async () => {
     const service = createWorkspaceFilesService(
       createFakeFilesystem({ stats: { "/repo": { isDirectory: true } } }),

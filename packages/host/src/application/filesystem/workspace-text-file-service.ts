@@ -193,7 +193,8 @@ const resolveAvailableWorkspaceFile = (
       canonicalRoot,
       canonicalPath,
     );
-    if (canonicalRelativePath === relativePath) {
+    const requestedPath = filesystem.join(canonicalRoot, relativePath);
+    if (filesystem.relative(requestedPath, canonicalPath) === "") {
       return canonicalPath;
     }
     const targetPaths = yield* loadWorkspaceFilePaths(

@@ -142,6 +142,19 @@ const directoryPathsForFiles = (filePaths: readonly string[]): string[] => {
   return [...directories].sort(compareWorkspacePaths);
 };
 
+const hasPathAncestor = (filePath: string, ancestors: ReadonlySet<string>): boolean => {
+  for (
+    let separator = filePath.indexOf("/");
+    separator !== -1;
+    separator = filePath.indexOf("/", separator + 1)
+  ) {
+    if (ancestors.has(filePath.slice(0, separator))) {
+      return true;
+    }
+  }
+  return false;
+};
+
 export const createWorkspaceFilesService = (
   filesystem: FilesystemPort,
   gitPort: Pick<
@@ -196,6 +209,7 @@ export const createWorkspaceFilesService = (
         const filePathSet = new Set(materializedFilePaths);
         const gitStatusByPath = new Map<string, WorkspaceFileGitStatus | null>();
         const unstagedTypechangePaths = new Set<string>();
+        const unstagedDeletedPaths = new Set<string>();
         for (const change of targetChanges) {
           const workspaceChange = projectGitChangeToWorkspace(
             filesystem,
@@ -229,6 +243,9 @@ export const createWorkspaceFilesService = (
           if (status.status === "typechange" && !status.staged) {
             unstagedTypechangePaths.add(workspaceChange.path);
           }
+          if (status.status === "deleted" && !status.staged) {
+            unstagedDeletedPaths.add(workspaceChange.path);
+          }
           const normalizedStatus = yield* normalizeGitStatus(workspaceChange.status);
           filePathSet.add(workspaceChange.path);
           gitStatusByPath.set(
@@ -237,7 +254,16 @@ export const createWorkspaceFilesService = (
           );
         }
         const filePaths = [...filePathSet].sort(compareWorkspacePaths);
-        const directoryPaths = directoryPathsForFiles(filePaths);
+        const materializedRegularFilePaths = new Set<string>();
+        for (const [filePath, kind] of listedKindByPath) {
+          if (kind === "file" && !unstagedDeletedPaths.has(filePath)) {
+            materializedRegularFilePaths.add(filePath);
+          }
+        }
+        const visibleFilePaths = filePaths.filter(
+          (filePath) => !hasPathAncestor(filePath, materializedRegularFilePaths),
+        );
+        const directoryPaths = directoryPathsForFiles(visibleFilePaths);
         const directoryEntries = new Map<string, WorkspaceFileTreeEntry>(
           directoryPaths.map((directoryPath) => [
             directoryPath,
@@ -251,7 +277,7 @@ export const createWorkspaceFilesService = (
           ]),
         );
         const fileEntries: WorkspaceFileTreeEntry[] = [];
-        for (const filePath of filePaths) {
+        for (const filePath of visibleFilePaths) {
           const gitStatus = gitStatusByPath.get(filePath) ?? null;
           if (directoryEntries.has(filePath)) {
             directoryEntries.set(filePath, {
