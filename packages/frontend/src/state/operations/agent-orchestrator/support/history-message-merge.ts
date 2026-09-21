@@ -46,6 +46,49 @@ const sameIdCurrentMessageOrEmpty = (
   return [currentMessage];
 };
 
+const assistantRuntimeMessageId = (message: AgentChatMessage): string | null => {
+  if (message.role !== "assistant" || message.meta?.kind !== "assistant") {
+    return null;
+  }
+  return message.meta.sourceMessageId ?? message.id;
+};
+
+/**
+ * Hydrated whole-message assistant rows (no part id) use the runtime message id as
+ * their row id. The live projection keys the same message by a text part when the
+ * host emits one, and by the runtime id otherwise. Match both projections by the
+ * runtime message identity on assistant metadata, so a history read never adds a
+ * second row for one assistant message.
+ */
+const findMatchingCurrentAssistantMessages = ({
+  currentOwner,
+  loadedMessage,
+  absorbedCurrentMessageIds,
+}: {
+  currentOwner: Pick<AgentSessionState, "externalSessionId" | "messages">;
+  loadedMessage: AgentChatMessage;
+  absorbedCurrentMessageIds: ReadonlySet<string>;
+}): AgentChatMessage[] => {
+  if (loadedMessage.role !== "assistant" || loadedMessage.meta?.kind !== "assistant") {
+    return [];
+  }
+  if (loadedMessage.meta.partId !== undefined) {
+    return [];
+  }
+
+  const currentSlice = getSessionMessagesSlice(currentOwner, 0);
+  for (let index = currentSlice.length - 1; index >= 0; index -= 1) {
+    const candidate = currentSlice[index];
+    if (!candidate || absorbedCurrentMessageIds.has(candidate.id)) {
+      continue;
+    }
+    if (assistantRuntimeMessageId(candidate) === loadedMessage.id) {
+      return [candidate];
+    }
+  }
+  return [];
+};
+
 const findMatchingCurrentToolMessages = ({
   currentOwner,
   loadedMessage,
@@ -198,7 +241,17 @@ const findMatchingCurrentMessages = ({
     });
   }
 
-  return sameIdCurrentMessageOrEmpty(sameIdCurrentMessage, absorbedCurrentMessageIds);
+  const sameIdMatches = sameIdCurrentMessageOrEmpty(
+    sameIdCurrentMessage,
+    absorbedCurrentMessageIds,
+  );
+  return sameIdMatches.length > 0
+    ? sameIdMatches
+    : findMatchingCurrentAssistantMessages({
+        currentOwner,
+        loadedMessage,
+        absorbedCurrentMessageIds,
+      });
 };
 
 const mergeSameMessageId = (

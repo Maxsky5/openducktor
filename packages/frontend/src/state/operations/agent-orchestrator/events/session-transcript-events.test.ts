@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
+  sessionMessagesToArray,
+  lastSessionMessageForTest,
+} from "@/test-utils/session-message-test-helpers";
+import { applyLoadedSessionHistory } from "../support/session-history-chat-messages";
+import {
   buildSession,
   createSessionsRef,
   createSessionUpdater,
@@ -505,5 +510,226 @@ describe("agent-orchestrator session transcript events", () => {
       "assistant-history-1",
       "assistant-result-1",
     ]);
+  });
+
+  test("deduplicates the final Claude assistant row when history arrives after the turn", async () => {
+    const handlers: Array<(event: SessionEvent) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: async (_externalSessionId, handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+    const sessionsRef = createSessionsRef([
+      buildSession({ runtimeKind: "claude", status: "running" }),
+    ]);
+    const updateSession = createSessionUpdater(sessionsRef);
+
+    await listenToAgentSessionEvents({
+      adapter,
+      repoPath: "/tmp/repo",
+      externalSessionId: "session-1",
+      sessionsRef,
+      updateSession,
+      eventBatchWindowMs: 0,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "assistant_delta",
+      externalSessionId: "session-1",
+      timestamp: "2026-02-22T08:00:01.000Z",
+      channel: "text",
+      messageId: "response-final",
+      delta: "Complete final answer",
+    });
+    handleEvent({
+      type: "assistant_part",
+      externalSessionId: "session-1",
+      timestamp: "2026-02-22T08:00:01.500Z",
+      part: {
+        kind: "text",
+        messageId: "response-final",
+        partId: "response-final:text",
+        text: "Complete final answer",
+        completed: true,
+      },
+    });
+    handleEvent({
+      type: "assistant_message",
+      externalSessionId: "session-1",
+      messageId: "response-final",
+      timestamp: "2026-02-22T08:00:02.000Z",
+      message: "Complete final answer",
+      model: {
+        providerId: "claude",
+        modelId: "claude-opus-5",
+        variant: "high",
+        runtimeKind: "claude",
+      },
+    });
+
+    const liveSession = getSession(sessionsRef);
+    expect(sessionMessagesToArray(liveSession).map((message) => message.id)).toEqual([
+      "text:response-final:response-final:text",
+    ]);
+
+    const loadedSession = applyLoadedSessionHistory(
+      { ...liveSession, historyLoadState: "loading" },
+      [
+        {
+          messageId: "user-1",
+          role: "user",
+          state: "read",
+          timestamp: "2026-02-22T08:00:00.000Z",
+          text: "Run the audit.",
+          displayParts: [{ kind: "text", text: "Run the audit." }],
+          parts: [],
+        },
+        {
+          messageId: "response-final",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:02.000Z",
+          text: "Complete final answer",
+          parts: [
+            {
+              kind: "step",
+              messageId: "response-final",
+              partId: "response-final:finish",
+              phase: "finish",
+              reason: "stop",
+            },
+          ],
+          model: {
+            providerId: "claude",
+            modelId: "claude-opus-5",
+            variant: "high",
+            runtimeKind: "claude",
+          },
+        },
+      ],
+    );
+
+    expect(sessionMessagesToArray(loadedSession).map((message) => message.id)).toEqual([
+      "user-1",
+      "response-final",
+    ]);
+    expect(lastSessionMessageForTest(loadedSession)).toMatchObject({
+      id: "response-final",
+      content: "Complete final answer",
+      meta: expect.objectContaining({
+        kind: "assistant",
+        isFinal: true,
+        providerId: "claude",
+        modelId: "claude-opus-5",
+        variant: "high",
+      }),
+    });
+  });
+
+  test("keeps one Claude assistant row when live events arrive after history", async () => {
+    const handlers: Array<(event: SessionEvent) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: async (_externalSessionId, handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        runtimeKind: "claude",
+        status: "running",
+        messages: [
+          {
+            id: "response-final",
+            role: "assistant",
+            content: "Complete final answer",
+            timestamp: "2026-02-22T08:00:01.000Z",
+            meta: {
+              kind: "assistant",
+              isFinal: true,
+              providerId: "claude",
+              modelId: "claude-opus-5",
+              variant: "high",
+              durationMs: 120_000,
+            },
+          },
+        ],
+      }),
+    ]);
+    const updateSession = createSessionUpdater(sessionsRef);
+
+    await listenToAgentSessionEvents({
+      adapter,
+      repoPath: "/tmp/repo",
+      externalSessionId: "session-1",
+      sessionsRef,
+      updateSession,
+      eventBatchWindowMs: 0,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "assistant_delta",
+      externalSessionId: "session-1",
+      timestamp: "2026-02-22T08:00:01.500Z",
+      channel: "text",
+      messageId: "response-final",
+      delta: "Complete final answer",
+    });
+    handleEvent({
+      type: "assistant_part",
+      externalSessionId: "session-1",
+      timestamp: "2026-02-22T08:00:01.800Z",
+      part: {
+        kind: "text",
+        messageId: "response-final",
+        partId: "response-final:text",
+        text: "Complete final answer",
+        completed: true,
+      },
+    });
+    handleEvent({
+      type: "assistant_message",
+      externalSessionId: "session-1",
+      messageId: "response-final",
+      timestamp: "2026-02-22T08:00:02.000Z",
+      message: "Complete final answer",
+      model: {
+        providerId: "claude",
+        modelId: "claude-opus-5",
+        variant: "high",
+        runtimeKind: "claude",
+      },
+    });
+
+    const assistantMessages = getSessionMessages(sessionsRef).filter(
+      (message) => message.role === "assistant",
+    );
+    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages[0]).toMatchObject({
+      content: "Complete final answer",
+      meta: expect.objectContaining({
+        kind: "assistant",
+        isFinal: true,
+        providerId: "claude",
+        modelId: "claude-opus-5",
+        variant: "high",
+      }),
+    });
   });
 });
