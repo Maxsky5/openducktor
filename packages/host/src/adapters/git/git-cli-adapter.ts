@@ -55,12 +55,7 @@ import {
   buildWorktreeStatusData,
   buildWorktreeStatusSummaryData,
 } from "../../infrastructure/git/git-worktree-status";
-import type {
-  GitFileListEntry,
-  GitPort,
-  GitRemote,
-  GitRemoteEndpoint,
-} from "../../ports/git-port";
+import type { GitFileListEntry, GitPort, GitRemote, GitRemoteEndpoint } from "../../ports/git-port";
 
 export type {
   GitCommandResult,
