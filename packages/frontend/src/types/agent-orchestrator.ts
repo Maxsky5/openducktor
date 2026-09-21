@@ -13,7 +13,9 @@ import type {
 import type {
   AgentModelSelection,
   AgentPendingApprovalRequest,
+  AgentPendingQuestionRequest,
   AgentRole,
+  AgentSessionScope,
   AgentSubagentExecutionMode,
   AgentSubagentStatus,
   AgentUserMessageDisplayPart,
@@ -140,6 +142,7 @@ export type AgentChatMessage = {
 export type AgentMessageSendOptions = {
   preserveTextWhitespace?: boolean;
   errorAttentionId?: string;
+  sessionScope?: AgentSessionScope;
 };
 
 export type SessionMessagesState = {
@@ -164,17 +167,7 @@ type AgentPendingInputRouting = {
 
 export type AgentApprovalRequest = AgentPendingApprovalRequest & AgentPendingInputRouting;
 
-export type AgentQuestionRequest = {
-  requestId: string;
-  requestInstanceId?: string;
-  questions: Array<{
-    header: string;
-    question: string;
-    options: Array<{ label: string; description: string }>;
-    multiple?: boolean;
-    custom?: boolean;
-  }>;
-} & AgentPendingInputRouting;
+export type AgentQuestionRequest = AgentPendingQuestionRequest & AgentPendingInputRouting;
 
 export type AgentSessionContextUsage = {
   totalTokens: number;

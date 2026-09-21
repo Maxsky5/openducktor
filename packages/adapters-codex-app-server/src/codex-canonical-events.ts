@@ -1,5 +1,6 @@
 import type {
   AgentModelSelection,
+  AgentPendingQuestionRequest,
   AgentSessionTodoItem,
   AgentStreamPart,
   AgentUserMessageDisplayPart,
@@ -20,6 +21,7 @@ export type CodexCanonicalEventBase = {
 export type CodexCanonicalToolEvent = CodexCanonicalEventBase & {
   kind: "tool";
   invocation: NormalizedCodexToolInvocation;
+  resolvedQuestionRequestIds?: string[];
 };
 
 export type CodexCanonicalStreamPartEvent = CodexCanonicalEventBase & {
@@ -34,6 +36,7 @@ export type CodexCanonicalUserMessageEvent = CodexCanonicalEventBase & {
   displayParts: AgentUserMessageDisplayPart[];
   state: "read";
   model?: AgentModelSelection;
+  resolvedQuestionRequestIds?: string[];
 };
 
 export type CodexCanonicalAssistantMessageEvent = CodexCanonicalEventBase & {
@@ -43,6 +46,7 @@ export type CodexCanonicalAssistantMessageEvent = CodexCanonicalEventBase & {
   model?: AgentModelSelection;
   totalTokens?: number;
   contextWindow?: number;
+  questionRequest?: AgentPendingQuestionRequest;
 };
 
 export type CodexCanonicalAssistantDeltaEvent = CodexCanonicalEventBase & {

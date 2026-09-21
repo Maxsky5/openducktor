@@ -7,6 +7,7 @@ import type {
 } from "@/types/agent-orchestrator";
 import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import { toAssistantMessageMeta, toSessionContextUsage } from "../support/assistant-meta";
+import { closeBackgroundQuestions } from "../support/background-questions";
 import {
   appendSessionMessage,
   createSessionMessagesState,
@@ -190,12 +191,11 @@ export const handleUserMessage = (
   event: Extract<SessionEvent, { type: "user_message" }>,
 ): void => {
   context.turn.recordTurnUserMessageTimestamp(context.session.key, event.timestamp);
-  context.store.updateSession(context.session.identity, (current) => {
-    return {
-      ...current,
-      messages: upsertUserSessionMessage(current, toUserChatMessage(event)),
-    };
-  });
+  context.store.updateSession(context.session.identity, (current) => ({
+    ...current,
+    ...closeBackgroundQuestions(current, event.resolvedQuestionRequestIds ?? []),
+    messages: upsertUserSessionMessage(current, toUserChatMessage(event)),
+  }));
 };
 
 export const handleSessionStatus = (

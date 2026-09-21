@@ -152,6 +152,30 @@ describe("projectSessionSnapshotActivity", () => {
       });
     },
   );
+
+  test.each(["stopped", "error"] as const)(
+    "preserves terminal %s with a background question",
+    (status) => {
+      expect(
+        projectSessionSnapshotActivity(
+          {
+            status,
+            runtimeStatusMessage: "Previous runtime message",
+            executionEpisodeId: "episode-1",
+          },
+          snapshot("a", {
+            executionEpisodeId: "episode-1",
+            pendingQuestions: [{ requestId: "q", blocking: false, questions: [] }],
+          }),
+        ),
+      ).toEqual({
+        status,
+        pendingUserMessageStartedAt: undefined,
+        runtimeStatusMessage: "Previous runtime message",
+        executionEpisodeId: "episode-1",
+      });
+    },
+  );
 });
 
 describe("agent session live projection", () => {
@@ -214,6 +238,76 @@ describe("agent session live projection", () => {
     });
     expect(getAgentSession(updated, identity("thread-1"))?.contextUsage).toBe(contextUsage);
     expect(getAgentSession(updated, identity("thread-1"))?.title).toBe("Renamed");
+  });
+
+  test("uses an empty live snapshot over a history question", () => {
+    const question = {
+      requestId: "question-history",
+      blocking: false,
+      questions: [{ header: "Environment", question: "Which environment?", options: [] }],
+    };
+    const emptySnapshot = snapshot("thread-1");
+    const initial = build({ snapshots: [emptySnapshot] });
+    const session = getAgentSession(initial, identity("thread-1"));
+    if (!session) throw new Error("Expected the live session.");
+    const stale = replaceAgentSession(initial, {
+      ...session,
+      pendingQuestions: [question],
+    });
+
+    const refreshed = build({ current: stale, snapshots: [emptySnapshot] });
+
+    expect(getAgentSession(refreshed, identity("thread-1"))?.pendingQuestions).toEqual([]);
+  });
+
+  test("uses live questions instead of questions restored from history", () => {
+    const historyQuestion = {
+      requestId: "question-history",
+      blocking: false,
+      questions: [
+        {
+          header: "Environment",
+          question: "Which environment?",
+          options: [
+            { label: "Staging", description: "Staging" },
+            { label: "Production", description: "Production" },
+          ],
+        },
+      ],
+    };
+    const liveQuestion = {
+      requestId: "question-live",
+      blocking: false,
+      questions: [
+        {
+          header: "Region",
+          question: "Which region?",
+          options: [
+            { label: "Europe", description: "Europe" },
+            { label: "US", description: "US" },
+          ],
+        },
+      ],
+    };
+    const emptySnapshot = snapshot("thread-1");
+    const initial = build({ snapshots: [emptySnapshot] });
+    const session = getAgentSession(initial, identity("thread-1"));
+    if (!session) {
+      throw new Error("Expected the live session before restoring history state.");
+    }
+    const restored = replaceAgentSession(initial, {
+      ...session,
+      pendingQuestions: [historyQuestion],
+    });
+    const partialLiveSnapshot = snapshot("thread-1", {
+      pendingQuestions: [liveQuestion],
+    });
+
+    const refreshed = build({ current: restored, snapshots: [partialLiveSnapshot] });
+
+    expect(getAgentSession(refreshed, identity("thread-1"))?.pendingQuestions).toEqual([
+      liveQuestion,
+    ]);
   });
 
   test.each(["stopped", "error"] as const)(
@@ -758,6 +852,50 @@ describe("agent session live projection", () => {
     });
     expect(getAgentSession(removed, identity("root-thread"))?.pendingApprovals).toEqual([]);
     expect(getAgentSession(removed, identity("child-thread"))?.pendingQuestions).toEqual([]);
+  });
+
+  test("clears descendant question mirrors when a child user message handles the question", () => {
+    const initial = build({
+      snapshots: [
+        snapshot("root-thread"),
+        snapshot("child-thread", { parentExternalSessionId: "root-thread" }),
+        snapshot("grandchild-thread", {
+          parentExternalSessionId: "child-thread",
+          pendingQuestions: [
+            {
+              requestId: "grandchild-question",
+              blocking: false,
+              questions: [
+                {
+                  header: "Continue?",
+                  question: "Should the grandchild continue?",
+                  options: [{ label: "Yes", description: "Continue." }],
+                },
+              ],
+            },
+          ],
+        }),
+      ],
+    });
+
+    const handled = delta(initial, {
+      type: "transcript_event",
+      event: {
+        type: "user_message",
+        sessionRef: snapshot("grandchild-thread").ref,
+        externalSessionId: "grandchild-thread",
+        messageId: "answer-1",
+        timestamp: "2026-07-16T08:00:01.000Z",
+        message: "Yes",
+        parts: [{ kind: "text", text: "Yes" }],
+        state: "read",
+        resolvedQuestionRequestIds: ["grandchild-question"],
+      },
+    });
+
+    expect(getAgentSession(handled, identity("root-thread"))?.pendingQuestions).toEqual([]);
+    expect(getAgentSession(handled, identity("child-thread"))?.pendingQuestions).toEqual([]);
+    expect(getAgentSession(handled, identity("grandchild-thread"))?.pendingQuestions).toEqual([]);
   });
 
   test("keeps sibling descendant pending requests isolated", () => {

@@ -25,7 +25,6 @@ import {
 export { invokeStopAgentSession };
 
 const EMPTY_SESSION_AGENT_COLORS = Object.freeze<Record<string, string>>({});
-
 type UseAgentChatSurfaceModelArgs = {
   modelCatalog?: AgentModelCatalog | null;
   transcript: AgentChatTranscriptPresentation;

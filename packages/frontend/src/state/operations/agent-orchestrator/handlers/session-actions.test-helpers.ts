@@ -20,6 +20,7 @@ import {
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { closeProjectedBackgroundQuestions } from "../session-read-model/agent-session-live-projection";
 import { createSessionTurnState } from "../support/session-turn-state";
 import { createTaskCardFixture } from "../test-utils";
 import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
@@ -123,6 +124,13 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
         nextSession,
       );
       return nextSession;
+    },
+    closeBackgroundQuestions: (identity, requestIds) => {
+      sessionsRef.current = closeProjectedBackgroundQuestions(
+        sessionsRef.current,
+        identity,
+        requestIds,
+      );
     },
     canonicalizePath: async (path) => path,
     startWorkflowSession: defaultStartWorkflowSession,

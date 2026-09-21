@@ -170,4 +170,109 @@ describe("createReadonlyTranscriptSession", () => {
       status: "completed",
     });
   });
+
+  test("projects a background question for a history-only session", () => {
+    const question = {
+      requestId: "question-1",
+      blocking: false,
+      questions: [
+        {
+          header: "Environment",
+          question: "Which environment?",
+          options: [
+            { label: "Staging", description: "Staging" },
+            { label: "Production", description: "Production" },
+          ],
+        },
+      ],
+    };
+    const session = createReadonlyTranscriptSession({
+      externalSessionId: "session-1",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      history: [
+        {
+          messageId: "question-1",
+          role: "assistant",
+          timestamp: "2026-09-19T10:00:00.000Z",
+          text: "Which environment?",
+          parts: [],
+          questionRequest: question,
+        },
+      ],
+    });
+
+    expect(session.messages.items).toEqual([]);
+    expect(session.pendingQuestions).toEqual([question]);
+  });
+
+  test("keeps live question state when read-only history is stale", () => {
+    const question = {
+      requestId: "question-stale",
+      blocking: false,
+      questions: [
+        {
+          header: "Environment",
+          question: "Which environment?",
+          options: [
+            { label: "Staging", description: "Staging" },
+            { label: "Production", description: "Production" },
+          ],
+        },
+      ],
+    };
+    const session = createAgentSessionFixture({
+      externalSessionId: "session-1",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      sessionAssociation: { kind: "unbound" },
+      livePresence: "present",
+      historyLoadState: "loaded",
+      messages: createSessionMessagesState("session-1"),
+    });
+
+    const merged = mergeReadonlyRuntimeHistory(session, [
+      {
+        messageId: "question-stale",
+        role: "assistant",
+        timestamp: "2026-09-19T10:00:00.000Z",
+        text: "Which environment?",
+        parts: [],
+        questionRequest: question,
+      },
+    ]);
+
+    expect(merged.pendingQuestions).toEqual([]);
+  });
+
+  test("preserves a background question that arrives while history loads", () => {
+    const question = {
+      requestId: "question-live",
+      blocking: false,
+      questions: [
+        {
+          header: "Environment",
+          question: "Which environment?",
+          options: [
+            { label: "Staging", description: "Staging" },
+            { label: "Production", description: "Production" },
+          ],
+        },
+      ],
+    };
+    const atReadStart = createAgentSessionFixture({
+      externalSessionId: "session-1",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      sessionAssociation: { kind: "unbound" },
+    });
+    const current = {
+      ...atReadStart,
+      pendingQuestions: [question],
+    };
+
+    const merged = mergeReadonlyRuntimeHistory(current, []);
+
+    expect(merged.pendingQuestions).toEqual([question]);
+  });
 });

@@ -471,6 +471,7 @@ export function useAgentStudioOrchestrationController({
       onResumeSession,
       startLaunchKickoff,
       onSend,
+      sendAgentMessage: actions.sendAgentMessage,
       handleWorkflowStepSelect,
       handleSessionSelectionChange,
       handlePrepareMessageFirstSession,

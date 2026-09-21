@@ -649,6 +649,29 @@ describe("Codex app-server protocol", () => {
     } as const;
     expect(codexAppServerThreadItemSchema.safeParse(agentMessageItem).success).toBe(true);
     expect(
+      codexAppServerThreadItemSchema.parse({
+        ...agentMessageItem,
+        delivery: null,
+        questions: null,
+      }),
+    ).toMatchObject({ delivery: null, questions: null });
+    expect(
+      codexAppServerThreadItemSchema.parse({
+        ...agentMessageItem,
+        delivery: "async",
+        questions: [
+          { title: "Which environment?", options: ["Staging", "Production"] },
+          { title: "Anything else?", options: null },
+        ],
+      }),
+    ).toMatchObject({
+      delivery: "async",
+      questions: [
+        { title: "Which environment?", options: ["Staging", "Production"] },
+        { title: "Anything else?", options: null },
+      ],
+    });
+    expect(
       codexAppServerThreadItemSchema.safeParse({
         ...agentMessageItem,
         memoryCitation: {

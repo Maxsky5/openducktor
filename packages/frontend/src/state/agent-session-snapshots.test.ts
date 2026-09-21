@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createAgentSessionCollection } from "@/state/agent-session-collection";
+import { getAgentSessionActivityStateFromSession } from "@/lib/agent-session-activity-state";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   createAgentActivitySnapshot,
@@ -39,6 +40,36 @@ describe("createAgentActivitySnapshot", () => {
       taskId: "task-1",
       role: "build",
       activityState: "running",
+    });
+  });
+
+  test("marks a running session with a background question as waiting for input", () => {
+    const liveSession = session({
+      pendingQuestions: [
+        {
+          requestId: "message-1",
+          blocking: false,
+          questions: [
+            { header: "Test", question: "Which test should I run?", options: [] },
+            {
+              header: "Environment",
+              question: "Which environment should I use?",
+              options: [],
+            },
+          ],
+        },
+      ],
+    });
+    const snapshot = createAgentActivitySnapshot({
+      collection: createAgentSessionCollection([liveSession]),
+      previous: createEmptyAgentActivitySnapshot("/repo"),
+      workspaceRepoPath: "/repo",
+    });
+
+    expect(getAgentSessionActivityStateFromSession(liveSession)).toBe("waiting_input");
+    expect(snapshot.sessions[0]).toMatchObject({
+      activityState: "waiting_input",
+      pendingQuestionCount: 1,
     });
   });
 

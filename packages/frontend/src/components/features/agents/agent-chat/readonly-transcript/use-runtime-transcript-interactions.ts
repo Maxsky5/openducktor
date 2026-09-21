@@ -1,4 +1,5 @@
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
+import type { AgentSessionScope } from "@openducktor/core";
 import {
   hasAgentSessionPendingApprovals,
   hasAgentSessionPendingQuestions,
@@ -14,11 +15,13 @@ import { useAgentSessionQuestionActions } from "../use-agent-session-question-ac
 
 type UseRuntimeTranscriptInteractionsArgs = {
   target: AgentSessionIdentity | null;
+  hasLiveSession: boolean;
   pendingApprovalRequests: readonly AgentApprovalRequest[];
   pendingQuestionRequests: readonly AgentQuestionRequest[];
   isRuntimeReady: boolean;
   replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"];
   answerAgentQuestion: AgentOperationsContextValue["answerAgentQuestion"];
+  sessionScope?: AgentSessionScope | null | undefined;
 };
 
 type RuntimeTranscriptInteractions = {
@@ -39,11 +42,13 @@ type RuntimeTranscriptInteractions = {
 
 export function useRuntimeTranscriptInteractions({
   target,
+  hasLiveSession,
   pendingApprovalRequests,
   pendingQuestionRequests,
   isRuntimeReady,
   replyAgentApproval,
   answerAgentQuestion,
+  sessionScope,
 }: UseRuntimeTranscriptInteractionsArgs): RuntimeTranscriptInteractions {
   const canReplyToRuntimeRequest = isRuntimeReady && target !== null;
   const { isSubmittingApprovalByRequestId, approvalReplyErrorByRequestId, onReplyApproval } =
@@ -58,8 +63,9 @@ export function useRuntimeTranscriptInteractions({
     useAgentSessionQuestionActions({
       sessionIdentity: target,
       pendingQuestions: pendingQuestionRequests,
-      canAnswerQuestions: isRuntimeReady,
+      canAnswerQuestions: isRuntimeReady && hasLiveSession,
       answerAgentQuestion,
+      sessionScope,
     });
 
   return {
@@ -68,6 +74,7 @@ export function useRuntimeTranscriptInteractions({
     pendingQuestions: {
       canSubmit:
         canReplyToRuntimeRequest &&
+        hasLiveSession &&
         hasAgentSessionPendingQuestions({ pendingQuestions: pendingQuestionRequests }),
       isSubmittingByRequestId: isSubmittingQuestionByRequestId,
       onSubmit: onSubmitQuestionAnswers,

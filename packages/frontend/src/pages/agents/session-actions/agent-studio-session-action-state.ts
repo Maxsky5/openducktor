@@ -1,6 +1,7 @@
 import type { RuntimeDescriptor } from "@openducktor/contracts";
 import { runtimeSupportsCapability } from "@/lib/agent-runtime";
 import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
+import { isAgentSessionBlockedOnInput } from "@/lib/agent-session-waiting-input";
 import { canResumeInterruptedTurn } from "@/lib/agent-session-interrupted-turn";
 import type { AgentStudioSelectedSessionState } from "../selected-session/selected-session-state";
 
@@ -33,7 +34,9 @@ export function deriveAgentStudioSessionActionState({
       )
     : false;
   const isSessionWorking = isAgentSessionActivityWorking(selectedSession.activityState);
-  const isWaitingInput = selectedSession.activityState === "waiting_input";
+  const isWaitingInput = selectedSession.loadedSession
+    ? isAgentSessionBlockedOnInput(selectedSession.loadedSession)
+    : false;
   const canQueueBusyFollowups = isSessionWorking && supportsQueuedUserMessages;
   const selectedRuntimeLabel =
     selectedRuntimeDescriptor?.label ?? selectedRuntimeKind ?? "Current runtime";

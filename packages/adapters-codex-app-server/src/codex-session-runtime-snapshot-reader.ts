@@ -11,6 +11,7 @@ import {
 import type { CodexThreadInventory } from "./codex-app-server-threads";
 import type { CodexSessionLookup } from "./codex-local-session-state";
 import type { CodexPendingInputState } from "./codex-pending-input-state";
+import type { CodexAsyncQuestionState } from "./codex-async-questions";
 import type { CodexRuntimeClientResolver } from "./codex-runtime-client-resolver";
 import type { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import type { CodexSessionState } from "./types";
@@ -20,11 +21,21 @@ export type CodexSessionRuntimeSnapshotReaderDeps = {
   threadInventory: Pick<CodexThreadInventoryReader, "read" | "refresh">;
   sessions: CodexSessionLookup;
   pendingInput: CodexPendingInputState;
+  asyncQuestions: CodexAsyncQuestionState;
   hasActiveTurn: (externalSessionId: string) => boolean;
 };
 
 const directoriesFromInput = (directories: readonly string[] | undefined): Set<string> =>
   new Set(directories ?? []);
+
+const questionsForSession = (
+  deps: CodexSessionRuntimeSnapshotReaderDeps,
+  runtimeId: string,
+  threadId: string,
+) => [
+  ...deps.pendingInput.pendingQuestionsForSession(threadId, runtimeId),
+  ...deps.asyncQuestions.pendingForSession(runtimeId, threadId),
+];
 
 const toLocalRuntimeSnapshot = async (
   deps: CodexSessionRuntimeSnapshotReaderDeps,
@@ -42,10 +53,7 @@ const toLocalRuntimeSnapshot = async (
       session.threadId,
       session.runtimeId,
     ),
-    pendingQuestions: deps.pendingInput.pendingQuestionsForSession(
-      session.threadId,
-      session.runtimeId,
-    ),
+    pendingQuestions: questionsForSession(deps, session.runtimeId, session.threadId),
     hasActiveTurn: deps.hasActiveTurn(session.threadId),
   };
   if (input) {
@@ -89,10 +97,7 @@ export const listCodexSessionRuntimeSnapshots = async (
           session.threadId,
           session.runtimeId,
         ),
-        pendingQuestions: deps.pendingInput.pendingQuestionsForSession(
-          session.threadId,
-          session.runtimeId,
-        ),
+        pendingQuestions: questionsForSession(deps, session.runtimeId, session.threadId),
         hasActiveTurn: deps.hasActiveTurn(session.threadId),
       }),
     ),
@@ -123,6 +128,6 @@ export const readCodexSessionRuntimeSnapshot = async (
   }
   return toRuntimeSnapshotFromThread(snapshot, input, {
     pendingApprovals: deps.pendingInput.pendingApprovalsForSession(snapshot.id, runtimeId),
-    pendingQuestions: deps.pendingInput.pendingQuestionsForSession(snapshot.id, runtimeId),
+    pendingQuestions: questionsForSession(deps, runtimeId, snapshot.id),
   });
 };

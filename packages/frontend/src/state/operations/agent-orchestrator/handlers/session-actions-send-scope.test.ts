@@ -124,6 +124,54 @@ describe("agent-orchestrator/handlers/session-actions send scope", () => {
     expect(sendCalls).toBe(0);
   });
 
+  test("uses the requested workflow scope for an unbound child send", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const sendInputs: Parameters<typeof adapter.sendUserMessage>[0][] = [];
+    adapter.sendUserMessage = async (input) => {
+      sendInputs.push(input);
+      return acceptedUserMessage(input);
+    };
+    const sessionsRef = createSessionsRef([
+      buildSession({ status: "idle", sessionAssociation: { kind: "unbound" } }),
+    ]);
+    const actions = createSessionActions({ adapter, sessionsRef });
+
+    await actions.sendAgentMessage(
+      getSession(sessionsRef),
+      [{ kind: "text", text: "child reply" }],
+      { sessionScope: { kind: "workflow", taskId: "task-1", role: "build" } },
+    );
+
+    expect(sendInputs).toHaveLength(1);
+    expect(sendInputs[0]).toMatchObject({
+      externalSessionId: "session-1",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+    });
+    expect(getSession(sessionsRef).sessionAssociation).toEqual({ kind: "unbound" });
+  });
+
+  test("rejects a requested scope that conflicts with the registered scope", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    let sendCalls = 0;
+    adapter.sendUserMessage = async (input) => {
+      sendCalls += 1;
+      return acceptedUserMessage(input);
+    };
+    const sessionsRef = createSessionsRef([
+      buildSession({ status: "idle", sessionAssociation: { kind: "repository" } }),
+    ]);
+    const actions = createSessionActions({ adapter, sessionsRef });
+
+    await expect(
+      actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "wrong scope" }], {
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      }),
+    ).rejects.toThrow(
+      "Cannot send message for session 'session-1' because its registered repository scope does not match the requested workflow scope for task 'task-1' and role 'build'.",
+    );
+    expect(sendCalls).toBe(0);
+  });
+
   test("rejects a missing association before calling the runtime", async () => {
     const adapter = new OpencodeSdkAdapter();
     let sendCalls = 0;

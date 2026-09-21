@@ -15,7 +15,10 @@ import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-cha
 import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
 import { useAgentSessionQuestionActions } from "@/components/features/agents/agent-chat/use-agent-session-question-actions";
 import { useSelectedSessionContextUsage } from "@/features/agent-chat-composer/context-usage/use-selected-session-context-usage";
-import { getAgentSessionWaitingInputPlaceholder } from "@/lib/agent-session-waiting-input";
+import {
+  getAgentSessionWaitingInputPlaceholder,
+  isAgentSessionBlockedOnInput,
+} from "@/lib/agent-session-waiting-input";
 import { repoRuntimeReadinessTargetForRuntime } from "@/lib/repo-runtime-readiness";
 import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
@@ -224,6 +227,7 @@ export function WorkspaceSessionChat({
     pendingQuestions,
     canAnswerQuestions: canInteract,
     answerAgentQuestion: operations.answerAgentQuestion,
+    sessionScope: { kind: "repository" },
   });
   const transcript = resolveAgentChatTranscriptPresentation({
     repoPath: workspace.repoPath,
@@ -292,7 +296,7 @@ export function WorkspaceSessionChat({
       selectedSession: identity ? { ...identity, selectedModel } : null,
       isSessionModelCatalogLoading: isLoadingModelCatalog,
       isSessionWorking: isWorking,
-      isWaitingInput: activityState === "waiting_input",
+      isWaitingInput: isAgentSessionBlockedOnInput({ pendingApprovals, pendingQuestions }),
       waitingInputPlaceholder: getAgentSessionWaitingInputPlaceholder({
         pendingApprovals,
         pendingQuestions,

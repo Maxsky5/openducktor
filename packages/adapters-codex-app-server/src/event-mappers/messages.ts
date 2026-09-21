@@ -1,8 +1,16 @@
 import { isCodexContextualUserMessage } from "../codex-app-server-shared";
+import {
+  codexAsyncQuestionReplyTools,
+  parseCodexAsyncQuestionItem,
+  parseCodexAsyncQuestionReplyInputs,
+  parseCodexAsyncQuestionSkipIds,
+  stripCodexAsyncQuestionSkipMarker,
+} from "../codex-async-questions";
 import { codexItemTypeMatches, terminalHistoryPart } from "../codex-app-server-transcript";
 import type {
   CodexCanonicalAssistantMessageEvent,
   CodexCanonicalStreamPartEvent,
+  CodexCanonicalToolEvent,
   CodexCanonicalUserMessageEvent,
   CodexMappingResult,
 } from "../codex-canonical-events";
@@ -28,18 +36,38 @@ export const userMessageMapper: CodexEventMapper = {
     if (!codexItemTypeMatches(input.item, "userMessage")) {
       return emptyCodexMappingResult();
     }
-    if (isCodexContextualUserMessage(input.item)) {
+    const sourceParts = codexUserInputsFromItem(input.item);
+    const skippedQuestionRequestIds = parseCodexAsyncQuestionSkipIds(sourceParts);
+    const parts = stripCodexAsyncQuestionSkipMarker(sourceParts);
+    const message = codexUserInputListToText(parts);
+    const asyncQuestionReplies = parseCodexAsyncQuestionReplyInputs(parts);
+    if (!asyncQuestionReplies && isCodexContextualUserMessage(input.item)) {
       return { handled: true, events: [] };
     }
-    const parts = codexUserInputsFromItem(input.item);
-    const message = codexUserInputListToText(parts);
     const messageId = input.item.id;
+    const timestamp = ctx.timestamp ?? input.timestamp;
+    if (asyncQuestionReplies) {
+      const events = codexAsyncQuestionReplyTools(asyncQuestionReplies).map(
+        ({ requestId, invocation }): CodexCanonicalToolEvent => {
+          const event: CodexCanonicalToolEvent = {
+            kind: "tool",
+            source: ctx.source,
+            mapper: "user_message",
+            threadId: ctx.threadId,
+            invocation,
+            resolvedQuestionRequestIds: [requestId],
+          };
+          if (timestamp) event.timestamp = timestamp;
+          return event;
+        },
+      );
+      return { handled: true, events };
+    }
     const displayParts = codexUserInputsToDisplayParts(parts, messageId);
     const hasAttachment = displayParts.some((part) => part.kind === "attachment");
     if (message.trim().length === 0 && !hasAttachment) {
       return emptyCodexMappingResult();
     }
-    const timestamp = ctx.timestamp ?? input.timestamp;
     const event: CodexCanonicalUserMessageEvent = {
       kind: "user_message",
       source: ctx.source,
@@ -50,6 +78,9 @@ export const userMessageMapper: CodexEventMapper = {
       displayParts,
       state: "read",
     };
+    if (skippedQuestionRequestIds !== undefined) {
+      event.resolvedQuestionRequestIds = [...new Set(skippedQuestionRequestIds)];
+    }
     if (timestamp) {
       event.timestamp = timestamp;
     }
@@ -74,11 +105,34 @@ export const assistantMessageMapper: CodexEventMapper = {
       return emptyCodexMappingResult();
     }
     const message = input.item.text;
-    if (message.trim().length === 0) {
+    const asyncQuestion = parseCodexAsyncQuestionItem(input.item);
+    if (message.trim().length === 0 && asyncQuestion.kind === "not_async_question") {
       return emptyCodexMappingResult();
     }
     const messageId = input.item.id;
     const timestamp = ctx.timestamp ?? input.timestamp;
+    if (asyncQuestion.kind === "invalid") {
+      const event: CodexCanonicalStreamPartEvent = {
+        kind: "stream_part",
+        source: ctx.source,
+        mapper: "assistant_message",
+        threadId: ctx.threadId,
+        part: {
+          kind: "text",
+          messageId,
+          partId: `${messageId}:question-error`,
+          text: asyncQuestion.error,
+          completed: true,
+        },
+      };
+      if (timestamp) {
+        event.timestamp = timestamp;
+      }
+      return {
+        handled: true,
+        events: [event],
+      };
+    }
     const events: CodexMappingResult["events"] = [];
     const assistantMessageEvent: CodexCanonicalAssistantMessageEvent = {
       kind: "assistant_message",
@@ -88,11 +142,14 @@ export const assistantMessageMapper: CodexEventMapper = {
       messageId,
       message,
     };
+    if (asyncQuestion.kind === "question") {
+      assistantMessageEvent.questionRequest = asyncQuestion.request;
+    }
     if (timestamp) {
       assistantMessageEvent.timestamp = timestamp;
     }
     events.push(assistantMessageEvent);
-    if (input.isFinalAgentMessage) {
+    if (input.isFinalAgentMessage && asyncQuestion.kind === "not_async_question") {
       const terminalPartEvent: CodexCanonicalStreamPartEvent = {
         kind: "stream_part",
         source: ctx.source,

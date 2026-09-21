@@ -9,7 +9,10 @@ import {
   agentSessionTranscriptEventSchema,
   agentToolDataSchema,
 } from "./agent-session-event-schemas";
-import { agentSessionQuestionItemSchema } from "./agent-session-pending-schemas";
+import {
+  agentPendingRequestIdSchema,
+  agentSessionPendingQuestionRequestSchema,
+} from "./agent-session-pending-schemas";
 import {
   agentModelSelectionSchema,
   agentSessionLiveRefSchema,
@@ -43,8 +46,6 @@ export const agentSessionActivitySchema = z.enum([
   "idle",
 ]);
 export type AgentSessionActivity = z.infer<typeof agentSessionActivitySchema>;
-
-const agentPendingRequestIdSchema = nonEmptyStringSchema;
 
 export const agentSessionLivePendingApprovalRequestSchema = z
   .object({
@@ -84,12 +85,8 @@ export type AgentSessionLivePendingApprovalRequest = z.infer<
   typeof agentSessionLivePendingApprovalRequestSchema
 >;
 
-export const agentSessionLivePendingQuestionRequestSchema = z
-  .object({
-    requestId: agentPendingRequestIdSchema,
-    questions: z.array(agentSessionQuestionItemSchema),
-  })
-  .strict();
+export const agentSessionLivePendingQuestionRequestSchema =
+  agentSessionPendingQuestionRequestSchema;
 export type AgentSessionLivePendingQuestionRequest = z.infer<
   typeof agentSessionLivePendingQuestionRequestSchema
 >;
@@ -253,6 +250,8 @@ export type AgentSessionLiveReplyApprovalInput = z.infer<
 export const agentSessionLiveReplyQuestionInputSchema = agentSessionLiveRefSchema.extend({
   requestId: agentPendingRequestIdSchema,
   answers: z.array(z.array(z.string())),
+  blocking: z.boolean().optional(),
+  sessionScope: agentSessionScopeSchema.optional(),
 });
 export type AgentSessionLiveReplyQuestionInput = z.infer<
   typeof agentSessionLiveReplyQuestionInputSchema

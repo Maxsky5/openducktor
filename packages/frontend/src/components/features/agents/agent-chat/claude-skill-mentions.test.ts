@@ -44,6 +44,7 @@ const threadSession = (
   workingDirectory: "/repo",
   activityState: "idle",
   runtimeStatusMessage: null,
+  pendingQuestions: [],
   messages: createSessionMessagesState("session-1", [message], 4),
 });
 

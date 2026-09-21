@@ -52,6 +52,7 @@ export type AgentStudioChatSessionActionsContext = {
   onResumeSession: () => void;
   startLaunchKickoff: () => Promise<void>;
   onSend: (draft: AgentChatComposerDraft) => Promise<AgentChatSendResult>;
+  sendAgentMessage: AgentOperationsContextValue["sendAgentMessage"];
   stopAgentSession: AgentOperationsContextValue["stopAgentSession"];
   loadAgentSessionHistory: AgentOperationsContextValue["loadAgentSessionHistory"];
 };

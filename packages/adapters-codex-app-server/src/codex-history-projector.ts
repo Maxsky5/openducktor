@@ -23,6 +23,9 @@ export const projectCodexCanonicalEventsToHistory = (
       if (resolvedModel) {
         message.model = resolvedModel;
       }
+      if (event.resolvedQuestionRequestIds !== undefined) {
+        message.resolvedQuestionRequestIds = event.resolvedQuestionRequestIds;
+      }
       messages.push(message);
       continue;
     }
@@ -37,6 +40,9 @@ export const projectCodexCanonicalEventsToHistory = (
       };
       if (resolvedModel) {
         message.model = resolvedModel;
+      }
+      if (event.questionRequest) {
+        message.questionRequest = event.questionRequest;
       }
       if (event.totalTokens !== undefined) {
         message.totalTokens = event.totalTokens;
@@ -68,6 +74,19 @@ export const projectCodexCanonicalEventsToHistory = (
     }
     if (event.kind === "tool") {
       const part = requireNormalizedCodexToolInvocation(event.invocation);
+      if (event.resolvedQuestionRequestIds !== undefined) {
+        // History rebuilds read reply IDs from user records. Empty records close questions without adding a user message.
+        messages.push({
+          messageId: `${part.messageId}:question-resolution`,
+          role: "user",
+          timestamp,
+          text: "",
+          displayParts: [],
+          state: "read",
+          resolvedQuestionRequestIds: event.resolvedQuestionRequestIds,
+          parts: [],
+        });
+      }
       const message: AgentSessionHistoryMessage = {
         messageId: part.messageId,
         role: "assistant",

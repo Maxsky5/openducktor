@@ -14,6 +14,47 @@ const historyOwner = (messages: AgentChatMessage[]) => ({
 });
 
 describe("agent-orchestrator/support/session-history-chat-messages", () => {
+  test("hides a question source row and keeps normal assistant text", () => {
+    const pendingQuestion = {
+      requestId: "question-1",
+      blocking: false,
+      questions: [
+        {
+          header: "Environment",
+          question: "Which environment?",
+          options: [
+            { label: "Staging", description: "Staging" },
+            { label: "Production", description: "Production" },
+          ],
+        },
+      ],
+    };
+    const messages = historyToChatMessages(
+      [
+        {
+          role: "assistant",
+          messageId: "question-1",
+          timestamp: "2026-09-19T10:00:00.000Z",
+          text: "Which environment?",
+          parts: [],
+          questionRequest: pendingQuestion,
+        },
+        {
+          role: "assistant",
+          messageId: "question-2",
+          timestamp: "2026-09-19T10:01:00.000Z",
+          text: "Readable fallback question",
+          parts: [],
+        },
+      ],
+      { role: "build" },
+    );
+
+    expect(messages).toMatchObject([
+      { id: "question-2", role: "assistant", content: "Readable fallback question" },
+    ]);
+  });
+
   test("maps empty history to empty chat messages", () => {
     const messages = historyToChatMessages([], {
       role: "build",

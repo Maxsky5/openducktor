@@ -1,15 +1,20 @@
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
-import type { HostClient } from "@openducktor/host-client";
+import type { AgentSessionScope } from "@openducktor/core";
+import { HostInvokeError, type HostClient } from "@openducktor/host-client";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { errorMessage } from "@/lib/errors";
 import { resolveAgentPendingInputParticipants } from "@/state/agent-session-pending-input-participants";
+import { getAcceptedMessageAfterSendFailure } from "@/state/agent-runtime-services";
 import type {
   AgentApprovalRequest,
   AgentQuestionRequest,
   AgentSessionIdentity,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
+import type { UpdateSession } from "../events/session-event-types";
 import { type ReadSessionSnapshot, requireWorkspaceRepoPath } from "../support/session-invariants";
 import type { SessionTurnMetadata } from "../support/session-turn-metadata";
+import { appendSendFailureNotice, upsertAcceptedUserMessage } from "./send-agent-message";
 
 export type PendingInputActionDependencies = {
   workspaceRepoPath: string | null;
@@ -18,6 +23,8 @@ export type PendingInputActionDependencies = {
     "agentSessionLiveReplyApproval" | "agentSessionLiveReplyQuestion"
   >;
   readSessionSnapshot: ReadSessionSnapshot;
+  updateSession: UpdateSession;
+  closeBackgroundQuestions: (session: AgentSessionIdentity, requestIds: readonly string[]) => void;
   turnMetadata: SessionTurnMetadata;
   recordTurnUserMessageTimestamp: (
     sessionKey: string,
@@ -50,7 +57,8 @@ const preparePendingInputReply = ({
   currentSession: AgentSessionIdentity;
   request: AgentApprovalRequest | AgentQuestionRequest;
 }) => {
-  const { responseSession } = resolveAgentPendingInputParticipants(currentSession, request);
+  const participants = resolveAgentPendingInputParticipants(currentSession, request);
+  const { responseSession } = participants;
   const responseState = dependencies.readSessionSnapshot(responseSession);
   if (!responseState && !request.responseSession) {
     throw new Error(
@@ -61,7 +69,7 @@ const preparePendingInputReply = ({
   if (responseState) {
     markTurnUserAnchorIfMissing(dependencies, responseSession, responseState.selectedModel);
   }
-  return responseSession;
+  return participants;
 };
 
 export const createPendingInputActions = (dependencies: PendingInputActionDependencies) => {
@@ -71,7 +79,7 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
     outcome: RuntimeApprovalReplyOutcome,
     message?: string,
   ): Promise<void> => {
-    const responseSession = preparePendingInputReply({
+    const { responseSession } = preparePendingInputReply({
       dependencies,
       currentSession: identity,
       request,
@@ -95,20 +103,52 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
     identity: AgentSessionIdentity,
     request: AgentQuestionRequest,
     answers: string[][],
+    sessionScope?: AgentSessionScope,
   ): Promise<void> => {
-    const responseSession = preparePendingInputReply({
+    const { responseSession } = preparePendingInputReply({
       dependencies,
       currentSession: identity,
       request,
     });
-    await dependencies.liveSessionHost.agentSessionLiveReplyQuestion({
-      repoPath: requireWorkspaceRepoPath(dependencies.workspaceRepoPath),
-      externalSessionId: responseSession.externalSessionId,
-      runtimeKind: responseSession.runtimeKind,
-      workingDirectory: responseSession.workingDirectory,
-      requestId: request.requestId,
-      answers,
-    });
+    const input: Parameters<typeof dependencies.liveSessionHost.agentSessionLiveReplyQuestion>[0] =
+      {
+        repoPath: requireWorkspaceRepoPath(dependencies.workspaceRepoPath),
+        externalSessionId: responseSession.externalSessionId,
+        runtimeKind: responseSession.runtimeKind,
+        workingDirectory: responseSession.workingDirectory,
+        requestId: request.requestId,
+        answers,
+      };
+    if (request.blocking !== undefined) input.blocking = request.blocking;
+    if (sessionScope !== undefined) input.sessionScope = sessionScope;
+    let handledRequestIds: readonly string[] = [request.requestId];
+    try {
+      await dependencies.liveSessionHost.agentSessionLiveReplyQuestion(input);
+    } catch (error) {
+      const repoPath = requireWorkspaceRepoPath(dependencies.workspaceRepoPath);
+      const acceptedMessage =
+        error instanceof HostInvokeError
+          ? getAcceptedMessageAfterSendFailure(error, { ...responseSession, repoPath })
+          : null;
+      if (!acceptedMessage) throw error;
+
+      handledRequestIds = acceptedMessage.resolvedQuestionRequestIds ?? handledRequestIds;
+      upsertAcceptedUserMessage(
+        responseSession,
+        acceptedMessage,
+        handledRequestIds,
+        dependencies.updateSession,
+      );
+      appendSendFailureNotice(
+        responseSession,
+        `${errorMessage(error)} Reload the session to sync the transcript.`,
+        dependencies.updateSession,
+        false,
+      );
+    }
+    if (request.blocking === false) {
+      dependencies.closeBackgroundQuestions(responseSession, handledRequestIds);
+    }
   };
 
   return {

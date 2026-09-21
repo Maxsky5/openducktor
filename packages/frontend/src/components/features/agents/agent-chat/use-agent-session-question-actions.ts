@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import type { AgentSessionScope } from "@openducktor/core";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentQuestionRequest, AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
@@ -14,6 +15,7 @@ type UseAgentSessionQuestionActionsArgs = {
   pendingQuestions: readonly AgentQuestionRequest[];
   canAnswerQuestions: boolean;
   answerAgentQuestion: AgentOperationsContextValue["answerAgentQuestion"];
+  sessionScope?: AgentSessionScope | null | undefined;
 };
 
 export function useAgentSessionQuestionActions({
@@ -21,6 +23,7 @@ export function useAgentSessionQuestionActions({
   pendingQuestions,
   canAnswerQuestions,
   answerAgentQuestion,
+  sessionScope,
 }: UseAgentSessionQuestionActionsArgs) {
   const [submittingQuestionBySessionKey, setSubmittingQuestionBySessionKey] = useState<
     AgentSessionRequestState<boolean>
@@ -38,7 +41,10 @@ export function useAgentSessionQuestionActions({
     [pendingQuestions],
   );
   const pendingQuestionByRequestIdRef = useRef(pendingQuestionByRequestId);
-  pendingQuestionByRequestIdRef.current = pendingQuestionByRequestId;
+  useLayoutEffect(() => {
+    pendingQuestionByRequestIdRef.current = pendingQuestionByRequestId;
+  }, [pendingQuestionByRequestId]);
+  const submittingQuestionKeysRef = useRef(new Set<string>());
 
   const onSubmitQuestionAnswers = useCallback(
     async (requestId: string, answers: string[][]): Promise<void> => {
@@ -60,13 +66,19 @@ export function useAgentSessionQuestionActions({
       if (!request) {
         return;
       }
+      const submitKey = `${sessionKey}\u0000${requestId}`;
+      if (submittingQuestionKeysRef.current.has(submitKey)) {
+        return;
+      }
+      submittingQuestionKeysRef.current.add(submitKey);
 
       setSubmittingQuestionBySessionKey((current) =>
         setAgentSessionRequestValue(current, sessionKey, requestId, true),
       );
       try {
-        await answerAgentQuestion(sessionActionTarget, request, answers);
+        await answerAgentQuestion(sessionActionTarget, request, answers, sessionScope ?? undefined);
       } finally {
+        submittingQuestionKeysRef.current.delete(submitKey);
         setSubmittingQuestionBySessionKey((current) =>
           removeAgentSessionRequestValue(current, sessionKey, requestId),
         );
@@ -78,6 +90,7 @@ export function useAgentSessionQuestionActions({
       sessionExternalSessionId,
       sessionKey,
       sessionRuntimeKind,
+      sessionScope,
       sessionWorkingDirectory,
     ],
   );

@@ -3,7 +3,9 @@ import type {
   AgentSessionLiveReplyApprovalInput,
   AgentSessionLiveReplyQuestionInput,
 } from "@openducktor/contracts";
+import { HostInvokeError } from "@openducktor/host-client";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
 import type {
   AgentApprovalRequest,
   AgentQuestionRequest,
@@ -280,6 +282,156 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       },
     ]);
     expect(getSession(sessionsRef).pendingQuestions).toEqual([request]);
+  });
+
+  test("closes a background question after the host accepts its reply", async () => {
+    const request = { ...questionRequest("question-1"), blocking: false as const };
+    const session = buildSession({
+      runtimeKind: "codex",
+      sessionAssociation: { kind: "repository" },
+      pendingQuestions: [request],
+    });
+    const sessionsRef = createSessionsRef([session]);
+    const actions = createSessionActions({
+      workspaceRepoPath: "/active/repository",
+      sessionsRef,
+      liveSessionHost: {
+        agentSessionLiveReplyApproval: async () => {},
+        agentSessionLiveReplyQuestion: async () => {},
+      },
+    });
+
+    await actions.answerAgentQuestion(toAgentSessionIdentity(session), request, [["yes"]]);
+
+    const current = getSession(sessionsRef);
+    expect(current.pendingQuestions).toEqual([]);
+  });
+
+  test("closes a grandchild background question in each ancestor after reply", async () => {
+    const ownerRequest = {
+      ...questionRequest("grandchild-question"),
+      blocking: false as const,
+    };
+    const responseSession = {
+      externalSessionId: "grandchild-session",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/tmp/repo/worktree",
+      sessionAssociation: { kind: "repository" as const },
+    };
+    const rootRequest: AgentQuestionRequest = {
+      ...ownerRequest,
+      responseSession,
+      source: {
+        kind: "subagent",
+        parentExternalSessionId: "root-session",
+        childExternalSessionId: "grandchild-session",
+      },
+    };
+    const childRequest: AgentQuestionRequest = {
+      ...ownerRequest,
+      responseSession,
+      source: {
+        kind: "subagent",
+        parentExternalSessionId: "child-session",
+        childExternalSessionId: "grandchild-session",
+      },
+    };
+    const root = buildSession({
+      externalSessionId: "root-session",
+      runtimeKind: "codex",
+      sessionAssociation: { kind: "repository" },
+      pendingQuestions: [rootRequest],
+    });
+    const child = buildSession({
+      externalSessionId: "child-session",
+      runtimeKind: "codex",
+      sessionAssociation: { kind: "repository" },
+      liveParentExternalSessionId: "root-session",
+      pendingQuestions: [childRequest],
+    });
+    const grandchild = buildSession({
+      externalSessionId: "grandchild-session",
+      runtimeKind: "codex",
+      sessionAssociation: { kind: "repository" },
+      liveParentExternalSessionId: "child-session",
+      pendingQuestions: [ownerRequest],
+    });
+    const sessionsRef = createSessionsRef([root, child, grandchild]);
+    const actions = createSessionActions({
+      workspaceRepoPath: "/active/repository",
+      sessionsRef,
+      liveSessionHost: {
+        agentSessionLiveReplyApproval: async () => {},
+        agentSessionLiveReplyQuestion: async () => {},
+      },
+    });
+
+    await actions.answerAgentQuestion(toAgentSessionIdentity(root), rootRequest, [["yes"]]);
+
+    expect(getSession(sessionsRef, "root-session").pendingQuestions).toEqual([]);
+    expect(getSession(sessionsRef, "child-session").pendingQuestions).toEqual([]);
+    expect(getSession(sessionsRef, "grandchild-session").pendingQuestions).toEqual([]);
+  });
+
+  test("keeps an accepted background reply when the host cannot publish it", async () => {
+    const request = { ...questionRequest("question-1"), blocking: false as const };
+    const session = buildSession({
+      runtimeKind: "codex",
+      sessionAssociation: { kind: "repository" },
+      pendingQuestions: [request],
+    });
+    const sessionsRef = createSessionsRef([session]);
+    const acceptedMessage = {
+      type: "user_message" as const,
+      externalSessionId: session.externalSessionId,
+      timestamp: "2026-09-20T12:00:00.000Z",
+      messageId: "accepted-question-reply",
+      message: "> Continue?\n\nyes",
+      parts: [],
+      state: "read" as const,
+      resolvedQuestionRequestIds: [request.requestId],
+    };
+    const actions = createSessionActions({
+      workspaceRepoPath: "/active/repository",
+      sessionsRef,
+      liveSessionHost: {
+        agentSessionLiveReplyApproval: async () => {},
+        agentSessionLiveReplyQuestion: async () => {
+          throw new HostInvokeError(
+            "The runtime accepted the message, but the session update failed.",
+            {
+              kind: "agent_session_message_accepted",
+              stage: "live_update",
+              acceptedMessage,
+              sessionRef: {
+                repoPath: "/active/repository",
+                runtimeKind: session.runtimeKind,
+                workingDirectory: session.workingDirectory,
+                externalSessionId: session.externalSessionId,
+              },
+            },
+          );
+        },
+      },
+    });
+
+    await expect(
+      actions.answerAgentQuestion(toAgentSessionIdentity(session), request, [["yes"]]),
+    ).resolves.toBeUndefined();
+
+    const current = getSession(sessionsRef);
+    expect(current.pendingQuestions).toEqual([]);
+    expect(sessionMessagesToArray(current)).toEqual([
+      expect.objectContaining({
+        id: acceptedMessage.messageId,
+        role: "user",
+        content: acceptedMessage.message,
+      }),
+      expect.objectContaining({
+        role: "system",
+        content: expect.stringContaining("Reload the session to sync the transcript."),
+      }),
+    ]);
   });
 
   test("routes a UI-shaped repository question through the active workspace", async () => {

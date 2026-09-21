@@ -16,7 +16,6 @@ import type {
   AgentEvent,
   AgentModelSelection,
   AgentSessionTodoItem,
-  AgentUserMessagePart,
   SessionRef,
 } from "@openducktor/core";
 import { agentSessionStatusFromActivity, withAgentSessionRef } from "@openducktor/core";
@@ -29,13 +28,17 @@ import {
 import type { ActiveCodexTurn } from "./codex-app-server-shared";
 import {
   type CodexStreamingContext,
+  type CodexUserMessageEcho,
   type CompletedAgentMessage,
   emitCodexUserMessage,
+  expectCodexUserMessageEcho,
   handleCodexPendingNotifications,
 } from "./codex-app-server-streaming";
 import type { CodexThreadStatusSnapshot } from "./codex-app-server-threads";
 import type { CodexTokenUsageTotals } from "./codex-app-server-transcript";
 import { CodexContextUsageTracker } from "./codex-context-usage-tracker";
+import type { CodexAsyncQuestionState } from "./codex-async-questions";
+import { parseCodexAsyncQuestionItem } from "./codex-async-questions";
 
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import type { CodexSessionLookup } from "./codex-local-session-state";
@@ -64,6 +67,7 @@ import type {
   CodexServerRequestRecord,
   CodexSessionContextUsage,
   CodexSessionState,
+  CodexUserInput,
 } from "./types";
 
 type CodexRuntimeSessionEventsDepsBase = {
@@ -75,6 +79,7 @@ type CodexRuntimeSessionEventsDepsBase = {
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
   sessionEvents: CodexSessionEventBus;
   pendingInput: CodexPendingInputState;
+  asyncQuestions: CodexAsyncQuestionState;
   subagents: CodexSubagentLinkState;
   updateThreadStatus(runtimeId: string, threadId: string, status: CodexThreadStatusSnapshot): void;
   flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void;
@@ -165,7 +170,7 @@ export class CodexRuntimeSessionEvents {
     string,
     Map<string, Set<string>>
   >();
-  private readonly syntheticUserMessageTextsByThreadId = new Map<string, string[]>();
+  private readonly syntheticUserMessageEchoesByThreadId = new Map<string, CodexUserMessageEcho[]>();
   private readonly completedAgentMessagesByTurnKey = new Map<string, CompletedAgentMessage>();
   private readonly tokenUsageByTurnKey = new Map<string, CodexTokenUsageTotals>();
   private readonly modelByTurnKey = new Map<string, AgentModelSelection>();
@@ -428,7 +433,7 @@ export class CodexRuntimeSessionEvents {
       }
     }
     this.clearHandledStreamRequestKeys(externalSessionId, runtimeId);
-    this.syntheticUserMessageTextsByThreadId.delete(externalSessionId);
+    this.syntheticUserMessageEchoesByThreadId.delete(externalSessionId);
     this.latestTodosBySessionId.delete(externalSessionId);
     this.clearSessionDiffs(externalSessionId, runtimeId);
     this.contextUsage.clearSession(externalSessionId, runtimeId);
@@ -496,11 +501,12 @@ export class CodexRuntimeSessionEvents {
     }
   }
 
-  emitUserMessage(
-    event: AcceptedAgentUserMessage,
-    sourceParts: AgentUserMessagePart[],
-  ): AcceptedAgentUserMessage {
-    return emitCodexUserMessage(this.streamingContext(), event, sourceParts);
+  expectUserMessageEcho(event: AcceptedAgentUserMessage, input: CodexUserInput[]): () => void {
+    return expectCodexUserMessageEcho(this.streamingContext(), event, input);
+  }
+
+  emitUserMessage(event: AcceptedAgentUserMessage): AcceptedAgentUserMessage {
+    return emitCodexUserMessage(this.streamingContext(), event);
   }
 
   private applyLearnedSubagentRoute(route: CodexSubagentRoute): void {
@@ -599,6 +605,13 @@ export class CodexRuntimeSessionEvents {
       return;
     }
     if (isServerRequest || notification?.method === "serverRequest/resolved") {
+      this.markSnapshotChanged(event.runtimeId, threadId);
+    }
+    if (
+      notification?.method === "item/completed" &&
+      notification.params.item.type === "agentMessage" &&
+      parseCodexAsyncQuestionItem(notification.params.item).kind === "question"
+    ) {
       this.markSnapshotChanged(event.runtimeId, threadId);
     }
     if (notification?.method === "serverRequest/resolved") {
@@ -963,12 +976,28 @@ export class CodexRuntimeSessionEvents {
   private streamingContext(scopedSession?: CodexSessionState): CodexStreamingContext {
     return {
       activeTurnsBySessionId: this.deps.activeTurnsBySessionId,
-      syntheticUserMessageTextsByThreadId: this.syntheticUserMessageTextsByThreadId,
+      syntheticUserMessageEchoesByThreadId: this.syntheticUserMessageEchoesByThreadId,
       completedAgentMessagesByTurnKey: this.completedAgentMessagesByTurnKey,
       tokenUsageByTurnKey: this.tokenUsageByTurnKey,
       modelByTurnKey: this.modelByTurnKey,
       latestTodosBySessionId: this.latestTodosBySessionId,
       eventMapperPipeline: this.eventMapperPipeline,
+      asyncQuestions: this.deps.asyncQuestions,
+      runtimeIdForThread: (threadId) => {
+        if (scopedSession) {
+          return scopedSession.runtimeId;
+        }
+        const directSession = this.deps.sessions.get(threadId);
+        if (directSession) {
+          return directSession.runtimeId;
+        }
+        for (const session of this.deps.sessions.values()) {
+          if (this.deps.subagents.routeForChild(threadId, session.runtimeId)) {
+            return session.runtimeId;
+          }
+        }
+        return undefined;
+      },
       startImageGenerationTurn: (session, turnId, timestamp) => {
         this.imageGenerations.startTurn(session.runtimeId, session.threadId, turnId, timestamp);
         this.emitSessionEventForSession(session, {
@@ -983,6 +1012,7 @@ export class CodexRuntimeSessionEvents {
         this.recordStartedItemTimestamp(runtimeId, threadId, itemId, startedAtMs),
       takeStartedItemTimestamp: (runtimeId, threadId, itemId) =>
         this.takeStartedItemTimestamp(runtimeId, threadId, itemId),
+      markSnapshotChanged: (runtimeId, threadId) => this.markSnapshotChanged(runtimeId, threadId),
       emitSessionEvent: (externalSessionId, event) => {
         if (scopedSession?.threadId === externalSessionId) {
           this.emitSessionEventForSession(scopedSession, event);

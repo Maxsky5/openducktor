@@ -14,6 +14,7 @@ import {
   type AgentSessionLiveSnapshot,
   type CodexAppServerThreadResumeParams,
   agentSessionLiveSnapshotSchema,
+  isAgentSessionTranscriptEventType,
   CODEX_RUNTIME_DESCRIPTOR,
   MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
   type RuntimeDescriptor,
@@ -77,7 +78,10 @@ import { codexTodosFromThreadRead } from "./codex-app-server-transcript";
 import { CodexContextUsageLoader } from "./codex-context-usage-loader";
 import { fileDiffsFromUnifiedDiff } from "./codex-file-diffs";
 import { CodexLocalSessionState } from "./codex-local-session-state";
+import { CodexMessageAcceptedError } from "./codex-message-accepted-error";
 import { CodexPendingInputState } from "./codex-pending-input-state";
+import { CodexQuestionHistory } from "./codex-question-history";
+import { CodexAsyncQuestionState } from "./codex-async-questions";
 import { findRetainedSessionOwner } from "./codex-retained-session-owner";
 import { releaseCodexRuntimeState } from "./codex-runtime-cleanup";
 import { CodexRuntimeClientResolver } from "./codex-runtime-client-resolver";
@@ -120,8 +124,13 @@ import {
   flushQueuedUserMessagesLater as flushQueuedUserMessagesLaterImpl,
   startCodexContinuationTurn,
   startCodexTurnForSession,
+  startCodexTurnWithInputForSession,
 } from "./codex-turn-lifecycle";
-import { assertCodexUserMessagePartsSupported } from "./codex-user-inputs";
+import {
+  assertCodexUserMessagePartsSupported,
+  toCodexAsyncQuestionReplyInput,
+} from "./codex-user-inputs";
+import { codexAsyncQuestionReplyText, codexAsyncQuestionReplyTools } from "./codex-async-questions";
 import { searchCodexFiles } from "./file-search";
 import {
   CodexModels,
@@ -198,10 +207,19 @@ const toLivePendingApproval = (
 
 const toLivePendingQuestion = (
   request: AgentPendingQuestionRequest,
-): AgentSessionLivePendingQuestionRequest => ({
-  requestId: request.requestId,
-  questions: toCodexToolQuestions(request.questions),
-});
+): AgentSessionLivePendingQuestionRequest => {
+  const liveRequest: AgentSessionLivePendingQuestionRequest = {
+    requestId: request.requestId,
+    questions: toCodexToolQuestions(request.questions),
+  };
+  if (request.requestInstanceId !== undefined) {
+    liveRequest.requestInstanceId = request.requestInstanceId;
+  }
+  if (request.blocking !== undefined) {
+    liveRequest.blocking = request.blocking;
+  }
+  return liveRequest;
+};
 
 export class CodexAppServerAdapter
   implements AgentCatalogPort, AgentSessionPort, AgentWorkspaceInspectionPort
@@ -209,6 +227,8 @@ export class CodexAppServerAdapter
   private readonly runtimeClients: CodexRuntimeClientResolver;
   private readonly sessionEvents = new CodexSessionEventBus();
   private readonly pendingInput = new CodexPendingInputState();
+  private readonly asyncQuestions = new CodexAsyncQuestionState();
+  private readonly questionHistory: CodexQuestionHistory;
   private readonly activeTurnsBySessionId = new Map<string, ActiveCodexTurn>();
   // An empty rollout is safe only for reads started before this process first reads the thread.
   private readonly freshSessions = new WeakSet<CodexSessionState>();
@@ -221,6 +241,7 @@ export class CodexAppServerAdapter
   private readonly subagents = new CodexSubagentLinkState();
 
   constructor(private readonly options: CodexAppServerAdapterOptions) {
+    this.questionHistory = options.questionHistory ?? new CodexQuestionHistory();
     this.runtimeClients = new CodexRuntimeClientResolver(options);
     this.generatedImages = new CodexGeneratedImageResolver(
       this.runtimeClients,
@@ -242,6 +263,7 @@ export class CodexAppServerAdapter
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       sessionEvents: this.sessionEvents,
       pendingInput: this.pendingInput,
+      asyncQuestions: this.asyncQuestions,
       subagents: this.subagents,
       updateThreadStatus: (
         runtimeId: string,
@@ -352,6 +374,7 @@ export class CodexAppServerAdapter
         this.localSessions.releaseRuntime(runtimeId);
       },
       clearPendingInput: () => this.pendingInput.clearRuntime(runtimeId),
+      clearAsyncQuestions: () => this.asyncQuestions.clearRuntime(runtimeId),
       clearSubagents: () => this.subagents.clearRuntime(runtimeId),
       clearRuntimeEvents: () => this.runtimeEvents.clearRuntime(runtimeId),
       disposeThreadInventory: () => this.threadInventory.disposeRuntime(runtimeId),
@@ -714,10 +737,21 @@ export class CodexAppServerAdapter
     session: CodexSessionState,
     systemInvocation: ReturnType<typeof classifySystemSlashCommandInvocation>,
   ): Promise<AcceptedAgentUserMessage> {
+    let resolvedQuestionRequestIds: readonly string[];
+    if (systemInvocation.kind === "manual_session_compaction") {
+      resolvedQuestionRequestIds = [];
+    } else if (input.resolvedQuestionRequestIds !== undefined) {
+      resolvedQuestionRequestIds = input.resolvedQuestionRequestIds;
+    } else {
+      resolvedQuestionRequestIds = this.asyncQuestions
+        .pendingForSession(session.runtimeId, session.threadId)
+        .map((request) => request.requestId);
+    }
     const acceptedUserMessage = createCodexAcceptedUserMessage({
       session,
       parts: input.parts,
       model: input.model ?? session.model ?? undefined,
+      resolvedQuestionRequestIds,
     });
     if (systemInvocation.kind === "manual_session_compaction") {
       await this.runtimeEvents.ensureRuntimeEventSubscription(session.runtimeId);
@@ -730,13 +764,17 @@ export class CodexAppServerAdapter
       }
       return acceptedUserMessage;
     }
-    return startCodexTurnForSession(
+    const accepted = await startCodexTurnForSession(
       this.turnLifecycleContext(),
       input.externalSessionId,
       input.parts,
       acceptedUserMessage,
       input.model,
+      resolvedQuestionRequestIds.length > 0,
+      resolvedQuestionRequestIds,
     );
+    this.asyncQuestions.resolve(session.runtimeId, session.threadId, resolvedQuestionRequestIds);
+    return accepted;
   }
 
   private flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void {
@@ -790,7 +828,7 @@ export class CodexAppServerAdapter
     const mergeImage = this.options.subscribeEvents
       ? this.runtimeEvents.prepareImageHistory(runtime.runtimeId, input.externalSessionId)
       : undefined;
-    const history = await loadCodexSessionHistory({
+    const nativeHistory = await loadCodexSessionHistory({
       input,
       session,
       runtime,
@@ -798,6 +836,25 @@ export class CodexAppServerAdapter
       prepareImageGenerations: this.options.prepareImageGenerations,
       ...this.freshThreadReadGuard(session),
     });
+    const history = this.questionHistory.merge(
+      runtime.runtimeId,
+      input.externalSessionId,
+      nativeHistory,
+    );
+    this.asyncQuestions.loadHistory(runtime.runtimeId, input.externalSessionId, history);
+    if (session && this.options.onLiveSessionMutation) {
+      await this.options.onLiveSessionMutation({
+        runtimeId: runtime.runtimeId,
+        snapshotMode: "delta",
+        removedRefs: [],
+        snapshots: this.changedLiveSessionSnapshots(
+          runtime.runtimeId,
+          new Set([input.externalSessionId]),
+        ),
+        transcriptEvents: [],
+        catalogInvalidated: false,
+      });
+    }
     if (!mergeImage) return history;
     return history.map((message) =>
       message.role === "assistant"
@@ -1168,16 +1225,19 @@ export class CodexAppServerAdapter
     }
   }
 
-  async replyQuestion(input: ReplyQuestionInput): Promise<void> {
+  async replyQuestion(input: ReplyQuestionInput): Promise<AgentEvent> {
     assertCodexRuntimePolicyBinding(input, "reply to Codex question");
-    requireCodexPendingRequestKey(input.requestId, "question");
+    const mustRestoreQuestions = !this.localSessions.has(input.externalSessionId);
     const session = this.policyBoundSession(
       input,
       { lookup: "reply to question for", context: "reply to question" },
       true,
     );
-    const reply = async (boundSession: CodexSessionState): Promise<void> => {
-      await this.replyLiveQuestion({
+    const reply = async (boundSession: CodexSessionState): Promise<AgentEvent> => {
+      if (mustRestoreQuestions) {
+        await this.loadSessionHistory(input);
+      }
+      return this.replyLiveQuestion({
         runtimeId: boundSession.runtimeId,
         externalSessionId: input.externalSessionId,
         requestId: input.requestId,
@@ -1188,6 +1248,102 @@ export class CodexAppServerAdapter
   }
 
   async replyLiveQuestion(input: CodexLiveQuestionReplyInput): Promise<AgentEvent> {
+    const backgroundReplies = this.asyncQuestions.claimRepliesForSession(
+      input.runtimeId,
+      input.externalSessionId,
+      input.requestId,
+      input.answers,
+    );
+    if (backgroundReplies) {
+      let cancelExpectedEcho: (() => void) | undefined;
+      const session = this.localSessions.get(input.externalSessionId);
+      if (!session || session.runtimeId !== input.runtimeId) {
+        this.asyncQuestions.releaseReplyClaim(
+          input.runtimeId,
+          input.externalSessionId,
+          input.requestId,
+        );
+        throw new Error(
+          `Cannot answer Codex question '${input.requestId}' because its session is not loaded. Reload the session and try again.`,
+        );
+      }
+      const text = codexAsyncQuestionReplyText(backgroundReplies);
+      const parts = [{ kind: "text" as const, text }];
+      const acceptedUserMessage = createCodexAcceptedUserMessage({
+        session,
+        parts,
+        model: session.model ?? undefined,
+        resolvedQuestionRequestIds: [input.requestId],
+      });
+      const nativeInput = [toCodexAsyncQuestionReplyInput(backgroundReplies)];
+      let accepted: AcceptedAgentUserMessage;
+      try {
+        cancelExpectedEcho = this.runtimeEvents.expectUserMessageEcho(
+          acceptedUserMessage,
+          nativeInput,
+        );
+        accepted = await startCodexTurnWithInputForSession(
+          this.turnLifecycleContext(),
+          input.externalSessionId,
+          parts,
+          nativeInput,
+          acceptedUserMessage,
+        );
+      } catch (error) {
+        cancelExpectedEcho?.();
+        this.asyncQuestions.releaseReplyClaim(
+          input.runtimeId,
+          input.externalSessionId,
+          input.requestId,
+        );
+        throw error;
+      }
+      const replyTools = codexAsyncQuestionReplyTools(backgroundReplies);
+      const resolvedRequestIds = replyTools.map(({ requestId }) => requestId);
+      this.asyncQuestions.resolve(input.runtimeId, input.externalSessionId, resolvedRequestIds);
+      const timestamp = new Date().toISOString();
+      const completionEvents: AgentEvent[] = [];
+      for (const { requestId, invocation } of replyTools) {
+        completionEvents.push({
+          type: "question_resolved",
+          requestId,
+          externalSessionId: input.externalSessionId,
+          timestamp,
+        });
+        const toolEvent: AgentEvent = {
+          type: "assistant_part",
+          externalSessionId: input.externalSessionId,
+          timestamp,
+          part: requireNormalizedCodexToolInvocation(invocation),
+        };
+        completionEvents.push(toolEvent);
+      }
+      for (const event of completionEvents) {
+        this.emitSessionEvent(input.externalSessionId, event);
+      }
+      const publishLiveSessionMutation = this.options.onLiveSessionMutation;
+      if (publishLiveSessionMutation) {
+        const sessionRef = codexSessionRef(session);
+        try {
+          await publishLiveSessionMutation({
+            runtimeId: input.runtimeId,
+            snapshotMode: "delta",
+            removedRefs: [],
+            snapshots: this.changedLiveSessionSnapshots(
+              input.runtimeId,
+              new Set([input.externalSessionId]),
+            ),
+            transcriptEvents: completionEvents
+              .filter((event) => isAgentSessionTranscriptEventType(event.type))
+              .map((event) => withAgentSessionRef(sessionRef, event)),
+            catalogInvalidated: false,
+          });
+        } catch (cause) {
+          throw new CodexMessageAcceptedError(accepted, cause);
+        }
+      }
+      return accepted;
+    }
     requireCodexPendingRequestKey(input.requestId, "question");
     const pending = this.pendingInput.claimQuestionForSession(
       input.requestId,
@@ -1213,25 +1369,27 @@ export class CodexAppServerAdapter
       );
       const output = JSON.stringify({ answers });
       const questions = toCodexToolQuestions(pending.request.questions);
+      const timestamp = new Date().toISOString();
+      const part = requireNormalizedCodexToolInvocation({
+        messageId: `codex-question-${questionToolCallId}`,
+        partId: `codex-question-${questionToolCallId}`,
+        callId: questionToolCallId,
+        rawToolName: "request_user_input",
+        status: "completed",
+        input: { questions },
+        output,
+        metadata: {
+          codexServerRequest: true,
+          requestId: input.requestId,
+          questions,
+          answers,
+        },
+      });
       completedQuestionEvent = {
         type: "assistant_part",
         externalSessionId: input.externalSessionId,
-        timestamp: new Date().toISOString(),
-        part: requireNormalizedCodexToolInvocation({
-          messageId: `codex-question-${questionToolCallId}`,
-          partId: `codex-question-${questionToolCallId}`,
-          callId: questionToolCallId,
-          rawToolName: "request_user_input",
-          status: "completed",
-          input: { questions },
-          output,
-          metadata: {
-            codexServerRequest: true,
-            requestId: input.requestId,
-            questions,
-            answers,
-          },
-        }),
+        timestamp,
+        part,
       };
       await this.requireServerRequestResponder(pending.runtimeId)(
         pending.runtimeId,
@@ -1249,6 +1407,13 @@ export class CodexAppServerAdapter
       pending.threadId,
       pending.nativeRequest.id,
     );
+    this.questionHistory.add(pending.runtimeId, input.externalSessionId, {
+      messageId: completedQuestionEvent.part.messageId,
+      role: "assistant",
+      timestamp: completedQuestionEvent.timestamp,
+      text: "",
+      parts: [completedQuestionEvent.part],
+    });
     this.emitSessionEvent(input.externalSessionId, completedQuestionEvent);
     if (activeTurn && !activeTurn.isTurnSettled()) {
       void this.runtimeEvents.continueTurnAfterPendingInput(activeTurn);
@@ -1260,9 +1425,10 @@ export class CodexAppServerAdapter
     const pendingApprovals = this.pendingInput
       .pendingApprovalsForSession(session.threadId, session.runtimeId)
       .map(toLivePendingApproval);
-    const pendingQuestions = this.pendingInput
-      .pendingQuestionsForSession(session.threadId, session.runtimeId)
-      .map(toLivePendingQuestion);
+    const pendingQuestions = [
+      ...this.pendingInput.pendingQuestionsForSession(session.threadId, session.runtimeId),
+      ...this.asyncQuestions.pendingForSession(session.runtimeId, session.threadId),
+    ].map(toLivePendingQuestion);
     const runtimeActivity =
       session.liveStatus?.classification ??
       (session.summary.status === "running" || session.summary.status === "starting"
@@ -1301,9 +1467,16 @@ export class CodexAppServerAdapter
     const pendingApprovals = this.pendingInput
       .pendingApprovalsForSession(route.childExternalSessionId, parentSession.runtimeId)
       .map(toLivePendingApproval);
-    const pendingQuestions = this.pendingInput
-      .pendingQuestionsForSession(route.childExternalSessionId, parentSession.runtimeId)
-      .map(toLivePendingQuestion);
+    const pendingQuestions = [
+      ...this.pendingInput.pendingQuestionsForSession(
+        route.childExternalSessionId,
+        parentSession.runtimeId,
+      ),
+      ...this.asyncQuestions.pendingForSession(
+        parentSession.runtimeId,
+        route.childExternalSessionId,
+      ),
+    ].map(toLivePendingQuestion);
     const contextUsage = this.runtimeEvents.latestContextUsage(
       parentSession.runtimeId,
       route.childExternalSessionId,
@@ -1460,6 +1633,7 @@ export class CodexAppServerAdapter
       },
     );
     this.generatedImages.releaseSession({ ...codexSessionRef(session), runtimeKind: "codex" });
+    this.asyncQuestions.clearSession(session.runtimeId, session.threadId);
     for (const route of descendants.toReversed()) {
       this.generatedImages.releaseSession({
         ...codexSessionRef(session),
@@ -1470,6 +1644,7 @@ export class CodexAppServerAdapter
         ...codexSessionRef(session),
         externalSessionId: route.childExternalSessionId,
       });
+      this.asyncQuestions.clearSession(session.runtimeId, route.childExternalSessionId);
       if (this.localSessions.has(route.childExternalSessionId)) {
         this.localSessions.release(route.childExternalSessionId);
       }
@@ -1484,6 +1659,7 @@ export class CodexAppServerAdapter
       threadInventory: this.threadInventory,
       sessions: this.localSessions,
       pendingInput: this.pendingInput,
+      asyncQuestions: this.asyncQuestions,
       hasActiveTurn: (externalSessionId: string) => {
         const activeTurn = this.activeTurnsBySessionId.get(externalSessionId);
         return Boolean(activeTurn && !activeTurn.isTurnSettled());
@@ -1517,8 +1693,9 @@ export class CodexAppServerAdapter
         this.runtimeEvents.bindPendingInputToActiveTurn(externalSessionId, activeTurn),
       setSessionLiveStatus: (session, liveStatus) =>
         this.runtimeEvents.setSessionLiveStatus(session, liveStatus),
-      emitUserMessage: (event, sourceParts) =>
-        this.runtimeEvents.emitUserMessage(event, sourceParts),
+      expectUserMessageEcho: (event, sourceParts) =>
+        this.runtimeEvents.expectUserMessageEcho(event, sourceParts),
+      emitUserMessage: (event) => this.runtimeEvents.emitUserMessage(event),
       emitSessionEvent: (externalSessionId, event) =>
         this.emitSessionEvent(externalSessionId, event),
       codexPolicyForSession: (session) =>

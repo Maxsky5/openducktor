@@ -5,6 +5,7 @@ import { mergeHistoryMessages } from "@/state/operations/agent-orchestrator/supp
 import { haveSameMessageTimestamp } from "@/state/operations/agent-orchestrator/support/message-timestamp";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { historyToChatMessages } from "@/state/operations/agent-orchestrator/support/session-history-chat-messages";
+import { projectBackgroundQuestions } from "@/state/operations/agent-orchestrator/support/background-questions";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentChatTranscriptSession } from "../agent-chat.types";
 import type { AgentSessionTranscriptTarget } from "../agent-session-transcript-target";
@@ -43,18 +44,21 @@ export const createReadonlyTranscriptSession = ({
   runtimeKind,
   workingDirectory,
   history,
-}: ReadonlyTranscriptSessionInput): AgentChatTranscriptSession => ({
-  ...toAgentSessionIdentity({ externalSessionId, runtimeKind, workingDirectory }),
-  activityState: null,
-  runtimeStatusMessage: null,
-  messages: createSessionMessagesState(
-    externalSessionId,
-    historyToChatMessages(history, {
-      role: null,
-    }),
-    transcriptHistoryVersion(history),
-  ),
-});
+}: ReadonlyTranscriptSessionInput): AgentChatTranscriptSession => {
+  return {
+    ...toAgentSessionIdentity({ externalSessionId, runtimeKind, workingDirectory }),
+    activityState: null,
+    runtimeStatusMessage: null,
+    pendingQuestions: projectBackgroundQuestions(history),
+    messages: createSessionMessagesState(
+      externalSessionId,
+      historyToChatMessages(history, {
+        role: null,
+      }),
+      transcriptHistoryVersion(history),
+    ),
+  };
+};
 
 const areMessagesEquivalent = (left: AgentChatMessage, right: AgentChatMessage): boolean =>
   left.id === right.id &&

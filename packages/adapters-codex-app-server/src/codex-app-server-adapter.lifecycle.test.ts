@@ -15,6 +15,7 @@ import {
   RecordingTransport,
 } from "./codex-app-server-adapter.test-harness";
 import { codexSandboxPolicy } from "./codex-session-policy";
+import { toCodexTurnInputList } from "./codex-user-inputs";
 import { CodexAppServerAdapter } from "./index";
 import type { CodexJsonRpcRequest } from "./types";
 
@@ -388,7 +389,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       params: {
         ...expectedTurnPolicy("/repo"),
         threadId: "thread/start-runtime-live",
-        input: [{ type: "text", text: "Hello Codex", text_elements: [] }],
+        input: toCodexTurnInputList([{ kind: "text", text: "Hello Codex" }], []),
         model: "gpt-5",
         effort: "medium",
       },
@@ -439,7 +440,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       approvalsReviewer: "auto_review",
       sandboxPolicy: codexSandboxPolicy(runtimePolicy.policy, "/repo"),
       threadId: "thread/start-runtime-live",
-      input: [{ type: "text", text: "Build it", text_elements: [] }],
+      input: toCodexTurnInputList([{ kind: "text", text: "Build it" }], []),
       model: "gpt-5",
       effort: "medium",
     });
@@ -647,7 +648,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       params: {
         ...expectedTurnPolicy("/repo"),
         threadId: "thread/start-runtime-live",
-        input: [{ type: "text", text: "Use deeper reasoning", text_elements: [] }],
+        input: toCodexTurnInputList([{ kind: "text", text: "Use deeper reasoning" }], []),
         model: "gpt-5",
         effort: "high",
       },

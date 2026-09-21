@@ -4,6 +4,7 @@ import { projectCodexCanonicalEvents } from "./codex-canonical-projector";
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import { projectCodexCanonicalEventsToHistory } from "./codex-history-projector";
 import { CodexSubagentLinkState } from "./codex-subagent-link-state";
+import { toCodexTurnInputList } from "./codex-user-inputs";
 import { createCodexEventMappers, todoMapper } from "./event-mappers";
 
 const TODO_PAYLOAD = {
@@ -50,6 +51,334 @@ describe("Codex event mapper pipeline", () => {
     );
 
     expect(result).toEqual({ events: [], handled: false });
+  });
+
+  test("projects asynchronous questions with live and history parity", () => {
+    const item = {
+      type: "agentMessage" as const,
+      id: "question-message-1",
+      text: "Which environment should I use?",
+      phase: "commentary" as const,
+      memoryCitation: null,
+      delivery: "async" as const,
+      questions: [
+        {
+          title: "Which environment should I use?",
+          options: ["Staging", "Production"],
+        },
+      ],
+    };
+    const livePipeline = createCodexEventMapperPipeline();
+    const historyPipeline = createCodexEventMapperPipeline();
+    const live = projectCodexCanonicalEvents(
+      livePipeline.runLive(
+        { kind: "item_completed", item },
+        {
+          source: "live",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          timestamp: "2026-09-19T10:00:00.000Z",
+        },
+      ),
+    );
+    const history = projectCodexCanonicalEventsToHistory(
+      historyPipeline.runThreadItem(
+        { item, index: 0, timestamp: "2026-09-19T10:00:00.000Z" },
+        { source: "thread_read", threadId: "thread-1" },
+      ),
+    );
+
+    const expectedQuestionRequest = {
+      requestId: "question-message-1",
+      blocking: false,
+      questions: [
+        {
+          header: "",
+          question: "Which environment should I use?",
+          options: [
+            { label: "Staging", description: "" },
+            { label: "Production", description: "" },
+          ],
+        },
+      ],
+    };
+    expect(live).toEqual([
+      expect.objectContaining({
+        type: "assistant_message",
+        messageId: "question-message-1",
+        questionRequest: expectedQuestionRequest,
+      }),
+    ]);
+    expect(history).toEqual([
+      expect.objectContaining({
+        role: "assistant",
+        messageId: "question-message-1",
+        questionRequest: expectedQuestionRequest,
+      }),
+    ]);
+  });
+
+  test("projects current nullable agent messages with live and history parity", () => {
+    const item = {
+      type: "agentMessage" as const,
+      id: "message-1",
+      text: "Work continues",
+      phase: "commentary" as const,
+      memoryCitation: null,
+      delivery: null,
+      questions: null,
+    };
+    const live = projectCodexCanonicalEvents(
+      createCodexEventMapperPipeline().runLive(
+        { kind: "item_completed", item },
+        { source: "live", threadId: "thread-1", turnId: "turn-1" },
+      ),
+    );
+    const history = projectCodexCanonicalEventsToHistory(
+      createCodexEventMapperPipeline().runThreadItem(
+        { item, index: 0 },
+        { source: "thread_read", threadId: "thread-1" },
+      ),
+    );
+
+    expect(live).toEqual([
+      expect.objectContaining({ type: "assistant_message", message: "Work continues" }),
+    ]);
+    expect(history).toEqual([
+      expect.objectContaining({ role: "assistant", text: "Work continues" }),
+    ]);
+  });
+
+  test("projects async assistant messages without questions as normal messages", () => {
+    const item = {
+      type: "agentMessage" as const,
+      id: "async-message-1",
+      text: "I am still working on this.",
+      phase: "commentary" as const,
+      memoryCitation: null,
+      delivery: "async" as const,
+      questions: null,
+    };
+    const live = projectCodexCanonicalEvents(
+      createCodexEventMapperPipeline().runLive(
+        { kind: "item_completed", item },
+        { source: "live", threadId: "thread-1", turnId: "turn-1" },
+      ),
+    );
+    const history = projectCodexCanonicalEventsToHistory(
+      createCodexEventMapperPipeline().runThreadItem(
+        { item, index: 0 },
+        { source: "thread_read", threadId: "thread-1" },
+      ),
+    );
+
+    expect(live).toEqual([
+      expect.objectContaining({
+        type: "assistant_message",
+        message: "I am still working on this.",
+      }),
+    ]);
+    expect(history).toEqual([
+      expect.objectContaining({ role: "assistant", text: "I am still working on this." }),
+    ]);
+    expect(live[0]).not.toHaveProperty("questionRequest");
+    expect(history[0]).not.toHaveProperty("questionRequest");
+  });
+
+  test("keeps malformed async questions visible with an actionable error", () => {
+    const item = {
+      type: "agentMessage" as const,
+      id: "question-message-invalid",
+      text: "",
+      phase: "commentary" as const,
+      memoryCitation: null,
+      delivery: "async" as const,
+      questions: [],
+    };
+    const live = projectCodexCanonicalEvents(
+      createCodexEventMapperPipeline().runLive(
+        { kind: "item_completed", item },
+        { source: "live", threadId: "thread-1", turnId: "turn-1" },
+      ),
+    );
+    const history = projectCodexCanonicalEventsToHistory(
+      createCodexEventMapperPipeline().runThreadItem(
+        { item, index: 0 },
+        { source: "thread_read", threadId: "thread-1" },
+      ),
+    );
+
+    const error =
+      "OpenDucktor could not open this structured question. Answer through the main chat composer.";
+    expect(live).toEqual([
+      expect.objectContaining({
+        type: "assistant_part",
+        part: expect.objectContaining({
+          kind: "text",
+          messageId: "question-message-invalid",
+          text: error,
+        }),
+      }),
+    ]);
+    expect(history).toEqual([
+      expect.objectContaining({
+        role: "assistant",
+        messageId: "question-message-invalid",
+        parts: [expect.objectContaining({ kind: "text", text: error })],
+      }),
+    ]);
+  });
+
+  test("projects contextual question replies as completed question tools", () => {
+    const pipeline = createCodexEventMapperPipeline();
+    const result = projectCodexCanonicalEventsToHistory(
+      pipeline.runThreadItem(
+        {
+          index: 0,
+          item: {
+            type: "userMessage",
+            id: "reply-1",
+            content: [
+              {
+                type: "text",
+                text: '<send_user_message_question_reply>{"answer":"Staging","question":"Which environment?","questionItemId":"[\\"request_user_input_async\\",\\"question-1\\",0]"}</send_user_message_question_reply>',
+                text_elements: [],
+              },
+            ],
+          },
+        },
+        { source: "thread_read", threadId: "thread-1" },
+      ),
+    );
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        role: "user",
+        text: "",
+        resolvedQuestionRequestIds: ["question-1"],
+      }),
+      expect.objectContaining({
+        role: "assistant",
+        text: "",
+        parts: [
+          expect.objectContaining({
+            kind: "tool",
+            tool: "request_user_input",
+            toolType: "question",
+            status: "completed",
+            metadata: expect.objectContaining({
+              requestId: "question-1",
+              questions: [
+                expect.objectContaining({
+                  question: "Which environment?",
+                }),
+              ],
+              answers: expect.objectContaining({
+                '["request_user_input_async","question-1",0]': { answers: ["Staging"] },
+              }),
+            }),
+          }),
+        ],
+      }),
+    ]);
+  });
+
+  test("projects captured async question skip IDs from Codex history", () => {
+    const requestIds = ["question-message"];
+    const item = {
+      type: "userMessage" as const,
+      id: "ordinary-message",
+      clientId: null,
+      content: toCodexTurnInputList([{ kind: "text", text: "Continue" }], requestIds),
+    };
+    const pipeline = createCodexEventMapperPipeline();
+    const live = projectCodexCanonicalEvents(
+      pipeline.runLive(
+        { kind: "item_completed", item },
+        { source: "live", threadId: "thread-1", turnId: "turn-1" },
+      ),
+    );
+    const history = projectCodexCanonicalEventsToHistory(
+      pipeline.runThreadItem({ item, index: 0 }, { source: "thread_read", threadId: "thread-1" }),
+    );
+
+    expect(live).toEqual([
+      expect.objectContaining({
+        type: "user_message",
+        message: "Continue",
+        resolvedQuestionRequestIds: requestIds,
+      }),
+    ]);
+    expect(history).toEqual([
+      expect.objectContaining({
+        role: "user",
+        text: "Continue",
+        resolvedQuestionRequestIds: requestIds,
+      }),
+    ]);
+  });
+
+  test("projects an IDE-wrapped reply with live and history parity", () => {
+    const firstQuestionId = '["request_user_input_async","question-message",0]';
+    const reply = `<send_user_message_question_reply>${JSON.stringify({
+      questionItemId: firstQuestionId,
+      question: "Which environment?",
+      answer: "Staging",
+    })}</send_user_message_question_reply>`;
+    const item = {
+      type: "userMessage" as const,
+      id: "reply-wrapped",
+      content: [
+        { type: "skill" as const, name: "review", path: "/skills/review" },
+        {
+          type: "text" as const,
+          text: `# Context from my IDE setup:\n\nThe second question remains pending.\n\n## My request for Codex:\n${reply}`,
+          text_elements: [],
+        },
+        { type: "mention" as const, name: "config.ts", path: "/repo/config.ts" },
+      ],
+    };
+    const live = projectCodexCanonicalEvents(
+      createCodexEventMapperPipeline().runLive(
+        { kind: "item_completed", item },
+        { source: "live", threadId: "thread-1", turnId: "turn-1" },
+      ),
+    );
+    const history = projectCodexCanonicalEventsToHistory(
+      createCodexEventMapperPipeline().runThreadItem(
+        { item, index: 0 },
+        { source: "thread_read", threadId: "thread-1" },
+      ),
+    );
+    expect(live).toEqual([
+      expect.objectContaining({
+        type: "assistant_part",
+        part: expect.objectContaining({
+          kind: "tool",
+          tool: "request_user_input",
+          toolType: "question",
+          status: "completed",
+        }),
+      }),
+    ]);
+    expect(history).toEqual([
+      expect.objectContaining({
+        role: "user",
+        text: "",
+        resolvedQuestionRequestIds: ["question-message"],
+      }),
+      expect.objectContaining({
+        role: "assistant",
+        parts: [
+          expect.objectContaining({
+            kind: "tool",
+            tool: "request_user_input",
+            toolType: "question",
+            status: "completed",
+          }),
+        ],
+      }),
+    ]);
   });
 });
 

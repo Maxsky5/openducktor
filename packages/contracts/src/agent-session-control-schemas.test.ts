@@ -183,8 +183,12 @@ describe("agent session control contracts", () => {
       agentSessionControlSendInputSchema.parse({
         ...ref,
         parts: [{ kind: "text", text: "hello" }],
+        resolvedQuestionRequestIds: ["question-1"],
       }),
-    ).toMatchObject(ref);
+    ).toMatchObject({
+      ...ref,
+      resolvedQuestionRequestIds: ["question-1"],
+    });
   });
 
   test("requires a resume mode on every resume control", () => {

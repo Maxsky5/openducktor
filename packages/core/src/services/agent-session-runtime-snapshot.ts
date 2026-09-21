@@ -12,7 +12,7 @@ export type AgentSessionRuntimeActivity = AgentSessionActivity;
 export type AgentSessionActivityInput = {
   runtimeActivity: AgentSessionRuntimeActivity;
   pendingApprovals: readonly unknown[];
-  pendingQuestions: readonly unknown[];
+  pendingQuestions: readonly Pick<AgentPendingQuestionRequest, "blocking">[];
 };
 
 /**
@@ -27,7 +27,7 @@ export const classifyAgentSessionActivity = ({
   pendingApprovals,
   pendingQuestions,
 }: AgentSessionActivityInput): AgentSessionActivity => {
-  if (pendingQuestions.length > 0) {
+  if (pendingQuestions.some((request) => request.blocking !== false)) {
     return "waiting_for_question";
   }
   if (pendingApprovals.length > 0) {
@@ -71,7 +71,7 @@ export const toAgentSessionRuntimeSnapshot = (
   }
 
   const classification = classifyAgentSessionActivity(snapshot);
-  const runtimeSnapshot: AgentSessionRuntimeSnapshot = {
+  const runtimeSnapshot: Extract<AgentSessionRuntimeSnapshot, { availability: "runtime" }> = {
     availability: "runtime",
     classification,
     ref,

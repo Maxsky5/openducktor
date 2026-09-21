@@ -43,6 +43,7 @@ export const toAgentStudioTranscriptSession = ({
     activityState,
     runtimeStatusMessage: loadedSession.runtimeStatusMessage,
     messages: toSessionMessagesState(loadedSession),
+    pendingQuestions: loadedSession.pendingQuestions,
   };
   if (loadedSession.title) {
     transcriptSession.title = loadedSession.title;

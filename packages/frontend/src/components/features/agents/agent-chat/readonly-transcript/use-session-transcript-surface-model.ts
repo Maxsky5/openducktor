@@ -57,11 +57,13 @@ export function useSessionTranscriptSurfaceModel({
   });
   const transcriptInteractions = useRuntimeTranscriptInteractions({
     target,
+    hasLiveSession: sessionHistory.interactionSession !== null,
     pendingApprovalRequests: visiblePendingInput.pendingApprovals,
     pendingQuestionRequests: visiblePendingInput.pendingQuestions,
     isRuntimeReady: runtimeReadiness.state === "ready",
     replyAgentApproval: sessionHistory.replyAgentApproval,
     answerAgentQuestion: sessionHistory.answerAgentQuestion,
+    sessionScope: target?.sessionScope ?? null,
   });
 
   const transcriptSurfaceState = deriveRuntimeTranscriptSurfaceState({

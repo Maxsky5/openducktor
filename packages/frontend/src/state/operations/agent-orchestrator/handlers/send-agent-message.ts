@@ -2,12 +2,14 @@ import {
   type AgentEnginePort,
   type AgentUserMessagePart,
   classifySystemSlashCommandInvocation,
+  describeAgentSessionScope,
   hasMeaningfulAgentUserMessageParts,
   normalizeAgentUserMessageParts,
+  resolveAgentSessionAssociationTransition,
 } from "@openducktor/core";
 import { agentSessionIdentityKey, matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { AgentMessageSendError } from "@/lib/agent-message-send-error";
-import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
+import { isAgentSessionBlockedOnInput } from "@/lib/agent-session-waiting-input";
 import { errorMessage } from "@/lib/errors";
 import { getAcceptedMessageAfterSendFailure } from "@/state/agent-runtime-services";
 import { HostInvokeError } from "@openducktor/host-client";
@@ -19,6 +21,7 @@ import type {
 } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
 import { createRepoStaleGuard, now, throwIfRepoStale } from "../support/core";
+import { closeBackgroundQuestions } from "../support/background-questions";
 import {
   appendSessionMessage,
   someSessionMessage,
@@ -34,6 +37,28 @@ import { toBoundRuntimeSessionRef } from "../support/session-runtime-ref";
 import type { SessionTurnMetadata } from "../support/session-turn-metadata";
 import { toUserChatMessage } from "../support/user-message-event";
 import type { PreparedSessionSend } from "./prepare-session-send";
+
+const withSendScope = (
+  session: AgentSessionState,
+  sessionScope: AgentMessageSendOptions["sessionScope"],
+): AgentSessionState => {
+  if (!sessionScope) {
+    return session;
+  }
+  const transition = resolveAgentSessionAssociationTransition(
+    session.sessionAssociation,
+    sessionScope,
+  );
+  if (transition.kind === "conflict") {
+    throw new Error(
+      `Cannot send message for session '${session.externalSessionId}' because its registered ${describeAgentSessionScope(transition.previous)} does not match the requested ${describeAgentSessionScope(transition.incoming)}.`,
+    );
+  }
+  return {
+    ...session,
+    sessionAssociation: transition.association,
+  };
+};
 
 export type SendAgentMessageDependencies = {
   workspaceRepoPath: string | null;
@@ -106,6 +131,21 @@ const prepareIdleSessionForSend = async ({
   }
 };
 
+const rejectSendWhileWaitingForInput = (
+  session: AgentSessionState,
+  dependencies: Pick<SendAgentMessageDependencies, "readSessionSnapshot" | "updateSession">,
+): never => {
+  settleStartingSession(
+    session,
+    "idle",
+    dependencies.readSessionSnapshot,
+    dependencies.updateSession,
+  );
+  throw new Error(
+    "Cannot send a message while the session is waiting for a blocking request. Answer or reject the blocking request first.",
+  );
+};
+
 const markSessionRunningForSend = (
   session: AgentSessionState,
   dependencies: Pick<
@@ -127,8 +167,8 @@ const markSessionRunningForSend = (
   return pendingUserMessageStartedAt;
 };
 
-const appendSendFailureNotice = (
-  session: AgentSessionState,
+export const appendSendFailureNotice = (
+  session: AgentSessionIdentity,
   message: string,
   updateSession: UpdateSession,
   removeRunningCompactionNotice: boolean,
@@ -166,13 +206,17 @@ const appendSendFailureNotice = (
   }));
 };
 
-const upsertAcceptedUserMessage = (
-  session: AgentSessionState,
+export const upsertAcceptedUserMessage = (
+  session: AgentSessionIdentity,
   acceptedUserMessage: Awaited<ReturnType<AgentEnginePort["sendUserMessage"]>>,
+  resolvedQuestionRequestIds: readonly string[] | undefined,
   updateSession: UpdateSession,
 ): void => {
+  const handledRequestIds =
+    acceptedUserMessage.resolvedQuestionRequestIds ?? resolvedQuestionRequestIds ?? [];
   updateSession(session, (current) => ({
     ...current,
+    ...closeBackgroundQuestions(current, handledRequestIds),
     messages: upsertUserSessionMessage(current, toUserChatMessage(acceptedUserMessage)),
   }));
 };
@@ -192,7 +236,10 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
     const isManualCompactionSend =
       classifySystemSlashCommandInvocation(normalizedParts).kind === "manual_session_compaction";
 
-    let currentSession = requireLoadedSession(dependencies.readSessionSnapshot, identity);
+    let currentSession = withSendScope(
+      requireLoadedSession(dependencies.readSessionSnapshot, identity),
+      options?.sessionScope,
+    );
     const externalSessionId = currentSession.externalSessionId;
     if (currentSession.status === "stopped") {
       const repoPath = requireWorkspaceRepoPath(dependencies.workspaceRepoPath);
@@ -219,19 +266,16 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
           ? { ...current, status: resumed.status, runtimeStatusMessage: null }
           : current,
       );
-      currentSession = requireLoadedSession(dependencies.readSessionSnapshot, identity);
+      currentSession = withSendScope(
+        requireLoadedSession(dependencies.readSessionSnapshot, identity),
+        options?.sessionScope,
+      );
       if (currentSession.status === "stopped") {
         throw new Error(`Session '${externalSessionId}' is still stopped after resume.`);
       }
     }
-    if (isAgentSessionWaitingInput(currentSession)) {
-      settleStartingSession(
-        currentSession,
-        "idle",
-        dependencies.readSessionSnapshot,
-        dependencies.updateSession,
-      );
-      return;
+    if (isAgentSessionBlockedOnInput(currentSession)) {
+      rejectSendWhileWaitingForInput(currentSession, dependencies);
     }
 
     const sessionWasBusy = currentSession.status === "running";
@@ -244,21 +288,31 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
           updateSession: dependencies.updateSession,
         });
 
-    const readySession = dependencies.readSessionSnapshot(currentSession);
-    if (!readySession || isAgentSessionWaitingInput(readySession)) {
-      settleStartingSession(
-        currentSession,
-        "idle",
-        dependencies.readSessionSnapshot,
-        dependencies.updateSession,
-      );
-      return;
+    const loadedReadySession = dependencies.readSessionSnapshot(currentSession);
+    if (!loadedReadySession || isAgentSessionBlockedOnInput(loadedReadySession)) {
+      if (!loadedReadySession) {
+        settleStartingSession(
+          currentSession,
+          "idle",
+          dependencies.readSessionSnapshot,
+          dependencies.updateSession,
+        );
+        return;
+      }
+      rejectSendWhileWaitingForInput(loadedReadySession, dependencies);
     }
+    const readySession = withSendScope(loadedReadySession, options?.sessionScope);
 
     const isBusyQueuedSend = readySession.status === "running";
     const sendAttempt = isBusyQueuedSend
       ? undefined
       : markSessionRunningForSend(readySession, dependencies);
+    const resolvedQuestionRequestIds =
+      readySession.historyLoadState === "loaded"
+        ? readySession.pendingQuestions
+            .filter((request) => request.blocking === false && request.source === undefined)
+            .map((request) => request.requestId)
+        : undefined;
 
     try {
       const runtimeSessionRef = toBoundRuntimeSessionRef(
@@ -270,6 +324,9 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
         ...runtimeSessionRef,
         parts: normalizedParts,
       };
+      if (resolvedQuestionRequestIds !== undefined) {
+        sendInput.resolvedQuestionRequestIds = resolvedQuestionRequestIds;
+      }
       if (readySession.selectedModel) {
         sendInput.model = readySession.selectedModel;
       }
@@ -278,7 +335,12 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
       }
       const acceptedUserMessage = await dependencies.adapter.sendUserMessage(sendInput);
       if (!isManualCompactionSend) {
-        upsertAcceptedUserMessage(readySession, acceptedUserMessage, dependencies.updateSession);
+        upsertAcceptedUserMessage(
+          readySession,
+          acceptedUserMessage,
+          resolvedQuestionRequestIds,
+          dependencies.updateSession,
+        );
       }
     } catch (error) {
       const acceptedMessage =
@@ -292,7 +354,12 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
           : null;
       if (acceptedMessage) {
         if (!isManualCompactionSend) {
-          upsertAcceptedUserMessage(readySession, acceptedMessage, dependencies.updateSession);
+          upsertAcceptedUserMessage(
+            readySession,
+            acceptedMessage,
+            resolvedQuestionRequestIds,
+            dependencies.updateSession,
+          );
         }
         appendSendFailureNotice(
           readySession,

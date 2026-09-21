@@ -51,6 +51,7 @@ const createTarget = (overrides: Partial<AgentSessionIdentity> = {}): AgentSessi
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   target: createTarget(),
+  hasLiveSession: true,
   pendingApprovalRequests: [],
   pendingQuestionRequests: [],
   isRuntimeReady: true,
@@ -153,7 +154,12 @@ describe("useRuntimeTranscriptInteractions", () => {
         (state) => state.pendingQuestions.isSubmittingByRequestId["question-1"] === true,
       );
 
-      expect(answerAgentQuestion).toHaveBeenCalledWith(createTarget(), pendingQuestion, [["A"]]);
+      expect(answerAgentQuestion).toHaveBeenCalledWith(
+        createTarget(),
+        pendingQuestion,
+        [["A"]],
+        undefined,
+      );
 
       await harness.run(async () => {
         deferredAnswer.resolve(undefined);
@@ -168,6 +174,67 @@ describe("useRuntimeTranscriptInteractions", () => {
       );
     } finally {
       deferredAnswer.resolve(undefined);
+      await harness.unmount();
+    }
+  });
+
+  test("answers a background question through the standard action", async () => {
+    const answerAgentQuestion = mock(async () => {});
+    const target = createTarget({ runtimeKind: "codex" });
+    const question = {
+      ...createQuestionRequest("message-1"),
+      blocking: false,
+    };
+    const harness = createHookHarness(
+      createBaseArgs({
+        target,
+        pendingQuestionRequests: [question],
+        answerAgentQuestion,
+        sessionScope: { kind: "repository" },
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(harness.getLatest().pendingQuestionRequests).toMatchObject([
+        {
+          requestId: "message-1",
+          blocking: false,
+        },
+      ]);
+      await harness.run(async (state) => {
+        await state.pendingQuestions.onSubmit("message-1", [["Staging"]]);
+      });
+
+      expect(answerAgentQuestion).toHaveBeenCalledWith(target, question, [["Staging"]], {
+        kind: "repository",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("disables question answers without a live session", async () => {
+    const answerAgentQuestion = mock(async () => {});
+    const question = { ...createQuestionRequest("history-question"), blocking: false };
+    const harness = createHookHarness(
+      createBaseArgs({
+        hasLiveSession: false,
+        pendingQuestionRequests: [question],
+        answerAgentQuestion,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      expect(harness.getLatest().pendingQuestionRequests).toEqual([question]);
+      expect(harness.getLatest().pendingQuestions.canSubmit).toBe(false);
+      await harness.run(async (state) => {
+        await state.pendingQuestions.onSubmit("history-question", [["A"]]);
+      });
+      expect(answerAgentQuestion).not.toHaveBeenCalled();
+    } finally {
       await harness.unmount();
     }
   });

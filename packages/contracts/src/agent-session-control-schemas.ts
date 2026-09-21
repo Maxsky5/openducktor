@@ -142,6 +142,7 @@ export const agentSessionControlSendInputSchema = agentSessionLiveRefSchema
   .extend({
     sessionScope: agentSessionScopeSchema,
     parts: z.array(agentSessionUserMessagePartSchema).min(1),
+    resolvedQuestionRequestIds: z.array(nonEmptyStringSchema).optional(),
     model: agentModelSelectionSchema.optional(),
     systemPrompt: z.string().optional(),
   })

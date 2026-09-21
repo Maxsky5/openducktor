@@ -25,6 +25,7 @@ export const toAgentChatTranscriptSession = (
     activityState: getAgentSessionActivityStateFromSession(session),
     runtimeStatusMessage: session.runtimeStatusMessage,
     messages: toSessionMessagesState(session),
+    pendingQuestions: session.pendingQuestions,
   };
   if (session.title) {
     transcriptSession.title = session.title;

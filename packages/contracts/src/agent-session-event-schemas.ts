@@ -6,7 +6,10 @@ import {
   runtimeApprovalRequestTypeSchema,
   runtimeSubagentExecutionModeSchema,
 } from "./agent-runtime-schemas";
-import { agentSessionQuestionItemSchema } from "./agent-session-pending-schemas";
+import {
+  agentSessionPendingQuestionRequestSchema,
+  agentSessionPendingQuestionRequestFields,
+} from "./agent-session-pending-schemas";
 import {
   type AgentSessionLiveRef,
   agentModelSelectionSchema,
@@ -280,13 +283,8 @@ export type AgentTranscriptPendingApprovalRequest = z.infer<
   typeof inferredTranscriptPendingApprovalRequestSchema
 >;
 
-const transcriptPendingQuestionRequestFields = {
-  requestId: z.string(),
-  requestInstanceId: z.string().optional(),
-  questions: z.array(agentSessionQuestionItemSchema),
-} satisfies ZodSchemaFields;
 const inferredTranscriptPendingQuestionRequestSchema = z
-  .object(transcriptPendingQuestionRequestFields)
+  .object(agentSessionPendingQuestionRequestFields)
   .strict();
 export type AgentTranscriptPendingQuestionRequest = z.infer<
   typeof inferredTranscriptPendingQuestionRequestSchema
@@ -307,6 +305,7 @@ export const agentUserMessageEventSchema = transcriptEventSchema({
   parts: z.array(agentUserMessageDisplayPartSchema),
   state: z.enum(["queued", "read"]),
   model: agentModelSelectionSchema.optional(),
+  resolvedQuestionRequestIds: z.array(z.string().trim().min(1)).optional(),
 });
 
 const inferredAgentRuntimeEventSchema = z.discriminatedUnion("type", [
@@ -328,6 +327,7 @@ const inferredAgentRuntimeEventSchema = z.discriminatedUnion("type", [
     totalTokens: finiteNonNegativeNumberSchema.optional(),
     contextWindow: finiteNonNegativeNumberSchema.optional(),
     model: agentModelSelectionSchema.optional(),
+    questionRequest: agentSessionPendingQuestionRequestSchema.optional(),
   }),
   transcriptEventSchema({
     type: z.literal("transcript_retracted"),
@@ -382,7 +382,7 @@ const inferredAgentRuntimeEventSchema = z.discriminatedUnion("type", [
   }),
   transcriptEventSchema({
     type: z.literal("question_required"),
-    ...transcriptPendingQuestionRequestFields,
+    ...agentSessionPendingQuestionRequestFields,
     parentExternalSessionId: z.string().optional(),
     childExternalSessionId: z.string().optional(),
     subagentCorrelationKey: z.string().optional(),

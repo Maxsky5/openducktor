@@ -6,6 +6,7 @@ import type {
   AgentSessionHistoryMessage,
   AgentUserMessageDisplayPart,
 } from "@openducktor/core";
+import { pendingInputIdentity } from "@/lib/pending-input-identity";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { formatToolContent } from "../agent-tool-messages";
 import { createAssistantMessageMeta } from "./assistant-meta";
@@ -26,6 +27,7 @@ import {
   isSubagentMessage,
 } from "./subagent-messages";
 import { normalizeToolInput, normalizeToolText } from "./tool-messages";
+import { projectBackgroundQuestions } from "./background-questions";
 
 type HistoryPart = AgentSessionHistoryMessage["parts"][number];
 type LegacySubtaskHistoryPart = {
@@ -290,6 +292,8 @@ export const historyToChatMessages = (
     }
 
     const content = message.text;
+    const isStructuredAsyncQuestion =
+      message.role === "assistant" && message.questionRequest !== undefined;
     const isFinalAssistantMessage =
       message.role === "assistant" && isFinalAssistantHistoryMessage(message);
     const completedAtMs = Date.parse(message.timestamp);
@@ -352,6 +356,7 @@ export const historyToChatMessages = (
     }
 
     const shouldRenderPrimaryMessage =
+      !isStructuredAsyncQuestion &&
       (message.role !== "assistant" || assistantTextMessageIndexes.length === 0) &&
       (content.length > 0 || userDisplayParts.length > 0 || isFinalAssistantMessage);
     if (shouldRenderPrimaryMessage) {
@@ -423,16 +428,35 @@ export const applyLoadedSessionHistory = (
   session: AgentSessionState,
   history: AgentSessionHistoryMessage[],
   messagesAtReadStart?: AgentSessionState["messages"],
+  questionsAtReadStart?: AgentSessionState["pendingQuestions"],
 ): AgentSessionState => {
   const historyMessages = historyToChatMessages(history, {
     role: session.sessionAssociation.kind === "workflow" ? session.sessionAssociation.role : null,
   });
   const loadedMessages = createSessionMessagesState(session.externalSessionId, historyMessages);
+  const historyQuestions = projectBackgroundQuestions(history);
+  const historyQuestionIds = new Set(historyQuestions.map(pendingInputIdentity));
+  const oldQuestionIds = new Set(questionsAtReadStart?.map(pendingInputIdentity));
+  const pendingQuestions =
+    session.livePresence === "present"
+      ? session.pendingQuestions
+      : [
+          ...historyQuestions,
+          ...session.pendingQuestions.filter((request) => {
+            const requestId = pendingInputIdentity(request);
+            if (historyQuestionIds.has(requestId)) return false;
+            return (
+              request.source !== undefined ||
+              (questionsAtReadStart !== undefined && !oldQuestionIds.has(requestId))
+            );
+          }),
+        ];
 
   return {
     ...session,
     historyLoadState: "loaded",
     historyLoadFailure: null,
+    pendingQuestions,
     messages: settleImageGenerationMessages({
       ...session,
       messages: mergeHistoryMessages(

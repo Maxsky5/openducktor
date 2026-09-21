@@ -8,6 +8,20 @@ type AnsweredQuestion = AgentQuestionRequest["questions"][number] & {
   answers: string[];
 };
 
+const toAnsweredQuestionData = ({
+  header,
+  question,
+  options,
+  multiple,
+  custom,
+  answers,
+}: AnsweredQuestion): AgentToolData => {
+  const data: AgentToolData = { header, question, options, answers };
+  if (multiple !== undefined) data.multiple = multiple;
+  if (custom !== undefined) data.custom = custom;
+  return data;
+};
+
 const stringValueSchema = z.string();
 const readMetadataRequestId = (metadata: AgentToolData): string | null => {
   for (const key of ["requestId", "requestID", "questionRequestId"]) {
@@ -49,7 +63,7 @@ export const annotateQuestionToolMessage = (
           metadata: {
             ...metadata,
             requestId,
-            questions: answeredQuestionsWithAnswers,
+            questions: answeredQuestionsWithAnswers.map(toAnsweredQuestionData),
             answers,
           },
         },

@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const agentPendingRequestIdSchema = z.string().trim().min(1);
+
 const agentSessionQuestionOptionSchema = z
   .object({
     label: z.string(),
@@ -7,7 +9,7 @@ const agentSessionQuestionOptionSchema = z
   })
   .strict();
 
-export const agentSessionQuestionItemSchema = z
+const agentSessionQuestionItemSchema = z
   .object({
     header: z.string(),
     question: z.string(),
@@ -18,3 +20,14 @@ export const agentSessionQuestionItemSchema = z
   .strict();
 
 export type AgentTranscriptQuestionItem = z.infer<typeof agentSessionQuestionItemSchema>;
+
+export const agentSessionPendingQuestionRequestFields = {
+  requestId: agentPendingRequestIdSchema,
+  requestInstanceId: z.string().optional(),
+  questions: z.array(agentSessionQuestionItemSchema),
+  blocking: z.boolean().optional(),
+};
+
+export const agentSessionPendingQuestionRequestSchema = z
+  .object(agentSessionPendingQuestionRequestFields)
+  .strict();

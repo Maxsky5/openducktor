@@ -3,18 +3,19 @@ import { startSessionWorkflow } from "@/features/session-start/session-start-wor
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
-import type { AcceptedAgentUserMessage } from "@openducktor/core";
+import type { AcceptedAgentUserMessage, AgentEnginePort, AgentEvent } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
 import {
   findSessionMessageForTest,
   sessionMessagesToArray,
 } from "@/test-utils/session-message-test-helpers";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentQuestionRequest, AgentSessionState } from "@/types/agent-orchestrator";
 import {
   createSessionUpdater as createEventSessionUpdater,
   listenToAgentSessionEvents,
 } from "../events/session-events-test-harness";
+import type { SessionEventAdapter } from "../events/session-event-test-types";
 import { createTaskCardFixture } from "../test-utils";
 import {
   buildSession,
@@ -549,7 +550,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     });
 
     try {
-      await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]);
+      await expect(
+        actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]),
+      ).rejects.toThrow("Answer or reject the blocking request first");
 
       expect(sendCalls).toBe(0);
       expect(getSession(sessionsRef)?.status).toBe("idle");
@@ -593,8 +596,10 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalSendUserMessage = adapter.sendUserMessage;
     const callOrder: string[] = [];
+    let sentInput: Parameters<typeof adapter.sendUserMessage>[0] | null = null;
     adapter.sendUserMessage = async (input) => {
       callOrder.push("send");
+      sentInput = input;
       return acceptedUserMessage(input);
     };
 
@@ -620,6 +625,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]);
 
       expect(callOrder).toEqual(["send"]);
+      expect(sentInput).not.toHaveProperty("resolvedQuestionRequestIds");
       expect(sessionMessagesToArray(getSession(sessionsRef))).toEqual([
         expect.objectContaining({
           role: "user",
@@ -632,27 +638,48 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     }
   });
 
-  test("does not send free-form messages while waiting for pending input", async () => {
-    const adapter = new OpencodeSdkAdapter();
+  test("tells the runtime which history-restored background questions a send handles", async () => {
+    const adapter = createOpenCodeAgentEngineTestAdapter(new OpencodeSdkAdapter());
     const originalSendUserMessage = adapter.sendUserMessage;
-    let sendCalls = 0;
+    const inputs: Parameters<typeof adapter.sendUserMessage>[0][] = [];
     adapter.sendUserMessage = async (input) => {
-      sendCalls += 1;
+      inputs.push(input);
       return acceptedUserMessage(input);
     };
-
+    const requestId = "history-question";
+    const childRequest: AgentQuestionRequest = {
+      requestId: "child-question",
+      blocking: false,
+      questions: [{ header: "Child", question: "Which child option?", options: [] }],
+      source: {
+        kind: "subagent",
+        parentExternalSessionId: "session-1",
+        childExternalSessionId: "child-session",
+      },
+    };
     const sessionsRef = createSessionsRef([
       buildSession({
         status: "idle",
+        historyLoadState: "loaded",
         pendingQuestions: [
           {
-            requestId: "question-1",
-            questions: [{ header: "Confirm", question: "Confirm", options: [] }],
+            requestId,
+            blocking: false,
+            questions: [
+              {
+                header: "Environment",
+                question: "Which environment?",
+                options: [
+                  { label: "Staging", description: "Staging" },
+                  { label: "Production", description: "Production" },
+                ],
+              },
+            ],
           },
+          childRequest,
         ],
       }),
     ]);
-
     const actions = createSessionActions({
       adapter,
       sessionsRef,
@@ -660,14 +687,197 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     });
 
     try {
-      await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: " hello " }]);
-      expect(sendCalls).toBe(0);
-      expect(sessionMessagesToArray(getSession(sessionsRef))).toHaveLength(0);
-      expect(getSession(sessionsRef)?.pendingQuestions).toHaveLength(1);
+      await actions.sendAgentMessage(getSession(sessionsRef), [
+        { kind: "text", text: "Use the safest option" },
+      ]);
+
+      expect(inputs[0]).toMatchObject({ resolvedQuestionRequestIds: [requestId] });
+      expect(getSession(sessionsRef)?.pendingQuestions).toEqual([childRequest]);
     } finally {
       adapter.sendUserMessage = originalSendUserMessage;
     }
   });
+
+  test.each([
+    {
+      label: "one captured question",
+      beforeSend: [
+        {
+          requestId: "question-before-send",
+          blocking: false,
+          questions: [{ header: "Question", question: "Question before send", options: [] }],
+        },
+      ],
+    },
+    { label: "an empty captured set", beforeSend: [] },
+  ] satisfies Array<{ label: string; beforeSend: AgentQuestionRequest[] }>)(
+    "keeps a question that arrives during native admission after $label",
+    async ({ beforeSend }) => {
+      const handlers: Array<(event: AgentEvent) => void> = [];
+      const adapter: AgentEnginePort & SessionEventAdapter = {
+        ...createOpenCodeAgentEngineTestAdapter(new OpencodeSdkAdapter()),
+        subscribeEvents: async (_sessionRef, handler) => {
+          handlers.push(handler);
+          return () => {};
+        },
+        replyApproval: async () => {},
+      };
+      const entered = Promise.withResolvers<Parameters<typeof adapter.sendUserMessage>[0]>();
+      const admit = Promise.withResolvers<void>();
+      const emittedEvents: AcceptedAgentUserMessage[] = [];
+      adapter.sendUserMessage = async (input) => {
+        entered.resolve(input);
+        await admit.promise;
+        const emittedEvent = acceptedUserMessage(input);
+        if (input.resolvedQuestionRequestIds !== undefined) {
+          emittedEvent.resolvedQuestionRequestIds = input.resolvedQuestionRequestIds;
+        }
+        emittedEvents.push(emittedEvent);
+        for (const handler of handlers) {
+          handler(emittedEvent);
+        }
+        return emittedEvent;
+      };
+      const duringSend = {
+        requestId: "question-during-send",
+        blocking: false,
+        questions: [{ header: "Question", question: "Question during send", options: [] }],
+      };
+      const sessionsRef = createSessionsRef([
+        buildSession({
+          status: "idle",
+          historyLoadState: "loaded",
+          pendingQuestions: beforeSend,
+        }),
+      ]);
+      const unsubscribe = await listenToAgentSessionEvents({
+        adapter,
+        sessionsRef,
+        updateSession: createEventSessionUpdater(sessionsRef),
+        externalSessionId: "session-1",
+        repoPath: "/tmp/repo",
+        resolveTurnDurationMs: () => undefined,
+        clearTurnDuration: () => {},
+      });
+      const actions = createSessionActions({
+        adapter,
+        sessionsRef,
+        ensureExistingSessionRuntime: async () => {},
+      });
+
+      try {
+        const sending = actions.sendAgentMessage(getSession(sessionsRef), [
+          { kind: "text", text: "Continue" },
+        ]);
+        const input = await entered.promise;
+        const current = getSession(sessionsRef);
+        sessionsRef.current = replaceAgentSession(sessionsRef.current, {
+          ...current,
+          pendingQuestions: [...current.pendingQuestions, duringSend],
+        });
+        admit.resolve();
+        await sending;
+
+        const capturedIds = beforeSend.map((question) => question.requestId);
+        expect(input.resolvedQuestionRequestIds).toEqual(capturedIds);
+        expect(emittedEvents[0]?.resolvedQuestionRequestIds).toEqual(capturedIds);
+        expect(getSession(sessionsRef)?.pendingQuestions).toEqual([duringSend]);
+      } finally {
+        unsubscribe();
+      }
+    },
+  );
+
+  const blockingInputCases: Array<{
+    label: string;
+    pendingInput: Partial<Pick<AgentSessionState, "pendingApprovals" | "pendingQuestions">>;
+  }> = [
+    {
+      label: "approval",
+      pendingInput: {
+        pendingApprovals: [
+          {
+            requestId: "approval-1",
+            requestType: "permission_grant",
+            title: "Approve permission: read",
+            summary: "Approval request for read.",
+            action: { name: "read" },
+            mutation: "read_only",
+            supportedReplyOutcomes: ["approve_once", "reject"],
+          },
+        ],
+      },
+    },
+    {
+      label: "question",
+      pendingInput: {
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [{ header: "Confirm", question: "Confirm", options: [] }],
+          },
+        ],
+      },
+    },
+  ];
+
+  test.each(blockingInputCases)(
+    "rejects a send while waiting for a blocking $label",
+    async ({ pendingInput }) => {
+      const adapter = new OpencodeSdkAdapter();
+      const originalSendUserMessage = adapter.sendUserMessage;
+      let sendCalls = 0;
+      adapter.sendUserMessage = async (input) => {
+        sendCalls += 1;
+        return acceptedUserMessage(input);
+      };
+
+      const sessionsRef = createSessionsRef([
+        buildSession({
+          status: "idle",
+          pendingApprovals: pendingInput.pendingApprovals ?? [],
+          pendingQuestions: [
+            {
+              requestId: "background-question-1",
+              blocking: false,
+              questions: [
+                {
+                  header: "Environment",
+                  question: "Which environment should I use?",
+                  options: [
+                    { label: "Staging", description: "Staging" },
+                    { label: "Production", description: "Production" },
+                  ],
+                },
+              ],
+            },
+            ...(pendingInput.pendingQuestions ?? []),
+          ],
+        }),
+      ]);
+
+      const actions = createSessionActions({
+        adapter,
+        sessionsRef,
+        ensureExistingSessionRuntime: async () => {},
+      });
+
+      try {
+        await expect(
+          actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "Staging" }]),
+        ).rejects.toThrow("Answer or reject the blocking request first");
+        expect(sendCalls).toBe(0);
+        expect(sessionMessagesToArray(getSession(sessionsRef))).toHaveLength(0);
+        expect(
+          getSession(sessionsRef)?.pendingQuestions.some(
+            (question) => question.requestId === "background-question-1",
+          ),
+        ).toBe(true);
+      } finally {
+        adapter.sendUserMessage = originalSendUserMessage;
+      }
+    },
+  );
 
   test("sends to an existing QA session after the task status changes", async () => {
     const adapter = new OpencodeSdkAdapter();

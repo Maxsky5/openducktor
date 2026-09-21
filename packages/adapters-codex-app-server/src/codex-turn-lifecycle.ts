@@ -19,7 +19,7 @@ import {
 } from "./codex-session-policy";
 import { toCodexTurnInputList } from "./codex-user-inputs";
 import { requireModelSelection, toTransportModelSelection } from "./model-catalog";
-import type { CodexAppServerClient, CodexSessionState } from "./types";
+import type { CodexAppServerClient, CodexSessionState, CodexUserInput } from "./types";
 
 export type CodexTurnLifecycleContext = {
   sessions: CodexSessionLookup;
@@ -34,10 +34,8 @@ export type CodexTurnLifecycleContext = {
   bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string, startedAtMs?: number): boolean;
   bindPendingInputToActiveTurn(externalSessionId: string, activeTurn: ActiveCodexTurn): void;
   setSessionLiveStatus(session: CodexSessionState, liveStatus: CodexThreadStatusSnapshot): void;
-  emitUserMessage(
-    event: AcceptedAgentUserMessage,
-    sourceParts: AgentUserMessagePart[],
-  ): AcceptedAgentUserMessage;
+  expectUserMessageEcho(event: AcceptedAgentUserMessage, input: CodexUserInput[]): () => void;
+  emitUserMessage(event: AcceptedAgentUserMessage): AcceptedAgentUserMessage;
   emitSessionEvent(externalSessionId: string, event: AgentEvent): void;
   codexPolicyForSession(session: CodexSessionState): CodexEffectivePolicy;
   logSessionPolicy?: (entry: CodexPolicyLogEntry) => void;
@@ -96,9 +94,8 @@ const flushQueuedUserMessages = async (
 const emitAcceptedUserMessage = (
   context: CodexTurnLifecycleContext,
   acceptedUserMessage: AcceptedAgentUserMessage,
-  parts: AgentUserMessagePart[],
 ): AcceptedAgentUserMessage => {
-  return context.emitUserMessage(acceptedUserMessage, parts);
+  return context.emitUserMessage(acceptedUserMessage);
 };
 
 export const flushQueuedUserMessagesLater = (
@@ -123,17 +120,51 @@ const steerActiveTurn = async (
   activeTurn: ActiveCodexTurn,
   parts: AgentUserMessagePart[],
   acceptedUserMessage: AcceptedAgentUserMessage,
+  requireNativeAdmission: boolean,
+  publishAcceptedMessage: boolean,
+  resolvedQuestionRequestIds?: readonly string[],
+  nativeInput?: CodexUserInput[],
 ): Promise<AcceptedAgentUserMessage | null> => {
-  const input = toCodexTurnInputList(parts);
+  const input = nativeInput ?? toCodexTurnInputList(parts, resolvedQuestionRequestIds);
   if (activeTurn.isTurnSettled()) {
     return null;
   }
-  if (!activeTurn.turnId) {
-    activeTurn.queuedUserMessages.push(input);
-    return emitAcceptedUserMessage(context, acceptedUserMessage, parts);
+  const cancelExpectedEcho = publishAcceptedMessage
+    ? context.expectUserMessageEcho(acceptedUserMessage, input)
+    : () => undefined;
+  try {
+    if (!activeTurn.turnId) {
+      if (requireNativeAdmission) {
+        if (!activeTurn.turnStartPromise) {
+          throw new Error(
+            `Codex turn for session '${activeTurn.session.threadId}' has not reached native admission. Retry the message.`,
+          );
+        }
+        await activeTurn.turnStartPromise;
+        requireRetainedTurnSession(context, activeTurn.session);
+        if (activeTurn.isTurnSettled() || !activeTurn.turnId) {
+          throw new Error(
+            `Codex turn for session '${activeTurn.session.threadId}' ended before it could accept the message. Retry the message.`,
+          );
+        }
+        await steerRetainedTurn(context, activeTurn, input, activeTurn.turnId);
+        return publishAcceptedMessage
+          ? emitAcceptedUserMessage(context, acceptedUserMessage)
+          : acceptedUserMessage;
+      }
+      activeTurn.queuedUserMessages.push(input);
+      return publishAcceptedMessage
+        ? emitAcceptedUserMessage(context, acceptedUserMessage)
+        : acceptedUserMessage;
+    }
+    await steerRetainedTurn(context, activeTurn, input, activeTurn.turnId);
+    return publishAcceptedMessage
+      ? emitAcceptedUserMessage(context, acceptedUserMessage)
+      : acceptedUserMessage;
+  } catch (error) {
+    cancelExpectedEcho();
+    throw error;
   }
-  await steerRetainedTurn(context, activeTurn, input, activeTurn.turnId);
-  return emitAcceptedUserMessage(context, acceptedUserMessage, parts);
 };
 
 const emitTurnStartErrorLater = (
@@ -157,6 +188,7 @@ const emitTurnStartErrorLater = (
 type CodexTurnStart = {
   readonly acceptedUserMessage: AcceptedAgentUserMessage | null;
   readonly turnStartPromise: ReturnType<CodexAppServerClient["turnStart"]> | null;
+  readonly cancelExpectedEcho: (() => void) | null;
 };
 
 const runCodexTurn = async (
@@ -165,6 +197,10 @@ const runCodexTurn = async (
   parts: AgentUserMessagePart[],
   acceptedUserMessage: AcceptedAgentUserMessage | null,
   requestedModel?: AgentModelSelection,
+  requireNativeAdmission = false,
+  resolvedQuestionRequestIds?: readonly string[],
+  nativeInput?: CodexUserInput[],
+  publishAcceptedMessage = true,
 ): Promise<CodexTurnStart> => {
   const session = context.sessions.get(externalSessionId);
   if (!session) {
@@ -172,7 +208,7 @@ const runCodexTurn = async (
   }
   await context.ensureRuntimeEventSubscription(session.runtimeId);
   requireRetainedTurnSession(context, session);
-  const input = toCodexTurnInputList(parts);
+  const input = nativeInput ?? toCodexTurnInputList(parts, resolvedQuestionRequestIds);
 
   const existingActiveTurn = context.activeTurnsBySessionId.get(session.threadId);
   if (existingActiveTurn && !existingActiveTurn.isTurnSettled()) {
@@ -181,9 +217,18 @@ const runCodexTurn = async (
         `Codex session '${externalSessionId}' already has an active turn and cannot start a continuation.`,
       );
     }
-    const accepted = await steerActiveTurn(context, existingActiveTurn, parts, acceptedUserMessage);
+    const accepted = await steerActiveTurn(
+      context,
+      existingActiveTurn,
+      parts,
+      acceptedUserMessage,
+      requireNativeAdmission,
+      publishAcceptedMessage,
+      resolvedQuestionRequestIds,
+      nativeInput,
+    );
     if (accepted) {
-      return { acceptedUserMessage: accepted, turnStartPromise: null };
+      return { acceptedUserMessage: accepted, turnStartPromise: null, cancelExpectedEcho: null };
     }
 
     const latestActiveTurn = context.activeTurnsBySessionId.get(session.threadId);
@@ -251,6 +296,10 @@ const runCodexTurn = async (
     }),
   );
 
+  const cancelExpectedEcho =
+    acceptedUserMessage && publishAcceptedMessage
+      ? context.expectUserMessageEcho(acceptedUserMessage, input)
+      : null;
   activeTurnState.turnStartRequestSentAtMs = Date.now();
   const turnStartPromise = client
     .turnStart({
@@ -283,21 +332,69 @@ const runCodexTurn = async (
       return result;
     })
     .catch((error) => {
+      cancelExpectedEcho?.();
       activeTurnState.markTurnSettled();
       throw error;
     });
   activeTurnState.turnStartPromise = turnStartPromise;
 
-  if (acceptedUserMessage) {
-    context.emitUserMessage(acceptedUserMessage, parts);
+  if (acceptedUserMessage && !requireNativeAdmission && publishAcceptedMessage) {
+    context.emitUserMessage(acceptedUserMessage);
   }
-  return { acceptedUserMessage, turnStartPromise };
+  return { acceptedUserMessage, turnStartPromise, cancelExpectedEcho };
 };
 
 export const startCodexTurnForSession = async (
   context: CodexTurnLifecycleContext,
   externalSessionId: string,
   parts: AgentUserMessagePart[],
+  acceptedUserMessage: AcceptedAgentUserMessage,
+  requestedModel?: AgentModelSelection,
+  requireNativeAdmission = false,
+  resolvedQuestionRequestIds?: readonly string[],
+): Promise<AcceptedAgentUserMessage> => {
+  const started = await runCodexTurn(
+    context,
+    externalSessionId,
+    parts,
+    acceptedUserMessage,
+    requestedModel,
+    requireNativeAdmission,
+    resolvedQuestionRequestIds,
+  );
+  if (!started.acceptedUserMessage) {
+    throw new Error(`Codex session '${externalSessionId}' did not accept the user message.`);
+  }
+  const session = context.sessions.get(externalSessionId);
+  if (session && started.turnStartPromise) {
+    if (requireNativeAdmission) {
+      try {
+        const result = await started.turnStartPromise;
+        requireRetainedTurnSession(context, session);
+        if (result.turn.status === "failed" || result.turn.status === "interrupted") {
+          throw new Error(
+            `Codex ended the turn for session '${externalSessionId}' as '${result.turn.status}' before it accepted the message. Retry the message.`,
+          );
+        }
+        return emitAcceptedUserMessage(context, started.acceptedUserMessage);
+      } catch (error) {
+        started.cancelExpectedEcho?.();
+        if (sessionIsRetained(context, session)) {
+          context.setSessionLiveStatus(session, codexThreadStatusSnapshot("idle"));
+        }
+        throw error;
+      }
+    }
+    emitTurnStartErrorLater(context, session, started.turnStartPromise);
+  }
+  return started.acceptedUserMessage;
+};
+
+export const startCodexTurnWithInputForSession = async (
+  context: CodexTurnLifecycleContext,
+  externalSessionId: string,
+  parts: AgentUserMessagePart[],
+  input: CodexUserInput[],
   acceptedUserMessage: AcceptedAgentUserMessage,
   requestedModel?: AgentModelSelection,
 ): Promise<AcceptedAgentUserMessage> => {
@@ -307,15 +404,32 @@ export const startCodexTurnForSession = async (
     parts,
     acceptedUserMessage,
     requestedModel,
+    true,
+    undefined,
+    input,
+    false,
   );
   if (!started.acceptedUserMessage) {
     throw new Error(`Codex session '${externalSessionId}' did not accept the user message.`);
   }
   const session = context.sessions.get(externalSessionId);
-  if (session && started.turnStartPromise) {
-    emitTurnStartErrorLater(context, session, started.turnStartPromise);
+  if (!session || !started.turnStartPromise) return started.acceptedUserMessage;
+  try {
+    const result = await started.turnStartPromise;
+    requireRetainedTurnSession(context, session);
+    if (result.turn.status === "failed" || result.turn.status === "interrupted") {
+      throw new Error(
+        `Codex ended the turn for session '${externalSessionId}' as '${result.turn.status}' before it accepted the message. Retry the message.`,
+      );
+    }
+    return started.acceptedUserMessage;
+  } catch (error) {
+    started.cancelExpectedEcho?.();
+    if (sessionIsRetained(context, session)) {
+      context.setSessionLiveStatus(session, codexThreadStatusSnapshot("idle"));
+    }
+    throw error;
   }
-  return started.acceptedUserMessage;
 };
 
 /**

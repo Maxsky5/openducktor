@@ -35,6 +35,9 @@ const projectCodexCanonicalEvent = (event: CodexCanonicalEvent): AgentEvent => {
     if (event.model) {
       userMessage.model = event.model;
     }
+    if (event.resolvedQuestionRequestIds !== undefined) {
+      userMessage.resolvedQuestionRequestIds = event.resolvedQuestionRequestIds;
+    }
     return userMessage;
   }
 
@@ -54,6 +57,9 @@ const projectCodexCanonicalEvent = (event: CodexCanonicalEvent): AgentEvent => {
     }
     if (event.model) {
       assistantMessage.model = event.model;
+    }
+    if (event.questionRequest) {
+      assistantMessage.questionRequest = event.questionRequest;
     }
     return assistantMessage;
   }

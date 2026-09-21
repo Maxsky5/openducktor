@@ -862,28 +862,86 @@ describe("session history loader", () => {
     expect(harness.session.historyLoadState).toBe("not_requested");
   });
 
-  test("loads transcript history without owning live input state", async () => {
-    const pendingQuestions: AgentQuestionRequest[] = [
-      {
-        requestId: "question-1",
-        questions: [
-          {
-            header: "Confirm",
-            question: "Keep this pending question visible",
-            options: [],
-          },
-        ],
+  test("keeps a direct question that arrives during a history read", async () => {
+    const historyPromise = Promise.withResolvers<AgentSessionHistoryMessage[]>();
+    const readStarted = Promise.withResolvers<void>();
+    const harness = createHistoryLoadHarness();
+    const loadPromise = loadSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => {
+          readStarted.resolve();
+          return historyPromise.promise;
+        },
       },
-    ];
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+    await readStarted.promise;
+    const pendingQuestion: AgentQuestionRequest = {
+      requestId: "question-1",
+      questions: [
+        {
+          header: "Confirm",
+          question: "Keep this pending question visible",
+          options: [],
+        },
+      ],
+    };
+    harness.updateSession(sessionTarget, (current) => ({
+      ...current,
+      pendingQuestions: [pendingQuestion],
+    }));
+    historyPromise.resolve([]);
+    await loadPromise;
+
+    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(harness.session.pendingQuestions).toEqual([pendingQuestion]);
+  });
+
+  test("removes a history question that newer history resolves", async () => {
+    const pendingQuestion: AgentQuestionRequest = {
+      requestId: "question-1",
+      blocking: false,
+      questions: [
+        {
+          header: "Confirm",
+          question: "Keep this pending question visible",
+          options: [],
+        },
+      ],
+    };
     const harness = createHistoryLoadHarness({
       ...createSession(),
-      pendingQuestions,
+      pendingQuestions: [pendingQuestion],
     });
 
     await loadSessionHistoryIntoStore({
       repoPath: "/repo",
       adapter: {
-        loadSessionHistory: async () => [],
+        loadSessionHistory: async () => [
+          {
+            messageId: pendingQuestion.requestId,
+            role: "assistant",
+            timestamp: "2026-09-19T10:00:00.000Z",
+            text: "Keep this pending question visible",
+            parts: [],
+            questionRequest: pendingQuestion,
+          },
+          {
+            messageId: "answer-1",
+            role: "user",
+            timestamp: "2026-09-19T10:00:01.000Z",
+            text: "Yes",
+            displayParts: [{ kind: "text", text: "Yes" }],
+            state: "read",
+            parts: [],
+            resolvedQuestionRequestIds: [pendingQuestion.requestId],
+          },
+        ],
       },
       readSessionSnapshot: harness.readSessionSnapshot,
       updateSession: harness.updateSession,
@@ -892,8 +950,7 @@ describe("session history loader", () => {
       historyReadGeneration,
     });
 
-    expect(harness.session.historyLoadState).toBe("loaded");
-    expect(harness.session.pendingQuestions).toBe(pendingQuestions);
+    expect(harness.session.pendingQuestions).toEqual([]);
   });
 
   test("does not erase a live user message when applying a history baseline", async () => {
@@ -995,6 +1052,76 @@ describe("session history loader", () => {
       "Previous transcript",
       "Resume after QA rejection",
     ]);
+  });
+
+  test("does not reopen stale history after an ordinary message during the read", async () => {
+    const historyPromise = Promise.withResolvers<AgentSessionHistoryMessage[]>();
+    const readStarted = Promise.withResolvers<void>();
+    const harness = createHistoryLoadHarness();
+    const historyQuestion = {
+      requestId: "question-history",
+      blocking: false,
+      questions: [
+        {
+          header: "History",
+          question: "History question",
+          options: [
+            { label: "Yes", description: "Yes" },
+            { label: "No", description: "No" },
+          ],
+        },
+      ],
+    };
+    const liveQuestion = {
+      requestId: "question-live",
+      blocking: false,
+      questions: [
+        {
+          header: "Live",
+          question: "Live question",
+          options: [
+            { label: "Yes", description: "Yes" },
+            { label: "No", description: "No" },
+          ],
+        },
+      ],
+    };
+
+    const loadPromise = loadSelectedSessionBaselineHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => {
+          readStarted.resolve();
+          return historyPromise.promise;
+        },
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+    await readStarted.promise;
+
+    harness.updateSession(sessionTarget, (current) => ({
+      ...current,
+      livePresence: "present",
+      pendingQuestions: [liveQuestion],
+    }));
+
+    historyPromise.resolve([
+      {
+        messageId: historyQuestion.requestId,
+        role: "assistant",
+        timestamp: "2026-09-19T10:00:00.000Z",
+        text: "History question",
+        parts: [],
+        questionRequest: historyQuestion,
+      },
+    ]);
+    await loadPromise;
+
+    expect(harness.session.pendingQuestions).toEqual([liveQuestion]);
   });
 
   test("keeps a local accepted user send when baseline history confirms it", async () => {

@@ -568,6 +568,41 @@ describe("AgentChatThread", () => {
     expect(html).toContain("Input needed");
   });
 
+  test("renders Codex background questions through the standard question card", () => {
+    const question = buildQuestionRequest({
+      requestId: "question-1",
+      blocking: false,
+      questions: [
+        {
+          header: "Test",
+          question: "Which test should I run?",
+          options: [
+            { label: "Unit tests", description: "Unit tests" },
+            { label: "Full suite", description: "Full suite" },
+          ],
+        },
+      ],
+    });
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          transcript: buildSessionTranscript(
+            buildSession({
+              pendingQuestions: [question],
+            }),
+          ),
+          pendingQuestionRequests: [question],
+        },
+      }),
+    );
+
+    expect(html).toContain("Input needed");
+    expect(html).toContain("Which test should I run?");
+    expect(html).toContain("Unit tests");
+    expect(html).not.toContain("Codex asked while it keeps working");
+  });
+
   test("renders approval cards for pending approval requests", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
@@ -1121,6 +1156,8 @@ describe("AgentChatThread", () => {
 
     const bottomStack = rendered.container.querySelector(".agent-chat-bottom-stack");
     expect(bottomStack?.className).toContain("pb-3");
+    expect(bottomStack?.parentElement?.className).toContain("min-h-0");
+    expect(bottomStack?.parentElement?.className).toContain("overflow-y-auto");
 
     rendered.unmount();
   });

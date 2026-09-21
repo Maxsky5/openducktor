@@ -33,6 +33,7 @@ describe("agent session transcript event contract", () => {
         message: "hello",
         parts: [{ kind: "text", text: "hello" }],
         state: "read",
+        resolvedQuestionRequestIds: [],
       },
       {
         ...base,
@@ -148,6 +149,29 @@ describe("agent session transcript event contract", () => {
             ...event.part.computerUse,
             images: [{ mimeType: "image/png", dataBase64: "AAAA", staleField: 1 }],
           },
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  test("rejects empty question request ids", () => {
+    expect(
+      agentRuntimeEventSchema.safeParse({
+        ...base,
+        type: "question_required",
+        requestId: "   ",
+        questions: [{ header: "Choice", question: "Pick", options: [] }],
+      }).success,
+    ).toBe(false);
+    expect(
+      agentRuntimeEventSchema.safeParse({
+        ...base,
+        type: "assistant_message",
+        messageId: "message-1",
+        message: "Pick",
+        questionRequest: {
+          requestId: "",
+          questions: [{ header: "Choice", question: "Pick", options: [] }],
         },
       }).success,
     ).toBe(false);

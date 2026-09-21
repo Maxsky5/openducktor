@@ -42,6 +42,16 @@ const createProjector = () =>
     resolveTask: (taskId) => ({ id: taskId, title: "Build notifications" }),
   });
 
+const createRootOwnedProjector = () =>
+  createSessionOccurrenceProjector({
+    repositoryLabel: "Repo",
+    resolveAssociation: (candidate) =>
+      candidate.externalSessionId === ref.externalSessionId
+        ? { kind: "workflow", taskId: "task-1", role: "build" }
+        : null,
+    resolveTask: (taskId) => ({ id: taskId, title: "Build notifications" }),
+  });
+
 describe("session occurrence projector", () => {
   test.each([
     ["API request failed", "API request failed"],
@@ -122,6 +132,111 @@ describe("session occurrence projector", () => {
     expect(projector.accept({ type: "session_upsert", session: next })).toEqual([]);
   });
 
+  test("notifies once for a new background question and uses snapshots as a baseline", () => {
+    const projector = createProjector();
+    const existingQuestion = {
+      requestId: "message-1",
+      blocking: false,
+      questions: [
+        {
+          header: "Choice",
+          question: "Existing question",
+          options: [
+            { label: "A", description: "A" },
+            { label: "B", description: "B" },
+          ],
+        },
+      ],
+    };
+    projector.accept({
+      type: "snapshot",
+      repoPath: "/repo",
+      sessions: [snapshot({ pendingQuestions: [existingQuestion] })],
+    });
+    expect(
+      projector.accept({
+        type: "session_upsert",
+        session: snapshot({ pendingQuestions: [existingQuestion] }),
+      }),
+    ).toEqual([]);
+
+    const newQuestion = {
+      ...existingQuestion,
+      requestId: "message-2",
+      questions: [
+        {
+          header: "Provider",
+          question: "Which provider should we use?",
+          options: [
+            { label: "A", description: "A" },
+            { label: "B", description: "B" },
+          ],
+        },
+      ],
+    };
+    const occurrences = projector.accept({
+      type: "session_upsert",
+      session: snapshot({ pendingQuestions: [existingQuestion, newQuestion] }),
+    });
+    expect(occurrences).toMatchObject([
+      {
+        kind: "agent.question_asked",
+        status: "Which provider should we use?",
+        navigationTarget: {
+          type: "pending_input",
+          inputKind: "question",
+          requestId: "message-2",
+        },
+      },
+    ]);
+    expect(
+      projector.accept({
+        type: "session_upsert",
+        session: snapshot({ pendingQuestions: [existingQuestion, newQuestion] }),
+      }),
+    ).toEqual([]);
+  });
+
+  test("groups background questions from one Codex message", () => {
+    const projector = createProjector();
+    projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+
+    const occurrences = projector.accept({
+      type: "session_upsert",
+      session: snapshot({
+        pendingQuestions: [
+          {
+            requestId: "message-1",
+            blocking: false,
+            questions: [
+              {
+                header: "Provider",
+                question: "Which provider should we use?",
+                options: [
+                  { label: "OpenAI", description: "OpenAI" },
+                  { label: "Anthropic", description: "Anthropic" },
+                ],
+              },
+              { header: "Model", question: "Which model should we use?", options: [] },
+            ],
+          },
+        ],
+      }),
+    });
+
+    expect(occurrences).toMatchObject([
+      {
+        kind: "agent.question_asked",
+        status: "Which provider should we use? +1 more question",
+        navigationTarget: {
+          type: "pending_input",
+          inputKind: "question",
+          requestId: "message-1",
+        },
+      },
+    ]);
+  });
+
   test("keeps the remaining question count within the status limit", () => {
     const projector = createProjector();
     projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
@@ -198,6 +313,20 @@ describe("session occurrence projector", () => {
               },
             ],
           },
+          {
+            requestId: "async-question",
+            blocking: false,
+            questions: [
+              {
+                header: "Runtime",
+                question: "Which runtime should we use?",
+                options: [
+                  { label: "Codex", description: "Codex" },
+                  { label: "OpenCode", description: "OpenCode" },
+                ],
+              },
+            ],
+          },
         ],
       });
       projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [] });
@@ -210,6 +339,7 @@ describe("session occurrence projector", () => {
       expect(projector.accept(event).map(buildNotificationCopy)).toEqual([
         { title: "Builder", body: "Allow command: bun install" },
         { title: "Builder", body: "Which providers should we support?" },
+        { title: "Builder", body: "Which runtime should we use?" },
       ]);
       expect(projector.accept(event)).toEqual([]);
       expect(projector.accept({ type: "session_upsert", session: pending })).toEqual([]);
@@ -229,6 +359,15 @@ describe("session occurrence projector", () => {
       const pending = snapshot({
         pendingApprovals: [
           { requestId: "permission", requestType: "permission_grant", title: "Read" },
+        ],
+        pendingQuestions: [
+          {
+            requestId: "async-question",
+            blocking: false,
+            questions: [
+              { header: "Runtime", question: "Which runtime should we use?", options: [] },
+            ],
+          },
         ],
       });
       if (scenario === "subagent") pending.parentExternalSessionId = "parent";
@@ -392,6 +531,235 @@ describe("session occurrence projector", () => {
         }),
       }),
     ).toEqual([]);
+  });
+
+  test("routes a child background question notification to its parent session", () => {
+    const projector = createProjector();
+    const childRef = { ...ref, externalSessionId: "child-session" };
+    const child = snapshot({
+      ref: childRef,
+      parentExternalSessionId: ref.externalSessionId,
+    });
+    projector.accept({
+      type: "snapshot",
+      repoPath: "/repo",
+      sessions: [snapshot(), child],
+    });
+
+    const [occurrence] = projector.accept({
+      type: "session_upsert",
+      session: {
+        ...child,
+        pendingQuestions: [
+          {
+            requestId: "question-child-background",
+            blocking: false,
+            questions: [
+              {
+                header: "Runtime",
+                question: "Which runtime should the child use?",
+                options: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(occurrence).toMatchObject({
+      kind: "agent.question_asked",
+      status: "Which runtime should the child use?",
+      navigationTarget: {
+        type: "pending_input",
+        session: { externalSessionId: ref.externalSessionId },
+        requestId: "question-child-background",
+      },
+    });
+  });
+
+  test("routes a nested child background question to its owned root", () => {
+    const projector = createRootOwnedProjector();
+    const child = snapshot({
+      ref: { ...ref, externalSessionId: "child-session" },
+      parentExternalSessionId: ref.externalSessionId,
+    });
+    const grandchild = snapshot({
+      ref: { ...ref, externalSessionId: "grandchild-session" },
+      parentExternalSessionId: child.ref.externalSessionId,
+      pendingQuestions: [
+        {
+          requestId: "question-grandchild-background",
+          blocking: false,
+          questions: [{ header: "Runtime", question: "Which runtime?", options: [] }],
+        },
+      ],
+    });
+    projector.accept({
+      type: "snapshot",
+      repoPath: "/repo",
+      sessions: [snapshot(), child],
+    });
+
+    expect(projector.accept({ type: "session_upsert", session: grandchild })).toMatchObject([
+      {
+        kind: "agent.question_asked",
+        navigationTarget: {
+          session: { externalSessionId: ref.externalSessionId },
+          requestId: "question-grandchild-background",
+        },
+      },
+    ]);
+  });
+
+  test("releases a nested child question when the missing parent appears", () => {
+    const projector = createRootOwnedProjector();
+    const child = snapshot({
+      ref: { ...ref, externalSessionId: "child-session" },
+      parentExternalSessionId: ref.externalSessionId,
+    });
+    const grandchild = snapshot({
+      ref: { ...ref, externalSessionId: "grandchild-session" },
+      parentExternalSessionId: child.ref.externalSessionId,
+      pendingQuestions: [
+        {
+          requestId: "question-grandchild-background",
+          blocking: false,
+          questions: [{ header: "Runtime", question: "Which runtime?", options: [] }],
+        },
+      ],
+    });
+    projector.accept({ type: "session_upsert", session: snapshot() });
+
+    expect(projector.accept({ type: "session_upsert", session: grandchild })).toEqual([]);
+    expect(projector.accept({ type: "session_upsert", session: child })).toMatchObject([
+      {
+        kind: "agent.question_asked",
+        navigationTarget: {
+          session: { externalSessionId: ref.externalSessionId },
+          requestId: "question-grandchild-background",
+        },
+      },
+    ]);
+    expect(projector.accept({ type: "session_upsert", session: child })).toEqual([]);
+  });
+
+  test("defers a child background question until its parent appears", () => {
+    const projector = createProjector();
+    const childRef = { ...ref, externalSessionId: "child-session" };
+    const child = snapshot({
+      ref: childRef,
+      parentExternalSessionId: ref.externalSessionId,
+      pendingQuestions: [
+        {
+          requestId: "question-child-background",
+          blocking: false,
+          questions: [{ header: "Runtime", question: "Which runtime?", options: [] }],
+        },
+      ],
+    });
+
+    expect(projector.accept({ type: "session_upsert", session: child })).toEqual([]);
+    expect(projector.accept({ type: "session_upsert", session: snapshot() })).toMatchObject([
+      {
+        kind: "agent.question_asked",
+        navigationTarget: {
+          session: { externalSessionId: ref.externalSessionId },
+          requestId: "question-child-background",
+        },
+      },
+    ]);
+    expect(projector.accept({ type: "session_upsert", session: snapshot() })).toEqual([]);
+  });
+
+  test("releases a deferred child question after a snapshot restores its parent", () => {
+    const projector = createProjector();
+    const child = snapshot({
+      ref: { ...ref, externalSessionId: "child-session" },
+      parentExternalSessionId: ref.externalSessionId,
+      pendingQuestions: [
+        {
+          requestId: "question-child-background",
+          blocking: false,
+          questions: [{ header: "Runtime", question: "Which runtime?", options: [] }],
+        },
+      ],
+    });
+
+    expect(projector.accept({ type: "session_upsert", session: child })).toEqual([]);
+    const restored = {
+      type: "snapshot" as const,
+      repoPath: "/repo",
+      sessions: [snapshot(), child],
+    };
+    expect(projector.accept(restored)).toMatchObject([
+      {
+        kind: "agent.question_asked",
+        navigationTarget: {
+          session: { externalSessionId: ref.externalSessionId },
+          requestId: "question-child-background",
+        },
+      },
+    ]);
+    expect(projector.accept(restored)).toEqual([]);
+  });
+
+  test("drops a deferred child question that resolves before its parent appears", () => {
+    const projector = createProjector();
+    const childRef = { ...ref, externalSessionId: "child-session" };
+    const child = snapshot({
+      ref: childRef,
+      parentExternalSessionId: ref.externalSessionId,
+      pendingQuestions: [
+        {
+          requestId: "question-child-background",
+          blocking: false,
+          questions: [{ header: "Runtime", question: "Which runtime?", options: [] }],
+        },
+      ],
+    });
+
+    projector.accept({ type: "session_upsert", session: child });
+    projector.accept({
+      type: "session_upsert",
+      session: { ...child, pendingQuestions: [] },
+    });
+
+    expect(projector.accept({ type: "session_upsert", session: snapshot() })).toEqual([]);
+  });
+
+  test("publishes a deferred child question when its parent gains ownership", () => {
+    let parentOwned = false;
+    const projector = createSessionOccurrenceProjector({
+      repositoryLabel: "Repo",
+      resolveAssociation: (candidate) =>
+        candidate.externalSessionId === ref.externalSessionId && parentOwned
+          ? { kind: "workflow", taskId: "task-1", role: "build" }
+          : null,
+      resolveTask: (taskId) => ({ id: taskId, title: "Build notifications" }),
+    });
+    const child = snapshot({
+      ref: { ...ref, externalSessionId: "child-session" },
+      parentExternalSessionId: ref.externalSessionId,
+      pendingQuestions: [
+        {
+          requestId: "question-child-background",
+          blocking: false,
+          questions: [{ header: "Runtime", question: "Which runtime?", options: [] }],
+        },
+      ],
+    });
+
+    projector.accept({ type: "session_upsert", session: child });
+    projector.accept({ type: "session_upsert", session: snapshot() });
+    parentOwned = true;
+
+    expect(projector.reconcileAssociations()).toMatchObject([
+      {
+        kind: "agent.question_asked",
+        navigationTarget: { requestId: "question-child-background" },
+      },
+    ]);
+    expect(projector.reconcileAssociations()).toEqual([]);
   });
 
   test("merges error frames, gives error priority over idle, and allows a later episode", () => {

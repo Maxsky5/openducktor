@@ -1,4 +1,4 @@
-import type { AgentEvent } from "@openducktor/core";
+import type { AgentEvent, AgentPendingQuestionRequest } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { normalizeSessionErrorMessage } from "@/lib/session-error-message";
 import { isStopAbortSessionErrorMessage } from "../support/tool-messages";
@@ -14,7 +14,7 @@ export type AgentSessionTranscriptActivityFacts = Pick<
   "status" | "runtimeStatusMessage" | "pendingUserMessageStartedAt" | "stopRequestedAt"
 > & {
   pendingApprovals: readonly unknown[];
-  pendingQuestions: readonly unknown[];
+  pendingQuestions: readonly Pick<AgentPendingQuestionRequest, "blocking">[];
 };
 
 /** Apply ordered lifecycle facts before transcript assembly can buffer the event. */
@@ -50,7 +50,10 @@ const projectActivity = (
       runtimeStatusMessage: null,
       pendingUserMessageStartedAt: undefined,
       pendingApprovals: current.pendingApprovals.length === 0 ? current.pendingApprovals : [],
-      pendingQuestions: current.pendingQuestions.length === 0 ? current.pendingQuestions : [],
+      pendingQuestions:
+        event.type === "session_error"
+          ? current.pendingQuestions.filter((request) => request.blocking === false)
+          : [],
     };
   }
   if (

@@ -234,6 +234,10 @@ export function useAgentStudioSessionActions({
       pendingQuestions: loadedSession?.pendingQuestions ?? EMPTY_PENDING_QUESTION_REQUESTS,
       canAnswerQuestions: agentStudioReady,
       answerAgentQuestion,
+      sessionScope:
+        loadedSession?.sessionAssociation.kind === "unbound"
+          ? undefined
+          : loadedSession?.sessionAssociation,
     });
   const { isSubmittingApprovalByRequestId, approvalReplyErrorByRequestId, onReplyApproval } =
     useAgentSessionApprovalActions({

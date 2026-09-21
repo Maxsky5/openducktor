@@ -20,7 +20,6 @@ import type { ClaudeAgentSdkEvent, ClaudeSessionContext } from "../claude/claude
 import type { ClaudeRuntimeInstance } from "./claude-live-session-adapter-contract";
 
 type LoadedContextResult = AgentSessionLiveAdapterMutation<AgentSessionContextUsage | null>;
-
 const refKey = (ref: AgentSessionLiveRef): string =>
   [ref.repoPath, ref.runtimeKind, ref.workingDirectory, ref.externalSessionId].join("\u0000");
 

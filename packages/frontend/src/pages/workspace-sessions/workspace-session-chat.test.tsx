@@ -307,6 +307,23 @@ test.each(["retry", "streaming", "draft", "record-failure"] as const)(
         expect(renderCounts.get("assistant-2")).toBeGreaterThan(currentRenders);
         expect(renderCounts.get("assistant-1")).toBe(completedRenders);
         expect(buildPickerItems).toHaveBeenCalledTimes(catalogBuilds);
+        const composer = view.getByLabelText("Message composer");
+        await act(async () => {
+          store.replaceSession({
+            ...session,
+            pendingQuestions: [
+              { requestId: "background-question", blocking: false, questions: [] },
+            ],
+          });
+        });
+        expect(composer.getAttribute("contenteditable")).toBe("true");
+        await act(async () => {
+          store.replaceSession({
+            ...session,
+            pendingQuestions: [{ requestId: "blocking-question", questions: [] }],
+          });
+        });
+        expect(composer.getAttribute("contenteditable")).toBe("false");
         return;
       }
       const composer = view.getByLabelText("Message composer");
