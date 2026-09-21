@@ -5,6 +5,7 @@ import { applyPreferredMessageTimestamp } from "./message-timestamp";
 import { sessionMessageTimestampInsertionIndex } from "./message-timestamp-ordering";
 import {
   createSessionMessagesState,
+  findLastSessionMessageByRole,
   findSessionMessageById,
   forEachSessionMessage,
   getSessionMessagesSlice,
@@ -44,6 +45,38 @@ const sameIdCurrentMessageOrEmpty = (
     return [];
   }
   return [currentMessage];
+};
+
+/**
+ * Match the live row by source message id: a live assistant row can be keyed by a text
+ * part id, while the hydrated whole-message row uses the runtime message id. Loaded part
+ * rows carry their own part id, so this lookup skips them.
+ */
+const findCurrentAssistantMessagesForLoadedHistory = ({
+  currentOwner,
+  loadedMessage,
+  absorbedCurrentMessageIds,
+}: {
+  currentOwner: Pick<AgentSessionState, "externalSessionId" | "messages">;
+  loadedMessage: AgentChatMessage;
+  absorbedCurrentMessageIds: ReadonlySet<string>;
+}): AgentChatMessage[] => {
+  if (loadedMessage.role !== "assistant" || loadedMessage.meta?.kind !== "assistant") {
+    return [];
+  }
+  if (loadedMessage.meta.partId !== undefined) {
+    return [];
+  }
+
+  const match = findLastSessionMessageByRole(
+    currentOwner,
+    "assistant",
+    (message) =>
+      message.meta?.kind === "assistant" &&
+      message.meta.sourceMessageId === loadedMessage.id &&
+      !absorbedCurrentMessageIds.has(message.id),
+  );
+  return match ? [match] : [];
 };
 
 const findMatchingCurrentToolMessages = ({
@@ -198,7 +231,18 @@ const findMatchingCurrentMessages = ({
     });
   }
 
-  return sameIdCurrentMessageOrEmpty(sameIdCurrentMessage, absorbedCurrentMessageIds);
+  const sameIdMatches = sameIdCurrentMessageOrEmpty(
+    sameIdCurrentMessage,
+    absorbedCurrentMessageIds,
+  );
+  if (sameIdMatches.length > 0) {
+    return sameIdMatches;
+  }
+  return findCurrentAssistantMessagesForLoadedHistory({
+    currentOwner,
+    loadedMessage,
+    absorbedCurrentMessageIds,
+  });
 };
 
 const mergeSameMessageId = (

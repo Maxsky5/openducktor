@@ -310,6 +310,185 @@ describe("agent-orchestrator/support/history-message-merge", () => {
     });
   });
 
+  test("deduplicates the final Claude assistant row against its live text part row", () => {
+    const merged = mergedMessages(
+      [
+        {
+          id: "response-1",
+          role: "assistant",
+          content: "Complete final answer",
+          timestamp: "2026-03-01T09:00:03.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: true,
+            durationMs: 211_000,
+          },
+        },
+      ],
+      [
+        {
+          id: "text:response-1:response-1:text",
+          role: "assistant",
+          content: "Complete final answer",
+          timestamp: "2026-03-01T09:00:01.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: true,
+            providerId: "claude",
+            modelId: "claude-opus-5",
+            variant: "high",
+            durationMs: 159_000,
+            sourceMessageId: "response-1",
+            partId: "response-1:text",
+          },
+        },
+      ],
+    );
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({
+      id: "response-1",
+      content: "Complete final answer",
+      meta: {
+        kind: "assistant",
+        isFinal: true,
+        providerId: "claude",
+        modelId: "claude-opus-5",
+        variant: "high",
+        durationMs: 211_000,
+        sourceMessageId: "response-1",
+      },
+    });
+  });
+
+  test("deduplicates a streaming Claude assistant row against its live text part row", () => {
+    const merged = mergedMessages(
+      [
+        {
+          id: "response-1",
+          role: "assistant",
+          content: "Draft answer",
+          timestamp: "2026-03-01T09:00:02.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: false,
+          },
+        },
+      ],
+      [
+        {
+          id: "text:response-1:response-1:text",
+          role: "assistant",
+          content: "Draft answer",
+          timestamp: "2026-03-01T09:00:01.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: false,
+            providerId: "claude",
+            modelId: "claude-opus-5",
+            sourceMessageId: "response-1",
+            partId: "response-1:text",
+          },
+        },
+      ],
+    );
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({
+      id: "text:response-1:response-1:text",
+      content: "Draft answer",
+      meta: {
+        kind: "assistant",
+        isFinal: false,
+        providerId: "claude",
+        modelId: "claude-opus-5",
+        sourceMessageId: "response-1",
+      },
+    });
+  });
+
+  test("keeps distinct runtime assistant messages with the same text apart", () => {
+    const merged = mergedMessages(
+      [
+        {
+          id: "response-2",
+          role: "assistant",
+          content: "Complete final answer",
+          timestamp: "2026-03-01T09:00:03.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: true,
+          },
+        },
+      ],
+      [
+        {
+          id: "text:response-1:response-1:text",
+          role: "assistant",
+          content: "Complete final answer",
+          timestamp: "2026-03-01T09:00:01.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: true,
+            sourceMessageId: "response-1",
+            partId: "response-1:text",
+          },
+        },
+      ],
+    );
+
+    expect(merged.map((message) => message.id)).toEqual([
+      "text:response-1:response-1:text",
+      "response-2",
+    ]);
+  });
+
+  test("keeps distinct text part rows of one assistant message apart", () => {
+    const merged = mergedMessages(
+      [
+        {
+          id: "text:response-1:response-1:text:3",
+          role: "assistant",
+          content: "Second block",
+          timestamp: "2026-03-01T09:00:03.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: true,
+            sourceMessageId: "response-1",
+            partId: "response-1:text:3",
+          },
+        },
+      ],
+      [
+        {
+          id: "text:response-1:response-1:text:0",
+          role: "assistant",
+          content: "First block",
+          timestamp: "2026-03-01T09:00:01.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: false,
+            sourceMessageId: "response-1",
+            partId: "response-1:text:0",
+          },
+        },
+      ],
+    );
+
+    expect(merged.map((message) => message.id)).toEqual([
+      "text:response-1:response-1:text:0",
+      "text:response-1:response-1:text:3",
+    ]);
+  });
+
   test("keeps completed current reasoning when history reasoning is still incomplete", () => {
     const merged = mergedMessages(
       [
