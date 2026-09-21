@@ -17,12 +17,13 @@ import {
   flushCodexAdapterWork,
 } from "./codex-app-server-adapter.test-harness";
 import type { CodexSubagentLinkState } from "./codex-subagent-link-state";
-import type {
-  CodexAppServerAdapter,
-  CodexAppServerStreamEvent,
-  CodexJsonRpcRequest,
-  CodexJsonRpcTransport,
-  CodexLiveSessionMutation,
+import {
+  CodexMessageAcceptedError,
+  type CodexAppServerAdapter,
+  type CodexAppServerStreamEvent,
+  type CodexJsonRpcRequest,
+  type CodexJsonRpcTransport,
+  type CodexLiveSessionMutation,
 } from "./index";
 import {
   codexCollabAgentToolCallFixture,
@@ -230,7 +231,7 @@ describe("CodexAppServerAdapter streaming", () => {
     }
   });
 
-  test("rejects when publishing a completed background reply fails", async () => {
+  test("retains acceptance when publishing a completed background reply fails", async () => {
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
     const { adapter } = createHarness({
       subscribeEvents,
@@ -267,13 +268,22 @@ describe("CodexAppServerAdapter streaming", () => {
         externalSessionId: "thread/start-runtime-live",
         parts: [],
       });
-      await expect(
-        adapter.replyQuestion({
+      const error = await adapter
+        .replyQuestion({
           ...session,
           requestId: "async-question-live-update-failure",
           answers: [["Staging"]],
-        }),
-      ).rejects.toThrow("live update failed");
+        })
+        .catch((cause: unknown) => cause);
+      expect(error).toBeInstanceOf(CodexMessageAcceptedError);
+      expect(error).toMatchObject({
+        message: "live update failed",
+        acceptedMessage: {
+          type: "user_message",
+          message: "> Which environment should I use?\n\nStaging",
+          resolvedQuestionRequestIds: ["async-question-live-update-failure"],
+        },
+      });
       await expect(
         adapter.readSessionRuntimeSnapshot(codexSessionRuntimeRef("thread/start-runtime-live")),
       ).resolves.toMatchObject({ pendingQuestions: [] });

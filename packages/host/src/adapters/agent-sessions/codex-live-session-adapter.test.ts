@@ -1,6 +1,7 @@
 import { unexpectedNativeRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
 import { describe, expect, test } from "bun:test";
+import { CodexMessageAcceptedError } from "@openducktor/adapters-codex-app-server";
 import type {
   CodexAppServerAdapter,
   CodexAppServerAdapterOptions,
@@ -713,6 +714,56 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
         stage: "live_update",
         acceptedMessage: { type: "user_message", messageId: "question-reply-1" },
       },
+    });
+  });
+
+  test("retains a background question reply when controller publication fails", async () => {
+    const harness = createControllerHarness();
+    const acceptedMessage = {
+      type: "user_message" as const,
+      externalSessionId: "thread-1",
+      timestamp: "2026-07-16T10:02:00.000Z",
+      messageId: "question-reply-1",
+      message: "Answer",
+      parts: [{ kind: "text" as const, text: "Answer" }],
+      state: "read" as const,
+      resolvedQuestionRequestIds: ["question-1"],
+    };
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation");
+        },
+        liveSessionLifecycle: createLifecycle([]),
+        codexAppServer,
+        onBackgroundFailure: noBackgroundFailure,
+        resolveRuntimePolicy,
+        createController: (options) => ({
+          ...harness.createController(options),
+          replyQuestion: async () => {
+            throw new CodexMessageAcceptedError(acceptedMessage, new Error("Publication failed"));
+          },
+        }),
+      })(runtime),
+    );
+
+    const result = await Effect.runPromise(
+      Effect.either(
+        prepared.adapter.replyQuestion({
+          ...ref,
+          sessionScope: { kind: "repository" },
+          requestId: "question-1",
+          answers: [["Answer"]],
+          blocking: false,
+        }),
+      ),
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag !== "Left") throw new Error("Expected publication failure");
+    expect(result.left).toBeInstanceOf(AgentSessionMessageAcceptedError);
+    expect(result.left).toMatchObject({
+      failure: { sessionRef: ref, stage: "live_update", acceptedMessage },
     });
   });
 

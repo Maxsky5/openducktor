@@ -78,6 +78,7 @@ import { codexTodosFromThreadRead } from "./codex-app-server-transcript";
 import { CodexContextUsageLoader } from "./codex-context-usage-loader";
 import { fileDiffsFromUnifiedDiff } from "./codex-file-diffs";
 import { CodexLocalSessionState } from "./codex-local-session-state";
+import { CodexMessageAcceptedError } from "./codex-message-accepted-error";
 import { CodexPendingInputState } from "./codex-pending-input-state";
 import { CodexQuestionHistory } from "./codex-question-history";
 import { CodexAsyncQuestionState } from "./codex-async-questions";
@@ -1323,19 +1324,23 @@ export class CodexAppServerAdapter
       const publishLiveSessionMutation = this.options.onLiveSessionMutation;
       if (publishLiveSessionMutation) {
         const sessionRef = codexSessionRef(session);
-        await publishLiveSessionMutation({
-          runtimeId: input.runtimeId,
-          snapshotMode: "delta",
-          removedRefs: [],
-          snapshots: this.changedLiveSessionSnapshots(
-            input.runtimeId,
-            new Set([input.externalSessionId]),
-          ),
-          transcriptEvents: completionEvents
-            .filter((event) => isAgentSessionTranscriptEventType(event.type))
-            .map((event) => withAgentSessionRef(sessionRef, event)),
-          catalogInvalidated: false,
-        });
+        try {
+          await publishLiveSessionMutation({
+            runtimeId: input.runtimeId,
+            snapshotMode: "delta",
+            removedRefs: [],
+            snapshots: this.changedLiveSessionSnapshots(
+              input.runtimeId,
+              new Set([input.externalSessionId]),
+            ),
+            transcriptEvents: completionEvents
+              .filter((event) => isAgentSessionTranscriptEventType(event.type))
+              .map((event) => withAgentSessionRef(sessionRef, event)),
+            catalogInvalidated: false,
+          });
+        } catch (cause) {
+          throw new CodexMessageAcceptedError(accepted, cause);
+        }
       }
       return accepted;
     }

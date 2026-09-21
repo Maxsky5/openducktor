@@ -19,12 +19,8 @@ import {
 import type { AgentRuntimePolicyBinding, AgentSessionSummary } from "@openducktor/core";
 import { Effect, Exit } from "effect";
 import { toAgentSessionControlSummary } from "../../application/agent-sessions/agent-session-control-summary";
-import {
-  type HostError,
-  type HostOperationErrorAggregate,
-  HostValidationError,
-  toHostOperationError,
-} from "../../effect/host-errors";
+import { HostValidationError, toHostOperationError } from "../../effect/host-errors";
+import type { HostError, HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { AgentSessionRuntimeAdapterPort } from "../../ports/agent-session-live-adapter-port";
 import type { CodexAppServerRespondInput } from "../../ports/codex-app-server-port";
 import { stopCodexSession } from "../codex/codex-session-stop";
@@ -38,6 +34,7 @@ import { createCodexLiveSessionEventHub } from "./codex-live-session-event-hub";
 import {
   publishAcceptedCodexMessage,
   refreshAfterAcceptedCodexMessage,
+  toAcceptedCodexMessageError,
 } from "./codex-live-session-acceptance";
 import { toCodexUserMessagePart } from "./codex-live-session-inputs";
 import { createCodexLiveSessionProjection } from "./codex-live-session-projection";
@@ -50,7 +47,7 @@ export type {
   CodexLiveSessionAdapterPreparer,
   CreateCodexLiveSessionAdapterPreparerInput,
   PreparedCodexLiveSessionAdapter,
-} from "./codex-live-session-adapter-contract";
+};
 
 const defaultCreateController = (options: CodexAppServerAdapterOptions): CodexSessionController =>
   new CodexAppServerAdapter(options);
@@ -331,10 +328,12 @@ export const createCodexLiveSessionAdapterPreparer = ({
                 Effect.flatMap((boundInput) =>
                   Effect.tryPromise({
                     try: () => controller.replyQuestion(boundInput),
-                    catch: sessionError(
-                      "codex-live-session.reply-background-question",
-                      input.externalSessionId,
-                    ),
+                    catch: (cause) =>
+                      toAcceptedCodexMessageError(cause, toCodexLiveSessionRef(input)) ??
+                      sessionError(
+                        "codex-live-session.reply-background-question",
+                        input.externalSessionId,
+                      )(cause),
                   }),
                 ),
                 Effect.flatMap((event) =>

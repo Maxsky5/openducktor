@@ -1,4 +1,5 @@
 export { CodexAppServerAdapter, createCodexAppServerClient } from "./codex-app-server-adapter";
+export { CodexMessageAcceptedError } from "./codex-message-accepted-error";
 export { CodexQuestionHistory } from "./codex-question-history";
 export type {
   CodexAppServerAdapterOptions,

@@ -1,4 +1,7 @@
-import type { CodexLiveSessionMutation } from "@openducktor/adapters-codex-app-server";
+import {
+  CodexMessageAcceptedError,
+  type CodexLiveSessionMutation,
+} from "@openducktor/adapters-codex-app-server";
 import type { AgentSessionLiveRef } from "@openducktor/contracts";
 import type { AcceptedAgentUserMessage } from "@openducktor/core";
 import { Effect } from "effect";
@@ -8,6 +11,21 @@ import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send
 type RefreshProjection = (
   transcriptEvents?: CodexLiveSessionMutation["transcriptEvents"],
 ) => Effect.Effect<void, HostError>;
+
+export const toAcceptedCodexMessageError = (
+  cause: unknown,
+  sessionRef: AgentSessionLiveRef,
+): AgentSessionMessageAcceptedError | null =>
+  cause instanceof CodexMessageAcceptedError
+    ? new AgentSessionMessageAcceptedError(
+        {
+          sessionRef,
+          acceptedMessage: cause.acceptedMessage,
+          stage: "live_update",
+        },
+        cause,
+      )
+    : null;
 
 const refreshAcceptedCodexMessage = (
   acceptedMessage: AcceptedAgentUserMessage,
