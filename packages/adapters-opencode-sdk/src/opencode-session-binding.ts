@@ -31,12 +31,15 @@ export const applySessionPolicy = async (input: {
 }): Promise<void> => {
   const action = `update ${input.policy.toolSelection.kind} session policy for session '${input.externalSessionId}'`;
   try {
-    const updated = await input.client.session.update({
+    const request: Parameters<typeof input.client.session.update>[0] = {
       directory: input.workingDirectory,
       sessionID: input.externalSessionId,
-      title: input.policy.title,
       permission: input.policy.permission,
-    });
+    };
+    if (input.policy.title !== undefined) {
+      request.title = input.policy.title;
+    }
+    const updated = await input.client.session.update(request);
     if (updated.data === undefined || updated.data === null) {
       throw toOpenCodeRequestError(action, updated.error, updated.response);
     }
@@ -112,7 +115,9 @@ export const synchronizeOpencodeSessionPolicy = async (input: {
     workingDirectory: input.request.workingDirectory,
   });
   applyRuntimeContextToSession(input.session, input.request, input.action);
-  input.session.summary = { ...input.session.summary, title: input.policy.title };
+  if (input.policy.title !== undefined) {
+    input.session.summary = { ...input.session.summary, title: input.policy.title };
+  }
 };
 
 export const resolveOpencodePolicyBoundSession = (input: {

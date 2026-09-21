@@ -17,6 +17,7 @@ import {
   HostValidationError,
 } from "../../effect/host-errors";
 import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
+import { workspaceSessionRuntimeTitle } from "../../domain/workspace-sessions/workspace-session-title";
 import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
 import type { RuntimeOrchestratorService } from "../runtimes/runtime-orchestrator-service";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
@@ -42,7 +43,7 @@ export type WorkspaceSessionServiceDependencies = WorkspaceSessionTargetDependen
   runtime: Pick<RuntimeOrchestratorService, "runtimeEnsure">;
   live: Pick<
     AgentSessionLiveStateService,
-    "startSession" | "releaseSession" | "read" | "stopSession"
+    "startSession" | "releaseSession" | "read" | "stopSession" | "updateSessionTitle"
   >;
 };
 
@@ -165,11 +166,15 @@ export const createWorkspaceSessionService = (
           });
           return yield* Effect.uninterruptible(
             Effect.gen(function* () {
+              const runtimeTitle = workspaceSessionRuntimeTitle(session, session.manualTitle);
               const startInput: AgentSessionControlStartInput = {
                 repoPath: ref.repoPath,
                 runtimeKind: session.runtimeKind,
                 workingDirectory: session.executionTarget.workingDirectory,
-                sessionScope: { kind: "repository" },
+                sessionScope:
+                  runtimeTitle === null
+                    ? { kind: "repository" }
+                    : { kind: "repository", title: runtimeTitle },
                 systemPrompt: session.roleSnapshot?.systemPrompt ?? "",
               };
               if (session.selectedModel !== null) startInput.model = session.selectedModel;
@@ -243,6 +248,25 @@ export const createWorkspaceSessionService = (
               field: "sessionId",
             }),
           );
+        const runtimeTitle = workspaceSessionRuntimeTitle(session, input.manualTitle);
+        if (session.externalSessionId !== null && runtimeTitle !== null) {
+          yield* live
+            .updateSessionTitle({
+              repoPath: ref.repoPath,
+              runtimeKind: session.runtimeKind,
+              workingDirectory: session.executionTarget.workingDirectory,
+              externalSessionId: session.externalSessionId,
+              title: runtimeTitle,
+            })
+            .pipe(
+              Effect.catchIf(
+                (cause) =>
+                  cause instanceof HostResourceError &&
+                  cause.resource === "agent_session_live_adapter",
+                () => Effect.void,
+              ),
+            );
+        }
         return yield* store.rename({ ...ref, manualTitle: input.manualTitle });
       }),
     archivePreview: (input: WorkspaceSessionRefInput) =>

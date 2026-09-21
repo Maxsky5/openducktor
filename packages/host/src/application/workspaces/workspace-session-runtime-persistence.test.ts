@@ -301,6 +301,41 @@ describe("Workspace Session persistence through the shared command module", () =
     expect(h.updates.at(-1)).toEqual({ workspaceId: "fairnest", session: saved });
   });
 
+  test("applies the stored Workspace Session title on resume and send", async () => {
+    const h = await setup();
+    await Effect.runPromise(h.store.rename({ ...h.storeRef, manualTitle: "Renamed session" }));
+    await Effect.runPromise(
+      h.live.resumeSession({
+        resumeMode: "reattach",
+        ...h.ref,
+        sessionScope: { kind: "repository" },
+      }),
+    );
+    await Effect.runPromise(
+      h.live.sendUserMessage({
+        ...h.ref,
+        sessionScope: { kind: "repository" },
+        parts: [{ kind: "text", text: "Continue" }],
+      }),
+    );
+    expect(h.inputs).toHaveLength(2);
+    for (const input of h.inputs) {
+      expect(input.sessionScope).toEqual({ kind: "repository", title: "Renamed session" });
+    }
+  });
+
+  test("leaves the runtime session name unchanged when the Workspace Session has no title", async () => {
+    const h = await setup();
+    await Effect.runPromise(
+      h.live.resumeSession({
+        resumeMode: "reattach",
+        ...h.ref,
+        sessionScope: { kind: "repository" },
+      }),
+    );
+    expect(h.inputs[0]?.sessionScope).toEqual({ kind: "repository" });
+  });
+
   test("does not persist rejected sends or model changes and saves an accepted model", async () => {
     const h = await setup();
     h.state.failSend = true;

@@ -6,6 +6,7 @@ import type {
   AgentGeneratedImageBatch,
   AgentGeneratedImageBatchInput,
   AgentGeneratedImageDescribeInput,
+  AgentSessionControlUpdateTitleInput,
 } from "@openducktor/contracts";
 import type { AgentGeneratedImageReadInput } from "@openducktor/contracts";
 import type { AgentGeneratedImageSource } from "@openducktor/core";
@@ -447,10 +448,12 @@ export class CodexAppServerAdapter
     this.localSessions.remember(session);
     this.freshSessions.add(session);
     this.runtimeEvents.initializeFreshThreadContextUsage(runtimeId, session.threadId);
-    await client.threadSetName({
-      threadId: session.threadId,
-      name: title,
-    });
+    if (title !== undefined) {
+      await client.threadSetName({
+        threadId: session.threadId,
+        name: title,
+      });
+    }
 
     return summary;
   }
@@ -511,12 +514,18 @@ export class CodexAppServerAdapter
     const response = await client.threadResume(threadResumeInput);
     this.clearThreadInventory(runtimeId);
     const session = sessionStateFromThreadResume(input, runtimeId, model, response);
-    if (sessionPolicy.kind === "repository")
-      session.summary = { ...session.summary, title: sessionPolicy.title };
+    const repositoryTitle = sessionPolicy.kind === "repository" ? sessionPolicy.title : undefined;
+    if (repositoryTitle !== undefined) {
+      session.summary = { ...session.summary, title: repositoryTitle };
+    }
     const { summary } = session;
     this.localSessions.remember(session);
-    if (sessionPolicy.kind === "repository")
-      await client.threadSetName({ threadId: session.threadId, name: sessionPolicy.title });
+    if (repositoryTitle !== undefined) {
+      await client.threadSetName({
+        threadId: session.threadId,
+        name: repositoryTitle,
+      });
+    }
 
     return summary;
   }
@@ -646,16 +655,17 @@ export class CodexAppServerAdapter
     this.clearThreadInventory(runtimeId);
     const session = sessionStateFromThreadResume(input, runtimeId, model, response);
     session.preserveNativeSettings = preserveNativeSettings;
-    if (sessionPolicy.kind === "repository" && !preserveNativeSettings) {
-      session.summary = { ...session.summary, title: sessionPolicy.title };
+    const repositoryTitle = sessionPolicy.kind === "repository" ? sessionPolicy.title : undefined;
+    if (repositoryTitle !== undefined && !preserveNativeSettings) {
+      session.summary = { ...session.summary, title: repositoryTitle };
     }
     const previous = this.localSessions.get(input.externalSessionId);
     this.localSessions.remember(session);
-    if (sessionPolicy.kind === "repository" && !preserveNativeSettings) {
+    if (repositoryTitle !== undefined && !preserveNativeSettings) {
       try {
         await client.threadSetName({
           threadId: session.threadId,
-          name: sessionPolicy.title,
+          name: repositoryTitle,
         });
       } catch (cause) {
         // A replacement that cannot be prepared must not stay registered as a live
@@ -712,10 +722,12 @@ export class CodexAppServerAdapter
     const session = sessionStateFromThreadFork(input, runtimeId, model, response, title);
     const { summary } = session;
     this.localSessions.remember(session);
-    await client.threadSetName({
-      threadId: session.threadId,
-      name: title,
-    });
+    if (title !== undefined) {
+      await client.threadSetName({
+        threadId: session.threadId,
+        name: title,
+      });
+    }
 
     return summary;
   }
@@ -1090,6 +1102,32 @@ export class CodexAppServerAdapter
       return;
     }
     delete session.model;
+  }
+
+  async updateSessionTitle(
+    input: AgentSessionControlUpdateTitleInput,
+  ): Promise<AgentSessionSummary> {
+    const session = this.localSessions.get(input.externalSessionId);
+    if (!session) {
+      throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);
+    }
+    const sessionRef = codexSessionRef(session);
+    if (!agentSessionRefsEqual(sessionRef, input)) {
+      throw new Error(
+        `Cannot update the title of Codex session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${sessionRef.repoPath}' and working directory '${sessionRef.workingDirectory}'.`,
+      );
+    }
+    const { client } = await this.runtimeClients.resolve(input, "update session title");
+    await client.threadSetName({
+      threadId: session.threadId,
+      name: input.title,
+    });
+    const sessionAssociation: AgentSessionSummary["sessionAssociation"] =
+      session.summary.sessionAssociation.kind === "repository"
+        ? { kind: "repository", title: input.title }
+        : session.summary.sessionAssociation;
+    session.summary = { ...session.summary, title: input.title, sessionAssociation };
+    return session.summary;
   }
 
   private policyBoundSession(

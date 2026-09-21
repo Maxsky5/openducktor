@@ -1,5 +1,6 @@
 import {
   OPENCODE_RUNTIME_DESCRIPTOR,
+  type AgentSessionControlUpdateTitleInput,
   type AgentSessionScope,
   type RuntimeDescriptor,
   type RuntimeKind,
@@ -210,11 +211,14 @@ export class OpencodeSdkAdapter
       policy,
       workingDirectory: input.workingDirectory,
     });
-    const created = await client.session.create({
+    const createRequest: Parameters<typeof client.session.create>[0] = {
       directory: input.workingDirectory,
-      title: policy.title,
       permission: policy.permission,
-    });
+    };
+    if (policy.title !== undefined) {
+      createRequest.title = policy.title;
+    }
+    const created = await client.session.create(createRequest);
     const createdData = unwrapData(created, "create session");
     const externalSessionId = createdData.id;
     const sessionInput = toSessionInput(input);
@@ -834,6 +838,37 @@ export class OpencodeSdkAdapter
     session.input = nextInput;
     delete session.workflowToolSelectionCache;
     delete session.workflowToolSelectionCachedAt;
+  }
+
+  async updateSessionTitle(
+    input: AgentSessionControlUpdateTitleInput,
+  ): Promise<AgentSessionSummary> {
+    const session = requireSession(this.sessions, input.externalSessionId);
+    const sessionRef = opencodeSessionRef(session);
+    if (!agentSessionRefsEqual(sessionRef, input)) {
+      throw new Error(
+        `Cannot rename OpenCode session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${sessionRef.repoPath}' and working directory '${sessionRef.workingDirectory}'.`,
+      );
+    }
+    const action = `rename OpenCode session '${input.externalSessionId}'`;
+    try {
+      const updated = await session.client.session.update({
+        directory: input.workingDirectory,
+        sessionID: input.externalSessionId,
+        title: input.title,
+      });
+      if (updated.data === undefined || updated.data === null) {
+        throw toOpenCodeRequestError(action, updated.error, updated.response);
+      }
+    } catch (error) {
+      throw toOpenCodeRequestError(action, error);
+    }
+    const sessionAssociation =
+      session.summary.sessionAssociation.kind === "repository"
+        ? { kind: "repository" as const, title: input.title }
+        : session.summary.sessionAssociation;
+    session.summary = { ...session.summary, title: input.title, sessionAssociation };
+    return session.summary;
   }
 
   async replyApproval(input: ReplyApprovalInput): Promise<void> {

@@ -95,7 +95,11 @@ const applyRuntimeContextToSession = (
       ...session.summary,
       sessionAssociation: sessionScope,
     };
-    if (policy.kind === "repository" && !session.preserveNativeSettings) {
+    if (
+      policy.kind === "repository" &&
+      !session.preserveNativeSettings &&
+      policy.title !== undefined
+    ) {
       summary.title = policy.title;
     }
     if (sessionScope.kind === "workflow") session.preserveNativeSettings = false;
@@ -155,7 +159,7 @@ export const sessionStateFromThreadStart = (
   runtimeId: string,
   model: AgentModelSelection,
   response: CodexThreadStartResult,
-  title: string,
+  title: string | undefined,
 ): CodexSessionState => {
   const { externalSessionId, startedAt } = extractThreadId(response);
   const summary = toSessionSummary({
@@ -181,7 +185,7 @@ export const sessionStateFromThreadFork = (
   runtimeId: string,
   model: AgentModelSelection,
   response: CodexThreadForkResult,
-  title: string,
+  title: string | undefined,
 ): CodexSessionState => {
   const { externalSessionId, startedAt } = extractThreadId(response);
   const summary = toSessionSummary({

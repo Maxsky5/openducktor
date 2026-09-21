@@ -4,6 +4,9 @@ import { agentRoleSchema } from "./agent-workflow-schemas";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
 
+/** Matches WORKSPACE_SESSION_MANUAL_TITLE_LIMIT, kept local to avoid a schema import cycle. */
+const REPOSITORY_SESSION_TITLE_LIMIT = 120;
+
 export const runtimeWorkingDirectoryRefSchema = repoRuntimeRefSchema
   .extend({
     workingDirectory: nonEmptyStringSchema,
@@ -30,6 +33,11 @@ export type AgentSessionWorkflowScope = z.infer<typeof agentSessionWorkflowScope
 export const agentSessionRepositoryScopeSchema = z
   .object({
     kind: z.literal("repository"),
+    /**
+     * Workspace Session name. The runtime session uses this name. When it is
+     * absent, OpenDucktor leaves the runtime session name unchanged.
+     */
+    title: z.string().trim().min(1).max(REPOSITORY_SESSION_TITLE_LIMIT).optional(),
   })
   .strict();
 export type AgentSessionRepositoryScope = z.infer<typeof agentSessionRepositoryScopeSchema>;

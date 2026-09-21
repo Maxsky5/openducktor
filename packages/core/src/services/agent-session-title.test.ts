@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  AGENT_REPOSITORY_SESSION_TITLE,
-  formatAgentSessionTitle,
-  formatWorkflowAgentSessionTitle,
-} from "./agent-session-title";
+import { formatAgentSessionTitle, formatWorkflowAgentSessionTitle } from "./agent-session-title";
 
 describe("formatWorkflowAgentSessionTitle", () => {
   test("formats workflow session titles from role and task id", () => {
@@ -23,8 +19,9 @@ describe("formatWorkflowAgentSessionTitle", () => {
 });
 
 describe("Agent Session scope presentation", () => {
-  test("formats repository and workflow titles", () => {
-    expect(formatAgentSessionTitle({ kind: "repository" })).toBe(AGENT_REPOSITORY_SESSION_TITLE);
+  test("uses the repository session name from the scope", () => {
+    expect(formatAgentSessionTitle({ kind: "repository", title: "My session" })).toBe("My session");
+    expect(formatAgentSessionTitle({ kind: "repository" })).toBeUndefined();
     expect(formatAgentSessionTitle({ kind: "workflow", taskId: "task-1", role: "build" })).toBe(
       "BUILD task-1",
     );

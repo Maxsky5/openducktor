@@ -257,6 +257,10 @@ export const createOpenCodeSessionControlAdapter = ({
           ),
         ),
       ),
+    updateSessionTitle: (input) =>
+      runControlSummary("opencode-live-session.update-session-title", () =>
+        connection.updateSessionTitle({ ...toSessionRef(input), title: input.title }),
+      ).pipe(Effect.asVoid),
     stopSession: (input) =>
       serializeRuntime(
         Effect.tryPromise({

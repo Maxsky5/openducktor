@@ -31,13 +31,24 @@ export type ClaudeSessionLaunchInput = {
   title?: string;
 };
 
+type ClaudeSessionPresentation = {
+  startedMessage: string;
+  title?: string;
+};
+
 const sessionPresentation = (
   action: "Continued" | "Forked" | "Resumed" | "Started",
   scope: AgentSessionScope,
-) => ({
-  startedMessage: `${action} ${scope.kind === "repository" ? "repository" : scope.role} session`,
-  title: formatAgentSessionTitle(scope),
-});
+): ClaudeSessionPresentation => {
+  const presentation: ClaudeSessionPresentation = {
+    startedMessage: `${action} ${scope.kind === "repository" ? "repository" : scope.role} session`,
+  };
+  const title = formatAgentSessionTitle(scope);
+  if (title !== undefined) {
+    presentation.title = title;
+  }
+  return presentation;
+};
 
 export const freshClaudeSessionLaunch = (
   scope: AgentSessionScope,

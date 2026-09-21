@@ -55,6 +55,7 @@ export const createAgentSessionRuntimeAdapterTestDouble = <
   startSession: unexpectedEffectCall("live session adapter", "startSession"),
   stopSession: unexpectedEffectCall("live session adapter", "stopSession"),
   updateSessionModel: unexpectedEffectCall("live session adapter", "updateSessionModel"),
+  updateSessionTitle: unexpectedEffectCall("live session adapter", "updateSessionTitle"),
   ...overrides,
 });
 

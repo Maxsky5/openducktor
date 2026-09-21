@@ -12,6 +12,7 @@ import {
 import { skillDescriptorSchema } from "./skill-schemas";
 import { slashCommandDescriptorSchema } from "./slash-command-schemas";
 import { subagentDescriptorSchema } from "./subagent-schemas";
+import { WORKSPACE_SESSION_MANUAL_TITLE_LIMIT } from "./workspace-session-schemas";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
 
@@ -182,6 +183,15 @@ export const agentSessionControlUpdateModelInputSchema = agentSessionLiveRefSche
   });
 export type AgentSessionControlUpdateModelInput = z.infer<
   typeof agentSessionControlUpdateModelInputSchema
+>;
+
+export const agentSessionControlUpdateTitleInputSchema = agentSessionLiveRefSchema
+  .extend({
+    title: nonEmptyStringSchema.max(WORKSPACE_SESSION_MANUAL_TITLE_LIMIT),
+  })
+  .strict();
+export type AgentSessionControlUpdateTitleInput = z.infer<
+  typeof agentSessionControlUpdateTitleInputSchema
 >;
 
 export const agentSessionControlStopInputSchema = agentSessionLiveRefSchema;

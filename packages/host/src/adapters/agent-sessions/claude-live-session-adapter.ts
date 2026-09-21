@@ -454,6 +454,10 @@ export const createClaudeLiveSessionAdapterPreparer =
                 ),
               ),
           ),
+        updateSessionTitle: (input) =>
+          runSummary("claude-live-session.update-session-title", () =>
+            service.updateSessionTitle(input),
+          ).pipe(Effect.asVoid),
         stopSession: (input) =>
           eventCoordinator.runSessionClosure(
             input.externalSessionId,

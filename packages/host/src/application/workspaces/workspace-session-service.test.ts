@@ -20,7 +20,7 @@ import {
   type SqliteTaskStoreTestHarness,
 } from "../../adapters/sqlite/sqlite-task-store-test-support";
 import { createSqliteWorkspaceSessionStore } from "../../adapters/sqlite/sqlite-workspace-session-store";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, HostResourceError } from "../../effect/host-errors";
 import { hostInvokeFailureFromError } from "../../interface/router/host-invoke-failure";
 import { createWorkspaceSessionCommandHandlers } from "../../interface/commands/workspace-session-command-handlers";
 import {
@@ -71,6 +71,7 @@ describe("host-owned Workspace Session lifecycle", () => {
   const setup = () => {
     const calls: string[] = [];
     const starts: AgentSessionControlStartInput[] = [];
+    const titles: string[] = [];
     const paths = new Set<string>();
     const branches = new Set<string>();
     const registered = new Set<string>();
@@ -88,6 +89,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       failSave: false,
       failBind: false,
       failStop: false,
+      failRename: false,
       failHook: false,
       failCleanup: false,
       failDelete: false,
@@ -256,6 +258,13 @@ describe("host-owned Workspace Session lifecycle", () => {
             calls.push("stop");
             return state.failStop ? failure("stop failed") : Effect.void;
           }),
+        updateSessionTitle: (request) =>
+          Effect.suspend(() => {
+            calls.push("title");
+            if (state.failRename) return failure("runtime rename failed");
+            titles.push(request.title);
+            return Effect.void;
+          }),
         read: (ref) =>
           Effect.suspend(() => {
             if (state.observation === "error") return failure("observation failed");
@@ -284,6 +293,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       dependencies,
       calls,
       starts,
+      titles,
       state,
       roles,
       paths,
@@ -473,7 +483,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       expect(h.starts[0]).toMatchObject({
         repoPath: database.repoPath,
         workingDirectory: database.repoPath,
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", title: "My session" },
         systemPrompt: "Original prompt.",
         model: input().selectedModel,
       });
@@ -492,6 +502,73 @@ describe("host-owned Workspace Session lifecycle", () => {
       expect(h.starts).toHaveLength(1);
     },
   );
+
+  test("renames the bound runtime session with the new Workspace Session title", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(input()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    await Effect.runPromise(h.service.start(ref));
+    h.calls.length = 0;
+
+    const renamed = await Effect.runPromise(h.service.rename({ ...ref, manualTitle: "Renamed" }));
+
+    expect(renamed.manualTitle).toBe("Renamed");
+    expect(h.titles).toEqual(["Renamed"]);
+    expect(h.calls).toEqual(["title"]);
+  });
+
+  test("renames a draft without touching a runtime session", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(input()));
+    h.calls.length = 0;
+
+    const renamed = await Effect.runPromise(
+      h.service.rename({ workspaceId: "fairnest", sessionId: session.id, manualTitle: "Draft" }),
+    );
+
+    expect(renamed.manualTitle).toBe("Draft");
+    expect(h.titles).toEqual([]);
+    expect(h.calls).toEqual([]);
+  });
+
+  test("renames an offline Workspace Session without a live runtime", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(input()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    await Effect.runPromise(h.service.start(ref));
+    const offline = createWorkspaceSessionService({
+      ...h.dependencies,
+      live: {
+        ...h.dependencies.live,
+        updateSessionTitle: () =>
+          Effect.fail(
+            new HostResourceError({
+              resource: "agent_session_live_adapter",
+              operation: "resolveForScope",
+              message: "No live opencode runtime owns the repository.",
+            }),
+          ),
+      },
+    });
+
+    const renamed = await Effect.runPromise(offline.rename({ ...ref, manualTitle: "Renamed" }));
+
+    expect(renamed.manualTitle).toBe("Renamed");
+    expect(h.titles).toEqual([]);
+  });
+
+  test("fails the rename and keeps the durable title when the runtime rejects it", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(input()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    await Effect.runPromise(h.service.start(ref));
+    h.state.failRename = true;
+
+    await expect(
+      Effect.runPromise(h.service.rename({ ...ref, manualTitle: "Renamed" })),
+    ).rejects.toThrow("runtime rename failed");
+    expect((await Effect.runPromise(h.service.get(ref))).manualTitle).toBe("My session");
+  });
 
   test("No Role supplies no Role prompt and missing Roles fail before resource creation", async () => {
     const h = setup();

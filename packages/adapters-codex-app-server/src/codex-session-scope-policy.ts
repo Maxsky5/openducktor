@@ -13,7 +13,8 @@ type CodexSessionThreadConfig = {
 };
 
 type CodexSessionScopePolicyBase = {
-  title: string;
+  /** Runtime session name. `undefined` leaves the native thread name unchanged. */
+  title?: string;
   runtimePolicy: CodexEffectivePolicy;
   threadConfig: CodexSessionThreadConfig;
 };
@@ -42,20 +43,21 @@ export const resolveCodexSessionScopePolicy = (
     throw new Error(`Cannot ${action} without session context.`);
   }
   const policy = requireCodexRuntimePolicy(runtimePolicy, action);
+  const title = formatAgentSessionTitle(sessionScope);
   if (sessionScope.kind === "repository") {
-    return {
+    const base: CodexSessionScopePolicy = {
       kind: "repository",
       sessionScope,
-      title: formatAgentSessionTitle(sessionScope),
       runtimePolicy: policy,
       threadConfig: buildThreadConfig(ODT_MCP_TOOL_NAMES),
     };
+    return title === undefined ? base : { ...base, title };
   }
-  return {
+  const base: CodexSessionScopePolicy = {
     kind: "workflow",
     sessionScope,
-    title: formatAgentSessionTitle(sessionScope),
     runtimePolicy: policy,
     threadConfig: buildThreadConfig(AGENT_ROLE_TOOL_POLICY[sessionScope.role]),
   };
+  return title === undefined ? base : { ...base, title };
 };

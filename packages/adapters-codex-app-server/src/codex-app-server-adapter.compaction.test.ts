@@ -159,7 +159,7 @@ describe("CodexAppServerAdapter manual compaction", () => {
     await adapter.sendUserMessage(
       codexUserMessageInput({
         externalSessionId: "thread-1",
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", title: "Fairnest" },
         parts: [compactPart()],
       }),
     );

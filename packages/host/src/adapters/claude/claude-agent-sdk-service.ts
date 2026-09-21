@@ -3,6 +3,7 @@ import { getClaudeSessionMetadata, readClaudeSessionModel } from "./claude-sessi
 import { resolveClaudeQuerySession } from "./claude-agent-sdk-query-session";
 import { randomUUID } from "node:crypto";
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import type { AgentSessionControlUpdateTitleInput } from "@openducktor/contracts";
 import type {
   AgentSessionScope,
   ContinueInterruptedAgentTurnInput,
@@ -45,7 +46,10 @@ import {
   createClaudeAgentSdkSession,
   type CreateClaudeAgentSdkSessionInput,
 } from "./claude-agent-sdk-session-factory";
-import { sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
+import {
+  renameClaudeSessionIfNeeded,
+  sendClaudeUserMessage,
+} from "./claude-agent-sdk-session-io";
 import {
   type ClaudeSessionLaunchInput,
   continuedClaudeSessionLaunch,
@@ -285,6 +289,27 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     return updateClaudeSessionModel(input, {
       sessionStore: this.sessionStore,
       attach: (request, launch) => this.createSession(request, runtimeId, launch),
+    });
+  }
+
+  updateSessionTitle(input: AgentSessionControlUpdateTitleInput) {
+    return fromPromise("claudeRuntime.updateSessionTitle", async () => {
+      const session = this.sessionStore.get(input.externalSessionId);
+      if (!session) {
+        throw new HostValidationError({
+          field: "externalSessionId",
+          message: `Unknown Claude session '${input.externalSessionId}'.`,
+          details: { externalSessionId: input.externalSessionId },
+        });
+      }
+      assertClaudeSessionRef(session, input, "update session title");
+      await renameClaudeSessionIfNeeded({ session, title: input.title });
+      const sessionAssociation =
+        session.summary.sessionAssociation.kind === "repository"
+          ? { kind: "repository" as const, title: input.title }
+          : session.summary.sessionAssociation;
+      session.summary = { ...session.summary, title: input.title, sessionAssociation };
+      return session.summary;
     });
   }
 

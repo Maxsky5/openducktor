@@ -3,7 +3,7 @@ import { ODT_MCP_TOOL_NAMES, toOpencodeExposedOdtToolIds } from "@openducktor/co
 import { workflowAgentSessionScope } from "@openducktor/core";
 import { makeMockClient, OpencodeSdkAdapter, sessionRef, sessionRuntimeRef } from "./test-support";
 
-const repositoryScope = { kind: "repository" } as const;
+const repositoryScope = { kind: "repository", title: "Fairnest" } as const;
 const runtimePolicy = { kind: "opencode" } as const;
 
 describe("OpencodeSdkAdapter repository sessions", () => {
@@ -81,21 +81,21 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     });
 
     expect(started).toMatchObject({
-      title: "Repository session",
+      title: "Fairnest",
       sessionAssociation: repositoryScope,
       workingDirectory: "/repo",
     });
     expect(forked).toMatchObject({
-      title: "Repository session",
+      title: "Fairnest",
       sessionAssociation: repositoryScope,
     });
     expect(resumed).toMatchObject({
-      title: "Repository session",
+      title: "Fairnest",
       sessionAssociation: repositoryScope,
     });
     expect(mock.session.createCalls[0]).toMatchObject({
       directory: "/repo",
-      title: "Repository session",
+      title: "Fairnest",
       permission: expect.arrayContaining([
         { permission: "openducktor_*", pattern: "*", action: "deny" },
         { permission: "odt_read_task", pattern: "*", action: "allow" },
@@ -109,14 +109,14 @@ describe("OpencodeSdkAdapter repository sessions", () => {
       expect.arrayContaining([
         expect.objectContaining({
           sessionID: "repository-fork",
-          title: "Repository session",
+          title: "Fairnest",
           permission: expect.arrayContaining([
             { permission: "odt_create_task", pattern: "*", action: "allow" },
           ]),
         }),
         expect.objectContaining({
           sessionID: "repository-resume",
-          title: "Repository session",
+          title: "Fairnest",
           permission: expect.arrayContaining([
             { permission: "odt_create_task", pattern: "*", action: "allow" },
           ]),
@@ -144,6 +144,62 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     expect(mock.tool.idsCalls).toHaveLength(0);
   });
 
+  test("renames a live repository session and keeps its association title", async () => {
+    const mock = makeMockClient();
+    const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
+    const started = await adapter.startSession({
+      repoPath: "/repo",
+      workingDirectory: "/repo",
+      runtimeKind: "opencode",
+      sessionScope: repositoryScope,
+      runtimePolicy,
+      systemPrompt: "repository system",
+    });
+
+    const renamed = await adapter.updateSessionTitle({
+      ...sessionRuntimeRef(started.externalSessionId, { sessionScope: repositoryScope }),
+      title: "Renamed",
+    });
+
+    expect(renamed).toMatchObject({
+      title: "Renamed",
+      sessionAssociation: { kind: "repository", title: "Renamed" },
+    });
+    expect(mock.session.updateCalls).toContainEqual(
+      expect.objectContaining({
+        directory: "/repo",
+        sessionID: started.externalSessionId,
+        title: "Renamed",
+      }),
+    );
+  });
+
+  test("refuses to rename a repository session from another working directory", async () => {
+    const mock = makeMockClient();
+    const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
+    const started = await adapter.startSession({
+      repoPath: "/repo",
+      workingDirectory: "/repo",
+      runtimeKind: "opencode",
+      sessionScope: repositoryScope,
+      runtimePolicy,
+      systemPrompt: "repository system",
+    });
+    const updateCallCount = mock.session.updateCalls.length;
+
+    await expect(
+      adapter.updateSessionTitle({
+        ...sessionRuntimeRef(started.externalSessionId, {
+          sessionScope: repositoryScope,
+          workingDirectory: "/repo/worktrees/stale",
+        }),
+        title: "Renamed",
+      }),
+    ).rejects.toThrow("registered session belongs");
+
+    expect(mock.session.updateCalls).toHaveLength(updateCallCount);
+  });
+
   test("applies repository policy before sending from a retained unbound session", async () => {
     const mock = makeMockClient();
     const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
@@ -161,7 +217,7 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     expect(mock.session.updateCalls).toContainEqual(
       expect.objectContaining({
         sessionID: "session-opencode-1",
-        title: "Repository session",
+        title: "Fairnest",
         permission: expect.arrayContaining([
           { permission: "odt_create_task", pattern: "*", action: "allow" },
           { permission: "odt_search_tasks", pattern: "*", action: "allow" },
@@ -222,7 +278,7 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     expect(mock.session.updateCalls).toContainEqual(
       expect.objectContaining({
         sessionID: "session-opencode-1",
-        title: "Repository session",
+        title: "Fairnest",
         permission: expect.arrayContaining([
           { permission: "odt_create_task", pattern: "*", action: "allow" },
           { permission: "odt_search_tasks", pattern: "*", action: "allow" },

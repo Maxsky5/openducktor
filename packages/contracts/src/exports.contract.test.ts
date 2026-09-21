@@ -134,6 +134,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentSessionControlStopInputSchema",
   "agentSessionControlSummarySchema",
   "agentSessionControlUpdateModelInputSchema",
+  "agentSessionControlUpdateTitleInputSchema",
   "agentSessionHistoryMessageSchema",
   "agentSessionHistorySchema",
   "agentSessionLiveEnvelopeSchema",

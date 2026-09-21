@@ -1,7 +1,16 @@
 import {
   WORKSPACE_SESSION_GENERATED_TITLE_LIMIT,
   type AcceptedAgentUserMessage,
+  type WorkspaceSession,
 } from "@openducktor/contracts";
+
+export const workspaceSessionRuntimeTitle = (
+  session: Pick<WorkspaceSession, "generatedTitle">,
+  manualTitle: string | null,
+): string | null => {
+  const title = manualTitle?.trim() || session.generatedTitle;
+  return title ? title : null;
+};
 
 export const buildWorkspaceSessionTitle = (message: AcceptedAgentUserMessage): string | null => {
   const text = message.parts

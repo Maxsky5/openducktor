@@ -50,7 +50,18 @@ export const controlSummary = {
 };
 
 type ControlCall = {
-  [Operation in "start" | "resume" | "continue" | "fork" | "send" | "model" | "stop" | "release"]: {
+  [
+    Operation in
+      | "start"
+      | "resume"
+      | "continue"
+      | "fork"
+      | "send"
+      | "model"
+      | "title"
+      | "stop"
+      | "release"
+  ]: {
     operation: Operation;
     input: Parameters<
       OpencodeSessionRuntimeConnection[{
@@ -60,12 +71,13 @@ type ControlCall = {
         fork: "forkSession";
         send: "sendUserMessage";
         model: "updateSessionModel";
+        title: "updateSessionTitle";
         stop: "stopSession";
         release: "releaseSession";
       }[Operation]]
     >[0];
   };
-}["start" | "resume" | "continue" | "fork" | "send" | "model" | "stop" | "release"];
+}["start" | "resume" | "continue" | "fork" | "send" | "model" | "title" | "stop" | "release"];
 
 type RuntimeHarness = {
   readonly prepareRuntime: PrepareOpencodeSessionRuntime;
@@ -165,6 +177,10 @@ export const createRuntimeHarness = (
     },
     updateSessionModel: async (input) => {
       controlCalls.push({ operation: "model", input });
+    },
+    updateSessionTitle: async (input) => {
+      controlCalls.push({ operation: "title", input });
+      return { ...controlSummary, title: input.title };
     },
     stopSession: async (input) => {
       controlCalls.push({ operation: "stop", input });

@@ -7,7 +7,10 @@ import type {
 } from "@openducktor/contracts";
 import { agentSessionRefKey } from "@openducktor/core";
 import { Effect } from "effect";
-import { buildWorkspaceSessionTitle } from "../../domain/workspace-sessions/workspace-session-title";
+import {
+  buildWorkspaceSessionTitle,
+  workspaceSessionRuntimeTitle,
+} from "../../domain/workspace-sessions/workspace-session-title";
 import {
   type HostError,
   HostOperationError,
@@ -107,8 +110,13 @@ export const createWorkspaceSessionRuntimePersistence = ({
       if (input.sessionScope.kind !== "repository") return input;
       const known = yield* findActive(input);
       if (!known) return input;
+      const runtimeTitle = workspaceSessionRuntimeTitle(known.session, known.session.manualTitle);
       const prepared = {
         ...input,
+        sessionScope:
+          runtimeTitle === null
+            ? input.sessionScope
+            : { kind: "repository" as const, title: runtimeTitle },
         systemPrompt: known.session.roleSnapshot?.systemPrompt ?? "",
       };
       if (known.session.selectedModel !== null) prepared.model = known.session.selectedModel;

@@ -16,6 +16,7 @@ import type {
   AgentSessionControlStopInput,
   AgentSessionControlSummary,
   AgentSessionControlUpdateModelInput,
+  AgentSessionControlUpdateTitleInput,
   AgentSessionLiveLoadContextInput,
   AgentSessionLiveLoadDiffInput,
   AgentSessionLiveReadResult,
@@ -172,6 +173,9 @@ export type AgentSessionControlAdapterPort = {
   ) => Effect.Effect<AcceptedAgentUserMessage, HostError>;
   readonly updateSessionModel: (
     input: AgentSessionControlUpdateModelInput,
+  ) => Effect.Effect<void, HostError>;
+  readonly updateSessionTitle: (
+    input: AgentSessionControlUpdateTitleInput,
   ) => Effect.Effect<void, HostError>;
   readonly stopSession: (input: AgentSessionControlStopInput) => Effect.Effect<void, HostError>;
   readonly releaseSession: (

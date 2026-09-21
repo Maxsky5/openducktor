@@ -72,7 +72,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
   });
 
   test("applies repository policy across start, send, fork, resume, and history", async () => {
-    const sessionScope = { kind: "repository" } as const;
+    const sessionScope = { kind: "repository", title: "Fairnest" } as const;
     const runtimePolicy = { kind: "codex" as const, policy: defaultCodexEffectivePolicy() };
     const model = { providerId: "openai", modelId: "gpt-5", variant: "medium" } as const;
     const { adapter, transports } = createHarness();
@@ -119,31 +119,31 @@ describe("CodexAppServerAdapter repository sessions", () => {
     });
 
     expect(started).toMatchObject({
-      title: "Repository session",
+      title: "Fairnest",
       sessionAssociation: sessionScope,
       workingDirectory: "/repo",
     });
     expect(forked).toMatchObject({
-      title: "Repository session",
+      title: "Fairnest",
       sessionAssociation: sessionScope,
     });
     expect(resumed).toMatchObject({
-      title: "Repository session",
+      title: "Fairnest",
       sessionAssociation: sessionScope,
     });
     const calls = transports.get("runtime-live")?.calls ?? [];
     expect(calls.filter((call) => call.method === "thread/name/set")).toEqual([
       {
         method: "thread/name/set",
-        params: { threadId: started.externalSessionId, name: "Repository session" },
+        params: { threadId: started.externalSessionId, name: "Fairnest" },
       },
       {
         method: "thread/name/set",
-        params: { threadId: forked.externalSessionId, name: "Repository session" },
+        params: { threadId: forked.externalSessionId, name: "Fairnest" },
       },
       {
         method: "thread/name/set",
-        params: { threadId: resumed.externalSessionId, name: "Repository session" },
+        params: { threadId: resumed.externalSessionId, name: "Fairnest" },
       },
     ]);
     for (const call of calls.filter((candidate) =>
@@ -155,6 +155,53 @@ describe("CodexAppServerAdapter repository sessions", () => {
         config: repositoryThreadConfig,
       });
     }
+  });
+
+  test("renames a live repository session through the native thread name", async () => {
+    const sessionScope = { kind: "repository", title: "Fairnest" } as const;
+    const runtimePolicy = { kind: "codex" as const, policy: defaultCodexEffectivePolicy() };
+    const { adapter, transports } = createHarness();
+    const started = await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      sessionScope,
+      runtimePolicy,
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    const renamed = await adapter.updateSessionTitle({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: started.externalSessionId,
+      title: "Renamed",
+    });
+
+    expect(renamed).toMatchObject({
+      title: "Renamed",
+      sessionAssociation: { kind: "repository", title: "Renamed" },
+    });
+    const calls = transports.get("runtime-live")?.calls ?? [];
+    expect(calls.findLast((call) => call.method === "thread/name/set")).toEqual({
+      method: "thread/name/set",
+      params: { threadId: started.externalSessionId, name: "Renamed" },
+    });
+  });
+
+  test("refuses to rename an unknown Codex session", async () => {
+    const { adapter } = createHarness();
+
+    await expect(
+      adapter.updateSessionTitle({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "missing",
+        title: "Renamed",
+      }),
+    ).rejects.toThrow("Unknown Codex session 'missing'");
   });
 
   test("rejects stale history identity before changing a retained session", async () => {
@@ -343,7 +390,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
   });
 
   test("keeps resumed and history-restored repository sessions when thread naming fails", async () => {
-    const repositoryScope = { kind: "repository" } as const;
+    const repositoryScope = { kind: "repository", title: "Fairnest" } as const;
     const resumedTransport = new NameFailingTransport("runtime-live", false);
     const resumedAdapter = createAdapterWithTransport(resumedTransport);
 

@@ -8,7 +8,8 @@ import {
 } from "./workflow-tool-permissions";
 
 export type OpencodeSessionPolicy = {
-  title: string;
+  /** Runtime session name. `undefined` leaves the native session name unchanged. */
+  title?: string;
   activityLabel: string;
   permission: OpencodePermissionRule[];
   toolSelection:
@@ -25,8 +26,7 @@ export const resolveOpencodeSessionPolicy = (
     throw new Error(`Cannot ${action} without session context.`);
   }
   if (sessionScope.kind === "workflow") {
-    return {
-      title: formatAgentSessionTitle(sessionScope),
+    const policy: OpencodeSessionPolicy = {
       activityLabel: sessionScope.role,
       permission: buildRoleScopedPermissionRules({
         role: sessionScope.role,
@@ -34,11 +34,14 @@ export const resolveOpencodeSessionPolicy = (
       }),
       toolSelection: { kind: "workflow", role: sessionScope.role },
     };
+    const title = formatAgentSessionTitle(sessionScope);
+    return title === undefined ? policy : { ...policy, title };
   }
-  return {
-    title: formatAgentSessionTitle(sessionScope),
+  const policy: OpencodeSessionPolicy = {
     activityLabel: "repository",
     permission: buildRepositoryScopedPermissionRules(runtimeDescriptor),
     toolSelection: { kind: "repository" },
   };
+  const title = formatAgentSessionTitle(sessionScope);
+  return title === undefined ? policy : { ...policy, title };
 };

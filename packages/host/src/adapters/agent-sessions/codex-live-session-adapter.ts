@@ -460,6 +460,10 @@ export const createCodexLiveSessionAdapterPreparer = ({
             },
             catch: sessionError("codex-live-session.update-session-model", input.externalSessionId),
           }).pipe(Effect.tap(() => refreshProjection())),
+        updateSessionTitle: (input) =>
+          runControlSummary("codex-live-session.update-session-title", () =>
+            controller.updateSessionTitle(input),
+          ).pipe(Effect.asVoid),
         stopSession: (input) =>
           stopCodexSession({
             codexAppServer,

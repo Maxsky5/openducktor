@@ -9,6 +9,7 @@ import {
   type AgentSessionControlStopInput,
   type AgentSessionControlSummary,
   type AgentSessionControlUpdateModelInput,
+  type AgentSessionControlUpdateTitleInput,
   type AgentSessionLiveEnvelope,
   type AgentSessionLiveListInput,
   type AgentSessionLiveLoadContextInput,
@@ -101,6 +102,9 @@ export type AgentSessionLiveStateService = {
   ) => Effect.Effect<AcceptedAgentUserMessage, HostError>;
   readonly updateSessionModel: (
     input: AgentSessionControlUpdateModelInput,
+  ) => Effect.Effect<void, HostError>;
+  readonly updateSessionTitle: (
+    input: AgentSessionControlUpdateTitleInput,
   ) => Effect.Effect<void, HostError>;
   readonly stopSession: (input: AgentSessionControlStopInput) => Effect.Effect<void, HostError>;
   readonly releaseSession: (
@@ -426,6 +430,8 @@ export const createAgentSessionLiveStateService = ({
     ),
     updateSessionModel: (input) =>
       runControl(input, (adapter) => adapter.updateSessionModel(input)),
+    updateSessionTitle: (input) =>
+      runControl(input, (adapter) => adapter.updateSessionTitle(input)),
     stopSession: (input) => runControl(input, (adapter) => adapter.stopSession(input)),
     releaseSession: (input) => runControl(input, (adapter) => adapter.releaseSession(input)),
     registerRuntimeAdapter: lifecycle.registerRuntimeAdapter,

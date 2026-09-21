@@ -1255,6 +1255,7 @@ describe("createAgentSessionLiveStateService", () => {
       forkSession: () => Effect.dieMessage("unexpected fork"),
       sendUserMessage: () => Effect.dieMessage("unexpected send"),
       updateSessionModel: () => Effect.dieMessage("unexpected model update"),
+      updateSessionTitle: () => Effect.dieMessage("unexpected title update"),
       stopSession: () => Effect.dieMessage("unexpected stop"),
       releaseSession: () => Effect.dieMessage("unexpected release"),
     } satisfies AgentSessionRuntimeAdapterPort;
@@ -1304,6 +1305,7 @@ describe("createAgentSessionLiveStateService", () => {
       forkSession: () => Effect.dieMessage("unexpected fork"),
       sendUserMessage: () => Effect.dieMessage("unexpected send"),
       updateSessionModel: () => Effect.dieMessage("unexpected model update"),
+      updateSessionTitle: () => Effect.dieMessage("unexpected title update"),
       stopSession: () => Effect.dieMessage("unexpected stop"),
       releaseSession: () => Effect.dieMessage("unexpected release"),
     } satisfies AgentSessionRuntimeAdapterPort;
@@ -1423,6 +1425,10 @@ describe("createAgentSessionLiveStateService", () => {
         Effect.sync(() => {
           calls.push({ operation: "model", input });
         }),
+      updateSessionTitle: (input) =>
+        Effect.sync(() => {
+          calls.push({ operation: "title", input });
+        }),
       stopSession: (input) =>
         Effect.sync(() => {
           calls.push({ operation: "stop", input });
@@ -1441,12 +1447,14 @@ describe("createAgentSessionLiveStateService", () => {
 
     await expect(Effect.runPromise(service.sendUserMessage(input))).resolves.toEqual(accepted);
     await Effect.runPromise(service.updateSessionModel({ ...input, model: null }));
+    await Effect.runPromise(service.updateSessionTitle({ ...input, title: "Renamed session" }));
     await Effect.runPromise(service.stopSession(input));
     await Effect.runPromise(service.releaseSession(input));
 
     expect(calls).toEqual([
       { operation: "send", input },
       { operation: "model", input: { ...input, model: null } },
+      { operation: "title", input: { ...input, title: "Renamed session" } },
       { operation: "stop", input },
       { operation: "release", input },
     ]);

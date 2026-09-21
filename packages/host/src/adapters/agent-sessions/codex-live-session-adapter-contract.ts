@@ -51,6 +51,7 @@ export type CodexSessionController = Pick<
   | "forkSession"
   | "sendUserMessage"
   | "updateSessionModel"
+  | "updateSessionTitle"
   | "stopSession"
   | "releaseSession"
 >;

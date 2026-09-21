@@ -143,6 +143,8 @@ const createHarness = async (
     Effect.die("prepareQuestionReply was not configured");
   let updateSessionModelImpl: ClaudeAgentSdkService["updateSessionModel"] = () =>
     Effect.die("updateSessionModel was not configured");
+  let updateSessionTitleImpl: ClaudeAgentSdkService["updateSessionTitle"] = () =>
+    Effect.die("updateSessionTitle was not configured");
   let stopSessionImpl: ClaudeAgentSdkService["stopSession"] = () => Effect.void;
   let releaseSessionImpl: ClaudeAgentSdkService["releaseSession"] = () => Effect.void;
   let stopSessionsForRuntimeImpl: ClaudeAgentSdkService["stopSessionsForRuntime"] = () =>
@@ -195,6 +197,8 @@ const createHarness = async (
     prepareQuestionReply: (input: Parameters<ClaudeAgentSdkService["prepareQuestionReply"]>[0]) =>
       prepareQuestionReplyImpl(input),
     updateSessionModel: (input, runtimeId) => updateSessionModelImpl(input, runtimeId),
+    updateSessionTitle: (input: Parameters<ClaudeAgentSdkService["updateSessionTitle"]>[0]) =>
+      updateSessionTitleImpl(input),
     stopSession: (input: Parameters<ClaudeAgentSdkService["stopSession"]>[0]) =>
       stopSessionImpl(input),
     stopSessionsForRuntime: (runtimeId: string) => stopSessionsForRuntimeImpl(runtimeId),
@@ -296,6 +300,9 @@ const createHarness = async (
     },
     setUpdateSessionModel: (implementation: ClaudeAgentSdkService["updateSessionModel"]) => {
       updateSessionModelImpl = implementation;
+    },
+    setUpdateSessionTitle: (implementation: ClaudeAgentSdkService["updateSessionTitle"]) => {
+      updateSessionTitleImpl = implementation;
     },
     setStopSession: (implementation: ClaudeAgentSdkService["stopSession"]) => {
       stopSessionImpl = implementation;
@@ -1725,5 +1732,37 @@ describe("Claude host live-session adapter", () => {
     releaseFirstUpdate?.();
     await Promise.all([firstUpdate, secondUpdate]);
     expect(startedModels).toEqual(["claude-a", "claude-b"]);
+  });
+
+  test("delegates a live session title update to the Claude service", async () => {
+    const harness = await createHarness();
+    const calls: unknown[] = [];
+    harness.setUpdateSessionTitle((input) =>
+      Effect.sync(() => {
+        calls.push(input);
+        return {
+          ...summary,
+          title: input.title,
+          sessionAssociation: { kind: "repository" as const, title: input.title },
+        };
+      }),
+    );
+    const controlRef = {
+      repoPath: "/repo",
+      runtimeKind: "claude" as const,
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "session-1",
+      title: "Renamed",
+    };
+
+    await Effect.runPromise(harness.adapter.updateSessionTitle(controlRef));
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      repoPath: "/repo",
+      externalSessionId: "session-1",
+      workingDirectory: "/repo/worktree",
+      title: "Renamed",
+    });
   });
 });

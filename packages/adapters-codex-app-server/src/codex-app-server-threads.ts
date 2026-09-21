@@ -29,7 +29,7 @@ export const toSessionSummary = (input: {
   externalSessionId: string;
   workingDirectory: string;
   startedAt: string;
-  title?: string;
+  title: string | undefined;
   sessionAssociation: AgentSessionAssociation;
   status: AgentSessionSummary["status"];
 }): AgentSessionSummary => {
