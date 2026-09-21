@@ -230,6 +230,79 @@ describe("Azure DevOps review adapter", () => {
 
     expect(context).toMatchObject({ status: "loaded", aggregateStatus: "unknown", checks: [] });
   });
+
+  test("maps Azure code suggestions to the shared suggestion patch model", async () => {
+    const originalLine = '    "serverError": "Erreur du serveur Google.",';
+    const client: AzureDevOpsRestClient = {
+      request: (_config, _repository, request) => {
+        if (request.operation === "resolve repository for review") {
+          return Effect.succeed({ body: pullRequestResponse.repository, continuationToken: null });
+        }
+        if (request.operation === "read pull request review") {
+          return Effect.succeed({ body: pullRequestResponse, continuationToken: null });
+        }
+        if (request.operation === "read pull request suggestion file") {
+          expect(request.path).toBe("git/repositories/repository-1/items");
+          expect(request.query).toEqual({
+            $format: "json",
+            path: "/src/locales/fr.json",
+            includeContent: true,
+            "versionDescriptor.version": "odt/task-42",
+            "versionDescriptor.versionType": "branch",
+          });
+          return Effect.succeed({
+            body: { content: `${"unchanged\n".repeat(210)}${originalLine}\n` },
+            continuationToken: null,
+          });
+        }
+        return Effect.dieMessage(`unexpected request: ${request.operation}`);
+      },
+      readContinuationPages: (_config, _repository, request) =>
+        request.operation === "read pull request threads"
+          ? Effect.succeed([
+              {
+                id: 12,
+                status: "active",
+                threadContext: {
+                  filePath: "/src/locales/fr.json",
+                  rightFileStart: { line: 211, offset: 1 },
+                  rightFileEnd: { line: 211, offset: originalLine.length },
+                },
+                comments: [
+                  {
+                    id: 13,
+                    content:
+                      'Use that label instead:\n\n```suggestion\n    "serverError": "Erreur du serveur de connexion.",\n```',
+                    author: { displayName: "Maxime" },
+                  },
+                ],
+              },
+            ])
+          : Effect.succeed([]),
+      readOffsetPages: () => Effect.succeed([]),
+    };
+    const port = createAzureDevOpsReviewPort({ client, repositoryPort: reviewRepositoryPort });
+
+    const context = await Effect.runPromise(
+      port.readContext({ repoConfig, linkedPullRequest: pullRequest }),
+    );
+
+    if (context.status !== "loaded") throw new Error("Expected loaded review context");
+    expect(context.comments).toContainEqual(
+      expect.objectContaining({
+        id: "12:13",
+        body: "Use that label instead:",
+        suggestionPatches: [
+          [
+            "@@ -211,1 +211,1 @@",
+            `-${originalLine}`,
+            '+    "serverError": "Erreur du serveur de connexion.",',
+          ].join("\n"),
+        ],
+        suggestionWarning: null,
+      }),
+    );
+  });
 });
 
 const reviewRepositoryPort: GitProviderRepositoryPort<AzureDevOpsRepository> = {

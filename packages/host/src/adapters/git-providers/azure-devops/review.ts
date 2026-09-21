@@ -27,6 +27,11 @@ import {
 import type { AzureDevOpsRestClient } from "./rest-client";
 import type { GitProviderRepositoryPort } from "../../../ports/git-provider-port";
 import {
+  parseAzureReviewCommentContent,
+  readAzureSuggestionFiles,
+  type AzureSuggestionFile,
+} from "./review-suggestions";
+import {
   azureDevOpsNumberSchema,
   azureDevOpsPositiveIntegerSchema,
   azureDevOpsTimestampSchema,
@@ -135,6 +140,13 @@ export const createAzureDevOpsReviewPort = ({
         ),
         { concurrency: 4 },
       );
+      const suggestionFiles = yield* readAzureSuggestionFiles({
+        client,
+        repoConfig: input.repoConfig,
+        repository,
+        sourceBranch: pullRequest.sourceBranch,
+        threads,
+      });
       return yield* Effect.try({
         try: () => {
           const checks = [
@@ -143,7 +155,7 @@ export const createAzureDevOpsReviewPort = ({
             ...builds,
           ];
           const activities = threads.flatMap((thread) =>
-            parseThreadActivities(thread, pullRequest.record.url),
+            parseThreadActivities(thread, pullRequest.record.url, suggestionFiles),
           );
           const context: PullRequestReviewContext = {
             status: "loaded",
@@ -371,12 +383,17 @@ const parseReviewer = (value: AzureDevOpsJson): PullRequestReviewer => {
   };
 };
 
-const parseThreadActivities = (value: AzureDevOpsJson, pullRequestUrl: string) => {
+const parseThreadActivities = (
+  value: AzureDevOpsJson,
+  pullRequestUrl: string,
+  suggestionFiles: ReadonlyMap<string, AzureSuggestionFile>,
+) => {
   const thread = requireRecord(value, "thread");
   const threadId = String(requirePositiveInteger(thread.id, "thread.id"));
   const isResolved = resolvedThreadStatus(optionalString(thread.status));
   const context = optionalRecord(thread.threadContext) ?? {};
   const rightStart = optionalRecord(context.rightFileStart) ?? {};
+  const rightEnd = optionalRecord(context.rightFileEnd) ?? {};
   const leftStart = optionalRecord(context.leftFileStart) ?? {};
   const rightLine = azureDevOpsNumberSchema.safeParse(rightStart.line).data ?? null;
   const leftLine = azureDevOpsNumberSchema.safeParse(leftStart.line).data ?? null;
@@ -388,20 +405,30 @@ const parseThreadActivities = (value: AzureDevOpsJson, pullRequestUrl: string) =
       return [];
     }
     const author = optionalRecord(comment.author) ?? {};
+    const body = optionalString(comment.content) ?? "";
+    const path = optionalString(context.filePath);
+    const suggestionFile = path ? suggestionFiles.get(path) : undefined;
+    const content = parseAzureReviewCommentContent({
+      body,
+      fileContent: suggestionFile?.content ?? null,
+      fileWarning: suggestionFile?.warning ?? null,
+      rightStart,
+      rightEnd,
+    });
     return [
       {
         id: `${threadId}:${String(comment.id ?? "unknown")}`,
         source: "review_thread" as const,
         author: optionalString(author.displayName),
         authorAvatarUrl: optionalString(author.imageUrl),
-        body: optionalString(comment.content) ?? "",
+        body: content.body,
         patch: null,
-        suggestionPatches: [],
-        suggestionWarning: null,
+        suggestionPatches: content.suggestionPatches,
+        suggestionWarning: content.suggestionWarning,
         url: pullRequestUrl,
         createdAt: timestampOrNull(comment.publishedDate),
         updatedAt: timestampOrNull(comment.lastUpdatedDate),
-        path: optionalString(context.filePath),
+        path,
         line,
         threadId,
         isResolved,
