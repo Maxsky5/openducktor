@@ -2227,4 +2227,48 @@ describe("CodexAppServerAdapter history loading", () => {
       }),
     ).resolves.toEqual([]);
   });
+  test("limits loaded history to the newest messages", async () => {
+    const thread = {
+      id: "long-thread",
+      cwd: "/repo",
+      createdAt: 1_783_715_500,
+      status: { type: "idle" },
+      turns: Array.from({ length: 6 }, (_value, index) => ({
+        id: `turn-${index}`,
+        startedAt: 1_783_715_500 + index * 10,
+        completedAt: 1_783_715_509 + index * 10,
+        status: "completed" as const,
+        items: [
+          codexUserMessageItemFixture({
+            id: `user-${index}`,
+            content: [{ type: "text", text: `question ${index}`, text_elements: [] }],
+          }),
+          codexAgentMessageItemFixture({ id: `agent-${index}`, text: `answer ${index}` }),
+        ],
+      })),
+    };
+    const transport: CodexJsonRpcTransport = {
+      async request(request: CodexJsonRpcRequest) {
+        if (request.method === "thread/read") {
+          return paginatedThreadReadResponse(thread);
+        }
+        if (request.method === "thread/turns/list") {
+          return paginatedTurnsListResponse(thread);
+        }
+        throw new Error(`Unexpected method '${request.method}'.`);
+      },
+    };
+    const adapter = createAdapterWithTransport(transport);
+
+    const history = await adapter.loadSessionHistory({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "long-thread",
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      limit: 3,
+    });
+
+    expect(history.map((message) => message.messageId)).toEqual(["agent-4", "user-5", "agent-5"]);
+  });
 });
