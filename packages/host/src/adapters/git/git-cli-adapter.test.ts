@@ -140,6 +140,17 @@ describe("createGitCliAdapter", () => {
       { path: "src/add-add-conflict.ts", status: "unmerged", staged: true },
     ]);
   });
+  test("normalizes an untracked embedded repository path", async () => {
+    const git = createGitCliAdapter({
+      runner: createRunner({
+        "status --porcelain=v1 -z --untracked-files=all": "?? nested-repo/\0",
+      }),
+    });
+
+    await expect(Effect.runPromise(git.getStatus("/repo"))).resolves.toEqual([
+      { path: "nested-repo", status: "untracked", staged: false },
+    ]);
+  });
   test("prefers worktree deletions in mixed porcelain status rows", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({

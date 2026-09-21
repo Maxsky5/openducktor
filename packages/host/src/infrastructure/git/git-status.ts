@@ -106,7 +106,8 @@ const parseStatusRecord = (line: string): GitFileStatus[] => {
   const worktree = line.at(1) ?? "";
   const filePath = line.slice(3);
   if (index === "?" && worktree === "?") {
-    return [{ path: filePath, status: "untracked", staged: false }];
+    const path = filePath.endsWith("/") ? filePath.slice(0, -1) : filePath;
+    return [{ path, status: "untracked", staged: false }];
   }
   if (index === "!" && worktree === "!") {
     return [{ path: filePath, status: "ignored", staged: false }];
