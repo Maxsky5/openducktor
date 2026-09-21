@@ -26,6 +26,7 @@ import {
   CodexQuestionHistory,
   type CodexJsonRpcRequest,
   type CodexJsonRpcTransport,
+  type CodexLiveSessionMutation,
 } from "./index";
 import { encodeCodexAsyncQuestionReplies } from "./codex-async-questions";
 import { codexRpcRequestError, EMPTY_ROLLOUT_MESSAGE } from "./test-fixtures/codex-rpc-error";
@@ -84,6 +85,30 @@ const paginatedThreadListResponse = (threads: ThreadListFixture[]) => ({
   }),
   nextCursor: null,
   backwardsCursor: null,
+});
+
+const backgroundQuestionThread = (): PaginatedThreadFixture => ({
+  id: "thread-idle",
+  cwd: "/repo",
+  turns: [
+    {
+      id: "turn-question",
+      status: "completed",
+      items: [
+        codexAgentMessageItemFixture({
+          id: "history-question",
+          text: "Which environment should I use?",
+          delivery: "async",
+          questions: [
+            {
+              title: "Which environment should I use?",
+              options: ["Staging", "Production"],
+            },
+          ],
+        }),
+      ],
+    },
+  ],
 });
 
 describe("CodexAppServerAdapter history loading", () => {
@@ -166,29 +191,7 @@ describe("CodexAppServerAdapter history loading", () => {
   });
 
   test("restores an unanswered background question for a resumed session", async () => {
-    const thread = {
-      id: "thread-idle",
-      cwd: "/repo",
-      turns: [
-        {
-          id: "turn-question",
-          status: "completed" as const,
-          items: [
-            codexAgentMessageItemFixture({
-              id: "history-question",
-              text: "Which environment should I use?",
-              delivery: "async",
-              questions: [
-                {
-                  title: "Which environment should I use?",
-                  options: ["Staging", "Production"],
-                },
-              ],
-            }),
-          ],
-        },
-      ],
-    };
+    const thread = backgroundQuestionThread();
     const baseTransport = new RecordingTransport("runtime-live", false);
     const transport: CodexJsonRpcTransport = {
       request: async (request) => {
@@ -197,8 +200,12 @@ describe("CodexAppServerAdapter history loading", () => {
         return baseTransport.request(request);
       },
     };
+    const mutations: CodexLiveSessionMutation[] = [];
     const { subscribeEvents } = createRuntimeStreamSubscription();
-    const adapter = createAdapterWithTransport(transport, { subscribeEvents });
+    const adapter = createAdapterWithTransport(transport, {
+      subscribeEvents,
+      onLiveSessionMutation: (mutation) => mutations.push(mutation),
+    });
     const ref = codexSessionRuntimeRef("thread-idle");
     await adapter.resumeSession(ref);
 
@@ -209,6 +216,54 @@ describe("CodexAppServerAdapter history loading", () => {
         questionRequest: expect.objectContaining({ requestId: "history-question" }),
       }),
     );
+    expect(mutations).toContainEqual(
+      expect.objectContaining({
+        snapshotMode: "delta",
+        snapshots: [
+          expect.objectContaining({
+            pendingQuestions: [
+              expect.objectContaining({ requestId: "history-question", blocking: false }),
+            ],
+          }),
+        ],
+      }),
+    );
+
+    await adapter.replyQuestion({
+      ...ref,
+      requestId: "history-question",
+      answers: [["Staging"]],
+    });
+
+    const turnStart = baseTransport.calls.findLast((call) => call.method === "turn/start");
+    expect(turnStart?.params).toMatchObject({
+      input: [
+        {
+          type: "text",
+          text: encodeCodexAsyncQuestionReplies([
+            {
+              questionItemId: '["request_user_input_async","history-question",0]',
+              question: "Which environment should I use?",
+              answer: "Staging",
+            },
+          ]),
+        },
+      ],
+    });
+  });
+
+  test("restores a background question when its reply reattaches the session", async () => {
+    const thread = backgroundQuestionThread();
+    const baseTransport = new RecordingTransport("runtime-live", false);
+    const transport: CodexJsonRpcTransport = {
+      request: async (request) => {
+        if (request.method === "thread/read") return paginatedThreadReadResponse(thread);
+        if (request.method === "thread/turns/list") return paginatedTurnsListResponse(thread);
+        return baseTransport.request(request);
+      },
+    };
+    const adapter = createAdapterWithTransport(transport);
+    const ref = codexSessionRuntimeRef("thread-idle");
 
     await adapter.replyQuestion({
       ...ref,

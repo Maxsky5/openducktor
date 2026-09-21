@@ -841,6 +841,19 @@ export class CodexAppServerAdapter
       nativeHistory,
     );
     this.asyncQuestions.loadHistory(runtime.runtimeId, input.externalSessionId, history);
+    if (session && this.options.onLiveSessionMutation) {
+      await this.options.onLiveSessionMutation({
+        runtimeId: runtime.runtimeId,
+        snapshotMode: "delta",
+        removedRefs: [],
+        snapshots: this.changedLiveSessionSnapshots(
+          runtime.runtimeId,
+          new Set([input.externalSessionId]),
+        ),
+        transcriptEvents: [],
+        catalogInvalidated: false,
+      });
+    }
     if (!mergeImage) return history;
     return history.map((message) =>
       message.role === "assistant"
@@ -1213,12 +1226,16 @@ export class CodexAppServerAdapter
 
   async replyQuestion(input: ReplyQuestionInput): Promise<AgentEvent> {
     assertCodexRuntimePolicyBinding(input, "reply to Codex question");
+    const mustRestoreQuestions = !this.localSessions.has(input.externalSessionId);
     const session = this.policyBoundSession(
       input,
       { lookup: "reply to question for", context: "reply to question" },
       true,
     );
-    const reply = (boundSession: CodexSessionState): Promise<AgentEvent> => {
+    const reply = async (boundSession: CodexSessionState): Promise<AgentEvent> => {
+      if (mustRestoreQuestions) {
+        await this.loadSessionHistory(input);
+      }
       return this.replyLiveQuestion({
         runtimeId: boundSession.runtimeId,
         externalSessionId: input.externalSessionId,
