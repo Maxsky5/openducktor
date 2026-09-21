@@ -239,36 +239,73 @@ export const createWorkspaceSessionService = (
         }),
       ),
     rename: (input: WorkspaceSessionRefInput & { manualTitle: string | null }) =>
-      Effect.gen(function* () {
-        const { ref, session } = yield* recordFor(input);
-        if (session.archivedAt !== null)
-          return yield* Effect.fail(
-            new HostValidationError({
-              message: "Restore this Workspace Session before renaming it.",
-              field: "sessionId",
-            }),
-          );
-        const runtimeTitle = workspaceSessionRuntimeTitle(session, input.manualTitle);
-        if (session.externalSessionId !== null && runtimeTitle !== null) {
-          yield* live
-            .updateSessionTitle({
-              repoPath: ref.repoPath,
-              runtimeKind: session.runtimeKind,
-              workingDirectory: session.executionTarget.workingDirectory,
-              externalSessionId: session.externalSessionId,
-              title: runtimeTitle,
-            })
-            .pipe(
-              Effect.catchIf(
-                (cause) =>
-                  cause instanceof HostResourceError &&
-                  cause.resource === "agent_session_live_adapter",
-                () => Effect.void,
-              ),
+      operationGate.run(
+        input,
+        Effect.uninterruptible(
+          Effect.gen(function* () {
+            const { ref, session } = yield* recordFor(input);
+            if (session.archivedAt !== null)
+              return yield* Effect.fail(
+                new HostValidationError({
+                  message: "Restore this Workspace Session before renaming it.",
+                  field: "sessionId",
+                }),
+              );
+            const externalSessionId = session.externalSessionId;
+            if (externalSessionId === null) {
+              return yield* store.rename({ ...ref, manualTitle: input.manualTitle });
+            }
+            const runtimeTitle = workspaceSessionRuntimeTitle(session, input.manualTitle);
+            if (runtimeTitle === null) {
+              return yield* Effect.fail(
+                new HostValidationError({
+                  message:
+                    "This chat has no generated title. Send a message first, or enter a name.",
+                  field: "manualTitle",
+                }),
+              );
+            }
+            const previousTitle = workspaceSessionRuntimeTitle(session, session.manualTitle);
+            const updateRuntimeTitle = (title: string) =>
+              live.updateSessionTitle({
+                repoPath: ref.repoPath,
+                runtimeKind: session.runtimeKind,
+                workingDirectory: session.executionTarget.workingDirectory,
+                externalSessionId,
+                title,
+              });
+            const runtimeTitleChanged = runtimeTitle !== previousTitle;
+            if (runtimeTitleChanged) yield* updateRuntimeTitle(runtimeTitle);
+            const saved = yield* Effect.either(
+              store.rename({ ...ref, manualTitle: input.manualTitle }),
             );
-        }
-        return yield* store.rename({ ...ref, manualTitle: input.manualTitle });
-      }),
+            if (saved._tag === "Right") return saved.right;
+            if (!runtimeTitleChanged) return yield* Effect.fail(saved.left);
+            if (previousTitle === null) {
+              return yield* Effect.fail(
+                new HostOperationError({
+                  operation: "workspaceSession.rename.persist",
+                  message: `${saved.left.message} The runtime session keeps the new title because the session had no title before.`,
+                  cause: { storeFailure: saved.left },
+                  details: { ref, storeFailure: saved.left },
+                }),
+              );
+            }
+            const restored = yield* Effect.either(updateRuntimeTitle(previousTitle));
+            if (restored._tag === "Left") {
+              return yield* Effect.fail(
+                new HostOperationError({
+                  operation: "workspaceSession.rename.persist",
+                  message: `${saved.left.message} Runtime title restore failed: ${restored.left.message}`,
+                  cause: { storeFailure: saved.left, restoreFailure: restored.left },
+                  details: { ref, storeFailure: saved.left, restoreFailure: restored.left },
+                }),
+              );
+            }
+            return yield* Effect.fail(saved.left);
+          }),
+        ),
+      ),
     archivePreview: (input: WorkspaceSessionRefInput) =>
       Effect.gen(function* () {
         const { ref, session } = yield* recordFor(input);

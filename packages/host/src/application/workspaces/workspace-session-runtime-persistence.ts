@@ -2,6 +2,7 @@ import type {
   AcceptedAgentUserMessage,
   AgentSessionControlResumeInput,
   AgentSessionControlSendInput,
+  AgentSessionControlUpdateTitleInput,
   AgentSessionLiveRef,
   WorkspaceSession,
 } from "@openducktor/contracts";
@@ -33,6 +34,10 @@ export type WorkspaceSessionUpdatedPublisher = (
   session: WorkspaceSession,
 ) => Effect.Effect<void, HostError>;
 
+export type WorkspaceSessionRuntimeTitleUpdater = (
+  input: AgentSessionControlUpdateTitleInput,
+) => Effect.Effect<void, HostError>;
+
 const storeEffect = <A>(effect: Effect.Effect<A, TaskStoreError>): Effect.Effect<A, HostError> =>
   effect.pipe(
     Effect.mapError((cause) =>
@@ -52,12 +57,14 @@ export const createWorkspaceSessionRuntimePersistence = ({
   git,
   publishUpdated,
   operationGate,
+  updateRuntimeSessionTitle,
 }: {
   store: WorkspaceSessionStorePort;
   settings: Pick<WorkspaceSettingsService, "getRepoConfigByRepoPath">;
   git: WorkspaceSessionTargetDependencies["git"];
   publishUpdated: WorkspaceSessionUpdatedPublisher;
   operationGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
+  updateRuntimeSessionTitle: WorkspaceSessionRuntimeTitleUpdater;
 }): AgentSessionPersistencePort & AgentSessionOperationPolicy => {
   const pendingFinalMessages = new Map<string, { messageId: string; occurredAt: number }>();
   const find = (runtimeRef: AgentSessionLiveRef) =>
@@ -150,6 +157,18 @@ export const createWorkspaceSessionRuntimePersistence = ({
       }
       const saved = yield* storeEffect(store.recordAcceptedMessage(input));
       yield* publishUpdated(known.ref.workspaceId, saved);
+      const externalSessionId = saved.externalSessionId;
+      if (externalSessionId === null) return;
+      const runtimeTitle = workspaceSessionRuntimeTitle(saved, saved.manualTitle);
+      const previousTitle = workspaceSessionRuntimeTitle(known.session, known.session.manualTitle);
+      if (runtimeTitle === null || runtimeTitle === previousTitle) return;
+      yield* updateRuntimeSessionTitle({
+        repoPath: known.ref.repoPath,
+        runtimeKind: saved.runtimeKind,
+        workingDirectory: saved.executionTarget.workingDirectory,
+        externalSessionId,
+        title: runtimeTitle,
+      });
     });
   const flushFinalMessage = (runtimeRef: AgentSessionLiveRef) =>
     Effect.gen(function* () {

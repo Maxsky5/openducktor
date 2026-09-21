@@ -18,7 +18,7 @@ import {
   type SqliteTaskStoreTestHarness,
 } from "../../adapters/sqlite/sqlite-task-store-test-support";
 import { createSqliteWorkspaceSessionStore } from "../../adapters/sqlite/sqlite-workspace-session-store";
-import { HostOperationError } from "../../effect/host-errors";
+import { type HostError, HostOperationError } from "../../effect/host-errors";
 import {
   createAgentSessionRuntimeAdapterTestDouble,
   createGitPortTestDouble,
@@ -86,11 +86,13 @@ describe("Workspace Session persistence through the shared command module", () =
     const inputs: Array<AgentSessionControlSendInput | AgentSessionControlResumeInput> = [];
     const activityTimes: number[] = [];
     const models: AgentSessionControlUpdateModelInput["model"][] = [];
+    const titles: string[] = [];
     const state = {
       failSend: false,
       failModel: false,
       failModelSave: false,
       failRestore: false,
+      failTitle: false,
       failPublish: false,
       failActivity: false,
       registered: true,
@@ -119,7 +121,12 @@ describe("Workspace Session persistence through the shared command module", () =
       run: (ref, effect) =>
         Effect.sync(() => state.onGateRequest()).pipe(Effect.zipRight(baseGate.run(ref, effect))),
     };
+    let updateLiveRuntimeTitle: ((title: string) => Effect.Effect<void, HostError>) | null = null;
     const persistence = createWorkspaceSessionRuntimePersistence({
+      updateRuntimeSessionTitle: ({ title }) =>
+        updateLiveRuntimeTitle
+          ? updateLiveRuntimeTitle(title)
+          : Effect.dieMessage("live title update is not wired"),
       operationGate,
       store: {
         ...store,
@@ -175,6 +182,7 @@ describe("Workspace Session persistence through the shared command module", () =
         events.push(event);
       },
     });
+    updateLiveRuntimeTitle = (title) => live.updateSessionTitle({ ...ref, title });
     const registration = live.createRuntimeRegistration({
       runtimeId: "runtime",
       runtimeKind: "opencode",
@@ -220,6 +228,11 @@ describe("Workspace Session persistence through the shared command module", () =
                 return failure("runtime restore failed");
               return Effect.void;
             }),
+          updateSessionTitle: (input) =>
+            Effect.suspend(() => {
+              titles.push(input.title);
+              return state.failTitle ? failure("runtime title update failed") : Effect.void;
+            }),
         }),
       ),
     );
@@ -262,6 +275,7 @@ describe("Workspace Session persistence through the shared command module", () =
       inputs,
       activityTimes,
       models,
+      titles,
       state,
       accepted,
       emit,
@@ -334,6 +348,52 @@ describe("Workspace Session persistence through the shared command module", () =
       }),
     );
     expect(h.inputs[0]?.sessionScope).toEqual({ kind: "repository" });
+  });
+
+  test("renames the runtime session when the first accepted message sets the generated title", async () => {
+    const h = await setup();
+    await Effect.runPromise(
+      h.live.sendUserMessage({
+        ...h.ref,
+        sessionScope: { kind: "repository" },
+        parts: [{ kind: "text", text: "Name this chat" }],
+      }),
+    );
+    expect(h.titles).toEqual(["First accepted prompt"]);
+    expect((await h.get()).generatedTitle).toBe("First accepted prompt");
+  });
+
+  test("renames the runtime session when another client sends the first message", async () => {
+    const h = await setup();
+    await h.emit({ ...h.accepted(), sessionRef: h.ref });
+    expect(h.titles).toEqual(["First accepted prompt"]);
+    await h.emit({
+      ...h.accepted("Later prompt", "2026-09-07T10:05:00Z"),
+      sessionRef: h.ref,
+    });
+    expect(h.titles).toEqual(["First accepted prompt"]);
+    expect((await h.get()).generatedTitle).toBe("First accepted prompt");
+  });
+
+  test("keeps the manual runtime title when the generated title arrives", async () => {
+    const h = await setup();
+    await Effect.runPromise(h.store.rename({ ...h.storeRef, manualTitle: "Manual title" }));
+    await h.emit({ ...h.accepted(), sessionRef: h.ref });
+    expect(h.titles).toEqual([]);
+    expect((await h.get()).generatedTitle).toBe("First accepted prompt");
+  });
+
+  test("surfaces a failed runtime title update after the generated title is saved", async () => {
+    const h = await setup();
+    h.state.failTitle = true;
+    await expect(h.emit({ ...h.accepted(), sessionRef: h.ref })).rejects.toThrow(
+      "runtime title update failed",
+    );
+    expect((await h.get()).generatedTitle).toBe("First accepted prompt");
+    expect(h.events.at(-1)).toMatchObject({
+      type: "fault",
+      message: "runtime title update failed",
+    });
   });
 
   test("does not persist rejected sends or model changes and saves an accepted model", async () => {
