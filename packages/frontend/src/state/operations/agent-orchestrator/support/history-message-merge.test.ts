@@ -449,7 +449,7 @@ describe("agent-orchestrator/support/history-message-merge", () => {
     ]);
   });
 
-  test("keeps distinct live text parts of one assistant message apart", () => {
+  test("keeps distinct text part rows of one assistant message apart", () => {
     const merged = mergedMessages(
       [
         {

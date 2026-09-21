@@ -5,6 +5,7 @@ import { applyPreferredMessageTimestamp } from "./message-timestamp";
 import { sessionMessageTimestampInsertionIndex } from "./message-timestamp-ordering";
 import {
   createSessionMessagesState,
+  findLastSessionMessageByRole,
   findSessionMessageById,
   forEachSessionMessage,
   getSessionMessagesSlice,
@@ -67,20 +68,15 @@ const findCurrentAssistantMessageBySourceMessageId = ({
     return [];
   }
 
-  const currentSlice = getSessionMessagesSlice(currentOwner, 0);
-  for (let index = currentSlice.length - 1; index >= 0; index -= 1) {
-    const candidate = currentSlice[index];
-    if (!candidate || absorbedCurrentMessageIds.has(candidate.id)) {
-      continue;
-    }
-    if (
-      candidate.meta?.kind === "assistant" &&
-      candidate.meta.sourceMessageId === loadedMessage.id
-    ) {
-      return [candidate];
-    }
-  }
-  return [];
+  const match = findLastSessionMessageByRole(
+    currentOwner,
+    "assistant",
+    (message) =>
+      message.meta?.kind === "assistant" &&
+      message.meta.sourceMessageId === loadedMessage.id &&
+      !absorbedCurrentMessageIds.has(message.id),
+  );
+  return match ? [match] : [];
 };
 
 const findMatchingCurrentToolMessages = ({
@@ -239,13 +235,14 @@ const findMatchingCurrentMessages = ({
     sameIdCurrentMessage,
     absorbedCurrentMessageIds,
   );
-  return sameIdMatches.length > 0
-    ? sameIdMatches
-    : findCurrentAssistantMessageBySourceMessageId({
-        currentOwner,
-        loadedMessage,
-        absorbedCurrentMessageIds,
-      });
+  if (sameIdMatches.length > 0) {
+    return sameIdMatches;
+  }
+  return findCurrentAssistantMessageBySourceMessageId({
+    currentOwner,
+    loadedMessage,
+    absorbedCurrentMessageIds,
+  });
 };
 
 const mergeSameMessageId = (
