@@ -118,6 +118,66 @@ const isPartScopedSubagentKey = (correlationKey: string): boolean =>
 const isSessionScopedSubagentKey = (correlationKey: string): boolean =>
   correlationKey.startsWith("session:");
 
+/**
+ * Lookup tables for the current subagent rows. Without them the merge scans the
+ * whole current transcript for every loaded subagent row, which is quadratic and
+ * stalls the renderer on long sessions.
+ */
+export type SubagentMessageIndex = {
+  byExternalSessionId: ReadonlyMap<string, readonly AgentChatMessage[]>;
+  byAgentPromptKey: ReadonlyMap<string, readonly AgentChatMessage[]>;
+};
+
+const subagentAgentPromptMatchKey = (message: AgentChatMessage): string | null => {
+  if (!isSubagentMessage(message)) {
+    return null;
+  }
+  const agent = message.meta.agent?.trim();
+  const prompt = message.meta.prompt?.trim();
+  if (!agent || !prompt) {
+    return null;
+  }
+  return `${agent}\u0001${prompt}`;
+};
+
+const appendSubagentIndexEntry = (
+  index: Map<string, AgentChatMessage[]>,
+  key: string,
+  message: AgentChatMessage,
+): void => {
+  const existing = index.get(key);
+  if (existing) {
+    existing.push(message);
+    return;
+  }
+  index.set(key, [message]);
+};
+
+export const buildSubagentMessageIndex = (
+  messages: readonly AgentChatMessage[],
+): SubagentMessageIndex => {
+  const byExternalSessionId = new Map<string, AgentChatMessage[]>();
+  const byAgentPromptKey = new Map<string, AgentChatMessage[]>();
+
+  // Walk backwards so every entry list keeps descending message order.
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!message || !isSubagentMessage(message)) {
+      continue;
+    }
+    const externalSessionId = message.meta.externalSessionId;
+    if (externalSessionId) {
+      appendSubagentIndexEntry(byExternalSessionId, externalSessionId, message);
+    }
+    const agentPromptKey = subagentAgentPromptMatchKey(message);
+    if (agentPromptKey !== null) {
+      appendSubagentIndexEntry(byAgentPromptKey, agentPromptKey, message);
+    }
+  }
+
+  return { byExternalSessionId, byAgentPromptKey };
+};
+
 const canLinkSessionScopedSubagentToPartScopedRow = (
   incoming: Pick<SubagentMeta, "correlationKey" | "externalSessionId" | "agent" | "prompt">,
   candidate: SubagentMessage,
@@ -394,12 +454,12 @@ const canAbsorbLoadedPartSubagentIntoCurrentSessionRow = (
 };
 
 export const findCurrentSubagentMessagesForLoadedHistory = ({
-  currentOwner,
+  subagentIndex,
   loadedMessage,
   sameIdCurrentMessage,
   absorbedCurrentMessageIds,
 }: {
-  currentOwner: SessionMessageOwner;
+  subagentIndex: SubagentMessageIndex;
   loadedMessage: SubagentMessage;
   sameIdCurrentMessage: AgentChatMessage | undefined;
   absorbedCurrentMessageIds: ReadonlySet<string>;
@@ -411,22 +471,30 @@ export const findCurrentSubagentMessagesForLoadedHistory = ({
     seenIds.add(sameIdCurrentMessage.id);
   }
 
-  const currentSlice = getSessionMessages(currentOwner);
-  const bridgedSessionRows: AgentChatMessage[] = [];
-  for (let index = currentSlice.length - 1; index >= 0; index -= 1) {
-    const candidate = currentSlice[index];
-    if (!candidate || seenIds.has(candidate.id) || absorbedCurrentMessageIds.has(candidate.id)) {
-      continue;
+  const loadedSessionId = loadedMessage.meta.externalSessionId;
+  if (loadedSessionId) {
+    for (const candidate of subagentIndex.byExternalSessionId.get(loadedSessionId) ?? []) {
+      if (seenIds.has(candidate.id) || absorbedCurrentMessageIds.has(candidate.id)) {
+        continue;
+      }
+      if (matchesLoadedSubagent(loadedMessage, candidate)) {
+        matches.push(candidate);
+        seenIds.add(candidate.id);
+      }
     }
-    if (matchesLoadedSubagent(loadedMessage, candidate)) {
-      matches.push(candidate);
-      seenIds.add(candidate.id);
-      continue;
-    }
-    if (canAbsorbLoadedPartSubagentIntoCurrentSessionRow(loadedMessage, candidate)) {
-      bridgedSessionRows.push(candidate);
-    }
+    return matches;
   }
+
+  const agentPromptKey = subagentAgentPromptMatchKey(loadedMessage);
+  if (agentPromptKey === null) {
+    return matches;
+  }
+  const bridgedSessionRows = (subagentIndex.byAgentPromptKey.get(agentPromptKey) ?? []).filter(
+    (candidate) =>
+      !seenIds.has(candidate.id) &&
+      !absorbedCurrentMessageIds.has(candidate.id) &&
+      canAbsorbLoadedPartSubagentIntoCurrentSessionRow(loadedMessage, candidate),
+  );
 
   if (matches.length === 0 && bridgedSessionRows.length === 1) {
     const [bridgedSessionRow] = bridgedSessionRows;

@@ -10,6 +10,7 @@ import { messageTimestampMs } from "./message-timestamp-ordering";
 import {
   createSessionMessagesState,
   forEachSessionMessage,
+  getSessionMessageCount,
   getSessionMessages,
   haveSameUserMessageAttachmentIdentity,
   isFinalAssistantChatMessage,
@@ -18,9 +19,11 @@ import {
 } from "./messages";
 import { isSessionSystemPromptMessage } from "./session-prompt";
 import {
+  buildSubagentMessageIndex,
   findCurrentSubagentMessagesForLoadedHistory,
   isSubagentMessage,
   mergeSubagentMessages,
+  type SubagentMessageIndex,
 } from "./subagent-messages";
 
 const mergeReasoningMessages = (
@@ -61,12 +64,12 @@ type IndexedCurrentMessage = {
  * renderer on long sessions.
  */
 type CurrentMessageIndex = {
-  owner: SessionMessageOwner;
   firstById: Map<string, AgentChatMessage>;
   assistantMessagesBySourceMessageId: Map<string, IndexedCurrentMessage[]>;
   toolMessagesByCallId: Map<string, IndexedCurrentMessage[]>;
   toolMessagesByPartKey: Map<string, IndexedCurrentMessage[]>;
   readUserMessagesByMatchKey: Map<string, IndexedCurrentMessage[]>;
+  subagents: SubagentMessageIndex;
 };
 
 const appendIndexedMessage = (
@@ -96,12 +99,12 @@ const userMessageMatchKey = (message: AgentChatMessage): string | null => {
 const buildCurrentMessageIndex = (currentOwner: SessionMessageOwner): CurrentMessageIndex => {
   const messages = getSessionMessages(currentOwner);
   const index: CurrentMessageIndex = {
-    owner: currentOwner,
     firstById: new Map(),
     assistantMessagesBySourceMessageId: new Map(),
     toolMessagesByCallId: new Map(),
     toolMessagesByPartKey: new Map(),
     readUserMessagesByMatchKey: new Map(),
+    subagents: buildSubagentMessageIndex(messages),
   };
 
   // Same-id lookups keep the first occurrence, like a linear forward scan.
@@ -358,7 +361,7 @@ const findMatchingCurrentMessages = ({
 }): AgentChatMessage[] => {
   if (isSubagentMessage(loadedMessage)) {
     return findCurrentSubagentMessagesForLoadedHistory({
-      currentOwner: currentIndex.owner,
+      subagentIndex: currentIndex.subagents,
       loadedMessage,
       sameIdCurrentMessage,
       absorbedCurrentMessageIds,
@@ -589,7 +592,6 @@ export const mergeHistoryMessages = (
 ): AgentSessionState["messages"] => {
   const currentOwner = { externalSessionId, messages: currentMessages };
   const loadedOwner = { externalSessionId, messages: loadedMessages };
-  const currentIndex = buildCurrentMessageIndex(currentOwner);
   const loadedHasSystemPrompt = someSessionMessage(loadedOwner, isSessionSystemPromptMessage);
   const loadedMessageIds = new Set<string>();
   const absorbedCurrentMessageIds = new Set<string>();
@@ -615,25 +617,28 @@ export const mergeHistoryMessages = (
     });
   }
 
-  forEachSessionMessage(loadedOwner, (message) => {
-    const sameIdCurrentMessage = currentIndex.firstById.get(message.id);
-    const matchingCurrentMessages = findMatchingCurrentMessages({
-      currentIndex,
-      loadedMessage: message,
-      sameIdCurrentMessage,
-      absorbedCurrentMessageIds,
+  if (getSessionMessageCount(loadedOwner) > 0) {
+    const currentIndex = buildCurrentMessageIndex(currentOwner);
+    forEachSessionMessage(loadedOwner, (message) => {
+      const sameIdCurrentMessage = currentIndex.firstById.get(message.id);
+      const matchingCurrentMessages = findMatchingCurrentMessages({
+        currentIndex,
+        loadedMessage: message,
+        sameIdCurrentMessage,
+        absorbedCurrentMessageIds,
+      });
+      loadedMessageIds.add(message.id);
+      for (const matchingCurrentMessage of matchingCurrentMessages) {
+        absorbedCurrentMessageIds.add(matchingCurrentMessage.id);
+      }
+      const mergedMessage = matchingCurrentMessages.reduce<AgentChatMessage>(
+        (currentMerged, matchingCurrentMessage) =>
+          mergeSameMessageId(currentMerged, matchingCurrentMessage, messagesAtReadStart),
+        message,
+      );
+      pushMergedMessage(mergedMessage);
     });
-    loadedMessageIds.add(message.id);
-    for (const matchingCurrentMessage of matchingCurrentMessages) {
-      absorbedCurrentMessageIds.add(matchingCurrentMessage.id);
-    }
-    const mergedMessage = matchingCurrentMessages.reduce<AgentChatMessage>(
-      (currentMerged, matchingCurrentMessage) =>
-        mergeSameMessageId(currentMerged, matchingCurrentMessage, messagesAtReadStart),
-      message,
-    );
-    pushMergedMessage(mergedMessage);
-  });
+  }
 
   const unmatchedCurrentMessages: AgentChatMessage[] = [];
   forEachSessionMessage(currentOwner, (message) => {
