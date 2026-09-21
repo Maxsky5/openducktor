@@ -151,11 +151,11 @@ describe("createGitCliAdapter", () => {
       { path: "nested-repo", status: "untracked", staged: false },
     ]);
   });
-  test("prefers worktree deletions in mixed porcelain status rows", async () => {
+  test("prefers worktree changes in mixed porcelain status rows", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
         "status --porcelain=v1 -z --untracked-files=all":
-          "AD src/added.ts\0MD src/modified.ts\0RD src/renamed.ts\0src/original.ts\0",
+          "AD src/added.ts\0MD src/modified.ts\0RD src/renamed.ts\0src/original.ts\0TT src/typechanged.ts\0",
       }),
     });
 
@@ -168,6 +168,7 @@ describe("createGitCliAdapter", () => {
         status: "deleted",
         staged: false,
       },
+      { path: "src/typechanged.ts", status: "typechange", staged: false },
     ]);
   });
   test("resolves the repository root for a nested working directory", async () => {

@@ -115,8 +115,8 @@ const parseStatusRecord = (line: string): GitFileStatus[] => {
   if (isUnmergedStatusPair(index, worktree)) {
     return [{ path: filePath, status: "unmerged", staged: true }];
   }
-  if (worktree === "D") {
-    return [{ path: filePath, status: "deleted", staged: false }];
+  if (worktree === "D" || worktree === "T") {
+    return [{ path: filePath, status: porcelainCharToStatus(worktree), staged: false }];
   }
   if (index !== " " && worktree === " ") {
     return [{ path: filePath, status: porcelainCharToStatus(index), staged: true }];
