@@ -167,8 +167,8 @@ const markSessionRunningForSend = (
   return pendingUserMessageStartedAt;
 };
 
-const appendSendFailureNotice = (
-  session: AgentSessionState,
+export const appendSendFailureNotice = (
+  session: AgentSessionIdentity,
   message: string,
   updateSession: UpdateSession,
   removeRunningCompactionNotice: boolean,
@@ -206,8 +206,8 @@ const appendSendFailureNotice = (
   }));
 };
 
-const upsertAcceptedUserMessage = (
-  session: AgentSessionState,
+export const upsertAcceptedUserMessage = (
+  session: AgentSessionIdentity,
   acceptedUserMessage: Awaited<ReturnType<AgentEnginePort["sendUserMessage"]>>,
   resolvedQuestionRequestIds: readonly string[] | undefined,
   updateSession: UpdateSession,

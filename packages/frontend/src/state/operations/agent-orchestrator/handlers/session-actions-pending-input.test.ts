@@ -421,7 +421,17 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
 
     const current = getSession(sessionsRef);
     expect(current.pendingQuestions).toEqual([]);
-    expect(sessionMessagesToArray(current)).toEqual([]);
+    expect(sessionMessagesToArray(current)).toEqual([
+      expect.objectContaining({
+        id: acceptedMessage.messageId,
+        role: "user",
+        content: acceptedMessage.message,
+      }),
+      expect.objectContaining({
+        role: "system",
+        content: expect.stringContaining("Reload the session to sync the transcript."),
+      }),
+    ]);
   });
 
   test("routes a UI-shaped repository question through the active workspace", async () => {

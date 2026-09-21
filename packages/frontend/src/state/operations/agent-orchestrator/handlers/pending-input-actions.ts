@@ -2,6 +2,7 @@ import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import type { AgentSessionScope } from "@openducktor/core";
 import { HostInvokeError, type HostClient } from "@openducktor/host-client";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { errorMessage } from "@/lib/errors";
 import { resolveAgentPendingInputParticipants } from "@/state/agent-session-pending-input-participants";
 import { getAcceptedMessageAfterSendFailure } from "@/state/agent-runtime-services";
 import type {
@@ -13,6 +14,7 @@ import type {
 import type { UpdateSession } from "../events/session-event-types";
 import { type ReadSessionSnapshot, requireWorkspaceRepoPath } from "../support/session-invariants";
 import type { SessionTurnMetadata } from "../support/session-turn-metadata";
+import { appendSendFailureNotice, upsertAcceptedUserMessage } from "./send-agent-message";
 
 export type PendingInputActionDependencies = {
   workspaceRepoPath: string | null;
@@ -131,6 +133,18 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
       if (!acceptedMessage) throw error;
 
       handledRequestIds = acceptedMessage.resolvedQuestionRequestIds ?? handledRequestIds;
+      upsertAcceptedUserMessage(
+        responseSession,
+        acceptedMessage,
+        handledRequestIds,
+        dependencies.updateSession,
+      );
+      appendSendFailureNotice(
+        responseSession,
+        `${errorMessage(error)} Reload the session to sync the transcript.`,
+        dependencies.updateSession,
+        false,
+      );
     }
     if (request.blocking === false) {
       dependencies.closeBackgroundQuestions(responseSession, handledRequestIds);
