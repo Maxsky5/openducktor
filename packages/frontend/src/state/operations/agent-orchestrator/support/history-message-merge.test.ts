@@ -1577,4 +1577,183 @@ describe("agent-orchestrator/support/history-message-merge", () => {
       "runtime-user-newer",
     ]);
   });
+
+  test("keeps an undated current message after the newest loaded message", () => {
+    const merged = mergedMessages(
+      [
+        {
+          id: "assistant-1",
+          role: "assistant",
+          content: "History history",
+          timestamp: "2026-03-01T09:00:01.000Z",
+          meta: { kind: "assistant", agentRole: "build", isFinal: true },
+        },
+        {
+          id: "assistant-2",
+          role: "assistant",
+          content: "History newer",
+          timestamp: "2026-03-01T09:00:03.000Z",
+          meta: { kind: "assistant", agentRole: "build", isFinal: true },
+        },
+      ],
+      [
+        {
+          id: "assistant-3",
+          role: "assistant",
+          content: "Unmatched current row",
+          timestamp: "2026-03-01T09:00:02.000Z",
+          meta: { kind: "assistant", agentRole: "build", isFinal: false },
+        },
+        {
+          id: "assistant-undated",
+          role: "assistant",
+          content: "Current row without a timestamp",
+          timestamp: "not-a-timestamp",
+          meta: { kind: "assistant", agentRole: "build", isFinal: false },
+        },
+      ],
+    );
+
+    expect(merged.map((message) => message.id)).toEqual([
+      "assistant-1",
+      "assistant-3",
+      "assistant-2",
+      "assistant-undated",
+    ]);
+  });
+
+  test("keeps an undated current message after merged rows without usable timestamps", () => {
+    const merged = mergedMessages(
+      [
+        {
+          id: "loaded-undated",
+          role: "assistant",
+          content: "Loaded without a usable timestamp",
+          timestamp: "not-a-timestamp",
+          meta: { kind: "assistant", agentRole: "build", isFinal: true },
+        },
+      ],
+      [
+        {
+          id: "current-undated",
+          role: "assistant",
+          content: "Current without a usable timestamp",
+          timestamp: "also-not-a-timestamp",
+          meta: { kind: "assistant", agentRole: "build", isFinal: false },
+        },
+        {
+          id: "current-dated",
+          role: "assistant",
+          content: "Current dated",
+          timestamp: "2026-03-01T09:00:05.000Z",
+          meta: { kind: "assistant", agentRole: "build", isFinal: false },
+        },
+      ],
+    );
+
+    expect(merged.map((message) => message.id)).toEqual([
+      "loaded-undated",
+      "current-undated",
+      "current-dated",
+    ]);
+  });
+
+  test("merges a long transcript without superlinear work", () => {
+    // Regression guard for the Agent Studio tab-switch freeze. The merge used to
+    // rescan the current transcript for every loaded message and splice the
+    // merged list for every unmatched message, so the work grew with the loaded
+    // size times the current size. The guard counts reads of the input message
+    // fields instead of wall-clock time: the count is deterministic, so a busy
+    // parallel test worker cannot fail it, while superlinear work cannot pass it.
+    const baseMs = Date.parse("2026-09-21T10:00:00.000Z");
+    const buildTranscript = (
+      count: number,
+      indexOffset: number,
+      subagentIdPrefix: string,
+    ): AgentChatMessage[] =>
+      Array.from({ length: count }, (_value, index) => {
+        const absoluteIndex = indexOffset + index;
+        const timestamp = new Date(baseMs + absoluteIndex * 1000).toISOString();
+        const kind = absoluteIndex % 5;
+        if (kind === 0) {
+          return {
+            id: `user-${absoluteIndex}`,
+            role: "user",
+            content: `user message ${absoluteIndex}`,
+            timestamp,
+            meta: { kind: "user", state: "read" },
+          } satisfies AgentChatMessage;
+        }
+        if (kind === 1) {
+          return {
+            id: `assistant-${absoluteIndex}`,
+            role: "assistant",
+            content: `assistant message ${absoluteIndex}`,
+            timestamp,
+            meta: { kind: "assistant", isFinal: true },
+          } satisfies AgentChatMessage;
+        }
+        if (kind === 4) {
+          return {
+            id: `${subagentIdPrefix}subagent-${absoluteIndex}`,
+            role: "system",
+            content: `Subagent (build): task ${absoluteIndex}`,
+            timestamp,
+            meta: {
+              kind: "subagent",
+              partId: `subagent-part-${absoluteIndex}`,
+              correlationKey: `session:turn-${absoluteIndex}`,
+              externalSessionId: `subagent-session-${absoluteIndex}`,
+              agent: "build",
+              prompt: `task ${absoluteIndex}`,
+              status: "completed",
+            },
+          } satisfies AgentChatMessage;
+        }
+        return {
+          id: `tool:turn-${absoluteIndex}:call-${absoluteIndex}`,
+          role: "tool",
+          content: "",
+          timestamp,
+          meta: {
+            kind: "tool",
+            partId: `part-${absoluteIndex}`,
+            callId: `call-${absoluteIndex}`,
+            tool: "bash",
+            toolType: "generic" as const,
+            status: "completed",
+            output: `tool output ${absoluteIndex}`,
+          },
+        } satisfies AgentChatMessage;
+      });
+
+    const countMessageFieldReads = (loadedCount: number, currentCount: number): number => {
+      const overlap = Math.floor(loadedCount / 4);
+      const reads = { count: 0 };
+      const countedMessages = (messages: AgentChatMessage[]): AgentChatMessage[] =>
+        messages.map(
+          (message) =>
+            new Proxy(message, {
+              get(target, property) {
+                reads.count += 1;
+                // SAFETY: the trap forwards every read to the wrapped message.
+                return target[property as keyof AgentChatMessage];
+              },
+            }),
+        );
+      const currentMessages = countedMessages(buildTranscript(currentCount, 0, "current-"));
+      const loadedMessages = countedMessages(
+        buildTranscript(loadedCount, currentCount - overlap, "loaded-"),
+      );
+      const merged = mergedMessageState(loadedMessages, currentMessages);
+      // The loaded history overlaps the newest current messages, so the merge
+      // absorbs the overlap into the loaded rows.
+      expect(merged.items).toHaveLength(loadedCount + currentCount - overlap);
+      return reads.count;
+    };
+
+    const smallReads = countMessageFieldReads(1_600, 16_000);
+    const largeReads = countMessageFieldReads(6_400, 64_000);
+    expect(largeReads).toBeLessThan(smallReads * 8);
+  }, 30_000);
 });

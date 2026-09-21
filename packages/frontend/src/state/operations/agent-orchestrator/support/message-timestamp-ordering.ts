@@ -6,11 +6,14 @@ const timestampMs = (timestamp: string): number | null => {
   return Number.isNaN(parsed) ? null : parsed;
 };
 
+export const messageTimestampMs = (message: Pick<AgentChatMessage, "timestamp">): number | null =>
+  timestampMs(message.timestamp);
+
 export const sessionMessageTimestampInsertionIndex = (
   messages: readonly AgentChatMessage[],
   message: AgentChatMessage,
 ): number => {
-  const incomingMs = timestampMs(message.timestamp);
+  const incomingMs = messageTimestampMs(message);
   if (incomingMs === null) {
     return messages.length;
   }
@@ -28,7 +31,7 @@ export const sessionMessageTimestampInsertionIndex = (
     if (!existing) {
       continue;
     }
-    const existingMs = timestampMs(existing.timestamp);
+    const existingMs = messageTimestampMs(existing);
     if (existingMs !== null && existingMs > incomingMs) {
       return index;
     }

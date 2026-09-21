@@ -174,3 +174,23 @@ export const matchesLoadedTool = (
 
   return loadedMessage.meta.partId === candidate.meta.partId;
 };
+
+export type ToolMessageMatchKeys = {
+  callId: string;
+  partKey: string | null;
+};
+
+/**
+ * Index keys that cover every match `matchesLoadedTool` can accept for this message.
+ * `callId` covers the shared-call-id branch. `partKey` covers the scoped-part fallback.
+ */
+export const toolMessageMatchKeys = (message: AgentChatMessage): ToolMessageMatchKeys | null => {
+  if (message.meta?.kind !== "tool") {
+    return null;
+  }
+  const scopedId = parseToolScopedPartId(message.id);
+  return {
+    callId: trimToolCallId(message.meta.callId),
+    partKey: scopedId === null ? null : `${scopedId.messageId}\u0000${message.meta.partId}`,
+  };
+};
