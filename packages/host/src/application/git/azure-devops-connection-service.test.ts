@@ -23,11 +23,11 @@ describe("AzureDevOpsConnectionService", () => {
         expiresAt: "2026-09-19T18:00:00Z",
       }),
     );
-    const replaceServerPat = mock(() => Effect.void);
+    const replacePat = mock(() => Effect.void);
     const connection: AzureDevOpsConnectionPort = {
       getAuthorization: () => Effect.dieMessage("unexpected authorization"),
       getState: () => Effect.succeed({ status: "disconnected" }),
-      replaceServerPat,
+      replacePat,
       startCloudSignIn,
       cancelCloudSignIn: () => Effect.void,
       disconnect: () => Effect.void,
@@ -59,6 +59,6 @@ describe("AzureDevOpsConnectionService", () => {
       Effect.runPromise(service.replacePat({ repoPath: "/repo", repository, pat: "secret" })),
     ).rejects.toThrow("not enabled");
     expect(startCloudSignIn).not.toHaveBeenCalled();
-    expect(replaceServerPat).not.toHaveBeenCalled();
+    expect(replacePat).not.toHaveBeenCalled();
   });
 });

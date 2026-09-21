@@ -54,6 +54,52 @@ const createPendingController = (): ConnectionController => ({
 });
 
 describe("AzureDevOpsConnectionSettings", () => {
+  test("shows the supported Azure DevOps Services account options", () => {
+    const controller = {
+      ...createPendingController(),
+      connectionState: { status: "disconnected" as const },
+    };
+
+    render(
+      <AzureDevOpsConnectionSettings
+        controller={controller}
+        disabled={false}
+        onBack={() => {}}
+        onSaveSettings={async () => true}
+      />,
+    );
+
+    expect(screen.getByText("Work or school account")).toBeTruthy();
+    expect(screen.getByText("Personal Microsoft account")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Microsoft sign-in supports work or school accounts only. Use a personal access token for a personal Microsoft account.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Sign in with Microsoft" })).toBeTruthy();
+    expect(screen.getByLabelText("Personal access token")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save and validate PAT" })).toBeTruthy();
+  });
+
+  test("shows a connected Azure DevOps Services PAT without sign-in actions", () => {
+    render(
+      <AzureDevOpsConnectionSettings
+        controller={{
+          ...createPendingController(),
+          connectionState: { status: "connected", account: null },
+        }}
+        disabled={false}
+        onBack={() => {}}
+        onSaveSettings={async () => true}
+      />,
+    );
+
+    expect(screen.getByText("Connected with a personal access token.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Sign in with Microsoft" })).toBeNull();
+    expect(screen.queryByLabelText("Personal access token")).toBeNull();
+    expect(screen.getByRole("button", { name: "Disconnect" })).toBeTruthy();
+  });
+
   test("makes the pending Microsoft sign-in actions direct and accessible", async () => {
     const openExternalUrl = mock(async () => {});
     const writeText = mock(async () => {});
@@ -73,6 +119,9 @@ describe("AzureDevOpsConnectionSettings", () => {
       expect(screen.queryByText("Pull request actions")).toBeNull();
       expect(screen.getByRole("button", { name: "Change repository" })).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Sign in with Microsoft" })).toBeNull();
+      expect(
+        screen.getByText("Microsoft sign-in accepts work or school accounts only."),
+      ).toBeTruthy();
       const signInLink = screen.getByRole("link", { name: "Open Microsoft sign-in" });
       expect(signInLink.getAttribute("href")).toBe("https://microsoft.com/devicelogin");
       expect(signInLink.closest(".bg-info-surface")).toBeNull();

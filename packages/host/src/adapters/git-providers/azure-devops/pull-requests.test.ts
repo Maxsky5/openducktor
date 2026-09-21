@@ -69,7 +69,7 @@ const pullRequestResponse = (number: number) => ({
 const connection: AzureDevOpsConnectionPort = {
   getAuthorization: () => Effect.succeed({ headerValue: "Bearer secret", account: null }),
   getState: () => Effect.dieMessage("unexpected connection state"),
-  replaceServerPat: () => Effect.dieMessage("unexpected PAT replacement"),
+  replacePat: () => Effect.dieMessage("unexpected PAT replacement"),
   startCloudSignIn: () => Effect.dieMessage("unexpected sign-in"),
   cancelCloudSignIn: () => Effect.dieMessage("unexpected sign-in cancellation"),
   disconnect: () => Effect.dieMessage("unexpected disconnect"),

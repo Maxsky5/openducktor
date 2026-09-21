@@ -94,17 +94,8 @@ export const createAzureDevOpsConnectionAdapter = ({
       Effect.gen(function* () {
         yield* scopeGate.requireCurrent(scope, generation);
         yield* requireConnectionTransport(repoConfig, repository);
-        if (repository.deployment === "server") {
-          const connection = yield* loadConnection(protectedStorage, scope);
-          if (connection?.kind !== "server_pat") {
-            return yield* Effect.fail(
-              new HostValidationError({
-                field: "git.provider.connection",
-                message:
-                  "Azure DevOps Server requires a personal access token in repository settings.",
-              }),
-            );
-          }
+        const connection = yield* loadConnection(protectedStorage, scope);
+        if (connection?.kind === "server_pat") {
           yield* scopeGate.requireCurrent(scope, generation);
           return {
             headerValue: `Basic ${Buffer.from(`:${connection.pat}`).toString("base64")}`,
@@ -112,13 +103,23 @@ export const createAzureDevOpsConnectionAdapter = ({
           };
         }
 
+        if (repository.deployment === "server") {
+          return yield* Effect.fail(
+            new HostValidationError({
+              field: "git.provider.connection",
+              message:
+                "Azure DevOps Server requires a personal access token in repository settings.",
+            }),
+          );
+        }
+
         const configuredClientId = yield* requireClientId(clientId);
-        const connection = yield* loadConnection(protectedStorage, scope);
         if (connection?.kind !== "cloud") {
           return yield* Effect.fail(
             new HostValidationError({
               field: "git.provider.connection",
-              message: "Sign in with Microsoft Entra before using this Azure DevOps organization.",
+              message:
+                "Sign in with a work or school account, or add a personal access token for this Azure DevOps organization.",
             }),
           );
         }
@@ -177,22 +178,14 @@ export const createAzureDevOpsConnectionAdapter = ({
         } satisfies AzureDevOpsConnectionState;
       });
     },
-    replaceServerPat(repoConfig, repository, pat) {
+    replacePat(repoConfig, repository, pat) {
       return Effect.gen(function* () {
-        if (repository.deployment !== "server") {
-          return yield* Effect.fail(
-            new HostValidationError({
-              field: "git.provider.connection",
-              message: "Personal access tokens are supported only for Azure DevOps Server.",
-            }),
-          );
-        }
         const value = pat.trim();
         if (!value) {
           return yield* Effect.fail(
             new HostValidationError({
               field: "pat",
-              message: "Enter an Azure DevOps Server personal access token.",
+              message: "Enter an Azure DevOps personal access token.",
             }),
           );
         }
@@ -203,7 +196,7 @@ export const createAzureDevOpsConnectionAdapter = ({
           Effect.gen(function* () {
             yield* scopeGate.requireCurrent(scope, generation);
             yield* requireConnectionTransport(repoConfig, repository);
-            yield* validateServerPat(fetchImplementation, repository, value);
+            yield* validatePat(fetchImplementation, repository, value);
             yield* scopeGate.requireCurrent(scope, generation);
             yield* saveConnection(protectedStorage, scope, {
               kind: "server_pat",
@@ -437,7 +430,7 @@ const tryMsal = <T>(operation: () => Promise<T>, label: string) =>
 const accountLabel = (account: AccountInfo): string | null =>
   account.username || account.name || null;
 
-const validateServerPat = (
+const validatePat = (
   fetchImplementation: typeof fetch,
   repository: AzureDevOpsRepository,
   pat: string,
@@ -460,7 +453,7 @@ const validateServerPat = (
         new HostOperationError({
           operation: "azureDevOps.connection.validatePat",
           message:
-            "Azure DevOps Server PAT validation failed before the server returned a response. Check the server address, network, and TLS certificate.",
+            "Azure DevOps PAT validation failed before the service returned a response. Check the service address, network, and TLS certificate.",
           cause,
         }),
     }).pipe(
@@ -469,7 +462,7 @@ const validateServerPat = (
         onTimeout: () =>
           new HostOperationError({
             operation: "azureDevOps.connection.validatePat",
-            message: `Azure DevOps Server PAT validation timed out after ${REQUEST_TIMEOUT}. Check the server address and network. The prior connection remains active.`,
+            message: `Azure DevOps PAT validation timed out after ${REQUEST_TIMEOUT}. Check the service address and network. The prior connection remains active.`,
           }),
       }),
     );
@@ -478,7 +471,7 @@ const validateServerPat = (
         new HostOperationError({
           operation: "azureDevOps.connection.validatePat",
           message:
-            "Azure DevOps Server PAT validation returned an unexpected redirect. Check the configured service address.",
+            "Azure DevOps PAT validation returned an unexpected redirect. Check the configured service address.",
           details: { status: response.status },
         }),
       );
@@ -487,7 +480,7 @@ const validateServerPat = (
       return yield* Effect.fail(
         new HostOperationError({
           operation: "azureDevOps.connection.validatePat",
-          message: `Azure DevOps Server rejected the replacement PAT with HTTP ${response.status}. The prior connection remains active.`,
+          message: `Azure DevOps rejected the replacement PAT with HTTP ${response.status}. The prior connection remains active.`,
           details: { status: response.status },
         }),
       );

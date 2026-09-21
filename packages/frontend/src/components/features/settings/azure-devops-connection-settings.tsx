@@ -1,4 +1,14 @@
-import { Check, Copy, ExternalLink, KeyRound, LoaderCircle, LogIn, PencilLine } from "lucide-react";
+import {
+  Building2,
+  Check,
+  Copy,
+  ExternalLink,
+  KeyRound,
+  LoaderCircle,
+  LogIn,
+  PencilLine,
+  UserRound,
+} from "lucide-react";
 import { type MouseEvent, type ReactElement, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -100,10 +110,10 @@ function ConnectionStatePanel({
     return (
       <section
         className="grid gap-1 border-border border-t pt-4"
-        aria-labelledby="azure-account-heading"
+        aria-labelledby="azure-connection-method-heading"
       >
-        <h4 id="azure-account-heading" className="text-sm font-medium text-foreground">
-          Account
+        <h4 id="azure-connection-method-heading" className="text-sm font-medium text-foreground">
+          Connection method
         </h4>
         <p className="text-xs text-muted-foreground">
           Enable the Azure DevOps provider above to connect an account.
@@ -135,11 +145,11 @@ function UnsavedConnection({
   return (
     <section
       className="grid min-w-0 gap-3 border-border border-t pt-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
-      aria-labelledby="azure-account-heading"
+      aria-labelledby="azure-connection-method-heading"
     >
       <div className="min-w-0 space-y-1">
-        <h4 id="azure-account-heading" className="text-sm font-medium text-foreground">
-          Account
+        <h4 id="azure-connection-method-heading" className="text-sm font-medium text-foreground">
+          Connection method
         </h4>
         <p className="text-xs text-muted-foreground">
           OpenDucktor must save this repository mapping before it can start sign-in.
@@ -169,16 +179,17 @@ function ManagedConnection({
 }: Pick<AzureDevOpsConnectionSettingsProps, "controller" | "disabled">): ReactElement {
   const { connectionInput, connectionState, disconnect, isMutatingConnection } = controller;
   const canDisconnect = connectionState.status === "connected" && connectionInput !== null;
+  const showConnectionActions = connectionState.status !== "connected";
 
   return (
     <section
       className="grid min-w-0 gap-4 border-border border-t pt-4"
-      aria-labelledby="azure-account-heading"
+      aria-labelledby="azure-connection-method-heading"
     >
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
-          <h4 id="azure-account-heading" className="text-sm font-medium text-foreground">
-            Account
+          <h4 id="azure-connection-method-heading" className="text-sm font-medium text-foreground">
+            Connection method
           </h4>
           <p className="min-w-0 break-words text-xs text-muted-foreground">
             {connectionStatusText(connectionState)}
@@ -196,7 +207,9 @@ function ManagedConnection({
           </Button>
         ) : null}
       </div>
-      <ConnectionActions controller={controller} disabled={disabled} />
+      {showConnectionActions ? (
+        <ConnectionActions controller={controller} disabled={disabled} />
+      ) : null}
     </section>
   );
 }
@@ -206,23 +219,82 @@ function ConnectionActions({
   disabled,
 }: Pick<AzureDevOpsConnectionSettingsProps, "controller" | "disabled">): ReactElement {
   if (controller.draft.deployment === "server") {
-    return <ServerConnectionActions controller={controller} disabled={disabled} />;
+    return <PatConnectionActions controller={controller} disabled={disabled} />;
   }
-  return (
-    <CloudConnectionActions
-      connectionState={controller.connectionState}
-      disabled={disabled || !controller.connectionInput || controller.isMutatingConnection}
-      cancelDisabled={disabled || controller.isMutatingConnection}
-      onCancel={controller.cancelSignIn}
-      onSignIn={controller.startSignIn}
-    />
-  );
+  return <ServicesConnectionActions controller={controller} disabled={disabled} />;
 }
 
-function ServerConnectionActions({
+function ServicesConnectionActions({
   controller,
   disabled,
 }: Pick<AzureDevOpsConnectionSettingsProps, "controller" | "disabled">): ReactElement {
+  const signInDisabled = disabled || !controller.connectionInput || controller.isMutatingConnection;
+
+  if (controller.connectionState.status === "pending") {
+    return (
+      <PendingMicrosoftSignIn
+        deviceCode={controller.connectionState.deviceCode}
+        disabled={signInDisabled}
+        cancelDisabled={disabled || controller.isMutatingConnection}
+        onCancel={controller.cancelSignIn}
+      />
+    );
+  }
+
+  return (
+    <div className="grid min-w-0 gap-3">
+      <p className="text-xs text-muted-foreground">
+        Microsoft sign-in supports work or school accounts only. Use a personal access token for a
+        personal Microsoft account.
+      </p>
+      <div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] gap-3">
+        <section className="flex min-w-0 flex-col rounded-lg border border-border p-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-muted-foreground">
+              <Building2 className="size-4" aria-hidden="true" />
+            </div>
+            <div className="min-w-0 space-y-1">
+              <h5 className="text-sm font-medium text-foreground">Work or school account</h5>
+              <p className="text-xs text-muted-foreground">Connect through Microsoft Entra.</p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            className="mt-4 w-full"
+            disabled={signInDisabled}
+            onClick={controller.startSignIn}
+          >
+            <LogIn data-icon="inline-start" />
+            Sign in with Microsoft
+          </Button>
+        </section>
+
+        <section className="flex min-w-0 flex-col rounded-lg border border-border p-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-muted-foreground">
+              <UserRound className="size-4" aria-hidden="true" />
+            </div>
+            <div className="min-w-0 space-y-1">
+              <h5 className="text-sm font-medium text-foreground">Personal Microsoft account</h5>
+              <p className="text-xs text-muted-foreground">Connect with an Azure DevOps PAT.</p>
+            </div>
+          </div>
+          <div className="mt-4">
+            <PatConnectionActions controller={controller} disabled={disabled} stacked />
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function PatConnectionActions({
+  controller,
+  disabled,
+  stacked = false,
+}: Pick<AzureDevOpsConnectionSettingsProps, "controller" | "disabled"> & {
+  stacked?: boolean;
+}): ReactElement {
   const {
     connectionInput,
     consentGranted,
@@ -242,8 +314,14 @@ function ServerConnectionActions({
   return (
     <div className="grid min-w-0 gap-3">
       <div className="grid min-w-0 gap-2">
-        <Label htmlFor="repo-azure-pat">Personal access token</Label>
-        <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+        <Label htmlFor="repo-azure-pat" className={stacked ? "sr-only" : undefined}>
+          Personal access token
+        </Label>
+        <div
+          className={
+            stacked ? "grid min-w-0 gap-2" : "grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto]"
+          }
+        >
           <div className="relative min-w-0">
             <KeyRound className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -257,7 +335,12 @@ function ServerConnectionActions({
               onChange={(event) => setPat(event.currentTarget.value)}
             />
           </div>
-          <Button type="button" disabled={saveDisabled} onClick={savePat}>
+          <Button
+            type="button"
+            className={stacked ? "w-full" : undefined}
+            disabled={saveDisabled}
+            onClick={savePat}
+          >
             Save and validate PAT
           </Button>
         </div>
@@ -273,7 +356,9 @@ const connectionStatusText = (
   state: AzureDevOpsConnectionController["connectionState"],
 ): string => {
   if (state.status === "connected") {
-    return `Connected${state.account ? ` as ${state.account}` : ""}.`;
+    return state.account
+      ? `Connected as ${state.account} with Microsoft Entra.`
+      : "Connected with a personal access token.";
   }
   if (state.status === "pending") {
     return "Waiting for you to finish Microsoft sign-in.";
@@ -284,100 +369,92 @@ const connectionStatusText = (
   return "Not connected.";
 };
 
-type CloudConnectionActionsProps = {
-  connectionState: AzureDevOpsConnectionController["connectionState"];
+type PendingMicrosoftSignInProps = {
+  deviceCode: Extract<
+    AzureDevOpsConnectionController["connectionState"],
+    { status: "pending" }
+  >["deviceCode"];
   disabled: boolean;
   cancelDisabled: boolean;
   onCancel: () => void;
-  onSignIn: () => void;
 };
 
-function CloudConnectionActions({
-  connectionState,
+function PendingMicrosoftSignIn({
+  deviceCode,
   disabled,
   cancelDisabled,
   onCancel,
-  onSignIn,
-}: CloudConnectionActionsProps): ReactElement {
+}: PendingMicrosoftSignInProps): ReactElement {
   const { copied, copyToClipboard } = useCopyToClipboard({
     successMessage: "Sign-in code copied",
     errorLogContext: "AzureDevOpsConnectionSettings.copyDeviceCode",
   });
-
-  if (connectionState.status === "pending") {
-    const { userCode, verificationUri } = connectionState.deviceCode;
-    const openSignIn = (event: MouseEvent<HTMLAnchorElement>): void => {
-      event.preventDefault();
-      if (disabled) return;
-      void openExternalUrl(verificationUri).catch((cause) => {
-        toast.error("Failed to open Microsoft sign-in", {
-          description: errorMessage(cause),
-        });
+  const { userCode, verificationUri } = deviceCode;
+  const openSignIn = (event: MouseEvent<HTMLAnchorElement>): void => {
+    event.preventDefault();
+    if (disabled) return;
+    void openExternalUrl(verificationUri).catch((cause) => {
+      toast.error("Failed to open Microsoft sign-in", {
+        description: errorMessage(cause),
       });
-    };
-
-    return (
-      <div className="grid min-w-0 gap-4">
-        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0 space-y-1">
-            <p className="text-sm font-medium text-foreground">Open Microsoft sign-in</p>
-            <p className="text-xs text-muted-foreground">
-              Use the one-time code below to finish connecting this account.
-            </p>
-          </div>
-          <Button type="button" size="sm" asChild disabled={disabled}>
-            <a
-              href={verificationUri}
-              aria-disabled={disabled}
-              tabIndex={disabled ? -1 : undefined}
-              onClick={openSignIn}
-            >
-              Open Microsoft sign-in
-              <ExternalLink data-icon="inline-end" />
-            </a>
-          </Button>
-        </div>
-
-        <div className="flex min-w-0 flex-col gap-3 rounded-md border border-border bg-muted/30 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0 space-y-1">
-            <p className="text-xs text-muted-foreground">One-time code</p>
-            <p className="break-all font-mono text-base font-semibold tracking-wide text-foreground">
-              {userCode}
-            </p>
-          </div>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={disabled}
-            onClick={() => void copyToClipboard(userCode)}
-          >
-            {copied ? <Check data-icon="inline-start" /> : <Copy data-icon="inline-start" />}
-            {copied ? "Copied" : "Copy code"}
-          </Button>
-        </div>
-
-        <div className="flex justify-end">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={cancelDisabled}
-            onClick={onCancel}
-          >
-            Cancel sign-in
-          </Button>
-        </div>
-      </div>
-    );
-  }
+    });
+  };
 
   return (
-    <div className="flex min-w-0">
-      <Button type="button" disabled={disabled} onClick={onSignIn}>
-        <LogIn data-icon="inline-start" />
-        Sign in with Microsoft
-      </Button>
+    <div className="grid min-w-0 gap-4">
+      <p className="text-xs text-muted-foreground">
+        Microsoft sign-in accepts work or school accounts only.
+      </p>
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <p className="text-sm font-medium text-foreground">Open Microsoft sign-in</p>
+          <p className="text-xs text-muted-foreground">
+            Use the one-time code below to finish connecting this account.
+          </p>
+        </div>
+        <Button type="button" size="sm" asChild disabled={disabled}>
+          <a
+            href={verificationUri}
+            aria-disabled={disabled}
+            tabIndex={disabled ? -1 : undefined}
+            onClick={openSignIn}
+          >
+            Open Microsoft sign-in
+            <ExternalLink data-icon="inline-end" />
+          </a>
+        </Button>
+      </div>
+
+      <div className="flex min-w-0 flex-col gap-3 rounded-md border border-border bg-muted/30 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <p className="text-xs text-muted-foreground">One-time code</p>
+          <p className="break-all font-mono text-base font-semibold tracking-wide text-foreground">
+            {userCode}
+          </p>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={disabled}
+          onClick={() => void copyToClipboard(userCode)}
+        >
+          {copied ? <Check data-icon="inline-start" /> : <Copy data-icon="inline-start" />}
+          {copied ? "Copied" : "Copy code"}
+        </Button>
+      </div>
+
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={cancelDisabled}
+          onClick={onCancel}
+        >
+          Cancel sign-in
+        </Button>
+      </div>
     </div>
   );
 }

@@ -48,7 +48,7 @@ describe("Azure DevOps connection", () => {
     });
 
     await expect(
-      Effect.runPromise(connection.replaceServerPat(httpRepoConfig, httpRepository, "secret")),
+      Effect.runPromise(connection.replacePat(httpRepoConfig, httpRepository, "secret")),
     ).rejects.toThrow("Confirm the unencrypted Azure DevOps Server connection");
     expect(fetchImplementation).not.toHaveBeenCalled();
   });
@@ -73,9 +73,9 @@ describe("Azure DevOps connection", () => {
       fetchImplementation: fetchImplementation as unknown as typeof fetch,
     });
 
-    await Effect.runPromise(connection.replaceServerPat(repoConfig, repository, "working"));
+    await Effect.runPromise(connection.replacePat(repoConfig, repository, "working"));
     await expect(
-      Effect.runPromise(connection.replaceServerPat(repoConfig, repository, "rejected")),
+      Effect.runPromise(connection.replacePat(repoConfig, repository, "rejected")),
     ).rejects.toThrow("prior connection remains active");
     await expect(
       Effect.runPromise(connection.getAuthorization(repoConfig, repository)),
@@ -83,6 +83,56 @@ describe("Azure DevOps connection", () => {
       headerValue: `Basic ${btoa(":working")}`,
       account: null,
     });
+  });
+
+  test("uses a PAT for Azure DevOps Services without Microsoft sign-in", async () => {
+    const servicesRepository: AzureDevOpsRepository = {
+      providerId: "azure_devops",
+      deployment: "services",
+      serviceUrl: "https://dev.azure.com",
+      organization: "OpenDucktor",
+      project: "Desktop",
+      name: "app",
+    };
+    const servicesRepoConfig = repoConfigSchema.parse({
+      workspaceId: "repo",
+      workspaceName: "Repo",
+      repoPath: "/repo",
+      git: { provider: { id: "azure_devops", enabled: true, repository: servicesRepository } },
+    });
+    const records = new Map<string, string>();
+    const protectedStorage: AzureDevOpsProtectedStorage = {
+      open: (scope, record) =>
+        Effect.succeed({
+          save: async (contents: string) => void records.set(`${scope}:${record}`, contents),
+          load: async () => records.get(`${scope}:${record}`) ?? null,
+          delete: async () => records.delete(`${scope}:${record}`),
+        } as IPersistence),
+    };
+    const fetchImplementation = mock(async (_input: string | URL | Request, init?: RequestInit) => {
+      expect(new Headers(init?.headers).get("Authorization")).toBe(`Basic ${btoa(":secret")}`);
+      return new Response(null, { status: 200 });
+    });
+    const connection = createAzureDevOpsConnectionAdapter({
+      clientId: undefined,
+      protectedStorage,
+      fetchImplementation: fetchImplementation as unknown as typeof fetch,
+    });
+
+    await Effect.runPromise(
+      connection.replacePat(servicesRepoConfig, servicesRepository, "secret"),
+    );
+
+    await expect(
+      Effect.runPromise(connection.getAuthorization(servicesRepoConfig, servicesRepository)),
+    ).resolves.toEqual({
+      headerValue: `Basic ${btoa(":secret")}`,
+      account: null,
+    });
+    await expect(
+      Effect.runPromise(connection.getState(servicesRepoConfig, servicesRepository)),
+    ).resolves.toEqual({ status: "connected", account: null });
+    expect(fetchImplementation).toHaveBeenCalledTimes(1);
   });
 
   test("aborts PAT validation that exceeds the Azure DevOps deadline", async () => {
@@ -117,7 +167,7 @@ describe("Azure DevOps connection", () => {
     await Effect.runPromise(
       Effect.gen(function* () {
         const replacement = yield* Effect.fork(
-          Effect.either(connection.replaceServerPat(repoConfig, repository, "secret")),
+          Effect.either(connection.replacePat(repoConfig, repository, "secret")),
         );
         const signal = yield* Effect.promise(() => started.promise);
         expect(signal).toBeInstanceOf(AbortSignal);
@@ -233,7 +283,7 @@ describe("Azure DevOps connection", () => {
     });
 
     const replacement = Effect.runPromise(
-      connection.replaceServerPat(repoConfig, repository, "replacement"),
+      connection.replacePat(repoConfig, repository, "replacement"),
     );
     while (fetchImplementation.mock.calls.length === 0) {
       await Promise.resolve();

@@ -55,7 +55,7 @@ export function AzureDevOpsGitProviderForm({
 
   return (
     <Card className="min-w-0" role="region" aria-labelledby="azure-devops-heading">
-      <CardHeader className="gap-4 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between">
+      <CardHeader className="gap-4 border-b border-border pb-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="flex min-w-0 items-start gap-3">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-foreground">
             <Cloud className="size-4" />

@@ -106,7 +106,7 @@ export const createAzureDevOpsConnectionService = ({
       return Effect.gen(function* () {
         const port = yield* requireConnection();
         const repoConfig = yield* readConfig(input, true);
-        yield* port.replaceServerPat(repoConfig, input.repository, input.pat);
+        yield* port.replacePat(repoConfig, input.repository, input.pat);
         return yield* port.getState(repoConfig, input.repository);
       });
     },

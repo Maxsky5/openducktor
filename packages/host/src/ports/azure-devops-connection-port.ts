@@ -21,7 +21,7 @@ export type AzureDevOpsConnectionPort = {
     repoConfig: RepoConfig,
     repository: AzureDevOpsRepository,
   ): Effect.Effect<AzureDevOpsConnectionState, HostError>;
-  replaceServerPat(
+  replacePat(
     repoConfig: RepoConfig,
     repository: AzureDevOpsRepository,
     pat: string,

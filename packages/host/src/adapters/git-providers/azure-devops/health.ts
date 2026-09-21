@@ -46,7 +46,7 @@ export const createAzureDevOpsHealthPort = ({
       if (state.status === "disconnected") {
         return unhealthy(
           repository.deployment === "services"
-            ? "Sign in with Microsoft Entra for this Azure DevOps organization."
+            ? "Sign in with a work or school account, or add a personal access token for this Azure DevOps organization."
             : "Add an Azure DevOps Server personal access token.",
         );
       }
