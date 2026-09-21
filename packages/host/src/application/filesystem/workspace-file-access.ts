@@ -1,7 +1,7 @@
 import { Data, Effect } from "effect";
 import { type HostErrorDetails, HostValidationError } from "../../effect/host-errors";
 import type { FilesystemPort } from "../../ports/filesystem-port";
-import type { GitPort } from "../../ports/git-port";
+import type { GitFileListOptions, GitPort } from "../../ports/git-port";
 import { isContainedPath } from "./workspace-files-paths";
 
 export const workspaceFileValidationError = <Details extends object>(
@@ -57,6 +57,7 @@ export const loadWorkspaceFileEntries = (
   gitPort: Pick<GitPort, "isGitRepository" | "listFiles">,
   canonicalRoot: string,
   relativePath?: string,
+  options?: GitFileListOptions,
 ) =>
   Effect.gen(function* () {
     const isGitRepository = yield* gitPort
@@ -80,7 +81,7 @@ export const loadWorkspaceFileEntries = (
       );
     }
 
-    return yield* gitPort.listFiles(canonicalRoot, relativePath).pipe(
+    return yield* gitPort.listFiles(canonicalRoot, relativePath, options).pipe(
       Effect.mapError((cause) =>
         workspaceFileValidationError(cause, `Unable to list Git files for '${canonicalRoot}'.`, {
           rootPath: canonicalRoot,
@@ -93,8 +94,9 @@ export const loadWorkspaceFilePaths = (
   gitPort: Pick<GitPort, "isGitRepository" | "listFiles">,
   canonicalRoot: string,
   relativePath?: string,
+  options?: GitFileListOptions,
 ) =>
-  loadWorkspaceFileEntries(gitPort, canonicalRoot, relativePath).pipe(
+  loadWorkspaceFileEntries(gitPort, canonicalRoot, relativePath, options).pipe(
     Effect.map((entries) => entries.map((entry) => entry.path)),
   );
 

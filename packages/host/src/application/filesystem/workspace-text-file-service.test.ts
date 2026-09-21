@@ -25,12 +25,16 @@ const createGitPort = (
 ): Parameters<typeof createWorkspaceTextFileService>[1] =>
   ({
     isGitRepository: () => Effect.succeed(true),
-    listFiles: (_rootPath, relativePath) => {
+    listFiles: (_rootPath, relativePath, options?: { caseInsensitive?: boolean }) => {
       requestedPaths?.push(relativePath);
       return Effect.succeed(
         (relativePath === undefined
           ? files
-          : files.filter((filePath) => filePath === relativePath)
+          : files.filter((filePath) =>
+              options?.caseInsensitive
+                ? filePath.toLowerCase() === relativePath.toLowerCase()
+                : filePath === relativePath,
+            )
         ).map((filePath) => ({ kind: "file" as const, path: filePath })),
       );
     },
@@ -139,6 +143,29 @@ describe("createWorkspaceTextFileService", () => {
     const service = createWorkspaceTextFileService(
       createFilesystemAdapter(),
       createGitPort(["link.txt", "target.txt"], requestedPaths),
+    );
+
+    const loaded = await Effect.runPromise(
+      service.readTextFile({ rootPath, relativePath: "link.txt" }),
+    );
+
+    expect(loaded).toMatchObject({ kind: "text", contents: "target" });
+    expect(requestedPaths).toEqual(["link.txt", "target.txt"]);
+  });
+
+  test("uses filesystem semantics for a symlink target with different index casing", async () => {
+    const rootPath = await createRoot();
+    await writeFile(path.join(rootPath, "target.txt"), "target");
+    await symlink("target.txt", path.join(rootPath, "link.txt"));
+    const requestedPaths: Array<string | undefined> = [];
+    const filesystem = createFilesystemAdapter();
+    const service = createWorkspaceTextFileService(
+      {
+        ...filesystem,
+        relative: (from, to) =>
+          from.toLowerCase() === to.toLowerCase() ? "" : filesystem.relative(from, to),
+      },
+      createGitPort(["link.txt", "Target.txt"], requestedPaths),
     );
 
     const loaded = await Effect.runPromise(

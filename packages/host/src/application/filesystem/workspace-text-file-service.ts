@@ -201,8 +201,13 @@ const resolveAvailableWorkspaceFile = (
       gitPort,
       canonicalRoot,
       canonicalRelativePath,
+      { caseInsensitive: true },
     );
-    if (!targetPaths.includes(canonicalRelativePath)) {
+    const hasCanonicalTarget = targetPaths.some(
+      (targetPath) =>
+        filesystem.relative(filesystem.join(canonicalRoot, targetPath), canonicalPath) === "",
+    );
+    if (!hasCanonicalTarget) {
       return yield* new WorkspaceFileAccessError({
         code: "unavailable_file",
         field: "relativePath",

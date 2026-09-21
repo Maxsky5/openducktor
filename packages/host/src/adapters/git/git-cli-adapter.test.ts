@@ -107,6 +107,18 @@ describe("createGitCliAdapter", () => {
       { kind: "file", path: "src/[index].ts" },
     ]);
   });
+  test("limits a case-insensitive file lookup to one literal path", async () => {
+    const git = createGitCliAdapter({
+      runner: createRunner({
+        "ls-files -t -s -co -k --exclude-standard -z -- :(icase,literal)src/index.ts":
+          "H 100644 abc123 0\tsrc/Index.ts\0",
+      }),
+    });
+
+    await expect(
+      Effect.runPromise(git.listFiles("/repo", "src/index.ts", { caseInsensitive: true })),
+    ).resolves.toEqual([{ kind: "file", path: "src/Index.ts" }]);
+  });
   test("fails when tagged file output is malformed", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({

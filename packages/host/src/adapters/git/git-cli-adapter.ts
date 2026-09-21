@@ -218,9 +218,12 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
     listBranches(workingDirectory) {
       return listBranchesUnchecked(runner, workingDirectory);
     },
-    listFiles(workingDirectory, relativePath) {
+    listFiles(workingDirectory, relativePath, options) {
       return Effect.gen(function* () {
-        const pathspec = relativePath === undefined ? "." : `:(literal)${relativePath}`;
+        const pathspec =
+          relativePath === undefined
+            ? "."
+            : `:(${options?.caseInsensitive ? "icase," : ""}literal)${relativePath}`;
         const output = yield* runGit(runner, workingDirectory, [
           "ls-files",
           "-t",
