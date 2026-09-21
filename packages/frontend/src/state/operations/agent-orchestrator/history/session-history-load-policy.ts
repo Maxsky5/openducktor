@@ -18,6 +18,7 @@ export type SessionHistoryLoadPolicy = {
     session: AgentSessionState,
     history: AgentSessionHistoryMessage[],
     messagesAtReadStart?: AgentSessionState["messages"],
+    questionsAtReadStart?: AgentSessionState["pendingQuestions"],
   ): AgentSessionState;
 };
 

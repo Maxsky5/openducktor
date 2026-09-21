@@ -208,6 +208,7 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
     }
     const sessionAtReadStart = readSessionSnapshot(identity);
     const messagesAtReadStart = sessionAtReadStart?.messages;
+    const questionsAtReadStart = sessionAtReadStart?.pendingQuestions;
     const history = await adapter.loadSessionHistory(historyInput);
     if (isStaleRepoOperation()) {
       return finishStaleHistoryLoad();
@@ -217,7 +218,7 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
     }
 
     return updateSession(identity, (current) =>
-      policy.applyLoadedHistory(current, history, messagesAtReadStart),
+      policy.applyLoadedHistory(current, history, messagesAtReadStart, questionsAtReadStart),
     );
   } catch (error) {
     if (isStaleRepoOperation()) {

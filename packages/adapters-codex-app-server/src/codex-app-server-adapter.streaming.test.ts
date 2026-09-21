@@ -230,18 +230,14 @@ describe("CodexAppServerAdapter streaming", () => {
     }
   });
 
-  test("reports a live update failure after Codex accepts a background reply", async () => {
+  test("rejects when publishing a completed background reply fails", async () => {
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
-    const failures: unknown[] = [];
     const { adapter } = createHarness({
       subscribeEvents,
       onLiveSessionMutation: (mutation) => {
         if (mutation.transcriptEvents.some((event) => event.type === "assistant_part")) {
           throw new Error("live update failed");
         }
-      },
-      onRuntimeEventQueueFailure: ({ error }) => {
-        failures.push(error);
       },
     });
     await adapter.startSession(codexStartSessionInput());
@@ -277,10 +273,7 @@ describe("CodexAppServerAdapter streaming", () => {
           requestId: "async-question-live-update-failure",
           answers: [["Staging"]],
         }),
-      ).resolves.toMatchObject({ type: "user_message" });
-      await flushCodexAdapterWork();
-
-      expect(failures).toEqual([expect.objectContaining({ message: "live update failed" })]);
+      ).rejects.toThrow("live update failed");
       await expect(
         adapter.readSessionRuntimeSnapshot(codexSessionRuntimeRef("thread/start-runtime-live")),
       ).resolves.toMatchObject({ pendingQuestions: [] });

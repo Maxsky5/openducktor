@@ -6,6 +6,7 @@ import type {
   AgentSessionHistoryMessage,
   AgentUserMessageDisplayPart,
 } from "@openducktor/core";
+import { pendingInputIdentity } from "@/lib/pending-input-identity";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { formatToolContent } from "../agent-tool-messages";
 import { createAssistantMessageMeta } from "./assistant-meta";
@@ -427,20 +428,28 @@ export const applyLoadedSessionHistory = (
   session: AgentSessionState,
   history: AgentSessionHistoryMessage[],
   messagesAtReadStart?: AgentSessionState["messages"],
+  questionsAtReadStart?: AgentSessionState["pendingQuestions"],
 ): AgentSessionState => {
   const historyMessages = historyToChatMessages(history, {
     role: session.sessionAssociation.kind === "workflow" ? session.sessionAssociation.role : null,
   });
   const loadedMessages = createSessionMessagesState(session.externalSessionId, historyMessages);
-  const hasDirectPendingQuestions = session.pendingQuestions.some(
-    (request) => request.source === undefined,
-  );
+  const historyQuestions = projectBackgroundQuestions(history);
+  const historyQuestionIds = new Set(historyQuestions.map(pendingInputIdentity));
+  const oldQuestionIds = new Set(questionsAtReadStart?.map(pendingInputIdentity));
   const pendingQuestions =
-    session.livePresence === "present" || hasDirectPendingQuestions
+    session.livePresence === "present"
       ? session.pendingQuestions
       : [
-          ...projectBackgroundQuestions(history),
-          ...session.pendingQuestions.filter((request) => request.source !== undefined),
+          ...historyQuestions,
+          ...session.pendingQuestions.filter((request) => {
+            const requestId = pendingInputIdentity(request);
+            if (historyQuestionIds.has(requestId)) return false;
+            return (
+              request.source !== undefined ||
+              (questionsAtReadStart !== undefined && !oldQuestionIds.has(requestId))
+            );
+          }),
         ];
 
   return {

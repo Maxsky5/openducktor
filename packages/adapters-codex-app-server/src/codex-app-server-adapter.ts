@@ -1323,25 +1323,19 @@ export class CodexAppServerAdapter
       const publishLiveSessionMutation = this.options.onLiveSessionMutation;
       if (publishLiveSessionMutation) {
         const sessionRef = codexSessionRef(session);
-        void Promise.resolve()
-          .then(() =>
-            publishLiveSessionMutation({
-              runtimeId: input.runtimeId,
-              snapshotMode: "delta",
-              removedRefs: [],
-              snapshots: this.changedLiveSessionSnapshots(
-                input.runtimeId,
-                new Set([input.externalSessionId]),
-              ),
-              transcriptEvents: completionEvents
-                .filter((event) => isAgentSessionTranscriptEventType(event.type))
-                .map((event) => withAgentSessionRef(sessionRef, event)),
-              catalogInvalidated: false,
-            }),
-          )
-          .catch((error) => {
-            this.options.onRuntimeEventQueueFailure?.({ runtimeId: input.runtimeId, error });
-          });
+        await publishLiveSessionMutation({
+          runtimeId: input.runtimeId,
+          snapshotMode: "delta",
+          removedRefs: [],
+          snapshots: this.changedLiveSessionSnapshots(
+            input.runtimeId,
+            new Set([input.externalSessionId]),
+          ),
+          transcriptEvents: completionEvents
+            .filter((event) => isAgentSessionTranscriptEventType(event.type))
+            .map((event) => withAgentSessionRef(sessionRef, event)),
+          catalogInvalidated: false,
+        });
       }
       return accepted;
     }
