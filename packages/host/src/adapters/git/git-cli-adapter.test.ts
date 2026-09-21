@@ -66,29 +66,79 @@ describe("createGitCliAdapter", () => {
       { name: "backup", url: "https://github.com/openai/openducktor.git" },
     ]);
   });
-  test("lists only materialized tracked and untracked files", async () => {
+  test("lists materialized files and reports Git links as directories", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
-        "ls-files -t -co --exclude-standard -z -- .":
-          "H src/index.ts\0S packages/sparse.ts\0? untracked file.ts\0H  padded.ts \0",
+        "ls-files -t -s -co -k --exclude-standard -z -- .":
+          "H 100644 abc123 0\tsrc/index.ts\0S 040000 def456 0\tpackages/sparse.ts\0? untracked file.ts\0? nested-repo/\0H 100644 fed321 0\t padded.ts \0H 120000 abc456 0\tbroken-link\0H 160000 abc789 0\tpackages/nested-checkout\0H 100644 def123 0\tsrc/line\nbreak.ts\0",
       }),
     });
 
     await expect(Effect.runPromise(git.listFiles("/repo"))).resolves.toEqual([
-      "src/index.ts",
-      "untracked file.ts",
-      " padded.ts ",
+      { kind: "file", path: "src/index.ts" },
+      { kind: "file", path: "untracked file.ts" },
+      { kind: "directory", path: "nested-repo" },
+      { kind: "file", path: " padded.ts " },
+      { kind: "file", path: "broken-link" },
+      { kind: "directory", path: "packages/nested-checkout" },
+      { kind: "file", path: "src/line\nbreak.ts" },
     ]);
+  });
+  test("preserves a live directory that replaces an indexed file", async () => {
+    const git = createGitCliAdapter({
+      runner: createRunner({
+        "ls-files -t -s -co -k --exclude-standard -z -- .": "K entry/\0H 100644 abc123 0\tentry\0",
+      }),
+    });
+
+    await expect(Effect.runPromise(git.listFiles("/repo"))).resolves.toEqual([
+      { kind: "file", path: "entry", worktreeKind: "directory" },
+    ]);
+  });
+  test("limits a file lookup to one literal path", async () => {
+    const git = createGitCliAdapter({
+      runner: createRunner({
+        "ls-files -t -s -co -k --exclude-standard -z -- :(literal)src/[index].ts":
+          "H 100644 abc123 0\tsrc/[index].ts\0",
+      }),
+    });
+
+    await expect(Effect.runPromise(git.listFiles("/repo", "src/[index].ts"))).resolves.toEqual([
+      { kind: "file", path: "src/[index].ts" },
+    ]);
+  });
+  test("limits a case-insensitive file lookup to one literal path", async () => {
+    const git = createGitCliAdapter({
+      runner: createRunner({
+        "ls-files -t -s -co -k --exclude-standard -z -- :(icase,literal)src/index.ts":
+          "H 100644 abc123 0\tsrc/Index.ts\0",
+      }),
+    });
+
+    await expect(
+      Effect.runPromise(git.listFiles("/repo", "src/index.ts", { caseInsensitive: true })),
+    ).resolves.toEqual([{ kind: "file", path: "src/Index.ts" }]);
   });
   test("fails when tagged file output is malformed", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
-        "ls-files -t -co --exclude-standard -z -- .": "src/index.ts\0",
+        "ls-files -t -s -co -k --exclude-standard -z -- .": "src/index.ts\0",
       }),
     });
 
     await expect(Effect.runPromise(git.listFiles("/repo"))).rejects.toThrow(
       "Git returned an invalid tagged file entry",
+    );
+  });
+  test("fails when a staged file entry is malformed", async () => {
+    const git = createGitCliAdapter({
+      runner: createRunner({
+        "ls-files -t -s -co -k --exclude-standard -z -- .": "H src/index.ts\0",
+      }),
+    });
+
+    await expect(Effect.runPromise(git.listFiles("/repo"))).rejects.toThrow(
+      "Git returned an invalid staged file entry",
     );
   });
   test("parses porcelain status rows", async () => {
@@ -113,11 +163,22 @@ describe("createGitCliAdapter", () => {
       { path: "src/add-add-conflict.ts", status: "unmerged", staged: true },
     ]);
   });
-  test("prefers worktree deletions in mixed porcelain status rows", async () => {
+  test("normalizes an untracked embedded repository path", async () => {
+    const git = createGitCliAdapter({
+      runner: createRunner({
+        "status --porcelain=v1 -z --untracked-files=all": "?? nested-repo/\0",
+      }),
+    });
+
+    await expect(Effect.runPromise(git.getStatus("/repo"))).resolves.toEqual([
+      { path: "nested-repo", status: "untracked", staged: false },
+    ]);
+  });
+  test("prefers worktree changes in mixed porcelain status rows", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
         "status --porcelain=v1 -z --untracked-files=all":
-          "AD src/added.ts\0MD src/modified.ts\0RD src/renamed.ts\0src/original.ts\0",
+          "AD src/added.ts\0MD src/modified.ts\0RD src/renamed.ts\0src/original.ts\0TT src/typechanged.ts\0",
       }),
     });
 
@@ -130,6 +191,7 @@ describe("createGitCliAdapter", () => {
         status: "deleted",
         staged: false,
       },
+      { path: "src/typechanged.ts", status: "typechange", staged: false },
     ]);
   });
   test("resolves the repository root for a nested working directory", async () => {

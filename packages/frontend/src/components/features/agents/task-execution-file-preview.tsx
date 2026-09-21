@@ -272,13 +272,11 @@ const resolveFilePreviewSaveState = ({
 
 function FilePreviewHeader({
   relativePath,
-  isSwitchingFiles,
   saveState,
   onSave,
   onClose,
 }: {
   relativePath: string;
-  isSwitchingFiles: boolean;
   saveState: FilePreviewSaveState;
   onSave: () => void;
   onClose: () => void;
@@ -301,9 +299,6 @@ function FilePreviewHeader({
           />
         ) : null}
       </div>
-      {isSwitchingFiles ? (
-        <div className="shrink-0 text-xs text-muted-foreground">Loading...</div>
-      ) : null}
       {isAvailable ? (
         <Button
           type="button"
@@ -463,7 +458,7 @@ function resolveFilePreviewPresentation({
     visibleSnapshot !== null &&
     (visibleSnapshot.selectedFile.rootPath !== selectedFile.rootPath ||
       visibleSnapshot.selectedFile.relativePath !== selectedFile.relativePath) &&
-    (isFileFetching || !isCurrentSnapshotReady);
+    (isFileFetching || (!isFileError && !isCurrentSnapshotReady));
   const codeViewFileId = visibleSnapshot?.codeViewFile?.id ?? null;
   const hasActiveEditorSession =
     codeViewFileId !== null &&
@@ -714,11 +709,11 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     <section
       className="flex h-full min-h-0 flex-col bg-card"
       aria-label="Selected file preview"
+      aria-busy={isSwitchingFiles}
       onKeyDown={handlePreviewShortcut}
     >
       <FilePreviewHeader
         relativePath={visibleSnapshot?.selectedFile.relativePath ?? selectedFile.relativePath}
-        isSwitchingFiles={isSwitchingFiles}
         saveState={resolveFilePreviewSaveState({
           hasSession: hasActiveEditorSession,
           isSwitchingFiles,

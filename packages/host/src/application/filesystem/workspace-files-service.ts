@@ -9,11 +9,11 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostValidationError, type HostValidationErrorAggregate } from "../../effect/host-errors";
-import type { FilesystemPort, FilesystemStats } from "../../ports/filesystem-port";
+import type { FilesystemPort } from "../../ports/filesystem-port";
 import type { GitPort } from "../../ports/git-port";
 import {
   canonicalizeWorkspaceRoot,
-  loadWorkspaceFilePaths,
+  loadWorkspaceFileEntries,
   workspaceFileValidationError,
 } from "./workspace-file-access";
 import { toWorkspaceRelativeGitPath } from "./workspace-files-paths";
@@ -142,24 +142,18 @@ const directoryPathsForFiles = (filePaths: readonly string[]): string[] => {
   return [...directories].sort(compareWorkspacePaths);
 };
 
-const statFile = (
-  filesystem: FilesystemPort,
-  canonicalRoot: string,
-  relativePath: string,
-): Effect.Effect<
-  FilesystemStats,
-  HostValidationError<{ rootPath: string; relativePath: string }>
-> =>
-  filesystem
-    .stat(filesystem.join(canonicalRoot, relativePath), { followSymbolicLinks: false })
-    .pipe(
-      Effect.mapError((cause) =>
-        workspaceFileValidationError(cause, `Unable to inspect file '${relativePath}'.`, {
-          rootPath: canonicalRoot,
-          relativePath,
-        }),
-      ),
-    );
+const hasPathAncestor = (filePath: string, ancestors: ReadonlySet<string>): boolean => {
+  for (
+    let separator = filePath.indexOf("/");
+    separator !== -1;
+    separator = filePath.indexOf("/", separator + 1)
+  ) {
+    if (ancestors.has(filePath.slice(0, separator))) {
+      return true;
+    }
+  }
+  return false;
+};
 
 export const createWorkspaceFilesService = (
   filesystem: FilesystemPort,
@@ -173,7 +167,7 @@ export const createWorkspaceFilesService = (
     listTree(input) {
       return Effect.gen(function* () {
         const canonicalRoot = yield* canonicalizeWorkspaceRoot(filesystem, input.rootPath);
-        const listedFilePaths = yield* loadWorkspaceFilePaths(gitPort, canonicalRoot);
+        const listedFiles = yield* loadWorkspaceFileEntries(gitPort, canonicalRoot);
         const repositoryRoot = yield* gitPort.getRepositoryRoot(canonicalRoot).pipe(
           Effect.mapError((cause) =>
             workspaceFileValidationError(
@@ -210,9 +204,12 @@ export const createWorkspaceFilesService = (
             ),
           ),
         );
-        const materializedFilePaths = new Set(listedFilePaths);
+        const listedEntryByPath = new Map(listedFiles.map((entry) => [entry.path, entry]));
+        const materializedFilePaths = new Set(listedEntryByPath.keys());
         const filePathSet = new Set(materializedFilePaths);
         const gitStatusByPath = new Map<string, WorkspaceFileGitStatus | null>();
+        const unstagedTypechangePaths = new Set<string>();
+        const unstagedDeletedPaths = new Set<string>();
         for (const change of targetChanges) {
           const workspaceChange = projectGitChangeToWorkspace(
             filesystem,
@@ -243,6 +240,12 @@ export const createWorkspaceFilesService = (
           if (!workspaceChange) {
             continue;
           }
+          if (status.status === "typechange" && !status.staged) {
+            unstagedTypechangePaths.add(workspaceChange.path);
+          }
+          if (status.status === "deleted" && !status.staged) {
+            unstagedDeletedPaths.add(workspaceChange.path);
+          }
           const normalizedStatus = yield* normalizeGitStatus(workspaceChange.status);
           filePathSet.add(workspaceChange.path);
           gitStatusByPath.set(
@@ -250,8 +253,26 @@ export const createWorkspaceFilesService = (
             mergeGitStatus(gitStatusByPath.get(workspaceChange.path), normalizedStatus),
           );
         }
+        const listedKindByPath = new Map(
+          [...listedEntryByPath].map(([path, entry]) => [
+            path,
+            entry.worktreeKind ??
+              (entry.kind === "directory" && unstagedTypechangePaths.has(path)
+                ? "file"
+                : entry.kind),
+          ]),
+        );
         const filePaths = [...filePathSet].sort(compareWorkspacePaths);
-        const directoryPaths = directoryPathsForFiles(filePaths);
+        const materializedRegularFilePaths = new Set<string>();
+        for (const [filePath, kind] of listedKindByPath) {
+          if (kind === "file" && !unstagedDeletedPaths.has(filePath)) {
+            materializedRegularFilePaths.add(filePath);
+          }
+        }
+        const visibleFilePaths = filePaths.filter(
+          (filePath) => !hasPathAncestor(filePath, materializedRegularFilePaths),
+        );
+        const directoryPaths = directoryPathsForFiles(visibleFilePaths);
         const directoryEntries = new Map<string, WorkspaceFileTreeEntry>(
           directoryPaths.map((directoryPath) => [
             directoryPath,
@@ -265,29 +286,21 @@ export const createWorkspaceFilesService = (
           ]),
         );
         const fileEntries: WorkspaceFileTreeEntry[] = [];
-        for (const filePath of filePaths) {
+        for (const filePath of visibleFilePaths) {
           const gitStatus = gitStatusByPath.get(filePath) ?? null;
-          const metadataResult = yield* Effect.either(
-            statFile(filesystem, canonicalRoot, filePath),
-          );
-          if (metadataResult._tag === "Left") {
-            if (gitStatus !== "deleted") {
-              return yield* Effect.fail(metadataResult.left);
-            }
-            fileEntries.push({
+          if (directoryEntries.has(filePath)) {
+            directoryEntries.set(filePath, {
               path: filePath,
-              kind: "file",
+              kind: "directory",
               size: null,
               mtimeMs: null,
               gitStatus,
             });
             continue;
           }
-          const metadata = metadataResult.right;
-          if (metadata.isDirectory) {
-            const directoryPath = filePath.replace(/\/+$/u, "");
-            directoryEntries.set(directoryPath, {
-              path: directoryPath,
+          if (listedKindByPath.get(filePath) === "directory") {
+            directoryEntries.set(filePath, {
+              path: filePath,
               kind: "directory",
               size: null,
               mtimeMs: null,
@@ -298,8 +311,8 @@ export const createWorkspaceFilesService = (
           fileEntries.push({
             path: filePath,
             kind: "file",
-            size: metadata.size ?? null,
-            mtimeMs: metadata.mtimeMs ?? null,
+            size: null,
+            mtimeMs: null,
             gitStatus,
           });
         }

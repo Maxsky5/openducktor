@@ -4,12 +4,11 @@ import type { FileDiff } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import type { FilesystemPort, FilesystemStats } from "../../ports/filesystem-port";
-import type { GitChangedFile, GitFileStatus, GitPort } from "../../ports/git-port";
+import type { GitChangedFile, GitFileListEntry, GitFileStatus } from "../../ports/git-port";
 import { createWorkspaceFilesService } from "./workspace-files-service";
 
 type FakeFilesystemInput = {
   canonical?: Record<string, string>;
-  linkStats?: Record<string, FilesystemStats>;
   relative?: (from: string, to: string) => string;
   readLimits?: number[];
   statOptions?: Array<{ followSymbolicLinks: boolean; path: string }>;
@@ -17,19 +16,14 @@ type FakeFilesystemInput = {
   files?: Record<string, Uint8Array>;
 };
 
-const encoder = new TextEncoder();
 const revisionForBytes = (bytes: Uint8Array): string =>
   `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 
 const hostOperationError = (message: string): HostOperationError =>
-  new HostOperationError({
-    operation: "workspace-files-test",
-    message,
-  });
+  new HostOperationError({ operation: "workspace-files-test", message });
 
 const createFakeFilesystem = ({
   canonical = {},
-  linkStats = {},
   relative,
   readLimits,
   statOptions,
@@ -39,22 +33,12 @@ const createFakeFilesystem = ({
   homeDirectory: () => "/home/dev",
   canonicalize: (path) => Effect.succeed(canonical[path] ?? path),
   readDirectory: () => Effect.succeed([]),
-  readFileBytes: (path, maxBytes) => {
-    if (maxBytes !== undefined) {
-      readLimits?.push(maxBytes);
-    }
-    const value = files[path];
-    return value
-      ? Effect.succeed(maxBytes === undefined ? value : value.slice(0, maxBytes))
-      : Effect.fail(hostOperationError(`Missing file ${path}`));
-  },
+  readFileBytes: () => Effect.die("Unexpected readFileBytes call"),
   readFileSnapshot: (path, maxBytes) => {
     readLimits?.push(maxBytes);
     const value = files[path];
     const metadata = stats[path];
-    if (!value || !metadata) {
-      return Effect.die(`Missing file ${path}`);
-    }
+    if (!value || !metadata) return Effect.die(`Missing file ${path}`);
     const bytes = value.slice(0, maxBytes);
     return Effect.succeed({
       bytes,
@@ -64,43 +48,20 @@ const createFakeFilesystem = ({
       revision: revisionForBytes(bytes),
     });
   },
-  replaceFileBytes: ({ path, expectedRevision, bytes }) => {
-    const current = files[path];
-    const metadata = stats[path];
-    if (!current || !metadata || revisionForBytes(current) !== expectedRevision) {
-      return Effect.die(`Cannot replace file ${path}`);
-    }
-    files[path] = bytes;
-    return Effect.succeed({
-      bytes,
-      isFile: true,
-      size: bytes.byteLength,
-      mtimeMs: metadata.mtimeMs ?? null,
-      revision: revisionForBytes(bytes),
-    });
-  },
+  replaceFileBytes: () => Effect.die("Unexpected replaceFileBytes call"),
   stat: (path, options) => {
-    const followSymbolicLinks = options?.followSymbolicLinks ?? true;
-    statOptions?.push({ followSymbolicLinks, path });
-    const value = followSymbolicLinks ? stats[path] : (linkStats[path] ?? stats[path]);
+    statOptions?.push({ followSymbolicLinks: options?.followSymbolicLinks ?? true, path });
+    const value = stats[path];
     return value ? Effect.succeed(value) : Effect.fail(hostOperationError(`Missing stat ${path}`));
   },
   exists: () => Effect.succeed(true),
   join: (...paths) => paths.join("/").replaceAll(/\/+/g, "/"),
-  parent: (path) => {
-    const parent = path.split("/").slice(0, -1).join("/");
-    return parent.length > 0 ? parent : null;
-  },
+  parent: (path) => path.split("/").slice(0, -1).join("/") || null,
   relative:
     relative ??
     ((from, to) => {
-      if (to === from) {
-        return "";
-      }
-      if (to.startsWith(`${from}/`)) {
-        return to.slice(from.length + 1);
-      }
-      return `../${to}`;
+      if (to === from) return "";
+      return to.startsWith(`${from}/`) ? to.slice(from.length + 1) : `../${to}`;
     }),
 });
 
@@ -111,6 +72,8 @@ const createFakeGitPort = ({
   statuses = [],
   diffs = [],
   changedFiles,
+  directories = [],
+  worktreeDirectories = [],
 }: {
   isRepository?: boolean;
   repositoryRoot?: string;
@@ -118,31 +81,41 @@ const createFakeGitPort = ({
   statuses?: GitFileStatus[];
   diffs?: FileDiff[];
   changedFiles?: GitChangedFile[];
-} = {}): Parameters<typeof createWorkspaceFilesService>[1] & Pick<GitPort, "getDiff"> =>
-  ({
-    isGitRepository: () => Effect.succeed(isRepository),
-    getRepositoryRoot: () => Effect.succeed(repositoryRoot),
-    listFiles: () => Effect.succeed(files),
-    getStatus: () => Effect.succeed(statuses),
-    getDiff: () => Effect.succeed(diffs),
-    listChangedFiles: () =>
-      Effect.succeed(changedFiles ?? diffs.map((diff) => ({ path: diff.file, status: diff.type }))),
-  }) satisfies Parameters<typeof createWorkspaceFilesService>[1] & Pick<GitPort, "getDiff">;
+  directories?: string[];
+  worktreeDirectories?: string[];
+} = {}): Parameters<typeof createWorkspaceFilesService>[1] => ({
+  isGitRepository: () => Effect.succeed(isRepository),
+  getRepositoryRoot: () => Effect.succeed(repositoryRoot),
+  listFiles: (_rootPath, relativePath) =>
+    Effect.succeed(
+      files
+        .filter((path) => relativePath === undefined || path === relativePath)
+        .map((path) => {
+          const entry: GitFileListEntry = {
+            kind: directories.includes(path) ? "directory" : "file",
+            path,
+          };
+          if (worktreeDirectories.includes(path)) {
+            entry.worktreeKind = "directory";
+          }
+          return entry;
+        }),
+    ),
+  getStatus: () => Effect.succeed(statuses),
+  listChangedFiles: () =>
+    Effect.succeed(changedFiles ?? diffs.map((diff) => ({ path: diff.file, status: diff.type }))),
+});
+
+const encoder = new TextEncoder();
 
 describe("createWorkspaceFilesService", () => {
   test("lists git-tracked files, parent directories, and compatible git status", async () => {
+    const statOptions: Array<{ followSymbolicLinks: boolean; path: string }> = [];
     const service = createWorkspaceFilesService(
       createFakeFilesystem({
+        statOptions,
         stats: {
           "/repo": { isDirectory: true },
-          "/repo/README.md": { isDirectory: false, isFile: true, size: 12, mtimeMs: 10 },
-          "/repo/src/index.ts": { isDirectory: false, isFile: true, size: 42, mtimeMs: 20 },
-          "/repo/src/util/helpers.ts": {
-            isDirectory: false,
-            isFile: true,
-            size: 18,
-            mtimeMs: 30,
-          },
         },
       }),
       createFakeGitPort({
@@ -163,10 +136,11 @@ describe("createWorkspaceFilesService", () => {
     expect(tree.entries).toContainEqual({
       path: "src/index.ts",
       kind: "file",
-      size: 42,
-      mtimeMs: 20,
+      size: null,
+      mtimeMs: null,
       gitStatus: "modified",
     });
+    expect(statOptions).toEqual([{ path: "/repo", followSymbolicLinks: true }]);
   });
 
   test("keeps deleted tracked files from failing the whole tree", async () => {
@@ -174,7 +148,6 @@ describe("createWorkspaceFilesService", () => {
       createFakeFilesystem({
         stats: {
           "/repo": { isDirectory: true },
-          "/repo/README.md": { isDirectory: false, isFile: true, size: 12, mtimeMs: 10 },
         },
       }),
       createFakeGitPort({
@@ -195,8 +168,8 @@ describe("createWorkspaceFilesService", () => {
     expect(tree.entries).toContainEqual({
       path: "README.md",
       kind: "file",
-      size: 12,
-      mtimeMs: 10,
+      size: null,
+      mtimeMs: null,
       gitStatus: null,
     });
   });
@@ -206,23 +179,10 @@ describe("createWorkspaceFilesService", () => {
       createFakeFilesystem({
         stats: {
           "/repo": { isDirectory: true },
-          "/repo/apps/api/src/lib/auth.ts": {
-            isDirectory: false,
-            isFile: true,
-            size: 12,
-            mtimeMs: 10,
-          },
-          "/repo/apps/web/src/components/LandingPage.tsx": {
-            isDirectory: false,
-            isFile: true,
-            size: 42,
-            mtimeMs: 20,
-          },
         },
       }),
       createFakeGitPort({
         files: ["apps/api/src/lib/auth.ts", "apps/web/src/components/LandingPage.tsx"],
-        statuses: [],
         diffs: [
           {
             file: "apps/api/src/lib/auth.ts",
@@ -249,15 +209,15 @@ describe("createWorkspaceFilesService", () => {
     expect(tree.entries).toContainEqual({
       path: "apps/api/src/lib/auth.ts",
       kind: "file",
-      size: 12,
-      mtimeMs: 10,
+      size: null,
+      mtimeMs: null,
       gitStatus: "modified",
     });
     expect(tree.entries).toContainEqual({
       path: "apps/web/src/components/LandingPage.tsx",
       kind: "file",
-      size: 42,
-      mtimeMs: 20,
+      size: null,
+      mtimeMs: null,
       gitStatus: "modified",
     });
   });
@@ -267,7 +227,6 @@ describe("createWorkspaceFilesService", () => {
       createFakeFilesystem({
         stats: {
           "/repo": { isDirectory: true },
-          "/repo/src/visible.ts": { isDirectory: false, isFile: true, size: 12, mtimeMs: 10 },
         },
       }),
       createFakeGitPort({
@@ -298,18 +257,6 @@ describe("createWorkspaceFilesService", () => {
       createFakeFilesystem({
         stats: {
           "/repo/packages/host": { isDirectory: true },
-          "/repo/packages/host/src/status.ts": {
-            isDirectory: false,
-            isFile: true,
-            size: 12,
-            mtimeMs: 10,
-          },
-          "/repo/packages/host/src/target.ts": {
-            isDirectory: false,
-            isFile: true,
-            size: 18,
-            mtimeMs: 20,
-          },
         },
       }),
       createFakeGitPort({
@@ -333,15 +280,15 @@ describe("createWorkspaceFilesService", () => {
     expect(tree.entries).toContainEqual({
       path: "src/status.ts",
       kind: "file",
-      size: 12,
-      mtimeMs: 10,
+      size: null,
+      mtimeMs: null,
       gitStatus: "modified",
     });
     expect(tree.entries).toContainEqual({
       path: "src/target.ts",
       kind: "file",
-      size: 18,
-      mtimeMs: 20,
+      size: null,
+      mtimeMs: null,
       gitStatus: "modified",
     });
     expect(tree.entries.map((entry) => entry.path)).not.toContain(
@@ -648,52 +595,11 @@ describe("createWorkspaceFilesService", () => {
     ).rejects.toThrow("outside the selected workspace root");
   });
 
-  test("uses changed-file metadata without loading full diffs", async () => {
-    let getDiffCalls = 0;
-    let listChangedFilesCalls = 0;
-    const gitPort = createFakeGitPort({
-      files: ["src/index.ts"],
-      changedFiles: [{ path: "src/index.ts", status: "modified" }],
-    });
-    gitPort.getDiff = () => {
-      getDiffCalls += 1;
-      return Effect.succeed([]);
-    };
-    gitPort.listChangedFiles = () => {
-      listChangedFilesCalls += 1;
-      return Effect.succeed([{ path: "src/index.ts", status: "modified" }]);
-    };
-    const service = createWorkspaceFilesService(
-      createFakeFilesystem({
-        stats: {
-          "/repo": { isDirectory: true },
-          "/repo/src/index.ts": { isDirectory: false, isFile: true, size: 2, mtimeMs: 20 },
-        },
-      }),
-      gitPort,
-    );
-
-    const tree = await Effect.runPromise(
-      service.listTree({ rootPath: "/repo", targetBranch: "origin/main" }),
-    );
-
-    expect(tree.entries).toContainEqual({
-      path: "src/index.ts",
-      kind: "file",
-      size: 2,
-      mtimeMs: 20,
-      gitStatus: "modified",
-    });
-    expect(listChangedFilesCalls).toBe(1);
-    expect(getDiffCalls).toBe(0);
-  });
-
   test("uses the renamed destination path from git status", async () => {
     const service = createWorkspaceFilesService(
       createFakeFilesystem({
         stats: {
           "/repo": { isDirectory: true },
-          "/repo/src/new.ts": { isDirectory: false, isFile: true, size: 2, mtimeMs: 20 },
         },
       }),
       createFakeGitPort({
@@ -714,8 +620,8 @@ describe("createWorkspaceFilesService", () => {
     expect(tree.entries).toContainEqual({
       path: "src/new.ts",
       kind: "file",
-      size: 2,
-      mtimeMs: 20,
+      size: null,
+      mtimeMs: null,
       gitStatus: "renamed",
     });
     expect(tree.entries.some((entry) => entry.path === "src/old.ts")).toBe(false);
@@ -727,7 +633,6 @@ describe("createWorkspaceFilesService", () => {
       createFakeFilesystem({
         stats: {
           "/repo": { isDirectory: true },
-          [`/repo/${filePath}`]: { isDirectory: false, isFile: true, size: 2, mtimeMs: 20 },
         },
       }),
       createFakeGitPort({
@@ -741,8 +646,8 @@ describe("createWorkspaceFilesService", () => {
     expect(tree.entries).toContainEqual({
       path: filePath,
       kind: "file",
-      size: 2,
-      mtimeMs: 20,
+      size: null,
+      mtimeMs: null,
       gitStatus: "modified",
     });
     expect(tree.entries).toHaveLength(1);
@@ -753,10 +658,9 @@ describe("createWorkspaceFilesService", () => {
       createFakeFilesystem({
         stats: {
           "/repo": { isDirectory: true },
-          "/repo/nested/": { isDirectory: true, isFile: false, size: 0, mtimeMs: 20 },
         },
       }),
-      createFakeGitPort({ files: ["nested/"] }),
+      createFakeGitPort({ files: ["nested"], directories: ["nested"] }),
     );
 
     const tree = await Effect.runPromise(service.listTree({ rootPath: "/repo" }));
@@ -772,14 +676,114 @@ describe("createWorkspaceFilesService", () => {
     ]);
   });
 
+  test("emits one directory when a tracked file is replaced by a directory", async () => {
+    const service = createWorkspaceFilesService(
+      createFakeFilesystem({ stats: { "/repo": { isDirectory: true } } }),
+      createFakeGitPort({
+        files: ["foo", "foo/bar.ts"],
+        statuses: [
+          { path: "foo", status: "deleted", staged: false },
+          { path: "foo/bar.ts", status: "untracked", staged: false },
+        ],
+      }),
+    );
+
+    const tree = await Effect.runPromise(service.listTree({ rootPath: "/repo" }));
+
+    expect(tree.entries.filter((entry) => entry.path === "foo")).toEqual([
+      {
+        path: "foo",
+        kind: "directory",
+        size: null,
+        mtimeMs: null,
+        gitStatus: "deleted",
+      },
+    ]);
+    expect(tree.entries).toContainEqual({
+      path: "foo/bar.ts",
+      kind: "file",
+      size: null,
+      mtimeMs: null,
+      gitStatus: "untracked",
+    });
+  });
+
+  test("emits a materialized file instead of its deleted descendants", async () => {
+    const service = createWorkspaceFilesService(
+      createFakeFilesystem({ stats: { "/repo": { isDirectory: true } } }),
+      createFakeGitPort({
+        files: ["foo", "foo/bar.ts"],
+        statuses: [
+          { path: "foo", status: "untracked", staged: false },
+          { path: "foo/bar.ts", status: "deleted", staged: false },
+        ],
+      }),
+    );
+
+    const tree = await Effect.runPromise(service.listTree({ rootPath: "/repo" }));
+
+    expect(tree.entries).toEqual([
+      {
+        path: "foo",
+        kind: "file",
+        size: null,
+        mtimeMs: null,
+        gitStatus: "untracked",
+      },
+    ]);
+  });
+
+  test("emits a file when a tracked Git link becomes a regular file", async () => {
+    const service = createWorkspaceFilesService(
+      createFakeFilesystem({ stats: { "/repo": { isDirectory: true } } }),
+      createFakeGitPort({
+        files: ["nested-checkout"],
+        directories: ["nested-checkout"],
+        statuses: [{ path: "nested-checkout", status: "typechange", staged: false }],
+      }),
+    );
+
+    const tree = await Effect.runPromise(service.listTree({ rootPath: "/repo" }));
+
+    expect(tree.entries).toEqual([
+      {
+        path: "nested-checkout",
+        kind: "file",
+        size: null,
+        mtimeMs: null,
+        gitStatus: "modified",
+      },
+    ]);
+  });
+
+  test("emits a directory when a tracked file becomes an embedded repository", async () => {
+    const service = createWorkspaceFilesService(
+      createFakeFilesystem({ stats: { "/repo": { isDirectory: true } } }),
+      createFakeGitPort({
+        files: ["nested-checkout"],
+        worktreeDirectories: ["nested-checkout"],
+        statuses: [{ path: "nested-checkout", status: "typechange", staged: false }],
+      }),
+    );
+
+    const tree = await Effect.runPromise(service.listTree({ rootPath: "/repo" }));
+
+    expect(tree.entries).toEqual([
+      {
+        path: "nested-checkout",
+        kind: "directory",
+        size: null,
+        mtimeMs: null,
+        gitStatus: "modified",
+      },
+    ]);
+  });
+
   test("adapts known Git-only statuses without a generic fallback", async () => {
     const service = createWorkspaceFilesService(
       createFakeFilesystem({
         stats: {
           "/repo": { isDirectory: true },
-          "/repo/copied.ts": { isDirectory: false, isFile: true, size: 2, mtimeMs: 20 },
-          "/repo/conflicted.ts": { isDirectory: false, isFile: true, size: 2, mtimeMs: 20 },
-          "/repo/typechanged.ts": { isDirectory: false, isFile: true, size: 2, mtimeMs: 20 },
         },
       }),
       createFakeGitPort({
@@ -808,7 +812,6 @@ describe("createWorkspaceFilesService", () => {
       createFakeFilesystem({
         stats: {
           "/repo": { isDirectory: true },
-          "/repo/src/index.ts": { isDirectory: false, isFile: true, size: 2, mtimeMs: 20 },
         },
       }),
       createFakeGitPort({
@@ -822,42 +825,11 @@ describe("createWorkspaceFilesService", () => {
     );
   });
 
-  test("uses non-following metadata for tracked symlinks", async () => {
-    const statOptions: Array<{ followSymbolicLinks: boolean; path: string }> = [];
-    const service = createWorkspaceFilesService(
-      createFakeFilesystem({
-        statOptions,
-        stats: {
-          "/repo": { isDirectory: true },
-        },
-        linkStats: {
-          "/repo/broken-link": { isDirectory: false, isFile: false, size: 14, mtimeMs: 20 },
-        },
-      }),
-      createFakeGitPort({ files: ["broken-link"] }),
-    );
-
-    const tree = await Effect.runPromise(service.listTree({ rootPath: "/repo" }));
-
-    expect(tree.entries).toContainEqual({
-      path: "broken-link",
-      kind: "file",
-      size: 14,
-      mtimeMs: 20,
-      gitStatus: null,
-    });
-    expect(statOptions).toContainEqual({
-      path: "/repo/broken-link",
-      followSymbolicLinks: false,
-    });
-  });
-
   test("preserves the more specific status when target and worktree changes overlap", async () => {
     const service = createWorkspaceFilesService(
       createFakeFilesystem({
         stats: {
           "/repo": { isDirectory: true },
-          "/repo/src/new.ts": { isDirectory: false, isFile: true, size: 2, mtimeMs: 20 },
         },
       }),
       createFakeGitPort({

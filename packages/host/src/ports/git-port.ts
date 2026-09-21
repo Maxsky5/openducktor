@@ -47,6 +47,14 @@ export type GitChangedFile = {
 export type GitFileStatus = FileStatus & {
   originalPath?: string;
 };
+export type GitFileListEntry = {
+  kind: "directory" | "file";
+  path: string;
+  worktreeKind?: "directory" | "file";
+};
+export type GitFileListOptions = {
+  caseInsensitive?: boolean;
+};
 export type GitWorktreeStatusData = {
   currentBranch: GitCurrentBranch;
   fileStatuses: FileStatus[];
@@ -108,7 +116,11 @@ export type GitPort = {
   referenceExists(workingDir: string, reference: string): Effect.Effect<boolean, GitPortError>;
   listRemotes(workingDir: string): Effect.Effect<GitRemote[], GitPortError>;
   listBranches(workingDir: string): Effect.Effect<GitBranch[], GitPortError>;
-  listFiles(workingDir: string): Effect.Effect<string[], GitPortError>;
+  listFiles(
+    workingDir: string,
+    relativePath?: string,
+    options?: GitFileListOptions,
+  ): Effect.Effect<GitFileListEntry[], GitPortError>;
   getCurrentBranch(workingDir: string): Effect.Effect<GitCurrentBranch, GitPortError>;
   getStatus(workingDir: string): Effect.Effect<GitFileStatus[], GitPortError>;
   listChangedFiles(

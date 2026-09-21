@@ -106,7 +106,8 @@ const parseStatusRecord = (line: string): GitFileStatus[] => {
   const worktree = line.at(1) ?? "";
   const filePath = line.slice(3);
   if (index === "?" && worktree === "?") {
-    return [{ path: filePath, status: "untracked", staged: false }];
+    const path = filePath.endsWith("/") ? filePath.slice(0, -1) : filePath;
+    return [{ path, status: "untracked", staged: false }];
   }
   if (index === "!" && worktree === "!") {
     return [{ path: filePath, status: "ignored", staged: false }];
@@ -114,8 +115,8 @@ const parseStatusRecord = (line: string): GitFileStatus[] => {
   if (isUnmergedStatusPair(index, worktree)) {
     return [{ path: filePath, status: "unmerged", staged: true }];
   }
-  if (worktree === "D") {
-    return [{ path: filePath, status: "deleted", staged: false }];
+  if (worktree === "D" || worktree === "T") {
+    return [{ path: filePath, status: porcelainCharToStatus(worktree), staged: false }];
   }
   if (index !== " " && worktree === " ") {
     return [{ path: filePath, status: porcelainCharToStatus(index), staged: true }];

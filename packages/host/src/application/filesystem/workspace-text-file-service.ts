@@ -21,10 +21,10 @@ import {
   canonicalizeContainedWorkspaceFile,
   canonicalizeWorkspaceRoot,
   loadWorkspaceFilePaths,
-  type WorkspaceFileAccessError,
+  WorkspaceFileAccessError,
   workspaceFileValidationError,
 } from "./workspace-file-access";
-import { requireRelativePath } from "./workspace-files-paths";
+import { requireRelativePath, toWorkspaceRelativeCanonicalGitPath } from "./workspace-files-paths";
 
 export const MAX_WORKSPACE_TEXT_FILE_BYTES = 1024 * 1024;
 const TEXT_DECODER = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
@@ -167,6 +167,57 @@ const unsupportedWrite = (
   input: WorkspaceTextFileWriteInput,
 ): WorkspaceTextFileWriteError => writeFailure("unsupported_file", message, input);
 
+const resolveAvailableWorkspaceFile = (
+  filesystem: FilesystemPort,
+  gitPort: Pick<GitPort, "isGitRepository" | "listFiles">,
+  canonicalRoot: string,
+  relativePath: string,
+) =>
+  Effect.gen(function* () {
+    const listedFilePaths = yield* loadWorkspaceFilePaths(gitPort, canonicalRoot, relativePath);
+    if (!listedFilePaths.includes(relativePath)) {
+      return yield* new WorkspaceFileAccessError({
+        code: "unavailable_file",
+        field: "relativePath",
+        message: `File '${relativePath}' is not available in the workspace file tree.`,
+        details: { rootPath: canonicalRoot, relativePath },
+      });
+    }
+    const canonicalPath = yield* canonicalizeContainedWorkspaceFile(
+      filesystem,
+      canonicalRoot,
+      relativePath,
+    );
+    const canonicalRelativePath = toWorkspaceRelativeCanonicalGitPath(
+      filesystem,
+      canonicalRoot,
+      canonicalPath,
+    );
+    const requestedPath = filesystem.join(canonicalRoot, relativePath);
+    if (filesystem.relative(requestedPath, canonicalPath) === "") {
+      return canonicalPath;
+    }
+    const targetPaths = yield* loadWorkspaceFilePaths(
+      gitPort,
+      canonicalRoot,
+      canonicalRelativePath,
+      { caseInsensitive: true },
+    );
+    const hasCanonicalTarget = targetPaths.some(
+      (targetPath) =>
+        filesystem.relative(filesystem.join(canonicalRoot, targetPath), canonicalPath) === "",
+    );
+    if (!hasCanonicalTarget) {
+      return yield* new WorkspaceFileAccessError({
+        code: "unavailable_file",
+        field: "relativePath",
+        message: `File '${relativePath}' target is not available in the workspace file tree.`,
+        details: { rootPath: canonicalRoot, relativePath },
+      });
+    }
+    return canonicalPath;
+  });
+
 export const createWorkspaceTextFileService = (
   filesystem: FilesystemPort,
   gitPort: Pick<GitPort, "isGitRepository" | "listFiles">,
@@ -175,22 +226,16 @@ export const createWorkspaceTextFileService = (
     return Effect.gen(function* () {
       const canonicalRoot = yield* canonicalizeWorkspaceRoot(filesystem, input.rootPath);
       const relativePath = yield* requireRelativePath(input.relativePath);
-      const listedFilePaths = yield* loadWorkspaceFilePaths(gitPort, canonicalRoot);
-      if (!listedFilePaths.includes(relativePath)) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "relativePath",
-            message: `File '${relativePath}' is not available in the workspace file tree.`,
-            details: { rootPath: canonicalRoot, relativePath },
-          }),
-        );
-      }
-      const canonicalPath = yield* canonicalizeContainedWorkspaceFile(
+      const canonicalPath = yield* resolveAvailableWorkspaceFile(
         filesystem,
+        gitPort,
         canonicalRoot,
         relativePath,
-        listedFilePaths,
-      ).pipe(Effect.mapError(mapReadAccessFailure));
+      ).pipe(
+        Effect.mapError((cause) =>
+          cause._tag === "WorkspaceFileAccessError" ? mapReadAccessFailure(cause) : cause,
+        ),
+      );
       const snapshot = yield* filesystem
         .readFileSnapshot(canonicalPath, MAX_WORKSPACE_TEXT_FILE_BYTES + 1)
         .pipe(
@@ -280,24 +325,18 @@ export const createWorkspaceTextFileService = (
         Effect.mapError((cause) => mapValidationFailure(cause, input)),
       );
       const canonicalInput = { ...input, rootPath: canonicalRoot, relativePath };
-      const listedFilePaths = yield* loadWorkspaceFilePaths(gitPort, canonicalRoot).pipe(
-        Effect.mapError((cause) => mapValidationFailure(cause, canonicalInput)),
-      );
-      if (!listedFilePaths.includes(relativePath)) {
-        return yield* Effect.fail(
-          writeFailure(
-            "unavailable_file",
-            `File '${relativePath}' is not available in the workspace file tree.`,
-            canonicalInput,
-          ),
-        );
-      }
-      const canonicalPath = yield* canonicalizeContainedWorkspaceFile(
+      const canonicalPath = yield* resolveAvailableWorkspaceFile(
         filesystem,
+        gitPort,
         canonicalRoot,
         relativePath,
-        listedFilePaths,
-      ).pipe(Effect.mapError((cause) => mapAccessFailure(cause, canonicalInput)));
+      ).pipe(
+        Effect.mapError((cause) =>
+          cause._tag === "WorkspaceFileAccessError"
+            ? mapAccessFailure(cause, canonicalInput)
+            : mapValidationFailure(cause, canonicalInput),
+        ),
+      );
       const current = yield* filesystem
         .readFileSnapshot(canonicalPath, MAX_WORKSPACE_TEXT_FILE_BYTES + 1)
         .pipe(Effect.mapError((cause) => mapFileOperationFailure(cause, canonicalInput)));

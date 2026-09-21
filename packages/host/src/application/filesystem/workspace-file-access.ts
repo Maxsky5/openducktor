@@ -1,7 +1,7 @@
 import { Data, Effect } from "effect";
 import { type HostErrorDetails, HostValidationError } from "../../effect/host-errors";
 import type { FilesystemPort } from "../../ports/filesystem-port";
-import type { GitPort } from "../../ports/git-port";
+import type { GitFileListOptions, GitPort } from "../../ports/git-port";
 import { isContainedPath } from "./workspace-files-paths";
 
 export const workspaceFileValidationError = <Details extends object>(
@@ -53,9 +53,11 @@ export const canonicalizeWorkspaceRoot = (filesystem: FilesystemPort, rootPath: 
     return canonicalRoot;
   });
 
-export const loadWorkspaceFilePaths = (
+export const loadWorkspaceFileEntries = (
   gitPort: Pick<GitPort, "isGitRepository" | "listFiles">,
   canonicalRoot: string,
+  relativePath?: string,
+  options?: GitFileListOptions,
 ) =>
   Effect.gen(function* () {
     const isGitRepository = yield* gitPort
@@ -79,7 +81,7 @@ export const loadWorkspaceFilePaths = (
       );
     }
 
-    return yield* gitPort.listFiles(canonicalRoot).pipe(
+    return yield* gitPort.listFiles(canonicalRoot, relativePath, options).pipe(
       Effect.mapError((cause) =>
         workspaceFileValidationError(cause, `Unable to list Git files for '${canonicalRoot}'.`, {
           rootPath: canonicalRoot,
@@ -88,11 +90,20 @@ export const loadWorkspaceFilePaths = (
     );
   });
 
+export const loadWorkspaceFilePaths = (
+  gitPort: Pick<GitPort, "isGitRepository" | "listFiles">,
+  canonicalRoot: string,
+  relativePath?: string,
+  options?: GitFileListOptions,
+) =>
+  loadWorkspaceFileEntries(gitPort, canonicalRoot, relativePath, options).pipe(
+    Effect.map((entries) => entries.map((entry) => entry.path)),
+  );
+
 export const canonicalizeContainedWorkspaceFile = (
   filesystem: FilesystemPort,
   canonicalRoot: string,
   relativePath: string,
-  listedFilePaths: readonly string[],
 ) =>
   Effect.gen(function* () {
     const requestedPath = filesystem.join(canonicalRoot, relativePath);
@@ -114,20 +125,6 @@ export const canonicalizeContainedWorkspaceFile = (
           code: "path_escape",
           field: "relativePath",
           message: `File '${relativePath}' is outside the selected workspace root.`,
-          details: { rootPath: canonicalRoot, relativePath },
-        }),
-      );
-    }
-    const canonicalTargetIsListed = listedFilePaths.some(
-      (listedPath) =>
-        filesystem.relative(filesystem.join(canonicalRoot, listedPath), canonicalPath) === "",
-    );
-    if (!canonicalTargetIsListed) {
-      return yield* Effect.fail(
-        new WorkspaceFileAccessError({
-          code: "unavailable_file",
-          field: "relativePath",
-          message: `File '${relativePath}' target is not available in the workspace file tree.`,
           details: { rootPath: canonicalRoot, relativePath },
         }),
       );

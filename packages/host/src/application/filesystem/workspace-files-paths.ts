@@ -51,6 +51,14 @@ export const toWorkspaceRelativeGitPath = (
   if (!isContainedPath(filesystem, workspaceRoot, absolutePath)) {
     return null;
   }
+  return toWorkspaceRelativeCanonicalGitPath(filesystem, workspaceRoot, absolutePath);
+};
+
+export const toWorkspaceRelativeCanonicalGitPath = (
+  filesystem: FilesystemPort,
+  workspaceRoot: string,
+  absolutePath: string,
+): string => {
   const relativePath = filesystem.relative(workspaceRoot, absolutePath);
   return isWindowsAbsolutePathLike(workspaceRoot)
     ? relativePath.replaceAll("\\", "/")
