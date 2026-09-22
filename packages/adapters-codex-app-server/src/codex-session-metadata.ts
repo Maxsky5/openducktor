@@ -1,5 +1,5 @@
 import type { CodexAppServerThread, WorkspaceSessionExternal } from "@openducktor/contracts";
-import type { ExternalRuntimeSessionPage, SessionRef } from "@openducktor/core";
+import type { RuntimeSessionMetadataPage, SessionRef } from "@openducktor/core";
 import type { CodexAppServerClient } from "./types";
 
 const isRoot = (thread: CodexAppServerThread): boolean => {
@@ -22,13 +22,13 @@ const metadata = (thread: CodexAppServerThread): WorkspaceSessionExternal => ({
   title: thread.name ?? null,
   updatedAt: thread.updatedAt * 1000,
 });
-export const listCodexExternalSessions = async (
+export const listCodexSessionMetadataPage = async (
   client: CodexAppServerClient,
-  input: { cursor?: string; signal: AbortSignal },
-): Promise<ExternalRuntimeSessionPage> => {
+  input: { pageToken?: string; signal: AbortSignal },
+): Promise<RuntimeSessionMetadataPage> => {
   type Stream = { cursor?: string | null; rows: WorkspaceSessionExternal[] };
-  const streams: [Stream, Stream] = input.cursor
-    ? JSON.parse(input.cursor)
+  const streams: [Stream, Stream] = input.pageToken
+    ? JSON.parse(input.pageToken)
     : [{ rows: [] }, { rows: [] }];
   const sessions = new Map<string, WorkspaceSessionExternal>();
   while (sessions.size < 100) {
@@ -70,12 +70,12 @@ export const listCodexExternalSessions = async (
   }
   return {
     sessions: [...sessions.values()],
-    nextCursor: streams.some((stream) => stream.rows.length || stream.cursor !== null)
+    nextPageToken: streams.some((stream) => stream.rows.length || stream.cursor !== null)
       ? JSON.stringify(streams)
       : null,
   };
 };
-export const inspectCodexExternalSession = async (
+export const getCodexSessionMetadata = async (
   client: CodexAppServerClient,
   ref: SessionRef,
 ): Promise<WorkspaceSessionExternal> => {

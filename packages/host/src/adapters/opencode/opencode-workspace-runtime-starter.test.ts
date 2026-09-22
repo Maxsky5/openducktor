@@ -1,4 +1,4 @@
-import { unexpectedExternalSessions } from "../../test-support/external-session-test-doubles";
+import { unexpectedSessionImport } from "../../test-support/session-import-test-doubles";
 import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
 import { existsSync } from "node:fs";
@@ -93,7 +93,7 @@ const createOpenCodeWorkspaceRuntimeStarter = (input: OpenCodeWorkspaceRuntimeSt
       ((runtime) => {
         const adapter: AgentSessionLiveAdapterPort = {
           queries: unexpectedRuntimeQueries,
-          externalSessions: unexpectedExternalSessions,
+          sessionImport: unexpectedSessionImport,
           supportsSessionControl: false,
           beginGeneratedImageBatch: () => Effect.dieMessage("Unexpected beginGeneratedImageBatch"),
           releaseGeneratedImageBatch: () =>
@@ -306,7 +306,7 @@ if (exitAfterMs !== null) {
 
 const createLiveAdapter = (runtime: RuntimeInstanceSummary): AgentSessionLiveAdapterPort => ({
   queries: unexpectedRuntimeQueries,
-  externalSessions: unexpectedExternalSessions,
+  sessionImport: unexpectedSessionImport,
   supportsSessionControl: false,
   beginGeneratedImageBatch: () => Effect.dieMessage("Unexpected beginGeneratedImageBatch"),
   releaseGeneratedImageBatch: () => Effect.dieMessage("Unexpected releaseGeneratedImageBatch"),

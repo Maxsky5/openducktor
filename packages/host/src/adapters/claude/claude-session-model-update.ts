@@ -4,7 +4,7 @@ import type {
 } from "@openducktor/core";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
-import { inspectClaudeExternalSession } from "./claude-external-sessions";
+import { getClaudeSessionMetadata } from "./claude-session-metadata";
 import { applyClaudeSessionModel } from "./claude-agent-sdk-session-io";
 import type { ClaudeSessionLaunchInput } from "./claude-agent-sdk-session-policy";
 import { assertClaudeSessionRef } from "./claude-agent-sdk-session-shape";
@@ -29,7 +29,7 @@ export const updateClaudeSessionModel = (
     const cold = !dependencies.sessionStore.get(input.externalSessionId);
     if (cold) {
       yield* fromPromise("claudeRuntime.inspectModelUpdateSession", () =>
-        inspectClaudeExternalSession(input),
+        getClaudeSessionMetadata(input),
       );
       yield* dependencies.attach(
         {

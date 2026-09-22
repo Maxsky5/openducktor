@@ -37,7 +37,7 @@ export type ClaudePendingInputResolution = {
 };
 
 export type ClaudeAgentSdkService = {
-  prepareExternalSession(
+  openForImport(
     input: SessionRef,
     runtimeId: string,
   ): Effect.Effect<

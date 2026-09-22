@@ -1,8 +1,8 @@
 import { updateClaudeSessionModel } from "./claude-session-model-update";
 import {
-  prepareClaudeExternalSession,
-  type ClaudeExternalPreparation,
-} from "./claude-external-session-preparation";
+  openClaudeSessionForImport,
+  type ClaudeSessionImportContext,
+} from "./claude-session-import";
 import { resolveClaudeQuerySession } from "./claude-agent-sdk-query-session";
 import { randomUUID } from "node:crypto";
 import { query } from "@anthropic-ai/claude-agent-sdk";
@@ -253,8 +253,8 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     });
   }
 
-  prepareExternalSession(input: SessionRef, runtimeId: string) {
-    return prepareClaudeExternalSession(input, {
+  openForImport(input: SessionRef, runtimeId: string) {
+    return openClaudeSessionForImport(input, {
       now: this.now,
       sessionStore: this.sessionStore,
       emit: this.emit.bind(this),
@@ -371,7 +371,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     runtimeId: string,
     sessionInput: ClaudeSessionLaunchInput,
     onContinuationAdmission?: () => void,
-    preparation?: ClaudeExternalPreparation,
+    preparation?: ClaudeSessionImportContext,
   ) {
     return Effect.gen(this, function* () {
       const resumeSessionId = sessionInput.options.resume;

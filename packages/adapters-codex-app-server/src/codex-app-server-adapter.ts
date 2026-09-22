@@ -1,5 +1,5 @@
-import { listCodexExternalSessions, inspectCodexExternalSession } from "./codex-external-sessions";
-import type { PreparedExternalRuntimeSession } from "@openducktor/core";
+import { listCodexSessionMetadataPage, getCodexSessionMetadata } from "./codex-session-metadata";
+import type { RuntimeSessionImportHandle } from "@openducktor/core";
 import { codexSubAgentSourceMetadata } from "./codex-app-server-threads";
 import { AgentRuntimeQueryError, assertAgentRuntimeQuerySession } from "@openducktor/core";
 import type {
@@ -478,8 +478,8 @@ export class CodexAppServerAdapter
       (!current || current.preserveNativeSettings)
     ) {
       if (current) return current.summary;
-      const prepared = await this.prepareExternalSession(input);
-      await prepared.commit();
+      const handle = await this.openExistingSession(input);
+      await handle.commit();
       return this.localSessions.get(input.externalSessionId)!.summary;
     }
     const model = requireModelSelection(input.model);
@@ -1044,24 +1044,19 @@ export class CodexAppServerAdapter
     };
   }
 
-  async listExternalSessions(input: SessionRef & { cursor?: string; signal: AbortSignal }) {
+  async listSessionMetadataPage(input: SessionRef & { pageToken?: string; signal: AbortSignal }) {
     const { client } = await this.runtimeClients.resolve(input, "list external sessions");
-    return listCodexExternalSessions(client, input);
+    return listCodexSessionMetadataPage(client, input);
   }
 
-  async inspectExternalSession(input: SessionRef) {
-    const { client } = await this.runtimeClients.resolve(input, "inspect external session");
-    return inspectCodexExternalSession(client, input);
+  async getSessionMetadata(input: SessionRef) {
+    const { client } = await this.runtimeClients.resolve(input, "read session metadata");
+    return getCodexSessionMetadata(client, input);
   }
 
-  async prepareExternalSession(
-    input: PolicyBoundSessionRef,
-  ): Promise<PreparedExternalRuntimeSession> {
-    const { client, runtimeId } = await this.runtimeClients.resolve(
-      input,
-      "prepare external session",
-    );
-    const metadata = await inspectCodexExternalSession(client, input);
+  async openExistingSession(input: PolicyBoundSessionRef): Promise<RuntimeSessionImportHandle> {
+    const { client, runtimeId } = await this.runtimeClients.resolve(input, "open existing session");
+    const metadata = await getCodexSessionMetadata(client, input);
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     const response = await client.threadResume({
       threadId: input.externalSessionId,
@@ -1087,7 +1082,7 @@ export class CodexAppServerAdapter
     binding?: PolicyBoundSessionRef,
   ): Promise<void> {
     if (!this.localSessions.get(input.externalSessionId) && binding) {
-      const handle = await this.prepareExternalSession(binding);
+      const handle = await this.openExistingSession(binding);
       await handle.commit();
     }
     const session = this.localSessions.get(input.externalSessionId);

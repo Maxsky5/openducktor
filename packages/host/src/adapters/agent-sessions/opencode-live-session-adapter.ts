@@ -1,4 +1,4 @@
-import { createExternalRuntimeSessionsAdapter } from "./external-runtime-sessions-adapter";
+import { createRuntimeSessionImportAdapter } from "./runtime-session-import-adapter";
 import { createRuntimeQueryAdapter } from "./runtime-query-adapter";
 import {
   unsupportedGeneratedImageSource,
@@ -274,10 +274,10 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
         );
 
       const adapter: AgentSessionRuntimeAdapterPort = {
-        externalSessions: createExternalRuntimeSessionsAdapter({
-          ...prepared.externalSessions,
-          prepare: async (ref) => {
-            const handle = await prepared.externalSessions.prepare(ref);
+        sessionImport: createRuntimeSessionImportAdapter({
+          ...prepared.sessionImport,
+          openForImport: async (ref) => {
+            const handle = await prepared.sessionImport.openForImport(ref);
             return {
               ...handle,
               commit: async () => {

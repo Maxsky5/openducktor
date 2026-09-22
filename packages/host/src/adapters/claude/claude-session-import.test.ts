@@ -1,7 +1,7 @@
 import { expect, spyOn, test } from "bun:test";
 import { Effect } from "effect";
-import { prepareClaudeExternalSession } from "./claude-external-session-preparation";
-import * as native from "./claude-external-sessions";
+import { openClaudeSessionForImport } from "./claude-session-import";
+import * as native from "./claude-session-metadata";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
 import {
   createClaudeSession,
@@ -17,12 +17,12 @@ const ref = {
 test.each([false, true])(
   "Claude preparation stays private until commit=%s and closes only its own query",
   async (commit) => {
-    const inspect = spyOn(native, "inspectClaudeExternalSession").mockResolvedValue({
+    const inspect = spyOn(native, "getClaudeSessionMetadata").mockResolvedValue({
       ...ref,
       title: "Native title",
       updatedAt: 1,
     });
-    const model = spyOn(native, "inspectClaudeExternalModel").mockResolvedValue({
+    const model = spyOn(native, "readClaudeSessionModel").mockResolvedValue({
       runtimeKind: "claude",
       providerId: "claude",
       modelId: "native-claude",
@@ -33,7 +33,7 @@ test.each([false, true])(
     let preparedStore: ClaudeSessionStore | undefined;
     try {
       const handle = await Effect.runPromise(
-        prepareClaudeExternalSession(ref, {
+        openClaudeSessionForImport(ref, {
           now: () => "2026-09-20T00:00:00Z",
           sessionStore: store,
           emit: (_session, event) => events.push(event),

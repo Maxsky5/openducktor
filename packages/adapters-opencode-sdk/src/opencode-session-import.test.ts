@@ -1,13 +1,13 @@
 import { expect, test } from "bun:test";
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
-import { createOpenCodeExternalSessions } from "./external-sessions";
+import { createOpenCodeSessionImportPort } from "./opencode-session-import";
 const ref = {
   repoPath: "/repo",
   runtimeKind: "opencode" as const,
   workingDirectory: "/repo",
   externalSessionId: "native",
 };
-test("OpenCode V2 discovery paginates metadata and passive preparation waits for commit", async () => {
+test("OpenCode V2 discovery pages metadata and opening for import waits for commit", async () => {
   const calls: string[] = [];
   const admitted: string[] = [];
   const native = {
@@ -38,20 +38,20 @@ test("OpenCode V2 discovery paginates metadata and passive preparation waits for
       });
     },
   });
-  const sessions = createOpenCodeExternalSessions({
+  const sessions = createOpenCodeSessionImportPort({
     createClient: () => client,
     runtimeEndpoint: "http://runtime",
     admit: async (input) => {
       admitted.push(input.externalSessionId);
     },
   });
-  const page = await sessions.list({ signal: new AbortController().signal });
+  const page = await sessions.listMetadataPage({ signal: new AbortController().signal });
   expect(page.sessions).toEqual(
     [{ ...ref, title: "Native title", updatedAt: 123 }].map(({ repoPath: _repo, ...row }) => row),
   );
-  expect(page.nextCursor).toBe("page-two");
-  const prepared = await sessions.prepare(ref);
-  expect(prepared.selectedModel).toEqual({
+  expect(page.nextPageToken).toBe("page-two");
+  const handle = await sessions.openForImport(ref);
+  expect(handle.selectedModel).toEqual({
     runtimeKind: "opencode",
     providerId: "openai",
     modelId: "native-model",
@@ -59,11 +59,11 @@ test("OpenCode V2 discovery paginates metadata and passive preparation waits for
     variant: "high",
   });
   expect(admitted).toEqual([]);
-  await prepared.commit();
-  await prepared.dispose();
+  await handle.commit();
+  await handle.dispose();
   expect(admitted).toEqual(["native"]);
   expect(calls.every((path) => !path.includes("message") && !path.includes("prompt"))).toBe(true);
-  await expect(sessions.inspect({ ...ref, workingDirectory: "/different" })).rejects.toThrow(
+  await expect(sessions.getMetadata({ ...ref, workingDirectory: "/different" })).rejects.toThrow(
     "directory changed",
   );
 });
@@ -76,13 +76,13 @@ test.each([null, undefined])("OpenCode accepts terminal cursor %s", async (next)
         headers: { "content-type": "application/json" },
       }),
   });
-  const sessions = createOpenCodeExternalSessions({
+  const sessions = createOpenCodeSessionImportPort({
     createClient: () => client,
     runtimeEndpoint: "http://runtime",
     admit: async () => {},
   });
-  expect(await sessions.list({ signal: new AbortController().signal })).toEqual({
+  expect(await sessions.listMetadataPage({ signal: new AbortController().signal })).toEqual({
     sessions: [],
-    nextCursor: null,
+    nextPageToken: null,
   });
 });

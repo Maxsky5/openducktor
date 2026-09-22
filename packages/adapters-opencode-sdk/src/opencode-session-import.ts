@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ExternalRuntimeSessionsPort } from "@openducktor/core";
+import type { RuntimeSessionImportPort } from "@openducktor/core";
 import { workspaceSessionExternalSchema, type WorkspaceSession } from "@openducktor/contracts";
 import { unwrapData } from "./data-utils";
 import type { ClientFactory } from "./types";
@@ -28,17 +28,17 @@ const metadata = (row: z.infer<typeof metadataSchema>) =>
     updatedAt: row.time.updated,
   });
 
-export const createOpenCodeExternalSessions = (input: {
+export const createOpenCodeSessionImportPort = (input: {
   createClient: ClientFactory;
   runtimeEndpoint: string;
-  admit: (ref: Parameters<ExternalRuntimeSessionsPort["inspect"]>[0]) => Promise<void>;
-}): ExternalRuntimeSessionsPort => {
+  admit: (ref: Parameters<RuntimeSessionImportPort["getMetadata"]>[0]) => Promise<void>;
+}): RuntimeSessionImportPort => {
   const client = input.createClient({ runtimeEndpoint: input.runtimeEndpoint });
-  const read = async (ref: Parameters<ExternalRuntimeSessionsPort["inspect"]>[0]) => {
+  const read = async (ref: Parameters<RuntimeSessionImportPort["getMetadata"]>[0]) => {
     const row = metadataSchema.parse(
       unwrapData(
         await client.v2.session.get({ sessionID: ref.externalSessionId }),
-        "inspect external session",
+        "read session metadata",
       ).data,
     );
     if (row.parentID || row.location.workspaceID)
@@ -48,11 +48,11 @@ export const createOpenCodeExternalSessions = (input: {
     return row;
   };
   return {
-    list: async ({ cursor, signal }) => {
+    listMetadataPage: async ({ pageToken, signal }) => {
       if (!client.v2?.session)
         throw new Error("Update OpenCode to a version with the V2 session listing API.");
       const request: Parameters<typeof client.v2.session.list>[0] = { limit: 100, order: "desc" };
-      if (cursor) request.cursor = cursor;
+      if (pageToken) request.cursor = pageToken;
       const page = pageSchema.parse(
         unwrapData(await client.v2.session.list(request, { signal }), "list external sessions"),
       );
@@ -60,11 +60,11 @@ export const createOpenCodeExternalSessions = (input: {
         sessions: page.data
           .filter((row) => !row.parentID && !row.location.workspaceID)
           .map(metadata),
-        nextCursor: page.cursor.next ?? null,
+        nextPageToken: page.cursor.next ?? null,
       };
     },
-    inspect: async (ref) => metadata(await read(ref)),
-    prepare: async (ref) => {
+    getMetadata: async (ref) => metadata(await read(ref)),
+    openForImport: async (ref) => {
       const row = await read(ref);
       const selectedModel: WorkspaceSession["selectedModel"] = row.model
         ? {

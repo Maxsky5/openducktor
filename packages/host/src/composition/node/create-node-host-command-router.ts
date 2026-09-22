@@ -1,4 +1,4 @@
-import { createWorkspaceSessionOwnedRootsReader } from "./workspace-session-owned-roots";
+import { createLiveSessionRootRefsReader } from "./live-session-root-refs";
 import { createWorkspaceSessionImportService } from "../../application/workspaces/workspace-session-import-service";
 import { createWorkspaceSessionImportCommandHandlers } from "../../interface/commands/workspace-session-import-command-handlers";
 import {
@@ -156,7 +156,7 @@ export const assembleNodeEffectHostCommandRouter = (
     adapterRegistry: liveSessionAdapterRegistry,
     withProcessStartAdmission: workspaceAdmissionService.withProcessStartAdmission,
     persistence: workspaceSessions.persistence,
-    readOwnedRoots: createWorkspaceSessionOwnedRootsReader({
+    readSessionRootRefs: createLiveSessionRootRefsReader({
       store: assets.workspaceSessionStore,
       taskStore,
       settings: workspaceSettingsService,

@@ -103,7 +103,7 @@ export class AgentSessionLiveRegistration implements AgentSessionLiveAdapterBind
 export type AgentSessionLiveAdapterScope = Pick<AgentSessionLiveRef, "repoPath" | "runtimeKind">;
 
 type AgentSessionLiveAdapterBase = {
-  readonly externalSessions: import("./external-runtime-sessions-port").ExternalRuntimeSessionsPort;
+  readonly sessionImport: import("./runtime-session-import-port").RuntimeSessionImportPort;
   readonly queries: AgentRuntimeQueryAdapterPort;
   readonly beginGeneratedImageBatch: (
     input: AgentGeneratedImageBatchInput,

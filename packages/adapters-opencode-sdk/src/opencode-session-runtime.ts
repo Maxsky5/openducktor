@@ -1,5 +1,5 @@
-import { createOpenCodeExternalSessions } from "./external-sessions";
-import type { ExternalRuntimeSessionsPort } from "@openducktor/core";
+import { createOpenCodeSessionImportPort } from "./opencode-session-import";
+import type { RuntimeSessionImportPort } from "@openducktor/core";
 import type {
   AgentCatalogPort,
   AgentSessionQueryParentPort,
@@ -77,7 +77,7 @@ export type OpencodeSessionRuntimeConnection = {
 };
 
 export type PreparedOpencodeSessionRuntime = {
-  readonly externalSessions: ExternalRuntimeSessionsPort;
+  readonly sessionImport: RuntimeSessionImportPort;
   readonly queries: AgentCatalogPort &
     AgentSessionHistoryPort &
     AgentWorkspaceInspectionPort &
@@ -551,7 +551,7 @@ export const createPrepareOpencodeSessionRuntime = (
     };
 
     return {
-      externalSessions: createOpenCodeExternalSessions({
+      sessionImport: createOpenCodeSessionImportPort({
         createClient,
         runtimeEndpoint: input.runtimeEndpoint,
         admit: async (ref) => {

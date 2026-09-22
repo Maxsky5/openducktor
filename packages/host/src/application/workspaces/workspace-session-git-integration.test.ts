@@ -526,10 +526,10 @@ describe("Workspace Session commands with real Git and SQLite", () => {
         createAgentSessionRuntimeAdapterTestDouble(
           { runtimeId: "test-runtime", repoPath, runtimeKind: "opencode" },
           {
-            externalSessions: {
-              list: () => Effect.succeed({ sessions: [metadata], nextCursor: null }),
-              inspect: () => Effect.succeed(metadata),
-              prepare: (ref) => {
+            sessionImport: {
+              listMetadataPage: () => Effect.succeed({ sessions: [metadata], nextPageToken: null }),
+              getMetadata: () => Effect.succeed(metadata),
+              openForImport: (ref) => {
                 expect(ref.workingDirectory).toBe(alias);
                 return Effect.succeed({ metadata, commit: Effect.void, dispose: Effect.void });
               },

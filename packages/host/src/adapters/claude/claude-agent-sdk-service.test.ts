@@ -1,6 +1,6 @@
 import * as todos from "./claude-agent-sdk-todos";
 import * as sessionFactory from "./claude-agent-sdk-session-factory";
-import * as nativeSessions from "./claude-external-sessions";
+import * as nativeSessions from "./claude-session-metadata";
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import { AgentRuntimeQueryError, InterruptedTurnResumeError } from "@openducktor/core";
 import { Effect } from "effect";
@@ -790,7 +790,7 @@ describe("createClaudeAgentSdkService", () => {
         operations.push("setModel");
       });
       const applyFlagSettings = mock(async () => {});
-      const inspect = spyOn(nativeSessions, "inspectClaudeExternalSession").mockResolvedValue({
+      const inspect = spyOn(nativeSessions, "getClaudeSessionMetadata").mockResolvedValue({
         ...ref,
         title: "Native title",
         updatedAt: null,
@@ -871,7 +871,7 @@ describe("createClaudeAgentSdkService", () => {
         sessionScope: { kind: "repository" as const },
       };
       const store = createClaudeAgentSdkSessionStore();
-      const inspect = spyOn(nativeSessions, "inspectClaudeExternalSession").mockImplementation(
+      const inspect = spyOn(nativeSessions, "getClaudeSessionMetadata").mockImplementation(
         async () => {
           if (stage === "inspect") throw new Error("Native session is missing");
           return { ...ref, title: null, updatedAt: null };

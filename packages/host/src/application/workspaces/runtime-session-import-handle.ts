@@ -1,11 +1,11 @@
 import type { WorkspaceSessionImportResult } from "@openducktor/contracts";
 import { Cause, Effect, Exit } from "effect";
 import { type HostError, HostOperationError } from "../../effect/host-errors";
-import type { PreparedExternalSession } from "../../ports/external-runtime-sessions-port";
+import type { HostSessionImportHandle } from "../../ports/runtime-session-import-port";
 
-export const withPreparedWorkspaceSessionImport = (
-  acquire: Effect.Effect<PreparedExternalSession, HostError>,
-  use: (handle: PreparedExternalSession) => Effect.Effect<WorkspaceSessionImportResult, HostError>,
+export const withRuntimeSessionImportHandle = (
+  acquire: Effect.Effect<HostSessionImportHandle, HostError>,
+  use: (handle: HostSessionImportHandle) => Effect.Effect<WorkspaceSessionImportResult, HostError>,
 ): Effect.Effect<WorkspaceSessionImportResult, HostError> =>
   Effect.uninterruptible(
     Effect.gen(function* () {

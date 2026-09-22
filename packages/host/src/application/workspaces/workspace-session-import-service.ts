@@ -1,4 +1,4 @@
-import { withPreparedWorkspaceSessionImport } from "./workspace-session-import-preparation";
+import { withRuntimeSessionImportHandle } from "./runtime-session-import-handle";
 import {
   workspaceSessionExternalSchema,
   type WorkspaceSessionExternal,
@@ -191,11 +191,11 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
           ),
         );
       while (!state.done && matches().length < count) {
-        const request: Parameters<typeof adapter.externalSessions.list>[0] = {
+        const request: Parameters<typeof adapter.sessionImport.listMetadataPage>[0] = {
           signal: entry.controller.signal,
         };
-        if (state.cursor) request.cursor = state.cursor;
-        const page = yield* adapter.externalSessions.list(request);
+        if (state.cursor) request.pageToken = state.cursor;
+        const page = yield* adapter.sessionImport.listMetadataPage(request);
         for (const raw of page.sessions) {
           state.bytes += JSON.stringify(raw).length * 2;
           if (++state.scanned > MAX_RECORDS || state.bytes > MAX_BYTES)
@@ -222,7 +222,7 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
 
           records.set(row.externalSessionId, row);
         }
-        state.cursor = page.nextCursor ?? undefined;
+        state.cursor = page.nextPageToken ?? undefined;
         state.done = !state.cursor;
         if (state.cursor) {
           if (cursors.has(state.cursor))
@@ -392,13 +392,13 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
             externalSessionId: input.externalSessionId,
             workingDirectory: input.workingDirectory,
           };
-          return yield* withPreparedWorkspaceSessionImport(
+          return yield* withRuntimeSessionImportHandle(
             lifecycle.runWorktreeRead(
               canonical,
               Effect.gen(function* () {
-                const metadata = yield* adapter.externalSessions.inspect(ref);
+                const metadata = yield* adapter.sessionImport.getMetadata(ref);
                 yield* targetFor(scope.repoPath, metadata.workingDirectory);
-                return yield* adapter.externalSessions.prepare(ref);
+                return yield* adapter.sessionImport.openForImport(ref);
               }),
             ),
             (handle) =>

@@ -1,4 +1,4 @@
-import { unexpectedExternalSessions } from "./external-session-test-doubles";
+import { unexpectedSessionImport } from "./session-import-test-doubles";
 import { unexpectedRuntimeQueries } from "./runtime-query-test-doubles";
 import { AgentSessionLiveRegistration } from "../ports/agent-session-live-adapter-port";
 import { Effect } from "effect";
@@ -26,7 +26,7 @@ export const createAgentSessionRuntimeAdapterTestDouble = <
   overrides: Overrides,
 ): AgentSessionRuntimeAdapterPort => ({
   queries: unexpectedRuntimeQueries,
-  externalSessions: unexpectedExternalSessions,
+  sessionImport: unexpectedSessionImport,
   supportsSessionControl: true,
   beginGeneratedImageBatch: unexpectedEffectCall("session adapter", "beginGeneratedImageBatch"),
   releaseGeneratedImageBatch: unexpectedEffectCall("session adapter", "releaseGeneratedImageBatch"),

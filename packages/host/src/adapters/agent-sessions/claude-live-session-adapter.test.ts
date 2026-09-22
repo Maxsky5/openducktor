@@ -167,7 +167,7 @@ const createHarness = async (
   };
   const service = {
     ...unexpectedRuntimeQueries,
-    prepareExternalSession: () => Effect.dieMessage("Unexpected preparation"),
+    openForImport: () => Effect.dieMessage("Unexpected import"),
     startSession: (
       input: Parameters<ClaudeAgentSdkService["startSession"]>[0],
       runtimeId: string,

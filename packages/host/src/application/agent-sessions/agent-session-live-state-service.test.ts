@@ -1,4 +1,4 @@
-import { unexpectedExternalSessions } from "../../test-support/external-session-test-doubles";
+import { unexpectedSessionImport } from "../../test-support/session-import-test-doubles";
 import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
 import { describe, expect, test } from "bun:test";
@@ -56,7 +56,7 @@ const fakeAdapter = (input: {
     : {};
   const adapter = {
     queries: unexpectedRuntimeQueries,
-    externalSessions: unexpectedExternalSessions,
+    sessionImport: unexpectedSessionImport,
     supportsSessionControl: false,
     beginGeneratedImageBatch: () => Effect.dieMessage("Unexpected beginGeneratedImageBatch"),
     releaseGeneratedImageBatch: () => Effect.dieMessage("Unexpected releaseGeneratedImageBatch"),
@@ -1243,7 +1243,7 @@ describe("createAgentSessionLiveStateService", () => {
         snapshots: () => [],
       }),
       queries: unexpectedRuntimeQueries,
-      externalSessions: unexpectedExternalSessions,
+      sessionImport: unexpectedSessionImport,
       supportsSessionControl: true,
       startSession: () => Effect.dieMessage("unexpected start"),
       resumeSession: (input) =>
@@ -1289,7 +1289,7 @@ describe("createAgentSessionLiveStateService", () => {
     const adapter = {
       ...fakeAdapter({ runtimeId: "runtime-1", snapshots: () => [] }),
       queries: unexpectedRuntimeQueries,
-      externalSessions: unexpectedExternalSessions,
+      sessionImport: unexpectedSessionImport,
       supportsSessionControl: true,
       startSession: () => Effect.dieMessage("unexpected start"),
       resumeSession: () => Effect.dieMessage("unexpected resume"),
@@ -1408,7 +1408,7 @@ describe("createAgentSessionLiveStateService", () => {
         snapshots: () => [],
       }),
       queries: unexpectedRuntimeQueries,
-      externalSessions: unexpectedExternalSessions,
+      sessionImport: unexpectedSessionImport,
       supportsSessionControl: true,
       startSession: () => Effect.dieMessage("unexpected start"),
       resumeSession: () => Effect.dieMessage("unexpected resume"),

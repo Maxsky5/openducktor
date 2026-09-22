@@ -3,22 +3,22 @@ import type { AgentSessionSummary } from "@openducktor/core";
 import type { HostError } from "../../effect/host-errors";
 import type { ClaudeAgentSdkService } from "../../application/runtimes/claude-agent-sdk-service";
 import {
-  listClaudeExternalSessions,
-  inspectClaudeExternalSession,
-} from "../claude/claude-external-sessions";
-import { createExternalRuntimeSessionsAdapter } from "./external-runtime-sessions-adapter";
-export const createClaudeExternalRuntimeSessions = (
-  service: Pick<ClaudeAgentSdkService, "prepareExternalSession">,
+  listClaudeSessionMetadata,
+  getClaudeSessionMetadata,
+} from "../claude/claude-session-metadata";
+import { createRuntimeSessionImportAdapter } from "./runtime-session-import-adapter";
+export const createClaudeSessionImportAdapter = (
+  service: Pick<ClaudeAgentSdkService, "openForImport">,
   runtimeId: string,
   publish: (
     effect: Effect.Effect<AgentSessionSummary, HostError>,
   ) => Effect.Effect<unknown, HostError>,
 ) =>
-  createExternalRuntimeSessionsAdapter({
-    list: ({ signal }) => listClaudeExternalSessions(signal),
-    inspect: inspectClaudeExternalSession,
-    prepare: async (input) => {
-      const handle = await Effect.runPromise(service.prepareExternalSession(input, runtimeId));
+  createRuntimeSessionImportAdapter({
+    listMetadataPage: ({ signal }) => listClaudeSessionMetadata(signal),
+    getMetadata: getClaudeSessionMetadata,
+    openForImport: async (input) => {
+      const handle = await Effect.runPromise(service.openForImport(input, runtimeId));
       return {
         metadata: handle.metadata,
         selectedModel: handle.selectedModel,

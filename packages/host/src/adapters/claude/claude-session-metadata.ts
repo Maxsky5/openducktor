@@ -1,5 +1,5 @@
 import { getSessionInfo, getSessionMessages, listSessions } from "@anthropic-ai/claude-agent-sdk";
-import type { ExternalRuntimeSessionPage, SessionRef } from "@openducktor/core";
+import type { RuntimeSessionMetadataPage, SessionRef } from "@openducktor/core";
 import { z } from "zod";
 import type { WorkspaceSession, WorkspaceSessionExternal } from "@openducktor/contracts";
 
@@ -15,9 +15,9 @@ const metadata = (
         updatedAt: row.lastModified,
       }
     : null;
-export const listClaudeExternalSessions = async (
+export const listClaudeSessionMetadata = async (
   signal: AbortSignal,
-): Promise<ExternalRuntimeSessionPage> => {
+): Promise<RuntimeSessionMetadataPage> => {
   signal.throwIfAborted();
   // The supported SDK can omit unreadable local history. This native limitation is accepted.
   const sessions = await listSessions({ includeProgrammatic: true });
@@ -27,10 +27,10 @@ export const listClaudeExternalSessions = async (
       const value = metadata(row);
       return value ? [value] : [];
     }),
-    nextCursor: null,
+    nextPageToken: null,
   };
 };
-export const inspectClaudeExternalSession = async (
+export const getClaudeSessionMetadata = async (
   ref: SessionRef,
 ): Promise<WorkspaceSessionExternal> => {
   const row = await getSessionInfo(ref.externalSessionId, { dir: ref.workingDirectory });
@@ -46,7 +46,7 @@ export const inspectClaudeExternalSession = async (
   return value;
 };
 
-export const inspectClaudeExternalModel = async (
+export const readClaudeSessionModel = async (
   ref: SessionRef,
 ): Promise<WorkspaceSession["selectedModel"]> => {
   const messages = await getSessionMessages(ref.externalSessionId, { dir: ref.workingDirectory });

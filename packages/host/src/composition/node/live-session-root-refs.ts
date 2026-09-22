@@ -3,7 +3,7 @@ import { toHostOperationError } from "../../effect/host-errors";
 import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
-export const createWorkspaceSessionOwnedRootsReader =
+export const createLiveSessionRootRefsReader =
   ({
     store,
     taskStore,

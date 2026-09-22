@@ -1,4 +1,4 @@
-import { createClaudeExternalRuntimeSessions } from "./claude-external-runtime-sessions";
+import { createClaudeSessionImportAdapter } from "./claude-session-import";
 import { createClaudeRuntimeQueryAdapter } from "./claude-runtime-query-adapter";
 import {
   unsupportedGeneratedImageSource,
@@ -237,11 +237,8 @@ export const createClaudeLiveSessionAdapterPreparer =
         );
 
       const adapter: AgentSessionRuntimeAdapterPort = {
-        externalSessions: createClaudeExternalRuntimeSessions(
-          service,
-          runtime.runtimeId,
-          (effect) =>
-            runSummary("claude-live-session.import", () => effect, { keepActivity: true }),
+        sessionImport: createClaudeSessionImportAdapter(service, runtime.runtimeId, (effect) =>
+          runSummary("claude-live-session.import", () => effect, { keepActivity: true }),
         ),
         queries: createClaudeRuntimeQueryAdapter(service),
         ...unsupportedGeneratedImageOperations,

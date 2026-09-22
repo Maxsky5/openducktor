@@ -28,7 +28,7 @@ const setup = async () => {
   const registry = createLiveSessionAdapterRegistry();
   const calls: string[] = [];
   type ImportTestState = {
-    failPrepare: boolean;
+    failOpen: boolean;
     failSave: boolean;
     failCommit: boolean;
     detached: boolean;
@@ -37,7 +37,7 @@ const setup = async () => {
     directoryErrors: Map<string, HostOperationError>;
   };
   const state: ImportTestState = {
-    failPrepare: false,
+    failOpen: false,
     failSave: false,
     failCommit: false,
     detached: false,
@@ -55,26 +55,26 @@ const setup = async () => {
   const adapter = createAgentSessionRuntimeAdapterTestDouble(
     { runtimeId: "runtime-1", repoPath: "/repo", runtimeKind: "opencode" },
     {
-      externalSessions: {
-        list: ({ cursor, signal }) =>
+      sessionImport: {
+        listMetadataPage: ({ pageToken, signal }) =>
           Effect.sync(() => {
-            calls.push("list");
+            calls.push("listMetadataPage");
             state.signal = signal;
-            const offset = Number(cursor ?? 0);
+            const offset = Number(pageToken ?? 0);
             return {
               sessions: state.rows.slice(offset, offset + 100),
-              nextCursor: offset + 100 < state.rows.length ? String(offset + 100) : null,
+              nextPageToken: offset + 100 < state.rows.length ? String(offset + 100) : null,
             };
           }),
-        inspect: (ref) =>
+        getMetadata: (ref) =>
           Effect.sync(() => {
-            calls.push("inspect");
+            calls.push("getMetadata");
             return row(ref.externalSessionId, ref.workingDirectory);
           }),
-        prepare: (ref) =>
+        openForImport: (ref) =>
           Effect.suspend(() => {
-            calls.push("prepare");
-            if (state.failPrepare) return Effect.fail(failure("preparation failed"));
+            calls.push("openForImport");
+            if (state.failOpen) return Effect.fail(failure("opening source failed"));
             return Effect.succeed({
               metadata: {
                 ...row(ref.externalSessionId, ref.workingDirectory),
@@ -189,8 +189,8 @@ describe("external workspace session import", () => {
     expect(
       (await Effect.runPromise(h.service.list({ ...h.list, search: "other" }))).sessions,
     ).toEqual([]);
-    expect(h.calls).not.toContain("prepare");
-    expect(h.calls.filter((call) => call === "list")).toHaveLength(31);
+    expect(h.calls).not.toContain("openForImport");
+    expect(h.calls.filter((call) => call === "listMetadataPage")).toHaveLength(31);
     await expect(
       Effect.runPromise(
         h.service.list({ ...h.list, search: "changed", cursor: first.nextCursor! }),
@@ -277,7 +277,14 @@ describe("external workspace session import", () => {
       selectedModel: null,
       manualTitle: "Native title ".repeat(30),
     });
-    expect(h.calls).toEqual(["inspect", "prepare", "save", "commit", "publish", "dispose"]);
+    expect(h.calls).toEqual([
+      "getMetadata",
+      "openForImport",
+      "save",
+      "commit",
+      "publish",
+      "dispose",
+    ]);
     await Effect.runPromise(
       h.store.archive({
         workspaceId: "fairnest",
@@ -291,19 +298,16 @@ describe("external workspace session import", () => {
     );
   });
 
-  test.each(["failPrepare", "failSave"] as const)(
-    "does not admit or persist on %s",
-    async (flag) => {
-      const h = await setup();
-      h.state[flag] = true;
-      await expect(Effect.runPromise(h.service.importSession(h.input))).rejects.toThrow();
-      expect(
-        await Effect.runPromise(h.store.listActive({ workspaceId: "fairnest", repoPath: "/repo" })),
-      ).toEqual([]);
-      expect(h.calls).not.toContain("commit");
-      if (flag === "failSave") expect(h.calls).toContain("dispose");
-    },
-  );
+  test.each(["failOpen", "failSave"] as const)("does not admit or persist on %s", async (flag) => {
+    const h = await setup();
+    h.state[flag] = true;
+    await expect(Effect.runPromise(h.service.importSession(h.input))).rejects.toThrow();
+    expect(
+      await Effect.runPromise(h.store.listActive({ workspaceId: "fairnest", repoPath: "/repo" })),
+    ).toEqual([]);
+    expect(h.calls).not.toContain("commit");
+    if (flag === "failSave") expect(h.calls).toContain("dispose");
+  });
 
   test("keeps the saved record after live publication fails", async () => {
     const h = await setup();
@@ -333,7 +337,7 @@ describe("external workspace session import", () => {
   test("release interrupts an in-flight catalog without admitting a session", async () => {
     const h = await setup();
     const entered = Effect.runSync(Deferred.make<void>());
-    h.adapter.externalSessions.list = ({ signal }) =>
+    h.adapter.sessionImport.listMetadataPage = ({ signal }) =>
       Effect.sync(() => {
         h.state.signal = signal;
       }).pipe(Effect.zipRight(Deferred.succeed(entered, undefined)), Effect.zipRight(Effect.never));
@@ -347,9 +351,9 @@ describe("external workspace session import", () => {
 
 test("import releases the directory guard before runtime admission reads the same directory", async () => {
   const h = await setup();
-  const originalPrepare = h.adapter.externalSessions.prepare;
-  h.adapter.externalSessions.prepare = (ref) =>
-    originalPrepare(ref).pipe(
+  const openForImport = h.adapter.sessionImport.openForImport;
+  h.adapter.sessionImport.openForImport = (ref) =>
+    openForImport(ref).pipe(
       Effect.map((handle) => ({
         ...handle,
         commit: h.lifecycle.runWorktreeRead(ref.workingDirectory, handle.commit).pipe(
@@ -362,7 +366,7 @@ test("import releases the directory guard before runtime admission reads the sam
     );
   const imported = await Effect.runPromise(h.service.importSession(h.input));
   expect(imported.openError).toBeNull();
-  expect(h.calls).toEqual(["inspect", "prepare", "save", "commit", "publish", "dispose"]);
+  expect(h.calls).toEqual(["getMetadata", "openForImport", "save", "commit", "publish", "dispose"]);
 });
 
 test("returns the first import page without draining native history", async () => {
@@ -370,12 +374,12 @@ test("returns the first import page without draining native history", async () =
   h.state.rows = Array.from({ length: 3000 }, (_, index) => h.row(`external-${index}`));
   const first = await Effect.runPromise(h.service.list(h.list));
   expect(first.sessions).toHaveLength(50);
-  expect(h.calls.filter((call) => call === "list")).toHaveLength(1);
+  expect(h.calls.filter((call) => call === "listMetadataPage")).toHaveLength(1);
 });
 
-test("persists native model, profile and effort from import preparation", async () => {
+test("persists native model, profile and effort from the opened source", async () => {
   const h = await setup();
-  const prepare = h.adapter.externalSessions.prepare;
+  const openForImport = h.adapter.sessionImport.openForImport;
   const selectedModel = {
     runtimeKind: "opencode" as const,
     providerId: "openai",
@@ -383,8 +387,8 @@ test("persists native model, profile and effort from import preparation", async 
     profileId: "plan",
     variant: "high",
   };
-  h.adapter.externalSessions.prepare = (ref) =>
-    prepare(ref).pipe(Effect.map((handle) => ({ ...handle, selectedModel })));
+  h.adapter.sessionImport.openForImport = (ref) =>
+    openForImport(ref).pipe(Effect.map((handle) => ({ ...handle, selectedModel })));
   const imported = await Effect.runPromise(h.service.importSession(h.input));
   expect(imported.session.selectedModel).toEqual(selectedModel);
 });

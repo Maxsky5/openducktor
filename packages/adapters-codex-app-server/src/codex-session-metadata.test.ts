@@ -63,13 +63,13 @@ describe("external Codex sessions", () => {
     const transport = new CatalogTransport("runtime-live", false);
     const adapter = createAdapterWithTransport(transport);
     const signal = new AbortController().signal;
-    const first = await adapter.listExternalSessions({ ...ref, signal });
+    const first = await adapter.listSessionMetadataPage({ ...ref, signal });
     expect(first.sessions.map((row) => row.externalSessionId)).toEqual([
       "archived",
       "first",
       "second",
     ]);
-    expect(first.nextCursor).toBeNull();
+    expect(first.nextPageToken).toBeNull();
     expect(adapter.listLiveSessionSnapshots("runtime-live")).toEqual([]);
     expect(transport.calls.every((call) => call.method === "thread/list")).toBe(true);
     expect(transport.calls[0]?.params).toMatchObject({
@@ -106,13 +106,17 @@ describe("external Codex sessions", () => {
     const transport = new PagedTransport("runtime-live", false);
     const adapter = createAdapterWithTransport(transport);
     const signal = new AbortController().signal;
-    const first = await adapter.listExternalSessions({ ...ref, signal });
+    const first = await adapter.listSessionMetadataPage({ ...ref, signal });
     expect(first.sessions.map((row) => row.externalSessionId)).toEqual(
       Array.from({ length: 100 }, (_, index) => String(2000 - index)),
     );
     expect(transport.calls).toHaveLength(2);
-    if (!first.nextCursor) throw new Error("Expected another metadata page");
-    const second = await adapter.listExternalSessions({ ...ref, signal, cursor: first.nextCursor });
+    if (!first.nextPageToken) throw new Error("Expected another metadata page");
+    const second = await adapter.listSessionMetadataPage({
+      ...ref,
+      signal,
+      pageToken: first.nextPageToken,
+    });
     expect(second.sessions.map((row) => row.externalSessionId)).toEqual(
       Array.from({ length: 100 }, (_, index) => String(1900 - index)),
     );
@@ -161,14 +165,14 @@ describe("external Codex sessions", () => {
       }
       const transport = new SourceTransport("runtime-live", false);
       const adapter = createAdapterWithTransport(transport);
-      const page = await adapter.listExternalSessions({
+      const page = await adapter.listSessionMetadataPage({
         ...ref,
         signal: new AbortController().signal,
       });
       expect(page.sessions.map((session) => session.externalSessionId)).toEqual(
         discoverable ? [ref.externalSessionId] : [],
       );
-      const preparation = adapter.prepareExternalSession({
+      const preparation = adapter.openExistingSession({
         ...ref,
         sessionScope: { kind: "repository" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
@@ -188,7 +192,7 @@ describe("external Codex sessions", () => {
   test("prepares an exact passive resume and admits only on commit", async () => {
     const transport = new RecordingTransport("runtime-live", false);
     const adapter = createAdapterWithTransport(transport);
-    const prepared = await adapter.prepareExternalSession({
+    const prepared = await adapter.openExistingSession({
       ...ref,
       sessionScope: { kind: "repository" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
@@ -223,7 +227,7 @@ describe("external Codex sessions", () => {
         runtimePolicy: { kind: "codex" as const, policy: defaultCodexEffectivePolicy() },
       };
       if (!cold) {
-        const prepared = await adapter.prepareExternalSession(binding);
+        const prepared = await adapter.openExistingSession(binding);
         await prepared.commit();
         await prepared.dispose();
       }
@@ -247,7 +251,7 @@ describe("external Codex sessions", () => {
   test("discard leaves a prepared native thread unowned without unloading it", async () => {
     const transport = new RecordingTransport("runtime-live", false);
     const adapter = createAdapterWithTransport(transport);
-    const prepared = await adapter.prepareExternalSession({
+    const prepared = await adapter.openExistingSession({
       ...ref,
       sessionScope: { kind: "repository" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },

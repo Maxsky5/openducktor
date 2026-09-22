@@ -4,26 +4,26 @@ import type {
   CodexSessionController,
   CreateCodexLiveSessionAdapterPreparerInput,
 } from "./codex-live-session-adapter-contract";
-import { createExternalRuntimeSessionsAdapter } from "./external-runtime-sessions-adapter";
-export const createCodexExternalRuntimeSessions = (
+import { createRuntimeSessionImportAdapter } from "./runtime-session-import-adapter";
+export const createCodexSessionImportAdapter = (
   controller: CodexSessionController,
   repoPath: string,
   resolvePolicy: CreateCodexLiveSessionAdapterPreparerInput["resolveRuntimePolicy"],
   publish: () => Effect.Effect<void, HostError>,
 ) =>
-  createExternalRuntimeSessionsAdapter({
-    list: (input) =>
-      controller.listExternalSessions({
+  createRuntimeSessionImportAdapter({
+    listMetadataPage: (input) =>
+      controller.listSessionMetadataPage({
         ...input,
         repoPath,
         runtimeKind: "codex",
         workingDirectory: repoPath,
         externalSessionId: "discovery",
       }),
-    inspect: (input) => controller.inspectExternalSession(input),
-    prepare: async (input) => {
+    getMetadata: (input) => controller.getSessionMetadata(input),
+    openForImport: async (input) => {
       const policy = await Effect.runPromise(resolvePolicy({ kind: "repository" }));
-      const handle = await controller.prepareExternalSession({
+      const handle = await controller.openExistingSession({
         ...input,
         runtimeKind: "codex",
         sessionScope: { kind: "repository" },
