@@ -20,6 +20,7 @@ export type CodexThreadReadGuard = {
 
 type CodexThreadReadOptions = CodexThreadReadGuard & {
   localThreadCwd?: string | undefined;
+  expectedThreadCwd?: string | undefined;
 };
 
 type PendingInventoryRead = {
@@ -184,6 +185,7 @@ export class CodexThreadInventoryReader {
   ): Promise<CodexThreadHistoryReadResponse> {
     const response = await this.readThreadWithTurns(client, input.externalSessionId, {
       localThreadCwd: input.allowUnmaterialized ? input.workingDirectory : undefined,
+      expectedThreadCwd: input.workingDirectory,
       getFreshThreadCwd: input.getFreshThreadCwd,
       onThreadRead: input.onThreadRead,
     });
@@ -210,13 +212,22 @@ export class CodexThreadInventoryReader {
     threadId: string,
     options: CodexThreadReadOptions = {},
   ): Promise<CodexThreadHistoryReadResponse | undefined> {
-    const { localThreadCwd, getFreshThreadCwd, onThreadRead } = options;
+    const { localThreadCwd, expectedThreadCwd, getFreshThreadCwd, onThreadRead } = options;
     let response: Awaited<ReturnType<CodexAppServerClient["threadRead"]>>;
     let pagedTurns: CodexAppServerTurn[];
     try {
       response = await client.threadRead({ threadId, includeTurns: false });
-      onThreadRead?.();
+      if (
+        expectedThreadCwd !== undefined &&
+        (response.thread.id !== threadId || response.thread.cwd !== expectedThreadCwd)
+      ) {
+        throw new AgentRuntimeQueryError(
+          "scope_mismatch",
+          "The native session does not match the selected session and working directory. Select the matching session.",
+        );
+      }
       pagedTurns = await this.fetchThreadTurns(client, threadId, "full");
+      onThreadRead?.();
     } catch (error) {
       let emptyThreadCwd: string | undefined;
       if (isCodexEmptyRolloutError(error)) {

@@ -1026,6 +1026,7 @@ export class CodexAppServerAdapter
     return {
       getFreshThreadCwd: () =>
         this.localSessions.get(session.threadId) === session &&
+        this.freshSessions.has(session) &&
         session.liveStatus !== undefined &&
         session.liveStatus.classification !== "idle"
           ? session.workingDirectory

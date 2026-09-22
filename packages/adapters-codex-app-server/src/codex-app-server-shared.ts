@@ -95,7 +95,7 @@ export const isCodexEmptyRolloutError = (cause: unknown): boolean => {
   const parsed = codexRpcErrorSchema.safeParse(cause);
   if (
     !parsed.success ||
-    parsed.data.details.method !== "thread/read" ||
+    !["thread/read", "thread/turns/list"].includes(parsed.data.details.method) ||
     parsed.data.cause.code !== -32603
   ) {
     return false;
@@ -103,11 +103,22 @@ export const isCodexEmptyRolloutError = (cause: unknown): boolean => {
 
   // Codex can report this before a new rollout has its first session_meta record.
   // Keep this case until the oldest supported Codex version fixes https://github.com/openai/codex/issues/25621.
-  const match =
+  const legacyMatch =
     /^failed to read thread: thread-store internal error: failed to read thread ([^\r\n]+): rollout at ([^\r\n]+) is empty$/.exec(
       parsed.data.cause.message,
     );
-  return match !== null && match[1] === match[2];
+  if (legacyMatch) {
+    return legacyMatch[1] === legacyMatch[2];
+  }
+  const metadataMatch =
+    /^failed to read thread: thread-store internal error: failed to read session metadata ([^\r\n]+): thread-store internal error: failed to read session metadata ([^\r\n]+): rollout at ([^\r\n]+) is empty$/.exec(
+      parsed.data.cause.message,
+    );
+  return (
+    metadataMatch !== null &&
+    metadataMatch[1] === metadataMatch[2] &&
+    metadataMatch[2] === metadataMatch[3]
+  );
 };
 
 export const isCodexUnmaterializedThreadError = (cause: unknown): boolean => {
