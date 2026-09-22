@@ -20,7 +20,10 @@ import {
 } from "../../effect/host-errors";
 import type { AgentSessionPersistencePort } from "../../ports/agent-session-persistence-port";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
-import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
+import type {
+  WorkspaceSessionStorePort,
+  WorkspaceSessionStoreRef,
+} from "../../ports/workspace-session-store-port";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 import type { AgentSessionOperationPolicy } from "../agent-sessions/agent-session-operation-policy";
 import type { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
@@ -37,6 +40,16 @@ export type WorkspaceSessionUpdatedPublisher = (
 export type WorkspaceSessionRuntimeTitleUpdater = (
   input: AgentSessionControlUpdateTitleInput,
 ) => Effect.Effect<void, HostError>;
+
+export type WorkspaceSessionTitleSyncFailureReporter = (
+  runtimeRef: AgentSessionLiveRef,
+  message: string,
+) => Effect.Effect<void>;
+
+type AcceptedMessagePlan = {
+  input: Parameters<WorkspaceSessionStorePort["recordAcceptedMessage"]>[0];
+  runtimeTitleSync: AgentSessionControlUpdateTitleInput | null;
+};
 
 const storeEffect = <A>(effect: Effect.Effect<A, TaskStoreError>): Effect.Effect<A, HostError> =>
   effect.pipe(
@@ -59,6 +72,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
   operationGate,
   sessionTitleGate,
   updateRuntimeSessionTitle,
+  reportTitleSyncFailure,
 }: {
   store: WorkspaceSessionStorePort;
   settings: Pick<WorkspaceSettingsService, "getRepoConfigByRepoPath">;
@@ -67,8 +81,10 @@ export const createWorkspaceSessionRuntimePersistence = ({
   operationGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
   sessionTitleGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
   updateRuntimeSessionTitle: WorkspaceSessionRuntimeTitleUpdater;
+  reportTitleSyncFailure: WorkspaceSessionTitleSyncFailureReporter;
 }): AgentSessionPersistencePort & AgentSessionOperationPolicy => {
   const pendingFinalMessages = new Map<string, { messageId: string; occurredAt: number }>();
+  const sendsInFlight = new Set<string>();
   const find = (runtimeRef: AgentSessionLiveRef) =>
     Effect.gen(function* () {
       const config = yield* settings.getRepoConfigByRepoPath(runtimeRef.repoPath);
@@ -131,14 +147,13 @@ export const createWorkspaceSessionRuntimePersistence = ({
       if (known.session.selectedModel !== null) prepared.model = known.session.selectedModel;
       return prepared;
     });
-  const recordAcceptedMessageTransition = (
+  const planAcceptedMessage = (
+    known: { ref: WorkspaceSessionStoreRef; session: WorkspaceSession },
     runtimeRef: AgentSessionLiveRef,
     message: AcceptedAgentUserMessage,
     saveModel: boolean,
-  ) =>
+  ): Effect.Effect<AcceptedMessagePlan, HostError> =>
     Effect.gen(function* () {
-      const known = yield* find(runtimeRef);
-      if (!known) return;
       const input: Parameters<WorkspaceSessionStorePort["recordAcceptedMessage"]>[0] = {
         ...known.ref,
         generatedTitle: buildWorkspaceSessionTitle(message),
@@ -175,6 +190,14 @@ export const createWorkspaceSessionRuntimePersistence = ({
               title: runtimeTitle,
             }
           : null;
+      return { input, runtimeTitleSync };
+    });
+  const applyAcceptedMessage = (
+    known: { ref: WorkspaceSessionStoreRef; session: WorkspaceSession },
+    plan: AcceptedMessagePlan,
+  ) =>
+    Effect.gen(function* () {
+      const { input, runtimeTitleSync } = plan;
       if (runtimeTitleSync !== null) {
         const synced = yield* Effect.either(updateRuntimeSessionTitle(runtimeTitleSync));
         if (synced._tag === "Left") {
@@ -218,8 +241,40 @@ export const createWorkspaceSessionRuntimePersistence = ({
       if (!located) return;
       yield* sessionTitleGate.run(
         located.ref,
-        recordAcceptedMessageTransition(runtimeRef, message, saveModel),
+        Effect.gen(function* () {
+          const known = yield* find(runtimeRef);
+          if (!known) return;
+          yield* applyAcceptedMessage(
+            known,
+            yield* planAcceptedMessage(known, runtimeRef, message, saveModel),
+          );
+        }),
       );
+    });
+  const recordObservedMessage = (
+    runtimeRef: AgentSessionLiveRef,
+    message: AcceptedAgentUserMessage,
+  ) =>
+    Effect.gen(function* () {
+      const known = yield* find(runtimeRef);
+      if (!known) return;
+      const plan = yield* planAcceptedMessage(known, runtimeRef, message, false);
+      const awaitingRuntimeTitle = plan.runtimeTitleSync !== null;
+      // A runtime rename cannot run inside the live publication scopes. A send command
+      // completes the rename after the runtime call returns; every other observation
+      // defers the rename to a background transition.
+      const saved = yield* storeEffect(
+        store.recordAcceptedMessage(
+          awaitingRuntimeTitle ? { ...plan.input, generatedTitle: null } : plan.input,
+        ),
+      );
+      yield* publishUpdated(known.ref.workspaceId, saved);
+      if (awaitingRuntimeTitle && !sendsInFlight.has(agentSessionRefKey(runtimeRef)))
+        yield* Effect.forkDaemon(
+          recordAcceptedMessage(runtimeRef, message, false).pipe(
+            Effect.catchAll((failure) => reportTitleSyncFailure(runtimeRef, failure.message)),
+          ),
+        );
     });
   const flushFinalMessage = (runtimeRef: AgentSessionLiveRef) =>
     Effect.gen(function* () {
@@ -246,7 +301,13 @@ export const createWorkspaceSessionRuntimePersistence = ({
     run: (runtimeRef, _operation, effect) =>
       Effect.gen(function* () {
         const known = yield* find(runtimeRef);
-        return yield* known ? operationGate.run(known.ref, effect) : effect;
+        return yield* (known ? operationGate.run(known.ref, effect) : effect).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              sendsInFlight.delete(agentSessionRefKey(runtimeRef));
+            }),
+          ),
+        );
       }),
     prepareResume: (input) =>
       prepare(input).pipe(
@@ -255,7 +316,16 @@ export const createWorkspaceSessionRuntimePersistence = ({
           save: () => Effect.void,
         })),
       ),
-    prepareSend: prepare,
+    prepareSend: (input) =>
+      prepare(input).pipe(
+        Effect.tap(() =>
+          Effect.sync(() => {
+            // The send command records the observed message after the runtime call returns,
+            // so the observation must not start a background title rename.
+            sendsInFlight.add(agentSessionRefKey(input));
+          }),
+        ),
+      ),
     validateRef,
     prepareModelUpdate: (input) =>
       Effect.gen(function* () {
@@ -301,7 +371,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
         const { event } = envelope;
         const key = agentSessionRefKey(event.sessionRef);
         if (event.type === "user_message") {
-          yield* recordAcceptedMessage(event.sessionRef, event, false);
+          yield* recordObservedMessage(event.sessionRef, event);
         } else if (event.type === "assistant_message") {
           if (yield* find(event.sessionRef)) {
             const occurredAt = Date.parse(event.timestamp);

@@ -4,15 +4,18 @@ import type {
   AcceptedAgentUserMessage,
   AgentSessionControlResumeInput,
   AgentSessionControlUpdateModelInput,
+  AgentSessionControlUpdateTitleInput,
   AgentSessionControlSendInput,
   AgentSessionLiveEnvelope,
   AgentSessionLiveRef,
   AgentSessionTranscriptEvent,
   WorkspaceSession,
 } from "@openducktor/contracts";
-import { repoConfigSchema } from "@openducktor/contracts";
-import { Deferred, Effect, Exit, Fiber, Option, TestClock, TestContext } from "effect";
+import { repoConfigSchema, RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
+import { Deferred, Effect } from "effect";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
+import { createOpenCodeLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/opencode-live-session-adapter";
+import { createRuntimeHarness } from "../../adapters/agent-sessions/opencode-live-session-adapter.test-support";
 import {
   createSqliteTaskStoreHarness,
   type SqliteTaskStoreTestHarness,
@@ -30,6 +33,15 @@ import { createWorkspaceSessionRuntimePersistence } from "./workspace-session-ru
 import { createWorkspaceSessionService } from "./workspace-session-service";
 import { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
 import { createAgentSessionCommandService } from "../agent-sessions/agent-session-command-service";
+
+const waitFor = async (check: () => Promise<boolean> | boolean, timeoutMs = 2_000) => {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await check()) return;
+    await Bun.sleep(1);
+  }
+  throw new Error("Timed out while waiting for the condition.");
+};
 
 describe("Workspace Session persistence through the shared command module", () => {
   let database: SqliteTaskStoreTestHarness;
@@ -93,6 +105,7 @@ describe("Workspace Session persistence through the shared command module", () =
       failModelSave: false,
       failRestore: false,
       failTitle: false,
+      failTitleWrite: false,
       failPublish: false,
       failActivity: false,
       publishAcceptedMessageDuringSend: false,
@@ -103,6 +116,7 @@ describe("Workspace Session persistence through the shared command module", () =
       onGateRequest: () => {},
       active: false,
     };
+    const titleSyncFailures: string[] = [];
     const failure = (message: string) =>
       Effect.fail(new HostOperationError({ operation: "test", message }));
     const accepted = (
@@ -137,7 +151,9 @@ describe("Workspace Session persistence through the shared command module", () =
         recordAcceptedMessage: (input) =>
           state.failActivity
             ? failure("activity write failed")
-            : store.recordAcceptedMessage(input),
+            : state.failTitleWrite && input.generatedTitle !== null
+              ? failure("title write failed")
+              : store.recordAcceptedMessage(input),
         setSelectedModel: (input) =>
           state.beforeModelSave.pipe(
             Effect.zipRight(
@@ -177,6 +193,10 @@ describe("Workspace Session persistence through the shared command module", () =
                 updates.push({ workspaceId, session });
               }),
         ),
+      reportTitleSyncFailure: (_runtimeRef, message) =>
+        Effect.sync(() => {
+          titleSyncFailures.push(message);
+        }),
     });
     const live = createAgentSessionLiveStateService({
       adapterRegistry: createLiveSessionAdapterRegistry(),
@@ -323,6 +343,7 @@ describe("Workspace Session persistence through the shared command module", () =
       activityTimes,
       models,
       titles,
+      titleSyncFailures,
       state,
       accepted,
       emit,
@@ -429,7 +450,7 @@ describe("Workspace Session persistence through the shared command module", () =
   test("renames the runtime session when another client sends the first message", async () => {
     const h = await setup();
     await h.emit({ ...h.accepted(), sessionRef: h.ref });
-    expect(h.titles).toEqual(["First accepted prompt"]);
+    await waitFor(() => h.titles.length === 1);
     await h.emit({
       ...h.accepted("Later prompt", "2026-09-07T10:05:00Z"),
       sessionRef: h.ref,
@@ -442,79 +463,74 @@ describe("Workspace Session persistence through the shared command module", () =
     const h = await setup();
     await Effect.runPromise(h.store.rename({ ...h.storeRef, manualTitle: "Manual title" }));
     await h.emit({ ...h.accepted(), sessionRef: h.ref });
+    await waitFor(async () => (await h.get()).generatedTitle === "First accepted prompt");
     expect(h.titles).toEqual([]);
-    expect((await h.get()).generatedTitle).toBe("First accepted prompt");
   });
 
   test("keeps both titles on the prior value when the runtime title update fails", async () => {
     const h = await setup();
     h.state.failTitle = true;
-    await expect(h.emit({ ...h.accepted(), sessionRef: h.ref })).rejects.toThrow(
-      "runtime title update failed",
-    );
+    await h.emit({ ...h.accepted(), sessionRef: h.ref });
+    await waitFor(() => h.titleSyncFailures.length === 1);
+    expect(h.titleSyncFailures[0]).toContain("runtime title update failed");
     const saved = await h.get();
     expect(saved.generatedTitle).toBeNull();
     expect(saved.updatedAt).toBe(Date.parse(h.accepted().timestamp));
     expect(h.titles).toEqual(["First accepted prompt"]);
-    expect(h.events.at(-1)).toMatchObject({
-      type: "fault",
-      message: "runtime title update failed",
-    });
   });
 
-  test("reports the runtime title failure and a failed activity save together", async () => {
+  test("fails the observation and keeps both titles unchanged when the activity write fails", async () => {
     const h = await setup();
-    h.state.failTitle = true;
     h.state.failActivity = true;
     await expect(h.emit({ ...h.accepted(), sessionRef: h.ref })).rejects.toThrow(
-      /runtime title update failed[\s\S]*Saving the accepted message also failed: activity write failed/,
+      "activity write failed",
     );
+    expect(h.titles).toEqual([]);
     expect(await h.get()).toEqual(h.record);
+  });
+
+  test("reports the durable title failure after the runtime rename in a send", async () => {
+    const h = await setup();
+    h.state.failTitleWrite = true;
+    h.state.publishAcceptedMessageDuringSend = true;
+    await expect(
+      Effect.runPromise(
+        h.live.sendUserMessage({
+          ...h.ref,
+          sessionScope: { kind: "repository" },
+          parts: [{ kind: "text", text: "Name this chat" }],
+        }),
+      ),
+    ).rejects.toThrow(/title write failed[\s\S]*keeps the generated title/);
+    expect(h.titles).toEqual(["First accepted prompt"]);
+    const saved = await h.get();
+    expect(saved.generatedTitle).toBeNull();
+    expect(saved.updatedAt).toBe(Date.parse(h.accepted().timestamp));
   });
 
   test("serializes an observed first message with a manual rename", async () => {
     const h = await setup();
     const workspace = h.workspaceService();
-    await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const observeEntered = yield* Deferred.make<void>();
-          const observeRelease = yield* Deferred.make<void>();
-          const renameNativeReached = yield* Deferred.make<void>();
-          let titleCalls = 0;
-          h.state.beforeTitle = Effect.gen(function* () {
-            if (++titleCalls === 1) {
-              yield* Deferred.succeed(observeEntered, undefined);
-              yield* Deferred.await(observeRelease);
-              return;
-            }
-            yield* Deferred.succeed(renameNativeReached, undefined);
-          });
-          const renameNativeWaiter = yield* Effect.forkScoped(Deferred.await(renameNativeReached));
-          const observed = yield* Effect.forkScoped(
-            h.emitEffect({ ...h.accepted(), sessionRef: h.ref }),
-          );
-          yield* Deferred.await(observeEntered);
-          const renamed = yield* Effect.forkScoped(
-            Effect.exit(
-              workspace.rename({
-                workspaceId: "fairnest",
-                sessionId: "session-1",
-                manualTitle: "Renamed",
-              }),
-            ),
-          );
-          yield* TestClock.adjust(0);
-          expect(Option.isNone(yield* Fiber.poll(renamed))).toBe(true);
-          expect(Option.isNone(yield* Fiber.poll(renameNativeWaiter))).toBe(true);
-          expect(h.titles).toEqual([]);
-          yield* Deferred.succeed(observeRelease, undefined);
-          yield* Fiber.join(observed);
-          expect(Exit.isSuccess(yield* Fiber.join(renamed))).toBe(true);
-          expect(h.titles).toEqual(["First accepted prompt", "Renamed"]);
-        }),
-      ).pipe(Effect.provide(TestContext.TestContext)),
+    const observedTitleReached = await Effect.runPromise(Deferred.make<void>());
+    const releaseObservedTitle = await Effect.runPromise(Deferred.make<void>());
+    let titleCalls = 0;
+    h.state.beforeTitle = Effect.gen(function* () {
+      if (++titleCalls === 1) {
+        yield* Deferred.succeed(observedTitleReached, undefined);
+        yield* Deferred.await(releaseObservedTitle);
+      }
+    });
+    await h.emit({ ...h.accepted(), sessionRef: h.ref });
+    await Effect.runPromise(Deferred.await(observedTitleReached));
+    const renamed = Effect.runPromise(
+      workspace.rename({ workspaceId: "fairnest", sessionId: "session-1", manualTitle: "Renamed" }),
     );
+    await Bun.sleep(10);
+    // The deferred transition holds the title gate, so the rename has not written yet.
+    expect((await h.get()).manualTitle).toBeNull();
+    await Effect.runPromise(Deferred.succeed(releaseObservedTitle, undefined));
+    await renamed;
+    expect(h.titles).toEqual(["First accepted prompt", "Renamed"]);
     const saved = await h.get();
     expect(saved.manualTitle).toBe("Renamed");
     expect(saved.generatedTitle).toBe("First accepted prompt");
@@ -752,6 +768,7 @@ describe("Workspace Session persistence through the shared command module", () =
       model: { providerId: "provider", modelId: "old-model" },
       sessionRef: h.ref,
     });
+    await waitFor(() => h.titles.length === 1);
     expect((await h.get()).selectedModel).toEqual({ ...model, runtimeKind: "opencode" });
   });
 
@@ -893,8 +910,10 @@ describe("Workspace Session persistence through the shared command module", () =
   test("generates the title once and does not move activity back for older user messages", async () => {
     const h = await setup();
     await h.emit({ ...h.accepted(), sessionRef: h.ref });
+    await waitFor(() => h.titles.length === 1);
     await h.emit({ ...h.accepted("Duplicate with other text"), sessionRef: h.ref });
     await h.emit({ ...h.accepted("Older prompt", "2026-09-06T10:00:00Z"), sessionRef: h.ref });
+    expect(h.titles).toEqual(["First accepted prompt"]);
     expect((await h.get()).generatedTitle).toBe("First accepted prompt");
     expect((await h.get()).updatedAt).toBe(Date.parse("2026-09-07T10:00:00Z"));
   });
@@ -1025,11 +1044,149 @@ describe("Workspace Session persistence through the shared command module", () =
         repoPath: h.ref.repoPath,
         ref: h.ref,
         operation: "agent-session.persist",
-        message:
-          "activity write failed The runtime session keeps the generated title and the Workspace Session has no saved title. Rename the chat or send a message to sync the titles.",
+        message: "activity write failed",
       },
     ]);
     expect(await h.get()).toEqual(h.record);
     expect(h.updates).toEqual([]);
+  });
+});
+
+describe("Workspace Session title sync through the real OpenCode live adapter", () => {
+  let database: SqliteTaskStoreTestHarness;
+  beforeEach(async () => {
+    database = await createSqliteTaskStoreHarness();
+  });
+  afterEach(async () => {
+    await database.cleanup();
+  });
+
+  test("completes the first send and renames the runtime session", async () => {
+    const ref: AgentSessionLiveRef = {
+      repoPath: database.repoPath,
+      runtimeKind: "opencode",
+      externalSessionId: "native",
+      workingDirectory: `${database.repoPath}/session-worktree`,
+    };
+    const storeRef = {
+      repoPath: database.repoPath,
+      workspaceId: "fairnest",
+      sessionId: "session-1",
+    };
+    const store = createSqliteWorkspaceSessionStore(database.contextProvider);
+    await Effect.runPromise(
+      store.create({
+        ...storeRef,
+        session: {
+          id: "session-1",
+          runtimeKind: "opencode",
+          externalSessionId: "native",
+          executionTarget: {
+            kind: "local_worktree",
+            workingDirectory: ref.workingDirectory,
+            branchName: "feature/session",
+            worktreeState: "present",
+          },
+          roleSnapshot: { id: "role", name: "Role", systemPrompt: "Instructions." },
+          selectedModel: null,
+          generatedTitle: null,
+          manualTitle: null,
+          createdAt: 0,
+          updatedAt: 0,
+          archivedAt: null,
+        },
+      }),
+    );
+    let updateSessionTitle:
+      | ((input: AgentSessionControlUpdateTitleInput) => Effect.Effect<void, HostError>)
+      | null = null;
+    const persistence = createWorkspaceSessionRuntimePersistence({
+      store,
+      settings: {
+        getRepoConfigByRepoPath: () =>
+          Effect.succeed(
+            repoConfigSchema.parse({
+              workspaceId: "fairnest",
+              workspaceName: "Fairnest",
+              repoPath: database.repoPath,
+            }),
+          ),
+      },
+      git: createGitPortTestDouble({
+        canonicalizePath: (value) => Effect.succeed(value),
+        isGitRepository: () => Effect.succeed(true),
+        shareGitCommonDirectory: () => Effect.succeed(true),
+        isRegisteredWorktree: () => Effect.succeed(true),
+      }),
+      publishUpdated: () => Effect.void,
+      operationGate: createWorkspaceSessionOperationGate(),
+      sessionTitleGate: createWorkspaceSessionOperationGate(),
+      updateRuntimeSessionTitle: (input) =>
+        updateSessionTitle
+          ? updateSessionTitle(input)
+          : Effect.dieMessage("live title update is not wired"),
+      reportTitleSyncFailure: () => Effect.void,
+    });
+    const live = createAgentSessionLiveStateService({
+      adapterRegistry: createLiveSessionAdapterRegistry(),
+      persistence,
+      faultLog: () => Effect.void,
+      publish: () => {},
+    });
+    updateSessionTitle = (input) => live.updateSessionTitle(input);
+    const harness = createRuntimeHarness();
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: live,
+        prepareRuntime: harness.prepareRuntime,
+      })({
+        kind: "opencode",
+        runtimeId: "runtime-1",
+        repoPath: database.repoPath,
+        taskId: null,
+        role: "workspace",
+        workingDirectory: ref.workingDirectory,
+        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:43123" },
+        startedAt: "2026-07-16T10:00:00.000Z",
+        descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+      }),
+    );
+    await Effect.runPromise(live.registerRuntimeAdapter(prepared.adapter));
+    await Effect.runPromise(
+      live.resumeSession({
+        resumeMode: "reattach",
+        ...ref,
+        sessionScope: { kind: "repository" },
+      }),
+    );
+    const commands = createAgentSessionCommandService({
+      runtime: live,
+      repositoryPolicy: persistence,
+      canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
+      taskReader: { getTask: () => Effect.dieMessage("unexpected task read") },
+      tasks: {
+        agentSessionsList: () => Effect.dieMessage("unexpected task session read"),
+        agentSessionUpsert: () => Effect.dieMessage("unexpected task session write"),
+        agentSessionUpdateModel: () => Effect.dieMessage("unexpected task model write"),
+        transitionTask: () => Effect.dieMessage("unexpected task transition"),
+      },
+      taskLifecycle: { acquireLifecycle: () => Effect.dieMessage("unexpected task lifecycle") },
+      taskSessionStart: {
+        prepare: () => Effect.dieMessage("unexpected task start"),
+        complete: () => Effect.dieMessage("unexpected task completion"),
+      },
+      persistTaskModel: () => Effect.dieMessage("unexpected task model write"),
+    });
+    await Effect.runPromise(
+      commands.sendUserMessage({
+        ...ref,
+        sessionScope: { kind: "repository" },
+        parts: [{ kind: "text", text: "Name this chat" }],
+      }),
+    );
+    const titleCalls = harness.controlCalls.filter((call) => call.operation === "title");
+    expect(titleCalls).toHaveLength(1);
+    expect(titleCalls[0]?.input).toMatchObject({ externalSessionId: "native", title: "Hello" });
+    expect((await Effect.runPromise(store.get(storeRef))).generatedTitle).toBe("Hello");
   });
 });
