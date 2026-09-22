@@ -264,10 +264,11 @@ export const createWorkspaceSessionService = (
                   }),
                 );
               }
+              const previousTitle = runtimeTitleFor(session);
               const runtimeRename =
                 session.externalSessionId !== null &&
                 runtimeTitle !== null &&
-                runtimeTitle !== runtimeTitleFor(session)
+                runtimeTitle !== previousTitle
                   ? { externalSessionId: session.externalSessionId, title: runtimeTitle }
                   : null;
               // Save the new title before the runtime rename. Restore the saved title when

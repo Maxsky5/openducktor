@@ -40,6 +40,7 @@ import {
   assertAgentRuntimeQuerySession,
   agentSessionRefsEqual,
   assertAgentRuntimePolicyBinding,
+  withSummaryTitle,
   classifySystemSlashCommandInvocation,
   interruptedTurnResumeError,
   withAgentSessionRef,
@@ -863,11 +864,7 @@ export class OpencodeSdkAdapter
     } catch (error) {
       throw toOpenCodeRequestError(action, error);
     }
-    const sessionAssociation =
-      session.summary.sessionAssociation.kind === "repository"
-        ? { kind: "repository" as const, title: input.title }
-        : session.summary.sessionAssociation;
-    session.summary = { ...session.summary, title: input.title, sessionAssociation };
+    session.summary = withSummaryTitle(session.summary, input.title);
     return session.summary;
   }
 

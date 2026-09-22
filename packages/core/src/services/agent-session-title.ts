@@ -1,4 +1,5 @@
 import type { AgentSessionScope } from "@openducktor/contracts";
+import type { AgentSessionSummary } from "../ports/agent-engine";
 import type { AgentRole } from "../types/agent-orchestrator";
 
 export const formatWorkflowAgentSessionTitle = (role: AgentRole, taskId: string): string =>
@@ -27,3 +28,19 @@ export const withAgentSessionTitle = <Value extends object>(
   const title = agentSessionTitle(scope);
   return title === undefined ? value : { ...value, title };
 };
+
+/**
+ * Returns the summary with its title and repository association title set.
+ * Other association kinds keep their stored value.
+ */
+export const withSummaryTitle = (
+  summary: AgentSessionSummary,
+  title: string,
+): AgentSessionSummary => ({
+  ...summary,
+  title,
+  sessionAssociation:
+    summary.sessionAssociation.kind === "repository"
+      ? { kind: "repository", title }
+      : summary.sessionAssociation,
+});

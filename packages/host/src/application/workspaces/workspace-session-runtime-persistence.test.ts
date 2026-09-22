@@ -302,6 +302,14 @@ describe("Workspace Session persistence through the shared command module", () =
         Effect.succeed({ value: undefined, changes: [{ type: "transcript_event", event }] }),
       );
     const emit = (event: AgentSessionTranscriptEvent) => Effect.runPromise(emitEffect(event));
+    const send = (text: string) =>
+      Effect.runPromise(
+        commands.sendUserMessage({
+          ...ref,
+          sessionScope: { kind: "repository" },
+          parts: [{ kind: "text", text }],
+        }),
+      );
     const get = () => Effect.runPromise(store.get(storeRef));
     const config = repoConfigSchema.parse({
       workspaceId: "fairnest",
@@ -348,6 +356,7 @@ describe("Workspace Session persistence through the shared command module", () =
       accepted,
       emit,
       emitEffect,
+      send,
       get,
       workspaceService,
     };
@@ -395,13 +404,7 @@ describe("Workspace Session persistence through the shared command module", () =
         sessionScope: { kind: "repository" },
       }),
     );
-    await Effect.runPromise(
-      h.live.sendUserMessage({
-        ...h.ref,
-        sessionScope: { kind: "repository" },
-        parts: [{ kind: "text", text: "Continue" }],
-      }),
-    );
+    await h.send("Continue");
     expect(h.inputs).toHaveLength(2);
     for (const input of h.inputs) {
       expect(input.sessionScope).toEqual({ kind: "repository", title: "Renamed session" });
@@ -422,13 +425,7 @@ describe("Workspace Session persistence through the shared command module", () =
 
   test("renames the runtime session when the first accepted message sets the generated title", async () => {
     const h = await setup();
-    await Effect.runPromise(
-      h.live.sendUserMessage({
-        ...h.ref,
-        sessionScope: { kind: "repository" },
-        parts: [{ kind: "text", text: "Name this chat" }],
-      }),
-    );
+    await h.send("Name this chat");
     expect(h.titles).toEqual(["First accepted prompt"]);
     expect((await h.get()).generatedTitle).toBe("First accepted prompt");
   });
@@ -436,13 +433,7 @@ describe("Workspace Session persistence through the shared command module", () =
   test("records an accepted message that the runtime publishes during the send", async () => {
     const h = await setup();
     h.state.publishAcceptedMessageDuringSend = true;
-    await Effect.runPromise(
-      h.live.sendUserMessage({
-        ...h.ref,
-        sessionScope: { kind: "repository" },
-        parts: [{ kind: "text", text: "Name this chat" }],
-      }),
-    );
+    await h.send("Name this chat");
     expect((await h.get()).generatedTitle).toBe("First accepted prompt");
     expect(h.titles).toEqual(["First accepted prompt"]);
   });
@@ -493,15 +484,9 @@ describe("Workspace Session persistence through the shared command module", () =
     const h = await setup();
     h.state.failTitleWrite = true;
     h.state.publishAcceptedMessageDuringSend = true;
-    await expect(
-      Effect.runPromise(
-        h.live.sendUserMessage({
-          ...h.ref,
-          sessionScope: { kind: "repository" },
-          parts: [{ kind: "text", text: "Name this chat" }],
-        }),
-      ),
-    ).rejects.toThrow(/title write failed[\s\S]*keeps the generated title/);
+    await expect(h.send("Name this chat")).rejects.toThrow(
+      /title write failed[\s\S]*keeps the generated title/,
+    );
     expect(h.titles).toEqual(["First accepted prompt"]);
     const saved = await h.get();
     expect(saved.generatedTitle).toBeNull();
@@ -512,15 +497,7 @@ describe("Workspace Session persistence through the shared command module", () =
     const h = await setup();
     h.state.failTitle = true;
     h.state.publishAcceptedMessageDuringSend = true;
-    await expect(
-      Effect.runPromise(
-        h.live.sendUserMessage({
-          ...h.ref,
-          sessionScope: { kind: "repository" },
-          parts: [{ kind: "text", text: "First accepted prompt" }],
-        }),
-      ),
-    ).rejects.toThrow("runtime title update failed");
+    await expect(h.send("First accepted prompt")).rejects.toThrow("runtime title update failed");
     h.state.failTitle = false;
     await h.emit({ ...h.accepted("Second prompt"), sessionRef: h.ref });
     await waitFor(() => h.titles.length === 2);
@@ -559,15 +536,7 @@ describe("Workspace Session persistence through the shared command module", () =
   test("does not persist rejected sends or model changes and saves an accepted model", async () => {
     const h = await setup();
     h.state.failSend = true;
-    await expect(
-      Effect.runPromise(
-        h.live.sendUserMessage({
-          ...h.ref,
-          sessionScope: { kind: "repository" },
-          parts: [{ kind: "text", text: "Rejected" }],
-        }),
-      ),
-    ).rejects.toThrow("runtime rejected message");
+    await expect(h.send("Rejected")).rejects.toThrow("runtime rejected message");
     expect(await h.get()).toEqual(h.record);
     h.state.failModel = true;
     const model = { providerId: "provider", modelId: "new-model", variant: "low" };
@@ -669,13 +638,7 @@ describe("Workspace Session persistence through the shared command module", () =
         sessionScope: { kind: "repository" },
       }),
     );
-    await Effect.runPromise(
-      h.live.sendUserMessage({
-        ...h.ref,
-        sessionScope: { kind: "repository" },
-        parts: [{ kind: "text", text: "Continue" }],
-      }),
-    );
+    await h.send("Continue");
     expect(h.inputs.map((input) => input.model)).toEqual([expectedModel, expectedModel]);
   });
 

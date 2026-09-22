@@ -22,6 +22,7 @@ import type {
   StartAgentSessionInput,
   UpdateControlledAgentSessionModelInput,
 } from "@openducktor/core";
+import { withSummaryTitle } from "@openducktor/core";
 import { Effect } from "effect";
 import { HostValidationError, toHostOperationError } from "../../effect/host-errors";
 import { resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
@@ -304,11 +305,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
       }
       assertClaudeSessionRef(session, input, "update session title");
       await renameClaudeSessionIfNeeded({ session, title: input.title });
-      const sessionAssociation =
-        session.summary.sessionAssociation.kind === "repository"
-          ? { kind: "repository" as const, title: input.title }
-          : session.summary.sessionAssociation;
-      session.summary = { ...session.summary, title: input.title, sessionAssociation };
+      session.summary = withSummaryTitle(session.summary, input.title);
       return session.summary;
     });
   }

@@ -5,7 +5,11 @@ import {
   type WorkspaceSessionRenameFailureReporter,
   type WorkspaceSessionUpdatedPublisher,
 } from "../../application/workspaces/workspace-session-runtime-persistence";
-import { HostOperationError, HostResourceError } from "../../effect/host-errors";
+import {
+  HostOperationError,
+  HostResourceError,
+  toHostOperationError,
+} from "../../effect/host-errors";
 import type { HostEventBusPort } from "../../events/host-event-bus";
 import { createWorkspaceSessionOperationGate } from "../../application/workspaces/workspace-session-operation-gate";
 import { createLiveSessionPublisher } from "./runtime-lifecycle-publisher";
@@ -47,26 +51,21 @@ export const createNodeWorkspaceSessionPersistence = ({
     });
   const reportRenameFailure: WorkspaceSessionRenameFailureReporter = (ref, message) =>
     Effect.try({
-      try: () =>
+      try: () => {
         publishLiveEnvelope({
           type: "fault",
           repoPath: ref.repoPath,
           ref,
           operation: "workspaceSession.accepted-message.rename",
           message,
-        }),
-      catch: (cause) =>
-        new HostOperationError({
-          operation: "workspaceSession.rename.report-publish",
-          message: cause instanceof Error ? cause.message : String(cause),
-          cause,
-        }),
+        });
+      },
+      catch: (cause) => toHostOperationError(cause, "workspaceSession.rename.report-publish"),
     }).pipe(
       Effect.catchAll((failure) =>
-        faultLog(`Failed to report a Workspace Session rename failure: ${failure.message}`).pipe(
-          Effect.catchAll(() => Effect.void),
-        ),
+        faultLog(`Failed to report a Workspace Session rename failure: ${failure.message}`),
       ),
+      Effect.ignore,
     );
   return {
     persistence: createWorkspaceSessionRuntimePersistence({

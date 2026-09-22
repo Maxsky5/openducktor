@@ -1,7 +1,11 @@
 import { listCodexSessionMetadataPage, getCodexSessionMetadata } from "./codex-session-metadata";
 import type { RuntimeSessionImportSource } from "@openducktor/core";
 import { codexSubAgentSourceMetadata } from "./codex-app-server-threads";
-import { AgentRuntimeQueryError, assertAgentRuntimeQuerySession } from "@openducktor/core";
+import {
+  AgentRuntimeQueryError,
+  assertAgentRuntimeQuerySession,
+  withSummaryTitle,
+} from "@openducktor/core";
 import type {
   AgentGeneratedImageBatch,
   AgentGeneratedImageBatchInput,
@@ -1122,11 +1126,7 @@ export class CodexAppServerAdapter
       threadId: session.threadId,
       name: input.title,
     });
-    const sessionAssociation: AgentSessionSummary["sessionAssociation"] =
-      session.summary.sessionAssociation.kind === "repository"
-        ? { kind: "repository", title: input.title }
-        : session.summary.sessionAssociation;
-    session.summary = { ...session.summary, title: input.title, sessionAssociation };
+    session.summary = withSummaryTitle(session.summary, input.title);
     return session.summary;
   }
 
