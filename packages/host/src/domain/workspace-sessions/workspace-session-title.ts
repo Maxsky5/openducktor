@@ -4,9 +4,9 @@ import {
   type WorkspaceSession,
 } from "@openducktor/contracts";
 
-export const workspaceSessionRuntimeTitle = (
-  session: Pick<WorkspaceSession, "generatedTitle">,
-  manualTitle: string | null,
+export const runtimeTitleFor = (
+  session: Pick<WorkspaceSession, "generatedTitle" | "manualTitle">,
+  manualTitle: string | null = session.manualTitle,
 ): string | null => {
   const title = manualTitle?.trim() || session.generatedTitle;
   return title ? title : null;

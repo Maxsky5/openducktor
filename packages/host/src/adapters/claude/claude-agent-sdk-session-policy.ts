@@ -1,5 +1,5 @@
 import type { Options, Query } from "@anthropic-ai/claude-agent-sdk";
-import { type AgentSessionScope, formatAgentSessionTitle } from "@openducktor/core";
+import { type AgentSessionScope, withAgentSessionTitle } from "@openducktor/core";
 import { Effect } from "effect";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { INIT_TIMEOUT_MS, withTimeout } from "./claude-agent-sdk-utils";
@@ -31,24 +31,16 @@ export type ClaudeSessionLaunchInput = {
   title?: string;
 };
 
-type ClaudeSessionPresentation = {
-  startedMessage: string;
-  title?: string;
-};
-
 const sessionPresentation = (
   action: "Continued" | "Forked" | "Resumed" | "Started",
   scope: AgentSessionScope,
-): ClaudeSessionPresentation => {
-  const presentation: ClaudeSessionPresentation = {
-    startedMessage: `${action} ${scope.kind === "repository" ? "repository" : scope.role} session`,
-  };
-  const title = formatAgentSessionTitle(scope);
-  if (title !== undefined) {
-    presentation.title = title;
-  }
-  return presentation;
-};
+) =>
+  withAgentSessionTitle(
+    {
+      startedMessage: `${action} ${scope.kind === "repository" ? "repository" : scope.role} session`,
+    },
+    scope,
+  );
 
 export const freshClaudeSessionLaunch = (
   scope: AgentSessionScope,

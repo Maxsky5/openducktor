@@ -10,7 +10,7 @@ import { agentSessionRefKey } from "@openducktor/core";
 import { Effect } from "effect";
 import {
   buildWorkspaceSessionTitle,
-  workspaceSessionRuntimeTitle,
+  runtimeTitleFor,
 } from "../../domain/workspace-sessions/workspace-session-title";
 import {
   type HostError,
@@ -41,14 +41,14 @@ export type WorkspaceSessionRuntimeTitleUpdater = (
   input: AgentSessionControlUpdateTitleInput,
 ) => Effect.Effect<void, HostError>;
 
-export type WorkspaceSessionTitleSyncFailureReporter = (
+export type WorkspaceSessionRenameFailureReporter = (
   runtimeRef: AgentSessionLiveRef,
   message: string,
 ) => Effect.Effect<void>;
 
 type AcceptedMessagePlan = {
   input: Parameters<WorkspaceSessionStorePort["recordAcceptedMessage"]>[0];
-  runtimeTitleSync: AgentSessionControlUpdateTitleInput | null;
+  runtimeRename: AgentSessionControlUpdateTitleInput | null;
 };
 
 const storeEffect = <A>(effect: Effect.Effect<A, TaskStoreError>): Effect.Effect<A, HostError> =>
@@ -72,7 +72,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
   operationGate,
   sessionTitleGate,
   updateRuntimeSessionTitle,
-  reportTitleSyncFailure,
+  reportRenameFailure,
 }: {
   store: WorkspaceSessionStorePort;
   settings: Pick<WorkspaceSettingsService, "getRepoConfigByRepoPath">;
@@ -81,7 +81,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
   operationGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
   sessionTitleGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
   updateRuntimeSessionTitle: WorkspaceSessionRuntimeTitleUpdater;
-  reportTitleSyncFailure: WorkspaceSessionTitleSyncFailureReporter;
+  reportRenameFailure: WorkspaceSessionRenameFailureReporter;
 }): AgentSessionPersistencePort & AgentSessionOperationPolicy => {
   const pendingFinalMessages = new Map<string, { messageId: string; occurredAt: number }>();
   const sendsInFlight = new Set<string>();
@@ -135,7 +135,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
       if (input.sessionScope.kind !== "repository") return input;
       const known = yield* findActive(input);
       if (!known) return input;
-      const runtimeTitle = workspaceSessionRuntimeTitle(known.session, known.session.manualTitle);
+      const runtimeTitle = runtimeTitleFor(known.session);
       const prepared = {
         ...input,
         sessionScope:
@@ -173,12 +173,12 @@ export const createWorkspaceSessionRuntimePersistence = ({
         input.selectedModel = { ...message.model, runtimeKind: runtimeRef.runtimeKind };
       }
       const storedGeneratedTitle = known.session.generatedTitle ?? input.generatedTitle;
-      const runtimeTitle = workspaceSessionRuntimeTitle(
-        { ...known.session, generatedTitle: storedGeneratedTitle },
-        known.session.manualTitle,
-      );
-      const previousTitle = workspaceSessionRuntimeTitle(known.session, known.session.manualTitle);
-      const runtimeTitleSync =
+      const runtimeTitle = runtimeTitleFor({
+        ...known.session,
+        generatedTitle: storedGeneratedTitle,
+      });
+      const previousTitle = runtimeTitleFor(known.session);
+      const runtimeRename =
         known.session.externalSessionId !== null &&
         runtimeTitle !== null &&
         runtimeTitle !== previousTitle
@@ -190,17 +190,19 @@ export const createWorkspaceSessionRuntimePersistence = ({
               title: runtimeTitle,
             }
           : null;
-      return { input, runtimeTitleSync };
+      return { input, runtimeRename };
     });
   const applyAcceptedMessage = (
     known: { ref: WorkspaceSessionStoreRef; session: WorkspaceSession },
     plan: AcceptedMessagePlan,
   ) =>
     Effect.gen(function* () {
-      const { input, runtimeTitleSync } = plan;
-      if (runtimeTitleSync !== null) {
-        const synced = yield* Effect.either(updateRuntimeSessionTitle(runtimeTitleSync));
-        if (synced._tag === "Left") {
+      const { input, runtimeRename } = plan;
+      // Rename the runtime session before the durable write, so a failed rename never
+      // stores a title that the runtime session does not show.
+      if (runtimeRename !== null) {
+        const renamed = yield* Effect.either(updateRuntimeSessionTitle(runtimeRename));
+        if (renamed._tag === "Left") {
           // Keep the accepted-message activity, but leave the title on its prior value.
           const recorded = yield* Effect.either(
             storeEffect(store.recordAcceptedMessage({ ...input, generatedTitle: null })),
@@ -209,18 +211,18 @@ export const createWorkspaceSessionRuntimePersistence = ({
             return yield* Effect.fail(
               new HostOperationError({
                 operation: "workspaceSession.accepted-message.persist",
-                message: `${synced.left.message} Saving the accepted message also failed: ${recorded.left.message}`,
-                cause: { runtimeFailure: synced.left, storeFailure: recorded.left },
+                message: `${renamed.left.message} Saving the accepted message also failed: ${recorded.left.message}`,
+                cause: { runtimeFailure: renamed.left, storeFailure: recorded.left },
               }),
             );
           }
           yield* publishUpdated(known.ref.workspaceId, recorded.right);
-          return yield* Effect.fail(synced.left);
+          return yield* Effect.fail(renamed.left);
         }
       }
       const saved = yield* Effect.either(storeEffect(store.recordAcceptedMessage(input)));
       if (saved._tag === "Left") {
-        if (runtimeTitleSync === null) return yield* Effect.fail(saved.left);
+        if (runtimeRename === null) return yield* Effect.fail(saved.left);
         return yield* Effect.fail(
           new HostOperationError({
             operation: "workspaceSession.accepted-message.persist",
@@ -259,20 +261,20 @@ export const createWorkspaceSessionRuntimePersistence = ({
       const known = yield* find(runtimeRef);
       if (!known) return;
       const plan = yield* planAcceptedMessage(known, runtimeRef, message, false);
-      const awaitingRuntimeTitle = plan.runtimeTitleSync !== null;
-      // A runtime rename cannot run inside the live publication scopes. A send command
-      // completes the rename after the runtime call returns; every other observation
-      // defers the rename to a background transition.
+      const renamePending = plan.runtimeRename !== null;
+      // A runtime rename cannot run inside the live publication scopes, because the
+      // runtime holds its lock until the publication ends. A send completes the rename
+      // after the runtime call returns; every other observation defers it to a fiber.
       const saved = yield* storeEffect(
         store.recordAcceptedMessage(
-          awaitingRuntimeTitle ? { ...plan.input, generatedTitle: null } : plan.input,
+          renamePending ? { ...plan.input, generatedTitle: null } : plan.input,
         ),
       );
       yield* publishUpdated(known.ref.workspaceId, saved);
-      if (awaitingRuntimeTitle && !sendsInFlight.has(agentSessionRefKey(runtimeRef)))
+      if (renamePending && !sendsInFlight.has(agentSessionRefKey(runtimeRef)))
         yield* Effect.forkDaemon(
           recordAcceptedMessage(runtimeRef, message, false).pipe(
-            Effect.catchAll((failure) => reportTitleSyncFailure(runtimeRef, failure.message)),
+            Effect.catchAll((failure) => reportRenameFailure(runtimeRef, failure.message)),
           ),
         );
     });
@@ -311,8 +313,8 @@ export const createWorkspaceSessionRuntimePersistence = ({
       runOperation(
         runtimeRef,
         Effect.sync(() => {
-          // A send command records the observed message after the runtime call returns,
-          // so the observation must not start a background title rename.
+          // A send renames the runtime session after the runtime call returns, so an
+          // observation during the send must not start a background rename.
           sendsInFlight.add(agentSessionRefKey(runtimeRef));
         }).pipe(
           Effect.zipRight(effect),
@@ -330,7 +332,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
           save: () => Effect.void,
         })),
       ),
-    prepareSend: (input) => prepare(input),
+    prepareSend: prepare,
     validateRef,
     prepareModelUpdate: (input) =>
       Effect.gen(function* () {

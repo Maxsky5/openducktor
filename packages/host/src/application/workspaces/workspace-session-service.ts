@@ -17,7 +17,7 @@ import {
   HostValidationError,
 } from "../../effect/host-errors";
 import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
-import { workspaceSessionRuntimeTitle } from "../../domain/workspace-sessions/workspace-session-title";
+import { runtimeTitleFor } from "../../domain/workspace-sessions/workspace-session-title";
 import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
 import type { RuntimeOrchestratorService } from "../runtimes/runtime-orchestrator-service";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
@@ -167,7 +167,7 @@ export const createWorkspaceSessionService = (
           });
           return yield* Effect.uninterruptible(
             Effect.gen(function* () {
-              const runtimeTitle = workspaceSessionRuntimeTitle(session, session.manualTitle);
+              const runtimeTitle = runtimeTitleFor(session);
               const startInput: AgentSessionControlStartInput = {
                 repoPath: ref.repoPath,
                 runtimeKind: session.runtimeKind,
@@ -254,7 +254,7 @@ export const createWorkspaceSessionService = (
                     field: "sessionId",
                   }),
                 );
-              const runtimeTitle = workspaceSessionRuntimeTitle(session, input.manualTitle);
+              const runtimeTitle = runtimeTitleFor(session, input.manualTitle);
               if (session.externalSessionId !== null && runtimeTitle === null) {
                 return yield* Effect.fail(
                   new HostValidationError({
@@ -264,26 +264,28 @@ export const createWorkspaceSessionService = (
                   }),
                 );
               }
-              const runtimeTitleSync =
+              const runtimeRename =
                 session.externalSessionId !== null &&
                 runtimeTitle !== null &&
-                runtimeTitle !== workspaceSessionRuntimeTitle(session, session.manualTitle)
+                runtimeTitle !== runtimeTitleFor(session)
                   ? { externalSessionId: session.externalSessionId, title: runtimeTitle }
                   : null;
+              // Save the new title before the runtime rename. Restore the saved title when
+              // the runtime rename fails, so the record and the runtime session stay in step.
               const saved = yield* Effect.either(
                 store.rename({ ...ref, manualTitle: input.manualTitle }),
               );
               if (saved._tag === "Left") return yield* Effect.fail(saved.left);
-              if (runtimeTitleSync === null) return saved.right;
-              const synced = yield* Effect.either(
+              if (runtimeRename === null) return saved.right;
+              const renamed = yield* Effect.either(
                 live.updateSessionTitle({
                   repoPath: ref.repoPath,
                   runtimeKind: session.runtimeKind,
                   workingDirectory: session.executionTarget.workingDirectory,
-                  ...runtimeTitleSync,
+                  ...runtimeRename,
                 }),
               );
-              if (synced._tag === "Right") return saved.right;
+              if (renamed._tag === "Right") return saved.right;
               const restored = yield* Effect.either(
                 store.rename({ ...ref, manualTitle: session.manualTitle }),
               );
@@ -291,13 +293,13 @@ export const createWorkspaceSessionService = (
                 return yield* Effect.fail(
                   new HostOperationError({
                     operation: "workspaceSession.rename.persist",
-                    message: `${synced.left.message} Restoring the saved title also failed: ${restored.left.message}`,
-                    cause: { runtimeFailure: synced.left, storeFailure: restored.left },
-                    details: { ref, runtimeFailure: synced.left, storeFailure: restored.left },
+                    message: `${renamed.left.message} Restoring the saved title also failed: ${restored.left.message}`,
+                    cause: { runtimeFailure: renamed.left, storeFailure: restored.left },
+                    details: { ref, runtimeFailure: renamed.left, storeFailure: restored.left },
                   }),
                 );
               }
-              return yield* Effect.fail(synced.left);
+              return yield* Effect.fail(renamed.left);
             }),
           ),
         ),

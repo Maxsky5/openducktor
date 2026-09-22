@@ -1,9 +1,6 @@
 import { expect, test } from "bun:test";
 import type { AcceptedAgentUserMessage } from "@openducktor/contracts";
-import {
-  buildWorkspaceSessionTitle,
-  workspaceSessionRuntimeTitle,
-} from "./workspace-session-title";
+import { buildWorkspaceSessionTitle, runtimeTitleFor } from "./workspace-session-title";
 
 const message = (parts: AcceptedAgentUserMessage["parts"]): AcceptedAgentUserMessage => ({
   type: "user_message",
@@ -68,8 +65,15 @@ test("does not invent a title for empty visible content", () => {
 });
 
 test("prefers the manual title, falls back to the generated title, and stays undefined without a title", () => {
-  expect(workspaceSessionRuntimeTitle({ generatedTitle: "Generated" }, "Manual")).toBe("Manual");
-  expect(workspaceSessionRuntimeTitle({ generatedTitle: "Generated" }, null)).toBe("Generated");
-  expect(workspaceSessionRuntimeTitle({ generatedTitle: "Generated" }, "  ")).toBe("Generated");
-  expect(workspaceSessionRuntimeTitle({ generatedTitle: null }, null)).toBeNull();
+  expect(runtimeTitleFor({ generatedTitle: "Generated", manualTitle: null }, "Manual")).toBe(
+    "Manual",
+  );
+  expect(runtimeTitleFor({ generatedTitle: "Generated", manualTitle: null }, null)).toBe(
+    "Generated",
+  );
+  expect(runtimeTitleFor({ generatedTitle: "Generated", manualTitle: null }, "  ")).toBe(
+    "Generated",
+  );
+  expect(runtimeTitleFor({ generatedTitle: null, manualTitle: null })).toBeNull();
+  expect(runtimeTitleFor({ generatedTitle: "Generated", manualTitle: "Stored" })).toBe("Stored");
 });

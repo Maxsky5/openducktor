@@ -1,6 +1,6 @@
 import type { RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentSessionScope } from "@openducktor/core";
-import { formatAgentSessionTitle } from "@openducktor/core";
+import { withAgentSessionTitle } from "@openducktor/core";
 import {
   buildRepositoryScopedPermissionRules,
   buildRoleScopedPermissionRules,
@@ -8,7 +8,7 @@ import {
 } from "./workflow-tool-permissions";
 
 export type OpencodeSessionPolicy = {
-  /** Runtime session name. `undefined` leaves the native session name unchanged. */
+  /** Runtime session title. `undefined` leaves the native session title unchanged. */
   title?: string;
   activityLabel: string;
   permission: OpencodePermissionRule[];
@@ -25,23 +25,20 @@ export const resolveOpencodeSessionPolicy = (
   if (!sessionScope) {
     throw new Error(`Cannot ${action} without session context.`);
   }
-  if (sessionScope.kind === "workflow") {
-    const policy: OpencodeSessionPolicy = {
-      activityLabel: sessionScope.role,
-      permission: buildRoleScopedPermissionRules({
-        role: sessionScope.role,
-        runtimeDescriptor,
-      }),
-      toolSelection: { kind: "workflow", role: sessionScope.role },
-    };
-    const title = formatAgentSessionTitle(sessionScope);
-    return title === undefined ? policy : { ...policy, title };
-  }
-  const policy: OpencodeSessionPolicy = {
-    activityLabel: "repository",
-    permission: buildRepositoryScopedPermissionRules(runtimeDescriptor),
-    toolSelection: { kind: "repository" },
-  };
-  const title = formatAgentSessionTitle(sessionScope);
-  return title === undefined ? policy : { ...policy, title };
+  const policy: OpencodeSessionPolicy =
+    sessionScope.kind === "workflow"
+      ? {
+          activityLabel: sessionScope.role,
+          permission: buildRoleScopedPermissionRules({
+            role: sessionScope.role,
+            runtimeDescriptor,
+          }),
+          toolSelection: { kind: "workflow", role: sessionScope.role },
+        }
+      : {
+          activityLabel: "repository",
+          permission: buildRepositoryScopedPermissionRules(runtimeDescriptor),
+          toolSelection: { kind: "repository" },
+        };
+  return withAgentSessionTitle(policy, sessionScope);
 };

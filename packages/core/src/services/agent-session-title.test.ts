@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { formatAgentSessionTitle, formatWorkflowAgentSessionTitle } from "./agent-session-title";
+import {
+  agentSessionTitle,
+  formatWorkflowAgentSessionTitle,
+  withAgentSessionTitle,
+} from "./agent-session-title";
 
 describe("formatWorkflowAgentSessionTitle", () => {
   test("formats workflow session titles from role and task id", () => {
@@ -19,11 +23,20 @@ describe("formatWorkflowAgentSessionTitle", () => {
 });
 
 describe("Agent Session scope presentation", () => {
-  test("uses the repository session name from the scope", () => {
-    expect(formatAgentSessionTitle({ kind: "repository", title: "My session" })).toBe("My session");
-    expect(formatAgentSessionTitle({ kind: "repository" })).toBeUndefined();
-    expect(formatAgentSessionTitle({ kind: "workflow", taskId: "task-1", role: "build" })).toBe(
+  test("reads the repository title from the scope and formats a workflow title", () => {
+    expect(agentSessionTitle({ kind: "repository", title: "My session" })).toBe("My session");
+    expect(agentSessionTitle({ kind: "repository" })).toBeUndefined();
+    expect(agentSessionTitle({ kind: "workflow", taskId: "task-1", role: "build" })).toBe(
       "BUILD task-1",
     );
+  });
+
+  test("adds the scope title to a value and leaves the value unchanged without one", () => {
+    expect(
+      withAgentSessionTitle({ kind: "repository" }, { kind: "repository", title: "My session" }),
+    ).toEqual({ kind: "repository", title: "My session" });
+    expect(withAgentSessionTitle({ kind: "repository" }, { kind: "repository" })).toEqual({
+      kind: "repository",
+    });
   });
 });

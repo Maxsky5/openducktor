@@ -34,8 +34,8 @@ export const agentSessionRepositoryScopeSchema = z
   .object({
     kind: z.literal("repository"),
     /**
-     * Workspace Session name. The runtime session uses this name. When it is
-     * absent, OpenDucktor leaves the runtime session name unchanged.
+     * Workspace Session title. The runtime session uses this title. When it is
+     * absent, OpenDucktor leaves the runtime session title unchanged.
      */
     title: z.string().trim().min(1).max(REPOSITORY_SESSION_TITLE_LIMIT).optional(),
   })

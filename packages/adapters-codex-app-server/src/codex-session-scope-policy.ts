@@ -3,7 +3,7 @@ import {
   AGENT_ROLE_TOOL_POLICY,
   type AgentSessionRuntimePolicy,
   type AgentSessionScope,
-  formatAgentSessionTitle,
+  withAgentSessionTitle,
 } from "@openducktor/core";
 import { requireCodexRuntimePolicy } from "./codex-session-policy";
 
@@ -13,7 +13,7 @@ type CodexSessionThreadConfig = {
 };
 
 type CodexSessionScopePolicyBase = {
-  /** Runtime session name. `undefined` leaves the native thread name unchanged. */
+  /** Runtime session title. `undefined` leaves the native thread name unchanged. */
   title?: string;
   runtimePolicy: CodexEffectivePolicy;
   threadConfig: CodexSessionThreadConfig;
@@ -42,22 +42,20 @@ export const resolveCodexSessionScopePolicy = (
   if (!sessionScope) {
     throw new Error(`Cannot ${action} without session context.`);
   }
-  const policy = requireCodexRuntimePolicy(runtimePolicy, action);
-  const title = formatAgentSessionTitle(sessionScope);
-  if (sessionScope.kind === "repository") {
-    const base: CodexSessionScopePolicy = {
-      kind: "repository",
-      sessionScope,
-      runtimePolicy: policy,
-      threadConfig: buildThreadConfig(ODT_MCP_TOOL_NAMES),
-    };
-    return title === undefined ? base : { ...base, title };
-  }
-  const base: CodexSessionScopePolicy = {
-    kind: "workflow",
-    sessionScope,
-    runtimePolicy: policy,
-    threadConfig: buildThreadConfig(AGENT_ROLE_TOOL_POLICY[sessionScope.role]),
-  };
-  return title === undefined ? base : { ...base, title };
+  const effectivePolicy = requireCodexRuntimePolicy(runtimePolicy, action);
+  const policy: CodexSessionScopePolicy =
+    sessionScope.kind === "repository"
+      ? {
+          kind: "repository",
+          sessionScope,
+          runtimePolicy: effectivePolicy,
+          threadConfig: buildThreadConfig(ODT_MCP_TOOL_NAMES),
+        }
+      : {
+          kind: "workflow",
+          sessionScope,
+          runtimePolicy: effectivePolicy,
+          threadConfig: buildThreadConfig(AGENT_ROLE_TOOL_POLICY[sessionScope.role]),
+        };
+  return withAgentSessionTitle(policy, sessionScope);
 };

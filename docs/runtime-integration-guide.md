@@ -203,7 +203,7 @@ A fresh or forked session starts with a running lease. An old native idle event 
 
 Resume keeps the current running turn, approval, or question until a newer native event replaces it. One ordered coordinator applies control results and native events.
 
-Persistence observation does not call the runtime. A runtime-visible follow-up, such as a session rename, runs after the publication and runtime lock scopes release.
+The persistence observer never calls the runtime. A runtime-visible follow-up, such as a session rename, runs after the publication and runtime lock scopes release.
 
 Renderer attachment is atomic. Its first envelope has the current snapshot. Later changes use the same ordered channel. Separate snapshot and subscribe calls have a race.
 

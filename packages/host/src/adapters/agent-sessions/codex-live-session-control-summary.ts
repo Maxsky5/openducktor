@@ -8,19 +8,17 @@ import {
   toHostOperationError,
 } from "../../effect/host-errors";
 
-export type CodexControlSummaryRunner = (
-  operation: string,
-  run: () => Promise<AgentSessionSummary>,
-) => Effect.Effect<AgentSessionControlSummary, HostError>;
-
 export const createCodexControlSummaryRunner = ({
   runtimeId,
   refreshProjection,
 }: {
   runtimeId: string;
   refreshProjection: () => Effect.Effect<void, HostError>;
-}): CodexControlSummaryRunner => {
-  return (operation, run) =>
+}) => {
+  return (
+    operation: string,
+    run: () => Promise<AgentSessionSummary>,
+  ): Effect.Effect<AgentSessionControlSummary, HostError> =>
     Effect.tryPromise({
       try: run,
       catch: (cause) => toHostOperationError(cause, operation, { runtimeId }),

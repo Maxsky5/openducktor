@@ -116,7 +116,7 @@ describe("Workspace Session persistence through the shared command module", () =
       onGateRequest: () => {},
       active: false,
     };
-    const titleSyncFailures: string[] = [];
+    const renameFailures: string[] = [];
     const failure = (message: string) =>
       Effect.fail(new HostOperationError({ operation: "test", message }));
     const accepted = (
@@ -193,9 +193,9 @@ describe("Workspace Session persistence through the shared command module", () =
                 updates.push({ workspaceId, session });
               }),
         ),
-      reportTitleSyncFailure: (_runtimeRef, message) =>
+      reportRenameFailure: (_runtimeRef, message) =>
         Effect.sync(() => {
-          titleSyncFailures.push(message);
+          renameFailures.push(message);
         }),
     });
     const live = createAgentSessionLiveStateService({
@@ -343,7 +343,7 @@ describe("Workspace Session persistence through the shared command module", () =
       activityTimes,
       models,
       titles,
-      titleSyncFailures,
+      renameFailures,
       state,
       accepted,
       emit,
@@ -471,8 +471,8 @@ describe("Workspace Session persistence through the shared command module", () =
     const h = await setup();
     h.state.failTitle = true;
     await h.emit({ ...h.accepted(), sessionRef: h.ref });
-    await waitFor(() => h.titleSyncFailures.length === 1);
-    expect(h.titleSyncFailures[0]).toContain("runtime title update failed");
+    await waitFor(() => h.renameFailures.length === 1);
+    expect(h.renameFailures[0]).toContain("runtime title update failed");
     const saved = await h.get();
     expect(saved.generatedTitle).toBeNull();
     expect(saved.updatedAt).toBe(Date.parse(h.accepted().timestamp));
@@ -508,7 +508,7 @@ describe("Workspace Session persistence through the shared command module", () =
     expect(saved.updatedAt).toBe(Date.parse(h.accepted().timestamp));
   });
 
-  test("still defers renames after a send fails during the runtime title sync", async () => {
+  test("still defers renames after a send fails during the runtime rename", async () => {
     const h = await setup();
     h.state.failTitle = true;
     h.state.publishAcceptedMessageDuringSend = true;
@@ -1072,7 +1072,7 @@ describe("Workspace Session persistence through the shared command module", () =
   });
 });
 
-describe("Workspace Session title sync through the real OpenCode live adapter", () => {
+describe("Workspace Session runtime rename through the real OpenCode live adapter", () => {
   let database: SqliteTaskStoreTestHarness;
   beforeEach(async () => {
     database = await createSqliteTaskStoreHarness();
@@ -1145,7 +1145,7 @@ describe("Workspace Session title sync through the real OpenCode live adapter", 
         updateSessionTitle
           ? updateSessionTitle(input)
           : Effect.dieMessage("live title update is not wired"),
-      reportTitleSyncFailure: () => Effect.void,
+      reportRenameFailure: () => Effect.void,
     });
     const live = createAgentSessionLiveStateService({
       adapterRegistry: createLiveSessionAdapterRegistry(),

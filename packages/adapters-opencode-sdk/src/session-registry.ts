@@ -1,6 +1,6 @@
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent, AgentSessionSummary } from "@openducktor/core";
-import { formatAgentSessionTitle } from "@openducktor/core";
+import { agentSessionTitle } from "@openducktor/core";
 import {
   logStreamEvent,
   type OpencodeGlobalEventFailureScope,
@@ -484,7 +484,7 @@ export const registerSession = (
   const startsActive = input.emitStartedEvent !== false;
   const sessionAssociation = input.sessionInput.sessionScope ?? { kind: "unbound" };
   const title = input.sessionInput.sessionScope
-    ? formatAgentSessionTitle(input.sessionInput.sessionScope)
+    ? agentSessionTitle(input.sessionInput.sessionScope)
     : undefined;
   const summary: AgentSessionSummary = {
     externalSessionId: input.externalSessionId,

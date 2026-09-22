@@ -5,13 +5,25 @@ export const formatWorkflowAgentSessionTitle = (role: AgentRole, taskId: string)
   `${role.toUpperCase()} ${taskId}`;
 
 /**
- * Returns the runtime session name for a scope.
- * A repository session name comes from the Workspace Session record.
- * When the scope has no name, the runtime session keeps its current name.
+ * The runtime session title for a scope.
+ * A repository scope carries the title from its Workspace Session record.
+ * A scope without a title leaves the runtime session title unchanged.
  */
-export const formatAgentSessionTitle = (scope: AgentSessionScope): string | undefined => {
+export const agentSessionTitle = (scope: AgentSessionScope): string | undefined => {
   if (scope.kind === "repository") {
     return scope.title;
   }
   return formatWorkflowAgentSessionTitle(scope.role, scope.taskId);
+};
+
+/**
+ * Returns the value with the runtime session title for a scope.
+ * A scope without a title returns the value unchanged.
+ */
+export const withAgentSessionTitle = <Value extends object>(
+  value: Value,
+  scope: AgentSessionScope,
+): Value & { title?: string } => {
+  const title = agentSessionTitle(scope);
+  return title === undefined ? value : { ...value, title };
 };
