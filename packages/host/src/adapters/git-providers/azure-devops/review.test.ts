@@ -249,8 +249,8 @@ describe("Azure DevOps review adapter", () => {
             $format: "json",
             path: "/src/locales/fr.json",
             includeContent: true,
-            "versionDescriptor.version": "odt/task-42",
-            "versionDescriptor.versionType": "branch",
+            "versionDescriptor.version": "latest-source-commit",
+            "versionDescriptor.versionType": "commit",
           });
           return Effect.succeed({
             body: { content: `${"unchanged\n".repeat(210)}${originalLine}\n` },
@@ -260,26 +260,53 @@ describe("Azure DevOps review adapter", () => {
         return Effect.dieMessage(`unexpected request: ${request.operation}`);
       },
       readContinuationPages: (_config, _repository, request) =>
-        request.operation === "read pull request threads"
+        request.operation === "read pull request iterations"
           ? Effect.succeed([
-              {
-                id: 12,
-                status: "active",
-                threadContext: {
-                  filePath: "/src/locales/fr.json",
-                  rightFileStart: { line: 211, offset: 1 },
-                  rightFileEnd: { line: 211, offset: originalLine.length + 1 },
-                },
-                comments: [
-                  {
-                    id: 13,
-                    content: `Use that **label** instead:\n\n\`\`\`suggestion\n${suggestedLine}\n\`\`\`\n`,
-                    author: { displayName: "Maxime" },
-                  },
-                ],
-              },
+              { id: 1, sourceRefCommit: { commitId: "older-source-commit" } },
+              { id: 2, sourceRefCommit: { commitId: "latest-source-commit" } },
             ])
-          : Effect.succeed([]),
+          : request.operation === "read pull request threads"
+            ? Effect.succeed([
+                {
+                  id: 12,
+                  status: "active",
+                  pullRequestThreadContext: {
+                    iterationContext: { firstComparingIteration: 1, secondComparingIteration: 2 },
+                  },
+                  threadContext: {
+                    filePath: "/src/locales/fr.json",
+                    rightFileStart: { line: 211, offset: 1 },
+                    rightFileEnd: { line: 211, offset: originalLine.length + 1 },
+                  },
+                  comments: [
+                    {
+                      id: 13,
+                      content: `Use that **label** instead:\n\n\`\`\`suggestion\n${suggestedLine}\n\`\`\`\n`,
+                      author: { displayName: "Maxime" },
+                    },
+                  ],
+                },
+                {
+                  id: 14,
+                  status: "active",
+                  pullRequestThreadContext: {
+                    iterationContext: { firstComparingIteration: 1, secondComparingIteration: 1 },
+                  },
+                  threadContext: {
+                    filePath: "/src/locales/fr.json",
+                    rightFileStart: { line: 211, offset: 1 },
+                    rightFileEnd: { line: 211, offset: originalLine.length + 1 },
+                  },
+                  comments: [
+                    {
+                      id: 15,
+                      content: `Older suggestion:\n\n\`\`\`suggestion\n${suggestedLine}\n\`\`\``,
+                      author: { displayName: "Maxime" },
+                    },
+                  ],
+                },
+              ])
+            : Effect.succeed([]),
       readOffsetPages: () => Effect.succeed([]),
     };
     const port = createAzureDevOpsReviewPort({ client, repositoryPort: reviewRepositoryPort });
@@ -297,6 +324,14 @@ describe("Azure DevOps review adapter", () => {
           ["@@ -211,1 +211,1 @@", `-${originalLine}`, `+${suggestedLine}`].join("\n"),
         ],
         suggestionWarning: null,
+      }),
+    );
+    expect(context.comments).toContainEqual(
+      expect.objectContaining({
+        id: "14:15",
+        body: expect.stringContaining("```suggestion"),
+        suggestionPatches: [],
+        suggestionWarning: expect.stringContaining("current pull request iteration"),
       }),
     );
   });

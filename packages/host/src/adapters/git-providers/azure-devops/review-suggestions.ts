@@ -126,24 +126,34 @@ export const readAzureSuggestionFiles = ({
   client,
   repoConfig,
   repository,
-  sourceBranch,
+  sourceCommit,
+  iterationId,
   threads,
 }: {
   client: AzureDevOpsRestClient;
   repoConfig: RepoConfig;
   repository: ResolvedAzureDevOpsRepository;
-  sourceBranch: string;
+  sourceCommit: string | null;
+  iterationId: number | null;
   threads: AzureDevOpsJson[];
 }) =>
   Effect.try({
-    try: () => azureSuggestionPaths(threads),
+    try: () => azureSuggestionThreads(threads),
     catch: asValidationError,
   }).pipe(
     Effect.flatMap((paths) =>
       Effect.forEach(
         paths,
-        (path) =>
-          client
+        ({ id, path, threadIterationId }) => {
+          if (!sourceCommit || threadIterationId !== iterationId) {
+            const suggestionFile: AzureSuggestionFile = {
+              content: null,
+              warning:
+                "Azure DevOps suggestion source cannot be matched to the current pull request iteration. Open the thread in Azure DevOps to view it.",
+            };
+            return Effect.succeed([id, suggestionFile] as const);
+          }
+          return client
             .request(repoConfig, repository, {
               operation: "read pull request suggestion file",
               path: `git/repositories/${encodeURIComponent(repository.repositoryId)}/items`,
@@ -151,8 +161,8 @@ export const readAzureSuggestionFiles = ({
                 $format: "json",
                 path,
                 includeContent: true,
-                "versionDescriptor.version": sourceBranch,
-                "versionDescriptor.versionType": "branch",
+                "versionDescriptor.version": sourceCommit,
+                "versionDescriptor.versionType": "commit",
               },
             })
             .pipe(
@@ -164,7 +174,7 @@ export const readAzureSuggestionFiles = ({
                       "suggestionFile.content",
                     );
                     const suggestionFile: AzureSuggestionFile = { content, warning: null };
-                    return [path, suggestionFile] as const;
+                    return [id, suggestionFile] as const;
                   },
                   catch: asValidationError,
                 }),
@@ -174,33 +184,45 @@ export const readAzureSuggestionFiles = ({
                   content: null,
                   warning: `Azure DevOps suggestion source could not be loaded: ${errorMessage(cause)}`,
                 };
-                return Effect.succeed([path, suggestionFile] as const);
+                return Effect.succeed([id, suggestionFile] as const);
               }),
-            ),
+            );
+        },
         { concurrency: 4 },
       ),
     ),
     Effect.map((entries) => new Map(entries)),
   );
 
-const azureSuggestionPaths = (threads: AzureDevOpsJson[]): string[] => [
-  ...new Set(
-    threads.flatMap((value) => {
-      const thread = requireRecord(value, "thread");
-      const context = optionalRecord(thread.threadContext);
-      const path = optionalString(context?.filePath);
-      const comments = Array.isArray(thread.comments) ? thread.comments : [];
-      return path &&
-        comments.some((commentValue) => {
-          const comment = requireRecord(commentValue, "thread.comment");
-          const body = optionalString(comment.content);
-          return comment.isDeleted !== true && body !== null && hasAzureSuggestion(body);
-        })
-        ? [path]
-        : [];
-    }),
-  ),
-];
+const azureSuggestionThreads = (threads: AzureDevOpsJson[]) =>
+  threads.flatMap((value) => {
+    const thread = requireRecord(value, "thread");
+    const context = optionalRecord(thread.threadContext);
+    const path = optionalString(context?.filePath);
+    const comments = Array.isArray(thread.comments) ? thread.comments : [];
+    if (
+      !path ||
+      !comments.some((commentValue) => {
+        const comment = requireRecord(commentValue, "thread.comment");
+        const body = optionalString(comment.content);
+        return comment.isDeleted !== true && body !== null && hasAzureSuggestion(body);
+      })
+    ) {
+      return [];
+    }
+    const iterationContext = optionalRecord(
+      optionalRecord(thread.pullRequestThreadContext)?.iterationContext,
+    );
+    return [
+      {
+        id: String(thread.id),
+        path,
+        threadIterationId:
+          azureDevOpsPositiveIntegerSchema.safeParse(iterationContext?.secondComparingIteration)
+            .data ?? null,
+      },
+    ];
+  });
 
 const suggestionPosition = (value: AzureDevOpsJsonRecord): SuggestionPosition | null => {
   const line = azureDevOpsPositiveIntegerSchema.safeParse(value.line).data;

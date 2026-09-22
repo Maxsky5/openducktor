@@ -14,6 +14,31 @@ export const azureDevOpsRepositorySchema = z
   })
   .strict()
   .superRefine((repository, context) => {
+    const rawPath = repository.serviceUrl.match(/^[a-z][a-z\d+.-]*:\/\/[^/?#]*([^?#]*)/iu)?.[1];
+    let unsafePath = repository.serviceUrl.includes("\\") || rawPath === undefined;
+    for (const segment of rawPath?.split("/") ?? []) {
+      try {
+        const decoded = decodeURIComponent(segment);
+        if (
+          decoded === "." ||
+          decoded === ".." ||
+          decoded.includes("/") ||
+          decoded.includes("\\") ||
+          decoded.includes("%")
+        ) {
+          unsafePath = true;
+        }
+      } catch {
+        unsafePath = true;
+      }
+    }
+    if (unsafePath) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "The Azure DevOps service address contains an unsafe path.",
+        path: ["serviceUrl"],
+      });
+    }
     let serviceUrl: URL;
     try {
       serviceUrl = new URL(repository.serviceUrl);

@@ -81,12 +81,15 @@ describe("AzureDevOpsConnectionSettings", () => {
     expect(screen.getByRole("button", { name: "Save and validate PAT" })).toBeTruthy();
   });
 
-  test("shows a connected Azure DevOps Services PAT without sign-in actions", () => {
+  test("offers PAT replacement without work-account sign-in when connected by PAT", () => {
+    const savePat = mock(() => {});
     render(
       <AzureDevOpsConnectionSettings
         controller={{
           ...createPendingController(),
           connectionState: { status: "connected", account: null },
+          pat: "replacement",
+          savePat,
         }}
         disabled={false}
         onBack={() => {}}
@@ -96,8 +99,34 @@ describe("AzureDevOpsConnectionSettings", () => {
 
     expect(screen.getByText("Connected with a personal access token.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Sign in with Microsoft" })).toBeNull();
-    expect(screen.queryByLabelText("Personal access token")).toBeNull();
+    expect(screen.getByLabelText("New personal access token")).toBeTruthy();
+    expect(screen.getByText("Your current token stays active if validation fails.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Replace PAT" }));
+    expect(savePat).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "Disconnect" })).toBeTruthy();
+  });
+
+  test("offers PAT replacement for a connected Azure DevOps Server", () => {
+    const controller = createPendingController();
+    render(
+      <AzureDevOpsConnectionSettings
+        controller={{
+          ...controller,
+          connectionState: { status: "connected", account: null },
+          draft: {
+            ...controller.draft,
+            deployment: "server",
+            serviceUrl: "https://ado.example/tfs",
+          },
+        }}
+        disabled={false}
+        onBack={() => {}}
+        onSaveSettings={async () => true}
+      />,
+    );
+
+    expect(screen.getByLabelText("New personal access token")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Replace PAT" })).toBeTruthy();
   });
 
   test("makes the pending Microsoft sign-in actions direct and accessible", async () => {

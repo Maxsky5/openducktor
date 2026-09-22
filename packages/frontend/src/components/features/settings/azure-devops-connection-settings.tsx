@@ -179,7 +179,8 @@ function ManagedConnection({
 }: Pick<AzureDevOpsConnectionSettingsProps, "controller" | "disabled">): ReactElement {
   const { connectionInput, connectionState, disconnect, isMutatingConnection } = controller;
   const canDisconnect = connectionState.status === "connected" && connectionInput !== null;
-  const showConnectionActions = connectionState.status !== "connected";
+  const showConnectionActions =
+    connectionState.status !== "connected" || connectionState.account === null;
 
   return (
     <section
@@ -218,7 +219,11 @@ function ConnectionActions({
   controller,
   disabled,
 }: Pick<AzureDevOpsConnectionSettingsProps, "controller" | "disabled">): ReactElement {
-  if (controller.draft.deployment === "server") {
+  if (
+    controller.draft.deployment === "server" ||
+    (controller.connectionState.status === "connected" &&
+      controller.connectionState.account === null)
+  ) {
     return <PatConnectionActions controller={controller} disabled={disabled} />;
   }
   return <ServicesConnectionActions controller={controller} disabled={disabled} />;
@@ -304,6 +309,9 @@ function PatConnectionActions({
     savePat,
     setPat,
   } = controller;
+  const replacing =
+    controller.connectionState.status === "connected" &&
+    controller.connectionState.account === null;
   const inputDisabled = disabled || isMutatingConnection;
   const saveDisabled =
     inputDisabled ||
@@ -315,7 +323,7 @@ function PatConnectionActions({
     <div className="grid min-w-0 gap-3">
       <div className="grid min-w-0 gap-2">
         <Label htmlFor="repo-azure-pat" className={stacked ? "sr-only" : undefined}>
-          Personal access token
+          {replacing ? "New personal access token" : "Personal access token"}
         </Label>
         <div
           className={
@@ -330,7 +338,9 @@ function PatConnectionActions({
               type="password"
               autoComplete="off"
               value={pat}
-              placeholder="Paste a personal access token"
+              placeholder={
+                replacing ? "Paste a new personal access token" : "Paste a personal access token"
+              }
               disabled={inputDisabled}
               onChange={(event) => setPat(event.currentTarget.value)}
             />
@@ -341,12 +351,14 @@ function PatConnectionActions({
             disabled={saveDisabled}
             onClick={savePat}
           >
-            Save and validate PAT
+            {replacing ? "Replace PAT" : "Save and validate PAT"}
           </Button>
         </div>
       </div>
       <p className="text-xs text-muted-foreground">
-        The token needs Code read and write, Build read, and repository policy access.
+        {replacing
+          ? "Your current token stays active if validation fails."
+          : "The token needs Code read and write, Build read, and repository policy access."}
       </p>
     </div>
   );

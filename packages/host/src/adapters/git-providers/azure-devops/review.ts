@@ -110,12 +110,19 @@ export const createAzureDevOpsReviewPort = ({
         { concurrency: 5 },
       );
 
-      const { buildIds, iterationId, policyChecks } = yield* Effect.try({
-        try: () => ({
-          iterationId: latestIterationId(iterations),
-          policyChecks: policies.map(parsePolicyCheck),
-          buildIds: new Set(policies.flatMap(readPolicyBuildId)),
-        }),
+      const { buildIds, iterationId, sourceCommit, policyChecks } = yield* Effect.try({
+        try: () => {
+          const iterationId = latestIterationId(iterations);
+          const iteration = iterations
+            .map((value) => requireRecord(value, "iteration"))
+            .find((value) => value.id === iterationId);
+          return {
+            iterationId,
+            sourceCommit: optionalString(optionalRecord(iteration?.sourceRefCommit)?.commitId),
+            policyChecks: policies.map(parsePolicyCheck),
+            buildIds: new Set(policies.flatMap(readPolicyBuildId)),
+          };
+        },
         catch: asValidationError,
       });
       const iterationStatuses =
@@ -144,7 +151,8 @@ export const createAzureDevOpsReviewPort = ({
         client,
         repoConfig: input.repoConfig,
         repository,
-        sourceBranch: pullRequest.sourceBranch,
+        sourceCommit,
+        iterationId,
         threads,
       });
       return yield* Effect.try({
@@ -407,7 +415,7 @@ const parseThreadActivities = (
     const author = optionalRecord(comment.author) ?? {};
     const body = optionalString(comment.content) ?? "";
     const path = optionalString(context.filePath);
-    const suggestionFile = path ? suggestionFiles.get(path) : undefined;
+    const suggestionFile = suggestionFiles.get(threadId);
     const content = parseAzureReviewCommentContent({
       body,
       fileContent: suggestionFile?.content ?? null,
