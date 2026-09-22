@@ -66,11 +66,6 @@ const setup = async () => {
               nextPageToken: offset + 100 < state.rows.length ? String(offset + 100) : null,
             };
           }),
-        verifyImportSource: (ref) =>
-          Effect.sync(() => {
-            calls.push("verifyImportSource");
-            return row(ref.externalSessionId, ref.workingDirectory);
-          }),
         openExistingSessionForImport: (ref) =>
           Effect.suspend(() => {
             calls.push("openExistingSessionForImport");
@@ -85,9 +80,6 @@ const setup = async () => {
                 return state.failRegistration
                   ? Effect.fail(failure("publication failed"))
                   : Effect.void;
-              }),
-              releaseImportResources: Effect.sync(() => {
-                calls.push("releaseImportResources");
               }),
             });
           }),
@@ -280,12 +272,10 @@ describe("external workspace session import", () => {
       manualTitle: "Native title ".repeat(30),
     });
     expect(h.calls).toEqual([
-      "verifyImportSource",
       "openExistingSessionForImport",
       "save",
       "registerLiveSession",
       "publish",
-      "releaseImportResources",
     ]);
     await Effect.runPromise(
       h.store.archive({
@@ -308,7 +298,6 @@ describe("external workspace session import", () => {
       await Effect.runPromise(h.store.listActive({ workspaceId: "fairnest", repoPath: "/repo" })),
     ).toEqual([]);
     expect(h.calls).not.toContain("registerLiveSession");
-    if (flag === "failSave") expect(h.calls).toContain("releaseImportResources");
   });
 
   test("keeps the saved record after live publication fails", async () => {
@@ -371,12 +360,10 @@ test("import releases the directory guard before runtime admission reads the sam
   const imported = await Effect.runPromise(h.service.importSession(h.input));
   expect(imported.openError).toBeNull();
   expect(h.calls).toEqual([
-    "verifyImportSource",
     "openExistingSessionForImport",
     "save",
     "registerLiveSession",
     "publish",
-    "releaseImportResources",
   ]);
 });
 

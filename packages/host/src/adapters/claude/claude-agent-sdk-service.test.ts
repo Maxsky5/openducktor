@@ -99,6 +99,63 @@ const createService = (
 };
 
 describe("createClaudeAgentSdkService", () => {
+  test("imports a saved conversation only when live registration runs", async () => {
+    const ref = {
+      repoPath: "/repo/",
+      runtimeKind: "claude" as const,
+      workingDirectory: "/repo/worktree/",
+      externalSessionId: "session-1",
+    };
+    const store = createClaudeAgentSdkSessionStore();
+    const metadata = spyOn(nativeSessions, "getClaudeSessionMetadata").mockResolvedValue({
+      ...ref,
+      title: "Native title",
+      updatedAt: 1,
+    });
+    const model = spyOn(nativeSessions, "readClaudeSessionModel").mockResolvedValue({
+      runtimeKind: "claude",
+      providerId: "claude",
+      modelId: "native-claude",
+    });
+    const loadTodos = spyOn(todos, "loadClaudeTodos").mockResolvedValue([]);
+    const create = spyOn(sessionFactory, "createClaudeAgentSdkSession").mockImplementation(
+      async (request) => {
+        expect(request.sessionInput).toEqual({
+          externalSessionId: "session-1",
+          options: { resume: "session-1" },
+          preserveNativeSettings: true,
+          startedMessage: "Imported session",
+        });
+        const session = createSession({ input: request.input, runtimeId: request.runtimeId });
+        request.sessionStore.set(session);
+        return session.summary;
+      },
+    );
+    const service = createService(null, undefined, store, {
+      resolveMcpBridgeConnection: () =>
+        Effect.succeed({
+          workspaceId: "workspace-1",
+          hostUrl: "http://127.0.0.1:1",
+          hostToken: "test-token",
+        }),
+    });
+    try {
+      const source = await Effect.runPromise(service.openExistingSessionForImport(ref, "runtime"));
+      expect(source.selectedModel?.modelId).toBe("native-claude");
+      expect(create).not.toHaveBeenCalled();
+      expect(store.get(ref.externalSessionId)).toBeUndefined();
+      await Effect.runPromise(source.registerLiveSession);
+      expect(create).toHaveBeenCalledTimes(1);
+      expect(store.get(ref.externalSessionId)).toBeDefined();
+    } finally {
+      metadata.mockRestore();
+      model.mockRestore();
+      loadTodos.mockRestore();
+      create.mockRestore();
+      service.dispose();
+    }
+  });
+
   test("resolves a cold child parent without starting or admitting a session", async () => {
     const emit = mock(() => {});
     const service = createService(null, emit);

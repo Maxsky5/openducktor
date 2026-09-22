@@ -45,7 +45,6 @@ export type ClaudeAgentSdkService = {
       metadata: import("@openducktor/contracts").WorkspaceSessionExternal;
       selectedModel?: import("@openducktor/contracts").WorkspaceSession["selectedModel"];
       registerLiveSession: Effect.Effect<AgentSessionSummary, ClaudeAgentSdkServiceError>;
-      releaseImportResources: Effect.Effect<void, ClaudeAgentSdkServiceError>;
     },
     ClaudeAgentSdkServiceError
   >;

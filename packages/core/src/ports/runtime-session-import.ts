@@ -5,17 +5,15 @@ export type RuntimeSessionMetadataPage = {
   sessions: WorkspaceSessionExternal[];
   nextPageToken: string | null;
 };
-export type RuntimeSessionImportHandle = {
+export type RuntimeSessionImportSource = {
   metadata: WorkspaceSessionExternal;
   selectedModel?: WorkspaceSession["selectedModel"] | undefined;
   registerLiveSession(): Promise<void>;
-  releaseImportResources(): Promise<void>;
 };
 export type RuntimeSessionImportPort = {
   listRootSessionMetadataPage(input: {
     pageToken?: string;
     signal: AbortSignal;
   }): Promise<RuntimeSessionMetadataPage>;
-  verifyImportSource(input: SessionRef): Promise<WorkspaceSessionExternal>;
-  openExistingSessionForImport(input: SessionRef): Promise<RuntimeSessionImportHandle>;
+  openExistingSessionForImport(input: SessionRef): Promise<RuntimeSessionImportSource>;
 };

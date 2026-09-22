@@ -1,4 +1,3 @@
-import { withRuntimeSessionImportHandle } from "./runtime-session-import-handle";
 import {
   workspaceSessionExternalSchema,
   type WorkspaceSessionExternal,
@@ -392,64 +391,52 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
             externalSessionId: input.externalSessionId,
             workingDirectory: input.workingDirectory,
           };
-          return yield* withRuntimeSessionImportHandle(
-            lifecycle.runWorktreeRead(
-              canonical,
-              Effect.gen(function* () {
-                const metadata = yield* adapter.sessionImport.verifyImportSource(ref);
-                yield* targetFor(scope.repoPath, metadata.workingDirectory);
-                return yield* adapter.sessionImport.openExistingSessionForImport(ref);
-              }),
-            ),
-            (handle) =>
-              Effect.gen(function* () {
-                const saved = yield* lifecycle.runWorktreeRead(
-                  canonical,
-                  Effect.gen(function* () {
-                    if (
-                      handle.metadata.externalSessionId !== input.externalSessionId ||
-                      handle.metadata.workingDirectory !== input.workingDirectory ||
-                      handle.metadata.runtimeKind !== input.runtimeKind
-                    )
-                      return yield* invalid("The source conversation changed. Reload sessions.");
-                    const current = yield* registry.resolveForScope(ref);
-                    if (current.binding !== adapter.binding)
-                      return yield* invalid("The selected runtime restarted. Reload sessions.");
-                    const target = yield* targetFor(scope.repoPath, input.workingDirectory);
-                    const now = yield* Clock.currentTimeMillis;
-                    return yield* store.importSession({
-                      ...scope,
-                      session: {
-                        id: crypto.randomUUID(),
-                        runtimeKind: input.runtimeKind,
-                        externalSessionId: input.externalSessionId,
-                        executionTarget: target,
-                        manualTitle: handle.metadata.title || null,
-                        generatedTitle: null,
-                        roleSnapshot: null,
-                        selectedModel: handle.selectedModel ?? null,
-                        createdAt: now,
-                        updatedAt: now,
-                        archivedAt: null,
-                      },
-                    });
-                  }),
-                );
-                if (!saved.created) return { ...saved, openError: null };
-                // Runtime admission takes its own directory guards while loading live snapshots.
-                const opened = yield* Effect.exit(
-                  handle.registerLiveSession.pipe(
-                    Effect.zipRight(publishUpdated(input.workspaceId, saved.session)),
-                  ),
-                );
-                return {
-                  ...saved,
-                  openError: Exit.isFailure(opened)
-                    ? `The chat was saved, but opening failed: ${Cause.pretty(opened.cause)}. Open the saved chat to retry.`
-                    : null,
-                };
-              }),
+          const { source, saved } = yield* lifecycle.runWorktreeRead(
+            canonical,
+            Effect.gen(function* () {
+              const source = yield* adapter.sessionImport.openExistingSessionForImport(ref);
+              if (
+                source.metadata.externalSessionId !== input.externalSessionId ||
+                source.metadata.workingDirectory !== input.workingDirectory ||
+                source.metadata.runtimeKind !== input.runtimeKind
+              )
+                return yield* invalid("The source conversation changed. Reload sessions.");
+              const current = yield* registry.resolveForScope(ref);
+              if (current.binding !== adapter.binding)
+                return yield* invalid("The selected runtime restarted. Reload sessions.");
+              const target = yield* targetFor(scope.repoPath, input.workingDirectory);
+              const now = yield* Clock.currentTimeMillis;
+              const saved = yield* store.importSession({
+                ...scope,
+                session: {
+                  id: crypto.randomUUID(),
+                  runtimeKind: input.runtimeKind,
+                  externalSessionId: input.externalSessionId,
+                  executionTarget: target,
+                  manualTitle: source.metadata.title || null,
+                  generatedTitle: null,
+                  roleSnapshot: null,
+                  selectedModel: source.selectedModel ?? null,
+                  createdAt: now,
+                  updatedAt: now,
+                  archivedAt: null,
+                },
+              });
+              return { source, saved };
+            }),
           );
+          if (!saved.created) return { ...saved, openError: null };
+          const opened = yield* Effect.exit(
+            source.registerLiveSession.pipe(
+              Effect.zipRight(publishUpdated(input.workspaceId, saved.session)),
+            ),
+          );
+          return {
+            ...saved,
+            openError: Exit.isFailure(opened)
+              ? `The chat was saved, but opening failed: ${Cause.pretty(opened.cause)}. Open the saved chat to retry.`
+              : null,
+          };
         }),
       );
     });

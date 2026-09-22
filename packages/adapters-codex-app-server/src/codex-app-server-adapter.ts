@@ -1,5 +1,5 @@
 import { listCodexSessionMetadataPage, getCodexSessionMetadata } from "./codex-session-metadata";
-import type { RuntimeSessionImportHandle } from "@openducktor/core";
+import type { RuntimeSessionImportSource } from "@openducktor/core";
 import { codexSubAgentSourceMetadata } from "./codex-app-server-threads";
 import { AgentRuntimeQueryError, assertAgentRuntimeQuerySession } from "@openducktor/core";
 import type {
@@ -1049,12 +1049,7 @@ export class CodexAppServerAdapter
     return listCodexSessionMetadataPage(client, input);
   }
 
-  async getSessionMetadata(input: SessionRef) {
-    const { client } = await this.runtimeClients.resolve(input, "read session metadata");
-    return getCodexSessionMetadata(client, input);
-  }
-
-  async openExistingSession(input: PolicyBoundSessionRef): Promise<RuntimeSessionImportHandle> {
+  async openExistingSession(input: PolicyBoundSessionRef): Promise<RuntimeSessionImportSource> {
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "open existing session");
     const metadata = await getCodexSessionMetadata(client, input);
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
@@ -1073,7 +1068,6 @@ export class CodexAppServerAdapter
       registerLiveSession: async () => {
         this.localSessions.remember(session);
       },
-      releaseImportResources: async () => {},
     };
   }
 

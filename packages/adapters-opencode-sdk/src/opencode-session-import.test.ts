@@ -60,11 +60,10 @@ test("OpenCode V2 discovery pages metadata and registers only after import", asy
   });
   expect(admitted).toEqual([]);
   await handle.registerLiveSession();
-  await handle.releaseImportResources();
   expect(admitted).toEqual(["native"]);
   expect(calls.every((path) => !path.includes("message") && !path.includes("prompt"))).toBe(true);
   await expect(
-    sessions.verifyImportSource({ ...ref, workingDirectory: "/different" }),
+    sessions.openExistingSessionForImport({ ...ref, workingDirectory: "/different" }),
   ).rejects.toThrow("directory changed");
 });
 

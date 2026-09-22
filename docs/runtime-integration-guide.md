@@ -263,9 +263,9 @@ OpenDucktor request IDs are opaque handles. Keep native reply IDs inside the ada
 
 ## Import existing runtime sessions
 
-Implement `RuntimeSessionImportPort` to list metadata for existing root conversations. Use native paging when available and treat page tokens as opaque; the port must not depend on a native cursor shape. Listing and `verifyImportSource` must not read a transcript, send a prompt, or add a session to live state.
+Implement `RuntimeSessionImportPort` to list metadata for existing root conversations. Use native paging when available and treat page tokens as opaque; the port must not depend on a native cursor shape. Listing must not read a transcript, send a prompt, or add a session to live state.
 
-`openExistingSessionForImport` must check the exact source and keep its original ID, directory, and available settings. It returns a `RuntimeSessionImportHandle`. The host saves the workspace association before it calls `registerLiveSession` on that handle. `releaseImportResources` closes unregistered native resources. A failed live admission must leave the saved association available for retry.
+`openExistingSessionForImport` must check the exact source and keep its original ID, directory, and available settings. It returns a `RuntimeSessionImportSource`. The host saves the workspace association before it calls `registerLiveSession` on that source. The adapter must not retain a live resource before the save. A failed live admission must leave the saved association available for retry.
 
 Only an explicit import can claim a native root. The host checks repository or registered-worktree scope and existing task or workspace ownership. The adapter must not create, fork, or move the source conversation. It must report native access failures instead of substituting another session.
 

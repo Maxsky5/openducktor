@@ -20,7 +20,6 @@ export const createCodexSessionImportAdapter = (
         workingDirectory: repoPath,
         externalSessionId: "discovery",
       }),
-    verifyImportSource: (input) => controller.getSessionMetadata(input),
     openExistingSessionForImport: async (input) => {
       const policy = await Effect.runPromise(resolvePolicy({ kind: "repository" }));
       const handle = await controller.openExistingSession({

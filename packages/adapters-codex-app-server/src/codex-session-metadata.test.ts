@@ -178,8 +178,7 @@ describe("external Codex sessions", () => {
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       });
       if (accepted) {
-        const prepared = await preparation;
-        await prepared.releaseImportResources();
+        await preparation;
       } else {
         await expect(preparation).rejects.toThrow("Subagent conversations cannot be imported");
         expect(transport.calls.some((call) => call.method === "thread/resume")).toBe(false);
@@ -202,7 +201,6 @@ describe("external Codex sessions", () => {
     expect(transport.calls[0]?.params).toEqual({ threadId: "native", includeTurns: false });
     expect(transport.calls[1]?.params).toEqual({ threadId: "native", excludeTurns: true });
     await prepared.registerLiveSession();
-    await prepared.releaseImportResources();
     expect(adapter.listLiveSessionSnapshots("runtime-live")).toHaveLength(1);
     await adapter.sendUserMessage({
       ...ref,
@@ -229,7 +227,6 @@ describe("external Codex sessions", () => {
       if (!cold) {
         const prepared = await adapter.openExistingSession(binding);
         await prepared.registerLiveSession();
-        await prepared.releaseImportResources();
       }
       transport.calls.length = 0;
       await adapter.loadSessionContextUsage(binding);
@@ -248,15 +245,14 @@ describe("external Codex sessions", () => {
     });
   }
 
-  test("discard leaves a prepared native thread unowned without unloading it", async () => {
+  test("opening a source leaves its native thread unowned before registration", async () => {
     const transport = new RecordingTransport("runtime-live", false);
     const adapter = createAdapterWithTransport(transport);
-    const prepared = await adapter.openExistingSession({
+    await adapter.openExistingSession({
       ...ref,
       sessionScope: { kind: "repository" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
     });
-    await prepared.releaseImportResources();
     expect(adapter.listLiveSessionSnapshots("runtime-live")).toEqual([]);
     expect(
       transport.calls.some(

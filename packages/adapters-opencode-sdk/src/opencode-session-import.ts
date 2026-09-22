@@ -31,10 +31,14 @@ const metadata = (row: z.infer<typeof metadataSchema>) =>
 export const createOpenCodeSessionImportPort = (input: {
   createClient: ClientFactory;
   runtimeEndpoint: string;
-  admit: (ref: Parameters<RuntimeSessionImportPort["verifyImportSource"]>[0]) => Promise<void>;
+  admit: (
+    ref: Parameters<RuntimeSessionImportPort["openExistingSessionForImport"]>[0],
+  ) => Promise<void>;
 }): RuntimeSessionImportPort => {
   const client = input.createClient({ runtimeEndpoint: input.runtimeEndpoint });
-  const read = async (ref: Parameters<RuntimeSessionImportPort["verifyImportSource"]>[0]) => {
+  const read = async (
+    ref: Parameters<RuntimeSessionImportPort["openExistingSessionForImport"]>[0],
+  ) => {
     const row = metadataSchema.parse(
       unwrapData(
         await client.v2.session.get({ sessionID: ref.externalSessionId }),
@@ -63,7 +67,6 @@ export const createOpenCodeSessionImportPort = (input: {
         nextPageToken: page.cursor.next ?? null,
       };
     },
-    verifyImportSource: async (ref) => metadata(await read(ref)),
     openExistingSessionForImport: async (ref) => {
       const row = await read(ref);
       const selectedModel: WorkspaceSession["selectedModel"] = row.model
@@ -79,7 +82,6 @@ export const createOpenCodeSessionImportPort = (input: {
         metadata: metadata(row),
         selectedModel,
         registerLiveSession: () => input.admit(ref),
-        releaseImportResources: async () => {},
       };
     },
   };
