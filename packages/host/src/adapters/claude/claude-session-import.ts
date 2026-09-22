@@ -71,7 +71,7 @@ export const openClaudeSessionForImport = (
     return {
       metadata,
       selectedModel,
-      commit: fromPromise("claudeRuntime.commitImport", async () => {
+      registerLiveSession: fromPromise("claudeRuntime.registerLiveSession", async () => {
         const session = privateStore.get(input.externalSessionId);
         if (!session)
           throw new Error(
@@ -84,7 +84,7 @@ export const openClaudeSessionForImport = (
           dependencies.emit(buffered.session, buffered.event);
         return summary;
       }),
-      dispose: fromPromise("claudeRuntime.disposeImport", async () => {
+      releaseImportResources: fromPromise("claudeRuntime.releaseImportResources", async () => {
         if (committed) return;
         const session = privateStore.get(input.externalSessionId);
         if (session) {

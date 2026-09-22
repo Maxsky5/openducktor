@@ -179,7 +179,7 @@ describe("external Codex sessions", () => {
       });
       if (accepted) {
         const prepared = await preparation;
-        await prepared.dispose();
+        await prepared.releaseImportResources();
       } else {
         await expect(preparation).rejects.toThrow("Subagent conversations cannot be imported");
         expect(transport.calls.some((call) => call.method === "thread/resume")).toBe(false);
@@ -189,7 +189,7 @@ describe("external Codex sessions", () => {
     },
   );
 
-  test("prepares an exact passive resume and admits only on commit", async () => {
+  test("opens the exact session and registers it only after import", async () => {
     const transport = new RecordingTransport("runtime-live", false);
     const adapter = createAdapterWithTransport(transport);
     const prepared = await adapter.openExistingSession({
@@ -201,8 +201,8 @@ describe("external Codex sessions", () => {
     expect(transport.calls.map((call) => call.method)).toEqual(["thread/read", "thread/resume"]);
     expect(transport.calls[0]?.params).toEqual({ threadId: "native", includeTurns: false });
     expect(transport.calls[1]?.params).toEqual({ threadId: "native", excludeTurns: true });
-    await prepared.commit();
-    await prepared.dispose();
+    await prepared.registerLiveSession();
+    await prepared.releaseImportResources();
     expect(adapter.listLiveSessionSnapshots("runtime-live")).toHaveLength(1);
     await adapter.sendUserMessage({
       ...ref,
@@ -228,8 +228,8 @@ describe("external Codex sessions", () => {
       };
       if (!cold) {
         const prepared = await adapter.openExistingSession(binding);
-        await prepared.commit();
-        await prepared.dispose();
+        await prepared.registerLiveSession();
+        await prepared.releaseImportResources();
       }
       transport.calls.length = 0;
       await adapter.loadSessionContextUsage(binding);
@@ -256,7 +256,7 @@ describe("external Codex sessions", () => {
       sessionScope: { kind: "repository" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
     });
-    await prepared.dispose();
+    await prepared.releaseImportResources();
     expect(adapter.listLiveSessionSnapshots("runtime-live")).toEqual([]);
     expect(
       transport.calls.some(

@@ -276,12 +276,12 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
       const adapter: AgentSessionRuntimeAdapterPort = {
         sessionImport: createRuntimeSessionImportAdapter({
           ...prepared.sessionImport,
-          openForImport: async (ref) => {
-            const handle = await prepared.sessionImport.openForImport(ref);
+          openExistingSessionForImport: async (ref) => {
+            const handle = await prepared.sessionImport.openExistingSessionForImport(ref);
             return {
               ...handle,
-              commit: async () => {
-                await handle.commit();
+              registerLiveSession: async () => {
+                await handle.registerLiveSession();
                 await Effect.runPromise(refreshSnapshots(runtime.repoPath));
               },
             };

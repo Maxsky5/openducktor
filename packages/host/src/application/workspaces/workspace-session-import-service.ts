@@ -191,11 +191,11 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
           ),
         );
       while (!state.done && matches().length < count) {
-        const request: Parameters<typeof adapter.sessionImport.listMetadataPage>[0] = {
+        const request: Parameters<typeof adapter.sessionImport.listRootSessionMetadataPage>[0] = {
           signal: entry.controller.signal,
         };
         if (state.cursor) request.pageToken = state.cursor;
-        const page = yield* adapter.sessionImport.listMetadataPage(request);
+        const page = yield* adapter.sessionImport.listRootSessionMetadataPage(request);
         for (const raw of page.sessions) {
           state.bytes += JSON.stringify(raw).length * 2;
           if (++state.scanned > MAX_RECORDS || state.bytes > MAX_BYTES)
@@ -396,9 +396,9 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
             lifecycle.runWorktreeRead(
               canonical,
               Effect.gen(function* () {
-                const metadata = yield* adapter.sessionImport.getMetadata(ref);
+                const metadata = yield* adapter.sessionImport.verifyImportSource(ref);
                 yield* targetFor(scope.repoPath, metadata.workingDirectory);
-                return yield* adapter.sessionImport.openForImport(ref);
+                return yield* adapter.sessionImport.openExistingSessionForImport(ref);
               }),
             ),
             (handle) =>
@@ -438,7 +438,7 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
                 if (!saved.created) return { ...saved, openError: null };
                 // Runtime admission takes its own directory guards while loading live snapshots.
                 const opened = yield* Effect.exit(
-                  handle.commit.pipe(
+                  handle.registerLiveSession.pipe(
                     Effect.zipRight(publishUpdated(input.workspaceId, saved.session)),
                   ),
                 );

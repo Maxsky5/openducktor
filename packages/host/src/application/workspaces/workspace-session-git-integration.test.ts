@@ -527,11 +527,16 @@ describe("Workspace Session commands with real Git and SQLite", () => {
           { runtimeId: "test-runtime", repoPath, runtimeKind: "opencode" },
           {
             sessionImport: {
-              listMetadataPage: () => Effect.succeed({ sessions: [metadata], nextPageToken: null }),
-              getMetadata: () => Effect.succeed(metadata),
-              openForImport: (ref) => {
+              listRootSessionMetadataPage: () =>
+                Effect.succeed({ sessions: [metadata], nextPageToken: null }),
+              verifyImportSource: () => Effect.succeed(metadata),
+              openExistingSessionForImport: (ref) => {
                 expect(ref.workingDirectory).toBe(alias);
-                return Effect.succeed({ metadata, commit: Effect.void, dispose: Effect.void });
+                return Effect.succeed({
+                  metadata,
+                  registerLiveSession: Effect.void,
+                  releaseImportResources: Effect.void,
+                });
               },
             },
           },

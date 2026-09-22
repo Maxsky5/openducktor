@@ -253,7 +253,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     });
   }
 
-  openForImport(input: SessionRef, runtimeId: string) {
+  openExistingSessionForImport(input: SessionRef, runtimeId: string) {
     return openClaudeSessionForImport(input, {
       now: this.now,
       sessionStore: this.sessionStore,

@@ -1,17 +1,17 @@
 import { Effect } from "effect";
 export const unexpectedSessionImport = {
-  listMetadataPage: () => Effect.dieMessage("Unexpected external session listing"),
-  getMetadata: () => Effect.dieMessage("Unexpected session metadata read"),
-  openForImport: () => Effect.dieMessage("Unexpected session import opening"),
+  listRootSessionMetadataPage: () => Effect.dieMessage("Unexpected root session listing"),
+  verifyImportSource: () => Effect.dieMessage("Unexpected import source check"),
+  openExistingSessionForImport: () => Effect.dieMessage("Unexpected session import opening"),
 };
 export const unexpectedNativeSessionImport = {
-  listMetadataPage: async () => {
+  listRootSessionMetadataPage: async () => {
     throw new Error("Unexpected external session listing");
   },
-  getMetadata: async () => {
+  verifyImportSource: async () => {
     throw new Error("Unexpected session metadata read");
   },
-  openForImport: async () => {
+  openExistingSessionForImport: async () => {
     throw new Error("Unexpected session import opening");
   },
 };

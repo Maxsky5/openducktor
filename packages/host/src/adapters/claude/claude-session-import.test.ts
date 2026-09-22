@@ -15,8 +15,8 @@ const ref = {
   workingDirectory: "/repo",
 };
 test.each([false, true])(
-  "Claude preparation stays private until commit=%s and closes only its own query",
-  async (commit) => {
+  "Claude import stays private until registration=%s and closes only its own query",
+  async (register) => {
     const inspect = spyOn(native, "getClaudeSessionMetadata").mockResolvedValue({
       ...ref,
       title: "Native title",
@@ -73,15 +73,15 @@ test.each([false, true])(
       expect(handle.selectedModel?.modelId).toBe("native-claude");
       expect(store.get("native")).toBeUndefined();
       expect(events).toEqual([]);
-      if (commit) {
-        await Effect.runPromise(handle.commit);
+      if (register) {
+        await Effect.runPromise(handle.registerLiveSession);
         expect(store.get("native")).toBeDefined();
         expect(preparedStore?.get("native")).toBe(store.get("native"));
         expect(events).toHaveLength(1);
       }
-      await Effect.runPromise(handle.dispose);
-      expect(closes).toBe(commit ? 0 : 1);
-      if (commit) {
+      await Effect.runPromise(handle.releaseImportResources);
+      expect(closes).toBe(register ? 0 : 1);
+      if (register) {
         const session = store.get("native");
         if (session) store.close(session);
       }

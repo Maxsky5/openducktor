@@ -9,13 +9,15 @@ import type { HostError } from "../effect/host-errors";
 export type HostSessionImportHandle = {
   metadata: WorkspaceSessionExternal;
   selectedModel?: WorkspaceSession["selectedModel"] | undefined;
-  commit: Effect.Effect<void, HostError>;
-  dispose: Effect.Effect<void, HostError>;
+  registerLiveSession: Effect.Effect<void, HostError>;
+  releaseImportResources: Effect.Effect<void, HostError>;
 };
 export type RuntimeSessionImportPort = {
-  listMetadataPage(
-    input: Parameters<NativePort["listMetadataPage"]>[0],
+  listRootSessionMetadataPage(
+    input: Parameters<NativePort["listRootSessionMetadataPage"]>[0],
   ): Effect.Effect<RuntimeSessionMetadataPage, HostError>;
-  getMetadata(input: SessionRef): Effect.Effect<WorkspaceSessionExternal, HostError>;
-  openForImport(input: SessionRef): Effect.Effect<HostSessionImportHandle, HostError>;
+  verifyImportSource(input: SessionRef): Effect.Effect<WorkspaceSessionExternal, HostError>;
+  openExistingSessionForImport(
+    input: SessionRef,
+  ): Effect.Effect<HostSessionImportHandle, HostError>;
 };

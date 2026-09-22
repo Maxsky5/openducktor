@@ -479,7 +479,7 @@ export class CodexAppServerAdapter
     ) {
       if (current) return current.summary;
       const handle = await this.openExistingSession(input);
-      await handle.commit();
+      await handle.registerLiveSession();
       return this.localSessions.get(input.externalSessionId)!.summary;
     }
     const model = requireModelSelection(input.model);
@@ -1070,10 +1070,10 @@ export class CodexAppServerAdapter
     return {
       metadata,
       selectedModel: session.model ? { ...session.model, runtimeKind: "codex" } : null,
-      commit: async () => {
+      registerLiveSession: async () => {
         this.localSessions.remember(session);
       },
-      dispose: async () => {},
+      releaseImportResources: async () => {},
     };
   }
 
@@ -1083,7 +1083,7 @@ export class CodexAppServerAdapter
   ): Promise<void> {
     if (!this.localSessions.get(input.externalSessionId) && binding) {
       const handle = await this.openExistingSession(binding);
-      await handle.commit();
+      await handle.registerLiveSession();
     }
     const session = this.localSessions.get(input.externalSessionId);
     if (!session) throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);

@@ -12,7 +12,7 @@ export const createCodexSessionImportAdapter = (
   publish: () => Effect.Effect<void, HostError>,
 ) =>
   createRuntimeSessionImportAdapter({
-    listMetadataPage: (input) =>
+    listRootSessionMetadataPage: (input) =>
       controller.listSessionMetadataPage({
         ...input,
         repoPath,
@@ -20,8 +20,8 @@ export const createCodexSessionImportAdapter = (
         workingDirectory: repoPath,
         externalSessionId: "discovery",
       }),
-    getMetadata: (input) => controller.getSessionMetadata(input),
-    openForImport: async (input) => {
+    verifyImportSource: (input) => controller.getSessionMetadata(input),
+    openExistingSessionForImport: async (input) => {
       const policy = await Effect.runPromise(resolvePolicy({ kind: "repository" }));
       const handle = await controller.openExistingSession({
         ...input,
@@ -31,8 +31,8 @@ export const createCodexSessionImportAdapter = (
       });
       return {
         ...handle,
-        commit: async () => {
-          await handle.commit();
+        registerLiveSession: async () => {
+          await handle.registerLiveSession();
           await Effect.runPromise(publish());
         },
       };

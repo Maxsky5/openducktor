@@ -8,22 +8,25 @@ import {
 } from "../claude/claude-session-metadata";
 import { createRuntimeSessionImportAdapter } from "./runtime-session-import-adapter";
 export const createClaudeSessionImportAdapter = (
-  service: Pick<ClaudeAgentSdkService, "openForImport">,
+  service: Pick<ClaudeAgentSdkService, "openExistingSessionForImport">,
   runtimeId: string,
   publish: (
     effect: Effect.Effect<AgentSessionSummary, HostError>,
   ) => Effect.Effect<unknown, HostError>,
 ) =>
   createRuntimeSessionImportAdapter({
-    listMetadataPage: ({ signal }) => listClaudeSessionMetadata(signal),
-    getMetadata: getClaudeSessionMetadata,
-    openForImport: async (input) => {
-      const handle = await Effect.runPromise(service.openForImport(input, runtimeId));
+    listRootSessionMetadataPage: ({ signal }) => listClaudeSessionMetadata(signal),
+    verifyImportSource: getClaudeSessionMetadata,
+    openExistingSessionForImport: async (input) => {
+      const handle = await Effect.runPromise(
+        service.openExistingSessionForImport(input, runtimeId),
+      );
       return {
         metadata: handle.metadata,
         selectedModel: handle.selectedModel,
-        commit: () => Effect.runPromise(publish(handle.commit)).then(() => undefined),
-        dispose: () => Effect.runPromise(handle.dispose),
+        registerLiveSession: () =>
+          Effect.runPromise(publish(handle.registerLiveSession)).then(() => undefined),
+        releaseImportResources: () => Effect.runPromise(handle.releaseImportResources),
       };
     },
   });

@@ -30,7 +30,7 @@ const setup = async () => {
   type ImportTestState = {
     failOpen: boolean;
     failSave: boolean;
-    failCommit: boolean;
+    failRegistration: boolean;
     detached: boolean;
     rows: WorkspaceSessionExternal[];
     signal: AbortSignal | null;
@@ -39,7 +39,7 @@ const setup = async () => {
   const state: ImportTestState = {
     failOpen: false,
     failSave: false,
-    failCommit: false,
+    failRegistration: false,
     detached: false,
     rows: [],
     signal: null,
@@ -56,9 +56,9 @@ const setup = async () => {
     { runtimeId: "runtime-1", repoPath: "/repo", runtimeKind: "opencode" },
     {
       sessionImport: {
-        listMetadataPage: ({ pageToken, signal }) =>
+        listRootSessionMetadataPage: ({ pageToken, signal }) =>
           Effect.sync(() => {
-            calls.push("listMetadataPage");
+            calls.push("listRootSessionMetadataPage");
             state.signal = signal;
             const offset = Number(pageToken ?? 0);
             return {
@@ -66,26 +66,28 @@ const setup = async () => {
               nextPageToken: offset + 100 < state.rows.length ? String(offset + 100) : null,
             };
           }),
-        getMetadata: (ref) =>
+        verifyImportSource: (ref) =>
           Effect.sync(() => {
-            calls.push("getMetadata");
+            calls.push("verifyImportSource");
             return row(ref.externalSessionId, ref.workingDirectory);
           }),
-        openForImport: (ref) =>
+        openExistingSessionForImport: (ref) =>
           Effect.suspend(() => {
-            calls.push("openForImport");
+            calls.push("openExistingSessionForImport");
             if (state.failOpen) return Effect.fail(failure("opening source failed"));
             return Effect.succeed({
               metadata: {
                 ...row(ref.externalSessionId, ref.workingDirectory),
                 title: "Native title ".repeat(30),
               },
-              commit: Effect.suspend(() => {
-                calls.push("commit");
-                return state.failCommit ? Effect.fail(failure("publication failed")) : Effect.void;
+              registerLiveSession: Effect.suspend(() => {
+                calls.push("registerLiveSession");
+                return state.failRegistration
+                  ? Effect.fail(failure("publication failed"))
+                  : Effect.void;
               }),
-              dispose: Effect.sync(() => {
-                calls.push("dispose");
+              releaseImportResources: Effect.sync(() => {
+                calls.push("releaseImportResources");
               }),
             });
           }),
@@ -189,8 +191,8 @@ describe("external workspace session import", () => {
     expect(
       (await Effect.runPromise(h.service.list({ ...h.list, search: "other" }))).sessions,
     ).toEqual([]);
-    expect(h.calls).not.toContain("openForImport");
-    expect(h.calls.filter((call) => call === "listMetadataPage")).toHaveLength(31);
+    expect(h.calls).not.toContain("openExistingSessionForImport");
+    expect(h.calls.filter((call) => call === "listRootSessionMetadataPage")).toHaveLength(31);
     await expect(
       Effect.runPromise(
         h.service.list({ ...h.list, search: "changed", cursor: first.nextCursor! }),
@@ -278,12 +280,12 @@ describe("external workspace session import", () => {
       manualTitle: "Native title ".repeat(30),
     });
     expect(h.calls).toEqual([
-      "getMetadata",
-      "openForImport",
+      "verifyImportSource",
+      "openExistingSessionForImport",
       "save",
-      "commit",
+      "registerLiveSession",
       "publish",
-      "dispose",
+      "releaseImportResources",
     ]);
     await Effect.runPromise(
       h.store.archive({
@@ -305,13 +307,13 @@ describe("external workspace session import", () => {
     expect(
       await Effect.runPromise(h.store.listActive({ workspaceId: "fairnest", repoPath: "/repo" })),
     ).toEqual([]);
-    expect(h.calls).not.toContain("commit");
-    if (flag === "failSave") expect(h.calls).toContain("dispose");
+    expect(h.calls).not.toContain("registerLiveSession");
+    if (flag === "failSave") expect(h.calls).toContain("releaseImportResources");
   });
 
   test("keeps the saved record after live publication fails", async () => {
     const h = await setup();
-    h.state.failCommit = true;
+    h.state.failRegistration = true;
     const result = await Effect.runPromise(h.service.importSession(h.input));
     expect(result.openError).toContain("publication failed");
     expect((await Effect.runPromise(h.service.importSession(h.input))).session.id).toBe(
@@ -337,7 +339,7 @@ describe("external workspace session import", () => {
   test("release interrupts an in-flight catalog without admitting a session", async () => {
     const h = await setup();
     const entered = Effect.runSync(Deferred.make<void>());
-    h.adapter.sessionImport.listMetadataPage = ({ signal }) =>
+    h.adapter.sessionImport.listRootSessionMetadataPage = ({ signal }) =>
       Effect.sync(() => {
         h.state.signal = signal;
       }).pipe(Effect.zipRight(Deferred.succeed(entered, undefined)), Effect.zipRight(Effect.never));
@@ -351,22 +353,31 @@ describe("external workspace session import", () => {
 
 test("import releases the directory guard before runtime admission reads the same directory", async () => {
   const h = await setup();
-  const openForImport = h.adapter.sessionImport.openForImport;
-  h.adapter.sessionImport.openForImport = (ref) =>
-    openForImport(ref).pipe(
+  const openExistingSessionForImport = h.adapter.sessionImport.openExistingSessionForImport;
+  h.adapter.sessionImport.openExistingSessionForImport = (ref) =>
+    openExistingSessionForImport(ref).pipe(
       Effect.map((handle) => ({
         ...handle,
-        commit: h.lifecycle.runWorktreeRead(ref.workingDirectory, handle.commit).pipe(
-          Effect.timeoutFail({
-            duration: "1 second",
-            onTimeout: () => failure("Admission deadlocked on the import directory guard"),
-          }),
-        ),
+        registerLiveSession: h.lifecycle
+          .runWorktreeRead(ref.workingDirectory, handle.registerLiveSession)
+          .pipe(
+            Effect.timeoutFail({
+              duration: "1 second",
+              onTimeout: () => failure("Admission deadlocked on the import directory guard"),
+            }),
+          ),
       })),
     );
   const imported = await Effect.runPromise(h.service.importSession(h.input));
   expect(imported.openError).toBeNull();
-  expect(h.calls).toEqual(["getMetadata", "openForImport", "save", "commit", "publish", "dispose"]);
+  expect(h.calls).toEqual([
+    "verifyImportSource",
+    "openExistingSessionForImport",
+    "save",
+    "registerLiveSession",
+    "publish",
+    "releaseImportResources",
+  ]);
 });
 
 test("returns the first import page without draining native history", async () => {
@@ -374,12 +385,12 @@ test("returns the first import page without draining native history", async () =
   h.state.rows = Array.from({ length: 3000 }, (_, index) => h.row(`external-${index}`));
   const first = await Effect.runPromise(h.service.list(h.list));
   expect(first.sessions).toHaveLength(50);
-  expect(h.calls.filter((call) => call === "listMetadataPage")).toHaveLength(1);
+  expect(h.calls.filter((call) => call === "listRootSessionMetadataPage")).toHaveLength(1);
 });
 
 test("persists native model, profile and effort from the opened source", async () => {
   const h = await setup();
-  const openForImport = h.adapter.sessionImport.openForImport;
+  const openExistingSessionForImport = h.adapter.sessionImport.openExistingSessionForImport;
   const selectedModel = {
     runtimeKind: "opencode" as const,
     providerId: "openai",
@@ -387,8 +398,8 @@ test("persists native model, profile and effort from the opened source", async (
     profileId: "plan",
     variant: "high",
   };
-  h.adapter.sessionImport.openForImport = (ref) =>
-    openForImport(ref).pipe(Effect.map((handle) => ({ ...handle, selectedModel })));
+  h.adapter.sessionImport.openExistingSessionForImport = (ref) =>
+    openExistingSessionForImport(ref).pipe(Effect.map((handle) => ({ ...handle, selectedModel })));
   const imported = await Effect.runPromise(h.service.importSession(h.input));
   expect(imported.session.selectedModel).toEqual(selectedModel);
 });

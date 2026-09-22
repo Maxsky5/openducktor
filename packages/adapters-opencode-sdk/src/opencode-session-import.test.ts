@@ -7,7 +7,7 @@ const ref = {
   workingDirectory: "/repo",
   externalSessionId: "native",
 };
-test("OpenCode V2 discovery pages metadata and opening for import waits for commit", async () => {
+test("OpenCode V2 discovery pages metadata and registers only after import", async () => {
   const calls: string[] = [];
   const admitted: string[] = [];
   const native = {
@@ -45,12 +45,12 @@ test("OpenCode V2 discovery pages metadata and opening for import waits for comm
       admitted.push(input.externalSessionId);
     },
   });
-  const page = await sessions.listMetadataPage({ signal: new AbortController().signal });
+  const page = await sessions.listRootSessionMetadataPage({ signal: new AbortController().signal });
   expect(page.sessions).toEqual(
     [{ ...ref, title: "Native title", updatedAt: 123 }].map(({ repoPath: _repo, ...row }) => row),
   );
   expect(page.nextPageToken).toBe("page-two");
-  const handle = await sessions.openForImport(ref);
+  const handle = await sessions.openExistingSessionForImport(ref);
   expect(handle.selectedModel).toEqual({
     runtimeKind: "opencode",
     providerId: "openai",
@@ -59,13 +59,13 @@ test("OpenCode V2 discovery pages metadata and opening for import waits for comm
     variant: "high",
   });
   expect(admitted).toEqual([]);
-  await handle.commit();
-  await handle.dispose();
+  await handle.registerLiveSession();
+  await handle.releaseImportResources();
   expect(admitted).toEqual(["native"]);
   expect(calls.every((path) => !path.includes("message") && !path.includes("prompt"))).toBe(true);
-  await expect(sessions.getMetadata({ ...ref, workingDirectory: "/different" })).rejects.toThrow(
-    "directory changed",
-  );
+  await expect(
+    sessions.verifyImportSource({ ...ref, workingDirectory: "/different" }),
+  ).rejects.toThrow("directory changed");
 });
 
 test.each([null, undefined])("OpenCode accepts terminal cursor %s", async (next) => {
@@ -81,7 +81,9 @@ test.each([null, undefined])("OpenCode accepts terminal cursor %s", async (next)
     runtimeEndpoint: "http://runtime",
     admit: async () => {},
   });
-  expect(await sessions.listMetadataPage({ signal: new AbortController().signal })).toEqual({
+  expect(
+    await sessions.listRootSessionMetadataPage({ signal: new AbortController().signal }),
+  ).toEqual({
     sessions: [],
     nextPageToken: null,
   });

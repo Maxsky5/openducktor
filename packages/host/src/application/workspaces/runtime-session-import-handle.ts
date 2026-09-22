@@ -11,7 +11,7 @@ export const withRuntimeSessionImportHandle = (
     Effect.gen(function* () {
       const handle = yield* acquire;
       const result = yield* Effect.exit(use(handle));
-      const cleanup = yield* Effect.exit(handle.dispose);
+      const cleanup = yield* Effect.exit(handle.releaseImportResources);
       if (Exit.isSuccess(cleanup)) return yield* result;
       const message = `Import cleanup failed: ${Cause.pretty(cleanup.cause)}`;
       if (Exit.isSuccess(result))

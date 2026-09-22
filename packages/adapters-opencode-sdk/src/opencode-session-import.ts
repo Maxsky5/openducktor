@@ -31,10 +31,10 @@ const metadata = (row: z.infer<typeof metadataSchema>) =>
 export const createOpenCodeSessionImportPort = (input: {
   createClient: ClientFactory;
   runtimeEndpoint: string;
-  admit: (ref: Parameters<RuntimeSessionImportPort["getMetadata"]>[0]) => Promise<void>;
+  admit: (ref: Parameters<RuntimeSessionImportPort["verifyImportSource"]>[0]) => Promise<void>;
 }): RuntimeSessionImportPort => {
   const client = input.createClient({ runtimeEndpoint: input.runtimeEndpoint });
-  const read = async (ref: Parameters<RuntimeSessionImportPort["getMetadata"]>[0]) => {
+  const read = async (ref: Parameters<RuntimeSessionImportPort["verifyImportSource"]>[0]) => {
     const row = metadataSchema.parse(
       unwrapData(
         await client.v2.session.get({ sessionID: ref.externalSessionId }),
@@ -48,7 +48,7 @@ export const createOpenCodeSessionImportPort = (input: {
     return row;
   };
   return {
-    listMetadataPage: async ({ pageToken, signal }) => {
+    listRootSessionMetadataPage: async ({ pageToken, signal }) => {
       if (!client.v2?.session)
         throw new Error("Update OpenCode to a version with the V2 session listing API.");
       const request: Parameters<typeof client.v2.session.list>[0] = { limit: 100, order: "desc" };
@@ -63,8 +63,8 @@ export const createOpenCodeSessionImportPort = (input: {
         nextPageToken: page.cursor.next ?? null,
       };
     },
-    getMetadata: async (ref) => metadata(await read(ref)),
-    openForImport: async (ref) => {
+    verifyImportSource: async (ref) => metadata(await read(ref)),
+    openExistingSessionForImport: async (ref) => {
       const row = await read(ref);
       const selectedModel: WorkspaceSession["selectedModel"] = row.model
         ? {
@@ -78,8 +78,8 @@ export const createOpenCodeSessionImportPort = (input: {
       return {
         metadata: metadata(row),
         selectedModel,
-        commit: () => input.admit(ref),
-        dispose: async () => {},
+        registerLiveSession: () => input.admit(ref),
+        releaseImportResources: async () => {},
       };
     },
   };

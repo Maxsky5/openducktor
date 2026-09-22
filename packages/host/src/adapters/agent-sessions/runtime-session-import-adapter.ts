@@ -6,31 +6,31 @@ import type { RuntimeSessionImportPort } from "../../ports/runtime-session-impor
 export const createRuntimeSessionImportAdapter = (
   native: NativePort,
 ): RuntimeSessionImportPort => ({
-  listMetadataPage: (input) =>
+  listRootSessionMetadataPage: (input) =>
     Effect.tryPromise({
-      try: () => native.listMetadataPage(input),
-      catch: (cause) => toHostOperationError(cause, "sessionImport.listMetadataPage"),
+      try: () => native.listRootSessionMetadataPage(input),
+      catch: (cause) => toHostOperationError(cause, "sessionImport.listRootSessionMetadataPage"),
     }),
-  getMetadata: (input) =>
+  verifyImportSource: (input) =>
     Effect.tryPromise({
-      try: () => native.getMetadata(input),
-      catch: (cause) => toHostOperationError(cause, "sessionImport.getMetadata"),
+      try: () => native.verifyImportSource(input),
+      catch: (cause) => toHostOperationError(cause, "sessionImport.verifyImportSource"),
     }),
-  openForImport: (input) =>
+  openExistingSessionForImport: (input) =>
     Effect.tryPromise({
-      try: () => native.openForImport(input),
-      catch: (cause) => toHostOperationError(cause, "sessionImport.openForImport"),
+      try: () => native.openExistingSessionForImport(input),
+      catch: (cause) => toHostOperationError(cause, "sessionImport.openExistingSessionForImport"),
     }).pipe(
       Effect.map((handle) => ({
         metadata: handle.metadata,
         selectedModel: handle.selectedModel,
-        commit: Effect.tryPromise({
-          try: () => handle.commit(),
-          catch: (cause) => toHostOperationError(cause, "sessionImport.commit"),
+        registerLiveSession: Effect.tryPromise({
+          try: () => handle.registerLiveSession(),
+          catch: (cause) => toHostOperationError(cause, "sessionImport.registerLiveSession"),
         }),
-        dispose: Effect.tryPromise({
-          try: () => handle.dispose(),
-          catch: (cause) => toHostOperationError(cause, "sessionImport.dispose"),
+        releaseImportResources: Effect.tryPromise({
+          try: () => handle.releaseImportResources(),
+          catch: (cause) => toHostOperationError(cause, "sessionImport.releaseImportResources"),
         }),
       })),
     ),
