@@ -401,6 +401,7 @@ export const assembleNodeEffectHostCommandRouter = (
     createNodeWorkspaceSessionServices({
       lifecycle: taskSessionLifecycleCoordinator,
       operationGate: workspaceSessions.operationGate,
+      sessionTitleGate: workspaceSessions.sessionTitleGate,
       store: assets.workspaceSessionStore,
       settings: workspaceSettingsService,
       runtime: runtimeOrchestratorWithEffectiveRegistry,

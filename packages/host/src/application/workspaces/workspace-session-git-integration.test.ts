@@ -141,6 +141,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     const dependencies: WorkspaceSessionServiceDependencies = {
       lifecycle: createTaskSessionLifecycleCoordinator(),
       operationGate: createWorkspaceSessionOperationGate(),
+      sessionTitleGate: createWorkspaceSessionOperationGate(),
       ...targetDependencies,
       store,
       settings: {

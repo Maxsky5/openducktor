@@ -12,11 +12,12 @@ export const createNodeWorkspaceSessionPersistence = ({
   ...dependencies
 }: Omit<
   Parameters<typeof createWorkspaceSessionRuntimePersistence>[0],
-  "publishUpdated" | "operationGate"
+  "publishUpdated" | "operationGate" | "sessionTitleGate"
 > & {
   eventBus: HostEventBusPort | undefined;
 }) => {
   const operationGate = createWorkspaceSessionOperationGate();
+  const sessionTitleGate = createWorkspaceSessionOperationGate();
   const publishUpdated: WorkspaceSessionUpdatedPublisher = (workspaceId, session) =>
     Effect.try({
       try: () => {
@@ -43,8 +44,10 @@ export const createNodeWorkspaceSessionPersistence = ({
       ...dependencies,
       publishUpdated,
       operationGate,
+      sessionTitleGate,
     }),
     publishUpdated,
     operationGate,
+    sessionTitleGate,
   };
 };

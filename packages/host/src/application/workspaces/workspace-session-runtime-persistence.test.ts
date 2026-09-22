@@ -11,7 +11,7 @@ import type {
   WorkspaceSession,
 } from "@openducktor/contracts";
 import { repoConfigSchema } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Deferred, Effect, Exit, Fiber, Option, TestClock, TestContext } from "effect";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
 import {
   createSqliteTaskStoreHarness,
@@ -95,9 +95,11 @@ describe("Workspace Session persistence through the shared command module", () =
       failTitle: false,
       failPublish: false,
       failActivity: false,
+      publishAcceptedMessageDuringSend: false,
       registered: true,
       beforeControl: Effect.void,
       beforeModelSave: Effect.void,
+      beforeTitle: Effect.void,
       onGateRequest: () => {},
       active: false,
     };
@@ -121,6 +123,7 @@ describe("Workspace Session persistence through the shared command module", () =
       run: (ref, effect) =>
         Effect.sync(() => state.onGateRequest()).pipe(Effect.zipRight(baseGate.run(ref, effect))),
     };
+    const sessionTitleGate = createWorkspaceSessionOperationGate();
     let updateLiveRuntimeTitle: ((title: string) => Effect.Effect<void, HostError>) | null = null;
     const persistence = createWorkspaceSessionRuntimePersistence({
       updateRuntimeSessionTitle: ({ title }) =>
@@ -128,6 +131,7 @@ describe("Workspace Session persistence through the shared command module", () =
           ? updateLiveRuntimeTitle(title)
           : Effect.dieMessage("live title update is not wired"),
       operationGate,
+      sessionTitleGate,
       store: {
         ...store,
         recordAcceptedMessage: (input) =>
@@ -214,9 +218,23 @@ describe("Workspace Session persistence through the shared command module", () =
               Effect.zipRight(
                 Effect.suspend(() => {
                   inputs.push(input);
-                  return state.failSend
-                    ? failure("runtime rejected message")
-                    : Effect.succeed(accepted());
+                  if (state.failSend) return failure("runtime rejected message");
+                  const acceptedMessage = accepted();
+                  if (!state.publishAcceptedMessageDuringSend)
+                    return Effect.succeed(acceptedMessage);
+                  return registration
+                    .runMutation(
+                      Effect.succeed({
+                        value: undefined,
+                        changes: [
+                          {
+                            type: "transcript_event" as const,
+                            event: { ...acceptedMessage, sessionRef: ref },
+                          },
+                        ],
+                      }),
+                    )
+                    .pipe(Effect.as(acceptedMessage));
                 }),
               ),
             ),
@@ -229,10 +247,14 @@ describe("Workspace Session persistence through the shared command module", () =
               return Effect.void;
             }),
           updateSessionTitle: (input) =>
-            Effect.suspend(() => {
-              titles.push(input.title);
-              return state.failTitle ? failure("runtime title update failed") : Effect.void;
-            }),
+            state.beforeTitle.pipe(
+              Effect.zipRight(
+                Effect.suspend(() => {
+                  titles.push(input.title);
+                  return state.failTitle ? failure("runtime title update failed") : Effect.void;
+                }),
+              ),
+            ),
         }),
       ),
     );
@@ -255,15 +277,40 @@ describe("Workspace Session persistence through the shared command module", () =
       },
       persistTaskModel: () => Effect.dieMessage("unexpected task model write"),
     });
-    const emit = (event: AgentSessionTranscriptEvent) =>
-      Effect.runPromise(
-        registration.runMutation(
-          Effect.succeed({ value: undefined, changes: [{ type: "transcript_event", event }] }),
-        ),
+    const emitEffect = (event: AgentSessionTranscriptEvent) =>
+      registration.runMutation(
+        Effect.succeed({ value: undefined, changes: [{ type: "transcript_event", event }] }),
       );
+    const emit = (event: AgentSessionTranscriptEvent) => Effect.runPromise(emitEffect(event));
     const get = () => Effect.runPromise(store.get(storeRef));
+    const config = repoConfigSchema.parse({
+      workspaceId: "fairnest",
+      workspaceName: "Fairnest",
+      repoPath: database.repoPath,
+    });
+    const workspaceService = () =>
+      createWorkspaceSessionService({
+        operationGate,
+        sessionTitleGate,
+        store,
+        settings: {
+          getRepoConfig: () => Effect.succeed(config),
+          listCustomAgentRoles: () => Effect.succeed([]),
+        },
+        runtime: { runtimeEnsure: () => Effect.dieMessage("unexpected runtime ensure") },
+        live: { ...live, ...commands },
+        git: createGitPortTestDouble({ canonicalizePath: (value) => Effect.succeed(value) }),
+        settingsConfig: createSettingsConfigTestDouble({}),
+        worktreeFiles: createWorktreeFilePortTestDouble({}),
+        systemCommands: {
+          resolveCommandPath: () => Effect.dieMessage("unused"),
+          versionCommand: () => Effect.dieMessage("unused"),
+          runCommandAllowFailure: () => Effect.dieMessage("unused"),
+        },
+      });
     return {
       operationGate,
+      sessionTitleGate,
       ref,
       storeRef,
       record,
@@ -279,7 +326,9 @@ describe("Workspace Session persistence through the shared command module", () =
       state,
       accepted,
       emit,
+      emitEffect,
       get,
+      workspaceService,
     };
   };
 
@@ -363,6 +412,20 @@ describe("Workspace Session persistence through the shared command module", () =
     expect((await h.get()).generatedTitle).toBe("First accepted prompt");
   });
 
+  test("records an accepted message that the runtime publishes during the send", async () => {
+    const h = await setup();
+    h.state.publishAcceptedMessageDuringSend = true;
+    await Effect.runPromise(
+      h.live.sendUserMessage({
+        ...h.ref,
+        sessionScope: { kind: "repository" },
+        parts: [{ kind: "text", text: "Name this chat" }],
+      }),
+    );
+    expect((await h.get()).generatedTitle).toBe("First accepted prompt");
+    expect(h.titles).toEqual(["First accepted prompt"]);
+  });
+
   test("renames the runtime session when another client sends the first message", async () => {
     const h = await setup();
     await h.emit({ ...h.accepted(), sessionRef: h.ref });
@@ -383,17 +446,78 @@ describe("Workspace Session persistence through the shared command module", () =
     expect((await h.get()).generatedTitle).toBe("First accepted prompt");
   });
 
-  test("surfaces a failed runtime title update after the generated title is saved", async () => {
+  test("keeps both titles on the prior value when the runtime title update fails", async () => {
     const h = await setup();
     h.state.failTitle = true;
     await expect(h.emit({ ...h.accepted(), sessionRef: h.ref })).rejects.toThrow(
       "runtime title update failed",
     );
-    expect((await h.get()).generatedTitle).toBe("First accepted prompt");
+    const saved = await h.get();
+    expect(saved.generatedTitle).toBeNull();
+    expect(saved.updatedAt).toBe(Date.parse(h.accepted().timestamp));
+    expect(h.titles).toEqual(["First accepted prompt"]);
     expect(h.events.at(-1)).toMatchObject({
       type: "fault",
       message: "runtime title update failed",
     });
+  });
+
+  test("reports the runtime title failure and a failed activity save together", async () => {
+    const h = await setup();
+    h.state.failTitle = true;
+    h.state.failActivity = true;
+    await expect(h.emit({ ...h.accepted(), sessionRef: h.ref })).rejects.toThrow(
+      /runtime title update failed[\s\S]*Saving the accepted message also failed: activity write failed/,
+    );
+    expect(await h.get()).toEqual(h.record);
+  });
+
+  test("serializes an observed first message with a manual rename", async () => {
+    const h = await setup();
+    const workspace = h.workspaceService();
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const observeEntered = yield* Deferred.make<void>();
+          const observeRelease = yield* Deferred.make<void>();
+          const renameNativeReached = yield* Deferred.make<void>();
+          let titleCalls = 0;
+          h.state.beforeTitle = Effect.gen(function* () {
+            if (++titleCalls === 1) {
+              yield* Deferred.succeed(observeEntered, undefined);
+              yield* Deferred.await(observeRelease);
+              return;
+            }
+            yield* Deferred.succeed(renameNativeReached, undefined);
+          });
+          const renameNativeWaiter = yield* Effect.forkScoped(Deferred.await(renameNativeReached));
+          const observed = yield* Effect.forkScoped(
+            h.emitEffect({ ...h.accepted(), sessionRef: h.ref }),
+          );
+          yield* Deferred.await(observeEntered);
+          const renamed = yield* Effect.forkScoped(
+            Effect.exit(
+              workspace.rename({
+                workspaceId: "fairnest",
+                sessionId: "session-1",
+                manualTitle: "Renamed",
+              }),
+            ),
+          );
+          yield* TestClock.adjust(0);
+          expect(Option.isNone(yield* Fiber.poll(renamed))).toBe(true);
+          expect(Option.isNone(yield* Fiber.poll(renameNativeWaiter))).toBe(true);
+          expect(h.titles).toEqual([]);
+          yield* Deferred.succeed(observeRelease, undefined);
+          yield* Fiber.join(observed);
+          expect(Exit.isSuccess(yield* Fiber.join(renamed))).toBe(true);
+          expect(h.titles).toEqual(["First accepted prompt", "Renamed"]);
+        }),
+      ).pipe(Effect.provide(TestContext.TestContext)),
+    );
+    const saved = await h.get();
+    expect(saved.manualTitle).toBe("Renamed");
+    expect(saved.generatedTitle).toBe("First accepted prompt");
   });
 
   test("does not persist rejected sends or model changes and saves an accepted model", async () => {
@@ -667,6 +791,7 @@ describe("Workspace Session persistence through the shared command module", () =
     const workspace = createWorkspaceSessionService({
       lifecycle: createTaskSessionLifecycleCoordinator(),
       operationGate: h.operationGate,
+      sessionTitleGate: h.sessionTitleGate,
       store: h.store,
       settings: {
         getRepoConfig: () => Effect.succeed(config),
@@ -900,7 +1025,8 @@ describe("Workspace Session persistence through the shared command module", () =
         repoPath: h.ref.repoPath,
         ref: h.ref,
         operation: "agent-session.persist",
-        message: "activity write failed",
+        message:
+          "activity write failed The runtime session keeps the generated title and the Workspace Session has no saved title. Rename the chat or send a message to sync the titles.",
       },
     ]);
     expect(await h.get()).toEqual(h.record);

@@ -57,6 +57,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
   git,
   publishUpdated,
   operationGate,
+  sessionTitleGate,
   updateRuntimeSessionTitle,
 }: {
   store: WorkspaceSessionStorePort;
@@ -64,6 +65,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
   git: WorkspaceSessionTargetDependencies["git"];
   publishUpdated: WorkspaceSessionUpdatedPublisher;
   operationGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
+  sessionTitleGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
   updateRuntimeSessionTitle: WorkspaceSessionRuntimeTitleUpdater;
 }): AgentSessionPersistencePort & AgentSessionOperationPolicy => {
   const pendingFinalMessages = new Map<string, { messageId: string; occurredAt: number }>();
@@ -129,7 +131,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
       if (known.session.selectedModel !== null) prepared.model = known.session.selectedModel;
       return prepared;
     });
-  const recordAcceptedMessage = (
+  const recordAcceptedMessageTransition = (
     runtimeRef: AgentSessionLiveRef,
     message: AcceptedAgentUserMessage,
     saveModel: boolean,
@@ -155,20 +157,69 @@ export const createWorkspaceSessionRuntimePersistence = ({
           );
         input.selectedModel = { ...message.model, runtimeKind: runtimeRef.runtimeKind };
       }
-      const saved = yield* storeEffect(store.recordAcceptedMessage(input));
-      yield* publishUpdated(known.ref.workspaceId, saved);
-      const externalSessionId = saved.externalSessionId;
-      if (externalSessionId === null) return;
-      const runtimeTitle = workspaceSessionRuntimeTitle(saved, saved.manualTitle);
+      const storedGeneratedTitle = known.session.generatedTitle ?? input.generatedTitle;
+      const runtimeTitle = workspaceSessionRuntimeTitle(
+        { ...known.session, generatedTitle: storedGeneratedTitle },
+        known.session.manualTitle,
+      );
       const previousTitle = workspaceSessionRuntimeTitle(known.session, known.session.manualTitle);
-      if (runtimeTitle === null || runtimeTitle === previousTitle) return;
-      yield* updateRuntimeSessionTitle({
-        repoPath: known.ref.repoPath,
-        runtimeKind: saved.runtimeKind,
-        workingDirectory: saved.executionTarget.workingDirectory,
-        externalSessionId,
-        title: runtimeTitle,
-      });
+      const runtimeTitleSync =
+        known.session.externalSessionId !== null &&
+        runtimeTitle !== null &&
+        runtimeTitle !== previousTitle
+          ? {
+              externalSessionId: known.session.externalSessionId,
+              repoPath: known.ref.repoPath,
+              runtimeKind: known.session.runtimeKind,
+              workingDirectory: known.session.executionTarget.workingDirectory,
+              title: runtimeTitle,
+            }
+          : null;
+      if (runtimeTitleSync !== null) {
+        const synced = yield* Effect.either(updateRuntimeSessionTitle(runtimeTitleSync));
+        if (synced._tag === "Left") {
+          // Keep the accepted-message activity, but leave the title on its prior value.
+          const recorded = yield* Effect.either(
+            storeEffect(store.recordAcceptedMessage({ ...input, generatedTitle: null })),
+          );
+          if (recorded._tag === "Left") {
+            return yield* Effect.fail(
+              new HostOperationError({
+                operation: "workspaceSession.accepted-message.persist",
+                message: `${synced.left.message} Saving the accepted message also failed: ${recorded.left.message}`,
+                cause: { runtimeFailure: synced.left, storeFailure: recorded.left },
+              }),
+            );
+          }
+          yield* publishUpdated(known.ref.workspaceId, recorded.right);
+          return yield* Effect.fail(synced.left);
+        }
+      }
+      const saved = yield* Effect.either(storeEffect(store.recordAcceptedMessage(input)));
+      if (saved._tag === "Left") {
+        if (runtimeTitleSync === null) return yield* Effect.fail(saved.left);
+        return yield* Effect.fail(
+          new HostOperationError({
+            operation: "workspaceSession.accepted-message.persist",
+            message: `${saved.left.message} The runtime session keeps the generated title and the Workspace Session has no saved title. Rename the chat or send a message to sync the titles.`,
+            cause: { storeFailure: saved.left },
+          }),
+        );
+      }
+      yield* publishUpdated(known.ref.workspaceId, saved.right);
+    });
+  const recordAcceptedMessage = (
+    runtimeRef: AgentSessionLiveRef,
+    message: AcceptedAgentUserMessage,
+    saveModel: boolean,
+  ) =>
+    Effect.gen(function* () {
+      const located = yield* find(runtimeRef);
+      if (!located) return;
+      yield* sessionTitleGate.run(
+        located.ref,
+        recordAcceptedMessageTransition(runtimeRef, message, saveModel),
+      );
     });
   const flushFinalMessage = (runtimeRef: AgentSessionLiveRef) =>
     Effect.gen(function* () {
