@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import type { AgentSessionLiveFaultLogger } from "../../application/agent-sessions/agent-session-live-state-service";
 import {
   createWorkspaceSessionRuntimePersistence,
   type WorkspaceSessionTitleSyncFailureReporter,
@@ -11,12 +12,14 @@ import { createLiveSessionPublisher } from "./runtime-lifecycle-publisher";
 
 export const createNodeWorkspaceSessionPersistence = ({
   eventBus,
+  faultLog,
   ...dependencies
 }: Omit<
   Parameters<typeof createWorkspaceSessionRuntimePersistence>[0],
   "publishUpdated" | "operationGate" | "sessionTitleGate" | "reportTitleSyncFailure"
 > & {
   eventBus: HostEventBusPort | undefined;
+  faultLog: AgentSessionLiveFaultLogger;
 }) => {
   const operationGate = createWorkspaceSessionOperationGate();
   const sessionTitleGate = createWorkspaceSessionOperationGate();
@@ -58,7 +61,13 @@ export const createNodeWorkspaceSessionPersistence = ({
           message: cause instanceof Error ? cause.message : String(cause),
           cause,
         }),
-    }).pipe(Effect.catchAll(() => Effect.void));
+    }).pipe(
+      Effect.catchAll((failure) =>
+        faultLog(`Workspace Session title sync failure report failed: ${failure.message}`).pipe(
+          Effect.catchAll(() => Effect.void),
+        ),
+      ),
+    );
   return {
     persistence: createWorkspaceSessionRuntimePersistence({
       ...dependencies,

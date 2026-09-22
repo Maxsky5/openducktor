@@ -149,6 +149,7 @@ export const assembleNodeEffectHostCommandRouter = (
     settings: workspaceSettingsService,
     git,
     eventBus,
+    faultLog: createLiveSessionFaultLogger(lifecycleLogger),
     updateRuntimeSessionTitle: (input) => agentSessionLiveStateService.updateSessionTitle(input),
   });
   const liveSessionAdapterRegistry = createLiveSessionAdapterRegistry();

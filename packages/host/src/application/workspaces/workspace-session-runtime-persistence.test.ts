@@ -508,6 +508,26 @@ describe("Workspace Session persistence through the shared command module", () =
     expect(saved.updatedAt).toBe(Date.parse(h.accepted().timestamp));
   });
 
+  test("still defers renames after a send fails during the runtime title sync", async () => {
+    const h = await setup();
+    h.state.failTitle = true;
+    h.state.publishAcceptedMessageDuringSend = true;
+    await expect(
+      Effect.runPromise(
+        h.live.sendUserMessage({
+          ...h.ref,
+          sessionScope: { kind: "repository" },
+          parts: [{ kind: "text", text: "First accepted prompt" }],
+        }),
+      ),
+    ).rejects.toThrow("runtime title update failed");
+    h.state.failTitle = false;
+    await h.emit({ ...h.accepted("Second prompt"), sessionRef: h.ref });
+    await waitFor(() => h.titles.length === 2);
+    expect(h.titles).toEqual(["First accepted prompt", "Second prompt"]);
+    expect((await h.get()).generatedTitle).toBe("Second prompt");
+  });
+
   test("serializes an observed first message with a manual rename", async () => {
     const h = await setup();
     const workspace = h.workspaceService();

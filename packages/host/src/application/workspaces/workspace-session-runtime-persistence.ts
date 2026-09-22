@@ -297,18 +297,32 @@ export const createWorkspaceSessionRuntimePersistence = ({
     Effect.gen(function* () {
       yield* findActive(runtimeRef);
     });
+  const runOperation = <A, E, R>(
+    runtimeRef: AgentSessionLiveRef,
+    effect: Effect.Effect<A, E, R>,
+  ): Effect.Effect<A, E | HostError, R> =>
+    Effect.gen(function* () {
+      const known = yield* find(runtimeRef);
+      return yield* known ? operationGate.run(known.ref, effect) : effect;
+    });
   return {
-    run: (runtimeRef, _operation, effect) =>
-      Effect.gen(function* () {
-        const known = yield* find(runtimeRef);
-        return yield* (known ? operationGate.run(known.ref, effect) : effect).pipe(
+    run: (runtimeRef, _operation, effect) => runOperation(runtimeRef, effect),
+    runSend: (runtimeRef, effect) =>
+      runOperation(
+        runtimeRef,
+        Effect.sync(() => {
+          // A send command records the observed message after the runtime call returns,
+          // so the observation must not start a background title rename.
+          sendsInFlight.add(agentSessionRefKey(runtimeRef));
+        }).pipe(
+          Effect.zipRight(effect),
           Effect.ensuring(
             Effect.sync(() => {
               sendsInFlight.delete(agentSessionRefKey(runtimeRef));
             }),
           ),
-        );
-      }),
+        ),
+      ),
     prepareResume: (input) =>
       prepare(input).pipe(
         Effect.map((prepared) => ({
@@ -316,16 +330,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
           save: () => Effect.void,
         })),
       ),
-    prepareSend: (input) =>
-      prepare(input).pipe(
-        Effect.tap(() =>
-          Effect.sync(() => {
-            // The send command records the observed message after the runtime call returns,
-            // so the observation must not start a background title rename.
-            sendsInFlight.add(agentSessionRefKey(input));
-          }),
-        ),
-      ),
+    prepareSend: (input) => prepare(input),
     validateRef,
     prepareModelUpdate: (input) =>
       Effect.gen(function* () {

@@ -43,6 +43,7 @@ const createAgentSessionCommandService = (input: TestControlServiceInput) =>
     },
     repositoryPolicy: {
       run: (_ref, _operation, effect) => effect,
+      runSend: (_ref, effect) => effect,
       validateRef: () => Effect.void,
       prepareResume: (request) => Effect.succeed({ input: request, save: () => Effect.void }),
       prepareSend: (request) => Effect.succeed(request),

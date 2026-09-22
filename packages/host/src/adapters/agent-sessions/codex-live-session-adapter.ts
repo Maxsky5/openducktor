@@ -12,14 +12,11 @@ import {
   type CodexLiveSessionMutation,
 } from "@openducktor/adapters-codex-app-server";
 import {
-  type AgentSessionControlSummary,
   type AgentSessionLiveRef,
   acceptedAgentUserMessageSchema,
   agentSessionLiveLoadContextResultSchema,
 } from "@openducktor/contracts";
-import type { AgentSessionSummary } from "@openducktor/core";
 import { Effect, Exit } from "effect";
-import { toAgentSessionControlSummary } from "../../application/agent-sessions/agent-session-control-summary";
 import { HostValidationError, toHostOperationError } from "../../effect/host-errors";
 import type { HostError, HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { AgentSessionRuntimeAdapterPort } from "../../ports/agent-session-live-adapter-port";
@@ -32,6 +29,7 @@ import type {
   PreparedCodexLiveSessionAdapter,
 } from "./codex-live-session-adapter-contract";
 import { createCodexLiveSessionEventHub } from "./codex-live-session-event-hub";
+import { createCodexControlSummaryRunner } from "./codex-live-session-control-summary";
 import {
   publishAcceptedCodexMessage,
   refreshAfterAcceptedCodexMessage,
@@ -129,28 +127,10 @@ export const createCodexLiveSessionAdapterPreparer = ({
           catalogInvalidated: false,
         });
 
-      const runControlSummary = (
-        operation: string,
-        run: () => Promise<AgentSessionSummary>,
-      ): Effect.Effect<AgentSessionControlSummary, HostError> =>
-        Effect.tryPromise({
-          try: run,
-          catch: (cause) =>
-            toHostOperationError(cause, operation, { runtimeId: runtime.runtimeId }),
-        }).pipe(
-          Effect.flatMap((summary) =>
-            summary.runtimeKind === "codex"
-              ? refreshProjection().pipe(Effect.as(summary))
-              : Effect.fail(
-                  new HostValidationError({
-                    field: "runtimeKind",
-                    message: `Codex control '${operation}' returned runtime kind '${summary.runtimeKind}'.`,
-                    details: { runtimeId: runtime.runtimeId },
-                  }),
-                ),
-          ),
-          Effect.flatMap((summary) => toAgentSessionControlSummary(summary, operation)),
-        );
+      const runControlSummary = createCodexControlSummaryRunner({
+        runtimeId: runtime.runtimeId,
+        refreshProjection,
+      });
 
       const images = createCodexImageSettlement(controller, runtime.runtimeId, refreshProjection);
       const finishSession = (input: AgentSessionLiveRef, action: "stop" | "release") =>

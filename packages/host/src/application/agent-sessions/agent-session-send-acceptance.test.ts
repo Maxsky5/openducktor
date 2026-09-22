@@ -86,6 +86,7 @@ describe("message acceptance through the command and live adapter modules", () =
         runtime: live,
         repositoryPolicy: {
           run: (_ref, _operation, effect) => effect,
+          runSend: (_ref, effect) => effect,
           validateRef: () => Effect.void,
           prepareSend: Effect.succeed,
           prepareResume: () => Effect.dieMessage("unexpected resume"),
