@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import {
-  azureDevOpsCollectionUrl,
-  azureDevOpsRepositoryKey,
-  parseAzureDevOpsRepositoryUrl,
-} from "./repository-identity";
+import { azureDevOpsCollectionUrl, azureDevOpsRepositoryKey } from "@openducktor/core";
+import { parseAzureDevOpsRepositoryUrl } from "./repository-identity";
 
 describe("Azure DevOps repository identity", () => {
   test("normalizes Services HTTPS, legacy, and SSH remotes", () => {

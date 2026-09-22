@@ -147,7 +147,7 @@ describe("Git provider descriptors", () => {
     ).toBe(false);
   });
 
-  test("canonicalizes an Azure DevOps Server service address", () => {
+  test("validates an Azure DevOps Server service address without rewriting it", () => {
     expect(
       azureDevOpsRepositorySchema.parse({
         providerId: "azure_devops",
@@ -157,7 +157,7 @@ describe("Git provider descriptors", () => {
         project: "OpenDucktor",
         name: "Desktop",
       }).serviceUrl,
-    ).toBe("http://ado.example/tfs");
+    ).toBe("HTTP://ADO.Example/tfs/");
   });
 
   test("reports an invalid Azure DevOps Server address without throwing", () => {

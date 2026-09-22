@@ -6,6 +6,11 @@ import {
   type HostEventPayload,
   type RepoConfig,
 } from "@openducktor/contracts";
+import {
+  azureDevOpsCollectionUrl,
+  azureDevOpsConnectionConfigurationFingerprint,
+  azureDevOpsRepositoryKey,
+} from "@openducktor/core";
 import { type AccountInfo, type DeviceCodeRequest } from "@azure/msal-node";
 import { Effect } from "effect";
 import {
@@ -23,11 +28,6 @@ import {
   createAzureDevOpsPublicClient,
   type AzureDevOpsPublicClientFactory,
 } from "./public-client";
-import {
-  azureDevOpsCollectionUrl,
-  azureDevOpsConnectionConfigurationFingerprint,
-  azureDevOpsRepositoryKey,
-} from "./repository-identity";
 
 const AZURE_DEVOPS_SCOPE = "499b84ac-1321-427f-aa17-267ca6975798/.default";
 const REQUEST_TIMEOUT = "30 seconds";

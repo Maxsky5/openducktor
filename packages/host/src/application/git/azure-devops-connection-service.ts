@@ -4,6 +4,7 @@ import {
   type AzureDevOpsDeviceCode,
   type AzureDevOpsRepository,
 } from "@openducktor/contracts";
+import { azureDevOpsRepositoryKey } from "@openducktor/core";
 import { Effect } from "effect";
 import { type HostError, HostValidationError } from "../../effect/host-errors";
 import type { AzureDevOpsConnectionPort } from "../../ports/azure-devops-connection-port";
@@ -63,7 +64,8 @@ export const createAzureDevOpsConnectionService = ({
         provider?.id !== "azure_devops" ||
         !savedRepository.success ||
         !requestedRepository.success ||
-        !sameRepository(savedRepository.data, requestedRepository.data)
+        azureDevOpsRepositoryKey(savedRepository.data) !==
+          azureDevOpsRepositoryKey(requestedRepository.data)
       ) {
         return yield* Effect.fail(
           new HostValidationError({
@@ -118,18 +120,4 @@ export const createAzureDevOpsConnectionService = ({
       });
     },
   };
-};
-
-const sameRepository = (left: AzureDevOpsRepository, right: AzureDevOpsRepository): boolean => {
-  if (left.deployment !== right.deployment || left.serviceUrl !== right.serviceUrl) {
-    return false;
-  }
-  const leftIdentity = [left.organization, left.project, left.name];
-  const rightIdentity = [right.organization, right.project, right.name];
-  if (left.deployment === "services") {
-    return leftIdentity.every(
-      (value, index) => value.toLowerCase() === rightIdentity[index]?.toLowerCase(),
-    );
-  }
-  return leftIdentity.every((value, index) => value === rightIdentity[index]);
 };

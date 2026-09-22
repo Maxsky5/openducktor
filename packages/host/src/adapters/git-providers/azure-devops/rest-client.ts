@@ -1,9 +1,9 @@
 import { type AzureDevOpsRepository, type RepoConfig } from "@openducktor/contracts";
+import { azureDevOpsCollectionUrl } from "@openducktor/core";
 import { Effect } from "effect";
 import { type HostError, HostOperationError } from "../../../effect/host-errors";
 import type { AzureDevOpsConnectionPort } from "../../../ports/azure-devops-connection-port";
 import { azureDevOpsJsonListSchema, azureDevOpsJsonSchema, type AzureDevOpsJson } from "./json";
-import { azureDevOpsCollectionUrl } from "./repository-identity";
 
 const REQUEST_TIMEOUT = "30 seconds";
 

@@ -4,9 +4,9 @@ import {
   type AzureDevOpsDeployment,
   type AzureDevOpsRemoteMapping,
   type AzureDevOpsRepository,
-  type GitProviderRepository,
   type HostEventPayload,
 } from "@openducktor/contracts";
+import { azureDevOpsCollectionUrl } from "@openducktor/core";
 
 export type AzureRepositoryDraft = {
   deployment: AzureDevOpsDeployment;
@@ -43,39 +43,6 @@ type AzureConnectionSelection = {
   repoPath: string;
   configurationFingerprint: string | null;
   attemptId: string | null;
-};
-
-export const isAzureDevOpsRepository = (
-  repository: GitProviderRepository,
-): repository is AzureDevOpsRepository =>
-  "providerId" in repository && repository.providerId === "azure_devops";
-
-export const azureDevOpsRepositoryKey = (repository: AzureDevOpsRepository): string => {
-  const values = [repository.organization, repository.project, repository.name];
-  const identity =
-    repository.deployment === "services" ? values.map((value) => value.toLowerCase()) : values;
-  return [
-    "azure_devops",
-    repository.deployment,
-    canonicalServiceUrl(repository.serviceUrl),
-    ...identity,
-  ].join("::");
-};
-
-export const azureDevOpsConnectionConfigurationFingerprint = (
-  workspaceId: string,
-  repoPath: string,
-  repository: AzureDevOpsRepository,
-): string =>
-  [workspaceId, repoPath, "azure_devops", azureDevOpsRepositoryKey(repository)].join("\n");
-
-const azureDevOpsCollectionUrl = (repository: AzureDevOpsRepository): string =>
-  `${canonicalServiceUrl(repository.serviceUrl)}/${encodeURIComponent(repository.organization)}`;
-
-const canonicalServiceUrl = (value: string): string => {
-  const parsed = new URL(value);
-  const path = parsed.pathname.replace(/\/+$/u, "");
-  return `${parsed.protocol}//${parsed.host}${path}`;
 };
 
 export const isAzureDevOpsConnectionEventCurrent = (

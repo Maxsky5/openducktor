@@ -1,4 +1,5 @@
 import { type AzureDevOpsRepository, type PullRequest } from "@openducktor/contracts";
+import { azureDevOpsRepositoryKey, azureDevOpsResolvedRepositoryIdentity } from "@openducktor/core";
 import { HostValidationError } from "../../../effect/host-errors";
 import type { ProviderPullRequest } from "../../../ports/git-provider-port";
 import {
@@ -9,11 +10,7 @@ import {
   type AzureDevOpsJson,
   type AzureDevOpsJsonRecord,
 } from "./json";
-import {
-  azureDevOpsProjectUrl,
-  azureDevOpsRepositoryKey,
-  azureDevOpsResolvedRepositoryIdentity,
-} from "./repository-identity";
+import { azureDevOpsProjectUrl } from "./repository-identity";
 
 const jsonRecordSchema = azureDevOpsJsonRecordSchema;
 

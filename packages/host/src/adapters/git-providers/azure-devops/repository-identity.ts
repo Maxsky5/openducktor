@@ -1,4 +1,5 @@
-import type { AzureDevOpsRepository, GitProviderRepository } from "@openducktor/contracts";
+import type { AzureDevOpsRepository } from "@openducktor/contracts";
+import { azureDevOpsCollectionUrl } from "@openducktor/core";
 
 const CLOUD_HTTPS_HOST = "dev.azure.com";
 const CLOUD_SSH_HOST = "ssh.dev.azure.com";
@@ -9,51 +10,6 @@ type RemoteParts = {
   host: string;
   path: string;
 };
-
-export const isAzureDevOpsRepository = (
-  repository: GitProviderRepository,
-): repository is AzureDevOpsRepository =>
-  "providerId" in repository && repository.providerId === "azure_devops";
-
-export const azureDevOpsRepositoryKey = (repository: AzureDevOpsRepository): string => {
-  const values = [repository.organization, repository.project, repository.name];
-  const identity = repository.deployment === "services" ? values.map(lower) : values;
-  return [
-    "azure_devops",
-    repository.deployment,
-    canonicalServiceUrl(repository.serviceUrl),
-    ...identity,
-  ].join("::");
-};
-
-export const azureDevOpsConnectionConfigurationFingerprint = (
-  workspaceId: string,
-  repoPath: string,
-  repository: AzureDevOpsRepository,
-): string =>
-  [workspaceId, repoPath, "azure_devops", azureDevOpsRepositoryKey(repository)].join("\n");
-
-export const azureDevOpsCollectionUrl = (repository: AzureDevOpsRepository): string =>
-  joinUrl(canonicalServiceUrl(repository.serviceUrl), repository.organization);
-
-export const azureDevOpsResolvedRepositoryIdentity = (repository: {
-  deployment: AzureDevOpsRepository["deployment"];
-  serviceUrl: string;
-  organization: string;
-  projectId: string;
-  repositoryId: string;
-}): string =>
-  [
-    "azure_devops",
-    joinUrl(
-      canonicalServiceUrl(repository.serviceUrl),
-      repository.deployment === "services"
-        ? lower(repository.organization)
-        : repository.organization,
-    ),
-    repository.projectId,
-    repository.repositoryId,
-  ].join("::");
 
 export const azureDevOpsProjectUrl = (repository: AzureDevOpsRepository): string =>
   joinUrl(azureDevOpsCollectionUrl(repository), repository.project);
@@ -209,16 +165,8 @@ const decodePathSegments = (path: string): string[] | null => {
   }
 };
 
-const canonicalServiceUrl = (value: string): string => {
-  const parsed = new URL(value);
-  const path = parsed.pathname.replace(/\/+$/u, "");
-  return `${parsed.protocol}//${parsed.host}${path}`;
-};
-
 const joinUrl = (base: string, segment: string): string =>
   `${base.replace(/\/+$/u, "")}/${encodeURIComponent(segment)}`;
 
 const stripGitSuffix = (value: string): string =>
   value.endsWith(".git") ? value.slice(0, -4) : value;
-
-const lower = (value: string): string => value.toLowerCase();

@@ -4,16 +4,13 @@ import {
   type AzureDevOpsRepository,
   type RepoConfig,
 } from "@openducktor/contracts";
+import { azureDevOpsRepositoryKey, isAzureDevOpsRepository } from "@openducktor/core";
 import { Effect } from "effect";
 import { HostValidationError } from "../../../effect/host-errors";
 import type { GitPort, GitRemoteEndpoint } from "../../../ports/git-port";
 import { GitProviderRepositoryError } from "../../../ports/git-provider-errors";
 import type { GitProviderRepositoryPort } from "../../../ports/git-provider-port";
-import {
-  azureDevOpsRepositoryKey,
-  isAzureDevOpsRepository,
-  parseAzureDevOpsRepositoryUrl,
-} from "./repository-identity";
+import { parseAzureDevOpsRepositoryUrl } from "./repository-identity";
 
 const PROVIDER_ID = AZURE_DEVOPS_PROVIDER_DESCRIPTOR.id;
 

@@ -6,7 +6,7 @@ import type { AuthenticationResult, DeviceCodeRequest } from "@azure/msal-node";
 import { Effect, Fiber, TestClock, TestContext } from "effect";
 import type { AzureDevOpsProtectedStorage } from "./protected-storage";
 import { createAzureDevOpsConnectionAdapter } from "./connection";
-import { azureDevOpsRepositoryKey } from "./repository-identity";
+import { azureDevOpsRepositoryKey } from "@openducktor/core";
 
 const repository: AzureDevOpsRepository = {
   providerId: "azure_devops",

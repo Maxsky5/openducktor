@@ -11,7 +11,7 @@ import { HostValidationError } from "../../../effect/host-errors";
 import type { AzureDevOpsConnectionPort } from "../../../ports/azure-devops-connection-port";
 import type { GitProviderRepositoryPort } from "../../../ports/git-provider-port";
 import { createAzureDevOpsPullRequestPort } from "./pull-requests";
-import { azureDevOpsResolvedRepositoryIdentity } from "./repository-identity";
+import { azureDevOpsResolvedRepositoryIdentity } from "@openducktor/core";
 import { createAzureDevOpsRestClient } from "./rest-client";
 
 const repository: AzureDevOpsRepository = {

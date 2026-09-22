@@ -1,18 +1,20 @@
 import { type AzureDevOpsRepository, type SettingsRepoConfig } from "@openducktor/contracts";
+import {
+  azureDevOpsConnectionConfigurationFingerprint,
+  azureDevOpsRepositoryKey,
+  isAzureDevOpsRepository,
+} from "@openducktor/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/lib/errors";
 import { host } from "@/state/operations/shared/host";
 import {
   type AzureRemoteMappingDraft,
   type AzureRepositoryDraft,
-  azureDevOpsConnectionConfigurationFingerprint,
   azureDevOpsHttpConsentCollectionUrl,
-  azureDevOpsRepositoryKey,
   azureRemoteMappingDraftErrors,
   azureRepositoryDraftErrors,
   buildAzureRemoteMappingDrafts,
   buildAzureRepositoryDraft,
-  isAzureDevOpsRepository,
   parseAzureRepositoryDraft,
   toAzureRemoteMappings,
 } from "./azure-devops-git-provider-form-model";

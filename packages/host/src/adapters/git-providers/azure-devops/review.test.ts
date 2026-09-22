@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import type { GitProviderRepositoryPort } from "../../../ports/git-provider-port";
 import type { AzureDevOpsJson } from "./json";
 import { createAzureDevOpsReviewPort } from "./review";
-import { azureDevOpsResolvedRepositoryIdentity } from "./repository-identity";
+import { azureDevOpsResolvedRepositoryIdentity } from "@openducktor/core";
 import type { AzureDevOpsRestClient } from "./rest-client";
 
 const repository: AzureDevOpsRepository = {

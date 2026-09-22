@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AzureDevOpsRepository, PullRequest } from "@openducktor/contracts";
 import { parseAzurePullRequest, requireAzureLinkedRepository } from "./models";
-import { azureDevOpsResolvedRepositoryIdentity } from "./repository-identity";
+import { azureDevOpsResolvedRepositoryIdentity } from "@openducktor/core";
 
 const repository: AzureDevOpsRepository = {
   providerId: "azure_devops",

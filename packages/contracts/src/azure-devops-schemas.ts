@@ -3,17 +3,6 @@ import { z } from "zod";
 export const azureDevOpsDeploymentSchema = z.enum(["services", "server"]);
 export type AzureDevOpsDeployment = z.infer<typeof azureDevOpsDeploymentSchema>;
 
-const normalizeServiceUrl = (value: string): string => {
-  let parsed: URL;
-  try {
-    parsed = new URL(value);
-  } catch {
-    return value;
-  }
-  const path = parsed.pathname.replace(/\/+$/u, "");
-  return `${parsed.protocol}//${parsed.host}${path}`;
-};
-
 export const azureDevOpsRepositorySchema = z
   .object({
     providerId: z.literal("azure_devops"),
@@ -57,11 +46,7 @@ export const azureDevOpsRepositorySchema = z
         path: ["serviceUrl"],
       });
     }
-  })
-  .overwrite((repository) => ({
-    ...repository,
-    serviceUrl: normalizeServiceUrl(repository.serviceUrl),
-  }));
+  });
 export type AzureDevOpsRepository = z.infer<typeof azureDevOpsRepositorySchema>;
 
 export const azureDevOpsRemoteMappingSchema = z
