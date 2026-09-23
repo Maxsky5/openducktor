@@ -1,5 +1,5 @@
 import type { CodexAppServerThread, WorkspaceSessionExternal } from "@openducktor/contracts";
-import type { RuntimeSessionMetadataPage, SessionRef } from "@openducktor/core";
+import type { SessionRef } from "@openducktor/core";
 import type { CodexAppServerClient } from "./types";
 
 const isRoot = (thread: CodexAppServerThread): boolean => {
@@ -22,10 +22,14 @@ const metadata = (thread: CodexAppServerThread): WorkspaceSessionExternal => ({
   title: thread.name ?? null,
   updatedAt: thread.updatedAt * 1000,
 });
+type CodexSessionPage = {
+  sessions: WorkspaceSessionExternal[];
+  nextPageToken: string | null;
+};
 export const listCodexSessionMetadataPage = async (
   client: CodexAppServerClient,
   input: { pageToken?: string; signal: AbortSignal },
-): Promise<RuntimeSessionMetadataPage> => {
+): Promise<CodexSessionPage> => {
   type Stream = { cursor?: string | null; rows: WorkspaceSessionExternal[] };
   const streams: [Stream, Stream] = input.pageToken
     ? JSON.parse(input.pageToken)

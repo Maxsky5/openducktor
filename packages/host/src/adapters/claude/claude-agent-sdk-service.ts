@@ -250,7 +250,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     });
   }
 
-  openExistingSessionForImport(input: SessionRef, runtimeId: string) {
+  inspectSessionForImport(input: SessionRef, runtimeId: string) {
     return Effect.gen(this, function* () {
       const metadata = yield* fromPromise("claudeRuntime.getSessionMetadata", () =>
         getClaudeSessionMetadata(input),
@@ -261,7 +261,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
       return {
         metadata,
         selectedModel,
-        registerLiveSession: this.createSession(
+        attach: this.createSession(
           {
             ...input,
             runtimeKind: "claude",

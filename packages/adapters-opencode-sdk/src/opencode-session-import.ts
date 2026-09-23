@@ -1,6 +1,9 @@
 import { z } from "zod";
-import type { RuntimeSessionImportPort } from "@openducktor/core";
-import { workspaceSessionExternalSchema, type WorkspaceSession } from "@openducktor/contracts";
+import type { RuntimeSessionImportPort, SessionRef } from "@openducktor/core";
+import {
+  workspaceSessionExternalSchema,
+  type AgentSessionModelSelection,
+} from "@openducktor/contracts";
 import { unwrapData } from "./data-utils";
 import type { ClientFactory } from "./types";
 
@@ -31,14 +34,10 @@ const metadata = (row: z.infer<typeof metadataSchema>) =>
 export const createOpenCodeSessionImportPort = (input: {
   createClient: ClientFactory;
   runtimeEndpoint: string;
-  admit: (
-    ref: Parameters<RuntimeSessionImportPort["openExistingSessionForImport"]>[0],
-  ) => Promise<void>;
+  admit: (ref: SessionRef) => Promise<void>;
 }): RuntimeSessionImportPort => {
   const client = input.createClient({ runtimeEndpoint: input.runtimeEndpoint });
-  const read = async (
-    ref: Parameters<RuntimeSessionImportPort["openExistingSessionForImport"]>[0],
-  ) => {
+  const read = async (ref: SessionRef) => {
     const row = metadataSchema.parse(
       unwrapData(
         await client.v2.session.get({ sessionID: ref.externalSessionId }),
@@ -52,24 +51,27 @@ export const createOpenCodeSessionImportPort = (input: {
     return row;
   };
   return {
-    listRootSessionMetadataPage: async ({ pageToken, signal }) => {
+    scanSessions: async function* (signal) {
       if (!client.v2?.session)
         throw new Error("Update OpenCode to a version with the V2 session listing API.");
-      const request: Parameters<typeof client.v2.session.list>[0] = { limit: 100, order: "desc" };
-      if (pageToken) request.cursor = pageToken;
-      const page = pageSchema.parse(
-        unwrapData(await client.v2.session.list(request, { signal }), "list external sessions"),
-      );
-      return {
-        sessions: page.data
-          .filter((row) => !row.parentID && !row.location.workspaceID)
-          .map(metadata),
-        nextPageToken: page.cursor.next ?? null,
-      };
+      let cursor: string | null = null;
+      const seen = new Set<string>();
+      do {
+        const request: Parameters<typeof client.v2.session.list>[0] = { limit: 100, order: "desc" };
+        if (cursor) request.cursor = cursor;
+        const page = pageSchema.parse(
+          unwrapData(await client.v2.session.list(request, { signal }), "list external sessions"),
+        );
+        yield page.data.filter((row) => !row.parentID && !row.location.workspaceID).map(metadata);
+        cursor = page.cursor.next ?? null;
+        if (cursor && seen.has(cursor))
+          throw new Error("OpenCode repeated a session page. Update OpenCode and retry.");
+        if (cursor) seen.add(cursor);
+      } while (cursor);
     },
-    openExistingSessionForImport: async (ref) => {
+    inspectSession: async (ref) => {
       const row = await read(ref);
-      const selectedModel: WorkspaceSession["selectedModel"] = row.model
+      const selectedModel: AgentSessionModelSelection | null = row.model
         ? {
             runtimeKind: "opencode",
             providerId: row.model.providerID,
@@ -81,7 +83,7 @@ export const createOpenCodeSessionImportPort = (input: {
       return {
         metadata: metadata(row),
         selectedModel,
-        registerLiveSession: () => input.admit(ref),
+        attach: () => input.admit(ref),
       };
     },
   };

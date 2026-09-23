@@ -6,22 +6,27 @@ import type { RuntimeSessionImportPort } from "../../ports/runtime-session-impor
 export const createRuntimeSessionImportAdapter = (
   native: NativePort,
 ): RuntimeSessionImportPort => ({
-  listRootSessionMetadataPage: (input) =>
+  scanSessions: (signal) => {
+    const iterator = native.scanSessions(signal)[Symbol.asyncIterator]();
+    return {
+      next: () =>
+        Effect.tryPromise({
+          try: () => iterator.next(),
+          catch: (cause) => toHostOperationError(cause, "sessionImport.scanSessions"),
+        }),
+    };
+  },
+  inspectSession: (input) =>
     Effect.tryPromise({
-      try: () => native.listRootSessionMetadataPage(input),
-      catch: (cause) => toHostOperationError(cause, "sessionImport.listRootSessionMetadataPage"),
-    }),
-  openExistingSessionForImport: (input) =>
-    Effect.tryPromise({
-      try: () => native.openExistingSessionForImport(input),
-      catch: (cause) => toHostOperationError(cause, "sessionImport.openExistingSessionForImport"),
+      try: () => native.inspectSession(input),
+      catch: (cause) => toHostOperationError(cause, "sessionImport.inspectSession"),
     }).pipe(
-      Effect.map((handle) => ({
-        metadata: handle.metadata,
-        selectedModel: handle.selectedModel,
-        registerLiveSession: Effect.tryPromise({
-          try: () => handle.registerLiveSession(),
-          catch: (cause) => toHostOperationError(cause, "sessionImport.registerLiveSession"),
+      Effect.map((source) => ({
+        metadata: source.metadata,
+        selectedModel: source.selectedModel,
+        attach: Effect.tryPromise({
+          try: () => source.attach(),
+          catch: (cause) => toHostOperationError(cause, "sessionImport.attach"),
         }),
       })),
     ),

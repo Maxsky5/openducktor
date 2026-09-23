@@ -140,11 +140,11 @@ describe("createClaudeAgentSdkService", () => {
         }),
     });
     try {
-      const source = await Effect.runPromise(service.openExistingSessionForImport(ref, "runtime"));
+      const source = await Effect.runPromise(service.inspectSessionForImport(ref, "runtime"));
       expect(source.selectedModel?.modelId).toBe("native-claude");
       expect(create).not.toHaveBeenCalled();
       expect(store.get(ref.externalSessionId)).toBeUndefined();
-      await Effect.runPromise(source.registerLiveSession);
+      await Effect.runPromise(source.attach);
       expect(create).toHaveBeenCalledTimes(1);
       expect(store.get(ref.externalSessionId)).toBeDefined();
     } finally {

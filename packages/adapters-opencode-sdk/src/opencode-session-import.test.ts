@@ -25,14 +25,20 @@ test("OpenCode V2 discovery pages metadata and registers only after import", asy
       calls.push(url.pathname);
       const body = url.pathname.endsWith("/native")
         ? { data: native }
-        : {
-            data: [
-              native,
-              { ...native, id: "child", parentID: "native" },
-              { ...native, id: "remote", location: { directory: "/repo", workspaceID: "remote" } },
-            ],
-            cursor: { next: "page-two" },
-          };
+        : url.searchParams.has("cursor")
+          ? { data: [], cursor: { next: null } }
+          : {
+              data: [
+                native,
+                { ...native, id: "child", parentID: "native" },
+                {
+                  ...native,
+                  id: "remote",
+                  location: { directory: "/repo", workspaceID: "remote" },
+                },
+              ],
+              cursor: { next: "page-two" },
+            };
       return new Response(JSON.stringify(body), {
         headers: { "content-type": "application/json" },
       });
@@ -45,13 +51,15 @@ test("OpenCode V2 discovery pages metadata and registers only after import", asy
       admitted.push(input.externalSessionId);
     },
   });
-  const page = await sessions.listRootSessionMetadataPage({ signal: new AbortController().signal });
-  expect(page.sessions).toEqual(
+  const scanner = sessions.scanSessions(new AbortController().signal)[Symbol.asyncIterator]();
+  const first = await scanner.next();
+  expect(first.value).toEqual(
     [{ ...ref, title: "Native title", updatedAt: 123 }].map(({ repoPath: _repo, ...row }) => row),
   );
-  expect(page.nextPageToken).toBe("page-two");
-  const handle = await sessions.openExistingSessionForImport(ref);
-  expect(handle.selectedModel).toEqual({
+  expect((await scanner.next()).value).toEqual([]);
+  expect((await scanner.next()).done).toBe(true);
+  const source = await sessions.inspectSession(ref);
+  expect(source.selectedModel).toEqual({
     runtimeKind: "opencode",
     providerId: "openai",
     modelId: "native-model",
@@ -59,12 +67,12 @@ test("OpenCode V2 discovery pages metadata and registers only after import", asy
     variant: "high",
   });
   expect(admitted).toEqual([]);
-  await handle.registerLiveSession();
+  await source.attach();
   expect(admitted).toEqual(["native"]);
   expect(calls.every((path) => !path.includes("message") && !path.includes("prompt"))).toBe(true);
-  await expect(
-    sessions.openExistingSessionForImport({ ...ref, workingDirectory: "/different" }),
-  ).rejects.toThrow("directory changed");
+  await expect(sessions.inspectSession({ ...ref, workingDirectory: "/different" })).rejects.toThrow(
+    "directory changed",
+  );
 });
 
 test.each([null, undefined])("OpenCode accepts terminal cursor %s", async (next) => {
@@ -80,10 +88,7 @@ test.each([null, undefined])("OpenCode accepts terminal cursor %s", async (next)
     runtimeEndpoint: "http://runtime",
     admit: async () => {},
   });
-  expect(
-    await sessions.listRootSessionMetadataPage({ signal: new AbortController().signal }),
-  ).toEqual({
-    sessions: [],
-    nextPageToken: null,
-  });
+  const scanner = sessions.scanSessions(new AbortController().signal)[Symbol.asyncIterator]();
+  expect((await scanner.next()).value).toEqual([]);
+  expect((await scanner.next()).done).toBe(true);
 });

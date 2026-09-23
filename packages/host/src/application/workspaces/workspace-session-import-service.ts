@@ -16,6 +16,7 @@ import {
   hasNestedNodeErrorCode,
 } from "../../effect/host-errors";
 import type { AgentSessionLiveAdapterRegistryPort } from "../../ports/agent-session-live-adapter-port";
+import type { RuntimeSessionImportPort } from "../../ports/runtime-session-import-port";
 import type { WorkspaceSessionServiceDependencies } from "./workspace-session-service";
 import type { WorkspaceSessionUpdatedPublisher } from "./workspace-session-runtime-persistence";
 import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
@@ -44,8 +45,7 @@ type Catalog = {
     allowed: Set<string>;
     eligibleDirectories: Map<string, boolean>;
     records: Map<string, WorkspaceSessionExternal>;
-    cursors: Set<string>;
-    cursor?: string | undefined;
+    reader: ReturnType<RuntimeSessionImportPort["scanSessions"]>;
     done: boolean;
     bytes: number;
     scanned: number;
@@ -175,14 +175,14 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
           allowed,
           eligibleDirectories: new Map(),
           records: new Map(),
-          cursors: new Set(),
+          reader: adapter.sessionImport.scanSessions(entry.controller.signal),
           done: false,
           bytes: 0,
           scanned: 0,
         };
       }
       const state = entry.discovery;
-      const { owned, allowed, eligibleDirectories, records, cursors } = state;
+      const { owned, allowed, eligibleDirectories, records } = state;
       const matches = () =>
         [...records.values()].filter((row) =>
           [row.title, row.externalSessionId, row.workingDirectory].some((value) =>
@@ -190,12 +190,10 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
           ),
         );
       while (!state.done && matches().length < count) {
-        const request: Parameters<typeof adapter.sessionImport.listRootSessionMetadataPage>[0] = {
-          signal: entry.controller.signal,
-        };
-        if (state.cursor) request.pageToken = state.cursor;
-        const page = yield* adapter.sessionImport.listRootSessionMetadataPage(request);
-        for (const raw of page.sessions) {
+        const batch = yield* state.reader.next();
+        state.done = batch.done === true;
+        if (batch.done) break;
+        for (const raw of batch.value) {
           state.bytes += JSON.stringify(raw).length * 2;
           if (++state.scanned > MAX_RECORDS || state.bytes > MAX_BYTES)
             return yield* invalid(
@@ -220,15 +218,6 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
           if (!eligible || records.has(row.externalSessionId)) continue;
 
           records.set(row.externalSessionId, row);
-        }
-        state.cursor = page.nextPageToken ?? undefined;
-        state.done = !state.cursor;
-        if (state.cursor) {
-          if (cursors.has(state.cursor))
-            return yield* invalid(
-              "The runtime repeated a session page. Update the runtime and retry discovery.",
-            );
-          cursors.add(state.cursor);
         }
       }
       const current = yield* registry.resolveForScope({
@@ -394,7 +383,7 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
           const { source, saved } = yield* lifecycle.runWorktreeRead(
             canonical,
             Effect.gen(function* () {
-              const source = yield* adapter.sessionImport.openExistingSessionForImport(ref);
+              const source = yield* adapter.sessionImport.inspectSession(ref);
               if (
                 source.metadata.externalSessionId !== input.externalSessionId ||
                 source.metadata.workingDirectory !== input.workingDirectory ||
@@ -427,9 +416,7 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
           );
           if (!saved.created) return { ...saved, openError: null };
           const opened = yield* Effect.exit(
-            source.registerLiveSession.pipe(
-              Effect.zipRight(publishUpdated(input.workspaceId, saved.session)),
-            ),
+            source.attach.pipe(Effect.zipRight(publishUpdated(input.workspaceId, saved.session))),
           );
           return {
             ...saved,

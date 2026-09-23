@@ -200,7 +200,7 @@ describe("external Codex sessions", () => {
     expect(transport.calls.map((call) => call.method)).toEqual(["thread/read", "thread/resume"]);
     expect(transport.calls[0]?.params).toEqual({ threadId: "native", includeTurns: false });
     expect(transport.calls[1]?.params).toEqual({ threadId: "native", excludeTurns: true });
-    await prepared.registerLiveSession();
+    await prepared.attach();
     expect(adapter.listLiveSessionSnapshots("runtime-live")).toHaveLength(1);
     await adapter.sendUserMessage({
       ...ref,
@@ -226,7 +226,7 @@ describe("external Codex sessions", () => {
       };
       if (!cold) {
         const prepared = await adapter.openExistingSession(binding);
-        await prepared.registerLiveSession();
+        await prepared.attach();
       }
       transport.calls.length = 0;
       await adapter.loadSessionContextUsage(binding);

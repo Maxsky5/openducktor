@@ -56,27 +56,32 @@ const setup = async () => {
     { runtimeId: "runtime-1", repoPath: "/repo", runtimeKind: "opencode" },
     {
       sessionImport: {
-        listRootSessionMetadataPage: ({ pageToken, signal }) =>
-          Effect.sync(() => {
-            calls.push("listRootSessionMetadataPage");
-            state.signal = signal;
-            const offset = Number(pageToken ?? 0);
-            return {
-              sessions: state.rows.slice(offset, offset + 100),
-              nextPageToken: offset + 100 < state.rows.length ? String(offset + 100) : null,
-            };
-          }),
-        openExistingSessionForImport: (ref) =>
+        scanSessions: (signal) => {
+          state.signal = signal;
+          let offset = 0;
+          return {
+            next: () =>
+              Effect.sync(() => {
+                calls.push("scanSessions.next");
+                if (offset >= state.rows.length) return { done: true as const, value: undefined };
+                const value = state.rows.slice(offset, offset + 100);
+                offset += 100;
+                return { done: false as const, value };
+              }),
+          };
+        },
+        inspectSession: (ref) =>
           Effect.suspend(() => {
-            calls.push("openExistingSessionForImport");
+            calls.push("inspectSession");
             if (state.failOpen) return Effect.fail(failure("opening source failed"));
             return Effect.succeed({
               metadata: {
                 ...row(ref.externalSessionId, ref.workingDirectory),
                 title: "Native title ".repeat(30),
               },
-              registerLiveSession: Effect.suspend(() => {
-                calls.push("registerLiveSession");
+              selectedModel: null,
+              attach: Effect.suspend(() => {
+                calls.push("attach");
                 return state.failRegistration
                   ? Effect.fail(failure("publication failed"))
                   : Effect.void;
@@ -183,8 +188,8 @@ describe("external workspace session import", () => {
     expect(
       (await Effect.runPromise(h.service.list({ ...h.list, search: "other" }))).sessions,
     ).toEqual([]);
-    expect(h.calls).not.toContain("openExistingSessionForImport");
-    expect(h.calls.filter((call) => call === "listRootSessionMetadataPage")).toHaveLength(31);
+    expect(h.calls).not.toContain("inspectSession");
+    expect(h.calls.filter((call) => call === "scanSessions.next")).toHaveLength(32);
     await expect(
       Effect.runPromise(
         h.service.list({ ...h.list, search: "changed", cursor: first.nextCursor! }),
@@ -271,12 +276,7 @@ describe("external workspace session import", () => {
       selectedModel: null,
       manualTitle: "Native title ".repeat(30),
     });
-    expect(h.calls).toEqual([
-      "openExistingSessionForImport",
-      "save",
-      "registerLiveSession",
-      "publish",
-    ]);
+    expect(h.calls).toEqual(["inspectSession", "save", "attach", "publish"]);
     await Effect.runPromise(
       h.store.archive({
         workspaceId: "fairnest",
@@ -297,7 +297,7 @@ describe("external workspace session import", () => {
     expect(
       await Effect.runPromise(h.store.listActive({ workspaceId: "fairnest", repoPath: "/repo" })),
     ).toEqual([]);
-    expect(h.calls).not.toContain("registerLiveSession");
+    expect(h.calls).not.toContain("attach");
   });
 
   test("keeps the saved record after live publication fails", async () => {
@@ -328,10 +328,12 @@ describe("external workspace session import", () => {
   test("release interrupts an in-flight catalog without admitting a session", async () => {
     const h = await setup();
     const entered = Effect.runSync(Deferred.make<void>());
-    h.adapter.sessionImport.listRootSessionMetadataPage = ({ signal }) =>
-      Effect.sync(() => {
-        h.state.signal = signal;
-      }).pipe(Effect.zipRight(Deferred.succeed(entered, undefined)), Effect.zipRight(Effect.never));
+    h.adapter.sessionImport.scanSessions = (signal) => {
+      h.state.signal = signal;
+      return {
+        next: () => Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Effect.never)),
+      };
+    };
     const fiber = Effect.runFork(h.service.list(h.list));
     await Effect.runPromise(Deferred.await(entered));
     await Effect.runPromise(h.service.release(h.list));
@@ -342,29 +344,22 @@ describe("external workspace session import", () => {
 
 test("import releases the directory guard before runtime admission reads the same directory", async () => {
   const h = await setup();
-  const openExistingSessionForImport = h.adapter.sessionImport.openExistingSessionForImport;
-  h.adapter.sessionImport.openExistingSessionForImport = (ref) =>
-    openExistingSessionForImport(ref).pipe(
-      Effect.map((handle) => ({
-        ...handle,
-        registerLiveSession: h.lifecycle
-          .runWorktreeRead(ref.workingDirectory, handle.registerLiveSession)
-          .pipe(
-            Effect.timeoutFail({
-              duration: "1 second",
-              onTimeout: () => failure("Admission deadlocked on the import directory guard"),
-            }),
-          ),
+  const inspectSession = h.adapter.sessionImport.inspectSession;
+  h.adapter.sessionImport.inspectSession = (ref) =>
+    inspectSession(ref).pipe(
+      Effect.map((source) => ({
+        ...source,
+        attach: h.lifecycle.runWorktreeRead(ref.workingDirectory, source.attach).pipe(
+          Effect.timeoutFail({
+            duration: "1 second",
+            onTimeout: () => failure("Admission deadlocked on the import directory guard"),
+          }),
+        ),
       })),
     );
   const imported = await Effect.runPromise(h.service.importSession(h.input));
   expect(imported.openError).toBeNull();
-  expect(h.calls).toEqual([
-    "openExistingSessionForImport",
-    "save",
-    "registerLiveSession",
-    "publish",
-  ]);
+  expect(h.calls).toEqual(["inspectSession", "save", "attach", "publish"]);
 });
 
 test("returns the first import page without draining native history", async () => {
@@ -372,12 +367,12 @@ test("returns the first import page without draining native history", async () =
   h.state.rows = Array.from({ length: 3000 }, (_, index) => h.row(`external-${index}`));
   const first = await Effect.runPromise(h.service.list(h.list));
   expect(first.sessions).toHaveLength(50);
-  expect(h.calls.filter((call) => call === "listRootSessionMetadataPage")).toHaveLength(1);
+  expect(h.calls.filter((call) => call === "scanSessions.next")).toHaveLength(1);
 });
 
 test("persists native model, profile and effort from the opened source", async () => {
   const h = await setup();
-  const openExistingSessionForImport = h.adapter.sessionImport.openExistingSessionForImport;
+  const inspectSession = h.adapter.sessionImport.inspectSession;
   const selectedModel = {
     runtimeKind: "opencode" as const,
     providerId: "openai",
@@ -385,8 +380,8 @@ test("persists native model, profile and effort from the opened source", async (
     profileId: "plan",
     variant: "high",
   };
-  h.adapter.sessionImport.openExistingSessionForImport = (ref) =>
-    openExistingSessionForImport(ref).pipe(Effect.map((handle) => ({ ...handle, selectedModel })));
+  h.adapter.sessionImport.inspectSession = (ref) =>
+    inspectSession(ref).pipe(Effect.map((source) => ({ ...source, selectedModel })));
   const imported = await Effect.runPromise(h.service.importSession(h.input));
   expect(imported.session.selectedModel).toEqual(selectedModel);
 });

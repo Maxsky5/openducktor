@@ -37,14 +37,14 @@ export type ClaudePendingInputResolution = {
 };
 
 export type ClaudeAgentSdkService = {
-  openExistingSessionForImport(
+  inspectSessionForImport(
     input: SessionRef,
     runtimeId: string,
   ): Effect.Effect<
     {
       metadata: import("@openducktor/contracts").WorkspaceSessionExternal;
-      selectedModel?: import("@openducktor/contracts").WorkspaceSession["selectedModel"];
-      registerLiveSession: Effect.Effect<AgentSessionSummary, ClaudeAgentSdkServiceError>;
+      selectedModel: import("@openducktor/contracts").AgentSessionModelSelection | null;
+      attach: Effect.Effect<AgentSessionSummary, ClaudeAgentSdkServiceError>;
     },
     ClaudeAgentSdkServiceError
   >;

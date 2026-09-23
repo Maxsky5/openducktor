@@ -1,21 +1,15 @@
-import type { WorkspaceSessionExternal, WorkspaceSession } from "@openducktor/contracts";
-import type {
-  RuntimeSessionImportPort as NativePort,
-  SessionRef,
-  RuntimeSessionMetadataPage,
-} from "@openducktor/core";
+import type { AgentSessionModelSelection, WorkspaceSessionExternal } from "@openducktor/contracts";
+import type { SessionRef } from "@openducktor/core";
 import type { Effect } from "effect";
 import type { HostError } from "../effect/host-errors";
 export type HostSessionImportSource = {
   metadata: WorkspaceSessionExternal;
-  selectedModel?: WorkspaceSession["selectedModel"] | undefined;
-  registerLiveSession: Effect.Effect<void, HostError>;
+  selectedModel: AgentSessionModelSelection | null;
+  attach: Effect.Effect<void, HostError>;
 };
 export type RuntimeSessionImportPort = {
-  listRootSessionMetadataPage(
-    input: Parameters<NativePort["listRootSessionMetadataPage"]>[0],
-  ): Effect.Effect<RuntimeSessionMetadataPage, HostError>;
-  openExistingSessionForImport(
-    input: SessionRef,
-  ): Effect.Effect<HostSessionImportSource, HostError>;
+  scanSessions(signal: AbortSignal): {
+    next(): Effect.Effect<IteratorResult<WorkspaceSessionExternal[]>, HostError>;
+  };
+  inspectSession(input: SessionRef): Effect.Effect<HostSessionImportSource, HostError>;
 };

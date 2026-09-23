@@ -1,19 +1,12 @@
-import type { WorkspaceSessionExternal, WorkspaceSession } from "@openducktor/contracts";
+import type { AgentSessionModelSelection, WorkspaceSessionExternal } from "@openducktor/contracts";
 import type { SessionRef } from "../types/agent-orchestrator";
 
-export type RuntimeSessionMetadataPage = {
-  sessions: WorkspaceSessionExternal[];
-  nextPageToken: string | null;
-};
 export type RuntimeSessionImportSource = {
   metadata: WorkspaceSessionExternal;
-  selectedModel?: WorkspaceSession["selectedModel"] | undefined;
-  registerLiveSession(): Promise<void>;
+  selectedModel: AgentSessionModelSelection | null;
+  attach(): Promise<void>;
 };
 export type RuntimeSessionImportPort = {
-  listRootSessionMetadataPage(input: {
-    pageToken?: string;
-    signal: AbortSignal;
-  }): Promise<RuntimeSessionMetadataPage>;
-  openExistingSessionForImport(input: SessionRef): Promise<RuntimeSessionImportSource>;
+  scanSessions(signal: AbortSignal): AsyncIterable<WorkspaceSessionExternal[]>;
+  inspectSession(input: SessionRef): Promise<RuntimeSessionImportSource>;
 };
