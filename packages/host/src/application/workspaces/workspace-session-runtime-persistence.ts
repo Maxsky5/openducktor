@@ -289,13 +289,16 @@ export const createWorkspaceSessionRuntimePersistence = ({
           renamePending ? { ...plan.input, generatedTitle: null } : plan.input,
         ),
       );
-      yield* publishUpdated(known.ref.workspaceId, saved);
+      const published = yield* Effect.either(publishUpdated(known.ref.workspaceId, saved));
+      // Start the deferred rename before a publication failure propagates, or the write that
+      // held the generated title back would leave the title unapplied.
       if (renamePending && !sendsInFlight.has(agentSessionRefKey(runtimeRef)))
         yield* Effect.forkDaemon(
           recordAcceptedMessage(runtimeRef, message, false).pipe(
             Effect.catchAll((failure) => reportRenameFailure(runtimeRef, failure.message)),
           ),
         );
+      if (published._tag === "Left") return yield* Effect.fail(published.left);
     });
   const flushFinalMessage = (runtimeRef: AgentSessionLiveRef) =>
     Effect.gen(function* () {

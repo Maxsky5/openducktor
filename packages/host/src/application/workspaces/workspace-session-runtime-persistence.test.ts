@@ -244,6 +244,20 @@ describe("Workspace Session persistence through the shared command module", () =
     expect(saved.generatedTitle).toBe("First accepted prompt");
   });
 
+  test("defers the first-message rename when the publication fails", async () => {
+    const h = await setup();
+    h.state.failPublish = true;
+    h.state.beforeTitle = Effect.sync(() => {
+      h.state.failPublish = false;
+    });
+    await expect(h.emit({ ...h.accepted(), sessionRef: h.ref })).rejects.toThrow(
+      "publication failed",
+    );
+    await waitFor(() => h.titleAttempts.length === 1);
+    expect(h.titleAttempts).toEqual(["First accepted prompt"]);
+    expect((await h.get()).generatedTitle).toBe("First accepted prompt");
+  });
+
   test("does not persist rejected sends or model changes and saves an accepted model", async () => {
     const h = await setup();
     h.state.failSend = true;
