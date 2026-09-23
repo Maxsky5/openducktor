@@ -6,11 +6,11 @@ import WorkspaceSessionsPage from "./workspace-sessions-page";
 import * as workspaceSessionsView from "./workspace-sessions-view";
 
 test("repository sessions mount the syntax worker provider around the view", () => {
-  const provider = spyOn(diffWorkers, "DiffWorkerProvider").mockImplementation(({ children }) => (
-    <div data-testid="syntax-worker-provider">{children}</div>
-  ));
-  const sessions = spyOn(workspaceSessionsView, "WorkspaceSessions").mockImplementation(() => (
-    <div data-testid="repository-session-view">Edited /home/user/.claude/memory/MEMORY.md</div>
+  const workerProvider = spyOn(diffWorkers, "DiffWorkerProvider").mockImplementation(
+    ({ children }) => <div data-testid="syntax-worker-provider">{children}</div>,
+  );
+  const sessionView = spyOn(workspaceSessionsView, "WorkspaceSessions").mockImplementation(() => (
+    <div data-testid="repository-session-view" />
   ));
   let view: ReturnType<typeof render> | undefined;
   try {
@@ -31,7 +31,7 @@ test("repository sessions mount the syntax worker provider around the view", () 
     ).toBe(true);
   } finally {
     view?.unmount();
-    sessions.mockRestore();
-    provider.mockRestore();
+    sessionView.mockRestore();
+    workerProvider.mockRestore();
   }
 });
