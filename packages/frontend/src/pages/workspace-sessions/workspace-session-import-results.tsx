@@ -1,5 +1,5 @@
 import type { WorkspaceSessionExternal } from "@openducktor/contracts";
-import { Import, LoaderCircle } from "lucide-react";
+import { Folder, Import, LoaderCircle } from "lucide-react";
 import { formatCiRelativeTime } from "@/components/features/agents/task-execution-ci-relative-time-format";
 import { Button } from "@/components/ui/button";
 
@@ -46,57 +46,61 @@ export function WorkspaceSessionImportResults({
       {rows.length > 0 && (
         <ul
           aria-label="External sessions"
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain divide-y divide-border rounded-md border border-border"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain divide-y divide-border rounded-lg border border-border"
         >
           {rows.map((session) => (
-            <li key={session.externalSessionId} className="flex items-center gap-3 p-3">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-baseline justify-between gap-3">
-                  <p
-                    className="min-w-0 truncate text-sm font-medium"
-                    title={session.title ?? session.externalSessionId}
-                  >
-                    {session.title ?? session.externalSessionId}
-                  </p>
-                  {session.updatedAt !== null && (
-                    <time
-                      className="shrink-0 text-xs font-normal text-muted-foreground"
-                      title={new Date(session.updatedAt).toLocaleString()}
-                      dateTime={new Date(session.updatedAt).toISOString()}
-                    >
-                      {formatCiRelativeTime(new Date(session.updatedAt).toISOString())}
-                    </time>
-                  )}
-                </div>
+            <li
+              key={session.externalSessionId}
+              className="flex flex-col gap-3 p-4 transition-colors hover:bg-muted/30 focus-within:bg-muted/30 sm:flex-row sm:items-center sm:gap-4"
+            >
+              <div className="min-w-0 flex-1 space-y-2">
+                <p
+                  className="truncate text-sm font-semibold text-foreground"
+                  title={session.title ?? session.externalSessionId}
+                >
+                  {session.title ?? session.externalSessionId}
+                </p>
+                <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Folder aria-hidden="true" className="size-3.5 shrink-0" />
+                  <span className="min-w-0 truncate" title={session.workingDirectory}>
+                    {session.workingDirectory}
+                  </span>
+                </p>
                 <p
                   className="truncate text-xs text-muted-foreground"
-                  title={session.workingDirectory}
+                  title={session.externalSessionId}
                 >
-                  {session.workingDirectory}
+                  <span className="mr-1.5">Session ID</span>
+                  <span className="font-mono">{session.externalSessionId}</span>
                 </p>
-                <div className="mt-1 flex items-baseline gap-3 text-xs text-muted-foreground">
-                  <p className="min-w-0 flex-1 truncate" title={session.externalSessionId}>
-                    {session.externalSessionId}
-                  </p>
-                </div>
               </div>
-              <Button
-                className="shrink-0"
-                size="sm"
-                variant="outline"
-                disabled={pending}
-                onClick={() => onImport(session)}
-                aria-label={`Import ${session.title ?? session.externalSessionId}`}
-              >
-                {pending && selectedSessionId === session.externalSessionId ? (
-                  <LoaderCircle className="motion-safe:animate-spin" />
-                ) : (
-                  <Import />
+              <div className="flex shrink-0 items-center justify-between gap-3 sm:flex-col sm:items-end">
+                {session.updatedAt !== null && (
+                  <time
+                    className="text-xs text-muted-foreground"
+                    title={new Date(session.updatedAt).toLocaleString()}
+                    dateTime={new Date(session.updatedAt).toISOString()}
+                  >
+                    {formatCiRelativeTime(new Date(session.updatedAt).toISOString())}
+                  </time>
                 )}
-                {pending && selectedSessionId === session.externalSessionId
-                  ? "Importing…"
-                  : "Import"}
-              </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={pending}
+                  onClick={() => onImport(session)}
+                  aria-label={`Import ${session.title ?? session.externalSessionId}`}
+                >
+                  {pending && selectedSessionId === session.externalSessionId ? (
+                    <LoaderCircle className="motion-safe:animate-spin" />
+                  ) : (
+                    <Import />
+                  )}
+                  {pending && selectedSessionId === session.externalSessionId
+                    ? "Importing…"
+                    : "Import"}
+                </Button>
+              </div>
             </li>
           ))}
         </ul>

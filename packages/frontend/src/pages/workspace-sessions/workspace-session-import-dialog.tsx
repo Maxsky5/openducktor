@@ -67,14 +67,14 @@ export function WorkspaceSessionImportDialog(props: Props) {
           if (pending) event.preventDefault();
         }}
       >
-        <DialogHeader className="border-b border-border px-5 py-3 pr-14">
+        <DialogHeader className="border-b border-border px-6 py-4 pr-14">
           <DialogTitle>Import session</DialogTitle>
           <DialogDescription>
             Continue an existing conversation from this repository or one of its worktrees.
           </DialogDescription>
         </DialogHeader>
-        <DialogBody className="flex flex-col gap-3 overflow-hidden px-5 py-3">
-          <div className="shrink-0 space-y-2">
+        <DialogBody className="flex flex-col gap-5 overflow-hidden px-6 py-4">
+          <div className="grid shrink-0 gap-2.5">
             <Label id="session-import-runtime">Runtime</Label>
             <Combobox
               value={selectedRuntime ?? ""}
@@ -109,7 +109,7 @@ export function WorkspaceSessionImportDialog(props: Props) {
             />
           )}
         </DialogBody>
-        <DialogFooter className="mt-0 border-t border-border px-5 py-3">
+        <DialogFooter className="mt-0 border-t border-border px-6 py-4">
           <Button variant="outline" disabled={pending} onClick={props.onClose}>
             Cancel
           </Button>

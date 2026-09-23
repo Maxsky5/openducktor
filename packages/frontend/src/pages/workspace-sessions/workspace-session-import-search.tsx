@@ -15,7 +15,7 @@ export function WorkspaceSessionImportSearch({ search, pending, loading, onSearc
   const searchInput = useRef<HTMLInputElement>(null);
   return (
     <>
-      <div className="shrink-0 space-y-2">
+      <div className="grid shrink-0 gap-2.5">
         <Label htmlFor="session-import-search">Search sessions</Label>
         <div className="relative">
           <Input
