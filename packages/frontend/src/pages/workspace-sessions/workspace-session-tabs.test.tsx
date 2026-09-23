@@ -1,10 +1,9 @@
-import { afterEach, beforeEach, expect, jest, spyOn, test } from "bun:test";
+import { afterEach, expect, jest, spyOn, test } from "bun:test";
 import type { WorkspaceSession, WorkspaceSessionArchiveInput } from "@openducktor/contracts";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { act, type ReactNode } from "react";
 import { Link, MemoryRouter, useLocation, useNavigate } from "react-router";
-import * as diffWorkers from "@/contexts/DiffWorkerProvider";
 import { QueryProvider } from "@/lib/query-provider";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
@@ -18,7 +17,7 @@ import {
   createAgentSessionFixture,
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
-import WorkspaceSessionsPage from "./workspace-sessions-page";
+import { WorkspaceSessions } from "./workspace-sessions-view";
 import { workspaceSessionSelectionStorageKey } from "./use-workspace-session-selection";
 import { workspaceSessionTabOrderStorageKey } from "./use-workspace-session-tab-order";
 import { updateWorkspaceSessionQueries } from "@/state/queries/workspace-sessions";
@@ -26,22 +25,7 @@ import * as chatCreate from "./workspace-session-create-dialog";
 import * as workspaceChat from "./workspace-session-chat";
 
 const testWorkspaceIds = new Set<string>();
-let showSyntaxWorkerProvider = false;
-let restoreSyntaxWorkerProvider: (() => void) | undefined;
-beforeEach(() => {
-  const provider = spyOn(diffWorkers, "DiffWorkerProvider").mockImplementation(({ children }) =>
-    showSyntaxWorkerProvider ? (
-      <div data-testid="syntax-worker-provider">{children}</div>
-    ) : (
-      <>{children}</>
-    ),
-  );
-  restoreSyntaxWorkerProvider = () => provider.mockRestore();
-});
 afterEach(() => {
-  restoreSyntaxWorkerProvider?.();
-  restoreSyntaxWorkerProvider = undefined;
-  showSyntaxWorkerProvider = false;
   for (const workspaceId of testWorkspaceIds) {
     localStorage.removeItem(workspaceSessionSelectionStorageKey(workspaceId));
     localStorage.removeItem(workspaceSessionTabOrderStorageKey(workspaceId));
@@ -330,6 +314,7 @@ function renderTabs(
   queryControls: ReactNode = null,
 ) {
   testWorkspaceIds.add(workspaceId);
+  const workspace = { workspaceId, workspaceName: "A", repoPath: "/repo" };
   const store = createAgentSessionsStore("/repo");
   if (runningId) {
     store.replaceSession(
@@ -353,7 +338,7 @@ function renderTabs(
         {queryControls}
         <ActiveWorkspaceContext
           value={{
-            activeWorkspace: { workspaceId, workspaceName: "A", repoPath: "/repo" },
+            activeWorkspace: workspace,
             setActiveWorkspace: () => {},
           }}
         >
@@ -366,7 +351,7 @@ function renderTabs(
             }}
           >
             <AgentSessionsContext value={store}>
-              <WorkspaceSessionsPage />
+              <WorkspaceSessions workspace={workspace} />
             </AgentSessionsContext>
           </AgentSessionReadModelStateContext>
         </ActiveWorkspaceContext>
@@ -552,30 +537,6 @@ test("switching loaded chats keeps only the selected session header", async () =
       "Second",
     ]);
     expect(view.getByTestId("selected-chat").textContent).toBe("Second");
-  } finally {
-    view.unmount();
-    chat.mockRestore();
-    configureShellBridge(createUnavailableShellBridge());
-  }
-});
-
-test("repository session chats render inside the syntax worker provider", async () => {
-  showSyntaxWorkerProvider = true;
-  const chat = spyOn(workspaceChat, "WorkspaceSessionChat").mockImplementation(() => (
-    <div data-testid="selected-chat">Edited /home/user/.claude/memory/MEMORY.md</div>
-  ));
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceSessionListActive: async () => [sessionRecord("First")],
-        workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
-      },
-    }),
-  );
-  const view = renderTabs();
-  try {
-    const selectedChat = await view.findByTestId("selected-chat", {}, { timeout: 800 });
-    expect(view.getByTestId("syntax-worker-provider").contains(selectedChat)).toBe(true);
   } finally {
     view.unmount();
     chat.mockRestore();
