@@ -28,7 +28,7 @@ const fieldLabels = {
 } satisfies Partial<Record<AzureRepositoryDraftField, string>>;
 
 const fieldPlaceholders = {
-  serviceUrl: "https://azure.example.com/tfs",
+  serviceUrl: "https://azure.example.com",
   organization: "my-organization",
   project: "My project",
   name: "my-repository",
@@ -286,6 +286,11 @@ function ManualRepositoryForm({
                 aria-invalid={error ? true : undefined}
                 aria-describedby={error ? `repo-azure-${field}-error` : undefined}
               />
+              {field === "serviceUrl" ? (
+                <p className="text-xs text-muted-foreground">
+                  Include the full path if your server uses one.
+                </p>
+              ) : null}
               {error ? (
                 <p id={`repo-azure-${field}-error`} role="alert" className="text-xs text-danger">
                   {error}

@@ -11,7 +11,7 @@ import {
 
 const repositoryDraft = {
   deployment: "server" as const,
-  serviceUrl: "https://azure.example.test/tfs",
+  serviceUrl: "https://azure.example.test/installation",
   organization: "DefaultCollection",
   project: "Desktop",
   name: "OpenDucktor",
@@ -23,9 +23,9 @@ describe("Azure DevOps settings draft", () => {
       azureDevOpsHttpConsentCollectionUrl({
         providerId: "azure_devops",
         ...repositoryDraft,
-        serviceUrl: "HTTP://ADO.Example/tfs",
+        serviceUrl: "HTTP://ADO.Example/installation",
       }),
-    ).toBe("http://ado.example/tfs/DefaultCollection");
+    ).toBe("http://ado.example/installation/DefaultCollection");
   });
 
   test("reports repository errors by field without discarding raw input", () => {

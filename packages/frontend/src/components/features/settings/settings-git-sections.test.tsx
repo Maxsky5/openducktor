@@ -869,7 +869,12 @@ describe("settings git sections", () => {
       expect(rendered.container.textContent).toContain("Organization is required.");
 
       fireEvent.click(screen.getByRole("radio", { name: /Azure DevOps Server/ }));
-      expect(screen.getByLabelText("Server address")).toBeTruthy();
+      expect(screen.getByLabelText("Server address").getAttribute("placeholder")).toBe(
+        "https://azure.example.com",
+      );
+      expect(rendered.container.textContent).toContain(
+        "Include the full path if your server uses one.",
+      );
     } finally {
       rendered.unmount();
     }
@@ -887,7 +892,7 @@ describe("settings git sections", () => {
           repository: {
             providerId: "azure_devops",
             deployment: "server",
-            serviceUrl: "https://azure.example.test/tfs",
+            serviceUrl: "https://azure.example.test/installation",
             organization: "DefaultCollection",
             project: "Desktop",
             name: "OpenDucktor",
@@ -1043,7 +1048,7 @@ describe("settings git sections", () => {
     const oldRepository = {
       providerId: "azure_devops" as const,
       deployment: "server" as const,
-      serviceUrl: "http://azure.example.test/tfs",
+      serviceUrl: "http://azure.example.test/installation",
       organization: "DefaultCollection",
       project: "Desktop",
       name: "OpenDucktor",
@@ -1059,14 +1064,15 @@ describe("settings git sections", () => {
           remoteMappings: [
             {
               remoteName: "origin",
-              fetchUrl: "http://azure.example.test/tfs/DefaultCollection/Desktop/_git/OpenDucktor",
+              fetchUrl:
+                "http://azure.example.test/installation/DefaultCollection/Desktop/_git/OpenDucktor",
               pushUrls: [
-                "http://azure.example.test/tfs/DefaultCollection/Desktop/_git/OpenDucktor",
+                "http://azure.example.test/installation/DefaultCollection/Desktop/_git/OpenDucktor",
               ],
               repository: oldRepository,
             },
           ],
-          httpConsentCollectionUrl: "http://azure.example.test/tfs/DefaultCollection",
+          httpConsentCollectionUrl: "http://azure.example.test/installation/DefaultCollection",
         },
       },
     };
@@ -1126,7 +1132,7 @@ describe("settings git sections", () => {
     const repository = {
       providerId: "azure_devops" as const,
       deployment: "server" as const,
-      serviceUrl: "http://azure.example.test/tfs",
+      serviceUrl: "http://azure.example.test/installation",
       organization: "DefaultCollection",
       project: "Desktop",
       name: "OpenDucktor",
@@ -1139,7 +1145,7 @@ describe("settings git sections", () => {
           enabled: true,
           autoDetected: false,
           repository,
-          httpConsentCollectionUrl: "http://azure.example.test/tfs/DefaultCollection",
+          httpConsentCollectionUrl: "http://azure.example.test/installation/DefaultCollection",
         },
       },
     };
@@ -1207,7 +1213,7 @@ describe("settings git sections", () => {
           repository: {
             providerId: "azure_devops",
             deployment: "server",
-            serviceUrl: "https://azure.example.test/tfs",
+            serviceUrl: "https://azure.example.test/installation",
             organization: "DefaultCollection",
             project: "Desktop",
             name: "OpenDucktor",

@@ -10,7 +10,7 @@ import { createAzureDevOpsRestClient } from "./rest-client";
 const repository = azureDevOpsRepositorySchema.parse({
   providerId: "azure_devops",
   deployment: "server",
-  serviceUrl: "https://ado.example.test/tfs/Main%20Collection",
+  serviceUrl: "https://ado.example.test/installation/Main%20Collection",
   organization: "DefaultCollection",
   project: "Desktop App",
   name: "app",
@@ -72,7 +72,7 @@ describe("Azure DevOps REST client", () => {
       ),
     ).resolves.toEqual([{ id: 1 }, { id: 2 }]);
     expect(urls[0]).toContain(
-      "https://ado.example.test/tfs/Main%20Collection/DefaultCollection/Desktop%20App/_apis/git/repositories/app/pullrequests",
+      "https://ado.example.test/installation/Main%20Collection/DefaultCollection/Desktop%20App/_apis/git/repositories/app/pullrequests",
     );
     expect(urls[1]).toContain("continuationToken=next");
   });

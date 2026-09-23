@@ -87,7 +87,7 @@ describe("AzureDevOpsConnectionSettings", () => {
           connectionState: { status: "disconnected" },
           draft: {
             deployment: "server",
-            serviceUrl: "http://azure.example.test/tfs",
+            serviceUrl: "http://azure.example.test/installation",
             organization: "DefaultCollection",
             project: "project",
             name: "repository",
@@ -171,7 +171,7 @@ describe("AzureDevOpsConnectionSettings", () => {
           draft: {
             ...controller.draft,
             deployment: "server",
-            serviceUrl: "https://ado.example/tfs",
+            serviceUrl: "https://ado.example/installation",
           },
         }}
         disabled={false}

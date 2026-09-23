@@ -11,7 +11,7 @@ import { azureDevOpsRepositoryKey } from "@openducktor/core";
 const repository: AzureDevOpsRepository = {
   providerId: "azure_devops",
   deployment: "server",
-  serviceUrl: "https://ado.example.test/tfs",
+  serviceUrl: "https://ado.example.test/installation",
   organization: "DefaultCollection",
   project: "Desktop",
   name: "app",
@@ -32,7 +32,7 @@ describe("Azure DevOps connection", () => {
   test("rejects a mixed-case HTTP Server address before sending the PAT", async () => {
     const httpRepository: AzureDevOpsRepository = {
       ...repository,
-      serviceUrl: "HTTP://ADO.Example.test/tfs",
+      serviceUrl: "HTTP://ADO.Example.test/installation",
     };
     const httpRepoConfig = repoConfigSchema.parse({
       ...repoConfig,

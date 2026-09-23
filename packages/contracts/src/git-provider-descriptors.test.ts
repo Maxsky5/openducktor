@@ -183,12 +183,12 @@ describe("Git provider descriptors", () => {
       azureDevOpsRepositorySchema.parse({
         providerId: "azure_devops",
         deployment: "server",
-        serviceUrl: "HTTP://ADO.Example/tfs/",
+        serviceUrl: "HTTP://ADO.Example/installation/",
         organization: "DefaultCollection",
         project: "OpenDucktor",
         name: "Desktop",
       }).serviceUrl,
-    ).toBe("HTTP://ADO.Example/tfs/");
+    ).toBe("HTTP://ADO.Example/installation/");
   });
 
   test("reports an invalid Azure DevOps Server address without throwing", () => {
@@ -217,13 +217,13 @@ describe("Git provider descriptors", () => {
 
   test("rejects Server paths that URL parsing would rewrite or cannot decode", () => {
     for (const serviceUrl of [
-      "https://ado.example/tfs/../admin",
-      "https://ado.example/tfs/%2e%2e/admin",
-      "https://ado.example/tfs/%252e%252e/admin",
-      "https://ado.example/tfs/%2fadmin",
-      "https://ado.example/tfs/%5cadmin",
-      "https://ado.example/tfs\\..\\admin",
-      "https://ado.example/tfs/%",
+      "https://ado.example/installation/../admin",
+      "https://ado.example/installation/%2e%2e/admin",
+      "https://ado.example/installation/%252e%252e/admin",
+      "https://ado.example/installation/%2fadmin",
+      "https://ado.example/installation/%5cadmin",
+      "https://ado.example/installation\\..\\admin",
+      "https://ado.example/installation/%",
     ]) {
       expect(
         azureDevOpsRepositorySchema.safeParse({

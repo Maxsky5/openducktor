@@ -38,31 +38,31 @@ describe("Azure DevOps repository identity", () => {
 
   test("preserves Server service, collection, and project paths", () => {
     const repository = parseAzureDevOpsRepositoryUrl(
-      "http://azure.example.test:8080/tfs/Collection%20A/Project%20One/_git/Repo%20A.git",
+      "http://azure.example.test:8080/installation/Collection%20A/Project%20One/_git/Repo%20A.git",
     );
 
     expect(repository).toEqual({
       providerId: "azure_devops",
       deployment: "server",
-      serviceUrl: "http://azure.example.test:8080/tfs",
+      serviceUrl: "http://azure.example.test:8080/installation",
       organization: "Collection A",
       project: "Project One",
       name: "Repo A",
     });
     expect(azureDevOpsCollectionUrl(repository!)).toBe(
-      "http://azure.example.test:8080/tfs/Collection%20A",
+      "http://azure.example.test:8080/installation/Collection%20A",
     );
   });
 
   test("detects a Server SSH remote with the standard SSH port", () => {
     expect(
       parseAzureDevOpsRepositoryUrl(
-        "ssh://azure-devops.example.test:22/tfs/DefaultCollection/Asterix/_git/Asterix",
+        "ssh://azure-devops.example.test:22/installation/DefaultCollection/Asterix/_git/Asterix",
       ),
     ).toEqual({
       providerId: "azure_devops",
       deployment: "server",
-      serviceUrl: "https://azure-devops.example.test/tfs",
+      serviceUrl: "https://azure-devops.example.test/installation",
       organization: "DefaultCollection",
       project: "Asterix",
       name: "Asterix",
@@ -88,7 +88,7 @@ describe("Azure DevOps repository identity", () => {
     expect(parseAzureDevOpsRepositoryUrl("git@azure.example.test:project/repo")).toBeNull();
     expect(
       parseAzureDevOpsRepositoryUrl(
-        "ssh://azure.example.test:2222/tfs/DefaultCollection/Project/_git/Repo",
+        "ssh://azure.example.test:2222/installation/DefaultCollection/Project/_git/Repo",
       ),
     ).toBeNull();
     expect(parseAzureDevOpsRepositoryUrl("https://dev.azure.com/org/_git/repo")).toBeNull();
