@@ -13,7 +13,7 @@ type CodexSessionThreadConfig = {
 };
 
 type CodexSessionScopePolicyBase = {
-  /** Runtime session title. `undefined` leaves the native thread name unchanged. */
+  /** Runtime session title. `undefined` keeps the current title. */
   title?: string;
   runtimePolicy: CodexEffectivePolicy;
   threadConfig: CodexSessionThreadConfig;

@@ -268,7 +268,7 @@ export const createWorkspaceSessionService = (
                   }),
                 );
               }
-              const runtimeRename = planRuntimeTitleRename(session, nextTitle);
+              const plannedRename = planRuntimeTitleRename(session, nextTitle);
               // Save the new title before the runtime rename. Restore the saved title when
               // the runtime rename fails, so the record and the runtime session stay in step.
               // A session that the runtime does not hold yet keeps the saved title for the
@@ -277,13 +277,13 @@ export const createWorkspaceSessionService = (
                 store.rename({ ...ref, manualTitle: input.manualTitle }),
               );
               if (saved._tag === "Left") return yield* Effect.fail(saved.left);
-              if (runtimeRename === null) return saved.right;
+              if (plannedRename === null) return saved.right;
               const renamed = yield* Effect.either(
                 live.updateSessionTitle({
                   repoPath: ref.repoPath,
                   runtimeKind: session.runtimeKind,
                   workingDirectory: session.executionTarget.workingDirectory,
-                  ...runtimeRename,
+                  ...plannedRename,
                 }),
               );
               if (renamed._tag === "Right") return saved.right;

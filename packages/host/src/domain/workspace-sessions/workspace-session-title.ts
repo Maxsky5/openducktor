@@ -4,26 +4,18 @@ import {
   type WorkspaceSession,
 } from "@openducktor/contracts";
 
-const effectiveRuntimeTitle = (
-  manualTitle: string | null,
-  generatedTitle: string | null,
-): string | null => {
-  const title = manualTitle?.trim() || generatedTitle;
-  return title ? title : null;
-};
-
 export const runtimeTitle = (
   session: Pick<WorkspaceSession, "generatedTitle" | "manualTitle">,
-): string | null => effectiveRuntimeTitle(session.manualTitle, session.generatedTitle);
+): string | null => chooseTitle(session.manualTitle, session.generatedTitle);
 
 export const runtimeTitleWithManualTitle = (
   session: Pick<WorkspaceSession, "generatedTitle">,
   manualTitle: string | null,
-): string | null => effectiveRuntimeTitle(manualTitle, session.generatedTitle);
+): string | null => chooseTitle(manualTitle, session.generatedTitle);
 
 /**
- * Plans the native rename for a Workspace Session title change.
- * Returns null when the session has no native session or the title does not change.
+ * Plans the runtime rename for a Workspace Session title change.
+ * Returns null when the title stays the same or the session is not bound to a runtime session.
  */
 export const planRuntimeTitleRename = (
   session: Pick<WorkspaceSession, "externalSessionId" | "generatedTitle" | "manualTitle">,
@@ -62,4 +54,9 @@ export const buildWorkspaceSessionTitle = (message: AcceptedAgentUserMessage): s
   const lastSpace = prefix.lastIndexOf(" ");
   if (lastSpace > 0 && text[prefix.length] !== " ") prefix = prefix.slice(0, lastSpace);
   return `${prefix.trimEnd()}…`;
+};
+
+const chooseTitle = (manualTitle: string | null, generatedTitle: string | null): string | null => {
+  const title = manualTitle?.trim() || generatedTitle;
+  return title ? title : null;
 };

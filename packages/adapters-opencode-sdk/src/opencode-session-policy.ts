@@ -8,7 +8,7 @@ import {
 } from "./workflow-tool-permissions";
 
 export type OpencodeSessionPolicy = {
-  /** Runtime session title. `undefined` leaves the native session title unchanged. */
+  /** Runtime session title. `undefined` keeps the current title. */
   title?: string;
   activityLabel: string;
   permission: OpencodePermissionRule[];

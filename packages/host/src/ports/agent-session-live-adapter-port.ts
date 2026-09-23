@@ -155,7 +155,7 @@ export type AgentSessionControlContinueInterruptedTurnInput = Omit<
   "resumeMode"
 >;
 
-/** `not_attached` means the runtime holds no session with that id, so there is nothing to rename. */
+/** `renamed` commits the new summary. `not_attached` means the runtime holds no session with that id. */
 export type AgentSessionTitleUpdateOutcome =
   | { readonly status: "renamed" }
   | { readonly status: "not_attached" };

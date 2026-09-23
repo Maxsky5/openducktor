@@ -179,19 +179,19 @@ export const createWorkspaceSessionRuntimePersistence = ({
         ...known.session,
         generatedTitle: storedGeneratedTitle,
       });
-      const renameTarget = planRuntimeTitleRename(known.session, nextTitle);
+      const plannedRename = planRuntimeTitleRename(known.session, nextTitle);
       const runtimeRename =
-        renameTarget === null
+        plannedRename === null
           ? null
           : {
-              ...renameTarget,
+              ...plannedRename,
               repoPath: known.ref.repoPath,
               runtimeKind: known.session.runtimeKind,
               workingDirectory: known.session.executionTarget.workingDirectory,
             };
       return { input, runtimeRename };
     });
-  const renameAcceptedMessageTitle = (
+  const renameRuntimeTitle = (
     input: AgentSessionControlUpdateTitleInput,
   ): Effect.Effect<void, HostError> =>
     updateRuntimeSessionTitle(input).pipe(
@@ -216,7 +216,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
       // Rename the runtime session before the durable write, so a failed rename never
       // stores a title that the runtime session does not show.
       if (runtimeRename !== null) {
-        const renamed = yield* Effect.either(renameAcceptedMessageTitle(runtimeRename));
+        const renamed = yield* Effect.either(renameRuntimeTitle(runtimeRename));
         if (renamed._tag === "Left") {
           // Keep the accepted-message activity, but leave the title on its prior value.
           const recorded = yield* Effect.either(

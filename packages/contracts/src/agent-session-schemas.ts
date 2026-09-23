@@ -4,7 +4,7 @@ import { agentRoleSchema } from "./agent-workflow-schemas";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
 
-/** Matches WORKSPACE_SESSION_MANUAL_TITLE_LIMIT, kept local to avoid a schema import cycle. */
+/** Matches WORKSPACE_SESSION_MANUAL_TITLE_LIMIT. A local copy avoids a schema import cycle. */
 const REPOSITORY_SESSION_TITLE_LIMIT = 120;
 
 export const runtimeWorkingDirectoryRefSchema = repoRuntimeRefSchema

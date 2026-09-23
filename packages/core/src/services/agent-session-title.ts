@@ -8,7 +8,6 @@ export const formatWorkflowAgentSessionTitle = (role: AgentRole, taskId: string)
 /**
  * The runtime session title for a scope.
  * A repository scope carries the title from its Workspace Session record.
- * A scope without a title leaves the runtime session title unchanged.
  */
 export const agentSessionTitle = (scope: AgentSessionScope): string | undefined => {
   if (scope.kind === "repository") {
@@ -18,7 +17,7 @@ export const agentSessionTitle = (scope: AgentSessionScope): string | undefined 
 };
 
 /**
- * Returns the value with the runtime session title for a scope.
+ * Adds the scope's runtime session title to the value.
  * A scope without a title returns the value unchanged.
  */
 export const withAgentSessionTitle = <Value extends object>(
@@ -30,7 +29,7 @@ export const withAgentSessionTitle = <Value extends object>(
 };
 
 /**
- * Returns the summary with its title and repository association title set.
+ * Sets the summary title and the repository association title.
  * Other association kinds keep their stored value.
  */
 export const withSummaryTitle = (

@@ -241,7 +241,7 @@ export type AgentSessionSummary = {
 };
 
 /**
- * The result of a native session title update.
+ * The result of a runtime session title update.
  * `not_attached` means the runtime holds no session with that id, so there is nothing to rename.
  */
 export type AgentSessionTitleUpdateResult =

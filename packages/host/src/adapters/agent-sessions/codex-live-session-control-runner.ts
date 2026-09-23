@@ -2,6 +2,7 @@ import type { AgentSessionControlSummary } from "@openducktor/contracts";
 import type { AgentSessionSummary, AgentSessionTitleUpdateResult } from "@openducktor/core";
 import { Effect } from "effect";
 import { toAgentSessionControlSummary } from "../../application/agent-sessions/agent-session-control-summary";
+import { commitTitleUpdate } from "../../application/agent-sessions/agent-session-title-update";
 import {
   type HostError,
   HostValidationError,
@@ -9,30 +10,14 @@ import {
 } from "../../effect/host-errors";
 import type { AgentSessionTitleUpdateOutcome } from "../../ports/agent-session-live-adapter-port";
 
-const refreshCodexSummary = <Result extends { summary: AgentSessionSummary }>(
-  result: Result,
-  operation: string,
-  runtimeId: string,
-  refreshProjection: () => Effect.Effect<void, HostError>,
-): Effect.Effect<Result, HostError> =>
-  result.summary.runtimeKind === "codex"
-    ? refreshProjection().pipe(Effect.as(result))
-    : Effect.fail(
-        new HostValidationError({
-          field: "runtimeKind",
-          message: `Codex control '${operation}' returned runtime kind '${result.summary.runtimeKind}'.`,
-          details: { runtimeId },
-        }),
-      );
-
-export const createCodexControlSummaryRunner = ({
+export const createCodexControlRunner = ({
   runtimeId,
   refreshProjection,
 }: {
   runtimeId: string;
   refreshProjection: () => Effect.Effect<void, HostError>;
-}) => {
-  return (
+}) => ({
+  runSummary: (
     operation: string,
     run: () => Promise<AgentSessionSummary>,
   ): Effect.Effect<AgentSessionControlSummary, HostError> =>
@@ -41,20 +26,11 @@ export const createCodexControlSummaryRunner = ({
       catch: (cause) => toHostOperationError(cause, operation, { runtimeId }),
     }).pipe(
       Effect.flatMap((summary) =>
-        refreshCodexSummary({ summary }, operation, runtimeId, refreshProjection),
+        refreshCodexSummary(summary, operation, runtimeId, refreshProjection),
       ),
-      Effect.flatMap(({ summary }) => toAgentSessionControlSummary(summary, operation)),
-    );
-};
-
-export const createCodexTitleUpdateRunner = ({
-  runtimeId,
-  refreshProjection,
-}: {
-  runtimeId: string;
-  refreshProjection: () => Effect.Effect<void, HostError>;
-}) => {
-  return (
+      Effect.flatMap((summary) => toAgentSessionControlSummary(summary, operation)),
+    ),
+  runTitleUpdate: (
     operation: string,
     run: () => Promise<AgentSessionTitleUpdateResult>,
   ): Effect.Effect<AgentSessionTitleUpdateOutcome, HostError> =>
@@ -62,12 +38,26 @@ export const createCodexTitleUpdateRunner = ({
       try: run,
       catch: (cause) => toHostOperationError(cause, operation, { runtimeId }),
     }).pipe(
-      Effect.flatMap((result): Effect.Effect<AgentSessionTitleUpdateOutcome, HostError> =>
-        result.status === "not_attached"
-          ? Effect.succeed({ status: "not_attached" as const })
-          : refreshCodexSummary(result, operation, runtimeId, refreshProjection).pipe(
-              Effect.as({ status: "renamed" as const }),
-            ),
+      Effect.flatMap((result) =>
+        commitTitleUpdate(result, (summary) =>
+          refreshCodexSummary(summary, operation, runtimeId, refreshProjection),
+        ),
       ),
-    );
-};
+    ),
+});
+
+const refreshCodexSummary = (
+  summary: AgentSessionSummary,
+  operation: string,
+  runtimeId: string,
+  refreshProjection: () => Effect.Effect<void, HostError>,
+): Effect.Effect<AgentSessionSummary, HostError> =>
+  summary.runtimeKind === "codex"
+    ? refreshProjection().pipe(Effect.as(summary))
+    : Effect.fail(
+        new HostValidationError({
+          field: "runtimeKind",
+          message: `Codex control '${operation}' returned runtime kind '${summary.runtimeKind}'.`,
+          details: { runtimeId },
+        }),
+      );

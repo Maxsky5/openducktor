@@ -29,10 +29,7 @@ import type {
   PreparedCodexLiveSessionAdapter,
 } from "./codex-live-session-adapter-contract";
 import { createCodexLiveSessionEventHub } from "./codex-live-session-event-hub";
-import {
-  createCodexControlSummaryRunner,
-  createCodexTitleUpdateRunner,
-} from "./codex-live-session-control-runner";
+import { createCodexControlRunner } from "./codex-live-session-control-runner";
 import {
   publishAcceptedCodexMessage,
   refreshAfterAcceptedCodexMessage,
@@ -130,11 +127,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
           catalogInvalidated: false,
         });
 
-      const runControlSummary = createCodexControlSummaryRunner({
-        runtimeId: runtime.runtimeId,
-        refreshProjection,
-      });
-      const runTitleUpdate = createCodexTitleUpdateRunner({
+      const { runSummary, runTitleUpdate } = createCodexControlRunner({
         runtimeId: runtime.runtimeId,
         refreshProjection,
       });
@@ -335,7 +328,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
               if (model !== undefined) {
                 request.model = model;
               }
-              return runControlSummary("codex-live-session.start-session", () =>
+              return runSummary("codex-live-session.start-session", () =>
                 controller.startSession(request),
               );
             }),
@@ -351,7 +344,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
               if (systemPrompt !== undefined) {
                 request.systemPrompt = systemPrompt;
               }
-              return runControlSummary("codex-live-session.resume-session", () =>
+              return runSummary("codex-live-session.resume-session", () =>
                 controller.resumeSession(request),
               );
             }),
@@ -368,7 +361,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
               if (systemPrompt !== undefined) {
                 request.systemPrompt = systemPrompt;
               }
-              return runControlSummary("codex-live-session.continue-interrupted-turn", () =>
+              return runSummary("codex-live-session.continue-interrupted-turn", () =>
                 controller.continueInterruptedTurn(request),
               );
             }),
@@ -391,7 +384,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
               if (runtimeHistoryAnchor !== undefined) {
                 request.runtimeHistoryAnchor = runtimeHistoryAnchor;
               }
-              return runControlSummary("codex-live-session.fork-session", () =>
+              return runSummary("codex-live-session.fork-session", () =>
                 controller.forkSession(request),
               );
             }),

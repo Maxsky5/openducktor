@@ -12,6 +12,7 @@ import type {
 } from "@openducktor/core";
 import { Effect } from "effect";
 import { toAgentSessionControlSummary } from "../../application/agent-sessions/agent-session-control-summary";
+import { commitTitleUpdate } from "../../application/agent-sessions/agent-session-title-update";
 import { type HostError, toHostOperationError } from "../../effect/host-errors";
 import { toAgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
@@ -82,7 +83,7 @@ export const createOpenCodeSessionControlAdapter = ({
     return serializeSend(effect);
   };
 
-  const runControlSummary = (
+  const runSummary = (
     operation: string,
     run: () => Promise<AgentSessionSummary>,
   ): Effect.Effect<AgentSessionControlSummary, HostError> =>
@@ -116,13 +117,13 @@ export const createOpenCodeSessionControlAdapter = ({
             runtimeId: runtime.runtimeId,
           }),
       }).pipe(
-        Effect.flatMap((result): Effect.Effect<AgentSessionTitleUpdateOutcome, HostError> =>
-          result.status === "not_attached"
-            ? Effect.succeed({ status: "not_attached" as const })
-            : commit(`${operation}.commit`, () => ({
-                value: result,
-                changes: state.applyControlSummary(result.summary),
-              })).pipe(Effect.as({ status: "renamed" as const })),
+        Effect.flatMap((result) =>
+          commitTitleUpdate(result, (summary) =>
+            commit(`${operation}.commit`, () => ({
+              value: summary,
+              changes: state.applyControlSummary(summary),
+            })),
+          ),
         ),
       ),
     );
@@ -140,7 +141,7 @@ export const createOpenCodeSessionControlAdapter = ({
       if (input.model) {
         request.model = input.model;
       }
-      return runControlSummary("opencode-live-session.start-session", () =>
+      return runSummary("opencode-live-session.start-session", () =>
         connection.startSession(request),
       );
     },
@@ -157,7 +158,7 @@ export const createOpenCodeSessionControlAdapter = ({
       if (input.systemPrompt) {
         request.systemPrompt = input.systemPrompt;
       }
-      return runControlSummary("opencode-live-session.resume-session", () =>
+      return runSummary("opencode-live-session.resume-session", () =>
         connection.resumeSession(request),
       );
     },
@@ -177,7 +178,7 @@ export const createOpenCodeSessionControlAdapter = ({
       }
       return serializeSessionSend(
         refKey(sessionRef),
-        runControlSummary("opencode-live-session.continue-interrupted-turn", () =>
+        runSummary("opencode-live-session.continue-interrupted-turn", () =>
           connection.continueInterruptedTurn(request),
         ),
       ).pipe(
@@ -206,7 +207,7 @@ export const createOpenCodeSessionControlAdapter = ({
       if (input.model) {
         request.model = input.model;
       }
-      return runControlSummary("opencode-live-session.fork-session", () =>
+      return runSummary("opencode-live-session.fork-session", () =>
         connection.forkSession(request),
       );
     },

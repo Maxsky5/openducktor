@@ -2,6 +2,7 @@ import type { AgentSessionControlSummary } from "@openducktor/contracts";
 import type { AgentSessionSummary, AgentSessionTitleUpdateResult } from "@openducktor/core";
 import { Effect } from "effect";
 import { toAgentSessionControlSummary } from "../../application/agent-sessions/agent-session-control-summary";
+import { commitTitleUpdate } from "../../application/agent-sessions/agent-session-title-update";
 import type { HostError } from "../../effect/host-errors";
 import type { AgentSessionTitleUpdateOutcome } from "../../ports/agent-session-live-adapter-port";
 
@@ -40,12 +41,8 @@ export const createClaudeControlRunner = ({
   ): Effect.Effect<AgentSessionTitleUpdateOutcome, HostError> =>
     runControlMutation(
       run().pipe(
-        Effect.flatMap((result): Effect.Effect<AgentSessionTitleUpdateOutcome, HostError> =>
-          result.status === "not_attached"
-            ? Effect.succeed({ status: "not_attached" as const })
-            : retainSummary(operation, result.summary, {}).pipe(
-                Effect.as({ status: "renamed" as const }),
-              ),
+        Effect.flatMap((result) =>
+          commitTitleUpdate(result, (summary) => retainSummary(operation, summary, {})),
         ),
       ),
     ),
