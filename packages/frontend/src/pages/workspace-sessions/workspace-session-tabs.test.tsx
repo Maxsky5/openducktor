@@ -17,7 +17,7 @@ import {
   createAgentSessionFixture,
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
-import WorkspaceSessionsPage from "./workspace-sessions-page";
+import { WorkspaceSessions } from "./workspace-sessions-view";
 import { workspaceSessionSelectionStorageKey } from "./use-workspace-session-selection";
 import { workspaceSessionTabOrderStorageKey } from "./use-workspace-session-tab-order";
 import { updateWorkspaceSessionQueries } from "@/state/queries/workspace-sessions";
@@ -314,6 +314,7 @@ function renderTabs(
   queryControls: ReactNode = null,
 ) {
   testWorkspaceIds.add(workspaceId);
+  const workspace = { workspaceId, workspaceName: "A", repoPath: "/repo" };
   const store = createAgentSessionsStore("/repo");
   if (runningId) {
     store.replaceSession(
@@ -337,7 +338,7 @@ function renderTabs(
         {queryControls}
         <ActiveWorkspaceContext
           value={{
-            activeWorkspace: { workspaceId, workspaceName: "A", repoPath: "/repo" },
+            activeWorkspace: workspace,
             setActiveWorkspace: () => {},
           }}
         >
@@ -350,7 +351,7 @@ function renderTabs(
             }}
           >
             <AgentSessionsContext value={store}>
-              <WorkspaceSessionsPage />
+              <WorkspaceSessions workspace={workspace} />
             </AgentSessionsContext>
           </AgentSessionReadModelStateContext>
         </ActiveWorkspaceContext>
