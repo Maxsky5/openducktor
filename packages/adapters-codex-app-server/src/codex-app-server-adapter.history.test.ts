@@ -1126,21 +1126,17 @@ describe("CodexAppServerAdapter history loading", () => {
   test.each(["thread/read", "thread/turns/list"] as const)(
     "rethrows a later %s empty-rollout error after a complete history read",
     async (method) => {
-      const threadId = "thread/start-runtime-live";
       const failure = codexRpcRequestError(method, -32603, NESTED_EMPTY_ROLLOUT_MESSAGE);
-      const thread = { id: threadId, cwd: "/repo", turns: [] };
-      let rolloutExists = true;
+      const thread = { id: "thread/start-runtime-live", cwd: "/repo", turns: [] };
+      let readFails = false;
       const baseTransport = new RecordingTransport("runtime-live", false);
       const transport: CodexJsonRpcTransport = {
         request: async (request: CodexJsonRpcRequest) => {
+          if (readFails && request.method === method) throw failure;
           if (request.method === "thread/read") {
-            if (!rolloutExists && method === "thread/read") {
-              throw failure;
-            }
             return paginatedThreadReadResponse(thread);
           }
           if (request.method === "thread/turns/list") {
-            if (!rolloutExists && method === "thread/turns/list") throw failure;
             return paginatedTurnsListResponse(thread);
           }
           return baseTransport.request(request);
@@ -1153,7 +1149,7 @@ describe("CodexAppServerAdapter history loading", () => {
         expect.objectContaining({ role: "system" }),
       ]);
 
-      rolloutExists = false;
+      readFails = true;
       await expect(adapter.loadSessionHistory(codexSessionRef())).rejects.toBe(failure);
       await expect(adapter.loadSessionTodos(codexSessionRef())).rejects.toBe(failure);
     },
