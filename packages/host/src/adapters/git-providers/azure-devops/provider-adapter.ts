@@ -16,7 +16,7 @@ import type { PullRequestReviewProviderPort } from "../../../ports/pull-request-
 import { createAzureDevOpsHealthPort } from "./health";
 import { createAzureDevOpsPullRequestPort } from "./pull-requests";
 import { createAzureDevOpsRepositoryAdapter } from "./repository";
-import { createAzureDevOpsRestClient } from "./rest-client";
+import { createAzureDevOpsRestClient, type AzureDevOpsFetch } from "./rest-client";
 import { createAzureDevOpsReviewPort } from "./review";
 
 export class AzureDevOpsProviderAdapter implements GitProviderPort {
@@ -28,14 +28,19 @@ export class AzureDevOpsProviderAdapter implements GitProviderPort {
 
   constructor({
     connectionPort,
+    fetchImplementation = fetch,
     gitPort,
   }: {
     connectionPort: AzureDevOpsConnectionPort;
+    fetchImplementation?: AzureDevOpsFetch;
     gitPort: GitPort;
   }) {
     this.connectionPort = connectionPort;
     this.repositoryPort = createAzureDevOpsRepositoryAdapter({ gitPort });
-    const client = createAzureDevOpsRestClient({ connection: this.connectionPort });
+    const client = createAzureDevOpsRestClient({
+      connection: this.connectionPort,
+      fetchImplementation,
+    });
     this.healthPort = createAzureDevOpsHealthPort({
       client,
       connection: this.connectionPort,

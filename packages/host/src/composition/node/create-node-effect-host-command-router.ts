@@ -18,6 +18,7 @@ export const createNodeEffectHostCommandRouter = (input: CreateNodeHostCommandRo
           const { configDir, git, processEnvironment, systemCommands, toolDiscovery } =
             defaultPorts;
           const gitProviders = yield* createNodeGitProviderComposition({
+            azureDevOpsFetch: input.azureDevOpsFetch,
             configDir: configDir.root,
             gitPort: git,
             processEnv: processEnvironment.environment,

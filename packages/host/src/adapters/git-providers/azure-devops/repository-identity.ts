@@ -50,7 +50,13 @@ export const parseAzureDevOpsRepositoryUrl = (remoteUrl: string): AzureDevOpsRep
     return null;
   }
   if (parsed.protocol === "ssh:") {
-    return host === CLOUD_SSH_HOST ? parseCloudSshSegments(segments) : null;
+    if (host === CLOUD_SSH_HOST) {
+      return parseCloudSshSegments(segments);
+    }
+    if (parsed.port !== "" && parsed.port !== "22") {
+      return null;
+    }
+    return parseServerSegments(new URL(`https://${parsed.hostname}${parsed.pathname}`), segments);
   }
   if (host === CLOUD_HTTPS_HOST) {
     return parseCloudHttpsSegments(segments);

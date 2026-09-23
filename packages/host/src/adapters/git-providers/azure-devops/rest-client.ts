@@ -7,6 +7,8 @@ import { azureDevOpsJsonListSchema, azureDevOpsJsonSchema, type AzureDevOpsJson 
 
 const REQUEST_TIMEOUT = "30 seconds";
 
+export type AzureDevOpsFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+
 export type AzureDevOpsRequest = {
   operation: string;
   path: string;
@@ -44,7 +46,7 @@ export const createAzureDevOpsRestClient = ({
   fetchImplementation = fetch,
 }: {
   connection: AzureDevOpsConnectionPort;
-  fetchImplementation?: typeof fetch;
+  fetchImplementation?: AzureDevOpsFetch;
 }): AzureDevOpsRestClient => {
   const request: AzureDevOpsRestClient["request"] = (repoConfig, repository, input) =>
     Effect.gen(function* () {

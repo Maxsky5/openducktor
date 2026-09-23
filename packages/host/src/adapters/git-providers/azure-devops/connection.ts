@@ -29,6 +29,7 @@ import {
   createAzureDevOpsPublicClient,
   type AzureDevOpsPublicClientFactory,
 } from "./public-client";
+import type { AzureDevOpsFetch } from "./rest-client";
 
 const AZURE_DEVOPS_SCOPE = "499b84ac-1321-427f-aa17-267ca6975798/.default";
 type SignInAttempt = {
@@ -47,7 +48,7 @@ export const createAzureDevOpsConnectionAdapter = ({
 }: {
   clientId: string | undefined;
   protectedStorage: AzureDevOpsProtectedStorage;
-  fetchImplementation?: typeof fetch;
+  fetchImplementation?: AzureDevOpsFetch;
   publishConnectionState?: (
     event: HostEventPayload<"openducktor://azure-devops-connection-updated">,
   ) => void;

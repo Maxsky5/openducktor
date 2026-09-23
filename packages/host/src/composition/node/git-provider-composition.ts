@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import { AzureDevOpsProviderAdapter } from "../../adapters/git-providers/azure-devops/provider-adapter";
 import { createAzureDevOpsConnectionAdapter } from "../../adapters/git-providers/azure-devops/connection";
 import { createAzureDevOpsProtectedStorage } from "../../adapters/git-providers/azure-devops/protected-storage";
+import type { AzureDevOpsFetch } from "../../adapters/git-providers/azure-devops/rest-client";
 import { GithubProviderAdapter } from "../../adapters/git-providers/github/provider-adapter";
 import { resolveAzureDevOpsEntraClientId } from "../../config/azure-devops";
 import {
@@ -21,6 +22,7 @@ type NodeGitProviderComposition = {
 };
 
 type CreateNodeGitProviderCompositionInput = {
+  azureDevOpsFetch?: AzureDevOpsFetch | undefined;
   gitPort: GitPort;
   systemCommands: SystemCommandPort;
   toolDiscovery: ToolDiscoveryPort;
@@ -30,6 +32,7 @@ type CreateNodeGitProviderCompositionInput = {
 };
 
 export const createNodeGitProviderComposition = ({
+  azureDevOpsFetch,
   gitPort,
   systemCommands,
   toolDiscovery,
@@ -41,6 +44,7 @@ export const createNodeGitProviderComposition = ({
   GitProviderRegistrationError
 > => {
   const azureDevOpsConnection = createAzureDevOpsConnectionAdapter({
+    fetchImplementation: azureDevOpsFetch ?? fetch,
     clientId: resolveAzureDevOpsEntraClientId(processEnv),
     protectedStorage: createAzureDevOpsProtectedStorage({ configDir }),
     publishConnectionState: (payload) =>
@@ -53,6 +57,7 @@ export const createNodeGitProviderComposition = ({
     new GithubProviderAdapter({ gitPort, systemCommands, toolDiscovery }),
     new AzureDevOpsProviderAdapter({
       connectionPort: azureDevOpsConnection,
+      fetchImplementation: azureDevOpsFetch ?? fetch,
       gitPort,
     }),
   ]).pipe(Effect.map((resolver) => ({ resolver, azureDevOpsConnection })));

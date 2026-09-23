@@ -4,11 +4,12 @@ import { Effect } from "effect";
 import { HostOperationError, HostValidationError } from "../../../effect/host-errors";
 import { azureDevOpsJsonSchema } from "./json";
 import { parseAzureRepository } from "./models";
+import type { AzureDevOpsFetch } from "./rest-client";
 
 const REQUEST_TIMEOUT = "30 seconds";
 
 export const validatePat = (
-  fetchImplementation: typeof fetch,
+  fetchImplementation: AzureDevOpsFetch,
   repository: AzureDevOpsRepository,
   pat: string,
 ) =>

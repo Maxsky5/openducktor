@@ -3,6 +3,8 @@ import { describe, expect, mock, test } from "bun:test";
 import { azureDevOpsRepositorySchema, repoConfigSchema } from "@openducktor/contracts";
 import { Effect, Fiber, TestClock, TestContext } from "effect";
 import type { AzureDevOpsConnectionPort } from "../../../ports/azure-devops-connection-port";
+import type { GitPort } from "../../../ports/git-port";
+import { AzureDevOpsProviderAdapter } from "./provider-adapter";
 import { createAzureDevOpsRestClient } from "./rest-client";
 
 const repository = azureDevOpsRepositorySchema.parse({
@@ -30,6 +32,23 @@ const connection: AzureDevOpsConnectionPort = {
 };
 
 describe("Azure DevOps REST client", () => {
+  test("uses the provider adapter's network function for repository checks", async () => {
+    const fetchImplementation = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer secret");
+      return new Response(null, { status: 401 });
+    });
+    const adapter = new AzureDevOpsProviderAdapter({
+      connectionPort: connection,
+      fetchImplementation,
+      gitPort: {} as GitPort,
+    });
+
+    const status = await Effect.runPromise(adapter.health().getStatus(repoConfig));
+
+    expect(status.authenticated).toBe(false);
+    expect(fetchImplementation).toHaveBeenCalledTimes(1);
+  });
+
   test("constructs encoded Server URLs and follows continuation tokens", async () => {
     const urls: string[] = [];
     const fetchImplementation = mock(async (input: string | URL | Request) => {

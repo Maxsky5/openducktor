@@ -54,6 +54,21 @@ describe("Azure DevOps repository identity", () => {
     );
   });
 
+  test("detects a Server SSH remote with the standard SSH port", () => {
+    expect(
+      parseAzureDevOpsRepositoryUrl(
+        "ssh://azure-devops.example.test:22/tfs/DefaultCollection/Asterix/_git/Asterix",
+      ),
+    ).toEqual({
+      providerId: "azure_devops",
+      deployment: "server",
+      serviceUrl: "https://azure-devops.example.test/tfs",
+      organization: "DefaultCollection",
+      project: "Asterix",
+      name: "Asterix",
+    });
+  });
+
   test("rejects unsafe or incomplete remotes", () => {
     expect(
       parseAzureDevOpsRepositoryUrl("https://user:secret@dev.azure.com/org/project/_git/repo"),
@@ -71,6 +86,11 @@ describe("Azure DevOps repository identity", () => {
       parseAzureDevOpsRepositoryUrl("https://dev.azure.com/org/project/_git/repo?x=1"),
     ).toBeNull();
     expect(parseAzureDevOpsRepositoryUrl("git@azure.example.test:project/repo")).toBeNull();
+    expect(
+      parseAzureDevOpsRepositoryUrl(
+        "ssh://azure.example.test:2222/tfs/DefaultCollection/Project/_git/Repo",
+      ),
+    ).toBeNull();
     expect(parseAzureDevOpsRepositoryUrl("https://dev.azure.com/org/_git/repo")).toBeNull();
   });
 });
