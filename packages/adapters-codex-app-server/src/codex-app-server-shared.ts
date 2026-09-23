@@ -101,8 +101,7 @@ export const isCodexEmptyRolloutError = (cause: unknown): boolean => {
     return false;
   }
 
-  // Codex can report this before a new rollout has its first session_meta record.
-  // Keep this case until the oldest supported Codex version fixes https://github.com/openai/codex/issues/25621.
+  // Codex can report an empty rollout before it writes the first session_meta record.
   const legacyMatch =
     /^failed to read thread: thread-store internal error: failed to read thread ([^\r\n]+): rollout at ([^\r\n]+) is empty$/.exec(
       parsed.data.cause.message,

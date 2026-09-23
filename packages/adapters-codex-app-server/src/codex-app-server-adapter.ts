@@ -230,7 +230,7 @@ export class CodexAppServerAdapter
   private readonly asyncQuestions = new CodexAsyncQuestionState();
   private readonly questionHistory: CodexQuestionHistory;
   private readonly activeTurnsBySessionId = new Map<string, ActiveCodexTurn>();
-  // An empty rollout is safe only for reads started before this process first reads the thread.
+  // A new active session may have an empty rollout until a full history read succeeds.
   private readonly freshSessions = new WeakSet<CodexSessionState>();
   private readonly localSessions: CodexLocalSessionState;
   private readonly contextUsageLoader: CodexContextUsageLoader;
