@@ -1,5 +1,4 @@
 import { createLiveSessionRootRefsReader } from "./live-session-root-refs";
-import { createWorkspaceSessionImportService } from "../../application/workspaces/workspace-session-import-service";
 import { createWorkspaceSessionImportCommandHandlers } from "../../interface/commands/workspace-session-import-command-handlers";
 import {
   createLiveSessionPublisher,
@@ -45,7 +44,6 @@ import { createTerminalService } from "../../application/terminals/terminal-serv
 import { loadGlobalConfig } from "../../application/workspaces/workspace-settings-model";
 import { createWorkspaceAdmissionService } from "../../application/workspaces/workspace-admission-service";
 import { createWorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
-import { createWorkspaceSessionService } from "../../application/workspaces/workspace-session-service";
 import { createWorkspaceSessionCommandHandlers } from "../../interface/commands/workspace-session-command-handlers";
 import type { GitProviderResolver } from "../../application/git/git-provider-resolver";
 import type { AzureDevOpsConnectionPort } from "../../ports/azure-devops-connection-port";
@@ -86,6 +84,7 @@ import { createNodeHostRouterLifecycle } from "./node-host-router-lifecycle";
 import { createNodeTaskAssetServices } from "./node-task-asset-services";
 import { createNodeTaskSessionServices } from "./node-task-session-services";
 import { createNodeWorkspaceSessionPersistence } from "./node-workspace-session-persistence";
+import { createNodeWorkspaceSessionServices } from "./node-workspace-session-services";
 import { createOpenCodeRuntimeComposition } from "./opencode-runtime-composition";
 import { createRuntimeActiveSessionResolver } from "./runtime-active-session-resolver";
 import {
@@ -397,44 +396,22 @@ export const assembleNodeEffectHostCommandRouter = (
     taskReader: taskStore,
     logger: lifecycleLogger,
   });
-  const workspaceSessionService = createWorkspaceSessionService({
-    lifecycle: taskSessionLifecycleCoordinator,
-    operationGate: workspaceSessions.operationGate,
-    store: assets.workspaceSessionStore,
-    settings: workspaceSettingsService,
-    runtime: runtimeOrchestratorWithEffectiveRegistry,
-    live: agentSessionLiveStateService,
-    git,
-    settingsConfig,
-    worktreeFiles,
-    systemCommands,
-  });
-  const workspaceSessionImports = createWorkspaceSessionImportService({
-    store: assets.workspaceSessionStore,
-    settings: workspaceSettingsService,
-    runtime: runtimeOrchestratorWithEffectiveRegistry,
-    git,
-    registry: liveSessionAdapterRegistry,
-    publishUpdated: workspaceSessions.publishUpdated,
-    lifecycle: taskSessionLifecycleCoordinator,
-  });
-  const unsubscribeImportCatalogs = eventBus?.subscribe(
-    "openducktor://agent-session-live-event",
-    (envelope) => {
-      if (
-        envelope.channel === "openducktor://agent-session-live-event" &&
-        envelope.payload.type === "runtime_changed" &&
-        envelope.payload.state === "stopped"
-      ) {
-        Effect.runFork(
-          workspaceSessionImports.releaseRuntime(
-            envelope.payload.scope.repoPath,
-            envelope.payload.scope.runtimeKind,
-          ),
-        );
-      }
-    },
-  );
+  const { workspaceSessionService, workspaceSessionImports, unsubscribeImportCatalogs } =
+    createNodeWorkspaceSessionServices({
+      lifecycle: taskSessionLifecycleCoordinator,
+      operationGate: workspaceSessions.operationGate,
+      store: assets.workspaceSessionStore,
+      settings: workspaceSettingsService,
+      runtime: runtimeOrchestratorWithEffectiveRegistry,
+      live: agentSessionLiveStateService,
+      git,
+      settingsConfig,
+      worktreeFiles,
+      systemCommands,
+      registry: liveSessionAdapterRegistry,
+      publishUpdated: workspaceSessions.publishUpdated,
+      eventBus,
+    });
   const hostRouterLifecycle = createNodeHostRouterLifecycle({
     assets,
     azureDevOpsConnection,
