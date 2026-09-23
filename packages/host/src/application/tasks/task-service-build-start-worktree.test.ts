@@ -226,6 +226,42 @@ describe("createTaskService build start worktree handling", () => {
     ).resolves.toBeUndefined();
   });
 
+  test("rejects a status change from ai_review during Builder startup", async () => {
+    const calls: unknown[] = [];
+    let current = task({ status: "ai_review" });
+    const taskStore: TaskStorePort = {
+      getTask: () => Effect.sync(() => current),
+      transitionTask: () => Effect.dieMessage("unexpected task transition"),
+    };
+    const deps = createDependencies(calls, taskStore);
+    const service = createTaskService({
+      ...deps,
+      runtimeRegistry: {
+        ...deps.runtimeRegistry,
+        ensureWorkspaceRuntime: (input) =>
+          deps.runtimeRegistry.ensureWorkspaceRuntime(input).pipe(
+            Effect.tap(() =>
+              Effect.sync(() => {
+                current = task({ status: "blocked" });
+              }),
+            ),
+          ),
+      },
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.buildStart({ repoPath: "/repo", taskId: "task-1", runtimeKind: "opencode" }),
+      ),
+    ).rejects.toThrow("changed from ai_review to blocked while Builder startup was in progress");
+    expect(calls).toContainEqual({
+      type: "removeWorktree",
+      repoPath: "/repo",
+      worktreePath: "/worktrees/repo/task-1",
+      force: true,
+    });
+  });
+
   test("creates the canonical worktree and transitions the task", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
@@ -261,6 +297,62 @@ describe("createTaskService build start worktree handling", () => {
       input: { repoPath: "/repo", taskId: "task-1", status: "in_progress" },
     });
   });
+
+  test.each(["open", "spec_ready", "ready_for_dev"] as const)(
+    "moves a %s task to in_progress at Builder start",
+    async (status) => {
+      const calls: unknown[] = [];
+      let current = task({ status });
+      const taskStore: TaskStorePort = {
+        getTask: () => Effect.sync(() => current),
+        transitionTask: (input) =>
+          Effect.sync(() => {
+            calls.push({ type: "transition", input });
+            current = task({ status: input.status });
+            return current;
+          }),
+      };
+
+      await Effect.runPromise(
+        createTaskService(createDependencies(calls, taskStore)).buildStart({
+          repoPath: "/repo",
+          taskId: "task-1",
+          runtimeKind: "opencode",
+        }),
+      );
+
+      expect(current.status).toBe("in_progress");
+      expect(calls).toContainEqual({
+        type: "transition",
+        input: { repoPath: "/repo", taskId: "task-1", status: "in_progress" },
+      });
+    },
+  );
+
+  test.each(["in_progress", "blocked", "ai_review", "human_review"] as const)(
+    "keeps %s when starting another Builder session",
+    async (status) => {
+      const calls: unknown[] = [];
+      const taskStore: TaskStorePort = {
+        getTask: () => Effect.succeed(task({ status })),
+        transitionTask: () => Effect.dieMessage("unexpected task transition"),
+      };
+
+      await expect(
+        Effect.runPromise(
+          createTaskService(createDependencies(calls, taskStore)).buildStart({
+            repoPath: "/repo",
+            taskId: "task-1",
+            runtimeKind: "opencode",
+          }),
+        ),
+      ).resolves.toEqual({
+        runtimeKind: "opencode",
+        workingDirectory: "/worktrees/repo/task-1",
+      });
+      expect(calls).not.toContainEqual(expect.objectContaining({ type: "transition" }));
+    },
+  );
 
   test("rejects an occupied canonical path that is not a Git worktree", async () => {
     const calls: unknown[] = [];

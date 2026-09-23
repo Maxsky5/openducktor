@@ -60,6 +60,9 @@ export type TaskSessionStartPreparationDependencies = {
   taskSessionLifecycleCoordinator: TaskSessionLifecycleCoordinator;
 };
 
+const shouldTransitionBuilderStart = (status: TaskStatus): boolean =>
+  status === "open" || status === "spec_ready" || status === "ready_for_dev";
+
 export const createTaskSessionStartPreparationService = ({
   gitPort,
   taskStore,
@@ -164,10 +167,9 @@ export const createTaskSessionStartPreparationService = ({
         const prepared = yield* Effect.either(
           Effect.gen(function* () {
             const task = yield* taskStore.getTask({ repoPath: canonicalRepoPath, taskId });
-            if (role === "build") {
+            yield* validateTaskSessionWorkflowAvailable(task, role, canonicalRepoPath);
+            if (role === "build" && shouldTransitionBuilderStart(task.status)) {
               yield* validateTaskTransitionEffect(task, [task], task.status, "in_progress");
-            } else {
-              yield* validateTaskSessionWorkflowAvailable(task, role, canonicalRepoPath);
             }
             const branch = buildBranchName(repoConfig.branchPrefix, taskId, task.title);
             yield* Effect.scoped(
@@ -283,12 +285,14 @@ export const createTaskSessionStartPreparationService = ({
             }),
           );
         }
-        yield* validateTaskTransitionEffect(task, [task], task.status, "in_progress");
-        yield* transitionTask({
-          repoPath: prepared.canonicalRepoPath,
-          taskId: task.id,
-          status: "in_progress",
-        });
+        if (shouldTransitionBuilderStart(task.status)) {
+          yield* validateTaskTransitionEffect(task, [task], task.status, "in_progress");
+          yield* transitionTask({
+            repoPath: prepared.canonicalRepoPath,
+            taskId: task.id,
+            status: "in_progress",
+          });
+        }
       });
     },
   };

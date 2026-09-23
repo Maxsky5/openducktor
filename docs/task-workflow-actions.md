@@ -24,7 +24,7 @@ Read [the status model](task-workflow-status-model.md) for status and issue type
 | Action | Effect |
 |---|---|
 | `view_details` | Open task details. No transition. |
-| `build_start` | Move to `in_progress` when backend rules allow it. |
+| `build_start` | Start Builder and move `open`, `spec_ready`, or `ready_for_dev` to `in_progress` when backend rules allow it. Keep later statuses unchanged. |
 | `open_builder` | Open the linked Builder session. No transition. |
 | `qa_start` | Open QA from `blocked`, `ai_review`, or `human_review`. No direct transition. |
 | `open_qa` | Open the linked QA session. No transition. |
