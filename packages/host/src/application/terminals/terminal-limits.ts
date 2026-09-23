@@ -8,8 +8,6 @@ export const TERMINAL_LIMITS = {
   replayBytes: 2 * 1024 * 1024,
   pendingOutputBytes: 512 * 1024,
   resumeOutputBytes: 256 * 1024,
-  webSocketMessageBytes: 1024 * 1024,
-  browserOutboundQueueBytes: 2 * 1024 * 1024,
   retainedExited: 64,
   exitedRetentionMs: 24 * 60 * 60 * 1000,
 } as const;

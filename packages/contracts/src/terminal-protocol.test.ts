@@ -131,11 +131,27 @@ describe("terminal protocol", () => {
     );
   });
 
+  test("carries a full large TUI screen in one restore frame", () => {
+    const message = {
+      version: TERMINAL_PROTOCOL_VERSION,
+      type: "screen_restore" as const,
+      terminalId: "terminal-1",
+      sequenceEnd: 1,
+      columns: 500,
+      rows: 300,
+    };
+    const payload = new Uint8Array(2 * 1024 * 1024);
+    payload.fill(65);
+    const decoded = decodeTerminalProtocolFrame(encodeTerminalProtocolFrame({ message, payload }));
+    expect(decoded.message).toEqual(message);
+    expect(decoded.payload).toEqual(payload);
+  });
+
   test("rejects truncated, oversized, and mismatched frames before payload use", () => {
     expect(() => decodeTerminalProtocolFrame(new Uint8Array(3))).toThrow("header length");
     expect(() =>
       decodeTerminalProtocolFrame(new Uint8Array(TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES + 1)),
-    ).toThrow("1 MiB");
+    ).toThrow("8 MiB");
     const encoded = encodeTerminalProtocolFrame({
       message: inputMessage,
       payload: new Uint8Array([1]),

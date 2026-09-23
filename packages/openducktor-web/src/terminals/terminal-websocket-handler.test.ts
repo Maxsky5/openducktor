@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   decodeTerminalProtocolFrame,
   encodeTerminalProtocolFrame,
+  TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES,
   TERMINAL_PROTOCOL_VERSION,
 } from "@openducktor/contracts";
 import {
@@ -63,6 +64,48 @@ const makeSocket = (
 };
 
 describe("terminalWebSocketHandler", () => {
+  test("sends a large screen restore without closing the outbound queue", async () => {
+    const payload = new Uint8Array(2 * 1024 * 1024);
+    payload.fill(65);
+    const service = createTerminalServiceFixture({
+      attach: (input) =>
+        Effect.sync(() => {
+          input.sink(
+            {
+              version: TERMINAL_PROTOCOL_VERSION,
+              type: "screen_restore",
+              terminalId: input.terminalId,
+              sequenceEnd: 1,
+              columns: 500,
+              rows: 300,
+            },
+            payload,
+          );
+        }),
+    });
+    const harness = makeSocket(service, () => -1);
+    terminalWebSocketHandler.message(
+      harness.socket,
+      Buffer.from(
+        encodeTerminalProtocolFrame({
+          message: {
+            version: TERMINAL_PROTOCOL_VERSION,
+            type: "attach",
+            terminalId: "terminal-1",
+            lastConsumedSequence: null,
+          },
+          payload: new Uint8Array(),
+        }),
+      ),
+    );
+    await Bun.sleep(0);
+    expect(harness.closed).toEqual([]);
+    expect(harness.data.inFlightBytes).toBeGreaterThan(2 * 1024 * 1024);
+    expect(decodeTerminalProtocolFrame(harness.sent[0] ?? new Uint8Array()).payload).toEqual(
+      payload,
+    );
+  });
+
   test("multiplexes attach, input, resize, ACK, and detach by opaque terminal id", async () => {
     const operations: string[] = [];
     const service = createTerminalServiceFixture({
@@ -226,7 +269,10 @@ describe("terminalWebSocketHandler", () => {
     });
 
     const oversized = makeSocket(service);
-    terminalWebSocketHandler.message(oversized.socket, Buffer.alloc(1024 * 1024 + 1));
+    terminalWebSocketHandler.message(
+      oversized.socket,
+      Buffer.alloc(TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES + 1),
+    );
     expect(oversized.closed).toEqual([[1009, "Invalid terminal frame."]]);
   });
 
@@ -337,7 +383,7 @@ describe("terminalWebSocketHandler", () => {
     const service = createTerminalServiceFixture({
       attach: (input: Parameters<TerminalWebSocketService["attach"]>[0]) =>
         Effect.sync(() => {
-          for (let index = 0; index < 3; index += 1) {
+          for (let index = 0; index < 24; index += 1) {
             input.sink(
               {
                 version: TERMINAL_PROTOCOL_VERSION,
@@ -369,7 +415,7 @@ describe("terminalWebSocketHandler", () => {
     );
     await Bun.sleep(10);
     expect(harness.closed).toContainEqual([1013, "Terminal outbound queue limit exceeded."]);
-    expect(harness.data.pendingBytes).toBeLessThanOrEqual(700 * 1024 + 256);
+    expect(harness.data.pendingBytes).toBeLessThanOrEqual(TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES * 2);
   });
   test("rejects text and server-directed frames", () => {
     const harness = makeSocket(createTerminalServiceFixture({}));
