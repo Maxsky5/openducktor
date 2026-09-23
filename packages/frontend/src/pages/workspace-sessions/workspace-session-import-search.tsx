@@ -1,4 +1,4 @@
-import { LoaderCircle, X } from "lucide-react";
+import { LoaderCircle, Search, X } from "lucide-react";
 import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,12 +15,16 @@ export function WorkspaceSessionImportSearch({ search, pending, loading, onSearc
   const searchInput = useRef<HTMLInputElement>(null);
   return (
     <>
-      <div className="grid shrink-0 gap-2.5">
+      <div className="grid shrink-0 gap-2.5 border-b border-border bg-muted/20 p-4">
         <Label htmlFor="session-import-search">Search sessions</Label>
         <div className="relative">
+          <Search
+            aria-hidden="true"
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+          />
           <Input
             ref={searchInput}
-            className="pr-10"
+            className="pl-9 pr-10"
             id="session-import-search"
             value={search}
             disabled={pending}

@@ -29,7 +29,7 @@ export function WorkspaceSessionImportResults({
   if (!rows) return null;
   const hasPages = page > 0 || hasNextPage;
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
+    <div className="flex min-h-0 flex-1 flex-col">
       {pending && (
         <p role="status" className="sr-only">
           Importing session…
@@ -38,7 +38,7 @@ export function WorkspaceSessionImportResults({
       {rows.length === 0 && (
         <p
           role="status"
-          className="flex flex-1 items-center justify-center py-8 text-center text-sm text-muted-foreground"
+          className="flex flex-1 items-center justify-center p-8 text-center text-sm text-muted-foreground"
         >
           {search ? "No sessions match your search" : "No external sessions found"}
         </p>
@@ -46,7 +46,7 @@ export function WorkspaceSessionImportResults({
       {rows.length > 0 && (
         <ul
           aria-label="External sessions"
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain divide-y divide-border rounded-lg border border-border"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain divide-y divide-border"
         >
           {rows.map((session) => (
             <li
@@ -106,7 +106,7 @@ export function WorkspaceSessionImportResults({
         </ul>
       )}
       {(rows.length > 0 || hasPages) && (
-        <div className="flex shrink-0 items-center justify-between">
+        <div className="flex shrink-0 items-center justify-between border-t border-border p-3">
           {hasPages && (
             <Button
               variant="outline"

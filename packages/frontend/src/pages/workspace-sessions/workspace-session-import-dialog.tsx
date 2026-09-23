@@ -47,7 +47,7 @@ export function WorkspaceSessionImportDialog(props: Props) {
       }}
     >
       <DialogContent
-        className={`my-0 gap-0 p-0 sm:max-w-3xl ${selectedRuntime ? "h-[min(44rem,calc(100dvh-2rem))]" : ""}`}
+        className={`my-0 gap-0 p-0 sm:max-w-3xl ${selectedRuntime ? "h-[min(48rem,calc(100dvh-2rem))]" : ""}`}
         closeButton={
           <Button
             variant="ghost"
@@ -199,57 +199,59 @@ function RuntimeSessionResults({
   };
   return (
     <>
-      <WorkspaceSessionImportSearch
-        search={search}
-        pending={pending}
-        loading={lookupPending}
-        onSearchChange={(value) => {
-          setSearch(value);
-          setPage(0);
-          setCursors([undefined]);
-        }}
-      />
-      {result.isError && search === debouncedSearch && (
-        <div
-          role="alert"
-          className="flex max-h-40 shrink-0 flex-col gap-2 overflow-y-auto break-words"
-        >
-          <p className="text-sm text-destructive">{errorMessage(result.error)}</p>
-          <Button
-            variant="outline"
-            disabled={pending}
-            onClick={() => {
-              setPage(0);
-              setCursors([undefined]);
-              setAttempt((value) => value + 1);
-            }}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border">
+        <WorkspaceSessionImportSearch
+          search={search}
+          pending={pending}
+          loading={lookupPending}
+          onSearchChange={(value) => {
+            setSearch(value);
+            setPage(0);
+            setCursors([undefined]);
+          }}
+        />
+        {result.isError && search === debouncedSearch && (
+          <div
+            role="alert"
+            className="flex max-h-40 flex-col gap-2 overflow-y-auto break-words p-4"
           >
-            Retry
-          </Button>
-        </div>
-      )}
-      {releaseError && (
-        <p role="alert" className="text-sm text-destructive">
-          {releaseError}
-        </p>
-      )}
-      <WorkspaceSessionImportResults
-        rows={rows}
-        search={search}
-        pending={pending}
-        selectedSessionId={selected?.externalSessionId}
-        page={page}
-        hasNextPage={Boolean(result.data?.nextCursor)}
-        onImport={submit}
-        onPrevious={() => setPage(page - 1)}
-        onNext={() => {
-          const next = result.data?.nextCursor;
-          if (next) {
-            setCursors([...cursors.slice(0, page + 1), next]);
-            setPage(page + 1);
-          }
-        }}
-      />
+            <p className="text-sm text-destructive">{errorMessage(result.error)}</p>
+            <Button
+              variant="outline"
+              disabled={pending}
+              onClick={() => {
+                setPage(0);
+                setCursors([undefined]);
+                setAttempt((value) => value + 1);
+              }}
+            >
+              Retry
+            </Button>
+          </div>
+        )}
+        {releaseError && (
+          <p role="alert" className="p-4 text-sm text-destructive">
+            {releaseError}
+          </p>
+        )}
+        <WorkspaceSessionImportResults
+          rows={rows}
+          search={search}
+          pending={pending}
+          selectedSessionId={selected?.externalSessionId}
+          page={page}
+          hasNextPage={Boolean(result.data?.nextCursor)}
+          onImport={submit}
+          onPrevious={() => setPage(page - 1)}
+          onNext={() => {
+            const next = result.data?.nextCursor;
+            if (next) {
+              setCursors([...cursors.slice(0, page + 1), next]);
+              setPage(page + 1);
+            }
+          }}
+        />
+      </div>
       {mutation.isError && (
         <div
           role="alert"
