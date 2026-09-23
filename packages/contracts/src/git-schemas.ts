@@ -1,7 +1,8 @@
 import { z } from "zod";
 import {
-  azureDevOpsRemoteMappingSchema,
+  azureDevOpsProviderSettingsSchema,
   azureDevOpsRepositorySchema,
+  validateAzureDevOpsProviderSettings,
 } from "./azure-devops-schemas";
 import {
   workspaceAbbreviationValueSchema,
@@ -55,6 +56,7 @@ export const gitProviderCapabilitiesSchema = z
   .object({
     supportsPullRequests: z.boolean(),
     supportsPullRequestReview: z.boolean(),
+    issueAccess: z.enum(["browse", "search"]).optional(),
   })
   .strict()
   .superRefine((capabilities, context) => {
@@ -121,8 +123,7 @@ export const gitProviderConfigSchema = z
       gitProviderRepositorySchema.optional(),
     ),
     autoDetected: z.boolean().default(false),
-    remoteMappings: z.array(azureDevOpsRemoteMappingSchema).optional(),
-    httpConsentCollectionUrl: z.string().url().optional(),
+    settings: azureDevOpsProviderSettingsSchema.optional(),
   })
   .strict()
   .superRefine((config, context) => {
@@ -135,54 +136,18 @@ export const gitProviderConfigSchema = z
       if (config.repository && !azureRepository) {
         issue(["repository"], "Azure DevOps provider settings require an Azure DevOps repository.");
       }
-      if (!config.repository && config.remoteMappings?.length) {
-        issue(["remoteMappings"], "Azure DevOps remote mappings require a repository.");
-      }
-      if (azureRepository) {
-        const remoteNames = new Set<string>();
-        for (const [index, mapping] of (config.remoteMappings ?? []).entries()) {
-          if (remoteNames.has(mapping.remoteName)) {
-            issue(
-              ["remoteMappings", index, "remoteName"],
-              "Each Azure DevOps remote mapping must use a different remote name.",
-            );
-          }
-          remoteNames.add(mapping.remoteName);
-          if (!sameAzureRepository(mapping.repository, azureRepository)) {
-            issue(
-              ["remoteMappings", index, "repository"],
-              "The remote mapping must use the configured Azure DevOps repository.",
-            );
-          }
-        }
-      }
+      validateAzureDevOpsProviderSettings(azureRepository, config.settings, context);
       return;
     }
 
     if (azureRepository) {
       issue(["repository"], "Only the Azure DevOps provider can use an Azure DevOps repository.");
     }
-    if (config.remoteMappings !== undefined) {
-      issue(["remoteMappings"], "Only the Azure DevOps provider can use remote mappings.");
-    }
-    if (config.httpConsentCollectionUrl !== undefined) {
-      issue(
-        ["httpConsentCollectionUrl"],
-        "Only the Azure DevOps provider can record HTTP consent.",
-      );
+    if (config.settings !== undefined) {
+      issue(["settings"], "Only the Azure DevOps provider can use Azure DevOps settings.");
     }
   });
 export type GitProviderConfig = z.infer<typeof gitProviderConfigSchema>;
-
-const sameAzureRepository = (
-  left: z.infer<typeof azureDevOpsRepositorySchema>,
-  right: z.infer<typeof azureDevOpsRepositorySchema>,
-): boolean =>
-  left.deployment === right.deployment &&
-  left.serviceUrl === right.serviceUrl &&
-  left.organization === right.organization &&
-  left.project === right.project &&
-  left.name === right.name;
 
 export const repoGitConfigSchema = z
   .object({
@@ -215,6 +180,15 @@ export const pullRequestSchema = z.object({
   closedAt: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
 });
 export type PullRequest = z.infer<typeof pullRequestSchema>;
+
+export const sourceIssueReferenceSchema = z.object({
+  providerId: gitProviderIdSchema,
+  scope: z.string().trim().min(1),
+  sourceId: z.string().trim().min(1),
+  number: z.string().trim().min(1),
+  url: z.string().url(),
+});
+export type SourceIssueReference = z.infer<typeof sourceIssueReferenceSchema>;
 
 export const taskPullRequestDetectResultSchema = z.discriminatedUnion("outcome", [
   z.object({

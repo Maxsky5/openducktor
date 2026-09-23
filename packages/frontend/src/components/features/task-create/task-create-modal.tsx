@@ -276,6 +276,15 @@ export function TaskCreateModal({
                     onRequestTypeChange={() => controller.setStep("type")}
                     workspaceId={controller.workspaceId}
                     taskId={controller.taskId}
+                    {...(controller.workspaceRepoPath && task?.sourceIssue
+                      ? {
+                          issueImageContext: {
+                            repoPath: controller.workspaceRepoPath,
+                            sourceId: task.sourceIssue.sourceId,
+                            providerId: task.sourceIssue.providerId,
+                          },
+                        }
+                      : {})}
                     onDescriptionImageUpload={controller.stageDescriptionImage}
                     descriptionAssetUploads={controller.descriptionAssetUploads}
                     descriptionAssetPreviews={controller.descriptionAssetPreviews}

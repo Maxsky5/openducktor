@@ -157,6 +157,14 @@ const makeProvider = (
                 message: `Provider '${providerId}' does not support Pull Request review.`,
               }),
             )),
+    issues: () =>
+      Effect.fail(
+        new GitProviderCapabilityError({
+          providerId,
+          capability: "issues",
+          message: "Issue import is not supported.",
+        }),
+      ),
   };
 };
 

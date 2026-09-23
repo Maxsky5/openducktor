@@ -33,6 +33,7 @@ export const createNodeEffectHostCommandRouter = (input: CreateNodeHostCommandRo
                 defaultPorts,
                 gitProviders.resolver,
                 gitProviders.azureDevOpsConnection,
+                gitProviders.azureAreaPaths,
               ),
             catch: (cause) => toHostOperationError(cause, "host.create-router"),
           });

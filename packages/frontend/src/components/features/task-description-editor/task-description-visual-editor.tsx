@@ -8,6 +8,7 @@ import { ImagePlus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
+import type { IssueImageContext } from "@/components/features/issue-source/github-issue-image";
 import { MermaidPreviewProvider } from "@/components/ui/markdown-mermaid";
 import type { MermaidPreviews } from "@/components/ui/markdown-mermaid-state";
 import { cn } from "@/lib/utils";
@@ -45,6 +46,7 @@ type TaskDescriptionVisualEditorProps = {
   onChange(markdown: string): void;
   onUpload(file: File): Promise<TaskAssetStageResult>;
   renderContext: Omit<TaskAssetRenderContext, "assetId"> | null;
+  issueImageContext?: IssueImageContext | undefined;
   uploads: TaskDescriptionAssetUpload[];
   previews: ReadonlyMap<string, string>;
   mermaidPreviews: MermaidPreviews;
@@ -70,6 +72,7 @@ export default function TaskDescriptionVisualEditor({
   onChange,
   onUpload,
   renderContext,
+  issueImageContext,
   uploads,
   previews,
   mermaidPreviews,
@@ -81,7 +84,10 @@ export default function TaskDescriptionVisualEditor({
   const [mathEdit, setMathEdit] = useState<TaskDescriptionMathEdit | null>(null);
   const openMathEditor = useCallback((edit: TaskDescriptionMathEdit) => setMathEdit(edit), []);
   const uploading = uploads.some((upload) => upload.status === "uploading");
-  const imageContext = useMemo(() => ({ previews, renderContext }), [previews, renderContext]);
+  const imageContext = useMemo(
+    () => ({ previews, renderContext, issueImageContext }),
+    [previews, renderContext, issueImageContext],
+  );
 
   const editor = useEditor({
     editable: !uploading,

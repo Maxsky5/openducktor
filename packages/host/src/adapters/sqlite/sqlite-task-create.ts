@@ -12,7 +12,7 @@ import { requireTaskRow } from "./sqlite-task-queries";
 import type { TaskInsert, TaskStoreSession } from "./sqlite-task-store-schema";
 import { insertTaskIfAbsent } from "./sqlite-task-writes";
 
-const taskInsertFromCreateInput = (
+export const taskInsertFromCreateInput = (
   task: TaskCreateInput,
   taskId: string,
   createdAt: Date,

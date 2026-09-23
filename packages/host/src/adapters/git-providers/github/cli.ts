@@ -89,7 +89,7 @@ export const runGithubApi = (
 ) =>
   Effect.gen(function* () {
     const command = yield* githubCli.resolve();
-    const hostArgs = host.trim() ? ["--hostname", host.trim(), ...args] : args;
+    const hostArgs = host.trim() ? ["api", "--hostname", host.trim(), ...args.slice(1)] : args;
     const result = yield* command.run(hostArgs, { cwd: repoPath });
     if (result.ok) {
       return result.stdout;

@@ -8,7 +8,15 @@ export * from "./agent-session-schemas";
 export * from "./agent-workflow-schemas";
 export * from "./app-update-schemas";
 export * from "./attachment-limits";
-export * from "./azure-devops-schemas";
+export {
+  azureDevOpsDeploymentSchema,
+  azureDevOpsRepositorySchema,
+  azureDevOpsRemoteMappingSchema,
+  azureDevOpsProviderSettingsSchema,
+  azureDevOpsDeviceCodeSchema,
+  azureDevOpsConnectionStateSchema,
+} from "./azure-devops-schemas";
+export type * from "./azure-devops-schemas";
 export * from "./agent-runtime-query-command-contracts";
 export * from "./runtime-query-failure-schemas";
 export type * from "./codex-app-server-catalog-schemas";
@@ -50,6 +58,7 @@ export * from "./filesystem-schemas";
 export * from "./git-provider-descriptors";
 export * from "./git-provider-repository";
 export * from "./git-schemas";
+export * from "./issue-import-schemas";
 export * from "./host-event-schemas";
 export * from "./host-command-contracts";
 export * from "./host-invoke-failure-schemas";

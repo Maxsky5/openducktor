@@ -4,6 +4,7 @@ import path from "node:path";
 import { createNodeTaskAssetFilePort } from "../../adapters/node/filesystem-task-asset-file-port";
 import { createSqliteTaskAssetRegistry } from "../../adapters/sqlite/sqlite-task-asset-registry";
 import { createSqliteTaskRepository } from "../../adapters/sqlite/sqlite-task-repository";
+import { createSqliteIssueImportStore } from "../../adapters/sqlite/sqlite-issue-import-store";
 import { createSqliteWorkspaceSessionStore } from "../../adapters/sqlite/sqlite-workspace-session-store";
 import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
 import { createSqliteTaskRepositoryContextManager } from "../../adapters/sqlite/sqlite-task-repository-context";
@@ -26,6 +27,7 @@ import {
   type HostValidationErrorAggregate,
 } from "../../effect/host-errors";
 import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-ports";
+import type { IssueImportStorePort } from "../../ports/issue-import-store-port";
 import type { HostShutdownStep } from "../host-lifecycle";
 
 export type NodeTaskAssetServices = {
@@ -36,6 +38,7 @@ export type NodeTaskAssetServices = {
   taskStoreConnectionShutdownStep: HostShutdownStep;
   taskAssetStagingShutdownStep: HostShutdownStep;
   taskStore: TaskStorePort;
+  issueImportStore: IssueImportStorePort;
   removeWorkspaceTaskAssets: (workspaceId: string) => Effect.Effect<void, TaskAssetError>;
   removeWorkspaceTaskStore: (
     workspaceId: string,
@@ -160,6 +163,9 @@ export const createNodeTaskAssetServices = ({
       staging: taskAssetStagingService,
       persistence: configuredTaskStore ? null : registry,
       resolveWorkspaceIdForRepoPath,
+    }),
+    issueImportStore: createSqliteIssueImportStore({
+      contextProvider: contextManager.withDatabase,
     }),
     removeWorkspaceTaskAssets: (workspaceId) => filePort.removeWorkspaceData({ workspaceId }),
     removeWorkspaceTaskStore: (workspaceId) =>

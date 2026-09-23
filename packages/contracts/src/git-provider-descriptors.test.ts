@@ -41,6 +41,7 @@ describe("Git provider descriptors", () => {
       capabilities: {
         supportsPullRequests: true,
         supportsPullRequestReview: true,
+        issueAccess: "search",
       },
     });
     expect(gitProviderDescriptorSchema.parse(GITHUB_PROVIDER_DESCRIPTOR)).toEqual(
@@ -55,6 +56,7 @@ describe("Git provider descriptors", () => {
     expect(AZURE_DEVOPS_PROVIDER_DESCRIPTOR.capabilities).toEqual({
       supportsPullRequests: true,
       supportsPullRequestReview: true,
+      issueAccess: "search",
     });
   });
 
@@ -65,6 +67,20 @@ describe("Git provider descriptors", () => {
         supportsPullRequestReview: true,
       }),
     ).toThrow("Pull Request review support requires Pull Request support.");
+  });
+
+  test("allows issue browsing without search", () => {
+    expect(
+      gitProviderCapabilitiesSchema.parse({
+        supportsPullRequests: false,
+        supportsPullRequestReview: false,
+        issueAccess: "browse",
+      }),
+    ).toEqual({
+      supportsPullRequests: false,
+      supportsPullRequestReview: false,
+      issueAccess: "browse",
+    });
   });
 
   test("rejects undeclared descriptor and capability fields", () => {
@@ -135,14 +151,16 @@ describe("Git provider descriptors", () => {
         enabled: true,
         autoDetected: false,
         repository: azureRepository,
-        remoteMappings: [
-          {
-            remoteName: "origin",
-            fetchUrl: "https://dev.azure.com/OpenDucktor/Desktop/_git/other",
-            pushUrls: ["https://dev.azure.com/OpenDucktor/Desktop/_git/other"],
-            repository: otherAzureRepository,
-          },
-        ],
+        settings: {
+          remoteMappings: [
+            {
+              remoteName: "origin",
+              fetchUrl: "https://dev.azure.com/OpenDucktor/Desktop/_git/other",
+              pushUrls: ["https://dev.azure.com/OpenDucktor/Desktop/_git/other"],
+              repository: otherAzureRepository,
+            },
+          ],
+        },
       }).success,
     ).toBe(false);
   });
@@ -167,13 +185,15 @@ describe("Git provider descriptors", () => {
       id: "azure_devops",
       enabled: true,
       repository,
-      remoteMappings: [mapping, { ...mapping }],
+      settings: { remoteMappings: [mapping, { ...mapping }] },
     });
 
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(
-        result.error.issues.some((issue) => issue.path.join(".") === "remoteMappings.1.remoteName"),
+        result.error.issues.some(
+          (issue) => issue.path.join(".") === "settings.remoteMappings.1.remoteName",
+        ),
       ).toBe(true);
     }
   });

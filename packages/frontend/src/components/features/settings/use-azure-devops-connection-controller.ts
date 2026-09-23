@@ -190,7 +190,7 @@ export const useAzureDevOpsConnectionController = ({
   const httpConsentSaved =
     httpCollectionUrl === null ||
     (providerState.status === "loaded" &&
-      providerState.context?.config.httpConsentCollectionUrl === httpCollectionUrl);
+      providerState.context?.config.settings?.httpConsentCollectionUrl === httpCollectionUrl);
   const connectionQuery = useQuery({
     queryKey: connectionKey(configurationFingerprint),
     enabled: canManageConnection && providerEnabled && connectionInput !== null,

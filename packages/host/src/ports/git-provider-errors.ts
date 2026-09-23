@@ -1,7 +1,7 @@
 import type { GitProviderId, GitProviderRepository } from "@openducktor/contracts";
 import { Data } from "effect";
 
-export type GitProviderCapability = "pull_requests" | "pull_request_review";
+export type GitProviderCapability = "pull_requests" | "pull_request_review" | "issues";
 
 export class GitProviderCapabilityError extends Data.TaggedError("GitProviderCapabilityError")<{
   readonly providerId: GitProviderId;

@@ -401,11 +401,11 @@ const requireConnectionTransport = (repoConfig: RepoConfig, repository: AzureDev
     if (
       repository.deployment === "server" &&
       transportProtocol === "http:" &&
-      repoConfig.git.provider?.httpConsentCollectionUrl !== collectionUrl
+      repoConfig.git.provider?.settings?.httpConsentCollectionUrl !== collectionUrl
     ) {
       return yield* Effect.fail(
         new HostValidationError({
-          field: "git.provider.httpConsentCollectionUrl",
+          field: "git.provider.settings.httpConsentCollectionUrl",
           message: `Confirm the unencrypted Azure DevOps Server connection for ${collectionUrl} before sending credentials.`,
         }),
       );

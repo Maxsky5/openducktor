@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
+import { issueItemsQueryKeys } from "@/state/queries/issue-items";
 import type { TaskChatDraftCleanup } from "./task-chat-draft-cleanup";
 import type { TaskMutationRunner } from "./task-mutation-runner";
 import {
@@ -315,6 +316,30 @@ describe("createTaskMutationCommands", () => {
       ["/repo", "child"],
       ["/repo", "grandchild"],
     ]);
+  });
+
+  test("invalidates cached issue links for the deleted task's repository", async () => {
+    const queryClient = createQueryClient();
+    queryClient.setQueryDefaults(issueItemsQueryKeys.repo("/repo"), { staleTime: 60_000 });
+    const repoIssueKey = [...issueItemsQueryKeys.repo("/repo"), "azure_devops", "work-items"];
+    const otherRepoIssueKey = [...issueItemsQueryKeys.repo("/other"), "azure_devops", "work-items"];
+    queryClient.setQueryData(repoIssueKey, { items: [{ linkedTaskId: "task-1" }] });
+    queryClient.setQueryData(otherRepoIssueKey, { items: [{ linkedTaskId: "other-task" }] });
+    const commands = createTaskMutationCommands({
+      activeRepoPath: "/repo",
+      activeWorkspaceId: "workspace-1",
+      tasks: [createTaskCardFixture({ id: "task-1" })],
+      runTaskMutation: createRunTaskMutation([]),
+      hostPort: createHostPort(),
+      queryClient,
+      cacheImpact: createCacheImpact(),
+      taskChatDraftCleanup: { runMutation: (input) => input.mutation() },
+    });
+
+    await commands.deleteTask("task-1");
+
+    expect(queryClient.getQueryState(repoIssueKey)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(otherRepoIssueKey)?.isInvalidated).toBe(false);
   });
 
   test("routes close, closed transition, and approval through cleanup after their host mutations", async () => {

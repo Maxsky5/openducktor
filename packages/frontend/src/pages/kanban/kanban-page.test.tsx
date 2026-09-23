@@ -609,6 +609,7 @@ const renderPage = async (
       latest,
       useKanbanPageModels({
         onOpenDetails: () => {},
+        onImportIssues: () => {},
         actions: controller.actions,
       }),
     );
@@ -955,6 +956,8 @@ describe("KanbanPage session start modal flow", () => {
               isTaskCardViewPending: false,
               onTaskCardViewChange,
               onCreateTask,
+              onImportIssues: () => {},
+              importProviderContext: null,
               onRefreshTasks: () => {},
             }}
           />
@@ -1003,6 +1006,8 @@ describe("KanbanPage session start modal flow", () => {
               isTaskCardViewPending: true,
               onTaskCardViewChange,
               onCreateTask: () => {},
+              onImportIssues: () => {},
+              importProviderContext: null,
               onRefreshTasks: () => {},
             }}
           />

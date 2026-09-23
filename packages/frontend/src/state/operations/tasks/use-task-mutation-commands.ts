@@ -14,6 +14,7 @@ import {
   removeAgentSessionListQueries,
 } from "@/state/queries/agent-sessions";
 import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
+import { invalidateRepoIssueItemsQueries } from "@/state/queries/issue-items";
 import { taskStopImpactQueryKeys } from "@/state/queries/task-stop-impact";
 import { host } from "../shared/host";
 import {
@@ -200,6 +201,7 @@ export const createTaskMutationCommands = ({
     });
     const repoPath = requireActiveRepo(activeRepoPath);
     await Promise.all([
+      invalidateRepoIssueItemsQueries(queryClient, repoPath),
       cacheImpact.removeDeletedTaskCaches(repoPath, taskIdsToRemove),
       ...taskIdsToRemove.map((deletedTaskId) =>
         cacheImpact.invalidateTaskWorktree(repoPath, deletedTaskId),

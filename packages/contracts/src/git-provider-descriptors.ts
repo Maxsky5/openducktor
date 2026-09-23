@@ -7,6 +7,7 @@ export const GITHUB_PROVIDER_DESCRIPTOR = {
   capabilities: {
     supportsPullRequests: true,
     supportsPullRequestReview: true,
+    issueAccess: "search",
   },
 } as const satisfies GitProviderDescriptor;
 
@@ -17,5 +18,6 @@ export const AZURE_DEVOPS_PROVIDER_DESCRIPTOR = {
   capabilities: {
     supportsPullRequests: true,
     supportsPullRequestReview: true,
+    issueAccess: "search",
   },
 } as const satisfies GitProviderDescriptor;

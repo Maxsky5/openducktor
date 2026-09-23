@@ -1,8 +1,10 @@
 import type {
   GitProviderDescriptor,
+  IssueImageGetResult,
   GitProviderHealth,
   GitProviderId,
   GitProviderRepository,
+  SourceIssue,
   PullRequest,
   RepoConfig,
   TaskApprovalContext,
@@ -90,10 +92,33 @@ export type PullRequestProviderPort = {
   ): Effect.Effect<PullRequest, HostError | GitProviderRepositoryError>;
 };
 
+export type IssueReaderPort = {
+  providerId: GitProviderId;
+  scope(repoConfig: RepoConfig): Effect.Effect<string, HostError | GitProviderRepositoryError>;
+  list(input: { repoConfig: RepoConfig; search: string; page: number }): Effect.Effect<
+    {
+      items: SourceIssue[];
+      nextPage?: number | undefined;
+      incompleteResults?: boolean;
+    },
+    HostError | GitProviderRepositoryError
+  >;
+  get(input: {
+    repoConfig: RepoConfig;
+    sourceId: string;
+  }): Effect.Effect<SourceIssue, HostError | GitProviderRepositoryError>;
+  readImage?(input: {
+    repoConfig: RepoConfig;
+    sourceId: string;
+    url: string;
+  }): Effect.Effect<IssueImageGetResult, HostError | GitProviderRepositoryError>;
+};
+
 export type GitProviderPort = {
   getDescriptor(): GitProviderDescriptor;
   repository(): GitProviderRepositoryPort;
   health(): GitProviderHealthPort;
   pullRequests(): Effect.Effect<PullRequestProviderPort, GitProviderCapabilityError>;
   pullRequestReview(): Effect.Effect<PullRequestReviewProviderPort, GitProviderCapabilityError>;
+  issues(): Effect.Effect<IssueReaderPort, GitProviderCapabilityError>;
 };
