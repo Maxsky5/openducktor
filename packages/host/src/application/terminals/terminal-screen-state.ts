@@ -43,42 +43,13 @@ export class TerminalScreenState {
   write(data: Uint8Array, parsed: () => void): void {
     if (data.byteLength === 0) return;
     const copy = data.slice();
-    const markers = this.tail.accept(copy);
+    this.tail.accept(copy);
     this.pendingBytes += copy.byteLength;
-    let start = 0;
-    for (const marker of markers) {
-      const atEnd = marker.end === copy.byteLength;
-      this.operations.push({
-        type: "write",
-        data: copy.subarray(start, marker.end),
-        parsed: () => {
-          if (marker.kind === "save") {
-            this.tail.saveCursor(
-              this.terminal.buffer.active.type,
-              this.terminal.buffer.active.cursorX,
-              this.terminal.buffer.active.cursorY,
-              marker.style,
-            );
-          } else {
-            this.tail.updateTabs(
-              marker.kind,
-              this.terminal.buffer.active.cursorX,
-              this.terminal.cols,
-            );
-          }
-          if (atEnd) parsed();
-        },
-      });
-      start = marker.end;
-    }
-    if (start < copy.byteLength) {
-      this.operations.push({ type: "write", data: copy.subarray(start), parsed });
-    }
+    this.operations.push({ type: "write", data: copy, parsed });
     this.advance();
   }
 
   resize(grid: TerminalGrid): void {
-    this.tail.resize();
     this.operations.push({ type: "resize", grid });
     this.advance();
   }
@@ -94,11 +65,7 @@ export class TerminalScreenState {
     const serialized = new TextEncoder().encode(
       this.serializer.serialize({ scrollback: 0 }) || "\u001b[0m",
     );
-    const suffix = this.tail.suffix(
-      this.terminal.buffer.active.cursorX,
-      this.terminal.buffer.active.cursorY,
-      this.terminal.modes.originMode,
-    );
+    const suffix = this.tail.suffix(this.terminal);
     const payload = new Uint8Array(serialized.byteLength + suffix.byteLength);
     payload.set(serialized);
     payload.set(suffix, serialized.byteLength);

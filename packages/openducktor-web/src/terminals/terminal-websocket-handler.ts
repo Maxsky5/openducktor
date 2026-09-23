@@ -15,7 +15,7 @@ import {
 import { Effect } from "effect";
 import { type WebLogger, writeWebLogEffect } from "../logger";
 
-const OUTBOUND_QUEUE_LIMIT = 2 * 1024 * 1024;
+const OUTBOUND_QUEUE_LIMIT = TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES * 2;
 const EMPTY_PAYLOAD: Uint8Array = new Uint8Array(0);
 
 export type TerminalWebSocketService = Pick<

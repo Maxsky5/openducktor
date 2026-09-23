@@ -14,6 +14,169 @@ const visibleLines = (terminal: Terminal): string[] =>
   );
 
 describe("TerminalScreenState", () => {
+  test("restores after a long colored log with no saved cursor", async () => {
+    const screen = new TerminalScreenState({ columns: 80, rows: 24 });
+    const bytes = encoder.encode("\u001b[31m".repeat(16_000));
+    await writeScreen(screen, bytes);
+    expect(() => screen.snapshot()).not.toThrow();
+    screen.dispose();
+  });
+
+  test("restores after repeated SGR resets with a saved cursor", async () => {
+    const screen = new TerminalScreenState({ columns: 80, rows: 24 });
+    const original = new Terminal({ cols: 80, rows: 24, allowProposedApi: true });
+    const restored = new Terminal({ cols: 80, rows: 24, allowProposedApi: true });
+    const bytes = encoder.encode("\u001b[31mA\u001b7" + "\u001b[32m\u001b[0m".repeat(16_000));
+    await Promise.all([writeScreen(screen, bytes), write(original, bytes)]);
+    await write(restored, screen.snapshot().payload);
+    const continuation = encoder.encode("\u001b8B");
+    await Promise.all([
+      writeScreen(screen, continuation),
+      write(original, continuation),
+      write(restored, continuation),
+    ]);
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    expect(restored.buffer.active.getLine(0)?.getCell(1)?.getFgColor()).toBe(
+      original.buffer.active.getLine(0)?.getCell(1)?.getFgColor(),
+    );
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
+  test("keeps saved and current colors after many changes without a reset", async () => {
+    const screen = new TerminalScreenState({ columns: 8, rows: 2 });
+    const original = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const restored = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const bytes = encoder.encode("\u001b[31mA\u001b7" + "\u001b[32m\u001b[34m".repeat(16_000));
+    await Promise.all([writeScreen(screen, bytes), write(original, bytes)]);
+    await write(restored, screen.snapshot().payload);
+    const continuation = encoder.encode("\u001b8B");
+    await Promise.all([
+      writeScreen(screen, continuation),
+      write(original, continuation),
+      write(restored, continuation),
+    ]);
+    expect(restored.buffer.active.getLine(0)?.getCell(1)?.getFgColor()).toBe(
+      original.buffer.active.getLine(0)?.getCell(1)?.getFgColor(),
+    );
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
+  test("restores saved truecolor and text flags used by later TUI output", async () => {
+    const screen = new TerminalScreenState({ columns: 8, rows: 2 });
+    const original = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const restored = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const first = encoder.encode("\u001b[1;4;38;2;12;34;56mA\u001b7\u001b[0m");
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    await write(restored, screen.snapshot().payload);
+    const continuation = encoder.encode("\u001b8B");
+    await Promise.all([
+      writeScreen(screen, continuation),
+      write(original, continuation),
+      write(restored, continuation),
+    ]);
+    const originalCell = original.buffer.active.getLine(0)?.getCell(1);
+    const restoredCell = restored.buffer.active.getLine(0)?.getCell(1);
+    expect(restoredCell?.getFgColor()).toBe(originalCell?.getFgColor());
+    expect(restoredCell?.isBold()).toBe(originalCell?.isBold());
+    expect(restoredCell?.isUnderline()).toBe(originalCell?.isUnderline());
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
+  test("restores the alternate screen's own saved cursor", async () => {
+    const screen = new TerminalScreenState({ columns: 8, rows: 2 });
+    const original = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const restored = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const first = encoder.encode("\u001b[?1049h\u001b[31mA\u001b7\u001b[0m\u001b[2;1HB");
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    await write(restored, screen.snapshot().payload);
+    const continuation = encoder.encode("\u001b8C");
+    await Promise.all([
+      writeScreen(screen, continuation),
+      write(original, continuation),
+      write(restored, continuation),
+    ]);
+    expect(restored.buffer.active.type).toBe("alternate");
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    expect(restored.buffer.active.getLine(0)?.getCell(1)?.getFgColor()).toBe(
+      original.buffer.active.getLine(0)?.getCell(1)?.getFgColor(),
+    );
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
+  test("restores a colored screen larger than one MiB", async () => {
+    const grid = { columns: 500, rows: 300 };
+    const screen = new TerminalScreenState(grid);
+    const restored = new Terminal({ cols: grid.columns, rows: grid.rows, allowProposedApi: true });
+    const row = Array.from(
+      { length: grid.columns },
+      (_, index) => `\u001b[38;5;${index % 256}m${String.fromCharCode(33 + (index % 80))}`,
+    ).join("");
+    const bytes = encoder.encode(
+      Array.from({ length: grid.rows }, (_, index) => `\u001b[0m\u001b[${index + 1};1H${row}`).join(
+        "",
+      ),
+    );
+    await writeScreen(screen, bytes);
+    const snapshot = screen.snapshot();
+    expect(snapshot.payload.byteLength).toBeGreaterThan(1024 * 1024);
+    await write(restored, snapshot.payload);
+    expect(visibleLines(restored)).toEqual(
+      Array.from({ length: grid.rows }, () =>
+        Array.from({ length: grid.columns }, (_, column) =>
+          String.fromCharCode(33 + (column % 80)),
+        ).join(""),
+      ),
+    );
+    screen.dispose();
+    restored.dispose();
+  });
+
+  test("keeps the screen correct across an oversized unfinished OSC string", async () => {
+    const screen = new TerminalScreenState({ columns: 12, rows: 2 });
+    const original = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });
+    const restored = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });
+    const first = encoder.encode("before\u001b]0;" + "x".repeat(70_000));
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    await write(restored, screen.snapshot().payload);
+    const continuation = encoder.encode("\u0007after");
+    await Promise.all([
+      writeScreen(screen, continuation),
+      write(original, continuation),
+      write(restored, continuation),
+    ]);
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
+  test("keeps the screen correct across an oversized unfinished DCS string", async () => {
+    const screen = new TerminalScreenState({ columns: 12, rows: 2 });
+    const original = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });
+    const restored = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });
+    const first = encoder.encode("before\u001bPz" + "x".repeat(70_000));
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    await write(restored, screen.snapshot().payload);
+    const continuation = encoder.encode("\u001b\\after");
+    await Promise.all([
+      writeScreen(screen, continuation),
+      write(original, continuation),
+      write(restored, continuation),
+    ]);
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
   test("keeps the latest screen rows after a long log stream", async () => {
     const screen = new TerminalScreenState({ columns: 12, rows: 3 });
     const restored = new Terminal({ cols: 12, rows: 3, allowProposedApi: true });
@@ -163,6 +326,51 @@ describe("TerminalScreenState", () => {
     const original = new Terminal({ cols: 4, rows: 2, allowProposedApi: true });
     const restored = new Terminal({ cols: 4, rows: 2, allowProposedApi: true });
     const first = encoder.encode("ABCD");
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    await write(restored, screen.snapshot().payload);
+    const next = encoder.encode("E");
+    await Promise.all([writeScreen(screen, next), write(original, next), write(restored, next)]);
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
+  test("continues a saved cursor at the right edge", async () => {
+    const screen = new TerminalScreenState({ columns: 4, rows: 2 });
+    const original = new Terminal({ cols: 4, rows: 2, allowProposedApi: true });
+    const restored = new Terminal({ cols: 4, rows: 2, allowProposedApi: true });
+    const first = encoder.encode("ABCD\u001b7\u001b[2;1HX");
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    await write(restored, screen.snapshot().payload);
+    const next = encoder.encode("\u001b8E");
+    await Promise.all([writeScreen(screen, next), write(original, next), write(restored, next)]);
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
+  test("keeps a pending line wrap while restoring a saved cursor", async () => {
+    const screen = new TerminalScreenState({ columns: 4, rows: 3 });
+    const original = new Terminal({ cols: 4, rows: 3, allowProposedApi: true });
+    const restored = new Terminal({ cols: 4, rows: 3, allowProposedApi: true });
+    const first = encoder.encode("X\u001b7\u001b[2;1HABCD");
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    await write(restored, screen.snapshot().payload);
+    const next = encoder.encode("E");
+    await Promise.all([writeScreen(screen, next), write(original, next), write(restored, next)]);
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
+  test("keeps a pending line wrap after a wide final cell", async () => {
+    const screen = new TerminalScreenState({ columns: 4, rows: 3 });
+    const original = new Terminal({ cols: 4, rows: 3, allowProposedApi: true });
+    const restored = new Terminal({ cols: 4, rows: 3, allowProposedApi: true });
+    const first = encoder.encode("X\u001b7\u001b[2;3H界");
     await Promise.all([writeScreen(screen, first), write(original, first)]);
     await write(restored, screen.snapshot().payload);
     const next = encoder.encode("E");
