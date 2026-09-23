@@ -1,5 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { createElement } from "react";
 import { createQueryClient } from "@/lib/query-client";
+import { QueryProvider } from "@/lib/query-provider";
+import { useTaskDocuments } from "@/components/features/task-details/use-task-documents";
 import { host } from "@/state/operations/host";
 import {
   documentQueryKeys,
@@ -94,6 +98,62 @@ describe("documents query helpers", () => {
     }
   });
 
+  test("a normal Query refetch keeps newer optimistic content and accepts a later host version", async () => {
+    const queryClient = createQueryClient();
+    let incoming = document("# Older spec", "2026-03-28T09:00:00.000Z");
+    const read = mock(async () => incoming);
+    const original = host.taskDocumentGet;
+    host.taskDocumentGet = read;
+    const queryKey = documentQueryKeys.spec("/repo", "task-1");
+    queryClient.setQueryData(queryKey, document("# Optimistic spec", "2026-03-28T10:00:00.000Z"));
+
+    try {
+      await queryClient.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
+      expect((await loadSpecDocumentFromQuery(queryClient, "/repo", "task-1")).markdown).toBe(
+        "# Optimistic spec",
+      );
+      incoming = document("# Host spec", "2026-03-28T11:00:00.000Z");
+      await queryClient.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
+      expect((await loadSpecDocumentFromQuery(queryClient, "/repo", "task-1")).markdown).toBe(
+        "# Host spec",
+      );
+      expect(read).toHaveBeenCalledTimes(2);
+    } finally {
+      host.taskDocumentGet = original;
+      queryClient.clear();
+    }
+  });
+
+  test("a mounted document view reloads through the shared query definition", async () => {
+    let version = 1;
+    const read = mock(async (_repoPath: string, _taskId: string, section: string) =>
+      document(`${section} V${version}`, `2026-03-28T0${version}:00:00.000Z`),
+    );
+    const original = host.taskDocumentGet;
+    host.taskDocumentGet = read;
+    const view = renderHook(() => useTaskDocuments("task-1", true, "/repo"), {
+      wrapper: ({ children }) =>
+        createElement(QueryProvider, { useIsolatedClient: true }, children),
+    });
+
+    try {
+      await waitFor(() => {
+        expect(view.result.current.specDoc.markdown).toBe("spec V1");
+        expect(view.result.current.planDoc.markdown).toBe("plan V1");
+        expect(view.result.current.qaDoc.markdown).toBe("qa V1");
+      });
+      version = 2;
+      act(() => {
+        expect(view.result.current.reloadDocument("spec")).toBe(true);
+      });
+      await waitFor(() => expect(view.result.current.specDoc.markdown).toBe("spec V2"));
+      expect(read.mock.calls.filter(([, , section]) => section === "spec")).toHaveLength(2);
+    } finally {
+      view.unmount();
+      host.taskDocumentGet = original;
+    }
+  });
+
   test("stream refresh reads only cached sections", async () => {
     const queryClient = createQueryClient();
     const read = mock(async (_repoPath: string, _taskId: string, section: string) =>
@@ -143,6 +203,23 @@ describe("documents query helpers", () => {
       await expect(
         fetchFreshTaskDocumentFromQuery(queryClient, "/repo", "task-1", "plan"),
       ).rejects.toBe(failure);
+    } finally {
+      host.taskDocumentGet = original;
+      queryClient.clear();
+    }
+  });
+
+  test("a read without a repository reports the missing selection", async () => {
+    const queryClient = createQueryClient();
+    const read = mock(async () => document("# Spec", "2026-03-28T10:00:00.000Z"));
+    const original = host.taskDocumentGet;
+    host.taskDocumentGet = read;
+
+    try {
+      await expect(loadSpecDocumentFromQuery(queryClient, "", "task-1")).rejects.toThrow(
+        "Select a repository before loading task documents.",
+      );
+      expect(read).not.toHaveBeenCalled();
     } finally {
       host.taskDocumentGet = original;
       queryClient.clear();
