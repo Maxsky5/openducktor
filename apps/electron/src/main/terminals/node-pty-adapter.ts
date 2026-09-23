@@ -51,6 +51,7 @@ export const createNodePtyPort = ({
         let nativeExit: NativeExit | null = null;
         let receivedOutput = false;
         let cleanupPromise: Promise<void> | null = null;
+        let terminating = false;
         const pty = nodePty.spawn(plan.shell, [...plan.args], {
           cols: plan.grid.columns,
           cwd: plan.cwd,
@@ -166,9 +167,28 @@ export const createNodePtyPort = ({
             ),
           write: (data) => requireOpen("write", () => pty.write(Buffer.from(data))),
           resize: ({ columns, rows }) => requireOpen("resize", () => pty.resize(columns, rows)),
-          pauseOutput: () => requireOpen("pause", () => pty.pause()),
-          resumeOutput: () => requireOpen("resume", () => pty.resume()),
-          terminate: () => (exitPublished ? Effect.void : finalizeExit()),
+          pauseOutput: () =>
+            Effect.suspend(() =>
+              terminating ? Effect.void : requireOpen("pause", () => pty.pause()),
+            ),
+          resumeOutput: () =>
+            Effect.suspend(() =>
+              terminating ? Effect.void : requireOpen("resume", () => pty.resume()),
+            ),
+          terminate: () =>
+            Effect.gen(function* () {
+              if (exitPublished) return;
+              terminating = true;
+              // node-pty delays onExit until its output stream closes.
+              if (!closed) yield* operation("terminate", () => pty.resume());
+              yield* finalizeExit();
+            }).pipe(
+              Effect.tapError(() =>
+                Effect.sync(() => {
+                  terminating = false;
+                }),
+              ),
+            ),
         };
         return handle;
       },

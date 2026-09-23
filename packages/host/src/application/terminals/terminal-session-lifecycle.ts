@@ -174,10 +174,12 @@ export const createTerminalSessionLifecycle = ({
           ),
         );
       } else if (event.type === "pause_requested" && session.resources.handle) {
+        const handle = session.resources.handle;
         Effect.runFork(
-          session.resources.handle
-            .pauseOutput()
-            .pipe(Effect.tapError(() => Effect.sync(() => terminateForOverflow(session)))),
+          handle.pauseOutput().pipe(
+            Effect.flatMap(() => session.output.resumeAfterPause(handle)),
+            Effect.tapError(() => Effect.sync(() => terminateForOverflow(session))),
+          ),
         );
       }
     }
