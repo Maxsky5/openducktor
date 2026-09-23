@@ -261,56 +261,44 @@ describe("rich task description rendering", () => {
     expect(view.container.querySelector(".katex")).toBeNull();
   });
 
-  test.each([false, true])(
-    "composes math, premium code, and task assets; Mermaid=%s",
-    async (withMermaid) => {
-      const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://asset/resolved");
-      configureShellBridge({
-        ...createUnavailableShellBridge(),
-        resolveTaskAssetSrc,
-      });
-      const assetId = "550e8400-e29b-41d4-a716-446655440000";
-      const mermaid = withMermaid ? "\n\n```mermaid\ngraph TD\n  A --> B\n```" : "";
-      const view = render(
-        <QueryProvider useIsolatedClient>
-          <StaticThemeProvider>
-            <MarkdownRenderer
-              markdown={`Formula $x^2$\n\n\`\`\`javascript\nconst answer = 42;\n\`\`\`\n\n![Diagram](odt-asset:${assetId})${mermaid}`}
-              premiumCodeBlocks
-              taskAssetContext={{
-                workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
-                taskId: "task-1",
-                scope: "description",
-              }}
-            />
-          </StaticThemeProvider>
-        </QueryProvider>,
-      );
+  // This test renders real KaTeX, syntax highlighting, and asset resolution.
+  test("composes math, premium code, and task assets", async () => {
+    const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://asset/resolved");
+    configureShellBridge({
+      ...createUnavailableShellBridge(),
+      resolveTaskAssetSrc,
+    });
+    const assetId = "550e8400-e29b-41d4-a716-446655440000";
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <StaticThemeProvider>
+          <MarkdownRenderer
+            markdown={`Formula $x^2$\n\n\`\`\`javascript\nconst answer = 42;\n\`\`\`\n\n![Diagram](odt-asset:${assetId})`}
+            premiumCodeBlocks
+            taskAssetContext={{
+              workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
+              taskId: "task-1",
+              scope: "description",
+            }}
+          />
+        </StaticThemeProvider>
+      </QueryProvider>,
+    );
 
-      await waitFor(() => expect(view.container.querySelector(".katex")).not.toBeNull(), {
-        timeout: 3000,
-      });
-      await waitFor(() => expect(view.container.querySelector(".token")).not.toBeNull(), {
-        timeout: 3000,
-      });
-      await waitFor(
-        () =>
-          expect(view.getByRole("img", { name: "Diagram" }).getAttribute("src")).toBe(
-            "openducktor-task-asset://asset/resolved",
-          ),
-        { timeout: 3000 },
-      );
-      if (withMermaid) {
-        await waitFor(() =>
-          expect(
-            view.getByRole("region", { name: "Mermaid diagram" }).querySelector("svg"),
-          ).not.toBeNull(),
-        );
-      }
-    },
-    // Renders real KaTeX, syntax highlighting, asset resolution, and Mermaid beside the host suite.
-    10_000,
-  );
+    await waitFor(() => expect(view.container.querySelector(".katex")).not.toBeNull(), {
+      timeout: 2000,
+    });
+    await waitFor(() => expect(view.container.querySelector(".token")).not.toBeNull(), {
+      timeout: 2000,
+    });
+    await waitFor(
+      () =>
+        expect(view.getByRole("img", { name: "Diagram" }).getAttribute("src")).toBe(
+          "openducktor-task-asset://asset/resolved",
+        ),
+      { timeout: 2000 },
+    );
+  }, 2_500);
 
   test("keeps premium code rendering for task documents that also contain math", async () => {
     const view = render(

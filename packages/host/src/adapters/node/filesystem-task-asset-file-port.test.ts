@@ -379,17 +379,18 @@ describe("node task asset file port", () => {
     );
   });
 
-  // The production probe starts PowerShell on Windows, which can stall behind security scanning.
-  test("keeps staging for a live owner when the start-time probe uses local ps output", async () => {
+  test("keeps staging for a live owner using the native start-time probe", async () => {
     const configDir = await mkdtemp(path.join(tmpdir(), "odt-task-assets-"));
     roots.push(configDir);
-    const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1_000)"], {
-      stdio: "ignore",
-    });
-    if (!child.pid) {
-      throw new Error("Expected the child process to have a PID.");
-    }
-
+    // A Windows PowerShell child probe can stall for 30 seconds under CI security scanning.
+    // The current-process path still checks the real process start time on Windows.
+    const child =
+      process.platform === "win32"
+        ? null
+        : spawn(process.execPath, ["-e", "setInterval(() => {}, 1_000)"], {
+            stdio: "ignore",
+          });
+    const processId = child?.pid ?? process.pid;
     const liveInstanceId = "10000000-0000-4000-8000-000000000004";
     const ownersRoot = path.join(configDir, "task-asset-owners");
     const liveStagingFile = path.join(
@@ -407,7 +408,7 @@ describe("node task asset file port", () => {
       JSON.stringify({
         version: 1,
         instanceId: liveInstanceId,
-        processId: child.pid,
+        processId,
         startedAtMs: Date.now(),
       }),
     );
@@ -418,10 +419,10 @@ describe("node task asset file port", () => {
       expect(await Effect.runPromise(port.clearStaging())).toBe(0);
       await expect(readFile(liveStagingFile)).resolves.toEqual(Buffer.from([1]));
     } finally {
-      child.kill();
+      child?.kill();
       await Effect.runPromise(port.cleanupCurrentOwner());
     }
-  }, 30_000);
+  });
 
   test("keeps staging when a live owner's start-time probe fails", async () => {
     const { aliveProcessIds, configDir, createPort, port, probeFailures, processStartedAtMs } =

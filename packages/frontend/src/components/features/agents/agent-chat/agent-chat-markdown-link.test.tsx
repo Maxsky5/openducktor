@@ -16,7 +16,6 @@ describe("chat Markdown links", () => {
     "[file](src/%E6%96%87.ts)\n\n$x^2$",
     "[file](src/a.ts)\n\n```mermaid\ngraph TD; A-->B;\n```",
     "[file](src/a.ts)\n\n$x^2$\n\n```mermaid\ngraph TD; A-->B;\n```",
-    "[file](src/a.ts)\n\n![asset](odt-asset://example)",
   ]) {
     test(markdown, async () => {
       const open = mock<(href: string, trigger: HTMLAnchorElement) => void>(() => {});
@@ -137,32 +136,47 @@ test("external links keep shell behavior and unsafe schemes do not become file l
   }
 });
 
-const lazyMarkdownRenderers = await Promise.all([
-  import("@/components/ui/markdown-renderer-rich"),
-  import("@/components/ui/markdown-renderer-math"),
-  import("@/components/ui/markdown-renderer-math-candidate"),
-  import("@/components/ui/markdown-renderer-mermaid-candidate"),
-]);
+const [richRenderer, mathRenderer, mathCandidateRenderer, mermaidCandidateRenderer] =
+  await Promise.all([
+    import("@/components/ui/markdown-renderer-rich"),
+    import("@/components/ui/markdown-renderer-math"),
+    import("@/components/ui/markdown-renderer-math-candidate"),
+    import("@/components/ui/markdown-renderer-mermaid-candidate"),
+  ]);
 
-test("the final lazy renderers all retain the file action", async () => {
-  for (const { default: Renderer } of lazyMarkdownRenderers) {
-    const open = mock<(href: string, trigger: HTMLAnchorElement) => void>(() => {});
-    const view = render(
-      <ChatFileLinkContext value={open}>
-        <Renderer
-          markdown={"[file](file:///repo/a.ts:42)\n\n$x^2$\n\n```mermaid\ngraph TD; A-->B;\n```"}
-          components={{ a: CHAT_MARKDOWN_LINK_POLICY.anchor }}
-          linkPolicy={CHAT_MARKDOWN_LINK_POLICY}
-          fallbackContent={<div>Loading</div>}
-        />
-      </ChatFileLinkContext>,
-    );
-    try {
-      await waitFor(() => expect(view.getByRole("link", { name: "file" })).toBeTruthy());
-      fireEvent.click(view.getByRole("link", { name: "file" }));
-      expect(open.mock.calls.at(-1)?.[0]).toBe("file:///repo/a.ts:42");
-    } finally {
-      view.unmount();
-    }
-  }
-});
+for (const [rendererName, { default: Renderer }] of [
+  ["rich", richRenderer],
+  ["math", mathRenderer],
+  ["math candidate", mathCandidateRenderer],
+  ["Mermaid candidate", mermaidCandidateRenderer],
+] as const) {
+  // The rich renderer parses an asset image as well as the file link.
+  const timeoutMs = rendererName === "rich" ? 2_500 : 1_000;
+  test(
+    `the final ${rendererName} renderer retains the file action`,
+    async () => {
+      const open = mock<(href: string, trigger: HTMLAnchorElement) => void>(() => {});
+      const view = render(
+        <ChatFileLinkContext value={open}>
+          <Renderer
+            markdown={
+              "[file](file:///repo/a.ts:42)\n\n$x^2$\n\n```mermaid\ngraph TD; A-->B;\n```" +
+              (rendererName === "rich" ? "\n\n![asset](odt-asset://example)" : "")
+            }
+            components={{ a: CHAT_MARKDOWN_LINK_POLICY.anchor }}
+            linkPolicy={CHAT_MARKDOWN_LINK_POLICY}
+            fallbackContent={<div>Loading</div>}
+          />
+        </ChatFileLinkContext>,
+      );
+      try {
+        await waitFor(() => expect(view.getByRole("link", { name: "file" })).toBeTruthy());
+        fireEvent.click(view.getByRole("link", { name: "file" }));
+        expect(open.mock.calls.at(-1)?.[0]).toBe("file:///repo/a.ts:42");
+      } finally {
+        view.unmount();
+      }
+    },
+    timeoutMs,
+  );
+}

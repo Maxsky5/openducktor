@@ -78,6 +78,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       .split("\0")
       .filter((field) => field.startsWith("worktree "))
       .map((field) => path.resolve(field.slice("worktree ".length)));
+  // Git initialization and two commits spawn several processes on Windows.
   beforeAll(async () => {
     fixtureRoot = await realpath(
       await mkdtemp(path.join(tmpdir(), "odt-workspace-session-git-fixture-")),
@@ -96,7 +97,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     [fixtureHead, initialHead] = runGit(fixtureRepoPath, "rev-parse", "HEAD", "HEAD~1").split(
       "\n",
     ) as [string, string];
-  });
+  }, 10_000);
   afterAll(async () => {
     await rm(fixtureRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });

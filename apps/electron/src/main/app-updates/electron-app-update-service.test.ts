@@ -396,6 +396,7 @@ describe("electron app update service", () => {
     expect(adapter.downloadCalls).toBe(0);
   });
 
+  // This integration test writes and reads a real log file on each platform.
   test("persists a real Electron update event through the main logger", async () => {
     const configDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-electron-update-log-"));
     let consoleOutput = "";
@@ -431,7 +432,7 @@ describe("electron app update service", () => {
     } finally {
       await rm(configDirectory, { force: true, recursive: true });
     }
-  });
+  }, 2_500);
 
   test("keeps successful checks committed when completion logging fails", async () => {
     const persistenceError = new Error("openducktor.logs.append failed");
