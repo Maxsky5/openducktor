@@ -5,7 +5,11 @@ import {
   acceptedAgentUserMessageSchema,
   agentSessionTranscriptEventSchema,
 } from "@openducktor/contracts";
-import type { AgentSessionSummary, AgentUserMessagePart } from "@openducktor/core";
+import type {
+  AgentSessionSummary,
+  AgentSessionTitleUpdateResult,
+  AgentUserMessagePart,
+} from "@openducktor/core";
 import { Effect } from "effect";
 import { toAgentSessionControlSummary } from "../../application/agent-sessions/agent-session-control-summary";
 import { type HostError, toHostOperationError } from "../../effect/host-errors";
@@ -14,6 +18,7 @@ import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send
 import type {
   AgentSessionControlAdapterPort,
   AgentSessionLiveAdapterMutation,
+  AgentSessionTitleUpdateOutcome,
 } from "../../ports/agent-session-live-adapter-port";
 import type { OpenCodeRuntimeInstance } from "./opencode-live-session-normalization";
 import { parseOutput, refKey, toSessionRef } from "./opencode-live-session-normalization";
@@ -96,6 +101,29 @@ export const createOpenCodeSessionControlAdapter = ({
           })),
         ),
         Effect.flatMap((summary) => toAgentSessionControlSummary(summary, operation)),
+      ),
+    );
+
+  const runTitleUpdate = (
+    operation: string,
+    run: () => Promise<AgentSessionTitleUpdateResult>,
+  ): Effect.Effect<AgentSessionTitleUpdateOutcome, HostError> =>
+    serializeRuntime(
+      Effect.tryPromise({
+        try: run,
+        catch: (cause) =>
+          toHostOperationError(cause, operation, {
+            runtimeId: runtime.runtimeId,
+          }),
+      }).pipe(
+        Effect.flatMap((result): Effect.Effect<AgentSessionTitleUpdateOutcome, HostError> =>
+          result.status === "not_attached"
+            ? Effect.succeed({ status: "not_attached" as const })
+            : commit(`${operation}.commit`, () => ({
+                value: result,
+                changes: state.applyControlSummary(result.summary),
+              })).pipe(Effect.as({ status: "renamed" as const })),
+        ),
       ),
     );
 
@@ -258,9 +286,9 @@ export const createOpenCodeSessionControlAdapter = ({
         ),
       ),
     updateSessionTitle: (input) =>
-      runControlSummary("opencode-live-session.update-session-title", () =>
+      runTitleUpdate("opencode-live-session.update-session-title", () =>
         connection.updateSessionTitle({ ...toSessionRef(input), title: input.title }),
-      ).pipe(Effect.asVoid),
+      ),
     stopSession: (input) =>
       serializeRuntime(
         Effect.tryPromise({

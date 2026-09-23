@@ -20,7 +20,8 @@ import {
   type SqliteTaskStoreTestHarness,
 } from "../../adapters/sqlite/sqlite-task-store-test-support";
 import { createSqliteWorkspaceSessionStore } from "../../adapters/sqlite/sqlite-workspace-session-store";
-import { HostOperationError, HostResourceError } from "../../effect/host-errors";
+import { type HostError, HostOperationError, HostResourceError } from "../../effect/host-errors";
+import type { AgentSessionTitleUpdateOutcome } from "../../ports/agent-session-live-adapter-port";
 import { hostInvokeFailureFromError } from "../../interface/router/host-invoke-failure";
 import { createWorkspaceSessionCommandHandlers } from "../../interface/commands/workspace-session-command-handlers";
 import {
@@ -92,6 +93,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       failRename: false,
       failRenameSave: false,
       failRenameRollback: false,
+      titleNotAttached: false,
       failHook: false,
       failCleanup: false,
       failDelete: false,
@@ -269,11 +271,12 @@ describe("host-owned Workspace Session lifecycle", () => {
             return state.failStop ? failure("stop failed") : Effect.void;
           }),
         updateSessionTitle: (request) =>
-          Effect.suspend(() => {
+          Effect.suspend((): Effect.Effect<AgentSessionTitleUpdateOutcome, HostError> => {
             calls.push("title");
             if (state.failRename) return failure("runtime rename failed");
+            if (state.titleNotAttached) return Effect.succeed({ status: "not_attached" });
             titles.push(request.title);
-            return Effect.void;
+            return Effect.succeed({ status: "renamed" });
           }),
         read: (ref) =>
           Effect.suspend(() => {
@@ -525,6 +528,24 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect(renamed.manualTitle).toBe("Renamed");
     expect(h.titles).toEqual(["Renamed"]);
     expect(h.calls).toEqual(["rename", "title"]);
+  });
+
+  test("keeps the saved title and succeeds when the runtime does not hold the session", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(
+      h.service.create({ ...input(), manualTitle: null }),
+    );
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    await Effect.runPromise(h.service.start(ref));
+    h.calls.length = 0;
+    h.state.titleNotAttached = true;
+
+    const renamed = await Effect.runPromise(h.service.rename({ ...ref, manualTitle: "Renamed" }));
+
+    expect(renamed.manualTitle).toBe("Renamed");
+    expect(h.titles).toEqual([]);
+    expect(h.calls).toEqual(["rename", "title"]);
+    expect((await Effect.runPromise(h.service.get(ref))).manualTitle).toBe("Renamed");
   });
 
   test("renames a draft without touching a runtime session", async () => {

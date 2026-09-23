@@ -15,6 +15,7 @@ import type {
   AgentSessionPort,
   AgentSessionRuntimePolicy,
   AgentSessionSummary,
+  AgentSessionTitleUpdateResult,
   AgentSessionTodoItem,
   AgentWorkspaceInspectionPort,
   EventUnsubscribe,
@@ -71,6 +72,7 @@ import { createOpenCodeMessageId } from "./opencode-message-id";
 import {
   applyRuntimeContextToSession,
   applySessionPolicy,
+  assertOpencodeSessionRef,
   assertRuntimeContextCompatibleWithSession,
   requireOpencodeSessionPolicyRuntime,
   resolveOpencodePolicyBoundSession,
@@ -843,29 +845,25 @@ export class OpencodeSdkAdapter
 
   async updateSessionTitle(
     input: AgentSessionControlUpdateTitleInput,
-  ): Promise<AgentSessionSummary> {
-    const session = requireSession(this.sessions, input.externalSessionId);
-    const sessionRef = opencodeSessionRef(session);
-    if (!agentSessionRefsEqual(sessionRef, input)) {
-      throw new Error(
-        `Cannot rename OpenCode session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${sessionRef.repoPath}' and working directory '${sessionRef.workingDirectory}'.`,
-      );
+  ): Promise<AgentSessionTitleUpdateResult> {
+    const session = this.sessions.get(input.externalSessionId);
+    if (!session) {
+      return { status: "not_attached" };
     }
     const action = `rename OpenCode session '${input.externalSessionId}'`;
+    assertOpencodeSessionRef(session, input, action);
     try {
       const updated = await session.client.session.update({
         directory: input.workingDirectory,
         sessionID: input.externalSessionId,
         title: input.title,
       });
-      if (updated.data === undefined || updated.data === null) {
-        throw toOpenCodeRequestError(action, updated.error, updated.response);
-      }
+      unwrapData(updated, action);
     } catch (error) {
       throw toOpenCodeRequestError(action, error);
     }
     session.summary = withSummaryTitle(session.summary, input.title);
-    return session.summary;
+    return { status: "renamed", summary: session.summary };
   }
 
   async replyApproval(input: ReplyApprovalInput): Promise<void> {

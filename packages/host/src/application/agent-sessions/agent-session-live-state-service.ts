@@ -44,6 +44,7 @@ import type {
   AgentSessionControlContinueInterruptedTurnInput,
   AgentSessionRuntimeAdapterPort,
   AgentSessionLiveAdapterScope,
+  AgentSessionTitleUpdateOutcome,
 } from "../../ports/agent-session-live-adapter-port";
 import type { AgentSessionPersistencePort } from "../../ports/agent-session-persistence-port";
 import { AgentSessionResumeError } from "../../ports/agent-session-resume-error";
@@ -105,7 +106,7 @@ export type AgentSessionLiveStateService = {
   ) => Effect.Effect<void, HostError>;
   readonly updateSessionTitle: (
     input: AgentSessionControlUpdateTitleInput,
-  ) => Effect.Effect<void, HostError>;
+  ) => Effect.Effect<AgentSessionTitleUpdateOutcome, HostError>;
   readonly stopSession: (input: AgentSessionControlStopInput) => Effect.Effect<void, HostError>;
   readonly releaseSession: (
     input: AgentSessionControlReleaseInput,

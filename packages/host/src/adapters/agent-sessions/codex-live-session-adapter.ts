@@ -29,7 +29,10 @@ import type {
   PreparedCodexLiveSessionAdapter,
 } from "./codex-live-session-adapter-contract";
 import { createCodexLiveSessionEventHub } from "./codex-live-session-event-hub";
-import { createCodexControlSummaryRunner } from "./codex-live-session-control-summary";
+import {
+  createCodexControlSummaryRunner,
+  createCodexTitleUpdateRunner,
+} from "./codex-live-session-control-runner";
 import {
   publishAcceptedCodexMessage,
   refreshAfterAcceptedCodexMessage,
@@ -128,6 +131,10 @@ export const createCodexLiveSessionAdapterPreparer = ({
         });
 
       const runControlSummary = createCodexControlSummaryRunner({
+        runtimeId: runtime.runtimeId,
+        refreshProjection,
+      });
+      const runTitleUpdate = createCodexTitleUpdateRunner({
         runtimeId: runtime.runtimeId,
         refreshProjection,
       });
@@ -441,9 +448,9 @@ export const createCodexLiveSessionAdapterPreparer = ({
             catch: sessionError("codex-live-session.update-session-model", input.externalSessionId),
           }).pipe(Effect.tap(() => refreshProjection())),
         updateSessionTitle: (input) =>
-          runControlSummary("codex-live-session.update-session-title", () =>
+          runTitleUpdate("codex-live-session.update-session-title", () =>
             controller.updateSessionTitle(input),
-          ).pipe(Effect.asVoid),
+          ),
         stopSession: (input) =>
           stopCodexSession({
             codexAppServer,

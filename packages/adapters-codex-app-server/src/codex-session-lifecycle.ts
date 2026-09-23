@@ -66,6 +66,24 @@ const buildSessionState = (
   return sessionState;
 };
 
+export const assertCodexSessionRef = (
+  session: CodexSessionState,
+  input: {
+    repoPath: string;
+    runtimeKind: AgentSessionSummary["runtimeKind"];
+    workingDirectory: string;
+    externalSessionId: string;
+  },
+  action: string,
+): void => {
+  const registeredSessionRef = codexSessionRef(session);
+  if (!agentSessionRefsEqual(registeredSessionRef, input)) {
+    throw new Error(
+      `Cannot ${action} Codex session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
+    );
+  }
+};
+
 export const assertRuntimeContextCompatibleWithSession = (
   session: CodexSessionState,
   input: PolicyBoundSessionRef,
@@ -133,12 +151,7 @@ export function resolveCodexPolicyBoundSession(
   const { actions, input } = resolution;
   const session = resolution.getSession(input.externalSessionId);
   if (session) {
-    const registeredSessionRef = codexSessionRef(session);
-    if (!agentSessionRefsEqual(registeredSessionRef, input)) {
-      throw new Error(
-        `Cannot ${actions.lookup} Codex session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
-      );
-    }
+    assertCodexSessionRef(session, input, actions.lookup);
     assertRuntimeContextCompatibleWithSession(session, input, actions.lookup);
     if (session.summary.sessionAssociation.kind !== "unbound" || !input.sessionScope) {
       applyRuntimeContextToSession(session, input, actions.context);

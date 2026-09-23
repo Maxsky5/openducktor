@@ -1428,6 +1428,7 @@ describe("createAgentSessionLiveStateService", () => {
       updateSessionTitle: (input) =>
         Effect.sync(() => {
           calls.push({ operation: "title", input });
+          return { status: "renamed" as const };
         }),
       stopSession: (input) =>
         Effect.sync(() => {

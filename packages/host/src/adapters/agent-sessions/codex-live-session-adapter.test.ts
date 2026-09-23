@@ -365,7 +365,10 @@ const createControllerHarness = ({
               ? { ...snapshot, title: input.title }
               : snapshot,
           );
-          return { ...controlSummary, title: input.title };
+          return {
+            status: "renamed" as const,
+            summary: { ...controlSummary, title: input.title },
+          };
         },
         stopSession: async () => {
           snapshots = [];

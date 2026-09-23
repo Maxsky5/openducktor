@@ -1,6 +1,11 @@
 import { expect, test } from "bun:test";
 import type { AcceptedAgentUserMessage } from "@openducktor/contracts";
-import { buildWorkspaceSessionTitle, runtimeTitleFor } from "./workspace-session-title";
+import {
+  buildWorkspaceSessionTitle,
+  planRuntimeTitleRename,
+  runtimeTitle,
+  runtimeTitleWithManualTitle,
+} from "./workspace-session-title";
 
 const message = (parts: AcceptedAgentUserMessage["parts"]): AcceptedAgentUserMessage => ({
   type: "user_message",
@@ -65,15 +70,37 @@ test("does not invent a title for empty visible content", () => {
 });
 
 test("prefers the manual title, falls back to the generated title, and stays undefined without a title", () => {
-  expect(runtimeTitleFor({ generatedTitle: "Generated", manualTitle: null }, "Manual")).toBe(
-    "Manual",
-  );
-  expect(runtimeTitleFor({ generatedTitle: "Generated", manualTitle: null }, null)).toBe(
-    "Generated",
-  );
-  expect(runtimeTitleFor({ generatedTitle: "Generated", manualTitle: null }, "  ")).toBe(
-    "Generated",
-  );
-  expect(runtimeTitleFor({ generatedTitle: null, manualTitle: null })).toBeNull();
-  expect(runtimeTitleFor({ generatedTitle: "Generated", manualTitle: "Stored" })).toBe("Stored");
+  expect(runtimeTitleWithManualTitle({ generatedTitle: "Generated" }, "Manual")).toBe("Manual");
+  expect(runtimeTitleWithManualTitle({ generatedTitle: "Generated" }, null)).toBe("Generated");
+  expect(runtimeTitleWithManualTitle({ generatedTitle: "Generated" }, "  ")).toBe("Generated");
+  expect(runtimeTitle({ generatedTitle: null, manualTitle: null })).toBeNull();
+  expect(runtimeTitle({ generatedTitle: "Generated", manualTitle: "Stored" })).toBe("Stored");
+  expect(runtimeTitle({ generatedTitle: "Generated", manualTitle: null })).toBe("Generated");
+});
+
+test("plans a native rename only for a changed title on a bound session", () => {
+  expect(
+    planRuntimeTitleRename(
+      { externalSessionId: "native", generatedTitle: null, manualTitle: null },
+      "Manual",
+    ),
+  ).toEqual({ externalSessionId: "native", title: "Manual" });
+  expect(
+    planRuntimeTitleRename(
+      { externalSessionId: "native", generatedTitle: null, manualTitle: "Manual" },
+      "Manual",
+    ),
+  ).toBeNull();
+  expect(
+    planRuntimeTitleRename(
+      { externalSessionId: null, generatedTitle: null, manualTitle: null },
+      "Manual",
+    ),
+  ).toBeNull();
+  expect(
+    planRuntimeTitleRename(
+      { externalSessionId: "native", generatedTitle: null, manualTitle: "Manual" },
+      null,
+    ),
+  ).toBeNull();
 });

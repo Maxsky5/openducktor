@@ -10,7 +10,8 @@ import { agentSessionRefKey } from "@openducktor/core";
 import { Effect } from "effect";
 import {
   buildWorkspaceSessionTitle,
-  runtimeTitleFor,
+  planRuntimeTitleRename,
+  runtimeTitle,
 } from "../../domain/workspace-sessions/workspace-session-title";
 import {
   type HostError,
@@ -19,6 +20,7 @@ import {
   isHostError,
 } from "../../effect/host-errors";
 import type { AgentSessionPersistencePort } from "../../ports/agent-session-persistence-port";
+import type { AgentSessionTitleUpdateOutcome } from "../../ports/agent-session-live-adapter-port";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
 import type {
   WorkspaceSessionStorePort,
@@ -39,7 +41,7 @@ export type WorkspaceSessionUpdatedPublisher = (
 
 export type WorkspaceSessionRuntimeTitleUpdater = (
   input: AgentSessionControlUpdateTitleInput,
-) => Effect.Effect<void, HostError>;
+) => Effect.Effect<AgentSessionTitleUpdateOutcome, HostError>;
 
 export type WorkspaceSessionRenameFailureReporter = (
   runtimeRef: AgentSessionLiveRef,
@@ -135,13 +137,13 @@ export const createWorkspaceSessionRuntimePersistence = ({
       if (input.sessionScope.kind !== "repository") return input;
       const known = yield* findActive(input);
       if (!known) return input;
-      const runtimeTitle = runtimeTitleFor(known.session);
+      const storedTitle = runtimeTitle(known.session);
       const prepared = {
         ...input,
         sessionScope:
-          runtimeTitle === null
+          storedTitle === null
             ? input.sessionScope
-            : { kind: "repository" as const, title: runtimeTitle },
+            : { kind: "repository" as const, title: storedTitle },
         systemPrompt: known.session.roleSnapshot?.systemPrompt ?? "",
       };
       if (known.session.selectedModel !== null) prepared.model = known.session.selectedModel;
@@ -173,25 +175,38 @@ export const createWorkspaceSessionRuntimePersistence = ({
         input.selectedModel = { ...message.model, runtimeKind: runtimeRef.runtimeKind };
       }
       const storedGeneratedTitle = known.session.generatedTitle ?? input.generatedTitle;
-      const runtimeTitle = runtimeTitleFor({
+      const nextTitle = runtimeTitle({
         ...known.session,
         generatedTitle: storedGeneratedTitle,
       });
-      const previousTitle = runtimeTitleFor(known.session);
+      const renameTarget = planRuntimeTitleRename(known.session, nextTitle);
       const runtimeRename =
-        known.session.externalSessionId !== null &&
-        runtimeTitle !== null &&
-        runtimeTitle !== previousTitle
-          ? {
-              externalSessionId: known.session.externalSessionId,
+        renameTarget === null
+          ? null
+          : {
+              ...renameTarget,
               repoPath: known.ref.repoPath,
               runtimeKind: known.session.runtimeKind,
               workingDirectory: known.session.executionTarget.workingDirectory,
-              title: runtimeTitle,
-            }
-          : null;
+            };
       return { input, runtimeRename };
     });
+  const renameAcceptedMessageTitle = (
+    input: AgentSessionControlUpdateTitleInput,
+  ): Effect.Effect<void, HostError> =>
+    updateRuntimeSessionTitle(input).pipe(
+      Effect.flatMap((result) =>
+        result.status === "renamed"
+          ? Effect.void
+          : Effect.fail(
+              new HostOperationError({
+                operation: "workspaceSession.accepted-message.rename",
+                message:
+                  "The runtime session is not attached. The title stays on its prior value. Rename the chat or send a message to sync the titles.",
+              }),
+            ),
+      ),
+    );
   const applyAcceptedMessage = (
     known: { ref: WorkspaceSessionStoreRef; session: WorkspaceSession },
     plan: AcceptedMessagePlan,
@@ -201,7 +216,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
       // Rename the runtime session before the durable write, so a failed rename never
       // stores a title that the runtime session does not show.
       if (runtimeRename !== null) {
-        const renamed = yield* Effect.either(updateRuntimeSessionTitle(runtimeRename));
+        const renamed = yield* Effect.either(renameAcceptedMessageTitle(runtimeRename));
         if (renamed._tag === "Left") {
           // Keep the accepted-message activity, but leave the title on its prior value.
           const recorded = yield* Effect.either(

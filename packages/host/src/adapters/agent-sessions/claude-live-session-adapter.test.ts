@@ -1741,9 +1741,12 @@ describe("Claude host live-session adapter", () => {
       Effect.sync(() => {
         calls.push(input);
         return {
-          ...summary,
-          title: input.title,
-          sessionAssociation: { kind: "repository" as const, title: input.title },
+          status: "renamed" as const,
+          summary: {
+            ...summary,
+            title: input.title,
+            sessionAssociation: { kind: "repository" as const, title: input.title },
+          },
         };
       }),
     );

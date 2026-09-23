@@ -1,47 +1,22 @@
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type {
-  AcceptedAgentUserMessage,
-  AgentSessionControlResumeInput,
-  AgentSessionControlUpdateModelInput,
-  AgentSessionControlUpdateTitleInput,
-  AgentSessionControlSendInput,
-  AgentSessionLiveEnvelope,
-  AgentSessionLiveRef,
-  AgentSessionTranscriptEvent,
-  WorkspaceSession,
-} from "@openducktor/contracts";
-import { repoConfigSchema, RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
+import type { AgentSessionLiveRef, WorkspaceSession } from "@openducktor/contracts";
+import { repoConfigSchema } from "@openducktor/contracts";
 import { Deferred, Effect } from "effect";
-import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
-import { createOpenCodeLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/opencode-live-session-adapter";
-import { createRuntimeHarness } from "../../adapters/agent-sessions/opencode-live-session-adapter.test-support";
 import {
   createSqliteTaskStoreHarness,
   type SqliteTaskStoreTestHarness,
 } from "../../adapters/sqlite/sqlite-task-store-test-support";
-import { createSqliteWorkspaceSessionStore } from "../../adapters/sqlite/sqlite-workspace-session-store";
-import { type HostError, HostOperationError } from "../../effect/host-errors";
 import {
-  createAgentSessionRuntimeAdapterTestDouble,
   createGitPortTestDouble,
   createSettingsConfigTestDouble,
   createWorktreeFilePortTestDouble,
 } from "../../test-support/service-test-doubles";
-import { createAgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
-import { createWorkspaceSessionRuntimePersistence } from "./workspace-session-runtime-persistence";
+import {
+  createPersistenceHarness,
+  waitFor,
+} from "./test-support/workspace-session-runtime-persistence-harness";
 import { createWorkspaceSessionService } from "./workspace-session-service";
-import { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
-import { createAgentSessionCommandService } from "../agent-sessions/agent-session-command-service";
-
-const waitFor = async (check: () => Promise<boolean> | boolean, timeoutMs = 2_000) => {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (await check()) return;
-    await Bun.sleep(1);
-  }
-  throw new Error("Timed out while waiting for the condition.");
-};
 
 describe("Workspace Session persistence through the shared command module", () => {
   let database: SqliteTaskStoreTestHarness;
@@ -52,315 +27,7 @@ describe("Workspace Session persistence through the shared command module", () =
     await database.cleanup();
   });
 
-  const setup = async () => {
-    const ref: AgentSessionLiveRef = {
-      repoPath: database.repoPath,
-      runtimeKind: "opencode",
-      externalSessionId: "native",
-      workingDirectory: `${database.repoPath}/session-worktree`,
-    };
-    const storeRef = {
-      repoPath: database.repoPath,
-      workspaceId: "fairnest",
-      sessionId: "session-1",
-    };
-    const record: WorkspaceSession = {
-      id: "session-1",
-      runtimeKind: "opencode",
-      externalSessionId: "native",
-      executionTarget: {
-        kind: "local_worktree",
-        workingDirectory: ref.workingDirectory,
-        branchName: "feature/session",
-        worktreeState: "present",
-      },
-      roleSnapshot: {
-        id: "deleted-role",
-        name: "Original role",
-        systemPrompt: "Original instructions.",
-      },
-      selectedModel: {
-        runtimeKind: "opencode",
-        providerId: "provider",
-        modelId: "stored-model",
-        variant: "high",
-      },
-      generatedTitle: null,
-      manualTitle: null,
-      createdAt: 0,
-      updatedAt: 0,
-      archivedAt: null,
-    };
-    const store = createSqliteWorkspaceSessionStore(database.contextProvider);
-    await Effect.runPromise(store.create({ ...storeRef, session: record }));
-    const updates: Array<{ workspaceId: string; session: WorkspaceSession }> = [];
-    const events: AgentSessionLiveEnvelope[] = [];
-    const inputs: Array<AgentSessionControlSendInput | AgentSessionControlResumeInput> = [];
-    const activityTimes: number[] = [];
-    const models: AgentSessionControlUpdateModelInput["model"][] = [];
-    const titles: string[] = [];
-    const state = {
-      failSend: false,
-      failModel: false,
-      failModelSave: false,
-      failRestore: false,
-      failTitle: false,
-      failTitleWrite: false,
-      failPublish: false,
-      failActivity: false,
-      publishAcceptedMessageDuringSend: false,
-      registered: true,
-      beforeControl: Effect.void,
-      beforeModelSave: Effect.void,
-      beforeTitle: Effect.void,
-      onGateRequest: () => {},
-      active: false,
-    };
-    const renameFailures: string[] = [];
-    const failure = (message: string) =>
-      Effect.fail(new HostOperationError({ operation: "test", message }));
-    const accepted = (
-      text = "First accepted prompt",
-      timestamp = "2026-09-07T10:00:00Z",
-    ): AcceptedAgentUserMessage => ({
-      type: "user_message",
-      externalSessionId: "native",
-      sessionRef: ref,
-      timestamp,
-      messageId: "user-1",
-      message: text,
-      parts: [{ kind: "text", text }],
-      state: "read",
-    });
-    const baseGate = createWorkspaceSessionOperationGate();
-    const operationGate: ReturnType<typeof createWorkspaceSessionOperationGate> = {
-      run: (ref, effect) =>
-        Effect.sync(() => state.onGateRequest()).pipe(Effect.zipRight(baseGate.run(ref, effect))),
-    };
-    const sessionTitleGate = createWorkspaceSessionOperationGate();
-    let updateLiveRuntimeTitle: ((title: string) => Effect.Effect<void, HostError>) | null = null;
-    const persistence = createWorkspaceSessionRuntimePersistence({
-      updateRuntimeSessionTitle: ({ title }) =>
-        updateLiveRuntimeTitle
-          ? updateLiveRuntimeTitle(title)
-          : Effect.dieMessage("live title update is not wired"),
-      operationGate,
-      sessionTitleGate,
-      store: {
-        ...store,
-        recordAcceptedMessage: (input) =>
-          state.failActivity
-            ? failure("activity write failed")
-            : state.failTitleWrite && input.generatedTitle !== null
-              ? failure("title write failed")
-              : store.recordAcceptedMessage(input),
-        setSelectedModel: (input) =>
-          state.beforeModelSave.pipe(
-            Effect.zipRight(
-              Effect.suspend(() =>
-                state.failModelSave ? failure("model save failed") : store.setSelectedModel(input),
-              ),
-            ),
-          ),
-        recordActivity: (input) => {
-          activityTimes.push(input.activity.occurredAt);
-          return state.failActivity
-            ? failure("activity write failed")
-            : store.recordActivity(input);
-        },
-      },
-      settings: {
-        getRepoConfigByRepoPath: () =>
-          Effect.succeed(
-            repoConfigSchema.parse({
-              workspaceId: "fairnest",
-              workspaceName: "Fairnest",
-              repoPath: database.repoPath,
-            }),
-          ),
-      },
-      git: createGitPortTestDouble({
-        canonicalizePath: (value) => Effect.succeed(value),
-        isGitRepository: () => Effect.succeed(true),
-        shareGitCommonDirectory: () => Effect.succeed(true),
-        isRegisteredWorktree: () => Effect.succeed(state.registered),
-      }),
-      publishUpdated: (workspaceId, session) =>
-        Effect.suspend(() =>
-          state.failPublish
-            ? failure("publication failed")
-            : Effect.sync(() => {
-                updates.push({ workspaceId, session });
-              }),
-        ),
-      reportRenameFailure: (_runtimeRef, message) =>
-        Effect.sync(() => {
-          renameFailures.push(message);
-        }),
-    });
-    const live = createAgentSessionLiveStateService({
-      adapterRegistry: createLiveSessionAdapterRegistry(),
-      persistence,
-      faultLog: () => Effect.void,
-      publish: (event) => {
-        events.push(event);
-      },
-    });
-    updateLiveRuntimeTitle = (title) => live.updateSessionTitle({ ...ref, title });
-    const registration = live.createRuntimeRegistration({
-      runtimeId: "runtime",
-      runtimeKind: "opencode",
-      repoPath: database.repoPath,
-    });
-    await Effect.runPromise(
-      live.registerRuntimeAdapter(
-        createAgentSessionRuntimeAdapterTestDouble(registration, {
-          matches: () => true,
-          listSnapshots: () => Effect.succeed([]),
-          listRetainedSnapshots: () => Effect.succeed([]),
-          resumeSession: (input) =>
-            state.beforeControl.pipe(
-              Effect.zipRight(
-                Effect.sync(() => {
-                  inputs.push(input);
-                  return {
-                    externalSessionId: input.externalSessionId,
-                    runtimeKind: input.runtimeKind,
-                    workingDirectory: input.workingDirectory,
-                    startedAt: "2026-09-07T10:00:00Z",
-                    status: "idle",
-                  };
-                }),
-              ),
-            ),
-          sendUserMessage: (input) =>
-            state.beforeControl.pipe(
-              Effect.zipRight(
-                Effect.suspend(() => {
-                  inputs.push(input);
-                  if (state.failSend) return failure("runtime rejected message");
-                  const acceptedMessage = accepted();
-                  if (!state.publishAcceptedMessageDuringSend)
-                    return Effect.succeed(acceptedMessage);
-                  return registration
-                    .runMutation(
-                      Effect.succeed({
-                        value: undefined,
-                        changes: [
-                          {
-                            type: "transcript_event" as const,
-                            event: { ...acceptedMessage, sessionRef: ref },
-                          },
-                        ],
-                      }),
-                    )
-                    .pipe(Effect.as(acceptedMessage));
-                }),
-              ),
-            ),
-          updateSessionModel: (input) =>
-            Effect.suspend(() => {
-              models.push(input.model);
-              if (state.failModel) return failure("runtime rejected model");
-              if (state.failRestore && models.length === 2)
-                return failure("runtime restore failed");
-              return Effect.void;
-            }),
-          updateSessionTitle: (input) =>
-            state.beforeTitle.pipe(
-              Effect.zipRight(
-                Effect.suspend(() => {
-                  titles.push(input.title);
-                  return state.failTitle ? failure("runtime title update failed") : Effect.void;
-                }),
-              ),
-            ),
-        }),
-      ),
-    );
-    events.length = 0;
-    const commands = createAgentSessionCommandService({
-      runtime: live,
-      repositoryPolicy: persistence,
-      canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
-      taskReader: { getTask: () => Effect.dieMessage("unexpected task read") },
-      tasks: {
-        agentSessionsList: () => Effect.dieMessage("unexpected task session read"),
-        agentSessionUpsert: () => Effect.dieMessage("unexpected task session write"),
-        agentSessionUpdateModel: () => Effect.dieMessage("unexpected task model write"),
-        transitionTask: () => Effect.dieMessage("unexpected task transition"),
-      },
-      taskLifecycle: { acquireLifecycle: () => Effect.dieMessage("unexpected task lifecycle") },
-      taskSessionStart: {
-        prepare: () => Effect.dieMessage("unexpected task start"),
-        complete: () => Effect.dieMessage("unexpected task completion"),
-      },
-      persistTaskModel: () => Effect.dieMessage("unexpected task model write"),
-    });
-    const emitEffect = (event: AgentSessionTranscriptEvent) =>
-      registration.runMutation(
-        Effect.succeed({ value: undefined, changes: [{ type: "transcript_event", event }] }),
-      );
-    const emit = (event: AgentSessionTranscriptEvent) => Effect.runPromise(emitEffect(event));
-    const send = (text: string) =>
-      Effect.runPromise(
-        commands.sendUserMessage({
-          ...ref,
-          sessionScope: { kind: "repository" },
-          parts: [{ kind: "text", text }],
-        }),
-      );
-    const get = () => Effect.runPromise(store.get(storeRef));
-    const config = repoConfigSchema.parse({
-      workspaceId: "fairnest",
-      workspaceName: "Fairnest",
-      repoPath: database.repoPath,
-    });
-    const workspaceService = () =>
-      createWorkspaceSessionService({
-        operationGate,
-        sessionTitleGate,
-        store,
-        settings: {
-          getRepoConfig: () => Effect.succeed(config),
-          listCustomAgentRoles: () => Effect.succeed([]),
-        },
-        runtime: { runtimeEnsure: () => Effect.dieMessage("unexpected runtime ensure") },
-        live: { ...live, ...commands },
-        git: createGitPortTestDouble({ canonicalizePath: (value) => Effect.succeed(value) }),
-        settingsConfig: createSettingsConfigTestDouble({}),
-        worktreeFiles: createWorktreeFilePortTestDouble({}),
-        systemCommands: {
-          resolveCommandPath: () => Effect.dieMessage("unused"),
-          versionCommand: () => Effect.dieMessage("unused"),
-          runCommandAllowFailure: () => Effect.dieMessage("unused"),
-        },
-      });
-    return {
-      operationGate,
-      sessionTitleGate,
-      ref,
-      storeRef,
-      record,
-      store,
-      live: { ...live, ...commands },
-      persistence,
-      updates,
-      events,
-      inputs,
-      activityTimes,
-      models,
-      titles,
-      renameFailures,
-      state,
-      accepted,
-      emit,
-      emitEffect,
-      send,
-      get,
-      workspaceService,
-    };
-  };
+  const setup = () => createPersistenceHarness(database);
 
   test("uses the stored Role and Model on resume and send after catalog edits or deletion", async () => {
     const h = await setup();
@@ -426,7 +93,7 @@ describe("Workspace Session persistence through the shared command module", () =
   test("renames the runtime session when the first accepted message sets the generated title", async () => {
     const h = await setup();
     await h.send("Name this chat");
-    expect(h.titles).toEqual(["First accepted prompt"]);
+    expect(h.titleAttempts).toEqual(["First accepted prompt"]);
     expect((await h.get()).generatedTitle).toBe("First accepted prompt");
   });
 
@@ -435,18 +102,18 @@ describe("Workspace Session persistence through the shared command module", () =
     h.state.publishAcceptedMessageDuringSend = true;
     await h.send("Name this chat");
     expect((await h.get()).generatedTitle).toBe("First accepted prompt");
-    expect(h.titles).toEqual(["First accepted prompt"]);
+    expect(h.titleAttempts).toEqual(["First accepted prompt"]);
   });
 
   test("renames the runtime session when another client sends the first message", async () => {
     const h = await setup();
     await h.emit({ ...h.accepted(), sessionRef: h.ref });
-    await waitFor(() => h.titles.length === 1);
+    await waitFor(() => h.titleAttempts.length === 1);
     await h.emit({
       ...h.accepted("Later prompt", "2026-09-07T10:05:00Z"),
       sessionRef: h.ref,
     });
-    expect(h.titles).toEqual(["First accepted prompt"]);
+    expect(h.titleAttempts).toEqual(["First accepted prompt"]);
     expect((await h.get()).generatedTitle).toBe("First accepted prompt");
   });
 
@@ -455,7 +122,7 @@ describe("Workspace Session persistence through the shared command module", () =
     await Effect.runPromise(h.store.rename({ ...h.storeRef, manualTitle: "Manual title" }));
     await h.emit({ ...h.accepted(), sessionRef: h.ref });
     await waitFor(async () => (await h.get()).generatedTitle === "First accepted prompt");
-    expect(h.titles).toEqual([]);
+    expect(h.titleAttempts).toEqual([]);
   });
 
   test("keeps both titles on the prior value when the runtime title update fails", async () => {
@@ -467,7 +134,19 @@ describe("Workspace Session persistence through the shared command module", () =
     const saved = await h.get();
     expect(saved.generatedTitle).toBeNull();
     expect(saved.updatedAt).toBe(Date.parse(h.accepted().timestamp));
-    expect(h.titles).toEqual(["First accepted prompt"]);
+    expect(h.titleAttempts).toEqual(["First accepted prompt"]);
+  });
+
+  test("keeps both titles on the prior value when the runtime does not hold the session", async () => {
+    const h = await setup();
+    h.state.titleNotAttached = true;
+    await h.emit({ ...h.accepted(), sessionRef: h.ref });
+    await waitFor(() => h.renameFailures.length === 1);
+    expect(h.renameFailures[0]).toContain("runtime session is not attached");
+    const saved = await h.get();
+    expect(saved.generatedTitle).toBeNull();
+    expect(saved.updatedAt).toBe(Date.parse(h.accepted().timestamp));
+    expect(h.titleAttempts).toEqual(["First accepted prompt"]);
   });
 
   test("fails the observation and keeps both titles unchanged when the activity write fails", async () => {
@@ -476,7 +155,7 @@ describe("Workspace Session persistence through the shared command module", () =
     await expect(h.emit({ ...h.accepted(), sessionRef: h.ref })).rejects.toThrow(
       "activity write failed",
     );
-    expect(h.titles).toEqual([]);
+    expect(h.titleAttempts).toEqual([]);
     expect(await h.get()).toEqual(h.record);
   });
 
@@ -487,7 +166,7 @@ describe("Workspace Session persistence through the shared command module", () =
     await expect(h.send("Name this chat")).rejects.toThrow(
       /title write failed[\s\S]*keeps the generated title/,
     );
-    expect(h.titles).toEqual(["First accepted prompt"]);
+    expect(h.titleAttempts).toEqual(["First accepted prompt"]);
     const saved = await h.get();
     expect(saved.generatedTitle).toBeNull();
     expect(saved.updatedAt).toBe(Date.parse(h.accepted().timestamp));
@@ -500,8 +179,8 @@ describe("Workspace Session persistence through the shared command module", () =
     await expect(h.send("First accepted prompt")).rejects.toThrow("runtime title update failed");
     h.state.failTitle = false;
     await h.emit({ ...h.accepted("Second prompt"), sessionRef: h.ref });
-    await waitFor(() => h.titles.length === 2);
-    expect(h.titles).toEqual(["First accepted prompt", "Second prompt"]);
+    await waitFor(() => h.titleAttempts.length === 2);
+    expect(h.titleAttempts).toEqual(["First accepted prompt", "Second prompt"]);
     expect((await h.get()).generatedTitle).toBe("Second prompt");
   });
 
@@ -519,15 +198,17 @@ describe("Workspace Session persistence through the shared command module", () =
     });
     await h.emit({ ...h.accepted(), sessionRef: h.ref });
     await Effect.runPromise(Deferred.await(observedTitleReached));
+    const renameQueued = Promise.withResolvers<void>();
+    h.state.onGateRequest = () => renameQueued.resolve();
     const renamed = Effect.runPromise(
       workspace.rename({ workspaceId: "fairnest", sessionId: "session-1", manualTitle: "Renamed" }),
     );
-    await Bun.sleep(10);
+    await renameQueued.promise;
     // The deferred transition holds the title gate, so the rename has not written yet.
     expect((await h.get()).manualTitle).toBeNull();
     await Effect.runPromise(Deferred.succeed(releaseObservedTitle, undefined));
     await renamed;
-    expect(h.titles).toEqual(["First accepted prompt", "Renamed"]);
+    expect(h.titleAttempts).toEqual(["First accepted prompt", "Renamed"]);
     const saved = await h.get();
     expect(saved.manualTitle).toBe("Renamed");
     expect(saved.generatedTitle).toBe("First accepted prompt");
@@ -751,7 +432,7 @@ describe("Workspace Session persistence through the shared command module", () =
       model: { providerId: "provider", modelId: "old-model" },
       sessionRef: h.ref,
     });
-    await waitFor(() => h.titles.length === 1);
+    await waitFor(() => h.titleAttempts.length === 1);
     expect((await h.get()).selectedModel).toEqual({ ...model, runtimeKind: "opencode" });
   });
 
@@ -893,10 +574,10 @@ describe("Workspace Session persistence through the shared command module", () =
   test("generates the title once and does not move activity back for older user messages", async () => {
     const h = await setup();
     await h.emit({ ...h.accepted(), sessionRef: h.ref });
-    await waitFor(() => h.titles.length === 1);
+    await waitFor(() => h.titleAttempts.length === 1);
     await h.emit({ ...h.accepted("Duplicate with other text"), sessionRef: h.ref });
     await h.emit({ ...h.accepted("Older prompt", "2026-09-06T10:00:00Z"), sessionRef: h.ref });
-    expect(h.titles).toEqual(["First accepted prompt"]);
+    expect(h.titleAttempts).toEqual(["First accepted prompt"]);
     expect((await h.get()).generatedTitle).toBe("First accepted prompt");
     expect((await h.get()).updatedAt).toBe(Date.parse("2026-09-07T10:00:00Z"));
   });
@@ -1032,144 +713,5 @@ describe("Workspace Session persistence through the shared command module", () =
     ]);
     expect(await h.get()).toEqual(h.record);
     expect(h.updates).toEqual([]);
-  });
-});
-
-describe("Workspace Session runtime rename through the real OpenCode live adapter", () => {
-  let database: SqliteTaskStoreTestHarness;
-  beforeEach(async () => {
-    database = await createSqliteTaskStoreHarness();
-  });
-  afterEach(async () => {
-    await database.cleanup();
-  });
-
-  test("completes the first send and renames the runtime session", async () => {
-    const ref: AgentSessionLiveRef = {
-      repoPath: database.repoPath,
-      runtimeKind: "opencode",
-      externalSessionId: "native",
-      workingDirectory: `${database.repoPath}/session-worktree`,
-    };
-    const storeRef = {
-      repoPath: database.repoPath,
-      workspaceId: "fairnest",
-      sessionId: "session-1",
-    };
-    const store = createSqliteWorkspaceSessionStore(database.contextProvider);
-    await Effect.runPromise(
-      store.create({
-        ...storeRef,
-        session: {
-          id: "session-1",
-          runtimeKind: "opencode",
-          externalSessionId: "native",
-          executionTarget: {
-            kind: "local_worktree",
-            workingDirectory: ref.workingDirectory,
-            branchName: "feature/session",
-            worktreeState: "present",
-          },
-          roleSnapshot: { id: "role", name: "Role", systemPrompt: "Instructions." },
-          selectedModel: null,
-          generatedTitle: null,
-          manualTitle: null,
-          createdAt: 0,
-          updatedAt: 0,
-          archivedAt: null,
-        },
-      }),
-    );
-    let updateSessionTitle:
-      | ((input: AgentSessionControlUpdateTitleInput) => Effect.Effect<void, HostError>)
-      | null = null;
-    const persistence = createWorkspaceSessionRuntimePersistence({
-      store,
-      settings: {
-        getRepoConfigByRepoPath: () =>
-          Effect.succeed(
-            repoConfigSchema.parse({
-              workspaceId: "fairnest",
-              workspaceName: "Fairnest",
-              repoPath: database.repoPath,
-            }),
-          ),
-      },
-      git: createGitPortTestDouble({
-        canonicalizePath: (value) => Effect.succeed(value),
-        isGitRepository: () => Effect.succeed(true),
-        shareGitCommonDirectory: () => Effect.succeed(true),
-        isRegisteredWorktree: () => Effect.succeed(true),
-      }),
-      publishUpdated: () => Effect.void,
-      operationGate: createWorkspaceSessionOperationGate(),
-      sessionTitleGate: createWorkspaceSessionOperationGate(),
-      updateRuntimeSessionTitle: (input) =>
-        updateSessionTitle
-          ? updateSessionTitle(input)
-          : Effect.dieMessage("live title update is not wired"),
-      reportRenameFailure: () => Effect.void,
-    });
-    const live = createAgentSessionLiveStateService({
-      adapterRegistry: createLiveSessionAdapterRegistry(),
-      persistence,
-      faultLog: () => Effect.void,
-      publish: () => {},
-    });
-    updateSessionTitle = (input) => live.updateSessionTitle(input);
-    const harness = createRuntimeHarness();
-    const prepared = await Effect.runPromise(
-      createOpenCodeLiveSessionAdapterPreparer({
-        liveSessionLifecycle: live,
-        prepareRuntime: harness.prepareRuntime,
-      })({
-        kind: "opencode",
-        runtimeId: "runtime-1",
-        repoPath: database.repoPath,
-        taskId: null,
-        role: "workspace",
-        workingDirectory: ref.workingDirectory,
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:43123" },
-        startedAt: "2026-07-16T10:00:00.000Z",
-        descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
-      }),
-    );
-    await Effect.runPromise(live.registerRuntimeAdapter(prepared.adapter));
-    await Effect.runPromise(
-      live.resumeSession({
-        resumeMode: "reattach",
-        ...ref,
-        sessionScope: { kind: "repository" },
-      }),
-    );
-    const commands = createAgentSessionCommandService({
-      runtime: live,
-      repositoryPolicy: persistence,
-      canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
-      taskReader: { getTask: () => Effect.dieMessage("unexpected task read") },
-      tasks: {
-        agentSessionsList: () => Effect.dieMessage("unexpected task session read"),
-        agentSessionUpsert: () => Effect.dieMessage("unexpected task session write"),
-        agentSessionUpdateModel: () => Effect.dieMessage("unexpected task model write"),
-        transitionTask: () => Effect.dieMessage("unexpected task transition"),
-      },
-      taskLifecycle: { acquireLifecycle: () => Effect.dieMessage("unexpected task lifecycle") },
-      taskSessionStart: {
-        prepare: () => Effect.dieMessage("unexpected task start"),
-        complete: () => Effect.dieMessage("unexpected task completion"),
-      },
-      persistTaskModel: () => Effect.dieMessage("unexpected task model write"),
-    });
-    await Effect.runPromise(
-      commands.sendUserMessage({
-        ...ref,
-        sessionScope: { kind: "repository" },
-        parts: [{ kind: "text", text: "Name this chat" }],
-      }),
-    );
-    const titleCalls = harness.controlCalls.filter((call) => call.operation === "title");
-    expect(titleCalls).toHaveLength(1);
-    expect(titleCalls[0]?.input).toMatchObject({ externalSessionId: "native", title: "Hello" });
-    expect((await Effect.runPromise(store.get(storeRef))).generatedTitle).toBe("Hello");
   });
 });

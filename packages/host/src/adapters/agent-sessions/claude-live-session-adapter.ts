@@ -6,7 +6,6 @@ import {
 } from "./generated-image-unsupported";
 import {
   type AcceptedAgentUserMessage,
-  type AgentSessionControlSummary,
   acceptedAgentUserMessageSchema,
   agentSessionContextUsageSchema,
   type RuntimeKind,
@@ -17,9 +16,8 @@ import {
   toAgentSessionResumeError,
 } from "../../ports/agent-session-resume-error";
 import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
-import { type AgentSessionSummary, InterruptedTurnResumeError } from "@openducktor/core";
+import { InterruptedTurnResumeError } from "@openducktor/core";
 import { Effect } from "effect";
-import { toAgentSessionControlSummary } from "../../application/agent-sessions/agent-session-control-summary";
 import type { ClaudePendingInputResolution } from "../../application/runtimes/claude-agent-sdk-service";
 import { requireRuntimeWorkingDirectory } from "../../application/runtimes/runtime-working-directory";
 import {
@@ -40,6 +38,7 @@ import type {
   CreateClaudeLiveSessionAdapterPreparerInput,
   PreparedClaudeLiveSessionAdapter,
 } from "./claude-live-session-adapter-contract";
+import { createClaudeControlRunner } from "./claude-live-session-control-runner";
 import { createClaudeLiveSessionEventCoordinator } from "./claude-live-session-event-coordinator";
 import {
   requireClaudePolicy,
@@ -208,25 +207,14 @@ export const createClaudeLiveSessionAdapterPreparer =
           ),
         );
 
-      const runSummary = (
-        operation: string,
-        run: () => Effect.Effect<AgentSessionSummary, HostError>,
-        options: {
-          readonly parentExternalSessionId?: string;
-          readonly keepActivity?: boolean;
-        } = {},
-      ): Effect.Effect<AgentSessionControlSummary, HostError> =>
-        eventCoordinator.runControlMutation(
-          run().pipe(
-            Effect.flatMap((summary) =>
-              commit(`${operation}.retain-summary`, () => ({
-                value: summary,
-                changes: state.applyControlSummary(summary, options),
-              })),
-            ),
-            Effect.flatMap((summary) => toAgentSessionControlSummary(summary, operation)),
-          ),
-        );
+      const { runSummary, runTitleUpdate } = createClaudeControlRunner({
+        runControlMutation: eventCoordinator.runControlMutation,
+        retainSummary: (operation, summary, options) =>
+          commit(`${operation}.retain-summary`, () => ({
+            value: summary,
+            changes: state.applyControlSummary(summary, options),
+          })),
+      });
 
       const requireSessionWorkingDirectory = (
         input: { repoPath: string; runtimeKind: RuntimeKind; workingDirectory: string },
@@ -455,9 +443,9 @@ export const createClaudeLiveSessionAdapterPreparer =
               ),
           ),
         updateSessionTitle: (input) =>
-          runSummary("claude-live-session.update-session-title", () =>
+          runTitleUpdate("claude-live-session.update-session-title", () =>
             service.updateSessionTitle(input),
-          ).pipe(Effect.asVoid),
+          ),
         stopSession: (input) =>
           eventCoordinator.runSessionClosure(
             input.externalSessionId,

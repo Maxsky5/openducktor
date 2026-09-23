@@ -10,6 +10,7 @@ import type {
   AgentEvent,
   ContinueInterruptedAgentTurnInput,
   AgentSessionSummary,
+  AgentSessionTitleUpdateResult,
   ForkAgentSessionInput,
   ResumeAgentSessionInput,
   SendAgentUserMessageInput,
@@ -76,7 +77,7 @@ export type OpencodeSessionRuntimeConnection = {
   readonly updateSessionModel: (input: UpdateAgentSessionModelInput) => Promise<void>;
   readonly updateSessionTitle: (
     input: AgentSessionControlUpdateTitleInput,
-  ) => Promise<AgentSessionSummary>;
+  ) => Promise<AgentSessionTitleUpdateResult>;
   readonly stopSession: (input: SessionRef) => Promise<void>;
   readonly releaseSession: (input: SessionRef) => Promise<void>;
 };

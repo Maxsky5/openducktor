@@ -180,8 +180,11 @@ describe("CodexAppServerAdapter repository sessions", () => {
     });
 
     expect(renamed).toMatchObject({
-      title: "Renamed",
-      sessionAssociation: { kind: "repository", title: "Renamed" },
+      status: "renamed",
+      summary: {
+        title: "Renamed",
+        sessionAssociation: { kind: "repository", title: "Renamed" },
+      },
     });
     const calls = transports.get("runtime-live")?.calls ?? [];
     expect(calls.findLast((call) => call.method === "thread/name/set")).toEqual({
@@ -190,18 +193,20 @@ describe("CodexAppServerAdapter repository sessions", () => {
     });
   });
 
-  test("refuses to rename an unknown Codex session", async () => {
-    const { adapter } = createHarness();
+  test("reports a title update for an unknown Codex session as not attached", async () => {
+    const { adapter, transports } = createHarness();
 
-    await expect(
-      adapter.updateSessionTitle({
+    expect(
+      await adapter.updateSessionTitle({
         repoPath: "/repo",
         runtimeKind: "codex",
         workingDirectory: "/repo",
         externalSessionId: "missing",
         title: "Renamed",
       }),
-    ).rejects.toThrow("Unknown Codex session 'missing'");
+    ).toEqual({ status: "not_attached" });
+    const calls = transports.get("runtime-live")?.calls ?? [];
+    expect(calls.findLast((call) => call.method === "thread/name/set")).toBeUndefined();
   });
 
   test("rejects stale history identity before changing a retained session", async () => {

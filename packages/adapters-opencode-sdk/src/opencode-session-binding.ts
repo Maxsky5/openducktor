@@ -120,6 +120,24 @@ export const synchronizeOpencodeSessionPolicy = async (input: {
   }
 };
 
+export const assertOpencodeSessionRef = (
+  session: SessionRecord,
+  request: {
+    repoPath: string;
+    runtimeKind: SessionRecord["summary"]["runtimeKind"];
+    workingDirectory: string;
+    externalSessionId: string;
+  },
+  action: string,
+): void => {
+  const registeredSessionRef = opencodeSessionRef(session);
+  if (!agentSessionRefsEqual(registeredSessionRef, request)) {
+    throw new Error(
+      `Cannot ${action} OpenCode session '${request.externalSessionId}' from repo '${request.repoPath}' and working directory '${request.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
+    );
+  }
+};
+
 export const resolveOpencodePolicyBoundSession = (input: {
   action: string;
   bindSession: () => Promise<SessionRecord>;
@@ -130,12 +148,7 @@ export const resolveOpencodePolicyBoundSession = (input: {
   if (!session || (session.summary.sessionAssociation.kind === "unbound" && request.sessionScope)) {
     return input.bindSession();
   }
-  const registeredSessionRef = opencodeSessionRef(session);
-  if (!agentSessionRefsEqual(registeredSessionRef, request)) {
-    throw new Error(
-      `Cannot ${input.action} OpenCode session '${request.externalSessionId}' from repo '${request.repoPath}' and working directory '${request.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
-    );
-  }
+  assertOpencodeSessionRef(session, request, input.action);
   applyRuntimeContextToSession(session, request, input.action);
   return session;
 };

@@ -297,16 +297,12 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     return fromPromise("claudeRuntime.updateSessionTitle", async () => {
       const session = this.sessionStore.get(input.externalSessionId);
       if (!session) {
-        throw new HostValidationError({
-          field: "externalSessionId",
-          message: `Unknown Claude session '${input.externalSessionId}'.`,
-          details: { externalSessionId: input.externalSessionId },
-        });
+        return { status: "not_attached" } as const;
       }
       assertClaudeSessionRef(session, input, "update session title");
       await renameClaudeSessionIfNeeded({ session, title: input.title });
       session.summary = withSummaryTitle(session.summary, input.title);
-      return session.summary;
+      return { status: "renamed", summary: session.summary } as const;
     });
   }
 

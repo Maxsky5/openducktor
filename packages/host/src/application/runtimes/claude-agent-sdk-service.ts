@@ -11,6 +11,7 @@ import type {
   AgentRuntimeCatalogRead,
   AgentSessionHistoryMessage,
   AgentSessionSummary,
+  AgentSessionTitleUpdateResult,
   AgentSessionTodoItem,
   ContinueInterruptedAgentTurnInput,
   ForkAgentSessionInput,
@@ -95,7 +96,7 @@ export type ClaudeAgentSdkService = {
   ): Effect.Effect<void, ClaudeAgentSdkServiceError>;
   updateSessionTitle(
     input: AgentSessionControlUpdateTitleInput,
-  ): Effect.Effect<AgentSessionSummary, ClaudeAgentSdkServiceError>;
+  ): Effect.Effect<AgentSessionTitleUpdateResult, ClaudeAgentSdkServiceError>;
   sendUserMessage(
     input: SendAgentUserMessageInput,
     runtimeId: string,

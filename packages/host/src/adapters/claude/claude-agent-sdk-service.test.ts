@@ -762,7 +762,7 @@ describe("createClaudeAgentSdkService", () => {
       });
       const service = createService(session);
 
-      const summary = await Effect.runPromise(
+      const result = await Effect.runPromise(
         service.updateSessionTitle({
           repoPath: "/repo/",
           runtimeKind: "claude",
@@ -775,29 +775,32 @@ describe("createClaudeAgentSdkService", () => {
       expect(renameSession).toHaveBeenCalledWith("session-1", "Renamed", {
         dir: "/repo/worktree/",
       });
-      expect(summary).toMatchObject({
-        title: "Renamed",
-        sessionAssociation: { kind: "repository", title: "Renamed" },
+      expect(result).toMatchObject({
+        status: "renamed",
+        summary: {
+          title: "Renamed",
+          sessionAssociation: { kind: "repository", title: "Renamed" },
+        },
       });
     } finally {
       renameSessionSpy.mockRestore();
     }
   });
 
-  test("fails a title update for an unknown Claude session", async () => {
+  test("reports a title update for an unknown Claude session as not attached", async () => {
     const service = createService(null);
 
-    await expect(
-      Effect.runPromise(
-        service.updateSessionTitle({
-          repoPath: "/repo/",
-          runtimeKind: "claude",
-          workingDirectory: "/repo/worktree/",
-          externalSessionId: "session-1",
-          title: "Renamed",
-        }),
-      ),
-    ).rejects.toThrow("Unknown Claude session 'session-1'");
+    const result = await Effect.runPromise(
+      service.updateSessionTitle({
+        repoPath: "/repo/",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree/",
+        externalSessionId: "session-1",
+        title: "Renamed",
+      }),
+    );
+
+    expect(result).toEqual({ status: "not_attached" });
   });
 
   test("keeps the active Claude profile during a live model update", async () => {

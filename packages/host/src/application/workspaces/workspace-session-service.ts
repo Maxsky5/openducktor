@@ -17,7 +17,11 @@ import {
   HostValidationError,
 } from "../../effect/host-errors";
 import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
-import { runtimeTitleFor } from "../../domain/workspace-sessions/workspace-session-title";
+import {
+  planRuntimeTitleRename,
+  runtimeTitle,
+  runtimeTitleWithManualTitle,
+} from "../../domain/workspace-sessions/workspace-session-title";
 import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
 import type { RuntimeOrchestratorService } from "../runtimes/runtime-orchestrator-service";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
@@ -167,15 +171,15 @@ export const createWorkspaceSessionService = (
           });
           return yield* Effect.uninterruptible(
             Effect.gen(function* () {
-              const runtimeTitle = runtimeTitleFor(session);
+              const startTitle = runtimeTitle(session);
               const startInput: AgentSessionControlStartInput = {
                 repoPath: ref.repoPath,
                 runtimeKind: session.runtimeKind,
                 workingDirectory: session.executionTarget.workingDirectory,
                 sessionScope:
-                  runtimeTitle === null
+                  startTitle === null
                     ? { kind: "repository" }
-                    : { kind: "repository", title: runtimeTitle },
+                    : { kind: "repository", title: startTitle },
                 systemPrompt: session.roleSnapshot?.systemPrompt ?? "",
               };
               if (session.selectedModel !== null) startInput.model = session.selectedModel;
@@ -254,8 +258,8 @@ export const createWorkspaceSessionService = (
                     field: "sessionId",
                   }),
                 );
-              const runtimeTitle = runtimeTitleFor(session, input.manualTitle);
-              if (session.externalSessionId !== null && runtimeTitle === null) {
+              const nextTitle = runtimeTitleWithManualTitle(session, input.manualTitle);
+              if (session.externalSessionId !== null && nextTitle === null) {
                 return yield* Effect.fail(
                   new HostValidationError({
                     message:
@@ -264,15 +268,11 @@ export const createWorkspaceSessionService = (
                   }),
                 );
               }
-              const previousTitle = runtimeTitleFor(session);
-              const runtimeRename =
-                session.externalSessionId !== null &&
-                runtimeTitle !== null &&
-                runtimeTitle !== previousTitle
-                  ? { externalSessionId: session.externalSessionId, title: runtimeTitle }
-                  : null;
+              const runtimeRename = planRuntimeTitleRename(session, nextTitle);
               // Save the new title before the runtime rename. Restore the saved title when
               // the runtime rename fails, so the record and the runtime session stay in step.
+              // A session that the runtime does not hold yet keeps the saved title for the
+              // next attach.
               const saved = yield* Effect.either(
                 store.rename({ ...ref, manualTitle: input.manualTitle }),
               );

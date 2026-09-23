@@ -240,6 +240,14 @@ export type AgentSessionSummary = {
   status: "starting" | "running" | "idle" | "error" | "stopped";
 };
 
+/**
+ * The result of a native session title update.
+ * `not_attached` means the runtime holds no session with that id, so there is nothing to rename.
+ */
+export type AgentSessionTitleUpdateResult =
+  | { readonly status: "renamed"; readonly summary: AgentSessionSummary }
+  | { readonly status: "not_attached" };
+
 export interface AgentRuntimeDefinitionsPort {
   listRuntimeDefinitions(): RuntimeDescriptor[];
 }

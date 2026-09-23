@@ -162,8 +162,11 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     });
 
     expect(renamed).toMatchObject({
-      title: "Renamed",
-      sessionAssociation: { kind: "repository", title: "Renamed" },
+      status: "renamed",
+      summary: {
+        title: "Renamed",
+        sessionAssociation: { kind: "repository", title: "Renamed" },
+      },
     });
     expect(mock.session.updateCalls).toContainEqual(
       expect.objectContaining({
@@ -172,6 +175,23 @@ describe("OpencodeSdkAdapter repository sessions", () => {
         title: "Renamed",
       }),
     );
+  });
+
+  test("reports a title update for an unknown OpenCode session as not attached", async () => {
+    const mock = makeMockClient();
+    const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
+    const updateCallCount = mock.session.updateCalls.length;
+
+    expect(
+      await adapter.updateSessionTitle({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo",
+        externalSessionId: "missing",
+        title: "Renamed",
+      }),
+    ).toEqual({ status: "not_attached" });
+    expect(mock.session.updateCalls).toHaveLength(updateCallCount);
   });
 
   test("refuses to rename a repository session from another working directory", async () => {

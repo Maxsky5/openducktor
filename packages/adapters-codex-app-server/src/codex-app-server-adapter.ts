@@ -40,6 +40,7 @@ import type {
   AgentSessionPort,
   AgentSessionRuntimeSnapshot,
   AgentSessionSummary,
+  AgentSessionTitleUpdateResult,
   AgentSessionTodoItem,
   AgentSkillCatalog,
   AgentSlashCommandCatalog,
@@ -96,6 +97,7 @@ import { CodexRuntimeSessionEvents } from "./codex-runtime-session-events";
 import { CodexSessionEventBus } from "./codex-session-event-bus";
 import { loadCodexSessionHistory } from "./codex-session-history";
 import {
+  assertCodexSessionRef,
   assertRuntimeContextCompatibleWithSession,
   preserveRuntimeContextForExistingThread,
   resolveCodexPolicyBoundSession,
@@ -1110,24 +1112,19 @@ export class CodexAppServerAdapter
 
   async updateSessionTitle(
     input: AgentSessionControlUpdateTitleInput,
-  ): Promise<AgentSessionSummary> {
+  ): Promise<AgentSessionTitleUpdateResult> {
     const session = this.localSessions.get(input.externalSessionId);
     if (!session) {
-      throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);
+      return { status: "not_attached" };
     }
-    const sessionRef = codexSessionRef(session);
-    if (!agentSessionRefsEqual(sessionRef, input)) {
-      throw new Error(
-        `Cannot update the title of Codex session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${sessionRef.repoPath}' and working directory '${sessionRef.workingDirectory}'.`,
-      );
-    }
+    assertCodexSessionRef(session, input, "update the title of");
     const { client } = await this.runtimeClients.resolve(input, "update session title");
     await client.threadSetName({
       threadId: session.threadId,
       name: input.title,
     });
     session.summary = withSummaryTitle(session.summary, input.title);
-    return session.summary;
+    return { status: "renamed", summary: session.summary };
   }
 
   private policyBoundSession(

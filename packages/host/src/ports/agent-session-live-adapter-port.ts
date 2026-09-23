@@ -155,6 +155,11 @@ export type AgentSessionControlContinueInterruptedTurnInput = Omit<
   "resumeMode"
 >;
 
+/** `not_attached` means the runtime holds no session with that id, so there is nothing to rename. */
+export type AgentSessionTitleUpdateOutcome =
+  | { readonly status: "renamed" }
+  | { readonly status: "not_attached" };
+
 export type AgentSessionControlAdapterPort = {
   readonly startSession: (
     input: AgentSessionControlStartInput,
@@ -176,7 +181,7 @@ export type AgentSessionControlAdapterPort = {
   ) => Effect.Effect<void, HostError>;
   readonly updateSessionTitle: (
     input: AgentSessionControlUpdateTitleInput,
-  ) => Effect.Effect<void, HostError>;
+  ) => Effect.Effect<AgentSessionTitleUpdateOutcome, HostError>;
   readonly stopSession: (input: AgentSessionControlStopInput) => Effect.Effect<void, HostError>;
   readonly releaseSession: (
     input: AgentSessionControlReleaseInput,
