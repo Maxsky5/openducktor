@@ -67,6 +67,7 @@ export const mountInteractiveTerminal = ({
     createTerminalOptions(container, { cursorBlink: true, screenReaderMode: true }),
   );
   const { fitAddon, terminal } = binding;
+  let restoringScreen = false;
   const resetTerminal = (): void => {
     binding.resetLinkState();
     terminal.reset();
@@ -103,6 +104,7 @@ export const mountInteractiveTerminal = ({
     resizeScheduler.schedule(cols, rows);
   });
   const dataSubscription = terminal.onData((data) => {
+    if (restoringScreen) return;
     const input = encodeTerminalTextInput(data);
     if (!input) return;
     resizeScheduler.flush();
@@ -162,15 +164,25 @@ export const mountInteractiveTerminal = ({
     if (message.type === "snapshot") {
       outputSequencer.setSnapshotBoundary(message.snapshotSequenceEnd);
     }
-    const isReplayGap = message.type === "replay_gap";
-    if (isReplayGap) {
+    if (message.type === "screen_restore") {
       void outputSequencer
-        .skipTo(message.missingSequenceEnd, resetTerminal)
+        .restore(
+          message.sequenceEnd,
+          payload,
+          () => {
+            restoringScreen = true;
+            resetTerminal();
+            terminal.resize(message.columns, message.rows);
+          },
+          () => {
+            restoringScreen = false;
+          },
+        )
         .catch((cause) => reportFailure("Terminal output failed", cause));
+      return;
     }
     if (
       handleTerminalMetadataFrame(message, {
-        reset: isReplayGap ? () => undefined : resetTerminal,
         onAttention,
         onLifecycle,
         onTitle: onTitleChange,

@@ -108,7 +108,7 @@ export const createTerminalSessionLifecycle = ({
       Math.max(0, exited.length - TERMINAL_LIMITS.retainedExited),
     );
     for (const session of new Set([...expired, ...overCapacity])) {
-      disposeTerminalSession(session);
+      disposeTerminalSession(session, true);
       applyStreamEvents(
         session,
         session.output.publish({
@@ -238,7 +238,7 @@ export const createTerminalSessionLifecycle = ({
           terminalId,
         }),
       );
-      disposeTerminalSession(session);
+      disposeTerminalSession(session, true);
       sessions.delete(terminalId);
     });
 

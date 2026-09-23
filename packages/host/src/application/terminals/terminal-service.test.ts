@@ -427,22 +427,53 @@ describe("TerminalService", () => {
     expect(pty.operations).toEqual(["write:first", "resize:120x40", "write:second"]);
   });
 
-  test("reports an exact replay gap before the retained tail", async () => {
+  test("restores the current screen after old replay bytes are evicted", async () => {
     const { service, pty } = await makeService();
     await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
-    pty.emit(new Uint8Array(TERMINAL_LIMITS.replayBytes + 1));
+    const chunk = new Uint8Array(64 * 1024).fill(120);
+    for (let index = 0; index < TERMINAL_LIMITS.replayBytes / chunk.byteLength + 1; index += 1) {
+      pty.emit(chunk);
+      const sequence = (index + 1) * chunk.byteLength;
+      await Effect.runPromise(
+        service.attach({
+          terminalId: "terminal-1",
+          attachmentId: "probe",
+          lastConsumedSequence: sequence,
+          sink: () => undefined,
+        }),
+      );
+      await Effect.runPromise(service.detach("terminal-1", "probe"));
+    }
+    const tui = new TextEncoder().encode("\u001b[?1049h\u001b[HREADY");
+    pty.emit(tui);
+    await Effect.runPromise(
+      service.attach({
+        terminalId: "terminal-1",
+        attachmentId: "probe",
+        lastConsumedSequence:
+          (TERMINAL_LIMITS.replayBytes / chunk.byteLength + 1) * chunk.byteLength + tui.byteLength,
+        sink: () => undefined,
+      }),
+    );
+    await Effect.runPromise(service.detach("terminal-1", "probe"));
     const eventTypes: string[] = [];
+    let restoredScreen = "";
     await Effect.runPromise(
       service.attach({
         terminalId: "terminal-1",
         attachmentId: "attachment-1",
         lastConsumedSequence: 0,
-        sink: (event) => eventTypes.push(event.type),
+        sink: (event, payload) => {
+          eventTypes.push(event.type);
+          if (event.type === "screen_restore") restoredScreen = new TextDecoder().decode(payload);
+        },
       }),
     );
     expect(eventTypes[0]).toBe("snapshot");
-    expect(eventTypes[1]).toBe("replay_gap");
-    expect(eventTypes[2]).toBe("output");
+    expect(eventTypes[1]).toBe("screen_restore");
+    expect(eventTypes).not.toContain("output");
+    expect(restoredScreen).toContain("\u001b[?1049h");
+    expect(restoredScreen).toContain("READY");
   });
 
   test("rejects an attachment position beyond published output", async () => {
@@ -547,6 +578,15 @@ describe("TerminalService", () => {
     await Bun.sleep(0);
     expect(pty.operations).toContain("pause");
     await Effect.runPromise(
+      service.attach({
+        terminalId: "terminal-1",
+        attachmentId: "screen-barrier",
+        lastConsumedSequence: TERMINAL_LIMITS.pendingOutputBytes,
+        sink: () => undefined,
+      }),
+    );
+    await Effect.runPromise(service.detach("terminal-1", "screen-barrier"));
+    await Effect.runPromise(
       service.acknowledge("terminal-1", "a", TERMINAL_LIMITS.pendingOutputBytes),
     );
     expect(pty.operations).toContain("resume");
@@ -565,6 +605,15 @@ describe("TerminalService", () => {
     );
     pty.emit(new Uint8Array(TERMINAL_LIMITS.pendingOutputBytes));
     await Bun.sleep(0);
+    await Effect.runPromise(
+      service.attach({
+        terminalId: "terminal-1",
+        attachmentId: "screen-barrier",
+        lastConsumedSequence: TERMINAL_LIMITS.pendingOutputBytes,
+        sink: () => undefined,
+      }),
+    );
+    await Effect.runPromise(service.detach("terminal-1", "screen-barrier"));
 
     await Effect.runPromise(service.detach("terminal-1", "slow-renderer"));
 
@@ -613,6 +662,15 @@ describe("TerminalService", () => {
 
       pty.emit(new Uint8Array(TERMINAL_LIMITS.pendingOutputBytes));
       await pauseStarted.promise;
+      await Effect.runPromise(
+        service.attach({
+          terminalId: "terminal-1",
+          attachmentId: "screen-barrier",
+          lastConsumedSequence: TERMINAL_LIMITS.pendingOutputBytes,
+          sink: () => undefined,
+        }),
+      );
+      await Effect.runPromise(service.detach("terminal-1", "screen-barrier"));
       if (unblock === "ack") {
         await Effect.runPromise(
           service.acknowledge("terminal-1", "slow-renderer", TERMINAL_LIMITS.pendingOutputBytes),

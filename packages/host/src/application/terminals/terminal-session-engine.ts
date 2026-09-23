@@ -146,13 +146,52 @@ export const createTerminalSessionEngine = ({
           operations: yield* Effect.makeSemaphore(1),
           replayByteLimit: TERMINAL_LIMITS.replayBytes,
           shell: plan.shell,
+          grid: plan.grid,
         });
         sessions.set(summary.terminalId, session);
+        let parserWasBacklogged = false;
         const handleResult = yield* Effect.either(
           ptyPort.start(plan, {
             onOutput: (data) => {
               session.resources.consumeOutput(data);
+              if (session.screen.queuedBytes + data.byteLength > TERMINAL_LIMITS.replayBytes) {
+                applyStreamEvents(session, [{ type: "overflow" }]);
+                return;
+              }
+              session.screen.write(data, () => {
+                applyStreamEvents(
+                  session,
+                  session.output.updateParserBacklog(
+                    session.screen.queuedBytes,
+                    session.resources.handle,
+                  ),
+                );
+                if (
+                  (parserWasBacklogged &&
+                    session.screen.queuedBytes <= TERMINAL_LIMITS.resumeOutputBytes) ||
+                  (session.output.needsScreenFlush && session.screen.queuedBytes === 0)
+                ) {
+                  parserWasBacklogged = false;
+                  Effect.runFork(
+                    session.output.resumeIfUnblocked(session.resources.handle).pipe(
+                      Effect.tap((events) => Effect.sync(() => applyStreamEvents(session, events))),
+                      Effect.tapError(() =>
+                        Effect.sync(() => applyStreamEvents(session, [{ type: "overflow" }])),
+                      ),
+                    ),
+                  );
+                }
+              });
               applyStreamEvents(session, session.output.accept(data, session.resources.handle));
+              applyStreamEvents(
+                session,
+                session.output.updateParserBacklog(
+                  session.screen.queuedBytes,
+                  session.resources.handle,
+                ),
+              );
+              if (session.screen.queuedBytes > TERMINAL_LIMITS.resumeOutputBytes)
+                parserWasBacklogged = true;
             },
             onFailure: (failure) => {
               applyStreamEvents(
@@ -170,7 +209,7 @@ export const createTerminalSessionEngine = ({
           }),
         );
         if (handleResult._tag === "Left") {
-          disposeTerminalSession(session);
+          disposeTerminalSession(session, true);
           sessions.delete(summary.terminalId);
           return yield* Effect.fail(
             terminalFailure(
@@ -223,9 +262,11 @@ export const createTerminalSessionEngine = ({
         },
       }),
     attach: (input: TerminalSessionAttachInput): Effect.Effect<void, TerminalServiceError> =>
-      Effect.try({
-        try: () => {
+      Effect.tryPromise({
+        try: async () => {
           const session = getSession(input.terminalId, "attach");
+          await session.screen.drained();
+          getSession(input.terminalId, "attach");
           applyStreamEvents(
             session,
             session.output.attach(input, session.summary, session.resources.handle),
@@ -313,7 +354,7 @@ export const createTerminalSessionEngine = ({
               terminalId,
             ),
           );
-        return yield* session.operations.withPermits(1)(
+        yield* session.operations.withPermits(1)(
           handle
             .resize(grid)
             .pipe(
@@ -322,6 +363,7 @@ export const createTerminalSessionEngine = ({
               ),
             ),
         );
+        session.screen.resize(grid);
       }),
     acknowledge: (
       terminalId: string,
