@@ -79,21 +79,13 @@ export const terminalServerMessageSchema = z.discriminatedUnion("type", [
   ),
   protocolBaseSchema
     .extend({
-      type: z.literal("replay_gap"),
+      type: z.literal("screen_restore"),
       terminalId: terminalIdSchema,
-      missingSequenceStart: sequenceSchema,
-      missingSequenceEnd: sequenceSchema,
+      sequenceEnd: sequenceSchema,
+      columns: z.number().int().min(1).max(TERMINAL_PROTOCOL_MAX_COLUMNS),
+      rows: z.number().int().min(1).max(TERMINAL_PROTOCOL_MAX_ROWS),
     })
-    .strict()
-    .superRefine((message, context) => {
-      if (message.missingSequenceEnd <= message.missingSequenceStart) {
-        context.addIssue({
-          code: "custom",
-          message: "missingSequenceEnd must be greater than missingSequenceStart",
-          path: ["missingSequenceEnd"],
-        });
-      }
-    }),
+    .strict(),
   protocolBaseSchema
     .extend({
       type: z.literal("lifecycle"),
@@ -146,7 +138,8 @@ export type TerminalProtocolFrame = {
 };
 
 const assertPayloadContract = (message: TerminalProtocolMessage, payloadLength: number): void => {
-  const requiresPayload = message.type === "input" || message.type === "output";
+  const requiresPayload =
+    message.type === "input" || message.type === "output" || message.type === "screen_restore";
   if (requiresPayload && payloadLength === 0) {
     throw new Error(`Terminal ${message.type} frame requires a non-empty binary payload.`);
   }

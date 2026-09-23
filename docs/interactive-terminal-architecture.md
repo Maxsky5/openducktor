@@ -32,9 +32,9 @@ The host adds an output consumer before it sends the attachment snapshot. The sn
 
 The renderer records the last sequence written to xterm. It sends ACK only after the xterm write callback finishes. On another attach, it sends that sequence so the host sends only missing output.
 
-If the host already dropped the requested range, it sends `replay_gap`. The renderer resets xterm before it applies later output. During first attach, keep xterm hidden until it reaches the snapshot boundary.
+The host mirrors PTY output in a bounded headless xterm screen. If the host dropped the requested bytes, it sends `screen_restore` with the current screen, grid, and any unfinished control sequence. The renderer resets xterm, applies that screen, and then applies later output. Old scrollback may be missing. During first attach, keep xterm hidden until it reaches the snapshot boundary.
 
-Replay and unacknowledged output have byte limits. `node-pty` can pause and resume. An adapter that cannot pause, such as Bun PTY, sends overflow and stops the terminal.
+Replay, unacknowledged output, and screen parsing have byte limits. `node-pty` can pause and resume. An adapter that cannot pause, such as Bun PTY, sends overflow and stops the terminal. If a screen cannot fit in one protocol frame, attach fails with an error instead of showing a wrong screen.
 
 The host reconciles a late PTY pause after an ACK or detach has resumed output. This keeps a live terminal from staying paused after the renderer catches up or leaves.
 

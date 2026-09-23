@@ -25,9 +25,68 @@ const pausableHandle: TerminalPtyHandle = {
   terminate: () => Effect.void,
 };
 
+const createOutput = (): TerminalSessionOutput =>
+  new TerminalSessionOutput("terminal-1", TERMINAL_LIMITS.replayBytes, () => ({
+    columns: 80,
+    rows: 24,
+    payload: new TextEncoder().encode("\u001b[0m"),
+  }));
+
 describe("TerminalSessionOutput", () => {
+  test("restores a gap and ignores an ACK sent before restoration", () => {
+    const output = new TerminalSessionOutput("terminal-1", 4, () => ({
+      columns: 80,
+      rows: 24,
+      payload: new TextEncoder().encode("\u001b[Hlatest"),
+    }));
+    output.accept(new TextEncoder().encode("12345"), null);
+    const frames: TerminalServerMessage[] = [];
+    output.attach(
+      {
+        terminalId: "terminal-1",
+        attachmentId: "client",
+        lastConsumedSequence: 0,
+        sink: (frame) => frames.push(frame),
+      },
+      summary,
+      null,
+    );
+    expect(frames.map((frame) => frame.type)).toEqual(["snapshot", "screen_restore"]);
+    expect(frames[1]).toMatchObject({ sequenceEnd: 5, columns: 80, rows: 24 });
+    expect(() => output.acknowledge("client", 0)).not.toThrow();
+    expect(() => output.acknowledge("client", 5)).not.toThrow();
+    expect(() => output.acknowledge("client", 6)).toThrow("outside the delivered sequence");
+  });
+
+  test("reports an unusable screen instead of attaching to an incorrect one", () => {
+    const output = new TerminalSessionOutput("terminal-1", 4, () => {
+      throw new Error(
+        "Terminal screen is too large to restore. Resize the terminal and reconnect.",
+      );
+    });
+    output.accept(new TextEncoder().encode("12345"), null);
+    const frames: TerminalServerMessage[] = [];
+    output.attach(
+      {
+        terminalId: "terminal-1",
+        attachmentId: "client",
+        lastConsumedSequence: 0,
+        sink: (frame) => frames.push(frame),
+      },
+      summary,
+      null,
+    );
+    expect(frames.map((frame) => frame.type)).toEqual(["snapshot", "protocol_error"]);
+    expect(frames[1]).toMatchObject({
+      failure: {
+        message: "Terminal screen is too large to restore. Resize the terminal and reconnect.",
+      },
+    });
+    expect(() => output.acknowledge("client", 5)).toThrow("Terminal attachment not found");
+  });
+
   test("publishes and replays the latest failure", () => {
-    const output = new TerminalSessionOutput("terminal-1", TERMINAL_LIMITS.replayBytes);
+    const output = createOutput();
     const frames: TerminalServerMessage[] = [];
     const input = {
       terminalId: "terminal-1",
@@ -46,7 +105,7 @@ describe("TerminalSessionOutput", () => {
   });
 
   test("continues bounded exited replay on ACK before publishing exit and failure", async () => {
-    const output = new TerminalSessionOutput("terminal-1", TERMINAL_LIMITS.replayBytes);
+    const output = createOutput();
     const bytes = new Uint8Array(TERMINAL_LIMITS.pendingOutputBytes * 2 + 1);
     output.accept(bytes, null);
     output.publishFailure({ code: "spawn_failed", message: "Shell failed." });
@@ -92,7 +151,7 @@ describe("TerminalSessionOutput", () => {
   });
 
   test("replays final output and exit details before the retained failure", () => {
-    const output = new TerminalSessionOutput("terminal-1", TERMINAL_LIMITS.replayBytes);
+    const output = createOutput();
     output.accept(new TextEncoder().encode("done"), null);
     output.publishFailure({ code: "spawn_failed", message: "Shell failed." });
     const frames: TerminalServerMessage[] = [];
@@ -132,7 +191,7 @@ describe("TerminalSessionOutput", () => {
   test.each(["output", "lifecycle", "protocol_error"])(
     "removes a sink that fails during %s replay without restoring its old attachment",
     (failedType) => {
-      const output = new TerminalSessionOutput("terminal-1", TERMINAL_LIMITS.replayBytes);
+      const output = createOutput();
       let oldCalls = 0;
       output.attach(
         {
@@ -180,7 +239,7 @@ describe("TerminalSessionOutput", () => {
     },
   );
   test("requests output pause when replay attachment reaches its pending byte bound", () => {
-    const output = new TerminalSessionOutput("terminal-1", TERMINAL_LIMITS.replayBytes);
+    const output = createOutput();
     output.accept(new Uint8Array(TERMINAL_LIMITS.pendingOutputBytes + 1), pausableHandle);
 
     const events = output.attach(

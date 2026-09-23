@@ -101,14 +101,13 @@ export const createLiveTerminalFitScheduler = ({
 export const handleTerminalMetadataFrame = (
   message: TerminalServerMessage,
   handlers: {
-    reset: () => void;
     onAttention: (message: string | null) => void;
     onLifecycle: (lifecycle: TerminalLifecycle, exitText: string | null) => void;
     onTitle: (title: string) => void;
     onForgotten: (message: string) => void;
     onFailure: (message: string) => void;
   },
-): message is Exclude<TerminalServerMessage, { type: "output" }> => {
+): message is Exclude<TerminalServerMessage, { type: "output" | "screen_restore" }> => {
   if (message.type === "snapshot") {
     handlers.onLifecycle(message.lifecycle, null);
     handlers.onTitle(message.title);
@@ -116,13 +115,6 @@ export const handleTerminalMetadataFrame = (
   }
   if (message.type === "title") {
     handlers.onTitle(message.title);
-    return true;
-  }
-  if (message.type === "replay_gap") {
-    handlers.reset();
-    handlers.onAttention(
-      `Incomplete replay: output ${message.missingSequenceStart}–${message.missingSequenceEnd} is unavailable.`,
-    );
     return true;
   }
   if (message.type === "output_overflow") {
@@ -150,7 +142,7 @@ export const handleTerminalMetadataFrame = (
     handlers.onFailure(message.failure.message);
     return true;
   }
-  return message.type !== "output";
+  return message.type !== "output" && message.type !== "screen_restore";
 };
 
 export const createTerminalOutputSequencer = ({
@@ -202,15 +194,26 @@ export const createTerminalOutputSequencer = ({
       });
       return queue;
     },
-    skipTo(sequence: number, reset: () => void): Promise<void> {
+    restore(
+      sequence: number,
+      payload: Uint8Array,
+      prepare: () => void,
+      finish: () => void,
+    ): Promise<void> {
       epoch += 1;
-      const resetEpoch = epoch;
-      consumedSequence = Math.max(consumedSequence, sequence);
-      queue = queue.then(() => {
-        if (resetEpoch === epoch) {
-          reset();
-          revealHydratedTerminal();
+      const restoreEpoch = epoch;
+      queue = queue.then(async () => {
+        if (restoreEpoch !== epoch) return;
+        try {
+          prepare();
+          await new Promise<void>((resolve) => write(payload, resolve));
+        } finally {
+          finish();
         }
+        if (restoreEpoch !== epoch) return;
+        consumedSequence = Math.max(consumedSequence, sequence);
+        onConsumed(consumedSequence);
+        revealHydratedTerminal();
       });
       return queue;
     },

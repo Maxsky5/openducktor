@@ -114,6 +114,23 @@ describe("terminal protocol", () => {
     ).toEqual(title);
   });
 
+  test("round trips a screen restore with its terminal grid", () => {
+    const message = {
+      version: TERMINAL_PROTOCOL_VERSION,
+      type: "screen_restore" as const,
+      terminalId: "terminal-1",
+      sequenceEnd: 2_097_152,
+      columns: 120,
+      rows: 40,
+    };
+    const payload = new TextEncoder().encode("\u001b[?1049h\u001b[Hcurrent screen");
+    const decoded = decodeTerminalProtocolFrame(encodeTerminalProtocolFrame({ message, payload }));
+    expect(decoded).toEqual({ message, payload });
+    expect(() => encodeTerminalProtocolFrame({ message, payload: new Uint8Array() })).toThrow(
+      "requires a non-empty binary payload",
+    );
+  });
+
   test("rejects truncated, oversized, and mismatched frames before payload use", () => {
     expect(() => decodeTerminalProtocolFrame(new Uint8Array(3))).toThrow("header length");
     expect(() =>
