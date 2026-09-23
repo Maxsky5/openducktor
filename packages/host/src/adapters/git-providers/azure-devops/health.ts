@@ -64,7 +64,12 @@ export const createAzureDevOpsHealthPort = ({
       );
       if (resolved._tag === "Left") {
         const reason = errorMessage(resolved.left);
-        return unhealthy(reason, true, true, state.account);
+        const credentialRejected =
+          resolved.left._tag === "HostOperationError" &&
+          resolved.left.details !== undefined &&
+          "status" in resolved.left.details &&
+          resolved.left.details.status === 401;
+        return unhealthy(reason, true, !credentialRejected, state.account);
       }
       const parsedRepository = yield* Effect.either(
         Effect.try({
