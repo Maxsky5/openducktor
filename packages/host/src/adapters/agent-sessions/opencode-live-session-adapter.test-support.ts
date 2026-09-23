@@ -182,7 +182,14 @@ export const createRuntimeHarness = (
     },
     updateSessionTitle: async (input) => {
       controlCalls.push({ operation: "title", input });
-      return { status: "renamed", summary: { ...controlSummary, title: input.title } };
+      return {
+        status: "renamed",
+        summary: {
+          ...controlSummary,
+          externalSessionId: input.externalSessionId,
+          title: input.title,
+        },
+      };
     },
     stopSession: async (input) => {
       controlCalls.push({ operation: "stop", input });

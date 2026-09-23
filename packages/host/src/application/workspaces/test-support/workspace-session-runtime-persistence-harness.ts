@@ -340,7 +340,6 @@ export const createPersistenceHarness = async (database: SqliteTaskStoreTestHarn
     state,
     accepted,
     emit,
-    emitEffect,
     send,
     get,
     workspaceService,

@@ -175,7 +175,10 @@ export const createOpenCodeLiveSessionState = ({
     };
   };
 
-  const applyControlSummary = (summary: AgentSessionSummary): AgentSessionLiveAdapterChange[] => {
+  const applyControlSummary = (
+    summary: AgentSessionSummary,
+    options: { readonly keepActivity?: boolean } = {},
+  ): AgentSessionLiveAdapterChange[] => {
     const ref: AgentSessionLiveRef = {
       repoPath: runtime.repoPath,
       runtimeKind: "opencode",
@@ -188,6 +191,7 @@ export const createOpenCodeLiveSessionState = ({
         summary,
         previous: sessionsByRef.get(refKey(ref)),
         contextUsage: contextUsageBySessionId.get(summary.externalSessionId),
+        keepActivity: options.keepActivity ?? false,
       }),
     );
   };

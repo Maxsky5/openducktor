@@ -14,11 +14,13 @@ export const toOpenCodeLiveSession = ({
   summary,
   previous,
   contextUsage,
+  keepActivity,
 }: {
   runtime: OpenCodeRuntimeInstance;
   summary: AgentSessionSummary;
   previous: OpenCodeLiveSession | undefined;
   contextUsage: AgentSessionContextUsage | undefined;
+  keepActivity: boolean;
 }): OpenCodeLiveSession => {
   if (summary.runtimeKind !== "opencode") {
     throw new HostValidationError({
@@ -33,8 +35,11 @@ export const toOpenCodeLiveSession = ({
     workingDirectory: summary.workingDirectory,
     externalSessionId: summary.externalSessionId,
   };
-  const runtimeActivity =
+  const summaryActivity =
     summary.status === "starting" || summary.status === "running" ? "running" : "idle";
+  // A summary status can be older than the live events. Keep the current activity
+  // for a control result that does not describe the turn, such as a title update.
+  const runtimeActivity = keepActivity && previous ? previous.runtimeActivity : summaryActivity;
   const snapshotInput: OpenCodeLiveSnapshotInput = {
     ref,
     activity: runtimeActivity,

@@ -121,7 +121,7 @@ export const createOpenCodeSessionControlAdapter = ({
           commitTitleUpdate(result, (summary) =>
             commit(`${operation}.commit`, () => ({
               value: summary,
-              changes: state.applyControlSummary(summary),
+              changes: state.applyControlSummary(summary, { keepActivity: true }),
             })),
           ),
         ),

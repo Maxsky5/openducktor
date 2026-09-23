@@ -27,7 +27,8 @@ export const createNodeWorkspaceSessionPersistence = ({
 }) => {
   const operationGate = createWorkspaceSessionOperationGate();
   // Title transitions serialize on their own gate, because an observed message
-  // renames the runtime session without an operation.
+  // renames the runtime session without an operation. Always acquire the
+  // operation gate before the title gate, never the reverse.
   const sessionTitleGate = createWorkspaceSessionOperationGate();
   const publishLiveEnvelope = createLiveSessionPublisher(eventBus);
   const publishUpdated: WorkspaceSessionUpdatedPublisher = (workspaceId, session) =>

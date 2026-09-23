@@ -42,7 +42,9 @@ export const createClaudeControlRunner = ({
     runControlMutation(
       run().pipe(
         Effect.flatMap((result) =>
-          commitTitleUpdate(result, (summary) => retainSummary(operation, summary, {})),
+          commitTitleUpdate(result, (summary) =>
+            retainSummary(operation, summary, { keepActivity: true }),
+          ),
         ),
       ),
     ),

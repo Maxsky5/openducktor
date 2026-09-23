@@ -185,7 +185,7 @@ export type AgentSessionControlUpdateModelInput = z.infer<
   typeof agentSessionControlUpdateModelInputSchema
 >;
 
-export const agentSessionControlUpdateTitleInputSchema = agentSessionLiveRefSchema
+const agentSessionControlUpdateTitleInputSchema = agentSessionLiveRefSchema
   .extend({
     title: nonEmptyStringSchema.max(WORKSPACE_SESSION_MANUAL_TITLE_LIMIT),
   })

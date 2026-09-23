@@ -1768,4 +1768,45 @@ describe("Claude host live-session adapter", () => {
       title: "Renamed",
     });
   });
+
+  test("keeps the current activity when a title update runs", async () => {
+    const harness = await createHarness();
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+    harness.eventHub.emit(session, {
+      type: "session_status",
+      externalSessionId: "session-1",
+      timestamp: "2026-07-17T10:01:30.000Z",
+      status: { type: "busy", message: null },
+    });
+    harness.setUpdateSessionTitle((input) =>
+      Effect.succeed({
+        status: "renamed" as const,
+        summary: { ...summary, title: input.title },
+      }),
+    );
+
+    await Effect.runPromise(
+      harness.adapter.updateSessionTitle({
+        repoPath: "/repo",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+        title: "Renamed",
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(
+        harness.adapter.readSnapshot({
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+        }),
+      ),
+    ).resolves.toMatchObject({
+      type: "live",
+      session: { activity: "running", title: "Renamed" },
+    });
+  });
 });
