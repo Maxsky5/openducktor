@@ -17,7 +17,11 @@ import {
 } from "./codex-app-server-adapter.test-harness";
 import { codexThreadList, codexThreadStatusSnapshot } from "./codex-app-server-threads";
 import { CodexThreadInventoryReader } from "./codex-thread-inventory";
-import { codexRpcRequestError, EMPTY_ROLLOUT_MESSAGE } from "./test-fixtures/codex-rpc-error";
+import {
+  codexRpcRequestError,
+  EMPTY_ROLLOUT_MESSAGE,
+  NESTED_EMPTY_ROLLOUT_MESSAGE,
+} from "./test-fixtures/codex-rpc-error";
 import type { CodexAppServerClient, CodexJsonRpcRequest } from "./types";
 
 type InventoryClientOverrides = Partial<
@@ -580,11 +584,65 @@ describe("CodexThreadInventoryReader", () => {
     ).resolves.toEqual({ thread: { id: "thread-local", cwd: "/repo", turns: [] } });
   });
 
-  test("returns empty history for a known fresh local session with an empty rollout", async () => {
+  test.each([
+    ["thread/read", "short", EMPTY_ROLLOUT_MESSAGE],
+    ["thread/read", "nested metadata", NESTED_EMPTY_ROLLOUT_MESSAGE],
+    ["thread/turns/list", "short", EMPTY_ROLLOUT_MESSAGE],
+    ["thread/turns/list", "nested metadata", NESTED_EMPTY_ROLLOUT_MESSAGE],
+  ] as const)(
+    "returns empty history for a fresh local session after %s %s error",
+    async (method, _form, message) => {
+      const reader = new CodexThreadInventoryReader();
+      const failure = codexRpcRequestError(method, -32603, message);
+      const client = createInventoryClient({
+        threadRead: async () => {
+          if (method === "thread/read") throw failure;
+          return threadReadResponse("thread-local");
+        },
+        threadTurnsList: async () => {
+          if (method !== "thread/turns/list") throw new Error("Unexpected turns read.");
+          throw failure;
+        },
+      });
+
+      await expect(
+        reader.readThreadHistory(client, {
+          externalSessionId: "thread-local",
+          workingDirectory: "/repo",
+          allowUnmaterialized: method === "thread/read",
+          getFreshThreadCwd: () => "/repo",
+        }),
+      ).resolves.toEqual({ thread: { id: "thread-local", cwd: "/repo", turns: [] } });
+    },
+  );
+
+  test("rethrows a turns-list empty-rollout error without fresh-session proof", async () => {
     const reader = new CodexThreadInventoryReader();
+    const failure = codexRpcRequestError("thread/turns/list", -32603, NESTED_EMPTY_ROLLOUT_MESSAGE);
     const client = createInventoryClient({
-      threadRead: async () => {
-        throw codexRpcRequestError("thread/read", -32603, EMPTY_ROLLOUT_MESSAGE);
+      threadRead: async () => threadReadResponse("thread-restored"),
+      threadTurnsList: async () => {
+        throw failure;
+      },
+    });
+
+    await expect(
+      reader.readThreadHistory(client, {
+        externalSessionId: "thread-restored",
+        workingDirectory: "/repo",
+      }),
+    ).rejects.toBe(failure);
+  });
+
+  test("does not hide a mismatched native thread behind an empty turns-list failure", async () => {
+    const reader = new CodexThreadInventoryReader();
+    let turnsRequested = false;
+    let guardCleared = false;
+    const client = createInventoryClient({
+      threadRead: async () => threadReadResponse("thread-local", "/other"),
+      threadTurnsList: async () => {
+        turnsRequested = true;
+        throw codexRpcRequestError("thread/turns/list", -32603, NESTED_EMPTY_ROLLOUT_MESSAGE);
       },
     });
 
@@ -592,10 +650,14 @@ describe("CodexThreadInventoryReader", () => {
       reader.readThreadHistory(client, {
         externalSessionId: "thread-local",
         workingDirectory: "/repo",
-        allowUnmaterialized: true,
         getFreshThreadCwd: () => "/repo",
+        onThreadRead: () => {
+          guardCleared = true;
+        },
       }),
-    ).resolves.toEqual({ thread: { id: "thread-local", cwd: "/repo", turns: [] } });
+    ).rejects.toThrow("does not match the selected session");
+    expect(turnsRequested).toBe(false);
+    expect(guardCleared).toBe(false);
   });
 
   test("rethrows the empty-rollout error without fresh-session proof", async () => {
@@ -644,6 +706,12 @@ describe("CodexThreadInventoryReader", () => {
       "thread/read",
       -32603,
       "failed to read thread: thread-store internal error: failed to read thread /repo/rollout.jsonl: rollout at /other/rollout.jsonl is empty",
+    ],
+    [
+      "different nested metadata paths",
+      "thread/read",
+      -32603,
+      "failed to read thread: thread-store internal error: failed to read session metadata /repo/rollout.jsonl: thread-store internal error: failed to read session metadata /other/rollout.jsonl: rollout at /repo/rollout.jsonl is empty",
     ],
   ] as const)(
     "rethrows an empty-rollout lookalike from %s",
@@ -705,7 +773,7 @@ describe("CodexThreadInventoryReader", () => {
         workingDirectory: "/repo",
       }),
     ).rejects.toThrow("does not match the selected session");
-    expect(calls).toEqual(["thread/read", "thread/turns/list"]);
+    expect(calls).toEqual(["thread/read"]);
   });
 
   test("propagates thread/read history failures", async () => {
