@@ -27,10 +27,9 @@ type AzureDevOpsConnectionController = Pick<
   | "connectionInput"
   | "connectionReadFailed"
   | "connectionState"
-  | "consentGranted"
   | "disconnect"
   | "draft"
-  | "httpCollectionUrl"
+  | "httpConsentSaved"
   | "isMutatingConnection"
   | "pat"
   | "providerEnabled"
@@ -38,6 +37,7 @@ type AzureDevOpsConnectionController = Pick<
   | "savePat"
   | "setPat"
   | "startSignIn"
+  | "updatesReady"
 >;
 
 type AzureDevOpsConnectionSettingsProps = {
@@ -251,7 +251,11 @@ function ServicesConnectionActions({
   controller,
   disabled,
 }: Pick<AzureDevOpsConnectionSettingsProps, "controller" | "disabled">): ReactElement {
-  const signInDisabled = disabled || !controller.connectionInput || controller.isMutatingConnection;
+  const signInDisabled =
+    disabled ||
+    !controller.connectionInput ||
+    controller.isMutatingConnection ||
+    !controller.updatesReady;
 
   if (controller.connectionState.status === "pending") {
     return (
@@ -318,24 +322,19 @@ function PatConnectionActions({
 }: Pick<AzureDevOpsConnectionSettingsProps, "controller" | "disabled"> & {
   stacked?: boolean;
 }): ReactElement {
-  const {
-    connectionInput,
-    consentGranted,
-    httpCollectionUrl,
-    isMutatingConnection,
-    pat,
-    savePat,
-    setPat,
-  } = controller;
+  const { connectionInput, httpConsentSaved, isMutatingConnection, pat, savePat, setPat } =
+    controller;
   const replacing =
     controller.connectionState.status === "connected" &&
     controller.connectionState.account === null;
   const inputDisabled = disabled || isMutatingConnection;
-  const saveDisabled =
-    inputDisabled ||
-    !connectionInput ||
-    !pat.trim() ||
-    (httpCollectionUrl !== null && !consentGranted);
+  const saveDisabled = inputDisabled || !connectionInput || !pat.trim() || !httpConsentSaved;
+  let helpText = "The token needs Code read and write, Build read, and repository policy access.";
+  if (!httpConsentSaved) {
+    helpText = "Confirm the HTTP connection in Repository, then save settings before using a PAT.";
+  } else if (replacing) {
+    helpText = "Your current token stays active if validation fails.";
+  }
 
   return (
     <div className="grid min-w-0 gap-3">
@@ -373,11 +372,7 @@ function PatConnectionActions({
           </Button>
         </div>
       </div>
-      <p className="text-xs text-muted-foreground">
-        {replacing
-          ? "Your current token stays active if validation fails."
-          : "The token needs Code read and write, Build read, and repository policy access."}
-      </p>
+      <p className="text-xs text-muted-foreground">{helpText}</p>
     </div>
   );
 }

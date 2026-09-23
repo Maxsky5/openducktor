@@ -41,11 +41,10 @@ const azureDevOpsValidationErrorCount = (
   mappings: AzureRemoteMappingDraft[],
   enabled: boolean,
 ): number => {
-  if (!enabled) return 0;
   const parsed = parseAzureRepositoryDraft(draft);
   const repository = parsed.success ? parsed.data : undefined;
   return [
-    ...Object.values(azureRepositoryDraftErrors(draft)),
+    ...(enabled ? Object.values(azureRepositoryDraftErrors(draft)) : []),
     ...azureRemoteMappingDraftListErrors(mappings, repository).flatMap((errors) =>
       Object.values(errors),
     ),
@@ -95,9 +94,6 @@ export const useAzureDevOpsGitProviderForm = ({
   const connectionInput: AzureDevOpsConnectionInput | null = parsedRepository
     ? { repoPath: selectedRepoPath, repository: parsedRepository }
     : null;
-  if (connectionInput && consentGranted && httpCollectionUrl) {
-    connectionInput.httpConsentCollectionUrl = httpCollectionUrl;
-  }
   const { actionError: connectionActionError, ...connectionController } =
     useAzureDevOpsConnectionController({
       workspaceId: selectedRepoConfig.workspaceId,

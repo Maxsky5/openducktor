@@ -5,13 +5,15 @@ import { errorMessage } from "@/lib/errors";
 import { subscribeAzureDevOpsConnectionUpdates } from "@/lib/host-client";
 import { host } from "@/state/operations/shared/host";
 import { repositoryGitProviderContextQueryKeys } from "@/state/queries/git-provider-context";
-import { isAzureDevOpsConnectionEventCurrent } from "./azure-devops-git-provider-form-model";
+import {
+  azureDevOpsHttpConsentCollectionUrl,
+  isAzureDevOpsConnectionEventCurrent,
+} from "./azure-devops-git-provider-form-model";
 import type { GitProviderState } from "./use-repository-git-section-model";
 
 export type AzureDevOpsConnectionInput = {
   repoPath: string;
   repository: AzureDevOpsRepository;
-  httpConsentCollectionUrl?: string;
 };
 
 type UseAzureDevOpsConnectionControllerInput = {
@@ -48,10 +50,12 @@ const useAzureDevOpsConnectionUpdates = ({
   selectedRepoPath: string;
   setActionError: (message: string | null) => void;
   workspaceId: string;
-}): void => {
+}): boolean => {
+  const [updatesReady, setUpdatesReady] = useState(false);
   useEffect(() => {
     let active = true;
     let unsubscribe: (() => void) | undefined;
+    setUpdatesReady(false);
     void subscribeAzureDevOpsConnectionUpdates((event) => {
       if (
         isAzureDevOpsConnectionEventCurrent(event, {
@@ -69,8 +73,16 @@ const useAzureDevOpsConnectionUpdates = ({
       }
     })
       .then((stop) => {
-        if (active) unsubscribe = stop;
-        else stop();
+        if (!active) {
+          stop();
+          return;
+        }
+        unsubscribe = stop;
+        setUpdatesReady(true);
+        void queryClient.invalidateQueries({
+          queryKey: connectionKey(configurationFingerprint),
+          exact: true,
+        });
       })
       .catch((cause: unknown) => {
         if (active) {
@@ -90,6 +102,7 @@ const useAzureDevOpsConnectionUpdates = ({
     setActionError,
     workspaceId,
   ]);
+  return updatesReady;
 };
 
 type ConnectionActionDependencies = {
@@ -98,12 +111,14 @@ type ConnectionActionDependencies = {
   configurationFingerprint: string | null;
   connectionInput: AzureDevOpsConnectionInput | null;
   connectionState: AzureDevOpsConnectionState;
+  httpConsentSaved: boolean;
   pat: string;
   runMutation: <Result>(
     operation: () => Promise<Result>,
     onResult?: (result: Result) => void,
   ) => void;
   setPat: (pat: string) => void;
+  updatesReady: boolean;
 };
 
 const createConnectionActions = ({
@@ -112,9 +127,11 @@ const createConnectionActions = ({
   configurationFingerprint,
   connectionInput,
   connectionState,
+  httpConsentSaved,
   pat,
   runMutation,
   setPat,
+  updatesReady,
 }: ConnectionActionDependencies) => ({
   disconnect() {
     if (!canManageConnection || !connectionInput) return;
@@ -126,7 +143,7 @@ const createConnectionActions = ({
     );
   },
   startSignIn() {
-    if (!canManageConnection || !connectionInput) return;
+    if (!canManageConnection || !connectionInput || !updatesReady) return;
     runMutation(
       () => host.workspaceStartAzureDevOpsSignIn(connectionInput),
       (deviceCode) => {
@@ -144,7 +161,7 @@ const createConnectionActions = ({
     );
   },
   savePat() {
-    if (!canManageConnection || !connectionInput) return;
+    if (!canManageConnection || !connectionInput || !httpConsentSaved) return;
     runMutation(
       () => host.workspaceReplaceAzureDevOpsPat({ ...connectionInput, pat }),
       () => setPat(""),
@@ -167,6 +184,13 @@ export const useAzureDevOpsConnectionController = ({
   const activeAttemptIdRef = useRef<string | null>(null);
   const canManageConnection =
     providerState.status === "loaded" && providerState.context?.config.id === "azure_devops";
+  const httpCollectionUrl = connectionInput
+    ? azureDevOpsHttpConsentCollectionUrl(connectionInput.repository)
+    : null;
+  const httpConsentSaved =
+    httpCollectionUrl === null ||
+    (providerState.status === "loaded" &&
+      providerState.context?.config.httpConsentCollectionUrl === httpCollectionUrl);
   const connectionQuery = useQuery({
     queryKey: connectionKey(configurationFingerprint),
     enabled: canManageConnection && providerEnabled && connectionInput !== null,
@@ -195,7 +219,7 @@ export const useAzureDevOpsConnectionController = ({
     if (pendingAttemptId) activeAttemptIdRef.current = pendingAttemptId;
   }, [pendingAttemptId]);
 
-  useAzureDevOpsConnectionUpdates({
+  const updatesReady = useAzureDevOpsConnectionUpdates({
     activeAttemptIdRef,
     configurationFingerprint,
     invalidateProviderContext,
@@ -232,6 +256,7 @@ export const useAzureDevOpsConnectionController = ({
     canManageConnection,
     connectionReadFailed,
     connectionState,
+    httpConsentSaved,
     isMutatingConnection,
     pat,
     retryConnectionRead() {
@@ -244,9 +269,12 @@ export const useAzureDevOpsConnectionController = ({
       configurationFingerprint,
       connectionInput,
       connectionState,
+      httpConsentSaved,
       pat,
       runMutation,
       setPat,
+      updatesReady,
     }),
+    updatesReady,
   };
 };

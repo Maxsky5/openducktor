@@ -939,6 +939,7 @@ describe("settings git sections", () => {
       fireEvent.change(projectInput, { target: { value: "Desktop" } });
       fireEvent.click(screen.getByRole("button", { name: /Advanced remote mappings/ }));
       fireEvent.click(screen.getByRole("button", { name: "Add mapping" }));
+      expect(onAzureDevOpsValidationChange.mock.lastCall?.[0]).toBeGreaterThan(0);
       const remoteName = rendered.container.querySelector("#repo-azure-mapping-0-remoteName");
       const fetchUrl = rendered.container.querySelector("#repo-azure-mapping-0-fetchUrl");
       const pushUrls = rendered.container.querySelector("#repo-azure-mapping-0-pushUrls");
@@ -959,6 +960,7 @@ describe("settings git sections", () => {
       expect(screen.getByTestId("azure-config").textContent).toContain(
         '"pushUrls":["git@work:team/repo","ssh://work/team/repo"]',
       );
+      expect(onAzureDevOpsValidationChange).toHaveBeenLastCalledWith(0);
     } finally {
       rendered.unmount();
     }
@@ -1117,6 +1119,80 @@ describe("settings git sections", () => {
     } finally {
       rendered.unmount();
       host.workspaceDetectAzureDevOpsRepository = originalDetect;
+    }
+  });
+
+  test("does not send a PAT when HTTP consent is only in the unsaved draft", async () => {
+    const repository = {
+      providerId: "azure_devops" as const,
+      deployment: "server" as const,
+      serviceUrl: "http://azure.example.test/tfs",
+      organization: "DefaultCollection",
+      project: "Desktop",
+      name: "OpenDucktor",
+    };
+    const repoConfig: SettingsRepoConfig = {
+      ...baseRepoConfig,
+      git: {
+        provider: {
+          id: "azure_devops",
+          enabled: true,
+          autoDetected: false,
+          repository,
+          httpConsentCollectionUrl: "http://azure.example.test/tfs/DefaultCollection",
+        },
+      },
+    };
+    const savedProvider = { ...repoConfig.git.provider!, httpConsentCollectionUrl: undefined };
+    const originalGetConnection = host.workspaceGetAzureDevOpsConnection;
+    const originalReplacePat = host.workspaceReplaceAzureDevOpsPat;
+    const replacePat = mock(async () => ({ status: "connected" as const, account: null }));
+    host.workspaceGetAzureDevOpsConnection = async () => ({ status: "disconnected" });
+    host.workspaceReplaceAzureDevOpsPat = replacePat;
+    const rendered = render(
+      createElement(
+        QueryProvider,
+        { useIsolatedClient: true },
+        createElement(RepositoryGitSection, {
+          selectedRepoPath: "/repo",
+          selectedRepoConfig: repoConfig,
+          providerState: {
+            status: "loaded",
+            context: {
+              descriptor: AZURE_DEVOPS_PROVIDER_DESCRIPTOR,
+              config: savedProvider,
+              health: {
+                providerId: "azure_devops",
+                enabled: true,
+                available: false,
+                reason: "Not connected.",
+                executablePath: null,
+                version: null,
+                authenticated: false,
+                account: null,
+                repositoryMappingValid: true,
+              },
+            },
+          },
+          disabled: false,
+          onDetectGithubRepository: async () => null,
+          onUpdateSelectedRepoConfig: () => repoConfig,
+        }),
+      ),
+    );
+
+    try {
+      const patInput = screen.getByLabelText("Personal access token");
+      fireEvent.change(patInput, { target: { value: "secret" } });
+      const button = screen.getByRole("button", { name: "Save and validate PAT" });
+      expect(button.hasAttribute("disabled")).toBe(true);
+      fireEvent.click(button);
+      expect(replacePat).not.toHaveBeenCalled();
+      expect(screen.getByText(/Confirm the HTTP connection in Repository/)).toBeTruthy();
+    } finally {
+      rendered.unmount();
+      host.workspaceGetAzureDevOpsConnection = originalGetConnection;
+      host.workspaceReplaceAzureDevOpsPat = originalReplacePat;
     }
   });
 

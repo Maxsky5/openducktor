@@ -36,7 +36,6 @@ const createPendingController = (): ConnectionController => ({
       expiresAt: "2026-09-20T22:00:00.000Z",
     },
   },
-  consentGranted: false,
   disconnect: mock(() => {}),
   draft: {
     deployment: "services",
@@ -45,7 +44,7 @@ const createPendingController = (): ConnectionController => ({
     project: "project",
     name: "repository",
   },
-  httpCollectionUrl: null,
+  httpConsentSaved: true,
   isMutatingConnection: false,
   pat: "",
   providerEnabled: true,
@@ -53,9 +52,63 @@ const createPendingController = (): ConnectionController => ({
   savePat: mock(() => {}),
   setPat: mock(() => {}),
   startSignIn: mock(() => {}),
+  updatesReady: true,
 });
 
 describe("AzureDevOpsConnectionSettings", () => {
+  test("waits for connection updates before Microsoft sign-in", () => {
+    const startSignIn = mock(() => {});
+    render(
+      <AzureDevOpsConnectionSettings
+        controller={{
+          ...createPendingController(),
+          connectionState: { status: "disconnected" },
+          updatesReady: false,
+          startSignIn,
+        }}
+        disabled={false}
+        onBack={() => {}}
+        onSaveSettings={async () => true}
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: "Sign in with Microsoft" });
+    expect(button.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(button);
+    expect(startSignIn).not.toHaveBeenCalled();
+  });
+
+  test("requires saved HTTP consent before PAT validation", () => {
+    const savePat = mock(() => {});
+    render(
+      <AzureDevOpsConnectionSettings
+        controller={{
+          ...createPendingController(),
+          connectionState: { status: "disconnected" },
+          draft: {
+            deployment: "server",
+            serviceUrl: "http://azure.example.test/tfs",
+            organization: "DefaultCollection",
+            project: "project",
+            name: "repository",
+          },
+          httpConsentSaved: false,
+          pat: "secret",
+          savePat,
+        }}
+        disabled={false}
+        onBack={() => {}}
+        onSaveSettings={async () => true}
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: "Save and validate PAT" });
+    expect(button.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(button);
+    expect(savePat).not.toHaveBeenCalled();
+    expect(screen.getByText(/Confirm the HTTP connection in Repository/)).toBeTruthy();
+  });
+
   test("shows the supported Azure DevOps Services account options", () => {
     const controller = {
       ...createPendingController(),

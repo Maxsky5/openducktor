@@ -18,7 +18,6 @@ export type AzureDevOpsConnectionServiceError = HostError | WorkspaceSettingsErr
 export type AzureDevOpsConnectionInput = {
   repoPath: string;
   repository: AzureDevOpsRepository;
-  httpConsentCollectionUrl?: string;
 };
 
 export type AzureDevOpsConnectionService = {

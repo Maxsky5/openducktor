@@ -226,17 +226,6 @@ const workspaceDetectAzureDevOpsRepository = async (
 export type AzureDevOpsConnectionInput = {
   repoPath: string;
   repository: AzureDevOpsRepository;
-  httpConsentCollectionUrl?: string;
-};
-
-const azureConnectionArgs = (input: AzureDevOpsConnectionInput) => {
-  const args: AzureDevOpsConnectionInput = {
-    repoPath: input.repoPath,
-    repository: input.repository,
-  };
-  if (input.httpConsentCollectionUrl)
-    args.httpConsentCollectionUrl = input.httpConsentCollectionUrl;
-  return args;
 };
 
 const workspaceGetGitProviderContext = async (
@@ -408,7 +397,7 @@ export class HostWorkspaceClient {
   ): Promise<AzureDevOpsConnectionState> {
     return this.invokeFn(
       "workspace_get_azure_devops_connection",
-      azureConnectionArgs(input),
+      input,
       azureDevOpsConnectionStateSchema,
     );
   }
@@ -418,7 +407,7 @@ export class HostWorkspaceClient {
   ): Promise<AzureDevOpsDeviceCode> {
     return this.invokeFn(
       "workspace_start_azure_devops_sign_in",
-      azureConnectionArgs(input),
+      input,
       azureDevOpsDeviceCodeSchema,
     );
   }
@@ -432,17 +421,13 @@ export class HostWorkspaceClient {
   ): Promise<AzureDevOpsConnectionState> {
     return this.invokeFn(
       "workspace_replace_azure_devops_pat",
-      { ...azureConnectionArgs(input), pat: input.pat },
+      input,
       azureDevOpsConnectionStateSchema,
     );
   }
 
   async workspaceDisconnectAzureDevOps(input: AzureDevOpsConnectionInput): Promise<void> {
-    await this.invokeFn(
-      "workspace_disconnect_azure_devops",
-      azureConnectionArgs(input),
-      voidResultSchema,
-    );
+    await this.invokeFn("workspace_disconnect_azure_devops", input, voidResultSchema);
   }
 
   async workspaceGetGitProviderContext(repoPath: string): Promise<RepositoryGitProviderContext> {

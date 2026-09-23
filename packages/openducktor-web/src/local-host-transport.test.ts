@@ -418,6 +418,34 @@ describe("createLocalHostClient", () => {
 });
 
 describe("local host SSE subscriptions", () => {
+  test("waits for the Azure connection stream to open", async () => {
+    const { subscribeLocalHostAzureDevOpsConnectionUpdates } = await loadLocalHostTransport();
+    globalThis.fetch = createFetchFixture(
+      mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })),
+    );
+    const listener = mock(() => {});
+    let ready = false;
+    const subscription = subscribeLocalHostAzureDevOpsConnectionUpdates(listener).then(
+      (stop: () => void) => {
+        ready = true;
+        return stop;
+      },
+    );
+    const eventSource = await waitForEventSourceInstance();
+    await waitForEventSourceListener(eventSource, "open");
+
+    eventSource.emit("error", "initial failure");
+    await Promise.resolve();
+    expect(ready).toBe(false);
+    expect(listener).not.toHaveBeenCalled();
+
+    eventSource.emit("open", "");
+    const unsubscribe = await subscription;
+    expect(ready).toBe(true);
+    unsubscribe();
+    expect(eventSource.closed).toBe(true);
+  });
+
   test("shares one EventSource across non-task host event channels", async () => {
     const {
       observeLocalHostAgentSessions,

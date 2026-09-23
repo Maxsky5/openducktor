@@ -489,20 +489,19 @@ export const subscribeLocalHostRunEvents = async (
 
 export const subscribeLocalHostAzureDevOpsConnectionUpdates = async (
   listener: AzureDevOpsConnectionUpdateListener,
-): Promise<() => void> =>
-  runWebBoundary(
-    Effect.gen(function* () {
-      yield* ensureLocalHostSessionDedupedEffect();
-      return (yield* subscribeSseChannelEffect(AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL, (event) => {
-        if (
-          !isBrowserSseControlEvent(event) &&
-          event.channel === AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL
-        ) {
-          listener(event.payload);
-        }
-      })).unsubscribe;
+): Promise<() => void> => {
+  const subscription = await runWebBoundary(
+    subscribeReadyLocalHostEventsEffect(AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL, (event) => {
+      if (
+        !isBrowserSseControlEvent(event) &&
+        event.channel === AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL
+      ) {
+        listener(event.payload);
+      }
     }),
   );
+  return subscription.unsubscribe;
+};
 
 const subscribeReadyLocalHostEventsEffect = (
   channel: HostEventChannel,

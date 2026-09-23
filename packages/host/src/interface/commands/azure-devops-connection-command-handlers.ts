@@ -3,11 +3,9 @@ import { HostValidationError } from "../../effect/host-errors";
 import type { AzureDevOpsConnectionService } from "../../application/git/azure-devops-connection-service";
 import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
 import {
-  commandInputOptionalStringSchema,
   commandInputRecordSchema,
   commandInputStringSchema,
   type HostCommandArgs,
-  optionalString,
   requireRecord,
   requireString,
 } from "./command-inputs";
@@ -15,7 +13,6 @@ import {
 type ParsedConnectionInput = {
   repoPath: string;
   repository: AzureDevOpsRepository;
-  httpConsentCollectionUrl?: string;
 };
 
 const parseConnectionInput = (args: HostCommandArgs, command: string) => {
@@ -31,11 +28,6 @@ const parseConnectionInput = (args: HostCommandArgs, command: string) => {
     repoPath: requireString(commandInputStringSchema.safeParse(record.repoPath), "repoPath"),
     repository: repository.data,
   };
-  const consent = optionalString(
-    commandInputOptionalStringSchema.safeParse(record.httpConsentCollectionUrl),
-    "httpConsentCollectionUrl",
-  );
-  if (consent) input.httpConsentCollectionUrl = consent;
   return { input, record };
 };
 
