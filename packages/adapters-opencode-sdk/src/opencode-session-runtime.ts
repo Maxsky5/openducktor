@@ -1,4 +1,5 @@
 import { createOpenCodeSessionImportPort } from "./opencode-session-import";
+import { agentSessionRefsEqual } from "@openducktor/core";
 import type { RuntimeSessionImportPort } from "@openducktor/core";
 import type {
   AgentCatalogPort,
@@ -488,8 +489,12 @@ export const createPrepareOpencodeSessionRuntime = (
       updateSessionModel: (modelInput) => controlAdapter.updateSessionModel(modelInput),
       stopSession: (ref) => controlAdapter.stopSession(ref),
       releaseSession: async (ref) => {
-        admittedRoots.delete(ref.externalSessionId);
         await controlAdapter.releaseSession(ref);
+        const admittedRoot = admittedRoots.get(ref.externalSessionId);
+        if (admittedRoot && agentSessionRefsEqual(admittedRoot, ref)) {
+          admittedRoots.delete(ref.externalSessionId);
+        }
+        authorizedRoots = authorizedRoots.filter((root) => !agentSessionRefsEqual(root, ref));
       },
     };
 

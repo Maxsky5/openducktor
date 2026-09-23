@@ -197,7 +197,7 @@ Accept a runtime definition only when its schema is valid, it can run workflow t
 
 OpenDucktor owns root-session admission. Start, resume, and fork controls register returned runtime metadata before a session enters the live-state list. A runtime adapter cannot scan a native session list to add roots. A runtime event can add a descendant only when OpenDucktor registered its parent.
 
-On reload, the host reads exact root references from durable task session records. The OpenCode adapter can call `session.get`, `session.children`, `session.status`, `permission.list`, and `question.list` for those roots and their verified descendants. It cannot call `session.list` or treat runtime data as proof that a new root belongs to OpenDucktor.
+On reload, the host reads exact root references from durable task session records. A live-state adapter reads only those roots and their verified descendants through exact native APIs. It cannot list native sessions to claim new live roots. The explicit import flow below is a separate discovery path.
 
 A fresh or forked session starts with a running lease. An old native idle event cannot mark it idle before the first turn settles.
 

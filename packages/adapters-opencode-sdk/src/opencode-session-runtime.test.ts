@@ -524,6 +524,57 @@ describe("OpenCode session runtime connection", () => {
     await prepared.release();
   });
 
+  test("does not restore a released root from cached sources", async () => {
+    const harness = createLiveClientHarness();
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    const ref = {
+      repoPath: "/repo",
+      runtimeKind: "opencode" as const,
+      externalSessionId: "session-1",
+      workingDirectory: "/repo",
+    };
+    try {
+      await prepared.connection.readSessionSources([ref]);
+      const readsBeforeRelease = harness.callOrder.filter(
+        (call) => call === "get:session-1",
+      ).length;
+
+      await prepared.connection.releaseSession(ref);
+      const { sources } = await prepared.connection.readSessionSources();
+
+      expect(sources).toEqual([]);
+      expect(harness.callOrder.filter((call) => call === "get:session-1")).toHaveLength(
+        readsBeforeRelease,
+      );
+    } finally {
+      await prepared.release();
+    }
+  });
+
+  test("keeps a root authorized when release fails", async () => {
+    const harness = createLiveClientHarness();
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    const ref = {
+      repoPath: "/repo",
+      runtimeKind: "opencode" as const,
+      externalSessionId: "session-1",
+      workingDirectory: "/repo",
+    };
+    try {
+      await resumeOpenDucktorSession(prepared);
+      await prepared.connection.readSessionSources([ref]);
+
+      await expect(
+        prepared.connection.releaseSession({ ...ref, workingDirectory: "/other" }),
+      ).rejects.toThrow("Cannot release OpenCode session");
+      expect((await prepared.connection.readSessionSources()).sources).toEqual(
+        expect.arrayContaining([expect.objectContaining({ externalSessionId: "session-1" })]),
+      );
+    } finally {
+      await prepared.release();
+    }
+  });
+
   test("keeps a session registered when an older refresh omits it", async () => {
     let markListStarted: () => void = () => undefined;
     let finishList: () => void = () => undefined;
