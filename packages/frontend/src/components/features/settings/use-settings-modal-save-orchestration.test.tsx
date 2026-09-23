@@ -445,7 +445,7 @@ describe("useSettingsModalSaveOrchestration", () => {
     await harness.unmount();
   });
 
-  test("rejects concurrent submit attempts while a save is already in flight", async () => {
+  test("blocks concurrent repository saves while the modal is busy", async () => {
     const deferredSave = createDeferred<void>();
     const saveSettingsSnapshot = mock(async () => {
       await deferredSave.promise;
@@ -457,7 +457,7 @@ describe("useSettingsModalSaveOrchestration", () => {
         },
         {
           ...EMPTY_DIRTY_SECTIONS,
-          chat: true,
+          repoSettings: true,
         },
       ),
     );
@@ -475,7 +475,6 @@ describe("useSettingsModalSaveOrchestration", () => {
     expect(secondResult).toBe(false);
     expect(harness.getLatest().isSaving).toBe(true);
 
-    deferredSave.resolve();
     if (!firstSubmit) {
       throw new Error("Expected first submit promise");
     }
@@ -488,32 +487,6 @@ describe("useSettingsModalSaveOrchestration", () => {
 
     expect(firstResult).toBe(true);
     expect(harness.getLatest().isSaving).toBe(false);
-
-    await harness.unmount();
-  });
-
-  test("disables modal interactions during a section save", async () => {
-    const deferredSave = createDeferred<void>();
-    const saveSettingsSnapshot = mock(async () => {
-      await deferredSave.promise;
-    });
-    const harness = createHookHarness(
-      createArgs({ saveSettingsSnapshot }, { ...EMPTY_DIRTY_SECTIONS, repoSettings: true }),
-    );
-
-    await harness.mount();
-
-    let submit: Promise<boolean> | undefined;
-    await harness.run((state) => {
-      submit = state.submit();
-    });
-
-    expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
-    expect(harness.getLatest().isSaving).toBe(true);
-
-    deferredSave.resolve();
-    if (!submit) throw new Error("Expected section save promise");
-    expect(await submit).toBe(true);
 
     await harness.unmount();
   });

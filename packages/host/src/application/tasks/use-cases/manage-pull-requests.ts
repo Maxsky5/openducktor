@@ -126,7 +126,7 @@ export const createTaskPullRequestManagementUseCases = ({
       }
       const provider = yield* dependencies.gitProviderResolver.resolve(repoConfig);
       const pullRequests = yield* provider.pullRequests();
-      const azure = provider.getDescriptor().id === "azure_devops";
+      const isAzureDevOps = provider.getDescriptor().id === "azure_devops";
       if (approval.pullRequest !== undefined) {
         yield* requirePullRequestProviderMatch({
           configuredProviderId: provider.getDescriptor().id,
@@ -166,15 +166,15 @@ export const createTaskPullRequestManagementUseCases = ({
           title: content.title,
           body: content.body,
         })
-        .pipe(Effect.mapError((cause) => (azure ? writeFailure(cause) : cause)));
+        .pipe(Effect.mapError((cause) => (isAzureDevOps ? writeFailure(cause) : cause)));
       const linkFailure = pullRequestLinkFailure(pushDetails, pullRequest);
       yield* requirePullRequestProviderMatch({
         configuredProviderId: provider.getDescriptor().id,
         linkedProviderId: pullRequest.providerId,
-      }).pipe(Effect.mapError((cause) => (azure ? linkFailure(cause) : cause)));
+      }).pipe(Effect.mapError((cause) => (isAzureDevOps ? linkFailure(cause) : cause)));
       yield* taskStore
         .setPullRequest({ repoPath: effectiveRepoPath, taskId, pullRequest })
-        .pipe(Effect.mapError((cause) => (azure ? linkFailure(cause) : cause)));
+        .pipe(Effect.mapError((cause) => (isAzureDevOps ? linkFailure(cause) : cause)));
       return pullRequest;
     });
   },

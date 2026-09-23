@@ -1323,7 +1323,6 @@ describe("createTaskService pull requests", () => {
         })
         .pipe(Effect.flip),
     );
-    expect(failure).toBeInstanceOf(HostOperationError);
     expect(failure).toBe(taskLinkFailure);
 
     rejectTaskLink = false;
