@@ -37,16 +37,6 @@ const createTaskDocumentState = (input?: {
 const toErrorMessage = (cause: unknown): string =>
   cause instanceof Error ? cause.message : "Unable to load document.";
 
-const createQueryOptionsBySection = (
-  queryClient: ReturnType<typeof useQueryClient>,
-  cacheScope: string,
-  taskId: string,
-) => ({
-  spec: taskDocumentQueryOptions(queryClient, cacheScope, taskId, "spec"),
-  plan: taskDocumentQueryOptions(queryClient, cacheScope, taskId, "plan"),
-  qa: taskDocumentQueryOptions(queryClient, cacheScope, taskId, "qa"),
-});
-
 const toTaskDocumentState = (
   query: ReturnType<typeof useQuery<TaskDocumentPayload>>,
   enabled: boolean,
@@ -67,7 +57,11 @@ export function useTaskDocuments(taskId: string | null, open: boolean, cacheScop
   const enabled = open && taskId !== null;
   const activeTaskId = taskId ?? DISABLED_TASK_ID;
   const queryOptionsBySection = useMemo(
-    () => createQueryOptionsBySection(queryClient, cacheScope, activeTaskId),
+    () => ({
+      spec: taskDocumentQueryOptions(queryClient, cacheScope, activeTaskId, "spec"),
+      plan: taskDocumentQueryOptions(queryClient, cacheScope, activeTaskId, "plan"),
+      qa: taskDocumentQueryOptions(queryClient, cacheScope, activeTaskId, "qa"),
+    }),
     [activeTaskId, cacheScope, queryClient],
   );
 

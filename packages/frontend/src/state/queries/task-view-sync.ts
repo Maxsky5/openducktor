@@ -89,30 +89,22 @@ export const createTaskViewSync = ({
 
   const toTaskIdSet = (tasks: TaskCard[]): Set<string> => new Set(tasks.map((task) => task.id));
 
-  const refreshDocumentEntry = async (
-    repoPath: string,
-    entry: ReturnType<typeof cachedDocumentEntries>[number],
-  ): Promise<void> => {
-    await fetchFreshTaskDocumentFromQuery(
-      queryClient,
-      repoPath,
-      entry.taskId,
-      entry.section,
-      ports.loadFreshDocument,
-    );
-  };
-
   const refreshDocumentEntries = async (
     repoPath: string,
     entries: ReturnType<typeof cachedDocumentEntries>,
   ): Promise<void> => {
-    await Promise.all(entries.map((entry) => refreshDocumentEntry(repoPath, entry)));
+    await Promise.all(
+      entries.map((entry) =>
+        fetchFreshTaskDocumentFromQuery(
+          queryClient,
+          repoPath,
+          entry.taskId,
+          entry.section,
+          ports.loadFreshDocument,
+        ),
+      ),
+    );
   };
-
-  const refreshSnapshotDocumentEntries = async (
-    repoPath: string,
-    entries: ReturnType<typeof cachedDocumentEntries>,
-  ): Promise<void> => refreshDocumentEntries(repoPath, entries);
 
   const refreshDocuments = async (repoPath: string, taskIds: string[]): Promise<void> => {
     const taskIdSet = new Set(taskIds);
@@ -346,7 +338,7 @@ export const createTaskViewSync = ({
         });
         activeTaskIds = tasks.map((task) => task.id);
         const visibleTaskIds = toTaskIdSet(tasks);
-        await refreshSnapshotDocumentEntries(
+        await refreshDocumentEntries(
           activeRepoPath,
           activeDocumentEntries.filter((entry) => visibleTaskIds.has(entry.taskId)),
         );
