@@ -365,7 +365,7 @@ const createProductionTaskViewSync = (queryClient: QueryClient): TaskViewSync =>
     ports: {
       listTasks: (repoPath) => host.tasksList(repoPath),
       loadFreshDocument: (repoPath, taskId, section) =>
-        host.taskDocumentGetFresh(repoPath, taskId, section),
+        host.taskDocumentGet(repoPath, taskId, section),
     },
   });
 

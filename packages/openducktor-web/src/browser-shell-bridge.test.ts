@@ -81,7 +81,7 @@ describe("browser shell bridge", () => {
     process.env.VITE_ODT_APP_VERSION = previousAppVersion;
   });
 
-  test("forwards task stream frames without mutating task metadata", async () => {
+  test("forwards task stream frames", async () => {
     configureBrowserRuntimeConfig({ backendUrl: "http://127.0.0.1:14327", appToken: "app-token" });
     // @ts-expect-error test EventSource shim
     globalThis.EventSource = TaskEventSource;
@@ -96,8 +96,6 @@ describe("browser shell bridge", () => {
     });
     globalThis.fetch = createFetchFixture(fetchMock);
     const bridge = createBrowserShellBridge();
-    const reconcile = mock(() => {});
-    bridge.client.reconcileExternalTaskSyncEvent = reconcile;
     const listener = mock(() => {});
     const subscriptionPromise = bridge.subscribeTaskStream({ cursor: null }, listener);
     const eventSource = await waitForTaskEventSource();
@@ -112,7 +110,6 @@ describe("browser shell bridge", () => {
     const subscription = await subscriptionPromise;
 
     expect(listener).toHaveBeenCalledWith(frame);
-    expect(reconcile).not.toHaveBeenCalled();
     await subscription.acknowledge(frame.cursor);
     await subscription.unsubscribe();
 

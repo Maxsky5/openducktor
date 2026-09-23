@@ -9,7 +9,7 @@ export const createDefaultAgentOrchestratorDependencies = (): AgentOrchestratorD
     agentSessionsList: (repoPath, taskId) => host.agentSessionsList(repoPath, taskId),
     agentSessionsListForTasks: (repoPath, taskIds) =>
       host.agentSessionsListForTasks(repoPath, taskIds),
-    taskMetadataGetFresh: (repoPath, taskId) => host.taskMetadataGetFresh(repoPath, taskId),
+    taskMetadataGet: (repoPath, taskId) => host.taskMetadataGet(repoPath, taskId),
     taskWorktreeGet: (repoPath, taskId) => host.taskWorktreeGet(repoPath, taskId),
   },
   runtimeHostPort: {

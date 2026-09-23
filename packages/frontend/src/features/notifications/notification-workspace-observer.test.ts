@@ -458,10 +458,6 @@ test("stops a cancelled session baseline when snapshot recovery fails terminally
         };
       },
     },
-    metadata: {
-      reconcileExternalTaskSyncEvent: () => {},
-      invalidateAllTaskMetadata: () => {},
-    },
     taskViewSync: {
       loadWorkspace: async () => {},
       refreshManually: async () => {},

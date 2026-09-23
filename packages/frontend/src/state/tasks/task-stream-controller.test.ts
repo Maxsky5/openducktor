@@ -69,10 +69,6 @@ const createHarness = ({
   notificationSink?: TaskStreamNotificationSink;
 } = {}) => {
   const records: SubscriptionRecord[] = [];
-  const metadata = {
-    reconcileExternalTaskSyncEvent: mock((_event: ExternalTaskSyncEvent) => {}),
-    invalidateAllTaskMetadata: mock(() => {}),
-  };
   const taskViewSync: TaskViewSync = {
     loadWorkspace: async () => {},
     refreshManually: async () => {},
@@ -109,7 +105,6 @@ const createHarness = ({
   });
   const controllerOptions: Parameters<typeof createTaskStreamController>[0] = {
     transport,
-    metadata,
     taskViewSync,
     agentSessionViewSync,
     getActiveRepoPath,
@@ -125,7 +120,6 @@ const createHarness = ({
   return {
     controller,
     agentSessionViewSync,
-    metadata,
     onDegraded,
     onSnapshotFinished,
     onSnapshotStarted,
@@ -659,10 +653,6 @@ describe("task stream controller recovery", () => {
     };
     const controller = createTaskStreamController({
       transport,
-      metadata: {
-        reconcileExternalTaskSyncEvent: () => {},
-        invalidateAllTaskMetadata: () => {},
-      },
       taskViewSync: {
         loadWorkspace: async () => {},
         refreshManually: async () => {},

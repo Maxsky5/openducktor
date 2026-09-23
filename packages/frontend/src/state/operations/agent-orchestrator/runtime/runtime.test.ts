@@ -52,7 +52,7 @@ describe("agent-orchestrator-runtime", () => {
     },
   );
 
-  test("loads startup documents from one fresh task metadata read", async () => {
+  test("loads current startup documents on each request", async () => {
     const taskMetadata = taskMetadataPayloadSchema.parse({
       spec: { markdown: "# Spec", updatedAt: "2026-04-10T13:10:00.000Z" },
       plan: { markdown: "# Plan", updatedAt: "2026-04-10T13:10:00.000Z" },
@@ -62,14 +62,29 @@ describe("agent-orchestrator-runtime", () => {
         updatedAt: "2026-04-10T13:10:00.000Z",
       },
     });
-    const taskMetadataGetFresh = mock(async () => taskMetadata);
+    let current = taskMetadata;
+    const taskMetadataGet = mock(async () => current);
 
-    await expect(loadTaskDocuments("/tmp/repo", "task-1", taskMetadataGetFresh)).resolves.toEqual({
+    await expect(loadTaskDocuments("/tmp/repo", "task-1", taskMetadataGet)).resolves.toEqual({
       specMarkdown: "# Spec",
       planMarkdown: "# Plan",
       qaMarkdown: "# QA",
     });
-    expect(taskMetadataGetFresh).toHaveBeenCalledWith("/tmp/repo", "task-1");
+    current = {
+      ...taskMetadata,
+      spec: { ...taskMetadata.spec, markdown: "# Spec V2" },
+      plan: { ...taskMetadata.plan, markdown: "# Plan V2" },
+      qaReport: taskMetadata.qaReport
+        ? { ...taskMetadata.qaReport, markdown: "# QA V2" }
+        : undefined,
+    };
+    await expect(loadTaskDocuments("/tmp/repo", "task-1", taskMetadataGet)).resolves.toEqual({
+      specMarkdown: "# Spec V2",
+      planMarkdown: "# Plan V2",
+      qaMarkdown: "# QA V2",
+    });
+    expect(taskMetadataGet).toHaveBeenCalledTimes(2);
+    expect(taskMetadataGet).toHaveBeenCalledWith("/tmp/repo", "task-1");
   });
 
   test("propagates repo config loading errors when default model lookup fails", async () => {

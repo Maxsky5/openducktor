@@ -2,7 +2,6 @@ import {
   type AgentSessionIdentity,
   type AgentSessionRecord,
   agentSessionRecordSchema,
-  type ExternalTaskSyncEvent,
   type PlanSubtaskInput,
   type TaskAgentSessions,
   type TaskAssetDescriptionMutation,
@@ -11,6 +10,7 @@ import {
   type TaskAssetStageResult,
   type TaskCard,
   type TaskCreateInput,
+  type TaskMetadataPayload,
   type TaskStatus,
   type TaskStopImpact,
   type TaskStopImpactOperation,
@@ -23,6 +23,7 @@ import {
   taskCardSchema,
   taskCreateInputSchema,
   taskMetadataDocumentSchema,
+  taskMetadataPayloadSchema,
   taskStatusSchema,
   taskStopImpactSchema,
   taskUpdatePatchSchema,
@@ -36,11 +37,6 @@ import {
   updatedAtResultSchema,
   voidResultSchema,
 } from "./invoke-utils";
-import type {
-  ParsedTaskMetadata,
-  TaskMetadataCache,
-  TaskMetadataReadOptions,
-} from "./task-metadata-cache";
 
 export type SetSpecInput = {
   taskId: string;
@@ -95,26 +91,18 @@ type TaskTransitionArgs = {
 type SetPlanPayloadInput = { markdown: string; subtasks?: SetPlanInput["subtasks"] };
 
 export class HostTaskClient {
-  constructor(
-    private readonly invokeFn: InvokeFn,
-    private readonly metadataCache: TaskMetadataCache,
-  ) {}
+  constructor(private readonly invokeFn: InvokeFn) {}
 
-  private readTaskMetadata(
-    repoPath: string,
-    taskId: string,
-    options?: TaskMetadataReadOptions,
-  ): Promise<ParsedTaskMetadata> {
-    return this.metadataCache.get(this.invokeFn, repoPath, taskId, options);
+  private readTaskMetadata(repoPath: string, taskId: string): Promise<TaskMetadataPayload> {
+    return this.invokeFn("task_metadata_get", { repoPath, taskId }, taskMetadataPayloadSchema);
   }
 
   private async readTaskDocument(
     repoPath: string,
     taskId: string,
     section: TaskDocumentSection,
-    options?: TaskMetadataReadOptions,
   ): Promise<TaskDocumentReadResult> {
-    const payload = await this.readTaskMetadata(repoPath, taskId, options);
+    const payload = await this.readTaskMetadata(repoPath, taskId);
 
     if (section === "spec") {
       return {
@@ -137,22 +125,6 @@ export class HostTaskClient {
       updatedAt: payload.qaReport?.updatedAt ?? null,
       error: payload.qaReport?.error ?? null,
     };
-  }
-
-  private invalidateTaskMetadata(repoPath: string, taskId: string): void {
-    this.metadataCache.invalidate(repoPath, taskId);
-  }
-
-  reconcileExternalTaskSyncEvent(event: ExternalTaskSyncEvent): void {
-    const taskIds = event.kind === "external_task_created" ? [event.taskId] : event.taskIds;
-
-    for (const taskId of taskIds) {
-      this.invalidateTaskMetadata(event.repoPath, taskId);
-    }
-  }
-
-  invalidateAllTaskMetadata(): void {
-    this.metadataCache.invalidateAll();
   }
 
   private requireRepoPath(repoPath: string | undefined, documentType: "spec" | "plan"): string {
@@ -207,9 +179,7 @@ export class HostTaskClient {
     if (assetIntent) {
       args.descriptionAssets = assetIntent;
     }
-    const payload = await this.invokeFn("task_update", args, taskCardSchema);
-    this.invalidateTaskMetadata(repoPath, taskId);
-    return payload;
+    return this.invokeFn("task_update", args, taskCardSchema);
   }
 
   async taskAssetStage(input: TaskAssetStageInput): Promise<TaskAssetStageResult> {
@@ -233,35 +203,23 @@ export class HostTaskClient {
     taskId: string,
     deleteSubtasks = false,
   ): Promise<{ ok: boolean }> {
-    const payload = await this.invokeFn(
+    return this.invokeFn(
       "task_delete",
       { repoPath, taskId, deleteSubtasks },
       okResultSchema("task_delete"),
     );
-    this.invalidateTaskMetadata(repoPath, taskId);
-    return payload;
   }
 
   async taskClose(repoPath: string, taskId: string): Promise<TaskCard> {
-    const payload = await this.invokeFn("task_close", { repoPath, taskId }, taskCardSchema);
-    this.invalidateTaskMetadata(repoPath, taskId);
-    return payload;
+    return this.invokeFn("task_close", { repoPath, taskId }, taskCardSchema);
   }
 
   async taskResetImplementation(repoPath: string, taskId: string): Promise<TaskCard> {
-    const payload = await this.invokeFn(
-      "task_reset_implementation",
-      { repoPath, taskId },
-      taskCardSchema,
-    );
-    this.invalidateTaskMetadata(repoPath, taskId);
-    return payload;
+    return this.invokeFn("task_reset_implementation", { repoPath, taskId }, taskCardSchema);
   }
 
   async taskReset(repoPath: string, taskId: string): Promise<TaskCard> {
-    const payload = await this.invokeFn("task_reset", { repoPath, taskId }, taskCardSchema);
-    this.invalidateTaskMetadata(repoPath, taskId);
-    return payload;
+    return this.invokeFn("task_reset", { repoPath, taskId }, taskCardSchema);
   }
 
   async taskTransition(
@@ -295,7 +253,6 @@ export class HostTaskClient {
       taskMetadataDocumentSchema,
     );
 
-    this.invalidateTaskMetadata(repoPath, input.taskId);
     return updatedAtResultSchema("set_spec").parse(payload);
   }
 
@@ -305,7 +262,6 @@ export class HostTaskClient {
       { repoPath: input.repoPath, taskId: input.taskId, markdown: input.markdown },
       taskMetadataDocumentSchema,
     );
-    this.invalidateTaskMetadata(input.repoPath, input.taskId);
     return updatedAtResultSchema("spec_save_document").parse(payload);
   }
 
@@ -324,7 +280,6 @@ export class HostTaskClient {
       taskMetadataDocumentSchema,
     );
 
-    this.invalidateTaskMetadata(repoPath, input.taskId);
     return updatedAtResultSchema("set_plan").parse(payload);
   }
 
@@ -334,7 +289,6 @@ export class HostTaskClient {
       { repoPath: input.repoPath, taskId: input.taskId, markdown: input.markdown },
       taskMetadataDocumentSchema,
     );
-    this.invalidateTaskMetadata(input.repoPath, input.taskId);
     return updatedAtResultSchema("plan_save_document").parse(payload);
   }
 
@@ -342,12 +296,8 @@ export class HostTaskClient {
     return this.readTaskDocument(repoPath, taskId, "plan");
   }
 
-  async taskMetadataGet(repoPath: string, taskId: string): Promise<ParsedTaskMetadata> {
+  async taskMetadataGet(repoPath: string, taskId: string): Promise<TaskMetadataPayload> {
     return this.readTaskMetadata(repoPath, taskId);
-  }
-
-  async taskMetadataGetFresh(repoPath: string, taskId: string): Promise<ParsedTaskMetadata> {
-    return this.readTaskMetadata(repoPath, taskId, { forceFresh: true });
   }
 
   async taskDocumentGet(
@@ -358,36 +308,16 @@ export class HostTaskClient {
     return this.readTaskDocument(repoPath, taskId, section);
   }
 
-  async taskDocumentGetFresh(
-    repoPath: string,
-    taskId: string,
-    section: TaskDocumentSection,
-  ): Promise<TaskDocumentReadResult> {
-    return this.readTaskDocument(repoPath, taskId, section, { forceFresh: true });
-  }
-
   async qaGetReport(repoPath: string, taskId: string): Promise<TaskDocumentReadResult> {
     return this.readTaskDocument(repoPath, taskId, "qa");
   }
 
   async qaApproved(repoPath: string, taskId: string, markdown: string): Promise<TaskCard> {
-    const payload = await this.invokeFn(
-      "qa_approved",
-      { repoPath, taskId, input: { markdown } },
-      taskCardSchema,
-    );
-    this.invalidateTaskMetadata(repoPath, taskId);
-    return payload;
+    return this.invokeFn("qa_approved", { repoPath, taskId, input: { markdown } }, taskCardSchema);
   }
 
   async qaRejected(repoPath: string, taskId: string, markdown: string): Promise<TaskCard> {
-    const payload = await this.invokeFn(
-      "qa_rejected",
-      { repoPath, taskId, input: { markdown } },
-      taskCardSchema,
-    );
-    this.invalidateTaskMetadata(repoPath, taskId);
-    return payload;
+    return this.invokeFn("qa_rejected", { repoPath, taskId, input: { markdown } }, taskCardSchema);
   }
 
   async agentSessionsList(repoPath: string, taskId: string): Promise<AgentSessionRecord[]> {
@@ -435,6 +365,5 @@ export class HostTaskClient {
       },
       booleanResultSchema,
     );
-    this.invalidateTaskMetadata(repoPath, taskId);
   }
 }

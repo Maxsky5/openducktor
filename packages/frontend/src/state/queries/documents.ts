@@ -16,8 +16,6 @@ export type TaskDocument = {
 
 export type TaskDocumentSection = "spec" | "plan" | "qa";
 
-type TaskDocumentReadMode = "default" | "forceFresh";
-
 export const documentQueryKeys = {
   all: ["task-documents"] as const,
   spec: (repoPath: string, taskId: string) =>
@@ -48,38 +46,16 @@ const loadTaskDocumentFromHost = async (
   repoPath: string,
   taskId: string,
   section: TaskDocumentSection,
-  mode: TaskDocumentReadMode = "default",
 ): Promise<TaskDocument> => {
-  const readDocument = mode === "forceFresh" ? host.taskDocumentGetFresh : host.taskDocumentGet;
-  return readDocument(repoPath, taskId, section);
+  return host.taskDocumentGet(repoPath, taskId, section);
 };
 
 const taskDocumentQueryOptions = (repoPath: string, taskId: string, section: TaskDocumentSection) =>
   queryOptions({
     queryKey: documentQueryKeyForSection(repoPath, taskId, section),
-    queryFn: async (): Promise<TaskDocument> =>
-      loadTaskDocumentFromHost(repoPath, taskId, section, "default"),
+    queryFn: async (): Promise<TaskDocument> => loadTaskDocumentFromHost(repoPath, taskId, section),
     staleTime: TASK_DOCUMENT_STALE_TIME_MS,
   });
-
-const fetchTaskDocumentWithMode = (
-  queryClient: QueryClient,
-  repoPath: string,
-  taskId: string,
-  section: TaskDocumentSection,
-  mode: TaskDocumentReadMode,
-): Promise<TaskDocumentPayload> => {
-  const queryKey = documentQueryKeyForSection(repoPath, taskId, section);
-  return queryClient.fetchQuery({
-    queryKey,
-    queryFn: async (): Promise<TaskDocumentPayload> => {
-      const incoming = await loadTaskDocumentFromHost(repoPath, taskId, section, mode);
-      const current = queryClient.getQueryData<TaskDocumentPayload>(queryKey);
-      return resolveLatestDocumentPayload(current, incoming);
-    },
-    staleTime: mode === "forceFresh" ? 0 : TASK_DOCUMENT_STALE_TIME_MS,
-  });
-};
 
 export const fetchFreshTaskDocumentFromQuery = (
   queryClient: QueryClient,
@@ -87,7 +63,16 @@ export const fetchFreshTaskDocumentFromQuery = (
   taskId: string,
   section: TaskDocumentSection,
 ): Promise<TaskDocumentPayload> => {
-  return fetchTaskDocumentWithMode(queryClient, repoPath, taskId, section, "forceFresh");
+  const queryKey = documentQueryKeyForSection(repoPath, taskId, section);
+  return queryClient.fetchQuery({
+    queryKey,
+    queryFn: async (): Promise<TaskDocumentPayload> => {
+      const incoming = await loadTaskDocumentFromHost(repoPath, taskId, section);
+      const current = queryClient.getQueryData<TaskDocumentPayload>(queryKey);
+      return resolveLatestDocumentPayload(current, incoming);
+    },
+    staleTime: 0,
+  });
 };
 
 const cachedTaskDocumentSections = (

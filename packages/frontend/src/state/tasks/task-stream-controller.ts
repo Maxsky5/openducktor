@@ -1,5 +1,4 @@
 import type { ExternalTaskSyncEvent, TaskEventCursor } from "@openducktor/contracts";
-import type { HostClient } from "@openducktor/host-client";
 import type { TaskStreamFrame, TaskStreamSubscription } from "@/lib/shell-bridge";
 import type { AgentSessionViewSync } from "@/state/queries/agent-session-view-sync";
 import type { TaskViewSync } from "@/state/queries/task-view-sync";
@@ -11,11 +10,6 @@ type TaskStreamTransport = {
     onTerminalFailure?: (cause: unknown) => void,
   ) => Promise<TaskStreamSubscription>;
 };
-
-type TaskMetadataReconciler = Pick<
-  HostClient,
-  "reconcileExternalTaskSyncEvent" | "invalidateAllTaskMetadata"
->;
 
 type OwnedSubscription = {
   subscription: TaskStreamSubscription | null;
@@ -41,7 +35,6 @@ const cursorsEqual = (left: TaskEventCursor | null, right: TaskEventCursor | nul
 
 export const createTaskStreamController = ({
   transport,
-  metadata,
   taskViewSync,
   agentSessionViewSync,
   getActiveRepoPath,
@@ -51,7 +44,6 @@ export const createTaskStreamController = ({
   onSnapshotStarted,
 }: {
   transport: TaskStreamTransport;
-  metadata: TaskMetadataReconciler;
   taskViewSync: TaskViewSync;
   agentSessionViewSync: AgentSessionViewSync;
   getActiveRepoPath: () => string | null;
@@ -171,7 +163,6 @@ export const createTaskStreamController = ({
     frame: Extract<TaskStreamFrame, { type: "change" }>,
     frameGeneration: number,
   ): Promise<boolean> => {
-    metadata.reconcileExternalTaskSyncEvent(frame.event);
     await Promise.all([
       taskViewSync.reconcileExternalEvent(frame.event, getActiveRepoPath()),
       agentSessionViewSync.reconcileExternalEvent(frame.event),
@@ -187,7 +178,6 @@ export const createTaskStreamController = ({
     frame: Extract<TaskStreamFrame, { type: "snapshot_required" }>,
     frameGeneration: number,
   ): Promise<boolean> => {
-    metadata.invalidateAllTaskMetadata();
     const activeRepoPath = getActiveRepoPath();
     onSnapshotStarted?.(activeRepoPath);
     let succeeded = false;

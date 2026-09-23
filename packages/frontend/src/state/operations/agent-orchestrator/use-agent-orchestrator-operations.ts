@@ -264,7 +264,7 @@ export function useAgentOrchestratorOperations({
         },
         ensureExistingSessionRuntime,
         loadTaskDocuments: (repoPath, taskId) =>
-          loadTaskDocuments(repoPath, taskId, hostPort.taskMetadataGetFresh),
+          loadTaskDocuments(repoPath, taskId, hostPort.taskMetadataGet),
         loadRepoPromptOverrides: queryBackedPromptOverrides,
         loadSettingsSnapshot: () => loadSettingsSnapshotFromQuery(queryClient),
         liveSessionHost: liveSessionHostPort,
