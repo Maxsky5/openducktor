@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { SettingsSnapshot } from "@openducktor/contracts";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createRepoSettingsConfigFixture,
+  createSettingsSnapshotFixture,
+} from "@/test-utils/shared-test-fixtures";
 import {
   buildCodexDangerousSettingsSaveError,
   buildPromptValidationSaveError,
@@ -11,6 +14,7 @@ import {
   hasAnyDirtySections,
   hasSameSaveReadyGlobalGitConfig,
   isGlobalGitOnlySave,
+  validateAzureDevOpsDraft,
 } from "./settings-modal-save-policy";
 import { EMPTY_DIRTY_SECTIONS } from "./use-settings-modal-dirty-state";
 
@@ -59,6 +63,23 @@ describe("settings-modal-save-policy", () => {
     ).toBe(false);
   });
 
+  test("allows a disabled Azure provider without repository details", () => {
+    const snapshot = createSettingsSnapshotFixture({
+      workspaces: {
+        repo: createRepoSettingsConfigFixture("repo", "/repo", {
+          id: "azure_devops",
+          enabled: false,
+          autoDetected: false,
+        }),
+      },
+    });
+
+    expect(validateAzureDevOpsDraft(snapshot, "repo", 0)).toEqual({
+      errorCount: 0,
+      invalidWorkspaceIds: [],
+    });
+  });
+
   test("builds the prompt and repo validation save errors", () => {
     expect(buildPromptValidationSaveError(1)).toBe("Fix 1 prompt placeholder error before saving.");
     expect(buildPromptValidationSaveError(2)).toBe(
@@ -84,7 +105,12 @@ describe("settings-modal-save-policy", () => {
 
   test("selects the first settings save blocker and its required UI action", () => {
     const blocker = getSettingsSaveBlocker({
-      azureDevOps: { hasErrors: false, errorCount: 0 },
+      azureDevOps: {
+        hasErrors: false,
+        errorCount: 0,
+        invalidWorkspaceIds: [],
+        selectedWorkspaceId: "repo",
+      },
       prompt: { hasErrors: true, errorCount: 2 },
       customAgentRoles: { hasErrors: false, errorCount: 0 },
       reusablePrompts: { hasErrors: true, errorCount: 3 },
@@ -108,7 +134,12 @@ describe("settings-modal-save-policy", () => {
 
   test("blocks save when Azure DevOps fields are invalid", () => {
     const blocker = getSettingsSaveBlocker({
-      azureDevOps: { hasErrors: true, errorCount: 2 },
+      azureDevOps: {
+        hasErrors: true,
+        errorCount: 2,
+        invalidWorkspaceIds: [],
+        selectedWorkspaceId: "repo",
+      },
       prompt: { hasErrors: false, errorCount: 0 },
       customAgentRoles: { hasErrors: false, errorCount: 0 },
       reusablePrompts: { hasErrors: false, errorCount: 0 },
@@ -128,7 +159,12 @@ describe("settings-modal-save-policy", () => {
 
   test("returns runtime focus metadata for an executable blocker", () => {
     const blocker = getSettingsSaveBlocker({
-      azureDevOps: { hasErrors: false, errorCount: 0 },
+      azureDevOps: {
+        hasErrors: false,
+        errorCount: 0,
+        invalidWorkspaceIds: [],
+        selectedWorkspaceId: "repo",
+      },
       prompt: { hasErrors: false, errorCount: 0 },
       customAgentRoles: { hasErrors: false, errorCount: 0 },
       reusablePrompts: { hasErrors: false, errorCount: 0 },
@@ -153,7 +189,12 @@ describe("settings-modal-save-policy", () => {
   test("returns no blocker for valid settings", () => {
     expect(
       getSettingsSaveBlocker({
-        azureDevOps: { hasErrors: false, errorCount: 0 },
+        azureDevOps: {
+          hasErrors: false,
+          errorCount: 0,
+          invalidWorkspaceIds: [],
+          selectedWorkspaceId: null,
+        },
         prompt: { hasErrors: false, errorCount: 0 },
         customAgentRoles: { hasErrors: false, errorCount: 0 },
         reusablePrompts: { hasErrors: false, errorCount: 0 },

@@ -34,6 +34,7 @@ import {
 } from "@/state/read-models/custom-agent-role-settings";
 import type { RuntimeModelCatalogQueryResource } from "@/state/queries/use-runtime-model-catalogs";
 import { buildNewCodexDangerousSelectionKey } from "./settings-codex-risk-policy";
+import { validateAzureDevOpsDraft } from "./settings-modal-save-policy";
 import type { PromptRoleTabId, SettingsSectionId } from "./settings-modal-constants";
 import type { PromptValidationState } from "./settings-modal-controller.types";
 import type { SettingsWorkspaceSelectionPolicy } from "./settings-workspace-selection";
@@ -228,8 +229,11 @@ export const useSettingsModalController = ({
     workspaceSelectionPolicy: workspacePolicy,
     loadSettingsSnapshot,
   });
-  const { azureDevOpsValidationErrorCount, setAzureDevOpsValidationErrorCount } =
-    useAzureDevOpsValidation({ loadedSnapshot, selectedRepoConfig, selectedWorkspaceId });
+  const {
+    azureDevOpsValidationErrorCount,
+    azureDevOpsInvalidWorkspaceIds,
+    setAzureDevOpsValidationErrorCount,
+  } = useAzureDevOpsValidation({ loadedSnapshot, snapshotDraft, selectedWorkspaceId });
 
   const selectedWorkspace = useMemo(
     () =>
@@ -440,6 +444,8 @@ export const useSettingsModalController = ({
       azureDevOps: {
         hasErrors: azureDevOpsValidationErrorCount > 0,
         errorCount: azureDevOpsValidationErrorCount,
+        invalidWorkspaceIds: azureDevOpsInvalidWorkspaceIds,
+        selectedWorkspaceId,
       },
       customAgentRoles: {
         hasErrors: customAgentRoleValidationState.totalErrorCount > 0,
@@ -648,11 +654,11 @@ export const useSettingsModalController = ({
 
 const useAzureDevOpsValidation = ({
   loadedSnapshot,
-  selectedRepoConfig,
+  snapshotDraft,
   selectedWorkspaceId,
 }: {
   loadedSnapshot: SettingsSnapshot | null;
-  selectedRepoConfig: SettingsRepoConfig | null;
+  snapshotDraft: SettingsSnapshot | null;
   selectedWorkspaceId: string | null;
 }) => {
   const [reported, setReported] = useState<{
@@ -666,19 +672,18 @@ const useAzureDevOpsValidation = ({
     },
     [loadedSnapshot, selectedWorkspaceId],
   );
-  const provider = selectedRepoConfig?.git.provider;
-  if (provider?.id !== "azure_devops" || !provider.enabled) {
-    return { azureDevOpsValidationErrorCount: 0, setAzureDevOpsValidationErrorCount };
-  }
   const reportedErrorCount =
     reported.snapshot === loadedSnapshot && reported.workspaceId === selectedWorkspaceId
       ? reported.errorCount
       : 0;
+  const validation = validateAzureDevOpsDraft(
+    snapshotDraft,
+    selectedWorkspaceId,
+    reportedErrorCount,
+  );
   return {
-    azureDevOpsValidationErrorCount: Math.max(
-      !provider.repository || !("providerId" in provider.repository) ? 1 : 0,
-      reportedErrorCount,
-    ),
+    azureDevOpsValidationErrorCount: validation.errorCount,
+    azureDevOpsInvalidWorkspaceIds: validation.invalidWorkspaceIds,
     setAzureDevOpsValidationErrorCount,
   };
 };

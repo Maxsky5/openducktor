@@ -69,6 +69,26 @@ describe("Azure DevOps repository identity", () => {
     });
   });
 
+  test("detects a Server SSH remote with a user name", () => {
+    expect(
+      parseAzureDevOpsRepositoryUrl(
+        "ssh://alice@azure-devops.example.test:22/installation/DefaultCollection/Project/_git/Repo",
+      ),
+    ).toEqual({
+      providerId: "azure_devops",
+      deployment: "server",
+      serviceUrl: "https://azure-devops.example.test/installation",
+      organization: "DefaultCollection",
+      project: "Project",
+      name: "Repo",
+    });
+    expect(
+      parseAzureDevOpsRepositoryUrl(
+        "ssh://alice:secret@azure-devops.example.test:22/installation/DefaultCollection/Project/_git/Repo",
+      ),
+    ).toBeNull();
+  });
+
   test("rejects unsafe or incomplete remotes", () => {
     expect(
       parseAzureDevOpsRepositoryUrl("https://user:secret@dev.azure.com/org/project/_git/repo"),

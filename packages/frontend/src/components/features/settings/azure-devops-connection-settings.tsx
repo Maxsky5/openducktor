@@ -187,7 +187,8 @@ function ManagedConnection({
     isMutatingConnection,
     retryConnectionRead,
   } = controller;
-  const canDisconnect = connectionState.status === "connected" && connectionInput !== null;
+  const canDisconnect =
+    connectionInput !== null && (connectionState.status === "connected" || connectionReadFailed);
   const showConnectionActions =
     !connectionReadFailed &&
     (connectionState.status !== "connected" || connectionState.account === null);

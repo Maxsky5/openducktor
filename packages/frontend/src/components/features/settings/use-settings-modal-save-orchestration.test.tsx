@@ -38,7 +38,12 @@ const createSnapshot = (): SettingsSnapshot =>
 const createValidation = (
   overrides: Partial<SettingsSaveValidation> = {},
 ): SettingsSaveValidation => ({
-  azureDevOps: { hasErrors: false, errorCount: 0 },
+  azureDevOps: {
+    hasErrors: false,
+    errorCount: 0,
+    invalidWorkspaceIds: [],
+    selectedWorkspaceId: null,
+  },
   prompt: { hasErrors: false, errorCount: 0 },
   customAgentRoles: { hasErrors: false, errorCount: 0 },
   reusablePrompts: { hasErrors: false, errorCount: 0 },

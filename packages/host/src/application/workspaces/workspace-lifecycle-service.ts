@@ -52,6 +52,7 @@ export type WorkspaceActivityPort = {
 export type WorkspaceStoragePort = {
   removeWorkspaceTaskAssets(workspaceId: string): Effect.Effect<void, TaskAssetError>;
   removeWorkspaceTaskStore(workspaceId: string): Effect.Effect<void, HostOperationErrorAggregate>;
+  removeWorkspaceCredentials(repoConfig: RepoConfig): Effect.Effect<void, HostOperationError>;
 };
 
 export type WorkspaceLifecycleService = {
@@ -396,7 +397,7 @@ export const createWorkspaceLifecycleService = ({
           );
         }
       }
-
+      yield* storage.removeWorkspaceCredentials(repoConfig);
       const catalog = yield* workspaceSettingsService.removeWorkspaceRegistration(
         input.workspaceId,
         input.expectedRepoPath,

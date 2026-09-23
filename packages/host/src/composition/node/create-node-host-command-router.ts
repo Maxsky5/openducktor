@@ -4,7 +4,9 @@ import {
 } from "./runtime-lifecycle-publisher";
 import { createNodeImageCommandHandlers } from "./node-image-command-handlers";
 import { resolveCodexEffectivePolicy } from "@openducktor/contracts";
+import { isAzureDevOpsRepository } from "@openducktor/core";
 import { Effect } from "effect";
+import { HostOperationError } from "../../effect/host-errors";
 import { createCodexLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/codex-live-session-adapter";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
 import { createCodexWorkspaceRuntimeStarter } from "../../adapters/codex/codex-workspace-runtime-starter";
@@ -295,6 +297,35 @@ export const assembleNodeEffectHostCommandRouter = (
     storage: {
       removeWorkspaceTaskAssets: assets.removeWorkspaceTaskAssets,
       removeWorkspaceTaskStore: assets.removeWorkspaceTaskStore,
+      removeWorkspaceCredentials: (repoConfig) => {
+        const provider = repoConfig.git.provider;
+        if (
+          provider?.id !== "azure_devops" ||
+          !provider.repository ||
+          !isAzureDevOpsRepository(provider.repository)
+        ) {
+          return Effect.void;
+        }
+        if (!azureDevOpsConnection) {
+          return Effect.fail(
+            new HostOperationError({
+              operation: "workspace.removeWorkspace.credentials",
+              message:
+                "Azure DevOps credential cleanup is unavailable. Retry workspace removal after restarting the host.",
+            }),
+          );
+        }
+        return azureDevOpsConnection.disconnect(repoConfig, provider.repository).pipe(
+          Effect.mapError(
+            (cause) =>
+              new HostOperationError({
+                operation: "workspace.removeWorkspace.credentials",
+                message: `Failed to remove Azure DevOps credentials: ${cause.message}. The workspace remains registered. Retry removal to continue.`,
+                cause,
+              }),
+          ),
+        );
+      },
     },
     taskSessionLifecycleCoordinator,
     taskStore,

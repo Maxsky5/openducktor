@@ -792,6 +792,54 @@ describe("useSettingsModalController", () => {
     await harness.unmount();
   });
 
+  for (const enabled of [true, false]) {
+    test(`blocks an invalid Azure mapping after switching workspaces when enabled is ${enabled}`, async () => {
+      saveSettingsSnapshot = mock(async () => {});
+      const harness = createHookHarness(true);
+      try {
+        await harness.mount();
+        await harness.waitFor((state) => state.snapshotDraft !== null);
+
+        await harness.run((state) => {
+          state.updateSelectedRepoConfig((repoConfig) => {
+            const repository = {
+              providerId: "azure_devops" as const,
+              deployment: "server" as const,
+              serviceUrl: "https://azure.example.test/installation",
+              organization: "DefaultCollection",
+              project: "Project",
+              name: "Repo",
+            };
+            return {
+              ...repoConfig,
+              git: {
+                provider: {
+                  id: "azure_devops",
+                  enabled,
+                  autoDetected: false,
+                  repository,
+                  remoteMappings: [
+                    { remoteName: "origin", fetchUrl: "", pushUrls: [], repository },
+                  ],
+                },
+              },
+            };
+          });
+          state.setAzureDevOpsValidationErrorCount(1);
+        });
+        await harness.run((state) => state.setSelectedWorkspaceId("repo-two"));
+
+        await harness.run(async (state) => {
+          expect(await state.submit()).toBe(false);
+        });
+        expect(saveSettingsSnapshot).not.toHaveBeenCalled();
+        expect(harness.getLatest().saveError).toContain("repo");
+      } finally {
+        await harness.unmount();
+      }
+    });
+  }
+
   test("does not enable catalog loading unless the agents section requests it", async () => {
     const loadRepoRuntimeCatalog = mock(async () => ({
       models: {

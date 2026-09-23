@@ -184,6 +184,34 @@ describe("AzureDevOpsConnectionSettings", () => {
     expect(screen.getByRole("button", { name: "Replace PAT" })).toBeTruthy();
   });
 
+  test("offers disconnect when the saved connection cannot be read", () => {
+    const disconnect = mock(() => {});
+    const retryConnectionRead = mock(() => {});
+    render(
+      <AzureDevOpsConnectionSettings
+        controller={{
+          ...createPendingController(),
+          connectionReadFailed: true,
+          connectionState: {
+            status: "error",
+            reason:
+              "The protected Azure DevOps connection record is invalid. Disconnect it and sign in again.",
+          },
+          disconnect,
+          retryConnectionRead,
+        }}
+        disabled={false}
+        onBack={() => {}}
+        onSaveSettings={async () => true}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Retry connection read" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+    expect(disconnect).toHaveBeenCalledTimes(1);
+    expect(retryConnectionRead).not.toHaveBeenCalled();
+  });
+
   test("makes the pending Microsoft sign-in actions direct and accessible", async () => {
     const openExternalUrl = mock(async () => {});
     const writeText = mock(async () => {});

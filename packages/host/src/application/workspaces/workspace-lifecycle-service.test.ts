@@ -139,6 +139,7 @@ const createService = ({
   removeWorkspaceRegistration = () => Effect.succeed(catalog()),
   removeWorkspaceTaskAssets = () => Effect.void,
   removeWorkspaceTaskStore = () => Effect.void,
+  removeWorkspaceCredentials = () => Effect.void,
   taskSessionLifecycleCoordinator = createTaskSessionLifecycleCoordinator(),
   taskStore = createTaskStoreDouble(),
   listWorktrees = () => Effect.succeed([]),
@@ -167,6 +168,7 @@ const createService = ({
   removeWorkspaceRegistration?: () => Effect.Effect<WorkspaceCatalog, never>;
   removeWorkspaceTaskAssets?: WorkspaceStoragePort["removeWorkspaceTaskAssets"];
   removeWorkspaceTaskStore?: WorkspaceStoragePort["removeWorkspaceTaskStore"];
+  removeWorkspaceCredentials?: WorkspaceStoragePort["removeWorkspaceCredentials"];
   taskSessionLifecycleCoordinator?: ReturnType<typeof createTaskSessionLifecycleCoordinator>;
   taskStore?: TaskStoreDouble;
   listWorktrees?: GitPort["listWorktrees"];
@@ -179,6 +181,7 @@ const createService = ({
   const storage: WorkspaceStoragePort = {
     removeWorkspaceTaskAssets,
     removeWorkspaceTaskStore,
+    removeWorkspaceCredentials,
   };
   return createWorkspaceLifecycleService({
     activity,
@@ -375,6 +378,97 @@ describe("workspace lifecycle service", () => {
 
     expect(calls).toEqual(["beginRemoval", "removeAssets", "removeTaskStore", "unregister"]);
     expect(result.removedWorktrees).toEqual([]);
+  });
+
+  test("removes Azure credentials before removing the workspace registration", async () => {
+    const calls: string[] = [];
+    const service = createService({
+      getRepoConfig: () =>
+        Effect.succeed(
+          repoConfig({
+            git: {
+              provider: {
+                id: "azure_devops",
+                enabled: false,
+                autoDetected: false,
+                repository: {
+                  providerId: "azure_devops",
+                  deployment: "server",
+                  serviceUrl: "https://azure.example.test/installation",
+                  organization: "DefaultCollection",
+                  project: "Project",
+                  name: "Repo",
+                },
+              },
+            },
+          }),
+        ),
+      removeWorkspaceCredentials: () =>
+        Effect.sync(() => {
+          calls.push("credentials");
+        }),
+      removeWorkspaceRegistration: () =>
+        Effect.sync(() => {
+          calls.push("registration");
+          return catalog();
+        }),
+    });
+
+    await Effect.runPromise(
+      service.removeWorkspace({
+        workspaceId: "ws",
+        expectedRepoPath: "/repos/ws",
+        removeTaskWorktrees: false,
+      }),
+    );
+
+    expect(calls).toEqual(["credentials", "registration"]);
+  });
+
+  test("keeps workspace registration when Azure credential cleanup fails, then retries", async () => {
+    let cleanupFails = true;
+    const removeWorkspaceRegistration = mock(() => Effect.succeed(catalog()));
+    const service = createService({
+      getRepoConfig: () =>
+        Effect.succeed(
+          repoConfig({
+            git: {
+              provider: {
+                id: "azure_devops",
+                enabled: true,
+                autoDetected: false,
+                repository: {
+                  providerId: "azure_devops",
+                  deployment: "server",
+                  serviceUrl: "https://azure.example.test/installation",
+                  organization: "DefaultCollection",
+                  project: "Project",
+                  name: "Repo",
+                },
+              },
+            },
+          }),
+        ),
+      removeWorkspaceCredentials: () =>
+        cleanupFails
+          ? Effect.fail(
+              new HostOperationError({
+                operation: "azureDevOps.connection.disconnect",
+                message: "Secure storage is unavailable.",
+              }),
+            )
+          : Effect.void,
+      removeWorkspaceRegistration,
+    });
+    const input = { workspaceId: "ws", expectedRepoPath: "/repos/ws", removeTaskWorktrees: false };
+
+    const failed = await Effect.runPromiseExit(service.removeWorkspace(input));
+    expect(failed._tag).toBe("Failure");
+    expect(removeWorkspaceRegistration).not.toHaveBeenCalled();
+
+    cleanupFails = false;
+    await Effect.runPromise(service.removeWorkspace(input));
+    expect(removeWorkspaceRegistration).toHaveBeenCalledTimes(1);
   });
 
   test("removeWorkspace records progress and blocks task work before deleting", async () => {
