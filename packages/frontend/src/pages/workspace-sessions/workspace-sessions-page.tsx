@@ -5,6 +5,7 @@ import { type ReactElement, useEffect, useState } from "react";
 import { useLocation, useNavigationType, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
 import { BrowserTabs, BrowserTabsBar, BrowserTabsRoot } from "@/components/ui/browser-tabs";
+import { DiffWorkerProvider } from "@/contexts/DiffWorkerProvider";
 import { isAgentSessionActivityActive } from "@/lib/agent-session-activity-state";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { errorMessage } from "@/lib/errors";
@@ -366,5 +367,9 @@ function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactElement 
 export default function WorkspaceSessionsPage() {
   const workspace = useActiveWorkspace();
   if (!workspace) return <p className="p-6">Select a workspace.</p>;
-  return <WorkspaceSessions key={workspace.workspaceId} workspace={workspace} />;
+  return (
+    <DiffWorkerProvider>
+      <WorkspaceSessions key={workspace.workspaceId} workspace={workspace} />
+    </DiffWorkerProvider>
+  );
 }
