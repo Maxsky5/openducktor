@@ -226,6 +226,81 @@ describe("createNodePtyPort", () => {
     expect(calls).toEqual(["pause", "resume", "terminate-after-resume"]);
   });
 
+  test.each([false, true])(
+    "keeps host output pressure after a failed close (ACK during close: %s)",
+    async (ackDuringClose) => {
+      let paused = false;
+      let stopAttempts = 0;
+      let dataListener: (data: Buffer) => void = () => undefined;
+      let exitListener: (event: { exitCode: number; signal: number }) => void = () => undefined;
+      const terminationStarted = Promise.withResolvers<void>();
+      const finishTermination = Promise.withResolvers<void>();
+      const output: Uint8Array[] = [];
+      const port = createNodePtyPort({
+        processTreeTerminator: () =>
+          Effect.promise(async () => {
+            stopAttempts += 1;
+            if (stopAttempts === 1) {
+              terminationStarted.resolve();
+              await finishTermination.promise;
+              throw new Error("process tree stayed live");
+            }
+            exitListener({ exitCode: 0, signal: 15 });
+          }),
+        nodePty: {
+          spawn: () => ({
+            pid: 42,
+            onData: (listener) => {
+              dataListener = listener;
+              return { dispose: () => undefined };
+            },
+            onExit: (listener) => {
+              exitListener = listener;
+              return { dispose: () => undefined };
+            },
+            write: () => undefined,
+            resize: () => undefined,
+            pause: () => {
+              paused = true;
+            },
+            resume: () => {
+              paused = false;
+            },
+          }),
+        },
+      });
+      const handle = await Effect.runPromise(
+        port.start(
+          { shell: "/bin/zsh", args: [], cwd: "/repo", env: {}, grid: { columns: 80, rows: 24 } },
+          {
+            onOutput: (data) => output.push(data),
+            onFailure: () => undefined,
+            onExit: () => undefined,
+          },
+        ),
+      );
+      const emitOutput = (data: string) => {
+        if (!paused) dataListener(Buffer.from(data));
+      };
+
+      await Effect.runPromise(handle.pauseOutput());
+      const termination = Effect.runPromise(handle.terminate());
+      await terminationStarted.promise;
+      if (ackDuringClose) await Effect.runPromise(handle.resumeOutput());
+      finishTermination.resolve();
+      await expect(termination).rejects.toThrow("node-pty process-tree termination failed");
+      expect(paused).toBe(!ackDuringClose);
+      emitOutput("new output");
+      expect(output).toEqual(ackDuringClose ? [new TextEncoder().encode("new output")] : []);
+
+      if (!ackDuringClose) await Effect.runPromise(handle.resumeOutput());
+      emitOutput("after ACK");
+      expect(output.at(-1)).toEqual(new TextEncoder().encode("after ACK"));
+      await Effect.runPromise(handle.terminate());
+      expect(stopAttempts).toBe(2);
+    },
+  );
+
   test("preserves Windows UTF-8 text output without terminating the PTY", async () => {
     let dataListener: (data: string | Buffer) => void = () => undefined;
     const calls: string[] = [];

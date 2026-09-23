@@ -52,6 +52,7 @@ export const createNodePtyPort = ({
         let receivedOutput = false;
         let cleanupPromise: Promise<void> | null = null;
         let terminating = false;
+        let outputPaused = false;
         const pty = nodePty.spawn(plan.shell, [...plan.args], {
           cols: plan.grid.columns,
           cwd: plan.cwd,
@@ -169,26 +170,57 @@ export const createNodePtyPort = ({
           resize: ({ columns, rows }) => requireOpen("resize", () => pty.resize(columns, rows)),
           pauseOutput: () =>
             Effect.suspend(() =>
-              terminating ? Effect.void : requireOpen("pause", () => pty.pause()),
+              terminating
+                ? Effect.sync(() => {
+                    outputPaused = true;
+                  })
+                : requireOpen("pause", () => {
+                    pty.pause();
+                    outputPaused = true;
+                  }),
             ),
           resumeOutput: () =>
             Effect.suspend(() =>
-              terminating ? Effect.void : requireOpen("resume", () => pty.resume()),
+              terminating
+                ? Effect.sync(() => {
+                    outputPaused = false;
+                  })
+                : requireOpen("resume", () => {
+                    pty.resume();
+                    outputPaused = false;
+                  }),
             ),
           terminate: () =>
             Effect.gen(function* () {
               if (exitPublished) return;
               terminating = true;
-              // node-pty delays onExit until its output stream closes.
-              if (!closed) yield* operation("terminate", () => pty.resume());
-              yield* finalizeExit();
-            }).pipe(
-              Effect.tapError(() =>
-                Effect.sync(() => {
-                  terminating = false;
+              const result = yield* Effect.either(
+                Effect.gen(function* () {
+                  // node-pty delays onExit until its output stream closes.
+                  if (!closed) yield* operation("terminate", () => pty.resume());
+                  yield* finalizeExit();
                 }),
-              ),
-            ),
+              );
+              if (result._tag === "Right") return;
+
+              const restore = yield* Effect.either(
+                operation("terminate", () => {
+                  if (!closed && outputPaused) pty.pause();
+                }),
+              );
+              terminating = false;
+              if (restore._tag === "Left") {
+                return yield* Effect.fail(
+                  new TerminalPtyError({
+                    code: "operation_failed",
+                    operation: "terminate",
+                    message: "node-pty could not restore output pause after termination failed.",
+                    cause: new AggregateError([result.left, restore.left]),
+                  }),
+                );
+              }
+              return yield* Effect.fail(result.left);
+            }),
         };
         return handle;
       },

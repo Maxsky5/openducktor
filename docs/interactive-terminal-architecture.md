@@ -46,6 +46,8 @@ Before an unconfirmed close, the host checks for child processes. With no child,
 
 Electron resumes a paused `node-pty` output stream before it stops the process tree. `node-pty` waits for that stream to close before it reports exit.
 
+If process-tree termination fails while the PTY remains live, Electron restores the host's current output pause request. An ACK or detach during close can clear that request.
+
 The UI hides a tab while close is pending. It restores the tab when confirmation is needed or close fails.
 
 Task close, delete, reset, and merged-worktree cleanup take a terminal cleanup lease. They stop task terminals before dev servers, worktrees, branches, or task records. A terminal failure stops later cleanup. The lease blocks a new task terminal during cleanup.
