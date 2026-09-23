@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import type { WorkspaceActivityBadge } from "./workspace-rail-activity-badges-model";
 
 /**
- * Badge fill, matching the session status dots of the workspace sessions page.
+ * Badge fill for session activity and workspace activity availability.
  *
  * The badges carry no glyph, so the tile states are told apart by color, and
  * the hover text and assistive text of each badge name the state in full.
@@ -13,6 +13,7 @@ const WORKSPACE_ACTIVITY_BADGE_COLORS = {
   inputRequired: "bg-warning-accent",
   error: "bg-destructive",
   active: "inline-flex",
+  unavailable: "bg-info-accent",
 } satisfies Record<WorkspaceActivityBadge["key"], string>;
 
 /**

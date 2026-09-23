@@ -348,6 +348,36 @@ describe("applyWorkspaceActivityEnvelope", () => {
     expect(apply(gapped, sessionSnapshot([])).unavailableReason).toBeNull();
   });
 
+  test("ignores a session-scoped fault without changing the ready projection", () => {
+    const ready = apply(emptyWorkspaceActivityProjection(), sessionSnapshot([snapshot("a")]));
+    const faulted = applyWorkspaceActivityEnvelope(ready, {
+      type: "fault",
+      repoPath,
+      ref: snapshot("a").ref,
+      message: "Codex thread reported a system error.",
+      operation: "codex-live-session.process-event",
+    });
+
+    expect(faulted).toBe(ready);
+    expect(faulted.hasSnapshot).toBe(true);
+    expect(faulted.unavailableReason).toBeNull();
+    expect(badges(faulted)).toEqual({ inputRequired: false, error: false, active: false });
+
+    const unavailable = apply(ready, {
+      type: "fault",
+      repoPath,
+      message: "stream closed",
+    });
+    expect(
+      applyWorkspaceActivityEnvelope(unavailable, {
+        type: "fault",
+        repoPath,
+        ref: snapshot("a").ref,
+        message: "session failed",
+      }),
+    ).toBe(unavailable);
+  });
+
   test("returns the same reference when an envelope changes no badge input", () => {
     const projection = apply(emptyWorkspaceActivityProjection(), sessionSnapshot([snapshot("a")]));
 
