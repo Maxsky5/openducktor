@@ -276,7 +276,11 @@ export const createWorkspaceSessionRuntimePersistence = ({
       const known = yield* find(runtimeRef);
       if (!known) return;
       const plan = yield* planAcceptedMessage(known, runtimeRef, message, false);
-      const renamePending = plan.runtimeRename !== null;
+      // A manual rename saves the new title before its runtime call and holds the title gate
+      // across it, so an observation in that window must not claim the generated title.
+      // The check never waits: the rename holds the gate while it waits for the live
+      // coordinator, so waiting here would deadlock.
+      const renamePending = plan.runtimeRename !== null || sessionTitleGate.isActive(known.ref);
       // A runtime rename cannot run inside the live publication scopes, because the
       // runtime holds its lock until the publication ends. A send completes the rename
       // after the runtime call returns; every other observation defers it to a fiber.

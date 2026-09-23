@@ -214,6 +214,36 @@ describe("Workspace Session persistence through the shared command module", () =
     expect(saved.generatedTitle).toBe("First accepted prompt");
   });
 
+  test("defers an observed first message while a manual rename holds the title gate", async () => {
+    const h = await setup();
+    const workspace = h.workspaceService();
+    const renameTitleReached = await Effect.runPromise(Deferred.make<void>());
+    const releaseRenameTitle = await Effect.runPromise(Deferred.make<void>());
+    let titleCalls = 0;
+    h.state.beforeTitle = Effect.gen(function* () {
+      h.state.failTitle = ++titleCalls === 1;
+      if (titleCalls === 1) {
+        yield* Deferred.succeed(renameTitleReached, undefined);
+        yield* Deferred.await(releaseRenameTitle);
+      }
+    });
+    const renamed = Effect.runPromise(
+      workspace.rename({ workspaceId: "fairnest", sessionId: "session-1", manualTitle: "Renamed" }),
+    );
+    await Effect.runPromise(Deferred.await(renameTitleReached));
+    // The rename saved the temporary manual title and holds the title gate.
+    expect((await h.get()).manualTitle).toBe("Renamed");
+    await h.emit({ ...h.accepted(), sessionRef: h.ref });
+    expect((await h.get()).generatedTitle).toBeNull();
+    await Effect.runPromise(Deferred.succeed(releaseRenameTitle, undefined));
+    await expect(renamed).rejects.toThrow("runtime title update failed");
+    await waitFor(() => h.titleAttempts.length === 2);
+    expect(h.titleAttempts).toEqual(["Renamed", "First accepted prompt"]);
+    const saved = await h.get();
+    expect(saved.manualTitle).toBeNull();
+    expect(saved.generatedTitle).toBe("First accepted prompt");
+  });
+
   test("does not persist rejected sends or model changes and saves an accepted model", async () => {
     const h = await setup();
     h.state.failSend = true;

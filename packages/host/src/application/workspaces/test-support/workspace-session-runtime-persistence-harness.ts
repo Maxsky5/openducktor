@@ -119,6 +119,7 @@ export const createPersistenceHarness = async (database: SqliteTaskStoreTestHarn
   });
   const baseGate = createWorkspaceSessionOperationGate();
   const operationGate: ReturnType<typeof createWorkspaceSessionOperationGate> = {
+    ...baseGate,
     run: (ref, effect) =>
       Effect.sync(() => state.onGateRequest()).pipe(Effect.zipRight(baseGate.run(ref, effect))),
   };
