@@ -371,6 +371,7 @@ export const assembleNodeEffectHostCommandRouter = (
   });
   const hostRouterLifecycle = createNodeHostRouterLifecycle({
     assets,
+    azureDevOpsConnection,
     devServerService,
     imageWorkers: defaultPorts.imageWorkers,
     lifecycleLogger,

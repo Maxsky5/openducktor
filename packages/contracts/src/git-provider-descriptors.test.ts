@@ -147,6 +147,37 @@ describe("Git provider descriptors", () => {
     ).toBe(false);
   });
 
+  test("rejects duplicate Azure DevOps remote names", () => {
+    const repository = {
+      providerId: "azure_devops" as const,
+      deployment: "services" as const,
+      serviceUrl: "https://dev.azure.com",
+      organization: "OpenDucktor",
+      project: "Desktop",
+      name: "app",
+    };
+    const mapping = {
+      remoteName: "origin",
+      fetchUrl: "https://dev.azure.com/OpenDucktor/Desktop/_git/app",
+      pushUrls: ["https://dev.azure.com/OpenDucktor/Desktop/_git/app"],
+      repository,
+    };
+
+    const result = gitProviderConfigSchema.safeParse({
+      id: "azure_devops",
+      enabled: true,
+      repository,
+      remoteMappings: [mapping, { ...mapping }],
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(
+        result.error.issues.some((issue) => issue.path.join(".") === "remoteMappings.1.remoteName"),
+      ).toBe(true);
+    }
+  });
+
   test("validates an Azure DevOps Server service address without rewriting it", () => {
     expect(
       azureDevOpsRepositorySchema.parse({

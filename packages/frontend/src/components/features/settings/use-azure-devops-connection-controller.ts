@@ -174,9 +174,12 @@ export const useAzureDevOpsConnectionController = ({
     retry: false,
     staleTime: 30_000,
   });
-  const connectionState = canManageConnection
-    ? (connectionQuery.data ?? disconnectedConnectionState)
-    : disconnectedConnectionState;
+  const connectionReadFailed = connectionQuery.isError;
+  const connectionState: AzureDevOpsConnectionState = connectionReadFailed
+    ? { status: "error", reason: errorMessage(connectionQuery.error) }
+    : canManageConnection
+      ? (connectionQuery.data ?? disconnectedConnectionState)
+      : disconnectedConnectionState;
   const invalidateProviderContext = useCallback(
     () =>
       queryClient.invalidateQueries({
@@ -186,11 +189,11 @@ export const useAzureDevOpsConnectionController = ({
     [queryClient, selectedRepoPath],
   );
 
+  const pendingAttemptId =
+    connectionState.status === "pending" ? connectionState.deviceCode.attemptId : null;
   useEffect(() => {
-    if (connectionState.status === "pending") {
-      activeAttemptIdRef.current = connectionState.deviceCode.attemptId;
-    }
-  }, [connectionState]);
+    if (pendingAttemptId) activeAttemptIdRef.current = pendingAttemptId;
+  }, [pendingAttemptId]);
 
   useAzureDevOpsConnectionUpdates({
     activeAttemptIdRef,
@@ -227,9 +230,13 @@ export const useAzureDevOpsConnectionController = ({
   return {
     actionError,
     canManageConnection,
+    connectionReadFailed,
     connectionState,
     isMutatingConnection,
     pat,
+    retryConnectionRead() {
+      void connectionQuery.refetch();
+    },
     setPat,
     ...createConnectionActions({
       activeAttemptIdRef,

@@ -26,6 +26,7 @@ const createPendingController = (): ConnectionController => ({
       deployment: "services",
     },
   },
+  connectionReadFailed: false,
   connectionState: {
     status: "pending",
     deviceCode: {
@@ -48,6 +49,7 @@ const createPendingController = (): ConnectionController => ({
   isMutatingConnection: false,
   pat: "",
   providerEnabled: true,
+  retryConnectionRead: mock(() => {}),
   savePat: mock(() => {}),
   setPat: mock(() => {}),
   startSignIn: mock(() => {}),

@@ -52,6 +52,16 @@ describe("Azure DevOps pull request models", () => {
     expect(parsed.targetBranch).toBe("main");
   });
 
+  test("keeps open pull request timestamps stable across reads", () => {
+    const first = parseAzurePullRequest(response("active"), repository, "2026-09-19T12:00:00Z");
+    const second = parseAzurePullRequest(response("active"), repository, "2026-09-19T13:00:00Z");
+
+    expect(first.record.updatedAt).toBe("2026-09-18T10:00:00Z");
+    expect(second.record.updatedAt).toBe(first.record.updatedAt);
+    expect(first.record.lastSyncedAt).toBe("2026-09-19T12:00:00Z");
+    expect(second.record.lastSyncedAt).toBe("2026-09-19T13:00:00Z");
+  });
+
   test("rejects a linked pull request from another provider", () => {
     const linked: PullRequest = {
       providerId: "github",

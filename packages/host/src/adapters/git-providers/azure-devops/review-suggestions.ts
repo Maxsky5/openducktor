@@ -44,7 +44,7 @@ type AzureReviewCommentContent = {
 
 const AZURE_SUGGESTION_BLOCK = /^```suggestion[^\r\n]*\r?\n([\s\S]*?)^```[ \t]*\r?$/gmu;
 
-export const hasAzureSuggestion = (body: string): boolean => {
+const hasAzureSuggestion = (body: string): boolean => {
   AZURE_SUGGESTION_BLOCK.lastIndex = 0;
   return AZURE_SUGGESTION_BLOCK.test(body);
 };

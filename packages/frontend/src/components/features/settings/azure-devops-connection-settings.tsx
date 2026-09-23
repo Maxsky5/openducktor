@@ -25,6 +25,7 @@ type AzureDevOpsConnectionController = Pick<
   | "canManageConnection"
   | "cancelSignIn"
   | "connectionInput"
+  | "connectionReadFailed"
   | "connectionState"
   | "consentGranted"
   | "disconnect"
@@ -33,6 +34,7 @@ type AzureDevOpsConnectionController = Pick<
   | "isMutatingConnection"
   | "pat"
   | "providerEnabled"
+  | "retryConnectionRead"
   | "savePat"
   | "setPat"
   | "startSignIn"
@@ -177,10 +179,18 @@ function ManagedConnection({
   controller,
   disabled,
 }: Pick<AzureDevOpsConnectionSettingsProps, "controller" | "disabled">): ReactElement {
-  const { connectionInput, connectionState, disconnect, isMutatingConnection } = controller;
+  const {
+    connectionInput,
+    connectionReadFailed,
+    connectionState,
+    disconnect,
+    isMutatingConnection,
+    retryConnectionRead,
+  } = controller;
   const canDisconnect = connectionState.status === "connected" && connectionInput !== null;
   const showConnectionActions =
-    connectionState.status !== "connected" || connectionState.account === null;
+    !connectionReadFailed &&
+    (connectionState.status !== "connected" || connectionState.account === null);
 
   return (
     <section
@@ -192,10 +202,18 @@ function ManagedConnection({
           <h4 id="azure-connection-method-heading" className="text-sm font-medium text-foreground">
             Connection method
           </h4>
-          <p className="min-w-0 break-words text-xs text-muted-foreground">
+          <p
+            role={connectionReadFailed ? "alert" : undefined}
+            className="min-w-0 break-words text-xs text-muted-foreground"
+          >
             {connectionStatusText(connectionState)}
           </p>
         </div>
+        {connectionReadFailed ? (
+          <Button type="button" size="sm" variant="outline" onClick={retryConnectionRead}>
+            Retry connection read
+          </Button>
+        ) : null}
         {canDisconnect ? (
           <Button
             type="button"

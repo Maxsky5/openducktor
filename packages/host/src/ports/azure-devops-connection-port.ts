@@ -35,4 +35,5 @@ export type AzureDevOpsConnectionPort = {
     repoConfig: RepoConfig,
     repository: AzureDevOpsRepository,
   ): Effect.Effect<void, HostError>;
+  shutdown(): Effect.Effect<void>;
 };

@@ -1,7 +1,6 @@
 import { PublicClientApplication } from "@azure/msal-node";
-import { PersistenceCachePlugin } from "@azure/msal-node-extensions";
 import { Effect } from "effect";
-import type { HostError } from "../../../effect/host-errors";
+import { type HostError, toHostOperationError } from "../../../effect/host-errors";
 import type { AzureDevOpsProtectedStorage } from "./protected-storage";
 
 const AUTHORITY = "https://login.microsoftonline.com/common";
@@ -24,6 +23,10 @@ export const createAzureDevOpsPublicClient: AzureDevOpsPublicClientFactory = (
 ) =>
   Effect.gen(function* () {
     const persistence = yield* protectedStorage.open(scope, "msal");
+    const { PersistenceCachePlugin } = yield* Effect.tryPromise({
+      try: () => import("@azure/msal-node-extensions"),
+      catch: (cause) => toHostOperationError(cause, "azureDevOps.connection.loadMsalPersistence"),
+    });
     return new PublicClientApplication({
       auth: { clientId, authority: AUTHORITY },
       cache: {

@@ -139,7 +139,15 @@ export const gitProviderConfigSchema = z
         issue(["remoteMappings"], "Azure DevOps remote mappings require a repository.");
       }
       if (azureRepository) {
+        const remoteNames = new Set<string>();
         for (const [index, mapping] of (config.remoteMappings ?? []).entries()) {
+          if (remoteNames.has(mapping.remoteName)) {
+            issue(
+              ["remoteMappings", index, "remoteName"],
+              "Each Azure DevOps remote mapping must use a different remote name.",
+            );
+          }
+          remoteNames.add(mapping.remoteName);
           if (!sameAzureRepository(mapping.repository, azureRepository)) {
             issue(
               ["remoteMappings", index, "repository"],

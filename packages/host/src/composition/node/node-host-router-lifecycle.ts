@@ -10,6 +10,7 @@ import type { TerminalService } from "../../application/terminals/terminal-servi
 import type { DisposableDevServerService } from "../../application/dev-servers/dev-server-service-types";
 import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
+import type { AzureDevOpsConnectionPort } from "../../ports/azure-devops-connection-port";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
 import {
   createStopDevServersStep,
@@ -29,6 +30,7 @@ export type NodeHostRouterLifecycle = {
 
 export const createNodeHostRouterLifecycle = ({
   assets,
+  azureDevOpsConnection,
   devServerService,
   imageWorkers,
   lifecycleLogger,
@@ -40,6 +42,7 @@ export const createNodeHostRouterLifecycle = ({
   terminalService,
 }: {
   assets: { taskStoreConnectionShutdownStep: HostShutdownStep };
+  azureDevOpsConnection?: Pick<AzureDevOpsConnectionPort, "shutdown"> | undefined;
   devServerService: DisposableDevServerService;
   imageWorkers: Pick<GeneratedImageWorkers, "shutdown">;
   lifecycleLogger: HostLifecycleLogger;
@@ -103,6 +106,9 @@ export const createNodeHostRouterLifecycle = ({
           runShutdownSteps(
             [
               { label: "pull request sync loop", run: stopPullRequestSyncLoop },
+              ...(azureDevOpsConnection
+                ? [{ label: "Azure DevOps sign-in", run: () => azureDevOpsConnection.shutdown() }]
+                : []),
               { label: "image workers", run: () => imageWorkers.shutdown },
               createStopTerminalsStep(terminalService),
               createStopDevServersStep(devServerService, lifecycleLogger),

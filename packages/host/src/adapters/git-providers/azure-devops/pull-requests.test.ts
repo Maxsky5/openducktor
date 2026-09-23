@@ -67,6 +67,7 @@ const pullRequestResponse = (number: number) => ({
 });
 
 const connection: AzureDevOpsConnectionPort = {
+  shutdown: () => Effect.void,
   getAuthorization: () => Effect.succeed({ headerValue: "Bearer secret", account: null }),
   getState: () => Effect.dieMessage("unexpected connection state"),
   replacePat: () => Effect.dieMessage("unexpected PAT replacement"),

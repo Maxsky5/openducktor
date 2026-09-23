@@ -1134,4 +1134,78 @@ describe("settings git sections", () => {
       host.workspaceReplaceAzureDevOpsPat = originalReplacePat;
     }
   });
+
+  test("shows an Azure connection read failure without offering a new sign-in", async () => {
+    const azureRepoConfig: SettingsRepoConfig = {
+      ...baseRepoConfig,
+      git: {
+        provider: {
+          id: "azure_devops",
+          enabled: true,
+          autoDetected: false,
+          repository: {
+            providerId: "azure_devops",
+            deployment: "services",
+            serviceUrl: "https://dev.azure.com",
+            organization: "OpenDucktor",
+            project: "Desktop",
+            name: "app",
+          },
+        },
+      },
+    };
+    const originalGetConnection = host.workspaceGetAzureDevOpsConnection;
+    let failRead = true;
+    host.workspaceGetAzureDevOpsConnection = async () => {
+      if (failRead) throw new Error("Credential store unavailable");
+      return { status: "disconnected" };
+    };
+    const rendered = render(
+      createElement(
+        QueryProvider,
+        { useIsolatedClient: true },
+        createElement(RepositoryGitSection, {
+          selectedRepoPath: "/repo",
+          selectedRepoConfig: azureRepoConfig,
+          providerState: {
+            status: "loaded",
+            context: {
+              descriptor: AZURE_DEVOPS_PROVIDER_DESCRIPTOR,
+              config: azureRepoConfig.git.provider!,
+              health: {
+                providerId: "azure_devops",
+                enabled: true,
+                available: false,
+                reason: "Not connected.",
+                executablePath: null,
+                version: null,
+                authenticated: false,
+                account: null,
+                repositoryMappingValid: true,
+              },
+            },
+          },
+          disabled: false,
+          onDetectGithubRepository: async () => null,
+          onUpdateSelectedRepoConfig: () => azureRepoConfig,
+        }),
+      ),
+    );
+
+    try {
+      await waitFor(() =>
+        expect(rendered.container.textContent).toContain("Credential store unavailable"),
+      );
+      expect(screen.getByRole("button", { name: "Retry connection read" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Sign in with Microsoft" })).toBeNull();
+      failRead = false;
+      fireEvent.click(screen.getByRole("button", { name: "Retry connection read" }));
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "Sign in with Microsoft" })).toBeTruthy(),
+      );
+    } finally {
+      rendered.unmount();
+      host.workspaceGetAzureDevOpsConnection = originalGetConnection;
+    }
+  });
 });

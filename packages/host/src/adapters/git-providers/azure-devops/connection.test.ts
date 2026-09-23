@@ -22,6 +22,11 @@ const repoConfig = repoConfigSchema.parse({
   repoPath: "/repo",
   git: { provider: { id: "azure_devops", enabled: true, repository } },
 });
+const repositoryResponse = (configured: AzureDevOpsRepository = repository) => ({
+  id: "repository-1",
+  name: configured.name,
+  project: { id: "project-1", name: configured.project },
+});
 
 describe("Azure DevOps connection", () => {
   test("rejects a mixed-case HTTP Server address before sending the PAT", async () => {
@@ -65,7 +70,9 @@ describe("Azure DevOps connection", () => {
     };
     const fetchImplementation = mock(async (_input: string | URL | Request, init?: RequestInit) => {
       const header = new Headers(init?.headers).get("Authorization");
-      return new Response(null, { status: header === `Basic ${btoa(":working")}` ? 200 : 401 });
+      return Response.json(repositoryResponse(), {
+        status: header === `Basic ${btoa(":working")}` ? 200 : 401,
+      });
     });
     const connection = createAzureDevOpsConnectionAdapter({
       clientId: undefined,
@@ -83,6 +90,30 @@ describe("Azure DevOps connection", () => {
       headerValue: `Basic ${btoa(":working")}`,
       account: null,
     });
+  });
+
+  test.each([
+    ["a generic success page", new Response("OK", { status: 200 })],
+    ["another repository", Response.json(repositoryResponse({ ...repository, name: "other" }))],
+  ])("does not save a PAT when Azure returns %s", async (_description, response) => {
+    const save = mock(async (_contents: string) => undefined);
+    const connection = createAzureDevOpsConnectionAdapter({
+      clientId: undefined,
+      protectedStorage: {
+        open: () =>
+          Effect.succeed({
+            save,
+            load: async () => null,
+            delete: async () => false,
+          } as unknown as IPersistence),
+      },
+      fetchImplementation: mock(async () => response) as unknown as typeof fetch,
+    });
+
+    await expect(
+      Effect.runPromise(connection.replacePat(repoConfig, repository, "secret")),
+    ).rejects.toThrow();
+    expect(save).not.toHaveBeenCalled();
   });
 
   test("uses a PAT for Azure DevOps Services without Microsoft sign-in", async () => {
@@ -111,7 +142,7 @@ describe("Azure DevOps connection", () => {
     };
     const fetchImplementation = mock(async (_input: string | URL | Request, init?: RequestInit) => {
       expect(new Headers(init?.headers).get("Authorization")).toBe(`Basic ${btoa(":secret")}`);
-      return new Response(null, { status: 200 });
+      return Response.json(repositoryResponse(servicesRepository));
     });
     const connection = createAzureDevOpsConnectionAdapter({
       clientId: undefined,
@@ -251,6 +282,111 @@ describe("Azure DevOps connection", () => {
     expect(events).toEqual([]);
   });
 
+  test("stops pending Microsoft sign-in before host shutdown completes", async () => {
+    const cloudRepository: AzureDevOpsRepository = {
+      ...repository,
+      deployment: "services",
+      serviceUrl: "https://dev.azure.com",
+      organization: "OpenDucktor",
+    };
+    const cloudRepoConfig = repoConfigSchema.parse({
+      ...repoConfig,
+      git: { provider: { id: "azure_devops", enabled: true, repository: cloudRepository } },
+    });
+    const records = new Map<string, string>();
+    const tokenResult = Promise.withResolvers<AuthenticationResult | null>();
+    const events: unknown[] = [];
+    const connection = createAzureDevOpsConnectionAdapter({
+      clientId: "client-id",
+      protectedStorage: {
+        open: (scope, record) =>
+          Effect.succeed({
+            save: async (contents: string) => void records.set(`${scope}:${record}`, contents),
+            load: async () => records.get(`${scope}:${record}`) ?? null,
+            delete: async () => records.delete(`${scope}:${record}`),
+          } as IPersistence),
+      },
+      publishConnectionState: (event) => events.push(event),
+      publicClientFactory: () =>
+        Effect.succeed({
+          getAllAccounts: async () => [],
+          acquireTokenSilent: async () => null,
+          acquireTokenByDeviceCode: async (request: DeviceCodeRequest) => {
+            request.deviceCodeCallback?.({
+              verificationUri: "https://microsoft.com/devicelogin",
+              userCode: "CODE",
+              expiresIn: 900,
+            } as never);
+            return tokenResult.promise as never;
+          },
+        } as never),
+    });
+
+    await Effect.runPromise(connection.startCloudSignIn(cloudRepoConfig, cloudRepository));
+    await Effect.runPromise(connection.shutdown());
+    tokenResult.resolve({
+      account: { homeAccountId: "account-1", username: "ada@example.test" },
+    } as never);
+    await Promise.resolve();
+
+    expect([...records.keys()].filter((key) => key.endsWith(":connection"))).toEqual([]);
+    expect(events).toEqual([]);
+  });
+
+  test("clears a failed Microsoft sign-in after a valid cloud PAT is saved", async () => {
+    const cloudRepository: AzureDevOpsRepository = {
+      ...repository,
+      deployment: "services",
+      serviceUrl: "https://dev.azure.com",
+      organization: "OpenDucktor",
+    };
+    const cloudRepoConfig = repoConfigSchema.parse({
+      ...repoConfig,
+      git: { provider: { id: "azure_devops", enabled: true, repository: cloudRepository } },
+    });
+    const records = new Map<string, string>();
+    const failure = Promise.withResolvers<void>();
+    const connection = createAzureDevOpsConnectionAdapter({
+      clientId: "client-id",
+      protectedStorage: {
+        open: (scope, record) =>
+          Effect.succeed({
+            save: async (contents: string) => void records.set(`${scope}:${record}`, contents),
+            load: async () => records.get(`${scope}:${record}`) ?? null,
+            delete: async () => records.delete(`${scope}:${record}`),
+          } as IPersistence),
+      },
+      fetchImplementation: mock(async () =>
+        Response.json(repositoryResponse(cloudRepository)),
+      ) as unknown as typeof fetch,
+      publishConnectionState: () => failure.resolve(),
+      publicClientFactory: () =>
+        Effect.succeed({
+          getAllAccounts: async () => [],
+          acquireTokenSilent: async () => null,
+          acquireTokenByDeviceCode: async (request: DeviceCodeRequest) => {
+            request.deviceCodeCallback?.({
+              verificationUri: "https://microsoft.com/devicelogin",
+              userCode: "CODE",
+              expiresIn: 900,
+            } as never);
+            throw new Error("sign-in denied");
+          },
+        } as never),
+    });
+
+    await Effect.runPromise(connection.startCloudSignIn(cloudRepoConfig, cloudRepository));
+    await failure.promise;
+    await Effect.runPromise(connection.replacePat(cloudRepoConfig, cloudRepository, "secret"));
+
+    await expect(
+      Effect.runPromise(connection.getState(cloudRepoConfig, cloudRepository)),
+    ).resolves.toEqual({
+      status: "connected",
+      account: null,
+    });
+  });
+
   test("does not restore a PAT replacement that was in flight when disconnect started", async () => {
     const records = new Map<string, string>();
     const operations: string[] = [];
@@ -274,7 +410,7 @@ describe("Azure DevOps connection", () => {
     });
     const fetchImplementation = mock(async () => {
       await validation;
-      return new Response(null, { status: 200 });
+      return Response.json(repositoryResponse());
     });
     const connection = createAzureDevOpsConnectionAdapter({
       clientId: undefined,

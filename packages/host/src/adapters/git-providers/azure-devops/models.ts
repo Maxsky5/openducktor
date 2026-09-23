@@ -67,7 +67,8 @@ export const parseAzurePullRequest = (
     url,
     state,
     createdAt,
-    updatedAt: closedAt ?? observedAt,
+    updatedAt: closedAt ?? createdAt,
+    lastSyncedAt: observedAt,
   };
   if (state === "merged" && closedAt) pullRequest.mergedAt = closedAt;
   if (state === "closed_unmerged" && closedAt) pullRequest.closedAt = closedAt;
@@ -106,7 +107,7 @@ export const requireAzureLinkedRepository = (
 export const headRef = (branch: string): string =>
   branch.startsWith("refs/heads/") ? branch : `refs/heads/${branch}`;
 
-export const stripHeadRef = (branch: string): string =>
+const stripHeadRef = (branch: string): string =>
   branch.startsWith("refs/heads/") ? branch.slice("refs/heads/".length) : branch;
 
 export const requireRecord = (

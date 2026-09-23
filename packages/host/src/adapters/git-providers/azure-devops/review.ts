@@ -441,7 +441,7 @@ const aggregateChecks = (checks: PullRequestReviewCheck[]): PullRequestReviewAgg
     return "unknown";
   }
   const applicable = checks.filter((check) => check.conclusion !== "skipped");
-  if (applicable.every((check) => check.conclusion === "neutral")) {
+  if (applicable.length > 0 && applicable.every((check) => check.conclusion === "neutral")) {
     return "neutral";
   }
   return applicable.every((check) => check.conclusion === "success") ? "success" : "unknown";

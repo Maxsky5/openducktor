@@ -71,8 +71,6 @@ export const createAzureDevOpsRepositoryAdapter = ({
   } satisfies GitProviderRepositoryPort<AzureDevOpsRepository>;
 };
 
-export const configuredAzureDevOpsRepository = configuredRepository;
-
 function configuredRepository(repoConfig: RepoConfig) {
   return Effect.gen(function* () {
     const provider = repoConfig.git.provider;

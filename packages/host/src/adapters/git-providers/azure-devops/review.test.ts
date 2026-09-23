@@ -214,6 +214,26 @@ describe("Azure DevOps review adapter", () => {
     expect(context).toMatchObject({ status: "loaded", aggregateStatus: "unknown", checks: [] });
   });
 
+  test("treats a list of skipped Azure policies as successful", async () => {
+    const port = createAzureDevOpsReviewPort({
+      repositoryPort: reviewRepositoryPort,
+      client: reviewClient({
+        policies: [
+          {
+            status: "notApplicable",
+            configuration: { id: 1, type: { displayName: "Skipped policy" } },
+          },
+        ],
+      }),
+    });
+
+    const context = await Effect.runPromise(
+      port.readContext({ repoConfig, linkedPullRequest: pullRequest }),
+    );
+
+    expect(context).toMatchObject({ status: "loaded", aggregateStatus: "success" });
+  });
+
   test("maps Azure code suggestions to the shared suggestion patch model", async () => {
     const originalLine =
       '      "serverError": "Erreur du serveur de connexion. Veuillez réessayer.",';

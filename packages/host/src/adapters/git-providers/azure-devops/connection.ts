@@ -12,7 +12,7 @@ import {
   azureDevOpsRepositoryKey,
 } from "@openducktor/core";
 import { type AccountInfo, type DeviceCodeRequest } from "@azure/msal-node";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
 import {
   HostOperationError,
   type HostError,
@@ -23,6 +23,7 @@ import {
 import type { AzureDevOpsConnectionPort } from "../../../ports/azure-devops-connection-port";
 import { loadConnection, saveConnection } from "./connection-storage";
 import { createAzureDevOpsConnectionScopeGate } from "./connection-scope-gate";
+import { validatePat } from "./pat-validation";
 import type { AzureDevOpsProtectedStorage } from "./protected-storage";
 import {
   createAzureDevOpsPublicClient,
@@ -30,12 +31,11 @@ import {
 } from "./public-client";
 
 const AZURE_DEVOPS_SCOPE = "499b84ac-1321-427f-aa17-267ca6975798/.default";
-const REQUEST_TIMEOUT = "30 seconds";
-
 type SignInAttempt = {
   request: DeviceCodeRequest;
   scope: string;
   cancelled: boolean;
+  fiber?: Fiber.RuntimeFiber<void, never>;
 };
 
 export const createAzureDevOpsConnectionAdapter = ({
@@ -75,12 +75,15 @@ export const createAzureDevOpsConnectionAdapter = ({
   };
 
   const cancelScopeAttempts = (scope: string) =>
-    Effect.sync(() => {
+    Effect.gen(function* () {
+      const fibers: Fiber.RuntimeFiber<void, never>[] = [];
       for (const [attemptId, attempt] of attempts) {
         if (attempt.scope === scope) {
           cancelAttempt(attemptId, attempt);
+          if (attempt.fiber) fibers.push(attempt.fiber);
         }
       }
+      yield* Effect.forEach(fibers, (fiber) => Fiber.interrupt(fiber), { discard: true });
     });
 
   const getAuthorization: AzureDevOpsConnectionPort["getAuthorization"] = (
@@ -202,6 +205,7 @@ export const createAzureDevOpsConnectionAdapter = ({
               kind: "server_pat",
               pat: value,
             });
+            errorsByScope.delete(scope);
           }),
         );
       });
@@ -245,8 +249,8 @@ export const createAzureDevOpsConnectionAdapter = ({
           };
           attempt = { request, scope, cancelled: false };
           attempts.set(attemptId, attempt);
-          const persistence = Effect.runPromise(
-            scopeGate.run(
+          const persistence = scopeGate
+            .run(
               scope,
               Effect.gen(function* () {
                 yield* scopeGate.requireCurrent(scope, generation);
@@ -275,59 +279,69 @@ export const createAzureDevOpsConnectionAdapter = ({
                 yield* scopeGate.requireCurrent(scope, generation);
                 return account;
               }),
-            ),
-          );
-          void persistence
-            .then((account) => {
-              if (attempt.cancelled || attempts.get(attemptId) !== attempt) {
-                return;
-              }
-              if (!account) {
-                return;
-              }
-              attempts.delete(attemptId);
-              clearPendingAttempt(attemptId, scope);
-              errorsByScope.delete(scope);
-              publishConnectionState?.(
-                connectionUpdate(repoConfig, repository, attemptId, {
-                  status: "connected",
-                  account: accountLabel(account),
-                }),
-              );
-            })
-            .catch((cause: unknown) => {
-              if (attempt.cancelled || attempts.get(attemptId) !== attempt) {
-                return;
-              }
-              attempts.delete(attemptId);
-              clearPendingAttempt(attemptId, scope);
-              const message = `Microsoft Entra sign-in failed: ${errorMessage(cause)}`;
-              errorsByScope.set(scope, message);
-              publishConnectionState?.(
-                connectionUpdate(repoConfig, repository, attemptId, {
-                  status: "error",
-                  reason: message,
-                }),
-              );
-              if (!codeReturned) {
-                resume(
-                  Effect.fail(
-                    toHostOperationError(cause, "azureDevOps.connection.startSignIn", {
-                      message,
+            )
+            .pipe(
+              Effect.tap((account) =>
+                Effect.sync(() => {
+                  if (attempt.cancelled || attempts.get(attemptId) !== attempt || !account) return;
+                  attempts.delete(attemptId);
+                  clearPendingAttempt(attemptId, scope);
+                  errorsByScope.delete(scope);
+                  publishConnectionState?.(
+                    connectionUpdate(repoConfig, repository, attemptId, {
+                      status: "connected",
+                      account: accountLabel(account),
                     }),
-                  ),
-                );
-              }
-            });
+                  );
+                }),
+              ),
+              Effect.catchAll((cause) =>
+                Effect.sync(() => {
+                  if (attempt.cancelled || attempts.get(attemptId) !== attempt) return;
+                  attempts.delete(attemptId);
+                  clearPendingAttempt(attemptId, scope);
+                  const message = `Microsoft Entra sign-in failed: ${errorMessage(cause)}`;
+                  errorsByScope.set(scope, message);
+                  publishConnectionState?.(
+                    connectionUpdate(repoConfig, repository, attemptId, {
+                      status: "error",
+                      reason: message,
+                    }),
+                  );
+                  if (!codeReturned) {
+                    resume(
+                      Effect.fail(
+                        toHostOperationError(cause, "azureDevOps.connection.startSignIn", {
+                          message,
+                        }),
+                      ),
+                    );
+                  }
+                }),
+              ),
+              Effect.asVoid,
+            );
+          attempt.fiber = Effect.runFork(persistence);
         });
       });
     },
     cancelCloudSignIn(attemptId) {
-      return Effect.sync(() => {
+      return Effect.gen(function* () {
         const attempt = attempts.get(attemptId);
         if (attempt) {
           cancelAttempt(attemptId, attempt);
+          if (attempt.fiber) yield* Fiber.interrupt(attempt.fiber);
         }
+      });
+    },
+    shutdown() {
+      return Effect.gen(function* () {
+        const fibers: Fiber.RuntimeFiber<void, never>[] = [];
+        for (const [attemptId, attempt] of attempts) {
+          cancelAttempt(attemptId, attempt);
+          if (attempt.fiber) fibers.push(attempt.fiber);
+        }
+        yield* Effect.forEach(fibers, (fiber) => Fiber.interrupt(fiber), { discard: true });
       });
     },
     disconnect(repoConfig, repository) {
@@ -429,60 +443,3 @@ const tryMsal = <T>(operation: () => Promise<T>, label: string) =>
 
 const accountLabel = (account: AccountInfo): string | null =>
   account.username || account.name || null;
-
-const validatePat = (
-  fetchImplementation: typeof fetch,
-  repository: AzureDevOpsRepository,
-  pat: string,
-) =>
-  Effect.gen(function* () {
-    const base = `${azureDevOpsCollectionUrl(repository)}/${encodeURIComponent(repository.project)}`;
-    const url = new URL(`${base}/_apis/git/repositories/${encodeURIComponent(repository.name)}`);
-    url.searchParams.set("api-version", "7.0");
-    const response = yield* Effect.tryPromise({
-      try: (signal) =>
-        fetchImplementation(url, {
-          redirect: "manual",
-          signal,
-          headers: {
-            Accept: "application/json",
-            Authorization: `Basic ${Buffer.from(`:${pat}`).toString("base64")}`,
-          },
-        }),
-      catch: (cause) =>
-        new HostOperationError({
-          operation: "azureDevOps.connection.validatePat",
-          message:
-            "Azure DevOps PAT validation failed before the service returned a response. Check the service address, network, and TLS certificate.",
-          cause,
-        }),
-    }).pipe(
-      Effect.timeoutFail({
-        duration: REQUEST_TIMEOUT,
-        onTimeout: () =>
-          new HostOperationError({
-            operation: "azureDevOps.connection.validatePat",
-            message: `Azure DevOps PAT validation timed out after ${REQUEST_TIMEOUT}. Check the service address and network. The prior connection remains active.`,
-          }),
-      }),
-    );
-    if (response.status >= 300 && response.status < 400) {
-      return yield* Effect.fail(
-        new HostOperationError({
-          operation: "azureDevOps.connection.validatePat",
-          message:
-            "Azure DevOps PAT validation returned an unexpected redirect. Check the configured service address.",
-          details: { status: response.status },
-        }),
-      );
-    }
-    if (!response.ok) {
-      return yield* Effect.fail(
-        new HostOperationError({
-          operation: "azureDevOps.connection.validatePat",
-          message: `Azure DevOps rejected the replacement PAT with HTTP ${response.status}. The prior connection remains active.`,
-          details: { status: response.status },
-        }),
-      );
-    }
-  });
