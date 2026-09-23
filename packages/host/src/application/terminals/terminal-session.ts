@@ -11,6 +11,7 @@ export type TerminalSession = {
   resources: TerminalSessionResources;
   output: TerminalSessionOutput;
   screen: TerminalScreenState;
+  screenReleaseStarted: boolean;
   operations: Effect.Semaphore;
 };
 
@@ -66,6 +67,7 @@ export const createTerminalSession = ({
     resources: new TerminalSessionResources(shell, titleTracker),
     output: new TerminalSessionOutput(summary.terminalId, replayByteLimit, () => screen.snapshot()),
     screen,
+    screenReleaseStarted: false,
     operations,
   };
 };
@@ -97,9 +99,11 @@ export const markTerminalOverflowed = (session: TerminalSession): boolean => {
   return session.output.markOverflowed();
 };
 
-export const disposeTerminalSession = (session: TerminalSession, releaseScreen = false): void => {
+export const forgetTerminalSession = (session: TerminalSession): void => {
   session.resources.dispose();
-  if (releaseScreen) void session.screen.drained().then(() => session.screen.dispose());
+  if (session.screenReleaseStarted) return;
+  session.screenReleaseStarted = true;
+  void session.screen.drained().then(() => session.screen.dispose());
 };
 
 export const exitTerminalSession = (
@@ -111,7 +115,7 @@ export const exitTerminalSession = (
   }: { exitCode: number | null; signal: string | null; exitedAt: string },
 ): boolean => {
   if (session.summary.lifecycle === "exited") return false;
-  disposeTerminalSession(session);
+  session.resources.dispose();
   session.summary.lifecycle = "exited";
   session.summary.exit = {
     exitCode,

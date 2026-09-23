@@ -32,13 +32,13 @@ The host adds an output consumer before it sends the attachment snapshot. The sn
 
 The renderer records the last sequence written to xterm. It sends ACK only after the xterm write callback finishes. On another attach, it sends that sequence so the host sends only missing output.
 
-The host mirrors PTY output in a bounded headless xterm screen. If the host dropped the requested bytes, it sends `screen_restore` with the current screen, grid, and unfinished control state. The renderer resets xterm, applies that screen, and then applies later output. Old scrollback may be missing. During first attach, keep xterm hidden until it reaches the snapshot boundary. The restore reads xterm's current cursor, saved cursor, colors, tab stops, and scroll region. It uses one version-pinned internal xterm adapter for fields that the public serializer omits. The host drops the body of an unfinished long OSC or DCS string but keeps its parser state, so later bytes cannot appear as screen text.
+The host mirrors PTY output in a bounded headless xterm screen. If the host dropped the requested bytes, it sends `screen_restore` with the current screen, grid, and unfinished control state. The renderer resets xterm, applies that screen, and then applies later output. Old scrollback may be missing. During first attach, keep xterm hidden until it reaches the snapshot boundary. The restore reads xterm's current cursor, saved cursor, colors, character sets, tab stops, and scroll region. It uses one version-pinned internal xterm adapter for fields that the public serializer omits. The host drops the body of an unfinished long OSC or DCS string but keeps its parser state, so later bytes cannot appear as screen text.
 
 Replay, unacknowledged output, and screen parsing have byte limits. A protocol frame can hold up to 8 MiB. `node-pty` can pause and resume. An adapter that cannot pause, such as Bun PTY, sends overflow and stops the terminal. If a screen cannot fit in one protocol frame, attach fails with an error instead of showing a wrong screen.
 
 The host reconciles a late PTY pause after an ACK or detach has resumed output. This keeps a live terminal from staying paused after the renderer catches up or leaves.
 
-The frontend reconnects the frame transport and attaches mounted terminals again. A transport loss removes attachments, not the PTY. If the host instance changes, old tabs become lost. A stale attach gets `terminal_forgotten`. Do not recreate a lost terminal.
+The frontend reconnects the frame transport and attaches mounted terminals again. The web transport waits for socket drain before it attaches another terminal after backpressure. A failed socket send fails the attachment. A transport loss removes attachments, not the PTY. If the host instance changes, old tabs become lost. A stale attach gets `terminal_forgotten`. Do not recreate a lost terminal.
 
 ## Close and clean up
 

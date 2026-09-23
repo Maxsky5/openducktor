@@ -62,8 +62,18 @@ export class TerminalScreenState {
   snapshot(): TerminalScreenSnapshot {
     if (this.writing || this.nextOperation < this.operations.length)
       throw new TerminalScreenBusyError();
+    const screen = this.serializer.serialize({ scrollback: 0 }) || "\u001b[0m";
+    const normalPrelude = this.tail.normalPrelude(this.terminal);
+    const alternateStart = "\u001b[?1049h";
+    const alternateIndex = normalPrelude ? screen.indexOf(alternateStart) : -1;
+    if (normalPrelude && alternateIndex < 0)
+      throw new Error(
+        "Terminal alternate screen state is unavailable. Resize the terminal and reconnect.",
+      );
     const serialized = new TextEncoder().encode(
-      this.serializer.serialize({ scrollback: 0 }) || "\u001b[0m",
+      alternateIndex < 0
+        ? screen
+        : screen.slice(0, alternateIndex) + normalPrelude + screen.slice(alternateIndex),
     );
     const suffix = this.tail.suffix(this.terminal);
     const payload = new Uint8Array(serialized.byteLength + suffix.byteLength);

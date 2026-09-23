@@ -4,7 +4,7 @@ import { TERMINAL_LIMITS } from "./terminal-limits";
 import { TerminalServiceError } from "./terminal-service-error";
 import {
   beginTerminalClose,
-  disposeTerminalSession,
+  forgetTerminalSession,
   exitTerminalSession,
   isLiveTerminal,
   markTerminalCloseFailed,
@@ -108,7 +108,7 @@ export const createTerminalSessionLifecycle = ({
       Math.max(0, exited.length - TERMINAL_LIMITS.retainedExited),
     );
     for (const session of new Set([...expired, ...overCapacity])) {
-      disposeTerminalSession(session, true);
+      forgetTerminalSession(session);
       applyStreamEvents(
         session,
         session.output.publish({
@@ -164,7 +164,10 @@ export const createTerminalSessionLifecycle = ({
     for (const event of events) {
       if (event.type === "overflow") {
         terminateForOverflow(session);
-      } else if (event.type === "attachments_empty" && session.resources.handle) {
+      } else if (
+        event.type === "resume_requested" ||
+        (event.type === "attachments_empty" && session.resources.handle)
+      ) {
         Effect.runFork(
           session.output.resumeIfUnblocked(session.resources.handle).pipe(
             Effect.tap((resumeEvents) =>
@@ -238,7 +241,7 @@ export const createTerminalSessionLifecycle = ({
           terminalId,
         }),
       );
-      disposeTerminalSession(session, true);
+      forgetTerminalSession(session);
       sessions.delete(terminalId);
     });
 

@@ -38,7 +38,8 @@ export type TerminalSessionAttachInput = {
 export type TerminalOutputEvent =
   | { type: "attachments_empty" }
   | { type: "overflow" }
-  | { type: "pause_requested" };
+  | { type: "pause_requested" }
+  | { type: "resume_requested" };
 
 export type TerminalOutputEvents = TerminalOutputEvent[];
 
@@ -90,10 +91,6 @@ export class TerminalSessionOutput {
 
   get earliestRetainedSequence(): number {
     return this.replay[0]?.sequenceStart ?? this.sequence;
-  }
-
-  get needsScreenFlush(): boolean {
-    return this.screenFlushPending;
   }
 
   attach(
@@ -174,8 +171,13 @@ export class TerminalSessionOutput {
   }
 
   updateParserBacklog(bytes: number, handle: TerminalPtyHandle | null): TerminalOutputEvents {
+    const wasBacklogged = this.parserPendingBytes > TERMINAL_LIMITS.resumeOutputBytes;
     this.parserPendingBytes = bytes;
-    return bytes >= TERMINAL_LIMITS.pendingOutputBytes ? this.requestPause(handle) : [];
+    const pressure = bytes >= TERMINAL_LIMITS.pendingOutputBytes ? this.requestPause(handle) : [];
+    const canResume =
+      (wasBacklogged && bytes <= TERMINAL_LIMITS.resumeOutputBytes) ||
+      (this.screenFlushPending && bytes === 0);
+    return canResume ? mergeEvents(pressure, event("resume_requested")) : pressure;
   }
 
   acknowledge(attachmentId: string, sequenceEnd: number): void {
