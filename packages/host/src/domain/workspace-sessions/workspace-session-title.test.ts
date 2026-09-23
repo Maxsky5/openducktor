@@ -52,15 +52,15 @@ test("limits titles at a word boundary with a complete ellipsis", () => {
 });
 
 test("retains exact-limit titles and safely cuts long single words and emoji", () => {
-  expect(buildWorkspaceSessionTitle(message([{ kind: "text", text: "a".repeat(40) }]))).toBe(
-    "a".repeat(40),
-  );
-  expect(buildWorkspaceSessionTitle(message([{ kind: "text", text: "a".repeat(41) }]))).toBe(
-    `${"a".repeat(39)}…`,
-  );
-  expect(buildWorkspaceSessionTitle(message([{ kind: "text", text: "😀".repeat(25) }]))).toBe(
-    `${"😀".repeat(19)}…`,
-  );
+  const exact = buildWorkspaceSessionTitle(message([{ kind: "text", text: "a".repeat(40) }]));
+  expect(exact).toBe("a".repeat(40));
+  expect(exact!.length).toBe(40);
+  const singleWord = buildWorkspaceSessionTitle(message([{ kind: "text", text: "a".repeat(41) }]));
+  expect(singleWord).toBe(`${"a".repeat(39)}…`);
+  expect(singleWord!.length).toBe(40);
+  const emoji = buildWorkspaceSessionTitle(message([{ kind: "text", text: "😀".repeat(25) }]));
+  expect(emoji).toBe(`${"😀".repeat(19)}…`);
+  expect(emoji!.length).toBeLessThanOrEqual(40);
 });
 
 test("does not invent a title for empty visible content", () => {

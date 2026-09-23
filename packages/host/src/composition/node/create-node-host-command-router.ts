@@ -144,6 +144,8 @@ export const assembleNodeEffectHostCommandRouter = (
     workspaceSettingsService,
   });
   const { startupSweep, taskAssetReadService, taskAssetStagingService, taskStore } = assets;
+  // The live state service and the persistence depend on each other, so the title
+  // callback resolves the service at call time.
   const workspaceSessions = createNodeWorkspaceSessionPersistence({
     store: assets.workspaceSessionStore,
     settings: workspaceSettingsService,

@@ -32,11 +32,11 @@ describe("Agent Session scope presentation", () => {
   });
 
   test("adds the scope title to a value and leaves the value unchanged without one", () => {
-    expect(
-      withAgentSessionTitle({ kind: "repository" }, { kind: "repository", title: "My session" }),
-    ).toEqual({ kind: "repository", title: "My session" });
-    expect(withAgentSessionTitle({ kind: "repository" }, { kind: "repository" })).toEqual({
-      kind: "repository",
-    });
+    const value = { kind: "repository" } as const;
+    const titled = withAgentSessionTitle(value, { kind: "repository", title: "My session" });
+    expect(titled).toEqual({ kind: "repository", title: "My session" });
+    expect(titled).not.toBe(value);
+    expect(value).toEqual({ kind: "repository" });
+    expect(withAgentSessionTitle(value, { kind: "repository" })).toBe(value);
   });
 });
