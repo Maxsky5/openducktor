@@ -7,7 +7,7 @@ const WORKSPACE_ACTIVITY_LABELS = {
   unavailable: "Session activity unavailable",
 } as const;
 
-type WorkspaceActivityBadgeKey = "inputRequired" | "error" | "active";
+type WorkspaceActivityBadgeKey = "inputRequired" | "error" | "active" | "unavailable";
 
 export type WorkspaceActivityBadge = {
   key: WorkspaceActivityBadgeKey;
@@ -24,7 +24,7 @@ export const workspaceActivityBadges = (
   }
   if (activity.kind === "unavailable") {
     return [
-      { key: "error", label: `${WORKSPACE_ACTIVITY_LABELS.unavailable}: ${activity.reason}` },
+      { key: "unavailable", label: `${WORKSPACE_ACTIVITY_LABELS.unavailable}: ${activity.reason}` },
     ];
   }
 

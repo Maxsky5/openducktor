@@ -116,6 +116,9 @@ export const applyWorkspaceActivityEnvelope = (
   }
 
   if (envelope.type === "fault") {
+    if (envelope.ref) {
+      return current;
+    }
     return withUnavailableReason(current, faultReason(envelope));
   }
 

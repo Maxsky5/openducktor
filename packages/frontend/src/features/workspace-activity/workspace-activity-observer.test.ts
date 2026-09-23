@@ -211,6 +211,33 @@ describe("createWorkspaceActivityObserver", () => {
     });
   });
 
+  test("keeps workspace activity ready when one session faults", async () => {
+    const harness = createHarness();
+    harness.observer.syncWorkspaces([{ workspaceId: "alpha", repoPath: "/alpha" }]);
+    await harness.settle();
+    harness.emit("/alpha", {
+      type: "snapshot",
+      repoPath: "/alpha",
+      sessions: [snapshot("/alpha", "a")],
+    });
+    const ready = harness.observer.getWorkspaceActivity("alpha");
+
+    harness.emit("/alpha", {
+      type: "fault",
+      repoPath: "/alpha",
+      ref: snapshot("/alpha", "a").ref,
+      message: "Codex thread reported a system error.",
+    });
+
+    expect(harness.observer.getWorkspaceActivity("alpha")).toBe(ready);
+    expect(ready).toEqual({
+      kind: "ready",
+      inputRequired: false,
+      error: false,
+      active: false,
+    });
+  });
+
   test("reports a rejected observation start without retrying", async () => {
     const harness = createHarness({ failObserveFor: new Set(["/alpha"]) });
     harness.observer.syncWorkspaces([{ workspaceId: "alpha", repoPath: "/alpha" }]);

@@ -51,9 +51,10 @@ describe("WorkspaceRailActivityBadges", () => {
       />,
     );
 
-    const errorBadge = getByTitle("Session activity unavailable: stream closed");
-    expect(errorBadge.className).toContain("bg-destructive");
-    expect(errorBadge.textContent).toBe("Session activity unavailable: stream closed");
+    const unavailableBadge = getByTitle("Session activity unavailable: stream closed");
+    expect(unavailableBadge.className).toContain("bg-info-accent");
+    expect(unavailableBadge.className).not.toContain("bg-destructive");
+    expect(unavailableBadge.textContent).toBe("Session activity unavailable: stream closed");
     expect(container.querySelector(".running-status-dot")).toBeNull();
     rerender(<WorkspaceRailActivityBadges badges={[]} describedById="workspace-activity" />);
     expect(container.innerHTML).toBe("");
@@ -86,9 +87,9 @@ describe("workspaceActivityBadges", () => {
     ]);
   });
 
-  test("shows only the error badge with the reported reason when activity is unavailable", () => {
+  test("shows only the unavailable badge with the reported reason", () => {
     expect(workspaceActivityBadges({ kind: "unavailable", reason: "stream closed" })).toEqual([
-      { key: "error", label: "Session activity unavailable: stream closed" },
+      { key: "unavailable", label: "Session activity unavailable: stream closed" },
     ]);
   });
 });
