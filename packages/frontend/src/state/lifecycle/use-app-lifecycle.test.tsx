@@ -281,10 +281,6 @@ describe("useAppLifecycle task stream", () => {
             };
           },
         },
-        metadata: {
-          reconcileExternalTaskSyncEvent: () => {},
-          invalidateAllTaskMetadata: () => {},
-        },
         taskViewSync: { ...taskViewSync, reconcileStreamSnapshot },
         agentSessionViewSync: {
           reconcileExternalEvent: async () => {},
@@ -436,10 +432,6 @@ describe("useAppLifecycle task stream", () => {
               const unsubscribe = mock(async () => {});
               pendingSubscriptions.push({ resolve, unsubscribe });
             }),
-        },
-        metadata: {
-          reconcileExternalTaskSyncEvent: () => {},
-          invalidateAllTaskMetadata: () => {},
         },
         taskViewSync,
         agentSessionViewSync: {

@@ -15,8 +15,11 @@ export type TaskDocument = {
 };
 
 export type TaskDocumentSection = "spec" | "plan" | "qa";
-
-type TaskDocumentReadMode = "default" | "forceFresh";
+export type TaskDocumentReader = (
+  repoPath: string,
+  taskId: string,
+  section: TaskDocumentSection,
+) => Promise<TaskDocument>;
 
 export const documentQueryKeys = {
   all: ["task-documents"] as const,
@@ -44,40 +47,24 @@ export const documentQueryKeyForSection = (
   return documentQueryKeys.qaReport(repoPath, taskId);
 };
 
-const loadTaskDocumentFromHost = async (
-  repoPath: string,
-  taskId: string,
-  section: TaskDocumentSection,
-  mode: TaskDocumentReadMode = "default",
-): Promise<TaskDocument> => {
-  const readDocument = mode === "forceFresh" ? host.taskDocumentGetFresh : host.taskDocumentGet;
-  return readDocument(repoPath, taskId, section);
-};
-
-const taskDocumentQueryOptions = (repoPath: string, taskId: string, section: TaskDocumentSection) =>
-  queryOptions({
-    queryKey: documentQueryKeyForSection(repoPath, taskId, section),
-    queryFn: async (): Promise<TaskDocument> =>
-      loadTaskDocumentFromHost(repoPath, taskId, section, "default"),
-    staleTime: TASK_DOCUMENT_STALE_TIME_MS,
-  });
-
-const fetchTaskDocumentWithMode = (
+export const taskDocumentQueryOptions = (
   queryClient: QueryClient,
   repoPath: string,
   taskId: string,
   section: TaskDocumentSection,
-  mode: TaskDocumentReadMode,
-): Promise<TaskDocumentPayload> => {
+  readDocument: TaskDocumentReader = host.taskDocumentGet,
+) => {
   const queryKey = documentQueryKeyForSection(repoPath, taskId, section);
-  return queryClient.fetchQuery({
+  return queryOptions({
     queryKey,
     queryFn: async (): Promise<TaskDocumentPayload> => {
-      const incoming = await loadTaskDocumentFromHost(repoPath, taskId, section, mode);
-      const current = queryClient.getQueryData<TaskDocumentPayload>(queryKey);
-      return resolveLatestDocumentPayload(current, incoming);
+      if (!repoPath) {
+        throw new Error("Select a repository before loading task documents.");
+      }
+      const incoming = await readDocument(repoPath, taskId, section);
+      return resolveLatestDocumentPayload(queryClient.getQueryData(queryKey), incoming);
     },
-    staleTime: mode === "forceFresh" ? 0 : TASK_DOCUMENT_STALE_TIME_MS,
+    staleTime: TASK_DOCUMENT_STALE_TIME_MS,
   });
 };
 
@@ -86,37 +73,12 @@ export const fetchFreshTaskDocumentFromQuery = (
   repoPath: string,
   taskId: string,
   section: TaskDocumentSection,
+  readDocument?: TaskDocumentReader,
 ): Promise<TaskDocumentPayload> => {
-  return fetchTaskDocumentWithMode(queryClient, repoPath, taskId, section, "forceFresh");
-};
-
-const cachedTaskDocumentSections = (
-  queryClient: QueryClient,
-  repoPath: string,
-  taskId: string,
-): TaskDocumentSection[] => {
-  const sections = new Set<TaskDocumentSection>();
-  for (const query of queryClient.getQueryCache().findAll({
-    queryKey: documentQueryKeys.all,
-    exact: false,
-  })) {
-    const [scope, section, cachedRepoPath, cachedTaskId] = query.queryKey;
-    if (
-      scope !== documentQueryKeys.all[0] ||
-      cachedRepoPath !== repoPath ||
-      cachedTaskId !== taskId
-    ) {
-      continue;
-    }
-    if (section === "spec" || section === "plan") {
-      sections.add(section);
-      continue;
-    }
-    if (section === "qa-report") {
-      sections.add("qa");
-    }
-  }
-  return [...sections];
+  return queryClient.fetchQuery({
+    ...taskDocumentQueryOptions(queryClient, repoPath, taskId, section, readDocument),
+    staleTime: 0,
+  });
 };
 
 export const removeCachedTaskDocumentQueries = (
@@ -170,39 +132,23 @@ export const invalidateCachedTaskDocumentQueries = async (
   });
 };
 
-export const refreshCachedTaskDocumentQueries = async (
-  queryClient: QueryClient,
-  repoPath: string,
-  taskIds: string[],
-): Promise<void> => {
-  const uniqueTaskIds = [...new Set(taskIds)];
-  await Promise.all(
-    uniqueTaskIds.flatMap((taskId) => {
-      const cachedSections = cachedTaskDocumentSections(queryClient, repoPath, taskId);
-      return cachedSections.map((section) =>
-        fetchFreshTaskDocumentFromQuery(queryClient, repoPath, taskId, section),
-      );
-    }),
-  );
-};
-
 export const loadSpecDocumentFromQuery = (
   queryClient: QueryClient,
   repoPath: string,
   taskId: string,
 ): Promise<TaskDocument> =>
-  queryClient.fetchQuery(taskDocumentQueryOptions(repoPath, taskId, "spec"));
+  queryClient.fetchQuery(taskDocumentQueryOptions(queryClient, repoPath, taskId, "spec"));
 
 export const loadPlanDocumentFromQuery = (
   queryClient: QueryClient,
   repoPath: string,
   taskId: string,
 ): Promise<TaskDocument> =>
-  queryClient.fetchQuery(taskDocumentQueryOptions(repoPath, taskId, "plan"));
+  queryClient.fetchQuery(taskDocumentQueryOptions(queryClient, repoPath, taskId, "plan"));
 
 export const loadQaReportDocumentFromQuery = (
   queryClient: QueryClient,
   repoPath: string,
   taskId: string,
 ): Promise<TaskDocument> =>
-  queryClient.fetchQuery(taskDocumentQueryOptions(repoPath, taskId, "qa"));
+  queryClient.fetchQuery(taskDocumentQueryOptions(queryClient, repoPath, taskId, "qa"));

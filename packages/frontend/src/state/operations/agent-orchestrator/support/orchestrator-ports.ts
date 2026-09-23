@@ -8,7 +8,7 @@ import type { AgentSessionReadPort } from "@/state/queries/agent-sessions";
 import type { host } from "../../shared/host";
 
 export type AgentOrchestratorHostPort = AgentSessionReadPort & {
-  taskMetadataGetFresh: typeof host.taskMetadataGetFresh;
+  taskMetadataGet: typeof host.taskMetadataGet;
   taskWorktreeGet: (repoPath: string, taskId: string) => Promise<TaskWorktreeSummary | null>;
 };
 

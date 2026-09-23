@@ -27,7 +27,6 @@ const createProductionTaskStreamController =
   ({ queryClient, getActiveRepoPath, onDegraded, onSnapshotFinished, onSnapshotStarted }) =>
     createTaskStreamController({
       transport: hostBridge,
-      metadata: hostClient,
       taskViewSync: getProductionTaskViewSync(queryClient),
       agentSessionViewSync: createAgentSessionViewSync({
         queryClient,

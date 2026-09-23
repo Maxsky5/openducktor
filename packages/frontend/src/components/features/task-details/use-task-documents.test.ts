@@ -1,7 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
-import { QueryClient, queryOptions } from "@tanstack/react-query";
-import { resolveLatestDocumentPayload } from "@/state/queries/document-utils";
-import { documentQueryKeys } from "@/state/queries/documents";
+import { QueryClient } from "@tanstack/react-query";
+import { documentQueryKeys, taskDocumentQueryOptions } from "@/state/queries/documents";
 import type { TaskDocumentPayload } from "@/types/task-documents";
 import { ensureTaskDocumentQueryData } from "./task-document-query-data";
 
@@ -54,16 +53,13 @@ describe("useTaskDocuments", () => {
       });
       loadPlanDocument.mockClear();
 
-      const options = queryOptions({
-        queryKey: documentQueryKeys.plan("/repo", "task-1"),
-        queryFn: async (): Promise<TaskDocumentPayload> => {
-          const incoming = await loadPlanDocument();
-          const current = queryClient.getQueryData<TaskDocumentPayload>(
-            documentQueryKeys.plan("/repo", "task-1"),
-          );
-          return resolveLatestDocumentPayload(current, incoming);
-        },
-      });
+      const options = taskDocumentQueryOptions(
+        queryClient,
+        "/repo",
+        "task-1",
+        "plan",
+        loadPlanDocument,
+      );
 
       // ensureTaskDocumentQueryData returns cached stale data immediately; its
       // revalidation runs in the background, so waitForCachedPlanMarkdown waits for it to land.

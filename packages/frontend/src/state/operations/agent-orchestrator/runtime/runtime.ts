@@ -36,9 +36,9 @@ const defaultRepoConfigLoader: RepoConfigLoader = (workspaceId: string): Promise
 export const loadTaskDocuments = async (
   repoPath: string,
   taskId: string,
-  taskMetadataGetFresh: typeof host.taskMetadataGetFresh = host.taskMetadataGetFresh,
+  taskMetadataGet: typeof host.taskMetadataGet = host.taskMetadataGet,
 ): Promise<TaskDocuments> => {
-  const metadata = await taskMetadataGetFresh(repoPath, taskId);
+  const metadata = await taskMetadataGet(repoPath, taskId);
 
   return {
     specMarkdown: metadata.spec.markdown,

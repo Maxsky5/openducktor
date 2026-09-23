@@ -429,7 +429,7 @@ describe("TaskViewSync", () => {
     }
   });
 
-  test("waits for fresh retained active documents while leaving inactive cached documents invalidated", async () => {
+  test("waits for fresh spec, plan, and QA documents while leaving inactive documents invalidated", async () => {
     const freshDocument = deferred<{ markdown: string; updatedAt: string | null }>();
     const freshDocumentStarted = deferred<void>();
     const loadFreshDocument = mock(async (_repoPath, taskId, section) => {
@@ -440,11 +440,17 @@ describe("TaskViewSync", () => {
       }));
     });
     const { queryClient, sync } = createSync(createPorts({ loadFreshDocument }));
-    const activeDocumentKey = documentQueryKeys.spec("/repo", "task-1");
-    const inactiveDocumentKey = documentQueryKeys.plan("/repo", "task-1");
-    queryClient.setQueryData(activeDocumentKey, { markdown: "# Stale spec", updatedAt: null });
-    queryClient.setQueryData(inactiveDocumentKey, { markdown: "# Stale plan", updatedAt: null });
-    const unsubscribe = observeDocument(queryClient, activeDocumentKey);
+    const activeDocuments = [
+      ["spec", documentQueryKeys.spec("/repo", "task-1")],
+      ["plan", documentQueryKeys.plan("/repo", "task-1")],
+      ["qa", documentQueryKeys.qaReport("/repo", "task-1")],
+    ] as const;
+    const inactiveDocumentKey = documentQueryKeys.spec("/repo", "task-2");
+    for (const [, key] of activeDocuments) {
+      queryClient.setQueryData(key, { markdown: "# Stale", updatedAt: null });
+    }
+    queryClient.setQueryData(inactiveDocumentKey, { markdown: "# Stale", updatedAt: null });
+    const unsubscribe = activeDocuments.map(([, key]) => observeDocument(queryClient, key));
     let settled = false;
 
     try {
@@ -455,17 +461,27 @@ describe("TaskViewSync", () => {
 
       expect(settled).toBe(false);
       expect(loadFreshDocument).toHaveBeenCalledWith("/repo", "task-1", "spec");
-      expect(loadFreshDocument).not.toHaveBeenCalledWith("/repo", "task-1", "plan");
       expect(queryClient.getQueryState(inactiveDocumentKey)?.isInvalidated).toBe(true);
 
       freshDocument.resolve({ markdown: "# Fresh", updatedAt: "2026-04-10T13:10:00.000Z" });
       await snapshot;
 
       expect(settled).toBe(true);
-      expect(queryClient.getQueryState(activeDocumentKey)?.isInvalidated).toBe(false);
+      expect(loadFreshDocument).toHaveBeenCalledTimes(3);
+      for (const [section, key] of activeDocuments) {
+        expect(loadFreshDocument).toHaveBeenCalledWith("/repo", "task-1", section);
+        expect(
+          queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(key),
+        ).toEqual({
+          markdown: `# task-1 ${section}`,
+          updatedAt: "2026-04-10T13:10:00.000Z",
+        });
+        expect(queryClient.getQueryState(key)?.isInvalidated).toBe(false);
+      }
+      expect(loadFreshDocument).not.toHaveBeenCalledWith("/repo", "task-2", "spec");
       expect(queryClient.getQueryState(inactiveDocumentKey)?.isInvalidated).toBe(true);
     } finally {
-      unsubscribe();
+      for (const stopObserving of unsubscribe) stopObserving();
     }
   });
 

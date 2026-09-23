@@ -230,12 +230,10 @@ describe("electron shell bridge", () => {
     expect(unsubscribeSpy).toHaveBeenCalledTimes(3);
   });
 
-  test("forwards task stream frames without mutating client task metadata", async () => {
+  test("forwards task stream frames", async () => {
     const { electronApi } = createElectronApi();
     setElectronApi(electronApi);
     const bridge = createElectronShellBridge();
-    const reconcile = mock(() => {});
-    bridge.client.reconcileExternalTaskSyncEvent = reconcile;
     const listener = mock(() => {});
 
     await bridge.subscribeTaskStream({ cursor: null }, listener);
@@ -245,7 +243,6 @@ describe("electron shell bridge", () => {
       listener,
       undefined,
     );
-    expect(reconcile).not.toHaveBeenCalled();
   });
 
   test("supersedes an in-flight change with the host overflow snapshot without acknowledging the obsolete cursor", async () => {
@@ -270,7 +267,6 @@ describe("electron shell bridge", () => {
     const reconcileStreamSnapshot = mock(async () => snapshotTaskIds);
     const reconcileAgentSessionExternalEvent = mock(async () => {});
     const reconcileAgentSessionStreamSnapshot = mock(async () => {});
-    const invalidateAllTaskMetadata = mock(() => {});
     const controller = createTaskStreamController({
       transport: {
         subscribeTaskStream: async (input, onFrame) => {
@@ -284,10 +280,6 @@ describe("electron shell bridge", () => {
             unsubscribe: async () => subscription.unsubscribe(),
           };
         },
-      },
-      metadata: {
-        reconcileExternalTaskSyncEvent: mock(() => {}),
-        invalidateAllTaskMetadata,
       },
       taskViewSync: {
         loadWorkspace: async () => {},
@@ -309,7 +301,6 @@ describe("electron shell bridge", () => {
     expect(acknowledgements).toEqual([taskStreamCursor(0)]);
     reconcileStreamSnapshot.mockClear();
     reconcileAgentSessionStreamSnapshot.mockClear();
-    invalidateAllTaskMetadata.mockClear();
 
     stream.publish(taskStreamEvent(1));
     await firstChangeStarted.promise;
@@ -324,7 +315,6 @@ describe("electron shell bridge", () => {
     expect(reconcileAgentSessionExternalEvent).toHaveBeenCalledWith(taskStreamEvent(1));
     expect(reconcileStreamSnapshot).toHaveBeenCalledWith("/repo");
     expect(reconcileAgentSessionStreamSnapshot).toHaveBeenCalledWith("/repo", snapshotTaskIds);
-    expect(invalidateAllTaskMetadata).toHaveBeenCalledTimes(1);
     expect(acknowledgements).toEqual([taskStreamCursor(0), taskStreamCursor(257)]);
     expect(failures).toEqual([]);
 

@@ -311,9 +311,6 @@ describe("HostClient", () => {
       "savePlanDocument",
       "planGet",
       "taskMetadataGet",
-      "taskMetadataGetFresh",
-      "reconcileExternalTaskSyncEvent",
-      "invalidateAllTaskMetadata",
       "qaGetReport",
       "qaApproved",
       "qaRejected",
@@ -1511,29 +1508,6 @@ describe("HostClient", () => {
     ]);
   });
 
-  test("taskClose invalidates cached task metadata", async () => {
-    let metadataReadCount = 0;
-    const { client, calls } = createClient((command) => {
-      if (command === "task_metadata_get") {
-        metadataReadCount += 1;
-        return makeTaskMetadataPayload(metadataReadCount === 1 ? "Spec V1" : "Spec V2");
-      }
-      if (command === "task_close") {
-        return { ...makeTaskCardPayload(), status: "closed" };
-      }
-      throw new Error(`Unexpected command: ${command}`);
-    });
-
-    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V1");
-    await client.taskClose("/repo", "task-1");
-    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V2");
-    expect(calls.map((entry) => entry.command)).toEqual([
-      "task_metadata_get",
-      "task_close",
-      "task_metadata_get",
-    ]);
-  });
-
   test("git commands use expected IPC routes and payloads", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "git_get_branches") {
@@ -2462,7 +2436,7 @@ describe("HostClient", () => {
     await expect(client.agentSessionsList("/repo", "task-1")).rejects.toThrow("role");
   });
 
-  test("document reads share metadata while session reads stay independently authoritative", async () => {
+  test("parallel document reads each reach the host while session reads stay independent", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "task_metadata_get") {
         return makeTaskMetadataPayload();
@@ -2493,6 +2467,20 @@ describe("HostClient", () => {
         },
       },
       {
+        command: "task_metadata_get",
+        args: {
+          repoPath: "/repo",
+          taskId: "task-1",
+        },
+      },
+      {
+        command: "task_metadata_get",
+        args: {
+          repoPath: "/repo",
+          taskId: "task-1",
+        },
+      },
+      {
         command: "agent_sessions_list",
         args: {
           repoPath: "/repo",
@@ -2502,7 +2490,7 @@ describe("HostClient", () => {
     ]);
   });
 
-  test("sequential document reads reuse metadata while session reads remain independent", async () => {
+  test("sequential document reads each reach the host while session reads remain independent", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "task_metadata_get") {
         return makeTaskMetadataPayload();
@@ -2523,6 +2511,20 @@ describe("HostClient", () => {
     expect(qa.markdown).toBe("QA Body");
     expect(sessions).toHaveLength(1);
     expect(calls).toEqual([
+      {
+        command: "task_metadata_get",
+        args: {
+          repoPath: "/repo",
+          taskId: "task-1",
+        },
+      },
+      {
+        command: "task_metadata_get",
+        args: {
+          repoPath: "/repo",
+          taskId: "task-1",
+        },
+      },
       {
         command: "task_metadata_get",
         args: {
@@ -2562,67 +2564,7 @@ describe("HostClient", () => {
     });
   });
 
-  test("forceFresh metadata reads bypass stale cache and repopulate steady-state reads", async () => {
-    let metadataReadCount = 0;
-    const { client, calls } = createClient((command) => {
-      if (command === "task_metadata_get") {
-        metadataReadCount += 1;
-        return makeTaskMetadataPayload(metadataReadCount === 1 ? "Spec V1" : "Spec V2");
-      }
-      throw new Error(`Unexpected command: ${command}`);
-    });
-
-    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V1");
-    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V1");
-    expect((await client.taskDocumentGetFresh("/repo", "task-1", "spec")).markdown).toBe("Spec V2");
-    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V2");
-
-    expect(calls.map((entry) => entry.command)).toEqual(["task_metadata_get", "task_metadata_get"]);
-  });
-
-  test("forceFresh metadata reads do not get stuck behind older in-flight reads", async () => {
-    let metadataReadCount = 0;
-    const createDeferredMetadataRead = () => {
-      let resolve!: (value: ReturnType<typeof makeTaskMetadataPayload>) => void;
-      const promise = new Promise<ReturnType<typeof makeTaskMetadataPayload>>((nextResolve) => {
-        resolve = nextResolve;
-      });
-      return { promise, resolve };
-    };
-    const staleReadPromise = createDeferredMetadataRead();
-    const freshReadPromise = createDeferredMetadataRead();
-    const { client, calls } = createClient((command) => {
-      if (command === "task_metadata_get") {
-        metadataReadCount += 1;
-        if (metadataReadCount === 1) {
-          return staleReadPromise.promise;
-        }
-        if (metadataReadCount === 2) {
-          return freshReadPromise.promise;
-        }
-      }
-      throw new Error(`Unexpected command: ${command}`);
-    });
-
-    const staleRead = client.specGet("/repo", "task-1");
-    const freshSpecRead = client.taskDocumentGetFresh("/repo", "task-1", "spec");
-    const freshPlanRead = client.taskDocumentGetFresh("/repo", "task-1", "plan");
-
-    freshReadPromise.resolve(makeTaskMetadataPayload("Spec V2"));
-
-    expect((await freshSpecRead).markdown).toBe("Spec V2");
-    expect((await freshPlanRead).markdown).toBe("Plan Body");
-
-    staleReadPromise.resolve(makeTaskMetadataPayload("Spec V1"));
-
-    expect((await staleRead).markdown).toBe("Spec V1");
-    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V2");
-    expect((await client.planGet("/repo", "task-1")).markdown).toBe("Plan Body");
-
-    expect(calls.map((entry) => entry.command)).toEqual(["task_metadata_get", "task_metadata_get"]);
-  });
-
-  test("metadata cache invalidates after spec mutations", async () => {
+  test("a document read after a local mutation returns the current host result", async () => {
     let metadataReadCount = 0;
     const { client, calls } = createClient((command) => {
       if (command === "task_metadata_get") {
@@ -2635,161 +2577,12 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const beforeMutation = await client.specGet("/repo", "task-1");
+    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V1");
     await client.setSpec({ repoPath: "/repo", taskId: "task-1", markdown: "# Updated" });
-    const afterMutation = await client.specGet("/repo", "task-1");
-
-    expect(beforeMutation.markdown).toBe("Spec V1");
-    expect(afterMutation.markdown).toBe("Spec V2");
+    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V2");
     expect(calls.map((entry) => entry.command)).toEqual([
       "task_metadata_get",
       "set_spec",
-      "task_metadata_get",
-    ]);
-  });
-
-  test("metadata cache invalidates after approval mutations and PR sync", async () => {
-    let metadataReadCount = 0;
-    const { client, calls } = createClient((command) => {
-      if (command === "task_metadata_get") {
-        metadataReadCount += 1;
-        return makeTaskMetadataPayload(`Spec V${metadataReadCount}`);
-      }
-      if (command === "task_direct_merge") {
-        return {
-          outcome: "completed",
-          task: makeTaskCardPayload(),
-        };
-      }
-      if (command === "task_direct_merge_complete") {
-        return makeTaskCardPayload();
-      }
-      if (command === "task_pull_request_upsert") {
-        return {
-          providerId: "github",
-          number: 17,
-          url: "https://github.com/openai/openducktor/pull/17",
-          state: "open",
-          createdAt: "2026-02-20T10:00:00Z",
-          updatedAt: "2026-02-20T10:00:00Z",
-          lastSyncedAt: "2026-02-20T10:00:00Z",
-          mergedAt: null,
-          closedAt: null,
-        };
-      }
-      if (command === "task_pull_request_detect") {
-        return {
-          outcome: "linked",
-          pullRequest: {
-            providerId: "github",
-            number: 17,
-            url: "https://github.com/openai/openducktor/pull/17",
-            state: "open",
-            createdAt: "2026-02-20T10:00:00Z",
-            updatedAt: "2026-02-20T10:00:00Z",
-            lastSyncedAt: "2026-02-20T10:00:00Z",
-            mergedAt: null,
-            closedAt: null,
-          },
-        };
-      }
-      if (command === "task_pull_request_link_merged") {
-        return makeTaskCardPayload();
-      }
-      if (command === "repo_pull_request_sync") {
-        return { ok: true };
-      }
-      throw new Error(`Unexpected command: ${command}`);
-    });
-
-    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V1");
-    await client.taskDirectMerge("/repo", "task-1", { mergeMethod: "merge_commit" });
-    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V2");
-
-    await client.taskDirectMergeComplete("/repo", "task-1");
-    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V3");
-
-    await client.taskPullRequestUpsert("/repo", "task-1", "Title", "Body");
-    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V4");
-
-    await client.taskPullRequestDetect("/repo", "task-1");
-    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V5");
-
-    await client.taskPullRequestLinkMerged("/repo", "task-1", {
-      providerId: "github",
-      number: 17,
-      url: "https://github.com/openai/openducktor/pull/17",
-      state: "merged",
-      createdAt: "2026-02-20T10:00:00Z",
-      updatedAt: "2026-02-20T10:00:00Z",
-      lastSyncedAt: "2026-02-20T10:00:00Z",
-      mergedAt: "2026-02-20T10:00:00Z",
-      closedAt: "2026-02-20T10:00:00Z",
-    });
-    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V6");
-
-    await client.repoPullRequestSync("/repo");
-    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V7");
-
-    expect(calls.map((entry) => entry.command)).toEqual([
-      "task_metadata_get",
-      "task_direct_merge",
-      "task_metadata_get",
-      "task_direct_merge_complete",
-      "task_metadata_get",
-      "task_pull_request_upsert",
-      "task_metadata_get",
-      "task_pull_request_detect",
-      "task_metadata_get",
-      "task_pull_request_link_merged",
-      "task_metadata_get",
-      "repo_pull_request_sync",
-      "task_metadata_get",
-    ]);
-  });
-
-  test("taskDirectMerge invalidates metadata cache for conflict outcomes", async () => {
-    let metadataReadCount = 0;
-    const { client, calls } = createClient((command) => {
-      if (command === "task_metadata_get") {
-        metadataReadCount += 1;
-        return makeTaskMetadataPayload(`Spec V${metadataReadCount}`);
-      }
-      if (command === "task_direct_merge") {
-        return {
-          outcome: "conflicts",
-          conflict: {
-            operation: "direct_merge_rebase",
-            currentBranch: "feature/task-1",
-            targetBranch: "origin/main",
-            conflictedFiles: ["src/index.ts"],
-            output: "CONFLICT (content): Merge conflict in src/index.ts",
-            workingDir: "/tmp/wt/task-1",
-          },
-        };
-      }
-      throw new Error(`Unexpected command: ${command}`);
-    });
-
-    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V1");
-    expect(
-      await client.taskDirectMerge("/repo", "task-1", { mergeMethod: "merge_commit" }),
-    ).toEqual({
-      outcome: "conflicts",
-      conflict: {
-        operation: "direct_merge_rebase",
-        currentBranch: "feature/task-1",
-        targetBranch: "origin/main",
-        conflictedFiles: ["src/index.ts"],
-        output: "CONFLICT (content): Merge conflict in src/index.ts",
-        workingDir: "/tmp/wt/task-1",
-      },
-    });
-    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V2");
-
-    expect(calls.map((entry) => entry.command)).toEqual([
-      "task_metadata_get",
-      "task_direct_merge",
       "task_metadata_get",
     ]);
   });

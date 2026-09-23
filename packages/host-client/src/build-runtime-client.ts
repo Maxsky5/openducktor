@@ -41,7 +41,6 @@ import {
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
 import { arrayResultSchema, booleanResultSchema, okResultSchema } from "./invoke-utils";
-import type { TaskMetadataCache } from "./task-metadata-cache";
 
 type RuntimeEnsureFailureKind = FailureKind;
 
@@ -429,10 +428,7 @@ const agentSessionStop = async (
 };
 
 export class HostAgentClient {
-  constructor(
-    private readonly invokeFn: InvokeFn,
-    private readonly metadataCache?: TaskMetadataCache,
-  ) {}
+  constructor(private readonly invokeFn: InvokeFn) {}
 
   async systemCheck(repoPath: string): Promise<SystemCheck> {
     return systemCheck(this.invokeFn, repoPath);
@@ -552,45 +548,31 @@ export class HostAgentClient {
     taskId: string,
     input: TaskDirectMergeInput,
   ): Promise<TaskDirectMergeResult> {
-    const result = await taskDirectMerge(this.invokeFn, repoPath, taskId, input);
-    this.metadataCache?.invalidate(repoPath, taskId);
-    return result;
+    return taskDirectMerge(this.invokeFn, repoPath, taskId, input);
   }
 
   async taskDirectMergeComplete(repoPath: string, taskId: string): Promise<TaskCard> {
-    const task = await taskDirectMergeComplete(this.invokeFn, repoPath, taskId);
-    this.metadataCache?.invalidate(repoPath, taskId);
-    return task;
+    return taskDirectMergeComplete(this.invokeFn, repoPath, taskId);
   }
 
   async taskPullRequestUpsert(repoPath: string, taskId: string, title: string, body: string) {
-    const pullRequest = await taskPullRequestUpsert(this.invokeFn, repoPath, taskId, title, body);
-    this.metadataCache?.invalidate(repoPath, taskId);
-    return pullRequest;
+    return taskPullRequestUpsert(this.invokeFn, repoPath, taskId, title, body);
   }
 
   async taskPullRequestUnlink(repoPath: string, taskId: string): Promise<{ ok: boolean }> {
-    const result = await taskPullRequestUnlink(this.invokeFn, repoPath, taskId);
-    this.metadataCache?.invalidate(repoPath, taskId);
-    return result;
+    return taskPullRequestUnlink(this.invokeFn, repoPath, taskId);
   }
 
   async taskPullRequestDetect(repoPath: string, taskId: string) {
-    const result = await taskPullRequestDetect(this.invokeFn, repoPath, taskId);
-    this.metadataCache?.invalidate(repoPath, taskId);
-    return result;
+    return taskPullRequestDetect(this.invokeFn, repoPath, taskId);
   }
 
   async taskPullRequestLinkMerged(repoPath: string, taskId: string, pullRequest: PullRequest) {
-    const result = await taskPullRequestLinkMerged(this.invokeFn, repoPath, taskId, pullRequest);
-    this.metadataCache?.invalidate(repoPath, taskId);
-    return result;
+    return taskPullRequestLinkMerged(this.invokeFn, repoPath, taskId, pullRequest);
   }
 
   async repoPullRequestSync(repoPath: string): Promise<{ ok: boolean }> {
-    const result = await repoPullRequestSync(this.invokeFn, repoPath);
-    this.metadataCache?.invalidateRepo(repoPath);
-    return result;
+    return repoPullRequestSync(this.invokeFn, repoPath);
   }
 
   async agentSessionStop(target: AgentSessionStopTarget): Promise<{ ok: boolean }> {

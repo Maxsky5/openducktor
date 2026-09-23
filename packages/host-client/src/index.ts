@@ -14,7 +14,6 @@ import type { InvokeFn } from "./invoke-utils";
 import { HostPullRequestReviewClient } from "./pull-request-review-client";
 import { HostSystemClient } from "./system-client";
 import { HostTaskClient } from "./task-client";
-import { TaskMetadataCache } from "./task-metadata-cache";
 import { HostTerminalClient } from "./terminal-client";
 
 export { HostInvokeError } from "./invoke-utils";
@@ -45,15 +44,14 @@ type HostClientApi = PublicMethods<HostWorkspaceClient> &
 export type HostClient = HostClientApi & PlannerTools;
 
 const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
-  const metadataCache = new TaskMetadataCache();
   const workspaceClient = new HostWorkspaceClient(invokeFn);
   const workspaceSessionClient = new HostWorkspaceSessionClient(invokeFn);
   const filesystemClient = new HostFilesystemClient(invokeFn);
   const pullRequestReviewClient = new HostPullRequestReviewClient(invokeFn);
   const systemClient = new HostSystemClient(invokeFn);
-  const taskClient = new HostTaskClient(invokeFn, metadataCache);
+  const taskClient = new HostTaskClient(invokeFn);
   const terminalClient = new HostTerminalClient(invokeFn);
-  const agentClient = new HostAgentClient(invokeFn, metadataCache);
+  const agentClient = new HostAgentClient(invokeFn);
   const agentSessionLiveClient = new HostAgentSessionLiveClient(invokeFn);
   const agentRuntimeQueryClient = new HostAgentRuntimeQueryClient(invokeFn);
   const gitClient = new HostGitClient(invokeFn);
@@ -141,11 +139,7 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     savePlanDocument: taskClient.savePlanDocument.bind(taskClient),
     planGet: taskClient.planGet.bind(taskClient),
     taskMetadataGet: taskClient.taskMetadataGet.bind(taskClient),
-    taskMetadataGetFresh: taskClient.taskMetadataGetFresh.bind(taskClient),
-    reconcileExternalTaskSyncEvent: taskClient.reconcileExternalTaskSyncEvent.bind(taskClient),
-    invalidateAllTaskMetadata: taskClient.invalidateAllTaskMetadata.bind(taskClient),
     taskDocumentGet: taskClient.taskDocumentGet.bind(taskClient),
-    taskDocumentGetFresh: taskClient.taskDocumentGetFresh.bind(taskClient),
     qaGetReport: taskClient.qaGetReport.bind(taskClient),
     qaApproved: taskClient.qaApproved.bind(taskClient),
     qaRejected: taskClient.qaRejected.bind(taskClient),

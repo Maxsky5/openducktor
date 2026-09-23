@@ -1,11 +1,9 @@
-import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
-import { host } from "@/state/operations/host";
 import { resolveLatestDocumentPayload } from "@/state/queries/document-utils";
 import {
-  documentQueryKeyForSection,
   fetchFreshTaskDocumentFromQuery,
-  TASK_DOCUMENT_STALE_TIME_MS,
+  taskDocumentQueryOptions,
 } from "@/state/queries/documents";
 import type { TaskDocumentPayload } from "@/types/task-documents";
 import { ensureTaskDocumentQueryData } from "./task-document-query-data";
@@ -19,14 +17,6 @@ export type TaskDocumentState = {
   error: string | null;
   loaded: boolean;
 };
-
-type TaskDocumentLoaders = {
-  loadSpecDocument: (taskId: string) => Promise<TaskDocumentPayload>;
-  loadPlanDocument: (taskId: string) => Promise<TaskDocumentPayload>;
-  loadQaReportDocument: (taskId: string) => Promise<TaskDocumentPayload>;
-};
-
-type SectionLoaders = Record<DocumentSectionKey, (taskId: string) => Promise<TaskDocumentPayload>>;
 
 const DISABLED_TASK_ID = "__disabled__";
 
@@ -47,80 +37,6 @@ const createTaskDocumentState = (input?: {
 const toErrorMessage = (cause: unknown): string =>
   cause instanceof Error ? cause.message : "Unable to load document.";
 
-const createHostDocumentLoader = <
-  TResult extends { markdown: string; updatedAt: string | null; error?: string | null },
->(
-  cacheScope: string,
-  readDocument: (repoPath: string, taskId: string) => Promise<TResult>,
-): ((taskId: string) => Promise<TaskDocumentPayload>) => {
-  return async (nextTaskId: string): Promise<TaskDocumentPayload> => {
-    if (!cacheScope) {
-      throw new Error("Select a repository before loading task documents.");
-    }
-
-    const document = await readDocument(cacheScope, nextTaskId);
-    return {
-      markdown: document.markdown,
-      updatedAt: document.updatedAt,
-      error: document.error ?? null,
-    };
-  };
-};
-
-const createDocumentQueryOptions = ({
-  queryClient,
-  cacheScope,
-  taskId,
-  section,
-  loader,
-}: {
-  queryClient: ReturnType<typeof useQueryClient>;
-  cacheScope: string;
-  taskId: string;
-  section: DocumentSectionKey;
-  loader: (taskId: string) => Promise<TaskDocumentPayload>;
-}) => {
-  const queryKey = documentQueryKeyForSection(cacheScope, taskId, section);
-  return queryOptions({
-    queryKey,
-    queryFn: async (): Promise<TaskDocumentPayload> => {
-      const incoming = await loader(taskId);
-      const current = queryClient.getQueryData<TaskDocumentPayload>(queryKey);
-      return resolveLatestDocumentPayload(current, incoming);
-    },
-    staleTime: TASK_DOCUMENT_STALE_TIME_MS,
-  });
-};
-
-const createQueryOptionsBySection = (
-  queryClient: ReturnType<typeof useQueryClient>,
-  cacheScope: string,
-  taskId: string,
-  loaders: SectionLoaders,
-) => ({
-  spec: createDocumentQueryOptions({
-    queryClient,
-    cacheScope,
-    taskId,
-    section: "spec",
-    loader: loaders.spec,
-  }),
-  plan: createDocumentQueryOptions({
-    queryClient,
-    cacheScope,
-    taskId,
-    section: "plan",
-    loader: loaders.plan,
-  }),
-  qa: createDocumentQueryOptions({
-    queryClient,
-    cacheScope,
-    taskId,
-    section: "qa",
-    loader: loaders.qa,
-  }),
-});
-
 const toTaskDocumentState = (
   query: ReturnType<typeof useQuery<TaskDocumentPayload>>,
   enabled: boolean,
@@ -135,47 +51,18 @@ const toTaskDocumentState = (
   });
 };
 
-export function useTaskDocuments(
-  taskId: string | null,
-  open: boolean,
-  cacheScope = "",
-  loadersOverride?: TaskDocumentLoaders,
-) {
-  const loadSpecDocumentFromHost = useMemo(
-    () => createHostDocumentLoader(cacheScope, host.specGet),
-    [cacheScope],
-  );
-  const loadPlanDocumentFromHost = useMemo(
-    () => createHostDocumentLoader(cacheScope, host.planGet),
-    [cacheScope],
-  );
-  const loadQaReportDocumentFromHost = useMemo(
-    () => createHostDocumentLoader(cacheScope, host.qaGetReport),
-    [cacheScope],
-  );
-
-  const sectionLoaders = useMemo<SectionLoaders>(() => {
-    return {
-      spec: loadersOverride?.loadSpecDocument ?? loadSpecDocumentFromHost,
-      plan: loadersOverride?.loadPlanDocument ?? loadPlanDocumentFromHost,
-      qa: loadersOverride?.loadQaReportDocument ?? loadQaReportDocumentFromHost,
-    };
-  }, [
-    loadersOverride?.loadPlanDocument,
-    loadersOverride?.loadQaReportDocument,
-    loadersOverride?.loadSpecDocument,
-    loadPlanDocumentFromHost,
-    loadQaReportDocumentFromHost,
-    loadSpecDocumentFromHost,
-  ]);
-
+export function useTaskDocuments(taskId: string | null, open: boolean, cacheScope = "") {
   const queryClient = useQueryClient();
 
   const enabled = open && taskId !== null;
   const activeTaskId = taskId ?? DISABLED_TASK_ID;
   const queryOptionsBySection = useMemo(
-    () => createQueryOptionsBySection(queryClient, cacheScope, activeTaskId, sectionLoaders),
-    [activeTaskId, cacheScope, queryClient, sectionLoaders],
+    () => ({
+      spec: taskDocumentQueryOptions(queryClient, cacheScope, activeTaskId, "spec"),
+      plan: taskDocumentQueryOptions(queryClient, cacheScope, activeTaskId, "plan"),
+      qa: taskDocumentQueryOptions(queryClient, cacheScope, activeTaskId, "qa"),
+    }),
+    [activeTaskId, cacheScope, queryClient],
   );
 
   const specQuery = useQuery({

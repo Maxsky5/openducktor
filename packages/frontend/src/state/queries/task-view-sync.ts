@@ -2,19 +2,19 @@ import type { ExternalTaskSyncEvent, TaskCard } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { hostClient as host } from "@/lib/host-client";
-import { resolveLatestDocumentPayload } from "./document-utils";
-import { documentQueryKeys, type TaskDocument, type TaskDocumentSection } from "./documents";
+import {
+  documentQueryKeys,
+  fetchFreshTaskDocumentFromQuery,
+  type TaskDocumentReader,
+  type TaskDocumentSection,
+} from "./documents";
 import { invalidateRepoTaskQueries, taskQueryKeys } from "./tasks";
 
 const queryKeyStringSchema = z.string();
 
 export type TaskViewSyncPorts = {
   listTasks: (repoPath: string) => Promise<TaskCard[]>;
-  loadFreshDocument: (
-    repoPath: string,
-    taskId: string,
-    section: TaskDocumentSection,
-  ) => Promise<TaskDocument>;
+  loadFreshDocument: TaskDocumentReader;
 };
 
 export type LocalMutationImpact =
@@ -89,32 +89,22 @@ export const createTaskViewSync = ({
 
   const toTaskIdSet = (tasks: TaskCard[]): Set<string> => new Set(tasks.map((task) => task.id));
 
-  const refreshDocumentEntry = async (
-    repoPath: string,
-    entry: ReturnType<typeof cachedDocumentEntries>[number],
-  ): Promise<void> => {
-    const { queryKey, section, taskId } = entry;
-    await queryClient.fetchQuery({
-      queryKey,
-      queryFn: async () => {
-        const incoming = await ports.loadFreshDocument(repoPath, taskId, section);
-        return resolveLatestDocumentPayload(queryClient.getQueryData(queryKey), incoming);
-      },
-      staleTime: 0,
-    });
-  };
-
   const refreshDocumentEntries = async (
     repoPath: string,
     entries: ReturnType<typeof cachedDocumentEntries>,
   ): Promise<void> => {
-    await Promise.all(entries.map((entry) => refreshDocumentEntry(repoPath, entry)));
+    await Promise.all(
+      entries.map((entry) =>
+        fetchFreshTaskDocumentFromQuery(
+          queryClient,
+          repoPath,
+          entry.taskId,
+          entry.section,
+          ports.loadFreshDocument,
+        ),
+      ),
+    );
   };
-
-  const refreshSnapshotDocumentEntries = async (
-    repoPath: string,
-    entries: ReturnType<typeof cachedDocumentEntries>,
-  ): Promise<void> => refreshDocumentEntries(repoPath, entries);
 
   const refreshDocuments = async (repoPath: string, taskIds: string[]): Promise<void> => {
     const taskIdSet = new Set(taskIds);
@@ -348,7 +338,7 @@ export const createTaskViewSync = ({
         });
         activeTaskIds = tasks.map((task) => task.id);
         const visibleTaskIds = toTaskIdSet(tasks);
-        await refreshSnapshotDocumentEntries(
+        await refreshDocumentEntries(
           activeRepoPath,
           activeDocumentEntries.filter((entry) => visibleTaskIds.has(entry.taskId)),
         );
@@ -365,7 +355,7 @@ const createProductionTaskViewSync = (queryClient: QueryClient): TaskViewSync =>
     ports: {
       listTasks: (repoPath) => host.tasksList(repoPath),
       loadFreshDocument: (repoPath, taskId, section) =>
-        host.taskDocumentGetFresh(repoPath, taskId, section),
+        host.taskDocumentGet(repoPath, taskId, section),
     },
   });
 
