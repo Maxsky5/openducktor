@@ -239,6 +239,7 @@ describe("Workspace Session persistence through the shared command module", () =
     await expect(renamed).rejects.toThrow("runtime title update failed");
     await waitFor(() => h.titleAttempts.length === 2);
     expect(h.titleAttempts).toEqual(["Renamed", "First accepted prompt"]);
+    await waitFor(async () => (await h.get()).generatedTitle === "First accepted prompt");
     const saved = await h.get();
     expect(saved.manualTitle).toBeNull();
     expect(saved.generatedTitle).toBe("First accepted prompt");
@@ -254,6 +255,7 @@ describe("Workspace Session persistence through the shared command module", () =
       "publication failed",
     );
     await waitFor(() => h.titleAttempts.length === 1);
+    await waitFor(async () => (await h.get()).generatedTitle === "First accepted prompt");
     expect(h.titleAttempts).toEqual(["First accepted prompt"]);
     expect((await h.get()).generatedTitle).toBe("First accepted prompt");
   });
