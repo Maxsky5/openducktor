@@ -12,7 +12,7 @@ import {
 import { skillDescriptorSchema } from "./skill-schemas";
 import { slashCommandDescriptorSchema } from "./slash-command-schemas";
 import { subagentDescriptorSchema } from "./subagent-schemas";
-import { WORKSPACE_SESSION_MANUAL_TITLE_LIMIT } from "./workspace-session-schemas";
+import { WORKSPACE_SESSION_MANUAL_TITLE_LIMIT } from "./workspace-session-limits";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
 

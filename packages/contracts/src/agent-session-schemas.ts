@@ -1,11 +1,9 @@
 import { z } from "zod";
 import { repoRuntimeRefSchema, runtimeKindSchema } from "./agent-runtime-schemas";
 import { agentRoleSchema } from "./agent-workflow-schemas";
+import { WORKSPACE_SESSION_MANUAL_TITLE_LIMIT } from "./workspace-session-limits";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
-
-/** Matches WORKSPACE_SESSION_MANUAL_TITLE_LIMIT. A local copy avoids a schema import cycle. */
-const REPOSITORY_SESSION_TITLE_LIMIT = 120;
 
 export const runtimeWorkingDirectoryRefSchema = repoRuntimeRefSchema
   .extend({
@@ -37,7 +35,7 @@ export const agentSessionRepositoryScopeSchema = z
      * Workspace Session title for the runtime session.
      * When absent, the runtime session keeps its current title.
      */
-    title: z.string().trim().min(1).max(REPOSITORY_SESSION_TITLE_LIMIT).optional(),
+    title: z.string().trim().min(1).max(WORKSPACE_SESSION_MANUAL_TITLE_LIMIT).optional(),
   })
   .strict();
 export type AgentSessionRepositoryScope = z.infer<typeof agentSessionRepositoryScopeSchema>;
