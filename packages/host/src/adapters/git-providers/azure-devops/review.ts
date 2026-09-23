@@ -5,7 +5,6 @@ import {
   type PullRequestReviewAggregateStatus,
   type PullRequestReviewCheck,
   type PullRequestReviewContext,
-  type PullRequestReviewer,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
@@ -82,15 +81,11 @@ export const createAzureDevOpsReviewPort = ({
       });
 
       const artifactId = `vstfs:///CodeReview/CodeReviewId/${repository.projectId}/${number}`;
-      const [statuses, reviewers, threads, policies, iterations] = yield* Effect.all(
+      const [statuses, threads, policies, iterations] = yield* Effect.all(
         [
           client.readContinuationPages(input.repoConfig, repository, {
             operation: "read pull request statuses",
             path: `git/repositories/${encodeURIComponent(repository.repositoryId)}/pullrequests/${number}/statuses`,
-          }),
-          client.readContinuationPages(input.repoConfig, repository, {
-            operation: "read pull request reviewers",
-            path: `git/repositories/${encodeURIComponent(repository.repositoryId)}/pullrequests/${number}/reviewers`,
           }),
           client.readContinuationPages(input.repoConfig, repository, {
             operation: "read pull request threads",
@@ -107,7 +102,7 @@ export const createAzureDevOpsReviewPort = ({
             path: `git/repositories/${encodeURIComponent(repository.repositoryId)}/pullrequests/${number}/iterations`,
           }),
         ],
-        { concurrency: 5 },
+        { concurrency: 4 },
       );
 
       const { buildIds, iterationId, sourceCommit, policyChecks } = yield* Effect.try({
@@ -191,7 +186,6 @@ export const createAzureDevOpsReviewPort = ({
                   .map((activity) => activity.threadId),
               ).size,
             },
-            reviewers: reviewers.map(parseReviewer),
             refreshedAt: new Date().toISOString(),
           };
           return pullRequestReviewContextSchema.parse(context);
@@ -364,30 +358,6 @@ const parseBuildCheck = (value: AzureDevOpsJson): PullRequestReviewCheck => {
     details: `Azure build status: ${statusValue}${result ? `; result: ${result}` : ""}`,
     startedAt: timestampOrNull(record.startTime),
     completedAt: timestampOrNull(record.finishTime),
-  };
-};
-
-const parseReviewer = (value: AzureDevOpsJson): PullRequestReviewer => {
-  const record = requireRecord(value, "reviewer");
-  const vote = azureDevOpsNumberSchema.safeParse(record.vote).data ?? Number.NaN;
-  const decision =
-    vote === 10
-      ? "approved"
-      : vote === 5
-        ? "approved_with_suggestions"
-        : vote === 0
-          ? "no_vote"
-          : vote === -5
-            ? "waiting_for_author"
-            : vote === -10
-              ? "rejected"
-              : "unknown";
-  return {
-    id: requireString(record.id, "reviewer.id"),
-    displayName: requireString(record.displayName, "reviewer.displayName"),
-    avatarUrl: optionalString(record.imageUrl),
-    decision,
-    isRequired: record.isRequired === true,
   };
 };
 

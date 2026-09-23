@@ -167,7 +167,6 @@ export type SettingsModalController = {
   ) => void;
   clearSelectedRepoDefaultModel: () => void;
   submit: () => Promise<boolean>;
-  submitSection: () => Promise<boolean>;
 };
 
 type UseSettingsModalControllerArgs = {
@@ -432,7 +431,6 @@ export const useSettingsModalController = ({
     clearSaveError,
     markRepoScriptSaveAttempt,
     submit,
-    submitSection,
   } = useSettingsModalSaveOrchestration({
     open,
     loadedSnapshot,
@@ -645,7 +643,6 @@ export const useSettingsModalController = ({
     updateSelectedRepoDefaultModel,
     clearSelectedRepoDefaultModel,
     submit,
-    submitSection,
   };
 };
 

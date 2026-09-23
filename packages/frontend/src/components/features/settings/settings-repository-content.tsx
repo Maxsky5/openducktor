@@ -286,7 +286,7 @@ export function SettingsRepositoryContent({
             providerState={providerState}
             disabled={isInteractionDisabled}
             onDetectGithubRepository={controller.detectSelectedRepoGithubRepository}
-            onSaveSettings={controller.submitSection}
+            onSaveSettings={controller.submit}
             onAzureDevOpsValidationChange={controller.setAzureDevOpsValidationErrorCount}
             onUpdateSelectedRepoConfig={updateSelectedRepoConfig}
           />

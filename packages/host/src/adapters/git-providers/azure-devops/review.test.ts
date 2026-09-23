@@ -69,7 +69,7 @@ const pullRequestResponse = {
 };
 
 describe("Azure DevOps review adapter", () => {
-  test("preserves policy, reviewer, and thread states", async () => {
+  test("preserves policy and thread states", async () => {
     const repositoryPort: GitProviderRepositoryPort<AzureDevOpsRepository> = {
       detectRepository: () => Effect.dieMessage("unexpected detection"),
       getRepository: () => Effect.succeed(repository),
@@ -83,16 +83,6 @@ describe("Azure DevOps review adapter", () => {
             ? Effect.succeed({ body: pullRequestResponse, continuationToken: null })
             : Effect.dieMessage(`unexpected request: ${request.operation}`),
       readContinuationPages: (_config, _repository, request) => {
-        if (request.operation === "read pull request reviewers") {
-          return Effect.succeed([
-            {
-              id: "reviewer-1",
-              displayName: "Ada Lovelace",
-              vote: 5,
-              isRequired: true,
-            },
-          ]);
-        }
         if (request.operation === "read pull request threads") {
           return Effect.succeed([
             {
@@ -153,13 +143,6 @@ describe("Azure DevOps review adapter", () => {
     expect(context).toMatchObject({
       status: "loaded",
       aggregateStatus: "pending",
-      reviewers: [
-        {
-          displayName: "Ada Lovelace",
-          decision: "approved_with_suggestions",
-          isRequired: true,
-        },
-      ],
       comments: [
         {
           id: "7:9",

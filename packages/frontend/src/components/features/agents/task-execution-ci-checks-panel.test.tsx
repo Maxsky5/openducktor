@@ -356,39 +356,6 @@ describe("TaskExecutionCiChecksPanel", () => {
     expect(html).toContain("text-info-muted");
   });
 
-  test("renders Azure reviewer decisions", () => {
-    const html = renderToStaticMarkup(
-      <QueryProvider useIsolatedClient>
-        <ThemeProvider defaultTheme="light">
-          <TooltipProvider>
-            <TaskExecutionCiLoaded
-              context={{
-                ...loadedContext,
-                providerId: "azure_devops",
-                reviewers: [
-                  {
-                    id: "reviewer-1",
-                    displayName: "Ada Lovelace",
-                    avatarUrl: null,
-                    decision: "approved_with_suggestions",
-                    isRequired: true,
-                  },
-                ],
-              }}
-              refreshState="idle"
-              onRefresh={() => {}}
-            />
-          </TooltipProvider>
-        </ThemeProvider>
-      </QueryProvider>,
-    );
-
-    expect(html).toContain("Reviewers");
-    expect(html).toContain("Ada Lovelace");
-    expect(html).toContain("Approved with suggestions");
-    expect(html).toContain("Required");
-  });
-
   test("colors only queued and in-progress check rows as informational blue", () => {
     for (const status of ["queued", "in_progress"] as const) {
       const html = renderCheckCard(status);

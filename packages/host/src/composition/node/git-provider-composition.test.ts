@@ -5,7 +5,7 @@ import { resolveAzureDevOpsEntraClientId } from "../../config/azure-devops";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { createGitPortTestDouble } from "../../test-support/service-test-doubles";
-import { createNodeGitProviderResolver } from "./git-provider-composition";
+import { createNodeGitProviderComposition } from "./git-provider-composition";
 
 test("node composition uses the product Azure DevOps Entra client ID by default", () => {
   expect(resolveAzureDevOpsEntraClientId({})).toBe("bac43573-dc2b-4b13-b536-8ea09b9c8816");
@@ -31,8 +31,8 @@ test("node composition registers the GitHub provider", async () => {
     resolveToolPath: () => Effect.die("Unexpected resolveToolPath call"),
     validateToolPath: () => Effect.die("Unexpected validateToolPath call"),
   };
-  const resolver = await Effect.runPromise(
-    createNodeGitProviderResolver({
+  const { resolver } = await Effect.runPromise(
+    createNodeGitProviderComposition({
       configDir: "/tmp/openducktor-git-provider-test",
       gitPort: createGitPortTestDouble({}),
       processEnv: {},

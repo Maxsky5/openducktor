@@ -57,6 +57,3 @@ export const createNodeGitProviderComposition = ({
     }),
   ]).pipe(Effect.map((resolver) => ({ resolver, azureDevOpsConnection })));
 };
-
-export const createNodeGitProviderResolver = (input: CreateNodeGitProviderCompositionInput) =>
-  createNodeGitProviderComposition(input).pipe(Effect.map(({ resolver }) => resolver));

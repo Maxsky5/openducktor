@@ -43,16 +43,10 @@ export const saveConnection = (
   scope: string,
   connection: StoredConnection,
 ) =>
-  Effect.tryPromise({
-    try: () => runSaveConnection(protectedStorage, scope, connection),
-    catch: (cause) => toHostOperationError(cause, "azureDevOps.connection.save"),
+  Effect.gen(function* () {
+    const store = yield* protectedStorage.open(scope, "connection");
+    yield* Effect.tryPromise({
+      try: () => store.save(JSON.stringify(connection)),
+      catch: (cause) => toHostOperationError(cause, "azureDevOps.connection.save"),
+    });
   });
-
-const runSaveConnection = async (
-  protectedStorage: AzureDevOpsProtectedStorage,
-  scope: string,
-  connection: StoredConnection,
-): Promise<void> => {
-  const store = await Effect.runPromise(protectedStorage.open(scope, "connection"));
-  await store.save(JSON.stringify(connection));
-};

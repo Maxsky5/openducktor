@@ -121,24 +121,6 @@ export const pullRequestReviewThreadsSummarySchema = z.object({
 });
 export type PullRequestReviewThreadsSummary = z.infer<typeof pullRequestReviewThreadsSummarySchema>;
 
-const pullRequestReviewerDecisionSchema = z.enum([
-  "approved",
-  "approved_with_suggestions",
-  "no_vote",
-  "waiting_for_author",
-  "rejected",
-  "unknown",
-]);
-
-export const pullRequestReviewerSchema = z.object({
-  id: z.string().min(1),
-  displayName: z.string().min(1),
-  avatarUrl: nullableUrlSchema,
-  decision: pullRequestReviewerDecisionSchema,
-  isRequired: z.boolean(),
-});
-export type PullRequestReviewer = z.infer<typeof pullRequestReviewerSchema>;
-
 export const pullRequestReviewContextSchema = z.discriminatedUnion("status", [
   z.object({
     status: z.literal("unavailable"),
@@ -163,7 +145,6 @@ export const pullRequestReviewContextSchema = z.discriminatedUnion("status", [
     checks: z.array(pullRequestReviewCheckSchema),
     comments: z.array(pullRequestReviewActivitySchema),
     reviewThreads: pullRequestReviewThreadsSummarySchema,
-    reviewers: z.array(pullRequestReviewerSchema).optional(),
     refreshedAt: dateTimeSchema,
   }),
 ]);

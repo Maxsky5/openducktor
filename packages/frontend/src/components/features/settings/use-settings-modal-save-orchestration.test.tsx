@@ -492,7 +492,7 @@ describe("useSettingsModalSaveOrchestration", () => {
     await harness.unmount();
   });
 
-  test("keeps modal interactions enabled during a section save", async () => {
+  test("disables modal interactions during a section save", async () => {
     const deferredSave = createDeferred<void>();
     const saveSettingsSnapshot = mock(async () => {
       await deferredSave.promise;
@@ -505,11 +505,11 @@ describe("useSettingsModalSaveOrchestration", () => {
 
     let submit: Promise<boolean> | undefined;
     await harness.run((state) => {
-      submit = state.submitSection();
+      submit = state.submit();
     });
 
     expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
-    expect(harness.getLatest().isSaving).toBe(false);
+    expect(harness.getLatest().isSaving).toBe(true);
 
     deferredSave.resolve();
     if (!submit) throw new Error("Expected section save promise");

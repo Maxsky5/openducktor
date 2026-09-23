@@ -3,7 +3,7 @@ import { z } from "zod";
 import { GithubProviderAdapter } from "../../adapters/git-providers/github/provider-adapter";
 import { createToolDiscoveryAdapter } from "../../adapters/system/tool-discovery";
 import { TaskPolicyError } from "../../domain/task";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { createGitProviderResolver } from "../git/git-provider-resolver";
@@ -1324,18 +1324,7 @@ describe("createTaskService pull requests", () => {
         .pipe(Effect.flip),
     );
     expect(failure).toBeInstanceOf(HostOperationError);
-    expect(failure).toMatchObject({
-      operation: "record pull request",
-      details: {
-        repoPath: "/repo",
-        taskId: "task-1",
-        remote: "origin",
-        branch: "odt/task-1",
-        pullRequestWrite: "succeeded",
-        pullRequestNumber: 77,
-      },
-    });
-    expect(failure.message).toContain("The branch was pushed and pull request 77 was written");
+    expect(failure).toBe(taskLinkFailure);
 
     rejectTaskLink = false;
     rejectProviderWrite = true;
@@ -1348,18 +1337,8 @@ describe("createTaskService pull requests", () => {
         })
         .pipe(Effect.flip),
     );
-    expect(providerFailure).toBeInstanceOf(HostOperationError);
-    expect(providerFailure).toMatchObject({
-      operation: "publish pull request",
-      details: {
-        repoPath: "/repo",
-        taskId: "task-1",
-        remote: "origin",
-        branch: "odt/task-1",
-        pullRequestWrite: "unknown",
-      },
-    });
-    expect(providerFailure.message).toContain("The branch was pushed to origin");
+    expect(providerFailure).toBeInstanceOf(HostValidationError);
+    expect(providerFailure.message).toContain("GitHub pull request response field number");
   });
   test("updates an existing editable pull request", async () => {
     const calls: unknown[] = [];

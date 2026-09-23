@@ -8,7 +8,6 @@ import { openExternalUrl } from "@/lib/open-external-url";
 import { TaskExecutionCiChecksList } from "./task-execution-ci-checks-list";
 import { TaskExecutionCiCommentsList } from "./task-execution-ci-comments-list";
 import { checksSummaryLabel } from "./task-execution-ci-presentation";
-import { TaskExecutionCiReviewersList } from "./task-execution-ci-reviewers-list";
 
 type LoadedPullRequestReviewContext = Extract<PullRequestReviewContext, { status: "loaded" }>;
 type RefreshState = "idle" | "refreshing";
@@ -78,11 +77,6 @@ export function TaskExecutionCiLoaded({
             summaryLabel={checkSummary}
           />
         </section>
-        {context.reviewers ? (
-          <section className="border-b border-border">
-            <TaskExecutionCiReviewersList reviewers={context.reviewers} />
-          </section>
-        ) : null}
         <section>
           <TaskExecutionCiCommentsList comments={context.comments} />
         </section>

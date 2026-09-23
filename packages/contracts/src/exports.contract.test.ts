@@ -9,7 +9,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "azureDevOpsRemoteMappingSchema",
   "azureDevOpsRepositorySchema",
   "githubGitProviderRepositorySchema",
-  "pullRequestReviewerSchema",
   "agentSessionRuntimePolicySchema",
   "agentRuntimePolicyBindingSchema",
   "policyBoundSessionRefSchema",
