@@ -133,3 +133,19 @@ export const azureRemoteMappingDraftErrors = (
     pushUrls: errors.pushUrls?.[0] ?? null,
   };
 };
+
+export const azureRemoteMappingDraftListErrors = (
+  drafts: readonly AzureRemoteMappingDraft[],
+  repository: AzureDevOpsRepository | undefined,
+): AzureRemoteMappingDraftErrors[] => {
+  const remoteNames = new Set<string>();
+  return drafts.map((draft) => {
+    const errors = azureRemoteMappingDraftErrors(draft, repository);
+    const remoteName = draft.remoteName.trim();
+    if (remoteName && remoteNames.has(remoteName)) {
+      errors.remoteName = "Each Azure DevOps remote mapping must use a different remote name.";
+    }
+    remoteNames.add(remoteName);
+    return errors;
+  });
+};

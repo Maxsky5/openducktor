@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   azureDevOpsHttpConsentCollectionUrl,
+  azureRemoteMappingDraftListErrors,
   azureRemoteMappingDraftErrors,
   azureRepositoryDraftErrors,
   isAzureDevOpsConnectionEventCurrent,
@@ -77,6 +78,22 @@ describe("Azure DevOps settings draft", () => {
       fetchUrl: expect.any(String),
       pushUrls: expect.any(String),
     });
+  });
+
+  test("reports duplicate remote names on the later mapping", () => {
+    const parsed = parseAzureRepositoryDraft(repositoryDraft);
+    if (!parsed.success) throw parsed.error;
+
+    const mappings = [
+      { draftId: "mapping-1", remoteName: "origin", fetchUrl: "git@one:repo", pushUrls: "" },
+      { draftId: "mapping-2", remoteName: " origin ", fetchUrl: "git@two:repo", pushUrls: "" },
+    ];
+    const errors = azureRemoteMappingDraftListErrors(mappings, parsed.data);
+
+    expect(errors[0]?.remoteName).toBeNull();
+    expect(errors[1]?.remoteName).toBe(
+      "Each Azure DevOps remote mapping must use a different remote name.",
+    );
   });
 
   test("accepts connection events only for the active selection and attempt", () => {

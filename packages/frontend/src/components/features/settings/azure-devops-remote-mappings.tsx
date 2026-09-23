@@ -20,8 +20,11 @@ const EMPTY_REMOTE_MAPPING_ERRORS = {
   pushUrls: null,
 } satisfies AzureRemoteMappingDraftErrors;
 
-const remoteMappingErrorMessage = (field: AzureRemoteMappingDraftField): string => {
-  if (field === "remoteName") return "Remote name is required.";
+const remoteMappingErrorMessage = (field: AzureRemoteMappingDraftField, error: string): string => {
+  if (field === "remoteName")
+    return error.includes("different remote name")
+      ? "Each remote mapping needs a different name."
+      : "Remote name is required.";
   if (field === "fetchUrl") return "Enter a valid fetch URL.";
   return "Enter at least one valid push URL.";
 };
@@ -185,7 +188,7 @@ function AzureDevOpsRemoteMapping({
                 role="alert"
                 className="text-xs text-danger"
               >
-                {remoteMappingErrorMessage(field)}
+                {remoteMappingErrorMessage(field, errors[field])}
               </p>
             ) : null}
           </div>

@@ -35,7 +35,7 @@ export const parseAzureDevOpsRepositoryUrl = (remoteUrl: string): AzureDevOpsRep
     return null;
   }
   if (
-    parsed.username !== "" ||
+    (parsed.username !== "" && !(parsed.protocol === "ssh:" && parsed.username === "git")) ||
     parsed.password !== "" ||
     parsed.search !== "" ||
     parsed.hash !== "" ||

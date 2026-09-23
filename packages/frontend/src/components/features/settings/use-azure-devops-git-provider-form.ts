@@ -11,7 +11,7 @@ import {
   type AzureRemoteMappingDraft,
   type AzureRepositoryDraft,
   azureDevOpsHttpConsentCollectionUrl,
-  azureRemoteMappingDraftErrors,
+  azureRemoteMappingDraftListErrors,
   azureRepositoryDraftErrors,
   buildAzureRemoteMappingDrafts,
   buildAzureRepositoryDraft,
@@ -46,8 +46,8 @@ const azureDevOpsValidationErrorCount = (
   const repository = parsed.success ? parsed.data : undefined;
   return [
     ...Object.values(azureRepositoryDraftErrors(draft)),
-    ...mappings.flatMap((mapping) =>
-      Object.values(azureRemoteMappingDraftErrors(mapping, repository)),
+    ...azureRemoteMappingDraftListErrors(mappings, repository).flatMap((errors) =>
+      Object.values(errors),
     ),
   ].filter(Boolean).length;
 };
@@ -78,10 +78,7 @@ export const useAzureDevOpsGitProviderForm = ({
   }, [draft]);
   const repositoryErrors = useMemo(() => azureRepositoryDraftErrors(draft), [draft]);
   const mappingErrors = useMemo(
-    () =>
-      remoteMappingDrafts.map((mapping) =>
-        azureRemoteMappingDraftErrors(mapping, parsedRepository),
-      ),
+    () => azureRemoteMappingDraftListErrors(remoteMappingDrafts, parsedRepository),
     [parsedRepository, remoteMappingDrafts],
   );
   const configurationFingerprint = parsedRepository

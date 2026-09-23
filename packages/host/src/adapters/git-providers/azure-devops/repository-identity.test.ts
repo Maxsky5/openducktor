@@ -22,11 +22,15 @@ describe("Azure DevOps repository identity", () => {
       parseAzureDevOpsRepositoryUrl(
         "git@ssh.dev.azure.com:v3/OpenDucktor/Desktop%20App/Main%20Repo",
       ),
+      parseAzureDevOpsRepositoryUrl(
+        "ssh://git@ssh.dev.azure.com/v3/OpenDucktor/Desktop%20App/Main%20Repo",
+      ),
     ];
 
     expect(repositories[0]).toEqual(expected);
     expect(repositories[1]).toEqual({ ...expected, organization: "openducktor" });
     expect(repositories[2]).toEqual(expected);
+    expect(repositories[3]).toEqual(expected);
     expect(
       new Set(repositories.map((repository) => azureDevOpsRepositoryKey(repository!))).size,
     ).toBe(1);
@@ -53,6 +57,15 @@ describe("Azure DevOps repository identity", () => {
   test("rejects unsafe or incomplete remotes", () => {
     expect(
       parseAzureDevOpsRepositoryUrl("https://user:secret@dev.azure.com/org/project/_git/repo"),
+    ).toBeNull();
+    expect(
+      parseAzureDevOpsRepositoryUrl("https://git@dev.azure.com/org/project/_git/repo"),
+    ).toBeNull();
+    expect(
+      parseAzureDevOpsRepositoryUrl("ssh://other@ssh.dev.azure.com/v3/org/project/repo"),
+    ).toBeNull();
+    expect(
+      parseAzureDevOpsRepositoryUrl("ssh://git:secret@ssh.dev.azure.com/v3/org/project/repo"),
     ).toBeNull();
     expect(
       parseAzureDevOpsRepositoryUrl("https://dev.azure.com/org/project/_git/repo?x=1"),

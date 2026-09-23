@@ -964,6 +964,79 @@ describe("settings git sections", () => {
     }
   });
 
+  test("shows duplicate Azure remote names and reports a save validation error", () => {
+    const onAzureDevOpsValidationChange = mock((_errorCount: number) => {});
+    const repository = {
+      providerId: "azure_devops" as const,
+      deployment: "services" as const,
+      serviceUrl: "https://dev.azure.com",
+      organization: "OpenDucktor",
+      project: "Desktop",
+      name: "app",
+    };
+    const initialRepoConfig: SettingsRepoConfig = {
+      ...baseRepoConfig,
+      git: {
+        provider: {
+          id: "azure_devops",
+          enabled: true,
+          autoDetected: false,
+          repository,
+          remoteMappings: [
+            {
+              remoteName: "origin",
+              fetchUrl: "git@one:repo",
+              pushUrls: ["git@one:repo"],
+              repository,
+            },
+            {
+              remoteName: "backup",
+              fetchUrl: "git@two:repo",
+              pushUrls: ["git@two:repo"],
+              repository,
+            },
+          ],
+        },
+      },
+    };
+    const ControlledRepositoryGitSection = (): ReturnType<typeof createElement> => {
+      const [repoConfig, setRepoConfig] = useState(initialRepoConfig);
+      return createElement(RepositoryGitSection, {
+        selectedRepoPath: "/repo",
+        selectedRepoConfig: repoConfig,
+        providerState: { status: "draft" },
+        disabled: false,
+        onDetectGithubRepository: async () => null,
+        onAzureDevOpsValidationChange,
+        onUpdateSelectedRepoConfig: setRepoConfig,
+      });
+    };
+    const rendered = render(
+      createElement(
+        QueryProvider,
+        { useIsolatedClient: true },
+        createElement(ControlledRepositoryGitSection),
+      ),
+    );
+
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Enter manually" }));
+      const secondRemoteName = rendered.container.querySelector("#repo-azure-mapping-1-remoteName");
+      if (!(secondRemoteName instanceof HTMLInputElement)) {
+        throw new Error("Expected the second remote name field");
+      }
+      fireEvent.change(secondRemoteName, { target: { value: " origin " } });
+      fireEvent.blur(secondRemoteName);
+
+      expect(rendered.container.textContent).toContain(
+        "Each remote mapping needs a different name.",
+      );
+      expect(onAzureDevOpsValidationChange).toHaveBeenLastCalledWith(1);
+    } finally {
+      rendered.unmount();
+    }
+  });
+
   test("clears Azure mappings and HTTP consent when detection changes repository", async () => {
     const oldRepository = {
       providerId: "azure_devops" as const,
