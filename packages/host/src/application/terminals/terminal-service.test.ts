@@ -581,6 +581,53 @@ describe("TerminalService", () => {
     expect(replayed).toEqual(["snapshot"]);
   });
 
+  test.each(["ack", "detach"] as const)(
+    "does not leave output paused when %s finishes before the pause request",
+    async (unblock) => {
+      const pty = makePty();
+      const start = pty.port.start;
+      const pauseStarted = Promise.withResolvers<void>();
+      const pauseGate = Promise.withResolvers<void>();
+      pty.port.start = (plan, handlers) =>
+        start(plan, handlers).pipe(
+          Effect.map((handle) => ({
+            ...handle,
+            pauseOutput: () =>
+              Effect.promise(async () => {
+                pauseStarted.resolve();
+                await pauseGate.promise;
+                pty.operations.push("pause");
+              }),
+          })),
+        );
+      const { service } = await makeService(pty);
+      await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
+      await Effect.runPromise(
+        service.attach({
+          terminalId: "terminal-1",
+          attachmentId: "slow-renderer",
+          lastConsumedSequence: 0,
+          sink: () => undefined,
+        }),
+      );
+
+      pty.emit(new Uint8Array(TERMINAL_LIMITS.pendingOutputBytes));
+      await pauseStarted.promise;
+      if (unblock === "ack") {
+        await Effect.runPromise(
+          service.acknowledge("terminal-1", "slow-renderer", TERMINAL_LIMITS.pendingOutputBytes),
+        );
+      } else {
+        await Effect.runPromise(service.detach("terminal-1", "slow-renderer"));
+      }
+      expect(pty.operations).toEqual(["resume"]);
+
+      pauseGate.resolve();
+      await Bun.sleep(0);
+      expect(pty.operations.at(-1)).toBe("resume");
+    },
+  );
+
   test("resumes output when a failed sink removes the last attachment", async () => {
     const { service, pty, settleTitles } = await makeService();
     await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));

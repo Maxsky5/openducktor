@@ -174,6 +174,58 @@ describe("createNodePtyPort", () => {
     expect(calls).toContain("terminate-tree:42");
   });
 
+  test("resumes a paused PTY before waiting for process-tree termination", async () => {
+    const calls: string[] = [];
+    let paused = false;
+    let exitListener: (event: { exitCode: number; signal: number }) => void = () => undefined;
+    const terminationStarted = Promise.withResolvers<void>();
+    const finishTermination = Promise.withResolvers<void>();
+    const port = createNodePtyPort({
+      processTreeTerminator: () =>
+        Effect.promise(async () => {
+          calls.push(paused ? "terminate-while-paused" : "terminate-after-resume");
+          terminationStarted.resolve();
+          await finishTermination.promise;
+          exitListener({ exitCode: 0, signal: 15 });
+        }),
+      nodePty: {
+        spawn: () => ({
+          pid: 42,
+          onData: () => ({ dispose: () => undefined }),
+          onExit: (listener) => {
+            exitListener = listener;
+            return { dispose: () => undefined };
+          },
+          write: () => undefined,
+          resize: () => undefined,
+          pause: () => {
+            paused = true;
+            calls.push("pause");
+          },
+          resume: () => {
+            paused = false;
+            calls.push("resume");
+          },
+        }),
+      },
+    });
+    const handle = await Effect.runPromise(
+      port.start(
+        { shell: "/bin/zsh", args: [], cwd: "/repo", env: {}, grid: { columns: 80, rows: 24 } },
+        { onOutput: () => undefined, onFailure: () => undefined, onExit: () => undefined },
+      ),
+    );
+
+    await Effect.runPromise(handle.pauseOutput());
+    const termination = Effect.runPromise(handle.terminate());
+    await terminationStarted.promise;
+    await Effect.runPromise(handle.pauseOutput());
+    finishTermination.resolve();
+    await termination;
+
+    expect(calls).toEqual(["pause", "resume", "terminate-after-resume"]);
+  });
+
   test("preserves Windows UTF-8 text output without terminating the PTY", async () => {
     let dataListener: (data: string | Buffer) => void = () => undefined;
     const calls: string[] = [];

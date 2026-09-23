@@ -36,11 +36,15 @@ If the host already dropped the requested range, it sends `replay_gap`. The rend
 
 Replay and unacknowledged output have byte limits. `node-pty` can pause and resume. An adapter that cannot pause, such as Bun PTY, sends overflow and stops the terminal.
 
+The host reconciles a late PTY pause after an ACK or detach has resumed output. This keeps a live terminal from staying paused after the renderer catches up or leaves.
+
 The frontend reconnects the frame transport and attaches mounted terminals again. A transport loss removes attachments, not the PTY. If the host instance changes, old tabs become lost. A stale attach gets `terminal_forgotten`. Do not recreate a lost terminal.
 
 ## Close and clean up
 
 Before an unconfirmed close, the host checks for child processes. With no child, it closes at once. With a child, it returns `confirmation_required`. A confirmed close stops the process tree and removes the session.
+
+Electron resumes a paused `node-pty` output stream before it stops the process tree. `node-pty` waits for that stream to close before it reports exit.
 
 The UI hides a tab while close is pending. It restores the tab when confirmation is needed or close fails.
 

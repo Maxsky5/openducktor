@@ -218,6 +218,10 @@ export class TerminalSessionOutput {
     });
   }
 
+  resumeAfterPause(handle: TerminalPtyHandle): Effect.Effect<void, TerminalPtyError> {
+    return this.paused || this.overflowed ? Effect.void : handle.resumeOutput();
+  }
+
   markOverflowed(): boolean {
     if (this.overflowed) return false;
     this.overflowed = true;
