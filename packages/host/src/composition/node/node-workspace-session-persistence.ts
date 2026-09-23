@@ -26,6 +26,8 @@ export const createNodeWorkspaceSessionPersistence = ({
   faultLog: AgentSessionLiveFaultLogger;
 }) => {
   const operationGate = createWorkspaceSessionOperationGate();
+  // Title transitions serialize on their own gate, because an observed message
+  // renames the runtime session without an operation.
   const sessionTitleGate = createWorkspaceSessionOperationGate();
   const publishLiveEnvelope = createLiveSessionPublisher(eventBus);
   const publishUpdated: WorkspaceSessionUpdatedPublisher = (workspaceId, session) =>

@@ -78,7 +78,7 @@ describe("Workspace Session persistence through the shared command module", () =
     }
   });
 
-  test("leaves the runtime session name unchanged when the Workspace Session has no title", async () => {
+  test("leaves the runtime session title unchanged when the Workspace Session has no title", async () => {
     const h = await setup();
     await Effect.runPromise(
       h.live.resumeSession({
@@ -125,7 +125,7 @@ describe("Workspace Session persistence through the shared command module", () =
     expect(h.titleAttempts).toEqual([]);
   });
 
-  test("keeps both titles on the prior value when the runtime title update fails", async () => {
+  test("keeps both titles unchanged when the runtime title update fails", async () => {
     const h = await setup();
     h.state.failTitle = true;
     await h.emit({ ...h.accepted(), sessionRef: h.ref });
@@ -137,7 +137,7 @@ describe("Workspace Session persistence through the shared command module", () =
     expect(h.titleAttempts).toEqual(["First accepted prompt"]);
   });
 
-  test("keeps both titles on the prior value when the runtime does not hold the session", async () => {
+  test("keeps both titles unchanged when the runtime does not hold the session", async () => {
     const h = await setup();
     h.state.titleNotAttached = true;
     await h.emit({ ...h.accepted(), sessionRef: h.ref });

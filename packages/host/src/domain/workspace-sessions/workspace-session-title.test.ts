@@ -78,7 +78,7 @@ test("prefers the manual title, falls back to the generated title, and stays und
   expect(runtimeTitle({ generatedTitle: "Generated", manualTitle: null })).toBe("Generated");
 });
 
-test("plans a native rename only for a changed title on a bound session", () => {
+test("plans a runtime rename only for a changed title on a bound session", () => {
   expect(
     planRuntimeTitleRename(
       { externalSessionId: "native", generatedTitle: null, manualTitle: null },

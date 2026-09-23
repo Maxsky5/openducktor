@@ -49,7 +49,7 @@ export const controlSummary = {
   sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } as const,
 };
 
-export const acceptedUserMessageTitle = "Hello";
+export const acceptedMessageText = "Hello";
 
 type ControlCall = {
   [
@@ -172,8 +172,8 @@ export const createRuntimeHarness = (
         externalSessionId: input.externalSessionId,
         timestamp: "2026-07-16T10:03:00.000Z",
         messageId: "user-1",
-        message: acceptedUserMessageTitle,
-        parts: [{ kind: "text", text: acceptedUserMessageTitle }],
+        message: acceptedMessageText,
+        parts: [{ kind: "text", text: acceptedMessageText }],
         state: "queued",
       };
     },

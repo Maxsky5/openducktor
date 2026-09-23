@@ -8,7 +8,7 @@ import { Effect } from "effect";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
 import { createOpenCodeLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/opencode-live-session-adapter";
 import {
-  acceptedUserMessageTitle,
+  acceptedMessageText,
   createRuntimeHarness,
 } from "../../adapters/agent-sessions/opencode-live-session-adapter.test-support";
 import {
@@ -162,10 +162,8 @@ describe("Workspace Session runtime rename through the real OpenCode live adapte
     expect(titleCalls).toHaveLength(1);
     expect(titleCalls[0]?.input).toMatchObject({
       externalSessionId: "native",
-      title: acceptedUserMessageTitle,
+      title: acceptedMessageText,
     });
-    expect((await Effect.runPromise(store.get(storeRef))).generatedTitle).toBe(
-      acceptedUserMessageTitle,
-    );
+    expect((await Effect.runPromise(store.get(storeRef))).generatedTitle).toBe(acceptedMessageText);
   });
 });
