@@ -2,6 +2,7 @@ import type { TaskAssetStageResult } from "@openducktor/contracts";
 import { AlertCircle, Code2, Eye, ImagePlus, Info } from "lucide-react";
 import { lazy, type ReactElement, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import type { IssueImageContext } from "@/components/features/issue-source/github-issue-image";
 import type { MermaidPreviews } from "@/components/ui/markdown-mermaid-state";
 import { Textarea } from "@/components/ui/textarea";
 import { TaskDescriptionEditorLoading } from "./task-description-editor-loading";
@@ -17,6 +18,7 @@ type TaskDescriptionEditorProps = {
   markdown: string;
   workspaceId: string | null;
   taskId: string | null;
+  issueImageContext?: IssueImageContext | undefined;
   onChange(markdown: string): void;
   onUpload(file: File): Promise<TaskAssetStageResult>;
   uploads: TaskDescriptionAssetUpload[];
@@ -27,6 +29,7 @@ function TaskDescriptionEditorSession({
   markdown,
   workspaceId,
   taskId,
+  issueImageContext,
   onChange,
   onUpload,
   uploads,
@@ -185,6 +188,7 @@ function TaskDescriptionEditorSession({
           previews={previews}
           mermaidPreviews={compatibilityState.mermaidPreviews}
           renderContext={renderContext}
+          issueImageContext={issueImageContext}
         />
       </Suspense>
     );

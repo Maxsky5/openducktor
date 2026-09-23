@@ -65,6 +65,36 @@ describe("TagSelector", () => {
     expect(labels).toEqual([]);
   });
 
+  test("accepts a comma inside a label when Enter is the only commit key", async () => {
+    const labels: string[][] = [];
+
+    function Harness() {
+      const [value, setValue] = useState(["ui,ux"]);
+      return (
+        <TagSelector
+          value={value}
+          onChange={(next) => {
+            labels.push(next);
+            setValue(next);
+          }}
+          commitKeys={["Enter"]}
+        />
+      );
+    }
+
+    const rendered = render(<Harness />);
+    const input = rendered.getByRole("textbox");
+
+    await act(async () => {
+      fireEvent.input(input, { target: { value: "docs" } });
+      fireEvent.keyDown(input, { key: "," });
+      fireEvent.input(input, { target: { value: "docs,ux" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+    });
+
+    expect(labels).toEqual([["ui,ux", "docs,ux"]]);
+  });
+
   test("prevents empty enter from bubbling to the parent form", async () => {
     let prevented = false;
 

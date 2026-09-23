@@ -119,6 +119,20 @@ export const createTaskDescriptionComponents = ({
     );
   },
   img: ({ alt, className, src, title, ...props }) => {
+    if (src?.startsWith(TASK_ASSET_URI_PREFIX)) {
+      if (parseTaskAssetUri(src) && taskAssetContext && resolveTaskAssetSrc) {
+        return (
+          <TaskAssetImage
+            context={taskAssetContext}
+            resolveTaskAssetSrc={resolveTaskAssetSrc}
+            src={src}
+            {...(alt === undefined ? {} : { alt })}
+            {...(className === undefined ? {} : { className })}
+            {...(title === undefined ? {} : { title })}
+          />
+        );
+      }
+    }
     const callerImage = components.img
       ? createElement(components.img, { ...props, alt, className, src, title })
       : null;
@@ -130,18 +144,6 @@ export const createTaskDescriptionComponents = ({
               Image could not be loaded: the task asset reference is invalid.
             </TaskAssetAlert>
           )
-        );
-      }
-      if (taskAssetContext && resolveTaskAssetSrc) {
-        return (
-          <TaskAssetImage
-            context={taskAssetContext}
-            resolveTaskAssetSrc={resolveTaskAssetSrc}
-            src={src}
-            {...(alt === undefined ? {} : { alt })}
-            {...(className === undefined ? {} : { className })}
-            {...(title === undefined ? {} : { title })}
-          />
         );
       }
       return (

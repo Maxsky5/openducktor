@@ -5,6 +5,7 @@ import {
   isAzureDevOpsRepository,
 } from "@openducktor/core";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { errorMessage } from "@/lib/errors";
 import { host } from "@/state/operations/shared/host";
 import {
@@ -65,7 +66,7 @@ export const useAzureDevOpsGitProviderForm = ({
     buildAzureRepositoryDraft(configuredRepository),
   );
   const [remoteMappingDrafts, setRemoteMappingDrafts] = useState<AzureRemoteMappingDraft[]>(() =>
-    buildAzureRemoteMappingDrafts(configuredProvider?.remoteMappings),
+    buildAzureRemoteMappingDrafts(configuredProvider?.settings?.remoteMappings),
   );
   const [repositoryActionError, setRepositoryActionError] = useState<string | null>(null);
   const [isDetecting, setIsDetecting] = useState(false);
@@ -90,7 +91,7 @@ export const useAzureDevOpsGitProviderForm = ({
   const httpCollectionUrl = azureDevOpsHttpConsentCollectionUrl(parsedRepository);
   const consentGranted =
     httpCollectionUrl !== null &&
-    configuredProvider?.httpConsentCollectionUrl === httpCollectionUrl;
+    configuredProvider?.settings?.httpConsentCollectionUrl === httpCollectionUrl;
   const connectionInput: AzureDevOpsConnectionInput | null = parsedRepository
     ? { repoPath: selectedRepoPath, repository: parsedRepository }
     : null;
@@ -103,6 +104,20 @@ export const useAzureDevOpsGitProviderForm = ({
       configurationFingerprint,
       connectionInput,
     });
+  const areasQuery = useQuery({
+    queryKey: ["azure-devops", "area-paths", selectedRepoPath, configurationFingerprint],
+    enabled: providerEnabled && parsedRepository !== undefined,
+    queryFn: async () => {
+      if (!parsedRepository)
+        throw new Error("Set an Azure DevOps project before loading its areas.");
+      const saved = await host.workspaceGetRepoConfig(selectedRepoConfig.workspaceId);
+      const savedRepository = configuredAzureRepository(saved.git.provider);
+      if (!savedRepository || !sameAzureProject(savedRepository, parsedRepository)) {
+        throw new Error("Save the Azure DevOps project settings, then load its area paths.");
+      }
+      return host.azureAreaPathsList(selectedRepoPath);
+    },
+  });
 
   useEffect(() => {
     configuredRepositoryRef.current = configuredRepository;
@@ -116,6 +131,10 @@ export const useAzureDevOpsGitProviderForm = ({
     if (!parsed.success) return;
     const repository = parsed.data;
     const remoteMappings = toAzureRemoteMappings(nextMappings, repository);
+    const consentCollectionUrl =
+      repository.deployment === "server" && repository.serviceUrl.startsWith("http://")
+        ? azureDevOpsHttpConsentCollectionUrl(repository)
+        : null;
     onUpdateSelectedRepoConfig((repoConfig) => ({
       ...repoConfig,
       git: {
@@ -126,14 +145,19 @@ export const useAzureDevOpsGitProviderForm = ({
           enabled: repoConfig.git.provider?.enabled ?? true,
           autoDetected: false,
           repository,
-          remoteMappings,
-          httpConsentCollectionUrl:
-            repository?.deployment === "server" &&
-            repository.serviceUrl.startsWith("http://") &&
-            repoConfig.git.provider?.httpConsentCollectionUrl ===
-              azureDevOpsHttpConsentCollectionUrl(repository)
-              ? repoConfig.git.provider.httpConsentCollectionUrl
+          settings: {
+            areaPath: sameAzureProject(
+              configuredAzureRepository(repoConfig.git.provider),
+              repository,
+            )
+              ? repoConfig.git.provider?.settings?.areaPath
               : undefined,
+            remoteMappings,
+            httpConsentCollectionUrl:
+              repoConfig.git.provider?.settings?.httpConsentCollectionUrl === consentCollectionUrl
+                ? repoConfig.git.provider.settings.httpConsentCollectionUrl
+                : undefined,
+          },
         },
       },
     }));
@@ -175,6 +199,29 @@ export const useAzureDevOpsGitProviderForm = ({
     isReady,
     readinessMessage,
     remoteMappingDrafts,
+    areaPaths: areasQuery.data ?? [],
+    areaPathsError: areasQuery.isError ? errorMessage(areasQuery.error) : null,
+    isLoadingAreaPaths: areasQuery.isFetching,
+    selectedAreaPath: configuredProvider?.settings?.areaPath ?? "",
+    reloadAreaPaths: () => void areasQuery.refetch(),
+    setAreaPath(areaPath: string) {
+      onUpdateSelectedRepoConfig((repoConfig) => ({
+        ...repoConfig,
+        git: {
+          ...repoConfig.git,
+          provider: {
+            ...repoConfig.git.provider,
+            id: "azure_devops",
+            enabled: repoConfig.git.provider?.enabled ?? true,
+            autoDetected: repoConfig.git.provider?.autoDetected ?? false,
+            settings: {
+              ...repoConfig.git.provider?.settings,
+              areaPath: areaPath || undefined,
+            },
+          },
+        },
+      }));
+    },
     repositoryActionError,
     repositoryErrors,
     setProviderEnabled(enabled: boolean) {
@@ -203,14 +250,11 @@ export const useAzureDevOpsGitProviderForm = ({
           !currentRepository ||
           azureDevOpsRepositoryKey(currentRepository) !== azureDevOpsRepositoryKey(repository);
         const nextMappings = repositoryChanged ? [] : remoteMappingDrafts;
-        setDraft(buildAzureRepositoryDraft(repository));
+        const repositoryDraft = buildAzureRepositoryDraft(repository);
+        setDraft(repositoryDraft);
         if (repositoryChanged) setRemoteMappingDrafts(nextMappings);
         onValidationChange(
-          azureDevOpsValidationErrorCount(
-            buildAzureRepositoryDraft(repository),
-            nextMappings,
-            providerEnabled,
-          ),
+          azureDevOpsValidationErrorCount(repositoryDraft, nextMappings, providerEnabled),
         );
         onUpdateSelectedRepoConfig((repoConfig) =>
           repoConfig.repoPath !== selectedRepoPath || repoConfig.git.provider?.id !== "azure_devops"
@@ -223,12 +267,20 @@ export const useAzureDevOpsGitProviderForm = ({
                     ...repoConfig.git.provider,
                     autoDetected: true,
                     repository,
-                    remoteMappings: repositoryChanged
-                      ? undefined
-                      : repoConfig.git.provider.remoteMappings,
-                    httpConsentCollectionUrl: repositoryChanged
-                      ? undefined
-                      : repoConfig.git.provider.httpConsentCollectionUrl,
+                    settings: {
+                      areaPath: sameAzureProject(
+                        configuredAzureRepository(repoConfig.git.provider),
+                        repository,
+                      )
+                        ? repoConfig.git.provider.settings?.areaPath
+                        : undefined,
+                      remoteMappings: repositoryChanged
+                        ? undefined
+                        : repoConfig.git.provider.settings?.remoteMappings,
+                      httpConsentCollectionUrl: repositoryChanged
+                        ? undefined
+                        : repoConfig.git.provider.settings?.httpConsentCollectionUrl,
+                    },
                   },
                 },
               },
@@ -253,7 +305,10 @@ export const useAzureDevOpsGitProviderForm = ({
             id: "azure_devops",
             enabled: repoConfig.git.provider?.enabled ?? true,
             autoDetected: repoConfig.git.provider?.autoDetected ?? false,
-            httpConsentCollectionUrl: checked ? (httpCollectionUrl ?? undefined) : undefined,
+            settings: {
+              ...repoConfig.git.provider?.settings,
+              httpConsentCollectionUrl: checked ? (httpCollectionUrl ?? undefined) : undefined,
+            },
           },
         },
       }));
@@ -274,3 +329,16 @@ const defaultReadinessMessage = (providerEnabled: boolean): string =>
     : "Enable Azure DevOps to use pull requests and review checks.";
 
 export type AzureDevOpsGitProviderFormController = ReturnType<typeof useAzureDevOpsGitProviderForm>;
+
+const sameAzureProject = (
+  left: AzureDevOpsRepository | undefined,
+  right: AzureDevOpsRepository | undefined,
+): boolean =>
+  Boolean(
+    left &&
+    right &&
+    left.deployment === right.deployment &&
+    left.serviceUrl === right.serviceUrl &&
+    left.organization === right.organization &&
+    left.project === right.project,
+  );

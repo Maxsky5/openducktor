@@ -104,6 +104,7 @@ type CapabilityRule<Port extends { providerId: GitProviderId }> = {
 const PORT_LABELS = {
   pull_requests: "Pull Request",
   pull_request_review: "Pull Request review",
+  issues: "Issue",
 } satisfies Record<GitProviderCapability, string>;
 
 function checkProvider(
@@ -120,6 +121,11 @@ function checkProvider(
       capability: "pull_request_review",
       supported: capabilities.supportsPullRequestReview,
       getPort: () => provider.pullRequestReview(),
+    });
+    yield* checkCapability(provider, {
+      capability: "issues",
+      supported: capabilities.issueAccess !== undefined,
+      getPort: () => provider.issues(),
     });
   });
 }

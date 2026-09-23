@@ -24,6 +24,7 @@ import {
 } from "@/components/features/kanban/session-target-resolution";
 import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workflow-action-group";
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
+import { TaskSourceIssueLink } from "@/components/features/task-source-issue-link";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
 import { Badge } from "@/components/ui/badge";
 import { BorderRay } from "@/components/ui/border-ray";
@@ -247,6 +248,7 @@ function TaskPrimaryMeta({ task }: { task: TaskCard }): ReactElement {
         </Badge>
       ) : null}
       {task.pullRequest ? <TaskPullRequestLink pullRequest={task.pullRequest} /> : null}
+      {task.sourceIssue ? <TaskSourceIssueLink sourceIssue={task.sourceIssue} /> : null}
     </div>
   );
 }
@@ -432,7 +434,8 @@ function CompactTaskIdentity({
 }
 
 function CompactTaskStatus({ task }: { task: TaskCard }): ReactElement | null {
-  const hasStatus = task.subtaskIds.length > 0 || Boolean(task.pullRequest);
+  const hasStatus =
+    task.subtaskIds.length > 0 || Boolean(task.pullRequest) || Boolean(task.sourceIssue);
   if (!hasStatus && !isQaRejectedTask(task)) {
     return null;
   }
@@ -447,6 +450,9 @@ function CompactTaskStatus({ task }: { task: TaskCard }): ReactElement | null {
       ) : null}
       {task.pullRequest ? (
         <TaskPullRequestLink pullRequest={task.pullRequest} className="h-6 px-2 py-0 text-xs" />
+      ) : null}
+      {task.sourceIssue ? (
+        <TaskSourceIssueLink sourceIssue={task.sourceIssue} className="h-6 px-2 py-0 text-xs" />
       ) : null}
     </div>
   );

@@ -84,6 +84,55 @@ export const azureDevOpsRemoteMappingSchema = z
   .strict();
 export type AzureDevOpsRemoteMapping = z.infer<typeof azureDevOpsRemoteMappingSchema>;
 
+export const azureDevOpsProviderSettingsSchema = z
+  .object({
+    remoteMappings: z.array(azureDevOpsRemoteMappingSchema).optional(),
+    httpConsentCollectionUrl: z.string().url().optional(),
+    areaPath: z.string().trim().min(1).optional(),
+  })
+  .strict();
+export type AzureDevOpsProviderSettings = z.infer<typeof azureDevOpsProviderSettingsSchema>;
+
+export const validateAzureDevOpsProviderSettings = (
+  repository: AzureDevOpsRepository | undefined,
+  settings: AzureDevOpsProviderSettings | undefined,
+  context: z.RefinementCtx,
+): void => {
+  if (!repository && settings?.remoteMappings?.length) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Azure DevOps remote mappings require a repository.",
+      path: ["settings", "remoteMappings"],
+    });
+  }
+  if (!repository) return;
+
+  const remoteNames = new Set<string>();
+  for (const [index, mapping] of (settings?.remoteMappings ?? []).entries()) {
+    if (remoteNames.has(mapping.remoteName)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Each Azure DevOps remote mapping must use a different remote name.",
+        path: ["settings", "remoteMappings", index, "remoteName"],
+      });
+    }
+    remoteNames.add(mapping.remoteName);
+    if (
+      mapping.repository.deployment !== repository.deployment ||
+      mapping.repository.serviceUrl !== repository.serviceUrl ||
+      mapping.repository.organization !== repository.organization ||
+      mapping.repository.project !== repository.project ||
+      mapping.repository.name !== repository.name
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "The remote mapping must use the configured Azure DevOps repository.",
+        path: ["settings", "remoteMappings", index, "repository"],
+      });
+    }
+  }
+};
+
 export const azureDevOpsDeviceCodeSchema = z
   .object({
     attemptId: z.string().uuid(),

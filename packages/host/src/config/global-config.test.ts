@@ -139,6 +139,96 @@ describe("global config", () => {
     });
   });
 
+  test("moves flat Azure settings into the provider settings object", () => {
+    const repository = {
+      providerId: "azure_devops" as const,
+      deployment: "services" as const,
+      serviceUrl: "https://dev.azure.com",
+      organization: "OpenDucktor",
+      project: "Desktop",
+      name: "app",
+    };
+    const mapping = {
+      remoteName: "origin",
+      fetchUrl: "https://dev.azure.com/OpenDucktor/Desktop/_git/app",
+      pushUrls: ["https://dev.azure.com/OpenDucktor/Desktop/_git/app"],
+      repository,
+    };
+    const config = parsePersistedGlobalConfig({
+      version: 4,
+      workspaces: {
+        repo: {
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
+          git: {
+            provider: {
+              id: "azure_devops",
+              enabled: true,
+              repository,
+              remoteMappings: [mapping],
+              httpConsentCollectionUrl: "http://ado.example/DefaultCollection",
+              areaPath: "Desktop\\Client",
+            },
+          },
+        },
+      },
+    });
+
+    expect(config.workspaces.repo?.git.provider).toMatchObject({
+      id: "azure_devops",
+      repository,
+      settings: {
+        remoteMappings: [mapping],
+        httpConsentCollectionUrl: "http://ado.example/DefaultCollection",
+        areaPath: "Desktop\\Client",
+      },
+    });
+    expect(config.workspaces.repo?.git.provider).not.toHaveProperty("areaPath");
+  });
+
+  test("migrates Azure settings inside a legacy provider map", () => {
+    const config = parsePersistedGlobalConfigV2({
+      version: 2,
+      workspaces: {
+        repo: {
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
+          git: { providers: { azure_devops: { enabled: true, areaPath: "Desktop\\Client" } } },
+        },
+      },
+    });
+
+    expect(config.workspaces.repo?.git.provider).toMatchObject({
+      id: "azure_devops",
+      settings: { areaPath: "Desktop\\Client" },
+    });
+  });
+
+  test("rejects mixed nested and flat Azure settings", () => {
+    expect(() =>
+      parsePersistedGlobalConfig({
+        version: 4,
+        workspaces: {
+          repo: {
+            workspaceId: "repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+            git: {
+              provider: {
+                id: "azure_devops",
+                enabled: true,
+                settings: { areaPath: "Desktop\\Client" },
+                areaPath: "Desktop\\Other",
+              },
+            },
+          },
+        },
+      }),
+    ).toThrow('Repository "repo" contains both nested and legacy Azure DevOps settings.');
+  });
+
   test("rejects canonical and legacy repository Git config together", () => {
     expect(() =>
       parsePersistedGlobalConfig({

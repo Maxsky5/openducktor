@@ -496,6 +496,7 @@ export function useTaskCreateModalController({
     mode,
     taskId,
     workspaceId,
+    workspaceRepoPath,
     step,
     setStep,
     selectedCreateIssueType,

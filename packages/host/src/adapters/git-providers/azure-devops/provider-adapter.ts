@@ -5,15 +5,18 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { AzureDevOpsConnectionPort } from "../../../ports/azure-devops-connection-port";
+import type { AzureAreaPathsPort } from "../../../ports/azure-area-paths-port";
 import type { GitPort } from "../../../ports/git-port";
 import type {
   GitProviderHealthPort,
   GitProviderPort,
   GitProviderRepositoryPort,
+  IssueReaderPort,
   PullRequestProviderPort,
 } from "../../../ports/git-provider-port";
 import type { PullRequestReviewProviderPort } from "../../../ports/pull-request-review-provider-port";
 import { createAzureDevOpsHealthPort } from "./health";
+import { createAzureDevOpsAreaPathsReader, createAzureDevOpsIssueReader } from "./issues";
 import { createAzureDevOpsPullRequestPort } from "./pull-requests";
 import { createAzureDevOpsRepositoryAdapter } from "./repository";
 import { createAzureDevOpsRestClient, type AzureDevOpsFetch } from "./rest-client";
@@ -25,6 +28,8 @@ export class AzureDevOpsProviderAdapter implements GitProviderPort {
   private readonly healthPort: GitProviderHealthPort;
   private readonly pullRequestsPort: PullRequestProviderPort;
   private readonly reviewPort: PullRequestReviewProviderPort;
+  private readonly issueReaderPort: IssueReaderPort;
+  private readonly areaPathsPort: AzureAreaPathsPort;
 
   constructor({
     connectionPort,
@@ -51,6 +56,14 @@ export class AzureDevOpsProviderAdapter implements GitProviderPort {
       repositoryPort: this.repositoryPort,
     });
     this.reviewPort = createAzureDevOpsReviewPort({ client, repositoryPort: this.repositoryPort });
+    this.issueReaderPort = createAzureDevOpsIssueReader({
+      client,
+      repositoryPort: this.repositoryPort,
+    });
+    this.areaPathsPort = createAzureDevOpsAreaPathsReader({
+      client,
+      repositoryPort: this.repositoryPort,
+    });
   }
 
   getDescriptor(): GitProviderDescriptor {
@@ -71,6 +84,14 @@ export class AzureDevOpsProviderAdapter implements GitProviderPort {
 
   pullRequestReview() {
     return Effect.succeed(this.reviewPort);
+  }
+
+  issues() {
+    return Effect.succeed(this.issueReaderPort);
+  }
+
+  areaPaths(): AzureAreaPathsPort {
+    return this.areaPathsPort;
   }
 
   connection(): AzureDevOpsConnectionPort {

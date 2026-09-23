@@ -17,6 +17,7 @@ import { useKanbanBoardModel } from "./use-kanban-board-model";
 
 type UseKanbanPageModelsArgs = {
   onOpenDetails: (taskId: string) => void;
+  onImportIssues: () => void;
   actions: TaskWorkflowActions;
 };
 
@@ -47,6 +48,7 @@ export const isKanbanForegroundLoading = (args: {
 
 export function useKanbanPageModels({
   onOpenDetails,
+  onImportIssues,
   actions,
 }: UseKanbanPageModelsArgs): KanbanPageModels {
   const { activeWorkspace, isSwitchingWorkspace } = useWorkspaceState();
@@ -208,6 +210,8 @@ export function useKanbanPageModels({
       isTaskCardViewPending: taskCardViewState.isPending,
       onTaskCardViewChange: taskCardViewState.changeTaskCardView,
       onCreateTask: actions.onCreateTask,
+      onImportIssues,
+      importProviderContext: gitProvider.context,
       onRefreshTasks,
     },
     content,

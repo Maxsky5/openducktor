@@ -5,7 +5,15 @@ import {
   taskStatusSchema,
 } from "@openducktor/contracts";
 import { sql } from "drizzle-orm";
-import { check, index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+  check,
+  index,
+  integer,
+  primaryKey,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 import type { SqliteDrizzleSession } from "../../infrastructure/sqlite/sqlite-drizzle-client";
 import { workspaceSessions } from "./sqlite-workspace-session-schema";
 export { workspaceSessions } from "./sqlite-workspace-session-schema";
@@ -54,6 +62,11 @@ export const tasks = sqliteTable(
     agentSessionsJson: text("agent_sessions_json").notNull(),
     targetBranchJson: text("target_branch_json"),
     pullRequestJson: text("pull_request_json"),
+    sourceProviderId: text("source_provider_id"),
+    sourceScope: text("source_scope"),
+    sourceId: text("source_id"),
+    sourceNumber: text("source_number"),
+    sourceUrl: text("source_url"),
     directMergeJson: text("direct_merge_json"),
     createdAt: integer("created_at_ms", { mode: "timestamp_ms" }).notNull(),
     updatedAt: integer("updated_at_ms", { mode: "timestamp_ms" }).notNull(),
@@ -68,6 +81,11 @@ export const tasks = sqliteTable(
     check("chk_tasks_qa_required", sql`${table.qaRequired} in (0, 1)`),
     index("idx_tasks_status_updated").on(table.status, table.updatedAt),
     index("idx_tasks_parent_id").on(table.parentId),
+    uniqueIndex("idx_tasks_source_identity").on(
+      table.sourceProviderId,
+      table.sourceScope,
+      table.sourceId,
+    ),
   ],
 );
 

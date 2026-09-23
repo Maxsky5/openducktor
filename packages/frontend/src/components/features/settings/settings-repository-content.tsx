@@ -137,9 +137,11 @@ const hasProviderEdits = (
     draftProvider?.enabled !== savedProvider?.enabled ||
     (draftProvider?.repository ? providerRepositoryKey(draftProvider.repository) : null) !==
       (savedProvider?.repository ? providerRepositoryKey(savedProvider.repository) : null) ||
-    JSON.stringify(draftProvider?.remoteMappings ?? []) !==
-      JSON.stringify(savedProvider?.remoteMappings ?? []) ||
-    draftProvider?.httpConsentCollectionUrl !== savedProvider?.httpConsentCollectionUrl
+    JSON.stringify(draftProvider?.settings?.remoteMappings ?? []) !==
+      JSON.stringify(savedProvider?.settings?.remoteMappings ?? []) ||
+    draftProvider?.settings?.httpConsentCollectionUrl !==
+      savedProvider?.settings?.httpConsentCollectionUrl ||
+    draftProvider?.settings?.areaPath !== savedProvider?.settings?.areaPath
   );
 };
 

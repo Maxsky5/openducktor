@@ -989,20 +989,22 @@ describe("settings git sections", () => {
           enabled: true,
           autoDetected: false,
           repository,
-          remoteMappings: [
-            {
-              remoteName: "origin",
-              fetchUrl: "git@one:repo",
-              pushUrls: ["git@one:repo"],
-              repository,
-            },
-            {
-              remoteName: "backup",
-              fetchUrl: "git@two:repo",
-              pushUrls: ["git@two:repo"],
-              repository,
-            },
-          ],
+          settings: {
+            remoteMappings: [
+              {
+                remoteName: "origin",
+                fetchUrl: "git@one:repo",
+                pushUrls: ["git@one:repo"],
+                repository,
+              },
+              {
+                remoteName: "backup",
+                fetchUrl: "git@two:repo",
+                pushUrls: ["git@two:repo"],
+                repository,
+              },
+            ],
+          },
         },
       },
     };
@@ -1061,18 +1063,20 @@ describe("settings git sections", () => {
           enabled: false,
           autoDetected: false,
           repository: oldRepository,
-          remoteMappings: [
-            {
-              remoteName: "origin",
-              fetchUrl:
-                "http://azure.example.test/installation/DefaultCollection/Desktop/_git/OpenDucktor",
-              pushUrls: [
-                "http://azure.example.test/installation/DefaultCollection/Desktop/_git/OpenDucktor",
-              ],
-              repository: oldRepository,
-            },
-          ],
-          httpConsentCollectionUrl: "http://azure.example.test/installation/DefaultCollection",
+          settings: {
+            remoteMappings: [
+              {
+                remoteName: "origin",
+                fetchUrl:
+                  "http://azure.example.test/installation/DefaultCollection/Desktop/_git/OpenDucktor",
+                pushUrls: [
+                  "http://azure.example.test/installation/DefaultCollection/Desktop/_git/OpenDucktor",
+                ],
+                repository: oldRepository,
+              },
+            ],
+            httpConsentCollectionUrl: "http://azure.example.test/installation/DefaultCollection",
+          },
         },
       },
     };
@@ -1145,11 +1149,13 @@ describe("settings git sections", () => {
           enabled: true,
           autoDetected: false,
           repository,
-          httpConsentCollectionUrl: "http://azure.example.test/installation/DefaultCollection",
+          settings: {
+            httpConsentCollectionUrl: "http://azure.example.test/installation/DefaultCollection",
+          },
         },
       },
     };
-    const savedProvider = { ...repoConfig.git.provider!, httpConsentCollectionUrl: undefined };
+    const savedProvider = { ...repoConfig.git.provider!, settings: undefined };
     const originalGetConnection = host.workspaceGetAzureDevOpsConnection;
     const originalReplacePat = host.workspaceReplaceAzureDevOpsPat;
     const replacePat = mock(async () => ({ status: "connected" as const, account: null }));

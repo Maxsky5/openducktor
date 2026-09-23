@@ -4,6 +4,7 @@ import type {
   KanbanEmptyColumnDisplay,
   KanbanTaskCardView,
   TaskCard,
+  RepositoryGitProviderContext,
 } from "@openducktor/contracts";
 import type { AgentRole, KanbanColumn as KanbanColumnData } from "@openducktor/core";
 import type {
@@ -87,6 +88,8 @@ export type KanbanPageHeaderModel = {
   isTaskCardViewPending: boolean;
   onTaskCardViewChange: (taskCardView: KanbanTaskCardView) => void;
   onCreateTask: () => void;
+  onImportIssues: () => void;
+  importProviderContext: RepositoryGitProviderContext | undefined;
   onRefreshTasks: () => void;
 };
 

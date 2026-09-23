@@ -13,6 +13,7 @@ const QA_ICON = <ShieldCheck className="size-3.5" />;
 
 type TaskDetailsSheetBodyProps = {
   task: TaskCard;
+  repoPath?: string;
   workspaceId?: string;
   shouldRenderSubtasks: boolean;
   subtasks: TaskCard[];
@@ -34,6 +35,7 @@ type TaskDetailsSheetBodyProps = {
 
 export function TaskDetailsSheetBody({
   task,
+  repoPath,
   workspaceId,
   shouldRenderSubtasks,
   subtasks,
@@ -57,6 +59,15 @@ export function TaskDetailsSheetBody({
         defaultExpanded
         taskId={task.id}
         stripTaskDescriptionFrontMatter
+        {...(repoPath && task.sourceIssue
+          ? {
+              issueImageContext: {
+                repoPath,
+                sourceId: task.sourceIssue.sourceId,
+                providerId: task.sourceIssue.providerId,
+              },
+            }
+          : {})}
         {...(workspaceId
           ? {
               taskAssetContext: {

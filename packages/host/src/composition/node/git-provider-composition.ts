@@ -11,6 +11,7 @@ import {
 } from "../../application/git/git-provider-resolver";
 import type { GitPort } from "../../ports/git-port";
 import type { AzureDevOpsConnectionPort } from "../../ports/azure-devops-connection-port";
+import type { AzureAreaPathsPort } from "../../ports/azure-area-paths-port";
 import type { GitProviderRegistrationError } from "../../ports/git-provider-errors";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
@@ -19,6 +20,7 @@ import type { HostEventBusPort } from "../../events/host-event-bus";
 type NodeGitProviderComposition = {
   resolver: GitProviderResolver;
   azureDevOpsConnection: AzureDevOpsConnectionPort;
+  azureAreaPaths: AzureAreaPathsPort;
 };
 
 type CreateNodeGitProviderCompositionInput = {
@@ -53,12 +55,19 @@ export const createNodeGitProviderComposition = ({
         payload,
       }),
   });
+  const azureDevOps = new AzureDevOpsProviderAdapter({
+    connectionPort: azureDevOpsConnection,
+    fetchImplementation: azureDevOpsFetch ?? fetch,
+    gitPort,
+  });
   return createGitProviderResolver([
     new GithubProviderAdapter({ gitPort, systemCommands, toolDiscovery }),
-    new AzureDevOpsProviderAdapter({
-      connectionPort: azureDevOpsConnection,
-      fetchImplementation: azureDevOpsFetch ?? fetch,
-      gitPort,
-    }),
-  ]).pipe(Effect.map((resolver) => ({ resolver, azureDevOpsConnection })));
+    azureDevOps,
+  ]).pipe(
+    Effect.map((resolver) => ({
+      resolver,
+      azureDevOpsConnection,
+      azureAreaPaths: azureDevOps.areaPaths(),
+    })),
+  );
 };

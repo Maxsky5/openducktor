@@ -101,6 +101,14 @@ const provider = ({
       }),
     );
   },
+  issues: () =>
+    Effect.fail(
+      new GitProviderCapabilityError({
+        providerId: providerDescriptor.id,
+        capability: "issues",
+        message: `Provider '${providerDescriptor.id}' does not support Issues.`,
+      }),
+    ),
 });
 
 const repoConfig = (providerConfig?: { id: string; enabled: boolean }) =>

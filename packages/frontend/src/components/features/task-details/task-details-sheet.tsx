@@ -144,6 +144,7 @@ export function TaskDetailsSheet(props: TaskDetailsSheetProps): ReactElement {
         <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
           <TaskDetailsSheetBody
             task={task}
+            {...(activeWorkspace ? { repoPath: activeWorkspace.repoPath } : {})}
             {...(activeWorkspace ? { workspaceId: activeWorkspace.workspaceId } : {})}
             shouldRenderSubtasks={viewModel.shouldRenderSubtasks}
             subtasks={viewModel.subtasks}

@@ -15,6 +15,20 @@ const withTempDir = async (run: (root: string) => Promise<void>): Promise<void> 
 };
 
 describe("createSystemCommandRunner", () => {
+  test("returns binary stdout as base64 and stops oversized output", async () => {
+    const port = createSystemCommandRunner({ env: process.env, platform: process.platform });
+    const args = ["-e", "process.stdout.write(Buffer.from([0, 255, 128, 1]))"];
+    const result = await Effect.runPromise(
+      port.runCommandAllowFailure("bun", args, { stdoutEncoding: "base64", maxStdoutBytes: 4 }),
+    );
+    expect(result.stdout).toBe(Buffer.from([0, 255, 128, 1]).toString("base64"));
+    await expect(
+      Effect.runPromise(
+        port.runCommandAllowFailure("bun", args, { stdoutEncoding: "base64", maxStdoutBytes: 3 }),
+      ),
+    ).rejects.toThrow("more than 3 bytes");
+  });
+
   test("preserves a nonzero process exit code", async () => {
     const port = createSystemCommandRunner({ env: process.env, platform: process.platform });
 

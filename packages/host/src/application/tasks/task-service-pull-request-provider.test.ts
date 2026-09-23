@@ -92,6 +92,14 @@ const createProvider = (
               message: "Pull Request review is not supported.",
             }),
           ),
+    issues: () =>
+      Effect.fail(
+        new GitProviderCapabilityError({
+          providerId: providerDescriptor.id,
+          capability: "issues",
+          message: "Issue import is not supported.",
+        }),
+      ),
   };
 };
 
