@@ -1,4 +1,7 @@
-import type { GitProviderRepository, PullRequestReviewActivity } from "@openducktor/contracts";
+import type {
+  GithubGitProviderRepository,
+  PullRequestReviewActivity,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import { z } from "zod";
 import { errorMessage, HostValidationError } from "../../../../effect/host-errors";
@@ -292,7 +295,7 @@ const parseReviewThreadCommentsPage = (payload: string): ParsedReviewThreadComme
 type GithubReviewThreadsReadInput = {
   githubCli: GithubCli;
   repoPath: string;
-  repository: GitProviderRepository;
+  repository: GithubGitProviderRepository;
   pullRequestNumber: number;
 };
 

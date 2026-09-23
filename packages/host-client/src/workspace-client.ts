@@ -1,5 +1,10 @@
 import {
   type AgentModelFavorite,
+  type AzureDevOpsConnectionState,
+  azureDevOpsConnectionStateSchema,
+  type AzureDevOpsDeviceCode,
+  azureDevOpsDeviceCodeSchema,
+  type AzureDevOpsRepository,
   type CustomAgentRole,
   type CustomAgentRoleInput,
   customAgentRoleSchema,
@@ -212,6 +217,17 @@ const workspaceDetectGithubRepository = async (
   );
 };
 
+const workspaceDetectAzureDevOpsRepository = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+): Promise<GitProviderRepository> =>
+  invokeFn("workspace_detect_azure_devops_repository", { repoPath }, gitProviderRepositorySchema);
+
+export type AzureDevOpsConnectionInput = {
+  repoPath: string;
+  repository: AzureDevOpsRepository;
+};
+
 const workspaceGetGitProviderContext = async (
   invokeFn: InvokeFn,
   repoPath: string,
@@ -370,6 +386,48 @@ export class HostWorkspaceClient {
 
   async workspaceDetectGithubRepository(repoPath: string): Promise<GitProviderRepository | null> {
     return workspaceDetectGithubRepository(this.invokeFn, repoPath);
+  }
+
+  async workspaceDetectAzureDevOpsRepository(repoPath: string): Promise<GitProviderRepository> {
+    return workspaceDetectAzureDevOpsRepository(this.invokeFn, repoPath);
+  }
+
+  async workspaceGetAzureDevOpsConnection(
+    input: AzureDevOpsConnectionInput,
+  ): Promise<AzureDevOpsConnectionState> {
+    return this.invokeFn(
+      "workspace_get_azure_devops_connection",
+      input,
+      azureDevOpsConnectionStateSchema,
+    );
+  }
+
+  async workspaceStartAzureDevOpsSignIn(
+    input: AzureDevOpsConnectionInput,
+  ): Promise<AzureDevOpsDeviceCode> {
+    return this.invokeFn(
+      "workspace_start_azure_devops_sign_in",
+      input,
+      azureDevOpsDeviceCodeSchema,
+    );
+  }
+
+  async workspaceCancelAzureDevOpsSignIn(attemptId: string): Promise<void> {
+    await this.invokeFn("workspace_cancel_azure_devops_sign_in", { attemptId }, voidResultSchema);
+  }
+
+  async workspaceReplaceAzureDevOpsPat(
+    input: AzureDevOpsConnectionInput & { pat: string },
+  ): Promise<AzureDevOpsConnectionState> {
+    return this.invokeFn(
+      "workspace_replace_azure_devops_pat",
+      input,
+      azureDevOpsConnectionStateSchema,
+    );
+  }
+
+  async workspaceDisconnectAzureDevOps(input: AzureDevOpsConnectionInput): Promise<void> {
+    await this.invokeFn("workspace_disconnect_azure_devops", input, voidResultSchema);
   }
 
   async workspaceGetGitProviderContext(repoPath: string): Promise<RepositoryGitProviderContext> {

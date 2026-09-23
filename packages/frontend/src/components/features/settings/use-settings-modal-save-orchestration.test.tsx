@@ -38,6 +38,12 @@ const createSnapshot = (): SettingsSnapshot =>
 const createValidation = (
   overrides: Partial<SettingsSaveValidation> = {},
 ): SettingsSaveValidation => ({
+  azureDevOps: {
+    hasErrors: false,
+    errorCount: 0,
+    invalidWorkspaceIds: [],
+    selectedWorkspaceId: null,
+  },
   prompt: { hasErrors: false, errorCount: 0 },
   customAgentRoles: { hasErrors: false, errorCount: 0 },
   reusablePrompts: { hasErrors: false, errorCount: 0 },
@@ -444,7 +450,7 @@ describe("useSettingsModalSaveOrchestration", () => {
     await harness.unmount();
   });
 
-  test("rejects concurrent submit attempts while a save is already in flight", async () => {
+  test("blocks concurrent repository saves while the modal is busy", async () => {
     const deferredSave = createDeferred<void>();
     const saveSettingsSnapshot = mock(async () => {
       await deferredSave.promise;
@@ -456,7 +462,7 @@ describe("useSettingsModalSaveOrchestration", () => {
         },
         {
           ...EMPTY_DIRTY_SECTIONS,
-          chat: true,
+          repoSettings: true,
         },
       ),
     );
@@ -474,7 +480,6 @@ describe("useSettingsModalSaveOrchestration", () => {
     expect(secondResult).toBe(false);
     expect(harness.getLatest().isSaving).toBe(true);
 
-    deferredSave.resolve();
     if (!firstSubmit) {
       throw new Error("Expected first submit promise");
     }

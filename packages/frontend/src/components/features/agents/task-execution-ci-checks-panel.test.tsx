@@ -245,7 +245,9 @@ describe("TaskExecutionCiChecksPanel", () => {
       });
       fireEvent.click(view.getByRole("button", { name: "Retry" }));
 
-      await waitFor(() => expect(reviewContextGet).toHaveBeenCalledTimes(2), { timeout: 1_000 });
+      await waitFor(() => expect(reviewContextGet).toHaveBeenCalledTimes(2), {
+        timeout: 1_000,
+      });
       await waitFor(() => expect(view.getByText("No pull request found")).toBeTruthy(), {
         timeout: 1_000,
       });
@@ -413,7 +415,9 @@ describe("TaskExecutionCiChecksPanel", () => {
           </ThemeProvider>
         </QueryProvider>,
       );
-      const link = view.getByRole("link", { name: loadedContext.pullRequest.title });
+      const link = view.getByRole("link", {
+        name: loadedContext.pullRequest.title,
+      });
 
       expect(link.getAttribute("target")).toBeNull();
       expect(fireEvent.click(link)).toBe(false);

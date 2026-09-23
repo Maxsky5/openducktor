@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { GitProviderRepository, SettingsRepoConfig } from "@openducktor/contracts";
+import { type GitProviderRepository, type SettingsRepoConfig } from "@openducktor/contracts";
 import { useState } from "react";
 import {
   createHookHarness as createSharedHookHarness,
@@ -115,6 +115,9 @@ describe("useSettingsModalRepositoryActions", () => {
     if (!detectedRepo) {
       throw new Error("Expected detected repository");
     }
+    if (!("host" in detectedRepo)) {
+      throw new Error("Expected detected GitHub repository");
+    }
     expect(detectedRepo.host).toBe("github.com");
     expect(detectedRepo.owner).toBe("duck");
     expect(detectedRepo.name).toBe("repo");
@@ -122,11 +125,14 @@ describe("useSettingsModalRepositoryActions", () => {
     if (!githubProvider) {
       throw new Error("Expected GitHub provider settings");
     }
+    if (!githubProvider.repository || !("host" in githubProvider.repository)) {
+      throw new Error("Expected GitHub repository settings");
+    }
     expect(githubProvider.enabled).toBe(false);
     expect(githubProvider.autoDetected).toBe(true);
-    expect(githubProvider.repository?.host).toBe("github.com");
-    expect(githubProvider.repository?.owner).toBe("duck");
-    expect(githubProvider.repository?.name).toBe("repo");
+    expect(githubProvider.repository.host).toBe("github.com");
+    expect(githubProvider.repository.owner).toBe("duck");
+    expect(githubProvider.repository.name).toBe("repo");
 
     await harness.unmount();
   });

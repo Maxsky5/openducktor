@@ -1,7 +1,7 @@
 import {
   GITHUB_PROVIDER_DESCRIPTOR,
   pullRequestReviewContextSchema,
-  type GitProviderRepository,
+  type GithubGitProviderRepository,
   type RepoConfig,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -28,7 +28,7 @@ export const createGithubPullRequestReviewAdapter = ({
   githubCli: GithubCli;
   getRepository: (
     repoConfig: RepoConfig,
-  ) => Effect.Effect<GitProviderRepository, HostError | GitProviderRepositoryError>;
+  ) => Effect.Effect<GithubGitProviderRepository, HostError | GitProviderRepositoryError>;
   reviewReader?: GithubPullRequestReviewReader;
 }): PullRequestReviewProviderPort => {
   return {

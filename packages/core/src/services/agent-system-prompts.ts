@@ -375,7 +375,7 @@ const AGENT_PROMPT_DEFINITIONS = {
   "kickoff.build_pull_request_generation": {
     id: "kickoff.build_pull_request_generation",
     purpose: "kickoff",
-    builtinVersion: 7,
+    builtinVersion: 8,
     template: joinPromptBlocks(
       "Publish a review-ready pull request for the current task.",
       lineSection("Pull request base", ["{{git.targetBranch}}"]),
@@ -395,7 +395,7 @@ const AGENT_PROMPT_DEFINITIONS = {
         "Push the source branch, create or update the pull request against the base branch, and confirm the published title and body follow repository conventions.",
       ]),
       bulletSection("Complete", [
-        "After the pull request exists, call odt_set_pull_request with taskId {{task.id}}, the tool's required providerId, and the pull request number.",
+        "After the pull request exists, call odt_set_pull_request with taskId {{task.id}} and the pull request number.",
         "Wait for required pull request checks to finish. If any fail, diagnose and fix the root cause, rerun the affected local checks, commit and push the fix, then check again until all required checks pass.",
         "Completion criterion: the task references the pull request and every required pull request check passes.",
         "Report the pull request URL and the passed local and pull request checks.",

@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { createGeneratedImageWorkers } from "../../adapters/attachments/generated-image-worker-client";
 import { toHostOperationError } from "../../effect/host-errors";
 import { assembleNodeEffectHostCommandRouter } from "./create-node-host-command-router";
-import { createNodeGitProviderResolver } from "./git-provider-composition";
+import { createNodeGitProviderComposition } from "./git-provider-composition";
 import { createNodeHostDefaultPorts } from "./node-host-default-ports";
 import type { CreateNodeHostCommandRouterInput } from "./node-host-command-router-types";
 
@@ -15,14 +15,25 @@ export const createNodeEffectHostCommandRouter = (input: CreateNodeHostCommandRo
           const defaultPorts = yield* createNodeHostDefaultPorts(input, imageWorkers).pipe(
             Effect.mapError((cause) => toHostOperationError(cause, "host.create-router")),
           );
-          const { git, systemCommands, toolDiscovery } = defaultPorts;
-          const resolver = yield* createNodeGitProviderResolver({
+          const { configDir, git, processEnvironment, systemCommands, toolDiscovery } =
+            defaultPorts;
+          const gitProviders = yield* createNodeGitProviderComposition({
+            azureDevOpsFetch: input.azureDevOpsFetch,
+            configDir: configDir.root,
             gitPort: git,
+            processEnv: processEnvironment.environment,
+            eventBus: input.eventBus,
             systemCommands,
             toolDiscovery,
           });
           return yield* Effect.try({
-            try: () => assembleNodeEffectHostCommandRouter(input, defaultPorts, resolver),
+            try: () =>
+              assembleNodeEffectHostCommandRouter(
+                input,
+                defaultPorts,
+                gitProviders.resolver,
+                gitProviders.azureDevOpsConnection,
+              ),
             catch: (cause) => toHostOperationError(cause, "host.create-router"),
           });
         }),

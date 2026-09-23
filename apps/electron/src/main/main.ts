@@ -259,6 +259,8 @@ const registerPrivilegedProtocolSchemes = (): void => {
 
 const createElectronHostCommandRouter = (runtimeDistribution: HostRuntimeDistribution) =>
   createElectronEffectHostCommandRouter({
+    azureDevOpsFetch: (input, init) =>
+      electron.net.fetch(input instanceof URL ? input.href : input, init),
     clientVersion: currentVersion,
     eventBus: hostEventBus,
     isPackaged: app.isPackaged,

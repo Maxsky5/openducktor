@@ -6,6 +6,8 @@ export default {
     // Required by @vitejs/plugin-react optimizeDeps during cold Electron renderer startup.
     "react",
     "react-dom",
+    // The Node bundle externalizes MSAL's native persistence package for the packaged app.
+    "@azure/msal-node-extensions",
   ],
   project: ["src/**/*.{ts,tsx}", "scripts/**/*.ts"],
 };

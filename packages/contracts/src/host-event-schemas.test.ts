@@ -5,6 +5,31 @@ import {
 } from "./host-event-schemas";
 
 describe("host event contracts", () => {
+  test("parses redacted Azure DevOps connection updates", () => {
+    expect(
+      parseHostEventEnvelope({
+        channel: "openducktor://azure-devops-connection-updated",
+        payload: {
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          providerId: "azure_devops",
+          configurationFingerprint: "workspace-1\n/repo\nazure_devops\nrepository-key",
+          attemptId: "8f7c9548-59a8-4f0e-a788-370a060d3f4f",
+          state: { status: "connected", account: "dev@example.test" },
+        },
+      }),
+    ).toEqual({
+      channel: "openducktor://azure-devops-connection-updated",
+      payload: {
+        workspaceId: "workspace-1",
+        repoPath: "/repo",
+        providerId: "azure_devops",
+        configurationFingerprint: "workspace-1\n/repo\nazure_devops\nrepository-key",
+        attemptId: "8f7c9548-59a8-4f0e-a788-370a060d3f4f",
+        state: { status: "connected", account: "dev@example.test" },
+      },
+    });
+  });
   test("parses each channel payload through its envelope branch", () => {
     const envelope = parseHostEventEnvelope({
       channel: "openducktor://agent-session-live-event",

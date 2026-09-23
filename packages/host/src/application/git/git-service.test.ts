@@ -153,6 +153,15 @@ const createFakeGitPort = ({
           }),
       });
     },
+    listRemoteEndpoints(workingDir) {
+      return Effect.succeed(
+        (remotes[workingDir] ?? []).map((remote) => ({
+          name: remote.name,
+          fetchUrls: [remote.url],
+          pushUrls: [remote.url],
+        })),
+      );
+    },
     listBranches(workingDir) {
       return Effect.tryPromise({
         try: async () => {

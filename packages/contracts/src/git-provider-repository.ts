@@ -1,4 +1,4 @@
-import type { GitProviderRepository } from "./git-schemas";
+import type { GithubGitProviderRepository } from "./git-schemas";
 
 const SSH_GIT_PREFIX = "git@";
 const HTTPS_PREFIX = "https://";
@@ -14,7 +14,7 @@ type RepositoryPath = {
   name: string;
 };
 
-export function parseGitRepositoryUrl(remoteUrl: string): GitProviderRepository | null {
+export function parseGitRepositoryUrl(remoteUrl: string): GithubGitProviderRepository | null {
   const value = remoteUrl.trim();
   if (value.length === 0) {
     return null;
@@ -37,7 +37,7 @@ export function parseGitRepositoryUrl(remoteUrl: string): GitProviderRepository 
   };
 }
 
-export function gitRepositoryKey(repository: GitProviderRepository): string {
+export function gitRepositoryKey(repository: GithubGitProviderRepository): string {
   return `${repository.host.toLowerCase()}::${repository.owner.toLowerCase()}::${repository.name.toLowerCase()}`;
 }
 

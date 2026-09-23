@@ -317,7 +317,7 @@ describe("buildAgentSystemPrompt", () => {
     ["kickoff.build_implementation_start", 3, 4, "build"],
     ["kickoff.build_after_qa_rejected", 3, 4, "build"],
     ["kickoff.build_after_human_request_changes", 4, 5, "build"],
-    ["kickoff.build_pull_request_generation", 6, 7, "build"],
+    ["kickoff.build_pull_request_generation", 7, 8, "build"],
     ["kickoff.qa_review", 2, 3, "qa"],
   ] as const)(
     "keeps prior overrides and reports the new version for %s",
@@ -568,7 +568,7 @@ describe("kickoff and permission prompts", () => {
       "Use a concise Conventional Commit-style pull request title that explains why the change matters.",
       "Start the body with the problem and goal. Add reviewer context and decisions or tradeoffs that affect review.",
       "Push the source branch, create or update the pull request against the base branch, and confirm the published title and body follow repository conventions.",
-      "After the pull request exists, call odt_set_pull_request with taskId task-1, the tool's required providerId, and the pull request number.",
+      "After the pull request exists, call odt_set_pull_request with taskId task-1 and the pull request number.",
       "If any fail, diagnose and fix the root cause, rerun the affected local checks, commit and push the fix, then check again until all required checks pass.",
       "Completion criterion: the task references the pull request and every required pull request check passes.",
       "Report the pull request URL and the passed local and pull request checks.",
@@ -577,7 +577,7 @@ describe("kickoff and permission prompts", () => {
     expect(prompt).not.toContain("comparison");
     expect(prompt).not.toContain("origin/release/2026.04");
     expect(prompt).not.toContain("target");
-    expect(result.templates[0]?.builtinVersion).toBe(7);
+    expect(result.templates[0]?.builtinVersion).toBe(8);
   });
 
   test("rejects pull request generation kickoff when target branch context is missing", () => {

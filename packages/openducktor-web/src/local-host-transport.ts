@@ -9,6 +9,7 @@ import {
 } from "@openducktor/contracts";
 import type { HostCommandArgs, HostCommandName } from "@openducktor/host";
 import type {
+  AzureDevOpsConnectionUpdateListener,
   DevServerEventListener,
   DevServerEventSubscription,
   RunEventListener,
@@ -62,6 +63,7 @@ type BrowserSseListenerRegistration = {
 const RUN_EVENT_CHANNEL = "openducktor://run-event";
 const DEV_SERVER_EVENT_CHANNEL = "openducktor://dev-server-event";
 const AGENT_SESSION_LIVE_EVENT_CHANNEL = "openducktor://agent-session-live-event";
+const AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL = "openducktor://azure-devops-connection-updated";
 const HOST_EVENT_STREAM_PATH = "events";
 const APP_TOKEN_HEADER = "x-openducktor-app-token";
 const SESSION_PATH = "session";
@@ -483,6 +485,22 @@ export const subscribeLocalHostRunEvents = async (
       })).unsubscribe;
     }),
   );
+};
+
+export const subscribeLocalHostAzureDevOpsConnectionUpdates = async (
+  listener: AzureDevOpsConnectionUpdateListener,
+): Promise<() => void> => {
+  const subscription = await runWebBoundary(
+    subscribeReadyLocalHostEventsEffect(AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL, (event) => {
+      if (
+        !isBrowserSseControlEvent(event) &&
+        event.channel === AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL
+      ) {
+        listener(event.payload);
+      }
+    }),
+  );
+  return subscription.unsubscribe;
 };
 
 const subscribeReadyLocalHostEventsEffect = (

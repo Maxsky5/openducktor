@@ -55,7 +55,7 @@ import {
   buildWorktreeStatusData,
   buildWorktreeStatusSummaryData,
 } from "../../infrastructure/git/git-worktree-status";
-import type { GitFileListEntry, GitPort, GitRemote } from "../../ports/git-port";
+import type { GitFileListEntry, GitPort, GitRemote, GitRemoteEndpoint } from "../../ports/git-port";
 
 export type {
   GitCommandResult,
@@ -215,6 +215,31 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
         return remotes;
       });
     },
+    listRemoteEndpoints(workingDirectory) {
+      return Effect.gen(function* () {
+        const remoteNames = parseRemoteNames(yield* runGit(runner, workingDirectory, ["remote"]));
+        const remotes: GitRemoteEndpoint[] = [];
+        for (const name of remoteNames) {
+          const fetchUrls = parseRemoteUrls(
+            yield* runGit(runner, workingDirectory, ["remote", "get-url", "--all", name]),
+          );
+          const pushUrls = parseRemoteUrls(
+            yield* runGit(runner, workingDirectory, ["remote", "get-url", "--push", "--all", name]),
+          );
+          if (fetchUrls.length === 0 || pushUrls.length === 0) {
+            return yield* Effect.fail(
+              new HostOperationError({
+                operation: "git.remote.get-url",
+                message: `Git remote '${name}' did not return both fetch and push URLs.`,
+                details: { name },
+              }),
+            );
+          }
+          remotes.push({ name, fetchUrls, pushUrls });
+        }
+        return remotes;
+      });
+    },
     listBranches(workingDirectory) {
       return listBranchesUnchecked(runner, workingDirectory);
     },
@@ -351,3 +376,9 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
     },
   };
 };
+
+const parseRemoteUrls = (output: string): string[] =>
+  output
+    .split(/\r?\n/u)
+    .map((url) => url.trim())
+    .filter(Boolean);

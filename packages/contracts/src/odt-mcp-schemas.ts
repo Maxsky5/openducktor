@@ -1,10 +1,5 @@
 import { z } from "zod";
-import {
-  gitTargetBranchSchema,
-  knownGitProviderIdSchema,
-  pullRequestSchema,
-  workspaceRecordSchema,
-} from "./git-schemas";
+import { gitTargetBranchSchema, pullRequestSchema, workspaceRecordSchema } from "./git-schemas";
 import {
   ODT_TOOL_NAMES,
   ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES,
@@ -264,7 +259,6 @@ export const SetPullRequestInputSchema = z
   .object({
     workspaceId: workspaceScopedToolWorkspaceIdSchema,
     taskId: z.string().trim().min(1),
-    providerId: knownGitProviderIdSchema,
     number: z.number().int().positive(),
   })
   .strict();

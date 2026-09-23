@@ -2,6 +2,13 @@ import { describe, expect, test } from "bun:test";
 import * as contracts from "./index";
 
 const EXPECTED_RUNTIME_EXPORTS = [
+  "AZURE_DEVOPS_PROVIDER_DESCRIPTOR",
+  "azureDevOpsConnectionStateSchema",
+  "azureDevOpsDeploymentSchema",
+  "azureDevOpsDeviceCodeSchema",
+  "azureDevOpsRemoteMappingSchema",
+  "azureDevOpsRepositorySchema",
+  "githubGitProviderRepositorySchema",
   "agentSessionRuntimePolicySchema",
   "agentRuntimePolicyBindingSchema",
   "policyBoundSessionRefSchema",

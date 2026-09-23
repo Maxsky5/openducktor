@@ -1,4 +1,8 @@
-import type { RuntimeKind, SettingsSnapshot } from "@openducktor/contracts";
+import {
+  gitProviderConfigSchema,
+  type RuntimeKind,
+  type SettingsSnapshot,
+} from "@openducktor/contracts";
 import { prepareGlobalGitSettingsForSave } from "./settings-save/global-git-settings";
 import type { DirtySections } from "./use-settings-modal-dirty-state";
 
@@ -50,6 +54,32 @@ export const buildRuntimeAvailabilitySaveError = (totalErrorCount: number): stri
 export const buildCodexDangerousSettingsSaveError = (): string =>
   "Confirm the Codex safety acknowledgement before saving.";
 
+export const validateAzureDevOpsDraft = (
+  snapshotDraft: SettingsSnapshot | null,
+  selectedWorkspaceId: string | null,
+  reportedErrorCount: number,
+) => {
+  let errorCount = 0;
+  const invalidWorkspaceIds: string[] = [];
+  for (const [workspaceId, repoConfig] of Object.entries(snapshotDraft?.workspaces ?? {})) {
+    const provider = repoConfig.git.provider;
+    if (provider?.id !== "azure_devops") continue;
+    const parsed = gitProviderConfigSchema.safeParse(provider);
+    const savedErrorCount =
+      (parsed.success ? 0 : parsed.error.issues.length) +
+      (provider.enabled && !provider.repository ? 1 : 0);
+    const workspaceErrorCount =
+      workspaceId === selectedWorkspaceId
+        ? Math.max(savedErrorCount, reportedErrorCount)
+        : savedErrorCount;
+    if (workspaceErrorCount > 0) {
+      errorCount += workspaceErrorCount;
+      invalidWorkspaceIds.push(workspaceId);
+    }
+  }
+  return { errorCount, invalidWorkspaceIds };
+};
+
 export const buildRepoScriptValidationSaveError = ({
   invalidRepoPathsWithDevServerErrors,
   repoScriptValidationErrorCount,
@@ -70,6 +100,12 @@ export const buildRepoScriptValidationSaveError = ({
 };
 
 export type SettingsSaveValidation = {
+  azureDevOps: {
+    hasErrors: boolean;
+    errorCount: number;
+    invalidWorkspaceIds: string[];
+    selectedWorkspaceId: string | null;
+  };
   customAgentRoles: { hasErrors: boolean; errorCount: number };
   prompt: { hasErrors: boolean; errorCount: number };
   reusablePrompts: { hasErrors: boolean; errorCount: number };
@@ -105,6 +141,19 @@ const saveBlocker = (
 export const getSettingsSaveBlocker = (
   validation: SettingsSaveValidation,
 ): SettingsSaveBlocker | null => {
+  if (validation.azureDevOps.hasErrors) {
+    const count = validation.azureDevOps.errorCount;
+    const workspaceSummary = validation.azureDevOps.invalidWorkspaceIds
+      .map((workspaceId) =>
+        workspaceId === validation.azureDevOps.selectedWorkspaceId
+          ? "the selected repository"
+          : `\`${workspaceId}\``,
+      )
+      .join(", ");
+    return saveBlocker(
+      `Fix ${count} Azure DevOps field error${count > 1 ? "s" : ""}${workspaceSummary ? ` in ${workspaceSummary}` : ""} before saving.`,
+    );
+  }
   if (validation.customAgentRoles.hasErrors) {
     const count = validation.customAgentRoles.errorCount;
     return saveBlocker(

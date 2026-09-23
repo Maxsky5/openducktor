@@ -1,5 +1,5 @@
 import {
-  type GitProviderRepository,
+  type GithubGitProviderRepository,
   type PullRequestReviewAggregateStatus,
   type PullRequestReviewCheck,
   type PullRequestReviewCheckConclusion,
@@ -23,7 +23,7 @@ import { loadGithubReviewThreads } from "./threads";
 type GithubPullRequestReviewReadInput = {
   githubCli: GithubCli;
   repoPath: string;
-  repository: GitProviderRepository;
+  repository: GithubGitProviderRepository;
   pullRequestNumber: number;
 };
 

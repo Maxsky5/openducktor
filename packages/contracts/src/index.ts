@@ -8,6 +8,7 @@ export * from "./agent-session-schemas";
 export * from "./agent-workflow-schemas";
 export * from "./app-update-schemas";
 export * from "./attachment-limits";
+export * from "./azure-devops-schemas";
 export * from "./agent-runtime-query-command-contracts";
 export * from "./runtime-query-failure-schemas";
 export type * from "./codex-app-server-catalog-schemas";

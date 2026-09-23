@@ -65,6 +65,8 @@ export const hostBridge: HostBridge = {
   subscribeWorkspaceSessionUpdates: (listener) =>
     getShellBridge().subscribeWorkspaceSessionUpdates(listener),
   subscribeRunEvents: (listener) => getShellBridge().subscribeRunEvents(listener),
+  subscribeAzureDevOpsConnectionUpdates: (listener) =>
+    getShellBridge().subscribeAzureDevOpsConnectionUpdates(listener),
   subscribeDevServerEvents: (listener) => getShellBridge().subscribeDevServerEvents(listener),
   observeAgentSessionLive: (input, listener) =>
     getShellBridge().observeAgentSessionLive(input, listener),
@@ -74,6 +76,8 @@ export const hostBridge: HostBridge = {
 
 export const hostClient = hostClientProxy;
 export const subscribeWorkspaceSessionUpdates = hostBridge.subscribeWorkspaceSessionUpdates;
+export const subscribeAzureDevOpsConnectionUpdates =
+  hostBridge.subscribeAzureDevOpsConnectionUpdates;
 
 export const subscribeDevServerEvents = hostBridge.subscribeDevServerEvents;
 export const observeAgentSessionLive = hostBridge.observeAgentSessionLive;

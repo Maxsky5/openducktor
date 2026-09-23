@@ -44,7 +44,7 @@ describe("formatOdtToolArgs", () => {
       'odt_read_task_assets({"taskId": string, "assetIds": string[]})',
     );
     expect(formatOdtToolArgs("odt_set_pull_request")).toBe(
-      'odt_set_pull_request({"taskId": string, "providerId": "github", "number": number})',
+      'odt_set_pull_request({"taskId": string, "number": number})',
     );
   });
 });

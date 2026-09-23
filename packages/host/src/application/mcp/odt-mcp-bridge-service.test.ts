@@ -759,7 +759,6 @@ describe("createOdtMcpBridgeService", () => {
         service.invoke("odt_set_pull_request", {
           workspaceId: "repo",
           taskId: "task-1",
-          providerId: "github",
           number: 42,
         }),
       ),
@@ -775,7 +774,6 @@ describe("createOdtMcpBridgeService", () => {
       {
         repoPath: "/repo",
         taskId: "task-1",
-        providerId: "github",
         number: 42,
       },
     ]);

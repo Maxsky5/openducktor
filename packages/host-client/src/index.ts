@@ -104,6 +104,18 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
       workspaceClient.workspaceUpdateGlobalGitConfig.bind(workspaceClient),
     workspaceDetectGithubRepository:
       workspaceClient.workspaceDetectGithubRepository.bind(workspaceClient),
+    workspaceDetectAzureDevOpsRepository:
+      workspaceClient.workspaceDetectAzureDevOpsRepository.bind(workspaceClient),
+    workspaceGetAzureDevOpsConnection:
+      workspaceClient.workspaceGetAzureDevOpsConnection.bind(workspaceClient),
+    workspaceStartAzureDevOpsSignIn:
+      workspaceClient.workspaceStartAzureDevOpsSignIn.bind(workspaceClient),
+    workspaceCancelAzureDevOpsSignIn:
+      workspaceClient.workspaceCancelAzureDevOpsSignIn.bind(workspaceClient),
+    workspaceReplaceAzureDevOpsPat:
+      workspaceClient.workspaceReplaceAzureDevOpsPat.bind(workspaceClient),
+    workspaceDisconnectAzureDevOps:
+      workspaceClient.workspaceDisconnectAzureDevOps.bind(workspaceClient),
     workspaceGetGitProviderContext:
       workspaceClient.workspaceGetGitProviderContext.bind(workspaceClient),
     workspaceSaveSettingsSnapshot:

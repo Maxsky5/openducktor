@@ -15,7 +15,7 @@ This matrix lists every allowed task transition. The backend validates it. The U
 - `odt_build_blocked`: `taskId`, `reason`
 - `odt_build_resumed`: `taskId`
 - `odt_build_completed`: `taskId`, `summary?`
-- `odt_set_pull_request`: `taskId`, `providerId`, `number`
+- `odt_set_pull_request`: `taskId`, `number`
 - `odt_qa_approved`: `taskId`, `reportMarkdown`
 - `odt_qa_rejected`: `taskId`, `reportMarkdown`
 
@@ -49,7 +49,7 @@ Human actions are `human_request_changes(taskId, note)` and `human_approve(taskI
 | `odt_build_completed` | `in_progress`, `blocked` | QA is required and the latest result is not `approved`. | `ai_review` |
 | `odt_build_completed` | `in_progress`, `blocked` | QA is not required, or the latest result is `approved`. | `human_review` |
 | `odt_build_completed` | `ai_review`, `human_review` | Idempotent. No hook or patch runs. | Unchanged. |
-| `odt_set_pull_request` | `in_progress`, `ai_review`, `human_review` | `providerId` and pull request number are present. | Unchanged. |
+| `odt_set_pull_request` | `in_progress`, `ai_review`, `human_review` | A pull request number is present and the repository has a configured provider. | Unchanged. |
 | `odt_qa_rejected` | `blocked`, `ai_review`, `human_review` | Report Markdown is present. | `in_progress` |
 | `odt_qa_approved` | `blocked`, `ai_review`, `human_review` | Report Markdown is present. | `human_review` |
 | `human_request_changes` | `ai_review`, `human_review` | `note` is optional. | `in_progress` |

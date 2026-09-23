@@ -1,5 +1,5 @@
 import type {
-  GitProviderRepository,
+  GithubGitProviderRepository,
   PullRequestReviewActivity,
   PullRequestReviewOutcome,
   PullRequestReviewPullRequest,
@@ -18,7 +18,7 @@ import { parseGithubJson } from "./payload";
 type GithubPullRequestReviewOverviewReadInput = {
   githubCli: GithubCli;
   repoPath: string;
-  repository: GitProviderRepository;
+  repository: GithubGitProviderRepository;
   pullRequestNumber: number;
 };
 

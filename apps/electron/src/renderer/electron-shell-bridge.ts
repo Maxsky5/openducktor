@@ -14,6 +14,7 @@ import { createElectronTaskAssetUrl } from "../shared/electron-task-asset-url";
 const RUN_EVENT_CHANNEL = "openducktor://run-event";
 const DEV_SERVER_EVENT_CHANNEL = "openducktor://dev-server-event";
 const AGENT_SESSION_LIVE_EVENT_CHANNEL = "openducktor://agent-session-live-event";
+const AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL = "openducktor://azure-devops-connection-updated";
 let nextDevServerTransportEpoch = 0;
 
 export class ElectronPreloadBridgeUnavailableError extends Error {
@@ -76,6 +77,8 @@ export const createElectronShellBridge = (): ShellBridge => {
       dispose: () => {},
     },
     subscribeRunEvents: subscribeElectronEvent(electronApi, RUN_EVENT_CHANNEL),
+    subscribeAzureDevOpsConnectionUpdates: async (listener) =>
+      electronApi.subscribe(AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL, listener),
     subscribeDevServerEvents: async (listener) => {
       const unsubscribe = electronApi.subscribe(DEV_SERVER_EVENT_CHANNEL, listener);
       const transportEpoch = `electron:${nextDevServerTransportEpoch}`;

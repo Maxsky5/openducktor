@@ -1,6 +1,7 @@
 import {
   GITHUB_PROVIDER_DESCRIPTOR,
   type GitProviderDescriptor,
+  type GithubGitProviderRepository,
   type RepoConfig,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -21,7 +22,7 @@ import { createGithubPullRequestReviewAdapter } from "./review/adapter";
 import { createGithubProviderRepositoryAdapter } from "./repository";
 
 export class GithubProviderAdapter implements GitProviderPort {
-  private readonly repositoryPort: GitProviderRepositoryPort;
+  private readonly repositoryPort: GitProviderRepositoryPort<GithubGitProviderRepository>;
   private readonly healthPort: GitProviderHealthPort;
   private readonly pullRequestsPort: PullRequestProviderPort;
   private readonly pullRequestReviewPort: PullRequestReviewProviderPort;
@@ -60,7 +61,7 @@ export class GithubProviderAdapter implements GitProviderPort {
     return GITHUB_PROVIDER_DESCRIPTOR;
   }
 
-  repository(): GitProviderRepositoryPort {
+  repository(): GitProviderRepositoryPort<GithubGitProviderRepository> {
     return this.repositoryPort;
   }
 

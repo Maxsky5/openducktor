@@ -14,6 +14,7 @@ export * from "./services/agent-session-todos";
 export * from "./services/agent-system-prompts";
 export * from "./services/agent-system-slash-commands";
 export * from "./services/agent-user-message-parts";
+export * from "./services/azure-devops-repository-identity";
 export * from "./services/approval-policy";
 export * from "./services/kanban-mapper";
 export * from "./services/odt-tools";

@@ -3,6 +3,7 @@ import {
   gitRepositoryKey,
   parseGitRepositoryUrl,
   type GitProviderRepository,
+  type GithubGitProviderRepository,
   type RepoConfig,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -13,8 +14,12 @@ import type { GitProviderRepositoryPort } from "../../../ports/git-provider-port
 
 const GITHUB_PROVIDER_ID = GITHUB_PROVIDER_DESCRIPTOR.id;
 
+const isGithubRepository = (
+  repository: GitProviderRepository,
+): repository is GithubGitProviderRepository => "host" in repository;
+
 export const createGithubProviderRepositoryAdapter = ({ gitPort }: { gitPort: GitPort }) => {
-  const findRemoteNames = (repoPath: string, repository: GitProviderRepository) =>
+  const findRemoteNames = (repoPath: string, repository: GithubGitProviderRepository) =>
     Effect.gen(function* () {
       const expectedKey = gitRepositoryKey(repository);
       return (yield* gitPort.listRemotes(repoPath)).flatMap((remote) => {
@@ -23,7 +28,7 @@ export const createGithubProviderRepositoryAdapter = ({ gitPort }: { gitPort: Gi
       });
     });
 
-  const matchRemote = (repoPath: string, repository: GitProviderRepository) =>
+  const matchRemote = (repoPath: string, repository: GithubGitProviderRepository) =>
     Effect.gen(function* () {
       const remoteNames = yield* findRemoteNames(repoPath, repository);
       const remoteName = remoteNames[0];
@@ -73,7 +78,7 @@ export const createGithubProviderRepositoryAdapter = ({ gitPort }: { gitPort: Gi
       }),
     getRepository,
     getMapping,
-  } satisfies GitProviderRepositoryPort;
+  } satisfies GitProviderRepositoryPort<GithubGitProviderRepository>;
 };
 
 const configuredRepository = (repoConfig: RepoConfig) =>
@@ -88,7 +93,7 @@ const configuredRepository = (repoConfig: RepoConfig) =>
         }),
       );
     }
-    if (!provider.repository) {
+    if (!provider.repository || !isGithubRepository(provider.repository)) {
       return yield* Effect.fail(
         new HostValidationError({
           field: "git.provider.repository",
@@ -109,8 +114,8 @@ const configuredRepository = (repoConfig: RepoConfig) =>
     return provider.repository;
   });
 
-const uniqueRepositories = (urls: readonly string[]): GitProviderRepository[] => {
-  const repositories = new Map<string, GitProviderRepository>();
+const uniqueRepositories = (urls: readonly string[]): GithubGitProviderRepository[] => {
+  const repositories = new Map<string, GithubGitProviderRepository>();
   for (const url of urls) {
     const repository = parseGitRepositoryUrl(url);
     if (repository && isGithubCliHost(repository.host)) {
@@ -128,7 +133,7 @@ const mappingError = ({
   remoteNames,
 }: {
   repoPath: string;
-  repository: GitProviderRepository;
+  repository: GithubGitProviderRepository;
   remoteNames: readonly string[];
 }) => {
   const reason = remoteNames.length === 0 ? "no_matching_remote" : "ambiguous_matching_remotes";
@@ -145,7 +150,7 @@ const mappingError = ({
   });
 };
 
-const detectError = (repoPath: string, repositories: readonly GitProviderRepository[]) => {
+const detectError = (repoPath: string, repositories: readonly GithubGitProviderRepository[]) => {
   const reason = repositories.length === 0 ? "no_matching_remote" : "ambiguous_matching_remotes";
   return new GitProviderRepositoryError({
     reason,

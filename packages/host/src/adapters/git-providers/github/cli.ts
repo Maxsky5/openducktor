@@ -1,4 +1,4 @@
-import type { GitProviderRepository } from "@openducktor/contracts";
+import type { GithubGitProviderRepository } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type {
   HostOperationErrorAggregate,
@@ -106,7 +106,7 @@ export const runGithubApi = (
 export const runGithubRepositoryCommandAllowFailure = (
   githubCli: GithubCli,
   repoPath: string,
-  repository: GitProviderRepository,
+  repository: GithubGitProviderRepository,
   args: string[],
 ) =>
   Effect.gen(function* () {

@@ -1,6 +1,7 @@
 import {
   GITHUB_PROVIDER_DESCRIPTOR,
   type GitProviderHealth,
+  type GithubGitProviderRepository,
   type RepoConfig,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -18,7 +19,7 @@ export const createGithubProviderHealthPort = ({
   repositoryPort,
 }: {
   githubCli: GithubCli;
-  repositoryPort: GitProviderRepositoryPort;
+  repositoryPort: GitProviderRepositoryPort<GithubGitProviderRepository>;
 }): GitProviderHealthPort => ({
   getStatus: (repoConfig: RepoConfig) =>
     Effect.gen(function* () {
