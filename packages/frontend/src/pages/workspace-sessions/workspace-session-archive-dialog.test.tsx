@@ -120,6 +120,52 @@ test("turning removal off keeps Git resources and Cancel sends no archive reques
   }
 });
 
+test("a missing detached worktree can be archived without removal", async () => {
+  const requests: boolean[] = [];
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        workspaceSessionArchivePreview: async () => ({
+          branchName: null,
+          worktreeExists: false,
+          hasUncommittedChanges: false,
+        }),
+      },
+    }),
+  );
+  const imported = record();
+  imported.externalSessionId = "native-detached";
+  if (imported.executionTarget.kind !== "local_worktree") throw new Error("Expected worktree");
+  imported.executionTarget.branchName = null;
+  const view = render(
+    <QueryProvider useIsolatedClient>
+      <WorkspaceSessionArchiveDialog
+        workspaceId="test"
+        record={imported}
+        isArchiving={false}
+        error={null}
+        onArchive={(remove) => requests.push(remove)}
+        onClose={() => {}}
+      />
+    </QueryProvider>,
+  );
+  try {
+    await view.findByText(/No branch is attached/, {}, { timeout: 800 });
+    const submit = view.getByRole("button", { name: "Archive chat" });
+    expect(submit.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(view.getByRole("switch", { name: "Remove worktree and branch" }));
+    expect(
+      view.getByText(/Restore the worktree at this path before restoring the chat/),
+    ).toBeTruthy();
+    expect(submit.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(submit);
+    expect(requests).toEqual([false]);
+  } finally {
+    view.unmount();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
 test("a failed check blocks removal but allows keeping the worktree", async () => {
   const requests: boolean[] = [];
   configureShellBridge(

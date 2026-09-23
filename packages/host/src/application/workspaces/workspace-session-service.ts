@@ -302,7 +302,11 @@ export const createWorkspaceSessionService = (
               }
               target = { ...target, branchName: preview.branchName };
             } else if (session.externalSessionId !== null) {
-              yield* validateWorkspaceSessionTarget(dependencies, ref.repoPath, target);
+              if (
+                target.kind !== "local_worktree" ||
+                (yield* dependencies.settingsConfig.pathExists(target.workingDirectory))
+              )
+                yield* validateWorkspaceSessionTarget(dependencies, ref.repoPath, target);
             }
             if (session.externalSessionId !== null) {
               const runtimeRef = {

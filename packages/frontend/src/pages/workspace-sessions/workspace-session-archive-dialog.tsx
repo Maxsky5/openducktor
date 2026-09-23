@@ -1,5 +1,9 @@
-import type { WorkspaceSession, WorkspaceSessionArchiveInput } from "@openducktor/contracts";
-import { useQuery } from "@tanstack/react-query";
+import type {
+  WorkspaceSession,
+  WorkspaceSessionArchiveInput,
+  WorkspaceSessionArchivePreview,
+} from "@openducktor/contracts";
+import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { LoaderCircle } from "lucide-react";
 import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -32,6 +36,36 @@ type Props = {
   onClose: () => void;
 };
 
+function ArchiveWorktreeNotice({
+  removeWorktree,
+  preview,
+}: {
+  removeWorktree: boolean;
+  preview: UseQueryResult<WorkspaceSessionArchivePreview>;
+}) {
+  if (!removeWorktree)
+    return (
+      <p className="text-sm text-muted-foreground">
+        {preview.data?.worktreeExists === false
+          ? "The worktree is missing. Restore the worktree at this path before restoring the chat."
+          : "The worktree and its branch will stay on disk."}
+      </p>
+    );
+  if (preview.isSuccess && preview.data.branchName === null)
+    return (
+      <p className="text-sm text-muted-foreground">
+        No branch is attached. Turn off worktree removal to archive this chat.
+      </p>
+    );
+  return (
+    <p className="text-sm text-muted-foreground">
+      Branch <span className="font-mono">{preview.data?.branchName ?? "…"}</span> will be deleted.
+      Commits that exist only on this branch may be lost. Restoring this chat creates a fresh
+      worktree from the default branch. It does not recover deleted changes.
+    </p>
+  );
+}
+
 export function WorkspaceSessionArchiveDialog({
   workspaceId,
   record,
@@ -44,7 +78,9 @@ export function WorkspaceSessionArchiveDialog({
   const switchId = useId();
   const preview = useQuery(workspaceSessionArchivePreviewQueryOptions(workspaceId, record.id));
   const canArchive =
-    !isArchiving && (!removeWorktree || (preview.isSuccess && !preview.isFetching));
+    !isArchiving &&
+    (!removeWorktree ||
+      (preview.isSuccess && !preview.isFetching && preview.data.branchName !== null));
   return (
     <Dialog
       open
@@ -89,19 +125,7 @@ export function WorkspaceSessionArchiveDialog({
               <p className="break-all text-xs text-muted-foreground">
                 {record.executionTarget.workingDirectory}
               </p>
-              {removeWorktree && (
-                <p className="text-sm text-muted-foreground">
-                  Branch <span className="font-mono">{preview.data?.branchName ?? "…"}</span> will
-                  be deleted. Commits that exist only on this branch may be lost. Restoring this
-                  chat creates a fresh worktree from the default branch. It does not recover deleted
-                  changes.
-                </p>
-              )}
-              {!removeWorktree && (
-                <p className="text-sm text-muted-foreground">
-                  The worktree and its branch will stay on disk.
-                </p>
-              )}
+              <ArchiveWorktreeNotice removeWorktree={removeWorktree} preview={preview} />
               <WorktreeArchivePreview preview={preview} removeWorktree={removeWorktree} />
               {error && (
                 <p role="alert" className="text-sm text-destructive">

@@ -10,6 +10,7 @@ import {
   type AgentSessionControlStartInput,
   type AgentSessionLiveReadResult,
   type WorkspaceSessionCreateInput,
+  type WorkspaceSession,
   repoConfigSchema,
 } from "@openducktor/contracts";
 import { Cause, Deferred, Effect, Exit, Fiber, Option, TestClock, TestContext } from "effect";
@@ -362,6 +363,68 @@ describe("host-owned Workspace Session lifecycle", () => {
       ).toEqual(session);
     },
   );
+
+  test("archives a detached import after its worktree is removed outside the app", async () => {
+    const h = setup();
+    const session: WorkspaceSession = {
+      id: "detached-import",
+      runtimeKind: "opencode",
+      externalSessionId: "native-detached",
+      executionTarget: {
+        kind: "local_worktree",
+        workingDirectory: "/missing-detached-worktree",
+        branchName: null,
+        worktreeState: "present",
+      },
+      roleSnapshot: null,
+      selectedModel: null,
+      generatedTitle: null,
+      manualTitle: "Detached import",
+      createdAt: 1,
+      updatedAt: 1,
+      archivedAt: null,
+    };
+    await Effect.runPromise(
+      h.dependencies.store.create({
+        workspaceId: "fairnest",
+        repoPath: database.repoPath,
+        session,
+      }),
+    );
+
+    h.paths.add(session.executionTarget.workingDirectory);
+    await expect(
+      Effect.runPromise(
+        h.service.archive({
+          workspaceId: "fairnest",
+          sessionId: session.id,
+          confirmStop: true,
+          removeWorktree: false,
+        }),
+      ),
+    ).rejects.toThrow("not a registered worktree");
+    h.paths.clear();
+
+    const archived = await Effect.runPromise(
+      h.service.archive({
+        workspaceId: "fairnest",
+        sessionId: session.id,
+        confirmStop: true,
+        removeWorktree: false,
+      }),
+    );
+    expect(archived.archivedAt).not.toBeNull();
+    expect(archived.executionTarget).toEqual(session.executionTarget);
+    await expect(
+      Effect.runPromise(h.service.restore({ workspaceId: "fairnest", sessionId: session.id })),
+    ).rejects.toThrow("not a registered worktree");
+    h.paths.add(session.executionTarget.workingDirectory);
+    h.registered.add(session.executionTarget.workingDirectory);
+    const restored = await Effect.runPromise(
+      h.service.restore({ workspaceId: "fairnest", sessionId: session.id }),
+    );
+    expect(restored.archivedAt).toBeNull();
+  });
 
   test("first-send startup completes through the real runtime registry cancellation race", async () => {
     const h = setup();
