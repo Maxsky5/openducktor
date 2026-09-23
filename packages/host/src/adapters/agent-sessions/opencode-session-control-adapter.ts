@@ -1,6 +1,7 @@
 import type { OpencodeSessionRuntimeConnection } from "@openducktor/adapters-opencode-sdk";
 import {
   type AgentSessionControlSummary,
+  type AgentSessionLiveRef,
   type AgentSessionUserMessagePart,
   acceptedAgentUserMessageSchema,
   agentSessionTranscriptEventSchema,
@@ -107,6 +108,7 @@ export const createOpenCodeSessionControlAdapter = ({
 
   const runTitleUpdate = (
     operation: string,
+    ref: AgentSessionLiveRef,
     run: () => Promise<AgentSessionTitleUpdateResult>,
   ): Effect.Effect<AgentSessionTitleUpdateOutcome, HostError> =>
     serializeRuntime(
@@ -118,11 +120,26 @@ export const createOpenCodeSessionControlAdapter = ({
           }),
       }).pipe(
         Effect.flatMap((result) =>
-          commitTitleUpdate(result, (summary) =>
-            commit(`${operation}.commit`, () => ({
-              value: summary,
-              changes: state.applyControlSummary(summary, { keepActivity: true }),
-            })),
+          commitTitleUpdate(
+            result,
+            (summary) =>
+              commit(`${operation}.commit`, () => ({
+                value: summary,
+                changes: state.applyControlSummary(summary, { keepActivity: true }),
+              })),
+            (failure) =>
+              commit(`${operation}.report-projection-failure`, () => ({
+                value: undefined,
+                changes: [
+                  {
+                    type: "fault",
+                    repoPath: runtime.repoPath,
+                    ref,
+                    operation,
+                    message: failure.message,
+                  },
+                ],
+              })),
           ),
         ),
       ),
@@ -287,7 +304,7 @@ export const createOpenCodeSessionControlAdapter = ({
         ),
       ),
     updateSessionTitle: (input) =>
-      runTitleUpdate("opencode-live-session.update-session-title", () =>
+      runTitleUpdate("opencode-live-session.update-session-title", toSessionRef(input), () =>
         connection.updateSessionTitle({ ...toSessionRef(input), title: input.title }),
       ),
     stopSession: (input) =>

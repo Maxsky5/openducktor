@@ -118,7 +118,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
 
       const refreshProjection = (
         transcriptEvents: CodexLiveSessionMutation["transcriptEvents"] = [],
-      ): Effect.Effect<void, HostError> =>
+      ) =>
         projection.applyMutation({
           runtimeId: runtime.runtimeId,
           snapshotMode: "full",
@@ -127,9 +127,21 @@ export const createCodexLiveSessionAdapterPreparer = ({
           catalogInvalidated: false,
         });
 
+      const reportProjectionFailure = (ref: AgentSessionLiveRef, failure: HostError) =>
+        projection.applyMutation({
+          runtimeId: runtime.runtimeId,
+          snapshotMode: "full",
+          snapshots: controller.listLiveSessionSnapshots(runtime.runtimeId),
+          transcriptEvents: [],
+          catalogInvalidated: false,
+          fault: failure.message,
+          faultRef: ref,
+        });
+
       const { runSummary, runTitleUpdate } = createCodexControlRunner({
         runtimeId: runtime.runtimeId,
         refreshProjection,
+        reportProjectionFailure,
       });
 
       const images = createCodexImageSettlement(controller, runtime.runtimeId, refreshProjection);
@@ -441,8 +453,10 @@ export const createCodexLiveSessionAdapterPreparer = ({
             catch: sessionError("codex-live-session.update-session-model", input.externalSessionId),
           }).pipe(Effect.tap(() => refreshProjection())),
         updateSessionTitle: (input) =>
-          runTitleUpdate("codex-live-session.update-session-title", () =>
-            controller.updateSessionTitle(input),
+          runTitleUpdate(
+            "codex-live-session.update-session-title",
+            toCodexLiveSessionRef(input),
+            () => controller.updateSessionTitle(input),
           ),
         stopSession: (input) =>
           stopCodexSession({

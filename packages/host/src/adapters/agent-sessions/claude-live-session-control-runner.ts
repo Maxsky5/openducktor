@@ -14,6 +14,7 @@ type SummaryOptions = {
 export const createClaudeControlRunner = ({
   runControlMutation,
   retainSummary,
+  reportProjectionFailure,
 }: {
   runControlMutation: <Value>(
     effect: Effect.Effect<Value, HostError>,
@@ -23,6 +24,10 @@ export const createClaudeControlRunner = ({
     summary: AgentSessionSummary,
     options: SummaryOptions,
   ) => Effect.Effect<AgentSessionSummary, HostError>;
+  reportProjectionFailure: (
+    operation: string,
+    failure: HostError,
+  ) => Effect.Effect<void, HostError>;
 }) => ({
   runSummary: (
     operation: string,
@@ -42,8 +47,10 @@ export const createClaudeControlRunner = ({
     runControlMutation(
       run().pipe(
         Effect.flatMap((result) =>
-          commitTitleUpdate(result, (summary) =>
-            retainSummary(operation, summary, { keepActivity: true }),
+          commitTitleUpdate(
+            result,
+            (summary) => retainSummary(operation, summary, { keepActivity: true }),
+            (failure) => reportProjectionFailure(operation, failure),
           ),
         ),
       ),

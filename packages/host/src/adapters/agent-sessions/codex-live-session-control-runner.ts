@@ -1,4 +1,4 @@
-import type { AgentSessionControlSummary } from "@openducktor/contracts";
+import type { AgentSessionControlSummary, AgentSessionLiveRef } from "@openducktor/contracts";
 import type { AgentSessionSummary, AgentSessionTitleUpdateResult } from "@openducktor/core";
 import { Effect } from "effect";
 import { toAgentSessionControlSummary } from "../../application/agent-sessions/agent-session-control-summary";
@@ -13,9 +13,14 @@ import type { AgentSessionTitleUpdateOutcome } from "../../ports/agent-session-l
 export const createCodexControlRunner = ({
   runtimeId,
   refreshProjection,
+  reportProjectionFailure,
 }: {
   runtimeId: string;
   refreshProjection: () => Effect.Effect<void, HostError>;
+  reportProjectionFailure: (
+    ref: AgentSessionLiveRef,
+    failure: HostError,
+  ) => Effect.Effect<void, HostError>;
 }) => ({
   runSummary: (
     operation: string,
@@ -32,6 +37,7 @@ export const createCodexControlRunner = ({
     ),
   runTitleUpdate: (
     operation: string,
+    ref: AgentSessionLiveRef,
     run: () => Promise<AgentSessionTitleUpdateResult>,
   ): Effect.Effect<AgentSessionTitleUpdateOutcome, HostError> =>
     Effect.tryPromise({
@@ -39,8 +45,10 @@ export const createCodexControlRunner = ({
       catch: (cause) => toHostOperationError(cause, operation, { runtimeId }),
     }).pipe(
       Effect.flatMap((result) =>
-        commitTitleUpdate(result, (summary) =>
-          refreshCodexSummary(summary, operation, runtimeId, refreshProjection),
+        commitTitleUpdate(
+          result,
+          (summary) => refreshCodexSummary(summary, operation, runtimeId, refreshProjection),
+          (failure) => reportProjectionFailure(ref, failure),
         ),
       ),
     ),

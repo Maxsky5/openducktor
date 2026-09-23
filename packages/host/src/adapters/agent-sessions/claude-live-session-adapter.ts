@@ -214,6 +214,18 @@ export const createClaudeLiveSessionAdapterPreparer =
             value: summary,
             changes: state.applyControlSummary(summary, options),
           })),
+        reportProjectionFailure: (operation, failure) =>
+          commit(`${operation}.report-projection-failure`, () => ({
+            value: undefined,
+            changes: [
+              {
+                type: "fault",
+                repoPath: runtime.repoPath,
+                operation,
+                message: failure.message,
+              },
+            ],
+          })),
       });
 
       const requireSessionWorkingDirectory = (
