@@ -189,6 +189,8 @@ const tryUpgradeTerminalWebSocket = ({
       inFlightBytes: 0,
       pendingBytes: 0,
       pendingFrames: [],
+      drainWaiters: new Set(),
+      closed: false,
       logger,
       onBackgroundFailure,
     },

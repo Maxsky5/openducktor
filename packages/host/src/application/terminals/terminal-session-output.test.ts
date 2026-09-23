@@ -33,6 +33,22 @@ const createOutput = (): TerminalSessionOutput =>
   }));
 
 describe("TerminalSessionOutput", () => {
+  test("requests one resume when parser backlog falls below the resume limit", () => {
+    const output = createOutput();
+    expect(output.updateParserBacklog(TERMINAL_LIMITS.pendingOutputBytes, pausableHandle)).toEqual([
+      { type: "pause_requested" },
+    ]);
+    expect(
+      output.updateParserBacklog(TERMINAL_LIMITS.resumeOutputBytes + 1, pausableHandle),
+    ).toEqual([]);
+    expect(output.updateParserBacklog(TERMINAL_LIMITS.resumeOutputBytes, pausableHandle)).toEqual([
+      { type: "resume_requested" },
+    ]);
+    expect(output.updateParserBacklog(TERMINAL_LIMITS.resumeOutputBytes, pausableHandle)).toEqual(
+      [],
+    );
+  });
+
   test("restores a gap and ignores an ACK sent before restoration", () => {
     const output = new TerminalSessionOutput("terminal-1", 4, () => ({
       columns: 80,

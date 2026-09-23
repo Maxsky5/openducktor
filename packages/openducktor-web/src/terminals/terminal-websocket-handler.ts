@@ -31,6 +31,8 @@ export type TerminalWebSocketData = {
   inFlightBytes: number;
   pendingBytes: number;
   pendingFrames: Uint8Array[];
+  drainWaiters: Set<(writable: boolean) => void>;
+  closed: boolean;
   logger: WebLogger;
   onBackgroundFailure(cause: unknown): void;
 };
@@ -44,34 +46,60 @@ const closeForQueueOverflow = (socket: TerminalServerSocket): void => {
   socket.close(1013, "Terminal outbound queue limit exceeded.");
 };
 
-const sendFrame = (socket: TerminalServerSocket, frame: Uint8Array): void => {
+const sendFrame = (socket: TerminalServerSocket, frame: Uint8Array): boolean => {
   const data = socket.data;
+  if (data.closed) return false;
   const queuedBytes = data.inFlightBytes + data.pendingBytes;
   if (queuedBytes + frame.byteLength > OUTBOUND_QUEUE_LIMIT) {
     closeForQueueOverflow(socket);
-    return;
+    return false;
   }
   if (data.backpressured) {
     data.pendingFrames.push(frame);
     data.pendingBytes += frame.byteLength;
-    return;
+    return true;
   }
   const status = socket.send(frame, false);
   if (status === 0) {
     socket.close(1011, "Terminal connection could not send data.");
-    return;
+    return false;
   }
   if (status === -1) {
     data.backpressured = true;
     data.inFlightBytes = frame.byteLength;
   }
+  return true;
 };
 
 const sendMessage = (
   socket: TerminalServerSocket,
   message: TerminalServerMessage,
   payload: Uint8Array = EMPTY_PAYLOAD,
-): void => sendFrame(socket, encodeTerminalProtocolFrame({ message, payload }));
+): boolean => sendFrame(socket, encodeTerminalProtocolFrame({ message, payload }));
+
+const waitForWritable = (socket: TerminalServerSocket): Effect.Effect<void> =>
+  Effect.async<void>((resume, signal) => {
+    const data = socket.data;
+    if (data.closed) {
+      resume(Effect.interrupt);
+      return;
+    }
+    if (!data.backpressured) {
+      resume(Effect.void);
+      return;
+    }
+    const finish = (writable: boolean): void => {
+      data.drainWaiters.delete(finish);
+      signal.removeEventListener("abort", canceled);
+      resume(writable ? Effect.void : Effect.interrupt);
+    };
+    const canceled = (): void => {
+      data.drainWaiters.delete(finish);
+      signal.removeEventListener("abort", canceled);
+    };
+    data.drainWaiters.add(finish);
+    signal.addEventListener("abort", canceled, { once: true });
+  });
 
 const sendProtocolError = (
   socket: TerminalServerSocket,
@@ -94,8 +122,17 @@ const getClientSession = (socket: TerminalServerSocket): TerminalClientSession =
   if (existing) return existing;
   const clientSession = createTerminalClientSession({
     clientId: `browser:${socket.data.connectionId}`,
-    terminalService: socket.data.terminalService,
-    send: (message, payload) => sendMessage(socket, message, payload),
+    terminalService: {
+      ...socket.data.terminalService,
+      attach: (input) =>
+        waitForWritable(socket).pipe(
+          Effect.flatMap(() => socket.data.terminalService.attach(input)),
+        ),
+    },
+    send: (message, payload) => {
+      if (!sendMessage(socket, message, payload))
+        throw new Error("Terminal WebSocket could not queue an outbound frame.");
+    },
   });
   socket.data.clientSession = clientSession;
   return clientSession;
@@ -146,17 +183,25 @@ export const terminalWebSocketHandler = {
   message: runClientMessage,
   drain(socket: TerminalServerSocket) {
     const data = socket.data;
+    if (data.closed) return;
     data.backpressured = false;
     data.inFlightBytes = 0;
     while (data.pendingFrames.length > 0 && !data.backpressured) {
       const frame = data.pendingFrames.shift();
       if (!frame) break;
       data.pendingBytes -= frame.byteLength;
-      sendFrame(socket, frame);
+      if (!sendFrame(socket, frame)) return;
+    }
+    if (!data.backpressured) {
+      for (const finish of data.drainWaiters) finish(true);
     }
   },
   close(socket: TerminalServerSocket) {
-    const { clientSession, connectionId, logger, onBackgroundFailure } = socket.data;
+    const { clientSession, connectionId, logger, onBackgroundFailure, drainWaiters } = socket.data;
+    socket.data.closed = true;
+    for (const finish of drainWaiters) finish(false);
+    socket.data.pendingFrames.length = 0;
+    socket.data.pendingBytes = 0;
     socket.data.clientSession = null;
     if (!clientSession) return;
     void Effect.runPromise(clientSession.close()).catch((cause: unknown) => {

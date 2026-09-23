@@ -22,7 +22,7 @@ import { TerminalServiceError } from "./terminal-service-error";
 import {
   activateTerminalSession,
   createTerminalSession,
-  disposeTerminalSession,
+  forgetTerminalSession,
   isLiveTerminal,
   type TerminalSession,
 } from "./terminal-session";
@@ -149,7 +149,6 @@ export const createTerminalSessionEngine = ({
           grid: plan.grid,
         });
         sessions.set(summary.terminalId, session);
-        let parserWasBacklogged = false;
         const handleResult = yield* Effect.either(
           ptyPort.start(plan, {
             onOutput: (data) => {
@@ -166,21 +165,6 @@ export const createTerminalSessionEngine = ({
                     session.resources.handle,
                   ),
                 );
-                if (
-                  (parserWasBacklogged &&
-                    session.screen.queuedBytes <= TERMINAL_LIMITS.resumeOutputBytes) ||
-                  (session.output.needsScreenFlush && session.screen.queuedBytes === 0)
-                ) {
-                  parserWasBacklogged = false;
-                  Effect.runFork(
-                    session.output.resumeIfUnblocked(session.resources.handle).pipe(
-                      Effect.tap((events) => Effect.sync(() => applyStreamEvents(session, events))),
-                      Effect.tapError(() =>
-                        Effect.sync(() => applyStreamEvents(session, [{ type: "overflow" }])),
-                      ),
-                    ),
-                  );
-                }
               });
               applyStreamEvents(session, session.output.accept(data, session.resources.handle));
               applyStreamEvents(
@@ -190,8 +174,6 @@ export const createTerminalSessionEngine = ({
                   session.resources.handle,
                 ),
               );
-              if (session.screen.queuedBytes > TERMINAL_LIMITS.resumeOutputBytes)
-                parserWasBacklogged = true;
             },
             onFailure: (failure) => {
               applyStreamEvents(
@@ -209,7 +191,7 @@ export const createTerminalSessionEngine = ({
           }),
         );
         if (handleResult._tag === "Left") {
-          disposeTerminalSession(session, true);
+          forgetTerminalSession(session);
           sessions.delete(summary.terminalId);
           return yield* Effect.fail(
             terminalFailure(

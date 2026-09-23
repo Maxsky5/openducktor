@@ -14,6 +14,158 @@ const visibleLines = (terminal: Terminal): string[] =>
   );
 
 describe("TerminalScreenState", () => {
+  test.each([
+    ["G0", "\u001b(0"],
+    ["G1", "\u001b)0\u000e"],
+    ["G1 alternate", "\u001b-0\u000e"],
+    ["G2", "\u001b.0\u001bn"],
+    ["G3", "\u001b+0\u001bo"],
+  ])("keeps %s line drawing active after restore", async (_name, selection) => {
+    const screen = new TerminalScreenState({ columns: 8, rows: 2 });
+    const original = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const restored = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const first = encoder.encode(selection);
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    await write(restored, screen.snapshot().payload);
+    const continuation = encoder.encode("qq");
+    await Promise.all([
+      writeScreen(screen, continuation),
+      write(original, continuation),
+      write(restored, continuation),
+    ]);
+    expect(visibleLines(original)[0]).toStartWith("──");
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
+  test.each(["\u001b[!p", "\u001b[?2h"])(
+    "keeps the default character set after %s reset",
+    async (reset) => {
+      const screen = new TerminalScreenState({ columns: 8, rows: 2 });
+      const original = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+      const restored = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+      const first = encoder.encode("\u001b(0" + reset);
+      await Promise.all([writeScreen(screen, first), write(original, first)]);
+      await write(restored, screen.snapshot().payload);
+      const continuation = encoder.encode("qq");
+      await Promise.all([
+        writeScreen(screen, continuation),
+        write(original, continuation),
+        write(restored, continuation),
+      ]);
+      expect(visibleLines(original)[0]).toStartWith("qq");
+      expect(visibleLines(restored)).toEqual(visibleLines(original));
+      screen.dispose();
+      original.dispose();
+      restored.dispose();
+    },
+  );
+
+  test("keeps the saved character set for later cursor restore", async () => {
+    const screen = new TerminalScreenState({ columns: 8, rows: 2 });
+    const original = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const restored = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const first = encoder.encode("\u001b(0\u001b7\u001b(B");
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    await write(restored, screen.snapshot().payload);
+    const continuation = encoder.encode("\u001b8q");
+    await Promise.all([
+      writeScreen(screen, continuation),
+      write(original, continuation),
+      write(restored, continuation),
+    ]);
+    expect(visibleLines(original)[0]).toStartWith("─");
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
+  test("keeps the active character set after restoring a saved cursor", async () => {
+    const screen = new TerminalScreenState({ columns: 8, rows: 2 });
+    const original = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const restored = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const first = encoder.encode("\u001b7\u001b(0\u001b8");
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    await write(restored, screen.snapshot().payload);
+    const continuation = encoder.encode("q\u001b(0q");
+    await Promise.all([
+      writeScreen(screen, continuation),
+      write(original, continuation),
+      write(restored, continuation),
+    ]);
+    expect(visibleLines(original)[0]).toStartWith("q─");
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
+  test("keeps each screen buffer's saved character set", async () => {
+    const screen = new TerminalScreenState({ columns: 8, rows: 2 });
+    const original = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const restored = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const first = encoder.encode("\u001b(0\u001b[?1049h\u001b(B");
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    await write(restored, screen.snapshot().payload);
+    const continuation = encoder.encode("\u001b8q");
+    await Promise.all([
+      writeScreen(screen, continuation),
+      write(original, continuation),
+      write(restored, continuation),
+    ]);
+    expect(original.buffer.active.type).toBe("alternate");
+    expect(visibleLines(original)[0]).toStartWith("q");
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
+  test("keeps the normal screen's saved character set when leaving an alternate screen", async () => {
+    const screen = new TerminalScreenState({ columns: 8, rows: 2 });
+    const original = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const restored = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const first = encoder.encode("\u001b(0\u001b[?1049h\u001b(BALT");
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    await write(restored, screen.snapshot().payload);
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    const continuation = encoder.encode("\u001b[?1049lq");
+    await Promise.all([
+      writeScreen(screen, continuation),
+      write(original, continuation),
+      write(restored, continuation),
+    ]);
+    expect(original.buffer.active.type).toBe("normal");
+    expect(visibleLines(original)[0]).toStartWith("─");
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
+  test("keeps the normal cursor when a 47 mode TUI exits after restore", async () => {
+    const screen = new TerminalScreenState({ columns: 8, rows: 2 });
+    const original = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const restored = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const first = encoder.encode("ab\u001b[?47hALT");
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    await write(restored, screen.snapshot().payload);
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    const continuation = encoder.encode("\u001b[?47lq");
+    await Promise.all([
+      writeScreen(screen, continuation),
+      write(original, continuation),
+      write(restored, continuation),
+    ]);
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
   test("restores after a long colored log with no saved cursor", async () => {
     const screen = new TerminalScreenState({ columns: 80, rows: 24 });
     const bytes = encoder.encode("\u001b[31m".repeat(16_000));
