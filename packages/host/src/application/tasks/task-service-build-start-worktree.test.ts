@@ -226,6 +226,42 @@ describe("createTaskService build start worktree handling", () => {
     ).resolves.toBeUndefined();
   });
 
+  test("rejects a status change from ai_review during Builder startup", async () => {
+    const calls: unknown[] = [];
+    let current = task({ status: "ai_review" });
+    const taskStore: TaskStorePort = {
+      getTask: () => Effect.sync(() => current),
+      transitionTask: () => Effect.dieMessage("unexpected task transition"),
+    };
+    const deps = createDependencies(calls, taskStore);
+    const service = createTaskService({
+      ...deps,
+      runtimeRegistry: {
+        ...deps.runtimeRegistry,
+        ensureWorkspaceRuntime: (input) =>
+          deps.runtimeRegistry.ensureWorkspaceRuntime(input).pipe(
+            Effect.tap(() =>
+              Effect.sync(() => {
+                current = task({ status: "blocked" });
+              }),
+            ),
+          ),
+      },
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.buildStart({ repoPath: "/repo", taskId: "task-1", runtimeKind: "opencode" }),
+      ),
+    ).rejects.toThrow("changed from ai_review to blocked while Builder startup was in progress");
+    expect(calls).toContainEqual({
+      type: "removeWorktree",
+      repoPath: "/repo",
+      worktreePath: "/worktrees/repo/task-1",
+      force: true,
+    });
+  });
+
   test("creates the canonical worktree and transitions the task", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
