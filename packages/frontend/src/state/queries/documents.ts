@@ -81,35 +81,6 @@ export const fetchFreshTaskDocumentFromQuery = (
   });
 };
 
-const cachedTaskDocumentSections = (
-  queryClient: QueryClient,
-  repoPath: string,
-  taskId: string,
-): TaskDocumentSection[] => {
-  const sections = new Set<TaskDocumentSection>();
-  for (const query of queryClient.getQueryCache().findAll({
-    queryKey: documentQueryKeys.all,
-    exact: false,
-  })) {
-    const [scope, section, cachedRepoPath, cachedTaskId] = query.queryKey;
-    if (
-      scope !== documentQueryKeys.all[0] ||
-      cachedRepoPath !== repoPath ||
-      cachedTaskId !== taskId
-    ) {
-      continue;
-    }
-    if (section === "spec" || section === "plan") {
-      sections.add(section);
-      continue;
-    }
-    if (section === "qa-report") {
-      sections.add("qa");
-    }
-  }
-  return [...sections];
-};
-
 export const removeCachedTaskDocumentQueries = (
   queryClient: QueryClient,
   repoPath: string,
@@ -159,22 +130,6 @@ export const invalidateCachedTaskDocumentQueries = async (
     },
     refetchType: "none",
   });
-};
-
-export const refreshCachedTaskDocumentQueries = async (
-  queryClient: QueryClient,
-  repoPath: string,
-  taskIds: string[],
-): Promise<void> => {
-  const uniqueTaskIds = [...new Set(taskIds)];
-  await Promise.all(
-    uniqueTaskIds.flatMap((taskId) => {
-      const cachedSections = cachedTaskDocumentSections(queryClient, repoPath, taskId);
-      return cachedSections.map((section) =>
-        fetchFreshTaskDocumentFromQuery(queryClient, repoPath, taskId, section),
-      );
-    }),
-  );
 };
 
 export const loadSpecDocumentFromQuery = (
