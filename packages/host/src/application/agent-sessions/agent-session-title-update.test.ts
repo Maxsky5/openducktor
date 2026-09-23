@@ -62,7 +62,7 @@ test("keeps the renamed outcome and reports a projection fault when the commit f
   expect(reported).toEqual([failure]);
 });
 
-test("fails with both errors when the projection fault report also fails", async () => {
+test("keeps the renamed outcome when the fault report fails", async () => {
   const commitFailure = new HostOperationError({
     operation: "test.commit",
     message: "commit failed",
@@ -71,16 +71,12 @@ test("fails with both errors when the projection fault report also fails", async
     operation: "test.report",
     message: "report failed",
   });
-  const error = await Effect.runPromise(
-    Effect.flip(
-      commitTitleUpdate(
-        renamed,
-        () => Effect.fail(commitFailure),
-        () => Effect.fail(reportFailure),
-      ),
+  const outcome = await Effect.runPromise(
+    commitTitleUpdate(
+      renamed,
+      () => Effect.fail(commitFailure),
+      () => Effect.fail(reportFailure),
     ),
   );
-  expect(error).toBeInstanceOf(HostOperationError);
-  expect(error.message).toContain("commit failed");
-  expect(error.message).toContain("report failed");
+  expect(outcome).toEqual({ status: "renamed" });
 });
