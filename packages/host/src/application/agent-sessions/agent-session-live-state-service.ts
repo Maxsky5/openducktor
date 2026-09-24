@@ -255,10 +255,13 @@ export const createAgentSessionLiveStateService = ({
   const runControl = <A>(
     scope: AgentSessionLiveAdapterScope,
     control: (adapter: AgentSessionRuntimeAdapterPort) => Effect.Effect<A, HostError>,
+    isCommitted: (result: A) => boolean = () => false,
   ) =>
     Effect.gen(function* () {
       const adapter = yield* adapterRegistry.resolveControlForScope(scope);
       const result = yield* control(adapter);
+      // A committed native change stays valid when the runtime detaches right after it.
+      if (isCommitted(result)) return result;
       yield* lifecycle.requireAttached(adapter.binding);
       return result;
     });
@@ -432,7 +435,11 @@ export const createAgentSessionLiveStateService = ({
     updateSessionModel: (input) =>
       runControl(input, (adapter) => adapter.updateSessionModel(input)),
     updateSessionTitle: (input) =>
-      runControl(input, (adapter) => adapter.updateSessionTitle(input)),
+      runControl(
+        input,
+        (adapter) => adapter.updateSessionTitle(input),
+        (outcome) => outcome.status === "renamed",
+      ),
     stopSession: (input) => runControl(input, (adapter) => adapter.stopSession(input)),
     releaseSession: (input) => runControl(input, (adapter) => adapter.releaseSession(input)),
     registerRuntimeAdapter: lifecycle.registerRuntimeAdapter,
