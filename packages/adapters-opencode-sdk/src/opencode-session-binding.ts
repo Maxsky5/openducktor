@@ -23,6 +23,21 @@ export const requireOpencodeSessionPolicyRuntime = async (input: {
   }
 };
 
+const updateNativeSession = async (
+  client: SessionRecord["client"],
+  action: string,
+  request: Parameters<SessionRecord["client"]["session"]["update"]>[0],
+): Promise<void> => {
+  try {
+    const updated = await client.session.update(request);
+    if (updated.data === undefined || updated.data === null) {
+      throw toOpenCodeRequestError(action, updated.error, updated.response);
+    }
+  } catch (error) {
+    throw toOpenCodeRequestError(action, error);
+  }
+};
+
 export const applySessionPolicy = async (input: {
   client: SessionRecord["client"];
   externalSessionId: string;
@@ -30,21 +45,44 @@ export const applySessionPolicy = async (input: {
   workingDirectory: string;
 }): Promise<void> => {
   const action = `update ${input.policy.toolSelection.kind} session policy for session '${input.externalSessionId}'`;
+  const request: Parameters<typeof input.client.session.update>[0] = {
+    directory: input.workingDirectory,
+    sessionID: input.externalSessionId,
+    permission: input.policy.permission,
+  };
+  if (input.policy.title !== undefined) {
+    request.title = input.policy.title;
+  }
+  await updateNativeSession(input.client, action, request);
+};
+
+/**
+ * Reconciles a durable title with the runtime on an attach. A failed update keeps the
+ * durable title, so the next attach can retry. Returns the applied title, or null when
+ * the scope carries no title or the runtime rejects the update.
+ */
+export const reconcileSessionTitle = async (input: {
+  client: SessionRecord["client"];
+  externalSessionId: string;
+  title: string | undefined;
+  workingDirectory: string;
+}): Promise<string | null> => {
+  if (input.title === undefined) {
+    return null;
+  }
   try {
-    const request: Parameters<typeof input.client.session.update>[0] = {
-      directory: input.workingDirectory,
-      sessionID: input.externalSessionId,
-      permission: input.policy.permission,
-    };
-    if (input.policy.title !== undefined) {
-      request.title = input.policy.title;
-    }
-    const updated = await input.client.session.update(request);
-    if (updated.data === undefined || updated.data === null) {
-      throw toOpenCodeRequestError(action, updated.error, updated.response);
-    }
-  } catch (error) {
-    throw toOpenCodeRequestError(action, error);
+    await updateNativeSession(
+      input.client,
+      `update the title of session '${input.externalSessionId}'`,
+      {
+        directory: input.workingDirectory,
+        sessionID: input.externalSessionId,
+        title: input.title,
+      },
+    );
+    return input.title;
+  } catch {
+    return null;
   }
 };
 
@@ -105,6 +143,15 @@ export const synchronizeOpencodeSessionPolicy = async (input: {
     workingDirectory: input.request.workingDirectory,
   });
   if (input.request.sessionScope?.kind === "repository" && !input.request.systemPrompt) {
+    const reconciledTitle = await reconcileSessionTitle({
+      client: input.session.client,
+      externalSessionId: input.session.externalSessionId,
+      title: input.policy.title,
+      workingDirectory: input.request.workingDirectory,
+    });
+    if (reconciledTitle !== null) {
+      input.session.summary = { ...input.session.summary, title: reconciledTitle };
+    }
     applyRuntimeContextToSession(input.session, input.request, input.action);
     return;
   }

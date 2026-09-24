@@ -249,6 +249,56 @@ describe("createClaudeAgentSdkService", () => {
     expect(mcpServerStatus).toHaveBeenCalledTimes(3);
   });
 
+  test("reconciles the durable repository title when a cold role-less session resumes", async () => {
+    const store = createClaudeAgentSdkSessionStore();
+    const loadTodos = spyOn(todos, "loadClaudeTodos").mockResolvedValue([]);
+    const attach = spyOn(sessionFactory, "createClaudeAgentSdkSession").mockImplementation(
+      async (request) => {
+        expect(request.sessionInput).toEqual({
+          externalSessionId: "session-1",
+          options: { resume: "session-1" },
+          reconcileTitle: true,
+          startedMessage: "Resumed session",
+          title: "Fairnest",
+        });
+        const session = createSession({ input: request.input, runtimeId: request.runtimeId });
+        request.sessionStore.set(session);
+        return session.summary;
+      },
+    );
+    const service = createService(null, undefined, store, {
+      resolveMcpBridgeConnection: () =>
+        Effect.succeed({
+          workspaceId: "workspace-1",
+          hostUrl: "http://127.0.0.1:1",
+          hostToken: "test-token",
+        }),
+    });
+    try {
+      await Effect.runPromise(
+        service.resumeSession(
+          {
+            repoPath: "/repo/",
+            runtimeKind: "claude",
+            workingDirectory: "/repo/worktree/",
+            externalSessionId: "session-1",
+            runtimePolicy: { kind: "claude" },
+            sessionScope: { kind: "repository", title: "Fairnest" },
+          },
+          "runtime-claude",
+        ),
+      );
+
+      expect(attach).toHaveBeenCalledTimes(1);
+    } finally {
+      const session = store.get("session-1");
+      if (session) store.close(session);
+      service.dispose();
+      attach.mockRestore();
+      loadTodos.mockRestore();
+    }
+  });
+
   test("rejects retained Claude session scope drift", async () => {
     const service = createService(
       createSession({

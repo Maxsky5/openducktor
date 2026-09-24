@@ -486,10 +486,19 @@ export class CodexAppServerAdapter
       !input.systemPrompt &&
       (!current || current.preserveNativeSettings)
     ) {
-      if (current) return current.summary;
+      if (current) {
+        await this.applyRepositoryTitle(input, current, sessionPolicy.title, {
+          tolerateFailure: true,
+        });
+        return current.summary;
+      }
       const handle = await this.openExistingSession(input);
       await handle.attach();
-      return this.localSessions.get(input.externalSessionId)!.summary;
+      const attached = this.localSessions.get(input.externalSessionId)!;
+      await this.applyRepositoryTitle(input, attached, sessionPolicy.title, {
+        tolerateFailure: true,
+      });
+      return attached.summary;
     }
     const model = requireModelSelection(input.model);
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "resume session");
@@ -662,28 +671,14 @@ export class CodexAppServerAdapter
     const session = sessionStateFromThreadResume(input, runtimeId, model, response);
     session.preserveNativeSettings = preserveNativeSettings;
     const repositoryTitle = sessionPolicy.kind === "repository" ? sessionPolicy.title : undefined;
-    if (repositoryTitle !== undefined && !preserveNativeSettings) {
-      session.summary = { ...session.summary, title: repositoryTitle };
+    try {
+      // A replacement that cannot be prepared must not stay registered as a live
+      // session, or the host would show a running session without a consumer.
+      await this.applyRepositoryTitle(input, session, repositoryTitle);
+    } catch (cause) {
+      throw codexContinuationFailed(input.externalSessionId, cause);
     }
-    const previous = this.localSessions.get(input.externalSessionId);
     this.localSessions.remember(session);
-    if (repositoryTitle !== undefined && !preserveNativeSettings) {
-      try {
-        await client.threadSetName({
-          threadId: session.threadId,
-          name: repositoryTitle,
-        });
-      } catch (cause) {
-        // A replacement that cannot be prepared must not stay registered as a live
-        // session, or the host would show a running session without a consumer.
-        if (previous) {
-          this.localSessions.remember(previous);
-        } else {
-          this.localSessions.release(session.threadId);
-        }
-        throw codexContinuationFailed(input.externalSessionId, cause);
-      }
-    }
     try {
       await startCodexContinuationTurn(this.turnLifecycleContext(), input.externalSessionId, model);
     } catch (cause) {
@@ -1195,6 +1190,9 @@ export class CodexAppServerAdapter
     const session = sessionStateFromExistingThread(input, runtimeId, model, response);
     if (sessionPolicy.kind === "repository") {
       session.preserveNativeSettings = true;
+      await this.applyRepositoryTitle(input, session, sessionPolicy.title, {
+        tolerateFailure: true,
+      });
     }
     const { summary } = session;
     const existingThreadSession = preserveRuntimeContextForExistingThread(
@@ -1203,6 +1201,32 @@ export class CodexAppServerAdapter
     );
     this.localSessions.remember(existingThreadSession);
     return summary;
+  }
+
+  private async applyRepositoryTitle(
+    input: PolicyBoundSessionRef,
+    session: CodexSessionState,
+    repositoryTitle: string | undefined,
+    options: { tolerateFailure?: boolean } = {},
+  ): Promise<void> {
+    if (repositoryTitle === undefined || session.summary.title === repositoryTitle) return;
+    const { client } = await this.runtimeClients.resolve(
+      input,
+      "apply the repository session title",
+    );
+    try {
+      await client.threadSetName({
+        threadId: session.threadId,
+        name: repositoryTitle,
+      });
+    } catch (cause) {
+      // An attach reconciles the durable title with the runtime. A failed reconciliation
+      // keeps the durable title and leaves the native title unchanged, so the next attach
+      // can retry. A session replacement must fail instead.
+      if (options.tolerateFailure !== true) throw cause;
+      return;
+    }
+    session.summary = withSummaryTitle(session.summary, repositoryTitle);
   }
 
   async releaseSession(input: SessionRef): Promise<void> {

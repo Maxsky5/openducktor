@@ -32,13 +32,90 @@ describe("OpencodeSdkAdapter repository sessions", () => {
       return { ...result, data: { ...result.data!, title: "External native title" } };
     };
     const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
-    const input = { ...sessionRef("native"), sessionScope: repositoryScope, runtimePolicy };
+    const input = {
+      ...sessionRef("native"),
+      sessionScope: { kind: "repository" } as const,
+      runtimePolicy,
+    };
     expect((await adapter.resumeSession(input)).title).toBe("External native title");
     await adapter.resumeSession(input);
     await adapter.sendUserMessage({ ...input, parts: [{ kind: "text", text: "Continue" }] });
     expect(mock.session.updateCalls).toEqual([]);
     expect(mock.session.createCalls).toEqual([]);
     expect(mock.session.promptAsyncCalls).toHaveLength(1);
+    await adapter.releaseSession(input);
+  });
+
+  test("applies the durable title when resuming a role-less repository session", async () => {
+    const mock = makeMockClient({ sessionId: "repository-resume" });
+    const get = mock.client.session.get;
+    mock.client.session.get = async (...args) => {
+      const result = await get(...args);
+      return { ...result, data: { ...result.data!, title: "External native title" } };
+    };
+    const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
+    const input = {
+      ...sessionRef("repository-resume"),
+      sessionScope: repositoryScope,
+      runtimePolicy,
+    };
+
+    const resumed = await adapter.resumeSession(input);
+
+    expect(resumed.title).toBe("Fairnest");
+    expect(mock.session.updateCalls).toContainEqual({
+      directory: "/repo",
+      sessionID: "repository-resume",
+      title: "Fairnest",
+    });
+    await adapter.releaseSession(input);
+  });
+
+  test("reconciles the durable title when an attached role-less repository session resumes", async () => {
+    const mock = makeMockClient({ sessionId: "repository-resume" });
+    const get = mock.client.session.get;
+    mock.client.session.get = async (...args) => {
+      const result = await get(...args);
+      return { ...result, data: { ...result.data!, title: "External native title" } };
+    };
+    const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
+    const input = {
+      ...sessionRef("repository-resume"),
+      sessionScope: repositoryScope,
+      runtimePolicy,
+    };
+    await adapter.resumeSession({ ...input, sessionScope: { kind: "repository" } });
+    mock.session.updateCalls.length = 0;
+
+    const resumed = await adapter.resumeSession(input);
+
+    expect(resumed.title).toBe("Fairnest");
+    expect(mock.session.updateCalls).toContainEqual({
+      directory: "/repo",
+      sessionID: "repository-resume",
+      title: "Fairnest",
+    });
+    await adapter.releaseSession(input);
+  });
+
+  test("keeps the native title when a role-less repository resume cannot apply the durable title", async () => {
+    const mock = makeMockClient({ sessionId: "repository-resume" });
+    const get = mock.client.session.get;
+    mock.client.session.get = async (...args) => {
+      const result = await get(...args);
+      return { ...result, data: { ...result.data!, title: "External native title" } };
+    };
+    mock.client.session.update = async () => {
+      throw new Error("update rejected");
+    };
+    const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
+    const input = {
+      ...sessionRef("repository-resume"),
+      sessionScope: repositoryScope,
+      runtimePolicy,
+    };
+
+    expect((await adapter.resumeSession(input)).title).toBe("External native title");
     await adapter.releaseSession(input);
   });
 

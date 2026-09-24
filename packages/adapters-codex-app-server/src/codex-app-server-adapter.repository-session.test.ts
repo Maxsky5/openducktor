@@ -258,6 +258,74 @@ describe("CodexAppServerAdapter repository sessions", () => {
     ).resolves.toMatchObject({ availability: "runtime", title: "Fairnest" });
   });
 
+  test("reconciles the durable repository title on a cold preserve-native resume", async () => {
+    const transport = new RecordingTransport("runtime-live", false);
+    const adapter = createAdapterWithTransport(transport);
+
+    const resumed = await adapter.resumeSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "thread-resume",
+      sessionScope: { kind: "repository", title: "Fairnest" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+    });
+
+    expect(resumed.title).toBe("Fairnest");
+    expect(transport.calls.find((call) => call.method === "thread/resume")?.params).toEqual({
+      threadId: "thread-resume",
+      excludeTurns: true,
+    });
+    expect(transport.calls.find((call) => call.method === "thread/name/set")).toEqual({
+      method: "thread/name/set",
+      params: { threadId: "thread-resume", name: "Fairnest" },
+    });
+  });
+
+  test("keeps the native title when a cold resume cannot apply the repository title", async () => {
+    const transport = new NameFailingTransport("runtime-live", false);
+    const adapter = createAdapterWithTransport(transport);
+
+    const resumed = await adapter.resumeSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "thread-resume",
+      sessionScope: { kind: "repository", title: "Fairnest" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+    });
+
+    expect(resumed.title).toBe("thread-resume");
+    expect(transport.calls.find((call) => call.method === "thread/name/set")).toEqual({
+      method: "thread/name/set",
+      params: { threadId: "thread-resume", name: "Fairnest" },
+    });
+  });
+
+  test("reconciles the durable repository title when a send attaches a detached session", async () => {
+    const transport = new RecordingTransport("runtime-live", false);
+    const adapter = createAdapterWithTransport(transport);
+
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread-history",
+        sessionScope: { kind: "repository", title: "Fairnest" },
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+        systemPrompt: "",
+        parts: [{ kind: "text", text: "Continue" }],
+      }),
+    );
+
+    expect(transport.calls.find((call) => call.method === "thread/resume")?.params).toEqual({
+      threadId: "thread-history",
+      excludeTurns: true,
+    });
+    expect(transport.calls.find((call) => call.method === "thread/name/set")).toEqual({
+      method: "thread/name/set",
+      params: { threadId: "thread-history", name: "Fairnest" },
+    });
+  });
+
   test("rejects stale history identity before changing a retained session", async () => {
     const { adapter, transports } = createHarness();
     const started = await adapter.startSession({

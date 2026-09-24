@@ -27,6 +27,11 @@ export type ClaudeSessionLaunchInput = {
    */
   resumeInterruptedTurn?: boolean;
   preserveNativeSettings?: boolean;
+  /**
+   * Reconciles the durable session title with the runtime. A failed update must not
+   * fail the attach, because the next attach can retry it.
+   */
+  reconcileTitle?: boolean;
   startedMessage: string;
   title?: string;
 };
@@ -57,7 +62,10 @@ export const resumedClaudeSessionLaunch = (
 ): ClaudeSessionLaunchInput => ({
   externalSessionId,
   ...(scope.kind === "repository"
-    ? { startedMessage: "Resumed session" }
+    ? {
+        ...withAgentSessionTitle({ startedMessage: "Resumed session" }, scope),
+        reconcileTitle: true,
+      }
     : sessionPresentation("Resumed", scope)),
   options: { resume: externalSessionId },
 });

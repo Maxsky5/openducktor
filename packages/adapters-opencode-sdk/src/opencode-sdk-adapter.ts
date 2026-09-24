@@ -74,6 +74,7 @@ import {
   applySessionPolicy,
   assertOpencodeSessionRef,
   assertRuntimeContextCompatibleWithSession,
+  reconcileSessionTitle,
   requireOpencodeSessionPolicyRuntime,
   resolveOpencodePolicyBoundSession,
   synchronizeOpencodeSessionPolicy,
@@ -284,13 +285,22 @@ export class OpencodeSdkAdapter
     });
     const detailData = unwrapData(detail, "get session");
     const preserveNativeSettings = input.sessionScope?.kind === "repository" && !input.systemPrompt;
-    if (!preserveNativeSettings)
+    if (!preserveNativeSettings) {
       await applySessionPolicy({
         client,
         externalSessionId: input.externalSessionId,
         policy,
         workingDirectory: input.workingDirectory,
       });
+    }
+    const reconciledTitle = preserveNativeSettings
+      ? await reconcileSessionTitle({
+          client,
+          externalSessionId: input.externalSessionId,
+          title: policy.title,
+          workingDirectory: input.workingDirectory,
+        })
+      : null;
     const detailRecord = opencodeSessionDetailPayloadSchema.parse(detailData);
     const startedAt = toIsoFromEpoch(detailRecord.time.created, this.now);
     const sessionInput = toSessionInput(input);
@@ -312,7 +322,7 @@ export class OpencodeSdkAdapter
       registrationInput.logEvent = this.logEvent;
     }
     const summary = registerSession(registrationInput);
-    if (preserveNativeSettings) summary.title = detailRecord.title;
+    if (preserveNativeSettings) summary.title = reconciledTitle ?? detailRecord.title;
     return summary;
   }
 
@@ -519,6 +529,15 @@ export class OpencodeSdkAdapter
         workingDirectory: input.workingDirectory,
       });
     }
+    const reconciledTitle =
+      policy && preserveNativeSettings
+        ? await reconcileSessionTitle({
+            client,
+            externalSessionId: input.externalSessionId,
+            title: policy.title,
+            workingDirectory: input.workingDirectory,
+          })
+        : null;
     const startedAt = toIsoFromEpoch(detailRecord.time.created, this.now);
     const sessionInput = toExistingSessionInput(input);
 
@@ -541,7 +560,7 @@ export class OpencodeSdkAdapter
       registrationInput.logEvent = this.logEvent;
     }
     const summary = registerSession(registrationInput);
-    if (preserveNativeSettings) summary.title = detailRecord.title;
+    if (preserveNativeSettings) summary.title = reconciledTitle ?? detailRecord.title;
 
     try {
       const subscriptionInput: Parameters<typeof subscribeSessionToRuntimeEvents>[0] = {
@@ -850,8 +869,8 @@ export class OpencodeSdkAdapter
     if (!session) {
       return { status: "not_attached" };
     }
+    assertOpencodeSessionRef(session, input, "rename");
     const action = `rename OpenCode session '${input.externalSessionId}'`;
-    assertOpencodeSessionRef(session, input, action);
     try {
       const updated = await session.client.session.update({
         directory: input.workingDirectory,

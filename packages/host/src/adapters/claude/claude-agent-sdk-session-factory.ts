@@ -191,10 +191,19 @@ export const createClaudeAgentSdkSession = async ({
       runtimeId,
     });
     if (sessionInput.options.resume && !sessionInput.options.forkSession) {
-      await renameClaudeSessionIfNeeded({
-        session,
-        title: sessionInput.title,
-      });
+      try {
+        await renameClaudeSessionIfNeeded({
+          session,
+          title: sessionInput.title,
+        });
+      } catch (error) {
+        // An attach reconciles the durable title with the runtime. A failed reconciliation
+        // keeps the durable title, so the next attach can retry. A session replacement or
+        // a policy title must fail instead.
+        if (isContinuation || sessionInput.reconcileTitle !== true) {
+          throw error;
+        }
+      }
     }
     if (continuationAdmission) {
       await awaitClaudeContinuationAdmission({
