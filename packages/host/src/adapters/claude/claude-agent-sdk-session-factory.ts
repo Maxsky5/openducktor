@@ -1,6 +1,6 @@
 import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { type AgentSessionSummary, type AgentSessionTodoItem } from "@openducktor/core";
-import { interruptedTurnResumeError } from "@openducktor/core";
+import { interruptedTurnResumeError, withoutSummaryTitle } from "@openducktor/core";
 import { HostOperationError } from "../../effect/host-errors";
 import {
   buildClaudeAgentSdkOptions,
@@ -102,7 +102,6 @@ export const createClaudeAgentSdkSession = async ({
   const queue = new AsyncInputQueue<SDKUserMessage>();
   const abortController = new AbortController();
   const startedAt = now();
-  const summary = createClaudeSessionSummary(input, sessionInput, startedAt);
   const sessionContext: ClaudeSessionContext = {
     acceptedUserMessages: [],
     activeSdkUserTurnCount: 0,
@@ -118,7 +117,7 @@ export const createClaudeAgentSdkSession = async ({
     queue,
     runtimeId,
     startedAt,
-    summary,
+    summary: createClaudeSessionSummary(input, sessionInput, startedAt),
     streamAssistantMessageOrdinal: 0,
     streamAssistantMessageIdsByBlockIndex: new Map(),
     subagentMessageIdsByTaskId: new Map(),
@@ -203,6 +202,7 @@ export const createClaudeAgentSdkSession = async ({
         if (isContinuation || sessionInput.reconcileTitle !== true) {
           throw error;
         }
+        session.summary = withoutSummaryTitle(session.summary);
       }
     }
     if (continuationAdmission) {
@@ -239,7 +239,7 @@ export const createClaudeAgentSdkSession = async ({
       },
     });
   }
-  summary.status = isContinuation ? "running" : "idle";
+  session.summary.status = isContinuation ? "running" : "idle";
   const timestamp = now();
   emit(session, {
     type: "session_started",
@@ -254,5 +254,5 @@ export const createClaudeAgentSdkSession = async ({
       timestamp,
     });
   }
-  return summary;
+  return session.summary;
 };

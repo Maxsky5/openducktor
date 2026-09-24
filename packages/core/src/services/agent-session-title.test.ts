@@ -3,6 +3,7 @@ import {
   agentSessionTitle,
   formatWorkflowAgentSessionTitle,
   withAgentSessionTitle,
+  withoutSummaryTitle,
 } from "./agent-session-title";
 
 describe("formatWorkflowAgentSessionTitle", () => {
@@ -38,5 +39,40 @@ describe("Agent Session scope presentation", () => {
     expect(titled).not.toBe(value);
     expect(value).toEqual({ kind: "repository" });
     expect(withAgentSessionTitle(value, { kind: "repository" })).toBe(value);
+  });
+});
+
+describe("withoutSummaryTitle", () => {
+  const repositorySummary = {
+    externalSessionId: "session-1",
+    runtimeKind: "claude",
+    workingDirectory: "/repo",
+    title: "Fairnest",
+    sessionAssociation: { kind: "repository", title: "Fairnest" },
+    startedAt: "2026-09-24T10:00:00.000Z",
+    status: "idle",
+  } as const;
+
+  test("removes the summary title and the repository association title", () => {
+    const cleared = withoutSummaryTitle(repositorySummary);
+
+    expect(cleared.title).toBeUndefined();
+    expect(cleared.sessionAssociation).toEqual({ kind: "repository" });
+    expect(cleared.externalSessionId).toBe("session-1");
+  });
+
+  test("keeps a workflow association unchanged", () => {
+    const cleared = withoutSummaryTitle({
+      ...repositorySummary,
+      title: "BUILD task-1",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+    });
+
+    expect(cleared.title).toBeUndefined();
+    expect(cleared.sessionAssociation).toEqual({
+      kind: "workflow",
+      taskId: "task-1",
+      role: "build",
+    });
   });
 });

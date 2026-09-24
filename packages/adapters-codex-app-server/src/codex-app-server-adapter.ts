@@ -530,19 +530,18 @@ export class CodexAppServerAdapter
     this.clearThreadInventory(runtimeId);
     const session = sessionStateFromThreadResume(input, runtimeId, model, response);
     const repositoryTitle = sessionPolicy.kind === "repository" ? sessionPolicy.title : undefined;
-    if (repositoryTitle !== undefined) {
-      session.summary = { ...session.summary, title: repositoryTitle };
-    }
-    const { summary } = session;
     this.localSessions.remember(session);
     if (repositoryTitle !== undefined) {
       await client.threadSetName({
         threadId: session.threadId,
         name: repositoryTitle,
       });
+      // Apply the title only after the runtime accepts it. A failed rename keeps the
+      // session addressable, and its summary must report the runtime title.
+      session.summary = { ...session.summary, title: repositoryTitle };
     }
 
-    return summary;
+    return session.summary;
   }
 
   async continueInterruptedTurn(

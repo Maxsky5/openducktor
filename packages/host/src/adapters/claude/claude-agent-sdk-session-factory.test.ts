@@ -671,7 +671,8 @@ describe("createClaudeAgentSdkSession", () => {
       expect(renameSessionSpy).toHaveBeenCalledTimes(1);
       expect(renameSessionSpy.mock.calls[0]?.[0]).toBe("session-1");
       expect(renameSessionSpy.mock.calls[0]?.[1]).toBe("Fairnest");
-      expect(summary.title).toBe("Fairnest");
+      expect(summary.title).toBeUndefined();
+      expect(summary.sessionAssociation).toEqual({ kind: "repository" });
       const session = sessionStore.get("session-1");
       if (session) sessionStore.close(session);
     } finally {

@@ -302,6 +302,33 @@ describe("CodexAppServerAdapter repository sessions", () => {
     });
   });
 
+  test("keeps the native title when a strict repository resume cannot apply the title", async () => {
+    const transport = new NameFailingTransport("runtime-live", false);
+    const adapter = createAdapterWithTransport(transport);
+
+    await expect(
+      adapter.resumeSession({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread-resume",
+        sessionScope: { kind: "repository", title: "Fairnest" },
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+        systemPrompt: "Use the repo rules.",
+        model: { providerId: "openai", modelId: "gpt-5" },
+      }),
+    ).rejects.toThrow("name failed");
+
+    await expect(
+      adapter.readSessionRuntimeSnapshot({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread-resume",
+      }),
+    ).resolves.toMatchObject({ availability: "runtime", title: "Live Codex session" });
+  });
+
   test("reconciles the durable repository title when a send attaches a detached session", async () => {
     const transport = new RecordingTransport("runtime-live", false);
     const adapter = createAdapterWithTransport(transport);

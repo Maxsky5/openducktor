@@ -43,3 +43,19 @@ export const withSummaryTitle = (
       ? { kind: "repository", title }
       : summary.sessionAssociation,
 });
+
+/**
+ * Removes the summary title and the repository association title.
+ * Use it when the runtime rejects a title update, so the summary reports the
+ * runtime title. Other association kinds keep their stored value.
+ */
+export const withoutSummaryTitle = (summary: AgentSessionSummary): AgentSessionSummary => {
+  const { title: _title, ...rest } = summary;
+  return {
+    ...rest,
+    sessionAssociation:
+      summary.sessionAssociation.kind === "repository"
+        ? { kind: "repository" }
+        : summary.sessionAssociation,
+  };
+};
