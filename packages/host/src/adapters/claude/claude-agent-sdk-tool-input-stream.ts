@@ -24,21 +24,6 @@ type ClaudeToolInputStreamSession = Pick<ClaudeEventSession, "externalSessionId"
 
 const toolStreamStates = new WeakMap<ClaudeToolInputStreamSession, ToolStreamState>();
 
-const toolStreamStateFor = (session: ClaudeToolInputStreamSession): ToolStreamState => {
-  const existing = toolStreamStates.get(session);
-  if (existing) {
-    return existing;
-  }
-  const state: ToolStreamState = {
-    toolsByBlockIndex: new Map(),
-    toolsByCallId: new Map(),
-  };
-  toolStreamStates.set(session, state);
-  return state;
-};
-
-const toolInputFingerprint = (input: ClaudeProtocolObject): string => JSON.stringify(input);
-
 export const rememberClaudeStreamToolStart = (
   session: ClaudeToolInputStreamSession,
   blockIndex: number,
@@ -102,7 +87,7 @@ export const completeClaudeStreamToolInput = (
       });
     }
   }
-  // The SDK can normalize tool values in the envelope. Validate raw input first.
+  // The SDK can change tool values in the envelope. Check raw input first.
   const input = entry.envelopeInput ?? parsedInput;
   if (!input) {
     return null;
@@ -132,8 +117,7 @@ export const consumeClaudeStreamEmittedToolInput = (
     return false;
   }
   if (state.toolsByBlockIndex.get(entry.blockIndex) === entry) {
-    // SDK 0.3.251 can emit the envelope before the raw content_block_stop event.
-    // Retain the raw buffer and defer the update until completion validates it.
+    // The envelope can arrive before block stop. Keep the raw JSON to check it then.
     entry.envelopeInput = input;
     return true;
   }
@@ -166,3 +150,20 @@ export const clearClaudeStreamToolInputTree = (session: ClaudeToolInputStreamTre
     clearClaudeStreamToolInputTree(child);
   }
 };
+
+function toolStreamStateFor(session: ClaudeToolInputStreamSession): ToolStreamState {
+  const existing = toolStreamStates.get(session);
+  if (existing) {
+    return existing;
+  }
+  const state: ToolStreamState = {
+    toolsByBlockIndex: new Map(),
+    toolsByCallId: new Map(),
+  };
+  toolStreamStates.set(session, state);
+  return state;
+}
+
+function toolInputFingerprint(input: ClaudeProtocolObject): string {
+  return JSON.stringify(input);
+}
