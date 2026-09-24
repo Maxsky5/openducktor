@@ -29,6 +29,25 @@ const repositoryResponse = (configured: AzureDevOpsRepository = repository) => (
 });
 
 describe("Azure DevOps connection", () => {
+  test("reports a new repository as disconnected without opening protected storage", async () => {
+    const open = mock(() => Effect.die("Unexpected protected storage open"));
+    const connection = createAzureDevOpsConnectionAdapter({
+      clientId: undefined,
+      protectedStorage: {
+        readConnection: () => Effect.succeed(null),
+        open,
+      },
+    });
+
+    await expect(Effect.runPromise(connection.getState(repoConfig, repository))).resolves.toEqual({
+      status: "disconnected",
+    });
+    await expect(
+      Effect.runPromise(connection.getAuthorization(repoConfig, repository)),
+    ).rejects.toThrow("requires a personal access token");
+    expect(open).not.toHaveBeenCalled();
+  });
+
   test("rejects a mixed-case HTTP Server address before sending the PAT", async () => {
     const httpRepository: AzureDevOpsRepository = {
       ...repository,
@@ -42,6 +61,7 @@ describe("Azure DevOps connection", () => {
     const connection = createAzureDevOpsConnectionAdapter({
       clientId: undefined,
       protectedStorage: {
+        readConnection: () => Effect.succeed(null),
         open: () =>
           Effect.succeed({
             save: async () => undefined,
@@ -61,6 +81,7 @@ describe("Azure DevOps connection", () => {
   test("keeps the working PAT when replacement validation fails", async () => {
     const records = new Map<string, string>();
     const protectedStorage: AzureDevOpsProtectedStorage = {
+      readConnection: (scope) => Effect.succeed(records.get(`${scope}:connection`) ?? null),
       open: (scope, record) =>
         Effect.succeed({
           save: async (contents: string) => void records.set(`${scope}:${record}`, contents),
@@ -100,6 +121,7 @@ describe("Azure DevOps connection", () => {
     const connection = createAzureDevOpsConnectionAdapter({
       clientId: undefined,
       protectedStorage: {
+        readConnection: () => Effect.succeed(null),
         open: () =>
           Effect.succeed({
             save,
@@ -133,6 +155,7 @@ describe("Azure DevOps connection", () => {
     });
     const records = new Map<string, string>();
     const protectedStorage: AzureDevOpsProtectedStorage = {
+      readConnection: (scope) => Effect.succeed(records.get(`${scope}:connection`) ?? null),
       open: (scope, record) =>
         Effect.succeed({
           save: async (contents: string) => void records.set(`${scope}:${record}`, contents),
@@ -185,6 +208,7 @@ describe("Azure DevOps connection", () => {
     const connection = createAzureDevOpsConnectionAdapter({
       clientId: undefined,
       protectedStorage: {
+        readConnection: () => Effect.succeed(null),
         open: () =>
           Effect.succeed({
             save: async () => undefined,
@@ -230,6 +254,7 @@ describe("Azure DevOps connection", () => {
     });
     const records = new Map<string, string>();
     const protectedStorage: AzureDevOpsProtectedStorage = {
+      readConnection: (scope) => Effect.succeed(records.get(`${scope}:connection`) ?? null),
       open: (scope, record) =>
         Effect.succeed({
           save: async (contents: string) => void records.set(`${scope}:${record}`, contents),
@@ -299,6 +324,7 @@ describe("Azure DevOps connection", () => {
     const connection = createAzureDevOpsConnectionAdapter({
       clientId: "client-id",
       protectedStorage: {
+        readConnection: (scope) => Effect.succeed(records.get(`${scope}:connection`) ?? null),
         open: (scope, record) =>
           Effect.succeed({
             save: async (contents: string) => void records.set(`${scope}:${record}`, contents),
@@ -349,6 +375,7 @@ describe("Azure DevOps connection", () => {
     const connection = createAzureDevOpsConnectionAdapter({
       clientId: "client-id",
       protectedStorage: {
+        readConnection: (scope) => Effect.succeed(records.get(`${scope}:connection`) ?? null),
         open: (scope, record) =>
           Effect.succeed({
             save: async (contents: string) => void records.set(`${scope}:${record}`, contents),
@@ -391,6 +418,7 @@ describe("Azure DevOps connection", () => {
     const records = new Map<string, string>();
     const operations: string[] = [];
     const protectedStorage: AzureDevOpsProtectedStorage = {
+      readConnection: (scope) => Effect.succeed(records.get(`${scope}:connection`) ?? null),
       open: (scope, record) =>
         Effect.succeed({
           save: async (contents: string) => {
@@ -458,6 +486,7 @@ describe("Azure DevOps connection", () => {
     });
     const records = new Map<string, string>();
     const protectedStorage: AzureDevOpsProtectedStorage = {
+      readConnection: (scope) => Effect.succeed(records.get(`${scope}:connection`) ?? null),
       open: (scope, record) =>
         Effect.succeed({
           save: async (contents: string) => void records.set(`${scope}:${record}`, contents),
