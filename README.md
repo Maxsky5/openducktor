@@ -37,6 +37,24 @@ It uses a workspace-scoped SQLite task store as the task source of truth, orches
 
 ## Install OpenDucktor
 
+### One-line desktop install
+
+The scripts install the latest stable GitHub release for the current user. Run the same command again to update a script-managed install. Quit OpenDucktor first.
+
+macOS arm64 or x64, and Linux x64:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Maxsky5/openducktor/main/install.sh | sh
+```
+
+Windows x64 in PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/Maxsky5/openducktor/main/install.ps1 | iex
+```
+
+The shell script needs `curl` and Python 3. It puts the macOS app in `~/Applications` or the Linux AppImage in `~/.local/bin` and adds a desktop launcher. The Windows script runs the NSIS installer for the current user. Both scripts check the asset against the SHA-256 digest in the GitHub release before they install it. Use the install method you already have if Homebrew, a system package, or another installer manages OpenDucktor.
+
 ### Homebrew (macOS only)
 
 ```sh
