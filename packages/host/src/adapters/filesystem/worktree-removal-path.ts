@@ -26,13 +26,17 @@ const resolveRemovalPath = async (inputPath: string): Promise<string> => {
     const parent = path.dirname(absolutePath);
     if (parent === absolutePath) throw cause;
     const resolvedParent = await resolveRemovalPath(parent);
+    let parentStats: Stats | null;
     try {
-      const parentStats = await lstat(resolvedParent);
-      if (!parentStats.isDirectory()) {
-        throw new Error(`ENOTDIR: ${resolvedParent} is not a directory.`);
-      }
+      parentStats = await lstat(resolvedParent);
     } catch (error) {
       if (!hasNestedNodeErrorCode(error, "ENOENT")) throw error;
+      parentStats = null;
+    }
+    if (parentStats && !parentStats.isDirectory()) {
+      throw new Error(
+        `Cannot resolve worktree removal path ${absolutePath}: ${resolvedParent} is not a directory.`,
+      );
     }
     return path.join(resolvedParent, path.basename(absolutePath));
   }

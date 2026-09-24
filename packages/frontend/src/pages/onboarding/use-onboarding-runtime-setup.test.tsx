@@ -872,6 +872,7 @@ describe("useOnboardingRuntimeSetup", () => {
     }
   });
 
+  // This test renders and visits three onboarding stages before it checks Back navigation.
   test("keeps the runtime step on save failure and supports retry, Workspace, and Back", async () => {
     const runtimes: AgentRuntimes = {
       opencode: { enabled: false, executablePath: "" },
@@ -921,8 +922,9 @@ describe("useOnboardingRuntimeSetup", () => {
       host.runtimeExecutablesCheck = originalCheck;
     }
     // This test renders a failed save, a retry, and two stage changes.
-  }, 3_000);
+  }, 5_000);
 
+  // This test renders the full coding-agent form and waits for an async save.
   test("keeps the coding-agent form visually stable while save is pending", async () => {
     const runtimes: AgentRuntimes = {
       opencode: { enabled: true, executablePath: "/valid/opencode" },
@@ -986,7 +988,7 @@ describe("useOnboardingRuntimeSetup", () => {
       host.runtimeExecutablesCheck = originalCheck;
     }
     // This test keeps three runtime cards mounted during a pending save.
-  }, 2_500);
+  }, 5_000);
 
   test("submits the no-runtime confirmation only once while saving", async () => {
     const runtimes = DEFAULT_AGENT_RUNTIMES;

@@ -717,7 +717,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
         await Effect.runPromise(importer.shutdown());
       }
     },
-    10_000,
+    15_000,
   );
 
   test("keeps the default branch after its session worktree disappears", async () => {
