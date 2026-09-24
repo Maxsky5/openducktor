@@ -110,7 +110,12 @@ describe("loadClaudeHistory", () => {
           },
         },
         () => "2026-07-17T10:01:01.000Z",
-        { hasActiveWork: () => false, source: "fresh", userMessages: [] },
+        {
+          activeBackgroundTaskIds: () => new Set(),
+          hasActiveWork: () => false,
+          source: "fresh",
+          userMessages: [],
+        },
       ),
     ).resolves.toEqual([
       {
@@ -136,6 +141,7 @@ describe("loadClaudeHistory", () => {
           },
           () => "2026-07-17T10:01:01.000Z",
           {
+            activeBackgroundTaskIds: () => new Set(),
             hasActiveWork: () => true,
             source: "fresh",
             userMessages: [
@@ -175,6 +181,7 @@ describe("loadClaudeHistory", () => {
         },
         () => "2026-07-17T10:01:01.000Z",
         {
+          activeBackgroundTaskIds: () => new Set(),
           hasActiveWork: () => false,
           source: "fresh",
           userMessages: [
@@ -202,6 +209,7 @@ describe("loadClaudeHistory", () => {
       },
       () => "2026-07-17T10:01:01.000Z",
       {
+        activeBackgroundTaskIds: () => new Set(),
         hasActiveWork: () => hasActiveWork,
         source: "fresh",
         userMessages: [
@@ -231,7 +239,12 @@ describe("loadClaudeHistory", () => {
           runtimePolicy: { kind: "claude" },
         },
         () => "2026-07-17T10:01:01.000Z",
-        { hasActiveWork: () => false, source: "persisted", userMessages: [] },
+        {
+          activeBackgroundTaskIds: () => new Set(),
+          hasActiveWork: () => false,
+          source: "persisted",
+          userMessages: [],
+        },
       ),
     ).rejects.toMatchObject({
       code: "request_failed",
@@ -265,6 +278,7 @@ describe("claudeLiveHistoryContext", () => {
     );
 
     expect(context).toEqual({
+      activeBackgroundTaskIds: expect.any(Function),
       hasActiveWork: expect.any(Function),
       source: "fresh",
       userMessages: [{ ...acceptedUserMessage, state: "queued" }],
@@ -288,11 +302,20 @@ describe("claudeLiveHistoryContext", () => {
     );
 
     expect(context).toEqual({
+      activeBackgroundTaskIds: expect.any(Function),
       hasActiveWork: expect.any(Function),
       source: "persisted",
       userMessages: [{ ...acceptedUserMessage, state: "read" }],
     });
     expect(context.hasActiveWork()).toBe(false);
+  });
+
+  test("reads the current process task set after a snapshot replaces it", () => {
+    const session = createClaudeSession({ backgroundToolActiveTaskIds: new Set(["task-1"]) });
+    const context = claudeLiveHistoryContext(session);
+    expect([...context.activeBackgroundTaskIds()]).toEqual(["task-1"]);
+    session.backgroundToolActiveTaskIds = new Set();
+    expect(context.activeBackgroundTaskIds().size).toBe(0);
   });
 });
 

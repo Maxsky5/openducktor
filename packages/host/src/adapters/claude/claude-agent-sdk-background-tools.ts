@@ -46,6 +46,7 @@ export type ClaudeBackgroundToolState = {
   backgroundToolTasksById?: Map<string, BackgroundToolTask>;
   backgroundToolTaskIdsByCallId?: Map<string, string>;
   backgroundToolActiveTaskIds?: Set<string>;
+  backgroundToolSnapshotSeen?: boolean;
   backgroundToolCompletedPartsByCallId?: Map<string, ToolPart>;
   backgroundToolAgentTaskIds?: Set<string>;
   toolInputsByCallId: Map<string, ClaudeToolInput>;
@@ -192,6 +193,8 @@ export const projectClaudeBackgroundTaskEdge = (
   }
   if (knownTask?.ambient) return null;
   const task = taskFor(state, taskId);
+  const canActivate =
+    !state.backgroundToolSnapshotSeen || state.backgroundToolActiveTaskIds?.has(taskId) === true;
   if (knownToolUseId) {
     task.toolUseId = knownToolUseId;
     taskIdsByCall(state).set(knownToolUseId, taskId);
@@ -202,13 +205,13 @@ export const projectClaudeBackgroundTaskEdge = (
     if (!task.outcome || !task.description) task.description = message.description;
     if (!task.outcome) task.startedAtMs = Date.parse(timestamp);
     task.backgrounded ||= message.is_backgrounded !== false;
-    if (!task.outcome) task.active = task.backgrounded;
+    if (!task.outcome) task.active = task.backgrounded && canActivate;
   } else if (message.subtype === "task_progress") {
     if (!task.outcome) {
       task.description = message.description;
       if (message.summary) task.summary = message.summary;
     }
-    if (!task.outcome && task.backgrounded) task.active = true;
+    if (!task.outcome && task.backgrounded && canActivate) task.active = true;
   } else if (message.subtype === "task_updated") {
     if (!task.notified) {
       if (message.patch.description) task.description = message.patch.description;
@@ -222,7 +225,7 @@ export const projectClaudeBackgroundTaskEdge = (
       }
       if (message.patch.is_backgrounded === true) {
         task.backgrounded = true;
-        if (!task.outcome) task.active = true;
+        if (!task.outcome && canActivate) task.active = true;
       }
     }
   } else {
@@ -246,45 +249,39 @@ export const projectClaudeBackgroundTaskEdge = (
   return projectTask(state, taskId, task, timestamp);
 };
 
-export const projectClaudeBackgroundTaskSnapshot = (
+const reconcileBackgroundTaskMembership = (
   state: ClaudeBackgroundToolState,
-  message: Pick<TaskSnapshot, "tasks">,
+  activeTaskIds: ReadonlySet<string>,
   timestamp: string,
+  descriptions?: ReadonlyMap<string, string>,
 ): ToolPart[] => {
   const active = new Set(
-    message.tasks
-      .filter((task) => {
-        const outcome = tasks(state).get(task.task_id)?.outcome;
-        return (
-          !task.ambient &&
-          !isAgentTask(task.task_type, undefined) &&
-          !state.backgroundToolAgentTaskIds?.has(task.task_id) &&
-          (outcome === undefined || outcome === "unknown")
-        );
-      })
-      .map((task) => task.task_id),
+    [...activeTaskIds].filter((taskId) => {
+      const task = tasks(state).get(taskId);
+      return (
+        !task?.ambient &&
+        !state.backgroundToolAgentTaskIds?.has(taskId) &&
+        (task?.outcome === undefined || task.outcome === "unknown")
+      );
+    }),
   );
   state.backgroundToolActiveTaskIds = active;
-  for (const entry of message.tasks) {
-    if (!active.has(entry.task_id)) continue;
-    const task = taskFor(state, entry.task_id);
+  state.backgroundToolSnapshotSeen = true;
+  for (const taskId of active) {
+    const task = taskFor(state, taskId);
     task.backgrounded = true;
     task.active = true;
     if (task.outcome === "unknown") {
       delete task.outcome;
       delete task.endedAtMs;
     }
-    task.description = entry.description;
+    const description = descriptions?.get(taskId);
+    if (description) task.description = description;
   }
   const parts: ToolPart[] = [];
   for (const [taskId, task] of tasks(state)) {
     if (task.outcome || task.ambient) continue;
-    if (active.has(taskId)) {
-      task.backgrounded = true;
-      task.active = true;
-      const description = message.tasks.find((entry) => entry.task_id === taskId)?.description;
-      if (description) task.description = description;
-    } else if (task.active) {
+    if (!active.has(taskId) && task.active) {
       task.active = false;
       task.outcome = "unknown";
       task.endedAtMs = Date.parse(timestamp);
@@ -293,6 +290,28 @@ export const projectClaudeBackgroundTaskSnapshot = (
     if (part) parts.push(part);
   }
   return parts;
+};
+
+export const projectClaudeBackgroundTaskMembership = (
+  state: ClaudeBackgroundToolState,
+  activeTaskIds: ReadonlySet<string>,
+  timestamp: string,
+): ToolPart[] => reconcileBackgroundTaskMembership(state, activeTaskIds, timestamp);
+
+export const projectClaudeBackgroundTaskSnapshot = (
+  state: ClaudeBackgroundToolState,
+  message: Pick<TaskSnapshot, "tasks">,
+  timestamp: string,
+): ToolPart[] => {
+  const visibleTasks = message.tasks.filter(
+    (task) => !task.ambient && !isAgentTask(task.task_type, undefined),
+  );
+  return reconcileBackgroundTaskMembership(
+    state,
+    new Set(visibleTasks.map((task) => task.task_id)),
+    timestamp,
+    new Map(visibleTasks.map((task) => [task.task_id, task.description])),
+  );
 };
 
 const backgroundTaskIdFromResult = (raw: ClaudeDecodedToolResult["raw"]): string | undefined => {
@@ -336,6 +355,9 @@ export const projectClaudeBackgroundToolResult = (
     if (resultTaskId && !task.active) {
       task.backgrounded = true;
       task.active = true;
+    } else if (task.backgrounded && !task.active && state.backgroundToolSnapshotSeen) {
+      task.outcome = "unknown";
+      task.endedAtMs = Date.parse(timestamp);
     }
   }
   if (resultTaskId) task.backgrounded = true;

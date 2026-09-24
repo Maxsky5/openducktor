@@ -109,6 +109,7 @@ export type ClaudeSession = {
   >;
   backgroundToolTaskIdsByCallId?: Map<string, string>;
   backgroundToolActiveTaskIds?: Set<string>;
+  backgroundToolSnapshotSeen?: boolean;
   backgroundToolCompletedPartsByCallId?: NonNullable<
     import("./claude-agent-sdk-background-tools").ClaudeBackgroundToolState["backgroundToolCompletedPartsByCallId"]
   >;

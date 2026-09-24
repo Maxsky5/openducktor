@@ -36,6 +36,7 @@ const claudeSubagentAssistantMessageSchema = z.looseObject({
 });
 
 export type ClaudeLiveHistoryContext = {
+  activeBackgroundTaskIds: () => ReadonlySet<string>;
   hasActiveWork: () => boolean;
   source: "fresh" | "persisted";
   userMessages: readonly ClaudeLiveUserMessage[];
@@ -43,6 +44,7 @@ export type ClaudeLiveHistoryContext = {
 
 /** A resumed or forked session must load its saved transcript. */
 export const claudeLiveHistoryContext = (session: ClaudeSession): ClaudeLiveHistoryContext => ({
+  activeBackgroundTaskIds: () => session.backgroundToolActiveTaskIds ?? new Set(),
   hasActiveWork: () => hasActiveClaudeWork(session),
   source:
     "externalSessionId" in session.input || "parentExternalSessionId" in session.input
@@ -246,11 +248,22 @@ export const loadClaudeHistory = async (
     };
   });
   const { messages, subagentAgentIdsByToolUseId } = projectionInput;
-  const history = toClaudeHistoryMessages(messages, now, liveContext?.userMessages ?? [], {
-    includeNestedEntries: isClaudeSubagentTranscriptTarget(input.externalSessionId),
+  const isSubagentTranscript = isClaudeSubagentTranscriptTarget(input.externalSessionId);
+  const projectionOptions: Parameters<typeof toClaudeHistoryMessages>[3] = {
+    includeNestedEntries: isSubagentTranscript,
     subagentAgentIdsByToolUseId,
     transcriptExternalSessionId: input.externalSessionId,
-  });
+  };
+  if (!isSubagentTranscript) {
+    projectionOptions.currentBackgroundTaskIds =
+      liveContext?.activeBackgroundTaskIds() ?? new Set();
+  }
+  const history = toClaudeHistoryMessages(
+    messages,
+    now,
+    liveContext?.userMessages ?? [],
+    projectionOptions,
+  );
   await reconcileClaudeSubagentStatuses(input, history, claudeSessionMessages(messages));
   return finalizeClaudeHistory(input, history);
 };

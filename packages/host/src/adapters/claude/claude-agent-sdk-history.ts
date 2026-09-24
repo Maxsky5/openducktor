@@ -28,6 +28,7 @@ import {
   retractedHistoryMessageIds,
 } from "./claude-agent-sdk-history-support";
 import {
+  appendClaudeHistoryBackgroundTaskMembership,
   appendClaudeHistoryBackgroundTaskSnapshot,
   appendClaudeHistorySubagentSystemMessage,
   type ClaudeHistoryToolResultState,
@@ -70,6 +71,7 @@ export const toClaudeHistoryMessages = (
   now: () => string,
   liveUserMessages: readonly ClaudeLiveUserMessage[] = [],
   options: {
+    currentBackgroundTaskIds?: ReadonlySet<string>;
     includeNestedEntries?: boolean;
     subagentAgentIdsByToolUseId?: ReadonlyMap<string, string>;
     transcriptExternalSessionId?: string;
@@ -295,9 +297,7 @@ export const toClaudeHistoryMessages = (
       continue;
     }
     if (entry.type === "user") {
-      if (projectClaudeHistoryToolResults({ entry, state: toolResultState, timestamp })) {
-        continue;
-      }
+      projectClaudeHistoryToolResults({ entry, state: toolResultState, timestamp });
       continue;
     }
     if (entry.type === "assistant") {
@@ -308,9 +308,7 @@ export const toClaudeHistoryMessages = (
         toolMessageIdsByCallId,
         toolNamesByCallId,
       });
-      if (!projection) {
-        continue;
-      }
+      if (!projection) continue;
       const { message: assistantSnapshot, stopReason } = projection;
       projectClaudeHistoryBackgroundToolUses(toolResultState, assistantSnapshot, timestamp);
       assistantSnapshot.parts = assistantSnapshot.parts.flatMap((part) => {
@@ -471,9 +469,7 @@ export const toClaudeHistoryMessages = (
         }
         continue;
       }
-      if (!resultTarget) {
-        continue;
-      }
+      if (!resultTarget) continue;
       if (resultText) {
         moveNestedResultToEnd(history, resultTarget, timestamp, options.includeNestedEntries);
         lastAssistantMessage = resultTarget;
@@ -492,6 +488,11 @@ export const toClaudeHistoryMessages = (
       }
     }
   }
+  appendClaudeHistoryBackgroundTaskMembership(
+    toolResultState,
+    options.currentBackgroundTaskIds,
+    now,
+  );
   appendUnmatchedLiveUserMessages(history, liveUserMessages);
   return history;
 };

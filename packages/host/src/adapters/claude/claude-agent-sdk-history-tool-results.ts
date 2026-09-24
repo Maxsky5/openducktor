@@ -3,6 +3,7 @@ import type { AgentEvent, AgentSessionHistoryMessage, AgentStreamPart } from "@o
 import {
   type ClaudeBackgroundToolState,
   projectClaudeBackgroundTaskEdge,
+  projectClaudeBackgroundTaskMembership,
   projectClaudeBackgroundTaskSnapshot,
   projectClaudeBackgroundToolResult,
   projectClaudeBackgroundToolUse,
@@ -63,6 +64,17 @@ export const appendClaudeHistoryBackgroundTaskSnapshot = (
   timestamp: string,
 ): void => {
   for (const part of projectClaudeBackgroundTaskSnapshot(state, message, timestamp)) {
+    replaceHistoryToolPart(state, part);
+  }
+};
+
+export const appendClaudeHistoryBackgroundTaskMembership = (
+  state: ClaudeHistoryToolResultState,
+  activeTaskIds: ReadonlySet<string> | undefined,
+  now: () => string,
+): void => {
+  if (!activeTaskIds) return;
+  for (const part of projectClaudeBackgroundTaskMembership(state, activeTaskIds, now())) {
     replaceHistoryToolPart(state, part);
   }
 };

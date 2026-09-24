@@ -16,6 +16,7 @@ export type ClaudeEventSession = {
   backgroundToolTasksById?: NonNullable<ClaudeBackgroundToolState["backgroundToolTasksById"]>;
   backgroundToolTaskIdsByCallId?: Map<string, string>;
   backgroundToolActiveTaskIds?: Set<string>;
+  backgroundToolSnapshotSeen?: boolean;
   backgroundToolCompletedPartsByCallId?: NonNullable<
     ClaudeBackgroundToolState["backgroundToolCompletedPartsByCallId"]
   >;

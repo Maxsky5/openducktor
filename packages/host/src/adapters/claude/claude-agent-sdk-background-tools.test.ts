@@ -350,6 +350,64 @@ describe("Claude background ordinary tool parts", () => {
     });
   });
 
+  test("does not restore an absent task from a late start or progress edge", () => {
+    const { parts, send, session } = live();
+    send(toolUse("bash-absent", "Bash", { command: "sleep 2" }));
+    send(snapshot([]));
+    send(taskStart("absent-task", "bash-absent", "Wait"));
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_progress",
+        task_id: "absent-task",
+        tool_use_id: "bash-absent",
+        description: "Wait",
+        summary: "Still waiting",
+      }),
+    );
+    expect(parts("bash-absent").at(-1)?.status).toBe("pending");
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
+    send(toolResult("bash-absent", "Started", "absent-task"));
+    expect(parts("bash-absent").at(-1)?.status).toBe("running");
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(true);
+  });
+
+  test("activates a correlated task when a later snapshot confirms a new launch", () => {
+    const { parts, send, session } = live();
+    send(snapshot([]));
+    send(toolUse("bash-new", "Bash", { command: "sleep 2" }));
+    send(taskStart("new-task", "bash-new", "Wait"));
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
+    send(snapshot([{ task_id: "new-task", task_type: "local_bash", description: "Wait" }]));
+    expect(parts("bash-new").at(-1)).toMatchObject({
+      status: "running",
+      metadata: { backgroundTaskId: "new-task" },
+    });
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(true);
+  });
+
+  test("does not call an excluded background task successful when its result has no task ID", () => {
+    const { parts, send, session } = live();
+    send(toolUse("mcp-absent", "mcp__server__long_call", { query: "report" }));
+    send(snapshot([]));
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_started",
+        task_id: "mcp-absent-task",
+        tool_use_id: "mcp-absent",
+        task_type: "mcp_task",
+        description: "Fetch report",
+      }),
+    );
+    send(toolResult("mcp-absent", "Running"));
+    expect(parts("mcp-absent").at(-1)).toMatchObject({
+      status: "error",
+      metadata: { backgroundTaskStatus: "unknown" },
+    });
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
+  });
+
   test("keeps snapshot activity when a foreground start edge arrives late", () => {
     const { parts, send } = live();
     send(toolUse("bash-backgrounded", "Bash", { command: "sleep 2" }));
@@ -554,6 +612,8 @@ describe("Claude background ordinary tool parts", () => {
         },
       ],
       () => timestamp,
+      [],
+      { currentBackgroundTaskIds: new Set() },
     );
     const finalPart = completed
       .flatMap((message) => message.parts)
@@ -704,5 +764,59 @@ describe("Claude background ordinary tool parts", () => {
           candidate.kind === "tool" && candidate.callId === "history-foreground",
       );
     expect(part).toMatchObject({ status: "completed", output: "/repo" });
+  });
+
+  test("history reconciles a saved launch with current process activity", () => {
+    const entries = filterClaudeHistoryMessages([
+      claudeSessionMessageFixture({
+        type: "assistant",
+        uuid: "history-restart-call",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        timestamp,
+        message: {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "history-restart",
+              name: "Bash",
+              input: { command: "sleep 2" },
+            },
+          ],
+        },
+      }),
+      claudeSessionMessageFixture({
+        type: "user",
+        uuid: "history-restart-result",
+        session_id: "session-1",
+        parent_tool_use_id: "history-restart",
+        timestamp,
+        tool_use_result: {
+          type: "tool_result",
+          tool_use_id: "history-restart",
+          content: "Started",
+          backgroundTaskId: "history-restart-task",
+        },
+        message: { role: "user", content: [] },
+      }),
+    ]);
+    const partFor = (activeTaskIds: ReadonlySet<string>) =>
+      toClaudeHistoryMessages(entries, () => timestamp, [], {
+        currentBackgroundTaskIds: activeTaskIds,
+      })
+        .flatMap((message) => message.parts)
+        .find(
+          (candidate): candidate is ToolPart =>
+            candidate.kind === "tool" && candidate.callId === "history-restart",
+        );
+    expect(partFor(new Set())).toMatchObject({
+      status: "error",
+      metadata: { backgroundTaskStatus: "unknown" },
+    });
+    expect(partFor(new Set(["history-restart-task"]))).toMatchObject({
+      status: "running",
+      metadata: { backgroundTaskStatus: "running" },
+    });
   });
 });
