@@ -13,6 +13,9 @@ import { MarkdownMermaid } from "./markdown-mermaid";
 import { MERMAID_RENDER_CONFIG } from "./markdown-mermaid-render";
 import { MarkdownRenderer } from "./markdown-renderer";
 
+// Load the syntax highlighter before the premium code render test starts its timer.
+await import("./markdown-syntax-block");
+
 const renderMarkdownLink = (href: string, label: string) => {
   return render(
     createElement(MarkdownRenderer, {

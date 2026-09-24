@@ -474,19 +474,23 @@ describe("electron dev script", () => {
     const directory = await mkdtemp(path.join(tmpdir(), "odt-electron-cdp-"));
     const endpointLine = electronDebugEndpointLogLine(45_678);
     const loggedLines: string[] = [];
+    let resolveElectronExit: (exitCode: number) => void = () => {};
+    const electronExited = new Promise<number>((resolve) => {
+      resolveElectronExit = resolve;
+    });
     const originalConsoleLog = console.log;
     console.log = (...arguments_: unknown[]) => {
-      loggedLines.push(arguments_.map(String).join(" "));
+      const line = arguments_.map(String).join(" ");
+      loggedLines.push(line);
+      if (line === endpointLine) {
+        resolveElectronExit(0);
+      }
     };
 
     try {
       const activePortPath = path.join(directory, "DevToolsActivePort");
       const fakeProcessHandlers = createFakeProcessHandlers();
       const remoteDebuggingValues: boolean[] = [];
-      let resolveElectronExit: (exitCode: number) => void = () => {};
-      const electronExited = new Promise<number>((resolve) => {
-        resolveElectronExit = resolve;
-      });
 
       const lifecycle = runElectronEffect(
         runElectronDevLifecycleEffect({
@@ -498,16 +502,6 @@ describe("electron dev script", () => {
           startElectronProcess: (_rendererDevUrl, _executablePath, remoteDebugging) => {
             remoteDebuggingValues.push(remoteDebugging);
             void writeFile(activePortPath, "45678\n/devtools/browser/example\n");
-            void (async () => {
-              for (
-                let attempt = 0;
-                attempt < 50 && !loggedLines.includes(endpointLine);
-                attempt += 1
-              ) {
-                await new Promise((resolve) => setTimeout(resolve, 10));
-              }
-              resolveElectronExit(0);
-            })();
             return {
               exited: electronExited,
               kill() {},

@@ -379,68 +379,50 @@ describe("node task asset file port", () => {
     );
   });
 
-  test(
-    "keeps staging for a live owner using the external start-time probe",
-    async () => {
-      const configDir = await mkdtemp(path.join(tmpdir(), "odt-task-assets-"));
-      roots.push(configDir);
-      const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1_000)"], {
-        stdio: "ignore",
-      });
-      if (!child.pid) {
-        throw new Error("Expected the child process to have a PID.");
-      }
-      const processId = child.pid;
-      const probeFailures: TaskAssetOwnerProbeFailure[] = [];
-      const liveInstanceId = "10000000-0000-4000-8000-000000000004";
-      const ownersRoot = path.join(configDir, "task-asset-owners");
-      const liveStagingFile = path.join(
-        configDir,
-        "task-asset-staging",
-        "instances",
-        liveInstanceId,
-        workspaceId,
-        assetId,
-      );
-      await mkdir(ownersRoot, { recursive: true });
-      await mkdir(path.dirname(liveStagingFile), { recursive: true });
-      await writeFile(
-        path.join(ownersRoot, `${liveInstanceId}.json`),
-        JSON.stringify({
-          version: 1,
-          instanceId: liveInstanceId,
-          processId,
-          startedAtMs: Date.now(),
-        }),
-      );
-      await writeFile(liveStagingFile, new Uint8Array([1]));
-      const port = createNodeTaskAssetFilePort({
-        configDir,
-        configDirScope: "test",
-        reportProbeFailure: async (failure) => {
-          probeFailures.push(failure);
-        },
-      });
-
-      try {
-        expect(await Effect.runPromise(port.clearStaging())).toBe(0);
-        await expect(readFile(liveStagingFile)).resolves.toEqual(Buffer.from([1]));
-        if (probeFailures.length > 0) {
-          expect(process.platform).toBe("win32");
-          expect(probeFailures).toHaveLength(1);
-          expect(probeFailures[0]).toEqual({
-            owner: expect.objectContaining({ processId }),
-            cause: expect.objectContaining({ killed: true, signal: "SIGTERM" }),
+  test("keeps staging for a live owner using the native start-time probe", async () => {
+    const configDir = await mkdtemp(path.join(tmpdir(), "odt-task-assets-"));
+    roots.push(configDir);
+    // Windows checks the external command and parser with an injected runner.
+    // This integration test uses the current-process path there to avoid PowerShell startup.
+    const child =
+      process.platform === "win32"
+        ? null
+        : spawn(process.execPath, ["-e", "setInterval(() => {}, 1_000)"], {
+            stdio: "ignore",
           });
-        }
-      } finally {
-        child.kill();
-        await Effect.runPromise(port.cleanupCurrentOwner());
-      }
-      // Windows runs the real PowerShell probe with a four-second command bound.
-    },
-    process.platform === "win32" ? 10_000 : 5_000,
-  );
+    const processId = child?.pid ?? process.pid;
+    const liveInstanceId = "10000000-0000-4000-8000-000000000004";
+    const ownersRoot = path.join(configDir, "task-asset-owners");
+    const liveStagingFile = path.join(
+      configDir,
+      "task-asset-staging",
+      "instances",
+      liveInstanceId,
+      workspaceId,
+      assetId,
+    );
+    await mkdir(ownersRoot, { recursive: true });
+    await mkdir(path.dirname(liveStagingFile), { recursive: true });
+    await writeFile(
+      path.join(ownersRoot, `${liveInstanceId}.json`),
+      JSON.stringify({
+        version: 1,
+        instanceId: liveInstanceId,
+        processId,
+        startedAtMs: Date.now(),
+      }),
+    );
+    await writeFile(liveStagingFile, new Uint8Array([1]));
+    const port = createNodeTaskAssetFilePort({ configDir, configDirScope: "test" });
+
+    try {
+      expect(await Effect.runPromise(port.clearStaging())).toBe(0);
+      await expect(readFile(liveStagingFile)).resolves.toEqual(Buffer.from([1]));
+    } finally {
+      child?.kill();
+      await Effect.runPromise(port.cleanupCurrentOwner());
+    }
+  });
 
   test("keeps staging when a live owner's start-time probe fails", async () => {
     const { aliveProcessIds, configDir, createPort, port, probeFailures, processStartedAtMs } =
