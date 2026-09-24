@@ -69,7 +69,8 @@ describe("chat Markdown links", () => {
     } finally {
       view.unmount();
     }
-  });
+    // This test loads the premium Markdown renderer before it can open the link.
+  }, 2_500);
   test("streaming reads only after a complete link is activated", () => {
     const open = mock<(href: string, trigger: HTMLAnchorElement) => void>(() => {});
     const view = render(
