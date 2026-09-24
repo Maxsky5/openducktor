@@ -55,7 +55,7 @@ const readProcessStartedAtMs = async (processId: number): Promise<number> => {
             "-Command",
             `(Get-Process -Id ${processId} -ErrorAction Stop).StartTime.ToUniversalTime().ToString('o')`,
           ],
-          { windowsHide: true },
+          { windowsHide: true, timeout: 4_000 },
         )
       : await execFileAsync("ps", ["-p", processId.toString(), "-o", "lstart="], {
           env: { ...process.env, LC_ALL: "C", TZ: "UTC" },
