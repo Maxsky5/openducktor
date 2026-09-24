@@ -301,15 +301,18 @@ const runCodexTurn = async (
       ? context.expectUserMessageEcho(acceptedUserMessage, input)
       : null;
   activeTurnState.turnStartRequestSentAtMs = Date.now();
+  const turnInput: Parameters<typeof client.turnStart>[0] = {
+    threadId: session.threadId,
+    input,
+    ...toTransportModelSelection(model),
+  };
+  if (!session.preserveNativeSettings) {
+    turnInput.approvalPolicy = policy.approvalPolicy;
+    turnInput.approvalsReviewer = codexApprovalsReviewer(policy);
+    turnInput.sandboxPolicy = sandboxPolicy;
+  }
   const turnStartPromise = client
-    .turnStart({
-      approvalPolicy: policy.approvalPolicy,
-      approvalsReviewer: codexApprovalsReviewer(policy),
-      threadId: session.threadId,
-      input,
-      sandboxPolicy,
-      ...toTransportModelSelection(model),
-    })
+    .turnStart(turnInput)
     .then((result) => {
       if (!sessionIsRetained(context, session)) {
         activeTurnState.markTurnSettled();

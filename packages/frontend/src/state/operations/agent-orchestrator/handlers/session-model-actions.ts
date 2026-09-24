@@ -34,11 +34,14 @@ const toSessionModelSettings = (
       `Session '${session.externalSessionId}' cannot move from '${session.runtimeKind}' to '${selection.runtimeKind}'.`,
     );
   }
-  return {
+  const model: NonNullable<UpdateControlledAgentSessionModelInput["model"]> = {
     providerId: selection.providerId,
     modelId: selection.modelId,
     variant: selection.variant,
   };
+  if (session.runtimeKind === "opencode" && selection.profileId !== undefined)
+    model.profileId = selection.profileId;
+  return model;
 };
 
 export const createSessionModelActions = ({

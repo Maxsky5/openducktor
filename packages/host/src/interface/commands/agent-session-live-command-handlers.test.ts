@@ -1,3 +1,4 @@
+import { unexpectedSessionImport } from "../../test-support/session-import-test-doubles";
 import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
 import { describe, expect, test } from "bun:test";
@@ -54,6 +55,7 @@ const createHarness = async (
   const starts: AgentSessionControlStartInput[] = [];
   const adapter: AgentSessionRuntimeAdapterPort = {
     queries: unexpectedRuntimeQueries,
+    sessionImport: unexpectedSessionImport,
     supportsSessionControl: true,
     beginGeneratedImageBatch: () => Effect.dieMessage("Unexpected beginGeneratedImageBatch"),
     releaseGeneratedImageBatch: () => Effect.dieMessage("Unexpected releaseGeneratedImageBatch"),

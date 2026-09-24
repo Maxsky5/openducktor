@@ -56,6 +56,12 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
   const agentRuntimeQueryClient = new HostAgentRuntimeQueryClient(invokeFn);
   const gitClient = new HostGitClient(invokeFn);
   const hostClient = {
+    workspaceSessionExternalList:
+      workspaceSessionClient.workspaceSessionExternalList.bind(workspaceSessionClient),
+    workspaceSessionExternalRelease:
+      workspaceSessionClient.workspaceSessionExternalRelease.bind(workspaceSessionClient),
+    workspaceSessionImport:
+      workspaceSessionClient.workspaceSessionImport.bind(workspaceSessionClient),
     workspaceSessionListActive:
       workspaceSessionClient.workspaceSessionListActive.bind(workspaceSessionClient),
     workspaceSessionListArchived:

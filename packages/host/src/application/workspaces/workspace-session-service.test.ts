@@ -1,3 +1,8 @@
+import {
+  readWorkspaceSessionArchivePreview,
+  removeWorkspaceSessionWorktree,
+} from "./workspace-session-worktree-lifecycle";
+import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import path from "node:path";
 import {
@@ -5,6 +10,7 @@ import {
   type AgentSessionControlStartInput,
   type AgentSessionLiveReadResult,
   type WorkspaceSessionCreateInput,
+  type WorkspaceSession,
   repoConfigSchema,
 } from "@openducktor/contracts";
 import { Cause, Deferred, Effect, Exit, Fiber, Option, TestClock, TestContext } from "effect";
@@ -103,6 +109,7 @@ describe("host-owned Workspace Session lifecycle", () => {
     const failure = (message: string) =>
       Effect.fail(new HostOperationError({ operation: "test", message }));
     const dependencies: WorkspaceSessionServiceDependencies = {
+      lifecycle: createTaskSessionLifecycleCoordinator(),
       operationGate: createWorkspaceSessionOperationGate(),
       store: {
         ...store,
@@ -184,6 +191,7 @@ describe("host-owned Workspace Session lifecycle", () => {
         pathExists: (value) => Effect.succeed(paths.has(value)),
       }),
       worktreeFiles: createWorktreeFilePortTestDouble({
+        resolveWorktreeRemovalPath: (value) => Effect.succeed(value),
         ensureDirectory: () => Effect.void,
         copyConfiguredPaths: (_repo, _directory, copyPaths) =>
           Effect.sync(() => {
@@ -283,6 +291,140 @@ describe("host-owned Workspace Session lifecycle", () => {
       registered,
     };
   };
+
+  test.each(["default target", "checkout"] as const)(
+    "protects the %s branch when the stored worktree is missing",
+    async (protectedBy) => {
+      const h = setup();
+      const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
+      if (session.executionTarget.kind !== "local_worktree") throw new Error("Expected worktree");
+      const target = session.executionTarget;
+      const branchName = target.branchName;
+      if (branchName === null) throw new Error("Expected named branch");
+      h.paths.clear();
+      h.registered.clear();
+      const config = await Effect.runPromise(h.dependencies.settings.getRepoConfig("fairnest"));
+      const protectedConfig = {
+        ...config,
+        defaultTargetBranch: {
+          branch: protectedBy === "default target" ? branchName : "other",
+        },
+      };
+      const dependencies = {
+        ...h.dependencies,
+        settings: {
+          ...h.dependencies.settings,
+          getRepoConfig: () => Effect.succeed(protectedConfig),
+        },
+        git: {
+          ...h.dependencies.git,
+          getCurrentBranch: () =>
+            Effect.succeed({
+              name: protectedBy === "checkout" ? branchName : "other",
+              detached: false,
+            }),
+        },
+      };
+      const service = createWorkspaceSessionService(dependencies);
+      h.calls.length = 0;
+      await expect(
+        Effect.runPromise(
+          readWorkspaceSessionArchivePreview(dependencies, protectedConfig, target),
+        ),
+      ).rejects.toThrow("Cannot delete protected branch");
+      await expect(
+        Effect.runPromise(
+          removeWorkspaceSessionWorktree(
+            dependencies,
+            protectedConfig,
+            target,
+            target.workingDirectory,
+          ),
+        ),
+      ).rejects.toThrow("Cannot delete protected branch");
+      await expect(
+        Effect.runPromise(
+          service.archive({
+            workspaceId: "fairnest",
+            sessionId: session.id,
+            confirmStop: true,
+            removeWorktree: true,
+            worktreeConfirmation: {
+              workingDirectory: target.workingDirectory,
+              branchName,
+            },
+          }),
+        ),
+      ).rejects.toThrow("Cannot delete protected branch");
+      expect(h.calls).not.toContain("delete-branch");
+      expect(h.branches.has(`refs/heads/${target.branchName}`)).toBe(true);
+      expect(
+        await Effect.runPromise(service.get({ workspaceId: "fairnest", sessionId: session.id })),
+      ).toEqual(session);
+    },
+  );
+
+  test("archives a detached import after its worktree is removed outside the app", async () => {
+    const h = setup();
+    const session: WorkspaceSession = {
+      id: "detached-import",
+      runtimeKind: "opencode",
+      externalSessionId: "native-detached",
+      executionTarget: {
+        kind: "local_worktree",
+        workingDirectory: "/missing-detached-worktree",
+        branchName: null,
+        worktreeState: "present",
+      },
+      roleSnapshot: null,
+      selectedModel: null,
+      generatedTitle: null,
+      manualTitle: "Detached import",
+      createdAt: 1,
+      updatedAt: 1,
+      archivedAt: null,
+    };
+    await Effect.runPromise(
+      h.dependencies.store.create({
+        workspaceId: "fairnest",
+        repoPath: database.repoPath,
+        session,
+      }),
+    );
+
+    h.paths.add(session.executionTarget.workingDirectory);
+    await expect(
+      Effect.runPromise(
+        h.service.archive({
+          workspaceId: "fairnest",
+          sessionId: session.id,
+          confirmStop: true,
+          removeWorktree: false,
+        }),
+      ),
+    ).rejects.toThrow("not a registered worktree");
+    h.paths.clear();
+
+    const archived = await Effect.runPromise(
+      h.service.archive({
+        workspaceId: "fairnest",
+        sessionId: session.id,
+        confirmStop: true,
+        removeWorktree: false,
+      }),
+    );
+    expect(archived.archivedAt).not.toBeNull();
+    expect(archived.executionTarget).toEqual(session.executionTarget);
+    await expect(
+      Effect.runPromise(h.service.restore({ workspaceId: "fairnest", sessionId: session.id })),
+    ).rejects.toThrow("not a registered worktree");
+    h.paths.add(session.executionTarget.workingDirectory);
+    h.registered.add(session.executionTarget.workingDirectory);
+    const restored = await Effect.runPromise(
+      h.service.restore({ workspaceId: "fairnest", sessionId: session.id }),
+    );
+    expect(restored.archivedAt).toBeNull();
+  });
 
   test("first-send startup completes through the real runtime registry cancellation race", async () => {
     const h = setup();
@@ -537,7 +679,15 @@ describe("host-owned Workspace Session lifecycle", () => {
     const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
     const ref = { workspaceId: "fairnest", sessionId: session.id };
     const archived = await Effect.runPromise(
-      h.service.archive({ ...ref, confirmStop: true, removeWorktree: true }),
+      h.service.archive({
+        ...ref,
+        confirmStop: true,
+        removeWorktree: true,
+        worktreeConfirmation: {
+          workingDirectory: session.executionTarget.workingDirectory,
+          branchName: "odt/my-feature",
+        },
+      }),
     );
     h.calls.length = 0;
     await Effect.runPromise(
@@ -639,7 +789,15 @@ describe("host-owned Workspace Session lifecycle", () => {
       const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
       const ref = { workspaceId: "fairnest", sessionId: session.id };
       const archived = await Effect.runPromise(
-        h.service.archive({ ...ref, confirmStop: true, removeWorktree: true }),
+        h.service.archive({
+          ...ref,
+          confirmStop: true,
+          removeWorktree: true,
+          worktreeConfirmation: {
+            workingDirectory: session.executionTarget.workingDirectory,
+            branchName: "odt/my-feature",
+          },
+        }),
       );
       await Effect.runPromise(
         Effect.scoped(
@@ -911,7 +1069,15 @@ describe("host-owned Workspace Session lifecycle", () => {
       const firstRef = { workspaceId: "fairnest", sessionId: first.session.id };
       if (operation === "restore") {
         await Effect.runPromise(
-          h.service.archive({ ...firstRef, confirmStop: true, removeWorktree: true }),
+          h.service.archive({
+            ...firstRef,
+            confirmStop: true,
+            removeWorktree: true,
+            worktreeConfirmation: {
+              workingDirectory: first.session.executionTarget.workingDirectory,
+              branchName: "odt/my-feature",
+            },
+          }),
         );
       }
       await Effect.runPromise(
@@ -1145,7 +1311,15 @@ describe("host-owned Workspace Session lifecycle", () => {
       const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
       const ref = { workspaceId: "fairnest", sessionId: session.id };
       const archived = await Effect.runPromise(
-        h.service.archive({ ...ref, confirmStop: true, removeWorktree: true }),
+        h.service.archive({
+          ...ref,
+          confirmStop: true,
+          removeWorktree: true,
+          worktreeConfirmation: {
+            workingDirectory: session.executionTarget.workingDirectory,
+            branchName: "odt/my-feature",
+          },
+        }),
       );
       const directory = session.executionTarget.workingDirectory;
       h.calls.length = 0;
@@ -1179,11 +1353,29 @@ describe("host-owned Workspace Session lifecycle", () => {
       hasUncommittedChanges: true,
     });
     await expect(
-      Effect.runPromise(h.service.archive({ ...ref, confirmStop: false, removeWorktree: true })),
+      Effect.runPromise(
+        h.service.archive({
+          ...ref,
+          confirmStop: false,
+          removeWorktree: true,
+          worktreeConfirmation: {
+            workingDirectory: session.executionTarget.workingDirectory,
+            branchName: "odt/my-feature",
+          },
+        }),
+      ),
     ).rejects.toThrow("Confirm Stop");
     expect(h.paths.size).toBe(1);
     const archived = await Effect.runPromise(
-      h.service.archive({ ...ref, confirmStop: true, removeWorktree: true }),
+      h.service.archive({
+        ...ref,
+        confirmStop: true,
+        removeWorktree: true,
+        worktreeConfirmation: {
+          workingDirectory: session.executionTarget.workingDirectory,
+          branchName: "odt/my-feature",
+        },
+      }),
     );
     expect(archived.executionTarget).toMatchObject({
       kind: "local_worktree",
@@ -1210,12 +1402,30 @@ describe("host-owned Workspace Session lifecycle", () => {
       const ref = { workspaceId: "fairnest", sessionId: session.id };
       h.state[failure] = true;
       await expect(
-        Effect.runPromise(h.service.archive({ ...ref, confirmStop: true, removeWorktree: true })),
+        Effect.runPromise(
+          h.service.archive({
+            ...ref,
+            confirmStop: true,
+            removeWorktree: true,
+            worktreeConfirmation: {
+              workingDirectory: session.executionTarget.workingDirectory,
+              branchName: "odt/my-feature",
+            },
+          }),
+        ),
       ).rejects.toThrow();
       expect(await Effect.runPromise(h.service.get(ref))).toEqual(session);
       h.state[failure] = false;
       const archived = await Effect.runPromise(
-        h.service.archive({ ...ref, confirmStop: true, removeWorktree: true }),
+        h.service.archive({
+          ...ref,
+          confirmStop: true,
+          removeWorktree: true,
+          worktreeConfirmation: {
+            workingDirectory: session.executionTarget.workingDirectory,
+            branchName: "odt/my-feature",
+          },
+        }),
       );
       expect(archived.archivedAt).not.toBeNull();
       expect(archived.executionTarget).toMatchObject({
@@ -1232,7 +1442,15 @@ describe("host-owned Workspace Session lifecycle", () => {
     const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
     const ref = { workspaceId: "fairnest", sessionId: session.id };
     const archived = await Effect.runPromise(
-      h.service.archive({ ...ref, confirmStop: true, removeWorktree: true }),
+      h.service.archive({
+        ...ref,
+        confirmStop: true,
+        removeWorktree: true,
+        worktreeConfirmation: {
+          workingDirectory: session.executionTarget.workingDirectory,
+          branchName: "odt/my-feature",
+        },
+      }),
     );
     h.calls.length = 0;
     h.state.partialCreate = true;
@@ -1252,7 +1470,15 @@ describe("host-owned Workspace Session lifecycle", () => {
       const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
       const ref = { workspaceId: "fairnest", sessionId: session.id };
       const archived = await Effect.runPromise(
-        h.service.archive({ ...ref, confirmStop: true, removeWorktree: true }),
+        h.service.archive({
+          ...ref,
+          confirmStop: true,
+          removeWorktree: true,
+          worktreeConfirmation: {
+            workingDirectory: session.executionTarget.workingDirectory,
+            branchName: "odt/my-feature",
+          },
+        }),
       );
       h.state[failure] = true;
       await expect(Effect.runPromise(h.service.restore(ref))).rejects.toThrow();
@@ -1281,8 +1507,18 @@ describe("host-owned Workspace Session lifecycle", () => {
     const ref = { workspaceId: "fairnest", sessionId: session.id };
     h.state.branch = "different";
     await expect(
-      Effect.runPromise(h.service.archive({ ...ref, confirmStop: true, removeWorktree: true })),
-    ).rejects.toThrow("no longer on");
+      Effect.runPromise(
+        h.service.archive({
+          ...ref,
+          confirmStop: true,
+          removeWorktree: true,
+          worktreeConfirmation: {
+            workingDirectory: session.executionTarget.workingDirectory,
+            branchName: "odt/my-feature",
+          },
+        }),
+      ),
+    ).rejects.toThrow("branch changed");
     expect(h.calls).not.toContain("remove-worktree");
     const archived = await Effect.runPromise(
       h.service.archive({ ...ref, confirmStop: true, removeWorktree: false }),
@@ -1296,7 +1532,15 @@ describe("host-owned Workspace Session lifecycle", () => {
     const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
     const ref = { workspaceId: "fairnest", sessionId: session.id };
     const archived = await Effect.runPromise(
-      h.service.archive({ ...ref, confirmStop: true, removeWorktree: true }),
+      h.service.archive({
+        ...ref,
+        confirmStop: true,
+        removeWorktree: true,
+        worktreeConfirmation: {
+          workingDirectory: session.executionTarget.workingDirectory,
+          branchName: "odt/my-feature",
+        },
+      }),
     );
     h.state.failHook = true;
     h.state.failCleanup = true;

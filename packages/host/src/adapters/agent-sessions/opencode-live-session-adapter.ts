@@ -1,3 +1,4 @@
+import { createRuntimeSessionImportAdapter } from "./runtime-session-import-adapter";
 import { createRuntimeQueryAdapter } from "./runtime-query-adapter";
 import {
   unsupportedGeneratedImageSource,
@@ -141,14 +142,17 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
         commit,
       });
 
-      const refreshSnapshots = (repoPath: string): Effect.Effect<void, HostError> =>
+      const refreshSnapshots = (
+        repoPath: string,
+        roots?: AgentSessionLiveRef[],
+      ): Effect.Effect<void, HostError> =>
         Effect.gen(function* () {
           if (repoPath !== runtime.repoPath) {
             return;
           }
           const readVersions = state.versions();
           const read = yield* Effect.tryPromise({
-            try: () => prepared.connection.readSessionSources(),
+            try: () => prepared.connection.readSessionSources(roots),
             catch: (cause) =>
               toHostOperationError(cause, "opencode-live-session.refresh-snapshots", {
                 runtimeId: runtime.runtimeId,
@@ -270,6 +274,19 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
         );
 
       const adapter: AgentSessionRuntimeAdapterPort = {
+        sessionImport: createRuntimeSessionImportAdapter({
+          ...prepared.sessionImport,
+          inspectSession: async (ref) => {
+            const source = await prepared.sessionImport.inspectSession(ref);
+            return {
+              ...source,
+              attach: async () => {
+                await source.attach();
+                await Effect.runPromise(refreshSnapshots(runtime.repoPath));
+              },
+            };
+          },
+        }),
         queries: createRuntimeQueryAdapter(prepared.queries),
         ...unsupportedGeneratedImageOperations,
         resolveGeneratedImageSource: unsupportedGeneratedImageSource,

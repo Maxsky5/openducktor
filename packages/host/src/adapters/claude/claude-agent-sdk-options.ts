@@ -60,6 +60,7 @@ type BuildClaudeAgentSdkOptionsInput = {
   emit: ClaudeAgentSdkEventEmitter;
   resolvedDependencies: ClaudeAgentSdkOptionsDependencies;
   resumeInterruptedTurn?: boolean;
+  preserveNativeSettings?: boolean;
 };
 
 const CLAUDE_OPENDUCKTOR_MCP_TOKEN_FILE_ENV = "ODT_HOST_TOKEN_FILE";
@@ -108,6 +109,7 @@ export const buildClaudeAgentSdkOptions = async ({
   now,
   randomId,
   resolvedDependencies,
+  preserveNativeSettings,
   resumeInterruptedTurn,
   serviceInput,
   session,
@@ -187,7 +189,17 @@ export const buildClaudeAgentSdkOptions = async ({
     },
     agentProgressSummaries: true,
   };
-  if (permissionMode === "bypassPermissions") {
+  if (
+    preserveNativeSettings ||
+    (sessionOptions.resume &&
+      !sessionOptions.forkSession &&
+      input.sessionScope?.kind === "repository" &&
+      !("systemPrompt" in input && input.systemPrompt))
+  ) {
+    delete options.systemPrompt;
+    delete options.permissionMode;
+  }
+  if (options.permissionMode === "bypassPermissions") {
     options.allowDangerouslySkipPermissions = true;
   }
   if (model?.modelId) {

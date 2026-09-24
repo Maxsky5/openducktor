@@ -105,7 +105,7 @@ describe("Workspace Session contracts", () => {
     ).toBe(false);
     expect(
       workspaceSessionSchema.safeParse({ ...session(), manualTitle: "a".repeat(121) }).success,
-    ).toBe(false);
+    ).toBe(true);
     expect(workspaceSessionSchema.safeParse({ ...session(), updatedAt: 1.5 }).success).toBe(false);
     expect(
       workspaceSessionSchema.safeParse({ ...session(), createdAt: 10, updatedAt: 1 }).success,

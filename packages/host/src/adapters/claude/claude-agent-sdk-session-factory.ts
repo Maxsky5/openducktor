@@ -150,6 +150,7 @@ export const createClaudeAgentSdkSession = async ({
       resolvedDependencies,
       emit,
       resumeInterruptedTurn: sessionInput.resumeInterruptedTurn === true,
+      preserveNativeSettings: sessionInput.preserveNativeSettings === true,
       sessionOptions,
     });
     sdkQuery = query({ prompt: queue, options });

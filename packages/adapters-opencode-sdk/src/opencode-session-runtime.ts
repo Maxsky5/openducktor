@@ -1,3 +1,6 @@
+import { createOpenCodeSessionImportPort } from "./opencode-session-import";
+import { agentSessionRefsEqual } from "@openducktor/core";
+import type { RuntimeSessionImportPort } from "@openducktor/core";
 import type {
   AgentCatalogPort,
   AgentSessionQueryParentPort,
@@ -58,7 +61,7 @@ export type {
 } from "./opencode-session-native-operations";
 
 export type OpencodeSessionRuntimeConnection = {
-  readonly readSessionSources: () => Promise<OpencodeRuntimeSnapshotRead>;
+  readonly readSessionSources: (roots?: SessionRef[]) => Promise<OpencodeRuntimeSnapshotRead>;
   readonly loadContextUsage: (ref: SessionRef) => Promise<OpencodeSessionContextUsage | null>;
   readonly replyApproval: (input: OpencodeNativeApprovalReply) => Promise<void>;
   readonly replyQuestion: (input: OpencodeNativeQuestionReply) => Promise<void>;
@@ -75,6 +78,7 @@ export type OpencodeSessionRuntimeConnection = {
 };
 
 export type PreparedOpencodeSessionRuntime = {
+  readonly sessionImport: RuntimeSessionImportPort;
   readonly queries: AgentCatalogPort &
     AgentSessionHistoryPort &
     AgentWorkspaceInspectionPort &
@@ -300,13 +304,20 @@ export const createPrepareOpencodeSessionRuntime = (
     };
 
     let readSessionSourcesTail = Promise.resolve();
-    const readSessionSources = (): Promise<OpencodeRuntimeSnapshotRead> => {
+    let authorizedRoots: SessionRef[] = [];
+    const admittedRoots = new Map<string, SessionRef>();
+    const readSessionSources = (roots?: SessionRef[]): Promise<OpencodeRuntimeSnapshotRead> => {
+      if (roots) {
+        authorizedRoots = roots;
+        for (const ref of roots) admittedRoots.delete(ref.externalSessionId);
+      }
       const read = readSessionSourcesTail.then(async () => {
         requireActive();
         const sessionsAtReadStart = new Map(eventSessions);
         const snapshotInput: Parameters<typeof listOpencodeRuntimeSnapshotSources>[0] = {
           createClient,
           runtimeEndpoint: input.runtimeEndpoint,
+          roots: [...authorizedRoots, ...admittedRoots.values()],
           readDirectory,
           now,
         };
@@ -447,15 +458,44 @@ export const createPrepareOpencodeSessionRuntime = (
         replyToOpencodeApproval({ createClient, runtimeEndpoint: input.runtimeEndpoint }, reply),
       replyQuestion: (reply) =>
         replyToOpencodeQuestion({ createClient, runtimeEndpoint: input.runtimeEndpoint }, reply),
-      startSession: (sessionInput) => controlAdapter.startSession(sessionInput),
-      resumeSession: (sessionInput) => controlAdapter.resumeSession(sessionInput),
+      startSession: async (sessionInput) => {
+        const summary = await controlAdapter.startSession(sessionInput);
+        admittedRoots.set(summary.externalSessionId, {
+          repoPath: sessionInput.repoPath,
+          runtimeKind: "opencode",
+          externalSessionId: summary.externalSessionId,
+          workingDirectory: sessionInput.workingDirectory,
+        });
+        return summary;
+      },
+      resumeSession: async (sessionInput) => {
+        const summary = await controlAdapter.resumeSession(sessionInput);
+        admittedRoots.set(summary.externalSessionId, sessionInput);
+        return summary;
+      },
       continueInterruptedTurn: (sessionInput) =>
         controlAdapter.continueInterruptedTurn(sessionInput),
-      forkSession: (sessionInput) => controlAdapter.forkSession(sessionInput),
+      forkSession: async (sessionInput) => {
+        const summary = await controlAdapter.forkSession(sessionInput);
+        admittedRoots.set(summary.externalSessionId, {
+          repoPath: sessionInput.repoPath,
+          runtimeKind: "opencode",
+          externalSessionId: summary.externalSessionId,
+          workingDirectory: sessionInput.workingDirectory,
+        });
+        return summary;
+      },
       sendUserMessage: (messageInput) => controlAdapter.sendUserMessage(messageInput),
       updateSessionModel: (modelInput) => controlAdapter.updateSessionModel(modelInput),
       stopSession: (ref) => controlAdapter.stopSession(ref),
-      releaseSession: (ref) => controlAdapter.releaseSession(ref),
+      releaseSession: async (ref) => {
+        await controlAdapter.releaseSession(ref);
+        const admittedRoot = admittedRoots.get(ref.externalSessionId);
+        if (admittedRoot && agentSessionRefsEqual(admittedRoot, ref)) {
+          admittedRoots.delete(ref.externalSessionId);
+        }
+        authorizedRoots = authorizedRoots.filter((root) => !agentSessionRefsEqual(root, ref));
+      },
     };
 
     const startForwarding = async (
@@ -516,6 +556,14 @@ export const createPrepareOpencodeSessionRuntime = (
     };
 
     return {
+      sessionImport: createOpenCodeSessionImportPort({
+        createClient,
+        runtimeEndpoint: input.runtimeEndpoint,
+        admit: async (ref) => {
+          admittedRoots.set(ref.externalSessionId, ref);
+          await readSessionSources();
+        },
+      }),
       queries: controlAdapter,
       connection,
       startForwarding,

@@ -21,7 +21,7 @@ import type {
   SendAgentUserMessageInput,
   SessionRef,
   StartAgentSessionInput,
-  UpdateAgentSessionModelInput,
+  UpdateControlledAgentSessionModelInput,
 } from "@openducktor/core";
 import type { Effect } from "effect";
 import type {
@@ -37,6 +37,18 @@ export type ClaudePendingInputResolution = {
 };
 
 export type ClaudeAgentSdkService = {
+  inspectSessionForImport(
+    input: SessionRef,
+    runtimeId: string,
+  ): Effect.Effect<
+    {
+      metadata: import("@openducktor/contracts").WorkspaceSessionExternal;
+      selectedModel: import("@openducktor/contracts").AgentSessionModelSelection | null;
+      attach: Effect.Effect<AgentSessionSummary, ClaudeAgentSdkServiceError>;
+    },
+    ClaudeAgentSdkServiceError
+  >;
+
   resolveSessionParent(input: SessionRef): Effect.Effect<string | null, ClaudeAgentSdkServiceError>;
   startSession(
     input: StartAgentSessionInput,
@@ -73,7 +85,8 @@ export type ClaudeAgentSdkService = {
     input: LoadAgentSessionHistoryInput,
   ): Effect.Effect<AgentSessionContextUsage | null, ClaudeAgentSdkServiceError>;
   updateSessionModel(
-    input: UpdateAgentSessionModelInput,
+    input: UpdateControlledAgentSessionModelInput,
+    runtimeId: string,
   ): Effect.Effect<void, ClaudeAgentSdkServiceError>;
   sendUserMessage(
     input: SendAgentUserMessageInput,

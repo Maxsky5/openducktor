@@ -167,6 +167,7 @@ const createHarness = async (
   };
   const service = {
     ...unexpectedRuntimeQueries,
+    inspectSessionForImport: () => Effect.dieMessage("Unexpected import"),
     startSession: (
       input: Parameters<ClaudeAgentSdkService["startSession"]>[0],
       runtimeId: string,
@@ -193,8 +194,7 @@ const createHarness = async (
       prepareApprovalReplyImpl(input),
     prepareQuestionReply: (input: Parameters<ClaudeAgentSdkService["prepareQuestionReply"]>[0]) =>
       prepareQuestionReplyImpl(input),
-    updateSessionModel: (input: Parameters<ClaudeAgentSdkService["updateSessionModel"]>[0]) =>
-      updateSessionModelImpl(input),
+    updateSessionModel: (input, runtimeId) => updateSessionModelImpl(input, runtimeId),
     stopSession: (input: Parameters<ClaudeAgentSdkService["stopSession"]>[0]) =>
       stopSessionImpl(input),
     stopSessionsForRuntime: (runtimeId: string) => stopSessionsForRuntimeImpl(runtimeId),
@@ -1679,8 +1679,10 @@ describe("Claude host live-session adapter", () => {
     const firstUpdateStarted = new Promise<void>((resolve) => {
       markFirstUpdateStarted = resolve;
     });
-    harness.setUpdateSessionModel((input) =>
+    harness.setUpdateSessionModel((input, runtimeId) =>
       Effect.promise(async () => {
+        expect(runtimeId).toBe("runtime-1");
+        expect(input.sessionScope).toEqual({ kind: "repository" });
         startedModels.push(input.model?.modelId ?? "default");
         if (startedModels.length === 1) {
           markFirstUpdateStarted?.();

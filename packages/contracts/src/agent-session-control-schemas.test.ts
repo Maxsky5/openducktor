@@ -347,6 +347,7 @@ describe("agent session control contracts", () => {
       agentSessionControlUpdateModelInputSchema.safeParse({
         ...session,
         model: { ...settings, profileId: "build" },
+        runtimeKind: "claude",
       }).success,
     ).toBe(false);
   });

@@ -1,3 +1,4 @@
+import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type {
   AcceptedAgentUserMessage,
@@ -365,6 +366,21 @@ describe("Workspace Session persistence through the shared command module", () =
     expect((await h.get()).selectedModel).toEqual({ ...model, runtimeKind: "opencode" });
   });
 
+  test("persists an explicit profile change on an existing OpenCode session", async () => {
+    const h = await setup();
+    const model = {
+      providerId: "provider",
+      modelId: "new-model",
+      profileId: "plan",
+      variant: "high",
+    };
+    await Effect.runPromise(
+      h.live.updateSessionModel({ ...h.ref, sessionScope: { kind: "repository" }, model }),
+    );
+    expect((await h.get()).selectedModel).toEqual({ ...model, runtimeKind: "opencode" });
+    expect(h.models).toEqual([model]);
+  });
+
   test.each([
     { providerId: "provider", modelId: "stored-model", variant: "low" },
     { providerId: "other", modelId: "new-model" },
@@ -554,6 +570,7 @@ describe("Workspace Session persistence through the shared command module", () =
       repoPath: database.repoPath,
     });
     const workspace = createWorkspaceSessionService({
+      lifecycle: createTaskSessionLifecycleCoordinator(),
       operationGate: h.operationGate,
       store: h.store,
       settings: {
@@ -601,7 +618,9 @@ describe("Workspace Session persistence through the shared command module", () =
           }),
       }),
       settingsConfig: createSettingsConfigTestDouble({ pathExists: () => Effect.succeed(true) }),
-      worktreeFiles: createWorktreeFilePortTestDouble({}),
+      worktreeFiles: createWorktreeFilePortTestDouble({
+        resolveWorktreeRemovalPath: (value) => Effect.succeed(value),
+      }),
       systemCommands: {
         resolveCommandPath: () => Effect.dieMessage("unused"),
         versionCommand: () => Effect.dieMessage("unused"),
@@ -630,6 +649,10 @@ describe("Workspace Session persistence through the shared command module", () =
           workspaceId: "fairnest",
           sessionId: "session-1",
           removeWorktree: true,
+          worktreeConfirmation: {
+            workingDirectory: h.ref.workingDirectory,
+            branchName: "feature/session",
+          },
           confirmStop: false,
         })
         .pipe(Effect.asVoid);

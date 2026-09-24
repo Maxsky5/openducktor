@@ -1,3 +1,4 @@
+import { createClaudeSessionImportAdapter } from "./claude-session-import";
 import { createClaudeRuntimeQueryAdapter } from "./claude-runtime-query-adapter";
 import {
   unsupportedGeneratedImageSource,
@@ -236,6 +237,9 @@ export const createClaudeLiveSessionAdapterPreparer =
         );
 
       const adapter: AgentSessionRuntimeAdapterPort = {
+        sessionImport: createClaudeSessionImportAdapter(service, runtime.runtimeId, (effect) =>
+          runSummary("claude-live-session.import", () => effect, { keepActivity: true }),
+        ),
         queries: createClaudeRuntimeQueryAdapter(service),
         ...unsupportedGeneratedImageOperations,
         resolveGeneratedImageSource: unsupportedGeneratedImageSource,
@@ -443,7 +447,7 @@ export const createClaudeLiveSessionAdapterPreparer =
         updateSessionModel: (input) =>
           eventCoordinator.runControlMutation(
             service
-              .updateSessionModel(input)
+              .updateSessionModel(input, runtime.runtimeId)
               .pipe(
                 Effect.mapError(
                   sessionError("claude-live-session.update-session-model", input.externalSessionId),

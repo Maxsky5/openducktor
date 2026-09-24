@@ -1,3 +1,4 @@
+import { unexpectedSessionImport } from "./session-import-test-doubles";
 import { unexpectedRuntimeQueries } from "./runtime-query-test-doubles";
 import { AgentSessionLiveRegistration } from "../ports/agent-session-live-adapter-port";
 import { Effect } from "effect";
@@ -25,6 +26,7 @@ export const createAgentSessionRuntimeAdapterTestDouble = <
   overrides: Overrides,
 ): AgentSessionRuntimeAdapterPort => ({
   queries: unexpectedRuntimeQueries,
+  sessionImport: unexpectedSessionImport,
   supportsSessionControl: true,
   beginGeneratedImageBatch: unexpectedEffectCall("session adapter", "beginGeneratedImageBatch"),
   releaseGeneratedImageBatch: unexpectedEffectCall("session adapter", "releaseGeneratedImageBatch"),
@@ -198,6 +200,14 @@ export const createWorktreeFilePortTestDouble = <Overrides extends Partial<Workt
   copyConfiguredPaths: unexpectedEffectCall("worktree file port", "copyConfiguredPaths"),
   ensureDirectory: unexpectedEffectCall("worktree file port", "ensureDirectory"),
   pathIsWithinRoot: unexpectedEffectCall("worktree file port", "pathIsWithinRoot"),
+  resolveWorktreeRemovalPath: unexpectedEffectCall(
+    "worktree file port",
+    "resolveWorktreeRemovalPath",
+  ),
+  prepareWorktreeAliasRemoval: unexpectedEffectCall(
+    "worktree file port",
+    "prepareWorktreeAliasRemoval",
+  ),
   removePathIfPresent: unexpectedEffectCall("worktree file port", "removePathIfPresent"),
   resolvePathWithinRoot: unexpectedEffectCall("worktree file port", "resolvePathWithinRoot"),
   resolveWorktreePath: () => unexpectedSyncCall("worktree file port", "resolveWorktreePath"),

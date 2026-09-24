@@ -101,6 +101,10 @@ export const synchronizeOpencodeSessionPolicy = async (input: {
     policy: input.policy,
     workingDirectory: input.request.workingDirectory,
   });
+  if (input.request.sessionScope?.kind === "repository" && !input.request.systemPrompt) {
+    applyRuntimeContextToSession(input.session, input.request, input.action);
+    return;
+  }
   await applySessionPolicy({
     client: input.session.client,
     externalSessionId: input.session.externalSessionId,

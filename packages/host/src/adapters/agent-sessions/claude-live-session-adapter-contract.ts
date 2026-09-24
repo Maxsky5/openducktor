@@ -37,6 +37,7 @@ export type CreateClaudeLiveSessionAdapterPreparerInput = {
   readonly liveSessionLifecycle: Pick<RuntimeLiveSessionLifecyclePort, "createRuntimeRegistration">;
   readonly service: Pick<
     ClaudeAgentSdkService,
+    | "inspectSessionForImport"
     | "resolveSessionParent"
     | "loadRuntimeCatalog"
     | "searchFiles"

@@ -1,3 +1,4 @@
+import { unexpectedNativeSessionImport } from "../../test-support/session-import-test-doubles";
 import { unexpectedNativeRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
 import type {
@@ -176,6 +177,7 @@ export const createRuntimeHarness = (
   return {
     prepareRuntime: async (input) => ({
       queries: unexpectedNativeRuntimeQueries,
+      sessionImport: unexpectedNativeSessionImport,
       connection,
       startForwarding: async (nextListener) => {
         listener = nextListener;

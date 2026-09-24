@@ -165,6 +165,7 @@ export const agentSessionModelSettingsSchema = z
     providerId: z.string(),
     modelId: z.string(),
     variant: z.string().optional(),
+    profileId: z.string().optional(),
   })
   .strict();
 export type AgentSessionModelSettings = z.infer<typeof agentSessionModelSettingsSchema>;
@@ -174,7 +175,11 @@ export const agentSessionControlUpdateModelInputSchema = agentSessionLiveRefSche
     sessionScope: agentSessionScopeSchema,
     model: agentSessionModelSettingsSchema.nullable(),
   })
-  .strict();
+  .strict()
+  .refine((input) => input.model?.profileId === undefined || input.runtimeKind === "opencode", {
+    message: "Only OpenCode supports changing the profile of an existing session.",
+    path: ["model", "profileId"],
+  });
 export type AgentSessionControlUpdateModelInput = z.infer<
   typeof agentSessionControlUpdateModelInputSchema
 >;

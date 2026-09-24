@@ -35,8 +35,9 @@ export function WorktreeArchivePreview({
       )}
       {removeWorktree && preview.data && !preview.data.worktreeExists && (
         <p role="alert" className="text-sm text-destructive">
-          The worktree is already missing. Archiving will finish removing its branch if it still
-          exists.
+          {preview.data.branchName === null
+            ? "The worktree is already missing."
+            : "The worktree is already missing. Archiving will finish removing its branch if it still exists."}
         </p>
       )}
     </>

@@ -1,0 +1,387 @@
+import { afterEach, describe, expect, test } from "bun:test";
+import {
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  repoConfigSchema,
+  type WorkspaceSessionExternal,
+} from "@openducktor/contracts";
+import { Deferred, Effect, Fiber } from "effect";
+import { createSqliteTaskStoreHarness } from "../../adapters/sqlite/sqlite-task-store-test-support";
+import { createSqliteWorkspaceSessionStore } from "../../adapters/sqlite/sqlite-workspace-session-store";
+import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
+import {
+  createAgentSessionRuntimeAdapterTestDouble,
+  createGitPortTestDouble,
+} from "../../test-support/service-test-doubles";
+import { HostOperationError } from "../../effect/host-errors";
+import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
+import { createWorkspaceSessionImportService } from "./workspace-session-import-service";
+
+const cleanups: Array<() => Promise<void>> = [];
+afterEach(async () => {
+  for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
+});
+const failure = (message: string) => new HostOperationError({ operation: "test.import", message });
+const setup = async () => {
+  const database = await createSqliteTaskStoreHarness({ repoPath: "/repo" });
+  cleanups.push(database.cleanup);
+  const store = createSqliteWorkspaceSessionStore(database.contextProvider);
+  const registry = createLiveSessionAdapterRegistry();
+  const calls: string[] = [];
+  type ImportTestState = {
+    failOpen: boolean;
+    failSave: boolean;
+    failRegistration: boolean;
+    detached: boolean;
+    rows: WorkspaceSessionExternal[];
+    signal: AbortSignal | null;
+    directoryErrors: Map<string, HostOperationError>;
+  };
+  const state: ImportTestState = {
+    failOpen: false,
+    failSave: false,
+    failRegistration: false,
+    detached: false,
+    rows: [],
+    signal: null,
+    directoryErrors: new Map(),
+  };
+  const row = (id: string, directory = "/repo"): WorkspaceSessionExternal => ({
+    externalSessionId: id,
+    runtimeKind: "opencode",
+    workingDirectory: directory,
+    title: `Native ${id}`,
+    updatedAt: 123,
+  });
+  const adapter = createAgentSessionRuntimeAdapterTestDouble(
+    { runtimeId: "runtime-1", repoPath: "/repo", runtimeKind: "opencode" },
+    {
+      sessionImport: {
+        scanSessions: (signal) => {
+          state.signal = signal;
+          let offset = 0;
+          return {
+            next: () =>
+              Effect.sync(() => {
+                calls.push("scanSessions.next");
+                if (offset >= state.rows.length) return { done: true as const, value: undefined };
+                const value = state.rows.slice(offset, offset + 100);
+                offset += 100;
+                return { done: false as const, value };
+              }),
+          };
+        },
+        inspectSession: (ref) =>
+          Effect.suspend(() => {
+            calls.push("inspectSession");
+            if (state.failOpen) return Effect.fail(failure("opening source failed"));
+            return Effect.succeed({
+              metadata: {
+                ...row(ref.externalSessionId, ref.workingDirectory),
+                title: "Native title ".repeat(30),
+              },
+              selectedModel: null,
+              attach: Effect.suspend(() => {
+                calls.push("attach");
+                return state.failRegistration
+                  ? Effect.fail(failure("publication failed"))
+                  : Effect.void;
+              }),
+            });
+          }),
+      },
+    },
+  );
+  await Effect.runPromise(registry.register(adapter));
+  const lifecycle = createTaskSessionLifecycleCoordinator();
+  const service = createWorkspaceSessionImportService({
+    store: {
+      ...store,
+      importSession: (input) =>
+        Effect.suspend(() => {
+          calls.push("save");
+          return state.failSave ? Effect.fail(failure("save failed")) : store.importSession(input);
+        }),
+    },
+    settings: {
+      getRepoConfig: () =>
+        Effect.succeed(
+          repoConfigSchema.parse({
+            workspaceId: "fairnest",
+            workspaceName: "Fairnest",
+            repoPath: "/repo",
+          }),
+        ),
+    },
+    runtime: {
+      runtimeEnsure: () =>
+        Effect.succeed({
+          kind: "opencode",
+          runtimeId: "runtime-1",
+          repoPath: "/repo",
+          taskId: null,
+          role: "workspace",
+          workingDirectory: "/repo",
+          runtimeRoute: { type: "local_http", endpoint: "http://localhost:1234" },
+          startedAt: "2026-09-20T00:00:00Z",
+          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+        }),
+    },
+    git: createGitPortTestDouble({
+      canonicalizePath: (path) => {
+        const error = state.directoryErrors.get(path);
+        return error ? Effect.fail(error) : Effect.succeed(path === "/alias" ? "/tree" : path);
+      },
+      listWorktrees: () =>
+        Effect.succeed([
+          { worktreePath: "/tree", branch: "feature", head: "abc", detached: false },
+        ]),
+      isGitRepository: () => Effect.succeed(true),
+      shareGitCommonDirectory: () => Effect.succeed(true),
+      isRegisteredWorktree: (_repo, path) => Effect.succeed(path === "/tree"),
+      getCurrentBranch: () =>
+        Effect.succeed({ name: state.detached ? undefined : "feature", detached: state.detached }),
+    }),
+    registry,
+    lifecycle,
+    publishUpdated: () =>
+      Effect.sync(() => {
+        calls.push("publish");
+      }),
+  });
+  cleanups.push(() => Effect.runPromise(service.shutdown()));
+  const input = {
+    workspaceId: "fairnest",
+    runtimeKind: "opencode" as const,
+    externalSessionId: "native",
+    workingDirectory: "/repo",
+  };
+  const list = {
+    workspaceId: "fairnest",
+    runtimeKind: "opencode" as const,
+    catalogRequestId: crypto.randomUUID(),
+    search: "",
+    pageSize: 50,
+  };
+  return { service, store, state, row, calls, input, list, registry, adapter, lifecycle };
+};
+
+describe("external workspace session import", () => {
+  test("searches all metadata pages and retains only workspace roots", async () => {
+    const h = await setup();
+    h.state.rows = Array.from({ length: 3000 }, (_, index) =>
+      h.row(`id-${index.toString().padStart(4, "0")}`),
+    );
+    h.state.rows.push(
+      h.row("alias", "/alias"),
+      h.row("other", "/other"),
+      h.row("subdirectory", "/repo/src"),
+    );
+    const first = await Effect.runPromise(h.service.list(h.list));
+    expect(first.sessions).toHaveLength(50);
+    expect(first.nextCursor).not.toBeNull();
+    const searched = await Effect.runPromise(
+      h.service.list({ ...h.list, search: "NATIVE ID-2999" }),
+    );
+    expect(searched.sessions.map((row) => row.externalSessionId)).toEqual(["id-2999"]);
+    const alias = await Effect.runPromise(h.service.list({ ...h.list, search: "/alias" }));
+    expect(alias.sessions[0]?.workingDirectory).toBe("/alias");
+    expect(
+      (await Effect.runPromise(h.service.list({ ...h.list, search: "other" }))).sessions,
+    ).toEqual([]);
+    expect(h.calls).not.toContain("inspectSession");
+    expect(h.calls.filter((call) => call === "scanSessions.next")).toHaveLength(32);
+    await expect(
+      Effect.runPromise(
+        h.service.list({ ...h.list, search: "changed", cursor: first.nextCursor! }),
+      ),
+    ).rejects.toThrow("cursor");
+    await Effect.runPromise(h.service.release(h.list));
+    expect(h.state.signal?.aborted).toBe(true);
+  });
+
+  test.each(["ENOENT", "ENOTDIR"])(
+    "excludes a known unavailable source directory (%s)",
+    async (code) => {
+      const h = await setup();
+      h.state.rows = [h.row("available"), h.row("unavailable", "/missing")];
+      h.state.directoryErrors.set(
+        "/missing",
+        new HostOperationError({
+          operation: "git.canonicalizePath",
+          message: "Source directory is unavailable",
+          cause: Object.assign(new Error("Path does not exist"), { code }),
+        }),
+      );
+      const result = await Effect.runPromise(h.service.list(h.list));
+      expect(result.sessions.map((row) => row.externalSessionId)).toEqual(["available"]);
+    },
+  );
+
+  test("excludes a missing registered worktree while keeping repository sessions", async () => {
+    const h = await setup();
+    h.state.rows = [h.row("available"), h.row("deleted-worktree", "/tree")];
+    h.state.directoryErrors.set(
+      "/tree",
+      new HostOperationError({
+        operation: "git.canonicalizePath",
+        message: "Worktree directory no longer exists",
+        cause: Object.assign(new Error("Missing worktree"), { code: "ENOENT" }),
+      }),
+    );
+    const result = await Effect.runPromise(h.service.list(h.list));
+    expect(result.sessions.map((row) => row.externalSessionId)).toEqual(["available"]);
+  });
+
+  test.each(["EACCES", "EIO", undefined])(
+    "fails discovery for unexpected directory lookup errors (%s)",
+    async (code) => {
+      const h = await setup();
+      h.state.rows = [h.row("available"), h.row("unreadable", "/denied")];
+      const cause = Object.assign(new Error("Directory lookup failed"), { code });
+      h.state.directoryErrors.set(
+        "/denied",
+        new HostOperationError({
+          operation: "git.canonicalizePath",
+          message: cause.message,
+          cause,
+        }),
+      );
+      await expect(Effect.runPromise(h.service.list(h.list))).rejects.toThrow(
+        "Cannot check session directory '/denied': Directory lookup failed. Check directory access and retry discovery.",
+      );
+      // The catalog stays failed even when the search would only match an earlier valid row.
+      await expect(
+        Effect.runPromise(h.service.list({ ...h.list, search: "available" })),
+      ).rejects.toThrow("Directory lookup failed");
+      await Effect.runPromise(h.service.release(h.list));
+      h.state.directoryErrors.clear();
+      const retried = await Effect.runPromise(
+        h.service.list({ ...h.list, catalogRequestId: crypto.randomUUID() }),
+      );
+      expect(retried.sessions.map((row) => row.externalSessionId)).toEqual(["available"]);
+    },
+  );
+
+  test("saves original metadata before live admission and deduplicates concurrent imports", async () => {
+    const h = await setup();
+    const [first, second] = await Promise.all([
+      Effect.runPromise(h.service.importSession(h.input)),
+      Effect.runPromise(h.service.importSession(h.input)),
+    ]);
+    expect(first.session.id).toBe(second.session.id);
+    expect([first.created, second.created]).toEqual([true, false]);
+    expect(first.session).toMatchObject({
+      externalSessionId: "native",
+      roleSnapshot: null,
+      selectedModel: null,
+      manualTitle: "Native title ".repeat(30),
+    });
+    expect(h.calls).toEqual(["inspectSession", "save", "attach", "publish"]);
+    await Effect.runPromise(
+      h.store.archive({
+        workspaceId: "fairnest",
+        repoPath: "/repo",
+        sessionId: first.session.id,
+        archivedAt: 10,
+      }),
+    );
+    await expect(Effect.runPromise(h.service.importSession(h.input))).rejects.toThrow(
+      "archived chat",
+    );
+  });
+
+  test.each(["failOpen", "failSave"] as const)("does not admit or persist on %s", async (flag) => {
+    const h = await setup();
+    h.state[flag] = true;
+    await expect(Effect.runPromise(h.service.importSession(h.input))).rejects.toThrow();
+    expect(
+      await Effect.runPromise(h.store.listActive({ workspaceId: "fairnest", repoPath: "/repo" })),
+    ).toEqual([]);
+    expect(h.calls).not.toContain("attach");
+  });
+
+  test("keeps the saved record after live publication fails", async () => {
+    const h = await setup();
+    h.state.failRegistration = true;
+    const result = await Effect.runPromise(h.service.importSession(h.input));
+    expect(result.openError).toContain("publication failed");
+    expect((await Effect.runPromise(h.service.importSession(h.input))).session.id).toBe(
+      result.session.id,
+    );
+    expect(h.calls.filter((call) => call === "save")).toHaveLength(1);
+  });
+
+  test("imports a detached worktree and preserves its native alias", async () => {
+    const h = await setup();
+    h.state.detached = true;
+    const result = await Effect.runPromise(
+      h.service.importSession({ ...h.input, workingDirectory: "/alias" }),
+    );
+    expect(result.session.executionTarget).toEqual({
+      kind: "local_worktree",
+      workingDirectory: "/alias",
+      branchName: null,
+      worktreeState: "present",
+    });
+  });
+
+  test("release interrupts an in-flight catalog without admitting a session", async () => {
+    const h = await setup();
+    const entered = Effect.runSync(Deferred.make<void>());
+    h.adapter.sessionImport.scanSessions = (signal) => {
+      h.state.signal = signal;
+      return {
+        next: () => Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Effect.never)),
+      };
+    };
+    const fiber = Effect.runFork(h.service.list(h.list));
+    await Effect.runPromise(Deferred.await(entered));
+    await Effect.runPromise(h.service.release(h.list));
+    expect((await Effect.runPromise(Fiber.await(fiber)))._tag).toBe("Failure");
+    expect(h.state.signal?.aborted).toBe(true);
+  });
+});
+
+test("import releases the directory guard before runtime admission reads the same directory", async () => {
+  const h = await setup();
+  const inspectSession = h.adapter.sessionImport.inspectSession;
+  h.adapter.sessionImport.inspectSession = (ref) =>
+    inspectSession(ref).pipe(
+      Effect.map((source) => ({
+        ...source,
+        attach: h.lifecycle.runWorktreeRead(ref.workingDirectory, source.attach).pipe(
+          Effect.timeoutFail({
+            duration: "1 second",
+            onTimeout: () => failure("Admission deadlocked on the import directory guard"),
+          }),
+        ),
+      })),
+    );
+  const imported = await Effect.runPromise(h.service.importSession(h.input));
+  expect(imported.openError).toBeNull();
+  expect(h.calls).toEqual(["inspectSession", "save", "attach", "publish"]);
+});
+
+test("returns the first import page without draining native history", async () => {
+  const h = await setup();
+  h.state.rows = Array.from({ length: 3000 }, (_, index) => h.row(`external-${index}`));
+  const first = await Effect.runPromise(h.service.list(h.list));
+  expect(first.sessions).toHaveLength(50);
+  expect(h.calls.filter((call) => call === "scanSessions.next")).toHaveLength(1);
+});
+
+test("persists native model, profile and effort from the opened source", async () => {
+  const h = await setup();
+  const inspectSession = h.adapter.sessionImport.inspectSession;
+  const selectedModel = {
+    runtimeKind: "opencode" as const,
+    providerId: "openai",
+    modelId: "native-model",
+    profileId: "plan",
+    variant: "high",
+  };
+  h.adapter.sessionImport.inspectSession = (ref) =>
+    inspectSession(ref).pipe(Effect.map((source) => ({ ...source, selectedModel })));
+  const imported = await Effect.runPromise(h.service.importSession(h.input));
+  expect(imported.session.selectedModel).toEqual(selectedModel);
+});

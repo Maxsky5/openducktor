@@ -66,14 +66,15 @@ const pushClaudeSdkUserMessage = (session: ClaudeSession, message: SDKUserMessag
 export const applyClaudeSessionModel = async (
   session: ClaudeSession,
   model: AgentModelSelection | null | undefined,
+  force = false,
 ): Promise<void> => {
   assertClaudeSessionAcceptingMessages(session);
   const nextModel = model ?? undefined;
   assertClaudeSessionModelUpdateSupported(session, nextModel);
 
   const previousModel = session.model;
-  const modelChanged = previousModel?.modelId !== nextModel?.modelId;
-  const effortChanged = previousModel?.variant !== nextModel?.variant;
+  const modelChanged = force || previousModel?.modelId !== nextModel?.modelId;
+  const effortChanged = force || previousModel?.variant !== nextModel?.variant;
   try {
     if (modelChanged) {
       await session.query.setModel(nextModel?.modelId);

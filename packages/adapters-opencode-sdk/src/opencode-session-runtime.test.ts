@@ -131,7 +131,11 @@ const createLiveClientHarness = (
         return {
           data: createOpencodeSessionFixture({
             id: sessionID,
-            parentID: input.parentSessionIdsBySessionId?.[sessionID],
+            parentID:
+              input.parentSessionIdsBySessionId?.[sessionID] ??
+              Object.entries(input.childSessionIdsByParent ?? {}).find(([, children]) =>
+                children.includes(sessionID),
+              )?.[0],
             directory: "/repo",
             title: "OpenDucktor session",
             time: {
@@ -395,6 +399,7 @@ describe("OpenCode session runtime connection", () => {
     const harness = createLiveClientHarness({
       externalSessionIds: ["session-1", "child-session"],
       parentSessionIdsBySessionId: { "child-session": "session-1" },
+      childSessionIdsByParent: { "session-1": ["child-session"] },
     });
     const todoCalls: string[] = [];
     let updateCalls = 0;
@@ -413,7 +418,14 @@ describe("OpenCode session runtime connection", () => {
       signals.push(signal);
     });
     try {
-      const before = await prepared.connection.readSessionSources();
+      const before = await prepared.connection.readSessionSources([
+        {
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          externalSessionId: "session-1",
+          workingDirectory: "/repo",
+        },
+      ]);
       const input = {
         repoPath: "/repo",
         runtimeKind: "opencode" as const,
@@ -429,7 +441,16 @@ describe("OpenCode session runtime connection", () => {
           prepared.queries.loadSessionTodos({ ...input, externalSessionId }),
         ).resolves.toEqual([]);
       }
-      expect(await prepared.connection.readSessionSources()).toEqual(before);
+      expect(
+        await prepared.connection.readSessionSources([
+          {
+            repoPath: "/repo",
+            runtimeKind: "opencode",
+            externalSessionId: "session-1",
+            workingDirectory: "/repo",
+          },
+        ]),
+      ).toEqual(before);
       expect(harness.promptCalls).toEqual([]);
       expect(updateCalls).toBe(0);
       expect(harness.permissionReplyCalls).toEqual([]);
@@ -464,15 +485,23 @@ describe("OpenCode session runtime connection", () => {
     await prepared.release();
   });
 
-  test("lists every runtime session for task matching", async () => {
+  test("lists only owned roots and verified descendants", async () => {
     const harness = createLiveClientHarness({
       externalSessionIds: ["session-1", "child-session", "unknown-session"],
+      childSessionIdsByParent: { "session-1": ["child-session"] },
       busySessionIds: ["session-1", "child-session"],
       parentSessionIdsBySessionId: { "child-session": "session-1" },
     });
     const prepared = await createPrepareRuntime(harness)(runtimeInput);
 
-    const { sources } = await prepared.connection.readSessionSources();
+    const { sources } = await prepared.connection.readSessionSources([
+      {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        externalSessionId: "session-1",
+        workingDirectory: "/repo",
+      },
+    ]);
 
     expect(sources).toEqual(
       expect.arrayContaining([
@@ -486,13 +515,64 @@ describe("OpenCode session runtime connection", () => {
           parentExternalSessionId: "session-1",
           runtimeActivity: "running",
         }),
-        expect.objectContaining({ externalSessionId: "unknown-session" }),
       ]),
     );
-    expect(harness.callOrder).toContain("list");
-    expect(harness.callOrder).not.toContain("get:session-1");
-    expect(harness.callOrder).not.toContain("children:session-1");
+    expect(sources).toHaveLength(2);
+    expect(harness.callOrder).not.toContain("list");
+    expect(harness.callOrder).toContain("get:session-1");
+    expect(harness.callOrder).toContain("children:session-1");
     await prepared.release();
+  });
+
+  test("does not restore a released root from cached sources", async () => {
+    const harness = createLiveClientHarness();
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    const ref = {
+      repoPath: "/repo",
+      runtimeKind: "opencode" as const,
+      externalSessionId: "session-1",
+      workingDirectory: "/repo",
+    };
+    try {
+      await prepared.connection.readSessionSources([ref]);
+      const readsBeforeRelease = harness.callOrder.filter(
+        (call) => call === "get:session-1",
+      ).length;
+
+      await prepared.connection.releaseSession(ref);
+      const { sources } = await prepared.connection.readSessionSources();
+
+      expect(sources).toEqual([]);
+      expect(harness.callOrder.filter((call) => call === "get:session-1")).toHaveLength(
+        readsBeforeRelease,
+      );
+    } finally {
+      await prepared.release();
+    }
+  });
+
+  test("keeps a root authorized when release fails", async () => {
+    const harness = createLiveClientHarness();
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    const ref = {
+      repoPath: "/repo",
+      runtimeKind: "opencode" as const,
+      externalSessionId: "session-1",
+      workingDirectory: "/repo",
+    };
+    try {
+      await resumeOpenDucktorSession(prepared);
+      await prepared.connection.readSessionSources([ref]);
+
+      await expect(
+        prepared.connection.releaseSession({ ...ref, workingDirectory: "/other" }),
+      ).rejects.toThrow("Cannot release OpenCode session");
+      expect((await prepared.connection.readSessionSources()).sources).toEqual(
+        expect.arrayContaining([expect.objectContaining({ externalSessionId: "session-1" })]),
+      );
+    } finally {
+      await prepared.release();
+    }
   });
 
   test("keeps a session registered when an older refresh omits it", async () => {
@@ -504,10 +584,15 @@ describe("OpenCode session runtime connection", () => {
     const listBarrier = new Promise<void>((resolve) => {
       finishList = resolve;
     });
+    let firstRead = true;
     const harness = createLiveClientHarness({
       externalSessionIds: [],
-      onList: markListStarted,
-      listBarrier: () => listBarrier,
+      onPermissionList: markListStarted,
+      permissionListBarrier: () => {
+        if (!firstRead) return Promise.resolve();
+        firstRead = false;
+        return listBarrier;
+      },
     });
     const prepared = await createPrepareRuntime(harness)(runtimeInput);
     const signals: OpencodeSessionRuntimeSignal[] = [];
@@ -515,7 +600,14 @@ describe("OpenCode session runtime connection", () => {
       signals.push(signal);
     });
 
-    const refresh = prepared.connection.readSessionSources();
+    const refresh = prepared.connection.readSessionSources([
+      {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        externalSessionId: "session-1",
+        workingDirectory: "/repo",
+      },
+    ]);
     await listStarted;
     await resumeOpenDucktorSession(prepared);
     finishList();
@@ -534,17 +626,27 @@ describe("OpenCode session runtime connection", () => {
     const harness = createLiveClientHarness({
       externalSessionIds: ["child-session"],
       parentSessionIdsBySessionId: { "child-session": "parent-session" },
+      childSessionIdsByParent: { "parent-session": ["child-session"] },
     });
     const prepared = await createPrepareRuntime(harness)(runtimeInput);
 
-    const { sources } = await prepared.connection.readSessionSources();
-
-    expect(sources).toEqual([
-      expect.objectContaining({
-        externalSessionId: "child-session",
-        parentExternalSessionId: "parent-session",
-      }),
+    const { sources } = await prepared.connection.readSessionSources([
+      {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        externalSessionId: "parent-session",
+        workingDirectory: "/repo",
+      },
     ]);
+
+    expect(sources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          externalSessionId: "child-session",
+          parentExternalSessionId: "parent-session",
+        }),
+      ]),
+    );
     await prepared.release();
   });
 
@@ -560,7 +662,14 @@ describe("OpenCode session runtime connection", () => {
       sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
     });
 
-    const { sources } = await prepared.connection.readSessionSources();
+    const { sources } = await prepared.connection.readSessionSources([
+      {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        externalSessionId: "session-1",
+        workingDirectory: "/repo",
+      },
+    ]);
 
     expect(sources[0]?.sessionAssociation).toEqual({ kind: "unbound" });
     await prepared.release();
@@ -573,7 +682,14 @@ describe("OpenCode session runtime connection", () => {
     });
     const prepared = await createPrepareRuntime(harness)(runtimeInput);
     const signals: OpencodeSessionRuntimeSignal[] = [];
-    await prepared.connection.readSessionSources();
+    await prepared.connection.readSessionSources([
+      {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        externalSessionId: "session-1",
+        workingDirectory: "/repo",
+      },
+    ]);
     await prepared.startForwarding((signal) => {
       signals.push(signal);
     });
@@ -622,7 +738,14 @@ describe("OpenCode session runtime connection", () => {
     });
     const prepared = await createPrepareRuntime(harness)(runtimeInput);
     const signals: OpencodeSessionRuntimeSignal[] = [];
-    await prepared.connection.readSessionSources();
+    await prepared.connection.readSessionSources([
+      {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        externalSessionId: "session-1",
+        workingDirectory: "/repo",
+      },
+    ]);
     await prepared.startForwarding((signal) => {
       signals.push(signal);
     });
@@ -656,12 +779,19 @@ describe("OpenCode session runtime connection", () => {
       sessionScope: { kind: "repository" as const },
     };
     await prepared.connection.resumeSession(childInput);
-    expect(harness.callOrder.filter((call) => call === "get:child-session")).toHaveLength(1);
+    expect(harness.callOrder.filter((call) => call === "get:child-session")).toHaveLength(2);
 
     harness.setExternalSessionIds(["session-1"]);
-    await prepared.connection.readSessionSources();
+    await prepared.connection.readSessionSources([
+      {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        externalSessionId: "session-1",
+        workingDirectory: "/repo",
+      },
+    ]);
     await prepared.connection.resumeSession(childInput);
-    expect(harness.callOrder.filter((call) => call === "get:child-session")).toHaveLength(2);
+    expect(harness.callOrder.filter((call) => call === "get:child-session")).toHaveLength(3);
     await prepared.release();
   });
 

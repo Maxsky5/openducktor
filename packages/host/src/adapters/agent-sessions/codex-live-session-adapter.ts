@@ -1,3 +1,5 @@
+import { createCodexSessionImportAdapter } from "./codex-session-import";
+import { createCodexControlPolicyBinder } from "./codex-control-policy";
 import { createCodexRuntimeTransport } from "./codex-runtime-transport";
 import { createRuntimeQueryAdapter } from "./runtime-query-adapter";
 import { createCodexImageOperations } from "./codex-image-operations";
@@ -12,11 +14,10 @@ import {
 import {
   type AgentSessionControlSummary,
   type AgentSessionLiveRef,
-  type AgentSessionScope,
   acceptedAgentUserMessageSchema,
   agentSessionLiveLoadContextResultSchema,
 } from "@openducktor/contracts";
-import type { AgentRuntimePolicyBinding, AgentSessionSummary } from "@openducktor/core";
+import type { AgentSessionSummary } from "@openducktor/core";
 import { Effect, Exit } from "effect";
 import { toAgentSessionControlSummary } from "../../application/agent-sessions/agent-session-control-summary";
 import { HostValidationError, toHostOperationError } from "../../effect/host-errors";
@@ -175,44 +176,10 @@ export const createCodexLiveSessionAdapterPreparer = ({
       const releaseRuntime = (): Effect.Effect<ReadonlyArray<AgentSessionLiveRef>, HostError> =>
         projection.releaseRuntime(() => controller.releaseRuntime(runtime.runtimeId));
 
-      const bindControlPolicy = <
-        Input extends {
-          readonly runtimeKind: string;
-          readonly sessionScope?: AgentSessionScope;
-        },
-      >(
-        input: Input,
-        operation: string,
-      ) => {
-        if (input.runtimeKind !== "codex") {
-          return Effect.fail(
-            new HostValidationError({
-              field: "runtimeKind",
-              message: `Codex live-session control '${operation}' requires a Codex runtime.`,
-              details: { operation, runtimeKind: input.runtimeKind },
-            }),
-          );
-        }
-        const sessionScope = input.sessionScope;
-        if (!sessionScope) {
-          return Effect.fail(
-            new HostValidationError({
-              field: "sessionScope",
-              message: `Codex live-session control '${operation}' requires session scope.`,
-              details: { operation, runtimeId: runtime.runtimeId },
-            }),
-          );
-        }
-        return resolveRuntimePolicy(sessionScope).pipe(
-          Effect.map((policy) => {
-            const binding: Extract<AgentRuntimePolicyBinding, { runtimeKind: "codex" }> = {
-              runtimeKind: "codex",
-              runtimePolicy: { kind: "codex", policy },
-            };
-            return { ...input, ...binding, sessionScope };
-          }),
-        );
-      };
+      const bindControlPolicy = createCodexControlPolicyBinder(
+        runtime.runtimeId,
+        resolveRuntimePolicy,
+      );
 
       const sessionError =
         (operation: string, externalSessionId: string) =>
@@ -223,6 +190,12 @@ export const createCodexLiveSessionAdapterPreparer = ({
           });
 
       const adapter: AgentSessionRuntimeAdapterPort = {
+        sessionImport: createCodexSessionImportAdapter(
+          controller,
+          runtime.repoPath,
+          resolveRuntimePolicy,
+          refreshProjection,
+        ),
         queries: createRuntimeQueryAdapter(controller),
         ...createCodexImageOperations(controller, sessionError),
         supportsSessionControl: true,
@@ -475,7 +448,16 @@ export const createCodexLiveSessionAdapterPreparer = ({
           ),
         updateSessionModel: (input) =>
           Effect.tryPromise({
-            try: () => controller.updateSessionModel(input),
+            try: async () => {
+              const policy = await Effect.runPromise(resolveRuntimePolicy({ kind: "repository" }));
+              return controller.updateSessionModel(input, {
+                repoPath: input.repoPath,
+                runtimeKind: "codex",
+                workingDirectory: input.workingDirectory,
+                externalSessionId: input.externalSessionId,
+                runtimePolicy: { kind: "codex", policy },
+              });
+            },
             catch: sessionError("codex-live-session.update-session-model", input.externalSessionId),
           }).pipe(Effect.tap(() => refreshProjection())),
         stopSession: (input) =>

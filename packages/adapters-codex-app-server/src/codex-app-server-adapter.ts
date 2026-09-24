@@ -1,3 +1,5 @@
+import { listCodexSessionMetadataPage, getCodexSessionMetadata } from "./codex-session-metadata";
+import type { RuntimeSessionImportSource } from "@openducktor/core";
 import { codexSubAgentSourceMetadata } from "./codex-app-server-threads";
 import { AgentRuntimeQueryError, assertAgentRuntimeQuerySession } from "@openducktor/core";
 import type {
@@ -470,6 +472,16 @@ export class CodexAppServerAdapter
       }
       assertRuntimeContextCompatibleWithSession(current, input, "resume session");
     }
+    if (
+      sessionPolicy.kind === "repository" &&
+      !input.systemPrompt &&
+      (!current || current.preserveNativeSettings)
+    ) {
+      if (current) return current.summary;
+      const handle = await this.openExistingSession(input);
+      await handle.attach();
+      return this.localSessions.get(input.externalSessionId)!.summary;
+    }
     const model = requireModelSelection(input.model);
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "resume session");
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
@@ -499,17 +511,12 @@ export class CodexAppServerAdapter
     const response = await client.threadResume(threadResumeInput);
     this.clearThreadInventory(runtimeId);
     const session = sessionStateFromThreadResume(input, runtimeId, model, response);
-    if (sessionPolicy.kind === "repository") {
+    if (sessionPolicy.kind === "repository")
       session.summary = { ...session.summary, title: sessionPolicy.title };
-    }
     const { summary } = session;
     this.localSessions.remember(session);
-    if (sessionPolicy.kind === "repository") {
-      await client.threadSetName({
-        threadId: session.threadId,
-        name: sessionPolicy.title,
-      });
-    }
+    if (sessionPolicy.kind === "repository")
+      await client.threadSetName({ threadId: session.threadId, name: sessionPolicy.title });
 
     return summary;
   }
@@ -621,26 +628,30 @@ export class CodexAppServerAdapter
         workingDirectory: input.workingDirectory,
       }),
     );
-    const threadResumeInput: CodexAppServerThreadResumeParams = {
-      ...codexTransportPolicy(policy),
-      config: sessionPolicy.threadConfig,
-      threadId: input.externalSessionId,
-      cwd: input.workingDirectory,
-      excludeTurns: true,
-      model: toTransportModelSelection(model).model,
-    };
-    if (input.systemPrompt) {
+    const preserveNativeSettings = current?.preserveNativeSettings === true;
+    const threadResumeInput: CodexAppServerThreadResumeParams = preserveNativeSettings
+      ? { threadId: input.externalSessionId, excludeTurns: true }
+      : {
+          ...codexTransportPolicy(policy),
+          config: sessionPolicy.threadConfig,
+          threadId: input.externalSessionId,
+          cwd: input.workingDirectory,
+          excludeTurns: true,
+          model: toTransportModelSelection(model).model,
+        };
+    if (input.systemPrompt && !preserveNativeSettings) {
       threadResumeInput.developerInstructions = input.systemPrompt;
     }
     const response = await client.threadResume(threadResumeInput);
     this.clearThreadInventory(runtimeId);
     const session = sessionStateFromThreadResume(input, runtimeId, model, response);
-    if (sessionPolicy.kind === "repository") {
+    session.preserveNativeSettings = preserveNativeSettings;
+    if (sessionPolicy.kind === "repository" && !preserveNativeSettings) {
       session.summary = { ...session.summary, title: sessionPolicy.title };
     }
     const previous = this.localSessions.get(input.externalSessionId);
     this.localSessions.remember(session);
-    if (sessionPolicy.kind === "repository") {
+    if (sessionPolicy.kind === "repository" && !preserveNativeSettings) {
       try {
         await client.threadSetName({
           threadId: session.threadId,
@@ -1037,11 +1048,43 @@ export class CodexAppServerAdapter
     };
   }
 
-  async updateSessionModel(input: UpdateAgentSessionModelInput): Promise<void> {
-    const session = this.localSessions.get(input.externalSessionId);
-    if (!session) {
-      throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);
+  async listSessionMetadataPage(input: SessionRef & { pageToken?: string; signal: AbortSignal }) {
+    const { client } = await this.runtimeClients.resolve(input, "list external sessions");
+    return listCodexSessionMetadataPage(client, input);
+  }
+
+  async openExistingSession(input: PolicyBoundSessionRef): Promise<RuntimeSessionImportSource> {
+    const { client, runtimeId } = await this.runtimeClients.resolve(input, "open existing session");
+    const metadata = await getCodexSessionMetadata(client, input);
+    await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
+    const response = await client.threadResume({
+      threadId: input.externalSessionId,
+      excludeTurns: true,
+    });
+    if (response.thread.id !== input.externalSessionId || response.cwd !== input.workingDirectory)
+      throw new Error("Codex resumed a different conversation or directory.");
+    const session = sessionStateFromExistingThread(input, runtimeId, undefined, response);
+    session.preserveNativeSettings = true;
+    session.summary = { ...session.summary, title: metadata.title ?? input.externalSessionId };
+    return {
+      metadata,
+      selectedModel: session.model ? { ...session.model, runtimeKind: "codex" } : null,
+      attach: async () => {
+        this.localSessions.remember(session);
+      },
+    };
+  }
+
+  async updateSessionModel(
+    input: UpdateAgentSessionModelInput,
+    binding?: PolicyBoundSessionRef,
+  ): Promise<void> {
+    if (!this.localSessions.get(input.externalSessionId) && binding) {
+      const handle = await this.openExistingSession(binding);
+      await handle.attach();
     }
+    const session = this.localSessions.get(input.externalSessionId);
+    if (!session) throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);
     if (input.model) {
       session.model = input.model;
       return;
@@ -1097,13 +1140,16 @@ export class CodexAppServerAdapter
       "ensure Codex session state",
     );
     const policy = sessionPolicy.runtimePolicy;
-    const threadResumeInput: CodexAppServerThreadResumeParams = {
-      ...codexTransportPolicy(policy),
-      config: sessionPolicy.threadConfig,
-      threadId: input.externalSessionId,
-      cwd: input.workingDirectory,
-      excludeTurns: true,
-    };
+    const threadResumeInput: CodexAppServerThreadResumeParams =
+      sessionPolicy.kind === "repository"
+        ? { threadId: input.externalSessionId, excludeTurns: true }
+        : {
+            ...codexTransportPolicy(policy),
+            config: sessionPolicy.threadConfig,
+            threadId: input.externalSessionId,
+            cwd: input.workingDirectory,
+            excludeTurns: true,
+          };
     if ("systemPrompt" in input && input.systemPrompt) {
       threadResumeInput.developerInstructions = input.systemPrompt;
     }
@@ -1113,7 +1159,7 @@ export class CodexAppServerAdapter
     const response = await client.threadResume(threadResumeInput);
     const session = sessionStateFromExistingThread(input, runtimeId, model, response);
     if (sessionPolicy.kind === "repository") {
-      session.summary = { ...session.summary, title: sessionPolicy.title };
+      session.preserveNativeSettings = true;
     }
     const { summary } = session;
     const existingThreadSession = preserveRuntimeContextForExistingThread(
@@ -1121,12 +1167,6 @@ export class CodexAppServerAdapter
       this.localSessions.get(summary.externalSessionId),
     );
     this.localSessions.remember(existingThreadSession);
-    if (sessionPolicy.kind === "repository") {
-      await client.threadSetName({
-        threadId: session.threadId,
-        name: sessionPolicy.title,
-      });
-    }
     return summary;
   }
 

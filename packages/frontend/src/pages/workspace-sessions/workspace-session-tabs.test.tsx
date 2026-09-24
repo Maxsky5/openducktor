@@ -21,6 +21,7 @@ import { WorkspaceSessions } from "./workspace-sessions-view";
 import { workspaceSessionSelectionStorageKey } from "./use-workspace-session-selection";
 import { workspaceSessionTabOrderStorageKey } from "./use-workspace-session-tab-order";
 import { updateWorkspaceSessionQueries } from "@/state/queries/workspace-sessions";
+import * as sessionImport from "./workspace-session-import-dialog";
 import * as chatCreate from "./workspace-session-create-dialog";
 import * as workspaceChat from "./workspace-session-chat";
 
@@ -111,13 +112,103 @@ test.each([true, false])(
       await waitFor(() => expect(submit.hasAttribute("disabled")).toBe(false), { timeout: 800 });
       fireEvent.click(submit);
       await waitFor(() => expect(view.queryByRole("dialog") === null).toBe(true), { timeout: 800 });
-      expect(requests).toEqual([
-        { workspaceId: view.workspaceId, sessionId: "Second", confirmStop: true, removeWorktree },
-      ]);
+      const expectedRequest: WorkspaceSessionArchiveInput = {
+        workspaceId: view.workspaceId,
+        sessionId: "Second",
+        confirmStop: true,
+        removeWorktree,
+      };
+      if (removeWorktree)
+        expectedRequest.worktreeConfirmation = {
+          workingDirectory: "/worktrees/second",
+          branchName: "feature/second",
+        };
+      expect(requests).toEqual([expectedRequest]);
       expect(view.getAllByRole("tab")).toHaveLength(1);
       expect(view.getByRole("tab", { name: /First/ }).getAttribute("aria-selected")).toBe("true");
     } finally {
       view.unmount();
+      configureShellBridge(createUnavailableShellBridge());
+    }
+  },
+);
+
+test.each([true, false])(
+  "the browser-tab action bar imports and selects a chat with existing sessions=%s",
+  async (hasSessions) => {
+    const imported = sessionRecord("Imported native chat");
+    const dialog = spyOn(sessionImport, "WorkspaceSessionImportDialog").mockImplementation(
+      function ImportDialog(props) {
+        const queryClient = useQueryClient();
+        return (
+          <div role="dialog" aria-label="Import session">
+            <button type="button" onClick={props.onClose}>
+              Cancel import
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                updateWorkspaceSessionQueries(queryClient, props.workspaceId, imported);
+                props.onImported(imported);
+                props.onClose();
+              }}
+            >
+              Import native chat
+            </button>
+          </div>
+        );
+      },
+    );
+    configureShellBridge(
+      createShellBridgeFixture({
+        client: {
+          workspaceSessionListActive: async () => (hasSessions ? [sessionRecord("First")] : []),
+          workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+        },
+      }),
+    );
+    const view = renderTabs(undefined, hasSessions ? "/chats?session=First" : "/chats");
+    try {
+      const importButton = await view.findByRole(
+        "button",
+        { name: "Import session" },
+        { timeout: 800 },
+      );
+      const historyButton = view.getByRole("button", { name: "Session history" });
+      expect(importButton.nextElementSibling).toBe(historyButton);
+      expect(importButton.className).toBe(historyButton.className);
+      expect(importButton.getAttribute("title")).toBe("Import session");
+      expect(importButton.closest('[role="tablist"]')).toBeNull();
+      if (hasSessions) {
+        expect(
+          view.getByRole("tab", { name: /First/ }).closest('[data-slot="browser-tab"]'),
+        ).not.toBeNull();
+      } else {
+        expect(view.getByText("No active sessions.")).toBeTruthy();
+      }
+      const originalUrl = view.getByTestId("session-url").textContent;
+      fireEvent.click(importButton);
+      expect(view.getByRole("dialog", { name: "Import session" })).toBeTruthy();
+      expect(view.getByTestId("session-url").textContent).toBe(originalUrl);
+      fireEvent.click(view.getByRole("button", { name: "Cancel import" }));
+      expect(view.queryByRole("dialog")).toBeNull();
+      fireEvent.click(importButton);
+      fireEvent.click(view.getByRole("button", { name: "Import native chat" }));
+      await waitFor(
+        () => {
+          const tab = view.getByRole("tab", { name: /Imported native chat/ });
+          expect(tab.getAttribute("aria-selected")).toBe("true");
+          expect(tab.closest('[data-slot="browser-tab"]')).not.toBeNull();
+        },
+        { timeout: 800 },
+      );
+      expect(view.queryByRole("dialog")).toBeNull();
+      const url = new URL(view.getByTestId("session-url").textContent ?? "", "http://localhost");
+      expect(url.searchParams.get("session")).toBe(imported.id);
+      expect(view.getAllByRole("tab")).toHaveLength(hasSessions ? 2 : 1);
+    } finally {
+      view.unmount();
+      dialog.mockRestore();
       configureShellBridge(createUnavailableShellBridge());
     }
   },
@@ -851,6 +942,10 @@ test("a slow worktree archive keeps its loader on the tab while the dialog is pe
         sessionId: "Second",
         confirmStop: true,
         removeWorktree: true,
+        worktreeConfirmation: {
+          workingDirectory: "/worktrees/second",
+          branchName: "feature/second",
+        },
       },
     ]);
     expect(view.getByRole("dialog", { name: "Archive chat" })).toBeTruthy();
@@ -928,6 +1023,10 @@ test("a failed direct archive does not show its error in the next worktree dialo
         sessionId: "Second",
         confirmStop: true,
         removeWorktree: true,
+        worktreeConfirmation: {
+          workingDirectory: "/worktrees/second",
+          branchName: "feature/second",
+        },
       },
     ]);
   } finally {

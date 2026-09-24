@@ -26,6 +26,7 @@ export type ClaudeSessionLaunchInput = {
    * transcript tail and starts its hidden continuation turn.
    */
   resumeInterruptedTurn?: boolean;
+  preserveNativeSettings?: boolean;
   startedMessage: string;
   title?: string;
 };
@@ -52,7 +53,9 @@ export const resumedClaudeSessionLaunch = (
   externalSessionId: string,
 ): ClaudeSessionLaunchInput => ({
   externalSessionId,
-  ...sessionPresentation("Resumed", scope),
+  ...(scope.kind === "repository"
+    ? { startedMessage: "Resumed session" }
+    : sessionPresentation("Resumed", scope)),
   options: { resume: externalSessionId },
 });
 

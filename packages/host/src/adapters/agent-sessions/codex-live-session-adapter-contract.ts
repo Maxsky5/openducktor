@@ -23,6 +23,8 @@ import type {
 
 export type CodexSessionController = Pick<
   CodexAppServerAdapter,
+  | "listSessionMetadataPage"
+  | "openExistingSession"
   | "resolveSessionParent"
   | "loadRuntimeCatalog"
   | "searchFiles"

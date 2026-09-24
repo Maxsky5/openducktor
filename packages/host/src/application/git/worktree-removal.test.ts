@@ -71,6 +71,8 @@ const createCleanupHarness = ({
     | "resolveConfiguredPath"
   >;
   const worktreeFiles: WorktreeFilePort = {
+    prepareWorktreeAliasRemoval: () => Effect.dieMessage("Unexpected alias removal"),
+    resolveWorktreeRemovalPath: () => Effect.dieMessage("Unexpected removal path resolution"),
     ensureDirectory: () => Effect.void,
     copyConfiguredPaths: () => Effect.void,
     removePathIfPresent(inputPath) {

@@ -1,3 +1,4 @@
+import { unexpectedSessionImport } from "../../test-support/session-import-test-doubles";
 import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
 import { describe, expect, test } from "bun:test";
@@ -7,6 +8,7 @@ import { createLiveSessionAdapterRegistry } from "./live-session-adapter-registr
 
 const adapter = (runtimeId: string): AgentSessionLiveAdapterPort => ({
   queries: unexpectedRuntimeQueries,
+  sessionImport: unexpectedSessionImport,
   supportsSessionControl: false,
   beginGeneratedImageBatch: () => Effect.dieMessage("Unexpected beginGeneratedImageBatch"),
   releaseGeneratedImageBatch: () => Effect.dieMessage("Unexpected releaseGeneratedImageBatch"),

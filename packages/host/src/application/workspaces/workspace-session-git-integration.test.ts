@@ -1,6 +1,23 @@
+import { HostOperationError } from "../../effect/host-errors";
+import { createWorkspaceSessionImportService } from "./workspace-session-import-service";
+import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
+import { createAgentSessionRuntimeAdapterTestDouble } from "../../test-support/service-test-doubles";
+import { removeWorkspaceSessionWorktree } from "./workspace-session-worktree-lifecycle";
+import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  readlink,
+  rm,
+  symlink,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -25,7 +42,10 @@ import {
   createEffectHostCommandRouter,
   toPromiseHostCommandRouter,
 } from "../../interface/router/host-command-router";
-import { createWorkspaceSessionService } from "./workspace-session-service";
+import {
+  createWorkspaceSessionService,
+  type WorkspaceSessionServiceDependencies,
+} from "./workspace-session-service";
 import { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
 
 const commitIdentity = [
@@ -118,7 +138,8 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       systemCommands: createSystemCommandRunner(),
     };
     const store = createSqliteWorkspaceSessionStore(database.contextProvider);
-    const service = createWorkspaceSessionService({
+    const dependencies: WorkspaceSessionServiceDependencies = {
+      lifecycle: createTaskSessionLifecycleCoordinator(),
       operationGate: createWorkspaceSessionOperationGate(),
       ...targetDependencies,
       store,
@@ -156,7 +177,8 @@ describe("Workspace Session commands with real Git and SQLite", () => {
         stopSession: () => Effect.dieMessage("Idle sessions must not be stopped"),
         read: (ref) => Effect.succeed({ type: "missing", ref }),
       },
-    });
+    };
+    const service = createWorkspaceSessionService(dependencies);
     const router = toPromiseHostCommandRouter(
       createEffectHostCommandRouter({
         handlers: createWorkspaceSessionCommandHandlers(service, (_workspaceId, session) =>
@@ -175,7 +197,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       worktree: { mode: "from_name", name: "named-chat", branchName: null },
       manualTitle: null,
     };
-    return { router, createInput, starts, events, targetDependencies };
+    return { router, createInput, starts, events, targetDependencies, dependencies };
   };
 
   test("creates from_branch at the selected branch HEAD instead of the source checkout HEAD", async () => {
@@ -355,6 +377,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       ...ref,
       confirmStop: true,
       removeWorktree: true,
+      worktreeConfirmation: { workingDirectory: directory, branchName },
     });
     expect(result.executionTarget).toMatchObject({
       kind: "local_worktree",
@@ -463,6 +486,271 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       await h.router.invoke("workspace_session_list_active", { workspaceId: "fairnest" }),
     ).toEqual([]);
     expect(h.events).toEqual([]);
+  });
+
+  test.each([
+    null,
+    "alias cleanup",
+    "branch deletion",
+    "archive save",
+    "changed branch",
+    "branch snapshot save",
+    "replacement directory",
+    "replacement worktree",
+    "replacement dangling alias",
+  ] as const)("imports, retries after %s, and restores a native symlink path", async (scenario) => {
+    const failureStage =
+      scenario === "changed branch"
+        ? "branch deletion"
+        : scenario === "replacement directory" ||
+            scenario === "replacement worktree" ||
+            scenario === "replacement dangling alias"
+          ? "alias cleanup"
+          : scenario;
+    await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=restored\n");
+    const directory = path.join(root, "external-worktree");
+    const alias = path.join(root, "native-alias");
+    gitCommand("worktree", "add", "-b", "feature/external", directory);
+    await symlink(directory, alias, "junction");
+    const h = setup({ hooks: false });
+    const registry = createLiveSessionAdapterRegistry();
+    const metadata = {
+      externalSessionId: "external-alias",
+      runtimeKind: "opencode" as const,
+      workingDirectory: alias,
+      title: "Native alias",
+      updatedAt: 123,
+    };
+    await Effect.runPromise(
+      registry.register(
+        createAgentSessionRuntimeAdapterTestDouble(
+          { runtimeId: "test-runtime", repoPath, runtimeKind: "opencode" },
+          {
+            sessionImport: {
+              scanSessions: () => {
+                let read = false;
+                return {
+                  next: () =>
+                    Effect.sync(() => {
+                      if (read) return { done: true as const, value: undefined };
+                      read = true;
+                      return { done: false as const, value: [metadata] };
+                    }),
+                };
+              },
+              inspectSession: (ref) => {
+                expect(ref.workingDirectory).toBe(alias);
+                return Effect.succeed({
+                  metadata,
+                  selectedModel: null,
+                  attach: Effect.void,
+                });
+              },
+            },
+          },
+        ),
+      ),
+    );
+    const importer = createWorkspaceSessionImportService({
+      ...h.dependencies,
+      registry,
+      publishUpdated: () => Effect.void,
+    });
+    try {
+      const { session } = await Effect.runPromise(
+        importer.importSession({
+          workspaceId: "fairnest",
+          runtimeKind: "opencode",
+          externalSessionId: metadata.externalSessionId,
+          workingDirectory: alias,
+        }),
+      );
+      expect(session.executionTarget).toEqual({
+        kind: "local_worktree",
+        workingDirectory: alias,
+        branchName: "feature/external",
+        worktreeState: "present",
+      });
+      const branchChanged = scenario === "changed branch" || scenario === "branch snapshot save";
+      const confirmedBranch = branchChanged ? "feature/renamed" : "feature/external";
+      if (branchChanged) gitCommand("-C", alias, "branch", "-m", confirmedBranch);
+      const confirmedTarget = {
+        kind: "local_worktree" as const,
+        workingDirectory: alias,
+        branchName: confirmedBranch,
+        worktreeState: "present" as const,
+      };
+      const ref = { workspaceId: "fairnest", sessionId: session.id };
+      const preview = await h.router.invoke("workspace_session_archive_preview", ref);
+      expect(preview).toMatchObject({ branchName: confirmedBranch, worktreeExists: true });
+      const archiveInput = {
+        ...ref,
+        confirmStop: true,
+        removeWorktree: true,
+        worktreeConfirmation: { workingDirectory: alias, branchName: confirmedBranch },
+      };
+      if (failureStage) {
+        const failure = Effect.fail(
+          new HostOperationError({
+            operation: "test.archive",
+            message: `Injected ${failureStage} failure`,
+          }),
+        );
+        const failingService = createWorkspaceSessionService({
+          ...h.dependencies,
+          worktreeFiles: {
+            ...h.dependencies.worktreeFiles,
+            prepareWorktreeAliasRemoval: (aliasPath, canonicalPath) =>
+              h.dependencies.worktreeFiles
+                .prepareWorktreeAliasRemoval(aliasPath, canonicalPath)
+                .pipe(
+                  Effect.map((prepared) => ({
+                    remove: failureStage === "alias cleanup" ? failure : prepared.remove,
+                  })),
+                ),
+          },
+          git: {
+            ...h.dependencies.git,
+            deleteLocalBranch: (...args) =>
+              failureStage === "branch deletion"
+                ? failure
+                : h.dependencies.git.deleteLocalBranch(...args),
+          },
+          store: {
+            ...h.dependencies.store,
+            setExecutionTarget: (input) =>
+              failureStage === "branch snapshot save"
+                ? failure
+                : h.dependencies.store.setExecutionTarget(input),
+            archive: (input) =>
+              failureStage === "archive save" ? failure : h.dependencies.store.archive(input),
+          },
+        });
+        await expect(Effect.runPromise(failingService.archive(archiveInput))).rejects.toThrow(
+          failureStage === "archive save"
+            ? "Could not save the archived chat"
+            : `Injected ${failureStage} failure`,
+        );
+        if (failureStage === "branch snapshot save")
+          expect(registeredWorktreePaths()).toContain(directory);
+        else expect(registeredWorktreePaths()).not.toContain(directory);
+        expect(await h.router.invoke("workspace_session_get", ref)).toEqual({
+          ...session,
+          executionTarget:
+            failureStage === "branch snapshot save" ? session.executionTarget : confirmedTarget,
+        });
+      }
+      const retryService = createWorkspaceSessionService(h.dependencies);
+      const retryRouter = toPromiseHostCommandRouter(
+        createEffectHostCommandRouter({
+          handlers: createWorkspaceSessionCommandHandlers(retryService, () => Effect.void),
+        }),
+      );
+      if (
+        scenario === "replacement directory" ||
+        scenario === "replacement worktree" ||
+        scenario === "replacement dangling alias"
+      ) {
+        await unlink(alias);
+        if (scenario === "replacement directory") {
+          await mkdir(alias);
+          await writeFile(path.join(alias, "keep.txt"), "keep");
+        } else if (scenario === "replacement dangling alias") {
+          await symlink(path.join(root, "unrelated-missing"), alias, "junction");
+        } else {
+          const replacementPath = path.join(root, "replacement-worktree");
+          gitCommand("worktree", "add", "-b", "feature/replacement", replacementPath);
+          await symlink(replacementPath, alias, "junction");
+        }
+        await expect(
+          retryRouter.invoke("workspace_session_archive", archiveInput),
+        ).rejects.toThrow();
+        expect(gitCommand("branch", "--list", confirmedBranch)).toContain(confirmedBranch);
+        if (scenario === "replacement directory")
+          expect(await readFile(path.join(alias, "keep.txt"), "utf8")).toBe("keep");
+        else if (scenario === "replacement dangling alias")
+          expect(await readlink(alias)).toBe(path.join(root, "unrelated-missing"));
+        else expect(runGit(alias, "branch", "--show-current")).toBe("feature/replacement");
+        expect(await h.router.invoke("workspace_session_get", ref)).toEqual({
+          ...session,
+          executionTarget: confirmedTarget,
+        });
+        return;
+      }
+      if (scenario === "alias cleanup") {
+        await expect(retryRouter.invoke("workspace_session_archive", archiveInput)).rejects.toThrow(
+          "Cannot verify dangling worktree alias",
+        );
+        expect(await readlink(alias)).toBe(directory);
+        expect(gitCommand("branch", "--list", confirmedBranch)).toContain(confirmedBranch);
+        // Model the explicit user repair requested by the error, then retry.
+        await unlink(alias);
+      }
+      const archived = await retryRouter.invoke("workspace_session_archive", archiveInput);
+      expect(archived.executionTarget).toEqual({
+        kind: "local_worktree",
+        workingDirectory: alias,
+        branchName: confirmedBranch,
+        worktreeState: "removed",
+      });
+      expect(registeredWorktreePaths()).not.toContain(directory);
+      expect(gitCommand("branch", "--list", confirmedBranch)).toBe("");
+      await expect(realpath(alias)).rejects.toThrow("ENOENT");
+      expect(await h.router.invoke("workspace_session_get", ref)).toEqual(archived);
+      const restored = await h.router.invoke("workspace_session_restore", ref);
+      expect(restored.executionTarget).toEqual(confirmedTarget);
+      expect(restored.externalSessionId).toBe(session.externalSessionId);
+      expect(restored.archivedAt).toBeNull();
+      expect(registeredWorktreePaths()).toContain(await realpath(alias));
+      expect(runGit(alias, "branch", "--show-current")).toBe(confirmedBranch);
+      expect(await h.router.invoke("workspace_session_get", ref)).toEqual(restored);
+    } finally {
+      await Effect.runPromise(importer.shutdown());
+    }
+  });
+
+  test("keeps the default branch after its session worktree disappears", async () => {
+    await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
+    gitCommand("checkout", "-b", "other-checkout");
+    const h = setup();
+    const { session } = await h.router.invoke("workspace_session_create", {
+      ...h.createInput,
+      worktree: { mode: "from_branch", name: "missing-main-review", branchName: "main" },
+    });
+    const directory = session.executionTarget.workingDirectory;
+    gitCommand("worktree", "remove", "--force", directory);
+    const branchHead = gitCommand("rev-parse", "refs/heads/main");
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    await expect(h.router.invoke("workspace_session_archive_preview", ref)).rejects.toThrow(
+      "protected branch main",
+    );
+    if (session.executionTarget.kind !== "local_worktree") throw new Error("Expected worktree");
+    const config = repoConfigSchema.parse({
+      workspaceId: "fairnest",
+      workspaceName: "Test",
+      repoPath,
+      defaultTargetBranch: { branch: "main" },
+    });
+    await expect(
+      Effect.runPromise(
+        removeWorkspaceSessionWorktree(
+          h.targetDependencies,
+          config,
+          session.executionTarget,
+          directory,
+        ),
+      ),
+    ).rejects.toThrow("protected branch main");
+    await expect(
+      h.router.invoke("workspace_session_archive", {
+        ...ref,
+        removeWorktree: true,
+        worktreeConfirmation: { workingDirectory: directory, branchName: "main" },
+      }),
+    ).rejects.toThrow("protected branch main");
+    expect(gitCommand("rev-parse", "refs/heads/main")).toBe(branchHead);
+    expect(gitCommand("branch", "--show-current")).toBe("other-checkout");
+    expect(await h.router.invoke("workspace_session_get", ref)).toEqual(session);
   });
 
   test("keeps a protected default-branch worktree when removal is refused", async () => {

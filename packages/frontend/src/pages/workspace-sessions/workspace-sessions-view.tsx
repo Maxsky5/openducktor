@@ -1,6 +1,6 @@
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive, Check, History, LoaderCircle, Plus } from "lucide-react";
+import { Archive, Check, History, Import, LoaderCircle, Plus } from "lucide-react";
 import { type ReactElement, useEffect, useState } from "react";
 import { useLocation, useNavigationType, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,7 @@ import {
 import { WorkspaceSessionCreateDialog } from "./workspace-session-create-dialog";
 import { WorkspaceSessionEmptyState } from "./workspace-session-empty-state";
 import { WorkspaceSessionHistoryDialog } from "./workspace-session-history-dialog";
+import { WorkspaceSessionImportDialog } from "./workspace-session-import-dialog";
 import { WorkspaceSessionArchiveDialog } from "./workspace-session-archive-dialog";
 import { useMountedRef } from "./use-mounted-ref";
 import { useWorkspaceSessionNavigation } from "./use-workspace-session-navigation";
@@ -213,6 +214,7 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
     records.data,
   );
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState<WorkspaceSession | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const mounted = useMountedRef();
@@ -226,8 +228,12 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
     if (records.data && sessionId !== selectedId) updateNavigation({ sessionId: selectedId });
   }, [records.data, selectedId, sessionId, updateNavigation]);
   const archive = useMutation({
-    mutationFn: (input: { sessionId: string; confirmStop: boolean; removeWorktree: boolean }) =>
-      host.workspaceSessionArchive({ workspaceId: workspace.workspaceId, ...input }),
+    mutationFn: (input: {
+      sessionId: string;
+      confirmStop: boolean;
+      removeWorktree: boolean;
+      worktreeConfirmation?: { workingDirectory: string; branchName: string } | undefined;
+    }) => host.workspaceSessionArchive({ workspaceId: workspace.workspaceId, ...input }),
     onSuccess: (record) => {
       updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, record);
       if (!mounted.current) return;
@@ -242,9 +248,13 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
     },
   });
   const archivingId = archive.isPending ? (archive.variables?.sessionId ?? null) : null;
-  const beginArchive = (sessionId: string, removeWorktree: boolean) => {
+  const beginArchive = (
+    sessionId: string,
+    removeWorktree: boolean,
+    worktreeConfirmation?: { workingDirectory: string; branchName: string },
+  ) => {
     archive.reset();
-    archive.mutate({ sessionId, confirmStop: true, removeWorktree });
+    archive.mutate({ sessionId, confirmStop: true, removeWorktree, worktreeConfirmation });
   };
   const handleTabArchive = (target: WorkspaceSession) => {
     archive.reset();
@@ -294,16 +304,28 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
           </Button>
         }
         actions={
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-8 shrink-0 text-studio-chrome-foreground hover:bg-transparent"
-            aria-label="Session history"
-            title="Archived chats"
-            onClick={() => setHistoryOpen(true)}
-          >
-            <History />
-          </Button>
+          <>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 shrink-0 text-studio-chrome-foreground hover:bg-transparent"
+              aria-label="Import session"
+              title="Import session"
+              onClick={() => setImportOpen(true)}
+            >
+              <Import />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 shrink-0 text-studio-chrome-foreground hover:bg-transparent"
+              aria-label="Session history"
+              title="Archived chats"
+              onClick={() => setHistoryOpen(true)}
+            >
+              <History />
+            </Button>
+          </>
         }
       >
         <WorkspaceSessionTabs
@@ -325,6 +347,15 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
           onCreate={() => setCreating(true)}
         />
       )}
+      {importOpen && (
+        <WorkspaceSessionImportDialog
+          workspaceId={workspace.workspaceId}
+          onClose={() => setImportOpen(false)}
+          onImported={(record) => {
+            if (mounted.current) updateNavigation({ sessionId: record.id, creating: false });
+          }}
+        />
+      )}
       {historyOpen && (
         <WorkspaceSessionHistoryDialog
           workspaceId={workspace.workspaceId}
@@ -339,7 +370,9 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
           record={archiveTarget}
           isArchiving={archive.isPending}
           error={archive.error}
-          onArchive={(removeWorktree) => beginArchive(archiveTarget.id, removeWorktree)}
+          onArchive={(removeWorktree, confirmation) =>
+            beginArchive(archiveTarget.id, removeWorktree, confirmation)
+          }
           onClose={() => {
             setArchiveTarget(null);
             archive.reset();

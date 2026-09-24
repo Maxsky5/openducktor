@@ -197,7 +197,7 @@ Accept a runtime definition only when its schema is valid, it can run workflow t
 
 OpenDucktor owns root-session admission. Start, resume, and fork controls register returned runtime metadata before a session enters the live-state list. A runtime adapter cannot scan a native session list to add roots. A runtime event can add a descendant only when OpenDucktor registered its parent.
 
-On reload, the host reads exact root references from durable task session records. The OpenCode adapter can call `session.get`, `session.children`, `session.status`, `permission.list`, and `question.list` for those roots and their verified descendants. It cannot call `session.list` or treat runtime data as proof that a new root belongs to OpenDucktor.
+On reload, the host reads exact root references from durable task session records. A live-state adapter reads only those roots and their verified descendants through exact native APIs. It cannot list native sessions to claim new live roots. The explicit import flow below is a separate discovery path.
 
 A fresh or forked session starts with a running lease. An old native idle event cannot mark it idle before the first turn settles.
 
@@ -260,6 +260,14 @@ OpenDucktor request IDs are opaque handles. Keep native reply IDs inside the ada
 | Subagents | Parent and child keep the description, mode, ID, transcript, pending input, and final state. |
 | Queued messages | One user-message ID keeps queued state live and in history. |
 | Compaction | Map requested, started, completed, and failed states without showing synthetic control messages. |
+
+## Import existing runtime sessions
+
+Implement `RuntimeSessionImportPort` to scan existing root conversations in bounded batches. Keep native cursors inside the adapter. Scanning must not read a transcript, send a prompt, or add a session to live state.
+
+`inspectSession` must check the exact source and keep its original ID, directory, and available settings. It returns a `RuntimeSessionImportSource`. The host saves the workspace association before it calls `attach` on that source. The adapter must not retain a live resource before the save. A failed attach must leave the saved association available for retry.
+
+Only an explicit import can claim a native root. The host checks repository or registered-worktree scope and existing task or workspace ownership. The adapter must not create, fork, or move the source conversation. It must report native access failures instead of substituting another session.
 
 ## Code map
 

@@ -95,9 +95,10 @@ const applyRuntimeContextToSession = (
       ...session.summary,
       sessionAssociation: sessionScope,
     };
-    if (policy.kind === "repository") {
+    if (policy.kind === "repository" && !session.preserveNativeSettings) {
       summary.title = policy.title;
     }
+    if (sessionScope.kind === "workflow") session.preserveNativeSettings = false;
     session.summary = summary;
   }
   session.runtimePolicy = input.runtimePolicy;

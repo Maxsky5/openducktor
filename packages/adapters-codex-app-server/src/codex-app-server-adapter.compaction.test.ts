@@ -163,11 +163,7 @@ describe("CodexAppServerAdapter manual compaction", () => {
         parts: [compactPart()],
       }),
     );
-    expect(calls.map((call) => call.method)).toEqual([
-      "thread/resume",
-      "thread/name/set",
-      "thread/compact/start",
-    ]);
+    expect(calls.map((call) => call.method)).toEqual(["thread/resume", "thread/compact/start"]);
   });
 
   test("adds thread context to native request failures without a fallback turn", async () => {
