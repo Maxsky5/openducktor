@@ -25,7 +25,16 @@ const resolveRemovalPath = async (inputPath: string): Promise<string> => {
     }
     const parent = path.dirname(absolutePath);
     if (parent === absolutePath) throw cause;
-    return path.join(await resolveRemovalPath(parent), path.basename(absolutePath));
+    const resolvedParent = await resolveRemovalPath(parent);
+    try {
+      const parentStats = await lstat(resolvedParent);
+      if (!parentStats.isDirectory()) {
+        throw new Error(`ENOTDIR: ${resolvedParent} is not a directory.`);
+      }
+    } catch (error) {
+      if (!hasNestedNodeErrorCode(error, "ENOENT")) throw error;
+    }
+    return path.join(resolvedParent, path.basename(absolutePath));
   }
 };
 

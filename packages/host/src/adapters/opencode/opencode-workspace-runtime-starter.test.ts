@@ -464,8 +464,9 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
     const root = await mkdtemp(join(tmpdir(), "odt-opencode-live-order-"));
     try {
       const repo = join(root, "repo");
+      const configCapturePath = join(root, "opencode-config.json");
       await mkdir(repo);
-      const opencodeBinary = await createFakeOpenCode(root);
+      const opencodeBinary = await createFakeOpenCode(root, { configCapturePath });
       const order: string[] = [];
       const releasedRuntimeIds: string[] = [];
       const lifecycle: RuntimeLiveSessionLifecyclePort = {
@@ -508,7 +509,8 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
         startupTimeoutMs: 2_000,
         retryDelayMs: 1,
         portAllocator: () => Effect.succeed(43123),
-        readinessProbe: () => Effect.succeed(true),
+        // The fake child must start before the test stops its process tree on Windows.
+        readinessProbe: () => Effect.sync(() => existsSync(configCapturePath)),
         runtimeId: () => "runtime-live-order",
       });
 
