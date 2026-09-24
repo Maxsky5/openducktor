@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
 import { spawn } from "node:child_process";
 import {
   mkdir,
@@ -17,6 +17,7 @@ import { z } from "zod";
 import { runFixtureProcess } from "../../test-support/fixture-process";
 import { createNodeTaskAssetFilePort } from "./filesystem-task-asset-file-port";
 import type { TaskAssetOwnerProbeFailure } from "./filesystem-task-asset-ownership";
+import { createProcessStartTimeProbe } from "./filesystem-task-asset-process-start";
 import type { TestScopeNestedSymlinkCaseResult } from "./test-support/test-scope-nested-symlink-fixture";
 
 const roots: string[] = [];
@@ -425,6 +426,49 @@ describe("node task asset file port", () => {
       child?.kill();
       await Effect.runPromise(port.cleanupCurrentOwner());
     }
+  });
+
+  test("keeps an external Windows owner's staging after the start-time command", async () => {
+    const configDir = await mkdtemp(path.join(tmpdir(), "odt-task-assets-"));
+    roots.push(configDir);
+    const processId = process.pid + 1;
+    const startTime = "2026-09-24T16:45:00.000Z";
+    const startedAtMs = Date.parse(startTime);
+    const ownerInstanceId = "10000000-0000-4000-8000-000000000004";
+    const config = { configDir, configDirScope: "test" } as const;
+    const ownerPort = createNodeTaskAssetFilePort(config, {
+      owner: { version: 1, instanceId: ownerInstanceId, processId, startedAtMs },
+      processIsAlive: () => true,
+      processStartedAtMs: async () => startedAtMs,
+    });
+    await Effect.runPromise(ownerPort.stage({ workspaceId, assetId, bytes: new Uint8Array([1]) }));
+
+    const runCommand = mock(async () => ({ stdout: `${startTime}\r\n` }));
+    const recoveryPort = createNodeTaskAssetFilePort(config, {
+      owner: {
+        version: 1,
+        instanceId: "10000000-0000-4000-8000-000000000005",
+        processId: process.pid,
+        startedAtMs,
+      },
+      processIsAlive: () => true,
+      processStartedAtMs: createProcessStartTimeProbe({ platform: "win32", runCommand }),
+    });
+
+    expect(await Effect.runPromise(recoveryPort.clearStaging())).toBe(0);
+    expect(runCommand).toHaveBeenCalledTimes(1);
+    await expect(
+      readFile(
+        path.join(
+          configDir,
+          "task-asset-staging",
+          "instances",
+          ownerInstanceId,
+          workspaceId,
+          assetId,
+        ),
+      ),
+    ).resolves.toEqual(Buffer.from([1]));
   });
 
   test("keeps staging when a live owner's start-time probe fails", async () => {

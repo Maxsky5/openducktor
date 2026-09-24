@@ -261,30 +261,25 @@ describe("rich task description rendering", () => {
     expect(view.container.querySelector(".katex")).toBeNull();
   });
 
-  test("keeps fenced code beside math in premium task documents", async () => {
-    const view = render(
-      <MarkdownRenderer markdown={"Formula $x$\n\n```\nconst value = 1;\n```"} premiumCodeBlocks />,
-    );
-
-    await waitFor(() => expect(view.container.querySelector(".katex")).not.toBeNull(), {
-      timeout: 1500,
-    });
-    expect(view.container.querySelector("pre code")?.textContent).toContain("const value = 1;");
-    // This test loads KaTeX and renders a math candidate.
-  }, 2500);
-
-  test("loads syntax highlighting for a premium code block", async () => {
+  test("keeps highlighted code beside math in premium task documents", async () => {
     const view = render(
       <QueryProvider useIsolatedClient>
         <StaticThemeProvider>
-          <MarkdownRenderer markdown={"```javascript\nconst value = 1;\n```"} premiumCodeBlocks />
+          <MarkdownRenderer
+            markdown={"Formula $x$\n\n```javascript\nconst value = 1;\n```"}
+            premiumCodeBlocks
+          />
         </StaticThemeProvider>
       </QueryProvider>,
     );
 
-    await waitFor(() => expect(view.container.querySelector(".token")).not.toBeNull(), {
-      timeout: 6_000,
-    });
+    await waitFor(
+      () => {
+        expect(view.container.querySelector(".katex")).not.toBeNull();
+        expect(view.container.querySelector(".token")).not.toBeNull();
+      },
+      { timeout: 6_000 },
+    );
     // A cold Prism load exceeded 3 seconds on Windows during a parallel CI run.
   }, 8_000);
 

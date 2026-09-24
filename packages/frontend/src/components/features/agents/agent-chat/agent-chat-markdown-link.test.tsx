@@ -51,6 +51,26 @@ describe("chat Markdown links", () => {
       }
     });
   }
+
+  test("keeps file links active beside a blocked task asset in chat", async () => {
+    const open = mock<(href: string, trigger: HTMLAnchorElement) => void>(() => {});
+    const view = render(
+      <ChatFileLinkContext value={open}>
+        <AgentChatMarkdownRenderer markdown="[file](src/a.ts)\n\n![asset](odt-asset://example)" />
+      </ChatFileLinkContext>,
+    );
+    try {
+      const link = await view.findByRole("link", { name: "file" });
+      expect(view.getByRole("alert").textContent).toContain("task asset reference is invalid");
+      expect(view.queryByRole("img")).toBeNull();
+      fireEvent.click(link);
+      expect(open.mock.calls.at(-1)?.[0]).toBe("src/a.ts");
+    } finally {
+      view.unmount();
+    }
+    // This test loads the rich Markdown renderer for the task asset.
+  }, 2_500);
+
   test("premium content forwards the policy", async () => {
     const open = mock<(href: string, trigger: HTMLAnchorElement) => void>(() => {});
     const view = render(
