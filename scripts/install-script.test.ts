@@ -118,8 +118,14 @@ function fixture(os: "Darwin" | "Linux", arch: string) {
   mkdirSync(home);
   const payload = Buffer.from("verified AppImage or ZIP fixture\n");
   const digest = createHash("sha256").update(payload).digest("hex");
-  const target =
-    os === "Linux" ? "linux-x86_64.AppImage" : `mac-${arch === "arm64" ? "arm64" : "x64"}.zip`;
+  let target: string;
+  if (os === "Linux") {
+    target = "linux-x86_64.AppImage";
+  } else if (arch === "arm64") {
+    target = "mac-arm64.zip";
+  } else {
+    target = "mac-x64.zip";
+  }
   const name = `OpenDucktor-0.8.0-${target}`;
   const url = `https://github.com/Maxsky5/openducktor/releases/download/v0.8.0/${name}`;
   const releasePath = join(root, "release.json");
