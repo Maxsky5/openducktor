@@ -7,10 +7,24 @@ import { loadConnection, saveConnection } from "./connection-storage";
 import type { AzureDevOpsProtectedStorage } from "./protected-storage";
 
 describe("Azure DevOps connection storage", () => {
-  test("does not open protected storage before a connection was saved", async () => {
+  test("reads a secure connection even when its cache file is empty", async () => {
+    const open = mock(() => Effect.die("Unexpected persistence validation"));
+    const protectedStorage: AzureDevOpsProtectedStorage = {
+      readConnection: () => Effect.succeed(JSON.stringify({ kind: "server_pat", pat: "saved" })),
+      open,
+    };
+
+    await expect(Effect.runPromise(loadConnection(protectedStorage, "scope"))).resolves.toEqual({
+      kind: "server_pat",
+      pat: "saved",
+    });
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  test("returns disconnected without validating persistence when no connection was saved", async () => {
     const open = mock(() => Effect.die("Unexpected protected storage open"));
     const protectedStorage: AzureDevOpsProtectedStorage = {
-      hasSavedRecord: () => Effect.succeed(false),
+      readConnection: () => Effect.succeed(null),
       open,
     };
 
@@ -18,31 +32,28 @@ describe("Azure DevOps connection storage", () => {
     expect(open).not.toHaveBeenCalled();
   });
 
-  test("preserves a saved-record check failure", async () => {
-    const checkFailure = new HostOperationError({
-      operation: "azureDevOps.protectedStorage.check",
-      message: "Cannot read the credential cache file",
+  test("preserves a protected storage read failure", async () => {
+    const readFailure = new HostOperationError({
+      operation: "azureDevOps.connection.load",
+      message: "Cannot read the secure connection",
     });
     const open = mock(() => Effect.die("Unexpected protected storage open"));
     const protectedStorage: AzureDevOpsProtectedStorage = {
-      hasSavedRecord: () => Effect.fail(checkFailure),
+      readConnection: () => Effect.fail(readFailure),
       open,
     };
 
     const failure = await Effect.runPromise(
       loadConnection(protectedStorage, "scope").pipe(Effect.flip),
     );
-    expect(failure).toBe(checkFailure);
+    expect(failure).toBe(readFailure);
     expect(open).not.toHaveBeenCalled();
   });
 
   test("rejects a syntactically valid connection record with an invalid shape", async () => {
     const protectedStorage: AzureDevOpsProtectedStorage = {
-      hasSavedRecord: () => Effect.succeed(true),
-      open: () =>
-        Effect.succeed({
-          load: async () => JSON.stringify({ kind: "server_pat" }),
-        } as IPersistence),
+      readConnection: () => Effect.succeed(JSON.stringify({ kind: "server_pat" })),
+      open: () => Effect.die("Unexpected persistence validation"),
     };
 
     await expect(Effect.runPromise(loadConnection(protectedStorage, "scope"))).rejects.toThrow(
@@ -56,7 +67,7 @@ describe("Azure DevOps connection storage", () => {
       message: "Credential store unavailable",
     });
     const protectedStorage: AzureDevOpsProtectedStorage = {
-      hasSavedRecord: () => Effect.succeed(true),
+      readConnection: () => Effect.die("Unexpected secure read"),
       open: () => Effect.fail(openFailure),
     };
 
@@ -70,7 +81,7 @@ describe("Azure DevOps connection storage", () => {
 
   test("reports a protected storage save failure", async () => {
     const protectedStorage: AzureDevOpsProtectedStorage = {
-      hasSavedRecord: () => Effect.succeed(true),
+      readConnection: () => Effect.die("Unexpected secure read"),
       open: () =>
         Effect.succeed({
           load: async () => "",

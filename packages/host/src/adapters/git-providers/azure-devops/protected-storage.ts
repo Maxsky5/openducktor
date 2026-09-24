@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, stat } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import type { IPersistence } from "@azure/msal-node-extensions";
 import { Effect } from "effect";
@@ -8,10 +8,9 @@ import { toHostOperationError } from "../../../effect/host-errors";
 const SERVICE_NAME = "OpenDucktor Azure DevOps";
 
 export type AzureDevOpsProtectedStorage = {
-  hasSavedRecord(
+  readConnection(
     scope: string,
-    record: "connection" | "msal",
-  ): Effect.Effect<boolean, ReturnType<typeof toHostOperationError>>;
+  ): Effect.Effect<string | null, ReturnType<typeof toHostOperationError>>;
   open(
     scope: string,
     record: "connection" | "msal",
@@ -25,22 +24,47 @@ export const createAzureDevOpsProtectedStorage = ({ configDir }: { configDir: st
   };
 
   return {
-    hasSavedRecord(scope: string, record: "connection" | "msal") {
+    readConnection(scope: string) {
       return Effect.tryPromise({
         try: async () => {
-          try {
-            const marker = await stat(recordPath(scope, record));
-            // MSAL creates an empty cache file before it saves credentials on each supported OS.
-            return marker.size > 0;
-          } catch (cause) {
-            if (cause instanceof Error && "code" in cause && cause.code === "ENOENT") {
-              return false;
-            }
-            throw cause;
+          const {
+            DataProtectionScope,
+            FilePersistenceWithDataProtection,
+            KeychainPersistence,
+            LibSecretPersistence,
+          } = await import("@azure/msal-node-extensions");
+          const key = createHash("sha256").update(scope).digest("hex");
+          const cachePath = recordPath(scope, "connection");
+          let persistence: IPersistence;
+          switch (process.platform) {
+            case "darwin":
+              persistence = await KeychainPersistence.create(
+                cachePath,
+                SERVICE_NAME,
+                `${key}.connection`,
+              );
+              break;
+            case "win32":
+              persistence = await FilePersistenceWithDataProtection.create(
+                cachePath,
+                DataProtectionScope.CurrentUser,
+              );
+              break;
+            case "linux":
+              persistence = await LibSecretPersistence.create(
+                cachePath,
+                SERVICE_NAME,
+                `${key}.connection`,
+              );
+              break;
+            default:
+              throw new Error(
+                `Azure DevOps credential storage is unavailable on ${process.platform}.`,
+              );
           }
+          return persistence.load();
         },
-        catch: (cause) =>
-          toHostOperationError(cause, "azureDevOps.protectedStorage.check", { record }),
+        catch: (cause) => toHostOperationError(cause, "azureDevOps.connection.load"),
       });
     },
     open(scope: string, record: "connection" | "msal") {

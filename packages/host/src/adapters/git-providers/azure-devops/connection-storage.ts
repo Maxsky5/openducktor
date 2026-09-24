@@ -18,14 +18,7 @@ export type StoredConnection = z.infer<typeof storedConnectionSchema>;
 
 export const loadConnection = (protectedStorage: AzureDevOpsProtectedStorage, scope: string) =>
   Effect.gen(function* () {
-    if (!(yield* protectedStorage.hasSavedRecord(scope, "connection"))) {
-      return null;
-    }
-    const store = yield* protectedStorage.open(scope, "connection");
-    const payload = yield* Effect.tryPromise({
-      try: () => store.load(),
-      catch: (cause) => toHostOperationError(cause, "azureDevOps.connection.load"),
-    });
+    const payload = yield* protectedStorage.readConnection(scope);
     if (payload === null) {
       return null;
     }

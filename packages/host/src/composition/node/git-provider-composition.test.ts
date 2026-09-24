@@ -1,6 +1,10 @@
+import { mkdtemp, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { expect, test } from "bun:test";
 import { GITHUB_PROVIDER_DESCRIPTOR, repoConfigSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { createGitProviderService } from "../../application/git/git-provider-service";
 import { resolveAzureDevOpsEntraClientId } from "../../config/azure-devops";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
@@ -19,7 +23,7 @@ test("node composition accepts an Azure DevOps Entra client ID development overr
   ).toBe("development-client-id");
 });
 
-test("node composition registers the GitHub provider", async () => {
+test("node composition leaves Azure storage untouched without an Azure repository", async () => {
   const systemCommands: SystemCommandPort = {
     resolveCommandPath: () => Effect.die("Unexpected resolveCommandPath call"),
     versionCommand: () => Effect.die("Unexpected versionCommand call"),
@@ -31,23 +35,44 @@ test("node composition registers the GitHub provider", async () => {
     resolveToolPath: () => Effect.die("Unexpected resolveToolPath call"),
     validateToolPath: () => Effect.die("Unexpected validateToolPath call"),
   };
-  const { resolver } = await Effect.runPromise(
-    createNodeGitProviderComposition({
-      configDir: "/tmp/openducktor-git-provider-test",
-      gitPort: createGitPortTestDouble({}),
-      processEnv: {},
-      systemCommands,
-      toolDiscovery,
-    }),
-  );
-  const repoConfig = repoConfigSchema.parse({
-    workspaceId: "repo",
-    workspaceName: "Repo",
-    repoPath: "/repo",
-    git: { provider: { id: "github", enabled: true } },
-  });
+  const configDir = await mkdtemp(path.join(tmpdir(), "openducktor-git-provider-"));
+  try {
+    const { resolver } = await Effect.runPromise(
+      createNodeGitProviderComposition({
+        configDir,
+        gitPort: createGitPortTestDouble({}),
+        processEnv: {},
+        systemCommands,
+        toolDiscovery,
+      }),
+    );
+    const githubConfig = repoConfigSchema.parse({
+      workspaceId: "repo",
+      workspaceName: "Repo",
+      repoPath: "/repo",
+      git: { provider: { id: "github", enabled: true } },
+    });
+    const noProviderConfig = repoConfigSchema.parse({
+      ...githubConfig,
+      git: {},
+    });
+    const service = createGitProviderService({
+      resolver,
+      workspaceSettingsService: {
+        getRepoConfigByRepoPath: () => Effect.succeed(noProviderConfig),
+      },
+    });
 
-  const resolved = await Effect.runPromise(resolver.resolve(repoConfig));
-
-  expect(resolved.getDescriptor()).toBe(GITHUB_PROVIDER_DESCRIPTOR);
+    expect((await Effect.runPromise(resolver.resolve(githubConfig))).getDescriptor()).toBe(
+      GITHUB_PROVIDER_DESCRIPTOR,
+    );
+    await expect(
+      Effect.runPromise(service.getContext(noProviderConfig.repoPath)),
+    ).resolves.toBeNull();
+    await expect(stat(path.join(configDir, "credentials", "azure-devops"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  } finally {
+    await rm(configDir, { recursive: true, force: true });
+  }
 });
