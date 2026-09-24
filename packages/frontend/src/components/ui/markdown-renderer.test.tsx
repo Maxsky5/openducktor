@@ -278,10 +278,10 @@ describe("rich task description rendering", () => {
         expect(view.container.querySelector(".katex")).not.toBeNull();
         expect(view.container.querySelector(".token")).not.toBeNull();
       },
-      { timeout: 6_000 },
+      { timeout: 10_000 },
     );
-    // A cold Prism load exceeded 3 seconds on Windows during a parallel CI run.
-  }, 8_000);
+    // A cold combined KaTeX and Prism render exceeded 8 seconds on a loaded Windows runner.
+  }, 12_000);
 
   test("resolves logical task assets through the shell without persisting runtime URLs", async () => {
     const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://asset/resolved");

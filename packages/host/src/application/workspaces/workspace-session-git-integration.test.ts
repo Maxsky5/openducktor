@@ -201,6 +201,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     return { router, createInput, starts, events, targetDependencies, dependencies };
   };
 
+  // This case copies a real repository and creates a worktree with Git on Windows.
   test("creates from_branch at the selected branch HEAD instead of the source checkout HEAD", async () => {
     await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
     const h = setup({ hooks: false });
@@ -221,9 +222,9 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     });
     expect(directory).toBe(path.join(root, "worktrees", "workspace-sessions", "existing-review"));
     expect(h.starts).toEqual([]);
-  });
+  }, 10_000);
 
-  // Competing requests run real Git worktree operations and SQLite writes on Windows.
+  // Competing requests run two real Git worktree operations and SQLite writes on Windows.
   test.each(["create", "restore"] as const)(
     "a failed %s leaves a competing chat's real worktree and files intact",
     async (operation) => {
@@ -300,7 +301,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
         await loser;
       }
     },
-    10_000,
+    15_000,
   );
 
   test("creates from_name from a dirty checkout with copy, hook, and dirty-source isolation", async () => {
