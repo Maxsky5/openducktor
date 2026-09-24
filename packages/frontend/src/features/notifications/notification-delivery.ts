@@ -42,7 +42,7 @@ export const createSonnerNotificationAdapter = ({
       classNames: {
         toast: "!flex-col !items-stretch",
         content: "w-full",
-        actionButton: "!m-0 !h-9 !w-full justify-center",
+        actionButton: "!m-0 !h-9 !w-full !rounded-md justify-center",
       },
       action: {
         label: createElement(
