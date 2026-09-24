@@ -130,7 +130,8 @@ export function useSessionStartModalRuntimeState({
     catalogError: selectedResource?.error ?? null,
     isCatalogLoading:
       isOpen && selectedStartMode !== "reuse" && selectedRuntimeKind !== null
-        ? isWaitingForRuntime || (selectedResource?.isFetching ?? false)
+        ? isWaitingForRuntime ||
+          ((selectedResource?.isFetching ?? false) && !selectedResource?.catalog)
         : false,
     eligibleRuntimeDefinitions,
     selectedRuntimeDescriptor,

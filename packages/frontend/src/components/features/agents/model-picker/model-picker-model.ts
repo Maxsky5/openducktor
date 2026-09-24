@@ -169,7 +169,7 @@ export const buildModelPickerItems = ({
   const favoriteKeys = new Set((favorites ?? []).map(modelPickerValueKey));
   const items = runtimes.flatMap((runtime, runtimeIndex) => {
     if (
-      runtime.resource.status !== "ready" ||
+      (runtime.resource.status !== "ready" && runtime.resource.status !== "refreshing") ||
       (lockedRuntimeKind && runtime.descriptor.kind !== lockedRuntimeKind)
     ) {
       return [];

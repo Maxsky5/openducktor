@@ -257,7 +257,7 @@ export function useSessionStartModalState({
       const runtime = modelPickerRuntimes.find(
         (candidate) => candidate.descriptor.kind === value.runtimeKind,
       );
-      if (runtime?.resource.status !== "ready") {
+      if (runtime?.resource.status !== "ready" && runtime?.resource.status !== "refreshing") {
         return;
       }
       setRequestedRuntimeKind(value.runtimeKind);

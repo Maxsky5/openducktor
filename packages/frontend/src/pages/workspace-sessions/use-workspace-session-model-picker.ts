@@ -87,7 +87,7 @@ export function useWorkspaceSessionModelPicker(
   const onValueChange = useCallback(
     (value: ModelPickerValue) => {
       const runtime = runtimes.find((entry) => entry.descriptor.kind === value.runtimeKind);
-      if (runtime?.resource.status === "ready")
+      if (runtime?.resource.status === "ready" || runtime?.resource.status === "refreshing")
         handleSelectModelPair(value, runtime.resource.catalog);
     },
     [runtimes, handleSelectModelPair],

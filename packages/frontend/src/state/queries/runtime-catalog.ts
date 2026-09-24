@@ -10,7 +10,8 @@ import { errorMessage } from "@/lib/errors";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import { SKIPPED_QUERY_KEY_SEGMENT, skippedQueryOptions } from "./skipped-query";
 
-export const RUNTIME_CATALOG_STALE_TIME_MS = 5 * 60_000;
+export const RUNTIME_CATALOG_STALE_TIME_MS = 30 * 60_000;
+export const RUNTIME_CATALOG_GC_TIME_MS = 60 * 60_000;
 export const RUNTIME_FILE_SEARCH_STALE_TIME_MS = 15_000;
 
 const runtimeCatalogKey = ["runtime-catalog"] as const;
@@ -64,6 +65,7 @@ export const runtimeCatalogQueryOptions = (
     queryKey: runtimeCatalogQueryKeys.catalog(runtimeRef),
     queryFn: (): Promise<AgentRuntimeCatalog> => loadRuntimeCatalog(runtimeRef),
     staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
+    gcTime: RUNTIME_CATALOG_GC_TIME_MS,
     retry: false,
   });
 

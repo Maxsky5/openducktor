@@ -78,6 +78,8 @@ export function projectWorkspaceModelResources(
     supportsProfiles:
       definitions.find((entry) => entry.kind === runtimeKind)?.capabilities.optionalSurfaces
         .supportsProfiles ?? false,
-    isLoading: session ? session.isLoading : resources.some((entry) => entry.isFetching),
+    isLoading: session
+      ? session.isLoading && session.catalog === null
+      : resources.some((entry) => entry.isFetching && entry.catalog === null),
   };
 }

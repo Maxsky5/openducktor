@@ -38,9 +38,10 @@ Invalidate these read-mostly values after a write.
 | Repository config | 10 min |
 | Workspace list | 5 min |
 | Runtime definitions | 30 min |
-| Runtime catalog | 5 min |
+| Runtime catalog | 30 min |
 
 Query modules: `workspace.ts`, `runtime.ts`, and `runtime-catalog.ts` under `packages/frontend/src/state/queries`.
+The runtime catalog keeps inactive results for 60 minutes so a modal can show cached models during a later refresh.
 
 ### Workflow data
 
