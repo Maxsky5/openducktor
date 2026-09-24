@@ -12,14 +12,11 @@ import {
   type CodexLiveSessionMutation,
 } from "@openducktor/adapters-codex-app-server";
 import {
-  type AgentSessionControlSummary,
   type AgentSessionLiveRef,
   acceptedAgentUserMessageSchema,
   agentSessionLiveLoadContextResultSchema,
 } from "@openducktor/contracts";
-import type { AgentSessionSummary } from "@openducktor/core";
 import { Effect, Exit } from "effect";
-import { toAgentSessionControlSummary } from "../../application/agent-sessions/agent-session-control-summary";
 import { HostValidationError, toHostOperationError } from "../../effect/host-errors";
 import type { HostError, HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { AgentSessionRuntimeAdapterPort } from "../../ports/agent-session-live-adapter-port";
@@ -32,6 +29,7 @@ import type {
   PreparedCodexLiveSessionAdapter,
 } from "./codex-live-session-adapter-contract";
 import { createCodexLiveSessionEventHub } from "./codex-live-session-event-hub";
+import { createCodexControlRunner } from "./codex-live-session-control-runner";
 import {
   publishAcceptedCodexMessage,
   refreshAfterAcceptedCodexMessage,
@@ -120,7 +118,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
 
       const refreshProjection = (
         transcriptEvents: CodexLiveSessionMutation["transcriptEvents"] = [],
-      ): Effect.Effect<void, HostError> =>
+      ) =>
         projection.applyMutation({
           runtimeId: runtime.runtimeId,
           snapshotMode: "full",
@@ -129,28 +127,22 @@ export const createCodexLiveSessionAdapterPreparer = ({
           catalogInvalidated: false,
         });
 
-      const runControlSummary = (
-        operation: string,
-        run: () => Promise<AgentSessionSummary>,
-      ): Effect.Effect<AgentSessionControlSummary, HostError> =>
-        Effect.tryPromise({
-          try: run,
-          catch: (cause) =>
-            toHostOperationError(cause, operation, { runtimeId: runtime.runtimeId }),
-        }).pipe(
-          Effect.flatMap((summary) =>
-            summary.runtimeKind === "codex"
-              ? refreshProjection().pipe(Effect.as(summary))
-              : Effect.fail(
-                  new HostValidationError({
-                    field: "runtimeKind",
-                    message: `Codex control '${operation}' returned runtime kind '${summary.runtimeKind}'.`,
-                    details: { runtimeId: runtime.runtimeId },
-                  }),
-                ),
-          ),
-          Effect.flatMap((summary) => toAgentSessionControlSummary(summary, operation)),
-        );
+      const reportProjectionFailure = (ref: AgentSessionLiveRef, failure: HostError) =>
+        projection.applyMutation({
+          runtimeId: runtime.runtimeId,
+          snapshotMode: "full",
+          snapshots: controller.listLiveSessionSnapshots(runtime.runtimeId),
+          transcriptEvents: [],
+          catalogInvalidated: false,
+          fault: failure.message,
+          faultRef: ref,
+        });
+
+      const { runSummary, runTitleUpdate } = createCodexControlRunner({
+        runtimeId: runtime.runtimeId,
+        refreshProjection,
+        reportProjectionFailure,
+      });
 
       const images = createCodexImageSettlement(controller, runtime.runtimeId, refreshProjection);
       const finishSession = (input: AgentSessionLiveRef, action: "stop" | "release") =>
@@ -348,7 +340,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
               if (model !== undefined) {
                 request.model = model;
               }
-              return runControlSummary("codex-live-session.start-session", () =>
+              return runSummary("codex-live-session.start-session", () =>
                 controller.startSession(request),
               );
             }),
@@ -364,7 +356,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
               if (systemPrompt !== undefined) {
                 request.systemPrompt = systemPrompt;
               }
-              return runControlSummary("codex-live-session.resume-session", () =>
+              return runSummary("codex-live-session.resume-session", () =>
                 controller.resumeSession(request),
               );
             }),
@@ -381,7 +373,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
               if (systemPrompt !== undefined) {
                 request.systemPrompt = systemPrompt;
               }
-              return runControlSummary("codex-live-session.continue-interrupted-turn", () =>
+              return runSummary("codex-live-session.continue-interrupted-turn", () =>
                 controller.continueInterruptedTurn(request),
               );
             }),
@@ -404,7 +396,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
               if (runtimeHistoryAnchor !== undefined) {
                 request.runtimeHistoryAnchor = runtimeHistoryAnchor;
               }
-              return runControlSummary("codex-live-session.fork-session", () =>
+              return runSummary("codex-live-session.fork-session", () =>
                 controller.forkSession(request),
               );
             }),
@@ -460,6 +452,12 @@ export const createCodexLiveSessionAdapterPreparer = ({
             },
             catch: sessionError("codex-live-session.update-session-model", input.externalSessionId),
           }).pipe(Effect.tap(() => refreshProjection())),
+        updateSessionTitle: (input) =>
+          runTitleUpdate(
+            "codex-live-session.update-session-title",
+            toCodexLiveSessionRef(input),
+            () => controller.updateSessionTitle(input),
+          ),
         stopSession: (input) =>
           stopCodexSession({
             codexAppServer,

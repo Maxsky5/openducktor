@@ -8,6 +8,7 @@ import {
 } from "./claude-agent-sdk-options";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { consumeClaudeSession, renameClaudeSessionIfNeeded } from "./claude-agent-sdk-session-io";
+import { reconcileClaudeSessionTitle } from "./claude-session-title-update";
 import {
   type ClaudeSessionLaunchInput,
   requireClaudeOpenDucktorMcpForScope,
@@ -102,7 +103,11 @@ export const createClaudeAgentSdkSession = async ({
   const queue = new AsyncInputQueue<SDKUserMessage>();
   const abortController = new AbortController();
   const startedAt = now();
-  const summary = createClaudeSessionSummary(input, sessionInput, startedAt);
+  // A reconciliation reports the durable title only after the runtime accepts it.
+  const summaryInput =
+    sessionInput.reconcileTitle === true
+      ? { externalSessionId: sessionInput.externalSessionId }
+      : sessionInput;
   const sessionContext: ClaudeSessionContext = {
     acceptedUserMessages: [],
     activeSdkUserTurnCount: 0,
@@ -118,7 +123,7 @@ export const createClaudeAgentSdkSession = async ({
     queue,
     runtimeId,
     startedAt,
-    summary,
+    summary: createClaudeSessionSummary(input, summaryInput, startedAt),
     streamAssistantMessageOrdinal: 0,
     streamAssistantMessageIdsByBlockIndex: new Map(),
     subagentMessageIdsByTaskId: new Map(),
@@ -191,10 +196,11 @@ export const createClaudeAgentSdkSession = async ({
       runtimeId,
     });
     if (sessionInput.options.resume && !sessionInput.options.forkSession) {
-      await renameClaudeSessionIfNeeded({
-        session,
-        title: sessionInput.title,
-      });
+      if (sessionInput.reconcileTitle === true && !isContinuation) {
+        await reconcileClaudeSessionTitle({ session, title: sessionInput.title });
+      } else {
+        await renameClaudeSessionIfNeeded({ session, title: sessionInput.title });
+      }
     }
     if (continuationAdmission) {
       await awaitClaudeContinuationAdmission({
@@ -230,7 +236,7 @@ export const createClaudeAgentSdkSession = async ({
       },
     });
   }
-  summary.status = isContinuation ? "running" : "idle";
+  session.summary.status = isContinuation ? "running" : "idle";
   const timestamp = now();
   emit(session, {
     type: "session_started",
@@ -245,5 +251,5 @@ export const createClaudeAgentSdkSession = async ({
       timestamp,
     });
   }
-  return summary;
+  return session.summary;
 };

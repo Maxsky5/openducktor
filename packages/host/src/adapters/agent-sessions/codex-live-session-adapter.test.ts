@@ -357,6 +357,19 @@ const createControllerHarness = ({
             return updated;
           });
         },
+        updateSessionTitle: async (
+          input: Parameters<CodexAppServerAdapter["updateSessionTitle"]>[0],
+        ) => {
+          snapshots = snapshots.map((snapshot) =>
+            snapshot.ref.externalSessionId === input.externalSessionId
+              ? { ...snapshot, title: input.title }
+              : snapshot,
+          );
+          return {
+            status: "renamed" as const,
+            summary: { ...controlSummary, title: input.title },
+          };
+        },
         stopSession: async () => {
           snapshots = [];
         },

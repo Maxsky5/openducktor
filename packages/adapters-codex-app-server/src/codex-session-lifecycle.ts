@@ -66,6 +66,24 @@ const buildSessionState = (
   return sessionState;
 };
 
+export const assertCodexSessionRef = (
+  session: CodexSessionState,
+  input: {
+    repoPath: string;
+    runtimeKind: AgentSessionSummary["runtimeKind"];
+    workingDirectory: string;
+    externalSessionId: string;
+  },
+  action: string,
+): void => {
+  const registeredSessionRef = codexSessionRef(session);
+  if (!agentSessionRefsEqual(registeredSessionRef, input)) {
+    throw new Error(
+      `Cannot ${action} Codex session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
+    );
+  }
+};
+
 export const assertRuntimeContextCompatibleWithSession = (
   session: CodexSessionState,
   input: PolicyBoundSessionRef,
@@ -90,16 +108,14 @@ const applyRuntimeContextToSession = (
   assertRuntimeContextCompatibleWithSession(session, input, action);
   const sessionScope = input.sessionScope;
   if (sessionScope) {
-    const policy = resolveCodexSessionScopePolicy(sessionScope, input.runtimePolicy, action);
-    const summary: AgentSessionSummary = {
+    resolveCodexSessionScopePolicy(sessionScope, input.runtimePolicy, action);
+    // A summary title comes from the runtime or from a successful title update.
+    // A scope update must not claim a title the runtime did not accept.
+    session.summary = {
       ...session.summary,
       sessionAssociation: sessionScope,
     };
-    if (policy.kind === "repository" && !session.preserveNativeSettings) {
-      summary.title = policy.title;
-    }
     if (sessionScope.kind === "workflow") session.preserveNativeSettings = false;
-    session.summary = summary;
   }
   session.runtimePolicy = input.runtimePolicy;
   if (input.systemPrompt !== undefined) {
@@ -129,12 +145,7 @@ export function resolveCodexPolicyBoundSession(
   const { actions, input } = resolution;
   const session = resolution.getSession(input.externalSessionId);
   if (session) {
-    const registeredSessionRef = codexSessionRef(session);
-    if (!agentSessionRefsEqual(registeredSessionRef, input)) {
-      throw new Error(
-        `Cannot ${actions.lookup} Codex session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
-      );
-    }
+    assertCodexSessionRef(session, input, actions.lookup);
     assertRuntimeContextCompatibleWithSession(session, input, actions.lookup);
     if (session.summary.sessionAssociation.kind !== "unbound" || !input.sessionScope) {
       applyRuntimeContextToSession(session, input, actions.context);
@@ -155,7 +166,7 @@ export const sessionStateFromThreadStart = (
   runtimeId: string,
   model: AgentModelSelection,
   response: CodexThreadStartResult,
-  title: string,
+  title: string | undefined,
 ): CodexSessionState => {
   const { externalSessionId, startedAt } = extractThreadId(response);
   const summary = toSessionSummary({
@@ -181,7 +192,7 @@ export const sessionStateFromThreadFork = (
   runtimeId: string,
   model: AgentModelSelection,
   response: CodexThreadForkResult,
-  title: string,
+  title: string | undefined,
 ): CodexSessionState => {
   const { externalSessionId, startedAt } = extractThreadId(response);
   const summary = toSessionSummary({

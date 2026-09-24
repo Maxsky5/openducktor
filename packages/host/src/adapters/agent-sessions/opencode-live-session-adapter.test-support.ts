@@ -49,8 +49,21 @@ export const controlSummary = {
   sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } as const,
 };
 
+export const acceptedMessageText = "Hello";
+
 type ControlCall = {
-  [Operation in "start" | "resume" | "continue" | "fork" | "send" | "model" | "stop" | "release"]: {
+  [
+    Operation in
+      | "start"
+      | "resume"
+      | "continue"
+      | "fork"
+      | "send"
+      | "model"
+      | "title"
+      | "stop"
+      | "release"
+  ]: {
     operation: Operation;
     input: Parameters<
       OpencodeSessionRuntimeConnection[{
@@ -60,12 +73,13 @@ type ControlCall = {
         fork: "forkSession";
         send: "sendUserMessage";
         model: "updateSessionModel";
+        title: "updateSessionTitle";
         stop: "stopSession";
         release: "releaseSession";
       }[Operation]]
     >[0];
   };
-}["start" | "resume" | "continue" | "fork" | "send" | "model" | "stop" | "release"];
+}["start" | "resume" | "continue" | "fork" | "send" | "model" | "title" | "stop" | "release"];
 
 type RuntimeHarness = {
   readonly prepareRuntime: PrepareOpencodeSessionRuntime;
@@ -158,13 +172,24 @@ export const createRuntimeHarness = (
         externalSessionId: input.externalSessionId,
         timestamp: "2026-07-16T10:03:00.000Z",
         messageId: "user-1",
-        message: "Hello",
-        parts: [{ kind: "text", text: "Hello" }],
+        message: acceptedMessageText,
+        parts: [{ kind: "text", text: acceptedMessageText }],
         state: "queued",
       };
     },
     updateSessionModel: async (input) => {
       controlCalls.push({ operation: "model", input });
+    },
+    updateSessionTitle: async (input) => {
+      controlCalls.push({ operation: "title", input });
+      return {
+        status: "renamed",
+        summary: {
+          ...controlSummary,
+          externalSessionId: input.externalSessionId,
+          title: input.title,
+        },
+      };
     },
     stopSession: async (input) => {
       controlCalls.push({ operation: "stop", input });

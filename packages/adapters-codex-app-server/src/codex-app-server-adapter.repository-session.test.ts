@@ -14,8 +14,19 @@ import {
 import { CodexAppServerAdapter } from "./index";
 
 class NameFailingTransport extends RecordingTransport {
+  constructor(
+    runtimeId: string,
+    deferTurnStart: boolean,
+    private readonly failingName?: string,
+  ) {
+    super(runtimeId, deferTurnStart);
+  }
+
   async request(request: Parameters<RecordingTransport["request"]>[0]) {
-    if (request.method === "thread/name/set") {
+    if (
+      request.method === "thread/name/set" &&
+      (this.failingName === undefined || request.params.name === this.failingName)
+    ) {
       this.calls.push(request);
       throw new Error("name failed");
     }
@@ -72,7 +83,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
   });
 
   test("applies repository policy across start, send, fork, resume, and history", async () => {
-    const sessionScope = { kind: "repository" } as const;
+    const sessionScope = { kind: "repository", title: "Fairnest" } as const;
     const runtimePolicy = { kind: "codex" as const, policy: defaultCodexEffectivePolicy() };
     const model = { providerId: "openai", modelId: "gpt-5", variant: "medium" } as const;
     const { adapter, transports } = createHarness();
@@ -119,31 +130,31 @@ describe("CodexAppServerAdapter repository sessions", () => {
     });
 
     expect(started).toMatchObject({
-      title: "Repository session",
+      title: "Fairnest",
       sessionAssociation: sessionScope,
       workingDirectory: "/repo",
     });
     expect(forked).toMatchObject({
-      title: "Repository session",
+      title: "Fairnest",
       sessionAssociation: sessionScope,
     });
     expect(resumed).toMatchObject({
-      title: "Repository session",
+      title: "Fairnest",
       sessionAssociation: sessionScope,
     });
     const calls = transports.get("runtime-live")?.calls ?? [];
     expect(calls.filter((call) => call.method === "thread/name/set")).toEqual([
       {
         method: "thread/name/set",
-        params: { threadId: started.externalSessionId, name: "Repository session" },
+        params: { threadId: started.externalSessionId, name: "Fairnest" },
       },
       {
         method: "thread/name/set",
-        params: { threadId: forked.externalSessionId, name: "Repository session" },
+        params: { threadId: forked.externalSessionId, name: "Fairnest" },
       },
       {
         method: "thread/name/set",
-        params: { threadId: resumed.externalSessionId, name: "Repository session" },
+        params: { threadId: resumed.externalSessionId, name: "Fairnest" },
       },
     ]);
     for (const call of calls.filter((candidate) =>
@@ -155,6 +166,228 @@ describe("CodexAppServerAdapter repository sessions", () => {
         config: repositoryThreadConfig,
       });
     }
+  });
+
+  test("renames a live repository session through the native thread name", async () => {
+    const sessionScope = { kind: "repository", title: "Fairnest" } as const;
+    const runtimePolicy = { kind: "codex" as const, policy: defaultCodexEffectivePolicy() };
+    const { adapter, transports } = createHarness();
+    const started = await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      sessionScope,
+      runtimePolicy,
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    const renamed = await adapter.updateSessionTitle({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: started.externalSessionId,
+      title: "Renamed",
+    });
+
+    expect(renamed).toMatchObject({
+      status: "renamed",
+      summary: {
+        title: "Renamed",
+        sessionAssociation: { kind: "repository", title: "Renamed" },
+      },
+    });
+    const calls = transports.get("runtime-live")?.calls ?? [];
+    expect(calls.findLast((call) => call.method === "thread/name/set")).toEqual({
+      method: "thread/name/set",
+      params: { threadId: started.externalSessionId, name: "Renamed" },
+    });
+  });
+
+  test("reports a title update for an unknown Codex session as not attached", async () => {
+    const { adapter, transports } = createHarness();
+
+    expect(
+      await adapter.updateSessionTitle({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "missing",
+        title: "Renamed",
+      }),
+    ).toEqual({ status: "not_attached" });
+    const calls = transports.get("runtime-live")?.calls ?? [];
+    expect(calls.findLast((call) => call.method === "thread/name/set")).toBeUndefined();
+  });
+
+  test("keeps the summary title when the native thread rename fails", async () => {
+    const sessionScope = { kind: "repository", title: "Fairnest" } as const;
+    const transport = new NameFailingTransport("runtime-live", false, "Renamed");
+    const adapter = createAdapterWithTransport(transport);
+    const started = await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      sessionScope,
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    await expect(
+      adapter.updateSessionTitle({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: started.externalSessionId,
+        title: "Renamed",
+      }),
+    ).rejects.toThrow("name failed");
+
+    expect(transport.calls.findLast((call) => call.method === "thread/name/set")).toEqual({
+      method: "thread/name/set",
+      params: { threadId: started.externalSessionId, name: "Renamed" },
+    });
+    await expect(
+      adapter.readSessionRuntimeSnapshot({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: started.externalSessionId,
+      }),
+    ).resolves.toMatchObject({ availability: "runtime", title: "Fairnest" });
+  });
+
+  test("reconciles the durable repository title on a cold preserve-native resume", async () => {
+    const transport = new RecordingTransport("runtime-live", false);
+    const adapter = createAdapterWithTransport(transport);
+
+    const resumed = await adapter.resumeSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "thread-resume",
+      sessionScope: { kind: "repository", title: "Fairnest" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+    });
+
+    expect(resumed.title).toBe("Fairnest");
+    expect(transport.calls.find((call) => call.method === "thread/resume")?.params).toEqual({
+      threadId: "thread-resume",
+      excludeTurns: true,
+    });
+    expect(transport.calls.find((call) => call.method === "thread/name/set")).toEqual({
+      method: "thread/name/set",
+      params: { threadId: "thread-resume", name: "Fairnest" },
+    });
+  });
+
+  test("keeps the native title when a cold resume cannot apply the repository title", async () => {
+    const transport = new NameFailingTransport("runtime-live", false);
+    const adapter = createAdapterWithTransport(transport);
+
+    const resumed = await adapter.resumeSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "thread-resume",
+      sessionScope: { kind: "repository", title: "Fairnest" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+    });
+
+    expect(resumed.title).toBe("thread-resume");
+    expect(transport.calls.find((call) => call.method === "thread/name/set")).toEqual({
+      method: "thread/name/set",
+      params: { threadId: "thread-resume", name: "Fairnest" },
+    });
+  });
+
+  test("keeps the native title when a strict repository resume cannot apply the title", async () => {
+    const transport = new NameFailingTransport("runtime-live", false);
+    const adapter = createAdapterWithTransport(transport);
+
+    await expect(
+      adapter.resumeSession({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread-resume",
+        sessionScope: { kind: "repository", title: "Fairnest" },
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+        systemPrompt: "Use the repo rules.",
+        model: { providerId: "openai", modelId: "gpt-5" },
+      }),
+    ).rejects.toThrow("name failed");
+
+    await expect(
+      adapter.readSessionRuntimeSnapshot({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread-resume",
+      }),
+    ).resolves.toMatchObject({ availability: "runtime", title: "Live Codex session" });
+  });
+
+  test("does not claim the repository title on a send after a failed strict resume", async () => {
+    const transport = new NameFailingTransport("runtime-live", false);
+    const adapter = createAdapterWithTransport(transport);
+
+    await expect(
+      adapter.resumeSession({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread-resume",
+        sessionScope: { kind: "repository", title: "Fairnest" },
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+        systemPrompt: "Use the repo rules.",
+        model: { providerId: "openai", modelId: "gpt-5" },
+      }),
+    ).rejects.toThrow("name failed");
+
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread-resume",
+        sessionScope: { kind: "repository", title: "Fairnest" },
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+        systemPrompt: "Use the repo rules.",
+        parts: [{ kind: "text", text: "Continue" }],
+      }),
+    );
+
+    await expect(
+      adapter.readSessionRuntimeSnapshot({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread-resume",
+      }),
+    ).resolves.toMatchObject({ availability: "runtime", title: "Live Codex session" });
+  });
+
+  test("reconciles the durable repository title when a send attaches a detached session", async () => {
+    const transport = new RecordingTransport("runtime-live", false);
+    const adapter = createAdapterWithTransport(transport);
+
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread-history",
+        sessionScope: { kind: "repository", title: "Fairnest" },
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+        systemPrompt: "",
+        parts: [{ kind: "text", text: "Continue" }],
+      }),
+    );
+
+    expect(transport.calls.find((call) => call.method === "thread/resume")?.params).toEqual({
+      threadId: "thread-history",
+      excludeTurns: true,
+    });
+    expect(transport.calls.find((call) => call.method === "thread/name/set")).toEqual({
+      method: "thread/name/set",
+      params: { threadId: "thread-history", name: "Fairnest" },
+    });
   });
 
   test("rejects stale history identity before changing a retained session", async () => {
@@ -343,7 +576,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
   });
 
   test("keeps resumed and history-restored repository sessions when thread naming fails", async () => {
-    const repositoryScope = { kind: "repository" } as const;
+    const repositoryScope = { kind: "repository", title: "Fairnest" } as const;
     const resumedTransport = new NameFailingTransport("runtime-live", false);
     const resumedAdapter = createAdapterWithTransport(resumedTransport);
 

@@ -1,19 +1,26 @@
 import type { OpencodeSessionRuntimeConnection } from "@openducktor/adapters-opencode-sdk";
 import {
   type AgentSessionControlSummary,
+  type AgentSessionLiveRef,
   type AgentSessionUserMessagePart,
   acceptedAgentUserMessageSchema,
   agentSessionTranscriptEventSchema,
 } from "@openducktor/contracts";
-import type { AgentSessionSummary, AgentUserMessagePart } from "@openducktor/core";
+import type {
+  AgentSessionSummary,
+  AgentSessionTitleUpdateResult,
+  AgentUserMessagePart,
+} from "@openducktor/core";
 import { Effect } from "effect";
 import { toAgentSessionControlSummary } from "../../application/agent-sessions/agent-session-control-summary";
+import { commitTitleUpdate } from "../../application/agent-sessions/agent-session-title-update";
 import { type HostError, toHostOperationError } from "../../effect/host-errors";
 import { toAgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
 import type {
   AgentSessionControlAdapterPort,
   AgentSessionLiveAdapterMutation,
+  AgentSessionTitleUpdateOutcome,
 } from "../../ports/agent-session-live-adapter-port";
 import type { OpenCodeRuntimeInstance } from "./opencode-live-session-normalization";
 import { parseOutput, refKey, toSessionRef } from "./opencode-live-session-normalization";
@@ -77,7 +84,7 @@ export const createOpenCodeSessionControlAdapter = ({
     return serializeSend(effect);
   };
 
-  const runControlSummary = (
+  const runSummary = (
     operation: string,
     run: () => Promise<AgentSessionSummary>,
   ): Effect.Effect<AgentSessionControlSummary, HostError> =>
@@ -99,6 +106,45 @@ export const createOpenCodeSessionControlAdapter = ({
       ),
     );
 
+  const runTitleUpdate = (
+    operation: string,
+    ref: AgentSessionLiveRef,
+    run: () => Promise<AgentSessionTitleUpdateResult>,
+  ): Effect.Effect<AgentSessionTitleUpdateOutcome, HostError> =>
+    serializeRuntime(
+      Effect.tryPromise({
+        try: run,
+        catch: (cause) =>
+          toHostOperationError(cause, operation, {
+            runtimeId: runtime.runtimeId,
+          }),
+      }).pipe(
+        Effect.flatMap((result) =>
+          commitTitleUpdate(
+            result,
+            (summary) =>
+              commit(`${operation}.commit`, () => ({
+                value: summary,
+                changes: state.applyControlSummary(summary, { keepActivity: true }),
+              })),
+            (failure) =>
+              commit(`${operation}.report-projection-failure`, () => ({
+                value: undefined,
+                changes: [
+                  {
+                    type: "fault",
+                    repoPath: runtime.repoPath,
+                    ref,
+                    operation,
+                    message: failure.message,
+                  },
+                ],
+              })),
+          ),
+        ),
+      ),
+    );
+
   return {
     startSession: (input) => {
       const request: Parameters<typeof connection.startSession>[0] = {
@@ -112,7 +158,7 @@ export const createOpenCodeSessionControlAdapter = ({
       if (input.model) {
         request.model = input.model;
       }
-      return runControlSummary("opencode-live-session.start-session", () =>
+      return runSummary("opencode-live-session.start-session", () =>
         connection.startSession(request),
       );
     },
@@ -129,7 +175,7 @@ export const createOpenCodeSessionControlAdapter = ({
       if (input.systemPrompt) {
         request.systemPrompt = input.systemPrompt;
       }
-      return runControlSummary("opencode-live-session.resume-session", () =>
+      return runSummary("opencode-live-session.resume-session", () =>
         connection.resumeSession(request),
       );
     },
@@ -149,7 +195,7 @@ export const createOpenCodeSessionControlAdapter = ({
       }
       return serializeSessionSend(
         refKey(sessionRef),
-        runControlSummary("opencode-live-session.continue-interrupted-turn", () =>
+        runSummary("opencode-live-session.continue-interrupted-turn", () =>
           connection.continueInterruptedTurn(request),
         ),
       ).pipe(
@@ -178,7 +224,7 @@ export const createOpenCodeSessionControlAdapter = ({
       if (input.model) {
         request.model = input.model;
       }
-      return runControlSummary("opencode-live-session.fork-session", () =>
+      return runSummary("opencode-live-session.fork-session", () =>
         connection.forkSession(request),
       );
     },
@@ -256,6 +302,10 @@ export const createOpenCodeSessionControlAdapter = ({
             })),
           ),
         ),
+      ),
+    updateSessionTitle: (input) =>
+      runTitleUpdate("opencode-live-session.update-session-title", toSessionRef(input), () =>
+        connection.updateSessionTitle({ ...toSessionRef(input), title: input.title }),
       ),
     stopSession: (input) =>
       serializeRuntime(

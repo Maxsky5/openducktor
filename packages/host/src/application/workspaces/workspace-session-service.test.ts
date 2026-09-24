@@ -20,7 +20,8 @@ import {
   type SqliteTaskStoreTestHarness,
 } from "../../adapters/sqlite/sqlite-task-store-test-support";
 import { createSqliteWorkspaceSessionStore } from "../../adapters/sqlite/sqlite-workspace-session-store";
-import { HostOperationError } from "../../effect/host-errors";
+import { type HostError, HostOperationError, HostResourceError } from "../../effect/host-errors";
+import type { AgentSessionTitleUpdateOutcome } from "../../ports/agent-session-live-adapter-port";
 import { hostInvokeFailureFromError } from "../../interface/router/host-invoke-failure";
 import { createWorkspaceSessionCommandHandlers } from "../../interface/commands/workspace-session-command-handlers";
 import {
@@ -71,6 +72,7 @@ describe("host-owned Workspace Session lifecycle", () => {
   const setup = () => {
     const calls: string[] = [];
     const starts: AgentSessionControlStartInput[] = [];
+    const titles: string[] = [];
     const paths = new Set<string>();
     const branches = new Set<string>();
     const registered = new Set<string>();
@@ -88,6 +90,10 @@ describe("host-owned Workspace Session lifecycle", () => {
       failSave: false,
       failBind: false,
       failStop: false,
+      failRename: false,
+      failRenameSave: false,
+      failRenameRollback: false,
+      titleNotAttached: false,
       failHook: false,
       failCleanup: false,
       failDelete: false,
@@ -111,6 +117,7 @@ describe("host-owned Workspace Session lifecycle", () => {
     const dependencies: WorkspaceSessionServiceDependencies = {
       lifecycle: createTaskSessionLifecycleCoordinator(),
       operationGate: createWorkspaceSessionOperationGate(),
+      sessionTitleGate: createWorkspaceSessionOperationGate(),
       store: {
         ...store,
         archive: (request) =>
@@ -126,6 +133,16 @@ describe("host-owned Workspace Session lifecycle", () => {
           return state.failBind
             ? failure("database bind failed")
             : store.bindRuntimeSession(request);
+        },
+        rename: (request) => {
+          calls.push("rename");
+          if (state.failRenameSave) return failure("database rename failed");
+          return store.rename(request);
+        },
+        setPersistedTitle: (request) => {
+          calls.push("setPersistedTitle");
+          if (state.failRenameRollback) return failure("database rename rollback failed");
+          return store.setPersistedTitle(request);
         },
       },
       settings: {
@@ -256,6 +273,14 @@ describe("host-owned Workspace Session lifecycle", () => {
             calls.push("stop");
             return state.failStop ? failure("stop failed") : Effect.void;
           }),
+        updateSessionTitle: (request) =>
+          Effect.suspend((): Effect.Effect<AgentSessionTitleUpdateOutcome, HostError> => {
+            calls.push("title");
+            if (state.failRename) return failure("runtime rename failed");
+            if (state.titleNotAttached) return Effect.succeed({ status: "not_attached" });
+            titles.push(request.title);
+            return Effect.succeed({ status: "renamed" });
+          }),
         read: (ref) =>
           Effect.suspend(() => {
             if (state.observation === "error") return failure("observation failed");
@@ -284,6 +309,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       dependencies,
       calls,
       starts,
+      titles,
       state,
       roles,
       paths,
@@ -473,7 +499,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       expect(h.starts[0]).toMatchObject({
         repoPath: database.repoPath,
         workingDirectory: database.repoPath,
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", title: "My session" },
         systemPrompt: "Original prompt.",
         model: input().selectedModel,
       });
@@ -492,6 +518,211 @@ describe("host-owned Workspace Session lifecycle", () => {
       expect(h.starts).toHaveLength(1);
     },
   );
+
+  test("renames the bound runtime session with the new Workspace Session title", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(input()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    await Effect.runPromise(h.service.start(ref));
+    h.calls.length = 0;
+
+    const renamed = await Effect.runPromise(h.service.rename({ ...ref, manualTitle: "Renamed" }));
+
+    expect(renamed.manualTitle).toBe("Renamed");
+    expect(h.titles).toEqual(["Renamed"]);
+    expect(h.calls).toEqual(["rename", "title"]);
+  });
+
+  test("keeps the saved title and succeeds when the runtime does not hold the session", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(
+      h.service.create({ ...input(), manualTitle: null }),
+    );
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    await Effect.runPromise(h.service.start(ref));
+    h.calls.length = 0;
+    h.state.titleNotAttached = true;
+
+    const renamed = await Effect.runPromise(h.service.rename({ ...ref, manualTitle: "Renamed" }));
+
+    expect(renamed.manualTitle).toBe("Renamed");
+    expect(h.titles).toEqual([]);
+    expect(h.calls).toEqual(["rename", "title"]);
+    expect((await Effect.runPromise(h.service.get(ref))).manualTitle).toBe("Renamed");
+  });
+
+  test("renames a draft without touching a runtime session", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(input()));
+    h.calls.length = 0;
+
+    const renamed = await Effect.runPromise(
+      h.service.rename({ workspaceId: "fairnest", sessionId: session.id, manualTitle: "Draft" }),
+    );
+
+    expect(renamed.manualTitle).toBe("Draft");
+    expect(h.titles).toEqual([]);
+    expect(h.calls).toEqual(["rename"]);
+  });
+
+  test("fails the rename and keeps the durable title when the runtime is unavailable", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(input()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    await Effect.runPromise(h.service.start(ref));
+    const offline = createWorkspaceSessionService({
+      ...h.dependencies,
+      live: {
+        ...h.dependencies.live,
+        updateSessionTitle: () =>
+          Effect.fail(
+            new HostResourceError({
+              resource: "agent_session_live_adapter",
+              operation: "resolveForScope",
+              message: "No live opencode runtime owns the repository.",
+            }),
+          ),
+      },
+    });
+
+    await expect(
+      Effect.runPromise(offline.rename({ ...ref, manualTitle: "Renamed" })),
+    ).rejects.toThrow("No live opencode runtime owns the repository.");
+    expect(h.titles).toEqual([]);
+    expect(
+      h.calls.filter((call) => call === "rename" || call === "setPersistedTitle"),
+    ).toHaveLength(2);
+    expect((await Effect.runPromise(h.service.get(ref))).manualTitle).toBe("My session");
+  });
+
+  test("restores the durable title when the runtime rejects the rename", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(input()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    await Effect.runPromise(h.service.start(ref));
+    h.calls.length = 0;
+    h.state.failRename = true;
+
+    await expect(
+      Effect.runPromise(h.service.rename({ ...ref, manualTitle: "Renamed" })),
+    ).rejects.toThrow("runtime rename failed");
+    expect(h.titles).toEqual([]);
+    expect(h.calls).toEqual(["rename", "title", "setPersistedTitle"]);
+    expect((await Effect.runPromise(h.service.get(ref))).manualTitle).toBe("My session");
+  });
+
+  test("restores an imported title longer than the input limit when the runtime rejects the rename", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(input()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    await Effect.runPromise(h.service.start(ref));
+    const importedTitle = "a".repeat(140);
+    await Effect.runPromise(
+      h.dependencies.store.setPersistedTitle({
+        workspaceId: "fairnest",
+        repoPath: database.repoPath,
+        sessionId: session.id,
+        manualTitle: importedTitle,
+      }),
+    );
+    h.calls.length = 0;
+    h.state.failRename = true;
+
+    await expect(
+      Effect.runPromise(h.service.rename({ ...ref, manualTitle: "Renamed" })),
+    ).rejects.toThrow("runtime rename failed");
+    expect(h.calls).toEqual(["rename", "title", "setPersistedTitle"]);
+    expect((await Effect.runPromise(h.service.get(ref))).manualTitle).toBe(importedTitle);
+  });
+
+  test("keeps both titles unchanged when the durable rename of an unnamed session fails", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(
+      h.service.create({ ...input(), manualTitle: null }),
+    );
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    await Effect.runPromise(h.service.start(ref));
+    h.calls.length = 0;
+    h.state.failRenameSave = true;
+
+    await expect(
+      Effect.runPromise(h.service.rename({ ...ref, manualTitle: "Renamed" })),
+    ).rejects.toThrow("database rename failed");
+    expect(h.titles).toEqual([]);
+    expect(h.calls).toEqual(["rename"]);
+    expect((await Effect.runPromise(h.service.get(ref))).manualTitle).toBeNull();
+  });
+
+  test("clears the manual title back to the generated runtime title", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(input()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    await Effect.runPromise(h.service.start(ref));
+    await Effect.runPromise(
+      h.dependencies.store.recordAcceptedMessage({
+        workspaceId: "fairnest",
+        repoPath: database.repoPath,
+        sessionId: session.id,
+        generatedTitle: "Generated from message",
+        occurredAt: Date.parse("2026-09-07T10:00:00Z"),
+      }),
+    );
+    h.titles.length = 0;
+
+    const renamed = await Effect.runPromise(h.service.rename({ ...ref, manualTitle: "" }));
+
+    expect(renamed.manualTitle).toBeNull();
+    expect(h.titles).toEqual(["Generated from message"]);
+  });
+
+  test("rejects clearing a title that has no generated title to fall back on", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(input()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    await Effect.runPromise(h.service.start(ref));
+
+    await expect(
+      Effect.runPromise(h.service.rename({ ...ref, manualTitle: null })),
+    ).rejects.toThrow("This chat has no generated title. Send a message first, or enter a name.");
+    expect(h.titles).toEqual([]);
+    expect(h.calls).not.toContain("rename");
+    expect((await Effect.runPromise(h.service.get(ref))).manualTitle).toBe("My session");
+  });
+
+  test("keeps the runtime title when the durable rename fails", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(input()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    await Effect.runPromise(h.service.start(ref));
+    h.calls.length = 0;
+    h.state.failRenameSave = true;
+
+    await expect(
+      Effect.runPromise(h.service.rename({ ...ref, manualTitle: "Renamed" })),
+    ).rejects.toThrow("database rename failed");
+    expect(h.titles).toEqual([]);
+    expect(h.calls).toEqual(["rename"]);
+    expect((await Effect.runPromise(h.service.get(ref))).manualTitle).toBe("My session");
+  });
+
+  test("reports the runtime failure and the failed durable restore together", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(input()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    await Effect.runPromise(h.service.start(ref));
+    h.calls.length = 0;
+    h.state.failRename = true;
+    h.state.failRenameRollback = true;
+
+    await expect(
+      Effect.runPromise(h.service.rename({ ...ref, manualTitle: "Renamed" })),
+    ).rejects.toThrow(
+      /runtime rename failed[\s\S]*Restoring the saved title also failed: database rename rollback failed/,
+    );
+    expect(h.titles).toEqual([]);
+    expect(h.calls).toEqual(["rename", "title", "setPersistedTitle"]);
+    expect((await Effect.runPromise(h.service.get(ref))).manualTitle).toBe("Renamed");
+  });
 
   test("No Role supplies no Role prompt and missing Roles fail before resource creation", async () => {
     const h = setup();
@@ -1159,7 +1390,7 @@ describe("host-owned Workspace Session lifecycle", () => {
     },
   );
 
-  test.each(["start", "model", "archive"] as const)(
+  test.each(["start", "model", "archive", "rename"] as const)(
     "orders a same-session %s after an in-flight start",
     async (operation) => {
       const h = setup();
@@ -1188,6 +1419,9 @@ describe("host-owned Workspace Session lifecycle", () => {
                 return service
                   .archive({ ...ref, confirmStop: true, removeWorktree: false })
                   .pipe(Effect.asVoid);
+              }
+              if (operation === "rename") {
+                return service.rename({ ...ref, manualTitle: "Renamed" }).pipe(Effect.asVoid);
               }
               return service
                 .setDraftModel({

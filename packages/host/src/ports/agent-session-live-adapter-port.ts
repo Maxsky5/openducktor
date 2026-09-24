@@ -16,6 +16,7 @@ import type {
   AgentSessionControlStopInput,
   AgentSessionControlSummary,
   AgentSessionControlUpdateModelInput,
+  AgentSessionControlUpdateTitleInput,
   AgentSessionLiveLoadContextInput,
   AgentSessionLiveLoadDiffInput,
   AgentSessionLiveReadResult,
@@ -154,6 +155,11 @@ export type AgentSessionControlContinueInterruptedTurnInput = Omit<
   "resumeMode"
 >;
 
+/** `renamed` commits the new summary. `not_attached` means the runtime holds no session with that id. */
+export type AgentSessionTitleUpdateOutcome =
+  | { readonly status: "renamed" }
+  | { readonly status: "not_attached" };
+
 export type AgentSessionControlAdapterPort = {
   readonly startSession: (
     input: AgentSessionControlStartInput,
@@ -173,6 +179,9 @@ export type AgentSessionControlAdapterPort = {
   readonly updateSessionModel: (
     input: AgentSessionControlUpdateModelInput,
   ) => Effect.Effect<void, HostError>;
+  readonly updateSessionTitle: (
+    input: AgentSessionControlUpdateTitleInput,
+  ) => Effect.Effect<AgentSessionTitleUpdateOutcome, HostError>;
   readonly stopSession: (input: AgentSessionControlStopInput) => Effect.Effect<void, HostError>;
   readonly releaseSession: (
     input: AgentSessionControlReleaseInput,

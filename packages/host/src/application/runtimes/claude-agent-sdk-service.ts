@@ -1,4 +1,9 @@
-import type { AgentSessionContextUsage, FileDiff, FileStatus } from "@openducktor/contracts";
+import type {
+  AgentSessionContextUsage,
+  AgentSessionControlUpdateTitleInput,
+  FileDiff,
+  FileStatus,
+} from "@openducktor/contracts";
 import type {
   AcceptedAgentUserMessage,
   AgentEvent,
@@ -6,6 +11,7 @@ import type {
   AgentRuntimeCatalogRead,
   AgentSessionHistoryMessage,
   AgentSessionSummary,
+  AgentSessionTitleUpdateResult,
   AgentSessionTodoItem,
   ContinueInterruptedAgentTurnInput,
   ForkAgentSessionInput,
@@ -88,6 +94,9 @@ export type ClaudeAgentSdkService = {
     input: UpdateControlledAgentSessionModelInput,
     runtimeId: string,
   ): Effect.Effect<void, ClaudeAgentSdkServiceError>;
+  updateSessionTitle(
+    input: AgentSessionControlUpdateTitleInput,
+  ): Effect.Effect<AgentSessionTitleUpdateResult, ClaudeAgentSdkServiceError>;
   sendUserMessage(
     input: SendAgentUserMessageInput,
     runtimeId: string,

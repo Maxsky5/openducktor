@@ -132,9 +132,8 @@ export const createAgentSessionCommandService = ({
         const repoPath = yield* canonicalizeRepoPath(input.repoPath);
         const ref = { ...input, repoPath };
         const policy = policyFor(input.sessionScope);
-        return yield* policy.run(
+        return yield* policy.runSend(
           ref,
-          "send session message",
           Effect.gen(function* () {
             const prepared = yield* policy.prepareSend(ref);
             const accepted = yield* runtime.sendUserMessage(prepared);

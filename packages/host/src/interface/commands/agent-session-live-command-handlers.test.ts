@@ -137,6 +137,7 @@ const createHarness = async (
         };
       }),
     updateSessionModel: () => Effect.dieMessage("unexpected model update"),
+    updateSessionTitle: () => Effect.dieMessage("unexpected title update"),
     stopSession: () => Effect.dieMessage("unexpected stop"),
     releaseSession: () => Effect.dieMessage("unexpected release"),
   };

@@ -1,11 +1,16 @@
 import { listCodexSessionMetadataPage, getCodexSessionMetadata } from "./codex-session-metadata";
 import type { RuntimeSessionImportSource } from "@openducktor/core";
 import { codexSubAgentSourceMetadata } from "./codex-app-server-threads";
-import { AgentRuntimeQueryError, assertAgentRuntimeQuerySession } from "@openducktor/core";
+import {
+  AgentRuntimeQueryError,
+  assertAgentRuntimeQuerySession,
+  withSummaryTitle,
+} from "@openducktor/core";
 import type {
   AgentGeneratedImageBatch,
   AgentGeneratedImageBatchInput,
   AgentGeneratedImageDescribeInput,
+  AgentSessionControlUpdateTitleInput,
 } from "@openducktor/contracts";
 import type { AgentGeneratedImageReadInput } from "@openducktor/contracts";
 import type { AgentGeneratedImageSource } from "@openducktor/core";
@@ -35,6 +40,7 @@ import type {
   AgentSessionPort,
   AgentSessionRuntimeSnapshot,
   AgentSessionSummary,
+  AgentSessionTitleUpdateResult,
   AgentSessionTodoItem,
   AgentSkillCatalog,
   AgentSlashCommandCatalog,
@@ -91,6 +97,7 @@ import { CodexRuntimeSessionEvents } from "./codex-runtime-session-events";
 import { CodexSessionEventBus } from "./codex-session-event-bus";
 import { loadCodexSessionHistory } from "./codex-session-history";
 import {
+  assertCodexSessionRef,
   assertRuntimeContextCompatibleWithSession,
   preserveRuntimeContextForExistingThread,
   resolveCodexPolicyBoundSession,
@@ -447,10 +454,12 @@ export class CodexAppServerAdapter
     this.localSessions.remember(session);
     this.freshSessions.add(session);
     this.runtimeEvents.initializeFreshThreadContextUsage(runtimeId, session.threadId);
-    await client.threadSetName({
-      threadId: session.threadId,
-      name: title,
-    });
+    if (title !== undefined) {
+      await client.threadSetName({
+        threadId: session.threadId,
+        name: title,
+      });
+    }
 
     return summary;
   }
@@ -477,10 +486,19 @@ export class CodexAppServerAdapter
       !input.systemPrompt &&
       (!current || current.preserveNativeSettings)
     ) {
-      if (current) return current.summary;
+      if (current) {
+        await this.applyRepositoryTitle(input, current, sessionPolicy.title, {
+          tolerateFailure: true,
+        });
+        return current.summary;
+      }
       const handle = await this.openExistingSession(input);
       await handle.attach();
-      return this.localSessions.get(input.externalSessionId)!.summary;
+      const attached = this.localSessions.get(input.externalSessionId)!;
+      await this.applyRepositoryTitle(input, attached, sessionPolicy.title, {
+        tolerateFailure: true,
+      });
+      return attached.summary;
     }
     const model = requireModelSelection(input.model);
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "resume session");
@@ -511,14 +529,19 @@ export class CodexAppServerAdapter
     const response = await client.threadResume(threadResumeInput);
     this.clearThreadInventory(runtimeId);
     const session = sessionStateFromThreadResume(input, runtimeId, model, response);
-    if (sessionPolicy.kind === "repository")
-      session.summary = { ...session.summary, title: sessionPolicy.title };
-    const { summary } = session;
+    const repositoryTitle = sessionPolicy.kind === "repository" ? sessionPolicy.title : undefined;
     this.localSessions.remember(session);
-    if (sessionPolicy.kind === "repository")
-      await client.threadSetName({ threadId: session.threadId, name: sessionPolicy.title });
+    if (repositoryTitle !== undefined) {
+      await client.threadSetName({
+        threadId: session.threadId,
+        name: repositoryTitle,
+      });
+      // Apply the title only after the runtime accepts it. A failed rename keeps the
+      // session addressable, and its summary must report the runtime title.
+      session.summary = { ...session.summary, title: repositoryTitle };
+    }
 
-    return summary;
+    return session.summary;
   }
 
   async continueInterruptedTurn(
@@ -646,28 +669,15 @@ export class CodexAppServerAdapter
     this.clearThreadInventory(runtimeId);
     const session = sessionStateFromThreadResume(input, runtimeId, model, response);
     session.preserveNativeSettings = preserveNativeSettings;
-    if (sessionPolicy.kind === "repository" && !preserveNativeSettings) {
-      session.summary = { ...session.summary, title: sessionPolicy.title };
+    const repositoryTitle = sessionPolicy.kind === "repository" ? sessionPolicy.title : undefined;
+    try {
+      // A replacement that cannot be prepared must not stay registered as a live
+      // session, or the host would show a running session without a consumer.
+      await this.applyRepositoryTitle(input, session, repositoryTitle);
+    } catch (cause) {
+      throw codexContinuationFailed(input.externalSessionId, cause);
     }
-    const previous = this.localSessions.get(input.externalSessionId);
     this.localSessions.remember(session);
-    if (sessionPolicy.kind === "repository" && !preserveNativeSettings) {
-      try {
-        await client.threadSetName({
-          threadId: session.threadId,
-          name: sessionPolicy.title,
-        });
-      } catch (cause) {
-        // A replacement that cannot be prepared must not stay registered as a live
-        // session, or the host would show a running session without a consumer.
-        if (previous) {
-          this.localSessions.remember(previous);
-        } else {
-          this.localSessions.release(session.threadId);
-        }
-        throw codexContinuationFailed(input.externalSessionId, cause);
-      }
-    }
     try {
       await startCodexContinuationTurn(this.turnLifecycleContext(), input.externalSessionId, model);
     } catch (cause) {
@@ -712,10 +722,12 @@ export class CodexAppServerAdapter
     const session = sessionStateFromThreadFork(input, runtimeId, model, response, title);
     const { summary } = session;
     this.localSessions.remember(session);
-    await client.threadSetName({
-      threadId: session.threadId,
-      name: title,
-    });
+    if (title !== undefined) {
+      await client.threadSetName({
+        threadId: session.threadId,
+        name: title,
+      });
+    }
 
     return summary;
   }
@@ -1092,6 +1104,23 @@ export class CodexAppServerAdapter
     delete session.model;
   }
 
+  async updateSessionTitle(
+    input: AgentSessionControlUpdateTitleInput,
+  ): Promise<AgentSessionTitleUpdateResult> {
+    const session = this.localSessions.get(input.externalSessionId);
+    if (!session) {
+      return { status: "not_attached" };
+    }
+    assertCodexSessionRef(session, input, "update the title of");
+    const { client } = await this.runtimeClients.resolve(input, "update session title");
+    await client.threadSetName({
+      threadId: session.threadId,
+      name: input.title,
+    });
+    session.summary = withSummaryTitle(session.summary, input.title);
+    return { status: "renamed", summary: session.summary };
+  }
+
   private policyBoundSession(
     input: PolicyBoundSessionRef,
     actions: { context: string; lookup: string },
@@ -1160,6 +1189,9 @@ export class CodexAppServerAdapter
     const session = sessionStateFromExistingThread(input, runtimeId, model, response);
     if (sessionPolicy.kind === "repository") {
       session.preserveNativeSettings = true;
+      await this.applyRepositoryTitle(input, session, sessionPolicy.title, {
+        tolerateFailure: true,
+      });
     }
     const { summary } = session;
     const existingThreadSession = preserveRuntimeContextForExistingThread(
@@ -1168,6 +1200,32 @@ export class CodexAppServerAdapter
     );
     this.localSessions.remember(existingThreadSession);
     return summary;
+  }
+
+  private async applyRepositoryTitle(
+    input: PolicyBoundSessionRef,
+    session: CodexSessionState,
+    repositoryTitle: string | undefined,
+    options: { tolerateFailure?: boolean } = {},
+  ): Promise<void> {
+    if (repositoryTitle === undefined || session.summary.title === repositoryTitle) return;
+    const { client } = await this.runtimeClients.resolve(
+      input,
+      "apply the repository session title",
+    );
+    try {
+      await client.threadSetName({
+        threadId: session.threadId,
+        name: repositoryTitle,
+      });
+    } catch (cause) {
+      // An attach reconciles the durable title with the runtime. A failed reconciliation
+      // keeps the durable title and leaves the native title unchanged, so the next attach
+      // can retry. A session replacement must fail instead.
+      if (options.tolerateFailure !== true) throw cause;
+      return;
+    }
+    session.summary = withSummaryTitle(session.summary, repositoryTitle);
   }
 
   async releaseSession(input: SessionRef): Promise<void> {

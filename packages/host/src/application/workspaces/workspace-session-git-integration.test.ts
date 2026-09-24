@@ -141,6 +141,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     const dependencies: WorkspaceSessionServiceDependencies = {
       lifecycle: createTaskSessionLifecycleCoordinator(),
       operationGate: createWorkspaceSessionOperationGate(),
+      sessionTitleGate: createWorkspaceSessionOperationGate(),
       ...targetDependencies,
       store,
       settings: {
@@ -175,6 +176,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
           }),
         releaseSession: () => Effect.void,
         stopSession: () => Effect.dieMessage("Idle sessions must not be stopped"),
+        updateSessionTitle: () => Effect.dieMessage("Unexpected live session title update"),
         read: (ref) => Effect.succeed({ type: "missing", ref }),
       },
     };

@@ -30,6 +30,13 @@ export type AgentSessionWorkflowScope = z.infer<typeof agentSessionWorkflowScope
 export const agentSessionRepositoryScopeSchema = z
   .object({
     kind: z.literal("repository"),
+    /**
+     * Workspace Session title for the runtime session.
+     * When absent, the runtime session keeps its current title.
+     * Mirrors the durable title, which can come from an imported conversation and
+     * can be longer than a manual title.
+     */
+    title: z.string().trim().min(1).optional(),
   })
   .strict();
 export type AgentSessionRepositoryScope = z.infer<typeof agentSessionRepositoryScopeSchema>;

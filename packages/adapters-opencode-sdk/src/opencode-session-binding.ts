@@ -23,6 +23,21 @@ export const requireOpencodeSessionPolicyRuntime = async (input: {
   }
 };
 
+const updateNativeSession = async (
+  client: SessionRecord["client"],
+  action: string,
+  request: Parameters<SessionRecord["client"]["session"]["update"]>[0],
+): Promise<void> => {
+  try {
+    const updated = await client.session.update(request);
+    if (updated.data === undefined || updated.data === null) {
+      throw toOpenCodeRequestError(action, updated.error, updated.response);
+    }
+  } catch (error) {
+    throw toOpenCodeRequestError(action, error);
+  }
+};
+
 export const applySessionPolicy = async (input: {
   client: SessionRecord["client"];
   externalSessionId: string;
@@ -30,18 +45,44 @@ export const applySessionPolicy = async (input: {
   workingDirectory: string;
 }): Promise<void> => {
   const action = `update ${input.policy.toolSelection.kind} session policy for session '${input.externalSessionId}'`;
+  const request: Parameters<typeof input.client.session.update>[0] = {
+    directory: input.workingDirectory,
+    sessionID: input.externalSessionId,
+    permission: input.policy.permission,
+  };
+  if (input.policy.title !== undefined) {
+    request.title = input.policy.title;
+  }
+  await updateNativeSession(input.client, action, request);
+};
+
+/**
+ * Reconciles a durable title with the runtime on an attach. A failed update keeps the
+ * durable title, so the next attach can retry. Returns the applied title, or null when
+ * the scope carries no title or the runtime rejects the update.
+ */
+export const reconcileSessionTitle = async (input: {
+  client: SessionRecord["client"];
+  externalSessionId: string;
+  title: string | undefined;
+  workingDirectory: string;
+}): Promise<string | null> => {
+  if (input.title === undefined) {
+    return null;
+  }
   try {
-    const updated = await input.client.session.update({
-      directory: input.workingDirectory,
-      sessionID: input.externalSessionId,
-      title: input.policy.title,
-      permission: input.policy.permission,
-    });
-    if (updated.data === undefined || updated.data === null) {
-      throw toOpenCodeRequestError(action, updated.error, updated.response);
-    }
-  } catch (error) {
-    throw toOpenCodeRequestError(action, error);
+    await updateNativeSession(
+      input.client,
+      `update the title of session '${input.externalSessionId}'`,
+      {
+        directory: input.workingDirectory,
+        sessionID: input.externalSessionId,
+        title: input.title,
+      },
+    );
+    return input.title;
+  } catch {
+    return null;
   }
 };
 
@@ -102,6 +143,15 @@ export const synchronizeOpencodeSessionPolicy = async (input: {
     workingDirectory: input.request.workingDirectory,
   });
   if (input.request.sessionScope?.kind === "repository" && !input.request.systemPrompt) {
+    const reconciledTitle = await reconcileSessionTitle({
+      client: input.session.client,
+      externalSessionId: input.session.externalSessionId,
+      title: input.policy.title,
+      workingDirectory: input.request.workingDirectory,
+    });
+    if (reconciledTitle !== null) {
+      input.session.summary = { ...input.session.summary, title: reconciledTitle };
+    }
     applyRuntimeContextToSession(input.session, input.request, input.action);
     return;
   }
@@ -112,7 +162,27 @@ export const synchronizeOpencodeSessionPolicy = async (input: {
     workingDirectory: input.request.workingDirectory,
   });
   applyRuntimeContextToSession(input.session, input.request, input.action);
-  input.session.summary = { ...input.session.summary, title: input.policy.title };
+  if (input.policy.title !== undefined) {
+    input.session.summary = { ...input.session.summary, title: input.policy.title };
+  }
+};
+
+export const assertOpencodeSessionRef = (
+  session: SessionRecord,
+  request: {
+    repoPath: string;
+    runtimeKind: SessionRecord["summary"]["runtimeKind"];
+    workingDirectory: string;
+    externalSessionId: string;
+  },
+  action: string,
+): void => {
+  const registeredSessionRef = opencodeSessionRef(session);
+  if (!agentSessionRefsEqual(registeredSessionRef, request)) {
+    throw new Error(
+      `Cannot ${action} OpenCode session '${request.externalSessionId}' from repo '${request.repoPath}' and working directory '${request.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
+    );
+  }
 };
 
 export const resolveOpencodePolicyBoundSession = (input: {
@@ -125,12 +195,7 @@ export const resolveOpencodePolicyBoundSession = (input: {
   if (!session || (session.summary.sessionAssociation.kind === "unbound" && request.sessionScope)) {
     return input.bindSession();
   }
-  const registeredSessionRef = opencodeSessionRef(session);
-  if (!agentSessionRefsEqual(registeredSessionRef, request)) {
-    throw new Error(
-      `Cannot ${input.action} OpenCode session '${request.externalSessionId}' from repo '${request.repoPath}' and working directory '${request.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
-    );
-  }
+  assertOpencodeSessionRef(session, request, input.action);
   applyRuntimeContextToSession(session, request, input.action);
   return session;
 };

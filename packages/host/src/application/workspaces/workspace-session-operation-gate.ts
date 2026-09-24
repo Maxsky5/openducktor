@@ -31,5 +31,10 @@ export const createWorkspaceSessionOperationGate = () => {
           }),
       );
     },
+    /** Reports whether an operation holds or waits for the gate. Never waits. */
+    isActive: (ref: WorkspaceSessionRefInput): boolean => {
+      const entry = entries.get(JSON.stringify([ref.workspaceId, ref.sessionId]));
+      return entry !== undefined && entry.users > 0;
+    },
   };
 };

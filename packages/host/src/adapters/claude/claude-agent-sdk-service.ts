@@ -1,8 +1,13 @@
 import { updateClaudeSessionModel } from "./claude-session-model-update";
+import {
+  resumeRetainedClaudeSession,
+  updateClaudeSessionTitle,
+} from "./claude-session-title-update";
 import { getClaudeSessionMetadata, readClaudeSessionModel } from "./claude-session-metadata";
 import { resolveClaudeQuerySession } from "./claude-agent-sdk-query-session";
 import { randomUUID } from "node:crypto";
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import type { AgentSessionControlUpdateTitleInput } from "@openducktor/contracts";
 import type {
   AgentSessionScope,
   ContinueInterruptedAgentTurnInput,
@@ -126,14 +131,9 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
       Effect.flatMap((scope) => {
         const existing = this.sessionStore.get(input.externalSessionId);
         if (existing) {
-          return fromPromise("claudeRuntime.resumeSession", async () => {
-            assertClaudeSessionRef(existing, input, "resume");
-            await requireClaudeOpenDucktorMcpForScope(scope, existing.query, {
-              externalSessionId: existing.externalSessionId,
-              runtimeId,
-            });
-            return existing.summary;
-          });
+          return fromPromise("claudeRuntime.resumeSession", () =>
+            resumeRetainedClaudeSession({ request: input, runtimeId, scope, session: existing }),
+          );
         }
         return this.resume(input, runtimeId, scope);
       }),
@@ -286,6 +286,10 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
       sessionStore: this.sessionStore,
       attach: (request, launch) => this.createSession(request, runtimeId, launch),
     });
+  }
+
+  updateSessionTitle(input: AgentSessionControlUpdateTitleInput) {
+    return updateClaudeSessionTitle(input, { sessionStore: this.sessionStore });
   }
 
   sendUserMessage(input: SendAgentUserMessageInput, runtimeId: string) {

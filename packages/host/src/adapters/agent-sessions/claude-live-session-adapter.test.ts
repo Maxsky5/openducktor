@@ -143,6 +143,8 @@ const createHarness = async (
     Effect.die("prepareQuestionReply was not configured");
   let updateSessionModelImpl: ClaudeAgentSdkService["updateSessionModel"] = () =>
     Effect.die("updateSessionModel was not configured");
+  let updateSessionTitleImpl: ClaudeAgentSdkService["updateSessionTitle"] = () =>
+    Effect.die("updateSessionTitle was not configured");
   let stopSessionImpl: ClaudeAgentSdkService["stopSession"] = () => Effect.void;
   let releaseSessionImpl: ClaudeAgentSdkService["releaseSession"] = () => Effect.void;
   let stopSessionsForRuntimeImpl: ClaudeAgentSdkService["stopSessionsForRuntime"] = () =>
@@ -195,6 +197,8 @@ const createHarness = async (
     prepareQuestionReply: (input: Parameters<ClaudeAgentSdkService["prepareQuestionReply"]>[0]) =>
       prepareQuestionReplyImpl(input),
     updateSessionModel: (input, runtimeId) => updateSessionModelImpl(input, runtimeId),
+    updateSessionTitle: (input: Parameters<ClaudeAgentSdkService["updateSessionTitle"]>[0]) =>
+      updateSessionTitleImpl(input),
     stopSession: (input: Parameters<ClaudeAgentSdkService["stopSession"]>[0]) =>
       stopSessionImpl(input),
     stopSessionsForRuntime: (runtimeId: string) => stopSessionsForRuntimeImpl(runtimeId),
@@ -296,6 +300,9 @@ const createHarness = async (
     },
     setUpdateSessionModel: (implementation: ClaudeAgentSdkService["updateSessionModel"]) => {
       updateSessionModelImpl = implementation;
+    },
+    setUpdateSessionTitle: (implementation: ClaudeAgentSdkService["updateSessionTitle"]) => {
+      updateSessionTitleImpl = implementation;
     },
     setStopSession: (implementation: ClaudeAgentSdkService["stopSession"]) => {
       stopSessionImpl = implementation;
@@ -1725,5 +1732,179 @@ describe("Claude host live-session adapter", () => {
     releaseFirstUpdate?.();
     await Promise.all([firstUpdate, secondUpdate]);
     expect(startedModels).toEqual(["claude-a", "claude-b"]);
+  });
+
+  test("delegates a live session title update to the Claude service", async () => {
+    const harness = await createHarness();
+    const calls: unknown[] = [];
+    harness.setUpdateSessionTitle((input) =>
+      Effect.sync(() => {
+        calls.push(input);
+        return {
+          status: "renamed" as const,
+          summary: {
+            ...summary,
+            title: input.title,
+            sessionAssociation: { kind: "repository" as const, title: input.title },
+          },
+        };
+      }),
+    );
+    const controlRef = {
+      repoPath: "/repo",
+      runtimeKind: "claude" as const,
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "session-1",
+      title: "Renamed",
+    };
+
+    await Effect.runPromise(harness.adapter.updateSessionTitle(controlRef));
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      repoPath: "/repo",
+      externalSessionId: "session-1",
+      workingDirectory: "/repo/worktree",
+      title: "Renamed",
+    });
+  });
+
+  test("keeps the current activity when a title update runs", async () => {
+    const harness = await createHarness();
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+    harness.eventHub.emit(session, {
+      type: "session_status",
+      externalSessionId: "session-1",
+      timestamp: "2026-07-17T10:01:30.000Z",
+      status: { type: "busy", message: null },
+    });
+    harness.setUpdateSessionTitle((input) =>
+      Effect.succeed({
+        status: "renamed" as const,
+        summary: { ...summary, title: input.title },
+      }),
+    );
+
+    await Effect.runPromise(
+      harness.adapter.updateSessionTitle({
+        repoPath: "/repo",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+        title: "Renamed",
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(
+        harness.adapter.readSnapshot({
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+        }),
+      ),
+    ).resolves.toMatchObject({
+      type: "live",
+      session: { activity: "running", title: "Renamed" },
+    });
+  });
+
+  test("keeps the saved title when the runtime does not hold the session", async () => {
+    const harness = await createHarness();
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+    harness.setUpdateSessionTitle(() => Effect.succeed({ status: "not_attached" as const }));
+    harness.changes.length = 0;
+
+    await expect(
+      Effect.runPromise(
+        harness.adapter.updateSessionTitle({
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+          title: "Renamed",
+        }),
+      ),
+    ).resolves.toEqual({ status: "not_attached" });
+
+    expect(harness.changes).toEqual([]);
+    await expect(
+      Effect.runPromise(
+        harness.adapter.readSnapshot({
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+        }),
+      ),
+    ).resolves.toMatchObject({ type: "live", session: { title: "Claude build" } });
+  });
+
+  test("keeps the saved title when the runtime rename fails", async () => {
+    const harness = await createHarness();
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+    harness.setUpdateSessionTitle(() =>
+      Effect.fail(new HostOperationError({ operation: "test.rename", message: "Rename failed." })),
+    );
+    harness.changes.length = 0;
+
+    await expect(
+      Effect.runPromise(
+        harness.adapter.updateSessionTitle({
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+          title: "Renamed",
+        }),
+      ),
+    ).rejects.toThrow("Rename failed.");
+
+    expect(harness.changes).toEqual([]);
+    await expect(
+      Effect.runPromise(
+        harness.adapter.readSnapshot({
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+        }),
+      ),
+    ).resolves.toMatchObject({ type: "live", session: { title: "Claude build" } });
+  });
+
+  test("keeps the renamed outcome and reports a fault when the title commit fails", async () => {
+    const harness = await createHarness();
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+    harness.setUpdateSessionTitle((input) =>
+      Effect.succeed({
+        status: "renamed" as const,
+        summary: { ...summary, title: input.title },
+      }),
+    );
+    harness.changes.length = 0;
+    harness.failNextMutationAfterStateApply();
+
+    await expect(
+      Effect.runPromise(
+        harness.adapter.updateSessionTitle({
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+          title: "Renamed",
+        }),
+      ),
+    ).resolves.toEqual({ status: "renamed" });
+
+    expect(harness.changes).toEqual([
+      {
+        type: "fault",
+        repoPath: "/repo",
+        operation: "claude-live-session.update-session-title",
+        message: "Publication failed.",
+      },
+    ]);
   });
 });

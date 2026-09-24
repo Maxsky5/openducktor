@@ -892,4 +892,47 @@ describe("OpenCode live session controls", () => {
       await Effect.runPromise(adapter.releaseRuntime());
     }
   });
+
+  test("keeps the current activity when a title update runs", async () => {
+    const harness = createRuntimeHarness();
+    const publishedChanges: AgentSessionLiveAdapterChange[] = [];
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle(publishedChanges),
+        prepareRuntime: harness.prepareRuntime,
+      })(runtime),
+    );
+    await Effect.runPromise(prepared.startForwarding());
+    const adapter = prepared.adapter;
+    const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+    await Effect.runPromise(
+      adapter.resumeSession({ resumeMode: "reattach", ...ref, sessionScope }),
+    );
+    await harness.emit({
+      type: "session_event",
+      externalSessionId: "session-1",
+      event: {
+        type: "session_idle",
+        externalSessionId: "session-1",
+        timestamp: "2026-07-16T10:02:00.000Z",
+      },
+    });
+    publishedChanges.length = 0;
+
+    try {
+      await Effect.runPromise(adapter.updateSessionTitle({ ...ref, title: "Renamed" }));
+
+      await expect(Effect.runPromise(adapter.readSnapshot(ref))).resolves.toMatchObject({
+        type: "live",
+        session: { activity: "idle", title: "Renamed" },
+      });
+      expect(
+        publishedChanges
+          .filter((change) => change.type === "session_upsert")
+          .map((change) => (change.type === "session_upsert" ? change.snapshot.activity : null)),
+      ).toEqual(["idle"]);
+    } finally {
+      await Effect.runPromise(adapter.releaseRuntime());
+    }
+  });
 });

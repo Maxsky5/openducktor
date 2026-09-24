@@ -10,6 +10,7 @@ import type {
   AgentEvent,
   ContinueInterruptedAgentTurnInput,
   AgentSessionSummary,
+  AgentSessionTitleUpdateResult,
   ForkAgentSessionInput,
   ResumeAgentSessionInput,
   SendAgentUserMessageInput,
@@ -17,6 +18,7 @@ import type {
   StartAgentSessionInput,
   UpdateAgentSessionModelInput,
 } from "@openducktor/core";
+import type { AgentSessionControlUpdateTitleInput } from "@openducktor/contracts";
 import {
   applyOpencodeAwaitingTurnStartToRuntimeSnapshot,
   listOpencodeRuntimeSnapshotSources,
@@ -73,6 +75,9 @@ export type OpencodeSessionRuntimeConnection = {
   readonly forkSession: (input: ForkAgentSessionInput) => Promise<AgentSessionSummary>;
   readonly sendUserMessage: (input: SendAgentUserMessageInput) => Promise<AcceptedAgentUserMessage>;
   readonly updateSessionModel: (input: UpdateAgentSessionModelInput) => Promise<void>;
+  readonly updateSessionTitle: (
+    input: AgentSessionControlUpdateTitleInput,
+  ) => Promise<AgentSessionTitleUpdateResult>;
   readonly stopSession: (input: SessionRef) => Promise<void>;
   readonly releaseSession: (input: SessionRef) => Promise<void>;
 };
@@ -487,6 +492,7 @@ export const createPrepareOpencodeSessionRuntime = (
       },
       sendUserMessage: (messageInput) => controlAdapter.sendUserMessage(messageInput),
       updateSessionModel: (modelInput) => controlAdapter.updateSessionModel(modelInput),
+      updateSessionTitle: (titleInput) => controlAdapter.updateSessionTitle(titleInput),
       stopSession: (ref) => controlAdapter.stopSession(ref),
       releaseSession: async (ref) => {
         await controlAdapter.releaseSession(ref);

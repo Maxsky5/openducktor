@@ -3,6 +3,7 @@ import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-
 import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
 import { describe, expect, test } from "bun:test";
 import type {
+  AgentSessionControlUpdateTitleInput,
   AgentSessionLiveEnvelope,
   AgentSessionLiveRef,
   AgentSessionLiveSnapshot,
@@ -15,6 +16,7 @@ import type {
   AgentSessionLiveAdapterPort,
   AgentSessionLiveAdapterMutation,
   AgentSessionRuntimeAdapterPort,
+  AgentSessionTitleUpdateOutcome,
 } from "../../ports/agent-session-live-adapter-port";
 import { createAgentSessionLiveStateService } from "./agent-session-live-state-service";
 import type { WithProcessStartAdmission } from "../workspaces/workspace-admission-service";
@@ -84,6 +86,25 @@ const fakeAdapter = (input: {
   } satisfies AgentSessionLiveAdapterPort;
   return adapter;
 };
+
+const titleControlAdapter = (
+  updateTitle: (
+    input: AgentSessionControlUpdateTitleInput,
+  ) => Effect.Effect<AgentSessionTitleUpdateOutcome, HostError>,
+): AgentSessionRuntimeAdapterPort => ({
+  ...fakeAdapter({ runtimeId: "runtime-1", snapshots: () => [liveSnapshot("session-1")] }),
+  queries: unexpectedRuntimeQueries,
+  supportsSessionControl: true,
+  startSession: () => Effect.dieMessage("unexpected start"),
+  resumeSession: () => Effect.dieMessage("unexpected resume"),
+  continueInterruptedTurn: () => Effect.dieMessage("unexpected continue"),
+  forkSession: () => Effect.dieMessage("unexpected fork"),
+  sendUserMessage: () => Effect.dieMessage("unexpected send"),
+  updateSessionModel: () => Effect.dieMessage("unexpected model update"),
+  updateSessionTitle: updateTitle,
+  stopSession: () => Effect.dieMessage("unexpected stop"),
+  releaseSession: () => Effect.dieMessage("unexpected release"),
+});
 
 const mutationRegistrations = new WeakMap<
   ReturnType<typeof createAgentSessionLiveStateService>,
@@ -1255,6 +1276,7 @@ describe("createAgentSessionLiveStateService", () => {
       forkSession: () => Effect.dieMessage("unexpected fork"),
       sendUserMessage: () => Effect.dieMessage("unexpected send"),
       updateSessionModel: () => Effect.dieMessage("unexpected model update"),
+      updateSessionTitle: () => Effect.dieMessage("unexpected title update"),
       stopSession: () => Effect.dieMessage("unexpected stop"),
       releaseSession: () => Effect.dieMessage("unexpected release"),
     } satisfies AgentSessionRuntimeAdapterPort;
@@ -1304,6 +1326,7 @@ describe("createAgentSessionLiveStateService", () => {
       forkSession: () => Effect.dieMessage("unexpected fork"),
       sendUserMessage: () => Effect.dieMessage("unexpected send"),
       updateSessionModel: () => Effect.dieMessage("unexpected model update"),
+      updateSessionTitle: () => Effect.dieMessage("unexpected title update"),
       stopSession: () => Effect.dieMessage("unexpected stop"),
       releaseSession: () => Effect.dieMessage("unexpected release"),
     } satisfies AgentSessionRuntimeAdapterPort;
@@ -1423,6 +1446,11 @@ describe("createAgentSessionLiveStateService", () => {
         Effect.sync(() => {
           calls.push({ operation: "model", input });
         }),
+      updateSessionTitle: (input) =>
+        Effect.sync(() => {
+          calls.push({ operation: "title", input });
+          return { status: "renamed" as const };
+        }),
       stopSession: (input) =>
         Effect.sync(() => {
           calls.push({ operation: "stop", input });
@@ -1441,15 +1469,73 @@ describe("createAgentSessionLiveStateService", () => {
 
     await expect(Effect.runPromise(service.sendUserMessage(input))).resolves.toEqual(accepted);
     await Effect.runPromise(service.updateSessionModel({ ...input, model: null }));
+    await Effect.runPromise(service.updateSessionTitle({ ...input, title: "Renamed session" }));
     await Effect.runPromise(service.stopSession(input));
     await Effect.runPromise(service.releaseSession(input));
 
     expect(calls).toEqual([
       { operation: "send", input },
       { operation: "model", input: { ...input, model: null } },
+      { operation: "title", input: { ...input, title: "Renamed session" } },
       { operation: "stop", input },
       { operation: "release", input },
     ]);
+  });
+
+  test("keeps a committed title rename when the runtime is released during the call", async () => {
+    const { service } = createHarness();
+    const entered = await Effect.runPromise(Deferred.make<void>());
+    const finish = await Effect.runPromise(Deferred.make<void>());
+    await Effect.runPromise(
+      service.registerRuntimeAdapter(
+        titleControlAdapter(() =>
+          Effect.gen(function* () {
+            yield* Deferred.succeed(entered, undefined);
+            yield* Deferred.await(finish);
+            return { status: "renamed" as const };
+          }),
+        ),
+      ),
+    );
+
+    const rename = Effect.runFork(
+      service.updateSessionTitle({ ...sessionRef("session-1"), title: "Renamed session" }),
+    );
+    await Effect.runPromise(Deferred.await(entered));
+    await Effect.runPromise(service.releaseRuntime("runtime-1"));
+    await Effect.runPromise(Deferred.succeed(finish, undefined));
+
+    await expect(Effect.runPromise(Fiber.join(rename))).resolves.toEqual({ status: "renamed" });
+  });
+
+  test("reports the released runtime for an uncommitted title outcome", async () => {
+    const { service } = createHarness();
+    const entered = await Effect.runPromise(Deferred.make<void>());
+    const finish = await Effect.runPromise(Deferred.make<void>());
+    await Effect.runPromise(
+      service.registerRuntimeAdapter(
+        titleControlAdapter(() =>
+          Effect.gen(function* () {
+            yield* Deferred.succeed(entered, undefined);
+            yield* Deferred.await(finish);
+            return { status: "not_attached" as const };
+          }),
+        ),
+      ),
+    );
+
+    const rename = Effect.runFork(
+      service.updateSessionTitle({ ...sessionRef("session-1"), title: "Renamed session" }),
+    );
+    await Effect.runPromise(Deferred.await(entered));
+    await Effect.runPromise(service.releaseRuntime("runtime-1"));
+    await Effect.runPromise(Deferred.succeed(finish, undefined));
+
+    const failure = await expectHostFailure(Fiber.join(rename));
+    expect(failure).toMatchObject({
+      _tag: "HostOperationError",
+      operation: "agent-session-live.runtime-detached",
+    });
   });
 
   test("fails scoped operations when the workspace has no live runtime", async () => {

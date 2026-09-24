@@ -203,6 +203,8 @@ A fresh or forked session starts with a running lease. An old native idle event 
 
 Resume keeps the current running turn, approval, or question until a newer native event replaces it. One ordered coordinator applies control results and native events.
 
+The persistence observer does not call the runtime inside the publication or lock scopes. A runtime-visible follow-up, such as a session rename, runs after those scopes release.
+
 Renderer attachment is atomic. Its first envelope has the current snapshot. Later changes use the same ordered channel. Separate snapshot and subscribe calls have a race.
 
 Map native completion, stream end, runtime failure, stop, and release as different events. Final release removes the session tree and rejects unresolved requests.

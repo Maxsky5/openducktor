@@ -1,10 +1,13 @@
 import { z } from "zod";
 import { runtimeKindSchema } from "./agent-runtime-schemas";
 import { agentSessionModelSelectionSchema } from "./session-schemas";
+import { WORKSPACE_SESSION_GENERATED_TITLE_LIMIT } from "./workspace-session-limits";
 
-export const WORKSPACE_SESSION_GENERATED_TITLE_LIMIT = 40;
-export const WORKSPACE_SESSION_MANUAL_TITLE_LIMIT = 120;
-export const WORKSPACE_SESSION_ARCHIVE_LIMIT = 100;
+export {
+  WORKSPACE_SESSION_ARCHIVE_LIMIT,
+  WORKSPACE_SESSION_GENERATED_TITLE_LIMIT,
+  WORKSPACE_SESSION_MANUAL_TITLE_LIMIT,
+} from "./workspace-session-limits";
 
 const identitySchema = z.string().min(1);
 const workingDirectorySchema = z.string().regex(/^(?:\/|[a-zA-Z]:[\\/]|\\\\)/, {

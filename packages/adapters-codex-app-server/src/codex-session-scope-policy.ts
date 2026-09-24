@@ -3,7 +3,7 @@ import {
   AGENT_ROLE_TOOL_POLICY,
   type AgentSessionRuntimePolicy,
   type AgentSessionScope,
-  formatAgentSessionTitle,
+  withAgentSessionTitle,
 } from "@openducktor/core";
 import { requireCodexRuntimePolicy } from "./codex-session-policy";
 
@@ -13,7 +13,8 @@ type CodexSessionThreadConfig = {
 };
 
 type CodexSessionScopePolicyBase = {
-  title: string;
+  /** Runtime session title. `undefined` keeps the current title. */
+  title?: string;
   runtimePolicy: CodexEffectivePolicy;
   threadConfig: CodexSessionThreadConfig;
 };
@@ -41,21 +42,20 @@ export const resolveCodexSessionScopePolicy = (
   if (!sessionScope) {
     throw new Error(`Cannot ${action} without session context.`);
   }
-  const policy = requireCodexRuntimePolicy(runtimePolicy, action);
-  if (sessionScope.kind === "repository") {
-    return {
-      kind: "repository",
-      sessionScope,
-      title: formatAgentSessionTitle(sessionScope),
-      runtimePolicy: policy,
-      threadConfig: buildThreadConfig(ODT_MCP_TOOL_NAMES),
-    };
-  }
-  return {
-    kind: "workflow",
-    sessionScope,
-    title: formatAgentSessionTitle(sessionScope),
-    runtimePolicy: policy,
-    threadConfig: buildThreadConfig(AGENT_ROLE_TOOL_POLICY[sessionScope.role]),
-  };
+  const effectivePolicy = requireCodexRuntimePolicy(runtimePolicy, action);
+  const policy: CodexSessionScopePolicy =
+    sessionScope.kind === "repository"
+      ? {
+          kind: "repository",
+          sessionScope,
+          runtimePolicy: effectivePolicy,
+          threadConfig: buildThreadConfig(ODT_MCP_TOOL_NAMES),
+        }
+      : {
+          kind: "workflow",
+          sessionScope,
+          runtimePolicy: effectivePolicy,
+          threadConfig: buildThreadConfig(AGENT_ROLE_TOOL_POLICY[sessionScope.role]),
+        };
+  return withAgentSessionTitle(policy, sessionScope);
 };

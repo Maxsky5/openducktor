@@ -596,6 +596,92 @@ describe("createClaudeAgentSdkSession", () => {
     }
   });
 
+  test("keeps a resumed repository session when the durable title cannot be reconciled", async () => {
+    const streamFinished = deferred<void>();
+    const fakeQuery = createClaudeQueryFixture({
+      close: () => streamFinished.resolve(),
+      initializationResult: async () => ({
+        account: {},
+        agents: [],
+        available_output_styles: [],
+        commands: [],
+        models: [],
+        output_style: "default",
+      }),
+      mcpServerStatus: async () => [{ name: "openducktor", status: "connected" }],
+      async *[Symbol.asyncIterator]() {
+        await streamFinished.promise;
+        yield* [];
+      },
+    });
+    const querySpy = spyOn(realClaudeSdk, "query").mockImplementation(() => fakeQuery);
+    const renameSessionSpy = spyOn(realClaudeSdk, "renameSession").mockImplementation(async () => {
+      throw new Error("rename unavailable");
+    });
+
+    try {
+      const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
+      const events: AgentEvent[] = [];
+      const sessionStore = createClaudeAgentSdkSessionStore();
+      const serviceInput: CreateClaudeAgentSdkServiceInput = {
+        claudeExecutablePath: process.execPath,
+        onBackgroundFailure: () => Effect.void,
+        resolveMcpBridgeConnection: () => Effect.die("unused"),
+        runtimeDistribution: createArtifactRuntimeDistribution({
+          mcpLauncher: { kind: "executable", executablePath: process.execPath },
+        }),
+        sessionStore,
+        toolDiscovery: createToolDiscovery(),
+      };
+
+      const summary = await createClaudeAgentSdkSession({
+        emit: (_session, event) => events.push(event),
+        input: {
+          repoPath: process.cwd(),
+          runtimeKind: "claude",
+          workingDirectory: process.cwd(),
+          runtimePolicy: { kind: "claude" },
+          sessionScope: { kind: "repository", title: "Fairnest" },
+          systemPrompt: "",
+        },
+        initialTodos: [],
+        now: () => "2026-06-25T20:00:00.000Z",
+        randomId: () => "id",
+        resolvedDependencies: {
+          claudeExecutablePath: process.execPath,
+          mcpBridgeConnection: {
+            workspaceId: "workspace-1",
+            hostUrl: "http://127.0.0.1:1",
+            hostToken: "bridge-secret-value",
+          },
+          mcpCommand: [process.execPath],
+        },
+        runtimeId: "runtime-1",
+        serviceInput,
+        sessionInput: {
+          externalSessionId: "session-1",
+          options: { resume: "session-1" },
+          reconcileTitle: true,
+          startedMessage: "Resumed session",
+          title: "Fairnest",
+        },
+        sessionStore,
+      });
+
+      expect(renameSessionSpy).toHaveBeenCalledTimes(1);
+      expect(renameSessionSpy.mock.calls[0]?.[0]).toBe("session-1");
+      expect(renameSessionSpy.mock.calls[0]?.[1]).toBe("Fairnest");
+      expect(summary.title).toBeUndefined();
+      expect(summary.sessionAssociation).toEqual({ kind: "repository" });
+      const session = sessionStore.get("session-1");
+      if (session) sessionStore.close(session);
+    } finally {
+      streamFinished.resolve();
+      querySpy.mockRestore();
+      renameSessionSpy.mockRestore();
+    }
+  });
+
   test("waits for the continuation admission before reporting a running session", async () => {
     const streamFinished = deferred<void>();
     const admissionGate = deferred<void>();

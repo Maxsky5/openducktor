@@ -1,16 +1,11 @@
-import { createLiveSessionRootRefsReader } from "./live-session-root-refs";
 import { createWorkspaceSessionImportCommandHandlers } from "../../interface/commands/workspace-session-import-command-handlers";
-import {
-  createLiveSessionPublisher,
-  createRuntimeLifecyclePublisher,
-} from "./runtime-lifecycle-publisher";
+import { createRuntimeLifecyclePublisher } from "./runtime-lifecycle-publisher";
 import { createNodeImageCommandHandlers } from "./node-image-command-handlers";
 import { resolveCodexEffectivePolicy } from "@openducktor/contracts";
 import { isAzureDevOpsRepository } from "@openducktor/core";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import { createCodexLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/codex-live-session-adapter";
-import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
 import { createCodexWorkspaceRuntimeStarter } from "../../adapters/codex/codex-workspace-runtime-starter";
 import {
   createMcpHostBridgeServer,
@@ -20,7 +15,6 @@ import { createRuntimeRegistry } from "../../adapters/runtimes/runtime-registry"
 import { createRuntimeSessionOperations } from "../../adapters/runtimes/runtime-session-operations";
 import { createRuntimeTaskActivityGuard } from "../../application/tasks/runtime-task-activity-guard";
 import { createRuntimeWorkspaceStarterDispatcher } from "../../adapters/runtimes/runtime-workspace-starter-dispatcher";
-import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
 import { createLocalAttachmentService } from "../../application/attachments/local-attachment-service";
 import { createDevServerService } from "../../application/dev-servers/dev-server-service";
 import { createSystemDiagnosticsService } from "../../application/diagnostics/system-diagnostics-service";
@@ -78,6 +72,7 @@ import type {
   EffectNodeHostCommandRouter,
 } from "./node-host-command-router-types";
 import type { NodeHostDefaultPorts } from "./node-host-default-ports";
+import { createNodeAgentSessionLiveState } from "./node-agent-session-live-state";
 import { createLiveSessionFaultLogger, defaultLifecycleLogger } from "./node-host-lifecycle-logger";
 import { createNodeRuntimeExecutableCommandHandlers } from "./node-runtime-executable-command-handlers";
 import { createNodeHostRouterLifecycle } from "./node-host-router-lifecycle";
@@ -144,25 +139,26 @@ export const assembleNodeEffectHostCommandRouter = (
     workspaceSettingsService,
   });
   const { startupSweep, taskAssetReadService, taskAssetStagingService, taskStore } = assets;
+  // The live state service and the persistence depend on each other, so the title
+  // callback resolves the service at call time.
   const workspaceSessions = createNodeWorkspaceSessionPersistence({
     store: assets.workspaceSessionStore,
     settings: workspaceSettingsService,
     git,
     eventBus,
+    faultLog: createLiveSessionFaultLogger(lifecycleLogger),
+    updateRuntimeSessionTitle: (input) => agentSessionLiveStateService.updateSessionTitle(input),
   });
-  const liveSessionAdapterRegistry = createLiveSessionAdapterRegistry();
-  const agentSessionLiveStateService = createAgentSessionLiveStateService({
-    adapterRegistry: liveSessionAdapterRegistry,
-    withProcessStartAdmission: workspaceAdmissionService.withProcessStartAdmission,
-    persistence: workspaceSessions.persistence,
-    readSessionRootRefs: createLiveSessionRootRefsReader({
+  const { liveSessionAdapterRegistry, liveState: agentSessionLiveStateService } =
+    createNodeAgentSessionLiveState({
+      persistence: workspaceSessions.persistence,
+      withProcessStartAdmission: workspaceAdmissionService.withProcessStartAdmission,
       store: assets.workspaceSessionStore,
       taskStore,
       settings: workspaceSettingsService,
-    }),
-    faultLog: createLiveSessionFaultLogger(lifecycleLogger),
-    publish: createLiveSessionPublisher(eventBus),
-  });
+      eventBus,
+      lifecycleLogger,
+    });
   const filesystemService = createFilesystemService(filesystem);
   const workspaceFilesService = createWorkspaceFilesService(filesystem, git);
   const gitService = createGitService({ gitPort: git, settingsConfig, worktreeFiles });
@@ -400,6 +396,7 @@ export const assembleNodeEffectHostCommandRouter = (
     createNodeWorkspaceSessionServices({
       lifecycle: taskSessionLifecycleCoordinator,
       operationGate: workspaceSessions.operationGate,
+      sessionTitleGate: workspaceSessions.sessionTitleGate,
       store: assets.workspaceSessionStore,
       settings: workspaceSettingsService,
       runtime: runtimeOrchestratorWithEffectiveRegistry,

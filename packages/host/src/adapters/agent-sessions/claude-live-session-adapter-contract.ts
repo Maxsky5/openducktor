@@ -58,6 +58,7 @@ export type CreateClaudeLiveSessionAdapterPreparerInput = {
     | "stopSession"
     | "stopSessionsForRuntime"
     | "updateSessionModel"
+    | "updateSessionTitle"
   >;
   readonly sessionStore: {
     get(externalSessionId: string): ClaudeSessionContext | undefined;

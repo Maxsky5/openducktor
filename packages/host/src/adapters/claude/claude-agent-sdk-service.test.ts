@@ -2,6 +2,7 @@ import * as todos from "./claude-agent-sdk-todos";
 import * as sessionFactory from "./claude-agent-sdk-session-factory";
 import * as nativeSessions from "./claude-session-metadata";
 import { describe, expect, mock, spyOn, test } from "bun:test";
+import * as realClaudeSdk from "@anthropic-ai/claude-agent-sdk";
 import { AgentRuntimeQueryError, InterruptedTurnResumeError } from "@openducktor/core";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
@@ -246,6 +247,157 @@ describe("createClaudeAgentSdkService", () => {
       ),
     ).resolves.toBeNull();
     expect(mcpServerStatus).toHaveBeenCalledTimes(3);
+  });
+
+  test("reconciles the durable repository title when a cold role-less session resumes", async () => {
+    const store = createClaudeAgentSdkSessionStore();
+    const loadTodos = spyOn(todos, "loadClaudeTodos").mockResolvedValue([]);
+    const attach = spyOn(sessionFactory, "createClaudeAgentSdkSession").mockImplementation(
+      async (request) => {
+        expect(request.sessionInput).toEqual({
+          externalSessionId: "session-1",
+          options: { resume: "session-1" },
+          reconcileTitle: true,
+          startedMessage: "Resumed session",
+          title: "Fairnest",
+        });
+        const session = createSession({ input: request.input, runtimeId: request.runtimeId });
+        request.sessionStore.set(session);
+        return session.summary;
+      },
+    );
+    const service = createService(null, undefined, store, {
+      resolveMcpBridgeConnection: () =>
+        Effect.succeed({
+          workspaceId: "workspace-1",
+          hostUrl: "http://127.0.0.1:1",
+          hostToken: "test-token",
+        }),
+    });
+    try {
+      await Effect.runPromise(
+        service.resumeSession(
+          {
+            repoPath: "/repo/",
+            runtimeKind: "claude",
+            workingDirectory: "/repo/worktree/",
+            externalSessionId: "session-1",
+            runtimePolicy: { kind: "claude" },
+            sessionScope: { kind: "repository", title: "Fairnest" },
+          },
+          "runtime-claude",
+        ),
+      );
+
+      expect(attach).toHaveBeenCalledTimes(1);
+    } finally {
+      const session = store.get("session-1");
+      if (session) store.close(session);
+      service.dispose();
+      attach.mockRestore();
+      loadTodos.mockRestore();
+    }
+  });
+
+  test("retries the durable repository title on a retained resume", async () => {
+    const renameSessionSpy = spyOn(realClaudeSdk, "renameSession").mockImplementation(
+      async () => {},
+    );
+    const session = createSession({
+      input: {
+        repoPath: "/repo/",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree/",
+        externalSessionId: "session-1",
+        runtimePolicy: { kind: "claude" },
+        sessionScope: { kind: "repository", title: "Fairnest" },
+      },
+      summary: {
+        externalSessionId: "session-1",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree/",
+        sessionAssociation: { kind: "repository" },
+        startedAt: "2026-06-25T20:00:00.000Z",
+        status: "idle",
+      },
+      query: createClaudeQueryFixture({
+        mcpServerStatus: async () => [{ name: "openducktor", status: "connected" }],
+      }),
+    });
+    const service = createService(session);
+    try {
+      await Effect.runPromise(
+        service.resumeSession(
+          {
+            repoPath: "/repo/",
+            runtimeKind: "claude",
+            workingDirectory: "/repo/worktree/",
+            externalSessionId: "session-1",
+            runtimePolicy: { kind: "claude" },
+            sessionScope: { kind: "repository", title: "Fairnest" },
+          },
+          "runtime-claude",
+        ),
+      );
+
+      expect(renameSessionSpy).toHaveBeenCalledTimes(1);
+      expect(renameSessionSpy.mock.calls[0]?.[0]).toBe("session-1");
+      expect(renameSessionSpy.mock.calls[0]?.[1]).toBe("Fairnest");
+      expect(session.summary.title).toBe("Fairnest");
+    } finally {
+      service.dispose();
+      renameSessionSpy.mockRestore();
+    }
+  });
+
+  test("keeps the runtime title when a retained resume cannot apply the durable title", async () => {
+    const renameSessionSpy = spyOn(realClaudeSdk, "renameSession").mockImplementation(async () => {
+      throw new Error("rename unavailable");
+    });
+    const session = createSession({
+      input: {
+        repoPath: "/repo/",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree/",
+        externalSessionId: "session-1",
+        runtimePolicy: { kind: "claude" },
+        sessionScope: { kind: "repository", title: "Fairnest" },
+      },
+      summary: {
+        externalSessionId: "session-1",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree/",
+        sessionAssociation: { kind: "repository" },
+        startedAt: "2026-06-25T20:00:00.000Z",
+        status: "idle",
+      },
+      query: createClaudeQueryFixture({
+        mcpServerStatus: async () => [{ name: "openducktor", status: "connected" }],
+      }),
+    });
+    const service = createService(session);
+    try {
+      await Effect.runPromise(
+        service.resumeSession(
+          {
+            repoPath: "/repo/",
+            runtimeKind: "claude",
+            workingDirectory: "/repo/worktree/",
+            externalSessionId: "session-1",
+            runtimePolicy: { kind: "claude" },
+            sessionScope: { kind: "repository", title: "Fairnest" },
+          },
+          "runtime-claude",
+        ),
+      );
+
+      expect(renameSessionSpy).toHaveBeenCalledTimes(1);
+      expect(session.summary.title).toBeUndefined();
+      expect(session.summary.sessionAssociation).toEqual({ kind: "repository" });
+    } finally {
+      service.dispose();
+      renameSessionSpy.mockRestore();
+    }
   });
 
   test("rejects retained Claude session scope drift", async () => {
@@ -732,6 +884,74 @@ describe("createClaudeAgentSdkService", () => {
     expect(setModel).not.toHaveBeenCalled();
     expect(applyFlagSettings).toHaveBeenCalledWith({ effortLevel: "xhigh" });
     expect(session.model?.variant).toBe("xhigh");
+  });
+
+  test("renames the live Claude session and its repository association", async () => {
+    const renameSession = mock(async () => {});
+    const renameSessionSpy = spyOn(realClaudeSdk, "renameSession").mockImplementation(
+      renameSession,
+    );
+    try {
+      const session = createSession({
+        input: {
+          repoPath: "/repo/",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree/",
+          externalSessionId: "session-1",
+          runtimePolicy: { kind: "claude" },
+          sessionScope: { kind: "repository", title: "Fairnest" },
+        },
+        summary: {
+          externalSessionId: "session-1",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree/",
+          title: "Fairnest",
+          sessionAssociation: { kind: "repository", title: "Fairnest" },
+          startedAt: "2026-06-25T20:00:00.000Z",
+          status: "idle",
+        },
+      });
+      const service = createService(session);
+
+      const result = await Effect.runPromise(
+        service.updateSessionTitle({
+          repoPath: "/repo/",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree/",
+          externalSessionId: "session-1",
+          title: "Renamed",
+        }),
+      );
+
+      expect(renameSession).toHaveBeenCalledWith("session-1", "Renamed", {
+        dir: "/repo/worktree/",
+      });
+      expect(result).toMatchObject({
+        status: "renamed",
+        summary: {
+          title: "Renamed",
+          sessionAssociation: { kind: "repository", title: "Renamed" },
+        },
+      });
+    } finally {
+      renameSessionSpy.mockRestore();
+    }
+  });
+
+  test("reports a title update for an unknown Claude session as not attached", async () => {
+    const service = createService(null);
+
+    const result = await Effect.runPromise(
+      service.updateSessionTitle({
+        repoPath: "/repo/",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree/",
+        externalSessionId: "session-1",
+        title: "Renamed",
+      }),
+    );
+
+    expect(result).toEqual({ status: "not_attached" });
   });
 
   test("keeps the active Claude profile during a live model update", async () => {

@@ -38,6 +38,11 @@ export type WorkspaceSessionStorePort = {
     input: WorkspaceSessionStoreRef & { executionTarget: WorkspaceSessionExecutionTarget },
   ): Result;
   rename(input: WorkspaceSessionStoreRef & { manualTitle: string | null }): Result;
+  /**
+   * Writes a manual title that an Operation already persisted. The value came from the
+   * store, so it can exceed the manual title input limit. Use it to restore a title.
+   */
+  setPersistedTitle(input: WorkspaceSessionStoreRef & { manualTitle: string | null }): Result;
   archive(
     input: WorkspaceSessionStoreRef & {
       archivedAt: number;

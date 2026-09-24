@@ -206,7 +206,9 @@ describe("CodexAppServerAdapter interrupted-turn continuation", () => {
     });
 
     await expect(
-      adapter.continueInterruptedTurn(continuationInput({ sessionScope: { kind: "repository" } })),
+      adapter.continueInterruptedTurn(
+        continuationInput({ sessionScope: { kind: "repository", title: "Fairnest" } }),
+      ),
     ).rejects.toMatchObject({ reason: "continuation_failed" });
 
     expect(adapter.listLiveSessionSnapshots("runtime-live")).toEqual([]);
@@ -221,12 +223,14 @@ describe("CodexAppServerAdapter interrupted-turn continuation", () => {
       threadSetNameError: () => (failRename ? renameError : undefined),
     });
     const resumed = await adapter.resumeSession(
-      continuationInput({ sessionScope: { kind: "repository" } }),
+      continuationInput({ sessionScope: { kind: "repository", title: "Fairnest" } }),
     );
 
     failRename = true;
     await expect(
-      adapter.continueInterruptedTurn(continuationInput({ sessionScope: { kind: "repository" } })),
+      adapter.continueInterruptedTurn(
+        continuationInput({ sessionScope: { kind: "repository", title: "Fairnest" } }),
+      ),
     ).rejects.toMatchObject({ reason: "continuation_failed" });
 
     const snapshots = adapter.listLiveSessionSnapshots("runtime-live");

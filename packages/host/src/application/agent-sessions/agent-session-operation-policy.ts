@@ -29,6 +29,11 @@ export type AgentSessionOperationPolicy = {
     operation: string,
     effect: Effect.Effect<A, E, R>,
   ): Effect.Effect<A, E | HostError, R>;
+  /** Runs a send command. Send-aware policies mark the send as in flight. */
+  runSend<A, E, R>(
+    ref: AgentSessionLiveRef,
+    effect: Effect.Effect<A, E, R>,
+  ): Effect.Effect<A, E | HostError, R>;
   prepareResume(
     input: AgentSessionControlResumeInput,
   ): Effect.Effect<PreparedSessionResume, HostError>;

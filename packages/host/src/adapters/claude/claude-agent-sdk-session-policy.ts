@@ -1,5 +1,5 @@
 import type { Options, Query } from "@anthropic-ai/claude-agent-sdk";
-import { type AgentSessionScope, formatAgentSessionTitle } from "@openducktor/core";
+import { type AgentSessionScope, withAgentSessionTitle } from "@openducktor/core";
 import { Effect } from "effect";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { INIT_TIMEOUT_MS, withTimeout } from "./claude-agent-sdk-utils";
@@ -27,6 +27,11 @@ export type ClaudeSessionLaunchInput = {
    */
   resumeInterruptedTurn?: boolean;
   preserveNativeSettings?: boolean;
+  /**
+   * Reconciles the durable session title with the runtime. A failed update must not
+   * fail the attach, because the next attach can retry it.
+   */
+  reconcileTitle?: boolean;
   startedMessage: string;
   title?: string;
 };
@@ -34,10 +39,13 @@ export type ClaudeSessionLaunchInput = {
 const sessionPresentation = (
   action: "Continued" | "Forked" | "Resumed" | "Started",
   scope: AgentSessionScope,
-) => ({
-  startedMessage: `${action} ${scope.kind === "repository" ? "repository" : scope.role} session`,
-  title: formatAgentSessionTitle(scope),
-});
+) =>
+  withAgentSessionTitle(
+    {
+      startedMessage: `${action} ${scope.kind === "repository" ? "repository" : scope.role} session`,
+    },
+    scope,
+  );
 
 export const freshClaudeSessionLaunch = (
   scope: AgentSessionScope,
@@ -54,7 +62,10 @@ export const resumedClaudeSessionLaunch = (
 ): ClaudeSessionLaunchInput => ({
   externalSessionId,
   ...(scope.kind === "repository"
-    ? { startedMessage: "Resumed session" }
+    ? {
+        ...withAgentSessionTitle({ startedMessage: "Resumed session" }, scope),
+        reconcileTitle: true,
+      }
     : sessionPresentation("Resumed", scope)),
   options: { resume: externalSessionId },
 });
