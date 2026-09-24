@@ -288,7 +288,7 @@ export const createWorkspaceSessionService = (
               );
               if (renamed._tag === "Right") return saved.right;
               const restored = yield* Effect.either(
-                store.rename({ ...ref, manualTitle: session.manualTitle }),
+                store.setPersistedTitle({ ...ref, manualTitle: session.manualTitle }),
               );
               if (restored._tag === "Left") {
                 return yield* Effect.fail(

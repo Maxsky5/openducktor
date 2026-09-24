@@ -318,6 +318,11 @@ export const createSqliteWorkspaceSessionStore = (
         const title = workspaceSessionRenameInputSchema.shape.manualTitle.parse(input.manualTitle);
         return { ...current, manualTitle: title || null };
       }),
+    setPersistedTitle: (input) =>
+      update(input, "workspaceSessionStore.setPersistedTitle", (current) => ({
+        ...current,
+        manualTitle: workspaceSessionSchema.shape.manualTitle.parse(input.manualTitle),
+      })),
     archive: (input) =>
       update(input, "workspaceSessionStore.archive", (current) => ({
         ...current,

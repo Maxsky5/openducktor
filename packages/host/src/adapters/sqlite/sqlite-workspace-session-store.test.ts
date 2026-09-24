@@ -323,6 +323,14 @@ describe("SQLite Workspace Session store", () => {
     await expect(
       Effect.runPromise(repository.rename({ ...ref(), manualTitle: "a".repeat(121) })),
     ).rejects.toThrow("Invalid Workspace Session");
+    const importedTitle = "a".repeat(140);
+    expect(
+      (
+        await Effect.runPromise(
+          repository.setPersistedTitle({ ...ref(), manualTitle: importedTitle }),
+        )
+      ).manualTitle,
+    ).toBe(importedTitle);
     const generated = await Effect.runPromise(
       repository.setGeneratedTitle({ ...ref(), generatedTitle: "Generated title" }),
     );
