@@ -169,7 +169,7 @@ describe("ModelPicker", () => {
     },
   );
 
-  test("keeps a retained catalog display-only while a refresh is in flight", async () => {
+  test("keeps cached models selectable while a refresh is in flight", async () => {
     const onValueChange = mock(() => {});
     const refreshingRuntimes: ModelPickerRuntime[] = [
       {
@@ -196,8 +196,11 @@ describe("ModelPicker", () => {
     });
 
     expect(screen.getByRole("status").textContent).toContain("Refreshing OpenCode models");
-    expect(screen.getAllByText("GPT Five")).toHaveLength(1);
-    expect(onValueChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Select GPT Five model" })).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Select GPT Five model" }));
+    });
+    expect(onValueChange).toHaveBeenCalledWith(value);
   });
 
   test("toggles a favorite without selecting the row or closing the picker", async () => {

@@ -145,4 +145,29 @@ describe("model-picker-model", () => {
       }),
     ).toEqual([]);
   });
+
+  test("exposes cached model rows during a background refresh", () => {
+    const refreshingRuntimes: ModelPickerRuntime[] = [
+      {
+        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+        resource: {
+          status: "refreshing",
+          catalog: catalog("opencode"),
+          retry: async () => {},
+        },
+      },
+    ];
+    expect(
+      buildModelPickerItems({
+        runtimes: refreshingRuntimes,
+        favorites: [],
+        activeView: "opencode",
+        searchQuery: "",
+        lockedRuntimeKind: null,
+      }).map((item) => item.value),
+    ).toEqual([
+      { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
+      { runtimeKind: "opencode", providerId: "proxy", modelId: "sonnet" },
+    ]);
+  });
 });

@@ -1221,6 +1221,59 @@ describe("useSessionStartModalState", () => {
     queryClient.clear();
   });
 
+  test("allows a workflow model choice while a stale catalog refreshes", async () => {
+    const queryClient = new QueryClient();
+    const runtimeRef = {
+      repoPath: "/repo",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo",
+    };
+    queryClient.setQueryData(
+      runtimeCatalogQueryKeys.catalog(runtimeRef),
+      runtimeCatalogFor(CATALOG),
+      {
+        updatedAt: 0,
+      },
+    );
+    const refresh = createDeferred<AgentRuntimeCatalog>();
+    const loadCatalog = mock(async () => refresh.promise);
+    const props = createBaseProps({ loadCatalog });
+    delete props.initialCatalog;
+    const harness = createHookHarness(props, { queryClient });
+
+    try {
+      await harness.mount();
+      await harness.run(() => {
+        harness.getLatest().openStartModal({
+          source: "kanban",
+          taskId: "TASK-STALE-CATALOG",
+          role: "spec",
+          launchActionId: "spec_initial",
+          postStartAction: "kickoff",
+          title: "Start Spec Session",
+        });
+      });
+      await harness.waitFor(
+        (state) => state.modelPickerRuntimes[0]?.resource.status === "refreshing",
+      );
+
+      expect(loadCatalog).toHaveBeenCalledWith(runtimeRef);
+      expect(harness.getLatest().isCatalogLoading).toBe(false);
+      await harness.run(() => {
+        harness.getLatest().handleSelectModelPair({
+          runtimeKind: "opencode",
+          providerId: "anthropic",
+          modelId: "claude-sonnet",
+        });
+      });
+      expect(harness.getLatest().selection?.modelId).toBe("claude-sonnet");
+    } finally {
+      refresh.resolve(runtimeCatalogFor(CATALOG));
+      await harness.unmount();
+      queryClient.clear();
+    }
+  });
+
   test("preserves caller-selected model when opening modal", async () => {
     const harness = createHookHarness(createBaseProps());
 
