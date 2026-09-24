@@ -55,6 +55,9 @@ describe("Toaster", () => {
     expect(source).toContain('position="bottom-right"');
     expect(source).toContain("richColors={false}");
     expect(source).toContain("closeButton");
+    expect(source).toContain("opacity-100");
+    expect(source).not.toContain("opacity-0");
+    expect(source).toContain('content: "gap-1.5 pr-7"');
     expect(source).toContain("expand");
     expect(source).toContain("visibleToasts={5}");
   });

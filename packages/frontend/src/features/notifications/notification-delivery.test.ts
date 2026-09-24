@@ -1,5 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { NotificationOccurrence } from "@openducktor/contracts";
+import { ArrowUpRight } from "lucide-react";
+import type { ReactNode } from "react";
 import {
   createCuelumeNotificationSoundAdapter,
   createSonnerNotificationAdapter,
@@ -26,18 +28,24 @@ const occurrence: NotificationOccurrence = {
   },
 };
 
+type TestToastOptions = {
+  description: string;
+  duration: number;
+  closeButton: boolean;
+  classNames: {
+    toast: string;
+    content: string;
+    actionButton: string;
+  };
+  action: {
+    label: ReactNode;
+    onClick(): void;
+  };
+};
+
 describe("notification delivery adapters", () => {
-  test("shows one actionable 10-second Sonner toast", async () => {
-    const showToast = mock(
-      (
-        _title: string,
-        _options: {
-          description: string;
-          duration: number;
-          action: { label: string; onClick(): void };
-        },
-      ) => "toast-id",
-    );
+  test("shows a closeable 10-second toast with a full-width session action", async () => {
+    const showToast = mock((_title: string, _options: TestToastOptions) => "toast-id");
     const navigate = mock(async () => {});
     const adapter = createSonnerNotificationAdapter({ showToast, navigate });
 
@@ -48,7 +56,28 @@ describe("notification delivery adapters", () => {
 
     expect(showToast).toHaveBeenCalledTimes(1);
     const options = showToast.mock.calls[0]?.[1];
-    expect(options).toMatchObject({ duration: 10000, description: "Repo - Build notifications" });
+    expect(options).toMatchObject({
+      duration: 10000,
+      description: "Repo - Build notifications",
+      closeButton: true,
+      classNames: {
+        toast: "!flex-col !items-stretch",
+        content: "w-full",
+        actionButton: "!m-0 !h-9 !w-full justify-center",
+      },
+    });
+    expect(options?.action?.label).toMatchObject({
+      type: "span",
+      props: {
+        children: [
+          "Open",
+          expect.objectContaining({
+            type: ArrowUpRight,
+            props: expect.objectContaining({ "aria-hidden": true }),
+          }),
+        ],
+      },
+    });
     options?.action?.onClick();
     expect(navigate).toHaveBeenCalledWith(occurrence.navigationTarget);
   });
