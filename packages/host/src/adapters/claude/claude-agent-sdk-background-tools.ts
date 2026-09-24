@@ -208,7 +208,6 @@ export const projectClaudeBackgroundTaskEdge = (
       task.description = message.description;
       if (message.summary) task.summary = message.summary;
     }
-    if (!knownTask) task.backgrounded = true;
     if (!task.outcome && task.backgrounded) task.active = true;
   } else if (message.subtype === "task_updated") {
     if (!task.notified) {

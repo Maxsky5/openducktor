@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
 import { hasActiveClaudeBackgroundWork } from "./claude-agent-sdk-event-session";
@@ -7,6 +8,7 @@ import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import { filterClaudeHistoryMessages } from "./claude-agent-sdk-history-import";
 import {
   claudeSdkMessageFixture,
+  claudeSdkMessageUuidFixture,
   claudeSessionMessageFixture,
 } from "./claude-agent-sdk-test-messages";
 
@@ -69,6 +71,24 @@ const taskStart = (taskId: string, callId: string, description: string, isBackgr
 const snapshot = (
   tasks: Array<{ task_id: string; description: string; task_type: string; ambient?: boolean }>,
 ) => claudeSdkMessageFixture({ type: "system", subtype: "background_tasks_changed", tasks });
+
+const init = {
+  type: "system",
+  subtype: "init",
+  apiKeySource: "none",
+  claude_code_version: "test",
+  cwd: "/repo",
+  tools: [],
+  mcp_servers: [],
+  model: "claude-test",
+  permissionMode: "default",
+  slash_commands: [],
+  output_style: "default",
+  skills: [],
+  plugins: [],
+  uuid: claudeSdkMessageUuidFixture("background-task-init"),
+  session_id: "session-1",
+} satisfies Extract<SDKMessage, { type: "system"; subtype: "init" }>;
 
 const notification = (
   taskId: string,
@@ -229,6 +249,43 @@ describe("Claude background ordinary tool parts", () => {
     expect(
       events.some((event) => event.type === "assistant_part" && event.part.kind === "subagent"),
     ).toBe(false);
+  });
+
+  test("keeps foreground Bash output after progress arrives before its start edge", () => {
+    const { parts, send, session } = live();
+    send(toolUse("foreground-progress", "Bash", { command: "pwd" }));
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_progress",
+        task_id: "foreground-progress-task",
+        tool_use_id: "foreground-progress",
+        description: "Print directory",
+        summary: "Still running",
+      }),
+    );
+    expect(parts("foreground-progress").at(-1)?.status).toBe("pending");
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
+    send(taskStart("foreground-progress-task", "foreground-progress", "Print directory", false));
+    send(toolResult("foreground-progress", "/repo"));
+    expect(parts("foreground-progress").at(-1)).toMatchObject({
+      status: "completed",
+      output: "/repo",
+    });
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
+  });
+
+  test("keeps active work through a turn init and starts a new session state with empty activity", () => {
+    const { parts, send, session } = live();
+    send(toolUse("bash-through-init", "Bash", { command: "sleep 2" }));
+    send(toolResult("bash-through-init", "Started", "task-through-init"));
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(true);
+    send(init);
+    expect(parts("bash-through-init").at(-1)?.status).toBe("running");
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(true);
+    const replacement = live();
+    replacement.send(init);
+    expect(hasActiveClaudeBackgroundWork(replacement.session)).toBe(false);
   });
 
   test("uses a snapshot and native result ID when the start edge is missing", () => {
@@ -585,5 +642,67 @@ describe("Claude background ordinary tool parts", () => {
       output: "Fetch report\nServer timed out",
       metadata: { backgroundTaskStatus: "failed" },
     });
+  });
+
+  test("history leaves a foreground call completed when progress precedes its start", () => {
+    const entries = filterClaudeHistoryMessages([
+      claudeSessionMessageFixture({
+        type: "assistant",
+        uuid: "history-foreground-call",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        timestamp,
+        message: {
+          role: "assistant",
+          content: [
+            { type: "tool_use", id: "history-foreground", name: "Bash", input: { command: "pwd" } },
+          ],
+        },
+      }),
+      {
+        type: "system",
+        subtype: "task_progress",
+        uuid: "history-foreground-progress",
+        session_id: "session-1",
+        task_id: "history-foreground-task",
+        tool_use_id: "history-foreground",
+        description: "Print directory",
+        summary: "Still running",
+        usage: { total_tokens: 0, tool_uses: 0, duration_ms: 1000 },
+        timestamp,
+      },
+      {
+        type: "system",
+        subtype: "task_started",
+        uuid: "history-foreground-start",
+        session_id: "session-1",
+        task_id: "history-foreground-task",
+        tool_use_id: "history-foreground",
+        task_type: "local_bash",
+        is_backgrounded: false,
+        description: "Print directory",
+        timestamp,
+      },
+      claudeSessionMessageFixture({
+        type: "user",
+        uuid: "history-foreground-result",
+        session_id: "session-1",
+        parent_tool_use_id: "history-foreground",
+        timestamp,
+        tool_use_result: {
+          type: "tool_result",
+          tool_use_id: "history-foreground",
+          content: "/repo",
+        },
+        message: { role: "user", content: [] },
+      }),
+    ]);
+    const part = toClaudeHistoryMessages(entries, () => timestamp)
+      .flatMap((message) => message.parts)
+      .find(
+        (candidate): candidate is ToolPart =>
+          candidate.kind === "tool" && candidate.callId === "history-foreground",
+      );
+    expect(part).toMatchObject({ status: "completed", output: "/repo" });
   });
 });

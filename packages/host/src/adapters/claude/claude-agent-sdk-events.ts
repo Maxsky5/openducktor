@@ -82,6 +82,8 @@ export const handleClaudeSdkMessage = ({
     return;
   }
   if (message.type === "system" && message.subtype === "init") {
+    // Claude sends init at the start of each turn, including while a background task runs.
+    // OpenDucktor starts a replacement CLI process with new session state.
     return;
   }
   if (message.type === "user") {
