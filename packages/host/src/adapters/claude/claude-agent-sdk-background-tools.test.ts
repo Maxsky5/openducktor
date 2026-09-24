@@ -337,6 +337,7 @@ describe("Claude background ordinary tool parts", () => {
     const { parts, send, session } = live();
     send(snapshot([]));
     send(toolUse("bash-after-snapshot", "Bash", { command: "sleep 2" }));
+    send(taskStart("new-task", "bash-after-snapshot", "Wait"));
     send(toolResult("bash-after-snapshot", "Started", "new-task"));
     expect(parts("bash-after-snapshot").at(-1)).toMatchObject({
       status: "running",
@@ -368,8 +369,39 @@ describe("Claude background ordinary tool parts", () => {
     expect(parts("bash-absent").at(-1)?.status).toBe("pending");
     expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
     send(toolResult("bash-absent", "Started", "absent-task"));
-    expect(parts("bash-absent").at(-1)?.status).toBe("running");
+    expect(parts("bash-absent").at(-1)).toMatchObject({
+      status: "error",
+      metadata: { backgroundTaskStatus: "unknown" },
+    });
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
+  });
+
+  test("does not restore an excluded task from a late launch result without a start edge", () => {
+    const { parts, send, session } = live();
+    send(toolUse("bash-no-start", "Bash", { command: "sleep 2" }));
+    send(snapshot([]));
+    send(toolResult("bash-no-start", "Started", "no-start-task"));
+    expect(parts("bash-no-start").at(-1)).toMatchObject({
+      status: "error",
+      metadata: { backgroundTaskId: "no-start-task", backgroundTaskStatus: "unknown" },
+    });
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
+    send(snapshot([{ task_id: "no-start-task", task_type: "local_bash", description: "Wait" }]));
+    expect(parts("bash-no-start").at(-1)?.status).toBe("running");
     expect(hasActiveClaudeBackgroundWork(session)).toBe(true);
+  });
+
+  test("does not treat a repeated tool-use message after a snapshot as a new launch", () => {
+    const { parts, send, session } = live();
+    send(toolUse("bash-repeat", "Bash", { command: "sleep 2" }));
+    send(snapshot([]));
+    send(toolUse("bash-repeat", "Bash", { command: "sleep 2" }));
+    send(toolResult("bash-repeat", "Started", "repeat-task"));
+    expect(parts("bash-repeat").at(-1)).toMatchObject({
+      status: "error",
+      metadata: { backgroundTaskStatus: "unknown" },
+    });
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
   });
 
   test("activates a correlated task when a later snapshot confirms a new launch", () => {
@@ -815,6 +847,57 @@ describe("Claude background ordinary tool parts", () => {
       metadata: { backgroundTaskStatus: "unknown" },
     });
     expect(partFor(new Set(["history-restart-task"]))).toMatchObject({
+      status: "running",
+      metadata: { backgroundTaskStatus: "running" },
+    });
+  });
+
+  test("history gives a snapshot authority over a later launch result", () => {
+    const assistant = claudeSessionMessageFixture({
+      type: "assistant",
+      uuid: "history-order-call",
+      session_id: "session-1",
+      parent_tool_use_id: null,
+      timestamp,
+      message: {
+        role: "assistant",
+        content: [{ type: "tool_use", id: "history-order", name: "Bash", input: {} }],
+      },
+    });
+    const emptySnapshot = {
+      type: "system" as const,
+      subtype: "background_tasks_changed" as const,
+      uuid: "history-order-snapshot",
+      session_id: "session-1",
+      timestamp,
+      tasks: [],
+    };
+    const result = claudeSessionMessageFixture({
+      type: "user",
+      uuid: "history-order-result",
+      session_id: "session-1",
+      parent_tool_use_id: "history-order",
+      timestamp,
+      tool_use_result: {
+        type: "tool_result",
+        tool_use_id: "history-order",
+        content: "Started",
+        backgroundTaskId: "history-order-task",
+      },
+      message: { role: "user", content: [] },
+    });
+    const partFor = (entries: Parameters<typeof filterClaudeHistoryMessages>[0]) =>
+      toClaudeHistoryMessages(filterClaudeHistoryMessages(entries), () => timestamp)
+        .flatMap((message) => message.parts)
+        .find(
+          (candidate): candidate is ToolPart =>
+            candidate.kind === "tool" && candidate.callId === "history-order",
+        );
+    expect(partFor([assistant, emptySnapshot, result])).toMatchObject({
+      status: "error",
+      metadata: { backgroundTaskStatus: "unknown" },
+    });
+    expect(partFor([emptySnapshot, assistant, result])).toMatchObject({
       status: "running",
       metadata: { backgroundTaskStatus: "running" },
     });

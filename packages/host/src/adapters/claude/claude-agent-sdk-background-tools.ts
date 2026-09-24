@@ -47,6 +47,7 @@ export type ClaudeBackgroundToolState = {
   backgroundToolTaskIdsByCallId?: Map<string, string>;
   backgroundToolActiveTaskIds?: Set<string>;
   backgroundToolSnapshotSeen?: boolean;
+  backgroundToolCallIdsSinceSnapshot?: Set<string>;
   backgroundToolCompletedPartsByCallId?: Map<string, ToolPart>;
   backgroundToolAgentTaskIds?: Set<string>;
   toolInputsByCallId: Map<string, ClaudeToolInput>;
@@ -155,6 +156,10 @@ export const projectClaudeBackgroundToolUse = (
   part: ToolPart,
   timestamp: string,
 ): ToolPart => {
+  if (state.backgroundToolSnapshotSeen) {
+    state.backgroundToolCallIdsSinceSnapshot ??= new Set();
+    state.backgroundToolCallIdsSinceSnapshot.add(part.callId);
+  }
   const taskId = taskIdsByCall(state).get(part.callId);
   if (!taskId) return part;
   const task = tasks(state).get(taskId);
@@ -267,6 +272,7 @@ const reconcileBackgroundTaskMembership = (
   );
   state.backgroundToolActiveTaskIds = active;
   state.backgroundToolSnapshotSeen = true;
+  state.backgroundToolCallIdsSinceSnapshot = new Set();
   for (const taskId of active) {
     const task = taskFor(state, taskId);
     task.backgrounded = true;
@@ -344,6 +350,7 @@ export const projectClaudeBackgroundToolResult = (
   if (task.ambient) return completedPart;
   task.toolUseId = callId;
   taskIdsByCall(state).set(callId, taskId);
+  if (resultTaskId) task.backgrounded = true;
   if (completedPart.status === "error" && (!task.outcome || task.outcome === "unknown")) {
     task.outcome = "failed";
     task.active = false;
@@ -352,15 +359,19 @@ export const projectClaudeBackgroundToolResult = (
     state.backgroundToolActiveTaskIds?.delete(taskId);
   }
   if (!task.outcome) {
-    if (resultTaskId && !task.active) {
-      task.backgrounded = true;
+    const launchAfterSnapshot = state.backgroundToolCallIdsSinceSnapshot?.has(callId) === true;
+    if (
+      resultTaskId &&
+      (!state.backgroundToolSnapshotSeen ||
+        state.backgroundToolActiveTaskIds?.has(taskId) ||
+        launchAfterSnapshot)
+    ) {
       task.active = true;
     } else if (task.backgrounded && !task.active && state.backgroundToolSnapshotSeen) {
       task.outcome = "unknown";
       task.endedAtMs = Date.parse(timestamp);
     }
   }
-  if (resultTaskId) task.backgrounded = true;
   if (task.active && !task.outcome) {
     state.backgroundToolActiveTaskIds ??= new Set();
     state.backgroundToolActiveTaskIds.add(taskId);
