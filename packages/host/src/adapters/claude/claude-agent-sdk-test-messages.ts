@@ -33,6 +33,7 @@ type ClaudeSdkResultMessage = Extract<SDKMessage, { type: "result" }>;
 type ClaudeSdkStreamEventMessage = Extract<SDKMessage, { type: "stream_event" }>;
 type ClaudeSdkToolProgressMessage = Extract<SDKMessage, { type: "tool_progress" }>;
 type ClaudeSdkUsedSystemSubtype =
+  | "background_tasks_changed"
   | "commands_changed"
   | "compact_boundary"
   | "local_command_output"
@@ -409,6 +410,8 @@ export function claudeSdkMessageFixture(
       };
     case "session_state_changed":
       return { state: "idle", ...message, session_id, uuid };
+    case "background_tasks_changed":
+      return { tasks: [], ...message, session_id, uuid };
     case "task_notification":
       return {
         output_file: "/tmp/task-output",

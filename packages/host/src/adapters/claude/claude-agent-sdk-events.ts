@@ -1,4 +1,8 @@
 import type { AgentModelSelection } from "@openducktor/core";
+import {
+  projectClaudeBackgroundTaskEdge,
+  projectClaudeBackgroundTaskSnapshot,
+} from "./claude-agent-sdk-background-tools";
 import { toClaudeSlashCommandCatalog } from "./claude-agent-sdk-catalog";
 import { handleClaudeCompactionBoundary } from "./claude-agent-sdk-compaction";
 import {
@@ -187,6 +191,17 @@ export const handleClaudeSdkMessage = ({
     });
     return;
   }
+  if (message.type === "system" && message.subtype === "background_tasks_changed") {
+    for (const part of projectClaudeBackgroundTaskSnapshot(session, message, timestamp)) {
+      emit({
+        type: "assistant_part",
+        externalSessionId: session.externalSessionId,
+        timestamp,
+        part,
+      });
+    }
+    return;
+  }
   if (
     message.type === "system" &&
     (message.subtype === "task_started" ||
@@ -200,6 +215,15 @@ export const handleClaudeSdkMessage = ({
         readStringProp(messageValue, "tool_use_id"),
         message.task_id,
       ) ?? session;
+    const backgroundPart = projectClaudeBackgroundTaskEdge(taskSession, message, timestamp);
+    if (backgroundPart) {
+      emit({
+        type: "assistant_part",
+        externalSessionId: taskSession.externalSessionId,
+        timestamp,
+        part: backgroundPart,
+      });
+    }
     handleClaudeSubagentSystemMessage({ emit, message, session: taskSession, timestamp });
     return;
   }

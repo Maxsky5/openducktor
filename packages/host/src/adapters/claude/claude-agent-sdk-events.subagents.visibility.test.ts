@@ -48,7 +48,7 @@ describe("handleClaudeSdkMessage subagent visibility", () => {
     expect(events).toEqual([]);
   });
 
-  test("hides Claude task events that belong to non-Agent tools", () => {
+  test("projects non-Agent task events onto the ordinary tool part", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
     session.toolNamesByCallId.set("toolu_bash_1", "Bash");
@@ -108,6 +108,24 @@ describe("handleClaudeSdkMessage subagent visibility", () => {
       }),
     });
 
-    expect(events).toEqual([]);
+    expect(events.filter((event) => event.type === "assistant_part")).toEqual([
+      expect.objectContaining({
+        part: expect.objectContaining({
+          kind: "tool",
+          callId: "toolu_bash_1",
+          partId: "toolu_bash_1",
+          status: "running",
+        }),
+      }),
+      expect.objectContaining({
+        part: expect.objectContaining({ kind: "tool", status: "completed" }),
+      }),
+      expect.objectContaining({
+        part: expect.objectContaining({ kind: "tool", status: "completed" }),
+      }),
+    ]);
+    expect(
+      events.some((event) => event.type === "assistant_part" && event.part.kind === "subagent"),
+    ).toBe(false);
   });
 });

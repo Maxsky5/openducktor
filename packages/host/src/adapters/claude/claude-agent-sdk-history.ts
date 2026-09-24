@@ -15,6 +15,7 @@ import {
 } from "./claude-agent-sdk-history-entry";
 import {
   type ClaudeHistoryMessage,
+  isClaudeHistoryBackgroundTasksChangedMessage,
   isClaudeHistoryCompactBoundaryMessage,
   isClaudeHistorySubagentSystemMessage,
 } from "./claude-agent-sdk-history-import";
@@ -27,8 +28,10 @@ import {
   retractedHistoryMessageIds,
 } from "./claude-agent-sdk-history-support";
 import {
+  appendClaudeHistoryBackgroundTaskSnapshot,
   appendClaudeHistorySubagentSystemMessage,
   type ClaudeHistoryToolResultState,
+  projectClaudeHistoryBackgroundToolUses,
   projectClaudeHistoryToolResults,
 } from "./claude-agent-sdk-history-tool-results";
 import {
@@ -287,6 +290,10 @@ export const toClaudeHistoryMessages = (
       });
       continue;
     }
+    if (isClaudeHistoryBackgroundTasksChangedMessage(entry)) {
+      appendClaudeHistoryBackgroundTaskSnapshot(toolResultState, entry, timestamp);
+      continue;
+    }
     if (entry.type === "user") {
       if (projectClaudeHistoryToolResults({ entry, state: toolResultState, timestamp })) {
         continue;
@@ -305,6 +312,7 @@ export const toClaudeHistoryMessages = (
         continue;
       }
       const { message: assistantSnapshot, stopReason } = projection;
+      projectClaudeHistoryBackgroundToolUses(toolResultState, assistantSnapshot, timestamp);
       assistantSnapshot.parts = assistantSnapshot.parts.flatMap((part) => {
         if (part.kind !== "tool" || part.tool !== "Agent") {
           return [part];

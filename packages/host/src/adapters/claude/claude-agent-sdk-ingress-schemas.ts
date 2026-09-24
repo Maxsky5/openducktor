@@ -154,6 +154,8 @@ const claudeTaskStartedMessageSchema = claudeTaskMessageSchema.extend({
   workflow_name: z.string().optional(),
   prompt: z.string().optional(),
   skip_transcript: z.boolean().optional(),
+  ambient: z.boolean().optional(),
+  is_backgrounded: z.boolean().optional(),
 });
 
 const claudeTaskProgressMessageSchema = claudeTaskMessageSchema.extend({
@@ -186,6 +188,7 @@ const claudeTaskNotificationMessageSchema = claudeTaskMessageSchema.extend({
   summary: z.string(),
   usage: claudeTaskUsageSchema.optional(),
   skip_transcript: z.boolean().optional(),
+  ambient: z.boolean().optional(),
 });
 
 const claudeHistorySubagentSystemMessageSchema = z.discriminatedUnion("subtype", [

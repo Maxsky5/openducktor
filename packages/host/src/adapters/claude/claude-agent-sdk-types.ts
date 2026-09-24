@@ -104,6 +104,16 @@ export type ClaudeSessionQuery = AsyncGenerator<SDKMessage, void> &
 
 export type ClaudeSession = {
   acceptedUserMessages: ClaudeAcceptedUserMessage[];
+  backgroundToolTasksById?: NonNullable<
+    import("./claude-agent-sdk-background-tools").ClaudeBackgroundToolState["backgroundToolTasksById"]
+  >;
+  backgroundToolTaskIdsByCallId?: Map<string, string>;
+  backgroundToolActiveTaskIds?: Set<string>;
+  backgroundToolSnapshotSeen?: boolean;
+  backgroundToolCompletedPartsByCallId?: NonNullable<
+    import("./claude-agent-sdk-background-tools").ClaudeBackgroundToolState["backgroundToolCompletedPartsByCallId"]
+  >;
+  backgroundToolAgentTaskIds?: Set<string>;
   activeBackgroundSubagentTaskIds?: Set<string>;
   activeManualCompaction?: ClaudeManualCompactionState;
   activeSdkUserTurnCount: number;

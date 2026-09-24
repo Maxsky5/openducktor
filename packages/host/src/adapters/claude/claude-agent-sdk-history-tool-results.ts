@@ -1,5 +1,12 @@
 import type { SessionMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent, AgentSessionHistoryMessage, AgentStreamPart } from "@openducktor/core";
+import {
+  type ClaudeBackgroundToolState,
+  projectClaudeBackgroundTaskEdge,
+  projectClaudeBackgroundTaskSnapshot,
+  projectClaudeBackgroundToolResult,
+  projectClaudeBackgroundToolUse,
+} from "./claude-agent-sdk-background-tools";
 import { projectClaudeCompletedToolResult } from "./claude-agent-sdk-completed-tool-result";
 import type { MutableAssistantHistoryMessage } from "./claude-agent-sdk-history-assistant";
 import { readHistorySessionId } from "./claude-agent-sdk-history-entry";
@@ -21,7 +28,7 @@ import type { ClaudeToolInput } from "./claude-agent-sdk-types";
 
 type SubagentPart = Extract<AgentStreamPart, { kind: "subagent" }>;
 
-export type ClaudeHistoryToolResultState = {
+export type ClaudeHistoryToolResultState = ClaudeBackgroundToolState & {
   activeBackgroundSubagentTaskIds: Set<string>;
   assistantMessagesByToolCallId: Map<string, MutableAssistantHistoryMessage>;
   hiddenSubagentTaskIds: Set<string>;
@@ -37,6 +44,37 @@ export type ClaudeHistoryToolResultState = {
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;
   transcriptExternalSessionId: string | undefined;
+};
+
+const replaceHistoryToolPart = (
+  state: ClaudeHistoryToolResultState,
+  part: Extract<AgentStreamPart, { kind: "tool" }>,
+): void => {
+  const message = state.assistantMessagesByToolCallId.get(part.callId);
+  if (!message) return;
+  message.parts = message.parts.map((candidate) =>
+    candidate.kind === "tool" && candidate.callId === part.callId ? part : candidate,
+  );
+};
+
+export const appendClaudeHistoryBackgroundTaskSnapshot = (
+  state: ClaudeHistoryToolResultState,
+  message: Parameters<typeof projectClaudeBackgroundTaskSnapshot>[1],
+  timestamp: string,
+): void => {
+  for (const part of projectClaudeBackgroundTaskSnapshot(state, message, timestamp)) {
+    replaceHistoryToolPart(state, part);
+  }
+};
+
+export const projectClaudeHistoryBackgroundToolUses = (
+  state: ClaudeHistoryToolResultState,
+  message: MutableAssistantHistoryMessage,
+  timestamp: string,
+): void => {
+  message.parts = message.parts.map((part) =>
+    part.kind === "tool" ? projectClaudeBackgroundToolUse(state, part, timestamp) : part,
+  );
 };
 
 const historySessionId = (
@@ -107,6 +145,8 @@ export const appendClaudeHistorySubagentSystemMessage = ({
   state: ClaudeHistoryToolResultState;
   timestamp: string;
 }): void => {
+  const backgroundPart = projectClaudeBackgroundTaskEdge(state, message, timestamp);
+  if (backgroundPart) replaceHistoryToolPart(state, backgroundPart);
   const events: AgentEvent[] = [];
   handleClaudeSubagentSystemMessage({
     emit: (event) => events.push(event),
@@ -271,7 +311,14 @@ export const projectClaudeHistoryToolResults = ({
     if (existingPart?.preview) {
       completedToolInput.preview = existingPart.preview;
     }
-    const { part: completedPart } = projectClaudeCompletedToolResult(completedToolInput);
+    const { part: ordinaryCompletedPart } = projectClaudeCompletedToolResult(completedToolInput);
+    const completedPart = projectClaudeBackgroundToolResult(
+      state,
+      result.toolUseId,
+      result.raw,
+      ordinaryCompletedPart,
+      timestamp,
+    );
     const subagentParts =
       tool === "Agent"
         ? projectAgentResult({

@@ -1,4 +1,8 @@
 import type { AgentEvent } from "@openducktor/core";
+import {
+  type ClaudeBackgroundToolState,
+  projectClaudeBackgroundToolResult,
+} from "./claude-agent-sdk-background-tools";
 import { projectClaudeCompletedToolResult } from "./claude-agent-sdk-completed-tool-result";
 import {
   emitClaudeAgentToolResultSubagentPart,
@@ -24,7 +28,7 @@ import { isClaudeToolUseRetracted } from "./claude-agent-sdk-transcript-correlat
 import { HostValidationError } from "../../effect/host-errors";
 import type { ClaudeSdkUserMessageProjection } from "./claude-agent-sdk-message-projection";
 
-type ClaudeToolResultSession = {
+type ClaudeToolResultSession = ClaudeBackgroundToolState & {
   activeBackgroundSubagentTaskIds?: Set<string>;
   externalSessionId: string;
   retractedSubagentTaskIds?: Set<string>;
@@ -121,7 +125,14 @@ export const handleClaudeUserToolResultMessage = ({
     if (startedAtMs !== undefined) {
       completedResultInput.startedAtMs = startedAtMs;
     }
-    const { part, todos } = projectClaudeCompletedToolResult(completedResultInput);
+    const { part: completedPart, todos } = projectClaudeCompletedToolResult(completedResultInput);
+    const part = projectClaudeBackgroundToolResult(
+      session,
+      result.toolUseId,
+      result.raw,
+      completedPart,
+      timestamp,
+    );
     emit({
       type: "assistant_part",
       externalSessionId: session.externalSessionId,

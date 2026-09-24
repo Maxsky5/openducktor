@@ -42,6 +42,12 @@ export type ClaudeHistoryRetractionMessage = SessionStoreEntry & {
 export type ClaudeHistorySubagentSystemMessage = SessionStoreEntry &
   ClaudeHistorySubagentSystemMessageIngress;
 
+export type ClaudeHistoryBackgroundTasksChangedMessage = SessionStoreEntry & {
+  type: "system";
+  subtype: "background_tasks_changed";
+  tasks: Array<{ task_id: string; task_type: string; description: string; ambient?: boolean }>;
+};
+
 export type ClaudeHistoryCompactBoundaryMessage = SessionStoreEntry & {
   type: "system";
   subtype: "compact_boundary";
@@ -69,6 +75,7 @@ export type ClaudeHistoryMessage =
   | ClaudeHistoryResultMessage
   | ClaudeHistoryRetractionMessage
   | ClaudeHistorySubagentSystemMessage
+  | ClaudeHistoryBackgroundTasksChangedMessage
   | ClaudeHistoryCompactBoundaryMessage
   | ClaudeHistoryLocalCommandMessage
   | ClaudeHistoryQueueOperationMessage;
@@ -113,6 +120,18 @@ const isMainClaudeHistoryMessage = (entry: SessionStoreEntry): entry is ClaudeHi
     ) {
       parseClaudeHistorySubagentSystemMessageIngress(entry);
       return true;
+    }
+    if (entry.type === "system" && subtype === "background_tasks_changed") {
+      return z
+        .array(
+          z.object({
+            task_id: z.string(),
+            task_type: z.string(),
+            description: z.string(),
+            ambient: z.boolean().optional(),
+          }),
+        )
+        .safeParse(entry.tasks).success;
     }
     if (
       entry.type === "system" &&
@@ -192,6 +211,11 @@ export const isClaudeHistorySubagentSystemMessage = (
   parseClaudeHistorySubagentSystemMessageIngress(entry);
   return true;
 };
+
+export const isClaudeHistoryBackgroundTasksChangedMessage = (
+  entry: ClaudeHistoryMessage,
+): entry is ClaudeHistoryBackgroundTasksChangedMessage =>
+  entry.type === "system" && readStringProp(entry, "subtype") === "background_tasks_changed";
 
 export const isClaudeHistoryCompactBoundaryMessage = (
   entry: ClaudeHistoryMessage,

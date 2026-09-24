@@ -1,4 +1,5 @@
 import type { AgentModelSelection } from "@openducktor/core";
+import type { ClaudeBackgroundToolState } from "./claude-agent-sdk-background-tools";
 import { claudeSubagentExternalSessionId } from "./claude-agent-sdk-subagent-transcripts";
 import type { ClaudeTodoProjection, ClaudeTodoState } from "./claude-agent-sdk-todos";
 import type {
@@ -12,6 +13,14 @@ import type {
 
 export type ClaudeEventSession = {
   acceptedUserMessages?: readonly ClaudeAcceptedUserMessage[];
+  backgroundToolTasksById?: NonNullable<ClaudeBackgroundToolState["backgroundToolTasksById"]>;
+  backgroundToolTaskIdsByCallId?: Map<string, string>;
+  backgroundToolActiveTaskIds?: Set<string>;
+  backgroundToolSnapshotSeen?: boolean;
+  backgroundToolCompletedPartsByCallId?: NonNullable<
+    ClaudeBackgroundToolState["backgroundToolCompletedPartsByCallId"]
+  >;
+  backgroundToolAgentTaskIds?: Set<string>;
   activeBackgroundSubagentTaskIds?: Set<string>;
   activeManualCompaction?: ClaudeManualCompactionState;
   activeSdkUserTurnCount?: number;
@@ -54,12 +63,16 @@ export type ClaudeEventSession = {
 };
 
 export type ClaudeBackgroundWorkSession = {
+  backgroundToolActiveTaskIds?: ReadonlySet<string>;
   activeBackgroundSubagentTaskIds?: ReadonlySet<string>;
   subagentEventSessionsByToolUseId?: ReadonlyMap<string, ClaudeBackgroundWorkSession>;
 };
 
 export const hasActiveClaudeBackgroundWork = (session: ClaudeBackgroundWorkSession): boolean => {
-  if ((session.activeBackgroundSubagentTaskIds?.size ?? 0) > 0) {
+  if (
+    (session.activeBackgroundSubagentTaskIds?.size ?? 0) > 0 ||
+    (session.backgroundToolActiveTaskIds?.size ?? 0) > 0
+  ) {
     return true;
   }
   for (const childSession of session.subagentEventSessionsByToolUseId?.values() ?? []) {

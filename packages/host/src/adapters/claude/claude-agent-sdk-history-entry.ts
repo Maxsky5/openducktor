@@ -41,7 +41,8 @@ export const isNestedHistoryEntry = (entry: ClaudeHistoryMessage): boolean => {
       subtype === "task_started" ||
       subtype === "task_progress" ||
       subtype === "task_updated" ||
-      subtype === "task_notification"
+      subtype === "task_notification" ||
+      subtype === "background_tasks_changed"
     ) {
       return false;
     }
