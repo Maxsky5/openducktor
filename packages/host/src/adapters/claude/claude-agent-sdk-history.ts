@@ -28,11 +28,11 @@ import {
   retractedHistoryMessageIds,
 } from "./claude-agent-sdk-history-support";
 import {
-  appendClaudeHistoryBackgroundTaskMembership,
-  appendClaudeHistoryBackgroundTaskSnapshot,
+  applyClaudeHistoryActiveTasks,
+  applyClaudeHistoryTaskSnapshot,
   appendClaudeHistorySubagentSystemMessage,
   type ClaudeHistoryToolResultState,
-  projectClaudeHistoryBackgroundToolUses,
+  applyClaudeHistoryToolUses,
   projectClaudeHistoryToolResults,
 } from "./claude-agent-sdk-history-tool-results";
 import {
@@ -293,7 +293,7 @@ export const toClaudeHistoryMessages = (
       continue;
     }
     if (isClaudeHistoryBackgroundTasksChangedMessage(entry)) {
-      appendClaudeHistoryBackgroundTaskSnapshot(toolResultState, entry, timestamp);
+      applyClaudeHistoryTaskSnapshot(toolResultState, entry, timestamp);
       continue;
     }
     if (entry.type === "user") {
@@ -310,7 +310,7 @@ export const toClaudeHistoryMessages = (
       });
       if (!projection) continue;
       const { message: assistantSnapshot, stopReason } = projection;
-      projectClaudeHistoryBackgroundToolUses(toolResultState, assistantSnapshot, timestamp);
+      applyClaudeHistoryToolUses(toolResultState, assistantSnapshot, timestamp);
       assistantSnapshot.parts = assistantSnapshot.parts.flatMap((part) => {
         if (part.kind !== "tool" || part.tool !== "Agent") {
           return [part];
@@ -488,11 +488,7 @@ export const toClaudeHistoryMessages = (
       }
     }
   }
-  appendClaudeHistoryBackgroundTaskMembership(
-    toolResultState,
-    options.currentBackgroundTaskIds,
-    now,
-  );
+  applyClaudeHistoryActiveTasks(toolResultState, options.currentBackgroundTaskIds, now);
   appendUnmatchedLiveUserMessages(history, liveUserMessages);
   return history;
 };

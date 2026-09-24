@@ -3,7 +3,7 @@ import type { AgentEvent, AgentSessionHistoryMessage, AgentStreamPart } from "@o
 import {
   type ClaudeBackgroundToolState,
   projectClaudeBackgroundTaskEdge,
-  projectClaudeBackgroundTaskMembership,
+  projectClaudeBackgroundActiveTasks,
   projectClaudeBackgroundTaskSnapshot,
   projectClaudeBackgroundToolResult,
   projectClaudeBackgroundToolUse,
@@ -41,10 +41,38 @@ export type ClaudeHistoryToolResultState = ClaudeBackgroundToolState & {
   subagentTaskIdsByToolUseId: Map<string, string>;
   todoProjectionState: ClaudeTodoProjectionState;
   todosById: ClaudeTodoState;
-  toolInputsByCallId: Map<string, ClaudeToolInput>;
-  toolMessageIdsByCallId: Map<string, string>;
-  toolNamesByCallId: Map<string, string>;
   transcriptExternalSessionId: string | undefined;
+};
+
+export const applyClaudeHistoryTaskSnapshot = (
+  state: ClaudeHistoryToolResultState,
+  message: Parameters<typeof projectClaudeBackgroundTaskSnapshot>[1],
+  timestamp: string,
+): void => {
+  for (const part of projectClaudeBackgroundTaskSnapshot(state, message, timestamp)) {
+    replaceHistoryToolPart(state, part);
+  }
+};
+
+export const applyClaudeHistoryActiveTasks = (
+  state: ClaudeHistoryToolResultState,
+  activeTaskIds: ReadonlySet<string> | undefined,
+  now: () => string,
+): void => {
+  if (!activeTaskIds) return;
+  for (const part of projectClaudeBackgroundActiveTasks(state, activeTaskIds, now())) {
+    replaceHistoryToolPart(state, part);
+  }
+};
+
+export const applyClaudeHistoryToolUses = (
+  state: ClaudeHistoryToolResultState,
+  message: MutableAssistantHistoryMessage,
+  timestamp: string,
+): void => {
+  message.parts = message.parts.map((part) =>
+    part.kind === "tool" ? projectClaudeBackgroundToolUse(state, part, timestamp) : part,
+  );
 };
 
 const replaceHistoryToolPart = (
@@ -55,37 +83,6 @@ const replaceHistoryToolPart = (
   if (!message) return;
   message.parts = message.parts.map((candidate) =>
     candidate.kind === "tool" && candidate.callId === part.callId ? part : candidate,
-  );
-};
-
-export const appendClaudeHistoryBackgroundTaskSnapshot = (
-  state: ClaudeHistoryToolResultState,
-  message: Parameters<typeof projectClaudeBackgroundTaskSnapshot>[1],
-  timestamp: string,
-): void => {
-  for (const part of projectClaudeBackgroundTaskSnapshot(state, message, timestamp)) {
-    replaceHistoryToolPart(state, part);
-  }
-};
-
-export const appendClaudeHistoryBackgroundTaskMembership = (
-  state: ClaudeHistoryToolResultState,
-  activeTaskIds: ReadonlySet<string> | undefined,
-  now: () => string,
-): void => {
-  if (!activeTaskIds) return;
-  for (const part of projectClaudeBackgroundTaskMembership(state, activeTaskIds, now())) {
-    replaceHistoryToolPart(state, part);
-  }
-};
-
-export const projectClaudeHistoryBackgroundToolUses = (
-  state: ClaudeHistoryToolResultState,
-  message: MutableAssistantHistoryMessage,
-  timestamp: string,
-): void => {
-  message.parts = message.parts.map((part) =>
-    part.kind === "tool" ? projectClaudeBackgroundToolUse(state, part, timestamp) : part,
   );
 };
 

@@ -8,20 +8,10 @@ import type {
   PendingApproval,
   PendingQuestion,
   ClaudeSessionActivity,
-  ClaudeToolInput,
 } from "./claude-agent-sdk-types";
 
-export type ClaudeEventSession = {
+export type ClaudeEventSession = ClaudeBackgroundToolState & {
   acceptedUserMessages?: readonly ClaudeAcceptedUserMessage[];
-  backgroundToolTasksById?: NonNullable<ClaudeBackgroundToolState["backgroundToolTasksById"]>;
-  backgroundToolTaskIdsByCallId?: Map<string, string>;
-  backgroundToolActiveTaskIds?: Set<string>;
-  backgroundToolSnapshotSeen?: boolean;
-  backgroundToolCallIdsSinceSnapshot?: Set<string>;
-  backgroundToolCompletedPartsByCallId?: NonNullable<
-    ClaudeBackgroundToolState["backgroundToolCompletedPartsByCallId"]
-  >;
-  backgroundToolAgentTaskIds?: Set<string>;
   activeBackgroundSubagentTaskIds?: Set<string>;
   activeManualCompaction?: ClaudeManualCompactionState;
   activeSdkUserTurnCount?: number;
@@ -53,9 +43,6 @@ export type ClaudeEventSession = {
   todoProjection?: ClaudeTodoProjection;
   todosById: ClaudeTodoState;
   toolEndedAtMsByCallId?: Map<string, number>;
-  toolInputsByCallId: Map<string, ClaudeToolInput>;
-  toolMessageIdsByCallId: Map<string, string>;
-  toolNamesByCallId: Map<string, string>;
   toolStartedAtMsByCallId: Map<string, number>;
   subagentMessageIdsByTaskId: Map<string, string>;
   subagentAgentIdsByToolUseId?: Map<string, string>;
