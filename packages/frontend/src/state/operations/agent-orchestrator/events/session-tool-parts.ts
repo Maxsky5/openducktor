@@ -180,7 +180,8 @@ const composeToolPartSessionUpdate = ({
   const existingToolMeta = existing?.meta?.kind === "tool" ? existing.meta : null;
   const resolvedInput = preserveExistingToolValue(input, existingToolMeta?.input);
   const resolvedOutput = preserveExistingToolValue(output, existingToolMeta?.output);
-  const resolvedError = preserveExistingToolValue(error, existingToolMeta?.error);
+  const resolvedError =
+    status === "error" ? preserveExistingToolValue(error, existingToolMeta?.error) : undefined;
   const resolvedPart: ToolPart = { ...part };
   if (part.fileDiffs === undefined && existingToolMeta?.fileDiffs !== undefined) {
     resolvedPart.fileDiffs = existingToolMeta.fileDiffs;

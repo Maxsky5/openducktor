@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { waitFor } from "@testing-library/react";
 import {
   buildSession,
   createSessionsRef,
@@ -291,6 +292,72 @@ describe("agent-orchestrator session transcript events", () => {
     }
     expect(message.meta.status).toBe("error");
     expect(message.meta.computerUse).toEqual(computerUse);
+  });
+
+  test("removes a superseded tool error when the same call resumes or completes", async () => {
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: async (_externalSessionId, handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+    const sessionsRef = createSessionsRef([buildSession({ status: "running" })]);
+    await listenToAgentSessionEvents({
+      adapter,
+      repoPath: "/tmp/repo",
+      externalSessionId: "session-1",
+      eventBatchWindowMs: 0,
+      sessionsRef,
+      updateSession: createSessionUpdater(sessionsRef),
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+    });
+    const handleEvent = handlers[0];
+    if (!handleEvent) throw new Error("Expected session event handler to be registered");
+    let eventOrdinal = 0;
+    const sendToolPart = (
+      status: "error" | "running" | "completed",
+      options: { error?: string; output?: string } = {},
+    ) =>
+      handleEvent({
+        type: "assistant_part",
+        externalSessionId: "session-1",
+        timestamp: new Date(Date.parse("2026-02-22T08:00:20.000Z") + eventOrdinal++).toISOString(),
+        part: {
+          kind: "tool",
+          messageId: "tool-msg-1",
+          partId: "bash-1",
+          callId: "bash-1",
+          tool: "Bash",
+          toolType: "bash",
+          status,
+          ...options,
+        },
+      });
+    const toolMeta = () =>
+      getSessionMessages(sessionsRef).find((message) => message.meta?.kind === "tool")?.meta;
+
+    sendToolPart("error", {
+      error: "Claude ended the background task without a terminal outcome.",
+    });
+    expect(toolMeta()).toMatchObject({ status: "error", error: expect.any(String) });
+    sendToolPart("running");
+    await waitFor(() => expect(toolMeta()).toMatchObject({ status: "running" }), { timeout: 900 });
+    expect(toolMeta()).not.toHaveProperty("error");
+
+    sendToolPart("error", {
+      error: "Claude ended the background task without a terminal outcome.",
+    });
+    sendToolPart("error");
+    expect(toolMeta()).toMatchObject({
+      status: "error",
+      error: "Claude ended the background task without a terminal outcome.",
+    });
+    sendToolPart("completed", { output: "Build passed" });
+    expect(toolMeta()).toMatchObject({ status: "completed", output: "Build passed" });
+    expect(toolMeta()).not.toHaveProperty("error");
   });
 
   test("does not revive an idle session from a terminal tool update", async () => {
