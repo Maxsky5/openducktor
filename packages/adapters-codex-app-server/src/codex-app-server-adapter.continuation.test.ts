@@ -175,6 +175,29 @@ describe("CodexAppServerAdapter interrupted-turn continuation", () => {
     });
   });
 
+  test("keeps native settings when continuing an imported repository session", async () => {
+    const { adapter, calls } = createContinuationAdapter({
+      threadStatus: { type: "idle" },
+      latestTurnStatus: "interrupted",
+    });
+    const input = continuationInput({ sessionScope: { kind: "repository" } });
+    const source = await adapter.openExistingSession(input);
+    await source.attach();
+    calls.length = 0;
+
+    await adapter.continueInterruptedTurn(input);
+
+    expect(calls.find((call) => call.method === "thread/resume")?.params).toEqual({
+      threadId: "thread-1",
+      excludeTurns: true,
+    });
+    expect(methodsOf(calls)).not.toContain("thread/name/set");
+    const turnStart = calls.find((call) => call.method === "turn/start");
+    expect(turnStart?.params).not.toHaveProperty("approvalPolicy");
+    expect(turnStart?.params).not.toHaveProperty("sandboxPolicy");
+    expect(turnStart?.params).not.toHaveProperty("approvalsReviewer");
+  });
+
   test("releases the resumed session when the thread rename fails", async () => {
     const { adapter } = createContinuationAdapter({
       threadStatus: { type: "idle" },

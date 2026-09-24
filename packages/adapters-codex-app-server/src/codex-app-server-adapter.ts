@@ -628,26 +628,30 @@ export class CodexAppServerAdapter
         workingDirectory: input.workingDirectory,
       }),
     );
-    const threadResumeInput: CodexAppServerThreadResumeParams = {
-      ...codexTransportPolicy(policy),
-      config: sessionPolicy.threadConfig,
-      threadId: input.externalSessionId,
-      cwd: input.workingDirectory,
-      excludeTurns: true,
-      model: toTransportModelSelection(model).model,
-    };
-    if (input.systemPrompt) {
+    const preserveNativeSettings = current?.preserveNativeSettings === true;
+    const threadResumeInput: CodexAppServerThreadResumeParams = preserveNativeSettings
+      ? { threadId: input.externalSessionId, excludeTurns: true }
+      : {
+          ...codexTransportPolicy(policy),
+          config: sessionPolicy.threadConfig,
+          threadId: input.externalSessionId,
+          cwd: input.workingDirectory,
+          excludeTurns: true,
+          model: toTransportModelSelection(model).model,
+        };
+    if (input.systemPrompt && !preserveNativeSettings) {
       threadResumeInput.developerInstructions = input.systemPrompt;
     }
     const response = await client.threadResume(threadResumeInput);
     this.clearThreadInventory(runtimeId);
     const session = sessionStateFromThreadResume(input, runtimeId, model, response);
-    if (sessionPolicy.kind === "repository") {
+    session.preserveNativeSettings = preserveNativeSettings;
+    if (sessionPolicy.kind === "repository" && !preserveNativeSettings) {
       session.summary = { ...session.summary, title: sessionPolicy.title };
     }
     const previous = this.localSessions.get(input.externalSessionId);
     this.localSessions.remember(session);
-    if (sessionPolicy.kind === "repository") {
+    if (sessionPolicy.kind === "repository" && !preserveNativeSettings) {
       try {
         await client.threadSetName({
           threadId: session.threadId,
