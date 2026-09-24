@@ -1,7 +1,10 @@
 import type { AgentModelSelection, RuntimeKind } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
-import { type ModelPickerValue } from "@/components/features/agents/model-picker";
+import {
+  selectableModelPickerCatalog,
+  type ModelPickerValue,
+} from "@/components/features/agents/model-picker";
 import { coerceVisibleSelectionToCatalog } from "@/features/model-selection/model-selection-state";
 import { resolveModelSelectionOptions } from "@/features/agent-chat-composer/model-selection/model-selection-options";
 import { useModelSelectionActions } from "@/features/agent-chat-composer/model-selection/use-model-selection-actions";
@@ -87,8 +90,8 @@ export function useWorkspaceSessionModelPicker(
   const onValueChange = useCallback(
     (value: ModelPickerValue) => {
       const runtime = runtimes.find((entry) => entry.descriptor.kind === value.runtimeKind);
-      if (runtime?.resource.status === "ready" || runtime?.resource.status === "refreshing")
-        handleSelectModelPair(value, runtime.resource.catalog);
+      const catalog = selectableModelPickerCatalog(runtime?.resource);
+      if (catalog) handleSelectModelPair(value, catalog);
     },
     [runtimes, handleSelectModelPair],
   );

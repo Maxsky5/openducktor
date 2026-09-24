@@ -13,7 +13,10 @@ import type {
   ModelPickerRuntime,
   ModelPickerValue,
 } from "@/components/features/agents/model-picker";
-import { toModelPickerCatalogResource } from "@/components/features/agents/model-picker";
+import {
+  selectableModelPickerCatalog,
+  toModelPickerCatalogResource,
+} from "@/components/features/agents/model-picker";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import {
@@ -257,11 +260,12 @@ export function useSessionStartModalState({
       const runtime = modelPickerRuntimes.find(
         (candidate) => candidate.descriptor.kind === value.runtimeKind,
       );
-      if (runtime?.resource.status !== "ready" && runtime?.resource.status !== "refreshing") {
+      const catalog = selectableModelPickerCatalog(runtime?.resource);
+      if (!catalog) {
         return;
       }
       setRequestedRuntimeKind(value.runtimeKind);
-      handleSelectPair(value, runtime.resource.catalog);
+      handleSelectPair(value, catalog);
     },
     [handleSelectPair, modelPickerRuntimes, selectedStartMode, setRequestedRuntimeKind],
   );

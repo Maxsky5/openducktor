@@ -37,6 +37,11 @@ export type ModelPickerCatalogResource =
       reason: string;
     };
 
+export const selectableModelPickerCatalog = (
+  resource: ModelPickerCatalogResource | undefined,
+): AgentModelCatalog | null =>
+  resource?.status === "ready" || resource?.status === "refreshing" ? resource.catalog : null;
+
 type ModelPickerCatalogResourceInput = {
   catalog: AgentModelCatalog | null;
   isFetching: boolean;
@@ -168,13 +173,11 @@ export const buildModelPickerItems = ({
 }): ModelPickerItem[] => {
   const favoriteKeys = new Set((favorites ?? []).map(modelPickerValueKey));
   const items = runtimes.flatMap((runtime, runtimeIndex) => {
-    if (
-      (runtime.resource.status !== "ready" && runtime.resource.status !== "refreshing") ||
-      (lockedRuntimeKind && runtime.descriptor.kind !== lockedRuntimeKind)
-    ) {
+    const catalog = selectableModelPickerCatalog(runtime.resource);
+    if (!catalog || (lockedRuntimeKind && runtime.descriptor.kind !== lockedRuntimeKind)) {
       return [];
     }
-    return (runtime.resource.catalog?.models ?? []).map((model, catalogIndex) => {
+    return catalog.models.map((model, catalogIndex) => {
       const value = {
         runtimeKind: runtime.descriptor.kind,
         providerId: model.providerId,

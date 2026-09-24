@@ -123,16 +123,18 @@ export function useSessionStartModalRuntimeState({
   const selectedResource =
     catalogResources.find((resource) => resource.runtimeKind === selectedRuntimeKind) ?? null;
   const isWaitingForRuntime = selectedRuntimeReadiness.state === "checking";
+  const isFetchingWithoutCatalog =
+    selectedResource?.isFetching === true && !selectedResource.catalog;
 
   return {
     catalog: selectedResource?.catalog ?? null,
     catalogResources,
     catalogError: selectedResource?.error ?? null,
     isCatalogLoading:
-      isOpen && selectedStartMode !== "reuse" && selectedRuntimeKind !== null
-        ? isWaitingForRuntime ||
-          ((selectedResource?.isFetching ?? false) && !selectedResource?.catalog)
-        : false,
+      isOpen &&
+      selectedStartMode !== "reuse" &&
+      selectedRuntimeKind !== null &&
+      (isWaitingForRuntime || isFetchingWithoutCatalog),
     eligibleRuntimeDefinitions,
     selectedRuntimeDescriptor,
     selectedRuntimeKind,
