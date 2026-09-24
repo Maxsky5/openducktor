@@ -1,10 +1,7 @@
 import { z } from "zod";
 import { runtimeKindSchema } from "./agent-runtime-schemas";
 import { agentSessionModelSelectionSchema } from "./session-schemas";
-import {
-  WORKSPACE_SESSION_GENERATED_TITLE_LIMIT,
-  WORKSPACE_SESSION_MANUAL_TITLE_LIMIT,
-} from "./workspace-session-limits";
+import { WORKSPACE_SESSION_GENERATED_TITLE_LIMIT } from "./workspace-session-limits";
 
 export {
   WORKSPACE_SESSION_ARCHIVE_LIMIT,
