@@ -283,9 +283,10 @@ describe("rich task description rendering", () => {
     );
 
     await waitFor(() => expect(view.container.querySelector(".token")).not.toBeNull(), {
-      timeout: 750,
+      timeout: 3000,
     });
-  });
+    // A cold Prism load took 2.33 seconds on macOS during a parallel CI run.
+  }, 4000);
 
   test("resolves logical task assets through the shell without persisting runtime URLs", async () => {
     const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://asset/resolved");
