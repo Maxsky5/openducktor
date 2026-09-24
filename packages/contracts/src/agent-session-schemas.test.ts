@@ -25,6 +25,15 @@ describe("agent session scope contracts", () => {
     });
   });
 
+  test("keeps a durable imported title on a repository scope", () => {
+    const importedTitle = "a".repeat(140);
+
+    expect(agentSessionScopeSchema.parse({ kind: "repository", title: importedTitle })).toEqual({
+      kind: "repository",
+      title: importedTitle,
+    });
+  });
+
   test("rejects invalid workflow field combinations", () => {
     expect(
       agentSessionScopeSchema.safeParse({
