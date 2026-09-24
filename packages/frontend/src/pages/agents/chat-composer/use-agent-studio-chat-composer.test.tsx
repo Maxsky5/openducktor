@@ -758,6 +758,61 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
+  test("selects cached models during refresh and rejects a failed catalog", async () => {
+    const loadedSession = createLoadedSession();
+    const updateAgentSessionModel = mock(() => {});
+    const harness = createHookHarness(
+      createBaseProps({
+        loadedSession,
+        sessionRuntimeData: createSessionRuntimeData({
+          modelCatalog: CATALOG,
+          isLoadingModelCatalog: true,
+        }),
+        updateAgentSessionModel,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (state) => state.modelPicker.runtimes[0]?.resource.status === "refreshing",
+      );
+      await harness.run(() => {
+        harness.getLatest().modelPicker.onValueChange({
+          runtimeKind: "opencode",
+          providerId: "anthropic",
+          modelId: "claude-sonnet",
+        });
+      });
+      expect(updateAgentSessionModel).toHaveBeenCalledWith(
+        toAgentSessionIdentity(loadedSession),
+        expect.objectContaining({ providerId: "anthropic", modelId: "claude-sonnet" }),
+      );
+
+      await harness.update(
+        createBaseProps({
+          loadedSession,
+          sessionRuntimeData: createSessionRuntimeData({
+            modelCatalog: CATALOG,
+            catalogError: "Catalog refresh failed",
+          }),
+          updateAgentSessionModel,
+        }),
+      );
+      await harness.waitFor((state) => state.modelPicker.runtimes[0]?.resource.status === "failed");
+      await harness.run(() => {
+        harness.getLatest().modelPicker.onValueChange({
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+        });
+      });
+      expect(updateAgentSessionModel).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("keeps the selected session model while selected-session runtime data loads", async () => {
     const loadCatalog = mock(async () => runtimeCatalog({ models: CATALOG }));
     const harness = createHookHarness(

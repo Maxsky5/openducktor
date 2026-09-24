@@ -20,6 +20,7 @@ import type {
   ModelPickerValue,
 } from "@/components/features/agents/model-picker";
 import {
+  selectableModelPickerCatalog,
   toModelPickerCatalogResource,
   unavailableModelPickerCatalogResource,
 } from "@/components/features/agents/model-picker";
@@ -511,10 +512,11 @@ export function useAgentStudioChatComposer({
       const targetRuntime = modelPickerRuntimes.find(
         (runtime) => runtime.descriptor.kind === value.runtimeKind,
       );
-      if (targetRuntime?.resource.status !== "ready") {
+      const catalog = selectableModelPickerCatalog(targetRuntime?.resource);
+      if (!catalog) {
         return;
       }
-      applyModelPair(value, targetRuntime.resource.catalog);
+      applyModelPair(value, catalog);
     },
     [applyModelPair, modelPickerRuntimes],
   );

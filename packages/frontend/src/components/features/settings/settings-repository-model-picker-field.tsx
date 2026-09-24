@@ -6,6 +6,7 @@ import {
   type ModelPickerFavoriteState,
   type ModelPickerRuntime,
   type ModelPickerValue,
+  selectableModelPickerCatalog,
   toModelPickerCatalogResource,
   unavailableModelPickerCatalogResource,
 } from "@/components/features/agents/model-picker";
@@ -53,10 +54,11 @@ export function RepositoryModelPickerField({
           const targetRuntime = runtimes.find(
             (candidate) => candidate.descriptor.kind === selectedValue.runtimeKind,
           );
-          if (targetRuntime?.resource.status !== "ready") {
+          const catalog = selectableModelPickerCatalog(targetRuntime?.resource);
+          if (!catalog) {
             return;
           }
-          onSelect(selectedValue, targetRuntime.resource.catalog);
+          onSelect(selectedValue, catalog);
         }}
       />
     </div>
