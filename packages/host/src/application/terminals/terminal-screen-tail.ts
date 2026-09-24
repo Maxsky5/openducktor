@@ -2,6 +2,14 @@ import type { Terminal } from "@xterm/headless";
 
 const ESC = 0x1b;
 const MAX_PENDING_BYTES = 64 * 1024;
+const C1_INTRODUCERS = new Map<number, number>([
+  [0x90, 0x50],
+  [0x98, 0x58],
+  [0x9b, 0x5b],
+  [0x9d, 0x5d],
+  [0x9e, 0x5e],
+  [0x9f, 0x5f],
+]);
 const SEQUENCE_DECODER = new TextDecoder();
 const CHARSET_FLAGS = new Set("0AB4C5RQKYE6ZH7=");
 const CHARSET_PREFIXES = ["(", ")", "*", "+"] as const;
@@ -123,6 +131,7 @@ export class TerminalScreenTail {
   private utf8Remaining = 0;
   private cursorStyle = "";
   private stringIntro: number | null = null;
+  private stringC1Lead = false;
   private discardedStringPayload = false;
   private discardedControlSequence = false;
   private readonly charsets = ["B", "B", "B", "B"];
@@ -245,7 +254,12 @@ export class TerminalScreenTail {
           : `\u001b${String.fromCharCode(this.stringIntro ?? 0x5f)}`
       : "";
     const pending = this.discardedStringPayload
-      ? new TextEncoder().encode(ignoredString + (this.state.endsWith("_escape") ? "\u001b" : ""))
+      ? new Uint8Array([
+          ...new TextEncoder().encode(
+            ignoredString + (this.state.endsWith("_escape") ? "\u001b" : ""),
+          ),
+          ...(this.stringC1Lead ? [0xc2] : []),
+        ])
       : new Uint8Array(this.pending);
     const modes = new TextEncoder().encode(parts.join(""));
     const suffix = new Uint8Array(modes.byteLength + pending.byteLength);
@@ -271,11 +285,22 @@ export class TerminalScreenTail {
       if (byte >= 0x80 && byte <= 0xbf) {
         this.push(byte);
         this.utf8Remaining -= 1;
-        if (this.utf8Remaining === 0) this.finish();
+        if (this.utf8Remaining === 0) {
+          const intro = this.pending[0] === 0xc2 ? C1_INTRODUCERS.get(byte) : undefined;
+          this.finish();
+          if (intro !== undefined) {
+            this.start(ESC, "escape");
+            this.acceptByte(intro);
+          }
+        }
       } else {
         this.finish();
         this.acceptByte(byte);
       }
+      return;
+    }
+    if (byte === 0x18 || byte === 0x1a) {
+      this.finish();
       return;
     }
     if (this.state === "escape") {
@@ -304,10 +329,6 @@ export class TerminalScreenTail {
         this.start(byte, "escape");
         return;
       }
-      if (byte === 0x18 || byte === 0x1a) {
-        this.finish();
-        return;
-      }
       this.push(byte);
       if (byte >= 0x40 && byte <= 0x7e) {
         const sequence = SEQUENCE_DECODER.decode(new Uint8Array(this.pending));
@@ -319,6 +340,11 @@ export class TerminalScreenTail {
       return;
     }
     if (this.state === "osc" || this.state === "string") {
+      if (this.stringC1Lead && byte === 0x9c) {
+        this.finish();
+        return;
+      }
+      this.stringC1Lead = byte === 0xc2;
       if (this.state === "osc" && byte === 0x07) {
         this.finish();
       } else {
@@ -336,6 +362,7 @@ export class TerminalScreenTail {
     this.pending = [byte];
     this.state = state;
     this.stringIntro = null;
+    this.stringC1Lead = false;
     this.discardedStringPayload = false;
     this.discardedControlSequence = false;
   }
@@ -360,6 +387,7 @@ export class TerminalScreenTail {
     this.pending = [];
     this.state = "ground";
     this.stringIntro = null;
+    this.stringC1Lead = false;
     this.discardedStringPayload = false;
     this.discardedControlSequence = false;
   }
