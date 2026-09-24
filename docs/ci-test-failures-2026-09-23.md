@@ -35,7 +35,7 @@ The runs used different commits, so a failure on a pull request does not prove t
 | [35844135677](https://github.com/Maxsky5/openducktor/actions/runs/35844135677) | Windows, Linux | Windows had four unnamed frontend hook timeouts and one Electron log timeout. Linux failed to load `keytar` because `libsecret-1.so.0` was missing; those module errors had no test names. | Electron log budget changed. The Linux load error is not a test timeout. |
 | [35841619806](https://github.com/Maxsky5/openducktor/actions/runs/35841619806) | Linux | 13 frontend tests and two generated-image worker tests failed. The exact names appear below. | Most timed out in the same period. Two frontend assertions failed after other timeouts. |
 | [35841358409](https://github.com/Maxsky5/openducktor/actions/runs/35841358409) | macOS | `SettingsNotificationsSection > offers Windows system settings without a permission result` timed out. | Per-test budget. |
-| [35838222083](https://github.com/Maxsky5/openducktor/actions/runs/35838222083) | Windows | `node task asset file port > keeps staging for a live owner when the start-time probe uses local ps output` and `rich task description rendering > composes math, premium code, and task assets; Mermaid=%s` timed out. One frontend hook had no name. | Native probe test and combined Markdown test reduced. |
+| [35838222083](https://github.com/Maxsky5/openducktor/actions/runs/35838222083) | Windows | `node task asset file port > keeps staging for a live owner when the start-time probe uses local ps output` and `rich task description rendering > composes math, premium code, and task assets; Mermaid=%s` timed out. One frontend hook had no name. | The Windows command has a direct fake-runner test. The repeated combined Markdown test was removed. |
 
 ### The 33 frontend failures in run 35895038923
 
@@ -67,5 +67,6 @@ The first [2026-09-24 CI run](https://github.com/Maxsky5/openducktor/actions/run
 The macOS job in that run timed out in the combined Markdown test, the denied-permission notification test, and a ModelPicker focus tooltip test.
 The second [2026-09-24 CI run](https://github.com/Maxsky5/openducktor/actions/runs/36031332474) passed on Linux, timed out in the Windows math and premium code test, and failed a macOS Electron dev-script test because its fake process exited before the port file appeared.
 The new Windows probe test checks the PowerShell command through a fake runner. It does not start PowerShell in hosted CI.
-The latest follow-up changes have not yet run in hosted CI.
+The final changes passed on Linux, macOS, and Windows in two sequential CI runs: [36032701472](https://github.com/Maxsky5/openducktor/actions/runs/36032701472) and [36033469979](https://github.com/Maxsky5/openducktor/actions/runs/36033469979).
+Both runs used the normal parallel test scripts and completed the build and generated-image worker checks.
 The external-session pull request owns tests that do not exist on this task branch, so this commit does not claim to fix those failures.
