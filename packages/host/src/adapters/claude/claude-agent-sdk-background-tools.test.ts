@@ -74,14 +74,17 @@ const notification = (
   taskId: string,
   status: "completed" | "failed" | "stopped",
   summary: string,
-) =>
-  claudeSdkMessageFixture({
-    type: "system",
-    subtype: "task_notification",
+  toolUseId?: string,
+) => {
+  const message = {
+    type: "system" as const,
+    subtype: "task_notification" as const,
     task_id: taskId,
     status,
     summary,
-  });
+  };
+  return claudeSdkMessageFixture(toolUseId ? { ...message, tool_use_id: toolUseId } : message);
+};
 
 describe("Claude background ordinary tool parts", () => {
   test("keeps the Bash call running after launch and shows progress and completion", () => {
@@ -257,6 +260,99 @@ describe("Claude background ordinary tool parts", () => {
     expect(hasActiveClaudeBackgroundWork(session)).toBe(true);
   });
 
+  test("correlates a snapshot task from its terminal notification when the start edge and result ID are missing", () => {
+    const { parts, send, session } = live();
+    send(toolUse("mcp-no-start", "mcp__server__long_call", { query: "report" }));
+    send(snapshot([{ task_id: "mcp-task", task_type: "mcp_task", description: "Fetch report" }]));
+    send(toolResult("mcp-no-start", "Running"));
+    expect(parts("mcp-no-start").at(-1)?.status).toBe("completed");
+    send(notification("mcp-task", "failed", "Server timed out", "mcp-no-start"));
+    expect(parts("mcp-no-start").at(-1)).toMatchObject({
+      status: "error",
+      title: "Fetch report",
+      output: "Fetch report\nServer timed out",
+      metadata: { backgroundTaskId: "mcp-task", backgroundTaskStatus: "failed" },
+    });
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
+  });
+
+  test("does not use an earlier empty snapshot to end a new background launch", () => {
+    const { parts, send, session } = live();
+    send(snapshot([]));
+    send(toolUse("bash-after-snapshot", "Bash", { command: "sleep 2" }));
+    send(toolResult("bash-after-snapshot", "Started", "new-task"));
+    expect(parts("bash-after-snapshot").at(-1)).toMatchObject({
+      status: "running",
+      metadata: { backgroundTaskStatus: "running" },
+    });
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(true);
+    send(snapshot([]));
+    expect(parts("bash-after-snapshot").at(-1)).toMatchObject({
+      status: "error",
+      metadata: { backgroundTaskStatus: "unknown" },
+    });
+  });
+
+  test("keeps snapshot activity when a foreground start edge arrives late", () => {
+    const { parts, send } = live();
+    send(toolUse("bash-backgrounded", "Bash", { command: "sleep 2" }));
+    send(snapshot([{ task_id: "moved-task", task_type: "local_bash", description: "Wait" }]));
+    send(taskStart("moved-task", "bash-backgrounded", "Wait", false));
+    send(toolResult("bash-backgrounded", "Started", "moved-task"));
+    expect(parts("bash-backgrounded").at(-1)).toMatchObject({
+      status: "running",
+      metadata: { backgroundTaskId: "moved-task" },
+    });
+  });
+
+  test("recovers an unknown card when a later snapshot confirms the task is active", () => {
+    const { parts, send } = live();
+    send(toolUse("bash-recovered", "Bash", { command: "sleep 2" }));
+    send(toolResult("bash-recovered", "Started", "recovered-task"));
+    send(snapshot([]));
+    expect(parts("bash-recovered").at(-1)?.metadata?.backgroundTaskStatus).toBe("unknown");
+    send(
+      snapshot([
+        { task_id: "recovered-task", task_type: "local_bash", description: "Still running" },
+      ]),
+    );
+    expect(parts("bash-recovered").at(-1)).toMatchObject({
+      status: "running",
+      title: "Still running",
+      metadata: { backgroundTaskStatus: "running" },
+    });
+  });
+
+  test("keeps the terminal summary when progress and updates arrive late", () => {
+    const { parts, send } = live();
+    send(toolUse("bash-final", "Bash", { command: "build" }));
+    send(taskStart("final-task", "bash-final", "Build"));
+    send(toolResult("bash-final", "Started", "final-task"));
+    send(notification("final-task", "completed", "Build passed"));
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_progress",
+        task_id: "final-task",
+        description: "Build",
+        summary: "2 of 3 files",
+      }),
+    );
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_updated",
+        task_id: "final-task",
+        patch: { status: "failed", error: "Old error" },
+      }),
+    );
+    expect(parts("bash-final").at(-1)).toMatchObject({
+      status: "completed",
+      output: "Build\nBuild passed",
+      metadata: { backgroundTaskStatus: "completed" },
+    });
+  });
+
   test("keeps Agent tasks out of the ordinary tool activity set", () => {
     const { send, session } = live();
     send(
@@ -428,6 +524,66 @@ describe("Claude background ordinary tool parts", () => {
     expect(unknownPart).toMatchObject({
       status: "error",
       metadata: { backgroundTaskStatus: "unknown" },
+    });
+  });
+
+  test("history correlates a task notification without a start edge or result task ID", () => {
+    const entries = filterClaudeHistoryMessages([
+      claudeSessionMessageFixture({
+        type: "assistant",
+        uuid: "history-mcp-call",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        timestamp,
+        message: {
+          role: "assistant",
+          content: [
+            { type: "tool_use", id: "history-mcp", name: "mcp__server__long_call", input: {} },
+          ],
+        },
+      }),
+      {
+        type: "system",
+        subtype: "background_tasks_changed",
+        uuid: "history-mcp-snapshot",
+        session_id: "session-1",
+        timestamp,
+        tasks: [
+          { task_id: "history-mcp-task", task_type: "mcp_task", description: "Fetch report" },
+        ],
+      },
+      claudeSessionMessageFixture({
+        type: "user",
+        uuid: "history-mcp-result",
+        session_id: "session-1",
+        parent_tool_use_id: "history-mcp",
+        timestamp,
+        tool_use_result: { type: "tool_result", tool_use_id: "history-mcp", content: "Running" },
+        message: { role: "user", content: [] },
+      }),
+      {
+        type: "system",
+        subtype: "task_notification",
+        uuid: "history-mcp-terminal",
+        session_id: "session-1",
+        task_id: "history-mcp-task",
+        tool_use_id: "history-mcp",
+        status: "failed",
+        output_file: "",
+        summary: "Server timed out",
+        timestamp,
+      },
+    ]);
+    const part = toClaudeHistoryMessages(entries, () => timestamp)
+      .flatMap((message) => message.parts)
+      .find(
+        (candidate): candidate is ToolPart =>
+          candidate.kind === "tool" && candidate.callId === "history-mcp",
+      );
+    expect(part).toMatchObject({
+      status: "error",
+      output: "Fetch report\nServer timed out",
+      metadata: { backgroundTaskStatus: "failed" },
     });
   });
 });
