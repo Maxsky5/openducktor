@@ -1,4 +1,3 @@
-# Install the latest stable OpenDucktor desktop release for this Windows user.
 $ErrorActionPreference = 'Stop'
 
 try {
@@ -18,7 +17,7 @@ try {
         'Registry::HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Uninstall',
         'Registry::HKEY_LOCAL_MACHINE\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
     )
-    $existing = @(
+    $installs = @(
         foreach ($root in $uninstallRoots) {
             if (Test-Path -LiteralPath $root) {
                 Get-ChildItem -LiteralPath $root | ForEach-Object {
@@ -28,20 +27,20 @@ try {
             }
         }
     )
-    if ($existing.Count -gt 1) {
+    if ($installs.Count -gt 1) {
         throw 'More than one OpenDucktor installation is registered. Remove the extra installation before using this script.'
     }
     $managed = Test-Path -LiteralPath $markerPath
-    if ($existing.Count -eq 1 -and -not $managed) {
+    if ($installs.Count -eq 1 -and -not $managed) {
         throw 'Another installer manages OpenDucktor. Update it with that installer or remove it before using this script.'
     }
     if ((Test-Path -LiteralPath $installPath) -and -not $managed) {
         throw "An unmanaged install exists at $installPath. Update or remove it before using this script."
     }
-    if ($managed -and (-not (Test-Path -LiteralPath $appPath) -or $existing.Count -ne 1)) {
+    if ($managed -and (-not (Test-Path -LiteralPath $appPath) -or $installs.Count -ne 1)) {
         throw "The managed install at $installPath is incomplete. Repair or remove it before using this script."
     }
-    if ($managed -and $existing[0].PSPath -notlike '*HKEY_CURRENT_USER*') {
+    if ($managed -and $installs[0].PSPath -notlike '*HKEY_CURRENT_USER*') {
         throw 'The managed marker conflicts with a system installation. Repair or remove the system install before using this script.'
     }
     if (Get-Process -Name OpenDucktor -ErrorAction SilentlyContinue) {
@@ -75,7 +74,7 @@ try {
     New-Item -ItemType Directory -Path $work | Out-Null
     $backup = Join-Path $work 'previous-install'
     $registryBackup = Join-Path $work 'previous-uninstall.reg'
-    $needsRestore = $false
+    $installTried = $false
     $keepWork = $false
     try {
         $installer = Join-Path $work $name
@@ -87,12 +86,12 @@ try {
 
         if ($managed) {
             Copy-Item -LiteralPath $installPath -Destination $backup -Recurse
-            $registryKey = $existing[0].PSPath -replace '^Microsoft.PowerShell.Core\\Registry::', ''
+            $registryKey = $installs[0].PSPath -replace '^Microsoft.PowerShell.Core\\Registry::', ''
             & reg.exe export $registryKey $registryBackup /y | Out-Null
             if ($LASTEXITCODE -ne 0) { throw 'Could not save the existing uninstall record.' }
         }
-        $needsRestore = $true
-        # /D must be last and must not be quoted for NSIS, even when the path has spaces.
+        $installTried = $true
+        # NSIS needs /D last and the path unquoted, even with spaces.
         $process = Start-Process -FilePath $installer -ArgumentList "/S /D=$installPath" -Wait -PassThru
         if ($process.ExitCode -ne 0) {
             throw "The NSIS installer failed with exit code $($process.ExitCode)."
@@ -100,25 +99,25 @@ try {
         if (-not (Test-Path -LiteralPath $appPath)) {
             throw "The NSIS installer did not install $appPath."
         }
-        $installedEntry = @(
+        $userInstalls = @(
             Get-ChildItem -LiteralPath $uninstallRoots[0] | ForEach-Object {
                 $entry = Get-ItemProperty -LiteralPath $_.PSPath
                 if ($entry.DisplayName -eq 'OpenDucktor') { $entry }
             }
         )
-        if ($installedEntry.Count -ne 1) {
+        if ($userInstalls.Count -ne 1) {
             throw 'The NSIS installer did not register one current-user OpenDucktor installation.'
         }
         if (-not $managed) {
             New-Item -ItemType Directory -Path (Split-Path -Parent $markerPath) -Force | Out-Null
             Set-Content -LiteralPath $markerPath -Value 'Installed by install.ps1' -NoNewline
         }
-        $needsRestore = $false
+        $installTried = $false
         Write-Host "OpenDucktor is installed at $appPath"
     }
     catch {
         $installError = $_
-        if ($needsRestore) {
+        if ($installTried) {
             try {
                 if (Test-Path -LiteralPath $installPath) {
                     Remove-Item -LiteralPath $installPath -Recurse -Force

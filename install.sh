@@ -1,5 +1,4 @@
 #!/bin/sh
-# Install the latest stable OpenDucktor desktop release for this user.
 set -eu
 umask 077
 
@@ -127,19 +126,19 @@ PY
 
 asset_url=$(sed -n '1p' "$work/selection")
 expected_sha=$(sed -n '2p' "$work/selection")
-archive="$work/asset"
-curl -fsSL --proto '=https' "$asset_url" -o "$archive" || error 'Could not download the desktop asset.'
+download="$work/asset"
+curl -fsSL --proto '=https' "$asset_url" -o "$download" || error 'Could not download the desktop asset.'
 if [ "$os" = Darwin ]; then
-  actual_sha=$(shasum -a 256 "$archive" | cut -d ' ' -f 1)
+  actual_sha=$(shasum -a 256 "$download" | cut -d ' ' -f 1)
 else
-  actual_sha=$(sha256sum "$archive" | cut -d ' ' -f 1)
+  actual_sha=$(sha256sum "$download" | cut -d ' ' -f 1)
 fi
 [ "$actual_sha" = "$expected_sha" ] || error 'The downloaded asset SHA-256 differs from the GitHub release digest. The existing install is unchanged.'
 
 mkdir -p "$install_dir" || error "Could not create $install_dir."
 if [ "$os" = Darwin ]; then
   mkdir "$work/unpacked"
-  ditto -x -k "$archive" "$work/unpacked" || error 'Could not extract the macOS app ZIP.'
+  ditto -x -k "$download" "$work/unpacked" || error 'Could not extract the macOS app ZIP.'
   [ -d "$work/unpacked/OpenDucktor.app" ] || error 'The macOS ZIP has no OpenDucktor.app.'
   codesign --verify --deep --strict "$work/unpacked/OpenDucktor.app" || error 'The macOS app signature failed verification.'
   spctl --assess --type execute "$work/unpacked/OpenDucktor.app" || error 'macOS did not accept the app signature.'
@@ -156,9 +155,9 @@ if [ "$os" = Darwin ]; then
   fi
 else
   mkdir -p "$(dirname "$desktop")" || error 'Could not create the desktop launcher directory.'
-  cp "$archive" "$work/OpenDucktor.AppImage" || error 'Could not stage the AppImage.'
+  cp "$download" "$work/OpenDucktor.AppImage" || error 'Could not stage the AppImage.'
   chmod 755 "$work/OpenDucktor.AppImage" || error 'Could not make the AppImage executable.'
-  # Desktop Entry Exec paths use quotes; escape characters with special meaning there.
+  # Exec needs these characters escaped inside quotes.
   desktop_exec=$(printf '%s' "$installed" | sed 's/\\/\\\\/g; s/"/\\"/g; s/`/\\`/g; s/\$/\\$/g')
   printf '[Desktop Entry]\nType=Application\nName=OpenDucktor\nExec="%s"\nIcon=openducktor\nTerminal=false\nCategories=Development;\n' "$desktop_exec" > "$work/openducktor.desktop"
   if [ -e "$installed" ]; then

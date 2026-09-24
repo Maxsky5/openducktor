@@ -11,6 +11,92 @@ const unixTest = process.platform === "win32" ? test.skip : test;
 const macTest =
   process.platform === "darwin" && !existsSync("/Applications/OpenDucktor.app") ? test : test.skip;
 
+afterEach(() => {
+  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
+
+macTest.each(["arm64", "x86_64"])("macOS %s installs and updates the matching ZIP", (arch) => {
+  const setup = fixture("Darwin", arch);
+  expect(setup.run().status).toBe(0);
+  expect(readFileSync(setup.installed, "utf8")).toBe("installed app\n");
+  expect(setup.run().status).toBe(0);
+  expect(readFileSync(setup.installed, "utf8")).toBe("installed app\n");
+});
+
+unixTest("Linux installs and updates one AppImage with a desktop launcher", () => {
+  const setup = fixture("Linux", "x86_64");
+  expect(setup.run().status).toBe(0);
+  expect(readFileSync(setup.installed, "utf8")).toBe("verified AppImage or ZIP fixture\n");
+  const desktop = readFileSync(
+    join(setup.home, ".local/share/applications/openducktor.desktop"),
+    "utf8",
+  );
+  expect(desktop).toContain(`Exec="${setup.installed}"`);
+  expect(setup.run().status).toBe(0);
+});
+
+unixTest("a changed download leaves the previous Linux install and launcher intact", () => {
+  const setup = fixture("Linux", "x86_64");
+  expect(setup.run().status).toBe(0);
+  const desktopPath = join(setup.home, ".local/share/applications/openducktor.desktop");
+  const previous = readFileSync(setup.installed);
+  const previousDesktop = readFileSync(desktopPath);
+  writeFileSync(setup.assetPath, "wrong download");
+  const result = setup.run();
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("SHA-256 differs");
+  expect(readFileSync(setup.installed)).toEqual(previous);
+  expect(readFileSync(desktopPath)).toEqual(previousDesktop);
+});
+
+unixTest("a failed launcher install restores the previous Linux app and launcher", () => {
+  const setup = fixture("Linux", "x86_64");
+  expect(setup.run().status).toBe(0);
+  const desktopPath = join(setup.home, ".local/share/applications/openducktor.desktop");
+  const previous = readFileSync(setup.installed);
+  const previousDesktop = readFileSync(desktopPath);
+  writeFileSync(
+    join(setup.bin, "mv"),
+    '#!/bin/sh\ncase "$1" in */openducktor-install.*/openducktor.desktop) exit 7 ;; esac\nexec /bin/mv "$@"\n',
+    { mode: 0o755 },
+  );
+  const result = setup.run();
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("Could not install the desktop launcher");
+  expect(readFileSync(setup.installed)).toEqual(previous);
+  expect(readFileSync(desktopPath)).toEqual(previousDesktop);
+});
+
+unixTest("missing or ambiguous assets and missing digests fail before installation", () => {
+  const setup = fixture("Linux", "x86_64");
+  for (const assets of [[], [setup.asset, setup.asset], [{ ...setup.asset, digest: null }]]) {
+    setup.release.assets = assets;
+    setup.saveRelease();
+    const result = setup.run();
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("matching desktop asset");
+  }
+});
+
+unixTest("an unmanaged install and an unsupported processor fail without changes", () => {
+  const setup = fixture("Linux", "x86_64");
+  mkdirSync(join(setup.home, ".local/bin"), { recursive: true });
+  writeFileSync(setup.installed, "other installer");
+  expect(setup.run().stderr).toContain("unmanaged install");
+  expect(readFileSync(setup.installed, "utf8")).toBe("other installer");
+  expect(setup.run({ ODT_TEST_ARCH: "aarch64" }).stderr).toContain("Unsupported system");
+});
+
+unixTest("a running Linux app blocks an update without changing the installed file", () => {
+  const setup = fixture("Linux", "x86_64");
+  expect(setup.run().status).toBe(0);
+  const previous = readFileSync(setup.installed);
+  const result = setup.run({ ODT_TEST_RUNNING: "0" });
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("Quit OpenDucktor");
+  expect(readFileSync(setup.installed)).toEqual(previous);
+});
+
 type ReleaseFixture = {
   tag_name: string;
   draft: boolean;
@@ -22,10 +108,6 @@ type ReleaseFixture = {
     browser_download_url: string;
   }>;
 };
-
-afterEach(() => {
-  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
-});
 
 function fixture(os: "Darwin" | "Linux", arch: string) {
   const root = mkdtempSync(join(tmpdir(), "openducktor-install-test-"));
@@ -52,29 +134,51 @@ function fixture(os: "Darwin" | "Linux", arch: string) {
   };
   const saveRelease = () => writeFileSync(releasePath, JSON.stringify(release));
   saveRelease();
-  const executable = (name: string, body: string) => {
+  const stub = (name: string, body: string) => {
     const path = join(bin, name);
     writeFileSync(path, `#!/bin/sh\n${body}\n`, { mode: 0o755 });
   };
-  executable(
+  stub(
     "uname",
     'if [ "$1" = -s ]; then printf "%s\\n" "$ODT_TEST_OS"; else printf "%s\\n" "$ODT_TEST_ARCH"; fi',
   );
-  executable(
+  stub(
     "curl",
-    'for arg do case "$arg" in https://api.github.com/*) source=$ODT_TEST_RELEASE ;; https://github.com/*) source=$ODT_TEST_ASSET ;; esac; previous=$arg; done; while [ "$#" -gt 0 ]; do if [ "$1" = -o ]; then output=$2; break; fi; shift; done; [ -n "${source:-}" ] && [ -n "${output:-}" ] || exit 2; cp "$source" "$output"',
+    [
+      "for arg do",
+      '  case "$arg" in',
+      "    https://api.github.com/*) source=$ODT_TEST_RELEASE ;;",
+      "    https://github.com/*) source=$ODT_TEST_ASSET ;;",
+      "  esac",
+      "done",
+      'while [ "$#" -gt 0 ]; do',
+      '  if [ "$1" = -o ]; then',
+      "    output=$2",
+      "    break",
+      "  fi",
+      "  shift",
+      "done",
+      '[ -n "${source:-}" ] && [ -n "${output:-}" ] || exit 2',
+      'cp "$source" "$output"',
+    ].join("\n"),
   );
-  executable("pgrep", 'exit "${ODT_TEST_RUNNING:-1}"');
-  executable(
+  stub("pgrep", 'exit "${ODT_TEST_RUNNING:-1}"');
+  stub(
     "sha256sum",
-    'python3 - "$1" <<\'PY\'\nimport hashlib,sys\np=sys.argv[1]\nprint(hashlib.sha256(open(p,"rb").read()).hexdigest(),p)\nPY',
+    [
+      "python3 - \"$1\" <<'PY'",
+      "import hashlib,sys",
+      "p=sys.argv[1]",
+      'print(hashlib.sha256(open(p,"rb").read()).hexdigest(),p)',
+      "PY",
+    ].join("\n"),
   );
-  executable(
+  stub(
     "ditto",
     'mkdir -p "$4/OpenDucktor.app"; printf "installed app\\n" > "$4/OpenDucktor.app/contents"',
   );
-  executable("codesign", "exit 0");
-  executable("spctl", "exit 0");
+  stub("codesign", "exit 0");
+  stub("spctl", "exit 0");
   const env = {
     ...process.env,
     HOME: home,
@@ -90,87 +194,5 @@ function fixture(os: "Darwin" | "Linux", arch: string) {
     os === "Linux"
       ? join(home, ".local/bin/OpenDucktor.AppImage")
       : join(home, "Applications/OpenDucktor.app/contents");
-  return { asset, assetPath, bin, digest, home, installed, release, run, saveRelease };
+  return { asset, assetPath, bin, home, installed, release, run, saveRelease };
 }
-
-macTest.each(["arm64", "x86_64"])("macOS %s installs and updates the matching ZIP", (arch) => {
-  const f = fixture("Darwin", arch);
-  expect(f.run().status).toBe(0);
-  expect(readFileSync(f.installed, "utf8")).toBe("installed app\n");
-  expect(f.run().status).toBe(0);
-  expect(readFileSync(f.installed, "utf8")).toBe("installed app\n");
-});
-
-unixTest("Linux installs and updates one AppImage with a desktop launcher", () => {
-  const f = fixture("Linux", "x86_64");
-  expect(f.run().status).toBe(0);
-  expect(readFileSync(f.installed, "utf8")).toBe("verified AppImage or ZIP fixture\n");
-  const desktop = readFileSync(
-    join(f.home, ".local/share/applications/openducktor.desktop"),
-    "utf8",
-  );
-  expect(desktop).toContain(`Exec="${f.installed}"`);
-  expect(f.run().status).toBe(0);
-});
-
-unixTest("a changed download leaves the previous Linux install and launcher intact", () => {
-  const f = fixture("Linux", "x86_64");
-  expect(f.run().status).toBe(0);
-  const desktopPath = join(f.home, ".local/share/applications/openducktor.desktop");
-  const previous = readFileSync(f.installed);
-  const previousDesktop = readFileSync(desktopPath);
-  writeFileSync(f.assetPath, "wrong download");
-  const result = f.run();
-  expect(result.status).not.toBe(0);
-  expect(result.stderr).toContain("SHA-256 differs");
-  expect(readFileSync(f.installed)).toEqual(previous);
-  expect(readFileSync(desktopPath)).toEqual(previousDesktop);
-});
-
-unixTest("a failed launcher install restores the previous Linux app and launcher", () => {
-  const f = fixture("Linux", "x86_64");
-  expect(f.run().status).toBe(0);
-  const desktopPath = join(f.home, ".local/share/applications/openducktor.desktop");
-  const previous = readFileSync(f.installed);
-  const previousDesktop = readFileSync(desktopPath);
-  writeFileSync(
-    join(f.bin, "mv"),
-    '#!/bin/sh\ncase "$1" in */openducktor-install.*/openducktor.desktop) exit 7 ;; esac\nexec /bin/mv "$@"\n',
-    { mode: 0o755 },
-  );
-  const result = f.run();
-  expect(result.status).not.toBe(0);
-  expect(result.stderr).toContain("Could not install the desktop launcher");
-  expect(readFileSync(f.installed)).toEqual(previous);
-  expect(readFileSync(desktopPath)).toEqual(previousDesktop);
-});
-
-unixTest("missing or ambiguous assets and missing digests fail before installation", () => {
-  const f = fixture("Linux", "x86_64");
-  for (const assets of [[], [f.asset, f.asset], [{ ...f.asset, digest: null }]]) {
-    f.release.assets = assets;
-    f.saveRelease();
-    const result = f.run();
-    expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("matching desktop asset");
-  }
-});
-
-unixTest("an unmanaged install and an unsupported processor fail without changes", () => {
-  const f = fixture("Linux", "x86_64");
-  mkdirSync(join(f.home, ".local/bin"), { recursive: true });
-  writeFileSync(f.installed, "other installer");
-  expect(f.run().stderr).toContain("unmanaged install");
-  expect(readFileSync(f.installed, "utf8")).toBe("other installer");
-  expect(f.run({ ODT_TEST_ARCH: "aarch64" }).stderr).toContain("Unsupported system");
-});
-
-unixTest("a running Linux app blocks an update without changing the installed file", () => {
-  const f = fixture("Linux", "x86_64");
-  expect(f.run().status).toBe(0);
-  const previous = readFileSync(f.installed);
-  const result = f.run({ ODT_TEST_RUNNING: "0" });
-  expect(result.status).not.toBe(0);
-  expect(result.stderr).toContain("Quit OpenDucktor");
-  expect(readFileSync(f.installed)).toEqual(previous);
-});
