@@ -13,9 +13,6 @@ import { MarkdownMermaid } from "./markdown-mermaid";
 import { MERMAID_RENDER_CONFIG } from "./markdown-mermaid-render";
 import { MarkdownRenderer } from "./markdown-renderer";
 
-// Load the syntax highlighter before the premium code render test starts its timer.
-await import("./markdown-syntax-block");
-
 const renderMarkdownLink = (href: string, label: string) => {
   return render(
     createElement(MarkdownRenderer, {
@@ -264,25 +261,31 @@ describe("rich task description rendering", () => {
     expect(view.container.querySelector(".katex")).toBeNull();
   });
 
-  test("keeps premium code rendering for task documents that also contain math", async () => {
+  test("keeps fenced code beside math in premium task documents", async () => {
+    const view = render(
+      <MarkdownRenderer markdown={"Formula $x$\n\n```\nconst value = 1;\n```"} premiumCodeBlocks />,
+    );
+
+    await waitFor(() => expect(view.container.querySelector(".katex")).not.toBeNull(), {
+      timeout: 1500,
+    });
+    expect(view.container.querySelector("pre code")?.textContent).toContain("const value = 1;");
+    // This test loads KaTeX and renders a math candidate.
+  }, 2500);
+
+  test("loads syntax highlighting for a premium code block", async () => {
     const view = render(
       <QueryProvider useIsolatedClient>
         <StaticThemeProvider>
-          <MarkdownRenderer
-            markdown={"Formula $x$\n\n```javascript\nconst value = 1;\n```"}
-            premiumCodeBlocks
-          />
+          <MarkdownRenderer markdown={"```javascript\nconst value = 1;\n```"} premiumCodeBlocks />
         </StaticThemeProvider>
       </QueryProvider>,
     );
 
-    await waitFor(() => expect(view.container.querySelector(".katex")).not.toBeNull(), {
-      timeout: 3000,
-    });
     await waitFor(() => expect(view.container.querySelector(".token")).not.toBeNull(), {
-      timeout: 3000,
+      timeout: 750,
     });
-  }, 5000);
+  });
 
   test("resolves logical task assets through the shell without persisting runtime URLs", async () => {
     const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://asset/resolved");
