@@ -22,16 +22,7 @@ const CHARSET_LEVEL_BY_PREFIX = {
   ".": 2,
 } as const;
 
-type ParserState =
-  | "ground"
-  | "escape"
-  | "escape_intermediate"
-  | "csi"
-  | "osc"
-  | "osc_escape"
-  | "string"
-  | "string_escape"
-  | "utf8";
+type ParserState = "ground" | "escape" | "escape_intermediate" | "csi" | "osc" | "string" | "utf8";
 
 type XtermAttributes = {
   isAttributeDefault(): boolean;
@@ -255,9 +246,7 @@ export class TerminalScreenTail {
       : "";
     const pending = this.discardedStringPayload
       ? new Uint8Array([
-          ...new TextEncoder().encode(
-            ignoredString + (this.state.endsWith("_escape") ? "\u001b" : ""),
-          ),
+          ...new TextEncoder().encode(ignoredString),
           ...(this.stringC1Lead ? [0xc2] : []),
         ])
       : new Uint8Array(this.pending);
@@ -329,6 +318,13 @@ export class TerminalScreenTail {
         this.start(byte, "escape");
         return;
       }
+      if (byte < 0x20 || byte === 0x7f) {
+        if (byte === 0x0e || byte === 0x0f) {
+          this.charsetLevel = byte === 0x0e ? 1 : 0;
+          this.activeCharset = this.charsets[this.charsetLevel] ?? "B";
+        }
+        return;
+      }
       this.push(byte);
       if (byte >= 0x40 && byte <= 0x7e) {
         const sequence = SEQUENCE_DECODER.decode(new Uint8Array(this.pending));
@@ -340,6 +336,10 @@ export class TerminalScreenTail {
       return;
     }
     if (this.state === "osc" || this.state === "string") {
+      if (byte === ESC) {
+        this.start(byte, "escape");
+        return;
+      }
       if (this.stringC1Lead && byte === 0x9c) {
         this.finish();
         return;
@@ -349,13 +349,9 @@ export class TerminalScreenTail {
         this.finish();
       } else {
         this.push(byte);
-        if (byte === ESC) this.state = this.state === "osc" ? "osc_escape" : "string_escape";
       }
       return;
     }
-    this.push(byte);
-    if (byte === 0x5c) this.finish();
-    else if (byte !== ESC) this.state = this.state === "osc_escape" ? "osc" : "string";
   }
 
   private start(byte: number, state: ParserState): void {
@@ -373,7 +369,7 @@ export class TerminalScreenTail {
       this.pending.push(byte);
       return;
     }
-    if (["osc", "osc_escape", "string", "string_escape"].includes(this.state)) {
+    if (this.state === "osc" || this.state === "string") {
       this.pending = [];
       this.discardedStringPayload = true;
       return;

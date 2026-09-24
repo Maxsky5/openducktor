@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, posix } from "node:path";
@@ -12,6 +12,7 @@ import {
   type TerminalPtyPort,
 } from "../../ports/terminal-pty-port";
 import { TERMINAL_LIMITS } from "./terminal-limits";
+import { TerminalScreenState } from "./terminal-screen-state";
 import { HostValidationError } from "../../effect/host-errors";
 import { createTerminalService } from "./terminal-service";
 import type { WithProcessStartAdmission } from "../workspaces/workspace-admission-service";
@@ -82,6 +83,13 @@ const makePty = (supportsOutputPause = true, hasChildProcesses = true) => {
       terminateFailuresRemaining += 1;
     },
   };
+};
+
+const waitForPtyOperation = async (operations: string[], operation: string): Promise<void> => {
+  for (let attempt = 0; attempt < 200 && !operations.includes(operation); attempt += 1) {
+    await Bun.sleep(10);
+  }
+  expect(operations).toContain(operation);
 };
 
 const makeTitleSettlementScheduler = () => {
@@ -433,29 +441,11 @@ describe("TerminalService", () => {
     const chunk = new Uint8Array(64 * 1024).fill(120);
     for (let index = 0; index < TERMINAL_LIMITS.replayBytes / chunk.byteLength + 1; index += 1) {
       pty.emit(chunk);
-      const sequence = (index + 1) * chunk.byteLength;
-      await Effect.runPromise(
-        service.attach({
-          terminalId: "terminal-1",
-          attachmentId: "probe",
-          lastConsumedSequence: sequence,
-          sink: () => undefined,
-        }),
-      );
-      await Effect.runPromise(service.detach("terminal-1", "probe"));
+      await Bun.sleep(0);
     }
     const tui = new TextEncoder().encode("\u001b[?1049h\u001b[HREADY");
     pty.emit(tui);
-    await Effect.runPromise(
-      service.attach({
-        terminalId: "terminal-1",
-        attachmentId: "probe",
-        lastConsumedSequence:
-          (TERMINAL_LIMITS.replayBytes / chunk.byteLength + 1) * chunk.byteLength + tui.byteLength,
-        sink: () => undefined,
-      }),
-    );
-    await Effect.runPromise(service.detach("terminal-1", "probe"));
+    await Bun.sleep(0);
     const eventTypes: string[] = [];
     let restoredScreen = "";
     await Effect.runPromise(
@@ -474,6 +464,38 @@ describe("TerminalService", () => {
     expect(eventTypes).not.toContain("output");
     expect(restoredScreen).toContain("\u001b[?1049h");
     expect(restoredScreen).toContain("READY");
+  });
+
+  test("replays retained output without waiting for the screen parser", async () => {
+    const { service, pty } = await makeService();
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
+    pty.emit(new TextEncoder().encode("A"));
+    let releaseDrain!: () => void;
+    const drain = new Promise<void>((resolve) => {
+      releaseDrain = resolve;
+    });
+    const drained = spyOn(TerminalScreenState.prototype, "drained").mockImplementation(() => drain);
+    const eventTypes: string[] = [];
+    const attaching = Effect.runPromise(
+      service.attach({
+        terminalId: "terminal-1",
+        attachmentId: "replay",
+        lastConsumedSequence: 0,
+        sink: (event) => eventTypes.push(event.type),
+      }),
+    );
+    try {
+      const result = await Promise.race([
+        attaching.then(() => "attached"),
+        Bun.sleep(1000).then(() => "blocked"),
+      ]);
+      expect(result).toBe("attached");
+      expect(eventTypes).toEqual(["snapshot", "output"]);
+    } finally {
+      releaseDrain();
+      drained.mockRestore();
+      await attaching;
+    }
   });
 
   test("rejects an attachment position beyond published output", async () => {
@@ -578,18 +600,9 @@ describe("TerminalService", () => {
     await Bun.sleep(0);
     expect(pty.operations).toContain("pause");
     await Effect.runPromise(
-      service.attach({
-        terminalId: "terminal-1",
-        attachmentId: "screen-barrier",
-        lastConsumedSequence: TERMINAL_LIMITS.pendingOutputBytes,
-        sink: () => undefined,
-      }),
-    );
-    await Effect.runPromise(service.detach("terminal-1", "screen-barrier"));
-    await Effect.runPromise(
       service.acknowledge("terminal-1", "a", TERMINAL_LIMITS.pendingOutputBytes),
     );
-    expect(pty.operations).toContain("resume");
+    await waitForPtyOperation(pty.operations, "resume");
   });
 
   test("resumes output when the pressure-causing attachment detaches", async () => {
@@ -605,18 +618,9 @@ describe("TerminalService", () => {
     );
     pty.emit(new Uint8Array(TERMINAL_LIMITS.pendingOutputBytes));
     await Bun.sleep(0);
-    await Effect.runPromise(
-      service.attach({
-        terminalId: "terminal-1",
-        attachmentId: "screen-barrier",
-        lastConsumedSequence: TERMINAL_LIMITS.pendingOutputBytes,
-        sink: () => undefined,
-      }),
-    );
-    await Effect.runPromise(service.detach("terminal-1", "screen-barrier"));
-
     await Effect.runPromise(service.detach("terminal-1", "slow-renderer"));
 
+    await waitForPtyOperation(pty.operations, "resume");
     expect(pty.operations).toEqual(["pause", "resume"]);
     const replayed: string[] = [];
     await Effect.runPromise(
@@ -662,15 +666,6 @@ describe("TerminalService", () => {
 
       pty.emit(new Uint8Array(TERMINAL_LIMITS.pendingOutputBytes));
       await pauseStarted.promise;
-      await Effect.runPromise(
-        service.attach({
-          terminalId: "terminal-1",
-          attachmentId: "screen-barrier",
-          lastConsumedSequence: TERMINAL_LIMITS.pendingOutputBytes,
-          sink: () => undefined,
-        }),
-      );
-      const barrierDetached = Effect.runPromise(service.detach("terminal-1", "screen-barrier"));
       const released =
         unblock === "ack"
           ? Effect.runPromise(
@@ -685,7 +680,8 @@ describe("TerminalService", () => {
       expect(pty.operations).toEqual([]);
 
       pauseGate.resolve();
-      await Promise.all([barrierDetached, released]);
+      await released;
+      await waitForPtyOperation(pty.operations, "resume");
       expect(pty.operations).toEqual(["pause", "resume"]);
     },
   );

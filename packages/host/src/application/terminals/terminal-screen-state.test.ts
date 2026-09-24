@@ -369,6 +369,75 @@ describe("TerminalScreenState", () => {
     restored.dispose();
   });
 
+  test.each(["\n", "\r", "\t"])(
+    "restores an unfinished CSI after executing C0 byte %j",
+    async (control) => {
+      const screen = new TerminalScreenState({ columns: 12, rows: 4 });
+      const original = new Terminal({ cols: 12, rows: 4, allowProposedApi: true });
+      const restored = new Terminal({ cols: 12, rows: 4, allowProposedApi: true });
+      const first = encoder.encode(`A\u001b[1${control}`);
+      await Promise.all([writeScreen(screen, first), write(original, first)]);
+      await write(restored, screen.snapshot().payload);
+      const continuation = encoder.encode("mB");
+      await Promise.all([
+        writeScreen(screen, continuation),
+        write(original, continuation),
+        write(restored, continuation),
+      ]);
+      expect(visibleLines(restored)).toEqual(visibleLines(original));
+      expect(restored.buffer.active.cursorX).toBe(original.buffer.active.cursorX);
+      expect(restored.buffer.active.cursorY).toBe(original.buffer.active.cursorY);
+      screen.dispose();
+      original.dispose();
+      restored.dispose();
+    },
+  );
+
+  test.each([
+    ["OSC", "\u001b]0;x"],
+    ["DCS", "\u001bPzx"],
+  ])("restores a new CSI after ESC ends %s", async (_name, sequence) => {
+    const screen = new TerminalScreenState({ columns: 12, rows: 2 });
+    const original = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });
+    const restored = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });
+    const first = encoder.encode(`A${sequence}\u001b[31mB`);
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    await write(restored, screen.snapshot().payload);
+    const continuation = encoder.encode("C");
+    await Promise.all([
+      writeScreen(screen, continuation),
+      write(original, continuation),
+      write(restored, continuation),
+    ]);
+    expect(visibleLines(original)[0]).toStartWith("ABC");
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    expect(restored.buffer.active.cursorX).toBe(original.buffer.active.cursorX);
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
+  test("restores after an oversized OSC ends with ESC before a new CSI", async () => {
+    const screen = new TerminalScreenState({ columns: 12, rows: 2 });
+    const original = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });
+    const restored = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });
+    const first = encoder.encode(`A\u001b]0;${"x".repeat(70_000)}\u001b`);
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    await write(restored, screen.snapshot().payload);
+    const continuation = encoder.encode("[31mBC");
+    await Promise.all([
+      writeScreen(screen, continuation),
+      write(original, continuation),
+      write(restored, continuation),
+    ]);
+    expect(visibleLines(original)[0]).toStartWith("ABC");
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    expect(restored.buffer.active.cursorX).toBe(original.buffer.active.cursorX);
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
   test.each([
     ["CSI", [0xc2, 0x9b, 0x33, 0x31], encoder.encode("mB")],
     ["OSC", [0xc2, 0x9d, 0x30, 0x3b, 0x78], encoder.encode("\u0007B")],

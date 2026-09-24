@@ -247,8 +247,10 @@ export const createTerminalSessionEngine = ({
       Effect.tryPromise({
         try: async () => {
           const session = getSession(input.terminalId, "attach");
-          await session.screen.drained();
-          getSession(input.terminalId, "attach");
+          if ((input.lastConsumedSequence ?? 0) < session.output.earliestRetainedSequence) {
+            await session.screen.drained();
+            getSession(input.terminalId, "attach");
+          }
           applyStreamEvents(
             session,
             session.output.attach(input, session.summary, session.resources.handle),
