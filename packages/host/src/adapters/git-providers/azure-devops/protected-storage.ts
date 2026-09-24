@@ -38,6 +38,7 @@ export const createAzureDevOpsProtectedStorage = ({ configDir }: { configDir: st
           const name = recordName(scope, "connection");
           const cachePath = recordPath(name);
           let persistence: IPersistence;
+          // PersistenceCreator writes a validation record; reads must skip that probe.
           switch (process.platform) {
             case "darwin":
               persistence = await KeychainPersistence.create(cachePath, SERVICE_NAME, name);

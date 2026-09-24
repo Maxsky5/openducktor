@@ -61,6 +61,18 @@ describe("Azure DevOps connection storage", () => {
     );
   });
 
+  test("reports an empty protected record as invalid instead of disconnected", async () => {
+    const protectedStorage: AzureDevOpsProtectedStorage = {
+      readConnection: () => Effect.succeed(""),
+      open: () => Effect.die("Unexpected persistence validation"),
+    };
+
+    const failure = await Effect.runPromise(
+      loadConnection(protectedStorage, "scope").pipe(Effect.flip),
+    );
+    expect(failure.operation).toBe("azureDevOps.connection.decode");
+  });
+
   test("preserves a protected storage open failure", async () => {
     const openFailure = new HostOperationError({
       operation: "azureDevOps.protectedStorage.open",
