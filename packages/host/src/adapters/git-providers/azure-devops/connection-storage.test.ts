@@ -7,7 +7,7 @@ import { loadConnection, saveConnection } from "./connection-storage";
 import type { AzureDevOpsProtectedStorage } from "./protected-storage";
 
 describe("Azure DevOps connection storage", () => {
-  test("reads a secure connection even when its cache file is empty", async () => {
+  test("reads a secure connection without opening validated persistence", async () => {
     const open = mock(() => Effect.die("Unexpected persistence validation"));
     const protectedStorage: AzureDevOpsProtectedStorage = {
       readConnection: () => Effect.succeed(JSON.stringify({ kind: "server_pat", pat: "saved" })),

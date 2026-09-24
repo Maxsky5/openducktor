@@ -18,10 +18,12 @@ export type AzureDevOpsProtectedStorage = {
 };
 
 export const createAzureDevOpsProtectedStorage = ({ configDir }: { configDir: string }) => {
-  const recordPath = (scope: string, record: "connection" | "msal") => {
+  const directory = path.join(configDir, "credentials", "azure-devops");
+  const recordName = (scope: string, record: "connection" | "msal") => {
     const key = createHash("sha256").update(scope).digest("hex");
-    return path.join(configDir, "credentials", "azure-devops", `${key}.${record}.cache`);
+    return `${key}.${record}`;
   };
+  const recordPath = (name: string) => path.join(directory, `${name}.cache`);
 
   return {
     readConnection(scope: string) {
@@ -33,16 +35,12 @@ export const createAzureDevOpsProtectedStorage = ({ configDir }: { configDir: st
             KeychainPersistence,
             LibSecretPersistence,
           } = await import("@azure/msal-node-extensions");
-          const key = createHash("sha256").update(scope).digest("hex");
-          const cachePath = recordPath(scope, "connection");
+          const name = recordName(scope, "connection");
+          const cachePath = recordPath(name);
           let persistence: IPersistence;
           switch (process.platform) {
             case "darwin":
-              persistence = await KeychainPersistence.create(
-                cachePath,
-                SERVICE_NAME,
-                `${key}.connection`,
-              );
+              persistence = await KeychainPersistence.create(cachePath, SERVICE_NAME, name);
               break;
             case "win32":
               persistence = await FilePersistenceWithDataProtection.create(
@@ -51,11 +49,7 @@ export const createAzureDevOpsProtectedStorage = ({ configDir }: { configDir: st
               );
               break;
             case "linux":
-              persistence = await LibSecretPersistence.create(
-                cachePath,
-                SERVICE_NAME,
-                `${key}.connection`,
-              );
+              persistence = await LibSecretPersistence.create(cachePath, SERVICE_NAME, name);
               break;
             default:
               throw new Error(
@@ -72,14 +66,13 @@ export const createAzureDevOpsProtectedStorage = ({ configDir }: { configDir: st
         try: async () => {
           const { DataProtectionScope, PersistenceCreator } =
             await import("@azure/msal-node-extensions");
-          const directory = path.join(configDir, "credentials", "azure-devops");
           await mkdir(directory, { recursive: true });
-          const key = createHash("sha256").update(scope).digest("hex");
+          const name = recordName(scope, record);
           return PersistenceCreator.createPersistence({
-            cachePath: recordPath(scope, record),
+            cachePath: recordPath(name),
             dataProtectionScope: DataProtectionScope.CurrentUser,
             serviceName: SERVICE_NAME,
-            accountName: `${key}.${record}`,
+            accountName: name,
             usePlaintextFileOnLinux: false,
           });
         },

@@ -8,6 +8,7 @@ import { createAzureDevOpsProtectedStorage } from "./protected-storage";
 
 const testWithNativeStorage = process.platform === "linux" ? test.skip : test;
 
+// MSAL validation writes test.cache, so a directory at that path makes validation fail.
 testWithNativeStorage(
   "reads an absent connection without running MSAL persistence validation",
   async () => {
