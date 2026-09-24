@@ -25,3 +25,7 @@ The local macOS build loaded MSAL persistence and keytar from the packaged app. 
 A Windows build must load DPAPI on Windows, and a Linux build must load keytar on Linux. Those platform checks did not run on this Mac.
 
 The app copied from the DMG reached onboarding with a clean profile and no visible credential prompt. The package check does not call the Azure DevOps connection flow. Azure DevOps PAT save, read, and disconnect through that flow, Entra device sign-in, token reuse after restart, and disconnect need credentialed desktop runs. No credentialed Azure DevOps account was available for this build.
+
+## Full repository build
+
+On 2026-09-24 UTC, `bun run build` ran from the repository root at code commit `cbe893e89599dd9881e59df2d0e3617deb3a6641` and exited with code 0. All 13 workspaces reported code 0, including Electron and web. The Electron package build and DMG checks above cover the installer.
