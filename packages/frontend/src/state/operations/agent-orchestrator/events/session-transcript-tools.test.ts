@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { waitFor } from "@testing-library/react";
 import {
   buildSession,
   createSessionsRef,
@@ -304,7 +303,7 @@ describe("agent-orchestrator session transcript events", () => {
       replyApproval: async () => {},
     };
     const sessionsRef = createSessionsRef([buildSession({ status: "running" })]);
-    await listenToAgentSessionEvents({
+    const unsubscribe = await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -344,7 +343,12 @@ describe("agent-orchestrator session transcript events", () => {
     });
     expect(toolMeta()).toMatchObject({ status: "error", error: expect.any(String) });
     sendToolPart("running");
-    await waitFor(() => expect(toolMeta()).toMatchObject({ status: "running" }), { timeout: 900 });
+    handleEvent({
+      type: "session_idle",
+      externalSessionId: "session-1",
+      timestamp: new Date(Date.parse("2026-02-22T08:00:20.000Z") + eventOrdinal++).toISOString(),
+    });
+    expect(toolMeta()).toMatchObject({ status: "running" });
     expect(toolMeta()).not.toHaveProperty("error");
 
     sendToolPart("error", {
@@ -358,6 +362,7 @@ describe("agent-orchestrator session transcript events", () => {
     sendToolPart("completed", { output: "Build passed" });
     expect(toolMeta()).toMatchObject({ status: "completed", output: "Build passed" });
     expect(toolMeta()).not.toHaveProperty("error");
+    unsubscribe();
   });
 
   test("does not revive an idle session from a terminal tool update", async () => {
