@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
 import { lifecycleNotifications } from "./lifecycle-notifications";
 
@@ -16,7 +17,13 @@ describe("lifecycle notifications", () => {
       }
 
       expect(notification.type).not.toBe("loading");
-      expect(notification.icon).toBeTruthy();
+      expect(notification.icon).toMatchObject({
+        type: LoaderCircle,
+        props: {
+          className: "size-4 animate-spin",
+          "aria-hidden": "true",
+        },
+      });
       expect(notification.duration).toBe(Infinity);
       expect(notification.closeButton).toBe(true);
       expect(notification.dismissible).toBe(true);
