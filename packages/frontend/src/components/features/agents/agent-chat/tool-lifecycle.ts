@@ -50,6 +50,9 @@ export const isToolMessageCancelled = (meta: ToolMeta): boolean => {
   if (meta.status !== "error") {
     return false;
   }
+  const backgroundTaskStatus = meta.metadata?.backgroundTaskStatus;
+  if (backgroundTaskStatus === "stopped") return true;
+  if (backgroundTaskStatus === "failed" || backgroundTaskStatus === "unknown") return false;
 
   return (
     (hasNonEmptyText(meta.error) && TOOL_CANCELLED_PATTERN.test(meta.error)) ||
