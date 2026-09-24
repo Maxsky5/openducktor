@@ -24,6 +24,7 @@ describe("Azure DevOps public client", () => {
       reloadNecessary: async () => true,
     } as unknown as IPersistence;
     const protectedStorage: AzureDevOpsProtectedStorage = {
+      hasSavedRecord: () => Effect.succeed(true),
       open: () => Effect.succeed(persistence),
     };
 
