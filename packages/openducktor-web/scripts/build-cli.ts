@@ -61,10 +61,11 @@ export const buildWebCliEffect = (): Effect.Effect<void, WebDependencyError> =>
         const temporaryDirectory = await mkdtemp(join(tmpdir(), "openducktor-web-cli-"));
         try {
           const binaryPath = join(temporaryDirectory, "openducktor-web");
-          await symlink(outputPath, binaryPath);
-          const { stdout } = await execFileAsync("node", [binaryPath, "--help"]);
+          const entrypoint = process.platform === "win32" ? outputPath : binaryPath;
+          if (process.platform !== "win32") await symlink(outputPath, binaryPath);
+          const { stdout } = await execFileAsync("node", [entrypoint, "--help"]);
           if (!stdout.startsWith("Usage: openducktor-web")) {
-            throw new Error("The built web CLI did not print help through its package symlink.");
+            throw new Error("The built web CLI did not print help under Node.");
           }
         } finally {
           await rm(temporaryDirectory, { recursive: true, force: true });
