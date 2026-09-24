@@ -394,6 +394,50 @@ describe("TerminalScreenState", () => {
   );
 
   test.each([
+    ["ESC with LF", "A\u001b\n", "(0B"],
+    ["ESC with CR", "A\u001b\r", "(0B"],
+    ["ESC with TAB", "A\u001b\t", "(0B"],
+    ["ESC intermediate with LF", "A\u001b(\n", "0B"],
+    ["ESC intermediate with CR", "A\u001b(\r", "0B"],
+    ["ESC intermediate with TAB", "A\u001b(\t", "0B"],
+  ])("restores after %s executes a C0 byte", async (_name, first, continuation) => {
+    const screen = new TerminalScreenState({ columns: 12, rows: 4 });
+    const original = new Terminal({ cols: 12, rows: 4, allowProposedApi: true });
+    const restored = new Terminal({ cols: 12, rows: 4, allowProposedApi: true });
+    const bytes = encoder.encode(first);
+    await Promise.all([writeScreen(screen, bytes), write(original, bytes)]);
+    await write(restored, screen.snapshot().payload);
+    const next = encoder.encode(continuation);
+    await Promise.all([writeScreen(screen, next), write(original, next), write(restored, next)]);
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    expect(restored.buffer.active.cursorX).toBe(original.buffer.active.cursorX);
+    expect(restored.buffer.active.cursorY).toBe(original.buffer.active.cursorY);
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
+  test.each([
+    ["ESC", "A\u001b\u001b"],
+    ["ESC intermediate", "A\u001b(\u001b"],
+  ])("restores after ESC restarts %s", async (_name, first) => {
+    const screen = new TerminalScreenState({ columns: 12, rows: 2 });
+    const original = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });
+    const restored = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });
+    const bytes = encoder.encode(first);
+    await Promise.all([writeScreen(screen, bytes), write(original, bytes)]);
+    await write(restored, screen.snapshot().payload);
+    const next = encoder.encode("[31mBC");
+    await Promise.all([writeScreen(screen, next), write(original, next), write(restored, next)]);
+    expect(visibleLines(original)[0]).toStartWith("ABC");
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    expect(restored.buffer.active.cursorX).toBe(original.buffer.active.cursorX);
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
+  test.each([
     ["OSC", "\u001b]0;x"],
     ["DCS", "\u001bPzx"],
   ])("restores a new CSI after ESC ends %s", async (_name, sequence) => {

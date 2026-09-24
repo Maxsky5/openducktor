@@ -292,6 +292,20 @@ export class TerminalScreenTail {
       this.finish();
       return;
     }
+    if (
+      (byte < 0x20 || byte === 0x7f) &&
+      (this.state === "escape" || this.state === "escape_intermediate" || this.state === "csi")
+    ) {
+      if (byte === ESC) {
+        this.start(byte, "escape");
+        return;
+      }
+      if (byte === 0x0e || byte === 0x0f) {
+        this.charsetLevel = byte === 0x0e ? 1 : 0;
+        this.activeCharset = this.charsets[this.charsetLevel] ?? "B";
+      }
+      return;
+    }
     if (this.state === "escape") {
       this.push(byte);
       if (byte === 0x5b) this.state = "csi";
@@ -314,17 +328,6 @@ export class TerminalScreenTail {
       return;
     }
     if (this.state === "csi") {
-      if (byte === ESC) {
-        this.start(byte, "escape");
-        return;
-      }
-      if (byte < 0x20 || byte === 0x7f) {
-        if (byte === 0x0e || byte === 0x0f) {
-          this.charsetLevel = byte === 0x0e ? 1 : 0;
-          this.activeCharset = this.charsets[this.charsetLevel] ?? "B";
-        }
-        return;
-      }
       this.push(byte);
       if (byte >= 0x40 && byte <= 0x7e) {
         const sequence = SEQUENCE_DECODER.decode(new Uint8Array(this.pending));
