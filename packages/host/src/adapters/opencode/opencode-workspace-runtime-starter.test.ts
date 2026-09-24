@@ -941,8 +941,9 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
     let runtimePid: number | null = null;
     try {
       const repo = join(root, "repo");
+      const configCapturePath = join(root, "opencode-config.json");
       await mkdir(repo);
-      const opencodeBinary = await createFakeOpenCode(root);
+      const opencodeBinary = await createFakeOpenCode(root, { configCapturePath });
       const starter = createOpenCodeWorkspaceRuntimeStarter({
         systemCommands: createSystemCommands(),
         toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
@@ -955,7 +956,8 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
         startupTimeoutMs: 2_000,
         retryDelayMs: 20,
         portAllocator: () => Effect.succeed(43123),
-        readinessProbe: () => Effect.succeed(true),
+        // The child must own its working directory before cleanup tests stop it on Windows.
+        readinessProbe: () => Effect.sync(() => existsSync(configCapturePath)),
         runtimeId: () => "runtime-failure",
         processTreeTerminator: ({ pid }) => {
           runtimePid = pid;

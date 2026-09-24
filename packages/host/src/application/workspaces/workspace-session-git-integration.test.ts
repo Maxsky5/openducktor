@@ -223,6 +223,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     expect(h.starts).toEqual([]);
   });
 
+  // Competing requests run real Git worktree operations and SQLite writes on Windows.
   test.each(["create", "restore"] as const)(
     "a failed %s leaves a competing chat's real worktree and files intact",
     async (operation) => {
@@ -299,6 +300,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
         await loser;
       }
     },
+    10_000,
   );
 
   test("creates from_name from a dirty checkout with copy, hook, and dirty-source isolation", async () => {
