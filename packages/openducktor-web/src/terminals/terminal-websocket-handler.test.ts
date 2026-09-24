@@ -50,6 +50,7 @@ const makeSocket = (
       pendingBytes: 0,
       pendingFrames: [],
       drainWaiters: new Set(),
+      attachPermit: Effect.unsafeMakeSemaphore(1),
       messagePermits: new Map(),
       closed: false,
       logger: {
@@ -69,6 +70,69 @@ const makeSocket = (
 };
 
 describe("terminalWebSocketHandler", () => {
+  test("paces concurrent attaches after an asynchronous first restore", async () => {
+    const payload = new Uint8Array(6 * 1024 * 1024);
+    let releaseFirst!: () => void;
+    const firstReady = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let markFirstStarted!: () => void;
+    const firstStarted = new Promise<void>((resolve) => {
+      markFirstStarted = resolve;
+    });
+    let attachCount = 0;
+    const service = createTerminalServiceFixture({
+      attach: (input) =>
+        Effect.promise(async () => {
+          attachCount += 1;
+          if (attachCount === 1) {
+            markFirstStarted();
+            await firstReady;
+          }
+          input.sink(
+            {
+              version: TERMINAL_PROTOCOL_VERSION,
+              type: "screen_restore",
+              terminalId: input.terminalId,
+              sequenceEnd: 1,
+              columns: 500,
+              rows: 300,
+            },
+            payload,
+          );
+        }),
+    });
+    const harness = makeSocket(service, () => -1);
+    for (const terminalId of ["terminal-1", "terminal-2", "terminal-3"]) {
+      terminalWebSocketHandler.message(
+        harness.socket,
+        Buffer.from(
+          encodeTerminalProtocolFrame({
+            message: {
+              version: TERMINAL_PROTOCOL_VERSION,
+              type: "attach",
+              terminalId,
+              lastConsumedSequence: null,
+            },
+            payload: new Uint8Array(),
+          }),
+        ),
+      );
+    }
+    await firstStarted;
+    await Bun.sleep(0);
+    releaseFirst();
+    await Bun.sleep(0);
+    expect(harness.sent).toHaveLength(1);
+    expect(harness.closed).toEqual([]);
+    for (let index = 2; index <= 3; index += 1) {
+      terminalWebSocketHandler.drain(harness.socket);
+      await Bun.sleep(0);
+      expect(harness.sent).toHaveLength(index);
+      expect(harness.closed).toEqual([]);
+    }
+  });
+
   test("paces large restores for several terminals while the socket is backpressured", async () => {
     const payload = new Uint8Array(6 * 1024 * 1024);
     const service = createTerminalServiceFixture({

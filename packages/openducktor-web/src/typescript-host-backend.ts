@@ -193,6 +193,7 @@ const tryUpgradeTerminalWebSocket = ({
       pendingBytes: 0,
       pendingFrames: [],
       drainWaiters: new Set(),
+      attachPermit: Effect.unsafeMakeSemaphore(1),
       messagePermits: new Map(),
       closed: false,
       logger,

@@ -36,6 +36,7 @@ export type TerminalWebSocketData = {
   pendingBytes: number;
   pendingFrames: Uint8Array[];
   drainWaiters: Set<(writable: boolean) => void>;
+  attachPermit: ReturnType<typeof Effect.unsafeMakeSemaphore>;
   messagePermits: Map<
     string,
     { permit: ReturnType<typeof Effect.unsafeMakeSemaphore>; pending: number }
@@ -194,21 +195,18 @@ const runClientMessage = (socket: TerminalServerSocket, raw: string | Buffer): v
   }
   entry.pending += 1;
   const messageEntry = entry;
+  const handle = Effect.suspend(() =>
+    socket.data.closed ? Effect.void : getClientSession(socket).handle(message, decoded.payload),
+  );
+  const operation =
+    message.type === "attach"
+      ? socket.data.attachPermit.withPermits(1)(
+          waitForWritable(socket).pipe(Effect.flatMap(() => handle)),
+        )
+      : handle;
   Effect.runFork(
     messageEntry.permit
-      .withPermits(1)(
-        Effect.suspend(() => {
-          if (socket.data.closed) return Effect.void;
-          const ready = message.type === "attach" ? waitForWritable(socket) : Effect.void;
-          return ready.pipe(
-            Effect.flatMap(() =>
-              socket.data.closed
-                ? Effect.void
-                : getClientSession(socket).handle(message, decoded.payload),
-            ),
-          );
-        }),
-      )
+      .withPermits(1)(operation)
       .pipe(
         Effect.ensuring(
           Effect.sync(() => {
