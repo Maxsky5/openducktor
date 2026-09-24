@@ -920,7 +920,8 @@ describe("useOnboardingRuntimeSetup", () => {
     } finally {
       host.runtimeExecutablesCheck = originalCheck;
     }
-  });
+    // This test renders a failed save, a retry, and two stage changes.
+  }, 3_000);
 
   test("keeps the coding-agent form visually stable while save is pending", async () => {
     const runtimes: AgentRuntimes = {
@@ -984,7 +985,8 @@ describe("useOnboardingRuntimeSetup", () => {
     } finally {
       host.runtimeExecutablesCheck = originalCheck;
     }
-  });
+    // This test keeps three runtime cards mounted during a pending save.
+  }, 2_500);
 
   test("submits the no-runtime confirmation only once while saving", async () => {
     const runtimes = DEFAULT_AGENT_RUNTIMES;
@@ -1016,7 +1018,8 @@ describe("useOnboardingRuntimeSetup", () => {
     } finally {
       host.runtimeExecutablesCheck = originalCheck;
     }
-  });
+    // This test renders the confirmation dialog through a pending save.
+  }, 2_500);
 
   test("keeps the no-runtime warning visible after confirmation is cancelled", async () => {
     const runtimes = DEFAULT_AGENT_RUNTIMES;

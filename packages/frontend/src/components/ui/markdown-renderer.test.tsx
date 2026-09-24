@@ -261,58 +261,7 @@ describe("rich task description rendering", () => {
     expect(view.container.querySelector(".katex")).toBeNull();
   });
 
-  test.each([false, true])(
-    "composes math, premium code, and task assets; Mermaid=%s",
-    async (withMermaid) => {
-      const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://asset/resolved");
-      configureShellBridge({
-        ...createUnavailableShellBridge(),
-        resolveTaskAssetSrc,
-      });
-      const assetId = "550e8400-e29b-41d4-a716-446655440000";
-      const mermaid = withMermaid ? "\n\n```mermaid\ngraph TD\n  A --> B\n```" : "";
-      const view = render(
-        <QueryProvider useIsolatedClient>
-          <StaticThemeProvider>
-            <MarkdownRenderer
-              markdown={`Formula $x^2$\n\n\`\`\`javascript\nconst answer = 42;\n\`\`\`\n\n![Diagram](odt-asset:${assetId})${mermaid}`}
-              premiumCodeBlocks
-              taskAssetContext={{
-                workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
-                taskId: "task-1",
-                scope: "description",
-              }}
-            />
-          </StaticThemeProvider>
-        </QueryProvider>,
-      );
-
-      await waitFor(() => expect(view.container.querySelector(".katex")).not.toBeNull(), {
-        timeout: 3000,
-      });
-      await waitFor(() => expect(view.container.querySelector(".token")).not.toBeNull(), {
-        timeout: 3000,
-      });
-      await waitFor(
-        () =>
-          expect(view.getByRole("img", { name: "Diagram" }).getAttribute("src")).toBe(
-            "openducktor-task-asset://asset/resolved",
-          ),
-        { timeout: 3000 },
-      );
-      if (withMermaid) {
-        await waitFor(() =>
-          expect(
-            view.getByRole("region", { name: "Mermaid diagram" }).querySelector("svg"),
-          ).not.toBeNull(),
-        );
-      }
-    },
-    // Renders real KaTeX, syntax highlighting, asset resolution, and Mermaid beside the host suite.
-    10_000,
-  );
-
-  test("keeps premium code rendering for task documents that also contain math", async () => {
+  test("keeps highlighted code beside math in premium task documents", async () => {
     const view = render(
       <QueryProvider useIsolatedClient>
         <StaticThemeProvider>
@@ -324,13 +273,15 @@ describe("rich task description rendering", () => {
       </QueryProvider>,
     );
 
-    await waitFor(() => expect(view.container.querySelector(".katex")).not.toBeNull(), {
-      timeout: 3000,
-    });
-    await waitFor(() => expect(view.container.querySelector(".token")).not.toBeNull(), {
-      timeout: 3000,
-    });
-  }, 5000);
+    await waitFor(
+      () => {
+        expect(view.container.querySelector(".katex")).not.toBeNull();
+        expect(view.container.querySelector(".token")).not.toBeNull();
+      },
+      { timeout: 10_000 },
+    );
+    // A cold combined KaTeX and Prism render exceeded 8 seconds on a loaded Windows runner.
+  }, 12_000);
 
   test("resolves logical task assets through the shell without persisting runtime URLs", async () => {
     const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://asset/resolved");

@@ -1245,6 +1245,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
     }
   });
 
+  // This hook test settles a query and mutation across two React transport updates.
   test("binds query and mutation results to the browser transport epoch", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
 
@@ -1400,5 +1401,5 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
     } finally {
       harness.unmount();
     }
-  });
+  }, 2_500);
 });

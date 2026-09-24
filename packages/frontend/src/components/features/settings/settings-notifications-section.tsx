@@ -9,7 +9,7 @@ import {
   type NotificationTarget,
 } from "@openducktor/contracts";
 import { Bell, BellRing, CircleAlert, CircleCheck, Settings } from "lucide-react";
-import type { ReactElement } from "react";
+import { memo, useCallback, type ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupSegmentItem } from "@/components/ui/radio-group";
@@ -247,7 +247,7 @@ type NotificationKindGroupProps = {
   onPreview: (cue: NotificationCue) => void;
 };
 
-function NotificationKindGroup({
+const NotificationKindGroup = memo(function NotificationKindGroup({
   title,
   kinds,
   settings,
@@ -280,7 +280,7 @@ function NotificationKindGroup({
       </div>
     </section>
   );
-}
+});
 
 type FocusSettingRowProps<Value extends string> = {
   title: string;
@@ -343,9 +343,12 @@ export function SettingsNotificationsSection({
   const isOsTestDisabled = capability?.supported === false;
   const permissionNotice = getPermissionNoticePresentation(capability);
   const PermissionIcon = permissionNotice.icon;
-  const previewCue = (cue: NotificationCue): void => {
-    void previewNotificationCue(cue);
-  };
+  const previewCue = useCallback(
+    (cue: NotificationCue): void => {
+      void previewNotificationCue(cue);
+    },
+    [previewNotificationCue],
+  );
 
   return (
     <div className="grid gap-6 p-4">

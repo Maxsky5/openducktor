@@ -269,6 +269,7 @@ describe("ModelPicker", () => {
     },
   );
 
+  // Opens the full picker and waits for its focus tooltip portal.
   test("keeps the unavailable favorite reason focusable without mutating", async () => {
     const toggleFavorite = mock(() => {});
     render(
@@ -307,7 +308,7 @@ describe("ModelPicker", () => {
       fireEvent.click(favoriteAction);
     });
     expect(toggleFavorite).not.toHaveBeenCalled();
-  });
+  }, 2_500);
 
   test("renders model selection and favorite actions as sibling buttons", async () => {
     render(

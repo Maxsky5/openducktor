@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { beforeEach, afterEach, expect, spyOn, test } from "bun:test";
-import { mkdtemp, open, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, open, rm, truncate, writeFile } from "node:fs/promises";
 import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,6 +8,8 @@ import { LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
 import { Cause, Effect, Exit, Fiber, Option } from "effect";
 import { causeToHostBoundaryError } from "../../effect/host-errors";
 import { createGeneratedImageFileAdapter } from "./generated-image-file-adapter";
+import { decodeInlineImage } from "./generated-image-decode";
+import { readSavedImage } from "./generated-image-saved-file";
 import {
   createGeneratedImageWorkers,
   type GeneratedImageWorkers,
@@ -130,41 +132,18 @@ for (const [name, base64] of [
 }
 
 test("32 MiB is accepted and one extra decoded byte is rejected, including equal encoded lengths", async () => {
-  const bytes = Buffer.alloc(LOCAL_ATTACHMENT_BYTE_LIMIT + 1);
-  png.copy(bytes);
-  const exact = bytes.subarray(0, LOCAL_ATTACHMENT_BYTE_LIMIT).toString("base64");
-  const larger = bytes.toString("base64");
+  // Small images cover worker routing above; check the large limit at the decoder and file reader.
+  const encodedLength = Math.ceil(LOCAL_ATTACHMENT_BYTE_LIMIT / 3) * 4;
+  const prefix = "A".repeat(encodedLength - 4);
+  const exact = `${prefix}AAA=`;
+  const larger = `${prefix}AAAA`;
   expect(exact.length).toBe(larger.length);
-  expect(
-    (await Effect.runPromise(reader.read({ representation: "inline", base64: exact }, "image")))
-      .byteLength,
-  ).toBe(LOCAL_ATTACHMENT_BYTE_LIMIT);
-  const oversizedInline = await Effect.runPromise(
-    Effect.either(reader.read({ representation: "inline", base64: larger }, "image")),
-  );
-  expect(oversizedInline._tag).toBe("Left");
-  if (oversizedInline._tag === "Left") expect(oversizedInline.left.message).toContain("32 MiB");
-  const path = await imageFile(bytes);
-  const oversizedFile = await Effect.runPromise(
-    Effect.either(
-      reader.read(
-        {
-          representation: "saved_file",
-          revision: createHash("sha256")
-            .update("saved_file\0")
-            .update(
-              Buffer.from(
-                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aC1sAAAAASUVORK5CYII=",
-                "base64",
-              ),
-            )
-            .digest("hex"),
-          path,
-        },
-        "image",
-      ),
-    ),
-  );
+  expect(decodeInlineImage(exact, "image").byteLength).toBe(LOCAL_ATTACHMENT_BYTE_LIMIT);
+  expect(() => decodeInlineImage(larger, "image")).toThrow("32 MiB");
+
+  const path = await imageFile();
+  await truncate(path, LOCAL_ATTACHMENT_BYTE_LIMIT + 1);
+  const oversizedFile = await Effect.runPromise(Effect.either(readSavedImage(path, "image")));
   expect(oversizedFile._tag).toBe("Left");
   if (oversizedFile._tag === "Left") expect(oversizedFile.left.message).toContain("32 MiB");
 });

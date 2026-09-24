@@ -118,6 +118,7 @@ describe("SettingsNotificationsSection", () => {
     // CI runs this render-heavy flow beside the host suite on 3-4 vCPUs.
   }, 2_500);
 
+  // This test renders the full notification form while its capability query settles.
   test("offers Windows system settings without a permission result", async () => {
     const openSystemSettings = mock(async () => {});
     render(
@@ -136,7 +137,7 @@ describe("SettingsNotificationsSection", () => {
     );
     fireEvent.click(await screen.findByRole("button", { name: "Open system settings" }));
     await waitFor(() => expect(openSystemSettings).toHaveBeenCalledTimes(1));
-  });
+  }, 2_500);
   test("renders every notification kind and retains disabled row choices", async () => {
     render(<NotificationsHarness context={createNotificationContext()} />);
     await screen.findByText(
@@ -216,6 +217,7 @@ describe("SettingsNotificationsSection", () => {
     // CI runs this render-heavy flow beside the host suite on 3-4 vCPUs.
   }, 2_500);
 
+  // This test renders the full notification form through two capability states.
   test("opens system settings and rechecks denied Electron notification permission", async () => {
     const openSystemSettings = mock(async () => {});
     let capabilityChecks = 0;
@@ -258,7 +260,7 @@ describe("SettingsNotificationsSection", () => {
       "OS notifications are enabled. OpenDucktor can send alerts outside the app.",
     );
     expect(getCapability).toHaveBeenCalledTimes(2);
-  });
+  }, 2_500);
 
   test("explains when OS notifications are enabled", async () => {
     render(
