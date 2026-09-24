@@ -390,7 +390,10 @@ describe("node task asset file port", () => {
         : spawn(process.execPath, ["-e", "setInterval(() => {}, 1_000)"], {
             stdio: "ignore",
           });
-    const processId = child?.pid ?? process.pid;
+    const processId = child ? child.pid : process.pid;
+    if (processId === undefined) {
+      throw new Error("Expected the child process to have a PID.");
+    }
     const liveInstanceId = "10000000-0000-4000-8000-000000000004";
     const ownersRoot = path.join(configDir, "task-asset-owners");
     const liveStagingFile = path.join(
