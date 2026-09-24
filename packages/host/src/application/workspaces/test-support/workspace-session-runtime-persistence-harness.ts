@@ -23,6 +23,7 @@ import {
 } from "../../../test-support/service-test-doubles";
 import { createAgentSessionCommandService } from "../../agent-sessions/agent-session-command-service";
 import { createAgentSessionLiveStateService } from "../../agent-sessions/agent-session-live-state-service";
+import { createTaskSessionLifecycleCoordinator } from "../../tasks/worktrees/task-session-lifecycle-coordinator";
 import { createWorkspaceSessionOperationGate } from "../workspace-session-operation-gate";
 import { createWorkspaceSessionRuntimePersistence } from "../workspace-session-runtime-persistence";
 import { createWorkspaceSessionService } from "../workspace-session-service";
@@ -304,6 +305,7 @@ export const createPersistenceHarness = async (database: SqliteTaskStoreTestHarn
   });
   const workspaceService = () =>
     createWorkspaceSessionService({
+      lifecycle: createTaskSessionLifecycleCoordinator(),
       operationGate,
       sessionTitleGate,
       store,
