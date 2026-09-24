@@ -45,10 +45,11 @@ export type TerminalWebSocketData = {
   onBackgroundFailure(cause: unknown): void;
 };
 
-type TerminalServerSocket = Pick<
-  Bun.ServerWebSocket<TerminalWebSocketData>,
-  "close" | "data" | "send"
->;
+export type TerminalServerSocket = {
+  data: TerminalWebSocketData;
+  close(code: number, reason: string): void;
+  send(frame: Uint8Array, compress: boolean): number;
+};
 
 const beginClose = (socket: TerminalServerSocket, code: number, reason: string): void => {
   if (socket.data.closed) return;

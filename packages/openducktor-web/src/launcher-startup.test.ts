@@ -7,6 +7,7 @@ import { Effect } from "effect";
 import { z } from "zod";
 import { runWebBoundary } from "./effect/web-errors";
 import { runLauncherEffect, viteServerOptions } from "./launcher";
+import * as nodeServer from "./node-fetch-server";
 import * as support from "./launcher-support";
 import * as backend from "./typescript-host-backend";
 import { withViteTestServer } from "./vite-test-server";
@@ -16,7 +17,7 @@ test.each(["", " \t\n "])(
   "rejects blank external URL %j before discovery or binds",
   async (externalUrl) => {
     const discover = spyOn(discovery, "resolveWebProvidedToolPathsEffect");
-    const serve = spyOn(Bun, "serve");
+    const serve = spyOn(nodeServer, "startNodeFetchServer");
     try {
       await expect(
         runWebBoundary(
@@ -45,7 +46,7 @@ test.each(["/session", "/health", "/invoke", "/task-events/subscriptions", "/tas
   "rejects conflicting base path %s before discovery or binds",
   async (basePath) => {
     const discover = spyOn(discovery, "resolveWebProvidedToolPathsEffect");
-    const serve = spyOn(Bun, "serve");
+    const serve = spyOn(nodeServer, "startNodeFetchServer");
     try {
       await expect(
         runWebBoundary(
@@ -228,11 +229,10 @@ test.each([
   ["RUNNER.INTERNAL", "runner.internal"],
 ])("normalizes %s at both server boundaries", async (host, normalizedHost) => {
   const packageRoot = await mkdtemp(path.join(os.tmpdir(), "odt-launcher-host-"));
-  const serve = Bun.serve;
-  const frontend = spyOn(Bun, "serve").mockImplementation((options) => {
-    const { unix: _unix, ...tcpOptions } = options;
-    return serve({ ...tcpOptions, hostname: "127.0.0.1" });
-  });
+  const serve = nodeServer.startNodeFetchServer;
+  const frontend = spyOn(nodeServer, "startNodeFetchServer").mockImplementation((options) =>
+    serve({ ...options, hostname: "127.0.0.1" }),
+  );
   const startHost = spyOn(backend, "startTypescriptHostBackendEffect").mockReturnValue(
     Effect.succeed({ port: 23456, exited: Promise.resolve(0), stop: async () => {} }),
   );

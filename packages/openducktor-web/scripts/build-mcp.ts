@@ -15,11 +15,11 @@ export const buildWebMcpEntrypointEffect = (): Effect.Effect<void, WebDependency
     const command = [
       "bun",
       "build",
-      "--target=bun",
+      "--target=node",
       "--outfile",
       outputPath,
       "--banner",
-      "#!/usr/bin/env bun",
+      "#!/usr/bin/env node",
       join(workspaceRoot, "packages", "openducktor-mcp", "src", "index.ts"),
     ] satisfies readonly [string, ...string[]];
     yield* Effect.tryPromise({

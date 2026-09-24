@@ -1,7 +1,7 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { Effect } from "effect";
-// Use the package entry point, not Bun's proxy-aware "undici" shim.
+// Use the package entry point so readiness requests do not use ambient proxy settings.
 import { Agent, fetch as directFetch } from "undici/index.js";
 import {
   causeToWebBoundaryError,
@@ -23,7 +23,7 @@ interface LauncherEarlyExitRef {
     | null;
 }
 
-type ManagedHost = Pick<Bun.Subprocess, "exited"> | TypescriptHostBackend;
+type ManagedHost = { exited: Promise<number> } | TypescriptHostBackend;
 type ReadinessRequestInit = {
   method?: string;
   headers?: Record<string, string>;
@@ -76,6 +76,11 @@ const fetchBackendDirectly: FetchFunction = async (input, init) => {
   } finally {
     await dispatcher.destroy();
   }
+};
+
+const defaultReadinessDependencies: BackendReadinessDependencies = {
+  fetch: fetchBackendDirectly,
+  sleep: (durationMs) => new Promise((resolve) => setTimeout(resolve, durationMs)),
 };
 
 export const buildFrontendUrl = (port: number, host: string = LOCALHOST): string =>
@@ -257,8 +262,7 @@ export const closeFrontendServer = (server: FrontendServer | null): Promise<void
   runWebBoundary(closeFrontendServerEffect(server));
 
 export const closeViteFrontendServer = (server: ViteFrontendServer): Promise<void> => {
-  // Bun 1.3.x can retain an upgraded HMR WebSocket after Vite closes its Node sockets.
-  // Stop Bun's native connections before Vite awaits http.Server.close().
+  // Close active HTTP connections before Vite waits for its server to stop.
   server.httpServer.closeAllConnections();
   return server.close();
 };
@@ -268,7 +272,7 @@ export const waitForBackendEffect = (
   appToken: string,
   timeoutMs: number,
   hostProcess: ManagedHost,
-  dependencies: BackendReadinessDependencies = { fetch: fetchBackendDirectly, sleep: Bun.sleep },
+  dependencies: BackendReadinessDependencies = defaultReadinessDependencies,
 ): Effect.Effect<void, WebDependencyError | WebOperationError> =>
   Effect.gen(function* () {
     const startedAt = Date.now();
@@ -365,7 +369,7 @@ export const waitForBackend = (
   appToken: string,
   timeoutMs: number,
   hostProcess: ManagedHost,
-  dependencies: BackendReadinessDependencies = { fetch: fetchBackendDirectly, sleep: Bun.sleep },
+  dependencies: BackendReadinessDependencies = defaultReadinessDependencies,
 ): Promise<void> =>
   runWebBoundary(waitForBackendEffect(backendUrl, appToken, timeoutMs, hostProcess, dependencies));
 

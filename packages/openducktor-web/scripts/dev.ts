@@ -60,10 +60,12 @@ export const resolveWebCliStopSignal = (
   platform: NodeJS.Platform = process.platform,
 ): NodeJS.Signals => (platform === "win32" ? "SIGTERM" : "SIGINT");
 
-export const buildWebDevCommand = (
-  args: readonly string[],
-  bunExecutable = process.execPath,
-): string[] => [bunExecutable, "src/cli.ts", "--workspace", ...args];
+export const buildWebDevCommand = (args: readonly string[], nodeExecutable = "node"): string[] => [
+  nodeExecutable,
+  "dist/cli.js",
+  "--workspace",
+  ...args,
+];
 
 export const buildWebDevProcessEnvironment = (
   env: NodeJS.ProcessEnv = process.env,

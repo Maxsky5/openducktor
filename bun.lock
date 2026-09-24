@@ -211,6 +211,7 @@
         "@types/node": "^26.6.1",
         "bun-types": "^1.4.2",
         "drizzle-kit": "0.31.10",
+        "node-pty": "1.2.0-beta.15",
       },
     },
     "packages/host-client": {
@@ -250,7 +251,10 @@
         "@anthropic-ai/claude-agent-sdk": "0.3.276",
         "@azure/msal-node-extensions": "^5.5.1",
         "@ff-labs/fff-node": "0.10.6",
+        "mime-types": "^3.0.2",
+        "node-pty": "1.2.0-beta.15",
         "undici": "^8.10.2",
+        "ws": "8.21.3",
         "zod": "^4.6.5",
       },
       "devDependencies": {
@@ -260,7 +264,9 @@
         "@openducktor/host": "workspace:*",
         "@openducktor/host-client": "workspace:*",
         "@tailwindcss/vite": "^4.3.3",
+        "@types/mime-types": "^3.0.1",
         "@types/node": "^26.6.1",
+        "@types/ws": "^8.18.1",
         "@vitejs/plugin-react": "^6.1.1",
         "bun-types": "^1.4.2",
         "effect": "^3.22.2",
@@ -1077,6 +1083,8 @@
     "@types/keyv": ["@types/keyv@3.1.4", "", { "dependencies": { "@types/node": "*" } }, "sha512-BQ5aZNSCpj7D6K2ksrRCTmKRLEpnPvWDiLPfoGyhZ++8YtiK9d/3DBKPJgry359X/P1PfruyYwvnvwFjuEiEIg=="],
 
     "@types/mdast": ["@types/mdast@4.0.4", "", { "dependencies": { "@types/unist": "*" } }, "sha512-kGaNbPh1k7AFzgpud/gMdvIm5xuECykRR+JnWKQno9TAXVa6WIVCGTPvYGekIDL4uwCZQSYbUxNBSb1aUo79oA=="],
+
+    "@types/mime-types": ["@types/mime-types@3.0.1", "", {}, "sha512-xRMsfuQbnRq1Ef+C+RKaENOxXX87Ygl38W1vDfPHRku02TgQr+Qd8iivLtAMcR0KF5/29xlnFihkTlbqFrGOVQ=="],
 
     "@types/ms": ["@types/ms@2.1.0", "", {}, "sha512-GsCCIZDE/p3i96vtEqx+7dBUGXrc7zeSK3wwPHIaRThS+9OhWIXRqzs4d6k1SVU8g91DrNRWxWUGhp5KXQb2VA=="],
 

@@ -1,9 +1,5 @@
 import path from "node:path";
-import {
-  createArtifactRuntimeDistribution,
-  createSourceRuntimeDistribution,
-  type HostRuntimeDistribution,
-} from "@openducktor/host";
+import { createArtifactRuntimeDistribution, type HostRuntimeDistribution } from "@openducktor/host";
 import { Effect } from "effect";
 import { errorMessage, runWebSyncBoundary, WebValidationError } from "./effect/web-errors";
 
@@ -31,16 +27,12 @@ export const resolveWebRuntimeDistributionEffect = ({
           field: "workspaceRoot",
         });
       }
-      return yield* Effect.try({
-        try: () => createSourceRuntimeDistribution(workspaceRoot),
-        catch: (cause) =>
-          new WebValidationError({
-            field: "workspaceRoot",
-            message: errorMessage(cause),
-            cause,
-            details: { workspaceRoot },
-          }),
-      });
+      if (!workspaceRoot.trim()) {
+        return yield* new WebValidationError({
+          message: "workspaceRoot cannot be empty.",
+          field: "workspaceRoot",
+        });
+      }
     }
 
     const mcpEntrypoint = path.join(packageRoot, "dist", WEB_PACKAGE_MCP_ENTRYPOINT);
@@ -50,7 +42,7 @@ export const resolveWebRuntimeDistributionEffect = ({
           mcpLauncher: {
             kind: "toolScript",
             scriptPath: mcpEntrypoint,
-            toolId: "bun",
+            toolId: "node",
           },
         }),
       catch: (cause) =>

@@ -1,6 +1,6 @@
 import type { ServerOptions as ViteServerOptions } from "vite";
 import { randomUUID } from "node:crypto";
-import { existsSync, realpathSync } from "node:fs";
+import { createReadStream, existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { OPENDUCKTOR_DEV_INSTANCE_ENV } from "@openducktor/contracts";
 import type { McpBridgeDiscoveryMode, OpenDucktorConfigDirScope } from "@openducktor/host";
@@ -51,6 +51,8 @@ import {
   portOfHttpOrigin,
 } from "./http-origin";
 import { type WebLogger, writeWebLogEffect } from "./logger";
+import { startNodeFetchServer } from "./node-fetch-server";
+import { nodeReadableStream } from "./node-readable-stream";
 import { RUNTIME_CONFIG_PATH } from "./runtime-config";
 import {
   startTypescriptHostBackendEffect,
@@ -520,11 +522,13 @@ const startStaticFrontendServerEffect = (
     });
 
     return yield* Effect.uninterruptible(
-      Effect.try({
+      Effect.tryPromise({
         try: () =>
-          Bun.serve({
+          startNodeFetchServer({
             hostname: options.host?.trim() || LOCALHOST,
             port: options.frontendPort,
+            onError: (cause) =>
+              console.error(`OpenDucktor web frontend request failed: ${errorMessage(cause)}`),
             async fetch(request) {
               if (!isRequestHostAllowed(request, allowedHostnames)) {
                 return new Response("Host not allowed.", { status: 403 });
@@ -550,7 +554,8 @@ const startStaticFrontendServerEffect = (
                 return new Response("Not found", { status: 404 });
               }
 
-              return new Response(Bun.file(responsePath), {
+              const file = nodeReadableStream(createReadStream(responsePath));
+              return new Response(file, {
                 headers: {
                   "content-type": contentTypeForPath(responsePath),
                 },
@@ -559,31 +564,13 @@ const startStaticFrontendServerEffect = (
           }),
         catch: (cause) =>
           new WebDependencyError({
-            dependency: "bun-server",
+            dependency: "node-server",
             operation: "start-static-frontend",
             message: errorMessage(cause),
             cause,
             details: { frontendPort: options.frontendPort },
           }),
-      }).pipe(
-        Effect.flatMap((server) => {
-          if (server.port === undefined) {
-            server.stop(true);
-            return Effect.fail(
-              new WebDependencyError({
-                dependency: "bun-server",
-                operation: "resolve-static-frontend-port",
-                message: "The static frontend server did not expose its listening TCP port.",
-                details: { frontendPort: options.frontendPort },
-              }),
-            );
-          }
-          return Effect.succeed({
-            close: () => Promise.resolve(server.stop(true)).then(() => undefined),
-            port: server.port,
-          });
-        }),
-      ),
+      }).pipe(Effect.map((server) => ({ close: () => server.stop(true), port: server.port }))),
     );
   });
 

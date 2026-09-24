@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -271,6 +271,6 @@ export const parseCliArgs = (args: string[]): CliOptions => {
   return invocation.options;
 };
 
-if (import.meta.main) {
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   await runCli();
 }

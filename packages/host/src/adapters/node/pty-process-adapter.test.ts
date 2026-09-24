@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { assertTerminalPtyConformance } from "@openducktor/host";
+import { assertTerminalPtyConformance } from "../../testing/terminal-pty-conformance";
 import { Effect } from "effect";
-import { createNodePtyPort } from "./node-pty-adapter";
+import { createNodePtyPort } from "./pty-process-adapter";
 
 describe("createNodePtyPort", () => {
   test("includes the native spawn error, shell, and directory in startup failures", async () => {

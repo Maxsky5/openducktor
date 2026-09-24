@@ -1,4 +1,4 @@
-import type { Stats } from "node:fs";
+import { createReadStream, type Stats } from "node:fs";
 import { stat } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -21,7 +21,9 @@ import {
   type TaskAssetReadService,
   type ToolDiscoveryId,
 } from "@openducktor/host";
+import { createNodePtyPort } from "@openducktor/host/node-pty";
 import { Cause, Effect } from "effect";
+import { lookup as lookupMimeType } from "mime-types";
 import { z } from "zod";
 import {
   causeToWebBoundaryError,
@@ -33,6 +35,8 @@ import {
   WebOperationError,
 } from "./effect/web-errors";
 import { type WebLogger, writeWebLogEffect } from "./logger";
+import { startNodeFetchServer, type NodeFetchServer } from "./node-fetch-server";
+import { nodeReadableStream } from "./node-readable-stream";
 import { allowedHostnamesFor, isRequestHostAllowed } from "./http-origin";
 import { routeTaskAssetHttpRequest } from "./task-asset-http-server";
 import {
@@ -42,7 +46,6 @@ import {
   writeTaskFrameSseEvent,
 } from "./task-event-http-server";
 import { createTaskEventLeaseManager, type TaskEventLeaseManager } from "./task-event-leases";
-import { createBunPtyPort } from "./terminals/bun-pty-adapter";
 import {
   type TerminalWebSocketData,
   terminalWebSocketHandler,
@@ -104,7 +107,7 @@ export type TypescriptHostBackend = {
 type RequestTimeoutController = {
   timeout(request: Request, seconds: number): void;
 };
-type TypescriptHostBackendServer = Bun.Server<TerminalWebSocketData>;
+type TypescriptHostBackendServer = NodeFetchServer<TerminalWebSocketData>;
 
 const LOCALHOST = "127.0.0.1";
 const CONTROL_TOKEN_HEADER = "x-openducktor-control-token";
@@ -144,7 +147,7 @@ const tryUpgradeTerminalWebSocket = ({
   logger: WebLogger;
   onBackgroundFailure(cause: unknown): void;
   request: Request;
-  server: Bun.Server<TerminalWebSocketData>;
+  server: TypescriptHostBackendServer;
   shutdownStarted: boolean;
   terminalPath: string;
 }): TerminalUpgradeResult => {
@@ -616,12 +619,12 @@ const localAttachmentPreviewResponse = (
       );
     }
 
-    const file = Bun.file(canonicalPath);
+    const file = nodeReadableStream(createReadStream(canonicalPath));
     return new Response(file, {
       headers: {
         ...corsHeaders,
         "cache-control": "no-store, private",
-        "content-type": file.type || "application/octet-stream",
+        "content-type": lookupMimeType(canonicalPath) || "application/octet-stream",
       },
     });
   });
@@ -902,7 +905,7 @@ type HostFetchInput = Omit<
   hostCommandRouter: EffectNodeHostCommandRouter;
   onBackgroundFailure(cause: unknown): void;
   request: Request;
-  server: Bun.Server<TerminalWebSocketData>;
+  server: TypescriptHostBackendServer;
 };
 
 export const handleHostFetch = (
@@ -1011,7 +1014,7 @@ export const startTypescriptHostBackendEffect = ({
           ),
       },
       runtimeDistribution,
-      terminalPty: createBunPtyPort(),
+      terminalPty: createNodePtyPort(),
     };
     if (processEnv) {
       routerInput.processEnvironmentInput = { baseEnv: processEnv };
@@ -1052,7 +1055,7 @@ export const startTypescriptHostBackendEffect = ({
       Effect.gen(function* () {
         yield* Effect.sync(() => taskEventLeaseManager.dispose());
         const disposeExit = yield* Effect.exit(hostCommandRouter.dispose());
-        yield* Effect.sync(() => server.stop(true));
+        yield* Effect.promise(() => server.stop(true));
         if (disposeExit._tag === "Failure") {
           const loggingExit = yield* Effect.exit(
             writeWebLogEffect(
@@ -1073,12 +1076,13 @@ export const startTypescriptHostBackendEffect = ({
 
     return yield* Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
-        server = yield* Effect.try({
+        server = yield* Effect.tryPromise({
           try: () =>
-            Bun.serve<TerminalWebSocketData>({
+            startNodeFetchServer<TerminalWebSocketData>({
               hostname: host ?? LOCALHOST,
-              idleTimeout: HOST_IDLE_TIMEOUT_SECONDS,
+              idleTimeoutSeconds: HOST_IDLE_TIMEOUT_SECONDS,
               port,
+              onError: onBackgroundFailure,
               fetch(request, server) {
                 return handleHostFetch({
                   allowedHostnames,
@@ -1106,15 +1110,6 @@ export const startTypescriptHostBackendEffect = ({
             }),
           catch: (cause) => toWebOperationError(cause, "web.host.start-server", { port }),
         });
-
-        if (server.port === undefined) {
-          yield* cleanupStartedServerEffect();
-          return yield* new WebOperationError({
-            operation: "web.host.start-server",
-            message: "OpenDucktor TypeScript host did not expose a listening port.",
-            details: { port },
-          });
-        }
 
         yield* restore(hostCommandRouter.initialize()).pipe(
           Effect.catchAll((error) =>

@@ -81,6 +81,10 @@ const BUN_TOOL_DESCRIPTOR = commandTool({
   command: "bun",
   overrideVariable: "OPENDUCKTOR_BUN_PATH",
 });
+const NODE_TOOL_DESCRIPTOR = commandTool({
+  command: "node",
+  overrideVariable: "OPENDUCKTOR_NODE_PATH",
+});
 const GIT_TOOL_DESCRIPTOR = commandTool({
   command: "git",
   overrideVariable: "OPENDUCKTOR_GIT_PATH",
@@ -156,5 +160,6 @@ export const TOOL_DISCOVERY_DESCRIPTORS = {
   codex: CODEX_TOOL_DESCRIPTOR,
   git: GIT_TOOL_DESCRIPTOR,
   githubCli: GITHUB_CLI_TOOL_DESCRIPTOR,
+  node: NODE_TOOL_DESCRIPTOR,
   opencode: OPENCODE_TOOL_DESCRIPTOR,
 } satisfies Record<ToolDiscoveryId, ToolDiscoveryDescriptor>;

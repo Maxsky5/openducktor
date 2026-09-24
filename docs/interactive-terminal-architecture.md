@@ -8,11 +8,11 @@ The app does not store terminal sessions, tabs, or transcripts in settings or SQ
 
 - `packages/contracts` defines commands, summaries, typed failures, and the binary protocol. A frame has a four-byte big-endian JSON header length, the JSON header, and an optional binary body.
 - `packages/host` owns IDs, launch rules, limits, in-memory sessions, output replay, byte order, flow control, titles, and cleanup. PTY adapters implement `TerminalPtyPort`.
-- Electron uses `node-pty` over a dedicated preload IPC bridge.
-- The web runner uses `Bun.spawn({ terminal })` over one authenticated WebSocket. It checks origin and requires the `openducktor-terminal.v2` subprotocol.
+- Electron uses the shared `node-pty` adapter over a dedicated preload IPC bridge.
+- The Node web runner uses the same `node-pty` adapter over one authenticated WebSocket. It checks origin and requires the `openducktor-terminal.v2` subprotocol.
 - `packages/frontend/src/features/terminals` owns the shared panel, collection hook, tabs, transport controller, xterm renderer, and input rules. Its transport controller shares one connection across the mounted terminal emulators. The Task Workflows page only supplies the task worktree and task context.
 
-Create, list, close, and path setup use host commands. Input, resize, attach, detach, ACK, output, lifecycle, and title use terminal frames. Electron and web each provide one PTY adapter. Neither falls back to the other.
+Create, list, close, and path setup use host commands. Input, resize, attach, detach, ACK, output, lifecycle, and title use terminal frames. Electron and web share the host PTY adapter and use separate transports.
 
 ## Start a terminal
 
@@ -34,7 +34,7 @@ The renderer records the last sequence written to xterm. It sends ACK only after
 
 The host mirrors PTY output in a bounded headless xterm screen. If the host dropped the requested bytes, it sends `screen_restore` with the current screen, grid, and unfinished control state. The renderer resets xterm, applies that screen, and then applies later output. Old scrollback may be missing. During first attach, keep xterm hidden until it reaches the snapshot boundary. The restore reads xterm's current cursor, saved cursor, colors, character sets, tab stops, and scroll region. It uses one version-pinned internal xterm adapter for fields that the public serializer omits. The host drops the body of an unfinished long OSC or DCS string but keeps its parser state, so later bytes cannot appear as screen text.
 
-Replay, unacknowledged output, and screen parsing have byte limits. A server frame can hold up to 8 MiB. A browser input frame has a 128 KiB limit. `node-pty` can pause and resume. An adapter that cannot pause, such as Bun PTY, sends overflow and stops the terminal. If a screen cannot fit in one protocol frame, attach fails with an error instead of showing a wrong screen.
+Replay, unacknowledged output, and screen parsing have byte limits. A server frame can hold up to 8 MiB. A browser input frame has a 64 KiB limit. `node-pty` can pause and resume in both apps. If a screen cannot fit in one protocol frame, attach fails with an error instead of showing a wrong screen.
 
 The host runs pause and resume in order. An ACK or detach can request resume while pause runs. The host resumes after pause finishes if output pressure has cleared.
 
@@ -44,9 +44,9 @@ The frontend reconnects the frame transport and attaches mounted terminals again
 
 Before an unconfirmed close, the host checks for child processes. With no child, it closes at once. With a child, it returns `confirmation_required`. A confirmed close stops the process tree and removes the session.
 
-Electron resumes a paused `node-pty` output stream before it stops the process tree. `node-pty` waits for that stream to close before it reports exit.
+The host resumes a paused `node-pty` output stream before it stops the process tree. `node-pty` waits for that stream to close before it reports exit.
 
-If process-tree termination fails while the PTY remains live, Electron restores the host's current output pause request. An ACK or detach during close can clear that request.
+If process-tree termination fails while the PTY remains live, the adapter restores the host's current output pause request. An ACK or detach during close can clear that request.
 
 The UI hides a tab while close is pending. It restores the tab when confirmation is needed or close fails.
 
@@ -70,4 +70,4 @@ The host limits terminals per task and host, input bytes, grid size, replay byte
 
 A browser WebSocket upgrade needs the HttpOnly app session, an allowed frontend origin, and the exact protocol name. Invalid direction, frame, or protocol version fails.
 
-Electron keeps `node-pty` as a production dependency. The package excludes its build scripts and unpacks native files from ASAR through Electron Builder. No dependency-specific package script handles terminals.
+Electron and web keep `node-pty` as a production dependency. Electron unpacks native files from ASAR through Electron Builder. The web package runs with Node.js 24.14 or later and installs the native dependency with the package.

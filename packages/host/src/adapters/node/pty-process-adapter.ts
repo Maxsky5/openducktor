@@ -4,16 +4,27 @@ import {
   type ProcessTreeTerminator,
   processTreeHasChildren,
   processTreeIsAlive,
+  terminateProcessTree,
+  waitForObservedState,
+} from "../../infrastructure/process/process-tree";
+import {
   TerminalPtyError,
   type TerminalPtyHandle,
   type TerminalPtyPort,
-  terminateProcessTree,
-  waitForObservedState,
-} from "@openducktor/host";
+} from "../../ports/terminal-pty-port";
 import { Effect } from "effect";
 import { spawn } from "node-pty";
 
-type NodePtyModule = { readonly spawn: typeof spawn };
+type NodePtyProcess = Pick<
+  ReturnType<typeof spawn>,
+  "pid" | "onExit" | "write" | "resize" | "pause" | "resume"
+> & {
+  onData(listener: (value: string | Buffer) => void): { dispose(): void };
+};
+
+type NodePtyModule = {
+  readonly spawn: (...args: Parameters<typeof spawn>) => NodePtyProcess;
+};
 
 type CreateNodePtyPortInput = {
   nodePty?: NodePtyModule;

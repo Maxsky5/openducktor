@@ -48,6 +48,7 @@ const builtInOverrideCases = [
   { command: "codex", toolId: "codex", variable: "OPENDUCKTOR_CODEX_BINARY" },
   { command: "git", toolId: "git", variable: "OPENDUCKTOR_GIT_PATH" },
   { command: "gh", toolId: "githubCli", variable: "OPENDUCKTOR_GH_PATH" },
+  { command: "node", toolId: "node", variable: "OPENDUCKTOR_NODE_PATH" },
   {
     command: "opencode",
     toolId: "opencode",
