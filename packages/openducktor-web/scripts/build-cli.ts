@@ -1,5 +1,9 @@
+import { execFile } from "node:child_process";
+import { mkdtemp, rm, symlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { markExecutable, runCommand } from "@openducktor/build-tools";
 import { Effect } from "effect";
 import { errorMessage, runWebBoundary, WebDependencyError } from "../src/effect/web-errors";
@@ -7,6 +11,7 @@ import { errorMessage, runWebBoundary, WebDependencyError } from "../src/effect/
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(scriptDirectory, "..");
 const outputPath = join(packageRoot, "dist", "cli.js");
+const execFileAsync = promisify(execFile);
 
 export const buildWebCliEffect = (): Effect.Effect<void, WebDependencyError> =>
   Effect.gen(function* () {
@@ -46,6 +51,29 @@ export const buildWebCliEffect = (): Effect.Effect<void, WebDependencyError> =>
         new WebDependencyError({
           dependency: "filesystem",
           operation: "mark-web-cli-executable",
+          message: errorMessage(cause),
+          cause,
+          details: { outputPath },
+        }),
+    });
+    yield* Effect.tryPromise({
+      try: async () => {
+        const temporaryDirectory = await mkdtemp(join(tmpdir(), "openducktor-web-cli-"));
+        try {
+          const binaryPath = join(temporaryDirectory, "openducktor-web");
+          await symlink(outputPath, binaryPath);
+          const { stdout } = await execFileAsync("node", [binaryPath, "--help"]);
+          if (!stdout.startsWith("Usage: openducktor-web")) {
+            throw new Error("The built web CLI did not print help through its package symlink.");
+          }
+        } finally {
+          await rm(temporaryDirectory, { recursive: true, force: true });
+        }
+      },
+      catch: (cause) =>
+        new WebDependencyError({
+          dependency: "build-command",
+          operation: "verify-web-cli-entrypoint",
           message: errorMessage(cause),
           cause,
           details: { outputPath },

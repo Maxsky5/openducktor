@@ -183,7 +183,14 @@ export const startNodeFetchServer = async <Data>({
                     nativeSocket.terminate();
                     return;
                   }
-                  queueMicrotask(() => websocket.drain(wrapped));
+                  queueMicrotask(() => {
+                    if (
+                      nativeSocket.readyState === WebSocket.OPEN &&
+                      nativeSocket.bufferedAmount === 0
+                    ) {
+                      websocket.drain(wrapped);
+                    }
+                  });
                 });
                 return nativeSocket.bufferedAmount > 0 ? -1 : frame.byteLength;
               } catch (cause) {

@@ -5,13 +5,13 @@ The web runner needs Node.js 24.14 or later. It uses `node-pty` to run terminals
 
 ## Start the runner
 
-Use the published package:
+Use the published package with Node.js. This command does not need Bun:
 
 ```sh
 npx @openducktor/web
 ```
 
-Use this command while you work in the repository:
+Use Bun for repository development and workspace commands:
 
 ```sh
 bun run browser:dev
