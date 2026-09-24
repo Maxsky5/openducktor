@@ -11,7 +11,11 @@ import {
   terminalServerMessageSchema,
 } from "./terminal-protocol";
 
-const inputMessage = { version: 1 as const, type: "input" as const, terminalId: "terminal-1" };
+const inputMessage = {
+  version: TERMINAL_PROTOCOL_VERSION,
+  type: "input" as const,
+  terminalId: "terminal-1",
+};
 
 describe("terminal protocol", () => {
   test("round trips binary input at the exact input limit", () => {
@@ -33,7 +37,7 @@ describe("terminal protocol", () => {
   });
 
   test("accepts exact grid maxima and rejects maximum plus one", () => {
-    const base = { version: 1, type: "resize", terminalId: "terminal-1" };
+    const base = { version: TERMINAL_PROTOCOL_VERSION, type: "resize", terminalId: "terminal-1" };
     expect(
       terminalClientMessageSchema.parse({
         ...base,
@@ -52,7 +56,7 @@ describe("terminal protocol", () => {
 
   test("compiled output retains the sequence validation message and field path", () => {
     const result = terminalServerMessageSchema.safeParse({
-      version: 1,
+      version: TERMINAL_PROTOCOL_VERSION,
       type: "output",
       terminalId: "terminal-1",
       sequenceStart: 2,
@@ -72,11 +76,15 @@ describe("terminal protocol", () => {
 
   test("rejects malformed discriminants and wrong versions", () => {
     expect(() =>
-      terminalClientMessageSchema.parse({ version: 1, type: "unknown", terminalId: "x" }),
+      terminalClientMessageSchema.parse({
+        version: TERMINAL_PROTOCOL_VERSION,
+        type: "unknown",
+        terminalId: "x",
+      }),
     ).toThrow();
     expect(() =>
       terminalClientMessageSchema.parse({
-        version: 2,
+        version: 1,
         type: "attach",
         terminalId: "x",
         lastConsumedSequence: null,
@@ -129,6 +137,21 @@ describe("terminal protocol", () => {
     expect(() => encodeTerminalProtocolFrame({ message, payload: new Uint8Array() })).toThrow(
       "requires a non-empty binary payload",
     );
+  });
+
+  test("rejects an invalid restore grid and the previous protocol version", () => {
+    const restore = {
+      version: TERMINAL_PROTOCOL_VERSION,
+      type: "screen_restore",
+      terminalId: "terminal-1",
+      sequenceEnd: 1,
+      columns: TERMINAL_PROTOCOL_MAX_COLUMNS,
+      rows: TERMINAL_PROTOCOL_MAX_ROWS,
+    };
+    expect(() =>
+      terminalServerMessageSchema.parse({ ...restore, columns: restore.columns + 1 }),
+    ).toThrow();
+    expect(() => terminalServerMessageSchema.parse({ ...restore, version: 1 })).toThrow();
   });
 
   test("carries a full large TUI screen in one restore frame", () => {

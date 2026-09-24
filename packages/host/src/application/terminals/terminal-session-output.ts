@@ -74,10 +74,12 @@ export class TerminalSessionOutput {
   private sequence = 0;
   private readonly attachments = new Map<string, TerminalAttachment>();
   private paused = false;
+  private ptyPaused = false;
   private overflowed = false;
   private failureFrame: Extract<TerminalServerMessage, { type: "protocol_error" }> | null = null;
   private parserPendingBytes = 0;
   private screenFlushPending = false;
+  private readonly flowOperations = Effect.unsafeMakeSemaphore(1);
 
   constructor(
     private readonly terminalId: string,
@@ -216,6 +218,27 @@ export class TerminalSessionOutput {
   resumeIfUnblocked(
     handle: TerminalPtyHandle | null,
   ): Effect.Effect<TerminalOutputEvents, TerminalPtyError> {
+    return this.flowOperations.withPermits(1)(this.resumeUnblocked(handle));
+  }
+
+  pauseIfRequested(
+    handle: TerminalPtyHandle,
+  ): Effect.Effect<TerminalOutputEvents, TerminalPtyError> {
+    return this.flowOperations.withPermits(1)(
+      Effect.gen(this, function* () {
+        if (!this.paused || this.overflowed) return [];
+        if (!this.ptyPaused) {
+          yield* handle.pauseOutput();
+          this.ptyPaused = true;
+        }
+        return yield* this.resumeUnblocked(handle);
+      }),
+    );
+  }
+
+  private resumeUnblocked(
+    handle: TerminalPtyHandle | null,
+  ): Effect.Effect<TerminalOutputEvents, TerminalPtyError> {
     return Effect.gen(this, function* () {
       if (this.paused) {
         if (
@@ -225,8 +248,16 @@ export class TerminalSessionOutput {
           )
         )
           return [];
-        if (handle) yield* handle.resumeOutput();
+        if (handle && this.ptyPaused) yield* handle.resumeOutput();
+        this.ptyPaused = false;
         this.paused = false;
+        if (
+          this.parserPendingBytes >= TERMINAL_LIMITS.pendingOutputBytes ||
+          [...this.attachments.values()].some(
+            (candidate) => candidate.pendingBytes >= TERMINAL_LIMITS.pendingOutputBytes,
+          )
+        )
+          return this.requestPause(handle);
       }
       let events: TerminalOutputEvents = [];
       // oxlint-disable-next-line unicorn/no-useless-spread -- flushing can change attachments
@@ -243,10 +274,6 @@ export class TerminalSessionOutput {
       );
       return events;
     });
-  }
-
-  resumeAfterPause(handle: TerminalPtyHandle): Effect.Effect<void, TerminalPtyError> {
-    return this.paused || this.overflowed ? Effect.void : handle.resumeOutput();
   }
 
   markOverflowed(): boolean {

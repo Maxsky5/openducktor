@@ -329,6 +329,22 @@ describe("TerminalScreenState", () => {
     restored.dispose();
   });
 
+  test("bounds an unfinished long CSI and restores after it ends", async () => {
+    const screen = new TerminalScreenState({ columns: 12, rows: 2 });
+    const original = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });
+    const restored = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });
+    const first = encoder.encode("before\u001b[" + "1;".repeat(40_000));
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    expect(() => screen.snapshot()).toThrow("Terminal control sequence is too long to restore");
+    const continuation = encoder.encode("mafter");
+    await Promise.all([writeScreen(screen, continuation), write(original, continuation)]);
+    await write(restored, screen.snapshot().payload);
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
   test("keeps the latest screen rows after a long log stream", async () => {
     const screen = new TerminalScreenState({ columns: 12, rows: 3 });
     const restored = new Terminal({ cols: 12, rows: 3, allowProposedApi: true });

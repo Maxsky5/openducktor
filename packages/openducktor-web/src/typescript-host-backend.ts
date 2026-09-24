@@ -190,6 +190,7 @@ const tryUpgradeTerminalWebSocket = ({
       pendingBytes: 0,
       pendingFrames: [],
       drainWaiters: new Set(),
+      messagePermits: new Map(),
       closed: false,
       logger,
       onBackgroundFailure,

@@ -1,4 +1,9 @@
-import type { AppPlatform, TerminalLifecycle, TerminalServerMessage } from "@openducktor/contracts";
+import {
+  TERMINAL_PROTOCOL_MAX_INPUT_BYTES,
+  type AppPlatform,
+  type TerminalLifecycle,
+  type TerminalServerMessage,
+} from "@openducktor/contracts";
 import {
   createLatestResizeScheduler,
   createLiveTerminalFitScheduler,
@@ -68,6 +73,10 @@ export const mountInteractiveTerminal = ({
   );
   const { fitAddon, terminal } = binding;
   let restoringScreen = false;
+  let restoreGeneration = 0;
+  let inputGate: Promise<void> | null = null;
+  let releaseInput: (() => void) | null = null;
+  let deferredInputBytes = 0;
   const resetTerminal = (): void => {
     binding.resetLinkState();
     terminal.reset();
@@ -92,7 +101,10 @@ export const mountInteractiveTerminal = ({
   });
   const enqueueInput = createTerminalInputSequencer({
     isActive,
-    writeInput: (data) => controller.write(terminalId, data),
+    writeInput: async (data) => {
+      if (inputGate) await inputGate;
+      if (!disposed) await controller.write(terminalId, data);
+    },
     reportFailure: (cause) => reportFailure("Terminal input failed", cause),
   });
   const resizeScheduler = createLatestResizeScheduler((columns, rows) => {
@@ -101,13 +113,23 @@ export const mountInteractiveTerminal = ({
       .catch((cause) => reportFailure("Terminal resize failed", cause));
   });
   const resizeSubscription = terminal.onResize(({ cols, rows }) => {
+    if (restoringScreen) return;
     resizeScheduler.schedule(cols, rows);
   });
   const dataSubscription = terminal.onData((data) => {
-    if (restoringScreen) return;
     const input = encodeTerminalTextInput(data);
     if (!input) return;
-    resizeScheduler.flush();
+    if (restoringScreen) {
+      deferredInputBytes += input.byteLength;
+      if (deferredInputBytes > TERMINAL_PROTOCOL_MAX_INPUT_BYTES) {
+        deferredInputBytes -= input.byteLength;
+        reportFailure(
+          "Terminal input failed",
+          new Error("Terminal input during screen restore exceeds the 64 KiB limit."),
+        );
+        return;
+      }
+    } else resizeScheduler.flush();
     void enqueueInput(() => input);
   });
   const oscClipboardSubscription = terminal.parser.registerOscHandler(52, () => true);
@@ -165,17 +187,33 @@ export const mountInteractiveTerminal = ({
       outputSequencer.setSnapshotBoundary(message.snapshotSequenceEnd);
     }
     if (message.type === "screen_restore") {
+      const generation = ++restoreGeneration;
+      restoringScreen = true;
+      if (!inputGate) {
+        inputGate = new Promise<void>((resolve) => {
+          releaseInput = resolve;
+        });
+      }
       void outputSequencer
         .restore(
           message.sequenceEnd,
           payload,
           () => {
-            restoringScreen = true;
             resetTerminal();
             terminal.resize(message.columns, message.rows);
           },
           () => {
+            if (generation !== restoreGeneration) return;
             restoringScreen = false;
+            try {
+              if (isActive()) fitAddon.fit();
+              resizeScheduler.flush();
+            } finally {
+              deferredInputBytes = 0;
+              releaseInput?.();
+              releaseInput = null;
+              inputGate = null;
+            }
           },
         )
         .catch((cause) => reportFailure("Terminal output failed", cause));
@@ -210,6 +248,9 @@ export const mountInteractiveTerminal = ({
     dispose: () => {
       if (disposed) return;
       disposed = true;
+      releaseInput?.();
+      releaseInput = null;
+      inputGate = null;
       controller.releaseEmulator(terminalId);
       unsubscribe();
       observer.disconnect();

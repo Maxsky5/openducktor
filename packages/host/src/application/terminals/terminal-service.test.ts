@@ -631,7 +631,7 @@ describe("TerminalService", () => {
   });
 
   test.each(["ack", "detach"] as const)(
-    "does not leave output paused when %s finishes before the pause request",
+    "resumes output after a pending pause when %s releases pressure",
     async (unblock) => {
       const pty = makePty();
       const start = pty.port.start;
@@ -670,19 +670,23 @@ describe("TerminalService", () => {
           sink: () => undefined,
         }),
       );
-      await Effect.runPromise(service.detach("terminal-1", "screen-barrier"));
-      if (unblock === "ack") {
-        await Effect.runPromise(
-          service.acknowledge("terminal-1", "slow-renderer", TERMINAL_LIMITS.pendingOutputBytes),
-        );
-      } else {
-        await Effect.runPromise(service.detach("terminal-1", "slow-renderer"));
-      }
-      expect(pty.operations).toEqual(["resume"]);
+      const barrierDetached = Effect.runPromise(service.detach("terminal-1", "screen-barrier"));
+      const released =
+        unblock === "ack"
+          ? Effect.runPromise(
+              service.acknowledge(
+                "terminal-1",
+                "slow-renderer",
+                TERMINAL_LIMITS.pendingOutputBytes,
+              ),
+            )
+          : Effect.runPromise(service.detach("terminal-1", "slow-renderer"));
+      await Bun.sleep(0);
+      expect(pty.operations).toEqual([]);
 
       pauseGate.resolve();
-      await Bun.sleep(0);
-      expect(pty.operations.at(-1)).toBe("resume");
+      await Promise.all([barrierDetached, released]);
+      expect(pty.operations).toEqual(["pause", "resume"]);
     },
   );
 
