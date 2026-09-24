@@ -1,5 +1,8 @@
 import { updateClaudeSessionModel } from "./claude-session-model-update";
-import { updateClaudeSessionTitle } from "./claude-session-title-update";
+import {
+  resumeRetainedClaudeSession,
+  updateClaudeSessionTitle,
+} from "./claude-session-title-update";
 import { getClaudeSessionMetadata, readClaudeSessionModel } from "./claude-session-metadata";
 import { resolveClaudeQuerySession } from "./claude-agent-sdk-query-session";
 import { randomUUID } from "node:crypto";
@@ -128,14 +131,9 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
       Effect.flatMap((scope) => {
         const existing = this.sessionStore.get(input.externalSessionId);
         if (existing) {
-          return fromPromise("claudeRuntime.resumeSession", async () => {
-            assertClaudeSessionRef(existing, input, "resume");
-            await requireClaudeOpenDucktorMcpForScope(scope, existing.query, {
-              externalSessionId: existing.externalSessionId,
-              runtimeId,
-            });
-            return existing.summary;
-          });
+          return fromPromise("claudeRuntime.resumeSession", () =>
+            resumeRetainedClaudeSession({ request: input, runtimeId, scope, session: existing }),
+          );
         }
         return this.resume(input, runtimeId, scope);
       }),

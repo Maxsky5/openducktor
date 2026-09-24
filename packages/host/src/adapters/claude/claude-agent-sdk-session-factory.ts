@@ -1,6 +1,6 @@
 import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { type AgentSessionSummary, type AgentSessionTodoItem } from "@openducktor/core";
-import { interruptedTurnResumeError, withoutSummaryTitle } from "@openducktor/core";
+import { interruptedTurnResumeError } from "@openducktor/core";
 import { HostOperationError } from "../../effect/host-errors";
 import {
   buildClaudeAgentSdkOptions,
@@ -8,6 +8,7 @@ import {
 } from "./claude-agent-sdk-options";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { consumeClaudeSession, renameClaudeSessionIfNeeded } from "./claude-agent-sdk-session-io";
+import { reconcileClaudeSessionTitle } from "./claude-session-title-update";
 import {
   type ClaudeSessionLaunchInput,
   requireClaudeOpenDucktorMcpForScope,
@@ -102,6 +103,11 @@ export const createClaudeAgentSdkSession = async ({
   const queue = new AsyncInputQueue<SDKUserMessage>();
   const abortController = new AbortController();
   const startedAt = now();
+  // A reconciliation reports the durable title only after the runtime accepts it.
+  const summaryInput =
+    sessionInput.reconcileTitle === true
+      ? { externalSessionId: sessionInput.externalSessionId }
+      : sessionInput;
   const sessionContext: ClaudeSessionContext = {
     acceptedUserMessages: [],
     activeSdkUserTurnCount: 0,
@@ -117,7 +123,7 @@ export const createClaudeAgentSdkSession = async ({
     queue,
     runtimeId,
     startedAt,
-    summary: createClaudeSessionSummary(input, sessionInput, startedAt),
+    summary: createClaudeSessionSummary(input, summaryInput, startedAt),
     streamAssistantMessageOrdinal: 0,
     streamAssistantMessageIdsByBlockIndex: new Map(),
     subagentMessageIdsByTaskId: new Map(),
@@ -190,19 +196,10 @@ export const createClaudeAgentSdkSession = async ({
       runtimeId,
     });
     if (sessionInput.options.resume && !sessionInput.options.forkSession) {
-      try {
-        await renameClaudeSessionIfNeeded({
-          session,
-          title: sessionInput.title,
-        });
-      } catch (error) {
-        // An attach reconciles the durable title with the runtime. A failed reconciliation
-        // keeps the durable title, so the next attach can retry. A session replacement or
-        // a policy title must fail instead.
-        if (isContinuation || sessionInput.reconcileTitle !== true) {
-          throw error;
-        }
-        session.summary = withoutSummaryTitle(session.summary);
+      if (sessionInput.reconcileTitle === true && !isContinuation) {
+        await reconcileClaudeSessionTitle({ session, title: sessionInput.title });
+      } else {
+        await renameClaudeSessionIfNeeded({ session, title: sessionInput.title });
       }
     }
     if (continuationAdmission) {

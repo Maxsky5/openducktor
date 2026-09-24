@@ -108,20 +108,14 @@ const applyRuntimeContextToSession = (
   assertRuntimeContextCompatibleWithSession(session, input, action);
   const sessionScope = input.sessionScope;
   if (sessionScope) {
-    const policy = resolveCodexSessionScopePolicy(sessionScope, input.runtimePolicy, action);
-    const summary: AgentSessionSummary = {
+    resolveCodexSessionScopePolicy(sessionScope, input.runtimePolicy, action);
+    // A summary title comes from the runtime or from a successful title update.
+    // A scope update must not claim a title the runtime did not accept.
+    session.summary = {
       ...session.summary,
       sessionAssociation: sessionScope,
     };
-    if (
-      policy.kind === "repository" &&
-      !session.preserveNativeSettings &&
-      policy.title !== undefined
-    ) {
-      summary.title = policy.title;
-    }
     if (sessionScope.kind === "workflow") session.preserveNativeSettings = false;
-    session.summary = summary;
   }
   session.runtimePolicy = input.runtimePolicy;
   if (input.systemPrompt !== undefined) {
