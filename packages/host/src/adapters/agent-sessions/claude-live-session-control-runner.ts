@@ -4,12 +4,20 @@ import { Effect } from "effect";
 import { toAgentSessionControlSummary } from "../../application/agent-sessions/agent-session-control-summary";
 import { commitTitleUpdate } from "../../application/agent-sessions/agent-session-title-update";
 import type { HostError } from "../../effect/host-errors";
-import type { AgentSessionTitleUpdateOutcome } from "../../ports/agent-session-live-adapter-port";
+import type {
+  AgentSessionLiveAdapterMutation,
+  AgentSessionTitleUpdateOutcome,
+} from "../../ports/agent-session-live-adapter-port";
 
 type SummaryOptions = {
   readonly parentExternalSessionId?: string;
   readonly keepActivity?: boolean;
 };
+
+type CommitMutation = <Value>(
+  operation: string,
+  mutation: () => AgentSessionLiveAdapterMutation<Value>,
+) => Effect.Effect<Value, HostError>;
 
 export const createClaudeControlRunner = ({
   runControlMutation,
@@ -56,3 +64,18 @@ export const createClaudeControlRunner = ({
       ),
     ),
 });
+
+export const createClaudeProjectionFailureReporter =
+  (dependencies: { commit: CommitMutation; repoPath: string }) =>
+  (operation: string, failure: HostError): Effect.Effect<void, HostError> =>
+    dependencies.commit(`${operation}.report-projection-failure`, () => ({
+      value: undefined,
+      changes: [
+        {
+          type: "fault",
+          repoPath: dependencies.repoPath,
+          operation,
+          message: failure.message,
+        },
+      ],
+    }));

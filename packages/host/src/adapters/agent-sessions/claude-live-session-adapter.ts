@@ -38,7 +38,10 @@ import type {
   CreateClaudeLiveSessionAdapterPreparerInput,
   PreparedClaudeLiveSessionAdapter,
 } from "./claude-live-session-adapter-contract";
-import { createClaudeControlRunner } from "./claude-live-session-control-runner";
+import {
+  createClaudeControlRunner,
+  createClaudeProjectionFailureReporter,
+} from "./claude-live-session-control-runner";
 import { createClaudeLiveSessionEventCoordinator } from "./claude-live-session-event-coordinator";
 import {
   requireClaudePolicy,
@@ -214,18 +217,10 @@ export const createClaudeLiveSessionAdapterPreparer =
             value: summary,
             changes: state.applyControlSummary(summary, options),
           })),
-        reportProjectionFailure: (operation, failure) =>
-          commit(`${operation}.report-projection-failure`, () => ({
-            value: undefined,
-            changes: [
-              {
-                type: "fault",
-                repoPath: runtime.repoPath,
-                operation,
-                message: failure.message,
-              },
-            ],
-          })),
+        reportProjectionFailure: createClaudeProjectionFailureReporter({
+          commit,
+          repoPath: runtime.repoPath,
+        }),
       });
 
       const requireSessionWorkingDirectory = (

@@ -1,4 +1,5 @@
 import { updateClaudeSessionModel } from "./claude-session-model-update";
+import { updateClaudeSessionTitle } from "./claude-session-title-update";
 import { getClaudeSessionMetadata, readClaudeSessionModel } from "./claude-session-metadata";
 import { resolveClaudeQuerySession } from "./claude-agent-sdk-query-session";
 import { randomUUID } from "node:crypto";
@@ -22,7 +23,6 @@ import type {
   StartAgentSessionInput,
   UpdateControlledAgentSessionModelInput,
 } from "@openducktor/core";
-import { withSummaryTitle } from "@openducktor/core";
 import { Effect } from "effect";
 import { HostValidationError, toHostOperationError } from "../../effect/host-errors";
 import { resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
@@ -47,10 +47,7 @@ import {
   createClaudeAgentSdkSession,
   type CreateClaudeAgentSdkSessionInput,
 } from "./claude-agent-sdk-session-factory";
-import {
-  renameClaudeSessionIfNeeded,
-  sendClaudeUserMessage,
-} from "./claude-agent-sdk-session-io";
+import { sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
 import {
   type ClaudeSessionLaunchInput,
   continuedClaudeSessionLaunch,
@@ -294,16 +291,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   }
 
   updateSessionTitle(input: AgentSessionControlUpdateTitleInput) {
-    return fromPromise("claudeRuntime.updateSessionTitle", async () => {
-      const session = this.sessionStore.get(input.externalSessionId);
-      if (!session) {
-        return { status: "not_attached" } as const;
-      }
-      assertClaudeSessionRef(session, input, "update session title");
-      await renameClaudeSessionIfNeeded({ session, title: input.title });
-      session.summary = withSummaryTitle(session.summary, input.title);
-      return { status: "renamed", summary: session.summary } as const;
-    });
+    return updateClaudeSessionTitle(input, { sessionStore: this.sessionStore });
   }
 
   sendUserMessage(input: SendAgentUserMessageInput, runtimeId: string) {
