@@ -170,9 +170,10 @@ describe("verifyPackagedFffFileSearch", () => {
       source: fffModuleSource(successfulFinder),
     });
 
-    await expect(verifyPayload("linux", releaseDirectory)).resolves.toEqual({
-      modulePath: realpathSync(join(moduleDirectory, "index.cjs")),
-    });
+    const verified = await verifyPayload("linux", releaseDirectory);
+    expect(realpathSync(verified.modulePath)).toBe(
+      realpathSync(join(moduleDirectory, "index.cjs")),
+    );
   });
 
   test("rejects a missing packaged payload with the expected location", async () => {

@@ -30,6 +30,10 @@ import {
   type ElectronReleasePlatform,
 } from "./electron-release-targets";
 import { electronSidecarDisplayName } from "./electron-sidecar-manifest";
+import {
+  resolvePackagedAppResourcesDirectory,
+  resolvePackagedUnpackedDirectory,
+} from "./electron-packaged-layout";
 import { prepareElectronSidecarsEffect } from "./prepare-electron-sidecars";
 import { verifyPackagedFffFileSearchEffect } from "./verify-electron-fff-package";
 import { verifyPackagedElectronSidecarsEffect } from "./verify-electron-sidecar-package";
@@ -424,6 +428,26 @@ export const buildElectronPackageEffect = ({
     console.log(
       `Verified packaged Claude file search payload: ${verifiedFffFileSearch.modulePath}`,
     );
+
+    const unpackedDirectory = resolvePackagedUnpackedDirectory({
+      arch,
+      platform,
+      releaseDirectory,
+    });
+    const packagedExecutable =
+      platform === "macos"
+        ? join(unpackedDirectory, "OpenDucktor.app", "Contents", "MacOS", "OpenDucktor")
+        : join(unpackedDirectory, platform === "windows" ? "OpenDucktor.exe" : "openducktor");
+    yield* runPackageCommandEffect({
+      command: [
+        packagedExecutable,
+        join(electronPackageDirectory, "scripts", "verify-electron-msal-package.cjs"),
+        resolvePackagedAppResourcesDirectory({ arch, platform, releaseDirectory }),
+      ],
+      cwd: electronPackageDirectory,
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+      label: "Packaged MSAL persistence",
+    });
 
     if (!stageReleaseArtifacts) {
       return [];
