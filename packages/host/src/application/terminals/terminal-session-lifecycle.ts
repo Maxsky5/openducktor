@@ -179,8 +179,8 @@ export const createTerminalSessionLifecycle = ({
       } else if (event.type === "pause_requested" && session.resources.handle) {
         const handle = session.resources.handle;
         Effect.runFork(
-          handle.pauseOutput().pipe(
-            Effect.flatMap(() => session.output.resumeAfterPause(handle)),
+          session.output.pauseIfRequested(handle).pipe(
+            Effect.tap((pauseEvents) => Effect.sync(() => applyStreamEvents(session, pauseEvents))),
             Effect.tapError(() => Effect.sync(() => terminateForOverflow(session))),
           ),
         );

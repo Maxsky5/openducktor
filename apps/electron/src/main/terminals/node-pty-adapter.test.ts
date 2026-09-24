@@ -226,6 +226,48 @@ describe("createNodePtyPort", () => {
     expect(calls).toEqual(["pause", "resume", "terminate-after-resume"]);
   });
 
+  test("shares one process-tree close for concurrent terminate requests", async () => {
+    const started = Promise.withResolvers<void>();
+    const finish = Promise.withResolvers<void>();
+    let closeCount = 0;
+    let resumeCount = 0;
+    const port = createNodePtyPort({
+      processTreeTerminator: () =>
+        Effect.promise(async () => {
+          closeCount += 1;
+          started.resolve();
+          await finish.promise;
+        }),
+      nodePty: {
+        spawn: () => ({
+          pid: 42,
+          onData: () => ({ dispose: () => undefined }),
+          onExit: () => ({ dispose: () => undefined }),
+          write: () => undefined,
+          resize: () => undefined,
+          pause: () => undefined,
+          resume: () => {
+            resumeCount += 1;
+          },
+        }),
+      },
+    });
+    const handle = await Effect.runPromise(
+      port.start(
+        { shell: "/bin/zsh", args: [], cwd: "/repo", env: {}, grid: { columns: 80, rows: 24 } },
+        { onOutput: () => undefined, onFailure: () => undefined, onExit: () => undefined },
+      ),
+    );
+    const first = Effect.runPromise(handle.terminate());
+    await started.promise;
+    const second = Effect.runPromise(handle.terminate());
+    finish.resolve();
+    await Promise.all([first, second]);
+    await Effect.runPromise(handle.terminate());
+    expect(closeCount).toBe(1);
+    expect(resumeCount).toBe(1);
+  });
+
   test.each([false, true])(
     "keeps host output pressure after a failed close (ACK during close: %s)",
     async (ackDuringClose) => {

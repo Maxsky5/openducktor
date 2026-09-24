@@ -5,8 +5,8 @@ import {
   terminalLifecycleSchema,
 } from "./terminal-schemas";
 
-export const TERMINAL_PROTOCOL_VERSION = 1 as const;
-export const TERMINAL_PROTOCOL_SUBPROTOCOL = "openducktor-terminal.v1";
+export const TERMINAL_PROTOCOL_VERSION = 2 as const;
+export const TERMINAL_PROTOCOL_SUBPROTOCOL = "openducktor-terminal.v2";
 export const TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES = 8 * 1024 * 1024;
 export const TERMINAL_PROTOCOL_MAX_HEADER_BYTES = 64 * 1024;
 export const TERMINAL_PROTOCOL_MAX_INPUT_BYTES = 64 * 1024;

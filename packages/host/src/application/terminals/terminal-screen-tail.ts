@@ -124,6 +124,7 @@ export class TerminalScreenTail {
   private cursorStyle = "";
   private stringIntro: number | null = null;
   private discardedStringPayload = false;
+  private discardedControlSequence = false;
   private readonly charsets = ["B", "B", "B", "B"];
   private charsetLevel = 0;
   private activeCharset = "B";
@@ -151,7 +152,7 @@ export class TerminalScreenTail {
   }
 
   suffix(terminal: Terminal): Uint8Array {
-    if (this.pending.length > MAX_PENDING_BYTES) {
+    if (this.discardedControlSequence) {
       throw new Error(
         "Terminal control sequence is too long to restore. Close this tab and create a new terminal.",
       );
@@ -336,10 +337,11 @@ export class TerminalScreenTail {
     this.state = state;
     this.stringIntro = null;
     this.discardedStringPayload = false;
+    this.discardedControlSequence = false;
   }
 
   private push(byte: number): void {
-    if (this.discardedStringPayload) return;
+    if (this.discardedStringPayload || this.discardedControlSequence) return;
     if (this.pending.length < MAX_PENDING_BYTES) {
       this.pending.push(byte);
       return;
@@ -349,7 +351,8 @@ export class TerminalScreenTail {
       this.discardedStringPayload = true;
       return;
     }
-    this.pending.push(byte);
+    this.pending = [];
+    this.discardedControlSequence = true;
   }
 
   private finish(): void {
@@ -358,6 +361,7 @@ export class TerminalScreenTail {
     this.state = "ground";
     this.stringIntro = null;
     this.discardedStringPayload = false;
+    this.discardedControlSequence = false;
   }
 
   private updateCharset(): void {

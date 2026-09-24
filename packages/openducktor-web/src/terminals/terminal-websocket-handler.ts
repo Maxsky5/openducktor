@@ -2,6 +2,8 @@ import {
   decodeTerminalProtocolFrame,
   encodeTerminalProtocolFrame,
   isTerminalClientMessage,
+  TERMINAL_PROTOCOL_MAX_HEADER_BYTES,
+  TERMINAL_PROTOCOL_MAX_INPUT_BYTES,
   TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES,
   TERMINAL_PROTOCOL_VERSION,
   type TerminalFailure,
@@ -16,6 +18,8 @@ import { Effect } from "effect";
 import { type WebLogger, writeWebLogEffect } from "../logger";
 
 const OUTBOUND_QUEUE_LIMIT = TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES * 2;
+const MAX_CLIENT_FRAME_BYTES =
+  4 + TERMINAL_PROTOCOL_MAX_HEADER_BYTES + TERMINAL_PROTOCOL_MAX_INPUT_BYTES;
 const EMPTY_PAYLOAD: Uint8Array = new Uint8Array(0);
 
 export type TerminalWebSocketService = Pick<
@@ -32,6 +36,10 @@ export type TerminalWebSocketData = {
   pendingBytes: number;
   pendingFrames: Uint8Array[];
   drainWaiters: Set<(writable: boolean) => void>;
+  messagePermits: Map<
+    string,
+    { permit: ReturnType<typeof Effect.unsafeMakeSemaphore>; pending: number }
+  >;
   closed: boolean;
   logger: WebLogger;
   onBackgroundFailure(cause: unknown): void;
@@ -42,8 +50,15 @@ type TerminalServerSocket = Pick<
   "close" | "data" | "send"
 >;
 
+const beginClose = (socket: TerminalServerSocket, code: number, reason: string): void => {
+  if (socket.data.closed) return;
+  socket.data.closed = true;
+  for (const finish of socket.data.drainWaiters) finish(false);
+  socket.close(code, reason);
+};
+
 const closeForQueueOverflow = (socket: TerminalServerSocket): void => {
-  socket.close(1013, "Terminal outbound queue limit exceeded.");
+  beginClose(socket, 1013, "Terminal outbound queue limit exceeded.");
 };
 
 const sendFrame = (socket: TerminalServerSocket, frame: Uint8Array): boolean => {
@@ -61,7 +76,7 @@ const sendFrame = (socket: TerminalServerSocket, frame: Uint8Array): boolean => 
   }
   const status = socket.send(frame, false);
   if (status === 0) {
-    socket.close(1011, "Terminal connection could not send data.");
+    beginClose(socket, 1011, "Terminal connection could not send data.");
     return false;
   }
   if (status === -1) {
@@ -122,13 +137,7 @@ const getClientSession = (socket: TerminalServerSocket): TerminalClientSession =
   if (existing) return existing;
   const clientSession = createTerminalClientSession({
     clientId: `browser:${socket.data.connectionId}`,
-    terminalService: {
-      ...socket.data.terminalService,
-      attach: (input) =>
-        waitForWritable(socket).pipe(
-          Effect.flatMap(() => socket.data.terminalService.attach(input)),
-        ),
-    },
+    terminalService: socket.data.terminalService,
     send: (message, payload) => {
       if (!sendMessage(socket, message, payload))
         throw new Error("Terminal WebSocket could not queue an outbound frame.");
@@ -144,7 +153,15 @@ const runClientMessage = (socket: TerminalServerSocket, raw: string | Buffer): v
       code: "protocol_error",
       message: "Terminal WebSocket messages must be binary.",
     });
-    socket.close(1003, "Binary terminal frames required.");
+    beginClose(socket, 1003, "Binary terminal frames required.");
+    return;
+  }
+  if (raw.byteLength > MAX_CLIENT_FRAME_BYTES) {
+    sendProtocolError(socket, {
+      code: "message_too_large",
+      message: "Terminal client frame exceeds the 128 KiB input and header limit.",
+    });
+    beginClose(socket, 1009, "Terminal client frame is too large.");
     return;
   }
   let decoded: ReturnType<typeof decodeTerminalProtocolFrame>;
@@ -154,16 +171,10 @@ const runClientMessage = (socket: TerminalServerSocket, raw: string | Buffer): v
     );
   } catch (cause) {
     sendProtocolError(socket, {
-      code:
-        raw.byteLength > TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES
-          ? "message_too_large"
-          : "protocol_error",
+      code: "protocol_error",
       message: cause instanceof Error ? cause.message : String(cause),
     });
-    socket.close(
-      raw.byteLength > TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES ? 1009 : 1002,
-      "Invalid terminal frame.",
-    );
+    beginClose(socket, 1002, "Invalid terminal frame.");
     return;
   }
   if (!isTerminalClientMessage(decoded.message)) {
@@ -171,15 +182,46 @@ const runClientMessage = (socket: TerminalServerSocket, raw: string | Buffer): v
       code: "protocol_error",
       message: "Browser terminal traffic must use a client message type.",
     });
-    socket.close(1002, "Invalid terminal message direction.");
+    beginClose(socket, 1002, "Invalid terminal message direction.");
     return;
   }
-  Effect.runFork(getClientSession(socket).handle(decoded.message, decoded.payload));
+  const message = decoded.message;
+  let entry = socket.data.messagePermits.get(message.terminalId);
+  if (!entry) {
+    entry = { permit: Effect.unsafeMakeSemaphore(1), pending: 0 };
+    socket.data.messagePermits.set(message.terminalId, entry);
+  }
+  entry.pending += 1;
+  const messageEntry = entry;
+  Effect.runFork(
+    messageEntry.permit
+      .withPermits(1)(
+        Effect.suspend(() => {
+          if (socket.data.closed) return Effect.void;
+          const ready = message.type === "attach" ? waitForWritable(socket) : Effect.void;
+          return ready.pipe(
+            Effect.flatMap(() =>
+              socket.data.closed
+                ? Effect.void
+                : getClientSession(socket).handle(message, decoded.payload),
+            ),
+          );
+        }),
+      )
+      .pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            messageEntry.pending -= 1;
+            if (messageEntry.pending === 0) socket.data.messagePermits.delete(message.terminalId);
+          }),
+        ),
+      ),
+  );
 };
 
 export const terminalWebSocketHandler = {
   perMessageDeflate: false,
-  maxPayloadLength: TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES,
+  maxPayloadLength: MAX_CLIENT_FRAME_BYTES,
   message: runClientMessage,
   drain(socket: TerminalServerSocket) {
     const data = socket.data;
@@ -202,6 +244,7 @@ export const terminalWebSocketHandler = {
     for (const finish of drainWaiters) finish(false);
     socket.data.pendingFrames.length = 0;
     socket.data.pendingBytes = 0;
+    socket.data.messagePermits.clear();
     socket.data.clientSession = null;
     if (!clientSession) return;
     void Effect.runPromise(clientSession.close()).catch((cause: unknown) => {

@@ -49,6 +49,51 @@ describe("TerminalSessionOutput", () => {
     );
   });
 
+  test("does not resume before a pending pause starts", async () => {
+    const calls: string[] = [];
+    const handle: TerminalPtyHandle = {
+      ...pausableHandle,
+      pauseOutput: () => Effect.sync(() => calls.push("pause")),
+      resumeOutput: () => Effect.sync(() => calls.push("resume")),
+    };
+    const output = createOutput();
+    expect(output.updateParserBacklog(TERMINAL_LIMITS.pendingOutputBytes, handle)).toEqual([
+      { type: "pause_requested" },
+    ]);
+    output.updateParserBacklog(0, handle);
+    await Effect.runPromise(output.resumeIfUnblocked(handle));
+    await Effect.runPromise(output.pauseIfRequested(handle));
+    expect(calls).toEqual([]);
+  });
+
+  test("issues one resume after an in-flight pause and two release requests", async () => {
+    const calls: string[] = [];
+    const pauseStarted = Promise.withResolvers<void>();
+    const finishPause = Promise.withResolvers<void>();
+    const handle: TerminalPtyHandle = {
+      ...pausableHandle,
+      pauseOutput: () =>
+        Effect.promise(async () => {
+          calls.push("pause-start");
+          pauseStarted.resolve();
+          await finishPause.promise;
+          calls.push("pause-end");
+        }),
+      resumeOutput: () => Effect.sync(() => calls.push("resume")),
+    };
+    const output = createOutput();
+    output.updateParserBacklog(TERMINAL_LIMITS.pendingOutputBytes, handle);
+    const pause = Effect.runPromise(output.pauseIfRequested(handle));
+    await pauseStarted.promise;
+    output.updateParserBacklog(0, handle);
+    const firstResume = Effect.runPromise(output.resumeIfUnblocked(handle));
+    const secondResume = Effect.runPromise(output.resumeIfUnblocked(handle));
+    expect(calls).toEqual(["pause-start"]);
+    finishPause.resolve();
+    await Promise.all([pause, firstResume, secondResume]);
+    expect(calls).toEqual(["pause-start", "pause-end", "resume"]);
+  });
+
   test("restores a gap and ignores an ACK sent before restoration", () => {
     const output = new TerminalSessionOutput("terminal-1", 4, () => ({
       columns: 80,
@@ -254,21 +299,24 @@ describe("TerminalSessionOutput", () => {
       expect(oldCalls).toBe(callsBeforeReplacement);
     },
   );
-  test("requests output pause when replay attachment reaches its pending byte bound", () => {
-    const output = createOutput();
-    output.accept(new Uint8Array(TERMINAL_LIMITS.pendingOutputBytes + 1), pausableHandle);
+  test.each([TERMINAL_LIMITS.pendingOutputBytes, TERMINAL_LIMITS.pendingOutputBytes + 1])(
+    "requests output pause when replay attachment reaches or exceeds its pending byte bound (%d)",
+    (byteCount) => {
+      const output = createOutput();
+      output.accept(new Uint8Array(byteCount), pausableHandle);
 
-    const events = output.attach(
-      {
-        terminalId: "terminal-1",
-        attachmentId: "attachment-1",
-        lastConsumedSequence: 0,
-        sink: () => undefined,
-      },
-      summary,
-      pausableHandle,
-    );
+      const events = output.attach(
+        {
+          terminalId: "terminal-1",
+          attachmentId: "attachment-1",
+          lastConsumedSequence: 0,
+          sink: () => undefined,
+        },
+        summary,
+        pausableHandle,
+      );
 
-    expect(events).toContainEqual({ type: "pause_requested" });
-  });
+      expect(events).toContainEqual({ type: "pause_requested" });
+    },
+  );
 });

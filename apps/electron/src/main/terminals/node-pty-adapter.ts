@@ -52,7 +52,9 @@ export const createNodePtyPort = ({
         let receivedOutput = false;
         let cleanupPromise: Promise<void> | null = null;
         let terminating = false;
+        let terminated = false;
         let outputPaused = false;
+        const terminationPermit = Effect.unsafeMakeSemaphore(1);
         const pty = nodePty.spawn(plan.shell, [...plan.args], {
           cols: plan.grid.columns,
           cwd: plan.cwd,
@@ -191,36 +193,42 @@ export const createNodePtyPort = ({
                   }),
             ),
           terminate: () =>
-            Effect.gen(function* () {
-              if (exitPublished) return;
-              terminating = true;
-              const result = yield* Effect.either(
-                Effect.gen(function* () {
-                  // node-pty delays onExit until its output stream closes.
-                  if (!closed) yield* operation("terminate", () => pty.resume());
-                  yield* finalizeExit();
-                }),
-              );
-              if (result._tag === "Right") return;
-
-              const restore = yield* Effect.either(
-                operation("terminate", () => {
-                  if (!closed && outputPaused) pty.pause();
-                }),
-              );
-              terminating = false;
-              if (restore._tag === "Left") {
-                return yield* Effect.fail(
-                  new TerminalPtyError({
-                    code: "operation_failed",
-                    operation: "terminate",
-                    message: "node-pty could not restore output pause after termination failed.",
-                    cause: new AggregateError([result.left, restore.left]),
+            terminationPermit.withPermits(1)(
+              Effect.gen(function* () {
+                if (exitPublished || terminated) return;
+                terminating = true;
+                const result = yield* Effect.either(
+                  Effect.gen(function* () {
+                    // node-pty delays onExit until its output stream closes.
+                    if (!closed) yield* operation("terminate", () => pty.resume());
+                    yield* finalizeExit();
                   }),
                 );
-              }
-              return yield* Effect.fail(result.left);
-            }),
+                if (result._tag === "Right") {
+                  terminating = false;
+                  terminated = true;
+                  return;
+                }
+
+                const restore = yield* Effect.either(
+                  operation("terminate", () => {
+                    if (!closed && outputPaused) pty.pause();
+                  }),
+                );
+                terminating = false;
+                if (restore._tag === "Left") {
+                  return yield* Effect.fail(
+                    new TerminalPtyError({
+                      code: "operation_failed",
+                      operation: "terminate",
+                      message: "node-pty could not restore output pause after termination failed.",
+                      cause: new AggregateError([result.left, restore.left]),
+                    }),
+                  );
+                }
+                return yield* Effect.fail(result.left);
+              }),
+            ),
         };
         return handle;
       },

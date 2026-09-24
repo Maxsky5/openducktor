@@ -724,9 +724,11 @@ describe("InteractiveTerminal policies", () => {
     const parserCallbacks: Array<() => void> = [];
     const events: string[] = [];
     const acknowledgements: number[] = [];
+    const restoreStarted = Promise.withResolvers<void>();
     const sequencer = createTerminalOutputSequencer({
       write: (payload, parsed) => {
         events.push(`write:${[...payload].join(",")}`);
+        if (payload.length === 1 && payload[0] === 9) restoreStarted.resolve();
         parserCallbacks.push(() => {
           events.push(`parsed:${[...payload].join(",")}`);
           parsed();
@@ -753,6 +755,7 @@ describe("InteractiveTerminal policies", () => {
 
     parserCallbacks[0]?.();
     await staleWrite;
+    await restoreStarted.promise;
     expect(events).toEqual(["write:1,2,3,4,5", "parsed:1,2,3,4,5", "reset", "write:9"]);
     expect(acknowledgements).toEqual([]);
 
