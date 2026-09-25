@@ -713,6 +713,60 @@ describe("TerminalScreenState", () => {
     },
   );
 
+  test.each([
+    ["OSC", "\u001b]0;"],
+    ["DCS", "\u001bPz"],
+    ["SOS", "\u001bX"],
+    ["PM", "\u001b^"],
+    ["APC", "\u001b_"],
+  ])("restores UTF-8 C1 CSI after a discarded %s payload", async (_name, intro) => {
+    const screen = new TerminalScreenState({ columns: 12, rows: 2 });
+    const original = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });
+    const restored = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });
+    const prefix = encoder.encode(`A${intro}${"x".repeat(70_000)}`);
+    const first = new Uint8Array(prefix.byteLength + 4);
+    first.set(prefix);
+    first.set([0xc2, 0x9b, 0x33, 0x31], prefix.byteLength);
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    await write(restored, screen.snapshot().payload);
+    const continuation = encoder.encode("mB");
+    await Promise.all([
+      writeScreen(screen, continuation),
+      write(original, continuation),
+      write(restored, continuation),
+    ]);
+    expect(visibleLines(original)[0]).toStartWith("AB");
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    expect(restored.buffer.active.cursorX).toBe(original.buffer.active.cursorX);
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
+  test("restores UTF-8 C1 OSC after a discarded DCS payload", async () => {
+    const screen = new TerminalScreenState({ columns: 12, rows: 2 });
+    const original = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });
+    const restored = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });
+    const prefix = encoder.encode(`A\u001bPz${"x".repeat(70_000)}`);
+    const first = new Uint8Array(prefix.byteLength + 5);
+    first.set(prefix);
+    first.set([0xc2, 0x9d, 0x30, 0x3b, 0x78], prefix.byteLength);
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    await write(restored, screen.snapshot().payload);
+    const continuation = encoder.encode("\u0007B");
+    await Promise.all([
+      writeScreen(screen, continuation),
+      write(original, continuation),
+      write(restored, continuation),
+    ]);
+    expect(visibleLines(original)[0]).toStartWith("AB");
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    expect(restored.buffer.active.cursorX).toBe(original.buffer.active.cursorX);
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
   test("bounds an unfinished long CSI and restores after it ends", async () => {
     const screen = new TerminalScreenState({ columns: 12, rows: 2 });
     const original = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });

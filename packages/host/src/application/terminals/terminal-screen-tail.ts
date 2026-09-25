@@ -295,9 +295,18 @@ export class TerminalScreenTail {
         this.start(byte, "escape");
         return;
       }
-      if (this.stringC1Lead && byte === 0x9c) {
-        this.finish();
-        return;
+      if (this.stringC1Lead) {
+        if (byte === 0x9c) {
+          this.finish();
+          return;
+        }
+        const intro = C1_INTRODUCERS.get(byte);
+        if (intro !== undefined) {
+          this.finish();
+          this.start(ESC, "escape");
+          this.acceptByte(intro);
+          return;
+        }
       }
       this.stringC1Lead = byte === 0xc2;
       if (this.state === "osc" && byte === 0x07) {
