@@ -99,9 +99,14 @@ export const projectClaudeBackgroundTaskEdge = (
     (message.subtype === "task_started" || message.subtype === "task_notification") &&
     (message.ambient || message.skip_transcript)
   ) {
-    taskFor(state, taskId).ambient = true;
+    const task = taskFor(state, taskId);
+    const wasActive = isTaskActive(state, taskId);
+    task.ambient = true;
     setTaskActive(state, taskId, false);
-    return null;
+    if (!wasActive || task.outcome) return null;
+    task.outcome = "unknown";
+    delete task.endedAtMs;
+    return projectTask(state, taskId, task, timestamp);
   }
   if (knownTask?.ambient) return null;
   const task = taskFor(state, taskId);
@@ -246,7 +251,7 @@ export const projectClaudeBackgroundToolResult = (
       state.backgroundToolCallIdsSinceSnapshot
     ) {
       task.outcome = "unknown";
-      task.endedAtMs = Date.parse(timestamp);
+      delete task.endedAtMs;
     }
   }
   task.part = completedPart;
@@ -327,13 +332,17 @@ const presentTask = (
     next.error = task.summary ? `Stopped: ${task.summary}` : "Stopped";
     if (text) next.output = text;
   } else if (task.outcome === "unknown") {
-    next.error = "Claude ended the background task without a terminal outcome.";
+    next.error = task.ambient
+      ? "Claude moved the background task out of visible activity."
+      : "Claude ended the background task without a terminal outcome.";
     if (text) next.output = text;
   } else {
     delete next.error;
     if (text) next.output = text;
   }
-  if (task.outcome) {
+  if (task.outcome === "unknown") {
+    delete next.endedAtMs;
+  } else if (task.outcome) {
     next.endedAtMs = task.endedAtMs ?? endedAtMs;
   } else {
     delete next.endedAtMs;
@@ -348,7 +357,7 @@ const projectTask = (
   timestamp: string,
 ): ToolPart | null => {
   if (
-    task.ambient ||
+    (task.ambient && !task.outcome) ||
     state.backgroundToolAgentTaskIds?.has(taskId) ||
     !task.backgrounded ||
     (!isTaskActive(state, taskId) && !task.outcome) ||
@@ -410,11 +419,12 @@ const applyActiveTasks = (
   }
   const parts: ToolPart[] = [];
   for (const [taskId, task] of tasks(state)) {
-    if (task.outcome || task.ambient) continue;
+    if (task.outcome) continue;
     if (!active.has(taskId) && previouslyActive?.has(taskId)) {
       task.outcome = "unknown";
-      task.endedAtMs = Date.parse(timestamp);
+      delete task.endedAtMs;
     }
+    if (task.ambient && !task.outcome) continue;
     const part = projectTask(state, taskId, task, timestamp);
     if (part) parts.push(part);
   }

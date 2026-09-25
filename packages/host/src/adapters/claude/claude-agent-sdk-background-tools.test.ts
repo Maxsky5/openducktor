@@ -322,6 +322,61 @@ describe("Claude background ordinary tool parts", () => {
     ).toBe(false);
   });
 
+  test("stops a running card when its task becomes ambient", () => {
+    const { parts, send, session } = live();
+    send(toolUse("ambient-bash", "Bash", { command: "sleep 10" }));
+    send(taskStart("ambient-task", "ambient-bash", "Run check"));
+    send(toolResult("ambient-bash", "Started", "ambient-task"));
+    expect(parts("ambient-bash").at(-1)?.status).toBe("running");
+
+    send(
+      snapshot([
+        {
+          task_id: "ambient-task",
+          task_type: "local_bash",
+          description: "Run check",
+          ambient: true,
+        },
+      ]),
+    );
+    expect(parts("ambient-bash").at(-1)).toMatchObject({
+      status: "error",
+      error: "Claude moved the background task out of visible activity.",
+      metadata: { backgroundTaskStatus: "unknown" },
+    });
+    expect(parts("ambient-bash").at(-1)?.endedAtMs).toBeUndefined();
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
+
+    send(
+      snapshot([{ task_id: "ambient-task", task_type: "local_bash", description: "Run check" }]),
+    );
+    expect(parts("ambient-bash").at(-1)?.status).toBe("running");
+  });
+
+  test("stops a running card when an edge marks its task ambient", () => {
+    const { parts, send, session } = live();
+    send(toolUse("ambient-edge", "Bash", { command: "sleep 10" }));
+    send(taskStart("ambient-edge-task", "ambient-edge", "Run check"));
+    send(toolResult("ambient-edge", "Started", "ambient-edge-task"));
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_started",
+        task_id: "ambient-edge-task",
+        tool_use_id: "ambient-edge",
+        task_type: "local_bash",
+        description: "Run check",
+        ambient: true,
+      }),
+    );
+    expect(parts("ambient-edge").at(-1)).toMatchObject({
+      status: "error",
+      metadata: { backgroundTaskStatus: "unknown" },
+    });
+    expect(parts("ambient-edge").at(-1)?.endedAtMs).toBeUndefined();
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
+  });
+
   test("keeps foreground Bash output after progress arrives before its start edge", () => {
     const { parts, send, session } = live();
     send(toolUse("foreground-progress", "Bash", { command: "pwd" }));
@@ -1080,8 +1135,8 @@ describe("Claude background ordinary tool parts", () => {
         message: { role: "user", content: [] },
       }),
     ]);
-    const partFor = (activeTaskIds: ReadonlySet<string>) =>
-      toClaudeHistoryMessages(entries, () => timestamp, [], {
+    const partFor = (activeTaskIds: ReadonlySet<string>, readAt = timestamp) =>
+      toClaudeHistoryMessages(entries, () => readAt, [], {
         currentBackgroundTaskIds: activeTaskIds,
       })
         .flatMap((message) => message.parts)
@@ -1093,6 +1148,8 @@ describe("Claude background ordinary tool parts", () => {
       status: "error",
       metadata: { backgroundTaskStatus: "unknown" },
     });
+    expect(partFor(new Set(), "2026-09-25T20:00:00.000Z")?.endedAtMs).toBeUndefined();
+    expect(partFor(new Set(), "2026-09-26T20:00:00.000Z")?.endedAtMs).toBeUndefined();
     expect(partFor(new Set(["history-restart-task"]))).toMatchObject({
       status: "running",
       metadata: { backgroundTaskStatus: "running" },
@@ -1111,6 +1168,7 @@ describe("Claude background ordinary tool parts", () => {
       status: "error",
       metadata: { backgroundTaskStatus: "unknown" },
     });
+    expect(childPart?.endedAtMs).toBeUndefined();
   });
 
   test("history gives a snapshot authority over a later launch result", () => {
