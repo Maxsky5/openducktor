@@ -2,7 +2,7 @@ import { SerializeAddon } from "@xterm/addon-serialize";
 import { Terminal } from "@xterm/headless";
 import { TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES } from "@openducktor/contracts";
 import type { TerminalGrid } from "../../ports/terminal-pty-port";
-import { underlineOverlay } from "./terminal-screen-style";
+import { attributeOverlay } from "./terminal-screen-style";
 import { TerminalScreenTail } from "./terminal-screen-tail";
 
 type ScreenOperation =
@@ -65,10 +65,10 @@ export class TerminalScreenState {
       throw new TerminalScreenBusyError();
     const screen = this.serializer.serialize({ scrollback: 0 }) || "\u001b[0m";
     const normalPrelude = this.tail.normalPrelude(this.terminal);
-    const normalOverlay = underlineOverlay(this.terminal, this.terminal.buffer.normal);
+    const normalOverlay = attributeOverlay(this.terminal, this.terminal.buffer.normal);
     const alternateOverlay =
       this.terminal.buffer.active.type === "alternate"
-        ? underlineOverlay(this.terminal, this.terminal.buffer.alternate)
+        ? attributeOverlay(this.terminal, this.terminal.buffer.alternate)
         : "";
     const alternateStart = "\u001b[?1049h";
     const alternateIndex = normalPrelude ? screen.indexOf(alternateStart) : -1;

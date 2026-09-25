@@ -329,6 +329,28 @@ describe("TerminalScreenState", () => {
     restored.dispose();
   });
 
+  test.each([
+    ["visible protected cells", '\u001b[1"qA\u001b[0"qB', "\u001b[?2K", "A"],
+    ["current protection", '\u001b[1"qA', "B\u001b[?2K", "AB"],
+    ["saved cursor protection", '\u001b[1"q\u001b7\u001b[0"qA', "\u001b8B\u001b[?2K", "B"],
+    ["alternate screen protection", '\u001b[?1049h\u001b[1"qA\u001b[0"qB', "\u001b[?2K", "A"],
+  ])("restores %s for later selective erase", async (_name, initial, continuation, expected) => {
+    const screen = new TerminalScreenState({ columns: 8, rows: 2 });
+    const original = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const restored = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const first = encoder.encode(initial);
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    await write(restored, screen.snapshot().payload);
+    const next = encoder.encode(continuation);
+    await Promise.all([writeScreen(screen, next), write(original, next), write(restored, next)]);
+    expect(visibleLines(original)[0]).toStartWith(expected);
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    expect(restored.buffer.active.cursorX).toBe(original.buffer.active.cursorX);
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
   test("restores decorated cells in both buffers and their cursors", async () => {
     const screen = new TerminalScreenState({ columns: 8, rows: 2 });
     const original = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });

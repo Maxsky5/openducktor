@@ -18,6 +18,7 @@ export type XtermAttributes = {
   isInvisible(): number | boolean;
   isStrikethrough(): number | boolean;
   isOverline(): number | boolean;
+  isProtected(): number | boolean;
 };
 
 const colorCodes = (attributes: XtermAttributes, foreground: boolean): number[] => {
@@ -57,13 +58,16 @@ export const styleSequence = (attributes: XtermAttributes): string => {
     ...(attributes.isStrikethrough() ? [9] : []),
     ...(attributes.isOverline() ? [53] : []),
   ];
-  return codes.length > 0 ? `\u001b[${codes.join(";")}m` : "";
+  const sgr = codes.length > 0 ? `\u001b[${codes.join(";")}m` : "";
+  return attributes.isProtected() ? `${sgr}\u001b[1"q` : sgr;
 };
 
-export const hasExtendedUnderline = (attributes: XtermAttributes): boolean =>
-  attributes.getUnderlineStyle() > 1 || (attributes.extended.underlineColor & 0x03000000) !== 0;
+export const needsCellRepair = (attributes: XtermAttributes): boolean =>
+  !!attributes.isProtected() ||
+  attributes.getUnderlineStyle() > 1 ||
+  (attributes.extended.underlineColor & 0x03000000) !== 0;
 
-export const underlineOverlay = (terminal: Terminal, buffer: IBuffer): string => {
+export const attributeOverlay = (terminal: Terminal, buffer: IBuffer): string => {
   const parts: string[] = [];
   for (let row = 0; row < terminal.rows; row += 1) {
     const line = buffer.getLine(buffer.viewportY + row);
@@ -84,7 +88,7 @@ export const underlineOverlay = (terminal: Terminal, buffer: IBuffer): string =>
       }
       // SAFETY: xterm 6.0.0 buffer cells inherit these attribute methods and extended data.
       const attributes = cell as IBufferCell & XtermAttributes;
-      if (!hasExtendedUnderline(attributes)) {
+      if (!needsCellRepair(attributes)) {
         flush();
         continue;
       }

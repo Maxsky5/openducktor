@@ -1,5 +1,5 @@
 import type { IBufferCell, Terminal } from "@xterm/headless";
-import { hasExtendedUnderline, styleSequence } from "./terminal-screen-style";
+import { needsCellRepair, styleSequence } from "./terminal-screen-style";
 import type { XtermAttributes } from "./terminal-screen-style";
 
 const ESC = 0x1b;
@@ -159,7 +159,7 @@ export class TerminalScreenTail {
         );
       parts.push("\u001b8");
     }
-    if (hasSavedCursor || hasOverlay || hasExtendedUnderline(core._inputHandler._curAttrData))
+    if (hasSavedCursor || hasOverlay || needsCellRepair(core._inputHandler._curAttrData))
       parts.push(`\u001b[0m${styleSequence(core._inputHandler._curAttrData)}`);
     if (hasScrollRegion) {
       parts.push(`\u001b[${buffer.scrollTop + 1};${buffer.scrollBottom + 1}r`);
