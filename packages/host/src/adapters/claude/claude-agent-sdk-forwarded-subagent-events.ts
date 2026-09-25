@@ -84,7 +84,12 @@ export const emitClaudeSubagentUserMessage = ({
 };
 
 const forwardedSubagentParentToolUseId = (message: ClaudeSdkMessageProjection): string | null => {
-  if (message.type !== "assistant" && message.type !== "user" && message.type !== "tool_progress") {
+  if (
+    message.type !== "assistant" &&
+    message.type !== "user" &&
+    message.type !== "tool_progress" &&
+    message.type !== "stream_event"
+  ) {
     return null;
   }
   const parentToolUseId = message.parent_tool_use_id;

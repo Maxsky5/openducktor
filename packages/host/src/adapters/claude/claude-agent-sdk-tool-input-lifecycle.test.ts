@@ -132,12 +132,17 @@ describe("Claude tool input lifecycle", () => {
 
   test("a parent result preserves input from a running child", () => {
     const session = createEventTestSession();
-    const child = createEventTestSession();
-    child.externalSessionId = "child";
-    session.subagentEventSessionsByToolUseId = new Map([["child", child]]);
+    session.activeBackgroundSubagentTaskIds = new Set(["child"]);
+    session.subagentTaskIdsByToolUseId.set("agent-tool", "child");
     const emit = () => {};
     for (const message of [start, delta]) {
-      handleClaudeSdkMessage({ session: child, message, timestamp, modelSelection, emit });
+      handleClaudeSdkMessage({
+        session,
+        message: { ...message, parent_tool_use_id: "agent-tool" },
+        timestamp,
+        modelSelection,
+        emit,
+      });
     }
     handleClaudeSdkMessage({
       session,
@@ -147,9 +152,10 @@ describe("Claude tool input lifecycle", () => {
       emit,
     });
     handleClaudeSdkMessage({
-      session: child,
+      session,
       message: claudeSdkMessageFixture({
         type: "stream_event",
+        parent_tool_use_id: "agent-tool",
         event: {
           type: "content_block_delta",
           index: 0,
@@ -160,8 +166,16 @@ describe("Claude tool input lifecycle", () => {
       modelSelection,
       emit,
     });
-    handleClaudeSdkMessage({ session: child, message: stop, timestamp, modelSelection, emit });
-    expect(child.toolInputsByCallId.get("write-1")).toEqual({ content: "child" });
+    handleClaudeSdkMessage({
+      session,
+      message: { ...stop, parent_tool_use_id: "agent-tool" },
+      timestamp,
+      modelSelection,
+      emit,
+    });
+    const child = session.subagentEventSessionsByToolUseId?.get("agent-tool");
+    expect(child?.toolInputsByCallId.get("write-1")).toEqual({ content: "child" });
+    expect(session.toolInputsByCallId.has("write-1")).toBe(false);
   });
 
   test.each(["message_start", "result"] as const)("discards incomplete input on %s", (boundary) => {

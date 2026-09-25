@@ -100,6 +100,7 @@ describe("Claude tool input completion order", () => {
     "%s preserves SDK-normalized final values",
     (order) => {
       const session = createEventTestSession();
+      const events: AgentEvent[] = [];
       const send = (message: ReturnType<typeof claudeSdkMessageFixture>) =>
         handleClaudeSdkMessage({
           session,
@@ -110,7 +111,7 @@ describe("Claude tool input completion order", () => {
             modelId: model,
             runtimeKind: "claude",
           }),
-          emit: () => {},
+          emit: (event) => events.push(event),
         });
       send(
         claudeSdkMessageFixture({
@@ -151,6 +152,19 @@ describe("Claude tool input completion order", () => {
         send(message);
       }
       expect(session.toolInputsByCallId.get("write-1")).toEqual(input);
+      const pendingTools = events.flatMap((event) =>
+        event.type === "assistant_part" && event.part.kind === "tool" ? [event.part] : [],
+      );
+      expect(pendingTools.length).toBeGreaterThanOrEqual(2);
+      for (const part of pendingTools) {
+        expect(part).toMatchObject({
+          callId: "write-1",
+          messageId: "write-1",
+          partId: "write-1",
+          status: "pending",
+        });
+        expect(part).not.toHaveProperty("input");
+      }
     },
   );
 });
