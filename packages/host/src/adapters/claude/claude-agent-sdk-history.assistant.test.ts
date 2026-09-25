@@ -107,6 +107,36 @@ describe("claude-agent-sdk-history assistant turns", () => {
     expect(earlierResponse?.model).toEqual(
       expect.objectContaining({ modelId: "claude-sonnet-4-6" }),
     );
+
+    const newerPrompt = toClaudeHistoryMessages(
+      entries.slice(1),
+      () => "2026-06-26T12:00:00.000Z",
+      [{ messageId: "next-user", text: "New request", timestamp: "2026-06-26T11:03:14.000Z" }],
+      { currentBackgroundTaskIds: new Set(["bash-1"]) },
+    );
+    const priorResponse = newerPrompt.find((message) => message.role === "assistant");
+    expect(priorResponse?.parts).toContainEqual(
+      expect.objectContaining({ kind: "step", phase: "finish" }),
+    );
+    expect(priorResponse?.model).toEqual(expect.objectContaining({ modelId: "claude-sonnet-4-6" }));
+
+    const queuedPrompt = toClaudeHistoryMessages(
+      entries.slice(1),
+      () => "2026-06-26T12:00:00.000Z",
+      [
+        {
+          messageId: "next-user",
+          text: "New request",
+          timestamp: "2026-06-26T11:03:14.000Z",
+          state: "queued",
+        },
+      ],
+      { currentBackgroundTaskIds: new Set(["bash-1"]) },
+    );
+    const activeResponse = queuedPrompt.find((message) => message.role === "assistant");
+    expect(activeResponse?.parts).not.toContainEqual(
+      expect.objectContaining({ kind: "step", phase: "finish" }),
+    );
   });
 
   test("hydrates one Claude response from split reasoning, text, and tool snapshots", () => {

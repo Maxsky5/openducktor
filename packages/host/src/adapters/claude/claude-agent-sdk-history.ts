@@ -113,7 +113,7 @@ export const toClaudeHistoryMessages = (
     toolNamesByCallId,
     transcriptExternalSessionId: options.transcriptExternalSessionId,
   };
-  const hasBackgroundWork = createClaudeHistoryTaskCheck(messages, options);
+  const hasBackgroundWork = createClaudeHistoryTaskCheck(messages, options, liveUserMessages);
   const projectHistoryInput = createClaudeHistoryInputProjector({ liveUserMessages });
   let lastAssistantMessage: MutableAssistantHistoryMessage | null = null;
   let lastAssistantTextMessage: MutableAssistantHistoryMessage | null = null;

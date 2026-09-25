@@ -19,7 +19,7 @@ import {
   isClaudeSubagentTranscriptTarget,
   parseClaudeTranscriptTarget,
 } from "./claude-agent-sdk-subagent-transcripts";
-import type { ClaudeBackgroundWorkSession } from "./claude-agent-sdk-event-session";
+import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
 import { hasActiveClaudeWork } from "./claude-agent-sdk-session-store";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
 import { readStringProp } from "./claude-agent-sdk-utils";
@@ -52,11 +52,12 @@ export const claudeLiveHistoryContext = (
   return {
     activeBackgroundTaskIds: () => {
       const ids = new Set<string>();
-      const collect = (work: ClaudeBackgroundWorkSession): void => {
+      const collect = (work: ClaudeEventSession): void => {
         for (const id of work.backgroundToolActiveTaskIds ?? []) ids.add(id);
         for (const child of work.subagentEventSessionsByToolUseId?.values() ?? []) collect(child);
       };
-      collect(session);
+      const work = isSubagent ? findClaudeHistoryWork(session, externalSessionId) : session;
+      if (work) collect(work);
       return ids;
     },
     hasActiveWork: () => hasActiveClaudeWork(session),
@@ -77,6 +78,18 @@ export const claudeLiveHistoryContext = (
             : ("read" as const),
         })),
   };
+};
+
+const findClaudeHistoryWork = (
+  session: ClaudeEventSession,
+  externalSessionId: string,
+): ClaudeEventSession | null => {
+  if (session.externalSessionId === externalSessionId) return session;
+  for (const child of session.subagentEventSessionsByToolUseId?.values() ?? []) {
+    const match = findClaudeHistoryWork(child, externalSessionId);
+    if (match) return match;
+  }
+  return null;
 };
 
 export const isClaudeSubagentTranscriptComplete = (

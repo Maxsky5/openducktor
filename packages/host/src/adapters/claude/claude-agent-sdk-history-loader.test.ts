@@ -320,12 +320,24 @@ describe("claudeLiveHistoryContext", () => {
   });
 
   test("uses current child activity without adding parent turns to child history", () => {
-    const session = createClaudeSession({ acceptedUserMessages });
+    const session = createClaudeSession({
+      acceptedUserMessages,
+      backgroundToolActiveTaskIds: new Set(["root-task"]),
+    });
     session.subagentTaskIdsByToolUseId.set("agent-call", "agent-1");
+    session.subagentTaskIdsByToolUseId.set("sibling-call", "agent-2");
     const child = claudeSubagentEventSession(session, "agent-call");
+    const sibling = claudeSubagentEventSession(session, "sibling-call");
     expect(child).not.toBeNull();
-    if (!child) return;
+    expect(sibling).not.toBeNull();
+    if (!child || !sibling) return;
     child.backgroundToolActiveTaskIds = new Set(["child-task"]);
+    sibling.backgroundToolActiveTaskIds = new Set(["sibling-task"]);
+    expect([...claudeLiveHistoryContext(session).activeBackgroundTaskIds()]).toEqual([
+      "root-task",
+      "child-task",
+      "sibling-task",
+    ]);
     const context = claudeLiveHistoryContext(session, child.externalSessionId);
     expect(context.source).toBe("persisted");
     expect(context.userMessages).toEqual([]);
