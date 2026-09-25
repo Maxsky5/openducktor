@@ -72,7 +72,7 @@ export class TerminalScreenTail {
   private utf8Remaining = 0;
   private cursorStyle = "";
   private stringIntro: number | null = null;
-  private stringC1Lead = false;
+  private c1Lead = false;
   private discardedStringPayload = false;
   private discardedControlSequence = false;
   private readonly charsets = ["B", "B", "B", "B"];
@@ -198,10 +198,7 @@ export class TerminalScreenTail {
           : `\u001b${String.fromCharCode(this.stringIntro ?? 0x5f)}`
       : "";
     const pending = this.discardedStringPayload
-      ? new Uint8Array([
-          ...new TextEncoder().encode(ignoredString),
-          ...(this.stringC1Lead ? [0xc2] : []),
-        ])
+      ? new Uint8Array([...new TextEncoder().encode(ignoredString), ...(this.c1Lead ? [0xc2] : [])])
       : new Uint8Array(this.pending);
     const modes = new TextEncoder().encode(parts.join(""));
     const suffix = new Uint8Array(modes.byteLength + pending.byteLength);
@@ -211,6 +208,17 @@ export class TerminalScreenTail {
   }
 
   private acceptByte(byte: number): void {
+    const c1 = this.c1Lead && byte >= 0x80 && byte <= 0x9f ? byte : undefined;
+    this.c1Lead = byte === 0xc2;
+    if (c1 !== undefined) {
+      this.finish();
+      const intro = C1_INTRODUCERS.get(c1);
+      if (intro !== undefined) {
+        this.start(ESC, "escape");
+        this.acceptByte(intro);
+      }
+      return;
+    }
     if (this.state === "ground") {
       if (byte === ESC) {
         this.start(byte, "escape");
@@ -227,14 +235,7 @@ export class TerminalScreenTail {
       if (byte >= 0x80 && byte <= 0xbf) {
         this.push(byte);
         this.utf8Remaining -= 1;
-        if (this.utf8Remaining === 0) {
-          const intro = this.pending[0] === 0xc2 ? C1_INTRODUCERS.get(byte) : undefined;
-          this.finish();
-          if (intro !== undefined) {
-            this.start(ESC, "escape");
-            this.acceptByte(intro);
-          }
-        }
+        if (this.utf8Remaining === 0) this.finish();
       } else {
         this.finish();
         this.acceptByte(byte);
@@ -295,20 +296,6 @@ export class TerminalScreenTail {
         this.start(byte, "escape");
         return;
       }
-      if (this.stringC1Lead) {
-        if (byte === 0x9c) {
-          this.finish();
-          return;
-        }
-        const intro = C1_INTRODUCERS.get(byte);
-        if (intro !== undefined) {
-          this.finish();
-          this.start(ESC, "escape");
-          this.acceptByte(intro);
-          return;
-        }
-      }
-      this.stringC1Lead = byte === 0xc2;
       if (this.state === "osc" && byte === 0x07) {
         this.finish();
       } else {
@@ -322,7 +309,6 @@ export class TerminalScreenTail {
     this.pending = [byte];
     this.state = state;
     this.stringIntro = null;
-    this.stringC1Lead = false;
     this.discardedStringPayload = false;
     this.discardedControlSequence = false;
   }
@@ -347,7 +333,6 @@ export class TerminalScreenTail {
     this.pending = [];
     this.state = "ground";
     this.stringIntro = null;
-    this.stringC1Lead = false;
     this.discardedStringPayload = false;
     this.discardedControlSequence = false;
   }
