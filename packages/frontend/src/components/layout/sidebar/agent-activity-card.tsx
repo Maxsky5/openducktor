@@ -1,6 +1,7 @@
 import { Activity, ChevronRight, CircleAlert } from "lucide-react";
 import type { ReactElement } from "react";
-import { Link } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
+import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
 import { formatAgentSessionActivityStateLabel } from "@/lib/agent-session-activity-state";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { buildAgentStudioHref } from "@/pages/agents/query-sync/agent-studio-navigation";
@@ -20,31 +21,53 @@ function SessionList({
   sessions: AgentActivitySessionItem[];
   accentClassName: string;
 }): ReactElement {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { run: guardWorkspaceChange } = useWorkspacePreviewTransitionGuard();
+
   return (
     <ul className="mt-1 space-y-1 border-t border-border pt-2">
-      {sessions.map((session) => (
-        <li key={agentSessionIdentityKey(session)}>
-          <Link
-            to={
-              session.workspaceSessionId !== undefined
-                ? `/chats?session=${encodeURIComponent(session.workspaceSessionId)}`
-                : buildAgentStudioHref({
-                    taskId: session.taskId,
-                    sessionExternalId: session.externalSessionId,
-                    role: session.role,
-                  })
-            }
-            className="block rounded-md border border-border bg-card px-2 py-1.5 hover:border-input hover:bg-accent"
-          >
-            <p className="truncate text-xs font-medium text-foreground">{session.taskTitle}</p>
-            <p className={`truncate text-[11px] ${accentClassName}`}>
-              {session.role?.toUpperCase() ?? "CHAT"}
-              {" · "}
-              {formatAgentSessionActivityStateLabel(session.activityState)}
-            </p>
-          </Link>
-        </li>
-      ))}
+      {sessions.map((session) => {
+        const isTaskSession = session.workspaceSessionId === undefined;
+        const href = isTaskSession
+          ? buildAgentStudioHref({
+              taskId: session.taskId,
+              sessionExternalId: session.externalSessionId,
+              role: session.role,
+            })
+          : `/chats?session=${encodeURIComponent(session.workspaceSessionId)}`;
+        return (
+          <li key={agentSessionIdentityKey(session)}>
+            <Link
+              to={href}
+              onClick={(event) => {
+                if (
+                  !isTaskSession ||
+                  location.pathname !== "/chats" ||
+                  event.defaultPrevented ||
+                  event.button !== 0 ||
+                  event.metaKey ||
+                  event.altKey ||
+                  event.ctrlKey ||
+                  event.shiftKey
+                ) {
+                  return;
+                }
+                event.preventDefault();
+                guardWorkspaceChange(() => navigate(href));
+              }}
+              className="block rounded-md border border-border bg-card px-2 py-1.5 hover:border-input hover:bg-accent"
+            >
+              <p className="truncate text-xs font-medium text-foreground">{session.taskTitle}</p>
+              <p className={`truncate text-[11px] ${accentClassName}`}>
+                {session.role?.toUpperCase() ?? "CHAT"}
+                {" · "}
+                {formatAgentSessionActivityStateLabel(session.activityState)}
+              </p>
+            </Link>
+          </li>
+        );
+      })}
     </ul>
   );
 }
