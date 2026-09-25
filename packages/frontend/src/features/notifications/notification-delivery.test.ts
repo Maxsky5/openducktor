@@ -85,9 +85,17 @@ describe("notification delivery adapters", () => {
     expect(navigate).toHaveBeenCalledWith(occurrence.navigationTarget);
   });
 
+  // A real Sonner portal render and close transition exceed the workspace's 1-second unit-test limit on CI.
   test("renders agent notifications with the shared close control and full-width action", async () => {
     const navigate = mock(async () => {});
-    const adapter = createSonnerNotificationAdapter({ navigate });
+    let toastId: string | number | undefined;
+    const adapter = createSonnerNotificationAdapter({
+      showToast: (toastTitle, options) => {
+        toastId = toast(toastTitle, options);
+        return toastId;
+      },
+      navigate,
+    });
     const title = "Agent Session Started - task-1";
 
     render(createElement(Toaster));
@@ -97,7 +105,11 @@ describe("notification delivery adapters", () => {
         await adapter.deliver({ title, body: "Repo - Build notifications" }, occurrence);
       });
 
-      const closeButton = await screen.findByRole("button", { name: "Close toast" });
+      const closeButton = await screen.findByRole(
+        "button",
+        { name: "Close toast" },
+        { timeout: 2_000 },
+      );
       const openButton = screen.getByRole("button", { name: "Open" });
       const toastElement = screen.getByText(title).closest("[data-sonner-toast]");
 
@@ -122,13 +134,18 @@ describe("notification delivery adapters", () => {
       );
 
       fireEvent.click(closeButton);
-      await waitFor(() => {
-        expect(toastElement.getAttribute("data-removed")).toBe("true");
-      });
+      await waitFor(
+        () => {
+          expect(toastElement.getAttribute("data-removed")).toBe("true");
+        },
+        { timeout: 2_000 },
+      );
     } finally {
-      act(() => toast.dismiss());
+      if (toastId !== undefined) {
+        act(() => toast.dismiss(toastId));
+      }
     }
-  });
+  }, 5_000);
 
   test("plays Cuelume through its imperative API with a normalized volume", async () => {
     const play = mock((_sound?: string, _options?: { volume?: number }) => {});
