@@ -1,5 +1,5 @@
 import type { GitComparisonTarget, GitTargetBranch } from "@openducktor/contracts";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderTree, GitBranch } from "lucide-react";
 import { useCallback, useEffect, useMemo } from "react";
 import type { TaskExecutionSelectedFile } from "./task-execution-file-explorer-model";
@@ -12,7 +12,7 @@ import { type DiffDataState, useAgentStudioDiffData } from "@/features/agent-stu
 import { useAgentStudioGitActions } from "@/pages/agents/use-agent-studio-git-actions";
 import { errorMessage } from "@/lib/errors";
 import { hostClient } from "@/lib/host-client";
-import { invalidateWorkspaceFileQueries } from "@/state/queries/filesystem";
+import { filesystemQueryKeys, invalidateWorkspaceFileQueries } from "@/state/queries/filesystem";
 import { gitComparisonTargetQueryOptions, gitQueryKeys } from "@/state/queries/git";
 
 export type WorkspaceToolsTabId = "git" | "file_explorer";
@@ -39,12 +39,21 @@ function workspaceGitModel(input: {
   resolvedTarget: string | null;
   unavailableReason: string | null;
   workingDirectory: string | null;
+  refresh: () => Promise<void>;
 }): AgentStudioGitPanelModel {
-  const { diffData, actions, contextMode, resolvedTarget, unavailableReason, workingDirectory } =
-    input;
+  const {
+    diffData,
+    actions,
+    contextMode,
+    resolvedTarget,
+    unavailableReason,
+    workingDirectory,
+    refresh,
+  } = input;
   return {
     ...diffData,
     ...actions,
+    refresh,
     contextMode,
     targetBranch: resolvedTarget ?? "",
     comparisonUnavailableReason: unavailableReason,
@@ -91,6 +100,90 @@ function WorkspaceOpenInAction({
   );
 }
 
+async function refreshWorkspaceSessionData(input: {
+  queryClient: QueryClient;
+  diffData: ReturnType<typeof useAgentStudioDiffData>;
+  refetchComparison: () => Promise<{
+    isError: boolean;
+    data: GitComparisonTarget | undefined;
+  }>;
+  resolvedTarget: string | null;
+  target: GitTargetBranch | null;
+  targetError: string | null;
+  workingDirectory: string | null;
+}): Promise<void> {
+  const {
+    queryClient,
+    diffData,
+    refetchComparison,
+    resolvedTarget,
+    target,
+    targetError,
+    workingDirectory,
+  } = input;
+  if (workingDirectory && target && !targetError) {
+    const checkedComparison = await refetchComparison();
+    const checkedTarget =
+      !checkedComparison.isError && checkedComparison.data?.kind === "available"
+        ? checkedComparison.data.reference
+        : null;
+    if (checkedTarget !== resolvedTarget) {
+      await queryClient.invalidateQueries({
+        queryKey: filesystemQueryKeys.treeRoot(workingDirectory),
+        refetchType: "none",
+      });
+      return;
+    }
+  }
+  await Promise.all([
+    resolvedTarget ? diffData.refreshAllScopes() : diffData.refresh("soft"),
+    workingDirectory
+      ? invalidateWorkspaceFileQueries(queryClient, workingDirectory)
+      : Promise.resolve(),
+    queryClient.invalidateQueries({
+      queryKey: gitQueryKeys.all,
+      predicate: (query) => query.queryKey.includes(workingDirectory),
+      refetchType: "none",
+    }),
+  ]);
+}
+
+function useWorkspaceSessionComparison(input: {
+  repoPath: string;
+  workingDirectory: string | null;
+  target: GitTargetBranch | null;
+  targetError: string | null;
+}) {
+  const { repoPath, workingDirectory, target, targetError } = input;
+  const comparison = useQuery({
+    ...gitComparisonTargetQueryOptions(
+      repoPath,
+      workingDirectory ?? "__missing_working_directory__",
+      target ?? { branch: "HEAD" },
+    ),
+    enabled: workingDirectory !== null && target !== null && targetError === null,
+  });
+  const resolvedTarget =
+    workingDirectory &&
+    target &&
+    !targetError &&
+    !comparison.isError &&
+    comparison.data?.kind === "available"
+      ? comparison.data.reference
+      : null;
+  return {
+    resolvedTarget,
+    unavailableReason: comparisonUnavailableReason({
+      targetError,
+      isPending: comparison.isPending,
+      isError: comparison.isError,
+      error: comparison.error,
+      data: comparison.data,
+    }),
+    refetchComparison: comparison.refetch,
+  };
+}
+
 export function WorkspaceSessionToolsPanel({
   repoPath,
   workingDirectory,
@@ -115,21 +208,11 @@ export function WorkspaceSessionToolsPanel({
   onRefreshReady: (refresh: (() => Promise<void>) | null) => void;
 }) {
   const queryClient = useQueryClient();
-  const comparison = useQuery({
-    ...gitComparisonTargetQueryOptions(
-      repoPath,
-      workingDirectory ?? "__missing_working_directory__",
-      target ?? { branch: "HEAD" },
-    ),
-    enabled: workingDirectory !== null && target !== null,
-  });
-  const resolvedTarget = comparison.data?.kind === "available" ? comparison.data.reference : null;
-  const unavailableReason = comparisonUnavailableReason({
+  const { resolvedTarget, unavailableReason, refetchComparison } = useWorkspaceSessionComparison({
+    repoPath,
+    workingDirectory,
+    target,
     targetError,
-    isPending: comparison.isPending,
-    isError: comparison.isError,
-    error: comparison.error,
-    data: comparison.data,
   });
   const readTarget = resolvedTarget ?? "HEAD";
   const diffData = useAgentStudioDiffData({
@@ -144,19 +227,27 @@ export function WorkspaceSessionToolsPanel({
     branchIdentityKey: workingDirectory,
     enableScheduledRefresh: false,
   });
-  const refresh = useCallback(async (): Promise<void> => {
-    await Promise.all([
-      resolvedTarget ? diffData.refreshAllScopes() : diffData.refresh("soft"),
-      workingDirectory
-        ? invalidateWorkspaceFileQueries(queryClient, workingDirectory)
-        : Promise.resolve(),
-      queryClient.invalidateQueries({
-        queryKey: gitQueryKeys.all,
-        predicate: (query) => query.queryKey.includes(workingDirectory),
-        refetchType: "none",
+  const refresh = useCallback(
+    () =>
+      refreshWorkspaceSessionData({
+        queryClient,
+        diffData,
+        refetchComparison,
+        resolvedTarget,
+        target,
+        targetError,
+        workingDirectory,
       }),
-    ]);
-  }, [diffData, queryClient, resolvedTarget, workingDirectory]);
+    [
+      diffData,
+      queryClient,
+      refetchComparison,
+      resolvedTarget,
+      target,
+      targetError,
+      workingDirectory,
+    ],
+  );
   useEffect(() => {
     onRefreshReady(refresh);
     return () => onRefreshReady(null);
@@ -191,6 +282,7 @@ export function WorkspaceSessionToolsPanel({
     resolvedTarget,
     unavailableReason,
     workingDirectory,
+    refresh,
   });
   const fileModel = {
     rootPath: workingDirectory,
