@@ -500,10 +500,27 @@ test("workspace tabs use full-size status icons and the animated running indicat
   const view = renderTabs("First");
   try {
     await view.findByRole("tab", { name: /First/ }, { timeout: 800 });
-    const runningStatus = view.getByLabelText("running");
-    const dot = runningStatus.querySelector(".running-status-dot");
-    expect(dot?.classList.contains("size-3.5")).toBe(true);
-    expect(dot?.querySelector("svg")?.classList.contains("size-3")).toBe(true);
+    const expectAnimatedDot = (status: "running" | "starting") => {
+      const dot = view.getByLabelText(status).querySelector(".running-status-dot");
+      expect(dot?.classList.contains("size-3.5")).toBe(true);
+      expect(dot?.querySelector("svg")?.classList.contains("size-3")).toBe(true);
+    };
+    expectAnimatedDot("running");
+
+    await act(async () => {
+      view.store.replaceSession(
+        createAgentSessionFixture({
+          runtimeKind: "opencode",
+          externalSessionId: "native-First",
+          workingDirectory: "/repo",
+          sessionAssociation: { kind: "repository" },
+          status: "starting",
+          pendingApprovals: [],
+          pendingQuestions: [],
+        }),
+      );
+    });
+    expectAnimatedDot("starting");
 
     for (const { status, hasPendingQuestion, label, iconClass } of [
       {
