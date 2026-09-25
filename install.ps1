@@ -17,12 +17,13 @@ try {
         'Registry::HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Uninstall',
         'Registry::HKEY_LOCAL_MACHINE\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
     )
+    $displayNamePattern = '^OpenDucktor(?: \d+\.\d+\.\d+)?$'
     $installs = @(
         foreach ($root in $uninstallRoots) {
             if (Test-Path -LiteralPath $root) {
                 Get-ChildItem -LiteralPath $root | ForEach-Object {
                     $entry = Get-ItemProperty -LiteralPath $_.PSPath
-                    if ($entry.DisplayName -eq 'OpenDucktor') { $entry }
+                    if ($entry.DisplayName -match $displayNamePattern) { $entry }
                 }
             }
         }
@@ -40,8 +41,8 @@ try {
     if ($managed -and (-not (Test-Path -LiteralPath $appPath) -or $installs.Count -ne 1)) {
         throw "The managed install at $installPath is incomplete. Repair or remove it before using this script."
     }
-    if ($managed -and $installs[0].PSPath -notlike '*HKEY_CURRENT_USER*') {
-        throw 'The managed marker conflicts with a system installation. Repair or remove the system install before using this script.'
+    if ($managed -and ($installs[0].PSPath -notlike '*HKEY_CURRENT_USER*' -or $installs[0].DisplayIcon -ine "$appPath,0")) {
+        throw 'The managed marker conflicts with another installation. Repair or remove that install before using this script.'
     }
     if (Get-Process -Name OpenDucktor -ErrorAction SilentlyContinue) {
         throw 'Quit OpenDucktor before updating it.'
@@ -102,11 +103,11 @@ try {
         $userInstalls = @(
             Get-ChildItem -LiteralPath $uninstallRoots[0] | ForEach-Object {
                 $entry = Get-ItemProperty -LiteralPath $_.PSPath
-                if ($entry.DisplayName -eq 'OpenDucktor') { $entry }
+                if ($entry.DisplayName -ceq "OpenDucktor $version") { $entry }
             }
         )
-        if ($userInstalls.Count -ne 1) {
-            throw 'The NSIS installer did not register one current-user OpenDucktor installation.'
+        if ($userInstalls.Count -ne 1 -or $userInstalls[0].DisplayIcon -ine "$appPath,0") {
+            throw "The NSIS installer did not register one current-user OpenDucktor installation at $appPath."
         }
         if (-not $managed) {
             New-Item -ItemType Directory -Path (Split-Path -Parent $markerPath) -Force | Out-Null
@@ -129,7 +130,7 @@ try {
                 } else {
                     Get-ChildItem -LiteralPath $uninstallRoots[0] | ForEach-Object {
                         $entry = Get-ItemProperty -LiteralPath $_.PSPath
-                        if ($entry.DisplayName -eq 'OpenDucktor') {
+                        if ($entry.DisplayName -ceq "OpenDucktor $version") {
                             Remove-Item -LiteralPath $_.PSPath -Recurse -Force
                         }
                     }
