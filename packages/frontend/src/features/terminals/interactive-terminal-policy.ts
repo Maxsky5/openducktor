@@ -198,17 +198,19 @@ export const createTerminalOutputSequencer = ({
       sequence: number,
       payload: Uint8Array,
       prepare: () => void,
-      finish: () => void,
+      finish: (completed: boolean) => void,
     ): Promise<void> {
       epoch += 1;
       const restoreEpoch = epoch;
       queue = queue.then(async () => {
         if (restoreEpoch !== epoch) return;
+        let completed = false;
         try {
           prepare();
           await new Promise<void>((resolve) => write(payload, resolve));
+          completed = restoreEpoch === epoch;
         } finally {
-          finish();
+          finish(completed);
         }
         if (restoreEpoch !== epoch) return;
         consumedSequence = Math.max(consumedSequence, sequence);

@@ -40,7 +40,10 @@ type XtermCore = {
     tabs: Record<string, boolean>;
   };
   _bufferService: { buffers: { normal: XtermSavedBuffer } };
-  _inputHandler: { _curAttrData: XtermAttributes };
+  _inputHandler: {
+    _curAttrData: XtermAttributes;
+    _parser: { precedingJoinState: number };
+  };
   coreService: { isCursorHidden: boolean };
 };
 
@@ -59,6 +62,7 @@ const getCore = (terminal: Terminal): XtermCore => {
     !Number.isInteger(core._bufferService?.buffers?.normal?.savedY) ||
     !core._bufferService?.buffers?.normal?.savedCurAttrData?.getFgColor ||
     !core._inputHandler?._curAttrData?.getFgColor ||
+    !Number.isInteger(core._inputHandler?._parser?.precedingJoinState) ||
     core.coreService?.isCursorHidden === undefined
   ) {
     throw new Error("Terminal screen state is unavailable. Restart OpenDucktor and try again.");
@@ -101,7 +105,7 @@ export class TerminalScreenTail {
     return `\u001b(${this.savedCharsets.normal}\u000f\u001b[${y + 1};${x + 1}H\u001b[0m${styleSequence(normal.savedCurAttrData)}`;
   }
 
-  suffix(terminal: Terminal, hasOverlay = false): Uint8Array {
+  suffix(terminal: Terminal, hasOverlay = false) {
     if (this.discardedControlSequence) {
       throw new Error(
         "Terminal control sequence is too long to restore. Close this tab and create a new terminal.",
@@ -204,7 +208,7 @@ export class TerminalScreenTail {
     const suffix = new Uint8Array(modes.byteLength + pending.byteLength);
     suffix.set(modes);
     suffix.set(pending, modes.byteLength);
-    return suffix;
+    return { payload: suffix, precedingJoinState: core._inputHandler._parser.precedingJoinState };
   }
 
   private acceptByte(byte: number): void {

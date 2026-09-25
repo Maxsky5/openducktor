@@ -84,6 +84,7 @@ export const terminalServerMessageSchema = z.discriminatedUnion("type", [
       sequenceEnd: sequenceSchema,
       columns: z.number().int().min(1).max(TERMINAL_PROTOCOL_MAX_COLUMNS),
       rows: z.number().int().min(1).max(TERMINAL_PROTOCOL_MAX_ROWS),
+      precedingJoinState: z.number().int(),
     })
     .strict(),
   protocolBaseSchema

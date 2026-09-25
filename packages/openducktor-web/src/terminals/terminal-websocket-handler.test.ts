@@ -97,6 +97,7 @@ describe("terminalWebSocketHandler", () => {
               sequenceEnd: 1,
               columns: 500,
               rows: 300,
+              precedingJoinState: 0,
             },
             payload,
           );
@@ -146,6 +147,7 @@ describe("terminalWebSocketHandler", () => {
               sequenceEnd: 1,
               columns: 500,
               rows: 300,
+              precedingJoinState: 0,
             },
             payload,
           );
@@ -198,6 +200,7 @@ describe("terminalWebSocketHandler", () => {
               sequenceEnd: 1,
               columns: 80,
               rows: 24,
+              precedingJoinState: 0,
             },
             payload,
           );
@@ -245,6 +248,7 @@ describe("terminalWebSocketHandler", () => {
               sequenceEnd: 1,
               columns: 80,
               rows: 24,
+              precedingJoinState: 0,
             },
             payload,
           );
@@ -347,6 +351,7 @@ describe("terminalWebSocketHandler", () => {
               sequenceEnd: 1,
               columns: 500,
               rows: 300,
+              precedingJoinState: 0,
             },
             payload,
           );

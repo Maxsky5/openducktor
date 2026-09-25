@@ -550,6 +550,7 @@ describe("InteractiveTerminal policies", () => {
           sequenceEnd: 20,
           columns: 80,
           rows: 24,
+          precedingJoinState: 0,
         },
         handlers,
       ),
@@ -746,7 +747,7 @@ describe("InteractiveTerminal policies", () => {
       10,
       new Uint8Array([9]),
       () => events.push("reset"),
-      () => events.push("restored"),
+      (completed) => events.push(`restored:${completed}`),
     );
     const currentWrite = sequencer.enqueue(
       { sequenceStart: 10, sequenceEnd: 12 },
@@ -761,12 +762,44 @@ describe("InteractiveTerminal policies", () => {
 
     parserCallbacks[1]?.();
     await reset;
-    expect(events).toContain("restored");
+    expect(events).toContain("restored:true");
     expect(acknowledgements).toEqual([10]);
     await Promise.resolve();
     expect(events.at(-1)).toBe("write:11,12");
     parserCallbacks[2]?.();
     await currentWrite;
     expect(acknowledgements).toEqual([10, 12]);
+  });
+
+  test("does not apply parser state from a superseded restore", async () => {
+    const parserCallbacks: Array<() => void> = [];
+    const completed: boolean[] = [];
+    const sequencer = createTerminalOutputSequencer({
+      write: (_payload, parsed) => parserCallbacks.push(parsed),
+      onConsumed: () => undefined,
+    });
+    const first = sequencer.restore(
+      1,
+      new Uint8Array([1]),
+      () => undefined,
+      (value) => {
+        completed.push(value);
+      },
+    );
+    await Promise.resolve();
+    const second = sequencer.restore(
+      2,
+      new Uint8Array([2]),
+      () => undefined,
+      (value) => {
+        completed.push(value);
+      },
+    );
+    parserCallbacks[0]?.();
+    await first;
+    await Promise.resolve();
+    parserCallbacks[1]?.();
+    await second;
+    expect(completed).toEqual([false, true]);
   });
 });

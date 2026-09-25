@@ -30,6 +30,7 @@ const createOutput = (): TerminalSessionOutput =>
     columns: 80,
     rows: 24,
     payload: new TextEncoder().encode("\u001b[0m"),
+    precedingJoinState: 0,
   }));
 
 describe("TerminalSessionOutput", () => {
@@ -99,6 +100,7 @@ describe("TerminalSessionOutput", () => {
       columns: 80,
       rows: 24,
       payload: new TextEncoder().encode("\u001b[Hlatest"),
+      precedingJoinState: 2,
     }));
     output.accept(new TextEncoder().encode("12345"), null);
     const frames: TerminalServerMessage[] = [];
@@ -113,7 +115,12 @@ describe("TerminalSessionOutput", () => {
       null,
     );
     expect(frames.map((frame) => frame.type)).toEqual(["snapshot", "screen_restore"]);
-    expect(frames[1]).toMatchObject({ sequenceEnd: 5, columns: 80, rows: 24 });
+    expect(frames[1]).toMatchObject({
+      sequenceEnd: 5,
+      columns: 80,
+      rows: 24,
+      precedingJoinState: 2,
+    });
     expect(() => output.acknowledge("client", 0)).not.toThrow();
     expect(() => output.acknowledge("client", 5)).not.toThrow();
     expect(() => output.acknowledge("client", 6)).toThrow("outside the delivered sequence");

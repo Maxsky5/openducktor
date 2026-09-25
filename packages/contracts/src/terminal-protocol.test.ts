@@ -130,6 +130,7 @@ describe("terminal protocol", () => {
       sequenceEnd: 2_097_152,
       columns: 120,
       rows: 40,
+      precedingJoinState: 2,
     };
     const payload = new TextEncoder().encode("\u001b[?1049h\u001b[Hcurrent screen");
     const decoded = decodeTerminalProtocolFrame(encodeTerminalProtocolFrame({ message, payload }));
@@ -147,9 +148,13 @@ describe("terminal protocol", () => {
       sequenceEnd: 1,
       columns: TERMINAL_PROTOCOL_MAX_COLUMNS,
       rows: TERMINAL_PROTOCOL_MAX_ROWS,
+      precedingJoinState: 0,
     };
     expect(() =>
       terminalServerMessageSchema.parse({ ...restore, columns: restore.columns + 1 }),
+    ).toThrow();
+    expect(() =>
+      terminalServerMessageSchema.parse({ ...restore, precedingJoinState: 0.5 }),
     ).toThrow();
     expect(() => terminalServerMessageSchema.parse({ ...restore, version: 1 })).toThrow();
   });
@@ -162,6 +167,7 @@ describe("terminal protocol", () => {
       sequenceEnd: 1,
       columns: 500,
       rows: 300,
+      precedingJoinState: 0,
     };
     const payload = new Uint8Array(2 * 1024 * 1024);
     payload.fill(65);

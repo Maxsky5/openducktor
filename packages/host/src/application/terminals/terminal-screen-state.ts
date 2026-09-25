@@ -13,6 +13,7 @@ export type TerminalScreenSnapshot = {
   columns: number;
   rows: number;
   payload: Uint8Array;
+  precedingJoinState: number;
 };
 
 export class TerminalScreenBusyError extends Error {}
@@ -85,7 +86,10 @@ export class TerminalScreenState {
             screen.slice(alternateIndex) +
             alternateOverlay,
     );
-    const suffix = this.tail.suffix(this.terminal, !!normalOverlay || !!alternateOverlay);
+    const { payload: suffix, precedingJoinState } = this.tail.suffix(
+      this.terminal,
+      !!normalOverlay || !!alternateOverlay,
+    );
     const payload = new Uint8Array(serialized.byteLength + suffix.byteLength);
     payload.set(serialized);
     payload.set(suffix, serialized.byteLength);
@@ -94,7 +98,7 @@ export class TerminalScreenState {
         "Terminal screen is too large to restore. Resize the terminal and reconnect.",
       );
     }
-    return { columns: this.terminal.cols, rows: this.terminal.rows, payload };
+    return { columns: this.terminal.cols, rows: this.terminal.rows, payload, precedingJoinState };
   }
 
   dispose(): void {

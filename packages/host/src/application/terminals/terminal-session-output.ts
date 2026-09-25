@@ -410,6 +410,7 @@ export class TerminalSessionOutput {
           sequenceEnd: this.sequence,
           columns: snapshot.columns,
           rows: snapshot.rows,
+          precedingJoinState: snapshot.precedingJoinState,
         },
         snapshot.payload,
       );

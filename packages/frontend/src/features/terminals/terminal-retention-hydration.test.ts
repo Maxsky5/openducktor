@@ -83,6 +83,7 @@ const createLightweightBinding = () => {
   const terminal = {
     cols: 80,
     rows: 24,
+    _core: { _inputHandler: { _parser: { precedingJoinState: 0 } } },
     write: mock((payload: Uint8Array, parsed: () => void) => {
       output += new TextDecoder().decode(payload);
       parsedCallbacks.push(parsed);
@@ -180,16 +181,19 @@ describe("retained terminal rendering", () => {
           sequenceEnd: 1,
           columns: 80,
           rows: 24,
+          precedingJoinState: 2,
         },
         new TextEncoder().encode("restored"),
       );
       lightweight.sendInput("a");
       await Promise.resolve();
       expect(operations).toEqual([]);
+      expect(lightweight.binding.terminal._core._inputHandler._parser.precedingJoinState).toBe(0);
       expect(lightweight.binding.terminal.resize).toHaveBeenCalledWith(80, 24);
       expect(lightweight.readOutput()).toBe("restored");
       lightweight.parsedCallbacks[0]?.();
       await Bun.sleep(0);
+      expect(lightweight.binding.terminal._core._inputHandler._parser.precedingJoinState).toBe(2);
       expect(lightweight.readOutput()).toBe("restored");
       expect(operations).toEqual(["resize:120x40", "input:a"]);
     } finally {

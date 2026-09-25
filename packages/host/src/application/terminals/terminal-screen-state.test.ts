@@ -33,6 +33,39 @@ const cursorAppearance = (terminal: Terminal) => {
 
 describe("TerminalScreenState", () => {
   test.each([
+    ["plain", "A"],
+    ["styled", "\u001b[31mA"],
+    ["alternate", "\u001b[?1049hA"],
+  ])("restores REP after a %s screen snapshot", async (_name, first) => {
+    const screen = new TerminalScreenState({ columns: 8, rows: 2 });
+    const original = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const restored = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const initial = encoder.encode(first);
+    await Promise.all([writeScreen(screen, initial), write(original, initial)]);
+    const snapshot = screen.snapshot();
+    expect(snapshot.precedingJoinState).not.toBe(0);
+    await write(restored, snapshot.payload);
+    // SAFETY: xterm 6.0.0 stores REP state on its parser. The browser applies this snapshot field.
+    const restoredParser = (
+      restored as Terminal & {
+        _core: { _inputHandler: { _parser: { precedingJoinState: number } } };
+      }
+    )._core._inputHandler._parser;
+    restoredParser.precedingJoinState = snapshot.precedingJoinState;
+    const continuation = encoder.encode("\u001b[3b");
+    await Promise.all([
+      writeScreen(screen, continuation),
+      write(original, continuation),
+      write(restored, continuation),
+    ]);
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    expect(restored.buffer.active.cursorX).toBe(original.buffer.active.cursorX);
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
+  test.each([
     ["without a reset", ""],
     ["after DECSTR", "\u001b[!p"],
     ["after RIS", "\u001bc"],

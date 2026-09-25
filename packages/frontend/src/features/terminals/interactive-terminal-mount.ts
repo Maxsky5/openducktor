@@ -21,6 +21,7 @@ import {
 import { createTerminalKeyEventHandler, encodeTerminalTextInput } from "./terminal-keyboard-policy";
 import type { TerminalTransportController } from "./terminal-transport-controller";
 import { createTerminalOptions } from "./terminal-xterm-options";
+import { restoreTerminalPrecedingJoinState } from "./terminal-rep-state";
 import { createTerminalBinding } from "./shared-terminal-binding";
 
 export type InteractiveTerminalMount = {
@@ -202,10 +203,12 @@ export const mountInteractiveTerminal = ({
             resetTerminal();
             terminal.resize(message.columns, message.rows);
           },
-          () => {
+          (completed) => {
             if (generation !== restoreGeneration) return;
             restoringScreen = false;
             try {
+              if (completed)
+                restoreTerminalPrecedingJoinState(terminal, message.precedingJoinState);
               if (isActive()) fitAddon.fit();
               resizeScheduler.flush();
             } finally {
