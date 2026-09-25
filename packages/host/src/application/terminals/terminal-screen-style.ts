@@ -12,7 +12,7 @@ export type XtermAttributes = {
   isItalic(): number | boolean;
   isUnderline(): number | boolean;
   getUnderlineStyle(): number;
-  extended: { underlineColor: number };
+  extended: { underlineColor: number; urlId: number };
   isBlink(): number | boolean;
   isInverse(): number | boolean;
   isInvisible(): number | boolean;
@@ -65,7 +65,25 @@ export const styleSequence = (attributes: XtermAttributes): string => {
 export const needsCellRepair = (attributes: XtermAttributes): boolean =>
   !!attributes.isProtected() ||
   attributes.getUnderlineStyle() > 1 ||
-  (attributes.extended.underlineColor & 0x03000000) !== 0;
+  (attributes.extended.underlineColor & 0x03000000) !== 0 ||
+  attributes.extended.urlId !== 0;
+
+export const hyperlinkSequence = (terminal: Terminal, urlId: number): string => {
+  if (!urlId) return "";
+  // SAFETY: xterm 6.0.0 keeps OSC 8 destinations in this core service.
+  const core = terminal as Terminal & {
+    _core?: {
+      _oscLinkService?: { getLinkData(id: number): { id?: string; uri: string } | undefined };
+    };
+  };
+  const service = core._core?._oscLinkService;
+  if (!service?.getLinkData)
+    throw new Error("Terminal hyperlink state is unavailable. Restart OpenDucktor and try again.");
+  const link = service.getLinkData(urlId);
+  return link ? `\u001b]8;${link.id ? `id=${link.id}` : ""};${link.uri}\u001b\\` : "";
+};
+
+const CLOSE_HYPERLINK = "\u001b]8;;\u001b\\";
 
 export const attributeOverlay = (terminal: Terminal, buffer: IBuffer): string => {
   const parts: string[] = [];
@@ -74,10 +92,16 @@ export const attributeOverlay = (terminal: Terminal, buffer: IBuffer): string =>
     if (!line) continue;
     let run = "";
     let runStyle = "";
+    let runLinkId = 0;
     let runColumn = 0;
     let nextColumn = 0;
     const flush = () => {
-      if (run) parts.push(`\u001b[${row + 1};${runColumn + 1}H\u001b[0m${runStyle}${run}`);
+      if (run) {
+        const link = hyperlinkSequence(terminal, runLinkId);
+        parts.push(
+          `\u001b[${row + 1};${runColumn + 1}H\u001b[0m${runStyle}${link}${run}${link ? CLOSE_HYPERLINK : ""}`,
+        );
+      }
       run = "";
     };
     for (let column = 0; column < terminal.cols; column += 1) {
@@ -93,10 +117,12 @@ export const attributeOverlay = (terminal: Terminal, buffer: IBuffer): string =>
         continue;
       }
       const style = styleSequence(attributes);
-      if (run && (style !== runStyle || column !== nextColumn)) flush();
+      const linkId = attributes.extended.urlId;
+      if (run && (style !== runStyle || linkId !== runLinkId || column !== nextColumn)) flush();
       if (!run) {
         runColumn = column;
         runStyle = style;
+        runLinkId = linkId;
       }
       run += cell.getChars() || " ";
       nextColumn = column + cell.getWidth();

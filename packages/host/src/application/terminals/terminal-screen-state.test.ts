@@ -13,6 +13,21 @@ const visibleLines = (terminal: Terminal): string[] =>
     { length: terminal.rows },
     (_, row) => terminal.buffer.active.getLine(row)?.translateToString() ?? "",
   );
+const linkAt = (terminal: Terminal, column: number) => {
+  // SAFETY: xterm 6.0.0 stores OSC 8 IDs on cells and resolves them through this core service.
+  const core = (
+    terminal as Terminal & {
+      _core: {
+        _oscLinkService: { getLinkData(id: number): { id?: string; uri: string } | undefined };
+      };
+    }
+  )._core;
+  // SAFETY: xterm 6.0.0 buffer cells expose the OSC 8 ID in extended attributes.
+  const cell = terminal.buffer.active.getLine(0)?.getCell(column) as
+    | (IBufferCell & { extended: { urlId: number } })
+    | undefined;
+  return cell ? core._oscLinkService.getLinkData(cell.extended.urlId) : undefined;
+};
 const underlineAttributes = (cell: IBufferCell | undefined) => {
   if (!cell) throw new Error("Expected a terminal cell");
   // SAFETY: xterm 6.0.0 buffer cells inherit these attribute methods.
@@ -32,6 +47,66 @@ const cursorAppearance = (terminal: Terminal) => {
 };
 
 describe("TerminalScreenState", () => {
+  test.each(["normal", "alternate"])(
+    "restores active OSC 8 links in the %s buffer",
+    async (buffer) => {
+      const screen = new TerminalScreenState({ columns: 12, rows: 2 });
+      const original = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });
+      const restored = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });
+      const first = encoder.encode(
+        `${buffer === "alternate" ? "\u001b[?1049h" : ""}\u001b]8;id=active;https://example.com/active\u001b\\A`,
+      );
+      await Promise.all([writeScreen(screen, first), write(original, first)]);
+      await write(restored, screen.snapshot().payload);
+      expect(linkAt(restored, 0)).toEqual(linkAt(original, 0));
+      const next = encoder.encode("B\u001b]8;;\u001b\\C");
+      await Promise.all([writeScreen(screen, next), write(original, next), write(restored, next)]);
+      expect(visibleLines(restored)).toEqual(visibleLines(original));
+      expect(linkAt(restored, 1)).toEqual(linkAt(original, 1));
+      expect(linkAt(restored, 2)).toBeUndefined();
+      screen.dispose();
+      original.dispose();
+      restored.dispose();
+    },
+  );
+
+  test("restores closed OSC 8 links on visible cells", async () => {
+    const screen = new TerminalScreenState({ columns: 12, rows: 2 });
+    const original = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });
+    const restored = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });
+    const first = encoder.encode(
+      "\u001b]8;;https://example.com/one\u001b\\A\u001b]8;;\u001b\\B" +
+        "\u001b]8;;https://example.com/two\u001b\\C\u001b]8;;\u001b\\D",
+    );
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    await write(restored, screen.snapshot().payload);
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    for (const column of [0, 1, 2, 3]) {
+      expect(linkAt(restored, column)).toEqual(linkAt(original, column));
+    }
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
+  test("restores normal-buffer links while the alternate buffer is active", async () => {
+    const screen = new TerminalScreenState({ columns: 12, rows: 2 });
+    const original = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });
+    const restored = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });
+    const first = encoder.encode(
+      "\u001b]8;;https://example.com/normal\u001b\\A\u001b]8;;\u001b\\\u001b[?1049hX",
+    );
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    await write(restored, screen.snapshot().payload);
+    const next = encoder.encode("\u001b[?1049l");
+    await Promise.all([writeScreen(screen, next), write(original, next), write(restored, next)]);
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    expect(linkAt(restored, 0)).toEqual(linkAt(original, 0));
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
   test.each([
     ["plain", "A"],
     ["styled", "\u001b[31mA"],

@@ -1,5 +1,5 @@
 import type { IBufferCell, Terminal } from "@xterm/headless";
-import { needsCellRepair, styleSequence } from "./terminal-screen-style";
+import { hyperlinkSequence, needsCellRepair, styleSequence } from "./terminal-screen-style";
 import type { XtermAttributes } from "./terminal-screen-style";
 
 const ESC = 0x1b;
@@ -194,6 +194,8 @@ export class TerminalScreenTail {
     }
     if (core.coreService.isCursorHidden) parts.push("\u001b[?25l");
     if (this.cursorStyle) parts.push(this.cursorStyle);
+    const activeLink = hyperlinkSequence(terminal, core._inputHandler._curAttrData.extended.urlId);
+    if (activeLink) parts.push(activeLink);
     const ignoredString = this.discardedStringPayload
       ? this.stringIntro === 0x5d
         ? "\u001b]999999;"
