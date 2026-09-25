@@ -1,4 +1,6 @@
-import type { Terminal } from "@xterm/headless";
+import type { IBufferCell, Terminal } from "@xterm/headless";
+import { hasExtendedUnderline, styleSequence } from "./terminal-screen-style";
+import type { XtermAttributes } from "./terminal-screen-style";
 
 const ESC = 0x1b;
 const MAX_PENDING_BYTES = 64 * 1024;
@@ -23,25 +25,6 @@ const CHARSET_LEVEL_BY_PREFIX = {
 } as const;
 
 type ParserState = "ground" | "escape" | "escape_intermediate" | "csi" | "osc" | "string" | "utf8";
-
-type XtermAttributes = {
-  isAttributeDefault(): boolean;
-  isFgRGB(): boolean;
-  isFgPalette(): boolean;
-  isBgRGB(): boolean;
-  isBgPalette(): boolean;
-  getFgColor(): number;
-  getBgColor(): number;
-  isBold(): number | boolean;
-  isDim(): number | boolean;
-  isItalic(): number | boolean;
-  isUnderline(): number | boolean;
-  isBlink(): number | boolean;
-  isInverse(): number | boolean;
-  isInvisible(): number | boolean;
-  isStrikethrough(): number | boolean;
-  isOverline(): number | boolean;
-};
 
 type XtermSavedBuffer = {
   savedX: number;
@@ -83,39 +66,6 @@ const getCore = (terminal: Terminal): XtermCore => {
   return core;
 };
 
-const colorCodes = (attributes: XtermAttributes, foreground: boolean): number[] => {
-  const color = foreground ? attributes.getFgColor() : attributes.getBgColor();
-  const rgb = foreground ? attributes.isFgRGB() : attributes.isBgRGB();
-  const palette = foreground ? attributes.isFgPalette() : attributes.isBgPalette();
-  if (rgb) {
-    return [foreground ? 38 : 48, 2, (color >>> 16) & 255, (color >>> 8) & 255, color & 255];
-  }
-  if (palette) {
-    if (color >= 16) return [foreground ? 38 : 48, 5, color];
-    const base = foreground ? (color & 8 ? 90 : 30) : color & 8 ? 100 : 40;
-    return [base + (color & 7)];
-  }
-  return [];
-};
-
-const styleSequence = (attributes: XtermAttributes): string => {
-  if (attributes.isAttributeDefault()) return "";
-  const codes = [
-    ...colorCodes(attributes, true),
-    ...colorCodes(attributes, false),
-    ...(attributes.isBold() ? [1] : []),
-    ...(attributes.isDim() ? [2] : []),
-    ...(attributes.isItalic() ? [3] : []),
-    ...(attributes.isUnderline() ? [4] : []),
-    ...(attributes.isBlink() ? [5] : []),
-    ...(attributes.isInverse() ? [7] : []),
-    ...(attributes.isInvisible() ? [8] : []),
-    ...(attributes.isStrikethrough() ? [9] : []),
-    ...(attributes.isOverline() ? [53] : []),
-  ];
-  return codes.length > 0 ? `\u001b[${codes.join(";")}m` : "";
-};
-
 export class TerminalScreenTail {
   private state: ParserState = "ground";
   private pending: number[] = [];
@@ -151,7 +101,7 @@ export class TerminalScreenTail {
     return `\u001b(${this.savedCharsets.normal}\u000f\u001b[${y + 1};${x + 1}H\u001b[0m${styleSequence(normal.savedCurAttrData)}`;
   }
 
-  suffix(terminal: Terminal): Uint8Array {
+  suffix(terminal: Terminal, hasOverlay = false): Uint8Array {
     if (this.discardedControlSequence) {
       throw new Error(
         "Terminal control sequence is too long to restore. Close this tab and create a new terminal.",
@@ -181,7 +131,7 @@ export class TerminalScreenTail {
       this.savedCharset !== "B" ||
       this.activeCharset !== this.charsets[this.charsetLevel];
     const hasScrollRegion = buffer.scrollTop !== 0 || buffer.scrollBottom !== terminal.rows - 1;
-    const needsCursorMove = customTabs || hasSavedCursor || hasScrollRegion;
+    const needsCursorMove = customTabs || hasSavedCursor || hasScrollRegion || hasOverlay;
     const originMode = terminal.modes.originMode;
     const parts: string[] = [];
 
@@ -209,7 +159,8 @@ export class TerminalScreenTail {
         );
       parts.push("\u001b8");
     }
-    if (hasSavedCursor) parts.push(`\u001b[0m${styleSequence(core._inputHandler._curAttrData)}`);
+    if (hasSavedCursor || hasOverlay || hasExtendedUnderline(core._inputHandler._curAttrData))
+      parts.push(`\u001b[0m${styleSequence(core._inputHandler._curAttrData)}`);
     if (hasScrollRegion) {
       parts.push(`\u001b[${buffer.scrollTop + 1};${buffer.scrollBottom + 1}r`);
     }
@@ -230,8 +181,10 @@ export class TerminalScreenTail {
             "Terminal cursor state is unavailable. Resize the terminal and reconnect.",
           );
         }
+        // SAFETY: xterm 6.0.0 buffer cells inherit the internal attribute methods.
+        const attributes = cell as IBufferCell & XtermAttributes;
         parts.push(
-          `\u001b[${row};${start + 1}H\u001b[0m${styleSequence(cell)}${cell.getChars() || " "}\u001b[0m${styleSequence(core._inputHandler._curAttrData)}`,
+          `\u001b[${row};${start + 1}H\u001b[0m${styleSequence(attributes)}${cell.getChars() || " "}\u001b[0m${styleSequence(core._inputHandler._curAttrData)}`,
         );
       }
     }

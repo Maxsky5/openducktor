@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Terminal } from "@xterm/headless";
+import type { IBufferCell } from "@xterm/headless";
 import { TerminalScreenState } from "./terminal-screen-state";
 
 const encoder = new TextEncoder();
@@ -12,6 +13,15 @@ const visibleLines = (terminal: Terminal): string[] =>
     { length: terminal.rows },
     (_, row) => terminal.buffer.active.getLine(row)?.translateToString() ?? "",
   );
+const underlineAttributes = (cell: IBufferCell | undefined) => {
+  if (!cell) throw new Error("Expected a terminal cell");
+  // SAFETY: xterm 6.0.0 buffer cells inherit these attribute methods.
+  const attributes = cell as IBufferCell & {
+    getUnderlineStyle(): number;
+    getUnderlineColor(): number;
+  };
+  return { style: attributes.getUnderlineStyle(), color: attributes.getUnderlineColor() };
+};
 
 describe("TerminalScreenState", () => {
   test.each([
@@ -235,6 +245,129 @@ describe("TerminalScreenState", () => {
     expect(restoredCell?.getFgColor()).toBe(originalCell?.getFgColor());
     expect(restoredCell?.isBold()).toBe(originalCell?.isBold());
     expect(restoredCell?.isUnderline()).toBe(originalCell?.isUnderline());
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
+  test.each([
+    ["double", "\u001b[4:2m", 2],
+    ["curly with RGB color", "\u001b[4:3;58;2;12;34;56m", 3],
+    ["dotted with palette color", "\u001b[4:4;58;5;123m", 4],
+  ])("restores visible %s underline and later text", async (_name, style, expectedStyle) => {
+    const screen = new TerminalScreenState({ columns: 8, rows: 2 });
+    const original = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const restored = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const first = encoder.encode(`${style}AB`);
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    await write(restored, screen.snapshot().payload);
+    const continuation = encoder.encode("C");
+    await Promise.all([
+      writeScreen(screen, continuation),
+      write(original, continuation),
+      write(restored, continuation),
+    ]);
+    for (let column = 0; column < 3; column += 1) {
+      const originalCell = underlineAttributes(original.buffer.active.getLine(0)?.getCell(column));
+      const restoredCell = underlineAttributes(restored.buffer.active.getLine(0)?.getCell(column));
+      expect(originalCell.style).toBe(expectedStyle);
+      expect(restoredCell.style).toBe(expectedStyle);
+      expect(restoredCell.color).toBe(originalCell.color);
+    }
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    expect(restored.buffer.active.cursorX).toBe(original.buffer.active.cursorX);
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
+  test("restores underline color set before underline starts", async () => {
+    const screen = new TerminalScreenState({ columns: 8, rows: 2 });
+    const original = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const restored = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const first = encoder.encode("\u001b[58;2;12;34;56mA");
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    await write(restored, screen.snapshot().payload);
+    const continuation = encoder.encode("\u001b[4mB");
+    await Promise.all([
+      writeScreen(screen, continuation),
+      write(original, continuation),
+      write(restored, continuation),
+    ]);
+    const originalCell = underlineAttributes(original.buffer.active.getLine(0)?.getCell(1));
+    const restoredCell = underlineAttributes(restored.buffer.active.getLine(0)?.getCell(1));
+    expect(originalCell.color).toBe(0x0c2238);
+    expect(restoredCell.color).toBe(originalCell.color);
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
+  test("restores decorated cells in both buffers and their cursors", async () => {
+    const screen = new TerminalScreenState({ columns: 8, rows: 2 });
+    const original = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const restored = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const first = encoder.encode("\u001b[4:3;58;2;12;34;56mN\u001b[?1049h\u001b[4:2mALT");
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    await write(restored, screen.snapshot().payload);
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    expect(restored.buffer.active.cursorX).toBe(original.buffer.active.cursorX);
+    const alternateCell = underlineAttributes(restored.buffer.active.getLine(0)?.getCell(1));
+    expect(alternateCell.style).toBe(2);
+    const continuation = encoder.encode("\u001b[?1049lB");
+    await Promise.all([
+      writeScreen(screen, continuation),
+      write(original, continuation),
+      write(restored, continuation),
+    ]);
+    const normalCell = underlineAttributes(restored.buffer.active.getLine(0)?.getCell(0));
+    const originalCell = underlineAttributes(original.buffer.active.getLine(0)?.getCell(0));
+    expect(normalCell.style).toBe(originalCell.style);
+    expect(normalCell.color).toBe(originalCell.color);
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    expect(restored.buffer.active.cursorX).toBe(original.buffer.active.cursorX);
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
+  test("restores pending wrap after a decorated last cell", async () => {
+    const screen = new TerminalScreenState({ columns: 4, rows: 2 });
+    const original = new Terminal({ cols: 4, rows: 2, allowProposedApi: true });
+    const restored = new Terminal({ cols: 4, rows: 2, allowProposedApi: true });
+    const first = encoder.encode("\u001b[4:3mABCD");
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    await write(restored, screen.snapshot().payload);
+    const continuation = encoder.encode("E");
+    await Promise.all([
+      writeScreen(screen, continuation),
+      write(original, continuation),
+      write(restored, continuation),
+    ]);
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    expect(restored.buffer.active.cursorX).toBe(original.buffer.active.cursorX);
+    expect(restored.buffer.active.cursorY).toBe(original.buffer.active.cursorY);
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
+  test("keeps alternate origin mode when only normal cells need repair", async () => {
+    const screen = new TerminalScreenState({ columns: 8, rows: 4 });
+    const original = new Terminal({ cols: 8, rows: 4, allowProposedApi: true });
+    const restored = new Terminal({ cols: 8, rows: 4, allowProposedApi: true });
+    const first = encoder.encode("\u001b[4:3mN\u001b[?1049h\u001b[0m\u001b[2;3r\u001b[?6h");
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    await write(restored, screen.snapshot().payload);
+    const continuation = encoder.encode("\u001b[1;1HA");
+    await Promise.all([
+      writeScreen(screen, continuation),
+      write(original, continuation),
+      write(restored, continuation),
+    ]);
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    expect(restored.buffer.active.cursorY).toBe(original.buffer.active.cursorY);
+    expect(restored.modes.originMode).toBe(original.modes.originMode);
     screen.dispose();
     original.dispose();
     restored.dispose();
