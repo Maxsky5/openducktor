@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { NotificationOccurrence } from "@openducktor/contracts";
 import { ArrowUpRight } from "lucide-react";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
@@ -85,10 +85,10 @@ describe("notification delivery adapters", () => {
     expect(navigate).toHaveBeenCalledWith(occurrence.navigationTarget);
   });
 
-  // A real Sonner portal render and close transition exceed the workspace's 1-second unit-test limit on CI.
   test("renders agent notifications with the shared close control and full-width action", async () => {
     const navigate = mock(async () => {});
     let toastId: string | number | undefined;
+    let unrelatedToastId: string | number | undefined;
     const adapter = createSonnerNotificationAdapter({
       showToast: (toastTitle, options) => {
         toastId = toast(toastTitle, options);
@@ -101,22 +101,24 @@ describe("notification delivery adapters", () => {
     render(createElement(Toaster));
 
     try {
+      act(() => {
+        unrelatedToastId = toast("Another notification");
+      });
+
       await act(async () => {
         await adapter.deliver({ title, body: "Repo - Build notifications" }, occurrence);
       });
 
-      const closeButton = await screen.findByRole(
-        "button",
-        { name: "Close toast" },
-        { timeout: 2_000 },
-      );
-      const openButton = screen.getByRole("button", { name: "Open" });
-      const toastElement = screen.getByText(title).closest("[data-sonner-toast]");
+      const titleElement = await screen.findByText(title, {}, { timeout: 800 });
+      const toastElement = titleElement.closest<HTMLElement>("[data-sonner-toast]");
 
       if (!toastElement) {
         throw new Error("The agent notification toast was not rendered");
       }
 
+      const toastQueries = within(toastElement);
+      const closeButton = toastQueries.getByRole("button", { name: "Close toast" });
+      const openButton = toastQueries.getByRole("button", { name: "Open" });
       const content = toastElement.querySelector("[data-content]");
       if (!content) {
         throw new Error("The agent notification content was not rendered");
@@ -138,14 +140,17 @@ describe("notification delivery adapters", () => {
         () => {
           expect(toastElement.getAttribute("data-removed")).toBe("true");
         },
-        { timeout: 2_000 },
+        { timeout: 800 },
       );
     } finally {
       if (toastId !== undefined) {
         act(() => toast.dismiss(toastId));
       }
+      if (unrelatedToastId !== undefined) {
+        act(() => toast.dismiss(unrelatedToastId));
+      }
     }
-  }, 5_000);
+  });
 
   test("plays Cuelume through its imperative API with a normalized volume", async () => {
     const play = mock((_sound?: string, _options?: { volume?: number }) => {});
