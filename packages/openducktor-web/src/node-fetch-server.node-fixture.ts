@@ -52,16 +52,14 @@ let drainCount = 0;
 const server = await startNodeFetchServer({
   hostname: "127.0.0.1",
   port: 0,
-  fetch: (request, currentServer) =>
-    currentServer.upgrade(request, { data: null })
-      ? undefined
-      : new Response("Not found", { status: 404 }),
+  fetch: (_request, currentServer) =>
+    currentServer.upgrade({ data: null }) ? undefined : new Response("Not found", { status: 404 }),
   websocket: {
     perMessageDeflate: false,
     maxPayloadLength: 1024,
     message: (socket) => {
-      socket.send(smallFrame, false);
-      socket.send(largeFrame, false);
+      socket.send(smallFrame);
+      socket.send(largeFrame);
     },
     drain: () => {
       drainCount += 1;

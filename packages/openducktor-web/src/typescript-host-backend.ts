@@ -183,7 +183,7 @@ const tryUpgradeTerminalWebSocket = ({
       }),
     };
   }
-  const upgraded = server.upgrade(request, {
+  const upgraded = server.upgrade({
     data: {
       connectionId: globalThis.crypto.randomUUID(),
       terminalService: hostCommandRouter.terminalService,
@@ -199,7 +199,6 @@ const tryUpgradeTerminalWebSocket = ({
       logger,
       onBackgroundFailure,
     },
-    headers: { "Sec-WebSocket-Protocol": TERMINAL_PROTOCOL_SUBPROTOCOL },
   });
   return {
     handled: true,

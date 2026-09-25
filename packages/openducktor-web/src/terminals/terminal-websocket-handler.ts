@@ -16,6 +16,7 @@ import {
 } from "@openducktor/host";
 import { Effect } from "effect";
 import { type WebLogger, writeWebLogEffect } from "../logger";
+import type { NodeServerSocket } from "../node-fetch-server";
 
 const OUTBOUND_QUEUE_LIMIT = TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES * 2;
 const MAX_CLIENT_FRAME_BYTES =
@@ -46,11 +47,7 @@ export type TerminalWebSocketData = {
   onBackgroundFailure(cause: unknown): void;
 };
 
-export type TerminalServerSocket = {
-  data: TerminalWebSocketData;
-  close(code: number, reason: string): void;
-  send(frame: Uint8Array, compress: boolean): number;
-};
+export type TerminalServerSocket = NodeServerSocket<TerminalWebSocketData>;
 
 const beginClose = (socket: TerminalServerSocket, code: number, reason: string): void => {
   if (socket.data.closed) return;
@@ -76,7 +73,7 @@ const sendFrame = (socket: TerminalServerSocket, frame: Uint8Array): boolean => 
     data.pendingBytes += frame.byteLength;
     return true;
   }
-  const status = socket.send(frame, false);
+  const status = socket.send(frame);
   if (status === 0) {
     beginClose(socket, 1011, "Terminal connection could not send data.");
     return false;

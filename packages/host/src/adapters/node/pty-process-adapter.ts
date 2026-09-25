@@ -161,22 +161,21 @@ export const createNodePtyPort = ({
             ? Effect.sync(publishExit)
             : ensureProcessTreeTerminated().pipe(Effect.tap(() => Effect.sync(publishExit)));
         const requireOpen = (name: TerminalPtyError["operation"], run: () => void) =>
-          operation(name, () => {
-            if (closed) throw new Error("The terminal is already closed.");
-            run();
+          Effect.suspend(() => {
+            if ((name === "write" || name === "resize") && (terminating || terminated)) {
+              return Effect.fail(
+                new TerminalPtyError({
+                  code: "operation_failed",
+                  operation: name,
+                  message: "Terminal is closing. Wait for close to finish or retry if it fails.",
+                }),
+              );
+            }
+            return operation(name, () => {
+              if (closed) throw new Error("The terminal is already closed.");
+              run();
+            });
           });
-        const requireInteractive = (name: "write" | "resize", run: () => void) =>
-          Effect.suspend(() =>
-            terminating || terminated
-              ? Effect.fail(
-                  new TerminalPtyError({
-                    code: "operation_failed",
-                    operation: name,
-                    message: "Terminal is closing. Wait for close to finish or retry if it fails.",
-                  }),
-                )
-              : requireOpen(name, run),
-          );
         const handle: TerminalPtyHandle = {
           supportsOutputPause: true,
           hasChildProcesses: () =>
@@ -191,9 +190,8 @@ export const createNodePtyPort = ({
                   }),
               ),
             ),
-          write: (data) => requireInteractive("write", () => pty.write(Buffer.from(data))),
-          resize: ({ columns, rows }) =>
-            requireInteractive("resize", () => pty.resize(columns, rows)),
+          write: (data) => requireOpen("write", () => pty.write(Buffer.from(data))),
+          resize: ({ columns, rows }) => requireOpen("resize", () => pty.resize(columns, rows)),
           pauseOutput: () =>
             Effect.suspend(() =>
               terminating

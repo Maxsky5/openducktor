@@ -8,7 +8,7 @@ import { nodeReadableStream } from "./node-readable-stream";
 export type NodeServerSocket<Data> = {
   data: Data;
   close(code: number, reason: string): void;
-  send(frame: Uint8Array, compress: boolean): number;
+  send(frame: Uint8Array): number;
 };
 
 export type NodeWebSocketHandler<Data> = {
@@ -23,7 +23,7 @@ export type NodeFetchServer<Data> = {
   readonly port: number;
   stop(force: boolean): Promise<void>;
   timeout(request: Request, seconds: number): void;
-  upgrade(request: Request, options: { data: Data; headers?: HeadersInit }): boolean;
+  upgrade(options: { data: Data }): boolean;
 };
 
 export type StartNodeFetchServerInput<Data> = {
@@ -35,62 +35,7 @@ export type StartNodeFetchServerInput<Data> = {
   onError(cause: unknown): void;
 };
 
-const toRequest = (incoming: IncomingMessage, hostname: string, signal: AbortSignal): Request => {
-  const headers = new Headers();
-  for (let index = 0; index < incoming.rawHeaders.length; index += 2) {
-    const name = incoming.rawHeaders[index];
-    const value = incoming.rawHeaders[index + 1];
-    if (name && value !== undefined) headers.append(name, value);
-  }
-  if (!headers.has("host") && incoming.headers.host) headers.set("host", incoming.headers.host);
-  const method = incoming.method ?? "GET";
-  const url = new URL(incoming.url ?? "/", `http://${incoming.headers.host ?? hostname}`);
-  const hasBody = method !== "GET" && method !== "HEAD";
-  const request = new Request(url, {
-    method,
-    headers,
-    signal,
-    ...(hasBody && {
-      body: nodeReadableStream(incoming),
-      duplex: "half" as const,
-    }),
-  });
-  for (const [name, value] of headers) request.headers.set(name, value);
-  return request;
-};
-
-const writeResponse = async (outgoing: ServerResponse, response: Response): Promise<void> => {
-  const headers = Object.fromEntries(response.headers.entries());
-  outgoing.writeHead(response.status, headers);
-  if (!response.body) {
-    outgoing.end();
-    return;
-  }
-  await pipeline(Readable.from(response.body), outgoing);
-};
-
-const writeUpgradeResponse = async (socket: Duplex, response: Response): Promise<void> => {
-  const body = Buffer.from(await response.arrayBuffer());
-  const headers = [...response.headers.entries(), ["content-length", String(body.byteLength)]];
-  const lines = [
-    `HTTP/1.1 ${response.status} ${response.statusText || "Request rejected"}`,
-    ...headers.map(([name, value]) => `${name}: ${value}`),
-    "connection: close",
-    "",
-    "",
-  ];
-  socket.end(Buffer.concat([Buffer.from(lines.join("\r\n")), body]));
-};
-
-const toMessage = (data: RawData, binary: boolean): string | Buffer => {
-  const bytes = Array.isArray(data)
-    ? Buffer.concat(data)
-    : data instanceof ArrayBuffer
-      ? Buffer.from(data)
-      : data;
-  return binary ? bytes : bytes.toString("utf8");
-};
-
+/** Binds the host and owns its sockets. A forced stop ends active connections. */
 export const startNodeFetchServer = async <Data>({
   hostname,
   port,
@@ -130,7 +75,7 @@ export const startNodeFetchServer = async <Data>({
 
   const makeRequestServer = (
     outgoing: ServerResponse | null,
-    upgrade: ((options: { data: Data; headers?: HeadersInit }) => boolean) | null,
+    upgrade: ((options: { data: Data }) => boolean) | null,
   ): NodeFetchServer<Data> => ({
     get port() {
       // SAFETY: this server exposes its port only after listen succeeds.
@@ -138,7 +83,7 @@ export const startNodeFetchServer = async <Data>({
     },
     stop,
     timeout: (_request, seconds) => outgoing?.setTimeout(seconds * 1000),
-    upgrade: (_request, options) => upgrade?.(options) ?? false,
+    upgrade: (options) => upgrade?.(options) ?? false,
   });
 
   server.on("request", (incoming, outgoing) => {
@@ -233,4 +178,60 @@ export const startNodeFetchServer = async <Data>({
     });
   });
   return makeRequestServer(null, null);
+};
+
+const toRequest = (incoming: IncomingMessage, hostname: string, signal: AbortSignal): Request => {
+  const headers = new Headers();
+  for (let index = 0; index < incoming.rawHeaders.length; index += 2) {
+    const name = incoming.rawHeaders[index];
+    const value = incoming.rawHeaders[index + 1];
+    if (name && value !== undefined) headers.append(name, value);
+  }
+  if (!headers.has("host") && incoming.headers.host) headers.set("host", incoming.headers.host);
+  const method = incoming.method ?? "GET";
+  const url = new URL(incoming.url ?? "/", `http://${incoming.headers.host ?? hostname}`);
+  const hasBody = method !== "GET" && method !== "HEAD";
+  const request = new Request(url, {
+    method,
+    headers,
+    signal,
+    ...(hasBody && {
+      body: nodeReadableStream(incoming),
+      duplex: "half" as const,
+    }),
+  });
+  for (const [name, value] of headers) request.headers.set(name, value);
+  return request;
+};
+
+const writeResponse = async (outgoing: ServerResponse, response: Response): Promise<void> => {
+  const headers = Object.fromEntries(response.headers.entries());
+  outgoing.writeHead(response.status, headers);
+  if (!response.body) {
+    outgoing.end();
+    return;
+  }
+  await pipeline(Readable.from(response.body), outgoing);
+};
+
+const writeUpgradeResponse = async (socket: Duplex, response: Response): Promise<void> => {
+  const body = Buffer.from(await response.arrayBuffer());
+  const headers = [...response.headers.entries(), ["content-length", String(body.byteLength)]];
+  const lines = [
+    `HTTP/1.1 ${response.status} ${response.statusText || "Request rejected"}`,
+    ...headers.map(([name, value]) => `${name}: ${value}`),
+    "connection: close",
+    "",
+    "",
+  ];
+  socket.end(Buffer.concat([Buffer.from(lines.join("\r\n")), body]));
+};
+
+const toMessage = (data: RawData, binary: boolean): string | Buffer => {
+  const bytes = Array.isArray(data)
+    ? Buffer.concat(data)
+    : data instanceof ArrayBuffer
+      ? Buffer.from(data)
+      : data;
+  return binary ? bytes : bytes.toString("utf8");
 };
