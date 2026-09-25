@@ -1,11 +1,21 @@
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive, Check, History, Import, LoaderCircle, Plus } from "lucide-react";
+import {
+  Archive,
+  Check,
+  Circle,
+  CircleAlert,
+  History,
+  Import,
+  LoaderCircle,
+  Plus,
+} from "lucide-react";
 import { type ReactElement, useEffect, useState } from "react";
 import { useLocation, useNavigationType, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
 import { BrowserTabs, BrowserTabsBar, BrowserTabsRoot } from "@/components/ui/browser-tabs";
-import { isAgentSessionActivityActive } from "@/lib/agent-session-activity-state";
+import { RunningStatusDot } from "@/components/ui/running-status-dot";
+import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { errorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
@@ -61,19 +71,25 @@ function WorkspaceSessionTabContent({ record }: { record: WorkspaceSession }): R
   const statusAvailable = sessionReadModelLoadState.kind === "ready";
   const activity = session && statusAvailable ? session.activityState : null;
   const statusLabel = statusAvailable ? (activity ?? "idle") : "Status unavailable";
-  const running = isAgentSessionActivityActive(activity);
+  let statusIcon: ReactElement;
+  if (isAgentSessionActivityWorking(activity)) {
+    statusIcon = <RunningStatusDot />;
+  } else if (activity === "waiting_input") {
+    statusIcon = <CircleAlert className="size-3.5 text-warning-accent" />;
+  } else if (activity === "error") {
+    statusIcon = <CircleAlert className="size-3.5 text-destructive" />;
+  } else {
+    statusIcon = <Circle className="size-3.5 fill-input text-input" />;
+  }
   const title = workspaceSessionTitle(record);
   return (
     <>
       <span
         aria-label={statusLabel}
-        className={cn(
-          "mx-1 size-2 shrink-0 rounded-full bg-input",
-          running && "bg-status-running",
-          activity === "waiting_input" && "bg-warning-accent",
-          activity === "error" && "bg-destructive",
-        )}
-      />
+        className="inline-flex size-5 shrink-0 items-center justify-center"
+      >
+        {statusIcon}
+      </span>
       <span className="max-w-48 truncate">{title}</span>
     </>
   );

@@ -488,6 +488,74 @@ test("tabs read activity without subscribing to session transcripts", async () =
   }
 }, 5000);
 
+test("workspace tabs use full-size status icons and the animated running indicator", async () => {
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        workspaceSessionListActive: async () => [sessionRecord("First")],
+        workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+      },
+    }),
+  );
+  const view = renderTabs("First");
+  try {
+    await view.findByRole("tab", { name: /First/ }, { timeout: 800 });
+    const expectAnimatedDot = (status: "running" | "starting") => {
+      const dot = view.getByLabelText(status).querySelector(".running-status-dot");
+      expect(dot?.classList.contains("size-3.5")).toBe(true);
+      expect(dot?.querySelector("svg")?.classList.contains("size-3")).toBe(true);
+    };
+    expectAnimatedDot("running");
+
+    await act(async () => {
+      view.store.replaceSession(
+        createAgentSessionFixture({
+          runtimeKind: "opencode",
+          externalSessionId: "native-First",
+          workingDirectory: "/repo",
+          sessionAssociation: { kind: "repository" },
+          status: "starting",
+          pendingApprovals: [],
+          pendingQuestions: [],
+        }),
+      );
+    });
+    expectAnimatedDot("starting");
+
+    for (const { status, hasPendingQuestion, label, iconClass } of [
+      {
+        status: "running",
+        hasPendingQuestion: true,
+        label: "waiting_input",
+        iconClass: "text-warning-accent",
+      },
+      { status: "error", hasPendingQuestion: false, label: "error", iconClass: "text-destructive" },
+      { status: "idle", hasPendingQuestion: false, label: "idle", iconClass: "fill-input" },
+    ] as const) {
+      await act(async () => {
+        view.store.replaceSession(
+          createAgentSessionFixture({
+            runtimeKind: "opencode",
+            externalSessionId: "native-First",
+            workingDirectory: "/repo",
+            sessionAssociation: { kind: "repository" },
+            status,
+            pendingApprovals: [],
+            pendingQuestions: hasPendingQuestion ? [{ requestId: "question", questions: [] }] : [],
+          }),
+        );
+      });
+      const icon = view.getByLabelText(label).querySelector("svg");
+      expect(icon?.classList.contains("size-3.5")).toBe(true);
+      expect(icon?.classList.contains(iconClass)).toBe(true);
+      expect(view.container.querySelector(".running-status-dot")).toBeNull();
+    }
+  } finally {
+    view.unmount();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
 test("drag preview keeps the normal tab status dot and button styling", async () => {
   configureShellBridge(
     createShellBridgeFixture({
