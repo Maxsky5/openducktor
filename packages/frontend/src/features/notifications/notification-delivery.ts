@@ -4,6 +4,8 @@ import type {
   NotificationOccurrence,
 } from "@openducktor/contracts";
 import { play as playCuelume, type SoundName } from "cuelume";
+import { ArrowUpRight } from "lucide-react";
+import { createElement, type ReactNode } from "react";
 import { toast } from "sonner";
 import type { NotificationCopy } from "./notification-copy";
 import type { NotificationBridge } from "@/lib/shell-bridge";
@@ -11,8 +13,14 @@ import type { NotificationBridge } from "@/lib/shell-bridge";
 type SonnerNotificationOptions = {
   description: string;
   duration: number;
+  closeButton: boolean;
+  classNames: {
+    toast: string;
+    content: string;
+    actionButton: string;
+  };
   action: {
-    label: string;
+    label: ReactNode;
     onClick(): void;
   };
 };
@@ -30,8 +38,19 @@ export const createSonnerNotificationAdapter = ({
     showToast(copy.title, {
       description: copy.body,
       duration: 10_000,
+      closeButton: true,
+      classNames: {
+        toast: "!flex-col !items-stretch",
+        content: "w-full",
+        actionButton: "!m-0 !h-9 !w-full !rounded-md justify-center",
+      },
       action: {
-        label: "Open",
+        label: createElement(
+          "span",
+          { className: "inline-flex items-center justify-center gap-2" },
+          "Open",
+          createElement(ArrowUpRight, { className: "size-3.5", "aria-hidden": true }),
+        ),
         onClick: () => {
           void navigate(occurrence.navigationTarget);
         },

@@ -15,11 +15,11 @@ import type { TaskStreamController } from "@/state/tasks/task-stream-controller"
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
-  type LifecycleNotificationPort,
   type LifecycleTimerPort,
   startRepositoryLoad,
   startRepositoryRuntimes,
 } from "./app-lifecycle-coordinator";
+import { lifecycleNotifications } from "./lifecycle-notifications";
 
 export type TaskStreamControllerFactory = (input: {
   queryClient: QueryClient;
@@ -39,13 +39,6 @@ type UseAppLifecycleArgs = {
   startRepoRuntime: (repoPath: string, runtimeKind: RuntimeKind) => Promise<RuntimeInstanceSummary>;
   clearBranchData: () => void;
   taskStreamControllerFactory: TaskStreamControllerFactory;
-};
-
-const lifecycleNotifications: LifecycleNotificationPort = {
-  error: (title, description) => toast.error(title, { description }),
-  loading: (title, description) => toast.loading(title, { description }),
-  success: (title, description) => toast.success(title, { description }),
-  dismiss: (id) => toast.dismiss(id),
 };
 
 const lifecycleTimers: LifecycleTimerPort<ReturnType<typeof setTimeout>> = {

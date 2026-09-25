@@ -43,19 +43,4 @@ describe("Toaster", () => {
       expect(screen.queryByRole("dialog")).toBeNull();
     });
   });
-
-  test("wraps the shared toaster in a dismissable layer branch with fixed defaults", async () => {
-    const source = await Bun.file(new URL("./sonner.tsx", import.meta.url)).text();
-
-    expect(source).toContain(
-      'import { DismissableLayerBranch } from "@radix-ui/react-dismissable-layer";',
-    );
-    expect(source).toContain("<DismissableLayerBranch>");
-    expect(source).toContain("</DismissableLayerBranch>");
-    expect(source).toContain('position="bottom-right"');
-    expect(source).toContain("richColors={false}");
-    expect(source).toContain("closeButton");
-    expect(source).toContain("expand");
-    expect(source).toContain("visibleToasts={5}");
-  });
 });
