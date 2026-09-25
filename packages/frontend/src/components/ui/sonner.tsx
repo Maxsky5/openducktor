@@ -19,9 +19,9 @@ export function Toaster(props: ToasterProps) {
             description: "whitespace-pre-wrap break-words text-xs text-muted-foreground",
             icon: "text-muted-foreground",
             closeButton:
-              "!left-auto !right-3 !top-3 !mt-0 !translate-x-0 !translate-y-0 !transform-none size-6 rounded-md border border-border bg-card text-muted-foreground opacity-100 transition hover:bg-accent hover:text-foreground",
+              "!left-auto !right-3 !top-3 !mt-0 !transform-none size-6 rounded-md border border-border bg-card text-muted-foreground opacity-100 transition hover:bg-accent hover:text-foreground",
             actionButton:
-              "bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring/40",
+              "!bg-primary !text-primary-foreground hover:!bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring/40",
             cancelButton:
               "bg-muted text-foreground hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring/40",
             success: "border-l-4 border-l-success-accent [&_[data-icon]]:text-success-accent",

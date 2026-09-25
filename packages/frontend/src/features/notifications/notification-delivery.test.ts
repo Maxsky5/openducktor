@@ -1,7 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { NotificationOccurrence } from "@openducktor/contracts";
 import { ArrowUpRight } from "lucide-react";
-import type { ReactNode } from "react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { createElement, type ReactNode } from "react";
+import { toast } from "sonner";
+import { Toaster } from "@/components/ui/sonner";
 import {
   createCuelumeNotificationSoundAdapter,
   createSonnerNotificationAdapter,
@@ -80,6 +83,51 @@ describe("notification delivery adapters", () => {
     });
     options?.action?.onClick();
     expect(navigate).toHaveBeenCalledWith(occurrence.navigationTarget);
+  });
+
+  test("renders agent notifications with the shared close control and full-width action", async () => {
+    const navigate = mock(async () => {});
+    const adapter = createSonnerNotificationAdapter({ navigate });
+    const title = "Agent Session Started - task-1";
+
+    render(createElement(Toaster));
+
+    try {
+      await act(async () => {
+        await adapter.deliver({ title, body: "Repo - Build notifications" }, occurrence);
+      });
+
+      const closeButton = await screen.findByRole("button", { name: "Close toast" });
+      const openButton = screen.getByRole("button", { name: "Open" });
+      const toastElement = screen.getByText(title).closest("[data-sonner-toast]");
+
+      if (!toastElement) {
+        throw new Error("The agent notification toast was not rendered");
+      }
+
+      const content = toastElement.querySelector("[data-content]");
+      if (!content) {
+        throw new Error("The agent notification content was not rendered");
+      }
+
+      expect(closeButton.className).toContain("opacity-100");
+      expect(content.className).toContain("pr-7");
+      expect(toastElement.className).toContain("!flex-col");
+      expect(openButton.className).toContain("!w-full");
+      expect(openButton.className).toContain("!bg-primary");
+      expect(openButton.className).toContain("!text-primary-foreground");
+      expect(closeButton.closest("[data-sonner-toast]")).toBe(toastElement);
+      expect(Array.from(toastElement.children).indexOf(content)).toBeLessThan(
+        Array.from(toastElement.children).indexOf(openButton),
+      );
+
+      fireEvent.click(closeButton);
+      await waitFor(() => {
+        expect(toastElement.getAttribute("data-removed")).toBe("true");
+      });
+    } finally {
+      act(() => toast.dismiss());
+    }
   });
 
   test("plays Cuelume through its imperative API with a normalized volume", async () => {
