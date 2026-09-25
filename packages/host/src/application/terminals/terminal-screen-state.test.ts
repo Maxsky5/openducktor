@@ -22,8 +22,34 @@ const underlineAttributes = (cell: IBufferCell | undefined) => {
   };
   return { style: attributes.getUnderlineStyle(), color: attributes.getUnderlineColor() };
 };
+const cursorAppearance = (terminal: Terminal) => {
+  // SAFETY: xterm 6.0.0 stores DECSCUSR state in these core modes.
+  const xterm = terminal as Terminal & {
+    _core: { coreService: { decPrivateModes: { cursorStyle?: string; cursorBlink?: boolean } } };
+  };
+  const { cursorStyle, cursorBlink } = xterm._core.coreService.decPrivateModes;
+  return { cursorStyle, cursorBlink };
+};
 
 describe("TerminalScreenState", () => {
+  test.each([
+    ["without a reset", ""],
+    ["after DECSTR", "\u001b[!p"],
+    ["after RIS", "\u001bc"],
+  ])("restores cursor style %s", async (_name, reset) => {
+    const screen = new TerminalScreenState({ columns: 8, rows: 2 });
+    const original = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const restored = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const first = encoder.encode(`\u001b[5 q${reset}A`);
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    await write(restored, screen.snapshot().payload);
+    expect(cursorAppearance(restored)).toEqual(cursorAppearance(original));
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
   test.each([
     ["G0", "\u001b(0"],
     ["G1", "\u001b)0\u000e"],

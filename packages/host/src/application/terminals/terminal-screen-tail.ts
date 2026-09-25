@@ -270,7 +270,6 @@ export class TerminalScreenTail {
         this.state = "string";
       } else if (byte >= 0x20 && byte <= 0x2f) this.state = "escape_intermediate";
       else {
-        if (byte === 0x63) this.cursorStyle = "";
         this.finish();
       }
       return;
@@ -362,6 +361,7 @@ export class TerminalScreenTail {
     } else if (sequence === "\u001b8" || sequence === "\u001b[u") {
       this.activeCharset = this.savedCharset;
     } else if (sequence === "\u001bc" || sequence === "\u001b[!p") {
+      this.cursorStyle = "";
       this.charsets.fill("B");
       this.charsetLevel = 0;
       this.activeCharset = "B";
