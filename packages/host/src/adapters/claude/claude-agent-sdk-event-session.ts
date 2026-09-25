@@ -56,6 +56,18 @@ export type ClaudeBackgroundWorkSession = {
   subagentEventSessionsByToolUseId?: ReadonlyMap<string, ClaudeBackgroundWorkSession>;
 };
 
+export const hasActiveClaudeBackgroundTools = (session: ClaudeBackgroundWorkSession): boolean => {
+  if ((session.backgroundToolActiveTaskIds?.size ?? 0) > 0) {
+    return true;
+  }
+  for (const child of session.subagentEventSessionsByToolUseId?.values() ?? []) {
+    if (hasActiveClaudeBackgroundTools(child)) {
+      return true;
+    }
+  }
+  return false;
+};
+
 export const hasActiveClaudeBackgroundWork = (session: ClaudeBackgroundWorkSession): boolean => {
   if (
     (session.activeBackgroundSubagentTaskIds?.size ?? 0) > 0 ||

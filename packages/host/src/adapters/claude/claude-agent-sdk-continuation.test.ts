@@ -131,6 +131,41 @@ describe("decideClaudeLiveContinuation", () => {
     expect(decideClaudeLiveContinuation(session, "session-1")).toEqual({ kind: "allow" });
   });
 
+  test("rejects Resume while an ordinary background tool runs", async () => {
+    const session = createClaudeSession({
+      acceptedUserMessages: [acceptedUserMessage("user-1")],
+      activity: "idle",
+      sdkState: "idle",
+      backgroundToolActiveTaskIds: new Set(["bash-task"]),
+    });
+
+    await expect(
+      decideClaudeContinuation(session, "session-1", unusedTranscriptReader),
+    ).resolves.toMatchObject({ kind: "reject", error: { reason: "live_turn" } });
+
+    session.backgroundToolActiveTaskIds?.clear();
+    expect(decideClaudeLiveContinuation(session, "session-1")).toEqual({ kind: "allow" });
+  });
+
+  test("rejects Resume while a child session runs an ordinary background tool", () => {
+    const child = createClaudeSession({
+      backgroundToolActiveTaskIds: new Set(["mcp-task"]),
+    });
+    const session = Object.assign(
+      createClaudeSession({
+        acceptedUserMessages: [acceptedUserMessage("user-1")],
+        activity: "idle",
+        sdkState: "idle",
+      }),
+      { subagentEventSessionsByToolUseId: new Map([["agent-tool", child]]) },
+    );
+
+    expect(decideClaudeLiveContinuation(session, "session-1")).toMatchObject({
+      kind: "reject",
+      error: { reason: "live_turn" },
+    });
+  });
+
   test("asks for the transcript when the session accepted no user turn", () => {
     expect(decideClaudeLiveContinuation(createClaudeSession(), "session-1")).toEqual({
       kind: "needs_transcript",

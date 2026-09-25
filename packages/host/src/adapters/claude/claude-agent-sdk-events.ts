@@ -26,7 +26,7 @@ import {
   emitClaudePermissionDeniedToolPart,
   handleClaudeResultMessage,
 } from "./claude-agent-sdk-result-events";
-import { emitClaudeRunningToolPart } from "./claude-agent-sdk-running-tool";
+import { handleClaudeToolProgressMessage } from "./claude-agent-sdk-running-tool";
 import {
   emitClaudePendingToolPart,
   handleClaudeStreamEvent,
@@ -39,11 +39,7 @@ import {
   consumeClaudeStreamEmittedToolInput,
 } from "./claude-agent-sdk-tool-input-stream";
 import { handleClaudeUserToolResultMessage } from "./claude-agent-sdk-tool-results";
-import {
-  decodeClaudeToolUseBlock,
-  isClaudeToolUseBlockType,
-  timestampMs,
-} from "./claude-agent-sdk-tool-shapes";
+import { decodeClaudeToolUseBlock, isClaudeToolUseBlockType } from "./claude-agent-sdk-tool-shapes";
 import {
   claudeAssistantTextPartEvent,
   createClaudeAssistantReasoningPart,
@@ -62,7 +58,6 @@ import { readStringProp, textFromContentBlocks } from "./claude-agent-sdk-utils"
 import type {
   ClaudeSdkAssistantMessageProjection,
   ClaudeSdkMessageProjection,
-  ClaudeSdkToolProgressMessageProjection,
 } from "./claude-agent-sdk-message-projection";
 
 type SdkMessageHandlerInput = {
@@ -183,7 +178,7 @@ export const handleClaudeSdkMessage = ({
     return;
   }
   if (message.type === "tool_progress") {
-    handleToolProgressMessage({ emit, message, session, timestamp });
+    handleClaudeToolProgressMessage({ emit, message, session, timestamp });
     return;
   }
   if (message.type === "system" && message.subtype === "commands_changed") {
@@ -470,34 +465,4 @@ const handleAssistantMessage = ({
       }),
     );
   }
-};
-
-const handleToolProgressMessage = ({
-  emit,
-  message,
-  session,
-  timestamp,
-}: Pick<SdkMessageHandlerInput, "emit" | "session" | "timestamp"> & {
-  message: ClaudeSdkToolProgressMessageProjection;
-}): void => {
-  const elapsedMs = Math.max(0, Math.round(message.elapsed_time_seconds * 1000));
-  const eventMs = timestampMs(timestamp);
-  const startedAtMs = eventMs - elapsedMs;
-
-  emitClaudeRunningToolPart({
-    emit,
-    fallbackMessageId: message.uuid,
-    session,
-    startedAtMs,
-    timestamp,
-    toolUse: {
-      blockType: "tool_progress",
-      callId: message.tool_use_id,
-      toolName: message.tool_name,
-      metadata: {
-        elapsedTimeSeconds: message.elapsed_time_seconds,
-        durationMs: elapsedMs,
-      },
-    },
-  });
 };

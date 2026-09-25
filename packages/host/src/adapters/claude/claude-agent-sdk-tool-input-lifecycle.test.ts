@@ -127,7 +127,7 @@ describe("Claude tool input lifecycle", () => {
     await Effect.runPromise(sessionStore.stopSession(claudeSessionRef(session)));
     expect(completeClaudeStreamToolInput(session, 0)).toBeNull();
     expect(consumeClaudeStreamEmittedToolInput(session, "write-1", {})).toBe(false);
-    expect(events).toHaveLength(1);
+    expect(events.filter((event) => event.type === "assistant_part")).toHaveLength(1);
   });
 
   test("a parent result preserves input from a running child", () => {

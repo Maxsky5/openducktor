@@ -1573,6 +1573,30 @@ describe("continueInterruptedTurn eligibility", () => {
     ).resolves.toBe("waiting_input");
   });
 
+  test("keeps a session with an ordinary background tool when Resume is requested", async () => {
+    const store = createClaudeAgentSdkSessionStore();
+    const session = createSession({
+      acceptedUserMessages: [
+        {
+          messageId: "user-1",
+          parts: [],
+          text: "Continue.",
+          timestamp: "2026-06-25T20:00:01.000Z",
+        },
+      ],
+      activity: "idle",
+      sdkState: "idle",
+      backgroundToolActiveTaskIds: new Set(["bash-task"]),
+    });
+    const service = createService(session, undefined, store);
+
+    await expect(
+      resumeFailureReason(service.continueInterruptedTurn(continuationInput, "runtime-claude")),
+    ).resolves.toBe("live_turn");
+    expect(store.get("session-1")).toBe(session);
+    expect(session.query.close).not.toHaveBeenCalled();
+  });
+
   test("refuses a fresh live session without a user turn as ineligible_turn_state", async () => {
     const service = createService(
       createSession({
