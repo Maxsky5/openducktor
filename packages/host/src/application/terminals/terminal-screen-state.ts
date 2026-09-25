@@ -9,6 +9,13 @@ type ScreenOperation =
   | { type: "write"; data: Uint8Array; parsed: () => void }
   | { type: "resize"; grid: TerminalGrid };
 
+type XtermColorRequest =
+  | { type: 0; index: number }
+  | { type: 1; index: number; color: readonly [number, number, number] }
+  | { type: 2; index?: number };
+
+const COLOR_RESET = "\u001b]104\u001b\\\u001b]110\u001b\\\u001b]111\u001b\\\u001b]112\u001b\\";
+
 export type TerminalScreenSnapshot = {
   columns: number;
   rows: number;
@@ -25,6 +32,7 @@ export class TerminalScreenState {
   private readonly operations: ScreenOperation[] = [];
   private nextOperation = 0;
   private readonly drainWaiters: Array<() => void> = [];
+  private readonly colors = new Map<number, string>();
   private writing = false;
   private pendingBytes = 0;
 
@@ -36,6 +44,20 @@ export class TerminalScreenState {
       allowProposedApi: true,
     });
     this.terminal.loadAddon(this.serializer);
+    // SAFETY: xterm 6.0.0 emits parsed OSC color changes from this internal handler.
+    const inputHandler = (
+      this.terminal as Terminal & {
+        _core?: {
+          _inputHandler?: {
+            onColor?: (listener: (requests: XtermColorRequest[]) => void) => void;
+          };
+        };
+      }
+    )._core?._inputHandler;
+    if (!inputHandler?.onColor) {
+      throw new Error("Terminal color state is unavailable. Restart OpenDucktor and try again.");
+    }
+    inputHandler.onColor((requests) => this.trackColors(requests));
   }
 
   get queuedBytes(): number {
@@ -77,15 +99,15 @@ export class TerminalScreenState {
       throw new Error(
         "Terminal alternate screen state is unavailable. Resize the terminal and reconnect.",
       );
-    const serialized = new TextEncoder().encode(
+    const screenContent =
       alternateIndex < 0
         ? screen + normalOverlay
         : screen.slice(0, alternateIndex) +
-            normalOverlay +
-            normalPrelude +
-            screen.slice(alternateIndex) +
-            alternateOverlay,
-    );
+          normalOverlay +
+          normalPrelude +
+          screen.slice(alternateIndex) +
+          alternateOverlay;
+    const serialized = new TextEncoder().encode(this.colorPrelude() + screenContent);
     const { payload: suffix, precedingJoinState } = this.tail.suffix(
       this.terminal,
       !!normalOverlay || !!alternateOverlay,
@@ -103,6 +125,32 @@ export class TerminalScreenState {
 
   dispose(): void {
     this.terminal.dispose();
+  }
+
+  private trackColors(requests: XtermColorRequest[]): void {
+    for (const request of requests) {
+      if (request.type === 1) {
+        this.colors.set(
+          request.index,
+          `#${request.color.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`,
+        );
+      } else if (request.type === 2) {
+        if (request.index === undefined) {
+          for (const index of this.colors.keys()) if (index < 256) this.colors.delete(index);
+        } else {
+          this.colors.delete(request.index);
+        }
+      }
+    }
+  }
+
+  private colorPrelude(): string {
+    const parts = [COLOR_RESET];
+    for (const [index, color] of [...this.colors].sort(([left], [right]) => left - right)) {
+      const command = index < 256 ? `4;${index}` : String(index - 246);
+      parts.push(`\u001b]${command};${color}\u001b\\`);
+    }
+    return parts.join("");
   }
 
   private advance(): void {

@@ -45,8 +45,91 @@ const cursorAppearance = (terminal: Terminal) => {
   const { cursorStyle, cursorBlink } = xterm._core.coreService.decPrivateModes;
   return { cursorStyle, cursorBlink };
 };
+const colorEvents = (terminal: Terminal) => {
+  const events: Array<{ type: number; index?: number; color?: number[] }> = [];
+  // SAFETY: xterm 6.0.0 emits parsed OSC color changes from this internal handler.
+  const core = terminal as Terminal & {
+    _core: {
+      _inputHandler: {
+        onColor(listener: (requests: typeof events) => void): void;
+      };
+    };
+  };
+  core._core._inputHandler.onColor((requests) => events.push(...requests));
+  return events;
+};
 
 describe("TerminalScreenState", () => {
+  test("restores indexed and default colors after old output is gone", async () => {
+    const screen = new TerminalScreenState({ columns: 8, rows: 2 });
+    const restored = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const events = colorEvents(restored);
+    await writeScreen(
+      screen,
+      encoder.encode(
+        "\u001b]4;1;#112233;2;rgb:4444/5555/6666\u0007" +
+          "\u001b]10;#010203;#040506;#070809\u0007A",
+      ),
+    );
+
+    await write(restored, screen.snapshot().payload);
+    expect(events).toEqual([
+      { type: 2 },
+      { type: 2, index: 256 },
+      { type: 2, index: 257 },
+      { type: 2, index: 258 },
+      { type: 1, index: 1, color: [17, 34, 51] },
+      { type: 1, index: 2, color: [68, 85, 102] },
+      { type: 1, index: 256, color: [1, 2, 3] },
+      { type: 1, index: 257, color: [4, 5, 6] },
+      { type: 1, index: 258, color: [7, 8, 9] },
+    ]);
+    expect(visibleLines(restored)[0]).toStartWith("A");
+    screen.dispose();
+    restored.dispose();
+  });
+
+  test("restores color resets without old overrides", async () => {
+    const screen = new TerminalScreenState({ columns: 8, rows: 2 });
+    const restored = new Terminal({ cols: 8, rows: 2, allowProposedApi: true });
+    const events = colorEvents(restored);
+    await writeScreen(
+      screen,
+      encoder.encode("\u001b]4;1;#112233;2;#445566\u0007\u001b]10;#010203;#040506;#070809\u0007"),
+    );
+    await write(restored, screen.snapshot().payload);
+
+    await writeScreen(screen, encoder.encode("\u001b]104;1\u001b\\\u001b]111\u001b\\"));
+    events.length = 0;
+    restored.reset();
+    await write(restored, screen.snapshot().payload);
+    expect(events).toEqual([
+      { type: 2 },
+      { type: 2, index: 256 },
+      { type: 2, index: 257 },
+      { type: 2, index: 258 },
+      { type: 1, index: 2, color: [68, 85, 102] },
+      { type: 1, index: 256, color: [1, 2, 3] },
+      { type: 1, index: 258, color: [7, 8, 9] },
+    ]);
+
+    await writeScreen(
+      screen,
+      encoder.encode("\u001b]104\u001b\\\u001b]110\u001b\\\u001b]112\u001b\\"),
+    );
+    events.length = 0;
+    restored.reset();
+    await write(restored, screen.snapshot().payload);
+    expect(events).toEqual([
+      { type: 2 },
+      { type: 2, index: 256 },
+      { type: 2, index: 257 },
+      { type: 2, index: 258 },
+    ]);
+    screen.dispose();
+    restored.dispose();
+  });
+
   test.each(["normal", "alternate"])(
     "restores active OSC 8 links in the %s buffer",
     async (buffer) => {
