@@ -1,5 +1,6 @@
 import type { SDKMessage, SessionStoreEntry } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
+import type { ClaudeUserToolResultIngress } from "./claude-agent-sdk-ingress-schemas";
 
 const claudeUserTurnSchema = z.looseObject({
   isSynthetic: z.boolean().optional(),
@@ -8,6 +9,15 @@ const claudeUserTurnSchema = z.looseObject({
 });
 
 type ClaudeUserTurn = Extract<SDKMessage, { type: "result" | "user" }> | SessionStoreEntry;
+
+export const isClaudeWakeUserMessage = (
+  message: Extract<SDKMessage, { type: "user" }>,
+  parsed: ClaudeUserToolResultIngress,
+): boolean =>
+  parsed.turnOriginKind !== "human" &&
+  message.shouldQuery !== false &&
+  parsed.parent_tool_use_id === null &&
+  parsed.toolResults.length === 0;
 
 export const readClaudeTurnOriginKind = (message: ClaudeUserTurn): string | undefined => {
   const parsed = claudeUserTurnSchema.safeParse(message);

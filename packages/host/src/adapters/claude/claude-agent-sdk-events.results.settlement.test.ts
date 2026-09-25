@@ -9,6 +9,24 @@ import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 
 const readSdkState = (session: ReturnType<typeof createSession>) => session.sdkState;
 
+const idleTrace = () => {
+  const events: AgentEvent[] = [];
+  const session = createSession("idle");
+  const send = (message: Parameters<typeof handleClaudeSdkMessage>[0]["message"]) =>
+    handleClaudeSdkMessage({
+      session,
+      timestamp: "2026-06-25T20:00:00.000Z",
+      modelSelection: (model) => ({
+        providerId: "claude",
+        modelId: model,
+        runtimeKind: "claude",
+      }),
+      emit: (event) => events.push(event),
+      message,
+    });
+  return { events, send, session };
+};
+
 describe("handleClaudeSdkMessage result settlement", () => {
   test("marks the parent idle when its completed result arrives", () => {
     const events: AgentEvent[] = [];
@@ -339,6 +357,178 @@ describe("handleClaudeSdkMessage result settlement", () => {
     expect(session.activity).toBe("idle");
     expect(session.pendingUserTurnCount).toBe(0);
     expect(events.map((event) => event.type)).toEqual(["session_idle"]);
+  });
+
+  test.each([
+    { kind: "auto-continuation" as const },
+    { kind: "channel" as const, server: "review-channel" },
+    { kind: "coordinator" as const },
+    { kind: "peer" as const, from: "teammate" },
+  ])("keeps $kind wake-up work running through assistant output", (origin) => {
+    const { events, send, session } = idleTrace();
+    send(
+      claudeSdkMessageFixture({
+        type: "user",
+        parent_tool_use_id: null,
+        message: { role: "user", content: "Continue the check" },
+        origin,
+      }),
+    );
+    expect(session.activity).toBe("running");
+    expect(session.activeSdkUserTurnCount).toBe(1);
+    expect(events[0]).toMatchObject({
+      type: "session_status",
+      status: { type: "busy", message: null },
+    });
+
+    send(
+      claudeSdkMessageFixture({
+        type: "assistant",
+        message: {
+          role: "assistant",
+          model: "claude-sonnet-4-6",
+          stop_reason: null,
+          content: [{ type: "text", text: "Checking files" }],
+        },
+      }),
+    );
+    expect(session.activity).toBe("running");
+    expect(events.some((event) => event.type === "session_idle")).toBe(false);
+
+    send(
+      claudeSdkMessageFixture({
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        result: "Checks complete",
+        stop_reason: "end_turn",
+        terminal_reason: "completed",
+        usage: { input_tokens: 1, output_tokens: 1 },
+        origin,
+      }),
+    );
+    expect(session.activity).toBe("idle");
+    expect(session.activeSdkUserTurnCount).toBe(0);
+    expect(events.filter((event) => event.type === "session_idle")).toHaveLength(1);
+  });
+
+  test("starts a wake-up turn from an unattributed root user message", () => {
+    const { events, send, session } = idleTrace();
+    send(
+      claudeSdkMessageFixture({
+        type: "user",
+        parent_tool_use_id: null,
+        message: { role: "user", content: "Background check finished" },
+      }),
+    );
+
+    expect(session.activity).toBe("running");
+    expect(session.activeSdkUserTurnCount).toBe(1);
+    expect(events[0]).toMatchObject({
+      type: "session_status",
+      status: { type: "busy", message: null },
+    });
+  });
+
+  test("starts a wake-up turn when assistant text streams without a user frame", () => {
+    const { events, send, session } = idleTrace();
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "session_state_changed",
+        state: "running",
+      }),
+    );
+    expect(session.activity).toBe("idle");
+
+    send(
+      claudeSdkMessageFixture({
+        type: "stream_event",
+        parent_tool_use_id: null,
+        event: {
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "text_delta", text: "Checking files" },
+        },
+      }),
+    );
+    expect(session.activity).toBe("running");
+    expect(session.activeSdkUserTurnCount).toBe(1);
+    expect(events.map((event) => event.type)).toEqual(["session_status", "assistant_delta"]);
+
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "session_state_changed",
+        state: "idle",
+      }),
+    );
+    expect(session.activity).toBe("running");
+    expect(events.filter((event) => event.type === "session_idle")).toEqual([]);
+
+    send(
+      claudeSdkMessageFixture({
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        result: "Checks complete",
+        stop_reason: "end_turn",
+        terminal_reason: "completed",
+        usage: { input_tokens: 1, output_tokens: 1 },
+      }),
+    );
+    expect(session.activity).toBe("idle");
+    expect(events.filter((event) => event.type === "session_idle")).toHaveLength(1);
+  });
+
+  test("starts a wake-up turn when its first output is a tool call", () => {
+    const { events, send, session } = idleTrace();
+    send(
+      claudeSdkMessageFixture({
+        type: "assistant",
+        parent_tool_use_id: null,
+        message: {
+          role: "assistant",
+          model: "claude-sonnet-4-6",
+          stop_reason: "tool_use",
+          content: [{ type: "tool_use", id: "read-1", name: "Read", input: { file_path: "a.ts" } }],
+        },
+      }),
+    );
+
+    expect(session.activity).toBe("running");
+    expect(session.activeSdkUserTurnCount).toBe(1);
+    expect(events[0]).toMatchObject({
+      type: "session_status",
+      status: { type: "busy", message: null },
+    });
+    expect(events.some((event) => event.type === "assistant_part")).toBe(true);
+  });
+
+  test("does not start a turn from a non-query frame or a tool result", () => {
+    const { events, send, session } = idleTrace();
+    send(
+      claudeSdkMessageFixture({
+        type: "user",
+        parent_tool_use_id: null,
+        origin: { kind: "peer", from: "teammate" },
+        shouldQuery: false,
+        message: { role: "user", content: "Context for a later turn" },
+      }),
+    );
+    send(
+      claudeSdkMessageFixture({
+        type: "user",
+        parent_tool_use_id: "bash-1",
+        origin: { kind: "task-notification" },
+        tool_use_result: { type: "tool_result", tool_use_id: "bash-1", content: "Done" },
+        message: { role: "user", content: [] },
+      }),
+    );
+
+    expect(session.activity).toBe("idle");
+    expect(session.activeSdkUserTurnCount).toBe(0);
+    expect(events.filter((event) => event.type === "session_status")).toEqual([]);
   });
 
   test("settles a task-notification turn that runs while the host is idle", () => {

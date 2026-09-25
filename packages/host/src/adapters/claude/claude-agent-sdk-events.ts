@@ -54,7 +54,10 @@ import {
   settleClaudeStreamedAssistantText,
 } from "./claude-agent-sdk-transcript-retractions";
 import type { ClaudeAgentSdkEvent } from "./claude-agent-sdk-types";
-import { shouldFinalizeClaudeTurn } from "./claude-agent-sdk-user-messages";
+import {
+  isClaudeWakeUserMessage,
+  shouldFinalizeClaudeTurn,
+} from "./claude-agent-sdk-user-messages";
 import { readStringProp, textFromContentBlocks } from "./claude-agent-sdk-utils";
 import type {
   ClaudeSdkAssistantMessageProjection,
@@ -102,9 +105,13 @@ export const handleClaudeSdkMessage = ({
     });
     return;
   }
+  const isRootSession = !isClaudeSubagentTranscriptTarget(session.externalSessionId);
   if (message.type === "assistant") {
     if (isClaudeSyntheticAssistantMessage(messageValue)) {
       return;
+    }
+    if (isRootSession && message.parent_tool_use_id === null) {
+      applyClaudeLifecycleEvent({ emit, session, timestamp, event: { kind: "sdk_turn_started" } });
     }
     handleAssistantMessage({
       emit,
@@ -123,21 +130,17 @@ export const handleClaudeSdkMessage = ({
     } else if (originKind !== undefined) {
       session.assistantTurnOriginKind = originKind;
     }
-    if (originKind === "task-notification") {
-      // The SDK starts this turn, so mark the session busy here to keep the live
-      // snapshot running until the turn result settles.
-      applyClaudeLifecycleEvent({
-        emit,
-        session,
-        timestamp,
-        event: { kind: "sdk_turn_started" },
-      });
+    if (isRootSession && isClaudeWakeUserMessage(message, userToolResultMessage)) {
+      applyClaudeLifecycleEvent({ emit, session, timestamp, event: { kind: "sdk_turn_started" } });
     }
     emitClaudeSubagentUserMessage({ emit, message, session, timestamp });
     handleClaudeUserToolResultMessage({ emit, message, session, timestamp });
     return;
   }
   if (message.type === "stream_event") {
+    if (isRootSession && message.parent_tool_use_id === null) {
+      applyClaudeLifecycleEvent({ emit, session, timestamp, event: { kind: "sdk_turn_started" } });
+    }
     handleClaudeStreamEvent({ emit, message, session, timestamp });
     return;
   }

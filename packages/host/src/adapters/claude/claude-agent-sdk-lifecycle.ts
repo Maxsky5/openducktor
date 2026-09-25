@@ -119,10 +119,8 @@ const applySdkStateLifecycleEvent = (
 };
 
 const applySdkTurnStartedLifecycleEvent = (input: ClaudeLifecycleInput): void => {
-  // A task-notification user message starts a turn before any host send. Count the
-  // turn so its result settles its own turn, and mark the session busy. The flag
-  // keeps the result from consuming a queued local turn. A replayed sdk_state
-  // "running" frame does not start a turn.
+  // Count the first work signal of an idle SDK turn. Its result must leave queued
+  // local turns alone. A bare "running" state may replay after resume.
   if (input.session.activity !== "idle") {
     return;
   }
