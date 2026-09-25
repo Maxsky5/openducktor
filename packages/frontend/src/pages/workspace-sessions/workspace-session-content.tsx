@@ -3,12 +3,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { TaskExecutionSelectedFilePreview } from "@/components/features/agents/task-execution-file-preview";
 import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
-import { useTaskExecutionFilePreviewController } from "@/components/features/agents/file-preview/use-task-execution-file-preview-controller";
 import {
   WorkspaceSessionToolsPanel,
   type WorkspaceToolsTabId,
 } from "@/components/features/agents/workspace-session-tools-panel";
-import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Button } from "@/components/ui/button";
 import { TabsContent } from "@/components/ui/tabs";
@@ -20,6 +18,7 @@ import { gitQueryKeys } from "@/state/queries/git";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { WorkspaceSessionChat } from "./workspace-session-chat";
 import { WorkspaceSessionHeader } from "./workspace-session-header";
+import { useWorkspaceSessionPreview } from "./use-workspace-session-preview";
 
 export type WorkspaceSessionPanelState = {
   isOpen: boolean;
@@ -160,9 +159,14 @@ export function WorkspaceSessionContent({
 }) {
   const repoConfig = useQuery(repoConfigQueryOptions(workspace.workspaceId));
   const queryClient = useQueryClient();
-  const { register } = useWorkspacePreviewTransitionGuard();
-  const preview = useTaskExecutionFilePreviewController(panelState.selectedFile);
-  const discardedRef = useRef(false);
+  const onSelectionChange = useCallback(
+    (selectedFile: TaskExecutionSelectedFile | null) => onPanelStateChange({ selectedFile }),
+    [onPanelStateChange],
+  );
+  const { preview, onDiscard } = useWorkspaceSessionPreview(
+    panelState.selectedFile,
+    onSelectionChange,
+  );
   const refreshRef = useRef<(() => Promise<void>) | null>(null);
   const [isNarrow, setIsNarrow] = useState(false);
   useEffect(() => {
@@ -172,19 +176,6 @@ export function WorkspaceSessionContent({
     media.addEventListener("change", sync);
     return () => media.removeEventListener("change", sync);
   }, []);
-  useEffect(
-    () =>
-      register((apply, cancel) =>
-        preview.requestContextTransition(() => {
-          onPanelStateChange({
-            selectedFile: discardedRef.current ? null : preview.model.selectedFile,
-          });
-          discardedRef.current = false;
-          apply();
-        }, cancel),
-      ),
-    [onPanelStateChange, preview, register],
-  );
   const workingDirectory = sessionWorkingDirectory(workspace, record);
   const target: GitTargetBranch | null =
     record.executionTarget.kind === "local_repo_root"
@@ -214,10 +205,7 @@ export function WorkspaceSessionContent({
       key={preview.model.previewSessionKey}
       model={{
         ...preview.model,
-        onDiscard: () => {
-          discardedRef.current = true;
-          preview.model.onDiscard();
-        },
+        onDiscard,
       }}
       onFileSaved={onFileSaved}
     />
