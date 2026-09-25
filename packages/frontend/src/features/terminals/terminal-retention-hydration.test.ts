@@ -149,30 +149,47 @@ describe("retained terminal rendering", () => {
       clientWidth: { value: 800 },
     });
     document.body.append(container);
-    const mount = mountInteractiveTerminal({
-      container,
-      terminalId: "terminal-1",
-      controller,
-      isActive: () => true,
-      getPlatform: () => "darwin",
-      stageFile: async () => "/tmp/image.png",
-      preparePathInput: async () => "/tmp/image.png",
-      writeClipboard: async () => undefined,
-      onAttention: () => undefined,
-      onLifecycle: () => undefined,
-      onForgotten: () => undefined,
-      onTitleChange: () => undefined,
-      onHydrated: () => undefined,
-      onImageDragActiveChange: () => undefined,
-      onInteractionFailure: (_title, cause) => {
-        throw cause;
-      },
-    });
+    const nativeResizeObserver = globalThis.ResizeObserver;
+    let notifyResize: ResizeObserverCallback = () => undefined;
+    globalThis.ResizeObserver = class {
+      constructor(callback: ResizeObserverCallback) {
+        notifyResize = callback;
+      }
+      observe(): void {}
+      unobserve(): void {}
+      disconnect(): void {}
+    };
+    let mount: InteractiveTerminalMount;
+    try {
+      mount = mountInteractiveTerminal({
+        container,
+        terminalId: "terminal-1",
+        controller,
+        isActive: () => true,
+        getPlatform: () => "darwin",
+        stageFile: async () => "/tmp/image.png",
+        preparePathInput: async () => "/tmp/image.png",
+        writeClipboard: async () => undefined,
+        onAttention: () => undefined,
+        onLifecycle: () => undefined,
+        onForgotten: () => undefined,
+        onTitleChange: () => undefined,
+        onHydrated: () => undefined,
+        onImageDragActiveChange: () => undefined,
+        onInteractionFailure: (_title, cause) => {
+          throw cause;
+        },
+      });
+    } finally {
+      globalThis.ResizeObserver = nativeResizeObserver;
+    }
     try {
       await nextFrame();
       operations.length = 0;
+      fit.mockClear();
       const listener = listeners.get("terminal-1");
       if (!listener) throw new Error("Expected terminal to subscribe.");
+      notifyResize([], new nativeResizeObserver(() => undefined));
       listener(
         {
           version: TERMINAL_PROTOCOL_VERSION,
@@ -186,13 +203,19 @@ describe("retained terminal rendering", () => {
         new TextEncoder().encode("restored"),
       );
       lightweight.sendInput("a");
+      mount.activate(false);
+      await nextFrame();
       await Promise.resolve();
       expect(operations).toEqual([]);
+      expect(fit).not.toHaveBeenCalled();
+      expect(lightweight.binding.terminal.cols).toBe(80);
+      expect(lightweight.binding.terminal.rows).toBe(24);
       expect(lightweight.binding.terminal._core._inputHandler._parser.precedingJoinState).toBe(0);
       expect(lightweight.binding.terminal.resize).toHaveBeenCalledWith(80, 24);
       expect(lightweight.readOutput()).toBe("restored");
       lightweight.parsedCallbacks[0]?.();
       await Bun.sleep(0);
+      expect(fit).toHaveBeenCalledTimes(1);
       expect(lightweight.binding.terminal._core._inputHandler._parser.precedingJoinState).toBe(2);
       expect(lightweight.readOutput()).toBe("restored");
       expect(operations).toEqual(["resize:120x40", "input:a"]);

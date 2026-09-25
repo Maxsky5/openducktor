@@ -82,8 +82,11 @@ export const mountInteractiveTerminal = ({
     binding.resetLinkState();
     terminal.reset();
   };
+  const fitViewport = (): void => {
+    if (!restoringScreen) fitAddon.fit();
+  };
   const activateViewport = createTerminalViewportActivator({
-    fit: () => fitAddon.fit(),
+    fit: fitViewport,
     scrollToBottom: () => terminal.scrollToBottom(),
     refresh: (start, end) => terminal.refresh(start, end),
     readRows: () => terminal.rows,
@@ -209,7 +212,7 @@ export const mountInteractiveTerminal = ({
             try {
               if (completed)
                 restoreTerminalPrecedingJoinState(terminal, message.precedingJoinState);
-              if (isActive()) fitAddon.fit();
+              if (isActive()) fitViewport();
               resizeScheduler.flush();
             } finally {
               deferredInputBytes = 0;
@@ -238,10 +241,10 @@ export const mountInteractiveTerminal = ({
       .catch((cause) => reportFailure("Terminal output failed", cause));
   };
   const unsubscribe = controller.subscribe(terminalId, handleFrame);
-  const fitScheduler = createLiveTerminalFitScheduler({ fit: () => fitAddon.fit(), isActive });
+  const fitScheduler = createLiveTerminalFitScheduler({ fit: fitViewport, isActive });
   const observer = new ResizeObserver(() => fitScheduler.schedule());
   observer.observe(container);
-  if (isActive()) fitAddon.fit();
+  if (isActive()) fitViewport();
 
   return {
     activate: (focus) => {
