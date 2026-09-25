@@ -21,7 +21,6 @@ import {
   SidebarNavigation,
 } from "@/components/layout/sidebar";
 import { WorkspaceRail } from "@/components/layout/workspace-rail";
-import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -254,6 +253,7 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
         open={isRepositoryModalOpen}
         canClose
         onOpenChange={handleRepositoryModalOpenChange}
+        requestTransition={guardWorkspaceChange}
       />
     </>
   );
@@ -329,9 +329,5 @@ export const AppShell = memo(function AppShell(): ReactElement {
     return <Navigate to="/onboarding" replace />;
   }
 
-  return (
-    <WorkspacePreviewTransitionGuardProvider>
-      <WorkspaceAppShell />
-    </WorkspacePreviewTransitionGuardProvider>
-  );
+  return <WorkspaceAppShell />;
 });

@@ -96,6 +96,7 @@ type WorkspaceCreationFormProps = {
   onSuccess?: () => void;
   resolveRepoPath?: (repoPath: string) => Promise<WorkspacePathResolution>;
   onReopenClosedWorkspace?: (workspace: WorkspaceRecord) => Promise<void>;
+  beforeWorkspaceChange?: () => Promise<boolean>;
 };
 
 export type WorkspaceCreationController = {
@@ -127,6 +128,7 @@ export function useWorkspaceCreation({
   onSuccess,
   resolveRepoPath,
   onReopenClosedWorkspace,
+  beforeWorkspaceChange,
   initialPickerOpen = false,
 }: WorkspaceCreationFormProps & { initialPickerOpen?: boolean }): WorkspaceCreationController {
   const [state, dispatch] = useReducer(reducer, {
@@ -161,6 +163,7 @@ export function useWorkspaceCreation({
         );
       }
       if (resolution.kind === "closed") {
+        if (beforeWorkspaceChange && !(await beforeWorkspaceChange())) return;
         if (onReopenClosedWorkspace) {
           await onReopenClosedWorkspace(resolution.workspace);
         }
@@ -196,6 +199,7 @@ export function useWorkspaceCreation({
       if (state.tileColor) {
         workspaceInput.tileColor = state.tileColor;
       }
+      if (beforeWorkspaceChange && !(await beforeWorkspaceChange())) return;
       await addWorkspace(workspaceInput);
       onSuccess?.();
     } catch (cause) {

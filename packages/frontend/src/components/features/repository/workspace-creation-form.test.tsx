@@ -122,10 +122,12 @@ const chooseRepository = async (): Promise<void> => {
 const renderForm = ({
   addWorkspace,
   onSuccess,
+  beforeWorkspaceChange,
   duplicate = false,
 }: {
   addWorkspace: Parameters<typeof WorkspaceCreationForm>[0]["addWorkspace"];
   onSuccess?: () => void;
+  beforeWorkspaceChange?: () => Promise<boolean>;
   duplicate?: boolean;
 }): void => {
   const formProps: Parameters<typeof WorkspaceCreationForm>[0] = {
@@ -149,6 +151,9 @@ const renderForm = ({
   };
   if (onSuccess) {
     formProps.onSuccess = onSuccess;
+  }
+  if (beforeWorkspaceChange) {
+    formProps.beforeWorkspaceChange = beforeWorkspaceChange;
   }
   const view = render(
     <QueryProvider useIsolatedClient>
@@ -296,6 +301,34 @@ describe("WorkspaceCreationForm", () => {
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /^open repository$/i })).toBeTruthy(),
     );
+  });
+
+  test("keeps the repository draft when a workspace change is canceled", async () => {
+    const addWorkspace = mock(async () => {});
+    const onSuccess = mock(() => {});
+    const beforeWorkspaceChange = mock(async () => false);
+    renderForm({ addWorkspace, onSuccess, beforeWorkspaceChange });
+    await chooseRepository();
+
+    fireEvent.click(screen.getByRole("button", { name: /^open repository$/i }));
+    await waitFor(() => expect(beforeWorkspaceChange).toHaveBeenCalledTimes(1));
+    expect(addWorkspace).not.toHaveBeenCalled();
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(screen.getByLabelText<HTMLInputElement>("Repository path").value).toBe("/repo");
+  });
+
+  test("waits for a pending preview save before adding the workspace", async () => {
+    const decision = createDeferred<boolean>();
+    const addWorkspace = mock(async () => {});
+    const beforeWorkspaceChange = mock(async () => decision.promise);
+    renderForm({ addWorkspace, beforeWorkspaceChange });
+    await chooseRepository();
+
+    fireEvent.click(screen.getByRole("button", { name: /^open repository$/i }));
+    await waitFor(() => expect(beforeWorkspaceChange).toHaveBeenCalledTimes(1));
+    expect(addWorkspace).not.toHaveBeenCalled();
+    await act(async () => decision.resolve(true));
+    await waitFor(() => expect(addWorkspace).toHaveBeenCalledTimes(1));
   });
 
   test("shows add failures and lets the user retry without losing the draft", async () => {

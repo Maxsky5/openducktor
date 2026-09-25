@@ -3,6 +3,7 @@ import { type ReactElement, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useSettingsModal } from "@/components/features/settings/settings-modal";
+import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { useNotificationContext } from "@/state/notifications/notification-context";
 import { workspaceSessionListQueryOptions } from "@/state/queries/workspace-sessions";
@@ -23,11 +24,28 @@ export function NotificationNavigationRegistrar(): null {
   const { openSettings } = useSettingsModal();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { run: guardWorkspaceChange } = useWorkspacePreviewTransitionGuard();
   const { workspaces, activeWorkspace, selectWorkspace } = useWorkspaceState();
   const { registerNavigator } = useNotificationContext();
 
   useEffect(() => {
     return registerNavigator(async (target) => {
+      if (target.type !== "notification_settings" && location.pathname === "/chats") {
+        const targetWorkspace = workspaces.find((entry) => entry.repoPath === target.repoPath);
+        const changesContext =
+          targetWorkspace &&
+          (targetWorkspace.workspaceId !== activeWorkspace?.workspaceId || "taskId" in target);
+        if (changesContext) {
+          const allowed = await new Promise<boolean>((resolve) => {
+            guardWorkspaceChange(
+              () => resolve(true),
+              () => resolve(false),
+            );
+          });
+          if (!allowed) return;
+        }
+      }
       await openNotificationTarget(
         target,
         {
@@ -56,6 +74,8 @@ export function NotificationNavigationRegistrar(): null {
     });
   }, [
     activeWorkspace?.workspaceId,
+    guardWorkspaceChange,
+    location.pathname,
     navigate,
     openSettings,
     queryClient,

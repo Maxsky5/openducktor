@@ -10,6 +10,8 @@ import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { OpenRepositoryModal } from "./open-repository-modal";
 
+const allowTransition = (apply: () => void): void => apply();
+
 enableReactActEnvironment();
 
 const addWorkspaceMock = mock(
@@ -83,7 +85,12 @@ describe("OpenRepositoryModal", () => {
       <QueryProvider useIsolatedClient>
         <WorkspaceStateContext.Provider value={workspaceState}>
           <SeedFilesystemDirectory />
-          <OpenRepositoryModal open={open} canClose onOpenChange={onOpenChange} />
+          <OpenRepositoryModal
+            open={open}
+            canClose
+            onOpenChange={onOpenChange}
+            requestTransition={allowTransition}
+          />
         </WorkspaceStateContext.Provider>
       </QueryProvider>
     );
@@ -138,7 +145,12 @@ describe("OpenRepositoryModal", () => {
           })}
         >
           <SeedFilesystemDirectory />
-          <OpenRepositoryModal open canClose onOpenChange={() => {}} />
+          <OpenRepositoryModal
+            open
+            canClose
+            onOpenChange={() => {}}
+            requestTransition={allowTransition}
+          />
         </WorkspaceStateContext.Provider>
       </QueryProvider>,
     );
@@ -176,7 +188,12 @@ describe("OpenRepositoryModal", () => {
           })}
         >
           <SeedFilesystemDirectory />
-          <OpenRepositoryModal open canClose onOpenChange={onOpenChange} />
+          <OpenRepositoryModal
+            open
+            canClose
+            onOpenChange={onOpenChange}
+            requestTransition={allowTransition}
+          />
         </WorkspaceStateContext.Provider>
       </QueryProvider>,
     );
@@ -235,7 +252,12 @@ describe("OpenRepositoryModal", () => {
           })}
         >
           <SeedFilesystemDirectory />
-          <OpenRepositoryModal open canClose onOpenChange={onOpenChange} />
+          <OpenRepositoryModal
+            open
+            canClose
+            onOpenChange={onOpenChange}
+            requestTransition={allowTransition}
+          />
         </WorkspaceStateContext.Provider>
       </QueryProvider>,
     );
@@ -249,6 +271,60 @@ describe("OpenRepositoryModal", () => {
       });
       expect(onOpenChange).toHaveBeenCalledWith(false);
     });
+    unmount();
+  });
+
+  test("waits for the preview decision before reopening a closed workspace", async () => {
+    const reopenWorkspace = mock(async () => {});
+    const onOpenChange = mock((_open: boolean) => {});
+    const transitions: Array<{ apply: () => void; cancel: () => void }> = [];
+    const requestTransition = (apply: () => void, cancel?: () => void) => {
+      transitions.push({ apply, cancel: cancel ?? (() => {}) });
+    };
+    const closedWorkspace = {
+      workspaceId: "existing",
+      workspaceName: "Existing",
+      abbreviation: null,
+      tileColor: null,
+      repoPath: "/other",
+      isActive: false,
+      hasConfig: true,
+      configuredWorktreeBasePath: null,
+      defaultWorktreeBasePath: "/worktrees",
+      effectiveWorktreeBasePath: "/worktrees",
+    };
+    const { unmount } = render(
+      <QueryProvider useIsolatedClient>
+        <WorkspaceStateContext.Provider
+          value={createWorkspaceStateValue({
+            closedWorkspaces: [closedWorkspace],
+            reopenWorkspace,
+          })}
+        >
+          <SeedFilesystemDirectory />
+          <OpenRepositoryModal
+            open
+            canClose
+            onOpenChange={onOpenChange}
+            requestTransition={requestTransition}
+          />
+        </WorkspaceStateContext.Provider>
+      </QueryProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Existing/ }));
+    expect(transitions).toHaveLength(1);
+    expect(reopenWorkspace).not.toHaveBeenCalled();
+    await act(async () => transitions[0]?.cancel());
+    expect(reopenWorkspace).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+
+    fireEvent.click(screen.getByRole("button", { name: /Existing/ }));
+    expect(transitions).toHaveLength(2);
+    expect(reopenWorkspace).not.toHaveBeenCalled();
+    await act(async () => transitions[1]?.apply());
+    await waitFor(() => expect(reopenWorkspace).toHaveBeenCalledTimes(1));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
     unmount();
   });
 
@@ -280,7 +356,12 @@ describe("OpenRepositoryModal", () => {
           })}
         >
           <SeedFilesystemDirectory />
-          <OpenRepositoryModal open canClose onOpenChange={onOpenChange} />
+          <OpenRepositoryModal
+            open
+            canClose
+            onOpenChange={onOpenChange}
+            requestTransition={allowTransition}
+          />
         </WorkspaceStateContext.Provider>
       </QueryProvider>,
     );
@@ -328,7 +409,12 @@ describe("OpenRepositoryModal", () => {
           })}
         >
           <SeedFilesystemDirectory />
-          <OpenRepositoryModal open canClose onOpenChange={() => {}} />
+          <OpenRepositoryModal
+            open
+            canClose
+            onOpenChange={() => {}}
+            requestTransition={allowTransition}
+          />
         </WorkspaceStateContext.Provider>
       </QueryProvider>,
     );
@@ -345,7 +431,12 @@ describe("OpenRepositoryModal", () => {
       <QueryProvider useIsolatedClient>
         <WorkspaceStateContext.Provider value={createWorkspaceStateValue()}>
           <SeedFilesystemDirectory />
-          <OpenRepositoryModal open canClose onOpenChange={() => {}} />
+          <OpenRepositoryModal
+            open
+            canClose
+            onOpenChange={() => {}}
+            requestTransition={allowTransition}
+          />
         </WorkspaceStateContext.Provider>
       </QueryProvider>,
     );
@@ -362,7 +453,12 @@ describe("OpenRepositoryModal", () => {
       <QueryProvider useIsolatedClient>
         <WorkspaceStateContext.Provider value={createWorkspaceStateValue({ addWorkspace })}>
           <SeedFilesystemDirectory />
-          <OpenRepositoryModal open canClose onOpenChange={onOpenChange} />
+          <OpenRepositoryModal
+            open
+            canClose
+            onOpenChange={onOpenChange}
+            requestTransition={allowTransition}
+          />
         </WorkspaceStateContext.Provider>
       </QueryProvider>,
     );
@@ -392,6 +488,7 @@ describe("OpenRepositoryModal", () => {
             open: true,
             canClose: false,
             onOpenChange: () => {},
+            requestTransition: allowTransition,
           })}
         </WorkspaceStateContext.Provider>
       </QueryProvider>,
