@@ -34,6 +34,63 @@ const createOutput = (): TerminalSessionOutput =>
   }));
 
 describe("TerminalSessionOutput", () => {
+  test("holds the PTY pause until a screen snapshot ends", async () => {
+    const calls: string[] = [];
+    const handle: TerminalPtyHandle = {
+      ...pausableHandle,
+      pauseOutput: () => Effect.sync(() => calls.push("pause")),
+      resumeOutput: () => Effect.sync(() => calls.push("resume")),
+    };
+    const output = createOutput();
+    output.beginSnapshotHold();
+    await Effect.runPromise(output.pauseIfRequested(handle));
+    output.updateParserBacklog(TERMINAL_LIMITS.pendingOutputBytes, handle);
+    expect(output.updateParserBacklog(0, handle)).toEqual([{ type: "resume_requested" }]);
+    await Effect.runPromise(output.resumeIfUnblocked(handle));
+    expect(calls).toEqual(["pause"]);
+    expect(output.endSnapshotHold()).toEqual([{ type: "resume_requested" }]);
+    await Effect.runPromise(output.resumeIfUnblocked(handle));
+    expect(calls).toEqual(["pause", "resume"]);
+  });
+
+  test("keeps the PTY paused until both screen snapshots end", async () => {
+    const calls: string[] = [];
+    const handle: TerminalPtyHandle = {
+      ...pausableHandle,
+      pauseOutput: () => Effect.sync(() => calls.push("pause")),
+      resumeOutput: () => Effect.sync(() => calls.push("resume")),
+    };
+    const output = createOutput();
+    output.beginSnapshotHold();
+    output.beginSnapshotHold();
+    await Effect.runPromise(output.pauseIfRequested(handle));
+    expect(output.endSnapshotHold()).toEqual([]);
+    await Effect.runPromise(output.resumeIfUnblocked(handle));
+    expect(calls).toEqual(["pause"]);
+    expect(output.endSnapshotHold()).toEqual([{ type: "resume_requested" }]);
+    await Effect.runPromise(output.resumeIfUnblocked(handle));
+    expect(calls).toEqual(["pause", "resume"]);
+  });
+
+  test("keeps normal output pressure after the snapshot hold ends", async () => {
+    const calls: string[] = [];
+    const handle: TerminalPtyHandle = {
+      ...pausableHandle,
+      pauseOutput: () => Effect.sync(() => calls.push("pause")),
+      resumeOutput: () => Effect.sync(() => calls.push("resume")),
+    };
+    const output = createOutput();
+    output.beginSnapshotHold();
+    await Effect.runPromise(output.pauseIfRequested(handle));
+    output.updateParserBacklog(TERMINAL_LIMITS.pendingOutputBytes, handle);
+    output.endSnapshotHold();
+    await Effect.runPromise(output.resumeIfUnblocked(handle));
+    expect(calls).toEqual(["pause"]);
+    output.updateParserBacklog(0, handle);
+    await Effect.runPromise(output.resumeIfUnblocked(handle));
+    expect(calls).toEqual(["pause", "resume"]);
+  });
+
   test("requests one resume when parser backlog falls below the resume limit", () => {
     const output = createOutput();
     expect(output.updateParserBacklog(TERMINAL_LIMITS.pendingOutputBytes, pausableHandle)).toEqual([

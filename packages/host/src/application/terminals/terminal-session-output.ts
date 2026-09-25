@@ -79,6 +79,7 @@ export class TerminalSessionOutput {
   private failureFrame: Extract<TerminalServerMessage, { type: "protocol_error" }> | null = null;
   private parserPendingBytes = 0;
   private screenFlushPending = false;
+  private snapshotHolds = 0;
   private readonly flowOperations = Effect.unsafeMakeSemaphore(1);
 
   constructor(
@@ -215,6 +216,17 @@ export class TerminalSessionOutput {
     this.attachments.delete(attachmentId);
   }
 
+  beginSnapshotHold(): void {
+    this.snapshotHolds += 1;
+    this.paused = true;
+  }
+
+  endSnapshotHold(): TerminalOutputEvents {
+    if (this.snapshotHolds === 0) throw new Error("Terminal screen snapshot hold is not active.");
+    this.snapshotHolds -= 1;
+    return this.snapshotHolds === 0 ? event("resume_requested") : [];
+  }
+
   resumeIfUnblocked(
     handle: TerminalPtyHandle | null,
   ): Effect.Effect<TerminalOutputEvents, TerminalPtyError> {
@@ -240,6 +252,7 @@ export class TerminalSessionOutput {
     handle: TerminalPtyHandle | null,
   ): Effect.Effect<TerminalOutputEvents, TerminalPtyError> {
     return Effect.gen(this, function* () {
+      if (this.snapshotHolds > 0) return [];
       if (this.paused) {
         if (
           this.parserPendingBytes > TERMINAL_LIMITS.resumeOutputBytes ||

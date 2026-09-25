@@ -244,32 +244,68 @@ export const createTerminalSessionEngine = ({
         },
       }),
     attach: (input: TerminalSessionAttachInput): Effect.Effect<void, TerminalServiceError> =>
-      Effect.tryPromise({
-        try: async () => {
-          const session = getSession(input.terminalId, "attach");
-          if ((input.lastConsumedSequence ?? 0) < session.output.earliestRetainedSequence) {
-            await session.screen.drained();
-            getSession(input.terminalId, "attach");
-          }
-          applyStreamEvents(
-            session,
-            session.output.attach(input, session.summary, session.resources.handle),
-          );
-        },
-        catch: (cause) => {
-          if (cause instanceof TerminalServiceError) return cause;
-          if (cause instanceof TerminalOutputStateError) {
-            return terminalFailure(
-              "protocol_error",
-              "attach",
-              cause.message,
-              input.terminalId,
-              cause,
+      Effect.gen(function* () {
+        const session = yield* Effect.try({
+          try: () => getSession(input.terminalId, "attach"),
+          catch: (cause) => terminalOperationFailure(cause, "attach"),
+        });
+        const needsRestore =
+          (input.lastConsumedSequence ?? 0) < session.output.earliestRetainedSequence;
+        const attachAfterDrain = Effect.tryPromise({
+          try: async () => {
+            if (needsRestore) {
+              await session.screen.drained();
+              getSession(input.terminalId, "attach");
+            }
+            applyStreamEvents(
+              session,
+              session.output.attach(input, session.summary, session.resources.handle),
             );
-          }
-          const message = cause instanceof Error ? cause.message : String(cause);
-          return terminalFailure("protocol_error", "attach", message, input.terminalId, cause);
-        },
+          },
+          catch: (cause) => {
+            if (cause instanceof TerminalServiceError) return cause;
+            if (cause instanceof TerminalOutputStateError) {
+              return terminalFailure(
+                "protocol_error",
+                "attach",
+                cause.message,
+                input.terminalId,
+                cause,
+              );
+            }
+            const message = cause instanceof Error ? cause.message : String(cause);
+            return terminalFailure("protocol_error", "attach", message, input.terminalId, cause);
+          },
+        });
+        const handle = session.resources.handle;
+        if (!needsRestore || !handle || !isLiveTerminal(session)) return yield* attachAfterDrain;
+        if (!handle.supportsOutputPause) {
+          return yield* Effect.fail(
+            terminalFailure(
+              "unsupported_runtime",
+              "attach",
+              "Terminal output cannot pause for a correct screen restore. Update OpenDucktor, then reconnect.",
+              input.terminalId,
+            ),
+          );
+        }
+        return yield* Effect.acquireUseRelease(
+          Effect.sync(() => session.output.beginSnapshotHold()),
+          () =>
+            session.output.pauseIfRequested(handle).pipe(
+              Effect.mapError((cause) =>
+                terminalFailure(
+                  "protocol_error",
+                  "attach",
+                  "Terminal output could not pause for a correct screen restore. Retry the connection or close this tab.",
+                  input.terminalId,
+                  cause,
+                ),
+              ),
+              Effect.zipRight(attachAfterDrain),
+            ),
+          () => Effect.sync(() => applyStreamEvents(session, session.output.endSnapshotHold())),
+        );
       }),
     write: (terminalId: string, data: Uint8Array): Effect.Effect<void, TerminalServiceError> =>
       Effect.gen(function* () {
