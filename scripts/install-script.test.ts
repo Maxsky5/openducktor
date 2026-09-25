@@ -35,6 +35,33 @@ unixTest("Linux installs and updates one AppImage with a desktop launcher", () =
   expect(setup.run().status).toBe(0);
 });
 
+unixTest("Linux stages the app and launcher beside their install paths", () => {
+  const setup = fixture("Linux", "x86_64");
+  writeFileSync(
+    join(setup.bin, "mv"),
+    '#!/bin/sh\ncase "$2" in "$HOME/.local/bin/OpenDucktor.AppImage"|"$HOME/.local/share/applications/openducktor.desktop") case "$1" in "$HOME/.local/"*) ;; *) exit 8 ;; esac ;; esac\nexec /bin/mv "$@"\n',
+    { mode: 0o755 },
+  );
+  expect(setup.run().status).toBe(0);
+  expect(readFileSync(setup.installed, "utf8")).toContain("verified AppImage");
+});
+
+unixTest("Linux escapes special characters in a desktop launcher path", () => {
+  const setup = fixture("Linux", "x86_64", 'home %f $ \\ " `');
+  expect(setup.run().status).toBe(0);
+  const desktop = readFileSync(
+    join(setup.home, ".local/share/applications/openducktor.desktop"),
+    "utf8",
+  );
+  const exec = desktop.match(/^Exec="(.*)"$/m)?.[1];
+  expect(exec).toBeDefined();
+  expect(exec).toContain("%%f");
+  expect(exec).toContain("\\\\$");
+  expect(exec).toContain("\\\\\\\\");
+  expect(exec).toContain('\\\\"');
+  expect(exec).toContain("\\\\`");
+});
+
 unixTest("a changed download leaves the previous Linux install and launcher intact", () => {
   const setup = fixture("Linux", "x86_64");
   expect(setup.run().status).toBe(0);
@@ -57,7 +84,7 @@ unixTest("a failed launcher install restores the previous Linux app and launcher
   const previousDesktop = readFileSync(desktopPath);
   writeFileSync(
     join(setup.bin, "mv"),
-    '#!/bin/sh\ncase "$1" in */openducktor-install.*/openducktor.desktop) exit 7 ;; esac\nexec /bin/mv "$@"\n',
+    '#!/bin/sh\ncase "$1" in */.openducktor.desktop.stage.*) exit 7 ;; esac\nexec /bin/mv "$@"\n',
     { mode: 0o755 },
   );
   const result = setup.run();
@@ -109,11 +136,11 @@ type ReleaseFixture = {
   }>;
 };
 
-function fixture(os: "Darwin" | "Linux", arch: string) {
+function fixture(os: "Darwin" | "Linux", arch: string, homeName = "home") {
   const root = mkdtempSync(join(tmpdir(), "openducktor-install-test-"));
   roots.push(root);
   const bin = join(root, "bin");
-  const home = join(root, "home");
+  const home = join(root, homeName);
   mkdirSync(bin);
   mkdirSync(home);
   const payload = Buffer.from("verified AppImage or ZIP fixture\n");

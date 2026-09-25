@@ -75,6 +75,13 @@ try {
     New-Item -ItemType Directory -Path $work | Out-Null
     $backup = Join-Path $work 'previous-install'
     $registryBackup = Join-Path $work 'previous-uninstall.reg'
+    $cachePath = Join-Path $env:LOCALAPPDATA '@openducktorelectron-updater\installer.exe'
+    $cacheDir = Split-Path -Parent $cachePath
+    $cacheDirExisted = Test-Path -LiteralPath $cacheDir
+    $cacheExisted = Test-Path -LiteralPath $cachePath
+    $cacheBackup = Join-Path $work 'previous-installer.exe'
+    $markerDir = Split-Path -Parent $markerPath
+    $markerDirExisted = Test-Path -LiteralPath $markerDir
     $installTried = $false
     $keepWork = $false
     try {
@@ -90,6 +97,9 @@ try {
             $registryKey = $installs[0].PSPath -replace '^Microsoft.PowerShell.Core\\Registry::', ''
             & reg.exe export $registryKey $registryBackup /y | Out-Null
             if ($LASTEXITCODE -ne 0) { throw 'Could not save the existing uninstall record.' }
+        }
+        if ($cacheExisted) {
+            Copy-Item -LiteralPath $cachePath -Destination $cacheBackup
         }
         $installTried = $true
         # NSIS needs /D last and the path unquoted, even with spaces.
@@ -120,8 +130,30 @@ try {
         $installError = $_
         if ($installTried) {
             try {
+                if (-not $managed) {
+                    # NSIS owns the shortcuts and install key from a new install.
+                    $uninstaller = Join-Path $installPath 'Uninstall OpenDucktor.exe'
+                    if (Test-Path -LiteralPath $uninstaller) {
+                        $undo = Start-Process -FilePath $uninstaller -ArgumentList '/currentuser /S' -Wait -PassThru
+                        if ($undo.ExitCode -ne 0) { throw "The NSIS uninstaller failed with exit code $($undo.ExitCode)." }
+                    }
+                }
                 if (Test-Path -LiteralPath $installPath) {
                     Remove-Item -LiteralPath $installPath -Recurse -Force
+                }
+                if ($cacheExisted) {
+                    Copy-Item -LiteralPath $cacheBackup -Destination $cachePath -Force
+                } elseif (Test-Path -LiteralPath $cachePath) {
+                    Remove-Item -LiteralPath $cachePath -Force
+                }
+                if (-not $cacheDirExisted -and (Test-Path -LiteralPath $cacheDir) -and @(Get-ChildItem -LiteralPath $cacheDir).Count -eq 0) {
+                    Remove-Item -LiteralPath $cacheDir -Force
+                }
+                if (-not $managed -and (Test-Path -LiteralPath $markerPath)) {
+                    Remove-Item -LiteralPath $markerPath -Force
+                }
+                if (-not $markerDirExisted -and (Test-Path -LiteralPath $markerDir) -and @(Get-ChildItem -LiteralPath $markerDir).Count -eq 0) {
+                    Remove-Item -LiteralPath $markerDir -Force
                 }
                 if ($managed) {
                     Copy-Item -LiteralPath $backup -Destination $installPath -Recurse
@@ -138,7 +170,8 @@ try {
             }
             catch {
                 $keepWork = $true
-                throw "Install failed: $($installError.Exception.Message). Restore failed: $($_.Exception.Message). Backup: $backup"
+                $checkPath = if ($managed) { $backup } else { $installPath }
+                throw "Install failed: $($installError.Exception.Message). Restore failed: $($_.Exception.Message). Check $checkPath."
             }
         }
         throw $installError

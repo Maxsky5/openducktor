@@ -8,6 +8,11 @@ New-Item -ItemType Directory -Path $root | Out-Null
 $env:LOCALAPPDATA = Join-Path $root 'LocalAppData'
 New-Item -ItemType Directory -Path $env:LOCALAPPDATA | Out-Null
 $appPath = Join-Path $env:LOCALAPPDATA 'Programs\OpenDucktor\OpenDucktor.exe'
+$cachePath = Join-Path $env:LOCALAPPDATA '@openducktorelectron-updater\installer.exe'
+$desktopLink = Join-Path $root 'Desktop\OpenDucktor.lnk'
+$menuLink = Join-Path $root 'Programs\OpenDucktor.lnk'
+$global:uninstallCalls = 0
+$global:failMarker = $false
 $global:displayIcon = "$appPath,0"
 $scriptPath = Join-Path $PSScriptRoot '..\install.ps1'
 $name = 'OpenDucktor-0.8.0-win-x64.exe'
@@ -63,12 +68,33 @@ function Invoke-WebRequest {
     param([string]$Uri, [string]$OutFile, [switch]$UseBasicParsing)
     [IO.File]::WriteAllBytes($OutFile, $global:payload)
 }
+function Set-Content {
+    param([string]$LiteralPath, [object]$Value, [switch]$NoNewline)
+    Microsoft.PowerShell.Management\Set-Content -LiteralPath $LiteralPath -Value $Value -NoNewline:$NoNewline
+    if ($global:failMarker -and $LiteralPath -like '*managed.txt') {
+        $global:failMarker = $false
+        throw 'Fixture marker write failed.'
+    }
+}
 function Start-Process {
     param([string]$FilePath, [string]$ArgumentList, [switch]$Wait, [switch]$PassThru)
+    if ($ArgumentList -eq '/currentuser /S') {
+        Assert ($FilePath -like '*Uninstall OpenDucktor.exe') 'The rollback did not run the NSIS uninstaller.'
+        $global:uninstallCalls++
+        Microsoft.PowerShell.Management\Remove-Item -LiteralPath (Split-Path -Parent $appPath) -Recurse -Force
+        Microsoft.PowerShell.Management\Remove-Item -LiteralPath $desktopLink, $menuLink -Force
+        $global:registered = $false
+        return [pscustomobject]@{ ExitCode = 0 }
+    }
     Assert ($ArgumentList -like '/S /D=*') 'NSIS did not receive /S and /D as the final argument.'
     $path = $ArgumentList.Substring(6)
     New-Item -ItemType Directory -Path $path -Force | Out-Null
     Set-Content -LiteralPath (Join-Path $path 'OpenDucktor.exe') -Value "fixture exit $global:exitCode"
+    Set-Content -LiteralPath (Join-Path $path 'Uninstall OpenDucktor.exe') -Value 'uninstaller fixture'
+    New-Item -ItemType Directory -Path (Split-Path -Parent $cachePath), (Split-Path -Parent $desktopLink), (Split-Path -Parent $menuLink) -Force | Out-Null
+    Set-Content -LiteralPath $cachePath -Value "cache exit $global:exitCode"
+    Set-Content -LiteralPath $desktopLink -Value 'desktop shortcut'
+    Set-Content -LiteralPath $menuLink -Value 'menu shortcut'
     $global:registered = $true
     [pscustomobject]@{ ExitCode = $global:exitCode }
 }
@@ -92,7 +118,12 @@ try {
     }
     Assert (-not (Test-Path -LiteralPath $appPath)) 'A failed first install left an app.'
     Assert (-not $global:registered) 'A failed first install left an uninstall record.'
+    Assert (-not (Test-Path -LiteralPath $desktopLink)) 'A failed first install left a desktop shortcut.'
+    Assert (-not (Test-Path -LiteralPath $menuLink)) 'A failed first install left a Start Menu shortcut.'
+    Assert (-not (Test-Path -LiteralPath $cachePath)) 'A failed first install left a cached installer.'
 
+    New-Item -ItemType Directory -Path (Split-Path -Parent $cachePath) -Force | Out-Null
+    Set-Content -LiteralPath $cachePath -Value 'prior cache'
     $global:exitCode = 0
     $global:displayIcon = 'C:\Other\OpenDucktor.exe,0'
     try { & $scriptPath; throw 'An NSIS record for another app path was accepted.' } catch {
@@ -100,11 +131,27 @@ try {
     }
     Assert (-not (Test-Path -LiteralPath $appPath)) 'A wrong install path left an app.'
     Assert (-not $global:registered) 'A wrong install path left an uninstall record.'
+    Assert (-not (Test-Path -LiteralPath $desktopLink)) 'A wrong install path left a desktop shortcut.'
+    Assert (-not (Test-Path -LiteralPath $menuLink)) 'A wrong install path left a Start Menu shortcut.'
+    Assert ((Get-Content -LiteralPath $cachePath -Raw).TrimEnd() -eq 'prior cache') 'A wrong install path changed a prior cached installer.'
+    Assert ($global:uninstallCalls -eq 2) 'A failed first install did not run the NSIS uninstaller.'
     $global:displayIcon = "$appPath,0"
+    Remove-Item -LiteralPath $cachePath -Force
+
+    $global:failMarker = $true
+    try { & $scriptPath; throw 'A failed marker write was accepted.' } catch {
+        Assert ($_.Exception.Message -like '*Fixture marker write failed*') 'The marker failure was not reported.'
+    }
+    Assert (-not (Test-Path -LiteralPath $appPath)) 'A failed marker write left an app.'
+    Assert (-not (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'OpenDucktorInstaller\managed.txt'))) 'A failed marker write left a managed marker.'
+    Assert (-not (Test-Path -LiteralPath $desktopLink)) 'A failed marker write left a desktop shortcut.'
+    Assert (-not (Test-Path -LiteralPath $cachePath)) 'A failed marker write left a cached installer.'
+    Assert ($global:uninstallCalls -eq 3) 'A failed marker write did not run the NSIS uninstaller.'
 
     & $scriptPath
     Assert (Test-Path -LiteralPath $appPath) 'The first run did not install OpenDucktor.exe.'
     $first = Get-Content -LiteralPath $appPath -Raw
+    $firstCache = Get-Content -LiteralPath $cachePath -Raw
 
     $global:displayIcon = 'C:\Other\OpenDucktor.exe,0'
     try { & $scriptPath; throw 'A managed marker with another app path was accepted.' } catch {
@@ -118,6 +165,10 @@ try {
         Assert ($_.Exception.Message -like '*exit code 7*') 'The NSIS exit code was not reported.'
     }
     Assert ((Get-Content -LiteralPath $appPath -Raw) -eq $first) 'The failed update changed the prior app.'
+    Assert ((Get-Content -LiteralPath $cachePath -Raw) -eq $firstCache) 'The failed update changed the prior cached installer.'
+    Assert (Test-Path -LiteralPath $desktopLink) 'The failed update removed the desktop shortcut.'
+    Assert (Test-Path -LiteralPath $menuLink) 'The failed update removed the Start Menu shortcut.'
+    Assert ($global:uninstallCalls -eq 3) 'A failed update uninstalled the prior app.'
 
     $global:exitCode = 0
     & $scriptPath

@@ -72,6 +72,9 @@ fi
 work=$(mktemp -d "${TMPDIR:-/tmp}/openducktor-install.XXXXXXXX") || error 'Could not create a temporary directory.'
 backup_app=
 backup_desktop=
+stage_app=
+stage_desktop=
+stage_marker=
 new_app=0
 new_desktop=0
 new_marker=0
@@ -92,6 +95,9 @@ cleanup() {
       rm -f "$desktop"
     fi
   fi
+  [ -z "$stage_app" ] || rm -rf "$stage_app"
+  [ -z "$stage_desktop" ] || rm -f "$stage_desktop"
+  [ -z "$stage_marker" ] || rm -f "$stage_marker"
   rm -rf "$work"
 }
 trap cleanup EXIT
@@ -137,29 +143,40 @@ fi
 
 mkdir -p "$install_dir" || error "Could not create $install_dir."
 if [ "$os" = Darwin ]; then
-  mkdir "$work/unpacked"
-  ditto -x -k "$download" "$work/unpacked" || error 'Could not extract the macOS app ZIP.'
-  [ -d "$work/unpacked/OpenDucktor.app" ] || error 'The macOS ZIP has no OpenDucktor.app.'
-  codesign --verify --deep --strict "$work/unpacked/OpenDucktor.app" || error 'The macOS app signature failed verification.'
-  spctl --assess --type execute "$work/unpacked/OpenDucktor.app" || error 'macOS did not accept the app signature.'
+  stage_app=$(mktemp -d "$install_dir/.openducktor-stage.XXXXXXXX") || error 'Could not stage the macOS app.'
+  ditto -x -k "$download" "$stage_app" || error 'Could not extract the macOS app ZIP.'
+  [ -d "$stage_app/OpenDucktor.app" ] || error 'The macOS ZIP has no OpenDucktor.app.'
+  codesign --verify --deep --strict "$stage_app/OpenDucktor.app" || error 'The macOS app signature failed verification.'
+  spctl --assess --type execute "$stage_app/OpenDucktor.app" || error 'macOS did not accept the app signature.'
   if [ -e "$installed" ]; then
     backup_app="$install_dir/.OpenDucktor.app.backup.$$"
     mv "$installed" "$backup_app" || error 'Could not move the previous app out of the way. Quit OpenDucktor and retry.'
   fi
   new_app=1
-  mv "$work/unpacked/OpenDucktor.app" "$installed" || error 'Could not install the macOS app.'
+  mv "$stage_app/OpenDucktor.app" "$installed" || error 'Could not install the macOS app.'
   if [ ! -f "$marker" ]; then
-    printf 'Installed by install.sh\n' > "$work/marker"
+    stage_marker=$(mktemp "$install_dir/.openducktor-marker.stage.XXXXXXXX") || error 'Could not stage the install marker.'
+    printf 'Installed by install.sh\n' > "$stage_marker"
     new_marker=1
-    mv "$work/marker" "$marker" || error 'Could not record the managed install.'
+    mv "$stage_marker" "$marker" || error 'Could not record the managed install.'
   fi
 else
   mkdir -p "$(dirname "$desktop")" || error 'Could not create the desktop launcher directory.'
-  cp "$download" "$work/OpenDucktor.AppImage" || error 'Could not stage the AppImage.'
-  chmod 755 "$work/OpenDucktor.AppImage" || error 'Could not make the AppImage executable.'
-  # Exec needs these characters escaped inside quotes.
-  desktop_exec=$(printf '%s' "$installed" | sed 's/\\/\\\\/g; s/"/\\"/g; s/`/\\`/g; s/\$/\\$/g')
-  printf '[Desktop Entry]\nType=Application\nName=OpenDucktor\nExec="%s"\nIcon=openducktor\nTerminal=false\nCategories=Development;\n' "$desktop_exec" > "$work/openducktor.desktop"
+  stage_app=$(mktemp "$install_dir/.OpenDucktor.AppImage.stage.XXXXXXXX") || error 'Could not stage the AppImage.'
+  cp "$download" "$stage_app" || error 'Could not stage the AppImage.'
+  chmod 755 "$stage_app" || error 'Could not make the AppImage executable.'
+  # Desktop entry strings and quoted Exec values each escape backslashes.
+  desktop_exec=$(python3 - "$installed" <<'PY'
+import sys
+
+path = sys.argv[1].replace('%', '%%')
+for char in ('\\', '"', '`', '$'):
+    path = path.replace(char, '\\' + char)
+print(path.replace('\\', '\\\\'))
+PY
+  )
+  stage_desktop=$(mktemp "$(dirname "$desktop")/.openducktor.desktop.stage.XXXXXXXX") || error 'Could not stage the desktop launcher.'
+  printf '[Desktop Entry]\nType=Application\nName=OpenDucktor\nExec="%s"\nIcon=openducktor\nTerminal=false\nCategories=Development;\n' "$desktop_exec" > "$stage_desktop"
   if [ -e "$installed" ]; then
     backup_app="$install_dir/.OpenDucktor.AppImage.backup.$$"
     mv "$installed" "$backup_app" || error 'Could not move the previous AppImage out of the way.'
@@ -169,13 +186,14 @@ else
     mv "$desktop" "$backup_desktop" || error 'Could not move the previous desktop launcher out of the way.'
   fi
   new_app=1
-  mv "$work/OpenDucktor.AppImage" "$installed" || error 'Could not install the AppImage.'
+  mv "$stage_app" "$installed" || error 'Could not install the AppImage.'
   new_desktop=1
-  mv "$work/openducktor.desktop" "$desktop" || error 'Could not install the desktop launcher.'
+  mv "$stage_desktop" "$desktop" || error 'Could not install the desktop launcher.'
   if [ ! -f "$marker" ]; then
-    printf 'Installed by install.sh\n' > "$work/marker"
+    stage_marker=$(mktemp "$(dirname "$marker")/.openducktor-marker.stage.XXXXXXXX") || error 'Could not stage the install marker.'
+    printf 'Installed by install.sh\n' > "$stage_marker"
     new_marker=1
-    mv "$work/marker" "$marker" || error 'Could not record the managed install.'
+    mv "$stage_marker" "$marker" || error 'Could not record the managed install.'
   fi
 fi
 
