@@ -265,6 +265,12 @@ export class TerminalScreenTail {
       return;
     }
     if (this.state === "escape") {
+      if (byte >= 0xc2 && byte <= 0xf4) {
+        this.push(byte);
+        this.state = "utf8";
+        this.utf8Remaining = byte < 0xe0 ? 1 : byte < 0xf0 ? 2 : 3;
+        return;
+      }
       this.push(byte);
       if (byte === 0x5b) this.state = "csi";
       else if (byte === 0x5d) {

@@ -730,6 +730,29 @@ describe("TerminalScreenState", () => {
     restored.dispose();
   });
 
+  test.each([
+    ["C1 CSI", [0xc2], [0x9b, 0x33, 0x31, 0x6d, 0x42]],
+    ["two-byte character", [0xc2], [0xa0, 0x42]],
+    ["three-byte character", [0xe2, 0x82], [0xac, 0x42]],
+  ])("restores split %s after ESC", async (_name, lead, continuation) => {
+    const screen = new TerminalScreenState({ columns: 12, rows: 2 });
+    const original = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });
+    const restored = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });
+    const first = new Uint8Array([0x41, 0x1b, ...lead]);
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    const snapshot = screen.snapshot();
+    expect(snapshot.payload.slice(-lead.length - 1)).toEqual(new Uint8Array([0x1b, ...lead]));
+    await write(restored, snapshot.payload);
+    const next = new Uint8Array(continuation);
+    await Promise.all([writeScreen(screen, next), write(original, next), write(restored, next)]);
+    expect(visibleLines(original)[0]).toStartWith("AB");
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    expect(restored.buffer.active.cursorX).toBe(original.buffer.active.cursorX);
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
   test("tracks a UTF-8 C1 CSI that replaces an unfinished CSI", async () => {
     const screen = new TerminalScreenState({ columns: 12, rows: 2 });
     const original = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });
