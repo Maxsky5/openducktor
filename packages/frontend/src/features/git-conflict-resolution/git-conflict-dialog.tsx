@@ -25,14 +25,16 @@ type GitConflictDialogProps = {
   askBuilderTestId?: string;
 };
 
-const toConflictDescription = (conflict: GitConflict): ReactNode => {
+const toConflictDescription = (conflict: GitConflict, showBuilderAction: boolean): ReactNode => {
   const { operationLabel } = getGitConflictCopy(conflict.operation);
 
   return (
     <>
       The {operationLabel} onto{" "}
       <code className={INLINE_CODE_CLASS_NAME}>{conflict.targetBranch}</code> stopped on conflicts.
-      Abort the git operation or send the conflict to Builder for resolution.
+      {showBuilderAction
+        ? " Abort the git operation or send the conflict to Builder for resolution."
+        : null}
     </>
   );
 };
@@ -61,7 +63,9 @@ export const GitConflictDialog = memo(function GitConflictDialog({
           <DialogTitle>
             {conflict ? getGitConflictTitle(conflict) : "Git conflict detected"}
           </DialogTitle>
-          <DialogDescription>{conflict ? toConflictDescription(conflict) : null}</DialogDescription>
+          <DialogDescription>
+            {conflict ? toConflictDescription(conflict, Boolean(actions.askBuilder)) : null}
+          </DialogDescription>
         </DialogHeader>
 
         <DialogBody className="pt-4">

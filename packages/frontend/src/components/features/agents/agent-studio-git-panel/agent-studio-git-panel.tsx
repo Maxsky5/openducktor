@@ -479,7 +479,9 @@ function useGitConflictPanel(model: AgentStudioGitPanelModel) {
             isHandlingConflict: isHandlingGitConflict ?? false,
             conflictAction: gitConflictAction,
             onAbort: () => void abortGitConflict?.(),
-            onAskBuilder: () => void askBuilderToResolveGitConflict?.(),
+            onAskBuilder: askBuilderToResolveGitConflict
+              ? () => void askBuilderToResolveGitConflict()
+              : undefined,
           })
         : null,
     [
@@ -498,10 +500,17 @@ function useGitConflictPanel(model: AgentStudioGitPanelModel) {
             isHandlingConflict: isHandlingGitConflict ?? false,
             conflictAction: gitConflictAction,
             onAbort: () => void abortGitConflict?.(),
-            onAskBuilder: closeAndAskBuilder,
+            onAskBuilder: askBuilderToResolveGitConflict ? closeAndAskBuilder : undefined,
           })
         : null,
-    [active, closeAndAskBuilder, abortGitConflict, gitConflictAction, isHandlingGitConflict],
+    [
+      active,
+      closeAndAskBuilder,
+      abortGitConflict,
+      askBuilderToResolveGitConflict,
+      gitConflictAction,
+      isHandlingGitConflict,
+    ],
   );
 
   useEffect(() => {
