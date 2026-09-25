@@ -30,7 +30,10 @@ import {
 import { isClaudeSubagentTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
 import { handleClaudeSubagentSystemMessage } from "./claude-agent-sdk-subagents";
 import { parseClaudeUserToolResultIngress } from "./claude-agent-sdk-ingress-schemas";
-import { consumeClaudeStreamEmittedToolInput } from "./claude-agent-sdk-tool-input-stream";
+import {
+  clearClaudeStreamToolInputs,
+  consumeClaudeStreamEmittedToolInput,
+} from "./claude-agent-sdk-tool-input-stream";
 import { handleClaudeUserToolResultMessage } from "./claude-agent-sdk-tool-results";
 import {
   decodeClaudeToolUseBlock,
@@ -134,6 +137,7 @@ export const handleClaudeSdkMessage = ({
     return;
   }
   if (message.type === "result") {
+    clearClaudeStreamToolInputs(session);
     emitRetractedTranscriptMessages({ emit, message, session, timestamp });
     handleClaudeResultMessage({ emit, message, session, timestamp });
     advanceStreamAssistantMessageIdentity(session);

@@ -1,3 +1,4 @@
+import { HostValidationError } from "../../effect/host-errors";
 import type { ClaudeDecodedToolUse } from "./claude-agent-sdk-tool-shapes";
 import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
 import {
@@ -11,6 +12,7 @@ type ToolStreamEntry = {
   partialInputJson: string;
   toolUse: ClaudeDecodedToolUse;
   lastEmittedInputFingerprint?: string;
+  envelopeInput?: ClaudeToolInput;
 };
 
 type ToolStreamState = {
@@ -21,30 +23,6 @@ type ToolStreamState = {
 type ClaudeToolInputStreamSession = Pick<ClaudeEventSession, "externalSessionId">;
 
 const toolStreamStates = new WeakMap<ClaudeToolInputStreamSession, ToolStreamState>();
-
-const toolStreamStateFor = (session: ClaudeToolInputStreamSession): ToolStreamState => {
-  const existing = toolStreamStates.get(session);
-  if (existing) {
-    return existing;
-  }
-  const state: ToolStreamState = {
-    toolsByBlockIndex: new Map(),
-    toolsByCallId: new Map(),
-  };
-  toolStreamStates.set(session, state);
-  return state;
-};
-
-const tryParseJsonRecord = (json: string) => {
-  try {
-    const parsed = claudeProtocolObjectSchema.safeParse(JSON.parse(json));
-    return parsed.success ? parsed.data : null;
-  } catch {
-    return null;
-  }
-};
-
-const toolInputFingerprint = (input: ClaudeProtocolObject): string => JSON.stringify(input);
 
 export const rememberClaudeStreamToolStart = (
   session: ClaudeToolInputStreamSession,
@@ -60,6 +38,10 @@ export const rememberClaudeStreamToolStart = (
     entry.lastEmittedInputFingerprint = toolInputFingerprint(toolUse.input);
   }
   const state = toolStreamStateFor(session);
+  const previous = state.toolsByBlockIndex.get(blockIndex);
+  if (previous) {
+    state.toolsByCallId.delete(previous.toolUse.callId);
+  }
   state.toolsByBlockIndex.set(blockIndex, entry);
   state.toolsByCallId.set(toolUse.callId, entry);
 };
@@ -68,19 +50,50 @@ export const appendClaudeStreamToolInputJson = (
   session: ClaudeToolInputStreamSession,
   blockIndex: number,
   partialJson: string,
+): void => {
+  const entry = toolStreamStates.get(session)?.toolsByBlockIndex.get(blockIndex);
+  if (entry) {
+    entry.partialInputJson += partialJson;
+  }
+};
+
+export const completeClaudeStreamToolInput = (
+  session: ClaudeToolInputStreamSession,
+  blockIndex: number,
 ): ClaudeDecodedToolUse | null => {
-  const entry = toolStreamStateFor(session).toolsByBlockIndex.get(blockIndex);
-  if (!entry) {
+  const state = toolStreamStates.get(session);
+  const entry = state?.toolsByBlockIndex.get(blockIndex);
+  if (!state || !entry) {
+    return null;
+  }
+  state.toolsByBlockIndex.delete(blockIndex);
+  const json = entry.partialInputJson;
+  entry.partialInputJson = "";
+  if (entry.envelopeInput) {
+    state.toolsByCallId.delete(entry.toolUse.callId);
+  }
+
+  let parsedInput = entry.toolUse.input;
+  if (json.length > 0) {
+    try {
+      parsedInput = claudeProtocolObjectSchema.parse(JSON.parse(json));
+    } catch (cause) {
+      state.toolsByCallId.delete(entry.toolUse.callId);
+      throw new HostValidationError({
+        field: "claudeStreamToolInput",
+        message: `Claude SDK sent invalid completed tool input for "${entry.toolUse.callId}" (${entry.toolUse.toolName}, block ${blockIndex}). Retry the turn.`,
+        cause,
+        details: { callId: entry.toolUse.callId, blockIndex, toolName: entry.toolUse.toolName },
+      });
+    }
+  }
+  // The SDK can change tool values in the envelope. Check raw input first.
+  const input = entry.envelopeInput ?? parsedInput;
+  if (!input) {
     return null;
   }
 
-  entry.partialInputJson += partialJson;
-  const parsedInput = tryParseJsonRecord(entry.partialInputJson);
-  if (!parsedInput) {
-    return null;
-  }
-
-  const nextFingerprint = toolInputFingerprint(parsedInput);
+  const nextFingerprint = toolInputFingerprint(input);
   if (entry.lastEmittedInputFingerprint === nextFingerprint) {
     return null;
   }
@@ -88,7 +101,7 @@ export const appendClaudeStreamToolInputJson = (
   entry.lastEmittedInputFingerprint = nextFingerprint;
   entry.toolUse = {
     ...entry.toolUse,
-    input: parsedInput,
+    input,
   };
   return entry.toolUse;
 };
@@ -98,12 +111,59 @@ export const consumeClaudeStreamEmittedToolInput = (
   callId: string,
   input: ClaudeToolInput,
 ): boolean => {
-  const state = toolStreamStateFor(session);
-  const entry = state.toolsByCallId.get(callId);
-  if (!entry) {
+  const state = toolStreamStates.get(session);
+  const entry = state?.toolsByCallId.get(callId);
+  if (!state || !entry) {
     return false;
   }
+  if (state.toolsByBlockIndex.get(entry.blockIndex) === entry) {
+    // The envelope can arrive before block stop. Keep the raw JSON to check it then.
+    entry.envelopeInput = input;
+    return true;
+  }
   state.toolsByCallId.delete(callId);
-  state.toolsByBlockIndex.delete(entry.blockIndex);
   return entry.lastEmittedInputFingerprint === toolInputFingerprint(input);
 };
+
+export const discardClaudeStreamToolInputBlocks = (session: ClaudeToolInputStreamSession): void => {
+  const state = toolStreamStates.get(session);
+  if (!state) {
+    return;
+  }
+  for (const entry of state.toolsByBlockIndex.values()) {
+    state.toolsByCallId.delete(entry.toolUse.callId);
+  }
+  state.toolsByBlockIndex.clear();
+};
+
+type ClaudeToolInputStreamTree = ClaudeToolInputStreamSession & {
+  subagentEventSessionsByToolUseId?: ReadonlyMap<string, ClaudeToolInputStreamTree>;
+};
+
+export const clearClaudeStreamToolInputs = (session: ClaudeToolInputStreamSession): void => {
+  toolStreamStates.delete(session);
+};
+
+export const clearClaudeStreamToolInputTree = (session: ClaudeToolInputStreamTree): void => {
+  clearClaudeStreamToolInputs(session);
+  for (const child of session.subagentEventSessionsByToolUseId?.values() ?? []) {
+    clearClaudeStreamToolInputTree(child);
+  }
+};
+
+function toolStreamStateFor(session: ClaudeToolInputStreamSession): ToolStreamState {
+  const existing = toolStreamStates.get(session);
+  if (existing) {
+    return existing;
+  }
+  const state: ToolStreamState = {
+    toolsByBlockIndex: new Map(),
+    toolsByCallId: new Map(),
+  };
+  toolStreamStates.set(session, state);
+  return state;
+}
+
+function toolInputFingerprint(input: ClaudeProtocolObject): string {
+  return JSON.stringify(input);
+}

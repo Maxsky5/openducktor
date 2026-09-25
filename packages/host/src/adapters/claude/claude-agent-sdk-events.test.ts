@@ -1101,6 +1101,18 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       }),
     });
 
+    expect(events).toHaveLength(1);
+    expect(session.toolInputsByCallId.get("tool-1")).toEqual({});
+    handleClaudeSdkMessage({
+      ...baseInput,
+      message: claudeSdkMessageFixture({
+        type: "stream_event",
+        event: { type: "content_block_stop", index: 1 },
+      }),
+    });
+    expect(events).toHaveLength(2);
+    expect(session.toolInputsByCallId.get("tool-1")).toEqual({ command: "bun test" });
+
     handleClaudeSdkMessage({
       ...baseInput,
       message: claudeSdkMessageFixture({

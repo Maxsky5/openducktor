@@ -4,6 +4,8 @@ import {
 } from "./claude-agent-sdk-event-session";
 import {
   appendClaudeStreamToolInputJson,
+  completeClaudeStreamToolInput,
+  discardClaudeStreamToolInputBlocks,
   rememberClaudeStreamToolStart,
 } from "./claude-agent-sdk-tool-input-stream";
 import {
@@ -56,6 +58,7 @@ export const handleClaudeStreamEvent = ({
 }): void => {
   const event = message.event;
   if (event.type === "message_start") {
+    discardClaudeStreamToolInputBlocks(session);
     session.streamAssistantMessageIdsByBlockIndex.clear();
     session.streamAssistantMessageOrdinal += 1;
     session.streamReasoningByBlockIndex?.clear();
@@ -68,6 +71,16 @@ export const handleClaudeStreamEvent = ({
   }
   if (event.type === "content_block_stop") {
     const index = event.index;
+    const toolUse = completeClaudeStreamToolInput(session, index);
+    if (toolUse) {
+      emitClaudePendingToolPart({
+        emit,
+        fallbackMessageId: toolUse.callId,
+        session,
+        timestamp,
+        toolUse,
+      });
+    }
     const reasoning = session.streamReasoningByBlockIndex?.get(index);
     if (!reasoning || !session.streamAssistantResponseId) {
       return;
@@ -148,15 +161,5 @@ export const handleClaudeStreamEvent = ({
   if (partialJson.length === 0) {
     return;
   }
-  const toolUse = appendClaudeStreamToolInputJson(session, index, partialJson);
-  if (!toolUse) {
-    return;
-  }
-  emitClaudePendingToolPart({
-    emit,
-    fallbackMessageId: toolUse.callId,
-    session,
-    timestamp,
-    toolUse,
-  });
+  appendClaudeStreamToolInputJson(session, index, partialJson);
 };
