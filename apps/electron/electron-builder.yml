@@ -3,7 +3,6 @@ productName: OpenDucktor
 asar: true
 npmRebuild: false
 asarUnpack:
-  - node_modules/@azure/msal-node-runtime/**/*
   - node_modules/keytar/**/*
   - node_modules/node-pty/**/*
   - node_modules/node-mac-permissions/**/*
@@ -35,6 +34,10 @@ files:
   - node_modules/ffi-rs/**/*
   - node_modules/@yuuang/**/*
   - "!node_modules/node-pty/scripts/**/*"
+  # MSAL persistence uses the runtime's JavaScript exports, not its native broker.
+  - "!node_modules/@azure/msal-node-runtime/dist/linux/**/*"
+  - "!node_modules/@azure/msal-node-runtime/dist/macos/**/*"
+  - "!node_modules/@azure/msal-node-runtime/dist/windows/**/*"
 
 extraResources:
   - from: build/sidecars
