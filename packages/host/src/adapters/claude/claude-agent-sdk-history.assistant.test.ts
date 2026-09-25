@@ -6,6 +6,85 @@ import {
 } from "./claude-agent-sdk-test-messages";
 
 describe("claude-agent-sdk-history assistant turns", () => {
+  test("keeps a task-notification response open while an ordinary background task runs", () => {
+    const entries = claudeHistoryMessagesFixture([
+      {
+        type: "system",
+        subtype: "background_tasks_changed",
+        uuid: "active-bash",
+        session_id: "session-1",
+        timestamp: "2026-06-26T11:03:10.000Z",
+        tasks: [{ task_id: "bash-1", task_type: "Bash", description: "Check files" }],
+      },
+      toSessionMessage({
+        type: "user",
+        uuid: "task-user",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        timestamp: "2026-06-26T11:03:11.000Z",
+        message: { role: "user", content: "A task finished" },
+        origin: { kind: "task-notification" },
+      }),
+      toSessionMessage({
+        type: "assistant",
+        uuid: "task-assistant",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        timestamp: "2026-06-26T11:03:12.000Z",
+        message: {
+          role: "assistant",
+          model: "claude-sonnet-4-6",
+          content: [{ type: "text", text: "Still checking" }],
+          stop_reason: "end_turn",
+        },
+      }),
+      {
+        type: "result",
+        uuid: "task-result",
+        session_id: "session-1",
+        timestamp: "2026-06-26T11:03:13.000Z",
+        subtype: "success",
+        is_error: false,
+        result: "Still checking",
+        stop_reason: "end_turn",
+        terminal_reason: "completed",
+        usage: { input_tokens: 1, output_tokens: 1 },
+        origin: { kind: "task-notification" },
+      },
+    ]);
+    for (const [messages, currentBackgroundTaskIds] of [
+      [entries, undefined],
+      [entries.slice(1), new Set(["bash-1"])],
+    ] as const) {
+      const history = toClaudeHistoryMessages(
+        messages,
+        () => "2026-06-26T12:00:00.000Z",
+        [],
+        currentBackgroundTaskIds ? { currentBackgroundTaskIds } : {},
+      );
+      const response = history.find((message) => message.role === "assistant");
+      expect(response?.parts).not.toContainEqual(
+        expect.objectContaining({ kind: "step", phase: "finish" }),
+      );
+      expect(response?.model).toBeUndefined();
+    }
+
+    const laterSnapshot = { ...entries[0]!, timestamp: "2026-06-26T11:03:14.000Z" };
+    const earlierTurn = toClaudeHistoryMessages(
+      [...entries.slice(1), laterSnapshot],
+      () => "2026-06-26T12:00:00.000Z",
+      [],
+      { currentBackgroundTaskIds: new Set(["bash-1"]) },
+    );
+    const earlierResponse = earlierTurn.find((message) => message.role === "assistant");
+    expect(earlierResponse?.parts).toContainEqual(
+      expect.objectContaining({ kind: "step", phase: "finish" }),
+    );
+    expect(earlierResponse?.model).toEqual(
+      expect.objectContaining({ modelId: "claude-sonnet-4-6" }),
+    );
+  });
+
   test("hydrates one Claude response from split reasoning, text, and tool snapshots", () => {
     const responseId = "response-tool-use";
     const history = toClaudeHistoryMessages(

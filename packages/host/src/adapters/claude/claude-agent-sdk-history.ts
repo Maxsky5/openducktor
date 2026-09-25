@@ -1,6 +1,7 @@
 import type { AgentEvent, AgentSessionHistoryMessage } from "@openducktor/core";
 import { z } from "zod";
 import { CLAUDE_COMPACTED_MESSAGE } from "./claude-agent-sdk-compaction";
+import { hasActiveClaudeBackgroundWork } from "./claude-agent-sdk-event-session";
 import {
   addClaudeHistoryFinishStep,
   isLiveFinalAssistantStopReason,
@@ -117,6 +118,9 @@ export const toClaudeHistoryMessages = (
     toolNamesByCallId,
     transcriptExternalSessionId: options.transcriptExternalSessionId,
   };
+  if (!messages.some(isClaudeHistoryBackgroundTasksChangedMessage)) {
+    applyClaudeHistoryActiveTasks(toolResultState, options.currentBackgroundTaskIds, now);
+  }
   const projectHistoryInput = createClaudeHistoryInputProjector({ liveUserMessages });
   let lastAssistantMessage: MutableAssistantHistoryMessage | null = null;
   let lastAssistantTextMessage: MutableAssistantHistoryMessage | null = null;
@@ -353,7 +357,7 @@ export const toClaudeHistoryMessages = (
       });
       const shouldFinalize = shouldFinalizeClaudeTurn(
         assistantTurnOriginKind,
-        activeBackgroundSubagentTaskIds.size,
+        hasActiveClaudeBackgroundWork(toolResultState) ? 1 : 0,
       );
       if (!shouldFinalize) {
         removeClaudeHistoryFinishStep(assistantSnapshot);
@@ -384,7 +388,7 @@ export const toClaudeHistoryMessages = (
       const resultOriginKind = readClaudeTurnOriginKind(entryValue) ?? assistantTurnOriginKind;
       const shouldFinalize = shouldFinalizeClaudeTurn(
         resultOriginKind,
-        activeBackgroundSubagentTaskIds.size,
+        hasActiveClaudeBackgroundWork(toolResultState) ? 1 : 0,
       );
       assistantTurnOriginKind = undefined;
       if (pendingManualCompaction) {
