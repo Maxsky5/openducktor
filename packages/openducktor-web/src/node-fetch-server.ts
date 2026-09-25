@@ -227,6 +227,7 @@ export const startNodeFetchServer = async <Data>({
     const failed = (cause: Error): void => reject(cause);
     server.once("error", failed);
     server.listen(port, hostname, () => {
+      server.on("error", onError);
       server.off("error", failed);
       resolve();
     });

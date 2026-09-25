@@ -9,7 +9,7 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 
 // The published runner uses Node's ws implementation, so this check runs under Node.
-test("keeps WebSocket backpressure until all queued frames finish", async () => {
+test("keeps WebSocket backpressure and reports later server errors", async () => {
   const temporaryDirectory = await mkdtemp(join(tmpdir(), "openducktor-web-socket-"));
   try {
     const result = await Bun.build({

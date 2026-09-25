@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
+import { Server } from "node:http";
 import type { Duplex } from "node:stream";
 import { WebSocket } from "ws";
 import { startNodeFetchServer } from "./node-fetch-server";
@@ -19,6 +20,12 @@ const largeSendCompleted = new Promise<void>((resolve) => {
 let queuedAtSmallCallback = 0;
 const corkState: CorkState = { corked: false };
 const originalSend = WebSocket.prototype.send;
+const originalEmit = Server.prototype.emit;
+const listeningServers: Server[] = [];
+Server.prototype.emit = function (this: Server, event: string | symbol, ...args: unknown[]) {
+  if (event === "listening") listeningServers.push(this);
+  return originalEmit.call(this, event, ...args);
+};
 // SAFETY: Every send in this isolated check passes an options object.
 WebSocket.prototype.send = function (
   this: WebSocket,
@@ -79,9 +86,16 @@ try {
   await largeSendCompleted;
   assert.equal(drainCount, 1);
   assert.deepEqual(errors, []);
+
+  const nativeServer = listeningServers[0];
+  assert.ok(nativeServer);
+  const serverError = new Error("server error after listen");
+  nativeServer.emit("error", serverError);
+  assert.deepEqual(errors, [serverError]);
 } finally {
   if (corkState.corked) corkState.socket?.uncork();
   client.terminate();
   await server.stop(true);
   WebSocket.prototype.send = originalSend;
+  Server.prototype.emit = originalEmit;
 }
