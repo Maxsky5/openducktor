@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, symlink } from "node:fs/promises";
+import { cp, mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,8 +10,45 @@ import { errorMessage, runWebBoundary, WebDependencyError } from "../src/effect/
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(scriptDirectory, "..");
+const workspaceRoot = resolve(packageRoot, "../..");
 const outputPath = join(packageRoot, "dist", "cli.js");
 const execFileAsync = promisify(execFile);
+
+export type WebSqliteTaskStoreMigrationCopyPlan = {
+  sourceDirectory: string;
+  targetDirectory: string;
+};
+
+export const resolveWebSqliteTaskStoreMigrationCopyPlan = ({
+  packageRoot,
+  workspaceRoot,
+}: {
+  packageRoot: string;
+  workspaceRoot: string;
+}): WebSqliteTaskStoreMigrationCopyPlan => ({
+  sourceDirectory: join(workspaceRoot, "packages", "host", "src", "adapters", "sqlite", "drizzle"),
+  targetDirectory: join(packageRoot, "dist", "drizzle"),
+});
+
+export const copyWebSqliteTaskStoreMigrationsEffect = ({
+  sourceDirectory,
+  targetDirectory,
+}: WebSqliteTaskStoreMigrationCopyPlan): Effect.Effect<void, WebDependencyError> =>
+  Effect.tryPromise({
+    try: () => cp(sourceDirectory, targetDirectory, { force: true, recursive: true }),
+    catch: (cause) =>
+      new WebDependencyError({
+        dependency: "filesystem",
+        operation: "copy-web-sqlite-task-store-migrations",
+        message: errorMessage(cause),
+        cause,
+        details: { sourceDirectory, targetDirectory },
+      }),
+  });
+
+export const copyWebSqliteTaskStoreMigrations = (
+  input: WebSqliteTaskStoreMigrationCopyPlan,
+): Promise<void> => runWebBoundary(copyWebSqliteTaskStoreMigrationsEffect(input));
 
 export const buildWebCliEffect = (): Effect.Effect<void, WebDependencyError> =>
   Effect.gen(function* () {
@@ -56,6 +93,9 @@ export const buildWebCliEffect = (): Effect.Effect<void, WebDependencyError> =>
           details: { outputPath },
         }),
     });
+    yield* copyWebSqliteTaskStoreMigrationsEffect(
+      resolveWebSqliteTaskStoreMigrationCopyPlan({ packageRoot, workspaceRoot }),
+    );
     yield* Effect.tryPromise({
       try: async () => {
         const temporaryDirectory = await mkdtemp(join(tmpdir(), "openducktor-web-cli-"));

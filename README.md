@@ -60,7 +60,7 @@ Windows and Linux desktop builds are published from the Electron release pipelin
 If you prefer to use OpenDucktor in a browser instead of a desktop window:
 
 ```sh
-bunx @openducktor/web
+npx @openducktor/web
 ```
 
 The web runner opens OpenDucktor in your browser. Choose the desktop app or the web runner based on what best fits your workflow.
