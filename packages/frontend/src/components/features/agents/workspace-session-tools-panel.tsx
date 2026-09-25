@@ -19,6 +19,143 @@ export type WorkspaceToolsTabId = "git" | "file_explorer";
 
 const missingWorkingDirectoryReason = "The selected working directory is unavailable.";
 
+export function WorkspaceSessionToolsPanel({
+  repoPath,
+  workingDirectory,
+  contextMode,
+  target,
+  targetError,
+  activeTabId,
+  onActiveTabChange,
+  selectedFile,
+  onSelectFile,
+  onRefreshReady,
+}: {
+  repoPath: string;
+  workingDirectory: string | null;
+  contextMode: "repository" | "worktree";
+  target: GitTargetBranch | null;
+  targetError: string | null;
+  activeTabId: WorkspaceToolsTabId;
+  onActiveTabChange: (tab: WorkspaceToolsTabId) => void;
+  selectedFile: TaskExecutionSelectedFile | null;
+  onSelectFile: (file: TaskExecutionSelectedFile) => false | void;
+  onRefreshReady: (refresh: (() => Promise<void>) | null) => void;
+}) {
+  const queryClient = useQueryClient();
+  const { resolvedTarget, unavailableReason, refetchComparison } = useWorkspaceSessionComparison({
+    repoPath,
+    workingDirectory,
+    target,
+    targetError,
+  });
+  const readTarget = resolvedTarget ?? "HEAD";
+  const diffData = useAgentStudioDiffData({
+    repoPath: workingDirectory ? repoPath : null,
+    worktreePath: workingDirectory,
+    worktreeResolutionTaskId: null,
+    shouldBlockDiffLoading: workingDirectory === null,
+    isWorktreeResolutionResolving: false,
+    worktreeResolutionError: null,
+    retryWorktreeResolution: () => undefined,
+    defaultTargetBranch: { branch: readTarget },
+    branchIdentityKey: workingDirectory,
+    enableScheduledRefresh: false,
+  });
+  const refresh = useCallback(
+    () =>
+      refreshWorkspaceSessionData({
+        queryClient,
+        diffData,
+        refetchComparison,
+        resolvedTarget,
+        target,
+        targetError,
+        workingDirectory,
+      }),
+    [
+      diffData,
+      queryClient,
+      refetchComparison,
+      resolvedTarget,
+      target,
+      targetError,
+      workingDirectory,
+    ],
+  );
+  useEffect(() => {
+    onRefreshReady(refresh);
+    return () => onRefreshReady(null);
+  }, [onRefreshReady, refresh]);
+  const conflictedFiles = useMemo(
+    () =>
+      diffData.fileStatuses
+        .filter((status) => status.status === "unmerged")
+        .map((status) => status.path),
+    [diffData.fileStatuses],
+  );
+  const actions = useAgentStudioGitActions({
+    repoPath: workingDirectory ? repoPath : null,
+    workingDir: workingDirectory,
+    branch: diffData.branch,
+    targetBranch: resolvedTarget ?? "",
+    resetTargetBranch: readTarget,
+    hashVersion: diffData.hashVersion,
+    statusHash: diffData.statusHash,
+    diffHash: diffData.diffHash,
+    upstreamAheadBehind: diffData.upstreamAheadBehind,
+    detectedConflict: diffData.gitConflict ?? null,
+    detectedConflictedFiles: conflictedFiles,
+    worktreeStatusSnapshotKey: diffData.statusSnapshotKey ?? null,
+    refreshDiffData: refresh,
+    isDiffDataLoading: diffData.isLoading,
+  });
+  const gitModel = workspaceGitModel({
+    diffData,
+    actions,
+    contextMode,
+    resolvedTarget,
+    unavailableReason,
+    workingDirectory,
+    refresh,
+  });
+  const fileModel = {
+    rootPath: workingDirectory,
+    targetBranch: resolvedTarget,
+    unavailableReason: workingDirectory ? null : missingWorkingDirectoryReason,
+    isActive: activeTabId === "file_explorer",
+    selectedFile,
+    onSelectFile,
+  };
+  return (
+    <SharedToolsPanel
+      model={{
+        tabs: [
+          {
+            id: "git",
+            label: "Git",
+            icon: GitBranch,
+            content: <AgentStudioGitPanel model={gitModel} />,
+          },
+          {
+            id: "file_explorer",
+            label: "File explorer",
+            icon: FolderTree,
+            content: <TaskExecutionFileExplorerPanel model={fileModel} />,
+          },
+        ],
+        activeTabId,
+        onActiveTabChange,
+        tabListLabel: "Workspace session tools",
+        testIdPrefix: "workspace-session-tools",
+        headerActions: (
+          <WorkspaceOpenInAction contextMode={contextMode} workingDirectory={workingDirectory} />
+        ),
+      }}
+    />
+  );
+}
+
 function comparisonUnavailableReason(input: {
   targetError: string | null;
   isPending: boolean;
@@ -182,141 +319,4 @@ function useWorkspaceSessionComparison(input: {
     }),
     refetchComparison: comparison.refetch,
   };
-}
-
-export function WorkspaceSessionToolsPanel({
-  repoPath,
-  workingDirectory,
-  contextMode,
-  target,
-  targetError,
-  activeTabId,
-  onActiveTabChange,
-  selectedFile,
-  onSelectFile,
-  onRefreshReady,
-}: {
-  repoPath: string;
-  workingDirectory: string | null;
-  contextMode: "repository" | "worktree";
-  target: GitTargetBranch | null;
-  targetError: string | null;
-  activeTabId: WorkspaceToolsTabId;
-  onActiveTabChange: (tab: WorkspaceToolsTabId) => void;
-  selectedFile: TaskExecutionSelectedFile | null;
-  onSelectFile: (file: TaskExecutionSelectedFile) => false | void;
-  onRefreshReady: (refresh: (() => Promise<void>) | null) => void;
-}) {
-  const queryClient = useQueryClient();
-  const { resolvedTarget, unavailableReason, refetchComparison } = useWorkspaceSessionComparison({
-    repoPath,
-    workingDirectory,
-    target,
-    targetError,
-  });
-  const readTarget = resolvedTarget ?? "HEAD";
-  const diffData = useAgentStudioDiffData({
-    repoPath: workingDirectory ? repoPath : null,
-    worktreePath: workingDirectory,
-    worktreeResolutionTaskId: null,
-    shouldBlockDiffLoading: workingDirectory === null,
-    isWorktreeResolutionResolving: false,
-    worktreeResolutionError: null,
-    retryWorktreeResolution: () => undefined,
-    defaultTargetBranch: { branch: readTarget },
-    branchIdentityKey: workingDirectory,
-    enableScheduledRefresh: false,
-  });
-  const refresh = useCallback(
-    () =>
-      refreshWorkspaceSessionData({
-        queryClient,
-        diffData,
-        refetchComparison,
-        resolvedTarget,
-        target,
-        targetError,
-        workingDirectory,
-      }),
-    [
-      diffData,
-      queryClient,
-      refetchComparison,
-      resolvedTarget,
-      target,
-      targetError,
-      workingDirectory,
-    ],
-  );
-  useEffect(() => {
-    onRefreshReady(refresh);
-    return () => onRefreshReady(null);
-  }, [onRefreshReady, refresh]);
-  const conflictedFiles = useMemo(
-    () =>
-      diffData.fileStatuses
-        .filter((status) => status.status === "unmerged")
-        .map((status) => status.path),
-    [diffData.fileStatuses],
-  );
-  const actions = useAgentStudioGitActions({
-    repoPath: workingDirectory ? repoPath : null,
-    workingDir: workingDirectory,
-    branch: diffData.branch,
-    targetBranch: resolvedTarget ?? "",
-    resetTargetBranch: readTarget,
-    hashVersion: diffData.hashVersion,
-    statusHash: diffData.statusHash,
-    diffHash: diffData.diffHash,
-    upstreamAheadBehind: diffData.upstreamAheadBehind,
-    detectedConflict: diffData.gitConflict ?? null,
-    detectedConflictedFiles: conflictedFiles,
-    worktreeStatusSnapshotKey: diffData.statusSnapshotKey ?? null,
-    refreshDiffData: refresh,
-    isDiffDataLoading: diffData.isLoading,
-  });
-  const gitModel = workspaceGitModel({
-    diffData,
-    actions,
-    contextMode,
-    resolvedTarget,
-    unavailableReason,
-    workingDirectory,
-    refresh,
-  });
-  const fileModel = {
-    rootPath: workingDirectory,
-    targetBranch: resolvedTarget,
-    unavailableReason: workingDirectory ? null : missingWorkingDirectoryReason,
-    isActive: activeTabId === "file_explorer",
-    selectedFile,
-    onSelectFile,
-  };
-  return (
-    <SharedToolsPanel
-      model={{
-        tabs: [
-          {
-            id: "git",
-            label: "Git",
-            icon: GitBranch,
-            content: <AgentStudioGitPanel model={gitModel} />,
-          },
-          {
-            id: "file_explorer",
-            label: "File explorer",
-            icon: FolderTree,
-            content: <TaskExecutionFileExplorerPanel model={fileModel} />,
-          },
-        ],
-        activeTabId,
-        onActiveTabChange,
-        tabListLabel: "Workspace session tools",
-        testIdPrefix: "workspace-session-tools",
-        headerActions: (
-          <WorkspaceOpenInAction contextMode={contextMode} workingDirectory={workingDirectory} />
-        ),
-      }}
-    />
-  );
 }

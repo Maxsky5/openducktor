@@ -116,9 +116,7 @@ export const gitComparisonTargetSchema = z.union([
   z.object({ kind: z.literal("available"), reference: z.string().min(1) }),
   z.object({ kind: z.literal("unavailable"), reason: z.string().min(1) }),
 ]);
-export type GitComparisonTarget =
-  | { kind: "available"; reference: string }
-  | { kind: "unavailable"; reason: string };
+export type GitComparisonTarget = z.infer<typeof gitComparisonTargetSchema>;
 
 export const gitProviderConfigSchema = z
   .object({

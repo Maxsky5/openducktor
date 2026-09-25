@@ -59,6 +59,7 @@ type LifecycleDialogProps = {
   error: string | null;
   onCancel: () => void;
   onConfirm: () => void;
+  requestTransition?: ((apply: () => void, cancel?: () => void) => void) | undefined;
   children: ReactNode;
 };
 
@@ -89,8 +90,13 @@ function LifecycleDialog({
   error,
   onCancel,
   onConfirm,
+  requestTransition,
   children,
 }: LifecycleDialogProps): ReactElement {
+  const confirm = () => {
+    if (requestTransition) requestTransition(onConfirm, onCancel);
+    else onConfirm();
+  };
   return (
     <Dialog
       open
@@ -129,7 +135,7 @@ function LifecycleDialog({
             variant={destructive ? "destructive" : "default"}
             disabled={submitting}
             aria-busy={submitting}
-            onClick={onConfirm}
+            onClick={confirm}
           >
             {submitting ? (
               <Loader2 className="animate-spin" data-icon="inline-start" />
@@ -175,16 +181,8 @@ export function WorkspaceCloseDialog({
       submitting={submit.submitting}
       error={submit.error}
       onCancel={() => onOpenChange(false)}
-      onConfirm={() =>
-        requestTransition
-          ? requestTransition(
-              () => {
-                void submit.confirm();
-              },
-              () => onOpenChange(false),
-            )
-          : void submit.confirm()
-      }
+      onConfirm={() => void submit.confirm()}
+      requestTransition={requestTransition}
     >
       <RepositoryPath path={workspace.repoPath} />
       <div className="flex gap-3 rounded-lg border border-border bg-card p-3">
@@ -231,16 +229,8 @@ export function WorkspaceRemoveDialog({
       submitting={submit.submitting}
       error={submit.error}
       onCancel={() => onOpenChange(false)}
-      onConfirm={() =>
-        requestTransition
-          ? requestTransition(
-              () => {
-                void submit.confirm();
-              },
-              () => onOpenChange(false),
-            )
-          : void submit.confirm()
-      }
+      onConfirm={() => void submit.confirm()}
+      requestTransition={requestTransition}
     >
       <RepositoryPath path={workspace.repoPath} />
       <div className="flex flex-col gap-2 rounded-lg border border-destructive-border bg-destructive-surface px-3 py-2 text-destructive-surface-foreground">

@@ -29,74 +29,6 @@ export type SharedToolsPanelModel<Id extends string> = {
   devServerModel?: AgentStudioDevServerPanelModel | null;
 };
 
-function SharedToolsPanelTabs<Id extends string>({ model }: { model: SharedToolsPanelModel<Id> }) {
-  return (
-    <TooltipProvider>
-      <Tabs
-        value={model.activeTabId}
-        onValueChange={(value) => {
-          const tab = model.tabs.find((entry) => entry.id === value);
-          if (tab) model.onActiveTabChange(tab.id);
-        }}
-        className="h-full min-h-0 gap-0 bg-card"
-      >
-        <div className="flex min-w-0 items-center justify-between gap-2 border-b border-border py-1 pr-2">
-          <TabsList
-            aria-label={model.tabListLabel}
-            className="h-9 w-fit shrink-0 gap-0 rounded-none bg-transparent p-0"
-          >
-            {model.tabs.map((tab, index) => {
-              const Icon = tab.icon;
-              const active = tab.id === model.activeTabId;
-              return (
-                <span key={tab.id} className="inline-flex items-center">
-                  {index > 0 ? (
-                    <span
-                      className="h-5 w-px shrink-0 bg-border"
-                      aria-hidden="true"
-                      data-testid={`${model.testIdPrefix}-tab-separator`}
-                    />
-                  ) : null}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <TabsTrigger
-                        value={tab.id}
-                        aria-label={tab.ariaLabel ?? tab.label}
-                        className="group size-9 flex-none cursor-pointer rounded-sm border border-transparent bg-transparent p-0 shadow-none hover:bg-transparent data-[state=active]:border-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-                        data-testid={`${model.testIdPrefix}-tab-${tab.id}`}
-                      >
-                        <span
-                          className={`relative inline-flex size-8 items-center justify-center rounded-sm group-hover:bg-muted ${active ? "text-foreground" : "text-muted-foreground/60"}`}
-                          data-testid={active ? `${model.testIdPrefix}-tab-active-icon` : undefined}
-                        >
-                          <Icon className="size-5" aria-hidden="true" />
-                          {tab.indicator}
-                        </span>
-                        <span className="sr-only">{tab.label}</span>
-                      </TabsTrigger>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom">
-                      <p>{tab.label}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </span>
-              );
-            })}
-          </TabsList>
-          <div className="ml-auto flex min-w-0 shrink-0 items-center justify-end gap-2">
-            {model.headerActions}
-          </div>
-        </div>
-        {model.tabs.map((tab) => (
-          <TabsContent key={tab.id} value={tab.id} className="min-h-0 overflow-hidden">
-            {tab.content}
-          </TabsContent>
-        ))}
-      </Tabs>
-    </TooltipProvider>
-  );
-}
-
 export function SharedToolsPanel<Id extends string>({
   model,
 }: {
@@ -166,5 +98,73 @@ export function SharedToolsPanelToggleButton({
     >
       {isOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}
     </Button>
+  );
+}
+
+function SharedToolsPanelTabs<Id extends string>({ model }: { model: SharedToolsPanelModel<Id> }) {
+  return (
+    <TooltipProvider>
+      <Tabs
+        value={model.activeTabId}
+        onValueChange={(value) => {
+          const tab = model.tabs.find((entry) => entry.id === value);
+          if (tab) model.onActiveTabChange(tab.id);
+        }}
+        className="h-full min-h-0 gap-0 bg-card"
+      >
+        <div className="flex min-w-0 items-center justify-between gap-2 border-b border-border py-1 pr-2">
+          <TabsList
+            aria-label={model.tabListLabel}
+            className="h-9 w-fit shrink-0 gap-0 rounded-none bg-transparent p-0"
+          >
+            {model.tabs.map((tab, index) => {
+              const Icon = tab.icon;
+              const active = tab.id === model.activeTabId;
+              return (
+                <span key={tab.id} className="inline-flex items-center">
+                  {index > 0 ? (
+                    <span
+                      className="h-5 w-px shrink-0 bg-border"
+                      aria-hidden="true"
+                      data-testid={`${model.testIdPrefix}-tab-separator`}
+                    />
+                  ) : null}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <TabsTrigger
+                        value={tab.id}
+                        aria-label={tab.ariaLabel ?? tab.label}
+                        className="group size-9 flex-none cursor-pointer rounded-sm border border-transparent bg-transparent p-0 shadow-none hover:bg-transparent data-[state=active]:border-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                        data-testid={`${model.testIdPrefix}-tab-${tab.id}`}
+                      >
+                        <span
+                          className={`relative inline-flex size-8 items-center justify-center rounded-sm group-hover:bg-muted ${active ? "text-foreground" : "text-muted-foreground/60"}`}
+                          data-testid={active ? `${model.testIdPrefix}-tab-active-icon` : undefined}
+                        >
+                          <Icon className="size-5" aria-hidden="true" />
+                          {tab.indicator}
+                        </span>
+                        <span className="sr-only">{tab.label}</span>
+                      </TabsTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      <p>{tab.label}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </span>
+              );
+            })}
+          </TabsList>
+          <div className="ml-auto flex min-w-0 shrink-0 items-center justify-end gap-2">
+            {model.headerActions}
+          </div>
+        </div>
+        {model.tabs.map((tab) => (
+          <TabsContent key={tab.id} value={tab.id} className="min-h-0 overflow-hidden">
+            {tab.content}
+          </TabsContent>
+        ))}
+      </Tabs>
+    </TooltipProvider>
   );
 }
