@@ -19,6 +19,7 @@ import {
   isClaudeSubagentTranscriptTarget,
   parseClaudeTranscriptTarget,
 } from "./claude-agent-sdk-subagent-transcripts";
+import type { ClaudeBackgroundWorkSession } from "./claude-agent-sdk-event-session";
 import { hasActiveClaudeWork } from "./claude-agent-sdk-session-store";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
 import { readStringProp } from "./claude-agent-sdk-utils";
@@ -43,22 +44,40 @@ export type ClaudeLiveHistoryContext = {
 };
 
 /** A resumed or forked session must load its saved transcript. */
-export const claudeLiveHistoryContext = (session: ClaudeSession): ClaudeLiveHistoryContext => ({
-  activeBackgroundTaskIds: () => session.backgroundToolActiveTaskIds ?? new Set(),
-  hasActiveWork: () => hasActiveClaudeWork(session),
-  source:
-    "externalSessionId" in session.input || "parentExternalSessionId" in session.input
-      ? "persisted"
-      : "fresh",
-  userMessages: session.acceptedUserMessages.map((message) => ({
-    ...message,
-    state: session.queuedSdkMessages.some(
-      (queuedMessage) => queuedMessage.uuid === message.messageId,
-    )
-      ? ("queued" as const)
-      : ("read" as const),
-  })),
-});
+export const claudeLiveHistoryContext = (
+  session: ClaudeSession,
+  externalSessionId = session.externalSessionId,
+): ClaudeLiveHistoryContext => {
+  const isSubagent = isClaudeSubagentTranscriptTarget(externalSessionId);
+  return {
+    activeBackgroundTaskIds: () => {
+      const ids = new Set<string>();
+      const collect = (work: ClaudeBackgroundWorkSession): void => {
+        for (const id of work.backgroundToolActiveTaskIds ?? []) ids.add(id);
+        for (const child of work.subagentEventSessionsByToolUseId?.values() ?? []) collect(child);
+      };
+      collect(session);
+      return ids;
+    },
+    hasActiveWork: () => hasActiveClaudeWork(session),
+    source:
+      isSubagent ||
+      "externalSessionId" in session.input ||
+      "parentExternalSessionId" in session.input
+        ? "persisted"
+        : "fresh",
+    userMessages: isSubagent
+      ? []
+      : session.acceptedUserMessages.map((message) => ({
+          ...message,
+          state: session.queuedSdkMessages.some(
+            (queuedMessage) => queuedMessage.uuid === message.messageId,
+          )
+            ? ("queued" as const)
+            : ("read" as const),
+        })),
+  };
+};
 
 export const isClaudeSubagentTranscriptComplete = (
   messages: readonly SessionMessage[],
@@ -254,10 +273,7 @@ export const loadClaudeHistory = async (
     subagentAgentIdsByToolUseId,
     transcriptExternalSessionId: input.externalSessionId,
   };
-  if (!isSubagentTranscript) {
-    projectionOptions.currentBackgroundTaskIds =
-      liveContext?.activeBackgroundTaskIds() ?? new Set();
-  }
+  projectionOptions.currentBackgroundTaskIds = liveContext?.activeBackgroundTaskIds() ?? new Set();
   const history = toClaudeHistoryMessages(
     messages,
     now,

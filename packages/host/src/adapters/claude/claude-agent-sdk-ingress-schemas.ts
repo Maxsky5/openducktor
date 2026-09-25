@@ -187,6 +187,19 @@ const claudeTaskNotificationMessageSchema = claudeTaskMessageSchema.extend({
   output_file: z.string(),
   summary: z.string(),
   usage: claudeTaskUsageSchema.optional(),
+  resource_links: z
+    .array(
+      z.object({
+        uri: z.string(),
+        name: z.string(),
+        title: z.string().optional(),
+        description: z.string().optional(),
+        mimeType: z.string().optional(),
+        size: z.number().optional(),
+        annotations: z.record(z.string(), claudeProtocolValueSchema).optional(),
+      }),
+    )
+    .optional(),
   skip_transcript: z.boolean().optional(),
   ambient: z.boolean().optional(),
 });

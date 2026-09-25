@@ -82,7 +82,7 @@ export const handleClaudeSdkMessage = ({
     return;
   }
   if (message.type === "system" && message.subtype === "init") {
-    // A new turn can start while background tasks still run; a new CLI process resets this state.
+    // A new turn can start while earlier background tasks still run.
     return;
   }
   if (message.type === "user") {
@@ -193,14 +193,7 @@ export const handleClaudeSdkMessage = ({
     return;
   }
   if (message.type === "system" && message.subtype === "background_tasks_changed") {
-    for (const part of projectClaudeBackgroundTaskSnapshot(session, message, timestamp)) {
-      emit({
-        type: "assistant_part",
-        externalSessionId: session.externalSessionId,
-        timestamp,
-        part,
-      });
-    }
+    emitBackgroundTaskSnapshot({ emit, message, session, timestamp });
     return;
   }
   if (
@@ -216,7 +209,15 @@ export const handleClaudeSdkMessage = ({
         readStringProp(messageValue, "tool_use_id"),
         message.task_id,
       ) ?? session;
-    const backgroundPart = projectClaudeBackgroundTaskEdge(taskSession, message, timestamp);
+    const backgroundPart = projectClaudeBackgroundTaskEdge(
+      taskSession,
+      message,
+      timestamp,
+      session.backgroundToolCallIdsSinceSnapshot ? session.backgroundToolActiveTaskIds : undefined,
+    );
+    if (taskSession !== session) {
+      projectClaudeBackgroundTaskEdge(session, message, timestamp);
+    }
     if (backgroundPart) {
       emit({
         type: "assistant_part",
@@ -265,6 +266,31 @@ export const handleClaudeSdkMessage = ({
       timestamp,
       permission,
     });
+  }
+};
+
+const emitBackgroundTaskSnapshot = ({
+  emit,
+  message,
+  session,
+  timestamp,
+  knownOnly = false,
+}: {
+  emit: SdkMessageHandlerInput["emit"];
+  message: Parameters<typeof projectClaudeBackgroundTaskSnapshot>[1];
+  session: ClaudeEventSession;
+  timestamp: string;
+  knownOnly?: boolean;
+}): void => {
+  const tasks = knownOnly
+    ? message.tasks.filter((task) => session.backgroundToolTasksById?.has(task.task_id))
+    : message.tasks;
+  const parts = projectClaudeBackgroundTaskSnapshot(session, { tasks }, timestamp);
+  for (const part of parts) {
+    emit({ type: "assistant_part", externalSessionId: session.externalSessionId, timestamp, part });
+  }
+  for (const child of session.subagentEventSessionsByToolUseId?.values() ?? []) {
+    emitBackgroundTaskSnapshot({ emit, message, session: child, timestamp, knownOnly: true });
   }
 };
 

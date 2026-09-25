@@ -11,6 +11,7 @@ import {
   loadClaudeHistory,
   reconciledClaudeSubagentStatus,
 } from "./claude-agent-sdk-history-loader";
+import { claudeSubagentEventSession } from "./claude-agent-sdk-event-session";
 import { createClaudeSession } from "./claude-agent-sdk-session-io.test-support";
 
 const latestProjectedMessage: AgentSessionHistoryMessage = {
@@ -315,6 +316,21 @@ describe("claudeLiveHistoryContext", () => {
     const context = claudeLiveHistoryContext(session);
     expect([...context.activeBackgroundTaskIds()]).toEqual(["task-1"]);
     session.backgroundToolActiveTaskIds = new Set();
+    expect(context.activeBackgroundTaskIds().size).toBe(0);
+  });
+
+  test("uses current child activity without adding parent turns to child history", () => {
+    const session = createClaudeSession({ acceptedUserMessages });
+    session.subagentTaskIdsByToolUseId.set("agent-call", "agent-1");
+    const child = claudeSubagentEventSession(session, "agent-call");
+    expect(child).not.toBeNull();
+    if (!child) return;
+    child.backgroundToolActiveTaskIds = new Set(["child-task"]);
+    const context = claudeLiveHistoryContext(session, child.externalSessionId);
+    expect(context.source).toBe("persisted");
+    expect(context.userMessages).toEqual([]);
+    expect([...context.activeBackgroundTaskIds()]).toEqual(["child-task"]);
+    child.backgroundToolActiveTaskIds.clear();
     expect(context.activeBackgroundTaskIds().size).toBe(0);
   });
 });

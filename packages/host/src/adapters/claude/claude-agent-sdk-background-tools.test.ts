@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
-import { hasActiveClaudeBackgroundWork } from "./claude-agent-sdk-event-session";
+import {
+  claudeSubagentEventSession,
+  hasActiveClaudeBackgroundWork,
+} from "./claude-agent-sdk-event-session";
 import { createEventTestSession } from "./claude-agent-sdk-events.test-support";
 import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import { filterClaudeHistoryMessages } from "./claude-agent-sdk-history-import";
@@ -205,6 +208,74 @@ describe("Claude background ordinary tool parts", () => {
       error: "Stopped: Stopped by user",
       metadata: { backgroundTaskStatus: "stopped" },
     });
+  });
+
+  test("shows MCP file links from the terminal notice on the same card", () => {
+    const { parts, send } = live();
+    send(toolUse("mcp-files", "mcp__server__export", { query: "report" }));
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_started",
+        task_id: "files-task",
+        tool_use_id: "mcp-files",
+        task_type: "mcp_task",
+        description: "Export report",
+      }),
+    );
+    send(toolResult("mcp-files", "Running"));
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_notification",
+        task_id: "files-task",
+        tool_use_id: "mcp-files",
+        status: "completed",
+        output_file: "/tmp/files-task.output",
+        summary: "Report ready",
+        resource_links: [
+          { name: "report.csv", uri: "file:///reports/report.csv", mimeType: "text/csv" },
+        ],
+      }),
+    );
+    expect(parts("mcp-files").at(-1)).toMatchObject({
+      status: "completed",
+      output: "Export report\nReport ready\nreport.csv: file:///reports/report.csv",
+      metadata: {
+        outputFile: "/tmp/files-task.output",
+        resourceLinks: [
+          { name: "report.csv", uri: "file:///reports/report.csv", mimeType: "text/csv" },
+        ],
+      },
+    });
+  });
+
+  test("uses the native end time before or after the terminal notice", () => {
+    const endedAtMs = Date.parse("2026-09-24T20:00:03.000Z");
+    for (const updateFirst of [true, false]) {
+      const { parts, send } = live();
+      send(toolUse("timed-bash", "Bash", { command: "sleep 3" }));
+      send(taskStart("timed-task", "timed-bash", "Wait"));
+      send(toolResult("timed-bash", "Started", "timed-task"));
+      const update = claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_updated",
+        task_id: "timed-task",
+        patch: { status: "completed", end_time: endedAtMs },
+      });
+      const done = notification("timed-task", "completed", "Done");
+      if (updateFirst) {
+        send(update, "2026-09-24T20:00:10.000Z");
+        send(done, "2026-09-24T20:00:11.000Z");
+      } else {
+        send(done, "2026-09-24T20:00:10.000Z");
+        send(update, "2026-09-24T20:00:11.000Z");
+      }
+      expect(parts("timed-bash").at(-1)).toMatchObject({
+        status: "completed",
+        endedAtMs,
+      });
+    }
   });
 
   test("ignores ambient and uncorrelated tasks and leaves foreground results completed", () => {
@@ -517,6 +588,126 @@ describe("Claude background ordinary tool parts", () => {
     );
     expect(session.backgroundToolActiveTaskIds?.size).toBe(0);
     expect(session.backgroundToolTasksById?.has("agent-task")).toBeFalsy();
+    expect(session.backgroundToolAgentTaskIds?.has("agent-task")).toBe(true);
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_progress",
+        task_id: "agent-task",
+        description: "Review code",
+        summary: "Still working",
+      }),
+    );
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_updated",
+        task_id: "agent-task",
+        patch: { is_backgrounded: true },
+      }),
+    );
+    expect(session.backgroundToolTasksById?.has("agent-task")).toBeFalsy();
+  });
+
+  test("reconciles a child tool from process snapshots and a late task edge", () => {
+    const { events, send, session } = live();
+    session.subagentTaskIdsByToolUseId.set("agent-call", "agent-1");
+    const child = claudeSubagentEventSession(session, "agent-call");
+    expect(child).not.toBeNull();
+    if (!child) return;
+    child.toolNamesByCallId.set("child-bash", "Bash");
+    child.toolMessageIdsByCallId.set("child-bash", "child-message");
+    send(snapshot([{ task_id: "child-task", task_type: "local_bash", description: "Wait" }]));
+    send(taskStart("child-task", "child-bash", "Wait"));
+    const childParts = (callId = "child-bash") =>
+      events.flatMap((event) =>
+        event.type === "assistant_part" &&
+        event.externalSessionId === child.externalSessionId &&
+        event.part.kind === "tool" &&
+        event.part.callId === callId
+          ? [event.part]
+          : [],
+      );
+    expect(childParts().at(-1)).toMatchObject({ status: "running" });
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_progress",
+        task_id: "child-task",
+        description: "Wait",
+        summary: "Half done",
+      }),
+    );
+    expect(childParts().at(-1)?.output).toBe("Wait\nHalf done");
+    send(snapshot([]));
+    expect(childParts().at(-1)).toMatchObject({
+      status: "error",
+      metadata: { backgroundTaskStatus: "unknown" },
+    });
+    expect(child.backgroundToolActiveTaskIds?.size).toBe(0);
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
+    send(notification("child-task", "completed", "Done"));
+    expect(childParts().at(-1)).toMatchObject({
+      status: "completed",
+      output: "Wait\nDone",
+    });
+
+    child.toolNamesByCallId.set("child-next", "Bash");
+    child.toolMessageIdsByCallId.set("child-next", "child-next-message");
+    send(snapshot([{ task_id: "child-next-task", task_type: "local_bash", description: "Next" }]));
+    send(taskStart("child-next-task", "child-next", "Next"));
+    send(notification("child-next-task", "completed", "Next done"));
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
+    send(snapshot([{ task_id: "child-next-task", task_type: "local_bash", description: "Next" }]));
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
+    expect(childParts("child-next").at(-1)).toMatchObject({
+      callId: "child-next",
+      status: "completed",
+    });
+  });
+
+  test("passes process snapshots through nested Agent sessions", () => {
+    const { events, send, session } = live();
+    session.subagentTaskIdsByToolUseId.set("first-agent", "agent-1");
+    const child = claudeSubagentEventSession(session, "first-agent");
+    expect(child).not.toBeNull();
+    if (!child) return;
+    child.subagentTaskIdsByToolUseId.set("second-agent", "agent-2");
+    const grandchild = claudeSubagentEventSession(child, "second-agent");
+    expect(grandchild).not.toBeNull();
+    if (!grandchild) return;
+    grandchild.toolNamesByCallId.set("nested-bash", "Bash");
+    grandchild.toolMessageIdsByCallId.set("nested-bash", "nested-message");
+    send(taskStart("nested-task", "nested-bash", "Wait"));
+    const nestedParts = () =>
+      events.flatMap((event) =>
+        event.type === "assistant_part" &&
+        event.externalSessionId === grandchild.externalSessionId &&
+        event.part.kind === "tool" &&
+        event.part.callId === "nested-bash"
+          ? [event.part]
+          : [],
+      );
+    expect(nestedParts().at(-1)?.status).toBe("running");
+    send(snapshot([{ task_id: "nested-task", task_type: "local_bash", description: "Wait" }]));
+    expect(nestedParts().at(-1)?.status).toBe("running");
+    send(snapshot([]));
+    expect(nestedParts().at(-1)?.metadata?.backgroundTaskStatus).toBe("unknown");
+  });
+
+  test("bounds unmatched results and drops each result after late correlation", () => {
+    const { send, session } = live();
+    send(snapshot([]));
+    for (let index = 0; index < 129; index += 1) {
+      const callId = `mcp-cache-${index}`;
+      send(toolUse(callId, "mcp__server__work"));
+      send(toolResult(callId, `Result ${index}`));
+    }
+    expect(session.backgroundToolCompletedPartsByCallId?.size).toBe(128);
+    expect(session.backgroundToolCompletedPartsByCallId?.has("mcp-cache-0")).toBe(false);
+    expect(session.backgroundToolCallIdsSinceSnapshot?.size).toBe(0);
+    send(taskStart("late-cache-task", "mcp-cache-128", "Late edge"));
+    expect(session.backgroundToolCompletedPartsByCallId?.has("mcp-cache-128")).toBe(false);
   });
 
   test("terminal outcome wins when the launch result and progress arrive late", () => {
@@ -736,6 +927,62 @@ describe("Claude background ordinary tool parts", () => {
     });
   });
 
+  test("history keeps file links from a saved MCP task notification", () => {
+    const entries = filterClaudeHistoryMessages([
+      claudeSessionMessageFixture({
+        type: "assistant",
+        uuid: "history-files-call",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        timestamp,
+        message: {
+          role: "assistant",
+          content: [
+            { type: "tool_use", id: "history-files", name: "mcp__server__export", input: {} },
+          ],
+        },
+      }),
+      claudeSessionMessageFixture({
+        type: "user",
+        uuid: "history-files-result",
+        session_id: "session-1",
+        parent_tool_use_id: "history-files",
+        timestamp,
+        tool_use_result: {
+          type: "tool_result",
+          tool_use_id: "history-files",
+          content: "Running",
+          backgroundTaskId: "history-files-task",
+        },
+        message: { role: "user", content: [] },
+      }),
+      {
+        type: "system",
+        subtype: "task_notification",
+        uuid: "history-files-notice",
+        session_id: "session-1",
+        task_id: "history-files-task",
+        tool_use_id: "history-files",
+        status: "completed",
+        output_file: "/tmp/history-files.output",
+        summary: "Report ready",
+        resource_links: [{ name: "report.csv", uri: "file:///reports/report.csv" }],
+        timestamp,
+      },
+    ]);
+    const part = toClaudeHistoryMessages(entries, () => timestamp)
+      .flatMap((message) => message.parts)
+      .find((candidate): candidate is ToolPart => candidate.kind === "tool");
+    expect(part).toMatchObject({
+      status: "completed",
+      output: "Report ready\nreport.csv: file:///reports/report.csv",
+      metadata: {
+        outputFile: "/tmp/history-files.output",
+        resourceLinks: [{ name: "report.csv", uri: "file:///reports/report.csv" }],
+      },
+    });
+  });
+
   test("history leaves a foreground call completed when progress precedes its start", () => {
     const entries = filterClaudeHistoryMessages([
       claudeSessionMessageFixture({
@@ -850,6 +1097,20 @@ describe("Claude background ordinary tool parts", () => {
       status: "running",
       metadata: { backgroundTaskStatus: "running" },
     });
+    const childPart = toClaudeHistoryMessages(entries, () => timestamp, [], {
+      includeNestedEntries: true,
+      transcriptExternalSessionId: "session-1::claude-subagent::agent-1",
+      currentBackgroundTaskIds: new Set(),
+    })
+      .flatMap((message) => message.parts)
+      .find(
+        (candidate): candidate is ToolPart =>
+          candidate.kind === "tool" && candidate.callId === "history-restart",
+      );
+    expect(childPart).toMatchObject({
+      status: "error",
+      metadata: { backgroundTaskStatus: "unknown" },
+    });
   });
 
   test("history gives a snapshot authority over a later launch result", () => {
@@ -894,6 +1155,10 @@ describe("Claude background ordinary tool parts", () => {
             candidate.kind === "tool" && candidate.callId === "history-order",
         );
     expect(partFor([assistant, emptySnapshot, result])).toMatchObject({
+      status: "error",
+      metadata: { backgroundTaskStatus: "unknown" },
+    });
+    expect(partFor([assistant, emptySnapshot, assistant, result])).toMatchObject({
       status: "error",
       metadata: { backgroundTaskStatus: "unknown" },
     });

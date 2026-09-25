@@ -226,8 +226,10 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   }
 
   loadSessionHistory(input: LoadAgentSessionHistoryInput) {
-    const { target, session } = resolveClaudeQuerySession(this.sessionStore, input);
-    const liveContext = session && !target.subpath ? claudeLiveHistoryContext(session) : undefined;
+    const { session } = resolveClaudeQuerySession(this.sessionStore, input);
+    const liveContext = session
+      ? claudeLiveHistoryContext(session, input.externalSessionId)
+      : undefined;
     return fromPromise("claudeRuntime.loadSessionHistory", () =>
       loadClaudeHistory(input, this.now, liveContext),
     );

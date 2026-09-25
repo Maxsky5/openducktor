@@ -70,9 +70,17 @@ export const applyClaudeHistoryToolUses = (
   message: MutableAssistantHistoryMessage,
   timestamp: string,
 ): void => {
-  message.parts = message.parts.map((part) =>
-    part.kind === "tool" ? projectClaudeBackgroundToolUse(state, part, timestamp) : part,
-  );
+  message.parts = message.parts.map((part) => {
+    if (part.kind !== "tool") return part;
+    const prior = state.assistantMessagesByToolCallId
+      .get(part.callId)
+      ?.parts.find((item) => item.kind === "tool" && item.callId === part.callId);
+    if (prior?.kind === "tool") {
+      return { ...prior, input: part.input ?? prior.input };
+    }
+    state.backgroundToolCallIdsSinceSnapshot?.add(part.callId);
+    return projectClaudeBackgroundToolUse(state, part, timestamp);
+  });
 };
 
 const replaceHistoryToolPart = (

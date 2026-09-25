@@ -1,7 +1,9 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentStreamPart } from "@openducktor/core";
 import {
+  claudeProtocolObjectSchema,
   isClaudeProtocolObject,
+  type ClaudeProtocolObject,
   type ClaudeHistorySubagentSystemMessageIngress,
 } from "./claude-agent-sdk-ingress-schemas";
 import type { ClaudeHistoryTaskNotificationMessage } from "./claude-agent-sdk-subagents";
@@ -26,6 +28,8 @@ type TaskEdge =
   | ClaudeHistoryTaskNotificationMessage;
 type TaskSnapshot = Extract<SDKMessage, { type: "system"; subtype: "background_tasks_changed" }>;
 type TaskOutcome = "completed" | "failed" | "stopped" | "unknown";
+// Late task edges need a result, but unmatched foreground results must not grow without end.
+const MAX_UNMATCHED_RESULTS = 128;
 
 type BackgroundToolTask = {
   ambient: boolean;
@@ -35,7 +39,9 @@ type BackgroundToolTask = {
   error?: string;
   notified?: boolean;
   outcome?: TaskOutcome;
+  outputFile?: string;
   part?: ToolPart;
+  resourceLinks?: ClaudeProtocolObject[];
   startedAtMs?: number;
   summary?: string;
   toolUseId?: string;
@@ -60,7 +66,6 @@ export const projectClaudeBackgroundToolUse = (
   part: ToolPart,
   timestamp: string,
 ): ToolPart => {
-  state.backgroundToolCallIdsSinceSnapshot?.add(part.callId);
   const taskId = taskIdsByCall(state).get(part.callId);
   if (!taskId) return part;
   const task = tasks(state).get(taskId);
@@ -73,6 +78,7 @@ export const projectClaudeBackgroundTaskEdge = (
   state: ClaudeBackgroundToolState,
   message: TaskEdge,
   timestamp: string,
+  processActiveTaskIds?: ReadonlySet<string>,
 ): ToolPart | null => {
   const taskId = message.task_id;
   const toolUseId = "tool_use_id" in message ? message.tool_use_id : undefined;
@@ -99,12 +105,21 @@ export const projectClaudeBackgroundTaskEdge = (
   }
   if (knownTask?.ambient) return null;
   const task = taskFor(state, taskId);
-  const canActivate = !state.backgroundToolCallIdsSinceSnapshot || isTaskActive(state, taskId);
+  const activeInSnapshot = processActiveTaskIds?.has(taskId);
+  const canActivate =
+    activeInSnapshot ?? (!state.backgroundToolCallIdsSinceSnapshot || isTaskActive(state, taskId));
+  if (activeInSnapshot) {
+    task.backgrounded = true;
+    setTaskActive(state, taskId, true);
+  }
   if (knownToolUseId) {
     task.toolUseId = knownToolUseId;
     taskIdsByCall(state).set(knownToolUseId, taskId);
     const completedPart = state.backgroundToolCompletedPartsByCallId?.get(knownToolUseId);
-    if (completedPart) task.part ??= completedPart;
+    if (completedPart) {
+      task.part ??= completedPart;
+      state.backgroundToolCompletedPartsByCallId?.delete(knownToolUseId);
+    }
   }
   if (message.subtype === "task_started") {
     if (!task.outcome || !task.description) task.description = message.description;
@@ -126,20 +141,29 @@ export const projectClaudeBackgroundTaskEdge = (
       if (message.patch.status === "killed") task.outcome = "stopped";
       if (task.outcome) {
         setTaskActive(state, taskId, false);
-        task.endedAtMs ??= Date.parse(timestamp);
+        task.endedAtMs = message.patch.end_time ?? task.endedAtMs ?? Date.parse(timestamp);
       }
       if (message.patch.is_backgrounded === true) {
         task.backgrounded = true;
         if (!task.outcome && canActivate) setTaskActive(state, taskId, true);
       }
     }
+    if (message.patch.end_time !== undefined && task.outcome) {
+      task.endedAtMs = message.patch.end_time;
+    }
   } else {
     task.backgrounded = true;
     task.notified = true;
     task.outcome = message.status;
     setTaskActive(state, taskId, false);
-    task.endedAtMs = Date.parse(timestamp);
+    task.endedAtMs ??= Date.parse(timestamp);
     if (message.summary) task.summary = message.summary;
+    if (message.output_file) task.outputFile = message.output_file;
+    if (message.resource_links?.length) {
+      task.resourceLinks = message.resource_links.map((link) =>
+        claudeProtocolObjectSchema.parse(link),
+      );
+    }
   }
   return projectTask(state, taskId, task, timestamp);
 };
@@ -149,6 +173,15 @@ export const projectClaudeBackgroundTaskSnapshot = (
   message: Pick<TaskSnapshot, "tasks">,
   timestamp: string,
 ): ToolPart[] => {
+  for (const task of message.tasks) {
+    if (isAgentTask(task.task_type, undefined)) {
+      state.backgroundToolAgentTaskIds ??= new Set();
+      state.backgroundToolAgentTaskIds.add(task.task_id);
+    } else {
+      const knownTask = tasks(state).get(task.task_id);
+      if (knownTask || task.ambient) taskFor(state, task.task_id).ambient = task.ambient === true;
+    }
+  }
   const visibleTasks = message.tasks.filter(
     (task) => !task.ambient && !isAgentTask(task.task_type, undefined),
   );
@@ -173,12 +206,21 @@ export const projectClaudeBackgroundToolResult = (
   completedPart: ToolPart,
   timestamp: string,
 ): ToolPart => {
+  const launchAfterSnapshot = state.backgroundToolCallIdsSinceSnapshot?.delete(callId) === true;
   if (isAgentTask(undefined, completedPart.tool)) return completedPart;
-  state.backgroundToolCompletedPartsByCallId ??= new Map();
-  state.backgroundToolCompletedPartsByCallId.set(callId, completedPart);
   const resultTaskId = backgroundTaskIdFromResult(raw);
   const taskId = taskIdsByCall(state).get(callId) ?? resultTaskId;
-  if (!taskId) return completedPart;
+  if (!taskId) {
+    const unmatched = (state.backgroundToolCompletedPartsByCallId ??= new Map());
+    unmatched.delete(callId);
+    unmatched.set(callId, completedPart);
+    if (unmatched.size > MAX_UNMATCHED_RESULTS) {
+      const oldest = unmatched.keys().next().value;
+      if (oldest !== undefined) unmatched.delete(oldest);
+    }
+    return completedPart;
+  }
+  state.backgroundToolCompletedPartsByCallId?.delete(callId);
   const task = taskFor(state, taskId);
   if (task.ambient) return completedPart;
   task.toolUseId = callId;
@@ -191,7 +233,6 @@ export const projectClaudeBackgroundToolResult = (
     if (completedPart.error) task.error = completedPart.error;
   }
   if (!task.outcome) {
-    const launchAfterSnapshot = state.backgroundToolCallIdsSinceSnapshot?.has(callId) === true;
     if (
       resultTaskId &&
       (!state.backgroundToolCallIdsSinceSnapshot ||
@@ -242,7 +283,17 @@ const setTaskActive = (state: ClaudeBackgroundToolState, taskId: string, active:
 };
 
 const taskText = (task: BackgroundToolTask): string | undefined =>
-  [task.description, task.summary].filter((value) => value?.trim()).join("\n") || undefined;
+  [
+    task.description,
+    task.summary,
+    ...(task.resourceLinks?.map((link) => {
+      const name = readStringProp(link, "name");
+      const uri = readStringProp(link, "uri");
+      return name && uri ? `${name}: ${uri}` : undefined;
+    }) ?? []),
+  ]
+    .filter((value) => value?.trim())
+    .join("\n") || undefined;
 
 const presentTask = (
   taskId: string,
@@ -250,13 +301,16 @@ const presentTask = (
   part: ToolPart,
   endedAtMs: number,
 ): ToolPart => {
+  const metadata: NonNullable<ToolPart["metadata"]> = {
+    ...part.metadata,
+    backgroundTaskId: taskId,
+    backgroundTaskStatus: task.outcome ?? "running",
+  };
+  if (task.outputFile) metadata.outputFile = task.outputFile;
+  if (task.resourceLinks) metadata.resourceLinks = task.resourceLinks;
   const next: ToolPart = {
     ...part,
-    metadata: {
-      ...part.metadata,
-      backgroundTaskId: taskId,
-      backgroundTaskStatus: task.outcome ?? "running",
-    },
+    metadata,
     status: task.outcome ? (task.outcome === "completed" ? "completed" : "error") : "running",
   };
   if (next.startedAtMs === undefined && task.startedAtMs !== undefined) {
@@ -295,6 +349,7 @@ const projectTask = (
 ): ToolPart | null => {
   if (
     task.ambient ||
+    state.backgroundToolAgentTaskIds?.has(taskId) ||
     !task.backgrounded ||
     (!isTaskActive(state, taskId) && !task.outcome) ||
     !task.toolUseId

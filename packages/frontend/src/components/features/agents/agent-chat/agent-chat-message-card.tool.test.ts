@@ -153,8 +153,11 @@ describe("AgentChatMessageCard tool presentation", () => {
     expect(html).not.toContain(">Activity<");
   });
 
-  test("shows failed and stopped background outcomes on regular and workflow cards", () => {
-    const renderCard = (toolType: "bash" | "workflow", outcome: "failed" | "stopped"): string =>
+  test("shows failed, stopped, and unknown background outcomes on tool cards", () => {
+    const renderCard = (
+      toolType: "bash" | "workflow",
+      outcome: "failed" | "stopped" | "unknown",
+    ): string =>
       renderToStaticMarkup(
         createMessageCardElement({
           message: {
@@ -170,7 +173,11 @@ describe("AgentChatMessageCard tool presentation", () => {
               toolType,
               status: "error",
               error:
-                outcome === "failed" ? "Server stopped responding" : "Stopped: User ended task",
+                outcome === "failed"
+                  ? "Server stopped responding"
+                  : outcome === "stopped"
+                    ? "Stopped: User ended task"
+                    : "Claude ended the background task without a terminal outcome.",
               metadata: { backgroundTaskStatus: outcome },
             },
           },
@@ -184,6 +191,11 @@ describe("AgentChatMessageCard tool presentation", () => {
     expect(renderCard("workflow", "failed")).toContain("FAILED");
     expect(renderCard("workflow", "failed")).not.toContain("CANCELLED");
     expect(renderCard("workflow", "stopped")).toContain("CANCELLED");
+    expect(renderCard("bash", "unknown")).toContain(
+      "Claude ended the background task without a terminal outcome.",
+    );
+    expect(renderCard("workflow", "unknown")).toContain("FAILED");
+    expect(renderCard("workflow", "unknown")).not.toContain("CANCELLED");
   });
 
   test("auto-opens failed ODT workflow tool error details", () => {

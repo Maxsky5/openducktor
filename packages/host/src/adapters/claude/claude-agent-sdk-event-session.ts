@@ -103,6 +103,9 @@ export const claudeSubagentEventSession = (
     subagentMessageIdsByTaskId: new Map(),
     subagentTaskIdsByToolUseId: new Map(),
   };
+  if (session.backgroundToolCallIdsSinceSnapshot) {
+    childSession.backgroundToolCallIdsSinceSnapshot = new Set();
+  }
   session.subagentEventSessionsByToolUseId.set(parentToolUseId, childSession);
   return childSession;
 };
@@ -181,7 +184,7 @@ export const findClaudeSubagentTaskSession = (
       return owner;
     }
   }
-  return null;
+  return session.backgroundToolTasksById?.get(taskId)?.toolUseId ? session : null;
 };
 
 const acceptedUserTurnCount = (session: ClaudeEventSession): number => {
