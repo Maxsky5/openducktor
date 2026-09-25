@@ -268,6 +268,69 @@ describe("createNodePtyPort", () => {
     expect(resumeCount).toBe(1);
   });
 
+  test("rejects PTY input during termination and allows it after a failed close", async () => {
+    const ioCalls: string[] = [];
+    const terminationStarted = Promise.withResolvers<void>();
+    const finishTermination = Promise.withResolvers<void>();
+    let attempts = 0;
+    const port = createNodePtyPort({
+      processTreeTerminator: () =>
+        Effect.promise(async () => {
+          attempts += 1;
+          if (attempts === 1) {
+            terminationStarted.resolve();
+            await finishTermination.promise;
+            throw new Error("process tree stayed live");
+          }
+        }),
+      nodePty: {
+        spawn: () => ({
+          pid: 42,
+          onData: () => ({ dispose: () => undefined }),
+          onExit: () => ({ dispose: () => undefined }),
+          write: () => ioCalls.push("write"),
+          resize: () => ioCalls.push("resize"),
+          pause: () => undefined,
+          resume: () => undefined,
+        }),
+      },
+    });
+    const handle = await Effect.runPromise(
+      port.start(
+        { shell: "/bin/zsh", args: [], cwd: "/repo", env: {}, grid: { columns: 80, rows: 24 } },
+        { onOutput: () => undefined, onFailure: () => undefined, onExit: () => undefined },
+      ),
+    );
+    const write = () => Effect.runPromise(Effect.either(handle.write(new Uint8Array([65]))));
+    const resize = () =>
+      Effect.runPromise(Effect.either(handle.resize({ columns: 120, rows: 40 })));
+
+    const termination = Effect.runPromise(handle.terminate());
+    await terminationStarted.promise;
+    const duringClose = await Promise.all([write(), resize()]);
+    expect(duringClose.map((result) => result._tag)).toEqual(["Left", "Left"]);
+    expect(duringClose.map((result) => result._tag === "Left" && result.left.message)).toEqual([
+      "Terminal is closing. Wait for close to finish or retry if it fails.",
+      "Terminal is closing. Wait for close to finish or retry if it fails.",
+    ]);
+    expect(ioCalls).toEqual([]);
+
+    finishTermination.resolve();
+    await expect(termination).rejects.toThrow("node-pty process-tree termination failed");
+    expect((await Promise.all([write(), resize()])).map((result) => result._tag)).toEqual([
+      "Right",
+      "Right",
+    ]);
+    expect(ioCalls).toEqual(["write", "resize"]);
+
+    await Effect.runPromise(handle.terminate());
+    expect((await Promise.all([write(), resize()])).map((result) => result._tag)).toEqual([
+      "Left",
+      "Left",
+    ]);
+    expect(ioCalls).toEqual(["write", "resize"]);
+  });
+
   test.each([false, true])(
     "keeps host output pressure after a failed close (ACK during close: %s)",
     async (ackDuringClose) => {
