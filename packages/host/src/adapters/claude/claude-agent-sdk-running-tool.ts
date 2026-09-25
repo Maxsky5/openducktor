@@ -39,7 +39,7 @@ export const handleClaudeToolProgressMessage = ({
   });
 };
 
-export const emitClaudeRunningToolPart = ({
+const emitClaudeRunningToolPart = ({
   emit,
   fallbackMessageId,
   session,
