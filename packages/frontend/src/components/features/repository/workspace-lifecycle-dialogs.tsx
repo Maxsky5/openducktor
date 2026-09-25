@@ -147,11 +147,13 @@ function LifecycleDialog({
 type WorkspaceLifecycleDialogProps = {
   workspace: WorkspaceRecord;
   onOpenChange: (open: boolean) => void;
+  requestTransition?: ((apply: () => void, cancel?: () => void) => void) | undefined;
 };
 
 export function WorkspaceCloseDialog({
   workspace,
   onOpenChange,
+  requestTransition,
 }: WorkspaceLifecycleDialogProps): ReactElement {
   const { closeWorkspace } = useWorkspaceState();
   const submit = useLifecycleSubmit(
@@ -173,7 +175,16 @@ export function WorkspaceCloseDialog({
       submitting={submit.submitting}
       error={submit.error}
       onCancel={() => onOpenChange(false)}
-      onConfirm={() => void submit.confirm()}
+      onConfirm={() =>
+        requestTransition
+          ? requestTransition(
+              () => {
+                void submit.confirm();
+              },
+              () => onOpenChange(false),
+            )
+          : void submit.confirm()
+      }
     >
       <RepositoryPath path={workspace.repoPath} />
       <div className="flex gap-3 rounded-lg border border-border bg-card p-3">
@@ -195,6 +206,7 @@ export function WorkspaceCloseDialog({
 export function WorkspaceRemoveDialog({
   workspace,
   onOpenChange,
+  requestTransition,
 }: WorkspaceLifecycleDialogProps): ReactElement {
   const { removeWorkspace } = useWorkspaceState();
   const [removeTaskWorktrees, setRemoveTaskWorktrees] = useState(false);
@@ -219,7 +231,16 @@ export function WorkspaceRemoveDialog({
       submitting={submit.submitting}
       error={submit.error}
       onCancel={() => onOpenChange(false)}
-      onConfirm={() => void submit.confirm()}
+      onConfirm={() =>
+        requestTransition
+          ? requestTransition(
+              () => {
+                void submit.confirm();
+              },
+              () => onOpenChange(false),
+            )
+          : void submit.confirm()
+      }
     >
       <RepositoryPath path={workspace.repoPath} />
       <div className="flex flex-col gap-2 rounded-lg border border-destructive-border bg-destructive-surface px-3 py-2 text-destructive-surface-foreground">

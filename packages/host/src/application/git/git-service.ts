@@ -77,6 +77,38 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
         });
       });
     },
+    getComparisonTarget(input) {
+      return Effect.gen(function* () {
+        const workingDirectory = yield* resolveGitWorkingDirectory(
+          gitPort,
+          input.repoPath,
+          input.workingDir,
+        );
+        const currentBranch = yield* gitPort.getCurrentBranch(workingDirectory);
+        if (currentBranch.detached || !currentBranch.name) {
+          return {
+            kind: "unavailable" as const,
+            reason: "Branch comparison is unavailable on a detached HEAD.",
+          };
+        }
+        const reference =
+          input.target.branch === "@{upstream}"
+            ? "@{upstream}"
+            : input.target.remote
+              ? `${input.target.remote}/${input.target.branch}`
+              : input.target.branch;
+        if (!(yield* gitPort.referenceExists(workingDirectory, reference))) {
+          return {
+            kind: "unavailable" as const,
+            reason:
+              reference === "@{upstream}"
+                ? `Branch ${currentBranch.name} has no tracked upstream. Set an upstream to compare changes.`
+                : `Comparison branch ${reference} is unavailable. Check the configured default target branch.`,
+          };
+        }
+        return { kind: "available" as const, reference };
+      });
+    },
     getStatus(input) {
       return Effect.gen(function* () {
         const { repoPath, workingDir } = input;

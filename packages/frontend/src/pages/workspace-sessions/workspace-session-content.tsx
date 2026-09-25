@@ -1,13 +1,133 @@
-import type { WorkspaceSession } from "@openducktor/contracts";
-import { useQuery } from "@tanstack/react-query";
+import type { GitTargetBranch, WorkspaceSession } from "@openducktor/contracts";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { TaskExecutionSelectedFilePreview } from "@/components/features/agents/task-execution-file-preview";
+import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
+import { useTaskExecutionFilePreviewController } from "@/components/features/agents/file-preview/use-task-execution-file-preview-controller";
+import {
+  WorkspaceSessionToolsPanel,
+  type WorkspaceToolsTabId,
+} from "@/components/features/agents/workspace-session-tools-panel";
+import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Button } from "@/components/ui/button";
 import { TabsContent } from "@/components/ui/tabs";
 import { errorMessage } from "@/lib/errors";
 import { useAgentSessionReadModelState } from "@/state/app-state-provider";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { repoConfigQueryOptions } from "@/state/queries/workspace";
+import { gitQueryKeys } from "@/state/queries/git";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { WorkspaceSessionChat } from "./workspace-session-chat";
 import { WorkspaceSessionHeader } from "./workspace-session-header";
+
+export type WorkspaceSessionPanelState = {
+  isOpen: boolean;
+  activeTabId: WorkspaceToolsTabId;
+  selectedFile: TaskExecutionSelectedFile | null;
+};
+
+function WorkspaceSessionChatPane({
+  workspace,
+  record,
+}: {
+  workspace: ActiveWorkspace;
+  record: WorkspaceSession;
+}) {
+  const settings = useQuery(settingsSnapshotQueryOptions());
+  if (settings.isPending)
+    return (
+      <p role="status" className="p-4">
+        Loading chat settings…
+      </p>
+    );
+  if (settings.isError)
+    return (
+      <div role="alert" className="p-4">
+        <p className="text-destructive">{errorMessage(settings.error)}</p>
+        <Button onClick={() => void settings.refetch()}>Retry settings</Button>
+      </div>
+    );
+  return (
+    <WorkspaceSessionChat
+      workspace={workspace}
+      record={record}
+      chatSettings={settings.data.chat}
+      reusablePrompts={settings.data.reusablePrompts}
+    />
+  );
+}
+
+function sessionWorkingDirectory(
+  workspace: ActiveWorkspace,
+  record: WorkspaceSession,
+): string | null {
+  return record.executionTarget.kind === "local_repo_root"
+    ? workspace.repoPath || null
+    : record.executionTarget.workingDirectory || null;
+}
+
+function WorkspaceSessionMainContent({
+  workspace,
+  record,
+  previewContent,
+  hasSelectedFile,
+}: {
+  workspace: ActiveWorkspace;
+  record: WorkspaceSession;
+  previewContent: ReactNode;
+  hasSelectedFile: boolean;
+}) {
+  return (
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
+      {hasSelectedFile ? (
+        <div
+          className="absolute inset-0 z-10 h-full min-h-0 overflow-hidden"
+          data-testid="workspace-session-file-preview"
+        >
+          {previewContent}
+        </div>
+      ) : null}
+      <div
+        className="min-h-0 flex-1 overflow-hidden"
+        style={{ visibility: hasSelectedFile ? "hidden" : undefined }}
+        inert={hasSelectedFile}
+      >
+        <WorkspaceSessionChatPane workspace={workspace} record={record} />
+      </div>
+    </div>
+  );
+}
+
+function WorkspaceSessionPaneLayout({
+  isOpen,
+  isNarrow,
+  mainContent,
+  toolsContent,
+}: {
+  isOpen: boolean;
+  isNarrow: boolean;
+  mainContent: ReactNode;
+  toolsContent: ReactNode;
+}) {
+  if (!isOpen) return mainContent;
+  return (
+    <ResizablePanelGroup
+      direction={isNarrow ? "vertical" : "horizontal"}
+      className="h-full min-h-0 overflow-hidden"
+    >
+      <ResizablePanel defaultSize={isNarrow ? 55 : 63} minSize={isNarrow ? 30 : 35}>
+        {mainContent}
+      </ResizablePanel>
+      <ResizableHandle withHandle />
+      <ResizablePanel defaultSize={isNarrow ? 45 : 37} minSize={isNarrow ? 25 : 30}>
+        <div className="h-full min-h-0 overflow-hidden border-l border-border bg-card">
+          {toolsContent}
+        </div>
+      </ResizablePanel>
+    </ResizablePanelGroup>
+  );
+}
 
 export function WorkspaceSessionReadModelNotice() {
   const { sessionReadModelLoadState, workspaceSessionRecordsError, reloadSessionReadModel } =
@@ -30,36 +150,112 @@ export function WorkspaceSessionReadModelNotice() {
 export function WorkspaceSessionContent({
   workspace,
   record,
+  panelState,
+  onPanelStateChange,
 }: {
   workspace: ActiveWorkspace;
   record: WorkspaceSession;
+  panelState: WorkspaceSessionPanelState;
+  onPanelStateChange: (update: Partial<WorkspaceSessionPanelState>) => void;
 }) {
-  const settings = useQuery(settingsSnapshotQueryOptions());
+  const repoConfig = useQuery(repoConfigQueryOptions(workspace.workspaceId));
+  const queryClient = useQueryClient();
+  const { register } = useWorkspacePreviewTransitionGuard();
+  const preview = useTaskExecutionFilePreviewController(panelState.selectedFile);
+  const discardedRef = useRef(false);
+  const refreshRef = useRef<(() => Promise<void>) | null>(null);
+  const [isNarrow, setIsNarrow] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 767px)");
+    const sync = () => setIsNarrow(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
+  useEffect(
+    () =>
+      register((apply, cancel) =>
+        preview.requestContextTransition(() => {
+          onPanelStateChange({
+            selectedFile: discardedRef.current ? null : preview.model.selectedFile,
+          });
+          discardedRef.current = false;
+          apply();
+        }, cancel),
+      ),
+    [onPanelStateChange, preview, register],
+  );
+  const workingDirectory = sessionWorkingDirectory(workspace, record);
+  const target: GitTargetBranch | null =
+    record.executionTarget.kind === "local_repo_root"
+      ? { branch: "@{upstream}" }
+      : (repoConfig.data?.defaultTargetBranch ?? null);
+  const targetError =
+    record.executionTarget.kind === "local_worktree" && repoConfig.isError
+      ? `Could not read the default target branch: ${errorMessage(repoConfig.error)}`
+      : null;
+  const onRefreshReady = useCallback((refresh: (() => Promise<void>) | null) => {
+    refreshRef.current = refresh;
+  }, []);
+  const onFileSaved = useCallback(() => {
+    void queryClient.invalidateQueries({
+      queryKey: gitQueryKeys.all,
+      predicate: (query) => query.queryKey.includes(workingDirectory),
+      refetchType: "none",
+    });
+    void refreshRef.current?.();
+  }, [queryClient, workingDirectory]);
+  const onSelectFile = useCallback(
+    (file: TaskExecutionSelectedFile) => preview.onSelectFile(file),
+    [preview],
+  );
+  const previewContent = (
+    <TaskExecutionSelectedFilePreview
+      key={preview.model.previewSessionKey}
+      model={{
+        ...preview.model,
+        onDiscard: () => {
+          discardedRef.current = true;
+          preview.model.onDiscard();
+        },
+      }}
+      onFileSaved={onFileSaved}
+    />
+  );
+  const mainContent = (
+    <WorkspaceSessionMainContent
+      workspace={workspace}
+      record={record}
+      previewContent={previewContent}
+      hasSelectedFile={Boolean(preview.model.selectedFile)}
+    />
+  );
+  const toolsContent = (
+    <WorkspaceSessionToolsPanel
+      repoPath={workspace.repoPath}
+      workingDirectory={workingDirectory}
+      contextMode={record.executionTarget.kind === "local_repo_root" ? "repository" : "worktree"}
+      target={target}
+      targetError={targetError}
+      activeTabId={panelState.activeTabId}
+      onActiveTabChange={(activeTabId) => onPanelStateChange({ activeTabId })}
+      selectedFile={preview.model.selectedFile}
+      onSelectFile={onSelectFile}
+      onRefreshReady={onRefreshReady}
+    />
+  );
   return (
     <TabsContent
       value={record.id}
       className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-card"
     >
       <WorkspaceSessionHeader workspaceId={workspace.workspaceId} record={record} />
-      {settings.data && (
-        <WorkspaceSessionChat
-          workspace={workspace}
-          record={record}
-          chatSettings={settings.data.chat}
-          reusablePrompts={settings.data.reusablePrompts}
-        />
-      )}
-      {settings.isPending && (
-        <p role="status" className="p-4">
-          Loading chat settings…
-        </p>
-      )}
-      {settings.isError && (
-        <div role="alert" className="p-4">
-          <p className="text-destructive">{errorMessage(settings.error)}</p>
-          <Button onClick={() => void settings.refetch()}>Retry settings</Button>
-        </div>
-      )}
+      <WorkspaceSessionPaneLayout
+        isOpen={panelState.isOpen}
+        isNarrow={isNarrow}
+        mainContent={mainContent}
+        toolsContent={toolsContent}
+      />
     </TabsContent>
   );
 }

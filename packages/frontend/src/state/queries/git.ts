@@ -1,6 +1,8 @@
 import type {
   GitBranch,
   GitCurrentBranch,
+  GitComparisonTarget,
+  GitTargetBranch,
   GitWorktreeStatus,
   GitWorktreeStatusSummary,
 } from "@openducktor/contracts";
@@ -9,6 +11,7 @@ import { hostClient as host } from "@/lib/host-client";
 
 type GitBranchesQueryHost = Pick<typeof host, "gitGetBranches">;
 type GitCurrentBranchQueryHost = Pick<typeof host, "gitGetCurrentBranch">;
+type GitComparisonTargetQueryHost = Pick<typeof host, "gitGetComparisonTarget">;
 type GitWorktreeStatusQueryHost = Pick<typeof host, "gitGetWorktreeStatus">;
 type GitWorktreeStatusSummaryQueryHost = Pick<typeof host, "gitGetWorktreeStatusSummary">;
 
@@ -20,6 +23,15 @@ export const gitQueryKeys = {
   canonicalPath: (path: string) => [...gitQueryKeys.all, "canonical-path", path] as const,
   branches: (repoPath: string) => [...gitQueryKeys.all, "branches", repoPath] as const,
   currentBranch: (repoPath: string) => [...gitQueryKeys.all, "current-branch", repoPath] as const,
+  comparisonTarget: (repoPath: string, workingDir: string, target: GitTargetBranch) =>
+    [
+      ...gitQueryKeys.all,
+      "comparison-target",
+      repoPath,
+      workingDir,
+      target.remote ?? "",
+      target.branch,
+    ] as const,
   worktreeStatus: (
     repoPath: string,
     targetBranch: string,
@@ -78,6 +90,19 @@ export const currentBranchQueryOptions = (
     queryKey: gitQueryKeys.currentBranch(repoPath),
     queryFn: (): Promise<GitCurrentBranch> => hostClient.gitGetCurrentBranch(repoPath),
     staleTime: BRANCH_DATA_STALE_TIME_MS,
+  });
+
+export const gitComparisonTargetQueryOptions = (
+  repoPath: string,
+  workingDir: string,
+  target: GitTargetBranch,
+  hostClient: GitComparisonTargetQueryHost = host,
+) =>
+  queryOptions({
+    queryKey: gitQueryKeys.comparisonTarget(repoPath, workingDir, target),
+    queryFn: (): Promise<GitComparisonTarget> =>
+      hostClient.gitGetComparisonTarget(repoPath, workingDir, target),
+    staleTime: 0,
   });
 
 const worktreeStatusQueryOptions = (

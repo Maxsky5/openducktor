@@ -9,6 +9,12 @@ const firstFile = { rootPath: "/repo", relativePath: "first.ts" };
 const secondFile = { rootPath: "/repo", relativePath: "second.ts" };
 
 describe("useTaskExecutionFilePreviewController", () => {
+  test("restores a clean selected file when its session returns", () => {
+    const view = renderHook(() => useTaskExecutionFilePreviewController(firstFile));
+    expect(view.result.current.model.selectedFile).toEqual(firstFile);
+    act(() => view.result.current.model.onClose());
+    expect(view.result.current.model.selectedFile).toBeNull();
+  });
   test("reports whether a file selection was accepted", () => {
     const view = renderHook(() => useTaskExecutionFilePreviewController());
     let selectionWasRejected = false;

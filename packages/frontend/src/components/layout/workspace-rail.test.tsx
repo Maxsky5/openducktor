@@ -9,6 +9,7 @@ import { WorkspaceActivityContext } from "@/state/workspace-activity/workspace-a
 import { createWorkspaceActivityObserverStub } from "@/test-utils/shared-test-fixtures";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { WorkspaceRail } from "./workspace-rail";
+import { WorkspacePreviewTransitionGuardProvider } from "./workspace-preview-transition-guard";
 
 const selectWorkspaceMock = mock(async (_workspaceId: string): Promise<void> => {});
 const reorderWorkspacesMock = mock(async (_workspaceIds: string[]): Promise<void> => {});
@@ -34,13 +35,15 @@ let workspaceState: WorkspaceStateContextValue;
 let workspaceActivity: Record<string, WorkspaceActivityState>;
 
 const withProviders = (children: ReactElement): ReactElement => (
-  <WorkspaceStateContext.Provider value={workspaceState}>
-    <WorkspaceActivityContext.Provider
-      value={createWorkspaceActivityObserverStub(workspaceActivity)}
-    >
-      {children}
-    </WorkspaceActivityContext.Provider>
-  </WorkspaceStateContext.Provider>
+  <WorkspacePreviewTransitionGuardProvider>
+    <WorkspaceStateContext.Provider value={workspaceState}>
+      <WorkspaceActivityContext.Provider
+        value={createWorkspaceActivityObserverStub(workspaceActivity)}
+      >
+        {children}
+      </WorkspaceActivityContext.Provider>
+    </WorkspaceStateContext.Provider>
+  </WorkspacePreviewTransitionGuardProvider>
 );
 
 const renderRail = (onOpenRepositoryModal = () => {}): ReturnType<typeof render> =>

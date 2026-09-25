@@ -10,11 +10,13 @@ import {
   LoaderCircle,
   Plus,
 } from "lucide-react";
-import { type ReactElement, useEffect, useState } from "react";
+import { type ReactElement, useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigationType, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
 import { BrowserTabs, BrowserTabsBar, BrowserTabsRoot } from "@/components/ui/browser-tabs";
 import { RunningStatusDot } from "@/components/ui/running-status-dot";
+import { SharedToolsPanelToggleButton } from "@/components/features/agents/shared-tools-panel";
+import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
 import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { errorMessage } from "@/lib/errors";
@@ -37,6 +39,7 @@ import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   WorkspaceSessionContent,
   WorkspaceSessionReadModelNotice,
+  type WorkspaceSessionPanelState,
 } from "./workspace-session-content";
 import { WorkspaceSessionCreateDialog } from "./workspace-session-create-dialog";
 import { WorkspaceSessionEmptyState } from "./workspace-session-empty-state";
@@ -146,6 +149,64 @@ function WorkspaceSessionTabArchiveAction({
 
 type WorkspaceSessionsProps = { workspace: ActiveWorkspace };
 
+function useVisibleSessionId(
+  requestedSelectedId: string | null,
+  guardWorkspaceChange: ReturnType<typeof useWorkspacePreviewTransitionGuard>["run"],
+  updateNavigation: ReturnType<typeof useWorkspaceSessionNavigation>["updateNavigation"],
+): string | null {
+  const [visibleSelectedId, setVisibleSelectedId] = useState<string | null>(requestedSelectedId);
+  const pendingSelectedIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      requestedSelectedId === visibleSelectedId ||
+      pendingSelectedIdRef.current === requestedSelectedId
+    )
+      return;
+    pendingSelectedIdRef.current = requestedSelectedId;
+    guardWorkspaceChange(
+      () => {
+        pendingSelectedIdRef.current = null;
+        setVisibleSelectedId(requestedSelectedId);
+      },
+      () => {
+        pendingSelectedIdRef.current = null;
+        updateNavigation({ sessionId: visibleSelectedId });
+      },
+    );
+  }, [guardWorkspaceChange, requestedSelectedId, updateNavigation, visibleSelectedId]);
+  return visibleSelectedId;
+}
+
+function useSessionPanelState(selectedId: string | null) {
+  const [panelStates, setPanelStates] = useState<Record<string, WorkspaceSessionPanelState>>({});
+  const panelState: WorkspaceSessionPanelState = selectedId
+    ? (panelStates[selectedId] ?? { isOpen: true, activeTabId: "git", selectedFile: null })
+    : { isOpen: false, activeTabId: "git", selectedFile: null };
+  const onPanelStateChange = useCallback(
+    (update: Partial<WorkspaceSessionPanelState>) => {
+      if (!selectedId) return;
+      setPanelStates((current) => {
+        const previous = current[selectedId] ?? {
+          isOpen: true,
+          activeTabId: "git",
+          selectedFile: null,
+        };
+        const next = { ...previous, ...update };
+        if (
+          previous.isOpen === next.isOpen &&
+          previous.activeTabId === next.activeTabId &&
+          previous.selectedFile?.rootPath === next.selectedFile?.rootPath &&
+          previous.selectedFile?.relativePath === next.selectedFile?.relativePath
+        )
+          return current;
+        return { ...current, [selectedId]: next };
+      });
+    },
+    [selectedId],
+  );
+  return { panelState, onPanelStateChange };
+}
+
 function WorkspaceSessionTabs({
   sessions,
   selectedId,
@@ -213,36 +274,24 @@ function WorkspaceSessionArchiveError({ error }: { error: Error | null }): React
   );
 }
 
-export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactElement {
-  const queryClient = useQueryClient();
-  const [params, setParams] = useSearchParams();
-  const location = useLocation();
-  const navigationType = useNavigationType();
-  const { sessionId, creating, updateNavigation } = useWorkspaceSessionNavigation({
-    locationKey: location.key,
-    navigationType,
-    searchParams: params,
-    setSearchParams: setParams,
-  });
-  const records = useQuery(workspaceSessionListQueryOptions(workspace.workspaceId));
-  const { sessions: orderedSessions, reorder } = useWorkspaceSessionTabOrder(
-    workspace.workspaceId,
-    records.data,
-  );
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
+function useWorkspaceSessionArchive({
+  workspace,
+  queryClient,
+  mounted,
+  selectedId,
+  orderedSessions,
+  updateNavigation,
+  guardWorkspaceChange,
+}: {
+  workspace: ActiveWorkspace;
+  queryClient: ReturnType<typeof useQueryClient>;
+  mounted: ReturnType<typeof useMountedRef>;
+  selectedId: string | null;
+  orderedSessions: WorkspaceSession[];
+  updateNavigation: ReturnType<typeof useWorkspaceSessionNavigation>["updateNavigation"];
+  guardWorkspaceChange: ReturnType<typeof useWorkspacePreviewTransitionGuard>["run"];
+}) {
   const [archiveTarget, setArchiveTarget] = useState<WorkspaceSession | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
-  const mounted = useMountedRef();
-  const selected = useWorkspaceSessionSelection({
-    workspaceId: workspace.workspaceId,
-    sessions: records.data === undefined ? undefined : orderedSessions,
-    requestedSessionId: sessionId,
-  });
-  const selectedId = selected?.id ?? null;
-  useEffect(() => {
-    if (records.data && sessionId !== selectedId) updateNavigation({ sessionId: selectedId });
-  }, [records.data, selectedId, sessionId, updateNavigation]);
   const archive = useMutation({
     mutationFn: (input: {
       sessionId: string;
@@ -263,14 +312,17 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
       void invalidateRepoBranchesQuery(queryClient, workspace.repoPath);
     },
   });
-  const archivingId = archive.isPending ? (archive.variables?.sessionId ?? null) : null;
   const beginArchive = (
     sessionId: string,
     removeWorktree: boolean,
     worktreeConfirmation?: { workingDirectory: string; branchName: string },
   ) => {
-    archive.reset();
-    archive.mutate({ sessionId, confirmStop: true, removeWorktree, worktreeConfirmation });
+    const apply = () => {
+      archive.reset();
+      archive.mutate({ sessionId, confirmStop: true, removeWorktree, worktreeConfirmation });
+    };
+    if (sessionId === selectedId) guardWorkspaceChange(apply);
+    else apply();
   };
   const handleTabArchive = (target: WorkspaceSession) => {
     archive.reset();
@@ -280,6 +332,135 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
     }
     beginArchive(target.id, false);
   };
+  return { archive, archiveTarget, setArchiveTarget, beginArchive, handleTabArchive };
+}
+
+function WorkspaceSessionDialogs({
+  workspace,
+  importOpen,
+  onImportClose,
+  onImported,
+  historyOpen,
+  onHistoryClose,
+  archiveTarget,
+  archivePending,
+  archiveError,
+  onArchive,
+  onArchiveClose,
+  createOpen,
+  onCreateClose,
+  onCreated,
+}: {
+  workspace: ActiveWorkspace;
+  importOpen: boolean;
+  onImportClose: () => void;
+  onImported: (record: WorkspaceSession) => void;
+  historyOpen: boolean;
+  onHistoryClose: () => void;
+  archiveTarget: WorkspaceSession | null;
+  archivePending: boolean;
+  archiveError: Error | null;
+  onArchive: (
+    sessionId: string,
+    removeWorktree: boolean,
+    confirmation?: { workingDirectory: string; branchName: string },
+  ) => void;
+  onArchiveClose: () => void;
+  createOpen: boolean;
+  onCreateClose: () => void;
+  onCreated: (record: WorkspaceSession) => void;
+}): ReactElement {
+  return (
+    <>
+      {importOpen && (
+        <WorkspaceSessionImportDialog
+          workspaceId={workspace.workspaceId}
+          onClose={onImportClose}
+          onImported={onImported}
+        />
+      )}
+      {historyOpen && (
+        <WorkspaceSessionHistoryDialog
+          workspaceId={workspace.workspaceId}
+          repoPath={workspace.repoPath}
+          onClose={onHistoryClose}
+        />
+      )}
+      {archiveTarget && (
+        <WorkspaceSessionArchiveDialog
+          key={archiveTarget.id}
+          workspaceId={workspace.workspaceId}
+          record={archiveTarget}
+          isArchiving={archivePending}
+          error={archiveError}
+          onArchive={(removeWorktree, confirmation) =>
+            onArchive(archiveTarget.id, removeWorktree, confirmation)
+          }
+          onClose={onArchiveClose}
+        />
+      )}
+      {createOpen && (
+        <WorkspaceSessionCreateDialog
+          workspace={workspace}
+          onClose={onCreateClose}
+          onCreated={onCreated}
+        />
+      )}
+    </>
+  );
+}
+
+export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactElement {
+  const { run: guardWorkspaceChange } = useWorkspacePreviewTransitionGuard();
+  const queryClient = useQueryClient();
+  const [params, setParams] = useSearchParams();
+  const location = useLocation();
+  const navigationType = useNavigationType();
+  const { sessionId, creating, updateNavigation } = useWorkspaceSessionNavigation({
+    locationKey: location.key,
+    navigationType,
+    searchParams: params,
+    setSearchParams: setParams,
+  });
+  const records = useQuery(workspaceSessionListQueryOptions(workspace.workspaceId));
+  const { sessions: orderedSessions, reorder } = useWorkspaceSessionTabOrder(
+    workspace.workspaceId,
+    records.data,
+  );
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const mounted = useMountedRef();
+  const requestedSelected = useWorkspaceSessionSelection({
+    workspaceId: workspace.workspaceId,
+    sessions: records.data === undefined ? undefined : orderedSessions,
+    requestedSessionId: sessionId,
+  });
+  const requestedSelectedId = requestedSelected?.id ?? null;
+  const visibleSelectedId = useVisibleSessionId(
+    requestedSelectedId,
+    guardWorkspaceChange,
+    updateNavigation,
+  );
+  const selected =
+    orderedSessions.find((record) => record.id === visibleSelectedId) ?? requestedSelected;
+  const selectedId = selected?.id ?? null;
+  const { panelState, onPanelStateChange } = useSessionPanelState(selectedId);
+  useEffect(() => {
+    if (records.data && sessionId !== requestedSelectedId)
+      updateNavigation({ sessionId: requestedSelectedId });
+  }, [records.data, requestedSelectedId, sessionId, updateNavigation]);
+  const { archive, archiveTarget, setArchiveTarget, beginArchive, handleTabArchive } =
+    useWorkspaceSessionArchive({
+      workspace,
+      queryClient,
+      mounted,
+      selectedId,
+      orderedSessions,
+      updateNavigation,
+      guardWorkspaceChange,
+    });
+  const archivingId = archive.isPending ? (archive.variables?.sessionId ?? null) : null;
   const setCreating = (open: boolean) => {
     setCreateOpen(open);
     if (!open && creating) updateNavigation({ creating: false });
@@ -321,6 +502,13 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
         }
         actions={
           <>
+            {selected ? (
+              <SharedToolsPanelToggleButton
+                label="workspace tools"
+                isOpen={panelState.isOpen}
+                onToggle={() => onPanelStateChange({ isOpen: !panelState.isOpen })}
+              />
+            ) : null}
             <Button
               variant="ghost"
               size="icon"
@@ -356,57 +544,45 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
       <WorkspaceSessionReadModelNotice />
       {archiveTarget === null && <WorkspaceSessionArchiveError error={archive.error} />}
       {selected ? (
-        <WorkspaceSessionContent key={selected.id} workspace={workspace} record={selected} />
+        <WorkspaceSessionContent
+          key={selected.id}
+          workspace={workspace}
+          record={selected}
+          panelState={panelState}
+          onPanelStateChange={onPanelStateChange}
+        />
       ) : (
         <WorkspaceSessionEmptyState
           hasSessions={records.data.length > 0}
           onCreate={() => setCreating(true)}
         />
       )}
-      {importOpen && (
-        <WorkspaceSessionImportDialog
-          workspaceId={workspace.workspaceId}
-          onClose={() => setImportOpen(false)}
-          onImported={(record) => {
-            if (mounted.current) updateNavigation({ sessionId: record.id, creating: false });
-          }}
-        />
-      )}
-      {historyOpen && (
-        <WorkspaceSessionHistoryDialog
-          workspaceId={workspace.workspaceId}
-          repoPath={workspace.repoPath}
-          onClose={() => setHistoryOpen(false)}
-        />
-      )}
-      {archiveTarget && (
-        <WorkspaceSessionArchiveDialog
-          key={archiveTarget.id}
-          workspaceId={workspace.workspaceId}
-          record={archiveTarget}
-          isArchiving={archive.isPending}
-          error={archive.error}
-          onArchive={(removeWorktree, confirmation) =>
-            beginArchive(archiveTarget.id, removeWorktree, confirmation)
+      <WorkspaceSessionDialogs
+        workspace={workspace}
+        importOpen={importOpen}
+        onImportClose={() => setImportOpen(false)}
+        onImported={(record) => {
+          if (mounted.current) updateNavigation({ sessionId: record.id, creating: false });
+        }}
+        historyOpen={historyOpen}
+        onHistoryClose={() => setHistoryOpen(false)}
+        archiveTarget={archiveTarget}
+        archivePending={archive.isPending}
+        archiveError={archive.error}
+        onArchive={beginArchive}
+        onArchiveClose={() => {
+          setArchiveTarget(null);
+          archive.reset();
+        }}
+        createOpen={createOpen || creating}
+        onCreateClose={() => setCreating(false)}
+        onCreated={(record) => {
+          if (mounted.current) {
+            setCreateOpen(false);
+            updateNavigation({ sessionId: record.id, creating: false });
           }
-          onClose={() => {
-            setArchiveTarget(null);
-            archive.reset();
-          }}
-        />
-      )}
-      {(createOpen || creating) && (
-        <WorkspaceSessionCreateDialog
-          workspace={workspace}
-          onClose={() => setCreating(false)}
-          onCreated={(record) => {
-            if (mounted.current) {
-              setCreateOpen(false);
-              updateNavigation({ sessionId: record.id, creating: false });
-            }
-          }}
-        />
-      )}
+        }}
+      />
     </BrowserTabsRoot>
   );
 }

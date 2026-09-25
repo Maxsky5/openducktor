@@ -54,6 +54,7 @@ import {
   WorkspaceRemoveDialog,
 } from "../features/repository/workspace-lifecycle-dialogs";
 import { WorkspaceRailActivityBadges } from "./workspace-rail-activity-badges";
+import { useWorkspacePreviewTransitionGuard } from "./workspace-preview-transition-guard";
 import { workspaceActivityBadges } from "./workspace-rail-activity-badges-model";
 
 const DRAG_DISTANCE_PX = 6;
@@ -267,8 +268,10 @@ export function WorkspaceRail({
 }: {
   onOpenRepositoryModal: () => void;
 }): ReactElement {
+  const { run: guardWorkspaceChange } = useWorkspacePreviewTransitionGuard();
   const {
     workspaces,
+    activeWorkspace,
     incompleteRemovals,
     selectWorkspace,
     reorderWorkspaces,
@@ -372,7 +375,10 @@ export function WorkspaceRail({
                       }
                       isSwitchingWorkspace={isSwitchingWorkspace}
                       onSelectWorkspace={(workspaceId) => {
-                        void selectWorkspace(workspaceId);
+                        if (workspaceId === activeWorkspace?.workspaceId) return;
+                        guardWorkspaceChange(() => {
+                          void selectWorkspace(workspaceId);
+                        });
                       }}
                       onRequestCloseWorkspace={(workspace) =>
                         setLifecycleRequest({ action: "close", workspace })
@@ -437,6 +443,11 @@ export function WorkspaceRail({
       {lifecycleRequest?.action === "close" ? (
         <WorkspaceCloseDialog
           workspace={lifecycleRequest.workspace}
+          requestTransition={
+            lifecycleRequest.workspace.workspaceId === activeWorkspace?.workspaceId
+              ? guardWorkspaceChange
+              : undefined
+          }
           onOpenChange={(open) => {
             if (!open) setLifecycleRequest(null);
           }}
@@ -445,6 +456,11 @@ export function WorkspaceRail({
       {lifecycleRequest?.action === "remove" ? (
         <WorkspaceRemoveDialog
           workspace={lifecycleRequest.workspace}
+          requestTransition={
+            lifecycleRequest.workspace.workspaceId === activeWorkspace?.workspaceId
+              ? guardWorkspaceChange
+              : undefined
+          }
           onOpenChange={(open) => {
             if (!open) setLifecycleRequest(null);
           }}

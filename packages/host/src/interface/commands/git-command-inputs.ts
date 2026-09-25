@@ -3,11 +3,13 @@ import {
   gitConflictOperationSchema,
   gitDiffScopeSchema,
   gitResetWorktreeSelectionRequestSchema,
+  gitTargetBranchSchema,
 } from "@openducktor/contracts";
 import type {
   GitAbortConflictInput,
   GitAheadBehindInput,
   GitCommitAllInput,
+  GitComparisonTargetInput,
   GitCreateWorktreeInput,
   GitDiffInput,
   GitPushBranchInput,
@@ -42,6 +44,18 @@ export const parseGitScopeInput = (input: HostCommandArgs): GitScopeInput => {
   );
 
   return workingDir ? { repoPath, workingDir } : { repoPath };
+};
+
+export const parseGitComparisonTargetInput = (input: HostCommandArgs): GitComparisonTargetInput => {
+  const record = requireParsedRecord(
+    commandInputRecordSchema.safeParse(input),
+    "Git comparison target input",
+  );
+  const scope = parseGitScopeInput(input);
+  const parsed = gitTargetBranchSchema.safeParse(record.target);
+  if (!parsed.success)
+    throw new HostValidationError({ message: "Invalid Git comparison target.", field: "target" });
+  return { ...scope, target: parsed.data };
 };
 
 export const parseGitAheadBehindInput = (input: HostCommandArgs): GitAheadBehindInput => {

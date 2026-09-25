@@ -21,6 +21,8 @@ import {
   SidebarNavigation,
 } from "@/components/layout/sidebar";
 import { WorkspaceRail } from "@/components/layout/workspace-rail";
+import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
+import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { OnboardingPage } from "@/pages/onboarding/onboarding-page";
@@ -71,6 +73,7 @@ const persistLeftSidebarPreference = (preference: AppShellSidebarPreference): vo
 };
 
 const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
+  const { run: guardWorkspaceChange } = useWorkspacePreviewTransitionGuard();
   const activeWorkspace = useActiveWorkspace();
   useQuery({
     ...repoConfigQueryOptions(activeWorkspace?.workspaceId ?? NO_ACTIVE_WORKSPACE_ID),
@@ -176,7 +179,10 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
 
                   <DiagnosticsPanel autoOpenedByRepo={diagnosticsAutoOpenedByRepo} />
 
-                  <SidebarNavigation hasActiveWorkspace={hasActiveWorkspace} />
+                  <SidebarNavigation
+                    hasActiveWorkspace={hasActiveWorkspace}
+                    onBeforeNavigate={guardWorkspaceChange}
+                  />
                   <Suspense fallback={null}>
                     <WorkspaceCreateActions />
                   </Suspense>
@@ -215,7 +221,11 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
                   />
                 </div>
                 <div className="w-full border-t border-sidebar-border pt-2">
-                  <SidebarNavigation hasActiveWorkspace={hasActiveWorkspace} compact />
+                  <SidebarNavigation
+                    hasActiveWorkspace={hasActiveWorkspace}
+                    compact
+                    onBeforeNavigate={guardWorkspaceChange}
+                  />
                   <Suspense fallback={null}>
                     <WorkspaceCreateActions compact />
                   </Suspense>
@@ -319,5 +329,9 @@ export const AppShell = memo(function AppShell(): ReactElement {
     return <Navigate to="/onboarding" replace />;
   }
 
-  return <WorkspaceAppShell />;
+  return (
+    <WorkspacePreviewTransitionGuardProvider>
+      <WorkspaceAppShell />
+    </WorkspacePreviewTransitionGuardProvider>
+  );
 });

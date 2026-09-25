@@ -190,6 +190,7 @@ function getGitInfoHeaderProps(
 ): ComponentProps<typeof GitInfoHeader> {
   const props: ComponentProps<typeof GitInfoHeader> = {
     contextMode: model.contextMode ?? "worktree",
+    comparisonUnavailableReason: model.comparisonUnavailableReason ?? null,
     pullRequest: model.pullRequest ?? null,
     branch: view.displayedScopeState.branch,
     targetBranch: model.targetBranch,

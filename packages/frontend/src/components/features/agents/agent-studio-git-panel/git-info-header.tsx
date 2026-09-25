@@ -29,6 +29,7 @@ const TARGET_BRANCH_LABEL_ID = "agent-studio-git-target-branch-label";
 type GitInfoHeaderProps = Pick<
   AgentStudioGitPanelModel,
   | "contextMode"
+  | "comparisonUnavailableReason"
   | "pullRequest"
   | "branch"
   | "targetBranch"
@@ -551,9 +552,14 @@ function GitActionRow({ actionState, onDetectPullRequest, ...syncProps }: GitAct
 type GitDiffScopeTabsProps = {
   diffScope: DiffScope;
   onScopeChange: (scope: DiffScope) => void;
+  comparisonUnavailableReason?: string | null;
 };
 
-function GitDiffScopeTabs({ diffScope, onScopeChange }: GitDiffScopeTabsProps): ReactElement {
+function GitDiffScopeTabs({
+  diffScope,
+  onScopeChange,
+  comparisonUnavailableReason,
+}: GitDiffScopeTabsProps): ReactElement {
   return (
     <div className="flex flex-col gap-1">
       <Tabs
@@ -576,6 +582,10 @@ function GitDiffScopeTabs({ diffScope, onScopeChange }: GitDiffScopeTabsProps): 
             <TabsTrigger
               key={option.scope}
               value={option.scope}
+              disabled={option.scope === "target" && Boolean(comparisonUnavailableReason)}
+              title={
+                option.scope === "target" ? (comparisonUnavailableReason ?? undefined) : undefined
+              }
               className={cn(
                 segmentedControlTriggerClassName({
                   size: "sm",
@@ -847,6 +857,7 @@ const getGitInfoHeaderState = (props: GitInfoHeaderStateInput) => {
 
 export const GitInfoHeader = memo(function GitInfoHeader({
   contextMode = "worktree",
+  comparisonUnavailableReason,
   pullRequest,
   branch,
   targetBranch,
@@ -957,7 +968,19 @@ export const GitInfoHeader = memo(function GitInfoHeader({
         </div>
       ) : null}
 
-      <GitDiffScopeTabs diffScope={diffScope} onScopeChange={handleScopeChange} />
+      {comparisonUnavailableReason ? (
+        <p
+          role="status"
+          className="border-y border-border bg-muted px-3 py-2 text-xs text-muted-foreground"
+        >
+          {comparisonUnavailableReason}
+        </p>
+      ) : null}
+      <GitDiffScopeTabs
+        diffScope={diffScope}
+        onScopeChange={handleScopeChange}
+        comparisonUnavailableReason={comparisonUnavailableReason ?? null}
+      />
       <GitInfoHeaderErrors pushError={pushError ?? null} rebaseError={rebaseError ?? null} />
     </div>
   );

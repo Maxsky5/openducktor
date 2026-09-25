@@ -46,6 +46,7 @@ export const HOST_COMMAND_NAMES = [
   "git_canonicalize_path",
   "git_commit_all",
   "git_commits_ahead_behind",
+  "git_comparison_target_get",
   "git_create_worktree",
   "git_fetch_remote",
   "git_get_branches",
