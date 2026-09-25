@@ -1382,4 +1382,35 @@ describe("TerminalScreenState", () => {
     original.dispose();
     restored.dispose();
   });
+
+  test("keeps both buffers' tab stops when restoring the alternate screen", async () => {
+    const screen = new TerminalScreenState({ columns: 16, rows: 2 });
+    const original = new Terminal({ cols: 16, rows: 2, allowProposedApi: true });
+    const restored = new Terminal({ cols: 16, rows: 2, allowProposedApi: true });
+    const first = encoder.encode(
+      "\u001b[3g\u001b[1;5H\u001bH\u001b[1;1H" +
+        "\u001b[?1049h\u001b[3g\u001b[1;7H\u001bH\u001b[1;1H",
+    );
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    await write(restored, screen.snapshot().payload);
+
+    const alternateTab = encoder.encode("\tA");
+    await Promise.all([
+      writeScreen(screen, alternateTab),
+      write(original, alternateTab),
+      write(restored, alternateTab),
+    ]);
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+
+    const normalTab = encoder.encode("\u001b[?1049l\u001b[1;1H\tB");
+    await Promise.all([
+      writeScreen(screen, normalTab),
+      write(original, normalTab),
+      write(restored, normalTab),
+    ]);
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
 });

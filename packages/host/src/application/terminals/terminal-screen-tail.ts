@@ -31,13 +31,13 @@ type XtermSavedBuffer = {
   savedY: number;
   ybase: number;
   savedCurAttrData: XtermAttributes;
+  tabs: Record<string, boolean>;
 };
 
 type XtermCore = {
   buffer: XtermSavedBuffer & {
     scrollTop: number;
     scrollBottom: number;
-    tabs: Record<string, boolean>;
   };
   _bufferService: { buffers: { normal: XtermSavedBuffer } };
   _inputHandler: {
@@ -60,6 +60,7 @@ const getCore = (terminal: Terminal): XtermCore => {
     !core.buffer.savedCurAttrData?.getFgColor ||
     !Number.isInteger(core._bufferService?.buffers?.normal?.savedX) ||
     !Number.isInteger(core._bufferService?.buffers?.normal?.savedY) ||
+    !core._bufferService?.buffers?.normal?.tabs ||
     !core._bufferService?.buffers?.normal?.savedCurAttrData?.getFgColor ||
     !core._inputHandler?._curAttrData?.getFgColor ||
     !Number.isInteger(core._inputHandler?._parser?.precedingJoinState) ||
@@ -68,6 +69,22 @@ const getCore = (terminal: Terminal): XtermCore => {
     throw new Error("Terminal screen state is unavailable. Restart OpenDucktor and try again.");
   }
   return core;
+};
+
+const customTabStops = (buffer: XtermSavedBuffer, columns: number): number[] | null => {
+  const tabs = Object.keys(buffer.tabs)
+    .filter((key) => buffer.tabs[key])
+    .map(Number)
+    .filter((column) => Number.isInteger(column) && column >= 0 && column < columns)
+    .sort((left, right) => left - right);
+  const defaultTabs = [
+    0,
+    ...Array.from({ length: Math.floor((columns - 1) / 8) }, (_, index) => (index + 1) * 8),
+  ];
+  return tabs.length !== defaultTabs.length ||
+    tabs.some((column, index) => column !== defaultTabs[index])
+    ? tabs
+    : null;
 };
 
 export class TerminalScreenTail {
@@ -100,9 +117,13 @@ export class TerminalScreenTail {
   normalPrelude(terminal: Terminal): string {
     if (terminal.buffer.active.type !== "alternate") return "";
     const normal = getCore(terminal)._bufferService.buffers.normal;
+    const tabs = customTabStops(normal, terminal.cols);
+    const tabPrelude = tabs
+      ? `\u001b[3g${tabs.map((column) => `\r${column ? `\u001b[${column}C` : ""}\u001bH`).join("")}`
+      : "";
     const x = Math.max(0, Math.min(normal.savedX, terminal.cols - 1));
     const y = Math.max(0, Math.min(normal.savedY - normal.ybase, terminal.rows - 1));
-    return `\u001b(${this.savedCharsets.normal}\u000f\u001b[${y + 1};${x + 1}H\u001b[0m${styleSequence(normal.savedCurAttrData)}`;
+    return `${tabPrelude}\u001b(${this.savedCharsets.normal}\u000f\u001b[${y + 1};${x + 1}H\u001b[0m${styleSequence(normal.savedCurAttrData)}`;
   }
 
   suffix(terminal: Terminal, hasOverlay = false) {
@@ -113,18 +134,7 @@ export class TerminalScreenTail {
     }
     const core = getCore(terminal);
     const buffer = core.buffer;
-    const tabs = Object.keys(buffer.tabs)
-      .filter((key) => buffer.tabs[key])
-      .map(Number)
-      .filter((column) => Number.isInteger(column) && column >= 0 && column < terminal.cols)
-      .sort((left, right) => left - right);
-    const defaultTabs = [
-      0,
-      ...Array.from({ length: Math.floor((terminal.cols - 1) / 8) }, (_, index) => (index + 1) * 8),
-    ];
-    const customTabs =
-      tabs.length !== defaultTabs.length ||
-      tabs.some((column, index) => column !== defaultTabs[index]);
+    const tabs = customTabStops(buffer, terminal.cols);
     const savedX = Math.max(0, Math.min(buffer.savedX, terminal.cols - 1));
     const savedY = Math.max(0, Math.min(buffer.savedY - buffer.ybase, terminal.rows - 1));
     const savedStyle = styleSequence(buffer.savedCurAttrData);
@@ -135,12 +145,12 @@ export class TerminalScreenTail {
       this.savedCharset !== "B" ||
       this.activeCharset !== this.charsets[this.charsetLevel];
     const hasScrollRegion = buffer.scrollTop !== 0 || buffer.scrollBottom !== terminal.rows - 1;
-    const needsCursorMove = customTabs || hasSavedCursor || hasScrollRegion || hasOverlay;
+    const needsCursorMove = !!tabs || hasSavedCursor || hasScrollRegion || hasOverlay;
     const originMode = terminal.modes.originMode;
     const parts: string[] = [];
 
     if (needsCursorMove) parts.push("\u001b[?6l");
-    if (customTabs) {
+    if (tabs) {
       parts.push("\u001b[3g");
       for (const column of tabs) parts.push(`\u001b[1;${column + 1}H\u001bH`);
     }
