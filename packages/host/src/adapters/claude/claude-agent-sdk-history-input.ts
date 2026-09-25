@@ -28,7 +28,7 @@ type PendingQueuedPrompt = {
   timestamp: string;
 };
 
-type ManualCompactionInput = {
+export type ManualCompactionInput = {
   messageId: string;
   timestamp: string;
 };

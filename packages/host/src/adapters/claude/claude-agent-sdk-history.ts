@@ -1,13 +1,13 @@
 import type { AgentEvent, AgentSessionHistoryMessage } from "@openducktor/core";
 import { z } from "zod";
 import { CLAUDE_COMPACTED_MESSAGE } from "./claude-agent-sdk-compaction";
-import { hasActiveClaudeBackgroundWork } from "./claude-agent-sdk-event-session";
 import {
   addClaudeHistoryFinishStep,
   isLiveFinalAssistantStopReason,
   type MutableAssistantHistoryMessage,
   moveNestedResultToEnd,
   projectClaudeHistoryAssistantMessage,
+  removeClaudeHistoryFinishStep,
 } from "./claude-agent-sdk-history-assistant";
 import {
   isNestedHistoryEntry,
@@ -21,7 +21,10 @@ import {
   isClaudeHistorySubagentSystemMessage,
 } from "./claude-agent-sdk-history-import";
 import { toClaudeTaskNotificationMessage } from "./claude-agent-sdk-history-notifications";
-import { createClaudeHistoryInputProjector } from "./claude-agent-sdk-history-input";
+import {
+  createClaudeHistoryInputProjector,
+  type ManualCompactionInput,
+} from "./claude-agent-sdk-history-input";
 import {
   appendUnmatchedLiveUserMessages,
   type ClaudeLiveUserMessage,
@@ -32,6 +35,7 @@ import {
   applyClaudeHistoryActiveTasks,
   applyClaudeHistoryTaskSnapshot,
   appendClaudeHistorySubagentSystemMessage,
+  createClaudeHistoryTaskCheck,
   type ClaudeHistoryToolResultState,
   applyClaudeHistoryToolUses,
   projectClaudeHistoryToolResults,
@@ -57,15 +61,6 @@ import {
 } from "./claude-agent-sdk-user-messages";
 
 const claudeCompactMetadataSchema = z.object({ trigger: z.string().optional() });
-
-const removeClaudeHistoryFinishStep = (message: MutableAssistantHistoryMessage): void => {
-  message.parts = message.parts.filter((part) => part.kind !== "step" || part.phase !== "finish");
-};
-
-type PendingManualCompaction = {
-  messageId: string;
-  timestamp: string;
-};
 
 export const toClaudeHistoryMessages = (
   messages: ClaudeHistoryMessage[],
@@ -118,9 +113,7 @@ export const toClaudeHistoryMessages = (
     toolNamesByCallId,
     transcriptExternalSessionId: options.transcriptExternalSessionId,
   };
-  if (!messages.some(isClaudeHistoryBackgroundTasksChangedMessage)) {
-    applyClaudeHistoryActiveTasks(toolResultState, options.currentBackgroundTaskIds, now);
-  }
+  const hasBackgroundWork = createClaudeHistoryTaskCheck(messages, options);
   const projectHistoryInput = createClaudeHistoryInputProjector({ liveUserMessages });
   let lastAssistantMessage: MutableAssistantHistoryMessage | null = null;
   let lastAssistantTextMessage: MutableAssistantHistoryMessage | null = null;
@@ -129,7 +122,7 @@ export const toClaudeHistoryMessages = (
   let lastFinalAssistantText: string | undefined;
   let lastAutonomousFinalAssistantMessage: MutableAssistantHistoryMessage | null = null;
   let assistantTurnOriginKind: string | undefined;
-  let pendingManualCompaction: PendingManualCompaction | null = null;
+  let pendingManualCompaction: ManualCompactionInput | null = null;
   let manualCompactionBoundaryReceived = false;
   let unclaimedManualCompactionBoundary = false;
   const appendOrMergeAssistantSnapshot = (
@@ -357,7 +350,7 @@ export const toClaudeHistoryMessages = (
       });
       const shouldFinalize = shouldFinalizeClaudeTurn(
         assistantTurnOriginKind,
-        hasActiveClaudeBackgroundWork(toolResultState) ? 1 : 0,
+        hasBackgroundWork(entryIndex, toolResultState) ? 1 : 0,
       );
       if (!shouldFinalize) {
         removeClaudeHistoryFinishStep(assistantSnapshot);
@@ -388,7 +381,7 @@ export const toClaudeHistoryMessages = (
       const resultOriginKind = readClaudeTurnOriginKind(entryValue) ?? assistantTurnOriginKind;
       const shouldFinalize = shouldFinalizeClaudeTurn(
         resultOriginKind,
-        hasActiveClaudeBackgroundWork(toolResultState) ? 1 : 0,
+        hasBackgroundWork(entryIndex, toolResultState) ? 1 : 0,
       );
       assistantTurnOriginKind = undefined;
       if (pendingManualCompaction) {
@@ -480,6 +473,7 @@ export const toClaudeHistoryMessages = (
       }
       if (!shouldFinalize) {
         removeClaudeHistoryFinishStep(resultTarget);
+        delete resultTarget.model;
       } else {
         addClaudeHistoryFinishStep(resultTarget, finishReasonForClaudeResult(entry));
       }

@@ -52,10 +52,34 @@ describe("claude-agent-sdk-history assistant turns", () => {
         origin: { kind: "task-notification" },
       },
     ]);
-    for (const [messages, currentBackgroundTaskIds] of [
+    const nestedReply = toSessionMessage({
+      type: "assistant",
+      uuid: "nested-assistant",
+      session_id: "session-1",
+      parent_tool_use_id: "child-call",
+      timestamp: "2026-06-26T11:03:14.000Z",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "Child update" }],
+        stop_reason: "end_turn",
+      },
+    });
+    const cases: Array<
+      [Parameters<typeof toClaudeHistoryMessages>[0], ReadonlySet<string> | undefined]
+    > = [
       [entries, undefined],
       [entries.slice(1), new Set(["bash-1"])],
-    ] as const) {
+      [[{ ...entries[0]!, tasks: [] }, ...entries.slice(1), nestedReply], new Set(["bash-1"])],
+      [
+        [
+          ...entries.slice(1, 3),
+          { ...entries[0]!, timestamp: "2026-06-26T11:03:12.500Z" },
+          entries[3]!,
+        ],
+        undefined,
+      ],
+    ];
+    for (const [messages, currentBackgroundTaskIds] of cases) {
       const history = toClaudeHistoryMessages(
         messages,
         () => "2026-06-26T12:00:00.000Z",

@@ -38,6 +38,10 @@ export const addClaudeHistoryFinishStep = (
   message.parts.push(part);
 };
 
+export const removeClaudeHistoryFinishStep = (message: MutableAssistantHistoryMessage): void => {
+  message.parts = message.parts.filter((part) => part.kind !== "step" || part.phase !== "finish");
+};
+
 export const isLiveFinalAssistantStopReason = (stopReason: string | undefined): boolean =>
   stopReason === "end_turn" || stopReason === "stop_sequence";
 

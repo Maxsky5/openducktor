@@ -9,10 +9,15 @@ import {
   projectClaudeBackgroundToolUse,
 } from "./claude-agent-sdk-background-tools";
 import { projectClaudeCompletedToolResult } from "./claude-agent-sdk-completed-tool-result";
+import { hasActiveClaudeBackgroundWork } from "./claude-agent-sdk-event-session";
 import type { MutableAssistantHistoryMessage } from "./claude-agent-sdk-history-assistant";
-import { readHistorySessionId } from "./claude-agent-sdk-history-entry";
-import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-import";
+import { isNestedHistoryEntry, readHistorySessionId } from "./claude-agent-sdk-history-entry";
+import {
+  type ClaudeHistoryMessage,
+  isClaudeHistoryBackgroundTasksChangedMessage,
+} from "./claude-agent-sdk-history-import";
 import { readHistoryToolResults } from "./claude-agent-sdk-history-support";
+import { isClaudeSyntheticAssistantMessage } from "./claude-agent-sdk-local-commands";
 import {
   emitClaudeAgentToolResultSubagentPart,
   emitClaudeTaskStopSubagentPart,
@@ -42,6 +47,27 @@ export type ClaudeHistoryToolResultState = ClaudeBackgroundToolState & {
   todoProjectionState: ClaudeTodoProjectionState;
   todosById: ClaudeTodoState;
   transcriptExternalSessionId: string | undefined;
+};
+
+export const createClaudeHistoryTaskCheck = (
+  messages: ClaudeHistoryMessage[],
+  options: {
+    currentBackgroundTaskIds?: ReadonlySet<string>;
+    includeNestedEntries?: boolean;
+  },
+) => {
+  const lastSnapshot = messages.findLastIndex(isClaudeHistoryBackgroundTasksChangedMessage);
+  const lastReply = messages.findLastIndex(
+    (message) =>
+      message.type === "assistant" &&
+      !isClaudeSyntheticAssistantMessage(message) &&
+      (options.includeNestedEntries || !isNestedHistoryEntry(message)),
+  );
+  return (index: number, state: ClaudeHistoryToolResultState): boolean =>
+    hasActiveClaudeBackgroundWork(state) ||
+    (index > lastSnapshot &&
+      index >= lastReply &&
+      (options.currentBackgroundTaskIds?.size ?? 0) > 0);
 };
 
 export const applyClaudeHistoryTaskSnapshot = (
