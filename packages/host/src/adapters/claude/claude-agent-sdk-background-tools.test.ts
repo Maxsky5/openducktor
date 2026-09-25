@@ -377,6 +377,92 @@ describe("Claude background ordinary tool parts", () => {
     expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
   });
 
+  test("keeps an ambient terminal notice on a card that was visible", () => {
+    for (const resultFirst of [true, false]) {
+      const { parts, send } = live();
+      send(toolUse("ambient-terminal", "mcp__server__export", { query: "report" }));
+      send(
+        claudeSdkMessageFixture({
+          type: "system",
+          subtype: "task_started",
+          task_id: "ambient-terminal-task",
+          tool_use_id: "ambient-terminal",
+          task_type: "mcp_task",
+          description: "Export report",
+        }),
+      );
+      if (resultFirst) {
+        send(toolResult("ambient-terminal", "Started", "ambient-terminal-task"));
+      } else {
+        send(
+          snapshot([
+            {
+              task_id: "ambient-terminal-task",
+              task_type: "mcp_task",
+              description: "Export report",
+              ambient: true,
+            },
+          ]),
+        );
+        expect(parts("ambient-terminal").at(-1)?.metadata?.backgroundTaskStatus).toBe("unknown");
+      }
+      send(
+        claudeSdkMessageFixture({
+          type: "system",
+          subtype: "task_notification",
+          task_id: "ambient-terminal-task",
+          tool_use_id: "ambient-terminal",
+          status: "completed",
+          output_file: "/tmp/report.output",
+          summary: "Report ready",
+          resource_links: [{ name: "report.csv", uri: "file:///reports/report.csv" }],
+          ambient: true,
+        }),
+      );
+      if (!resultFirst) send(toolResult("ambient-terminal", "Started", "ambient-terminal-task"));
+      expect(parts("ambient-terminal").at(-1)).toMatchObject({
+        status: "completed",
+        output: "Export report\nReport ready\nreport.csv: file:///reports/report.csv",
+        metadata: {
+          backgroundTaskStatus: "completed",
+          outputFile: "/tmp/report.output",
+          resourceLinks: [{ name: "report.csv", uri: "file:///reports/report.csv" }],
+        },
+      });
+    }
+  });
+
+  test("keeps a task that was always ambient off the card", () => {
+    const { parts, send } = live();
+    send(toolUse("ambient-only", "Bash", { command: "pwd" }));
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_started",
+        task_id: "ambient-only-task",
+        tool_use_id: "ambient-only",
+        task_type: "local_bash",
+        description: "Watch",
+        ambient: true,
+      }),
+    );
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_notification",
+        task_id: "ambient-only-task",
+        tool_use_id: "ambient-only",
+        status: "completed",
+        output_file: "",
+        summary: "Watch ended",
+        ambient: true,
+      }),
+    );
+    send(toolResult("ambient-only", "/repo"));
+    expect(parts("ambient-only").at(-1)).toMatchObject({ status: "completed", output: "/repo" });
+    expect(parts("ambient-only").at(-1)?.metadata?.backgroundTaskId).toBeUndefined();
+  });
+
   test("keeps foreground Bash output after progress arrives before its start edge", () => {
     const { parts, send, session } = live();
     send(toolUse("foreground-progress", "Bash", { command: "pwd" }));

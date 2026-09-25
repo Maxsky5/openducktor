@@ -42,6 +42,7 @@ type BackgroundToolTask = {
   outputFile?: string;
   part?: ToolPart;
   resourceLinks?: ClaudeProtocolObject[];
+  shown?: boolean;
   startedAtMs?: number;
   summary?: string;
   toolUseId?: string;
@@ -95,10 +96,7 @@ export const projectClaudeBackgroundTaskEdge = (
     state.backgroundToolAgentTaskIds.add(taskId);
     return null;
   }
-  if (
-    (message.subtype === "task_started" || message.subtype === "task_notification") &&
-    (message.ambient || message.skip_transcript)
-  ) {
+  if (message.subtype === "task_started" && (message.ambient || message.skip_transcript)) {
     const task = taskFor(state, taskId);
     const wasActive = isTaskActive(state, taskId);
     task.ambient = true;
@@ -108,7 +106,7 @@ export const projectClaudeBackgroundTaskEdge = (
     delete task.endedAtMs;
     return projectTask(state, taskId, task, timestamp);
   }
-  if (knownTask?.ambient) return null;
+  if (knownTask?.ambient && message.subtype !== "task_notification") return null;
   const task = taskFor(state, taskId);
   const activeInSnapshot = processActiveTaskIds?.has(taskId);
   const canActivate =
@@ -157,6 +155,7 @@ export const projectClaudeBackgroundTaskEdge = (
       task.endedAtMs = message.patch.end_time;
     }
   } else {
+    task.ambient ||= message.ambient === true || message.skip_transcript === true;
     task.backgrounded = true;
     task.notified = true;
     task.outcome = message.status;
@@ -227,7 +226,7 @@ export const projectClaudeBackgroundToolResult = (
   }
   state.backgroundToolCompletedPartsByCallId?.delete(callId);
   const task = taskFor(state, taskId);
-  if (task.ambient) return completedPart;
+  if (task.ambient && !task.shown) return completedPart;
   task.toolUseId = callId;
   taskIdsByCall(state).set(callId, taskId);
   if (resultTaskId) task.backgrounded = true;
@@ -357,7 +356,7 @@ const projectTask = (
   timestamp: string,
 ): ToolPart | null => {
   if (
-    (task.ambient && !task.outcome) ||
+    (task.ambient && !task.shown) ||
     state.backgroundToolAgentTaskIds?.has(taskId) ||
     !task.backgrounded ||
     (!isTaskActive(state, taskId) && !task.outcome) ||
@@ -385,6 +384,7 @@ const projectTask = (
     });
   if (!task.part && startedAtMs === undefined) delete base.startedAtMs;
   task.part = presentTask(taskId, task, base, Date.parse(timestamp));
+  task.shown = true;
   return task.part;
 };
 
