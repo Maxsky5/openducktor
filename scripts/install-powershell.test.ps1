@@ -174,6 +174,12 @@ try {
     & $scriptPath
     Assert (Test-Path -LiteralPath $appPath) 'The repeat run did not leave one installed app.'
 
+    $global:release.assets[0].digest = 'sha256:' + ('0' * 64)
+    try { & $scriptPath; throw 'A changed download was accepted.' } catch {
+        Assert ($_.Exception.Message -like '*SHA-256 differs*') 'The changed download was not reported.'
+    }
+    Assert ((Get-Content -LiteralPath $appPath -Raw) -eq $first) 'A changed download changed the prior app.'
+
     $global:release.assets[0].digest = $null
     try { & $scriptPath; throw 'A missing digest was accepted.' } catch {
         Assert ($_.Exception.Message -like '*SHA-256 digest*') 'The missing digest was not reported.'

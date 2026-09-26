@@ -87,7 +87,15 @@ try {
     try {
         $installer = Join-Path $work $name
         Invoke-WebRequest -Uri $expectedUrl -OutFile $installer -UseBasicParsing
-        $actualSha = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash
+        $stream = [IO.File]::OpenRead($installer)
+        try {
+            $sha256 = [Security.Cryptography.SHA256]::Create()
+            try {
+                $actualSha = [BitConverter]::ToString($sha256.ComputeHash($stream)).Replace('-', '')
+            }
+            finally { $sha256.Dispose() }
+        }
+        finally { $stream.Dispose() }
         if ($actualSha -ine $expectedSha) {
             throw 'The downloaded asset SHA-256 differs from the GitHub release digest. The existing install is unchanged.'
         }

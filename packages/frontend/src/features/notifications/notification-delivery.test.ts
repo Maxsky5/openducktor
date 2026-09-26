@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { NotificationOccurrence } from "@openducktor/contracts";
 import { ArrowUpRight } from "lucide-react";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
@@ -136,12 +136,7 @@ describe("notification delivery adapters", () => {
       );
 
       fireEvent.click(closeButton);
-      await waitFor(
-        () => {
-          expect(toastElement.getAttribute("data-removed")).toBe("true");
-        },
-        { timeout: 800 },
-      );
+      expect(toastElement.getAttribute("data-removed")).toBe("true");
     } finally {
       if (toastId !== undefined) {
         act(() => toast.dismiss(toastId));
