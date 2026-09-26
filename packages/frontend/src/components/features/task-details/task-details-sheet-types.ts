@@ -8,4 +8,5 @@ export type TaskDetailsSheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onEdit?: (taskId: string) => void;
+  onDelete?: (taskId: string, options: { deleteSubtasks: boolean }) => Promise<void>;
 };

@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
+import { useTaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
 import { unfilteredRepoTaskDataQueryOptions } from "@/state/queries/tasks";
 import { TaskDetailsSheet } from "./task-details-sheet";
 import type { TaskDetailsSheetProps } from "./task-details-sheet-types";
@@ -30,9 +31,11 @@ export function TaskDetailsSheetController(props: TaskDetailsSheetControllerProp
 
 function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerProps): ReactElement {
   const { allTasks, ref, ...sheetProps } = props;
+  const workflowActions = useTaskWorkflowActions();
+  const deleteTask = sheetProps.onDelete ?? workflowActions?.onDelete;
   const repoPath = sheetProps.activeWorkspace?.repoPath ?? null;
   const [taskId, setTaskId] = useState<string | null>(null);
-  const shownTaskIdRef = useRef<string | null>(null);
+  const deletingTaskIdRef = useRef<string | null>(null);
   const boardTask = allTasks.find((entry) => entry.id === taskId);
   const taskQuery = useQuery({
     ...unfilteredRepoTaskDataQueryOptions(repoPath ?? ""),
@@ -41,16 +44,9 @@ function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerPr
   const sheetTasks = boardTask || !taskQuery.isSuccess ? allTasks : taskQuery.data.tasks;
   const task = sheetTasks.find((entry) => entry.id === taskId) ?? null;
   useEffect(() => {
-    if (task) shownTaskIdRef.current = task.id;
-  }, [task]);
-  useEffect(() => {
     if (!taskId || boardTask || taskQuery.isFetching || taskQuery.isPending) return;
     if (taskQuery.isSuccess && taskQuery.data.tasks.some((entry) => entry.id === taskId)) return;
-    if (taskQuery.isSuccess && shownTaskIdRef.current === taskId) {
-      shownTaskIdRef.current = null;
-      setTaskId(null);
-      return;
-    }
+    if (taskQuery.isSuccess && deletingTaskIdRef.current === taskId) return;
     toast.error(
       taskQuery.isError ? "Could not load notification task" : "Notification task no longer exists",
       {
@@ -76,11 +72,11 @@ function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerPr
     ref,
     () => ({
       openTask: (nextTaskId: string) => {
-        shownTaskIdRef.current = null;
+        deletingTaskIdRef.current = null;
         setTaskId(nextTaskId);
       },
       close: () => {
-        shownTaskIdRef.current = null;
+        deletingTaskIdRef.current = null;
         setTaskId(null);
       },
     }),
@@ -93,9 +89,21 @@ function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerPr
       task={task}
       allTasks={sheetTasks}
       open={open}
+      {...(deleteTask && {
+        onDelete: async (deletedTaskId: string, options: { deleteSubtasks: boolean }) => {
+          deletingTaskIdRef.current = deletedTaskId;
+          try {
+            await deleteTask(deletedTaskId, options);
+            setTaskId((currentTaskId) => (currentTaskId === deletedTaskId ? null : currentTaskId));
+          } catch (error) {
+            deletingTaskIdRef.current = null;
+            throw error;
+          }
+        },
+      })}
       onOpenChange={(nextOpen) => {
         if (!nextOpen) {
-          shownTaskIdRef.current = null;
+          deletingTaskIdRef.current = null;
           setTaskId(null);
         }
       }}
