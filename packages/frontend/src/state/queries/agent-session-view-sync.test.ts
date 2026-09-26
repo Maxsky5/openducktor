@@ -109,7 +109,7 @@ describe("AgentSessionViewSync", () => {
     }
   });
 
-  test("removes session state and the cached list for a deleted task", async () => {
+  test("clears session state without rereading a deleted task", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
     const loadSessions = mock(async () => []);
@@ -149,7 +149,8 @@ describe("AgentSessionViewSync", () => {
         emittedAt: "2026-09-03T20:00:00.000Z",
       });
 
-      expect(queryClient.getQueryData(queryKey)).toBeUndefined();
+      expect(queryClient.getQueryData<unknown[]>(queryKey)).toEqual([]);
+      expect(loadSessions).not.toHaveBeenCalled();
       expect(removeTaskSessions).toHaveBeenCalledWith("/repo", ["task-1"]);
       expect(refreshLiveSessions).not.toHaveBeenCalled();
     } finally {
