@@ -11,7 +11,9 @@ const writeScreen = (screen: TerminalScreenState, data: Uint8Array): Promise<voi
 const visibleLines = (terminal: Terminal): string[] =>
   Array.from(
     { length: terminal.rows },
-    (_, row) => terminal.buffer.active.getLine(row)?.translateToString() ?? "",
+    (_, row) =>
+      terminal.buffer.active.getLine(terminal.buffer.active.viewportY + row)?.translateToString() ??
+      "",
   );
 const linkAt = (terminal: Terminal, column: number) => {
   // SAFETY: xterm 6.0.0 stores OSC 8 IDs on cells and resolves them through this core service.
@@ -1257,6 +1259,29 @@ describe("TerminalScreenState", () => {
     screen.dispose();
     original.dispose();
     restored.dispose();
+  });
+
+  test("keeps idle logs through a one-row resize and a screen restore", async () => {
+    const screen = new TerminalScreenState({ columns: 12, rows: 4 });
+    const restored = new Terminal({ cols: 2, rows: 1, scrollback: 2000, allowProposedApi: true });
+    await writeScreen(screen, encoder.encode("start log\r\nready\r\n"));
+
+    screen.resize({ columns: 2, rows: 1 });
+    await screen.drained();
+    await write(restored, screen.snapshot().payload);
+    restored.resize(12, 4);
+    expect(visibleLines(restored).join("\n")).toContain("start log");
+    expect(visibleLines(restored).join("\n")).toContain("ready");
+
+    screen.resize({ columns: 12, rows: 4 });
+    await screen.drained();
+    const reloaded = new Terminal({ cols: 12, rows: 4, allowProposedApi: true });
+    await write(reloaded, screen.snapshot().payload);
+    expect(visibleLines(reloaded).join("\n")).toContain("start log");
+    expect(visibleLines(reloaded).join("\n")).toContain("ready");
+    screen.dispose();
+    restored.dispose();
+    reloaded.dispose();
   });
 
   test("continues a line that ends at the right edge", async () => {

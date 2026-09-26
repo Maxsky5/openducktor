@@ -112,7 +112,10 @@ const createLightweightBinding = () => {
   };
   const binding = {
     terminal,
-    fitAddon: { fit: mock(() => undefined) },
+    fitAddon: {
+      fit: mock(() => undefined),
+      proposeDimensions: mock(() => ({ cols: 120, rows: 40 })),
+    },
     resetLinkState: mock(() => undefined),
     dispose: mock(() => undefined),
   };
@@ -125,7 +128,7 @@ const createLightweightBinding = () => {
 };
 
 describe("retained terminal rendering", () => {
-  test("does not resize a terminal when a task panel has only padding in one dimension", async () => {
+  test("does not resize a terminal when a task panel is too small for a grid", async () => {
     const lightweight = createLightweightBinding();
     const createBinding = spyOn(sharedTerminalBinding, "createTerminalBinding").mockImplementation(
       // SAFETY: the fake terminal implements every binding method used by this mount test.
@@ -147,8 +150,12 @@ describe("retained terminal rendering", () => {
     container.style.padding = "4px 8px";
     document.body.append(container);
     lightweight.binding.fitAddon.fit.mockImplementation(() => {
-      lightweight.binding.terminal.resize(width <= 16 ? 2 : 120, height <= 8 ? 1 : 40);
+      lightweight.binding.terminal.resize(width <= 17 ? 2 : 120, height <= 9 ? 1 : 40);
     });
+    lightweight.binding.fitAddon.proposeDimensions.mockImplementation(() => ({
+      cols: width <= 17 ? 2 : 120,
+      rows: height <= 9 ? 1 : 40,
+    }));
     const nativeResizeObserver = globalThis.ResizeObserver;
     globalThis.ResizeObserver = class {
       observe(): void {}
@@ -184,6 +191,8 @@ describe("retained terminal rendering", () => {
       for (const [collapsedWidth, collapsedHeight] of [
         [800, 8],
         [8, 400],
+        [800, 9],
+        [17, 400],
       ] as const) {
         width = collapsedWidth;
         height = collapsedHeight;
