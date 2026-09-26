@@ -31,18 +31,28 @@ export function NotificationNavigationRegistrar(): null {
 
   useEffect(() => {
     return registerNavigator(async (target) => {
-      let beforeNavigate: (() => Promise<boolean>) | undefined;
+      let beforeNavigate: ((selectWorkspace: () => Promise<void>) => Promise<boolean>) | undefined;
       if (target.type !== "notification_settings" && location.pathname === "/chats") {
         const targetWorkspace = workspaces.find((entry) => entry.repoPath === target.repoPath);
         const changesContext =
           targetWorkspace &&
           (targetWorkspace.workspaceId !== activeWorkspace?.workspaceId || "taskId" in target);
         if (changesContext)
-          beforeNavigate = () =>
-            new Promise<boolean>((resolve) => {
+          beforeNavigate = (selectWorkspace) =>
+            new Promise<boolean>((resolve, reject) => {
               guardWorkspaceChange(
-                () => resolve(true),
+                async () => {
+                  try {
+                    await selectWorkspace();
+                    resolve(true);
+                    return true;
+                  } catch (cause) {
+                    reject(cause);
+                    return false;
+                  }
+                },
                 () => resolve(false),
+                { waitForSuccess: true },
               );
             });
       }

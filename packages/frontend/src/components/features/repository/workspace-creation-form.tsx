@@ -96,7 +96,7 @@ type WorkspaceCreationFormProps = {
   onSuccess?: () => void;
   resolveRepoPath?: (repoPath: string) => Promise<WorkspacePathResolution>;
   onReopenClosedWorkspace?: (workspace: WorkspaceRecord) => Promise<void>;
-  beforeWorkspaceChange?: () => Promise<boolean>;
+  runWorkspaceChange?: (change: () => Promise<void>) => Promise<boolean>;
 };
 
 export type WorkspaceCreationController = {
@@ -128,7 +128,7 @@ export function useWorkspaceCreation({
   onSuccess,
   resolveRepoPath,
   onReopenClosedWorkspace,
-  beforeWorkspaceChange,
+  runWorkspaceChange,
   initialPickerOpen = false,
 }: WorkspaceCreationFormProps & { initialPickerOpen?: boolean }): WorkspaceCreationController {
   const [state, dispatch] = useReducer(reducer, {
@@ -153,6 +153,12 @@ export function useWorkspaceCreation({
       validationError = `Workspace ID already exists: ${state.workspaceId.trim()}`;
   }
   const busy = disabled || state.submitting;
+  const runChange =
+    runWorkspaceChange ??
+    (async (change: () => Promise<void>) => {
+      await change();
+      return true;
+    });
 
   const confirmRepo = async (repoPath: string): Promise<void> => {
     if (resolveRepoPath) {
@@ -163,10 +169,7 @@ export function useWorkspaceCreation({
         );
       }
       if (resolution.kind === "closed") {
-        if (beforeWorkspaceChange && !(await beforeWorkspaceChange())) return;
-        if (onReopenClosedWorkspace) {
-          await onReopenClosedWorkspace(resolution.workspace);
-        }
+        if (!(await runChange(async () => onReopenClosedWorkspace?.(resolution.workspace)))) return;
         onSuccess?.();
         return;
       }
@@ -199,8 +202,7 @@ export function useWorkspaceCreation({
       if (state.tileColor) {
         workspaceInput.tileColor = state.tileColor;
       }
-      if (beforeWorkspaceChange && !(await beforeWorkspaceChange())) return;
-      await addWorkspace(workspaceInput);
+      if (!(await runChange(() => addWorkspace(workspaceInput)))) return;
       onSuccess?.();
     } catch (cause) {
       dispatch({ type: "error", error: errorMessage(cause) });

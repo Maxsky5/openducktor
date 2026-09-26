@@ -1,8 +1,14 @@
 import { describe, expect, mock, test } from "bun:test";
 import { useQueryClient } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { createElement, type ReactNode, useEffect } from "react";
+import { createElement, type ReactNode, useEffect, useState } from "react";
 import { QueryProvider } from "@/lib/query-provider";
+import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
+import {
+  useWorkspacePreviewTransitionGuard,
+  WorkspacePreviewTransitionGuardProvider,
+} from "@/components/layout/workspace-preview-transition-guard";
+import { useWorkspaceSessionPreview } from "@/pages/workspace-sessions/use-workspace-session-preview";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
@@ -77,7 +83,95 @@ function SeedFilesystemDirectory(): ReactNode {
   return null;
 }
 
+function DirtyPreview() {
+  const [file, setFile] = useState<TaskExecutionSelectedFile | null>({
+    rootPath: "/repo",
+    relativePath: "draft.ts",
+  });
+  const { preview, onDiscard } = useWorkspaceSessionPreview(file, setFile);
+  return (
+    <>
+      <output data-testid="draft">{preview.model.selectedFile?.relativePath ?? "none"}</output>
+      <output data-testid="pending-discard">{String(preview.model.hasPendingDiscard)}</output>
+      <button onClick={() => preview.model.onLeavePolicyChange("confirm")}>Edit draft</button>
+      <button onClick={onDiscard}>Discard draft</button>
+    </>
+  );
+}
+
+function GuardedModal() {
+  const { run } = useWorkspacePreviewTransitionGuard();
+  return <OpenRepositoryModal open canClose onOpenChange={() => {}} requestTransition={run} />;
+}
+
+function renderGuardedModal(workspaceState: WorkspaceStateContextValue) {
+  return render(
+    <QueryProvider useIsolatedClient>
+      <WorkspaceStateContext.Provider value={workspaceState}>
+        <SeedFilesystemDirectory />
+        <WorkspacePreviewTransitionGuardProvider>
+          <GuardedModal />
+          <DirtyPreview />
+        </WorkspacePreviewTransitionGuardProvider>
+      </WorkspaceStateContext.Provider>
+    </QueryProvider>,
+  );
+}
+
 describe("OpenRepositoryModal", () => {
+  test.each(["add", "closed row", "closed folder"])(
+    "keeps the dirty draft when %s fails",
+    async (path) => {
+      const action = createDeferred<void>();
+      const addWorkspace = mock(() => action.promise);
+      const reopenWorkspace = mock(() => action.promise);
+      const closedWorkspace = {
+        workspaceId: "closed",
+        workspaceName: "Closed",
+        abbreviation: null,
+        tileColor: null,
+        repoPath: "/repo",
+        isActive: false,
+        hasConfig: true,
+        configuredWorktreeBasePath: null,
+        defaultWorktreeBasePath: null,
+        effectiveWorktreeBasePath: null,
+      };
+      const workspaceState = createWorkspaceStateValue({
+        addWorkspace,
+        reopenWorkspace,
+        closedWorkspaces: path === "add" ? [] : [closedWorkspace],
+        resolveWorkspacePath: async () =>
+          path === "closed folder"
+            ? { kind: "closed", workspace: closedWorkspace }
+            : { kind: "new" },
+      });
+      const view = renderGuardedModal(workspaceState);
+      try {
+        fireEvent.click(screen.getByText("Edit draft"));
+        if (path === "closed row") {
+          fireEvent.click(screen.getByRole("button", { name: /Closed/ }));
+        } else {
+          fireEvent.click(screen.getByRole("button", { name: /choose repository folder/i }));
+          fireEvent.click(screen.getByRole("button", { name: /choose this folder/i }));
+          if (path === "add")
+            fireEvent.click(await screen.findByRole("button", { name: /^open repository$/i }));
+        }
+        await waitFor(() => expect(screen.getByTestId("pending-discard").textContent).toBe("true"));
+        fireEvent.click(screen.getByText("Discard draft"));
+        await waitFor(() =>
+          expect(path === "add" ? addWorkspace : reopenWorkspace).toHaveBeenCalledTimes(1),
+        );
+        expect(screen.getByTestId("draft").textContent).toBe("draft.ts");
+        await act(async () => action.reject(new Error("Workspace failed")));
+        await screen.findByText("Workspace failed");
+        expect(screen.getByTestId("draft").textContent).toBe("draft.ts");
+      } finally {
+        view.unmount();
+      }
+    },
+  );
+
   test("resets repository creation fields when the modal reopens", async () => {
     const onOpenChange = mock((_open: boolean) => {});
     const workspaceState = createWorkspaceStateValue();

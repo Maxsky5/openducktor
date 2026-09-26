@@ -18,7 +18,11 @@ type OpenRepositoryModalProps = {
   open: boolean;
   canClose: boolean;
   onOpenChange: (open: boolean) => void;
-  requestTransition: (apply: () => void, cancel?: () => void) => void;
+  requestTransition: (
+    apply: () => Promise<boolean>,
+    cancel?: () => void,
+    options?: { waitForSuccess?: boolean },
+  ) => void;
 };
 
 export function OpenRepositoryModal({
@@ -37,20 +41,30 @@ export function OpenRepositoryModal({
     isSwitchingWorkspace,
   } = useWorkspaceState();
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
-  const [isWaitingForPreview, setIsWaitingForPreview] = useState(false);
+  const [isChangingWorkspace, setIsChangingWorkspace] = useState(false);
   const [selectionError, setSelectionError] = useState<string | null>(null);
-  const interactionLocked = isSwitchingWorkspace || isCreatingWorkspace || isWaitingForPreview;
-  const beforeWorkspaceChange = async (): Promise<boolean> => {
-    setIsWaitingForPreview(true);
+  const interactionLocked = isSwitchingWorkspace || isCreatingWorkspace || isChangingWorkspace;
+  const runWorkspaceChange = async (change: () => Promise<void>): Promise<boolean> => {
+    setIsChangingWorkspace(true);
     try {
-      return await new Promise<boolean>((resolve) => {
+      return await new Promise<boolean>((resolve, reject) => {
         requestTransition(
-          () => resolve(true),
+          async () => {
+            try {
+              await change();
+              resolve(true);
+              return true;
+            } catch (cause) {
+              reject(cause);
+              return false;
+            }
+          },
           () => resolve(false),
+          { waitForSuccess: true },
         );
       });
     } finally {
-      setIsWaitingForPreview(false);
+      setIsChangingWorkspace(false);
     }
   };
   const configuredWorkspaces = [
@@ -65,8 +79,8 @@ export function OpenRepositoryModal({
   ): Promise<void> => {
     setSelectionError(null);
     try {
-      if (!(await beforeWorkspaceChange())) return;
-      await reopenWorkspace({ workspaceId, expectedRepoPath });
+      if (!(await runWorkspaceChange(() => reopenWorkspace({ workspaceId, expectedRepoPath }))))
+        return;
       onOpenChange(false);
     } catch (cause) {
       setSelectionError(errorMessage(cause));
@@ -104,7 +118,7 @@ export function OpenRepositoryModal({
           <WorkspaceCreationForm
             workspaces={configuredWorkspaces}
             addWorkspace={addWorkspace}
-            beforeWorkspaceChange={beforeWorkspaceChange}
+            runWorkspaceChange={runWorkspaceChange}
             resolveRepoPath={resolveWorkspacePath}
             onReopenClosedWorkspace={async (workspace) => {
               await reopenWorkspace({

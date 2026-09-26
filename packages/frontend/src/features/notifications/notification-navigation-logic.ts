@@ -60,7 +60,7 @@ type NotificationNavigationDependencies = {
   navigate: (href: string, options?: { state?: unknown }) => void;
   reportStale: (message: string) => void;
   openSettings(): void;
-  beforeNavigate?: () => Promise<boolean>;
+  beforeNavigate?: (selectWorkspace: () => Promise<void>) => Promise<boolean>;
 };
 
 export const navigateToNotificationTarget = async (
@@ -83,8 +83,9 @@ export const navigateToNotificationTarget = async (
       : dependencies.selectWorkspace(workspace.workspaceId);
   const workspaceSelection = dependencies.beforeNavigate ? null : selectWorkspace();
   const open = async (href?: string, options?: { state?: unknown }) => {
-    if (dependencies.beforeNavigate && !(await dependencies.beforeNavigate())) return;
-    await (workspaceSelection ?? selectWorkspace());
+    if (dependencies.beforeNavigate) {
+      if (!(await dependencies.beforeNavigate(selectWorkspace))) return;
+    } else await workspaceSelection;
     if (href) {
       if (options) dependencies.navigate(href, options);
       else dependencies.navigate(href);
