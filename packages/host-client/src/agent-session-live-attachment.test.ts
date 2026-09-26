@@ -128,7 +128,7 @@ describe("agent session live attachment", () => {
     ]);
   });
 
-  test("preserves repository association in live session events", () => {
+  test("forwards complete repository session events unchanged", () => {
     const received: AgentSessionLiveEnvelope[] = [];
     const attachment = createAgentSessionLiveAttachment("/repo", (envelope) => {
       received.push(envelope);
@@ -149,15 +149,11 @@ describe("agent session live attachment", () => {
       contextUsage: null,
     } as const;
     const event = { type: "session_upsert", session } as const;
+    const expectedEvent = structuredClone(event);
 
     attachment.accept(snapshot);
     attachment.accept(event);
 
-    expect(received).toHaveLength(2);
-    expect(received[0]).toEqual({ ...snapshot, isConnectionSnapshot: true });
-    expect(received[1]).toMatchObject({
-      type: "session_upsert",
-      session: { sessionAssociation: { kind: "repository" } },
-    });
+    expect(received).toEqual([{ ...snapshot, isConnectionSnapshot: true }, expectedEvent]);
   });
 });
