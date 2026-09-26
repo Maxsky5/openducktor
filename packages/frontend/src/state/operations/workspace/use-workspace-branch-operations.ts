@@ -29,7 +29,7 @@ type UseWorkspaceBranchOperationsResult = {
   isLoadingBranches: boolean;
   isSwitchingBranch: boolean;
   refreshBranches: (force?: boolean) => Promise<void>;
-  switchBranch: (branchName: string) => Promise<void>;
+  switchBranch: (branchName: string, onSwitched?: () => void) => Promise<void>;
   clearBranchData: (repoPath?: string | null) => void;
 };
 
@@ -147,7 +147,7 @@ export function useWorkspaceBranchOperations({
   const isSwitchingBranch = activeRepo ? switchingBranchRepoPaths.has(activeRepo) : false;
 
   const switchBranch = useCallback(
-    async (branchName: string): Promise<void> => {
+    async (branchName: string, onSwitched?: () => void): Promise<void> => {
       if (!activeRepo || !branchName) {
         return;
       }
@@ -218,6 +218,7 @@ export function useWorkspaceBranchOperations({
         }
 
         queryClient.setQueryData(gitQueryKeys.currentBranch(repoPath), current);
+        onSwitched?.();
         await Promise.all([
           invalidateGitWorkingDirectoryQueries(queryClient, repoPath, repoPath),
           invalidateWorkspaceFileQueries(queryClient, repoPath),

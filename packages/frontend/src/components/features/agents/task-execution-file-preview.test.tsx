@@ -184,6 +184,7 @@ const renderPreview = (
     previewSessionKey: model.previewSessionKey ?? 0,
     preservePreviousSnapshot: model.preservePreviousSnapshot ?? false,
     hasPendingDiscard: model.hasPendingDiscard ?? false,
+    isApplyingTransition: model.isApplyingTransition ?? false,
     onLeavePolicyChange: model.onLeavePolicyChange ?? (() => {}),
     onKeepEditing: model.onKeepEditing ?? (() => {}),
     onDiscard: model.onDiscard ?? (() => {}),
@@ -1511,6 +1512,32 @@ describe("TaskExecutionSelectedFilePreview", () => {
 
     expect(event.defaultPrevented).toBe(true);
     expect(writeTextFileMock).not.toHaveBeenCalled();
+  });
+
+  test("holds the discard choice while branch checkout runs", async () => {
+    const onKeepEditing = mock(() => {});
+    const onDiscard = mock(() => {});
+    render(
+      renderPreview({
+        selectedFile: firstFile,
+        onClose: () => {},
+        hasPendingDiscard: true,
+        isApplyingTransition: true,
+        onKeepEditing,
+        onDiscard,
+      }),
+    );
+
+    await screen.findByRole("dialog");
+    expect(screen.getByRole("button", { name: "Keep editing" }).hasAttribute("disabled")).toBe(
+      true,
+    );
+    expect(
+      screen.getByRole("button", { name: "Switching branch..." }).hasAttribute("disabled"),
+    ).toBe(true);
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(onKeepEditing).not.toHaveBeenCalled();
+    expect(onDiscard).not.toHaveBeenCalled();
   });
 });
 

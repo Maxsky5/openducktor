@@ -102,7 +102,7 @@ export type WorkspaceStateContextValue = {
   resolveWorkspacePath: (repoPath: string) => Promise<WorkspacePathResolution>;
   reorderWorkspaces: (workspaceIds: string[]) => Promise<void>;
   refreshBranches: (force?: boolean) => Promise<void>;
-  switchBranch: (branchName: string) => Promise<void>;
+  switchBranch: (branchName: string, onSwitched?: () => void) => Promise<void>;
   loadRepoSettings: () => Promise<RepoSettingsInput>;
   saveRepoSettings: (input: RepoSettingsInput) => Promise<void>;
   loadSettingsSnapshot: () => Promise<SettingsSnapshot>;

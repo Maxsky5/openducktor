@@ -72,6 +72,40 @@ describe("useTaskExecutionFilePreviewController", () => {
     expect(view.result.current.model.selectedFile).toBeNull();
   });
 
+  test("keeps a dirty preview when a confirmed branch switch fails", async () => {
+    const view = renderHook(() => useTaskExecutionFilePreviewController(firstFile));
+    const finishSwitches: Array<(switched: boolean) => void> = [];
+    const switchBranch = mock(
+      () => new Promise<boolean>((resolve) => finishSwitches.push(resolve)),
+    );
+    act(() => view.result.current.model.onLeavePolicyChange("confirm"));
+
+    act(() =>
+      view.result.current.requestContextTransition(switchBranch, undefined, {
+        waitForSuccess: true,
+      }),
+    );
+    act(() => view.result.current.model.onDiscard());
+    await waitFor(() => expect(switchBranch).toHaveBeenCalledTimes(1));
+    expect(view.result.current.model.selectedFile).toEqual(firstFile);
+    expect(view.result.current.model.isApplyingTransition).toBe(true);
+
+    await act(async () => finishSwitches[0]?.(false));
+    await waitFor(() => expect(view.result.current.model.isApplyingTransition).toBe(false));
+    expect(view.result.current.model.selectedFile).toEqual(firstFile);
+    expect(view.result.current.model.hasPendingDiscard).toBe(false);
+
+    act(() =>
+      view.result.current.requestContextTransition(switchBranch, undefined, {
+        waitForSuccess: true,
+      }),
+    );
+    act(() => view.result.current.model.onDiscard());
+    await waitFor(() => expect(switchBranch).toHaveBeenCalledTimes(2));
+    await act(async () => finishSwitches[1]?.(true));
+    await waitFor(() => expect(view.result.current.model.selectedFile).toBeNull());
+  });
+
   test("defers a context transition during Save and applies it after Save settles cleanly", async () => {
     const view = renderHook(() => useTaskExecutionFilePreviewController());
     const applyContextTransition = mock(() => {});

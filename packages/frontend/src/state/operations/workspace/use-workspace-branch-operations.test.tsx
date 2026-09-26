@@ -914,6 +914,7 @@ describe("use-workspace-branch-operations", () => {
   test("restores the prior branch snapshot and reports the error when switching fails", async () => {
     const switchError = new Error("branch checkout failed");
     const toastError = spyOn(toast, "error").mockImplementation(() => "toast-id");
+    const onSwitched = mock(() => {});
 
     workspaceHost.gitGetCurrentBranch = mock(async () => ({
       name: "main",
@@ -947,7 +948,7 @@ describe("use-workspace-branch-operations", () => {
       });
 
       await harness.run(async (value) => {
-        await value.switchBranch("feature");
+        await value.switchBranch("feature", onSwitched);
       });
 
       expect(harness.getLatest().activeBranch).toEqual({
@@ -956,6 +957,7 @@ describe("use-workspace-branch-operations", () => {
         revision: "abc123",
       });
       expect(harness.getLatest().isSwitchingBranch).toBe(false);
+      expect(onSwitched).not.toHaveBeenCalled();
       expect(toastError).toHaveBeenCalledWith("Failed to switch branch", {
         description: "branch checkout failed",
       });
@@ -968,6 +970,7 @@ describe("use-workspace-branch-operations", () => {
   test("keeps the switched branch and rejects when branch list refresh fails after checkout", async () => {
     const branchListError = new Error("branch list unavailable");
     const toastError = spyOn(toast, "error").mockImplementation(() => "toast-id");
+    const onSwitched = mock(() => {});
 
     workspaceHost.gitGetCurrentBranch = mock(async () => ({
       name: "main",
@@ -1012,7 +1015,7 @@ describe("use-workspace-branch-operations", () => {
       const caughtErrors = new Array<Error>();
       await harness.run(async (value) => {
         try {
-          await value.switchBranch("feature");
+          await value.switchBranch("feature", onSwitched);
         } catch (cause) {
           if (!(cause instanceof Error)) {
             throw new Error("Expected branch list refresh to reject with Error.", { cause });
@@ -1026,6 +1029,7 @@ describe("use-workspace-branch-operations", () => {
         detached: false,
         revision: "def456",
       });
+      expect(onSwitched).toHaveBeenCalledTimes(1);
       expect(harness.getLatest().branches).toEqual(initialBranches);
       expect(caughtErrors).toEqual([branchListError]);
       expect(toastError).toHaveBeenCalledWith(

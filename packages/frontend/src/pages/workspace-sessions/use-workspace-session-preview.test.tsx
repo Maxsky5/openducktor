@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
 import {
@@ -35,7 +35,7 @@ function SessionPreview({
   );
 }
 
-function SessionHarness() {
+function SessionHarness({ switchBranch }: { switchBranch?: () => Promise<boolean> }) {
   const { run } = useWorkspacePreviewTransitionGuard();
   const [activeSession, setActiveSession] = useState<"first" | "second">("first");
   const [selectedFiles, setSelectedFiles] = useState<{
@@ -47,6 +47,11 @@ function SessionHarness() {
       <output data-testid="active-session">{activeSession}</output>
       <button onClick={() => run(() => setActiveSession("first"))}>Switch to first</button>
       <button onClick={() => run(() => setActiveSession("second"))}>Switch to second</button>
+      {switchBranch ? (
+        <button onClick={() => run(switchBranch, undefined, { waitForSuccess: true })}>
+          Switch branch
+        </button>
+      ) : null}
       <SessionPreview
         key={activeSession}
         selectedFile={selectedFiles[activeSession]}
@@ -75,6 +80,36 @@ test("keeps a closed preview closed after switching chats", async () => {
     fireEvent.click(screen.getByRole("button", { name: "Switch to second" }));
     fireEvent.click(screen.getByRole("button", { name: "Switch to first" }));
     expect(screen.getByTestId("selected-file").textContent).toBe("none");
+  } finally {
+    view.unmount();
+  }
+});
+
+test("keeps the dirty draft when branch checkout fails and clears it when checkout succeeds", async () => {
+  const finishSwitches: Array<(switched: boolean) => void> = [];
+  const switchBranch = () => new Promise<boolean>((resolve) => finishSwitches.push(resolve));
+  const view = render(
+    <WorkspacePreviewTransitionGuardProvider>
+      <SessionHarness switchBranch={switchBranch} />
+    </WorkspacePreviewTransitionGuardProvider>,
+  );
+  try {
+    fireEvent.click(screen.getByRole("button", { name: "Open first" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit file" }));
+    fireEvent.click(screen.getByRole("button", { name: "Switch branch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard draft" }));
+    await waitFor(() => expect(finishSwitches).toHaveLength(1));
+    expect(screen.getByTestId("selected-file").textContent).toBe("first.ts");
+
+    await act(async () => finishSwitches[0]?.(false));
+    await waitFor(() => expect(screen.getByTestId("pending-discard").textContent).toBe("false"));
+    expect(screen.getByTestId("selected-file").textContent).toBe("first.ts");
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch branch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard draft" }));
+    await waitFor(() => expect(finishSwitches).toHaveLength(2));
+    await act(async () => finishSwitches[1]?.(true));
+    await waitFor(() => expect(screen.getByTestId("selected-file").textContent).toBe("none"));
   } finally {
     view.unmount();
   }

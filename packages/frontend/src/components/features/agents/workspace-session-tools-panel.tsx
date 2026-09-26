@@ -316,7 +316,11 @@ async function refreshWorkspaceSessionData(input: {
   } = input;
   if (workingDirectory && target && !targetError) {
     if (mode === "hard" && !resolvedTarget) {
-      await hostClient.gitFetchRemote(repoPath, canonicalTargetBranch(target), workingDirectory);
+      try {
+        await hostClient.gitFetchRemote(repoPath, canonicalTargetBranch(target), workingDirectory);
+      } catch (error) {
+        toast.error("Could not refresh Git changes", { description: errorMessage(error) });
+      }
     }
     const checkedComparison = await refetchComparison();
     const checkedTarget =

@@ -464,18 +464,22 @@ test("manual refresh fetches a missing comparison target before checking it agai
 
 test("a missing target fetch failure tells the user what failed", async () => {
   const reportError = spyOn(toast, "error").mockImplementation(() => "toast-id");
+  const comparison = mock(async (): Promise<GitComparisonTarget> => ({
+    kind: "unavailable",
+    reason: "No tracked upstream.",
+  }));
+  const statusTargets: string[] = [];
   configureShellBridge(
     createShellBridgeFixture({
       client: {
-        gitGetComparisonTarget: async () => ({
-          kind: "unavailable",
-          reason: "No tracked upstream.",
-        }),
+        gitGetComparisonTarget: comparison,
         gitFetchRemote: async () => {
-          throw new Error("Remote is offline");
+          throw new Error("Current branch has no upstream remote");
         },
-        gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) =>
-          worktreeStatus(targetBranch),
+        gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) => {
+          statusTargets.push(targetBranch);
+          return worktreeStatus(targetBranch);
+        },
         gitGetWorktreeStatusSummary: async (_repoPath: string, targetBranch: string) =>
           worktreeSummary(targetBranch),
         gitGetBranches: async () => [],
@@ -483,6 +487,8 @@ test("a missing target fetch failure tells the user what failed", async () => {
     }),
   );
   const queryClient = createQueryClient();
+  const treeKey = filesystemQueryKeys.tree("/repo", null);
+  queryClient.setQueryData(treeKey, { rootPath: "/repo", entries: [] });
   const view = render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
@@ -492,12 +498,17 @@ test("a missing target fetch failure tells the user what failed", async () => {
   );
   try {
     await screen.findByText("No tracked upstream.");
+    await waitFor(() => expect(statusTargets).toContain("HEAD"));
+    const localReads = statusTargets.length;
     fireEvent.click(screen.getByTestId("agent-studio-git-refresh-button"));
     await waitFor(() =>
       expect(reportError).toHaveBeenCalledWith("Could not refresh Git changes", {
-        description: "Remote is offline",
+        description: "Current branch has no upstream remote",
       }),
     );
+    await waitFor(() => expect(comparison).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(statusTargets.length).toBeGreaterThan(localReads));
+    await waitFor(() => expect(queryClient.getQueryState(treeKey)?.isInvalidated).toBe(true));
   } finally {
     view.unmount();
     queryClient.clear();

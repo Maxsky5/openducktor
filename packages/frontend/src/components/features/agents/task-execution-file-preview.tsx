@@ -51,6 +51,7 @@ export type TaskExecutionSelectedFilePreviewModel = {
   previewSessionKey: number;
   preservePreviousSnapshot: boolean;
   hasPendingDiscard: boolean;
+  isApplyingTransition: boolean;
   onClose: () => void;
   onLeavePolicyChange(policy: TaskExecutionFilePreviewLeavePolicy): void;
   onKeepEditing: () => void;
@@ -366,11 +367,13 @@ function FileSaveErrorBanner({
 
 function FileDiscardDialog({
   open,
+  isApplyingTransition,
   onKeepEditing,
   onDiscard,
   onReturnFocus,
 }: {
   open: boolean;
+  isApplyingTransition: boolean;
   onKeepEditing: () => void;
   onDiscard: () => void;
   onReturnFocus: () => void;
@@ -386,7 +389,10 @@ function FileDiscardDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && keepEditing()}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => !nextOpen && !isApplyingTransition && keepEditing()}
+    >
       <DialogContent
         closeButton={null}
         onCloseAutoFocus={(event) => {
@@ -403,11 +409,21 @@ function FileDiscardDialog({
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={keepEditing}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isApplyingTransition}
+            onClick={keepEditing}
+          >
             Keep editing
           </Button>
-          <Button type="button" variant="destructive" onClick={discard}>
-            Discard
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={isApplyingTransition}
+            onClick={discard}
+          >
+            {isApplyingTransition ? "Switching branch..." : "Discard"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -482,6 +498,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     previewSessionKey,
     preservePreviousSnapshot,
     hasPendingDiscard,
+    isApplyingTransition,
     onClose,
     onLeavePolicyChange,
     onKeepEditing,
@@ -735,6 +752,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
       <div className="min-h-0 flex-1 overflow-hidden">{body}</div>
       <FileDiscardDialog
         open={hasPendingDiscard}
+        isApplyingTransition={isApplyingTransition}
         onKeepEditing={onKeepEditing}
         onDiscard={onDiscard}
         onReturnFocus={() => attachedEditorRef.current?.focus({ preventScroll: true })}

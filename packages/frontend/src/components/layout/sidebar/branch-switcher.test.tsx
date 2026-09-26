@@ -18,7 +18,7 @@ let activeBranchName = "main";
 let latestOnValueChange: ((value: string) => void) | undefined;
 const branchStateListeners = new Set<() => void>();
 
-const switchBranch = mock(async (_branchName: string) => {});
+const switchBranch = mock(async (_branchName: string, _onSwitched?: () => void) => {});
 
 type BranchState = WorkspaceBranchStateContextValue;
 
@@ -120,7 +120,11 @@ function DenyBranchSwitch() {
   return null;
 }
 
-function HoldBranchSwitch({ onRequest }: { onRequest: (apply: () => void) => void }) {
+function HoldBranchSwitch({
+  onRequest,
+}: {
+  onRequest: (apply: () => void | Promise<void | boolean>) => void;
+}) {
   const { register } = useWorkspacePreviewTransitionGuard();
   useEffect(() => register((apply) => onRequest(apply)), [onRequest, register]);
   return null;
@@ -300,7 +304,7 @@ describe("BranchSwitcher", () => {
 
   test("waits for the preview guard before switching branches", async () => {
     const BranchSwitcher = await importBranchSwitcher();
-    let applySwitch: (() => void) | null = null;
+    let applySwitch: (() => void | Promise<void | boolean>) | null = null;
     const rendered = render(
       <BranchStateProvider>
         <HoldBranchSwitch onRequest={(apply) => (applySwitch = apply)} />
@@ -312,8 +316,30 @@ describe("BranchSwitcher", () => {
     expect(switchBranch).not.toHaveBeenCalled();
     expect(applySwitch).not.toBeNull();
     await act(async () => applySwitch?.());
-    expect(switchBranch).toHaveBeenCalledWith("feature");
+    expect(switchBranch).toHaveBeenCalledWith("feature", expect.any(Function));
     rendered.unmount();
+  });
+
+  test("tells the preview guard whether checkout switched the branch", async () => {
+    const BranchSwitcher = await importBranchSwitcher();
+    let applySwitch: (() => void | Promise<void | boolean>) | null = null;
+    const rendered = render(
+      <BranchStateProvider>
+        <HoldBranchSwitch onRequest={(apply) => (applySwitch = apply)} />
+        <BranchSwitcher />
+      </BranchStateProvider>,
+    );
+    try {
+      switchBranch.mockImplementationOnce(async () => {});
+      await act(async () => latestOnValueChange?.("feature"));
+      await act(async () => expect(await applySwitch?.()).toBe(false));
+
+      switchBranch.mockImplementationOnce(async (_branchName, onSwitched) => onSwitched?.());
+      await act(async () => latestOnValueChange?.("feature"));
+      await act(async () => expect(await applySwitch?.()).toBe(true));
+    } finally {
+      rendered.unmount();
+    }
   });
 
   test("clears pending branch state after a successful switch completes", async () => {

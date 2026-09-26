@@ -9,7 +9,11 @@ import {
 } from "react";
 import { useBlocker } from "react-router";
 
-type RequestTransition = (apply: () => void, cancel?: () => void) => void;
+type RequestTransition = (
+  apply: () => void | Promise<void | boolean>,
+  cancel?: () => void,
+  options?: { waitForSuccess?: boolean },
+) => void;
 type GuardContext = {
   register: (guard: RequestTransition) => () => void;
   run: RequestTransition;
@@ -25,8 +29,8 @@ export function WorkspacePreviewTransitionGuardProvider({ children }: { children
       if (activeGuard.current === guard) activeGuard.current = null;
     };
   }, []);
-  const run = useCallback<RequestTransition>((apply, cancel) => {
-    if (activeGuard.current) activeGuard.current(apply, cancel);
+  const run = useCallback<RequestTransition>((apply, cancel, options) => {
+    if (activeGuard.current) activeGuard.current(apply, cancel, options);
     else apply();
   }, []);
   const value = useMemo(() => ({ register, run }), [register, run]);
