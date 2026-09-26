@@ -27,8 +27,11 @@ if [ "$os" = Darwin ]; then
   marker="$install_dir/.openducktor-script-install"
   [ ! -e /Applications/OpenDucktor.app ] || error 'An app exists in /Applications. Update it with its current installer or remove it before using this script.'
   for brew in /opt/homebrew/bin/brew /usr/local/bin/brew; do
-    if [ -x "$brew" ] && "$brew" list --cask --versions openducktor 2>/dev/null | grep -q .; then
-      error 'Homebrew manages OpenDucktor. Run brew upgrade --cask openducktor instead.'
+    if [ -x "$brew" ]; then
+      casks=$("$brew" list --cask --versions) || error 'Could not check Homebrew installs. Check Homebrew and retry.'
+      if printf '%s\n' "$casks" | grep -q '^openducktor '; then
+        error 'Homebrew manages OpenDucktor. Run brew upgrade --cask openducktor instead.'
+      fi
     fi
   done
   if command -v mdfind >/dev/null 2>&1; then
