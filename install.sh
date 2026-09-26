@@ -32,7 +32,8 @@ if [ "$os" = Darwin ]; then
     fi
   done
   if command -v mdfind >/dev/null 2>&1; then
-    mdfind 'kMDItemCFBundleIdentifier == "com.openducktor.app"' | while IFS= read -r app; do
+    apps=$(mdfind 'kMDItemCFBundleIdentifier == "com.openducktor.app"') || error 'Could not search for other OpenDucktor apps. Check Spotlight and retry.'
+    printf '%s\n' "$apps" | while IFS= read -r app; do
       if [ -d "$app" ] && [ "$app" != "$installed" ]; then
         error "Another OpenDucktor app exists at $app. Update or remove it before using this script."
       fi

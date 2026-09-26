@@ -31,6 +31,15 @@ macTest.each(["arm64", "x86_64"])("macOS %s installs and updates the matching ZI
   expect(readFileSync(setup.installed, "utf8")).toBe("installed app\n");
 });
 
+macTest("a failed Spotlight search stops the macOS install", () => {
+  const setup = fixture("Darwin", "arm64");
+  writeFileSync(join(setup.bin, "mdfind"), "#!/bin/sh\nexit 7\n", { mode: 0o755 });
+  const result = setup.run();
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("Could not search for other OpenDucktor apps");
+  expect(existsSync(setup.installed)).toBe(false);
+});
+
 unixTest("Linux installs and updates one AppImage with a desktop launcher", () => {
   const setup = fixture("Linux", "x86_64");
   expect(setup.run().status).toBe(0);
