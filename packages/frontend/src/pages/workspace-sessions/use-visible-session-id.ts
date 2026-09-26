@@ -6,13 +6,17 @@ export function useVisibleSessionId(
   requestedSelectedId: string | null,
   guardWorkspaceChange: ReturnType<typeof useWorkspacePreviewTransitionGuard>["run"],
   updateNavigation: ReturnType<typeof useWorkspaceSessionNavigation>["updateNavigation"],
+  cancelPendingChange: ReturnType<typeof useWorkspacePreviewTransitionGuard>["cancelPending"],
 ): string | null {
   const [visibleSelectedId, setVisibleSelectedId] = useState<string | null>(requestedSelectedId);
   const pendingRef = useRef<{ target: string | null } | null>(null);
 
   useEffect(() => {
     if (requestedSelectedId === visibleSelectedId) {
-      pendingRef.current = null;
+      if (pendingRef.current) {
+        pendingRef.current = null;
+        cancelPendingChange();
+      }
       return;
     }
     if (pendingRef.current?.target === requestedSelectedId) return;
@@ -30,7 +34,13 @@ export function useVisibleSessionId(
         updateNavigation({ sessionId: visibleSelectedId });
       },
     );
-  }, [guardWorkspaceChange, requestedSelectedId, updateNavigation, visibleSelectedId]);
+  }, [
+    cancelPendingChange,
+    guardWorkspaceChange,
+    requestedSelectedId,
+    updateNavigation,
+    visibleSelectedId,
+  ]);
 
   return visibleSelectedId;
 }

@@ -7,6 +7,7 @@ import {
   WorkspacePreviewTransitionGuardProvider,
 } from "@/components/layout/workspace-preview-transition-guard";
 import { useWorkspaceSessionPreview } from "./use-workspace-session-preview";
+import { useVisibleSessionId } from "./use-visible-session-id";
 
 const firstFile = { rootPath: "/repo", relativePath: "first.ts" };
 const secondFile = { rootPath: "/repo", relativePath: "second.ts" };
@@ -62,6 +63,60 @@ function SessionHarness({ switchBranch }: { switchBranch?: () => Promise<boolean
     </>
   );
 }
+
+function RoutedSessionHarness() {
+  const { run, cancelPending } = useWorkspacePreviewTransitionGuard();
+  const [requested, setRequested] = useState<"first" | "second">("first");
+  const visible = useVisibleSessionId(
+    requested,
+    run,
+    ({ sessionId }) => setRequested(sessionId === "second" ? "second" : "first"),
+    cancelPending,
+  );
+  const shown = visible === "second" ? "second" : "first";
+  const [selectedFiles, setSelectedFiles] = useState<{
+    first: TaskExecutionSelectedFile | null;
+    second: TaskExecutionSelectedFile | null;
+  }>({ first: firstFile, second: null });
+  return (
+    <>
+      <output data-testid="active-session">{shown}</output>
+      <button onClick={() => setRequested("first")}>Request first</button>
+      <button onClick={() => setRequested("second")}>Request second</button>
+      <SessionPreview
+        key={shown}
+        selectedFile={selectedFiles[shown]}
+        onSelectionChange={(file) => setSelectedFiles((current) => ({ ...current, [shown]: file }))}
+      />
+    </>
+  );
+}
+
+test("returning to the open chat cancels its pending discard", async () => {
+  const view = render(
+    <WorkspacePreviewTransitionGuardProvider>
+      <RoutedSessionHarness />
+    </WorkspacePreviewTransitionGuardProvider>,
+  );
+  try {
+    fireEvent.click(screen.getByRole("button", { name: "Edit file" }));
+    fireEvent.click(screen.getByRole("button", { name: "Request second" }));
+    await waitFor(() => expect(screen.getByTestId("pending-discard").textContent).toBe("true"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Request first" }));
+    await waitFor(() => expect(screen.getByTestId("pending-discard").textContent).toBe("false"));
+    fireEvent.click(screen.getByRole("button", { name: "Discard draft" }));
+    expect(screen.getByTestId("selected-file").textContent).toBe("first.ts");
+    expect(screen.getByTestId("active-session").textContent).toBe("first");
+
+    fireEvent.click(screen.getByRole("button", { name: "Request second" }));
+    await waitFor(() => expect(screen.getByTestId("pending-discard").textContent).toBe("true"));
+    fireEvent.click(screen.getByRole("button", { name: "Discard draft" }));
+    await waitFor(() => expect(screen.getByTestId("active-session").textContent).toBe("second"));
+  } finally {
+    view.unmount();
+  }
+});
 
 test("keeps a closed preview closed after switching chats", async () => {
   const view = render(

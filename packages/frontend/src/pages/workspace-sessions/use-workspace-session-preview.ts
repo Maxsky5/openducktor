@@ -13,36 +13,41 @@ export function useWorkspaceSessionPreview(
 
   useEffect(
     () =>
-      register((apply, cancel, options) => {
-        const pendingExit = { discarded: false };
-        pendingExitRef.current = pendingExit;
-        preview.requestContextTransition(
-          () => {
-            if (options?.waitForSuccess) {
-              return Promise.resolve()
-                .then(async () => (await apply()) === true)
-                .then((switched) => {
-                  if (pendingExitRef.current === pendingExit) pendingExitRef.current = null;
-                  if (switched)
-                    onSelectionChange(pendingExit.discarded ? null : preview.model.selectedFile);
-                  return switched;
-                })
-                .catch((error) => {
-                  if (pendingExitRef.current === pendingExit) pendingExitRef.current = null;
-                  throw error;
-                });
-            }
-            if (pendingExitRef.current === pendingExit) pendingExitRef.current = null;
-            onSelectionChange(pendingExit.discarded ? null : preview.model.selectedFile);
-            apply();
-          },
-          () => {
-            if (pendingExitRef.current === pendingExit) pendingExitRef.current = null;
-            cancel?.();
-          },
-          options,
-        );
-      }),
+      register(
+        (apply, cancel, options) => {
+          const pendingExit = { discarded: false };
+          pendingExitRef.current = pendingExit;
+          preview.requestContextTransition(
+            () => {
+              if (options?.waitForSuccess) {
+                return Promise.resolve()
+                  .then(async () => (await apply()) === true)
+                  .then((switched) => {
+                    if (pendingExitRef.current === pendingExit) pendingExitRef.current = null;
+                    if (switched)
+                      onSelectionChange(pendingExit.discarded ? null : preview.model.selectedFile);
+                    return switched;
+                  })
+                  .catch((error) => {
+                    if (pendingExitRef.current === pendingExit) pendingExitRef.current = null;
+                    throw error;
+                  });
+              }
+              if (pendingExitRef.current === pendingExit) pendingExitRef.current = null;
+              onSelectionChange(pendingExit.discarded ? null : preview.model.selectedFile);
+              apply();
+            },
+            () => {
+              if (pendingExitRef.current === pendingExit) pendingExitRef.current = null;
+              cancel?.();
+            },
+            options,
+          );
+        },
+        () => {
+          if (pendingExitRef.current) preview.model.onKeepEditing();
+        },
+      ),
     [onSelectionChange, preview, register],
   );
 

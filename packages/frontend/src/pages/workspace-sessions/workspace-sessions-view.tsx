@@ -35,7 +35,7 @@ import { useVisibleSessionId } from "./use-visible-session-id";
 type WorkspaceSessionsProps = { workspace: ActiveWorkspace };
 
 export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactElement {
-  const { run: guardWorkspaceChange } = useWorkspacePreviewTransitionGuard();
+  const { run: guardWorkspaceChange, cancelPending } = useWorkspacePreviewTransitionGuard();
   const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
   const location = useLocation();
@@ -65,6 +65,7 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
     requestedSelectedId,
     guardWorkspaceChange,
     updateNavigation,
+    cancelPending,
   );
   const selected =
     orderedSessions.find((record) => record.id === visibleSelectedId) ?? requestedSelected;

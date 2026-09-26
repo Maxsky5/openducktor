@@ -11,8 +11,9 @@ test.each(["discard", "keep"])("the latest tab choice wins when the user chooses
     transitions.push(transition);
   };
   const updateNavigation = mock(() => {});
+  const cancelPending = mock(() => {});
   const view = renderHook(
-    ({ requested }) => useVisibleSessionId(requested, guard, updateNavigation),
+    ({ requested }) => useVisibleSessionId(requested, guard, updateNavigation, cancelPending),
     { initialProps: { requested: "A" } },
   );
   try {
@@ -44,8 +45,9 @@ test("returning to the open tab drops a pending choice", () => {
     applyPending = apply;
   };
   const updateNavigation = mock(() => {});
+  const cancelPending = mock(() => {});
   const view = renderHook(
-    ({ requested }) => useVisibleSessionId(requested, guard, updateNavigation),
+    ({ requested }) => useVisibleSessionId(requested, guard, updateNavigation, cancelPending),
     { initialProps: { requested: "A" } },
   );
   try {
@@ -54,6 +56,7 @@ test("returning to the open tab drops a pending choice", () => {
     act(() => applyPending?.());
     expect(view.result.current).toBe("A");
     expect(updateNavigation).not.toHaveBeenCalled();
+    expect(cancelPending).toHaveBeenCalledTimes(1);
   } finally {
     view.unmount();
   }
