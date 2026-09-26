@@ -44,7 +44,9 @@ describe("Azure DevOps connection", () => {
       protectedStorage: { readConnection: () => Effect.succeed(null), open },
     });
 
-    await Effect.runPromise(connection.removeWorkspaceCredentials(repoConfig));
+    await Effect.runPromise(
+      connection.removeWorkspaceCredentials(repoConfigSchema.parse({ ...repoConfig, git: {} })),
+    );
 
     expect(open).not.toHaveBeenCalled();
   });
@@ -70,7 +72,9 @@ describe("Azure DevOps connection", () => {
       Effect.runPromise(connection.replacePat(repoConfig, repository, "secret")),
     ).rejects.toThrow();
     expect(scopes.size).toBe(0);
-    await Effect.runPromise(connection.removeWorkspaceCredentials(repoConfig));
+    await Effect.runPromise(
+      connection.removeWorkspaceCredentials(repoConfigSchema.parse({ ...repoConfig, git: {} })),
+    );
     expect(open).toHaveBeenCalledTimes(1);
   });
 
@@ -134,7 +138,7 @@ describe("Azure DevOps connection", () => {
           save: async (contents: string) => void records.set(`${scope}:${record}`, contents),
           load: async () => records.get(`${scope}:${record}`) ?? null,
           delete: async () => records.delete(`${scope}:${record}`),
-        } as IPersistence),
+        } as unknown as IPersistence),
     };
     const fetchImplementation = mock(async (_input: string | URL | Request, init?: RequestInit) => {
       const header = new Headers(init?.headers).get("Authorization");
@@ -196,6 +200,32 @@ describe("Azure DevOps connection", () => {
       status: "disconnected",
     });
     expect(scopes.size).toBe(0);
+  });
+
+  test("removes a PAT for the current repository when the credential index is empty", async () => {
+    const deleted: string[] = [];
+    const connection = createAzureDevOpsConnectionAdapter({
+      clientId: undefined,
+      credentialIndex: createCredentialIndex(),
+      protectedStorage: {
+        readConnection: () => Effect.succeed(null),
+        open: (scope, record) =>
+          Effect.succeed({
+            save: async () => undefined,
+            load: async () => null,
+            delete: async () => {
+              deleted.push(`${scope}:${record}`);
+              return true;
+            },
+          } as unknown as IPersistence),
+      },
+    });
+
+    await Effect.runPromise(connection.removeWorkspaceCredentials(repoConfig));
+
+    expect(deleted).toEqual([
+      `${repoConfig.workspaceId}\n${repoConfig.repoPath}\n${azureDevOpsRepositoryKey(repository)}:connection`,
+    ]);
   });
 
   test.each([

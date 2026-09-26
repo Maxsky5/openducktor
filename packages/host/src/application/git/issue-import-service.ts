@@ -4,6 +4,8 @@ import type {
   IssueItemsListInput,
   IssueItemGetInput,
   IssueImageGetInput,
+  RepoConfig,
+  SourceIssueReference,
   SourceIssue,
   TaskCard,
 } from "@openducktor/contracts";
@@ -11,11 +13,18 @@ import { Effect } from "effect";
 import { z } from "zod";
 import { errorMessage, HostValidationError } from "../../effect/host-errors";
 import type { IssueImportStorePort } from "../../ports/issue-import-store-port";
+import type { IssueReaderPort } from "../../ports/git-provider-port";
 import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-service";
 import type { GitProviderResolver } from "./git-provider-resolver";
 
 const cursorSchema = z
-  .object({ providerId: z.string(), scope: z.string(), search: z.string(), page: z.number().int() })
+  .object({
+    providerId: z.string(),
+    scope: z.string(),
+    search: z.string(),
+    page: z.number().int(),
+    snapshot: z.string().datetime({ offset: true }).optional(),
+  })
   .strict();
 type Cursor = z.infer<typeof cursorSchema>;
 
@@ -24,8 +33,8 @@ const readCursor = (
   providerId: string,
   scope: string,
   search: string,
-): number => {
-  if (!value) return 1;
+): Pick<Cursor, "page" | "snapshot"> => {
+  if (!value) return { page: 1 };
   try {
     const parsed = cursorSchema.safeParse(
       JSON.parse(Buffer.from(value, "base64url").toString("utf8")),
@@ -37,9 +46,10 @@ const readCursor = (
       cursor.search === search &&
       Number.isSafeInteger(cursor.page) &&
       cursor.page > 1 &&
-      cursor.page <= (providerId === "github" ? 50 : 1_000)
+      cursor.page <= (providerId === "github" ? 50 : 1_000) &&
+      (providerId !== "azure_devops" || Boolean(cursor.snapshot))
     )
-      return cursor.page;
+      return { page: cursor.page, snapshot: cursor.snapshot };
   } catch {
     /* Invalid cursors have the same user action. */
   }
@@ -52,6 +62,47 @@ const readCursor = (
 
 const nextCursor = (cursor: Cursor): string =>
   Buffer.from(JSON.stringify(cursor)).toString("base64url");
+
+const githubImageRepoConfig = (
+  repoConfig: RepoConfig,
+  source: SourceIssueReference,
+): Effect.Effect<RepoConfig, HostValidationError> => {
+  const issueUrl = URL.canParse(source.url) ? new URL(source.url) : null;
+  const parts = issueUrl?.pathname.split("/").filter(Boolean);
+  const owner = parts?.[0];
+  const name = parts?.[1];
+  if (
+    source.providerId !== "github" ||
+    issueUrl?.protocol !== "https:" ||
+    issueUrl.search !== "" ||
+    issueUrl.hash !== "" ||
+    !owner ||
+    !name ||
+    parts?.length !== 4 ||
+    parts[2] !== "issues" ||
+    parts[3] !== source.sourceId ||
+    `${issueUrl.host}/${owner}/${name}`.toLowerCase() !== source.scope.toLowerCase()
+  ) {
+    return Effect.fail(
+      new HostValidationError({
+        field: "taskId",
+        message: "This Task has no valid GitHub Issue source for its images.",
+      }),
+    );
+  }
+  return Effect.succeed({
+    ...repoConfig,
+    git: {
+      ...repoConfig.git,
+      provider: {
+        id: "github",
+        enabled: true,
+        autoDetected: false,
+        repository: { host: issueUrl.host, owner, name },
+      },
+    },
+  });
+};
 
 export const createIssueImportService = ({
   resolver,
@@ -81,7 +132,33 @@ export const createIssueImportService = ({
   return {
     getImage(input: IssueImageGetInput) {
       return Effect.gen(function* () {
-        const { repoConfig, reader } = yield* resolve(input.repoPath);
+        let repoConfig: RepoConfig;
+        let sourceId: string;
+        let reader: IssueReaderPort;
+        if ("taskId" in input) {
+          const currentConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(
+            input.repoPath,
+          );
+          const source = yield* store.getSourceIssue({
+            repoPath: input.repoPath,
+            taskId: input.taskId,
+          });
+          if (!source) {
+            return yield* new HostValidationError({
+              field: "taskId",
+              message: "This Task has no source Issue. Refresh the Task and try again.",
+            });
+          }
+          repoConfig = yield* githubImageRepoConfig(currentConfig, source);
+          sourceId = source.sourceId;
+          const provider = yield* resolver.resolve(repoConfig);
+          reader = yield* provider.issues();
+        } else {
+          const resolved = yield* resolve(input.repoPath);
+          repoConfig = resolved.repoConfig;
+          reader = resolved.reader;
+          sourceId = input.sourceId;
+        }
         if (!reader.readImage) {
           return yield* new HostValidationError({
             field: "provider",
@@ -90,7 +167,7 @@ export const createIssueImportService = ({
         }
         return yield* reader.readImage({
           repoConfig,
-          sourceId: input.sourceId,
+          sourceId,
           url: input.url,
         });
       });
@@ -128,14 +205,20 @@ export const createIssueImportService = ({
             message: "This Git provider does not support Issue search. Clear the search and retry.",
           });
         }
-        const page = yield* Effect.try({
+        const cursor = yield* Effect.try({
           try: () => readCursor(input.cursor, reader.providerId, scope, search),
           catch: (cause) =>
             cause instanceof HostValidationError
               ? cause
               : new HostValidationError({ field: "cursor", message: String(cause) }),
         });
-        const result = yield* reader.list({ repoConfig, search, page });
+        const readerInput: Parameters<IssueReaderPort["list"]>[0] = {
+          repoConfig,
+          search,
+          page: cursor.page,
+        };
+        if (cursor.snapshot) readerInput.snapshot = cursor.snapshot;
+        const result = yield* reader.list(readerInput);
         if (
           result.items.some((item) => item.scope !== scope || item.providerId !== reader.providerId)
         ) {
@@ -157,7 +240,13 @@ export const createIssueImportService = ({
         return {
           items,
           nextCursor: result.nextPage
-            ? nextCursor({ providerId: reader.providerId, scope, search, page: result.nextPage })
+            ? nextCursor({
+                providerId: reader.providerId,
+                scope,
+                search,
+                page: result.nextPage,
+                snapshot: result.snapshot,
+              })
             : undefined,
           searchSupported,
           incompleteResults: result.incompleteResults ?? false,

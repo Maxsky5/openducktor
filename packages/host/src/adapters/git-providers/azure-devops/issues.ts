@@ -25,11 +25,14 @@ const workItemTypesSchema = z.object({
     z.object({
       name: z.string().min(1),
       isDisabled: z.boolean().optional(),
-      states: z.array(z.object({ name: z.string(), category: z.string() })),
     }),
   ),
 });
+const workItemTypeStatesSchema = z.object({
+  value: z.array(z.object({ name: z.string().min(1), category: z.string().min(1) })),
+});
 const wiqlResultSchema = z.object({
+  asOf: z.string().datetime({ offset: true }),
   workItems: z.array(z.object({ id: z.number().int().positive() })),
 });
 const workItemSchema = z.object({
@@ -142,7 +145,20 @@ const readTypeStates = (
     const states: TypeStates = new Map();
     for (const type of types.value) {
       if (!type.isDisabled) {
-        states.set(type.name, new Map(type.states.map((state) => [state.name, state.category])));
+        const response = yield* client.request(config, repository, {
+          operation: `list states for ${type.name}`,
+          path: `wit/workitemtypes/${encodeURIComponent(type.name)}/states`,
+          apiVersion: issueApiVersion(repository),
+        });
+        const typeStates = yield* parse(
+          response.body,
+          workItemTypeStatesSchema,
+          "azureDevOps.states.parse",
+        );
+        states.set(
+          type.name,
+          new Map(typeStates.value.map((state) => [state.name, state.category])),
+        );
       }
     }
     return states;
@@ -327,7 +343,7 @@ export const createAzureDevOpsIssueReader = ({
       const searchClause = input.search.trim()
         ? ` AND [System.Title] CONTAINS '${escapeWiql(input.search.trim())}'`
         : "";
-      const query = `SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = '${escapeWiql(repository.project)}' AND ([System.AreaPath] = '${escapeWiql(area)}' OR [System.AreaPath] UNDER '${escapeWiql(area)}') AND (${stateClause})${searchClause} ORDER BY [System.ChangedDate] DESC, [System.Id] DESC`;
+      const query = `SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = '${escapeWiql(repository.project)}' AND ([System.AreaPath] = '${escapeWiql(area)}' OR [System.AreaPath] UNDER '${escapeWiql(area)}') AND (${stateClause})${searchClause} ORDER BY [System.ChangedDate] DESC, [System.Id] DESC${input.snapshot ? ` ASOF '${escapeWiql(input.snapshot)}'` : ""}`;
       const wiql = yield* client.request(input.repoConfig, repository, {
         operation: "query open work items",
         path: "wit/wiql",
@@ -336,18 +352,16 @@ export const createAzureDevOpsIssueReader = ({
         query: { $top: input.page * 20 + 1 },
         body: { query },
       });
-      const ids = (yield* parse(
-        wiql.body,
-        wiqlResultSchema,
-        "azureDevOps.wiql.parse",
-      )).workItems.map((item) => item.id);
+      const wiqlResult = yield* parse(wiql.body, wiqlResultSchema, "azureDevOps.wiql.parse");
+      const snapshot = input.snapshot ?? wiqlResult.asOf;
+      const ids = wiqlResult.workItems.map((item) => item.id);
       const pageIds = ids.slice((input.page - 1) * 20, input.page * 20);
       if (pageIds.length === 0) return { items: [], nextPage: undefined };
       const details = yield* client.request(input.repoConfig, repository, {
         operation: "read work items",
         path: "wit/workitems",
         apiVersion: issueApiVersion(repository),
-        query: { ids: pageIds.join(",") },
+        query: { ids: pageIds.join(","), asOf: snapshot },
       });
       const data = yield* parse(details.body, workItemsSchema, "azureDevOps.workItems.parse");
       const byId = new Map(data.value.map((item) => [item.id, item]));
@@ -368,7 +382,11 @@ export const createAzureDevOpsIssueReader = ({
                 cause,
               }),
       });
-      return { items, nextPage: ids.length > input.page * 20 ? input.page + 1 : undefined };
+      return {
+        items,
+        nextPage: ids.length > input.page * 20 ? input.page + 1 : undefined,
+        snapshot,
+      };
     });
   },
   get(input) {

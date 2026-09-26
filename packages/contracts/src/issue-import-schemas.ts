@@ -34,9 +34,10 @@ export const issueItemGetInputSchema = z.object({
 });
 export type IssueItemGetInput = z.infer<typeof issueItemGetInputSchema>;
 
-export const issueImageGetInputSchema = issueItemGetInputSchema.extend({
-  url: z.url(),
-});
+export const issueImageGetInputSchema = z.union([
+  issueItemGetInputSchema.extend({ url: z.url() }),
+  z.object({ repoPath: z.string().min(1), taskId: z.string().min(1), url: z.url() }),
+]);
 export type IssueImageGetInput = z.infer<typeof issueImageGetInputSchema>;
 
 export const issueImageGetResultSchema = z.object({

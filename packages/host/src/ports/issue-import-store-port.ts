@@ -3,6 +3,10 @@ import type { Effect } from "effect";
 import type { TaskStoreError } from "./task-repository-ports";
 
 export type IssueImportStorePort = {
+  getSourceIssue(input: {
+    repoPath: string;
+    taskId: string;
+  }): Effect.Effect<SourceIssueReference | undefined, TaskStoreError>;
   findLinkedTaskIds(input: {
     repoPath: string;
     providerId: string;

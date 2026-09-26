@@ -2,10 +2,8 @@ import { parseTaskAssetUri } from "@openducktor/contracts";
 import { NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react";
 import { useContext, useEffect, useState } from "react";
 import { z } from "zod";
-import {
-  GithubIssueImage,
-  isGithubIssueAttachmentUrl,
-} from "@/components/features/issue-source/github-issue-image";
+import { GithubIssueImage } from "@/components/features/issue-source/github-issue-image";
+import { isGithubIssueAttachmentUrl } from "@/components/features/issue-source/issue-image-url";
 import { Input } from "@/components/ui/input";
 import { errorMessage } from "@/lib/errors";
 import { getShellBridge } from "@/lib/shell-bridge";

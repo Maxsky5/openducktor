@@ -170,6 +170,54 @@ describe("Issue import dialog", () => {
     }
   });
 
+  test("skips an issue linked after selection and closes when the other import succeeds", async () => {
+    let linked = false;
+    host.issueItemsList = async () => ({
+      items: [linked ? { ...issue("1"), linkedTaskId: "TASK-OLD" } : issue("1"), issue("2")],
+      nextCursor: undefined,
+      searchSupported: true,
+      incompleteResults: false,
+    });
+    const importItems = mock(async (_input: IssueItemsImportInput) => ({
+      results: [{ sourceId: "2", outcome: "created" as const, taskId: "TASK-2" }],
+    }));
+    host.issueItemsImport = importItems;
+    const onOpenChange = mock((_open: boolean) => {});
+    const success = spyOn(toast, "success").mockImplementation(() => "toast-id");
+    const queryClient = createQueryClient();
+    try {
+      const view = render(
+        <QueryClientProvider client={queryClient}>
+          <SettingsModalProvider>
+            <IssueImportDialog
+              open
+              onOpenChange={onOpenChange}
+              repoPath="/repo"
+              provider={provider}
+              onImported={() => {}}
+            />
+          </SettingsModalProvider>
+        </QueryClientProvider>,
+      );
+      fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
+      fireEvent.click(screen.getByRole("checkbox", { name: "Select Issue 2" }));
+      linked = true;
+      await act(async () => {
+        await queryClient.invalidateQueries({ queryKey: issueItemsQueryKeys.repo("/repo") });
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Review Tasks" }));
+      fireEvent.click(screen.getByRole("button", { name: "Import selected" }));
+      await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+      expect(
+        importItems.mock.calls[0]?.[0].items.map((item: { sourceId: string }) => item.sourceId),
+      ).toEqual(["2"]);
+      expect(success).toHaveBeenCalledWith("1 Task created");
+      view.unmount();
+    } finally {
+      success.mockRestore();
+    }
+  });
+
   test("loads a private GitHub image through the host in review", async () => {
     const url = "https://github.com/user-attachments/assets/cda6c6b0-48b1-4d49-b8f2-78a1bd758be9";
     host.issueItemsList = async () => ({

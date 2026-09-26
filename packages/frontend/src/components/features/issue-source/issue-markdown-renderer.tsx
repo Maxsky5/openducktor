@@ -1,11 +1,8 @@
 import { type ComponentProps, type ReactElement, useMemo } from "react";
 import type { Components } from "react-markdown";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
-import {
-  GithubIssueImage,
-  isGithubIssueAttachmentUrl,
-  type IssueImageContext,
-} from "./github-issue-image";
+import { GithubIssueImage, type IssueImageContext } from "./github-issue-image";
+import { isGithubIssueAttachmentUrl } from "./issue-image-url";
 
 export type { IssueImageContext } from "./github-issue-image";
 
@@ -25,9 +22,10 @@ export function useIssueImageComponents(
   const providerId = issueImageContext?.providerId;
   const repoPath = issueImageContext?.repoPath;
   const sourceId = issueImageContext?.sourceId;
+  const taskId = issueImageContext?.taskId;
   return useMemo<Components | undefined>(() => {
     if (!providerId || !repoPath || !sourceId) return undefined;
-    const context = { providerId, repoPath, sourceId };
+    const context = { providerId, repoPath, sourceId, taskId };
     return {
       img: ({ node: _node, src, alt, title }) => {
         if (providerId === "github" && isGithubIssueAttachmentUrl(src ?? "")) {
@@ -36,5 +34,5 @@ export function useIssueImageComponents(
         return <img src={src} alt={alt ?? ""} title={title} />;
       },
     };
-  }, [providerId, repoPath, sourceId]);
+  }, [providerId, repoPath, sourceId, taskId]);
 }

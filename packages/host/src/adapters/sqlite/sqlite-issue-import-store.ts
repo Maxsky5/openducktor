@@ -39,6 +39,39 @@ export const createSqliteIssueImportStore = ({
   contextProvider: SqliteTaskRepositoryContextProvider;
   now?: () => Date;
 }): IssueImportStorePort => ({
+  getSourceIssue(input) {
+    return withDatabase(input.repoPath, "sqliteIssueImportStore.getSourceIssue", ({ session }) =>
+      session
+        .execute(
+          (database) =>
+            database
+              .select({
+                providerId: tasks.sourceProviderId,
+                scope: tasks.sourceScope,
+                sourceId: tasks.sourceId,
+                number: tasks.sourceNumber,
+                url: tasks.sourceUrl,
+              })
+              .from(tasks)
+              .where(eq(tasks.id, input.taskId))
+              .limit(1),
+          "sqliteIssueImportStore.getSourceIssue.query",
+        )
+        .pipe(
+          Effect.map(([source]) =>
+            source?.providerId && source.scope && source.sourceId && source.number && source.url
+              ? {
+                  providerId: source.providerId,
+                  scope: source.scope,
+                  sourceId: source.sourceId,
+                  number: source.number,
+                  url: source.url,
+                }
+              : undefined,
+          ),
+        ),
+    );
+  },
   findLinkedTaskIds(input) {
     if (input.sourceIds.length === 0) return Effect.succeed({});
     return withDatabase(input.repoPath, "sqliteIssueImportStore.findLinkedTaskIds", ({ session }) =>

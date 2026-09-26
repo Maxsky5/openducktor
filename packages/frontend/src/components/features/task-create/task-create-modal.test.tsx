@@ -169,6 +169,7 @@ describe("TaskCreateModal", () => {
           repoPath: "/workspace/repo",
           sourceId: "132",
           providerId: "github",
+          taskId: "TASK-123",
         });
       } finally {
         await act(async () => rendered.unmount());
