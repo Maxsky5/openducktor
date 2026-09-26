@@ -6,6 +6,7 @@ import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -99,6 +100,53 @@ unixTest("a changed download leaves the previous Linux install and launcher inta
   expect(result.status).not.toBe(0);
   expect(result.stderr).toContain("SHA-256 differs");
   expect(readFileSync(setup.installed)).toEqual(previous);
+  expect(readFileSync(desktopPath)).toEqual(previousDesktop);
+  expect(readFileSync(iconPath)).toEqual(previousIcon);
+});
+
+unixTest("a failed hash leaves the previous Linux install intact", () => {
+  const setup = fixture("Linux", "x86_64");
+  expect(setup.run().status).toBe(0);
+  const previous = readFileSync(setup.installed);
+  writeFileSync(join(setup.bin, "sha256sum"), "#!/bin/sh\nexit 7\n", { mode: 0o755 });
+  const result = setup.run();
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("Could not hash the downloaded asset");
+  expect(result.stderr).not.toContain("SHA-256 differs");
+  expect(readFileSync(setup.installed)).toEqual(previous);
+});
+
+unixTest("a failed rollback removal keeps the old app and restores the launcher", () => {
+  const setup = fixture("Linux", "x86_64");
+  expect(setup.run().status).toBe(0);
+  const previous = readFileSync(setup.installed);
+  const desktopPath = join(setup.home, ".local/share/applications/openducktor.desktop");
+  const iconPath = join(setup.home, ".local/share/icons/openducktor.png");
+  const previousDesktop = readFileSync(desktopPath);
+  const previousIcon = readFileSync(iconPath);
+  const next = linuxPayload("updated AppImage fixture");
+  writeFileSync(setup.assetPath, next);
+  setup.asset.digest = `sha256:${createHash("sha256").update(next).digest("hex")}`;
+  setup.saveRelease();
+  writeFileSync(
+    join(setup.bin, "mv"),
+    '#!/bin/sh\ncase "$1" in */.openducktor.desktop.stage.*) exit 7 ;; esac\nexec /bin/mv "$@"\n',
+    { mode: 0o755 },
+  );
+  writeFileSync(
+    join(setup.bin, "rm"),
+    '#!/bin/sh\ncase "$1:$2" in -rf:"$HOME/.local/bin/OpenDucktor.AppImage") exit 7 ;; esac\nexec /bin/rm "$@"\n',
+    { mode: 0o755 },
+  );
+  const result = setup.run();
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("Could not remove");
+  const backup = readdirSync(join(setup.home, ".local/bin")).find((name) =>
+    name.startsWith(".OpenDucktor.AppImage.backup."),
+  );
+  expect(backup).toBeDefined();
+  expect(readFileSync(join(setup.home, ".local/bin", backup!))).toEqual(previous);
+  expect(readFileSync(setup.installed)).toEqual(next);
   expect(readFileSync(desktopPath)).toEqual(previousDesktop);
   expect(readFileSync(iconPath)).toEqual(previousIcon);
 });

@@ -104,34 +104,43 @@ new_desktop=0
 new_icon=0
 new_marker=0
 install_done=0
+restore_backup() {
+  if [ "$3" -eq 1 ] && ! rm "$4" "$1"; then
+    printf 'Could not remove %s. The previous %s is at %s. Remove the new %s before restoring it.\n' "$1" "$5" "$2" "$5" >&2
+    cleanup_failed=1
+    return
+  fi
+  mv "$2" "$1" || { printf 'Restore the previous %s from %s.\n' "$5" "$2" >&2; cleanup_failed=1; }
+}
 cleanup() {
   status=$?
+  trap - EXIT
+  cleanup_failed=0
   if [ "$status" -ne 0 ] && [ "$install_done" -eq 0 ]; then
-    [ "$new_marker" -eq 0 ] || rm -f "$marker"
+    [ "$new_marker" -eq 0 ] || rm -f "$marker" || { printf 'Remove the install marker at %s after checking the install.\n' "$marker" >&2; cleanup_failed=1; }
     if [ -n "$backup_app" ] && [ -e "$backup_app" ]; then
-      [ "$new_app" -eq 0 ] || rm -rf "$installed"
-      mv "$backup_app" "$installed" || printf 'Restore the previous app from %s\n' "$backup_app" >&2
+      restore_backup "$installed" "$backup_app" "$new_app" -rf app
     elif [ "$new_app" -eq 1 ]; then
-      rm -rf "$installed"
+      rm -rf "$installed" || { printf 'Remove the incomplete app at %s.\n' "$installed" >&2; cleanup_failed=1; }
     fi
     if [ -n "$backup_desktop" ] && [ -e "$backup_desktop" ]; then
-      [ "$new_desktop" -eq 0 ] || rm -f "$desktop"
-      mv "$backup_desktop" "$desktop" || printf 'Restore the previous launcher from %s\n' "$backup_desktop" >&2
+      restore_backup "$desktop" "$backup_desktop" "$new_desktop" -f launcher
     elif [ "$new_desktop" -eq 1 ]; then
-      rm -f "$desktop"
+      rm -f "$desktop" || { printf 'Remove the incomplete launcher at %s.\n' "$desktop" >&2; cleanup_failed=1; }
     fi
     if [ -n "$backup_icon" ] && [ -e "$backup_icon" ]; then
-      [ "$new_icon" -eq 0 ] || rm -f "$icon"
-      mv "$backup_icon" "$icon" || printf 'Restore the previous icon from %s\n' "$backup_icon" >&2
+      restore_backup "$icon" "$backup_icon" "$new_icon" -f icon
     elif [ "$new_icon" -eq 1 ]; then
-      rm -f "$icon"
+      rm -f "$icon" || { printf 'Remove the incomplete icon at %s.\n' "$icon" >&2; cleanup_failed=1; }
     fi
   fi
-  [ -z "$stage_app" ] || rm -rf "$stage_app"
-  [ -z "$stage_desktop" ] || rm -f "$stage_desktop"
-  [ -z "$stage_icon" ] || rm -f "$stage_icon"
-  [ -z "$stage_marker" ] || rm -f "$stage_marker"
-  rm -rf "$work"
+  [ -z "$stage_app" ] || rm -rf "$stage_app" || { printf 'Remove the staged app at %s.\n' "$stage_app" >&2; cleanup_failed=1; }
+  [ -z "$stage_desktop" ] || rm -f "$stage_desktop" || { printf 'Remove the staged launcher at %s.\n' "$stage_desktop" >&2; cleanup_failed=1; }
+  [ -z "$stage_icon" ] || rm -f "$stage_icon" || { printf 'Remove the staged icon at %s.\n' "$stage_icon" >&2; cleanup_failed=1; }
+  [ -z "$stage_marker" ] || rm -f "$stage_marker" || { printf 'Remove the staged marker at %s.\n' "$stage_marker" >&2; cleanup_failed=1; }
+  rm -rf "$work" || { printf 'Remove the temporary files at %s.\n' "$work" >&2; cleanup_failed=1; }
+  if [ "$status" -eq 0 ] && [ "$cleanup_failed" -ne 0 ]; then status=1; fi
+  exit "$status"
 }
 trap cleanup EXIT
 trap 'exit 130' INT
@@ -169,10 +178,11 @@ expected_sha=$(sed -n '2p' "$work/selection")
 download="$work/asset"
 curl -fsSL --proto '=https' --connect-timeout 15 --speed-time 30 --speed-limit 1024 "$asset_url" -o "$download" || error 'Could not download the desktop asset.'
 if [ "$os" = Darwin ]; then
-  actual_sha=$(shasum -a 256 "$download" | cut -d ' ' -f 1)
+  hash_output=$(shasum -a 256 "$download") || error 'Could not hash the downloaded asset. Check disk access and retry.'
 else
-  actual_sha=$(sha256sum "$download" | cut -d ' ' -f 1)
+  hash_output=$(sha256sum "$download") || error 'Could not hash the downloaded asset. Check disk access and retry.'
 fi
+actual_sha=${hash_output%% *}
 [ "$actual_sha" = "$expected_sha" ] || error 'The downloaded asset SHA-256 differs from the GitHub release digest. The existing install is unchanged.'
 
 mkdir -p "$install_dir" || error "Could not create $install_dir."
