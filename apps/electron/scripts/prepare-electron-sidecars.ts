@@ -44,7 +44,6 @@ type ResolveElectronSidecarBuildPlanInput = {
 };
 
 type PrepareElectronSidecarsInput = ResolveElectronSidecarBuildPlanInput & {
-  arch: ElectronReleaseArch;
   chmodFile?: (path: string, mode: number) => Promise<void>;
   compileMcp?: (plan: ElectronSidecarBuildPlan) => Promise<void>;
 };
@@ -245,23 +244,12 @@ export const prepareElectronSidecarsEffect = ({
     };
   });
 
-export const prepareElectronSidecars = ({
-  arch,
-  chmodFile = chmod,
-  compileMcp = compileMcpSidecar,
-  ...input
-}: PrepareElectronSidecarsInput): Promise<{
+export const prepareElectronSidecars = (
+  input: PrepareElectronSidecarsInput,
+): Promise<{
   plan: ElectronSidecarBuildPlan;
   sidecars: PreparedElectronSidecar[];
-}> =>
-  runElectronEffect(
-    prepareElectronSidecarsEffect({
-      arch,
-      chmodFile,
-      compileMcp,
-      ...input,
-    }),
-  );
+}> => runElectronEffect(prepareElectronSidecarsEffect(input));
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const electronPackageDirectory = dirname(scriptDirectory);
