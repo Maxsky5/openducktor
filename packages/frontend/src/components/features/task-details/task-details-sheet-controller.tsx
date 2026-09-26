@@ -20,7 +20,7 @@ export type TaskDetailsSheetControllerHandle = {
 
 type TaskDetailsSheetControllerProps = Omit<
   TaskDetailsSheetProps,
-  "task" | "open" | "onOpenChange"
+  "task" | "open" | "onOpenChange" | "onDelete"
 > & {
   ref?: Ref<TaskDetailsSheetControllerHandle>;
 };
@@ -32,7 +32,7 @@ export function TaskDetailsSheetController(props: TaskDetailsSheetControllerProp
 function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerProps): ReactElement {
   const { allTasks, ref, ...sheetProps } = props;
   const workflowActions = useTaskWorkflowActions();
-  const deleteTask = sheetProps.onDelete ?? workflowActions?.onDelete;
+  const deleteTask = workflowActions?.onDelete;
   const repoPath = sheetProps.activeWorkspace?.repoPath ?? null;
   const [taskId, setTaskId] = useState<string | null>(null);
   const deletingTaskIdRef = useRef<string | null>(null);

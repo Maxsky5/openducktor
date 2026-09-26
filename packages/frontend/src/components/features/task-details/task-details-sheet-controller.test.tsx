@@ -9,6 +9,10 @@ import type { TaskCard } from "@openducktor/contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { taskQueryKeys } from "@/state/queries/tasks";
 import { withMockedToast } from "@/test-utils/mock-toast";
+import {
+  TaskWorkflowActionsContext,
+  type TaskWorkflowActions,
+} from "@/features/task-workflow/task-workflow-actions-context";
 import { collectDeleteImpactTaskIds, toSubtasks } from "./task-details-sheet-model";
 import type { TaskDetailsSheetControllerHandle } from "./task-details-sheet-controller";
 
@@ -37,6 +41,32 @@ const activeWorkspace = {
 const taskDetailsSheetRenderMock = mock((_props: TaskDetailsSheetRenderProps) => null);
 let taskDetailsSheetSpy: { mockRestore(): void };
 
+const createWorkflowActions = (onDelete: TaskWorkflowActions["onDelete"]): TaskWorkflowActions => ({
+  onCreateTask: () => {},
+  onPlan: () => {},
+  onQaStart: () => {},
+  onQaOpen: () => {},
+  onBuild: () => {},
+  onOpenSession: () => {},
+  onDelegate: () => {},
+  onEdit: () => {},
+  onHumanApprove: () => {},
+  onHumanRequestChanges: () => {},
+  onResetImplementation: () => {},
+  onResetTask: async () => {},
+  onCloseTask: async () => {},
+  onDelete,
+  onDetectPullRequest: () => {},
+  onUnlinkPullRequest: () => {},
+  detectingPullRequestTaskId: null,
+  unlinkingPullRequestTaskId: null,
+  gitProviderContext: undefined,
+  gitProviderReadError: null,
+  registerTaskDetailsClose: () => () => {},
+  taskSessionsByTaskId: new Map(),
+  activeTaskSessionContextByTaskId: new Map(),
+});
+
 async function importMockedTaskDetailsSheetController(): Promise<TaskDetailsSheetControllerComponent> {
   const { TaskDetailsSheetController } = await import("./task-details-sheet-controller");
   return TaskDetailsSheetController;
@@ -50,15 +80,15 @@ describe("TaskDetailsSheetController", () => {
     const queryKey = taskQueryKeys.repoData(activeWorkspace.repoPath);
     client.setQueryData(queryKey, { tasks: [task] });
     const ref = createRef<TaskDetailsSheetControllerHandle>();
+    const actions = createWorkflowActions(async () => {
+      client.setQueryData(queryKey, { tasks: [] });
+    });
     const controller = (allTasks: TaskCard[]) =>
-      createElement(TaskDetailsSheetController, {
-        ref,
-        activeWorkspace,
-        allTasks,
-        onDelete: async () => {
-          client.setQueryData(queryKey, { tasks: [] });
-        },
-      });
+      createElement(
+        TaskWorkflowActionsContext.Provider,
+        { value: actions },
+        createElement(TaskDetailsSheetController, { ref, activeWorkspace, allTasks }),
+      );
     const rendered = renderUi(controller([task]), {
       wrapper: ({ children }) => createElement(QueryClientProvider, { client }, children),
     });
@@ -94,15 +124,15 @@ describe("TaskDetailsSheetController", () => {
     const queryKey = taskQueryKeys.repoData(activeWorkspace.repoPath);
     client.setQueryData(queryKey, { tasks: [task] });
     const ref = createRef<TaskDetailsSheetControllerHandle>();
+    const actions = createWorkflowActions(async () => {
+      throw new Error("Delete failed");
+    });
     const controller = (allTasks: TaskCard[]) =>
-      createElement(TaskDetailsSheetController, {
-        ref,
-        activeWorkspace,
-        allTasks,
-        onDelete: async () => {
-          throw new Error("Delete failed");
-        },
-      });
+      createElement(
+        TaskWorkflowActionsContext.Provider,
+        { value: actions },
+        createElement(TaskDetailsSheetController, { ref, activeWorkspace, allTasks }),
+      );
     const rendered = renderUi(controller([task]), {
       wrapper: ({ children }) => createElement(QueryClientProvider, { client }, children),
     });
