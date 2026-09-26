@@ -1,356 +1,267 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { useQueryClient } from "@tanstack/react-query";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { type ReactElement, useEffect, useState } from "react";
+import { CODEX_RUNTIME_DESCRIPTOR, type WorkspaceRecord } from "@openducktor/contracts";
+import type { AgentModelCatalog } from "@openducktor/core";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
-import { filesystemQueryKeys } from "@/state/queries/filesystem";
-import { createDeferred } from "@/test-utils/shared-test-fixtures";
-import { FolderPickerCancelAction, FolderPickerConfirmAction } from "./folder-picker-actions";
-import { InlineFolderPickerContent, useInlineFolderPickerController } from "./inline-folder-picker";
+import type {
+  WorkspaceModelDefaultsDraft,
+  WorkspaceSelectionOperationsInput,
+} from "@/types/state-slices";
 import {
   useWorkspaceCreation,
+  WorkspaceCreationBackAction,
   WorkspaceCreationFields,
-  WorkspaceCreationForm,
   WorkspaceCreationSubmitAction,
 } from "./workspace-creation-form";
+import type { WorkspaceCreationModelSurface } from "./use-workspace-creation-models";
 
-const mountedViews = new Set<ReturnType<typeof render>>();
+const views = new Set<ReturnType<typeof render>>();
 afterEach(() => {
-  for (const view of mountedViews) view.unmount();
-  mountedViews.clear();
+  for (const view of views) view.unmount();
+  views.clear();
 });
 
-function SeedFilesystemDirectory(): ReactElement | null {
-  const queryClient = useQueryClient();
-  useEffect(() => {
-    queryClient.setQueryData(filesystemQueryKeys.directory(), {
-      currentPath: "/repo",
-      currentPathIsGitRepo: true,
-      parentPath: "/",
-      homePath: "/repo",
-      entries: [],
-    });
-  }, [queryClient]);
-  return null;
-}
+const record = (input: WorkspaceSelectionOperationsInput): WorkspaceRecord => ({
+  workspaceId: input.workspaceId,
+  workspaceName: input.workspaceName,
+  repoPath: input.repoPath,
+  abbreviation: input.abbreviation ?? null,
+  tileColor: input.tileColor ?? null,
+  isActive: true,
+  hasConfig: true,
+  configuredWorktreeBasePath: null,
+  defaultWorktreeBasePath: null,
+  effectiveWorktreeBasePath: null,
+});
 
-function InlineWorkspaceCreationForm({
-  addWorkspace,
-}: {
-  addWorkspace: Parameters<typeof WorkspaceCreationForm>[0]["addWorkspace"];
-}): ReactElement | null {
-  const queryClient = useQueryClient();
-  const [ready, setReady] = useState(false);
-  useEffect(() => {
-    queryClient.setQueryData(filesystemQueryKeys.directory(), {
-      currentPath: "/repo",
-      currentPathIsGitRepo: true,
-      parentPath: "/",
-      homePath: "/repo",
-      entries: [
-        {
-          name: "child",
-          path: "/repo/child",
-          isDirectory: true,
-          isGitRepo: false,
-        },
-      ],
-    });
-    setReady(true);
-  }, [queryClient]);
-  if (!ready) return null;
-  return <ReadyInlineWorkspaceCreationForm addWorkspace={addWorkspace} />;
-}
+const catalog: AgentModelCatalog = {
+  runtime: CODEX_RUNTIME_DESCRIPTOR,
+  models: [
+    {
+      id: "openai/o3",
+      providerId: "openai",
+      providerName: "OpenAI",
+      modelId: "o3",
+      modelName: "o3",
+      variants: ["low", "high"],
+    },
+  ],
+  defaultModelsByProvider: { openai: "o3" },
+  profiles: [],
+};
 
-function ReadyInlineWorkspaceCreationForm({
+const surface: WorkspaceCreationModelSurface = {
+  availableRuntimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR],
+  catalogResources: [
+    {
+      runtimeKind: "codex",
+      catalog,
+      isFetching: false,
+      isEnabled: true,
+      error: null,
+      retry: async () => {},
+    },
+  ],
+  favoriteState: {
+    favorites: [],
+    isLoading: false,
+    readError: null,
+    isMutationPending: false,
+    mutationError: null,
+    canMutate: false,
+    toggleFavorite: () => {},
+    retryRead: () => {},
+    retryMutation: () => {},
+  },
+  isLoadingRuntimeDefinitions: false,
+  isLoadingCatalog: false,
+  errors: [],
+  getCatalogForRuntime: () => catalog,
+  isCatalogLoadingForRuntime: () => false,
+  retry: async () => {},
+};
+
+function CreationHarness({
   addWorkspace,
+  saveWorkspaceModelDefaults = async () => {},
+  onSuccess = () => {},
+  modelSurface = surface,
 }: {
-  addWorkspace: Parameters<typeof WorkspaceCreationForm>[0]["addWorkspace"];
+  addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<WorkspaceRecord>;
+  saveWorkspaceModelDefaults?: (
+    workspaceId: string,
+    draft: WorkspaceModelDefaultsDraft,
+  ) => Promise<void>;
+  onSuccess?: () => void;
+  modelSurface?: WorkspaceCreationModelSurface;
 }): ReactElement {
-  const workspaceCreation = useWorkspaceCreation({
+  const creation = useWorkspaceCreation({
     workspaces: [],
     addWorkspace,
-    initialPickerOpen: true,
+    saveWorkspaceModelDefaults,
+    onSuccess,
   });
-  const folderPickerInput: Parameters<typeof useInlineFolderPickerController>[0] = {
-    requireGitRepo: true,
-    onCancel: workspaceCreation.closePicker,
-    onConfirm: workspaceCreation.confirmRepo,
-  };
-  if (workspaceCreation.repoPath) {
-    folderPickerInput.initialPath = workspaceCreation.repoPath;
-  }
-  const folderPicker = useInlineFolderPickerController(folderPickerInput);
   return (
-    <>
-      <WorkspaceCreationFields
-        controller={workspaceCreation}
-        picker={
-          <InlineFolderPickerContent
-            controller={folderPicker}
-            title="Repository browser"
-            description="Choose an existing Git repository on disk."
-          />
+    <QueryProvider useIsolatedClient>
+      <button type="button" onClick={() => void creation.confirmRepo("/repo")}>
+        Choose repo
+      </button>
+      <button type="button" onClick={() => void creation.confirmRepo("/other")}>
+        Choose other
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          creation.updateModelDraft((current) => ({
+            ...current,
+            defaultModel: {
+              runtimeKind: "codex",
+              providerId: "openai",
+              modelId: "o3",
+              variant: "low",
+              profileId: "",
+            },
+          }))
         }
-      />
-      <div data-testid="workspace-actions">
-        <button type="button">Back to coding agents</button>
-        {workspaceCreation.pickerOpen ? (
-          <>
-            {workspaceCreation.repoPath ? (
-              <FolderPickerCancelAction controller={folderPicker} />
-            ) : null}
-            <FolderPickerConfirmAction
-              controller={folderPicker}
-              confirmLabel="Choose This Folder"
-            />
-          </>
-        ) : (
-          <WorkspaceCreationSubmitAction controller={workspaceCreation} />
-        )}
-      </div>
-    </>
+      >
+        Choose model
+      </button>
+      <p data-testid="created-id">{creation.createdWorkspaceId ?? ""}</p>
+      <WorkspaceCreationFields controller={creation} modelSurface={modelSurface} />
+      <WorkspaceCreationBackAction controller={creation} />
+      <WorkspaceCreationSubmitAction controller={creation} modelSurface={modelSurface} />
+    </QueryProvider>
   );
 }
 
-const chooseRepository = async (): Promise<void> => {
-  fireEvent.click(screen.getByRole("button", { name: /choose repository folder/i }));
-  fireEvent.click(await screen.findByRole("button", { name: /choose this folder/i }));
-  await screen.findByRole("button", { name: /^open repository$/i });
+const renderHarness = (props: Parameters<typeof CreationHarness>[0]) => {
+  const view = render(<CreationHarness {...props} />);
+  views.add(view);
+  return view;
 };
 
-const renderForm = ({
-  addWorkspace,
-  onSuccess,
-  runWorkspaceChange,
-  duplicate = false,
-}: {
-  addWorkspace: Parameters<typeof WorkspaceCreationForm>[0]["addWorkspace"];
-  onSuccess?: () => void;
-  runWorkspaceChange?: (change: () => Promise<void>) => Promise<boolean>;
-  duplicate?: boolean;
-}): void => {
-  const formProps: Parameters<typeof WorkspaceCreationForm>[0] = {
-    workspaces: duplicate
-      ? [
-          {
-            workspaceId: "existing",
-            workspaceName: "Existing",
-            abbreviation: null,
-            tileColor: null,
-            repoPath: "/repo",
-            isActive: true,
-            hasConfig: true,
-            configuredWorktreeBasePath: null,
-            defaultWorktreeBasePath: "/worktrees",
-            effectiveWorktreeBasePath: "/worktrees",
-          },
-        ]
-      : [],
-    addWorkspace,
-  };
-  if (onSuccess) {
-    formProps.onSuccess = onSuccess;
-  }
-  if (runWorkspaceChange) {
-    formProps.runWorkspaceChange = runWorkspaceChange;
-  }
-  const view = render(
-    <QueryProvider useIsolatedClient>
-      <SeedFilesystemDirectory />
-      <WorkspaceCreationForm {...formProps} />
-    </QueryProvider>,
-  );
-  mountedViews.add(view);
+const advanceToModels = async () => {
+  fireEvent.click(screen.getByRole("button", { name: "Choose repo" }));
+  await screen.findByLabelText("Workspace ID");
+  fireEvent.click(screen.getByRole("button", { name: "Continue to models" }));
+  await screen.findByRole("button", { name: "Open repository" });
 };
 
-describe("WorkspaceCreationForm", () => {
-  test("renders the shared repository picker inline without opening a dialog", async () => {
-    const addWorkspace = mock(async () => {});
-    const view = render(
-      <QueryProvider useIsolatedClient>
-        <InlineWorkspaceCreationForm addWorkspace={addWorkspace} />
-      </QueryProvider>,
-    );
-    mountedViews.add(view);
-
-    expect(await screen.findByText("/repo")).toBeTruthy();
-    const tree = document.querySelector('[data-slot="folder-picker-directory-tree"]');
-    expect(tree?.classList.contains("h-80")).toBe(true);
-    expect(screen.getByRole("button", { name: "child" })).toBeTruthy();
-    expect(screen.queryByText("Choose a local Git repository to continue.")).toBeNull();
-    expect(screen.queryByRole("dialog")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /choose this folder/i }));
-    expect(await screen.findByRole("button", { name: /^open repository$/i })).toBeTruthy();
-    expect(screen.queryByRole("dialog")).toBeNull();
+describe("workspace creation stages", () => {
+  test("keeps identity changes while moving back and forward without creating a workspace", async () => {
+    const addWorkspace = mock(async (input: WorkspaceSelectionOperationsInput) => record(input));
+    renderHarness({ addWorkspace });
+    fireEvent.click(screen.getByRole("button", { name: "Choose repo" }));
+    await screen.findByLabelText("Workspace ID");
+    fireEvent.change(screen.getByLabelText("Workspace name"), { target: { value: "Renamed" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue to models" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByLabelText<HTMLInputElement>("Workspace name").value).toBe("Renamed");
+    expect(screen.getByLabelText<HTMLInputElement>("Workspace ID").value).toBe("renamed");
+    expect(addWorkspace).not.toHaveBeenCalled();
   });
 
-  test("lets the onboarding host compose its actions without duplicate helper copy", async () => {
-    const addWorkspace = mock(async () => {});
-    const view = render(
-      <QueryProvider useIsolatedClient>
-        <InlineWorkspaceCreationForm addWorkspace={addWorkspace} />
-      </QueryProvider>,
-    );
-    mountedViews.add(view);
-
-    const selectionActions = await screen.findByTestId("workspace-actions");
-    expect(screen.queryByText("Choose a local Git repository to continue.")).toBeNull();
+  test("blocks blank names on the information stage", async () => {
+    const addWorkspace = mock(async (input: WorkspaceSelectionOperationsInput) => record(input));
+    renderHarness({ addWorkspace });
+    fireEvent.click(screen.getByRole("button", { name: "Choose repo" }));
+    await screen.findByLabelText("Workspace name");
+    fireEvent.change(screen.getByLabelText("Workspace name"), { target: { value: "" } });
+    expect(screen.getByRole("alert").textContent).toContain("Workspace name cannot be blank.");
     expect(
-      within(selectionActions).getByRole("button", { name: "Back to coding agents" }),
-    ).toBeTruthy();
-    fireEvent.click(within(selectionActions).getByRole("button", { name: "Choose This Folder" }));
-
-    const submitActions = await screen.findByTestId("workspace-actions");
-    expect(
-      within(submitActions).getByRole("button", { name: "Back to coding agents" }),
-    ).toBeTruthy();
-    expect(within(submitActions).getByRole("button", { name: "Open repository" })).toBeTruthy();
-  });
-
-  test("blocks a repository that is already configured", async () => {
-    const addWorkspace = mock(async () => {});
-    renderForm({ addWorkspace, duplicate: true });
-
-    await chooseRepository();
-
-    expect(screen.getByRole("alert").textContent).toContain(
-      "Repository is already configured as Existing.",
-    );
-    expect(
-      screen.getByRole<HTMLButtonElement>("button", { name: /^open repository$/i }).disabled,
+      screen.getByRole<HTMLButtonElement>("button", { name: "Continue to models" }).disabled,
     ).toBe(true);
     expect(addWorkspace).not.toHaveBeenCalled();
   });
 
-  test("derives workspace fields, stays disabled while busy, and reports success", async () => {
-    const deferred = createDeferred<void>();
-    const addWorkspace = mock(async () => deferred.promise);
+  test("creates only on the final action and saves a selected model before success", async () => {
+    const addWorkspace = mock(async (input: WorkspaceSelectionOperationsInput) => record(input));
+    const saveWorkspaceModelDefaults = mock(async () => {});
     const onSuccess = mock(() => {});
-    renderForm({ addWorkspace, onSuccess });
-    await chooseRepository();
-
-    expect(screen.getByLabelText<HTMLInputElement>("Workspace ID").value).toBe("repo");
-    expect(screen.getByLabelText<HTMLInputElement>("Workspace name").value).toBe("repo");
-    fireEvent.click(screen.getByRole("button", { name: /^open repository$/i }));
-
-    const busyButton = await screen.findByRole("button", { name: "Opening repository..." });
-    if (!(busyButton instanceof HTMLButtonElement)) {
-      throw new TypeError("Expected the busy repository action to be a button.");
-    }
-    expect(busyButton.disabled).toBe(true);
-    expect(addWorkspace).toHaveBeenCalledWith({
-      repoPath: "/repo",
-      workspaceId: "repo",
-      workspaceName: "repo",
-    });
-    deferred.resolve();
+    renderHarness({ addWorkspace, saveWorkspaceModelDefaults, onSuccess });
+    await advanceToModels();
+    expect(addWorkspace).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Choose model" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
     await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
-  });
-
-  test("sends a picked abbreviation and tile color with the new workspace", async () => {
-    const addWorkspace = mock(async () => {});
-    renderForm({ addWorkspace });
-    await chooseRepository();
-
-    fireEvent.change(screen.getByLabelText("Abbreviation"), { target: { value: " iOS " } });
-    fireEvent.click(screen.getByRole("button", { name: "Blue (#3b82f6)" }));
-    fireEvent.click(screen.getByRole("button", { name: /^open repository$/i }));
-
-    await waitFor(() => expect(addWorkspace).toHaveBeenCalledTimes(1));
-    expect(addWorkspace).toHaveBeenCalledWith({
-      repoPath: "/repo",
-      workspaceId: "repo",
-      workspaceName: "repo",
-      abbreviation: "iOS",
-      tileColor: "#3b82f6",
-    });
-  });
-
-  test("omits the abbreviation and tile color when the user picks neither", async () => {
-    const addWorkspace = mock(async () => {});
-    renderForm({ addWorkspace });
-    await chooseRepository();
-
-    expect(screen.getByLabelText<HTMLInputElement>("Abbreviation").placeholder).toBe("RE");
-    fireEvent.click(screen.getByRole("button", { name: /^open repository$/i }));
-
-    await waitFor(() => expect(addWorkspace).toHaveBeenCalledTimes(1));
-    expect(addWorkspace).toHaveBeenCalledWith({
-      repoPath: "/repo",
-      workspaceId: "repo",
-      workspaceName: "repo",
-    });
-  });
-
-  test("starts one repository add when two submit events arrive before a rerender", async () => {
-    const deferred = createDeferred<void>();
-    const addWorkspace = mock(async () => deferred.promise);
-    renderForm({ addWorkspace });
-    await chooseRepository();
-    const submitButton = screen.getByRole("button", { name: /^open repository$/i });
-
-    await act(async () => {
-      submitButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      submitButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
-
     expect(addWorkspace).toHaveBeenCalledTimes(1);
-    deferred.resolve();
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /^open repository$/i })).toBeTruthy(),
-    );
+    expect(saveWorkspaceModelDefaults).toHaveBeenCalledWith("repo", {
+      defaultModel: {
+        runtimeKind: "codex",
+        providerId: "openai",
+        modelId: "o3",
+        variant: "low",
+        profileId: "",
+      },
+      agentDefaults: {},
+    });
   });
 
-  test("keeps the repository draft when a workspace change is canceled", async () => {
-    const addWorkspace = mock(async () => {});
+  test("keeps a created workspace and retries only the failed model save", async () => {
+    const addWorkspace = mock(async (input: WorkspaceSelectionOperationsInput) => record(input));
+    let saves = 0;
+    const saveWorkspaceModelDefaults = mock(async () => {
+      saves += 1;
+      if (saves === 1) throw new Error("Model save failed");
+    });
     const onSuccess = mock(() => {});
-    const runWorkspaceChange = mock(async () => false);
-    renderForm({ addWorkspace, onSuccess, runWorkspaceChange });
-    await chooseRepository();
-
-    fireEvent.click(screen.getByRole("button", { name: /^open repository$/i }));
-    await waitFor(() => expect(runWorkspaceChange).toHaveBeenCalledTimes(1));
-    expect(addWorkspace).not.toHaveBeenCalled();
+    renderHarness({ addWorkspace, saveWorkspaceModelDefaults, onSuccess });
+    await advanceToModels();
+    fireEvent.click(screen.getByRole("button", { name: "Choose model" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
+    expect(await screen.findByText("Model save failed")).toBeTruthy();
+    expect(screen.getByTestId("created-id").textContent).toBe("repo");
     expect(onSuccess).not.toHaveBeenCalled();
-    expect(screen.getByLabelText<HTMLInputElement>("Repository path").value).toBe("/repo");
-  });
-
-  test("waits for a pending preview save before adding the workspace", async () => {
-    const decision = createDeferred<boolean>();
-    const addWorkspace = mock(async () => {});
-    const runWorkspaceChange = mock(async (change: () => Promise<void>) => {
-      if (!(await decision.promise)) return false;
-      await change();
-      return true;
-    });
-    renderForm({ addWorkspace, runWorkspaceChange });
-    await chooseRepository();
-
-    fireEvent.click(screen.getByRole("button", { name: /^open repository$/i }));
-    await waitFor(() => expect(runWorkspaceChange).toHaveBeenCalledTimes(1));
-    expect(addWorkspace).not.toHaveBeenCalled();
-    await act(async () => decision.resolve(true));
-    await waitFor(() => expect(addWorkspace).toHaveBeenCalledTimes(1));
-  });
-
-  test("shows add failures and lets the user retry without losing the draft", async () => {
-    let attempts = 0;
-    const addWorkspace = mock(async () => {
-      attempts += 1;
-      if (attempts === 1) throw new Error("Repository open failed");
-    });
-    const onSuccess = mock(() => {});
-    renderForm({ addWorkspace, onSuccess });
-    await chooseRepository();
-
-    fireEvent.click(screen.getByRole("button", { name: /^open repository$/i }));
-    await screen.findByText("Repository open failed");
-    expect(screen.getByLabelText<HTMLInputElement>("Repository path").value).toBe("/repo");
-    fireEvent.click(screen.getByRole("button", { name: /^open repository$/i }));
-
+    fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
     await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
-    expect(addWorkspace).toHaveBeenCalledTimes(2);
+    expect(addWorkspace).toHaveBeenCalledTimes(1);
+    expect(saveWorkspaceModelDefaults).toHaveBeenCalledTimes(2);
+  });
+
+  test("resets identity and models when the repository changes", async () => {
+    const addWorkspace = mock(async (input: WorkspaceSelectionOperationsInput) => record(input));
+    const saveWorkspaceModelDefaults = mock(async () => {});
+    renderHarness({ addWorkspace, saveWorkspaceModelDefaults });
+    await advanceToModels();
+    fireEvent.click(screen.getByRole("button", { name: "Choose model" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose other" }));
+    expect(await screen.findByLabelText<HTMLInputElement>("Workspace ID")).toHaveProperty(
+      "value",
+      "other",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Continue to models" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
+    await waitFor(() =>
+      expect(addWorkspace).toHaveBeenCalledWith({
+        workspaceId: "other",
+        workspaceName: "other",
+        repoPath: "/other",
+      }),
+    );
+    expect(saveWorkspaceModelDefaults).not.toHaveBeenCalled();
+  });
+
+  test("rejects a selected model when its runtime catalog is unavailable", async () => {
+    const addWorkspace = mock(async (input: WorkspaceSelectionOperationsInput) => record(input));
+    const unavailableSurface: WorkspaceCreationModelSurface = {
+      ...surface,
+      catalogResources: [
+        { ...surface.catalogResources[0]!, isEnabled: false, error: "Runtime failed" },
+      ],
+      getCatalogForRuntime: () => null,
+      errors: ["Runtime failed"],
+    };
+    renderHarness({ addWorkspace, modelSurface: unavailableSurface });
+    await advanceToModels();
+    fireEvent.click(screen.getByRole("button", { name: "Choose model" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
+    expect(await screen.findByText(/Default Model is unavailable/)).toBeTruthy();
+    expect(addWorkspace).not.toHaveBeenCalled();
+    fireEvent.click(screen.getAllByRole("button", { name: "Clear" })[0]!);
+    fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
+    await waitFor(() => expect(addWorkspace).toHaveBeenCalledTimes(1));
   });
 });

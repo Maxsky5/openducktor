@@ -162,7 +162,7 @@ export const resolveRepoAgentDefaultRuntimeKind = ({
   runtimeDefinitions,
   role,
 }: {
-  selectedRepoConfig: SettingsRepoConfig;
+  selectedRepoConfig: Pick<SettingsRepoConfig, "defaultModel" | "agentDefaults">;
   runtimeDefinitions: RuntimeDescriptor[];
   role: RepoDefaultRole;
 }): RuntimeKind | null => {

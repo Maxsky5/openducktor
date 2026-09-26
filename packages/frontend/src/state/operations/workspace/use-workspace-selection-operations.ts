@@ -51,7 +51,7 @@ type UseWorkspaceSelectionOperationsResult = {
   workspaceLoadError: Error | null;
   isSwitchingWorkspace: boolean;
   refreshWorkspaces: () => Promise<void>;
-  addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<void>;
+  addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<WorkspaceRecord>;
   selectWorkspace: (workspaceId: string) => Promise<void>;
   closeWorkspace: (input: WorkspaceLifecycleTargetInput) => Promise<void>;
   removeWorkspace: (input: WorkspaceRemovalInput) => Promise<void>;
@@ -338,10 +338,10 @@ export function useWorkspaceSelectionOperations({
   }, [applyWorkspaceRecords, hostClient, queryClient]);
 
   const addWorkspace = useCallback(
-    async (input: WorkspaceSelectionOperationsInput): Promise<void> => {
+    async (input: WorkspaceSelectionOperationsInput): Promise<WorkspaceRecord> => {
       const normalizedRepoPath = normalizeRepoPath(input.repoPath);
       if (!normalizedRepoPath) {
-        return;
+        throw new Error("Choose a repository folder before opening a workspace.");
       }
 
       const workspaceInput: WorkspaceSelectionOperationsInput = {
@@ -357,10 +357,17 @@ export function useWorkspaceSelectionOperations({
       }
       const workspace = await hostClient.workspaceAdd(workspaceInput);
       applyWorkspaceRecord(workspace);
-      await invalidateWorkspaceSettingsSnapshot(queryClient);
+      try {
+        await invalidateWorkspaceSettingsSnapshot(queryClient);
+      } catch (cause) {
+        toast.error("Repository added, but settings did not refresh", {
+          description: errorMessage(cause),
+        });
+      }
       toast.success("Repository added", {
         description: workspace.repoPath,
       });
+      return workspace;
     },
     [applyWorkspaceRecord, hostClient, queryClient],
   );

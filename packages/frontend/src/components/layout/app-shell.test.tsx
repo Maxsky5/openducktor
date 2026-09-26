@@ -186,7 +186,10 @@ const createWorkspaceState = (
   activeWorkspace,
   branches: [],
   activeBranch: null,
-  addWorkspace: async () => undefined,
+  addWorkspace: async () => {
+    throw new Error("Not used");
+  },
+  saveWorkspaceModelDefaults: async () => {},
   selectWorkspace: async () => undefined,
   reorderWorkspaces: async () => undefined,
   refreshBranches: async () => undefined,
@@ -293,11 +296,12 @@ function AppShellTestEnvironment({
   const publishesWorkspaceAfterAdd = options.workspaceAdd !== undefined;
   const hasWorkspaces = publishesWorkspaceAfterAdd ? workspaces.length > 0 : startsWithWorkspaces;
   const addWorkspace: WorkspaceStateContextValue["addWorkspace"] = async (input) => {
-    if (!options.workspaceAdd) return;
+    if (!options.workspaceAdd) throw new Error("Not used");
     const workspace = await options.workspaceAdd(input);
     setWorkspaces([workspace]);
     setCurrentWorkspace(workspace);
     setCurrentActiveWorkspace(workspace);
+    return workspace;
   };
 
   return (
@@ -620,18 +624,16 @@ describe("AppShell", () => {
     fireEvent.click(within(workspaceFooter).getByRole("button", { name: "Choose This Folder" }));
     const submitActions = await screen.findByTestId("onboarding-workspace-actions");
     expect(workspaceFooter.contains(submitActions)).toBe(true);
-    expect(
-      within(workspaceFooter).getByRole("button", { name: "Back to notifications" }),
-    ).toBeTruthy();
+    expect(within(workspaceFooter).getByRole("button", { name: "Back" })).toBeTruthy();
+    expect(workspaceAdd).not.toHaveBeenCalled();
+    fireEvent.click(within(workspaceFooter).getByRole("button", { name: "Continue to models" }));
     const openRepositoryButton = await within(workspaceFooter).findByRole("button", {
       name: "Open repository",
     });
     fireEvent.click(openRepositoryButton);
 
-    expect(await screen.findByRole("button", { name: "Opening repository..." })).toBeTruthy();
-    expect(
-      screen.getByRole<HTMLButtonElement>("button", { name: "Back to notifications" }).disabled,
-    ).toBe(true);
+    expect(await screen.findByRole("button", { name: "Creating workspace..." })).toBeTruthy();
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Back" }).disabled).toBe(true);
     expect(screen.getByTestId("current-route").textContent).toBe("/onboarding");
     expect(screen.queryByText("Kanban")).toBeNull();
     expect(workspaceAdd).toHaveBeenCalledWith({
@@ -694,9 +696,10 @@ describe("AppShell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
     await screen.findByRole("heading", { name: "Open your first workspace" });
     fireEvent.click(await screen.findByRole("button", { name: "Choose This Folder" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Continue to models" }));
     fireEvent.click(await screen.findByRole("button", { name: "Open repository" }));
 
-    const backButton = screen.getByRole("button", { name: "Back to notifications" });
+    const backButton = screen.getByRole("button", { name: "Back" });
     if (!(backButton instanceof HTMLButtonElement)) {
       throw new TypeError("Expected the back action to be a button.");
     }

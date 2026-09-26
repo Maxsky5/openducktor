@@ -79,7 +79,12 @@ describe("WorkspaceRail", () => {
       activeWorkspace: null,
       branches: [],
       activeBranch: null,
-      addWorkspace: async () => {},
+      addWorkspace: async () => {
+        throw new Error("Not used");
+      },
+      saveWorkspaceModelDefaults: async () => {
+        throw new Error("Not used");
+      },
       selectWorkspace: selectWorkspaceMock,
       reorderWorkspaces: reorderWorkspacesMock,
       refreshBranches: async () => {},

@@ -50,7 +50,7 @@ export type UseWorkspaceOperationsResult = {
   isSwitchingBranch: boolean;
   branchSyncDegraded: boolean;
   refreshWorkspaces: () => Promise<void>;
-  addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<void>;
+  addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<WorkspaceRecord>;
   selectWorkspace: (workspaceId: string) => Promise<void>;
   closeWorkspace: (input: WorkspaceLifecycleTargetInput) => Promise<void>;
   removeWorkspace: (input: WorkspaceRemovalInput) => Promise<void>;

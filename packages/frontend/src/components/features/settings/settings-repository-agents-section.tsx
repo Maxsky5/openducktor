@@ -48,6 +48,19 @@ type RepositoryAgentsSectionProps = {
   onClearSelectedRepoDefaultModel: () => void;
 };
 
+type ModelDefaultsValue = Pick<SettingsRepoConfig, "defaultModel" | "agentDefaults">;
+
+export type RepositoryModelDefaultsFieldsProps = Omit<
+  RepositoryAgentsSectionProps,
+  "selectedRepoConfig" | "onUpdateSelectedRepoConfig"
+> & {
+  selectedRepoConfig: ModelDefaultsValue;
+  onUpdateSelectedRepoConfig: (
+    updater: (current: ModelDefaultsValue) => ModelDefaultsValue,
+  ) => void;
+  showMissingRoleWarning?: boolean;
+};
+
 type RepositoryAgentRoleViewModel = {
   runtimeKind: RuntimeKind | null;
   value: ReturnType<typeof ensureDraftAgentDefault>;
@@ -63,7 +76,7 @@ const buildRepositoryAgentRoleViewModel = ({
   getCatalogForRuntime,
   isCatalogLoadingForRuntime,
 }: {
-  selectedRepoConfig: SettingsRepoConfig;
+  selectedRepoConfig: ModelDefaultsValue;
   runtimeDefinitions: RuntimeDescriptor[];
   role: "spec" | "planner" | "build" | "qa";
   getCatalogForRuntime: (runtimeKind: RuntimeKind) => AgentModelCatalog | null;
@@ -93,7 +106,7 @@ const findMissingRoleLabels = ({
   selectedRepoConfig,
   runtimeDefinitions,
 }: {
-  selectedRepoConfig: SettingsRepoConfig;
+  selectedRepoConfig: ModelDefaultsValue;
   runtimeDefinitions: RuntimeDescriptor[];
 }): string[] =>
   ROLE_DEFAULTS.reduce<string[]>((labels, { role, label }) => {
@@ -122,7 +135,7 @@ const findMissingRoleLabels = ({
     return labels;
   }, []);
 
-export function RepositoryAgentsSection({
+export function RepositoryModelDefaultsFields({
   selectedRepoConfig,
   availableRuntimeDefinitions,
   catalogResources,
@@ -137,16 +150,10 @@ export function RepositoryAgentsSection({
   onClearSelectedRepoAgentDefault,
   onUpdateSelectedRepoDefaultModel,
   onClearSelectedRepoDefaultModel,
-}: RepositoryAgentsSectionProps): ReactElement {
+  showMissingRoleWarning = false,
+}: RepositoryModelDefaultsFieldsProps): ReactElement {
   const { isLoadingRuntimeDefinitions, isLoadingCatalog, isLoadingSettings, isSaving } =
     loadingState;
-  if (!selectedRepoConfig) {
-    return (
-      <div className="rounded-md border border-warning-border bg-warning-surface p-3 text-sm text-warning-surface-foreground">
-        Select a repository to edit agent defaults.
-      </div>
-    );
-  }
 
   const agentDropdownClassName = "sm:min-w-[18rem]";
   const variantDropdownClassName = "sm:min-w-[16rem]";
@@ -195,7 +202,7 @@ export function RepositoryAgentsSection({
           ))}
         </div>
       ) : null}
-      {missingRoleLabels.length > 0 ? (
+      {showMissingRoleWarning && missingRoleLabels.length > 0 ? (
         <p className="text-xs text-warning-muted">
           Missing complete defaults for: {missingRoleLabels.join(", ")}.
         </p>
@@ -301,5 +308,25 @@ export function RepositoryAgentsSection({
         })}
       </div>
     </div>
+  );
+}
+
+export function RepositoryAgentsSection(props: RepositoryAgentsSectionProps): ReactElement {
+  if (!props.selectedRepoConfig) {
+    return (
+      <div className="rounded-md border border-warning-border bg-warning-surface p-3 text-sm text-warning-surface-foreground">
+        Select a repository to edit agent defaults.
+      </div>
+    );
+  }
+  return (
+    <RepositoryModelDefaultsFields
+      {...props}
+      selectedRepoConfig={props.selectedRepoConfig}
+      onUpdateSelectedRepoConfig={(updater) =>
+        props.onUpdateSelectedRepoConfig((current) => ({ ...current, ...updater(current) }))
+      }
+      showMissingRoleWarning
+    />
   );
 }

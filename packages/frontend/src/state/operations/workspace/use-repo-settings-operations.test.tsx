@@ -562,6 +562,62 @@ describe("use-repo-settings-operations", () => {
     }
   });
 
+  test("saves only chosen model defaults for a newly created workspace", async () => {
+    const workspaceSaveRepoSettings = mock(async () => createWorkspaceRecord("/new-repo"));
+    const original = host.workspaceSaveRepoSettings;
+    host.workspaceSaveRepoSettings = workspaceSaveRepoSettings;
+    const applyWorkspaceRecord = mock(() => {});
+    const harness = createHookHarness({
+      activeWorkspace: createWorkspaceRecord(),
+      applyWorkspaceRecords: () => {},
+      applyWorkspaceRecord,
+    });
+
+    try {
+      await harness.mount();
+      await harness.getLatest().saveWorkspaceModelDefaults("new-repo", {
+        defaultModel: {
+          runtimeKind: "codex",
+          providerId: "openai",
+          modelId: "o3",
+          variant: "high",
+        },
+        agentDefaults: {
+          qa: {
+            runtimeKind: "opencode",
+            providerId: "anthropic",
+            modelId: "claude",
+          },
+        },
+      });
+      expect(workspaceSaveRepoSettings).toHaveBeenCalledWith("new-repo", {
+        defaultModel: {
+          runtimeKind: "codex",
+          providerId: "openai",
+          modelId: "o3",
+          variant: "high",
+        },
+        agentDefaults: {
+          qa: {
+            runtimeKind: "opencode",
+            providerId: "anthropic",
+            modelId: "claude",
+          },
+        },
+      });
+      expect(applyWorkspaceRecord).toHaveBeenCalledWith(createWorkspaceRecord("/new-repo"));
+      await expect(
+        harness.getLatest().saveWorkspaceModelDefaults("new-repo", {
+          agentDefaults: { spec: { runtimeKind: "codex", providerId: "", modelId: "o3" } },
+        }),
+      ).rejects.toThrow("spec default needs a runtime and model");
+      expect(workspaceSaveRepoSettings).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+      host.workspaceSaveRepoSettings = original;
+    }
+  });
+
   test("saveRepoSettings sends normalized repo scripts", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});

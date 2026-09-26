@@ -12,7 +12,7 @@ import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { useOnboardingWorkspaceCompletion } from "./use-onboarding-workspace-completion";
 
 describe("useOnboardingWorkspaceCompletion", () => {
-  test("creates the first workspace with an enabled coding agent as its default", async () => {
+  test("prepares destination reads after workspace creation completes", async () => {
     const settingsSnapshot = createSettingsSnapshotFixture({
       agentRuntimes: {
         ...DEFAULT_AGENT_RUNTIMES,
@@ -23,7 +23,9 @@ describe("useOnboardingWorkspaceCompletion", () => {
         },
       },
     });
-    const addWorkspace = mock(async () => {});
+    const addWorkspace = mock(async () => {
+      throw new Error("Not used");
+    });
     const onComplete = mock(() => {});
     const queryClient = createQueryClient();
     queryClient.setQueryData(repoTaskDataQueryOptions("/repos/project").queryKey, { tasks: [] });
@@ -52,6 +54,7 @@ describe("useOnboardingWorkspaceCompletion", () => {
         throw new Error("Not used");
       },
       saveRepoSettings: async () => {},
+      saveWorkspaceModelDefaults: async () => {},
       loadSettingsSnapshot: async () => settingsSnapshot,
       detectGithubRepository: async () => null,
       saveGlobalGitConfig: async () => {},
@@ -71,19 +74,9 @@ describe("useOnboardingWorkspaceCompletion", () => {
 
     try {
       await harness.mount();
-      await harness.run((completion) =>
-        completion.addFirstWorkspace({
-          workspaceId: "project",
-          workspaceName: "Project",
-          repoPath: "/repos/project",
-        }),
-      );
+      await harness.run((completion) => completion.completeWorkspace("/repos/project"));
 
-      expect(addWorkspace).toHaveBeenCalledWith({
-        workspaceId: "project",
-        workspaceName: "Project",
-        repoPath: "/repos/project",
-      });
+      expect(addWorkspace).not.toHaveBeenCalled();
       expect(onComplete).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();

@@ -10,9 +10,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { errorMessage } from "@/lib/errors";
 import { useWorkspaceState } from "@/state/app-state-provider";
-import { WorkspaceCreationForm } from "./workspace-creation-form";
+import { FolderPickerDialog } from "./folder-picker-dialog";
+import {
+  useWorkspaceCreation,
+  WorkspaceCreationBackAction,
+  WorkspaceCreationFields,
+  WorkspaceCreationSubmitAction,
+} from "./workspace-creation-form";
+import { useWorkspaceCreationModels } from "./use-workspace-creation-models";
 
 type OpenRepositoryModalProps = {
   open: boolean;
@@ -25,7 +31,7 @@ type OpenRepositoryModalProps = {
   ) => void;
 };
 
-export function OpenRepositoryModal({
+function OpenRepositoryModalSession({
   open,
   canClose,
   onOpenChange,
@@ -36,14 +42,14 @@ export function OpenRepositoryModal({
     closedWorkspaces,
     incompleteRemovals,
     addWorkspace,
+    saveWorkspaceModelDefaults,
+    saveAgentModelFavorites,
     reopenWorkspace,
     resolveWorkspacePath,
     isSwitchingWorkspace,
   } = useWorkspaceState();
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
   const [isChangingWorkspace, setIsChangingWorkspace] = useState(false);
-  const [selectionError, setSelectionError] = useState<string | null>(null);
-  const interactionLocked = isSwitchingWorkspace || isCreatingWorkspace || isChangingWorkspace;
   const runWorkspaceChange = async (change: () => Promise<void>): Promise<boolean> => {
     setIsChangingWorkspace(true);
     try {
@@ -72,20 +78,27 @@ export function OpenRepositoryModal({
     ...closedWorkspaces,
     ...incompleteRemovals.map((removal) => removal.workspace),
   ];
-
-  const reopenClosedWorkspace = async (
-    workspaceId: string,
-    expectedRepoPath: string,
-  ): Promise<void> => {
-    setSelectionError(null);
-    try {
-      if (!(await runWorkspaceChange(() => reopenWorkspace({ workspaceId, expectedRepoPath }))))
-        return;
-      onOpenChange(false);
-    } catch (cause) {
-      setSelectionError(errorMessage(cause));
-    }
-  };
+  const creation = useWorkspaceCreation({
+    workspaces: configuredWorkspaces,
+    addWorkspace,
+    saveWorkspaceModelDefaults,
+    resolveRepoPath: resolveWorkspacePath,
+    onReopenClosedWorkspace: (workspace) =>
+      reopenWorkspace({
+        workspaceId: workspace.workspaceId,
+        expectedRepoPath: workspace.repoPath,
+      }),
+    runWorkspaceChange,
+    disabled: isSwitchingWorkspace || isChangingWorkspace,
+    onSubmittingChange: setIsCreatingWorkspace,
+    onSuccess: () => onOpenChange(false),
+  });
+  const models = useWorkspaceCreationModels({
+    repoPath: creation.repoPath,
+    active: open && creation.stage === "models",
+    saveAgentModelFavorites,
+  });
+  const interactionLocked = isSwitchingWorkspace || isCreatingWorkspace || isChangingWorkspace;
 
   return (
     <Dialog
@@ -110,75 +123,48 @@ export function OpenRepositoryModal({
             Open a Repository
           </DialogTitle>
           <DialogDescription>
-            Choose a local Git repository and review its workspace identity.
+            Choose a repository folder, review workspace information, then choose models.
           </DialogDescription>
         </DialogHeader>
 
         <DialogBody className="flex flex-col gap-5 py-4">
-          <WorkspaceCreationForm
-            workspaces={configuredWorkspaces}
-            addWorkspace={addWorkspace}
-            runWorkspaceChange={runWorkspaceChange}
-            resolveRepoPath={resolveWorkspacePath}
-            onReopenClosedWorkspace={async (workspace) => {
-              await reopenWorkspace({
-                workspaceId: workspace.workspaceId,
-                expectedRepoPath: workspace.repoPath,
-              });
-            }}
-            disabled={interactionLocked}
-            onSubmittingChange={setIsCreatingWorkspace}
-            onSuccess={() => onOpenChange(false)}
-          />
-
-          <section className="flex flex-col gap-2" aria-labelledby="closed-workspaces-title">
-            <h3 id="closed-workspaces-title" className="text-sm font-semibold text-foreground">
-              Closed workspaces
-            </h3>
-            {closedWorkspaces.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No closed workspaces</p>
-            ) : (
-              <div className="grid gap-2 sm:grid-cols-2">
-                {closedWorkspaces.map((workspace) => (
-                  <Button
-                    key={workspace.workspaceId}
-                    type="button"
-                    variant="outline"
-                    className="h-auto flex-col items-start gap-1 overflow-hidden px-3 py-2 text-left"
-                    disabled={interactionLocked}
-                    onClick={() =>
-                      void reopenClosedWorkspace(workspace.workspaceId, workspace.repoPath)
-                    }
-                  >
-                    <span className="truncate">{workspace.workspaceName}</span>
-                    <span className="w-full truncate text-xs text-muted-foreground">
-                      {workspace.repoPath}
-                    </span>
-                  </Button>
-                ))}
-              </div>
-            )}
-            {selectionError ? (
-              <p className="text-sm text-destructive" role="alert">
-                {selectionError}
-              </p>
-            ) : null}
-          </section>
+          <WorkspaceCreationFields controller={creation} modelSurface={models} />
         </DialogBody>
 
-        {canClose ? (
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={interactionLocked}
-              onClick={() => onOpenChange(false)}
-            >
-              Close
-            </Button>
-          </DialogFooter>
-        ) : null}
+        <DialogFooter
+          className="flex-row justify-between"
+          role="group"
+          aria-label="Repository actions"
+        >
+          <div className="flex gap-2">
+            {canClose ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={interactionLocked}
+                onClick={() => onOpenChange(false)}
+              >
+                Close
+              </Button>
+            ) : null}
+            <WorkspaceCreationBackAction controller={creation} />
+          </div>
+          <WorkspaceCreationSubmitAction controller={creation} modelSurface={models} />
+        </DialogFooter>
       </DialogContent>
+      <FolderPickerDialog
+        open={creation.pickerOpen}
+        onOpenChange={(nextOpen) => (nextOpen ? creation.openPicker() : creation.closePicker())}
+        title="Open Repository"
+        description="Choose an existing Git repository on disk."
+        confirmLabel="Choose This Folder"
+        requireGitRepo
+        onConfirm={creation.confirmRepo}
+      />
     </Dialog>
   );
+}
+
+export function OpenRepositoryModal(props: OpenRepositoryModalProps): ReactElement | null {
+  return props.open ? <OpenRepositoryModalSession {...props} /> : null;
 }

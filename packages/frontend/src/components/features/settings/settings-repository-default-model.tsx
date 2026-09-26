@@ -17,7 +17,7 @@ import { RepositoryModelPickerField } from "./settings-repository-model-picker-f
 import { ensureDraftAgentDefault } from "./settings-modal-model";
 
 type RepositoryDefaultModelBlockProps = {
-  selectedRepoConfig: SettingsRepoConfig;
+  selectedRepoConfig: Pick<SettingsRepoConfig, "defaultModel" | "agentDefaults">;
   availableRuntimeDefinitions: RuntimeDescriptor[];
   catalogResources: RuntimeModelCatalogQueryResource[];
   favoriteState: ModelPickerFavoriteState;
@@ -29,7 +29,9 @@ type RepositoryDefaultModelBlockProps = {
   getCatalogForRuntime: (runtimeKind: RuntimeKind) => AgentModelCatalog | null;
   isCatalogLoadingForRuntime: (runtimeKind: RuntimeKind) => boolean;
   onUpdateSelectedRepoConfig: (
-    updater: (current: SettingsRepoConfig) => SettingsRepoConfig,
+    updater: (
+      current: Pick<SettingsRepoConfig, "defaultModel" | "agentDefaults">,
+    ) => Pick<SettingsRepoConfig, "defaultModel" | "agentDefaults">,
   ) => void;
   onUpdateSelectedRepoDefaultModel: (
     field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",

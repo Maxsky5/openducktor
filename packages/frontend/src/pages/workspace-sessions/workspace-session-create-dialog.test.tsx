@@ -61,7 +61,12 @@ function renderCreation(
     activeWorkspace: null,
     branches: [],
     activeBranch: null,
-    addWorkspace: async () => {},
+    addWorkspace: async () => {
+      throw new Error("Not used");
+    },
+    saveWorkspaceModelDefaults: async () => {
+      throw new Error("Not used");
+    },
     selectWorkspace: async () => {},
     closeWorkspace: async () => {},
     removeWorkspace: async () => {},

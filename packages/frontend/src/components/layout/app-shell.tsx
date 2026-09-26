@@ -96,11 +96,7 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
   );
 
   useEffect(() => {
-    if (hasActiveWorkspace) {
-      setRepositoryModalOpen(false);
-      return;
-    }
-    setRepositoryModalOpen(true);
+    if (!hasActiveWorkspace) setRepositoryModalOpen(true);
   }, [hasActiveWorkspace]);
 
   const handleRepositoryModalOpenChange = useCallback((open: boolean) => {

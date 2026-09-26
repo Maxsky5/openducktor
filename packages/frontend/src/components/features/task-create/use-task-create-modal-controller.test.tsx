@@ -45,7 +45,9 @@ const workspaceState = {
   },
   branches: [],
   activeBranch: null,
-  addWorkspace: async () => {},
+  addWorkspace: async () => {
+    throw new Error("Not used");
+  },
   selectWorkspace: async () => {},
   reorderWorkspaces: async () => {},
   refreshBranches: async () => {},
@@ -54,6 +56,9 @@ const workspaceState = {
     throw new Error("Not used in this test.");
   },
   saveRepoSettings: async () => {},
+  saveWorkspaceModelDefaults: async () => {
+    throw new Error("Not used");
+  },
   loadSettingsSnapshot: async () => {
     throw new Error("Not used in this test.");
   },
