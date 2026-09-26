@@ -156,6 +156,48 @@ describe("Workspace Session persistence through the shared command module", () =
     expect(h.titleAttempts).toEqual(["Manual title"]);
   });
 
+  test("defers a queued manual rename until the first Codex title sync enters the title gate", async () => {
+    const h = await createPersistenceHarness(database, "codex");
+    await h.send("First prompt");
+    const entered = await Effect.runPromise(Deferred.make<void>());
+    const release = await Effect.runPromise(Deferred.make<void>());
+    const holdingGate = Effect.runPromise(
+      h.sessionTitleGate.run(
+        h.storeRef,
+        Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Deferred.await(release))),
+      ),
+    );
+    await Effect.runPromise(Deferred.await(entered));
+
+    let renameRequested!: () => void;
+    const requested = new Promise<void>((resolve) => {
+      renameRequested = resolve;
+    });
+    h.state.onGateRequest = renameRequested;
+    const renaming = Effect.runPromise(
+      h.workspaceService().rename({
+        workspaceId: "fairnest",
+        sessionId: "session-1",
+        manualTitle: "Manual title",
+      }),
+    );
+    await requested;
+    await h.emit({
+      type: "session_idle",
+      turnCompleted: true,
+      sessionRef: h.ref,
+      externalSessionId: h.ref.externalSessionId,
+      timestamp: "2026-09-07T10:01:00Z",
+    });
+    expect(h.persistence.isCodexTitleSyncPending(h.ref)).toBe(true);
+
+    await Effect.runPromise(Deferred.succeed(release, undefined));
+    await holdingGate;
+    await renaming;
+    await waitFor(() => h.titleAttempts.length === 1);
+    expect(h.titleAttempts).toEqual(["Manual title"]);
+  });
+
   test("reports a Codex title failure after acceptance and keeps the intended title", async () => {
     const h = await createPersistenceHarness(database, "codex");
     h.state.failTitle = true;

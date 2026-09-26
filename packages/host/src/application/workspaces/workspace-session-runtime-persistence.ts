@@ -91,17 +91,14 @@ export const createWorkspaceSessionRuntimePersistence = ({
   } => {
   const pendingFinalMessages = new Map<string, { messageId: string; occurredAt: number }>();
   const sendsInFlight = new Set<string>();
-  const firstCodexMessages = new Set<string>();
-  const pendingCodexTitleSync = new Set<string>();
+  const codexTitleSync = new Map<string, "pending" | "queued" | "done">();
   const markCodexFirstMessage = (
     runtimeRef: AgentSessionLiveRef,
     known: { session: WorkspaceSession },
   ) => {
     if (runtimeRef.runtimeKind !== "codex" || known.session.generatedTitle !== null) return;
     const key = agentSessionRefKey(runtimeRef);
-    if (firstCodexMessages.has(key)) return;
-    firstCodexMessages.add(key);
-    pendingCodexTitleSync.add(key);
+    if (!codexTitleSync.has(key)) codexTitleSync.set(key, "pending");
   };
   const find = (runtimeRef: AgentSessionLiveRef) =>
     Effect.gen(function* () {
@@ -306,14 +303,9 @@ export const createWorkspaceSessionRuntimePersistence = ({
         yield* publishUpdated(known.ref.workspaceId, saved);
         return;
       }
-      // A manual rename saves the new title before its runtime call and holds the title gate
-      // across it, so an observation in that window must not claim the generated title.
-      // The check never waits: the rename holds the gate while it waits for the live
-      // coordinator, so waiting here would deadlock.
+      // A manual rename can hold the title gate while it waits for live publication.
+      // Save observed activity without a title and defer its native rename to avoid deadlock.
       const renamePending = plan.runtimeRename !== null || sessionTitleGate.isActive(known.ref);
-      // A runtime rename cannot run inside the live publication scopes, because the
-      // runtime holds its lock until the publication ends. A send completes the rename
-      // after the runtime call returns; every other observation defers it to a fiber.
       const saved = yield* storeEffect(
         store.recordAcceptedMessage(
           renamePending ? { ...plan.input, generatedTitle: null } : plan.input,
@@ -350,7 +342,8 @@ export const createWorkspaceSessionRuntimePersistence = ({
   const syncCodexTitleAfterTurn = (runtimeRef: AgentSessionLiveRef) =>
     Effect.gen(function* () {
       const key = agentSessionRefKey(runtimeRef);
-      if (!pendingCodexTitleSync.delete(key)) return;
+      if (codexTitleSync.get(key) !== "pending") return;
+      codexTitleSync.set(key, "queued");
       yield* Effect.forkDaemon(
         Effect.gen(function* () {
           const known = yield* find(runtimeRef);
@@ -358,17 +351,18 @@ export const createWorkspaceSessionRuntimePersistence = ({
           yield* sessionTitleGate.run(
             known.ref,
             Effect.gen(function* () {
+              if (codexTitleSync.get(key) !== "queued") return;
+              codexTitleSync.set(key, "done");
               const current = yield* findActive(runtimeRef);
               if (!current) return;
               const title = runtimeTitle(current.session);
               if (title === null) return;
               const result = yield* updateRuntimeSessionTitle({ ...runtimeRef, title });
-              if (result.status === "not_attached") {
+              if (result.status === "not_attached")
                 return yield* new HostOperationError({
                   operation: "workspaceSession.codex-title.sync",
                   message: "Codex no longer holds this chat.",
                 });
-              }
             }),
           );
         }).pipe(
@@ -378,6 +372,11 @@ export const createWorkspaceSessionRuntimePersistence = ({
               `Could not sync this Workspace Session title to Codex. The message was accepted and the saved title remains. Reattach this chat or rename it to retry. ${failure.message}`,
               "workspaceSession.title.sync",
             ),
+          ),
+          Effect.ensuring(
+            Effect.sync(() => {
+              if (codexTitleSync.get(key) === "queued") codexTitleSync.set(key, "done");
+            }),
           ),
         ),
       );
@@ -395,7 +394,10 @@ export const createWorkspaceSessionRuntimePersistence = ({
       return yield* known ? operationGate.run(known.ref, effect) : effect;
     });
   return {
-    isCodexTitleSyncPending: (ref) => pendingCodexTitleSync.has(agentSessionRefKey(ref)),
+    isCodexTitleSyncPending: (ref) => {
+      const state = codexTitleSync.get(agentSessionRefKey(ref));
+      return state === "pending" || state === "queued";
+    },
     run: (runtimeRef, _operation, effect) => runOperation(runtimeRef, effect),
     runSend: (runtimeRef, effect) =>
       runOperation(
@@ -457,8 +459,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
         if (envelope.type === "session_removed") {
           const key = agentSessionRefKey(envelope.ref);
           pendingFinalMessages.delete(key);
-          pendingCodexTitleSync.delete(key);
-          firstCodexMessages.delete(key);
+          codexTitleSync.delete(key);
           return;
         }
         if (envelope.type === "session_upsert") {
