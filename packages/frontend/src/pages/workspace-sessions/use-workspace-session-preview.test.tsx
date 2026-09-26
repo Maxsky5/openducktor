@@ -27,6 +27,7 @@ function SessionPreview({
       <output data-testid="pending-discard">{String(preview.model.hasPendingDiscard)}</output>
       <button onClick={() => preview.onSelectFile(firstFile)}>Open first</button>
       <button onClick={() => preview.onSelectFile(secondFile)}>Open second</button>
+      <button onClick={preview.model.onClose}>Close preview</button>
       <button onClick={() => preview.model.onLeavePolicyChange("confirm")}>Edit file</button>
       <button onClick={preview.model.onKeepEditing}>Keep editing</button>
       <button onClick={onDiscard}>Discard draft</button>
@@ -56,6 +57,58 @@ function SessionHarness() {
     </>
   );
 }
+
+test("keeps a closed preview closed after switching chats", async () => {
+  const view = render(
+    <WorkspacePreviewTransitionGuardProvider>
+      <SessionHarness />
+    </WorkspacePreviewTransitionGuardProvider>,
+  );
+  try {
+    fireEvent.click(screen.getByRole("button", { name: "Open first" }));
+    fireEvent.click(screen.getByRole("button", { name: "Switch to second" }));
+    fireEvent.click(screen.getByRole("button", { name: "Switch to first" }));
+    expect(screen.getByTestId("selected-file").textContent).toBe("first.ts");
+
+    fireEvent.click(screen.getByRole("button", { name: "Close preview" }));
+    expect(screen.getByTestId("selected-file").textContent).toBe("none");
+    fireEvent.click(screen.getByRole("button", { name: "Switch to second" }));
+    fireEvent.click(screen.getByRole("button", { name: "Switch to first" }));
+    expect(screen.getByTestId("selected-file").textContent).toBe("none");
+  } finally {
+    view.unmount();
+  }
+});
+
+test("keeps an unsaved preview open until the user discards the close request", async () => {
+  const view = render(
+    <WorkspacePreviewTransitionGuardProvider>
+      <SessionHarness />
+    </WorkspacePreviewTransitionGuardProvider>,
+  );
+  try {
+    fireEvent.click(screen.getByRole("button", { name: "Open first" }));
+    fireEvent.click(screen.getByRole("button", { name: "Switch to second" }));
+    fireEvent.click(screen.getByRole("button", { name: "Switch to first" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit file" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close preview" }));
+    expect(screen.getByTestId("pending-discard").textContent).toBe("true");
+    expect(screen.getByTestId("selected-file").textContent).toBe("first.ts");
+
+    fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+    expect(screen.getByTestId("pending-discard").textContent).toBe("false");
+    expect(screen.getByTestId("selected-file").textContent).toBe("first.ts");
+
+    fireEvent.click(screen.getByRole("button", { name: "Close preview" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard draft" }));
+    expect(screen.getByTestId("selected-file").textContent).toBe("none");
+    fireEvent.click(screen.getByRole("button", { name: "Switch to second" }));
+    fireEvent.click(screen.getByRole("button", { name: "Switch to first" }));
+    expect(screen.getByTestId("selected-file").textContent).toBe("none");
+  } finally {
+    view.unmount();
+  }
+});
 
 test("keeps a newly selected file after discarding another draft and returning to the session", async () => {
   const view = render(
