@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, mock, test } from "bun:test";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
@@ -163,6 +163,36 @@ test("keeps the dirty draft when branch checkout fails and clears it when checko
     fireEvent.click(screen.getByRole("button", { name: "Switch branch" }));
     fireEvent.click(screen.getByRole("button", { name: "Discard draft" }));
     await waitFor(() => expect(finishSwitches).toHaveLength(2));
+    await act(async () => finishSwitches[1]?.(true));
+    await waitFor(() => expect(screen.getByTestId("selected-file").textContent).toBe("none"));
+  } finally {
+    view.unmount();
+  }
+});
+
+test("keeps a clean preview open until branch checkout succeeds", async () => {
+  const finishSwitches: Array<(switched: boolean) => void> = [];
+  const switchBranch = mock(() => new Promise<boolean>((resolve) => finishSwitches.push(resolve)));
+  const view = render(
+    <WorkspacePreviewTransitionGuardProvider>
+      <SessionHarness switchBranch={switchBranch} />
+    </WorkspacePreviewTransitionGuardProvider>,
+  );
+  try {
+    fireEvent.click(screen.getByRole("button", { name: "Open first" }));
+    expect(screen.getByTestId("selected-file").textContent).toBe("first.ts");
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch branch" }));
+    await waitFor(() => expect(switchBranch).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId("selected-file").textContent).toBe("first.ts");
+
+    await act(async () => finishSwitches[0]?.(false));
+    expect(screen.getByTestId("selected-file").textContent).toBe("first.ts");
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch branch" }));
+    await waitFor(() => expect(switchBranch).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId("selected-file").textContent).toBe("first.ts");
+
     await act(async () => finishSwitches[1]?.(true));
     await waitFor(() => expect(screen.getByTestId("selected-file").textContent).toBe("none"));
   } finally {

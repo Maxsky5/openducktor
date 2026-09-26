@@ -18,6 +18,7 @@ import type {
 import {
   createTaskExecutionFilePreviewState,
   taskExecutionFilePreviewReducer,
+  type TaskExecutionFilePreviewAction,
 } from "@/components/features/agents/file-preview/task-execution-file-preview-state";
 
 export type UseTaskExecutionFilePreviewControllerResult = {
@@ -87,18 +88,15 @@ export const useTaskExecutionFilePreviewController = (
     dispatch({ type: "keep_editing" });
     transition?.cancel?.();
   }, []);
-  const onDiscard = useCallback(() => {
-    if (applyingTransitionRef.current) return;
-    const pendingIntent = stateRef.current.pendingIntent;
-    const transition = pendingContextTransitionRef.current;
-    if (pendingIntent?.type === "leave_context" && transition?.waitForSuccess) {
+  const applyAfterSuccess = useCallback(
+    (apply: () => void | Promise<void | boolean>, success: TaskExecutionFilePreviewAction) => {
       applyingTransitionRef.current = true;
       setIsApplyingTransition(true);
       void Promise.resolve()
-        .then(async () => (await transition.apply()) === true)
+        .then(async () => (await apply()) === true)
         .then((switched) => {
           pendingContextTransitionRef.current = null;
-          dispatch({ type: switched ? "discard" : "keep_editing" });
+          dispatch(switched ? success : { type: "keep_editing" });
         })
         .catch((error) => {
           pendingContextTransitionRef.current = null;
@@ -109,6 +107,15 @@ export const useTaskExecutionFilePreviewController = (
           applyingTransitionRef.current = false;
           setIsApplyingTransition(false);
         });
+    },
+    [],
+  );
+  const onDiscard = useCallback(() => {
+    if (applyingTransitionRef.current) return;
+    const pendingIntent = stateRef.current.pendingIntent;
+    const transition = pendingContextTransitionRef.current;
+    if (pendingIntent?.type === "leave_context" && transition?.waitForSuccess) {
+      applyAfterSuccess(transition.apply, { type: "discard" });
       return;
     }
     pendingContextTransitionRef.current = null;
@@ -118,7 +125,7 @@ export const useTaskExecutionFilePreviewController = (
       return;
     }
     transition?.cancel?.();
-  }, []);
+  }, [applyAfterSuccess]);
   const requestContextTransition = useCallback(
     (
       applyTransition: () => void | Promise<void | boolean>,
@@ -162,8 +169,15 @@ export const useTaskExecutionFilePreviewController = (
         return;
       }
       if (currentState.leavePolicy === "allow") {
-        dispatch({ type: "request", intent: { type: "leave_context" } });
-        applyTransition();
+        if (options?.waitForSuccess) {
+          applyAfterSuccess(applyTransition, {
+            type: "request",
+            intent: { type: "leave_context" },
+          });
+        } else {
+          dispatch({ type: "request", intent: { type: "leave_context" } });
+          applyTransition();
+        }
         return;
       }
       pendingContextTransitionRef.current = {
@@ -174,7 +188,7 @@ export const useTaskExecutionFilePreviewController = (
       };
       dispatch({ type: "request", intent: { type: "leave_context" } });
     },
-    [],
+    [applyAfterSuccess],
   );
   const model = useMemo<TaskExecutionSelectedFilePreviewModel>(
     () => ({
