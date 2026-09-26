@@ -58,7 +58,7 @@ type LifecycleDialogProps = {
   submitting: boolean;
   error: string | null;
   onCancel: () => void;
-  onConfirm: () => void;
+  onConfirm: () => Promise<void>;
   requestTransition?: ((apply: () => void, cancel?: () => void) => void) | undefined;
   children: ReactNode;
 };
@@ -94,8 +94,8 @@ function LifecycleDialog({
   children,
 }: LifecycleDialogProps): ReactElement {
   const confirm = () => {
-    if (requestTransition) requestTransition(onConfirm, onCancel);
-    else onConfirm();
+    if (requestTransition) requestTransition(() => void onConfirm(), onCancel);
+    else void onConfirm();
   };
   return (
     <Dialog
@@ -181,7 +181,7 @@ export function WorkspaceCloseDialog({
       submitting={submit.submitting}
       error={submit.error}
       onCancel={() => onOpenChange(false)}
-      onConfirm={() => void submit.confirm()}
+      onConfirm={submit.confirm}
       requestTransition={requestTransition}
     >
       <RepositoryPath path={workspace.repoPath} />
@@ -229,7 +229,7 @@ export function WorkspaceRemoveDialog({
       submitting={submit.submitting}
       error={submit.error}
       onCancel={() => onOpenChange(false)}
-      onConfirm={() => void submit.confirm()}
+      onConfirm={submit.confirm}
       requestTransition={requestTransition}
     >
       <RepositoryPath path={workspace.repoPath} />
@@ -298,7 +298,7 @@ export function WorkspaceRemovalRecoveryDialog({
       submitting={submit.submitting}
       error={submit.error}
       onCancel={() => onOpenChange(false)}
-      onConfirm={() => void submit.confirm()}
+      onConfirm={submit.confirm}
     >
       <p>
         OpenDucktor stopped during removal. The workspace stays frozen until removal finishes. Data
