@@ -88,14 +88,18 @@ describe("onboarding notifications", () => {
       renderOnboarding({ runtimes, saveSettingsSnapshot });
       await enterNotificationsStage();
       fireEvent.click(screen.getByRole("switch", { name: "Enable Agent Session Idle" }));
-      fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
+      });
 
-      const saveError = await screen.findByText("Notification settings write failed");
+      const saveError = screen.getByText("Notification settings write failed");
       expect(screen.getByRole("heading", { name: "Configure notifications" })).toBeTruthy();
       expect(document.activeElement).toBe(saveError);
 
-      fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
-      await screen.findByRole("heading", { name: "Open your first workspace" });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
+      });
+      expect(screen.getByRole("heading", { name: "Open your first workspace" })).toBeTruthy();
       expect(saveSettingsSnapshot).toHaveBeenCalledTimes(3);
     } finally {
       host.runtimeExecutablesCheck = originalCheck;
