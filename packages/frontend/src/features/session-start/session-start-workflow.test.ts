@@ -41,6 +41,45 @@ const sessionIdentity = (
   workingDirectory: `/repo/worktrees/${externalSessionId}`,
 });
 
+test("registers a fresh Codex session before sending its kickoff", async () => {
+  const order: string[] = [];
+  const identity = sessionIdentity("new-codex", "codex");
+  const startAgentSession = mock(async () => {
+    order.push("registered");
+    return identity;
+  });
+  const sendAgentMessage = mock(async () => {
+    order.push("kickoff");
+  });
+
+  await startSessionWorkflow({
+    queryClient: new QueryClient(),
+    workspaceId: "workspace-1",
+    task: null,
+    intent: {
+      taskId: "TASK-1",
+      role: "build",
+      launchActionId: "build_implementation_start",
+      startMode: "fresh",
+      postStartAction: "kickoff",
+      kickoffPrompt: "Start the task.",
+    },
+    selection: CODEX_BUILD_SELECTION,
+    startAgentSession,
+    sendAgentMessage,
+  });
+
+  expect(order).toEqual(["registered", "kickoff"]);
+  expect(startAgentSession).toHaveBeenCalledWith(
+    expect.objectContaining({ holdForPostStartMessage: true }),
+  );
+  expect(sendAgentMessage).toHaveBeenCalledWith(
+    identity,
+    [{ kind: "text", text: "Start the task." }],
+    { preserveTextWhitespace: true },
+  );
+});
+
 test.each([true, false])(
   "default prompt read failure with confirmed text: %s",
   async (confirmed) => {

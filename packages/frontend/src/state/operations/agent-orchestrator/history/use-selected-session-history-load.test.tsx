@@ -239,6 +239,63 @@ describe("useSelectedSessionHistoryLoad", () => {
     }
   });
 
+  test.each(["accepted", "failed"] as const)(
+    "waits for a fresh Codex send and revalidates after it is %s",
+    async (outcome) => {
+      const loadSessionHistory = mock(async () => null);
+      const revalidateSessionHistory = mock(async () => null);
+      const starting = createSession({
+        runtimeKind: "codex",
+        status: "starting",
+        historyLoadState: "loaded",
+        messages: createSessionMessagesState("session-1"),
+      });
+      const harness = createHistoryLoadHarness(
+        createProps({ session: starting }),
+        loadSessionHistory,
+        revalidateSessionHistory,
+      );
+
+      try {
+        await harness.mount();
+        expect(loadSessionHistory).not.toHaveBeenCalled();
+        expect(revalidateSessionHistory).not.toHaveBeenCalled();
+
+        const sending: AgentSessionState = {
+          ...starting,
+          status: "running",
+          pendingUserMessageStartedAt: 123,
+        };
+        await harness.update(createProps({ session: sending }));
+        expect(revalidateSessionHistory).not.toHaveBeenCalled();
+
+        const afterSend: AgentSessionState =
+          outcome === "accepted"
+            ? {
+                ...sending,
+                messages: createSessionMessagesState("session-1", [
+                  {
+                    id: "accepted-kickoff",
+                    role: "user",
+                    content: "Start the task.",
+                    timestamp: "2026-06-12T08:00:01.000Z",
+                  },
+                ]),
+              }
+            : { ...sending, status: "idle", pendingUserMessageStartedAt: undefined };
+        await harness.update(createProps({ session: afterSend }));
+        expect(revalidateSessionHistory).toHaveBeenCalledTimes(1);
+        expect(revalidateSessionHistory).toHaveBeenCalledWith({
+          externalSessionId: "session-1",
+          runtimeKind: "codex",
+          workingDirectory: "/repo/worktree",
+        });
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
+
   test("revalidates each selected session after the selection changes away and back", async () => {
     const revalidateSessionHistory = mock(async () => null);
     const firstSession = createSession({ historyLoadState: "loaded" });

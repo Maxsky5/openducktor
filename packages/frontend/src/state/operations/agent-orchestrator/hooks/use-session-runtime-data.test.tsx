@@ -17,6 +17,7 @@ import { host } from "@/state/operations/shared/host";
 import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
 import { useRuntimeModelCatalogs } from "@/state/queries/use-runtime-model-catalogs";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "../support/messages";
 import { useSessionRuntimeData } from "./use-session-runtime-data";
@@ -662,6 +663,67 @@ describe("useSessionRuntimeData", () => {
       host.workspaceGetSettingsSnapshot = original;
     }
   });
+
+  test.each(["accepted", "failed"] as const)(
+    "waits for a fresh Codex send and reads todos after it is %s",
+    async (outcome) => {
+      const original = host.workspaceGetSettingsSnapshot;
+      host.workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshotFixture());
+      const starting = sessionState({
+        runtimeKind: "codex",
+        status: "starting",
+        historyLoadState: "loaded",
+      });
+      const readSessionTodos = mock(async () => [todoFixture]);
+      const props: Parameters<typeof useSessionRuntimeData>[0] = {
+        repoPath: "/repo",
+        selectedSession: sessionTarget(starting),
+        sessionState: starting,
+        runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR],
+        repoReadinessState: "ready",
+        loadRuntimeCatalog: mock(async () =>
+          availableRuntimeCatalog({ ...emptyCatalog, runtime: CODEX_RUNTIME_DESCRIPTOR }),
+        ),
+        readSessionTodos,
+      };
+      const harness = createHookHarness(useSessionRuntimeData, props, { wrapper });
+
+      try {
+        await harness.mount();
+        await harness.waitFor((latest) => latest.modelCatalog !== null);
+        expect(readSessionTodos).not.toHaveBeenCalled();
+
+        const sending: AgentSessionState = {
+          ...starting,
+          status: "running",
+          pendingUserMessageStartedAt: 123,
+        };
+        await harness.update({ ...props, sessionState: sending });
+        expect(readSessionTodos).not.toHaveBeenCalled();
+
+        const afterSend: AgentSessionState =
+          outcome === "accepted"
+            ? {
+                ...sending,
+                messages: createSessionMessagesState(starting.externalSessionId, [
+                  {
+                    id: "accepted-kickoff",
+                    role: "user",
+                    content: "Start the task.",
+                    timestamp: "2026-06-12T08:00:01.000Z",
+                  },
+                ]),
+              }
+            : { ...sending, status: "idle", pendingUserMessageStartedAt: undefined };
+        await harness.update({ ...props, sessionState: afterSend });
+        await harness.waitFor((latest) => latest.todos.length === 1);
+        expect(readSessionTodos).toHaveBeenCalledTimes(1);
+      } finally {
+        await harness.unmount();
+        host.workspaceGetSettingsSnapshot = original;
+      }
+    },
+  );
 
   test("keeps runtime data stable when the selected session identity object is rebuilt", async () => {
     const loadRuntimeCatalog = mock(async () => availableRuntimeCatalog(emptyCatalog));
