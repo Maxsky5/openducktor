@@ -192,8 +192,8 @@ test("fresh history and todos accept the host-wrapped empty rollout error", asyn
   };
   const nativeMethods: string[] = [];
   const registry = createCodexAppServerTransportRegistry();
-  let turnsFail = true;
-  const rawError = new HostOperationError({
+  let failTurnsRead = true;
+  const rpcError = new HostOperationError({
     operation: "codexAppServerTransport.request.thread/turns/list",
     message: "Codex app-server request thread/turns/list failed",
     cause: {
@@ -206,7 +206,7 @@ test("fresh history and todos accept the host-wrapped empty rollout error", asyn
   registry.registerTransport(runtimeId, {
     request: (input) => {
       nativeMethods.push(input.method);
-      if (input.method === "thread/turns/list" && turnsFail) return Effect.fail(rawError);
+      if (input.method === "thread/turns/list" && failTurnsRead) return Effect.fail(rpcError);
       if (input.method === "initialize") {
         return Effect.succeed({
           codexHome: "/tmp/codex-home",
@@ -307,13 +307,13 @@ test("fresh history and todos accept the host-wrapped empty rollout error", asyn
   await expect(adapter.loadSessionTodos(ref)).resolves.toEqual([]);
   expect(nativeMethods.filter((method) => method === "thread/read")).toHaveLength(2);
 
-  turnsFail = false;
+  failTurnsRead = false;
   await adapter.loadSessionHistory(ref);
-  turnsFail = true;
-  const failure = await adapter.loadSessionHistory(ref).catch((cause) => cause);
-  expect(failure).toBeInstanceOf(CodexSessionHistoryError);
-  expect(failure.cause).toBe(rawError);
-  expect(failure.failure).toMatchObject({
+  failTurnsRead = true;
+  const historyError = await adapter.loadSessionHistory(ref).catch((cause) => cause);
+  expect(historyError).toBeInstanceOf(CodexSessionHistoryError);
+  expect(historyError.cause).toBe(rpcError);
+  expect(historyError.failure).toMatchObject({
     code: "request_failed",
     method: "thread/turns/list",
     diagnosticId: expect.any(String),

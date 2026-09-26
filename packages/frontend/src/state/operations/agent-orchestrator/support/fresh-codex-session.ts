@@ -1,9 +1,8 @@
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { isSessionSystemPromptMessage } from "./session-prompt";
 
-/** A launched session owns its empty transcript until the first message starts. */
+/** OpenDucktor already has the empty history before Codex stores its first turn. */
 export const isFreshCodexSessionAwaitingKickoff = (session: AgentSessionState): boolean =>
   session.runtimeKind === "codex" &&
   session.status === "starting" &&
