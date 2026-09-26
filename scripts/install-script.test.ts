@@ -309,6 +309,7 @@ function fixture(os: "Darwin" | "Linux", arch: string, homeName = "home") {
     ].join("\n"),
   );
   stub("pgrep", 'exit "${ODT_TEST_RUNNING:-1}"');
+  stub("mdfind", "exit 0");
   stub(
     "sha256sum",
     [
