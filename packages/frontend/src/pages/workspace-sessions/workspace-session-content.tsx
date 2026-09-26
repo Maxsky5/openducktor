@@ -171,10 +171,10 @@ export function WorkspaceSessionContent({
   const [isNarrow, setIsNarrow] = useState(false);
   useEffect(() => {
     const media = window.matchMedia("(max-width: 767px)");
-    const sync = () => setIsNarrow(media.matches);
-    sync();
-    media.addEventListener("change", sync);
-    return () => media.removeEventListener("change", sync);
+    const updateLayout = () => setIsNarrow(media.matches);
+    updateLayout();
+    media.addEventListener("change", updateLayout);
+    return () => media.removeEventListener("change", updateLayout);
   }, []);
   const workingDirectory = sessionWorkingDirectory(workspace, record);
   const target: GitTargetBranch | null =
