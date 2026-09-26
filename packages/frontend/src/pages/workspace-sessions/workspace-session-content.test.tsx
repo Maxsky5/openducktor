@@ -1,5 +1,5 @@
 import { expect, spyOn, test } from "bun:test";
-import type { WorkspaceSession } from "@openducktor/contracts";
+import { repoConfigSchema, type WorkspaceSession } from "@openducktor/contracts";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, memo, type ReactElement, useState } from "react";
@@ -11,11 +11,12 @@ import {
 } from "@/state/app-state-contexts";
 import { filesystemQueryKeys, invalidateWorkspaceFileQueries } from "@/state/queries/filesystem";
 import { currentBranchQueryOptions } from "@/state/queries/git";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { repoConfigQueryOptions, settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import * as filePreview from "@/components/features/agents/task-execution-file-preview";
+import * as toolsPanel from "@/components/features/agents/workspace-session-tools-panel";
 import * as sessionChat from "./workspace-session-chat";
 import {
   WorkspaceSessionContent,
@@ -143,6 +144,57 @@ test("an outside branch change keeps a dirty preview and refreshes file queries"
     chat.mockRestore();
     preview.mockRestore();
     queryClient.clear();
+  }
+});
+
+test("the tools panel starts beside the chat header", () => {
+  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(() => <div />);
+  const tools = spyOn(toolsPanel, "WorkspaceSessionToolsPanel").mockImplementation(() => (
+    <div>Tools</div>
+  ));
+  const queryClient = newQueryClient();
+  queryClient.setQueryData(
+    repoConfigQueryOptions(workspace.workspaceId).queryKey,
+    repoConfigSchema.parse({ ...workspace, agentStudioState: { openTaskIds: [] } }),
+  );
+  const view = render(
+    <QueryClientProvider client={queryClient}>
+      <WorkspaceBranchStateContext.Provider
+        value={{
+          activeWorkspace: null,
+          branches: [],
+          activeBranch: { name: "main", detached: false },
+          isLoadingBranches: false,
+          isSwitchingBranch: false,
+          branchSyncDegraded: false,
+          switchBranch: async () => {},
+        }}
+      >
+        <WorkspacePreviewTransitionGuardProvider>
+          <Tabs value={record.id}>
+            <WorkspaceSessionContent
+              workspace={workspace}
+              record={record}
+              panelState={{ isOpen: true, activeTabId: "git", selectedFile: null }}
+              onPanelStateChange={() => {}}
+            />
+          </Tabs>
+        </WorkspacePreviewTransitionGuardProvider>
+      </WorkspaceBranchStateContext.Provider>
+    </QueryClientProvider>,
+  );
+  try {
+    const panels = view.container.querySelectorAll('[data-slot="resizable-panel"]');
+    expect(panels.length).toBe(2);
+    expect(
+      screen.getByRole("heading", { name: "Chat" }).closest('[data-slot="resizable-panel"]'),
+    ).toBe(panels.item(0));
+    expect(panels[1]?.textContent).toBe("Tools");
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    tools.mockRestore();
+    chat.mockRestore();
   }
 });
 

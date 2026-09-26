@@ -88,6 +88,20 @@ describe("GitInfoHeader", () => {
     expect(screen.getByTestId("agent-studio-git-diff-scope-target")).toBeTruthy();
   });
 
+  test("shows a repository branch in one compact row", () => {
+    rendered = renderGitInfoHeader(
+      createGitInfoHeaderProps({ contextMode: "repository", branch: "beta" }),
+    );
+
+    const row = screen.getByTestId("agent-studio-git-branch-context-row");
+    const label = screen.getByText("Repository branch");
+    const branch = screen.getByTestId("agent-studio-git-current-branch");
+    expect(label.parentElement).toBe(branch.parentElement);
+    expect(row.classList.contains("grid")).toBe(false);
+    expect(branch.textContent).toBe("beta");
+    expect(screen.queryByTestId("agent-studio-git-target-branch-display-row")).toBeNull();
+  });
+
   test("disables Pull Request detection and shows the provider health error", () => {
     rendered = renderGitInfoHeader(
       createGitInfoHeaderProps({

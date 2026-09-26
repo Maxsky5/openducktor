@@ -276,13 +276,18 @@ export function WorkspaceSessionContent({
     </RepositoryFilePreview>
   );
   const mainContent = (
-    <WorkspaceSessionMainContent
-      workspace={workspace}
-      record={record}
-      onToolRefresh={() => refreshAfterChange("all")}
-      previewContent={previewContent}
-      hasSelectedFile={Boolean(preview.model.selectedFile)}
-    />
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+      <WorkspaceSessionHeader workspaceId={workspace.workspaceId} record={record} />
+      <div className="min-h-0 flex-1">
+        <WorkspaceSessionMainContent
+          workspace={workspace}
+          record={record}
+          onToolRefresh={() => refreshAfterChange("all")}
+          previewContent={previewContent}
+          hasSelectedFile={Boolean(preview.model.selectedFile)}
+        />
+      </div>
+    </div>
   );
   const toolsContent = (
     <WorkspaceSessionToolsPanel
@@ -308,7 +313,6 @@ export function WorkspaceSessionContent({
       value={record.id}
       className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-card"
     >
-      <WorkspaceSessionHeader workspaceId={workspace.workspaceId} record={record} />
       <WorkspaceSessionPaneLayout
         isOpen={panelState.isOpen}
         isNarrow={isNarrow}
