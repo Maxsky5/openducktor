@@ -11,7 +11,7 @@ const input = {
   itemId: "image",
   revision: "output-v1",
 };
-test("generated image reads validate request and response through the host transport", async () => {
+test("generated image reads validate requests and responses through the public client", async () => {
   const calls: unknown[] = [];
   let result = { ...input, mime: "image/png", byteLength: 3, base64: "AAAA" };
   const client = createHostClient(async (command, args, schema) => {
