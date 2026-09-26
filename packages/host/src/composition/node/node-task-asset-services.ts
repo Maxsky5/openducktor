@@ -23,12 +23,28 @@ import type { OpenDucktorConfigDir } from "../../config/openducktor-config-dir";
 import type { TaskAssetError } from "../../effect/task-asset-error";
 import {
   HostOperationError,
+  HostValidationError,
   type HostOperationErrorAggregate,
   type HostValidationErrorAggregate,
 } from "../../effect/host-errors";
 import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-ports";
 import type { IssueImportStorePort } from "../../ports/issue-import-store-port";
 import type { HostShutdownStep } from "../host-lifecycle";
+
+const issueImportUnavailable = () =>
+  Effect.fail(
+    new HostValidationError({
+      field: "taskStore",
+      message:
+        "Issue import requires the default SQLite Task store. Restart without a custom Task store.",
+    }),
+  );
+
+const unsupportedIssueImportStore: IssueImportStorePort = {
+  getSourceIssue: issueImportUnavailable,
+  findLinkedTaskIds: issueImportUnavailable,
+  createImportedTask: issueImportUnavailable,
+};
 
 export type NodeTaskAssetServices = {
   workspaceSessionStore: WorkspaceSessionStorePort;
@@ -164,9 +180,9 @@ export const createNodeTaskAssetServices = ({
       persistence: configuredTaskStore ? null : registry,
       resolveWorkspaceIdForRepoPath,
     }),
-    issueImportStore: createSqliteIssueImportStore({
-      contextProvider: contextManager.withDatabase,
-    }),
+    issueImportStore: configuredTaskStore
+      ? unsupportedIssueImportStore
+      : createSqliteIssueImportStore({ contextProvider: contextManager.withDatabase }),
     removeWorkspaceTaskAssets: (workspaceId) => filePort.removeWorkspaceData({ workspaceId }),
     removeWorkspaceTaskStore: (workspaceId) =>
       Effect.gen(function* () {
