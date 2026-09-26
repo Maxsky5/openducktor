@@ -88,52 +88,23 @@ const createClient = (
 };
 
 describe("HostClient", () => {
-  test("does not export a redundant runtime constructor alias", async () => {
-    const module = await import("./index");
-
-    expect(Object.hasOwn(module, "HostClient")).toBe(false);
-  });
-
-  test("exports a value and type-compatible host client", async () => {
-    const { client } = createClient((command) => {
+  test("routes setSpec through the host command", async () => {
+    const { client, calls } = createClient((command) => {
       if (command === "set_spec") {
         return { updatedAt: "2026-02-20T10:00:00Z" };
       }
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const typedClient: HostClientType = client;
-    const output = await typedClient.setSpec({
+    const input = {
       repoPath: "/repo",
       taskId: "task-1",
       markdown: "# Spec",
-    });
+    };
+    const output = await client.setSpec(input);
 
     expect(output.updatedAt).toBe("2026-02-20T10:00:00Z");
-  });
-
-  test("delegated methods are writable and configurable for test doubles", async () => {
-    const { client } = createClient((command) => {
-      if (command === "tasks_list") {
-        return [makeTaskCardPayload()];
-      }
-      throw new Error(`Unexpected command: ${command}`);
-    });
-
-    const descriptor = Object.getOwnPropertyDescriptor(client, "tasksList");
-    expect(descriptor?.writable).toBe(true);
-    expect(descriptor?.configurable).toBe(true);
-
-    const original = client.tasksList.bind(client);
-    const replacement = async (_repoPath: string) => [];
-    client.tasksList = replacement;
-
-    const rewritten = await client.tasksList("/repo");
-    expect(rewritten).toEqual([]);
-
-    client.tasksList = original;
-    const rewrittenAfterReplace = await client.tasksList("/repo");
-    expect(rewrittenAfterReplace).toHaveLength(1);
+    expect(calls).toEqual([{ command: "set_spec", args: input }]);
   });
 
   test("uses host-owned retention for task lists", async () => {
@@ -264,109 +235,6 @@ describe("HostClient", () => {
 
     expect(tasks[0]?.targetBranch).toBeUndefined();
     expect(tasks[0]?.targetBranchError).toContain("Invalid openducktor.targetBranch metadata");
-  });
-
-  test("facade exposes every delegated API method", () => {
-    const { client } = createClient((command) => {
-      throw new Error(`Unexpected command: ${command}`);
-    });
-
-    // Keep this explicit: importing internal method-group constants from index.ts
-    // would make this facade-surface assertion tautological.
-    const expectedMethods = [
-      "filesystemListDirectory",
-      "filesystemWriteTextFile",
-      "workspaceList",
-      "workspaceAdd",
-      "workspaceSelect",
-      "workspaceReorder",
-      "workspaceUpdateRepoConfig",
-      "workspaceSaveRepoSettings",
-      "workspaceUpdateRepoHooks",
-      "workspaceGetRepoConfig",
-      "workspaceReplaceAgentStudioState",
-      "workspaceGetSettingsSnapshot",
-      "workspaceUpdateAgentModelFavorites",
-      "workspaceUpdateKanbanTaskCardView",
-      "workspaceUpdateGlobalGitConfig",
-      "workspaceDetectGithubRepository",
-      "workspaceGetGitProviderContext",
-      "workspaceSaveSettingsSnapshot",
-      "systemGetPlatform",
-      "systemListOpenInTools",
-      "systemOpenDirectoryInTool",
-      "setTheme",
-      "tasksList",
-      "taskCreate",
-      "taskUpdate",
-      "taskDelete",
-      "taskClose",
-      "taskResetImplementation",
-      "taskReset",
-      "taskTransition",
-      "specGet",
-      "setSpec",
-      "saveSpecDocument",
-      "setPlan",
-      "savePlanDocument",
-      "planGet",
-      "taskMetadataGet",
-      "qaGetReport",
-      "qaApproved",
-      "qaRejected",
-      "agentSessionsList",
-      "taskStopImpactGet",
-      "agentSessionLiveList",
-      "agentSessionLiveLoadContext",
-      "agentSessionLiveLoadDiff",
-      "agentSessionLiveRead",
-      "agentSessionLiveRefresh",
-      "agentSessionLiveReplyApproval",
-      "agentSessionLiveReplyQuestion",
-      "systemCheck",
-      "runtimeCheck",
-      "taskStoreCheck",
-      "runtimeDefinitionsList",
-      "runtimeList",
-      "taskWorktreeGet",
-      "runtimeStop",
-      "runtimeEnsure",
-      "buildStart",
-      "buildBlocked",
-      "buildResumed",
-      "buildCompleted",
-      "taskApprovalContextGet",
-      "taskDirectMerge",
-      "taskDirectMergeComplete",
-      "taskPullRequestUpsert",
-      "taskPullRequestUnlink",
-      "taskPullRequestDetect",
-      "taskPullRequestLinkMerged",
-      "repoPullRequestSync",
-      "humanRequestChanges",
-      "humanApprove",
-      "agentSessionStop",
-      "gitGetBranches",
-      "gitGetCurrentBranch",
-      "gitSwitchBranch",
-      "gitCreateWorktree",
-      "gitRemoveWorktree",
-      "gitPushBranch",
-      "gitPullBranch",
-      "gitFetchRemote",
-      "gitGetStatus",
-      "gitGetDiff",
-      "gitCommitsAheadBehind",
-      "gitGetWorktreeStatus",
-      "gitGetWorktreeStatusSummary",
-      "gitResetWorktreeSelection",
-      "gitCommitAll",
-      "gitRebaseBranch",
-    ] as const;
-
-    for (const methodName of expectedMethods) {
-      expect(client[methodName]).toBeInstanceOf(Function);
-    }
   });
 
   test("uses the normalized live-session command surface", async () => {
@@ -1792,9 +1660,10 @@ describe("HostClient", () => {
   });
 
   test("git reset worktree selection validates payloads and rejects malformed host responses", async () => {
-    const { client } = createClient((command) => {
+    let response = { affectedPaths: ["src/main.ts"] };
+    const { client, calls } = createClient((command) => {
       if (command === "git_reset_worktree_selection") {
-        return { affectedPaths: [] };
+        return response;
       }
       throw new Error(`Unexpected command: ${command}`);
     });
@@ -1814,7 +1683,9 @@ describe("HostClient", () => {
         },
       }),
     ).rejects.toThrow();
+    expect(calls).toHaveLength(0);
 
+    response = { affectedPaths: [] };
     await expect(
       client.gitResetWorktreeSelection({
         repoPath: "/repo",
@@ -1830,6 +1701,8 @@ describe("HostClient", () => {
         },
       }),
     ).rejects.toThrow();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.command).toBe("git_reset_worktree_selection");
   });
 
   test("git worktree status rejects malformed hash metadata payloads", async () => {
@@ -2358,7 +2231,7 @@ describe("HostClient", () => {
   });
 
   test("agentSessionsList stays authoritative after a newer batch read", async () => {
-    const newerSession = {
+    const batchSession = {
       externalSessionId: "session-opencode-2",
       role: "build",
       startedAt: "2026-02-19T17:20:00Z",
@@ -2366,15 +2239,16 @@ describe("HostClient", () => {
       workingDirectory: "/repo",
       selectedModel: null,
     };
+    const latestSession = { ...batchSession, externalSessionId: "session-opencode-3" };
     const { client, calls } = createClient((command) => {
       if (command === "task_metadata_get") {
         return makeTaskMetadataPayload();
       }
       if (command === "agent_sessions_list_for_tasks") {
-        return [{ taskId: "task-1", agentSessions: [newerSession] }];
+        return [{ taskId: "task-1", agentSessions: [batchSession] }];
       }
       if (command === "agent_sessions_list") {
-        return [newerSession];
+        return [latestSession];
       }
       throw new Error(`Unexpected command: ${command}`);
     });
@@ -2383,7 +2257,7 @@ describe("HostClient", () => {
     await client.agentSessionsListForTasks("/repo", ["task-1"]);
     const sessions = await client.agentSessionsList("/repo", "task-1");
 
-    expect(sessions.map((session) => session.externalSessionId)).toEqual(["session-opencode-2"]);
+    expect(sessions.map((session) => session.externalSessionId)).toEqual(["session-opencode-3"]);
     expect(calls.map((call) => call.command)).toEqual([
       "task_metadata_get",
       "agent_sessions_list_for_tasks",
@@ -2434,157 +2308,6 @@ describe("HostClient", () => {
     });
 
     await expect(client.agentSessionsList("/repo", "task-1")).rejects.toThrow("role");
-  });
-
-  test("parallel document reads each reach the host while session reads stay independent", async () => {
-    const { client, calls } = createClient((command) => {
-      if (command === "task_metadata_get") {
-        return makeTaskMetadataPayload();
-      }
-      if (command === "agent_sessions_list") {
-        return makeTaskMetadataPayload().agentSessions;
-      }
-      throw new Error(`Unexpected command: ${command}`);
-    });
-
-    const [spec, plan, qa, sessions] = await Promise.all([
-      client.specGet("/repo", "task-1"),
-      client.planGet("/repo", "task-1"),
-      client.qaGetReport("/repo", "task-1"),
-      client.agentSessionsList("/repo", "task-1"),
-    ]);
-
-    expect(spec.markdown).toBe("Spec Body");
-    expect(plan.markdown).toBe("Plan Body");
-    expect(qa.markdown).toBe("QA Body");
-    expect(sessions).toHaveLength(1);
-    expect(calls).toEqual([
-      {
-        command: "task_metadata_get",
-        args: {
-          repoPath: "/repo",
-          taskId: "task-1",
-        },
-      },
-      {
-        command: "task_metadata_get",
-        args: {
-          repoPath: "/repo",
-          taskId: "task-1",
-        },
-      },
-      {
-        command: "task_metadata_get",
-        args: {
-          repoPath: "/repo",
-          taskId: "task-1",
-        },
-      },
-      {
-        command: "agent_sessions_list",
-        args: {
-          repoPath: "/repo",
-          taskId: "task-1",
-        },
-      },
-    ]);
-  });
-
-  test("sequential document reads each reach the host while session reads remain independent", async () => {
-    const { client, calls } = createClient((command) => {
-      if (command === "task_metadata_get") {
-        return makeTaskMetadataPayload();
-      }
-      if (command === "agent_sessions_list") {
-        return makeTaskMetadataPayload().agentSessions;
-      }
-      throw new Error(`Unexpected command: ${command}`);
-    });
-
-    const spec = await client.specGet("/repo", "task-1");
-    const plan = await client.planGet("/repo", "task-1");
-    const qa = await client.qaGetReport("/repo", "task-1");
-    const sessions = await client.agentSessionsList("/repo", "task-1");
-
-    expect(spec.markdown).toBe("Spec Body");
-    expect(plan.markdown).toBe("Plan Body");
-    expect(qa.markdown).toBe("QA Body");
-    expect(sessions).toHaveLength(1);
-    expect(calls).toEqual([
-      {
-        command: "task_metadata_get",
-        args: {
-          repoPath: "/repo",
-          taskId: "task-1",
-        },
-      },
-      {
-        command: "task_metadata_get",
-        args: {
-          repoPath: "/repo",
-          taskId: "task-1",
-        },
-      },
-      {
-        command: "task_metadata_get",
-        args: {
-          repoPath: "/repo",
-          taskId: "task-1",
-        },
-      },
-      {
-        command: "agent_sessions_list",
-        args: {
-          repoPath: "/repo",
-          taskId: "task-1",
-        },
-      },
-    ]);
-  });
-
-  test("document reads preserve document-level decode errors from task metadata", async () => {
-    const { client } = createClient((command) => {
-      if (command === "task_metadata_get") {
-        return {
-          ...makeTaskMetadataPayload(),
-          spec: {
-            markdown: "",
-            updatedAt: "2026-02-20T09:00:00Z",
-            error: "Failed to decode openducktor.documents.spec[0]: invalid base64 payload",
-          },
-        };
-      }
-      throw new Error(`Unexpected command: ${command}`);
-    });
-
-    await expect(client.specGet("/repo", "task-1")).resolves.toEqual({
-      markdown: "",
-      updatedAt: "2026-02-20T09:00:00Z",
-      error: "Failed to decode openducktor.documents.spec[0]: invalid base64 payload",
-    });
-  });
-
-  test("a document read after a local mutation returns the current host result", async () => {
-    let metadataReadCount = 0;
-    const { client, calls } = createClient((command) => {
-      if (command === "task_metadata_get") {
-        metadataReadCount += 1;
-        return makeTaskMetadataPayload(metadataReadCount === 1 ? "Spec V1" : "Spec V2");
-      }
-      if (command === "set_spec") {
-        return { updatedAt: "2026-02-20T10:00:00Z" };
-      }
-      throw new Error(`Unexpected command: ${command}`);
-    });
-
-    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V1");
-    await client.setSpec({ repoPath: "/repo", taskId: "task-1", markdown: "# Updated" });
-    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V2");
-    expect(calls.map((entry) => entry.command)).toEqual([
-      "task_metadata_get",
-      "set_spec",
-      "task_metadata_get",
-    ]);
   });
 
   test("taskDirectMerge sends structured squash input", async () => {

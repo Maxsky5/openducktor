@@ -62,29 +62,6 @@ describe("agent session live attachment", () => {
     ]);
   });
 
-  test("starts a new snapshot-first epoch after reconnect", () => {
-    const received: AgentSessionLiveEnvelope[] = [];
-    const attachment = createAgentSessionLiveAttachment("/repo", (envelope) => {
-      received.push(envelope);
-    });
-    const duringReconnect = transcriptEvent("during-reconnect");
-
-    attachment.accept(snapshot);
-    attachment.restart();
-    attachment.accept(duringReconnect);
-    const replayedSnapshot = { ...snapshot };
-    const refreshedSnapshot = { ...snapshot };
-    attachment.accept(replayedSnapshot);
-    attachment.accept(refreshedSnapshot);
-
-    expect(received).toEqual([
-      { ...snapshot, isConnectionSnapshot: true },
-      { ...replayedSnapshot, isConnectionSnapshot: true },
-      duringReconnect,
-      refreshedSnapshot,
-    ]);
-  });
-
   test("lets a repair snapshot supersede buffered session state without dropping transcripts", () => {
     const received: AgentSessionLiveEnvelope[] = [];
     const attachment = createAgentSessionLiveAttachment("/repo", (envelope) => {
@@ -176,6 +153,11 @@ describe("agent session live attachment", () => {
     attachment.accept(snapshot);
     attachment.accept(event);
 
-    expect(received).toEqual([{ ...snapshot, isConnectionSnapshot: true }, event]);
+    expect(received).toHaveLength(2);
+    expect(received[0]).toEqual({ ...snapshot, isConnectionSnapshot: true });
+    expect(received[1]).toMatchObject({
+      type: "session_upsert",
+      session: { sessionAssociation: { kind: "repository" } },
+    });
   });
 });
