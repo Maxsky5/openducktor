@@ -31,6 +31,8 @@ export function useWorkspaceSessionBranch({
   });
   const { branch, branchKey } = branchState(isWorktree, rootBranch, worktreeBranch, activeBranch);
   const previewBranch = branchIdentity(branch);
+  const branchReady =
+    previewBranch !== null || (isWorktree ? worktreeBranch.isError : rootBranch.isError);
   const lastBranch = useRef<string | null>(null);
   useEffect(() => {
     if (!previewBranch || !workingDirectory || lastBranch.current === previewBranch) return;
@@ -66,7 +68,7 @@ export function useWorkspaceSessionBranch({
     };
   }, [isWorktree, workingDirectory]);
 
-  return { rootBranch, worktreeBranch, previewBranch, branchKey, refreshBranch };
+  return { rootBranch, worktreeBranch, previewBranch, branchKey, branchReady, refreshBranch };
 }
 
 type BranchRead = {

@@ -173,7 +173,7 @@ export function WorkspaceSessionContent({
   const queryClient = useQueryClient();
   const workingDirectory = sessionWorkingDirectory(workspace, record);
   const isWorktree = record.executionTarget.kind === "local_worktree";
-  const { rootBranch, worktreeBranch, previewBranch, branchKey, refreshBranch } =
+  const { rootBranch, worktreeBranch, previewBranch, branchKey, branchReady, refreshBranch } =
     useWorkspaceSessionBranch({
       repoPath: workspace.repoPath,
       workingDirectory,
@@ -295,6 +295,7 @@ export function WorkspaceSessionContent({
       workingDirectory={workingDirectory}
       contextMode={record.executionTarget.kind === "local_repo_root" ? "repository" : "worktree"}
       branchKey={branchKey}
+      branchReady={branchReady}
       target={target}
       targetError={targetError}
       retryTarget={async () => {

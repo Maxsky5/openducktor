@@ -30,6 +30,7 @@ export function WorkspaceSessionToolsPanel({
   workingDirectory,
   contextMode,
   branchKey,
+  branchReady,
   target,
   targetError,
   retryTarget,
@@ -43,6 +44,7 @@ export function WorkspaceSessionToolsPanel({
   workingDirectory: string | null;
   contextMode: "repository" | "worktree";
   branchKey: string;
+  branchReady: boolean;
   target: GitTargetBranch | null;
   targetError: string | null;
   retryTarget: () => Promise<void>;
@@ -63,6 +65,7 @@ export function WorkspaceSessionToolsPanel({
       target,
       targetError,
       branchKey,
+      branchReady,
     });
   const readTarget = resolvedTarget ?? "HEAD";
   const diffData = useAgentStudioDiffData({
@@ -79,6 +82,7 @@ export function WorkspaceSessionToolsPanel({
   });
   const refresh = useCallback(
     async (mode: WorkspaceRefreshMode = "hard", includeFiles = true) => {
+      if (!branchReady) return;
       const fetchTarget =
         mode === "hard" &&
         !!workingDirectory &&
@@ -109,6 +113,7 @@ export function WorkspaceSessionToolsPanel({
       }
     },
     [
+      branchReady,
       diffData,
       queryClient,
       refetchComparison,
@@ -169,6 +174,7 @@ export function WorkspaceSessionToolsPanel({
     diffData,
     actions,
     contextMode,
+    branchReady,
     resolvedTarget,
     unavailableReason,
     workingDirectory,
@@ -178,8 +184,14 @@ export function WorkspaceSessionToolsPanel({
   const fileModel = {
     rootPath: workingDirectory,
     targetBranch: resolvedTarget,
-    unavailableReason: workingDirectory ? null : missingWorkingDirectoryReason,
-    isActive: activeTabId === "file_explorer",
+    unavailableReason: !workingDirectory
+      ? missingWorkingDirectoryReason
+      : !isReady
+        ? branchReady
+          ? "Checking comparison target..."
+          : "Checking branch..."
+        : null,
+    isActive: activeTabId === "file_explorer" && isReady,
     selectedFile,
     onSelectFile,
   };
@@ -229,6 +241,7 @@ function workspaceGitModel(input: {
   diffData: DiffDataState;
   actions: ReturnType<typeof useAgentStudioGitActions>;
   contextMode: "repository" | "worktree";
+  branchReady: boolean;
   resolvedTarget: string | null;
   unavailableReason: string | null;
   workingDirectory: string | null;
@@ -239,6 +252,7 @@ function workspaceGitModel(input: {
     diffData,
     actions,
     contextMode,
+    branchReady,
     resolvedTarget,
     unavailableReason,
     workingDirectory,
@@ -249,7 +263,7 @@ function workspaceGitModel(input: {
     ...diffData,
     ...actions,
     refresh,
-    isLoading: diffData.isLoading || isFetchingTarget,
+    isLoading: diffData.isLoading || isFetchingTarget || !branchReady,
     contextMode,
     targetBranch: resolvedTarget ?? "",
     comparisonUnavailableReason: unavailableReason,
@@ -385,8 +399,9 @@ function useWorkspaceSessionComparison(input: {
   target: GitTargetBranch | null;
   targetError: string | null;
   branchKey: string;
+  branchReady: boolean;
 }) {
-  const { repoPath, workingDirectory, target, targetError, branchKey } = input;
+  const { repoPath, workingDirectory, target, targetError, branchKey, branchReady } = input;
   const comparison = useQuery({
     ...gitComparisonTargetQueryOptions(
       repoPath,
@@ -394,9 +409,10 @@ function useWorkspaceSessionComparison(input: {
       target ?? { branch: "HEAD" },
       branchKey,
     ),
-    enabled: workingDirectory !== null && target !== null && targetError === null,
+    enabled: branchReady && workingDirectory !== null && target !== null && targetError === null,
   });
   const resolvedTarget =
+    branchReady &&
     workingDirectory &&
     target &&
     !targetError &&
@@ -406,7 +422,8 @@ function useWorkspaceSessionComparison(input: {
       : null;
   return {
     resolvedTarget,
-    isReady: targetError !== null || comparison.isError || comparison.data !== undefined,
+    isReady:
+      branchReady && (targetError !== null || comparison.isError || comparison.data !== undefined),
     unavailableReason: comparisonUnavailableReason({
       targetError,
       isPending: comparison.isPending,
