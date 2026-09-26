@@ -43,6 +43,41 @@ async function importMockedTaskDetailsSheetController(): Promise<TaskDetailsShee
 }
 
 describe("TaskDetailsSheetController", () => {
+  test("does not report a missing notification task after deleting an open task", async () => {
+    const TaskDetailsSheetController = await importMockedTaskDetailsSheetController();
+    const task = createTaskCardFixture({ id: "task-1" });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const queryKey = taskQueryKeys.repoData(activeWorkspace.repoPath);
+    client.setQueryData(queryKey, { tasks: [task] });
+    const ref = createRef<TaskDetailsSheetControllerHandle>();
+    const controller = (allTasks: TaskCard[]) =>
+      createElement(TaskDetailsSheetController, { ref, activeWorkspace, allTasks });
+    const rendered = renderUi(controller([task]), {
+      wrapper: ({ children }) => createElement(QueryClientProvider, { client }, children),
+    });
+    try {
+      await act(async () => ref.current?.openTask(task.id));
+      await withMockedToast(async ({ toastErrorMock }) => {
+        await act(async () => {
+          client.setQueryData(queryKey, { tasks: [] });
+          rendered.rerender(controller([]));
+        });
+        expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ task: null, open: false }),
+        );
+        expect(toastErrorMock).not.toHaveBeenCalled();
+        await act(async () => ref.current?.openTask(task.id));
+        expect(toastErrorMock).toHaveBeenCalledWith("Notification task no longer exists", {
+          id: "task-details-unavailable:/repo-a:task-1",
+          description: "The task was removed from this workspace.",
+        });
+      });
+    } finally {
+      rendered.unmount();
+      client.clear();
+    }
+  });
+
   test.each([false, true])(
     "handles a cached task refresh failure, visible on board=%s",
     async (visibleOnBoard) => {
