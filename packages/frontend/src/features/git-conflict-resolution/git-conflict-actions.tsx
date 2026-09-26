@@ -35,20 +35,22 @@ export const GitConflictActions = memo(function GitConflictActions({
         )}
         {actions.abort.label}
       </Button>
-      <Button
-        type="button"
-        size={size}
-        onClick={actions.askBuilder.onClick}
-        disabled={actions.isDisabled}
-        data-testid={askBuilderTestId}
-      >
-        {actions.askBuilder.isPending ? (
-          <LoaderCircle className="size-4 animate-spin" />
-        ) : (
-          <Sparkles className="size-4" />
-        )}
-        {actions.askBuilder.label}
-      </Button>
+      {actions.askBuilder ? (
+        <Button
+          type="button"
+          size={size}
+          onClick={actions.askBuilder.onClick}
+          disabled={actions.isDisabled}
+          data-testid={askBuilderTestId}
+        >
+          {actions.askBuilder.isPending ? (
+            <LoaderCircle className="size-4 animate-spin" />
+          ) : (
+            <Sparkles className="size-4" />
+          )}
+          {actions.askBuilder.label}
+        </Button>
+      ) : null}
     </div>
   );
 });

@@ -1,6 +1,9 @@
 import { memo, type ReactElement, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
+import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
+import { errorMessage } from "@/lib/errors";
 import { useWorkspaceBranchState } from "@/state/app-state-provider";
 
 type PendingBranchSelection = {
@@ -10,6 +13,7 @@ type PendingBranchSelection = {
 };
 
 export const BranchSwitcher = memo(function BranchSwitcher(): ReactElement | null {
+  const { run: guardBranchSwitch } = useWorkspacePreviewTransitionGuard();
   const {
     activeWorkspace,
     branches,
@@ -59,22 +63,39 @@ export const BranchSwitcher = memo(function BranchSwitcher(): ReactElement | nul
             return;
           }
 
-          const requestId = ++pendingBranchRequestIdRef.current;
-          setPendingBranchSelection({
-            repoPath: workspaceRepoPath,
-            requestId,
-            value: nextBranch,
-          });
-          void switchBranch(nextBranch)
-            .catch(() => undefined)
-            .finally(() => {
-              setPendingBranchSelection((currentSelection) =>
-                currentSelection?.repoPath === workspaceRepoPath &&
-                currentSelection.requestId === requestId
-                  ? null
-                  : currentSelection,
-              );
-            });
+          guardBranchSwitch(
+            () => {
+              const requestId = ++pendingBranchRequestIdRef.current;
+              setPendingBranchSelection({
+                repoPath: workspaceRepoPath,
+                requestId,
+                value: nextBranch,
+              });
+              return new Promise<boolean>((resolve) => {
+                let switched = false;
+                void switchBranch(nextBranch, () => {
+                  switched = true;
+                  resolve(true);
+                })
+                  .catch((error) => {
+                    if (!switched) {
+                      toast.error("Failed to switch branch", { description: errorMessage(error) });
+                    }
+                  })
+                  .finally(() => {
+                    resolve(false);
+                    setPendingBranchSelection((currentSelection) =>
+                      currentSelection?.repoPath === workspaceRepoPath &&
+                      currentSelection.requestId === requestId
+                        ? null
+                        : currentSelection,
+                    );
+                  });
+              });
+            },
+            undefined,
+            { waitForSuccess: true },
+          );
         }}
       />
       {branchSyncDegraded ? (

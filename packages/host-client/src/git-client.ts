@@ -12,6 +12,9 @@ import {
   type GitConflictAbortResult,
   type GitConflictOperation,
   type GitCurrentBranch,
+  type GitComparisonTarget,
+  type GitTargetBranch,
+  gitComparisonTargetSchema,
   type GitFetchRemoteRequest,
   type GitFetchRemoteResult,
   type GitPullBranchRequest,
@@ -356,6 +359,18 @@ export class HostGitClient {
 
   async gitGetCurrentBranch(repoPath: string, workingDir?: string): Promise<GitCurrentBranch> {
     return gitGetCurrentBranch(this.invokeFn, repoPath, workingDir);
+  }
+
+  async gitGetComparisonTarget(
+    repoPath: string,
+    workingDir: string,
+    target: GitTargetBranch,
+  ): Promise<GitComparisonTarget> {
+    return this.invokeFn(
+      "git_comparison_target_get",
+      { repoPath, workingDir, target },
+      gitComparisonTargetSchema,
+    );
   }
 
   async gitSwitchBranch(

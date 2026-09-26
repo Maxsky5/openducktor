@@ -180,6 +180,7 @@ const createWorkspaceChatHarness = ({
                       record={entry}
                       chatSettings={DEFAULT_CHAT_SETTINGS}
                       reusablePrompts={[]}
+                      onToolRefresh={() => {}}
                     />
                   </AgentSessionsContext>
                 </AgentSessionReadModelStateContext>

@@ -251,6 +251,7 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     gitCanonicalizePath: gitClient.gitCanonicalizePath.bind(gitClient),
     gitGetBranches: gitClient.gitGetBranches.bind(gitClient),
     gitGetCurrentBranch: gitClient.gitGetCurrentBranch.bind(gitClient),
+    gitGetComparisonTarget: gitClient.gitGetComparisonTarget.bind(gitClient),
     gitSwitchBranch: gitClient.gitSwitchBranch.bind(gitClient),
     gitCreateWorktree: gitClient.gitCreateWorktree.bind(gitClient),
     gitRemoveWorktree: gitClient.gitRemoveWorktree.bind(gitClient),

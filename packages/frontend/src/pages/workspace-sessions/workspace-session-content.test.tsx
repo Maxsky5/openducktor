@@ -1,7 +1,492 @@
-import { expect, test } from "bun:test";
-import { fireEvent, render } from "@testing-library/react";
-import { AgentSessionReadModelStateContext } from "@/state/app-state-contexts";
-import { WorkspaceSessionReadModelNotice } from "./workspace-session-content";
+import { expect, spyOn, test } from "bun:test";
+import { repoConfigSchema, type WorkspaceSession } from "@openducktor/contracts";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, memo, type ReactElement, useState } from "react";
+import { Tabs } from "@/components/ui/tabs";
+import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
+import {
+  AgentSessionReadModelStateContext,
+  WorkspaceBranchStateContext,
+} from "@/state/app-state-contexts";
+import { filesystemQueryKeys, invalidateWorkspaceFileQueries } from "@/state/queries/filesystem";
+import { currentBranchQueryOptions } from "@/state/queries/git";
+import { repoConfigQueryOptions, settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import * as filePreview from "@/components/features/agents/task-execution-file-preview";
+import * as toolsPanel from "@/components/features/agents/workspace-session-tools-panel";
+import * as sessionChat from "./workspace-session-chat";
+import {
+  WorkspaceSessionContent,
+  WorkspaceSessionReadModelNotice,
+} from "./workspace-session-content";
+
+const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
+const record = {
+  id: "chat",
+  runtimeKind: "opencode" as const,
+  externalSessionId: "native-chat",
+  executionTarget: { kind: "local_repo_root" as const, workingDirectory: "/repo" },
+  roleSnapshot: null,
+  selectedModel: null,
+  generatedTitle: null,
+  manualTitle: "Chat",
+  createdAt: 1,
+  updatedAt: 1,
+  archivedAt: null,
+};
+
+function renderClosedSession(
+  queryClient: QueryClient,
+  branch: string | null | undefined,
+  revision?: string,
+  sessionRecord: WorkspaceSession = record,
+) {
+  const content = (
+    name: string | null | undefined,
+    currentRevision?: string,
+    isSwitchingBranch = false,
+  ) => (
+    <QueryClientProvider client={queryClient}>
+      <WorkspaceBranchStateContext.Provider
+        value={{
+          activeWorkspace: null,
+          branches: [],
+          activeBranch:
+            name === undefined
+              ? null
+              : name === null
+                ? { detached: true, revision: currentRevision }
+                : { name, detached: false },
+          isLoadingBranches: false,
+          isSwitchingBranch,
+          branchSyncDegraded: false,
+          switchBranch: async () => {},
+        }}
+      >
+        <WorkspacePreviewTransitionGuardProvider>
+          <Tabs value={sessionRecord.id}>
+            <WorkspaceSessionContent
+              workspace={workspace}
+              record={sessionRecord}
+              panelState={{
+                isOpen: false,
+                activeTabId: "file_explorer",
+                selectedFile: {
+                  rootPath: sessionRecord.executionTarget.workingDirectory,
+                  relativePath: "file.ts",
+                },
+              }}
+              onPanelStateChange={() => {}}
+            />
+          </Tabs>
+        </WorkspacePreviewTransitionGuardProvider>
+      </WorkspaceBranchStateContext.Provider>
+    </QueryClientProvider>
+  );
+  const view = render(content(branch, revision));
+  return {
+    ...view,
+    setBranch: (
+      name: string | null | undefined,
+      nextRevision?: string,
+      isSwitchingBranch = false,
+    ) => view.rerender(content(name, nextRevision, isSwitchingBranch)),
+  };
+}
+
+function newQueryClient() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  queryClient.setQueryData(
+    settingsSnapshotQueryOptions().queryKey,
+    createSettingsSnapshotFixture(),
+  );
+  return queryClient;
+}
+
+function mockFilePreview(Preview: () => ReactElement) {
+  // Bun calls the mock as a function, but the exported component has React's memo shape.
+  return spyOn(filePreview, "TaskExecutionSelectedFilePreview").mockImplementation(
+    Object.assign(Preview, memo(Preview)),
+  );
+}
+
+test("an outside branch change keeps a dirty preview and refreshes file queries", async () => {
+  function Preview() {
+    const [draft, setDraft] = useState("");
+    return (
+      <input
+        aria-label="File draft"
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+      />
+    );
+  }
+  const preview = mockFilePreview(Preview);
+  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(() => <div />);
+  const queryClient = newQueryClient();
+  const view = renderClosedSession(queryClient, "main");
+  try {
+    const input = screen.getByRole("textbox", { name: "File draft" });
+    fireEvent.change(input, { target: { value: "unsaved draft" } });
+    const textKey = filesystemQueryKeys.textFile("/repo", "file.ts");
+    queryClient.setQueryData(textKey, "old branch");
+
+    view.setBranch("feature");
+
+    expect(screen.getByDisplayValue("unsaved draft")).toBe(input);
+    expect(preview.mock.calls.at(-1)?.[0].branch).toBe("branch:feature");
+    await waitFor(() => expect(queryClient.getQueryState(textKey)?.isInvalidated).toBe(true));
+  } finally {
+    view.unmount();
+    chat.mockRestore();
+    preview.mockRestore();
+    queryClient.clear();
+  }
+});
+
+test("the tools panel starts beside the chat header", () => {
+  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(() => <div />);
+  const tools = spyOn(toolsPanel, "WorkspaceSessionToolsPanel").mockImplementation(() => (
+    <div>Tools</div>
+  ));
+  const queryClient = newQueryClient();
+  queryClient.setQueryData(
+    repoConfigQueryOptions(workspace.workspaceId).queryKey,
+    repoConfigSchema.parse({ ...workspace, agentStudioState: { openTaskIds: [] } }),
+  );
+  const view = render(
+    <QueryClientProvider client={queryClient}>
+      <WorkspaceBranchStateContext.Provider
+        value={{
+          activeWorkspace: null,
+          branches: [],
+          activeBranch: { name: "main", detached: false },
+          isLoadingBranches: false,
+          isSwitchingBranch: false,
+          branchSyncDegraded: false,
+          switchBranch: async () => {},
+        }}
+      >
+        <WorkspacePreviewTransitionGuardProvider>
+          <Tabs value={record.id}>
+            <WorkspaceSessionContent
+              workspace={workspace}
+              record={record}
+              panelState={{ isOpen: true, activeTabId: "git", selectedFile: null }}
+              onPanelStateChange={() => {}}
+            />
+          </Tabs>
+        </WorkspacePreviewTransitionGuardProvider>
+      </WorkspaceBranchStateContext.Provider>
+    </QueryClientProvider>,
+  );
+  try {
+    const panels = view.container.querySelectorAll('[data-slot="resizable-panel"]');
+    expect(panels.length).toBe(2);
+    expect(
+      screen.getByRole("heading", { name: "Chat" }).closest('[data-slot="resizable-panel"]'),
+    ).toBe(panels.item(0));
+    expect(panels[1]?.textContent).toBe("Tools");
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    tools.mockRestore();
+    chat.mockRestore();
+  }
+});
+
+test("a sidebar branch switch reads the file tree once", async () => {
+  const treeKey = filesystemQueryKeys.tree("/repo");
+  let treeReads = 0;
+  function ChatWithTree() {
+    useQuery({
+      queryKey: treeKey,
+      queryFn: async () => ++treeReads,
+      staleTime: Infinity,
+    });
+    return <div />;
+  }
+  const preview = mockFilePreview(() => <div />);
+  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(ChatWithTree);
+  const queryClient = newQueryClient();
+  const view = renderClosedSession(queryClient, "main");
+  try {
+    await waitFor(() => expect(treeReads).toBe(1));
+
+    view.setBranch("feature", undefined, true);
+    await act(async () => {
+      await invalidateWorkspaceFileQueries(queryClient, "/repo");
+    });
+    view.setBranch("feature");
+
+    expect(treeReads).toBe(2);
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    chat.mockRestore();
+    preview.mockRestore();
+  }
+});
+
+test("a closed worktree panel tracks branch changes without losing a draft", async () => {
+  function Preview() {
+    const [draft, setDraft] = useState("");
+    return (
+      <input
+        aria-label="File draft"
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+      />
+    );
+  }
+  const preview = mockFilePreview(Preview);
+  let refreshTools = () => {};
+  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(
+    ({ onToolRefresh }) => {
+      refreshTools = onToolRefresh;
+      return <div />;
+    },
+  );
+  const worktreePath = "/repo/worktree";
+  let worktreeBranch = "main";
+  let branchError: Error | null = null;
+  let holdBranchRead = false;
+  let releaseBranchRead: (() => void) | null = null;
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        gitGetCurrentBranch: async (_repoPath, workingDir) => {
+          if (holdBranchRead) {
+            await new Promise<void>((resolve) => (releaseBranchRead = resolve));
+          }
+          if (branchError) throw branchError;
+          return {
+            name: workingDir === worktreePath ? worktreeBranch : "repo-root",
+            detached: false,
+          };
+        },
+      },
+    }),
+  );
+  const queryClient = newQueryClient();
+  const worktreeRecord: WorkspaceSession = {
+    ...record,
+    executionTarget: {
+      kind: "local_worktree",
+      workingDirectory: worktreePath,
+      branchName: "main",
+      worktreeState: "present",
+    },
+  };
+  const view = renderClosedSession(queryClient, "main", undefined, worktreeRecord);
+  try {
+    await waitFor(() => expect(preview.mock.calls.at(-1)?.[0].branch).toBe("branch:main"));
+    const input = screen.getByRole("textbox", { name: "File draft" });
+    fireEvent.change(input, { target: { value: "unsaved draft" } });
+    const textKey = filesystemQueryKeys.textFile(worktreePath, "file.ts");
+    queryClient.setQueryData(textKey, "old branch");
+
+    worktreeBranch = "feature";
+    holdBranchRead = true;
+    act(() => refreshTools());
+    await waitFor(() => expect(releaseBranchRead).not.toBeNull());
+    expect(preview.mock.calls.at(-1)?.[0].branch).toBeNull();
+    expect(screen.getByDisplayValue("unsaved draft")).toBe(input);
+    holdBranchRead = false;
+    await act(async () => releaseBranchRead?.());
+
+    await waitFor(() => expect(preview.mock.calls.at(-1)?.[0].branch).toBe("branch:feature"));
+    expect(screen.getByDisplayValue("unsaved draft")).toBe(input);
+    await waitFor(() => expect(queryClient.getQueryState(textKey)?.isInvalidated).toBe(true));
+
+    branchError = new Error("Git branch read failed");
+    act(() => refreshTools());
+    await screen.findByText("Could not read worktree branch: Git branch read failed");
+    expect(preview.mock.calls.at(-1)?.[0].branch).toBeNull();
+    expect(screen.getByDisplayValue("unsaved draft")).toBe(input);
+
+    branchError = null;
+    fireEvent.click(screen.getByRole("button", { name: "Retry branch" }));
+    await waitFor(() => expect(preview.mock.calls.at(-1)?.[0].branch).toBe("branch:feature"));
+    expect(screen.getByDisplayValue("unsaved draft")).toBe(input);
+
+    queryClient.setQueryData(textKey, "cached before focus");
+    worktreeBranch = "focus-branch";
+    act(() => globalThis.dispatchEvent(new Event("focus")));
+    await waitFor(() => expect(preview.mock.calls.at(-1)?.[0].branch).toBe("branch:focus-branch"));
+    await waitFor(() => expect(queryClient.getQueryState(textKey)?.isInvalidated).toBe(true));
+    expect(screen.getByDisplayValue("unsaved draft")).toBe(input);
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    chat.mockRestore();
+    preview.mockRestore();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
+test("a root chat checks the branch after a tool runs and keeps its draft on read failure", async () => {
+  function Preview() {
+    const [draft, setDraft] = useState("");
+    return (
+      <input
+        aria-label="File draft"
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+      />
+    );
+  }
+  const preview = mockFilePreview(Preview);
+  let refreshTools = () => {};
+  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(
+    ({ onToolRefresh }) => {
+      refreshTools = onToolRefresh;
+      return <div />;
+    },
+  );
+  let branch = "feature";
+  let branchError: Error | null = null;
+  let releaseRead: (() => void) | null = null;
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        gitGetCurrentBranch: async () => {
+          await new Promise<void>((resolve) => (releaseRead = resolve));
+          if (branchError) throw branchError;
+          return { name: branch, detached: false };
+        },
+      },
+    }),
+  );
+  const queryClient = newQueryClient();
+  queryClient.setQueryData(currentBranchQueryOptions("/repo").queryKey, {
+    name: "main",
+    detached: false,
+  });
+  const view = renderClosedSession(queryClient, "main");
+  try {
+    const input = screen.getByRole("textbox", { name: "File draft" });
+    fireEvent.change(input, { target: { value: "unsaved draft" } });
+
+    act(() => refreshTools());
+    await waitFor(() => expect(releaseRead).not.toBeNull());
+    expect(preview.mock.calls.at(-1)?.[0].branch).toBeNull();
+    expect(screen.getByDisplayValue("unsaved draft")).toBe(input);
+    await act(async () => releaseRead?.());
+    await waitFor(() => expect(preview.mock.calls.at(-1)?.[0].branch).toBe("branch:feature"));
+
+    branchError = new Error("Git branch read failed");
+    releaseRead = null;
+    act(() => refreshTools());
+    await waitFor(() => expect(releaseRead).not.toBeNull());
+    expect(preview.mock.calls.at(-1)?.[0].branch).toBeNull();
+    await act(async () => releaseRead?.());
+    await screen.findByText("Could not read repository branch: Git branch read failed");
+    expect(preview.mock.calls.at(-1)?.[0].branch).toBeNull();
+    expect(screen.getByDisplayValue("unsaved draft")).toBe(input);
+
+    branchError = null;
+    branch = "next";
+    releaseRead = null;
+    fireEvent.click(screen.getByRole("button", { name: "Retry branch" }));
+    await waitFor(() => expect(releaseRead).not.toBeNull());
+    await act(async () => releaseRead?.());
+    await waitFor(() => expect(preview.mock.calls.at(-1)?.[0].branch).toBe("branch:next"));
+    expect(screen.getByDisplayValue("unsaved draft")).toBe(input);
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    chat.mockRestore();
+    preview.mockRestore();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
+test("a root chat waits for its first branch before opening a file draft", async () => {
+  function Preview() {
+    return <input aria-label="File draft" />;
+  }
+  const preview = mockFilePreview(Preview);
+  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(() => <div />);
+  const queryClient = newQueryClient();
+  const view = renderClosedSession(queryClient, undefined);
+  try {
+    expect(screen.queryByRole("textbox", { name: "File draft" })).toBeNull();
+    expect(screen.getByRole("status").textContent).toContain("Checking repository branch");
+
+    act(() => {
+      queryClient.setQueryData(currentBranchQueryOptions("/repo").queryKey, {
+        name: "main",
+        detached: false,
+      });
+    });
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "File draft" })).toBeTruthy());
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    chat.mockRestore();
+    preview.mockRestore();
+  }
+});
+
+test("a detached HEAD change gets a new preview branch identity", () => {
+  function Preview() {
+    return <div />;
+  }
+  const preview = mockFilePreview(Preview);
+  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(() => <div />);
+  const queryClient = newQueryClient();
+  const view = renderClosedSession(queryClient, null, "first");
+  try {
+    expect(preview.mock.calls.at(-1)?.[0].branch).toBe("detached:first");
+
+    view.setBranch(null, "second");
+
+    expect(preview.mock.calls.at(-1)?.[0].branch).toBe("detached:second");
+  } finally {
+    view.unmount();
+    chat.mockRestore();
+    preview.mockRestore();
+    queryClient.clear();
+  }
+});
+
+test("a file edit refreshes file queries while the tools panel is closed", async () => {
+  function Preview() {
+    return <div />;
+  }
+  const preview = mockFilePreview(Preview);
+  let finishEdit = () => {};
+  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(
+    ({ onToolRefresh }) => {
+      finishEdit = onToolRefresh;
+      return <div />;
+    },
+  );
+  const queryClient = newQueryClient();
+  const view = renderClosedSession(queryClient, "main");
+  try {
+    const textKey = filesystemQueryKeys.textFile("/repo", "file.ts");
+    const treeKey = filesystemQueryKeys.tree("/repo");
+    queryClient.setQueryData(textKey, "old text");
+    queryClient.setQueryData(treeKey, "old tree");
+
+    act(() => finishEdit());
+
+    await waitFor(() => {
+      expect(queryClient.getQueryState(textKey)?.isInvalidated).toBe(true);
+      expect(queryClient.getQueryState(treeKey)?.isInvalidated).toBe(true);
+    });
+  } finally {
+    view.unmount();
+    chat.mockRestore();
+    preview.mockRestore();
+    queryClient.clear();
+  }
+});
 
 test.each(["records", "live"] as const)(
   "shows the %s error with an explicit Retry action",

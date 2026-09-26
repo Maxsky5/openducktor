@@ -58,7 +58,7 @@ export type UseWorkspaceOperationsResult = {
   resolveWorkspacePath: (repoPath: string) => Promise<WorkspacePathResolution>;
   reorderWorkspaces: (workspaceIds: string[]) => Promise<void>;
   refreshBranches: (force?: boolean) => Promise<void>;
-  switchBranch: (branchName: string) => Promise<void>;
+  switchBranch: (branchName: string, onSwitched?: () => void) => Promise<void>;
   clearBranchData: (repoPath?: string | null) => void;
   applyWorkspaceRecords: (records: WorkspaceRecord[]) => void;
   applyWorkspaceRecord: (record: WorkspaceRecord) => void;

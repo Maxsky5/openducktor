@@ -1,6 +1,6 @@
 import type { IncompleteWorkspaceRemoval, WorkspaceRecord } from "@openducktor/contracts";
 import { EyeOff, FolderGit2, Loader2, Trash2, type LucideIcon } from "lucide-react";
-import { type ReactElement, type ReactNode, useState } from "react";
+import { type ReactElement, type ReactNode, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -25,21 +25,29 @@ const removalPhaseLabel = {
 type LifecycleSubmit = {
   submitting: boolean;
   error: string | null;
-  confirm: () => Promise<void>;
+  confirm: () => Promise<boolean>;
 };
+
+type RequestTransition = (
+  apply: () => Promise<boolean>,
+  cancel?: () => void,
+  options?: { waitForSuccess?: boolean },
+) => void;
 
 const useLifecycleSubmit = (run: () => Promise<void>, onSuccess: () => void): LifecycleSubmit => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const confirm = async (): Promise<void> => {
+  const confirm = async (): Promise<boolean> => {
     setSubmitting(true);
     setError(null);
     try {
       await run();
       onSuccess();
+      return true;
     } catch (cause) {
       setError(errorMessage(cause));
+      return false;
     } finally {
       setSubmitting(false);
     }
@@ -58,7 +66,8 @@ type LifecycleDialogProps = {
   submitting: boolean;
   error: string | null;
   onCancel: () => void;
-  onConfirm: () => void;
+  onConfirm: () => Promise<boolean>;
+  requestTransition?: RequestTransition | undefined;
   children: ReactNode;
 };
 
@@ -89,23 +98,52 @@ function LifecycleDialog({
   error,
   onCancel,
   onConfirm,
+  requestTransition,
   children,
 }: LifecycleDialogProps): ReactElement {
+  const [waiting, setWaiting] = useState(false);
+  const waitingRef = useRef(false);
+  const busy = submitting || waiting;
+  const confirm = () => {
+    if (submitting || waitingRef.current) return;
+    if (!requestTransition) {
+      void onConfirm();
+      return;
+    }
+    waitingRef.current = true;
+    setWaiting(true);
+    requestTransition(
+      async () => {
+        try {
+          return await onConfirm();
+        } finally {
+          waitingRef.current = false;
+          setWaiting(false);
+        }
+      },
+      () => {
+        waitingRef.current = false;
+        setWaiting(false);
+        onCancel();
+      },
+      { waitForSuccess: true },
+    );
+  };
   return (
     <Dialog
       open
       onOpenChange={(nextOpen) => {
-        if (!submitting && !nextOpen) onCancel();
+        if (!busy && !nextOpen) onCancel();
       }}
     >
       <DialogContent
         className="max-w-lg"
-        {...(submitting ? { closeButton: null } : {})}
+        {...(busy ? { closeButton: null } : {})}
         onEscapeKeyDown={(event) => {
-          if (submitting) event.preventDefault();
+          if (busy) event.preventDefault();
         }}
         onPointerDownOutside={(event) => {
-          if (submitting) event.preventDefault();
+          if (busy) event.preventDefault();
         }}
       >
         <DialogHeader>
@@ -113,7 +151,9 @@ function LifecycleDialog({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <DialogBody className="flex flex-col gap-3 py-4 text-sm text-muted-foreground">
-          {children}
+          <fieldset disabled={busy} className="flex min-w-0 flex-col gap-3">
+            {children}
+          </fieldset>
           {error ? (
             <p className="text-destructive-muted" role="alert">
               {error}
@@ -121,22 +161,22 @@ function LifecycleDialog({
           ) : null}
         </DialogBody>
         <DialogFooter className="mt-0 flex flex-row justify-between gap-2 border-t border-border pt-5">
-          <Button type="button" variant="outline" disabled={submitting} onClick={onCancel}>
+          <Button type="button" variant="outline" disabled={busy} onClick={onCancel}>
             Cancel
           </Button>
           <Button
             type="button"
             variant={destructive ? "destructive" : "default"}
-            disabled={submitting}
-            aria-busy={submitting}
-            onClick={onConfirm}
+            disabled={busy}
+            aria-busy={busy}
+            onClick={confirm}
           >
             {submitting ? (
               <Loader2 className="animate-spin" data-icon="inline-start" />
             ) : (
               <ActionIcon data-icon="inline-start" />
             )}
-            {submitting ? pendingActionLabel : actionLabel}
+            {submitting ? pendingActionLabel : waiting ? "Waiting for file choice..." : actionLabel}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -147,11 +187,13 @@ function LifecycleDialog({
 type WorkspaceLifecycleDialogProps = {
   workspace: WorkspaceRecord;
   onOpenChange: (open: boolean) => void;
+  requestTransition?: RequestTransition | undefined;
 };
 
 export function WorkspaceCloseDialog({
   workspace,
   onOpenChange,
+  requestTransition,
 }: WorkspaceLifecycleDialogProps): ReactElement {
   const { closeWorkspace } = useWorkspaceState();
   const submit = useLifecycleSubmit(
@@ -173,7 +215,8 @@ export function WorkspaceCloseDialog({
       submitting={submit.submitting}
       error={submit.error}
       onCancel={() => onOpenChange(false)}
-      onConfirm={() => void submit.confirm()}
+      onConfirm={submit.confirm}
+      requestTransition={requestTransition}
     >
       <RepositoryPath path={workspace.repoPath} />
       <div className="flex gap-3 rounded-lg border border-border bg-card p-3">
@@ -195,6 +238,7 @@ export function WorkspaceCloseDialog({
 export function WorkspaceRemoveDialog({
   workspace,
   onOpenChange,
+  requestTransition,
 }: WorkspaceLifecycleDialogProps): ReactElement {
   const { removeWorkspace } = useWorkspaceState();
   const [removeTaskWorktrees, setRemoveTaskWorktrees] = useState(false);
@@ -219,7 +263,8 @@ export function WorkspaceRemoveDialog({
       submitting={submit.submitting}
       error={submit.error}
       onCancel={() => onOpenChange(false)}
-      onConfirm={() => void submit.confirm()}
+      onConfirm={submit.confirm}
+      requestTransition={requestTransition}
     >
       <RepositoryPath path={workspace.repoPath} />
       <div className="flex flex-col gap-2 rounded-lg border border-destructive-border bg-destructive-surface px-3 py-2 text-destructive-surface-foreground">
@@ -287,7 +332,7 @@ export function WorkspaceRemovalRecoveryDialog({
       submitting={submit.submitting}
       error={submit.error}
       onCancel={() => onOpenChange(false)}
-      onConfirm={() => void submit.confirm()}
+      onConfirm={submit.confirm}
     >
       <p>
         OpenDucktor stopped during removal. The workspace stays frozen until removal finishes. Data

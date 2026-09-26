@@ -176,6 +176,7 @@ const renderPreview = (
     Partial<Omit<TaskExecutionSelectedFilePreviewModel, "selectedFile" | "onClose">>,
   theme: "light" | "dark" = "light",
   onFileSaved: () => void = () => {},
+  branch: string | null = null,
 ) => {
   const fullModel: TaskExecutionSelectedFilePreviewModel = {
     selectedFile: model.selectedFile,
@@ -183,6 +184,7 @@ const renderPreview = (
     previewSessionKey: model.previewSessionKey ?? 0,
     preservePreviousSnapshot: model.preservePreviousSnapshot ?? false,
     hasPendingDiscard: model.hasPendingDiscard ?? false,
+    isApplyingTransition: model.isApplyingTransition ?? false,
     onLeavePolicyChange: model.onLeavePolicyChange ?? (() => {}),
     onKeepEditing: model.onKeepEditing ?? (() => {}),
     onDiscard: model.onDiscard ?? (() => {}),
@@ -191,7 +193,11 @@ const renderPreview = (
 
   return (
     <PreviewTestProviders>
-      <TaskExecutionSelectedFilePreview model={fullModel} onFileSaved={onFileSaved} />
+      <TaskExecutionSelectedFilePreview
+        model={fullModel}
+        onFileSaved={onFileSaved}
+        branch={branch}
+      />
     </PreviewTestProviders>
   );
 };
@@ -842,6 +848,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
       contents: "second save",
       revision: "revision:const first = true;:saved",
     });
+    expect(writeTextFileMock.mock.calls[1]?.[0]).not.toHaveProperty("expectedBranch");
   });
 
   test("ignores a completed save after the active editor session changes", async () => {
@@ -905,6 +912,155 @@ describe("TaskExecutionSelectedFilePreview", () => {
     await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(2));
     await waitForCleanFile();
     expect(writeTextFileMock.mock.calls[1]?.[0]).toMatchObject({ contents: "draft" });
+  });
+
+  test("keeps a draft but blocks saving it on another branch with the same file revision", async () => {
+    const onClose = mock(() => {});
+    const model = { selectedFile: firstFile, onClose };
+    const view = render(renderPreview(model, "light", undefined, "branch:main"));
+    await screen.findByText("const first = true;");
+    const item = firstCodeViewItem();
+    act(() => {
+      latestCodeViewProps?.onItemEditChange?.(item, { ...item.file, contents: "draft" });
+    });
+    await waitForDirtyFile();
+
+    view.rerender(renderPreview(model, "light", undefined, "branch:feature"));
+
+    expect(screen.getByRole("status", { name: "Unsaved changes" })).toBeTruthy();
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save file" }).disabled).toBe(
+      true,
+    );
+    expect(screen.getByRole("alert").textContent).toContain("current branch");
+    expect((await dispatchPreviewSaveShortcut("metaKey")).defaultPrevented).toBe(true);
+    expect(writeTextFileMock).toHaveBeenCalledTimes(0);
+
+    await runAsyncUiAction(() =>
+      fireEvent.click(screen.getByRole("button", { name: "Review latest version" })),
+    );
+    await screen.findByRole("dialog", { name: "Review latest file" });
+    expect(screen.getByLabelText("Latest file contents").textContent).toBe("const first = true;");
+    await runAsyncUiAction(() =>
+      fireEvent.click(screen.getByRole("button", { name: "Use latest as baseline" })),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save file" }).disabled).toBe(
+        false,
+      ),
+    );
+    await runAsyncUiAction(() =>
+      fireEvent.click(screen.getByRole("button", { name: "Save file" })),
+    );
+
+    await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(1));
+    expect(writeTextFileMock.mock.calls[0]?.[0]).toMatchObject({
+      contents: "draft",
+      revision: "revision:const first = true;",
+      expectedBranch: "branch:feature",
+    });
+  });
+
+  test("lets a clean preview start a draft after a branch change", async () => {
+    const onClose = mock(() => {});
+    const model = { selectedFile: firstFile, onClose };
+    const view = render(renderPreview(model, "light", undefined, "main"));
+    await screen.findByText("const first = true;");
+
+    view.rerender(renderPreview(model, "light", undefined, "feature"));
+    const item = firstCodeViewItem();
+    act(() => {
+      latestCodeViewProps?.onItemEditChange?.(item, { ...item.file, contents: "new draft" });
+    });
+
+    await waitForDirtyFile();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save file" }).disabled).toBe(
+      false,
+    );
+  });
+
+  test("drops a review result if the branch changes while the file loads", async () => {
+    const pendingReview = createDeferred<WorkspaceTextFileReadResult>();
+    const onClose = mock(() => {});
+    const model = { selectedFile: firstFile, onClose };
+    const view = render(renderPreview(model, "light", undefined, "main"));
+    await screen.findByText("const first = true;");
+    const item = firstCodeViewItem();
+    act(() => {
+      latestCodeViewProps?.onItemEditChange?.(item, { ...item.file, contents: "draft" });
+    });
+    await waitForDirtyFile();
+    view.rerender(renderPreview(model, "light", undefined, "feature"));
+    readTextFileMock.mockImplementationOnce(() => pendingReview.promise);
+    await runAsyncUiAction(() =>
+      fireEvent.click(screen.getByRole("button", { name: "Review latest version" })),
+    );
+
+    view.rerender(renderPreview(model, "light", undefined, "other"));
+    await act(async () => {
+      pendingReview.resolve(textFileResult(firstFile, "const first = true;"));
+      await pendingReview.promise;
+    });
+
+    expect(screen.queryByRole("dialog", { name: "Review latest file" })).toBeNull();
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save file" }).disabled).toBe(
+      true,
+    );
+    expect(writeTextFileMock).toHaveBeenCalledTimes(0);
+  });
+
+  test("closes a loaded review when the branch changes again", async () => {
+    const onClose = mock(() => {});
+    const model = { selectedFile: firstFile, onClose };
+    const view = render(renderPreview(model, "light", undefined, "main"));
+    await screen.findByText("const first = true;");
+    const item = firstCodeViewItem();
+    act(() => {
+      latestCodeViewProps?.onItemEditChange?.(item, { ...item.file, contents: "draft" });
+    });
+    await waitForDirtyFile();
+    view.rerender(renderPreview(model, "light", undefined, "feature"));
+    await runAsyncUiAction(() =>
+      fireEvent.click(screen.getByRole("button", { name: "Review latest version" })),
+    );
+    await screen.findByRole("dialog", { name: "Review latest file" });
+
+    view.rerender(renderPreview(model, "light", undefined, "other"));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Review latest file" })).toBeNull(),
+    );
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save file" }).disabled).toBe(
+      true,
+    );
+    expect(writeTextFileMock).toHaveBeenCalledTimes(0);
+  });
+
+  test("shows a failed branch review and keeps the draft blocked", async () => {
+    const onClose = mock(() => {});
+    const model = { selectedFile: firstFile, onClose };
+    const view = render(renderPreview(model, "light", undefined, "main"));
+    await screen.findByText("const first = true;");
+    const item = firstCodeViewItem();
+    act(() => {
+      latestCodeViewProps?.onItemEditChange?.(item, { ...item.file, contents: "draft" });
+    });
+    await waitForDirtyFile();
+    view.rerender(renderPreview(model, "light", undefined, "feature"));
+    readTextFileMock.mockImplementationOnce(async () => {
+      throw new Error("Read denied.");
+    });
+
+    await runAsyncUiAction(() =>
+      fireEvent.click(screen.getByRole("button", { name: "Review latest version" })),
+    );
+
+    await screen.findByText("Read denied.");
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save file" }).disabled).toBe(
+      true,
+    );
+    expect(screen.getByRole("status", { name: "Unsaved changes" })).toBeTruthy();
+    expect(writeTextFileMock).toHaveBeenCalledTimes(0);
   });
 
   test("reviews the latest file and rebases a stale draft without losing it", async () => {
@@ -1358,6 +1514,30 @@ describe("TaskExecutionSelectedFilePreview", () => {
 
     expect(event.defaultPrevented).toBe(true);
     expect(writeTextFileMock).not.toHaveBeenCalled();
+  });
+
+  test("holds the discard choice while branch checkout runs", async () => {
+    const onKeepEditing = mock(() => {});
+    const onDiscard = mock(() => {});
+    render(
+      renderPreview({
+        selectedFile: firstFile,
+        onClose: () => {},
+        hasPendingDiscard: true,
+        isApplyingTransition: true,
+        onKeepEditing,
+        onDiscard,
+      }),
+    );
+
+    await screen.findByRole("dialog");
+    expect(screen.getByRole("button", { name: "Keep editing" }).hasAttribute("disabled")).toBe(
+      true,
+    );
+    expect(screen.getByRole("button", { name: "Working..." }).hasAttribute("disabled")).toBe(true);
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(onKeepEditing).not.toHaveBeenCalled();
+    expect(onDiscard).not.toHaveBeenCalled();
   });
 });
 

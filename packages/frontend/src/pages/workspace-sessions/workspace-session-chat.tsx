@@ -40,12 +40,14 @@ import { createWorkspaceSessionChatDraftPersistence } from "./workspace-session-
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useWorkspaceSessionModelPicker } from "./use-workspace-session-model-picker";
 import { useWorkspaceSessionChatActions } from "./use-workspace-session-chat-actions";
+import { useWorkspaceSessionToolRefresh } from "./use-workspace-session-tool-refresh";
 
 type WorkspaceSessionChatProps = {
   workspace: ActiveWorkspace;
   record: WorkspaceSession;
   chatSettings: ChatSettings;
   reusablePrompts: ReusablePrompt[];
+  onToolRefresh: () => void;
 };
 
 export function WorkspaceSessionChat({
@@ -53,9 +55,11 @@ export function WorkspaceSessionChat({
   record,
   chatSettings,
   reusablePrompts,
+  onToolRefresh,
 }: WorkspaceSessionChatProps): ReactElement {
   const identity = useMemo(() => workspaceSessionIdentity(record), [record]);
   const session = useAgentSession(identity);
+  useWorkspaceSessionToolRefresh(session, onToolRefresh);
   const actions = useWorkspaceSessionChatActions(workspace, record);
   const { isSending, isStarting, isSavingModel, updateDraftModel } = actions;
   const draftPersistence = useMemo(

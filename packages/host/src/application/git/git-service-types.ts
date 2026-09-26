@@ -6,6 +6,7 @@ import type {
   GitCommitAllResult,
   GitConflictAbortResult,
   GitCurrentBranch,
+  GitComparisonTarget,
   GitFetchRemoteResult,
   GitPullBranchResult,
   GitPushBranchResult,
@@ -30,6 +31,7 @@ import type {
   GitAbortConflictInput,
   GitAheadBehindInput,
   GitCommitAllInput,
+  GitComparisonTargetInput,
   GitCreateWorktreeInput,
   GitDiffInput,
   GitPushBranchInput,
@@ -52,6 +54,9 @@ export type GitService = {
   canonicalizePath(input: GitScopeInput): Effect.Effect<string, GitServiceError>;
   getBranches(input: GitScopeInput): Effect.Effect<GitBranch[], GitServiceError>;
   getCurrentBranch(input: GitScopeInput): Effect.Effect<GitCurrentBranch, GitServiceError>;
+  getComparisonTarget(
+    input: GitComparisonTargetInput,
+  ): Effect.Effect<GitComparisonTarget, GitServiceError>;
   getStatus(input: GitScopeInput): Effect.Effect<FileStatus[], GitServiceError>;
   getDiff(input: GitDiffInput): Effect.Effect<FileDiff[], GitServiceError>;
   getWorktreeStatus(

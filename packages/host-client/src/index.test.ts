@@ -1376,6 +1376,23 @@ describe("HostClient", () => {
     ]);
   });
 
+  test("resolves a Git comparison target for the selected working directory", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "git_comparison_target_get")
+        return { kind: "unavailable", reason: "No upstream branch" };
+      throw new Error(`Unexpected command: ${command}`);
+    });
+    await expect(
+      client.gitGetComparisonTarget("/repo", "/worktree", { branch: "@{upstream}" }),
+    ).resolves.toEqual({ kind: "unavailable", reason: "No upstream branch" });
+    expect(calls).toEqual([
+      {
+        command: "git_comparison_target_get",
+        args: { repoPath: "/repo", workingDir: "/worktree", target: { branch: "@{upstream}" } },
+      },
+    ]);
+  });
+
   test("git commands use expected IPC routes and payloads", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "git_get_branches") {

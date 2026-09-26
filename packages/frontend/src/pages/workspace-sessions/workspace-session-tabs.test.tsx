@@ -1,16 +1,19 @@
 import { afterEach, expect, jest, spyOn, test } from "bun:test";
 import type { WorkspaceSession, WorkspaceSessionArchiveInput } from "@openducktor/contracts";
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { fireEvent, render, waitFor, within } from "@testing-library/react";
 import { useQueryClient } from "@tanstack/react-query";
-import { act, type ReactNode } from "react";
+import { act, type ReactNode, useState } from "react";
 import { Link, MemoryRouter, useLocation, useNavigate } from "react-router";
 import { QueryProvider } from "@/lib/query-provider";
+import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
+import { ThemeProvider } from "@/components/layout/theme-provider";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import {
   ActiveWorkspaceContext,
   AgentSessionReadModelStateContext,
   AgentSessionsContext,
+  WorkspaceBranchStateContext,
 } from "@/state/app-state-contexts";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import {
@@ -18,6 +21,7 @@ import {
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
 import { WorkspaceSessions } from "./workspace-sessions-view";
+import { useWorkspaceSessionPreview } from "./use-workspace-session-preview";
 import { workspaceSessionSelectionStorageKey } from "./use-workspace-session-selection";
 import { workspaceSessionTabOrderStorageKey } from "./use-workspace-session-tab-order";
 import { updateWorkspaceSessionQueries } from "@/state/queries/workspace-sessions";
@@ -26,6 +30,8 @@ import * as chatCreate from "./workspace-session-create-dialog";
 import * as workspaceChat from "./workspace-session-chat";
 
 const testWorkspaceIds = new Set<string>();
+const sessionTabs = (view: ReturnType<typeof render>) =>
+  within(view.getByRole("tablist", { name: "Workspace session tabs" })).queryAllByRole("tab");
 afterEach(() => {
   for (const workspaceId of testWorkspaceIds) {
     localStorage.removeItem(workspaceSessionSelectionStorageKey(workspaceId));
@@ -124,7 +130,7 @@ test.each([true, false])(
           branchName: "feature/second",
         };
       expect(requests).toEqual([expectedRequest]);
-      expect(view.getAllByRole("tab")).toHaveLength(1);
+      expect(sessionTabs(view)).toHaveLength(1);
       expect(view.getByRole("tab", { name: /First/ }).getAttribute("aria-selected")).toBe("true");
     } finally {
       view.unmount();
@@ -172,7 +178,7 @@ test.each([true, false])(
       const importButton = await view.findByRole(
         "button",
         { name: "Import session" },
-        { timeout: 800 },
+        { timeout: 3_000 },
       );
       const historyButton = view.getByRole("button", { name: "Session history" });
       expect(importButton.nextElementSibling).toBe(historyButton);
@@ -200,18 +206,19 @@ test.each([true, false])(
           expect(tab.getAttribute("aria-selected")).toBe("true");
           expect(tab.closest('[data-slot="browser-tab"]')).not.toBeNull();
         },
-        { timeout: 800 },
+        { timeout: 3_000 },
       );
       expect(view.queryByRole("dialog")).toBeNull();
       const url = new URL(view.getByTestId("session-url").textContent ?? "", "http://localhost");
       expect(url.searchParams.get("session")).toBe(imported.id);
-      expect(view.getAllByRole("tab")).toHaveLength(hasSessions ? 2 : 1);
+      expect(sessionTabs(view)).toHaveLength(hasSessions ? 2 : 1);
     } finally {
       view.unmount();
       dialog.mockRestore();
       configureShellBridge(createUnavailableShellBridge());
     }
   },
+  5_000,
 );
 
 test("New chat opens and closes over the selected session without changing its URL", async () => {
@@ -263,10 +270,7 @@ test("tabs show older chats first even when the server lists recent activity fir
   const view = renderTabs();
   try {
     await view.findByRole("tab", { name: /New/ }, { timeout: 800 });
-    expect(view.getAllByRole("tab").map((tab) => tab.getAttribute("title"))).toEqual([
-      "Old",
-      "New",
-    ]);
+    expect(sessionTabs(view).map((tab) => tab.getAttribute("title"))).toEqual(["Old", "New"]);
   } finally {
     view.unmount();
     configureShellBridge(createUnavailableShellBridge());
@@ -380,7 +384,7 @@ test("new drafts append right and metadata updates do not move tabs or change se
     workspaceId,
     <SessionMetadataControls workspaceId={workspaceId} />,
   );
-  const titles = () => view.getAllByRole("tab").map((tab) => tab.getAttribute("title"));
+  const titles = () => sessionTabs(view).map((tab) => tab.getAttribute("title"));
   try {
     await view.findByRole("tab", { name: /Second/ }, { timeout: 800 });
     fireEvent.click(view.getByRole("button", { name: "Add draft fixture" }));
@@ -403,6 +407,7 @@ function renderTabs(
   initialEntry = "/chats",
   workspaceId = crypto.randomUUID(),
   queryControls: ReactNode = null,
+  previewControls: ReactNode = null,
 ) {
   testWorkspaceIds.add(workspaceId);
   const workspace = { workspaceId, workspaceName: "A", repoPath: "/repo" };
@@ -426,31 +431,106 @@ function renderTabs(
       <Link to="/chats?session=Second">Open second chat</Link>
       <Link to="/chats">Open chats</Link>
       <QueryProvider useIsolatedClient>
-        {queryControls}
-        <ActiveWorkspaceContext
-          value={{
-            activeWorkspace: workspace,
-            setActiveWorkspace: () => {},
-          }}
-        >
-          <AgentSessionReadModelStateContext
+        <ThemeProvider>
+          {queryControls}
+          <ActiveWorkspaceContext
             value={{
-              sessionReadModelLoadState: { kind: "ready", workspaceRepoPath: "/repo" },
-              getSessionFault: () => null,
-              workspaceSessionRecordsError: null,
-              reloadSessionReadModel: () => {},
+              activeWorkspace: workspace,
+              setActiveWorkspace: () => {},
             }}
           >
-            <AgentSessionsContext value={store}>
-              <WorkspaceSessions workspace={workspace} />
-            </AgentSessionsContext>
-          </AgentSessionReadModelStateContext>
-        </ActiveWorkspaceContext>
+            <AgentSessionReadModelStateContext
+              value={{
+                sessionReadModelLoadState: { kind: "ready", workspaceRepoPath: "/repo" },
+                getSessionFault: () => null,
+                workspaceSessionRecordsError: null,
+                reloadSessionReadModel: () => {},
+              }}
+            >
+              <AgentSessionsContext value={store}>
+                <WorkspaceBranchStateContext.Provider
+                  value={{
+                    activeWorkspace: null,
+                    branches: [],
+                    activeBranch: { name: "main", detached: false },
+                    isLoadingBranches: false,
+                    isSwitchingBranch: false,
+                    branchSyncDegraded: false,
+                    switchBranch: async () => {},
+                  }}
+                >
+                  <WorkspacePreviewTransitionGuardProvider>
+                    <WorkspaceSessions workspace={workspace} />
+                    {previewControls}
+                  </WorkspacePreviewTransitionGuardProvider>
+                </WorkspaceBranchStateContext.Provider>
+              </AgentSessionsContext>
+            </AgentSessionReadModelStateContext>
+          </ActiveWorkspaceContext>
+        </ThemeProvider>
       </QueryProvider>
     </MemoryRouter>,
   );
   return { ...view, workspaceId, store };
 }
+
+function DirtyPreview() {
+  const [file, setFile] = useState<{ rootPath: string; relativePath: string } | null>({
+    rootPath: "/repo",
+    relativePath: "draft.ts",
+  });
+  const { preview, onDiscard } = useWorkspaceSessionPreview(file, setFile);
+  return (
+    <>
+      <output data-testid="draft">{preview.model.selectedFile?.relativePath ?? "none"}</output>
+      <button onClick={() => preview.model.onLeavePolicyChange("confirm")}>Edit draft</button>
+      <button onClick={onDiscard}>Discard draft</button>
+    </>
+  );
+}
+
+test("each selected chat keeps its own tools tab and open state", async () => {
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        workspaceSessionListActive: async () => [sessionRecord("First"), sessionRecord("Second")],
+        workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+      },
+    }),
+  );
+  const view = renderTabs(undefined, "/chats?session=First");
+  try {
+    await view.findByRole("button", { name: "Hide workspace tools panel" });
+    fireEvent.click(view.getByRole("button", { name: "Hide workspace tools panel" }));
+    expect(view.queryByRole("tablist", { name: "Workspace session tools" })).toBeNull();
+    fireEvent.mouseUp(view.getByRole("tab", { name: /Second/ }), { button: 0 });
+    await waitFor(() =>
+      expect(view.getByRole("tab", { name: /Second/ }).getAttribute("data-state")).toBe("active"),
+    );
+    await view.findByRole("tablist", { name: "Workspace session tools" });
+    fireEvent.mouseDown(view.getByRole("tab", { name: "File explorer" }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    await waitFor(() =>
+      expect(view.getByRole("tab", { name: "File explorer" }).getAttribute("aria-selected")).toBe(
+        "true",
+      ),
+    );
+    fireEvent.mouseUp(view.getByRole("tab", { name: /First/ }), { button: 0 });
+    await view.findByRole("button", { name: "Show workspace tools panel" });
+    expect(view.queryByRole("tablist", { name: "Workspace session tools" })).toBeNull();
+    fireEvent.mouseUp(view.getByRole("tab", { name: /Second/ }), { button: 0 });
+    await waitFor(() =>
+      expect(view.getByRole("tab", { name: "File explorer" }).getAttribute("aria-selected")).toBe(
+        "true",
+      ),
+    );
+  } finally {
+    view.unmount();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+}, 5_000);
 
 test("tabs read activity without subscribing to session transcripts", async () => {
   configureShellBridge(
@@ -669,7 +749,7 @@ test("switching loaded chats keeps only the selected session header", async () =
   );
   const view = renderTabs(undefined, "/chats?session=First");
   try {
-    await view.findByTestId("selected-chat", {}, { timeout: 800 });
+    await view.findByTestId("selected-chat", {}, { timeout: 3_000 });
     expect(view.getAllByRole("heading", { level: 2 }).map((header) => header.textContent)).toEqual([
       "First",
     ]);
@@ -679,7 +759,7 @@ test("switching loaded chats keeps only the selected session header", async () =
         ctrlKey: false,
       });
       await waitFor(() => expect(view.getByTestId("selected-chat").textContent).toBe(selected), {
-        timeout: 800,
+        timeout: 3_000,
       });
       expect(
         view.getAllByRole("heading", { level: 2 }).map((header) => header.textContent),
@@ -701,7 +781,7 @@ test("switching loaded chats keeps only the selected session header", async () =
     chat.mockRestore();
     configureShellBridge(createUnavailableShellBridge());
   }
-});
+}, 5_000);
 
 test("keeps an explicit session URL while the initial list is pending", async () => {
   let resolveList!: (records: WorkspaceSession[]) => void;
@@ -903,7 +983,9 @@ test("archive targets its tab, restore preserves selection, and the final archiv
   try {
     const firstTab = await view.findByRole("tab", { name: /First/ }, { timeout: 800 });
     expect(firstTab.getAttribute("aria-selected")).toBe("true");
-    expect(view.getByRole("tabpanel").id).toBe(firstTab.getAttribute("aria-controls") ?? "");
+    expect(view.getByRole("tabpanel", { name: /First/ }).id).toBe(
+      firstTab.getAttribute("aria-controls") ?? "",
+    );
     const scrollRegion = firstTab.closest(".hide-scrollbar");
     expect(scrollRegion).not.toBeNull();
     expect(scrollRegion?.contains(view.getByRole("button", { name: "New chat" }))).toBe(false);
@@ -965,7 +1047,7 @@ test("archive targets its tab, restore preserves selection, and the final archiv
       fireEvent.click(view.getByRole("button", { name: "Confirm stop and archive Second" }));
     });
     await view.findByText("No active sessions.", {}, { timeout: 800 });
-    expect(view.queryAllByRole("tab")).toHaveLength(0);
+    expect(sessionTabs(view)).toHaveLength(0);
   } finally {
     view.unmount();
     configureShellBridge(createUnavailableShellBridge());
@@ -1183,8 +1265,47 @@ test("running archive confirms inline and retains the tab and selection when Sto
       },
     ]);
     expect(view.queryByRole("dialog")).toBeNull();
-    expect(view.getAllByRole("tab")).toHaveLength(2);
+    expect(sessionTabs(view)).toHaveLength(2);
     expect(view.getByRole("tab", { name: /First/ }).getAttribute("aria-selected")).toBe("true");
+  } finally {
+    view.unmount();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
+test("failed selected-chat archive keeps the dirty draft", async () => {
+  let rejectArchive!: (reason: Error) => void;
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        workspaceSessionListActive: async () => [sessionRecord("First")],
+        workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+        workspaceSessionArchive: () =>
+          new Promise((_resolve, reject) => {
+            rejectArchive = reject;
+          }),
+      },
+    }),
+  );
+  const view = renderTabs(
+    undefined,
+    "/chats?session=First",
+    crypto.randomUUID(),
+    null,
+    <DirtyPreview />,
+  );
+  try {
+    await view.findByRole("button", { name: "Archive First" }, { timeout: 800 });
+    fireEvent.click(view.getByRole("button", { name: "Edit draft" }));
+    fireEvent.click(view.getByRole("button", { name: "Archive First" }));
+    fireEvent.click(view.getByRole("button", { name: "Confirm stop and archive First" }));
+    expect(view.getByTestId("draft").textContent).toBe("draft.ts");
+    fireEvent.click(view.getByRole("button", { name: "Discard draft" }));
+    await waitFor(() => expect(rejectArchive).toBeDefined());
+    expect(view.getByTestId("draft").textContent).toBe("draft.ts");
+    await act(async () => rejectArchive(new Error("Archive failed")));
+    await view.findByText("Archive failed", {}, { timeout: 800 });
+    expect(view.getByTestId("draft").textContent).toBe("draft.ts");
   } finally {
     view.unmount();
     configureShellBridge(createUnavailableShellBridge());

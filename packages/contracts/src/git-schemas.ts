@@ -112,6 +112,12 @@ export const gitTargetBranchSchema = z.object({
 });
 export type GitTargetBranch = z.infer<typeof gitTargetBranchSchema>;
 
+export const gitComparisonTargetSchema = z.union([
+  z.object({ kind: z.literal("available"), reference: z.string().min(1) }),
+  z.object({ kind: z.literal("unavailable"), reason: z.string().min(1) }),
+]);
+export type GitComparisonTarget = z.infer<typeof gitComparisonTargetSchema>;
+
 export const gitProviderConfigSchema = z
   .object({
     id: gitProviderIdSchema,

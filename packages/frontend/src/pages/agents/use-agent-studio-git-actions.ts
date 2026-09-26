@@ -59,6 +59,7 @@ type UseAgentStudioGitActionsInput = {
   workingDir: string | null;
   branch: string | null;
   targetBranch: string;
+  resetTargetBranch?: string;
   hashVersion: number | null;
   statusHash: string | null;
   diffHash: string | null;
@@ -76,6 +77,7 @@ export function useAgentStudioGitActions({
   workingDir,
   branch,
   targetBranch,
+  resetTargetBranch = targetBranch,
   hashVersion,
   statusHash,
   diffHash,
@@ -159,7 +161,7 @@ export function useAgentStudioGitActions({
   } = useAgentStudioGitResetActions({
     repoPath,
     workingDir,
-    targetBranch,
+    targetBranch: resetTargetBranch,
     hashVersion,
     statusHash,
     diffHash,

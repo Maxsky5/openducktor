@@ -1,6 +1,6 @@
-import { afterAll, afterEach, expect, spyOn, test } from "bun:test";
+import { afterAll, afterEach, expect, mock, spyOn, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import * as appStateProvider from "@/state/app-state-provider";
 
@@ -84,4 +84,40 @@ test("workspace removal uses the destructive layout and trash icon", () => {
 
   const removeButton = within(dialog).getByRole("button", { name: "Remove workspace" });
   expect(removeButton.querySelector(".lucide-trash-2")).not.toBeNull();
+});
+
+test("workspace removal waits for one preview choice before it can run", () => {
+  const remove = spyOn(workspaceState, "removeWorkspace");
+  const onOpenChange = mock((_open: boolean) => {});
+  const requests: Array<{ apply: () => void; cancel: () => void }> = [];
+  try {
+    render(
+      <WorkspaceRemoveDialog
+        workspace={workspace}
+        onOpenChange={onOpenChange}
+        requestTransition={(apply, cancel) =>
+          requests.push({ apply, cancel: cancel ?? (() => {}) })
+        }
+      />,
+    );
+
+    const removeButton = screen.getByRole("button", { name: "Remove workspace" });
+    fireEvent.click(removeButton);
+    fireEvent.click(removeButton);
+
+    expect(requests).toHaveLength(1);
+    expect(remove).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: "Waiting for file choice..." }).hasAttribute("disabled"),
+    ).toBe(true);
+    expect(
+      screen.getByRole("checkbox", { name: "Remove task worktrees" }).closest("fieldset")?.disabled,
+    ).toBe(true);
+
+    act(() => requests[0]?.cancel());
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(remove).not.toHaveBeenCalled();
+  } finally {
+    remove.mockRestore();
+  }
 });

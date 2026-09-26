@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import type { ReactElement } from "react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { type ReactElement, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { WorkspaceActivityState } from "@/features/workspace-activity/workspace-activity-state";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
@@ -9,6 +9,9 @@ import { WorkspaceActivityContext } from "@/state/workspace-activity/workspace-a
 import { createWorkspaceActivityObserverStub } from "@/test-utils/shared-test-fixtures";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { WorkspaceRail } from "./workspace-rail";
+import { WorkspacePreviewTransitionGuardProvider } from "./workspace-preview-transition-guard";
+import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
+import { useWorkspaceSessionPreview } from "@/pages/workspace-sessions/use-workspace-session-preview";
 
 const selectWorkspaceMock = mock(async (_workspaceId: string): Promise<void> => {});
 const reorderWorkspacesMock = mock(async (_workspaceIds: string[]): Promise<void> => {});
@@ -34,17 +37,34 @@ let workspaceState: WorkspaceStateContextValue;
 let workspaceActivity: Record<string, WorkspaceActivityState>;
 
 const withProviders = (children: ReactElement): ReactElement => (
-  <WorkspaceStateContext.Provider value={workspaceState}>
-    <WorkspaceActivityContext.Provider
-      value={createWorkspaceActivityObserverStub(workspaceActivity)}
-    >
-      {children}
-    </WorkspaceActivityContext.Provider>
-  </WorkspaceStateContext.Provider>
+  <WorkspacePreviewTransitionGuardProvider>
+    <WorkspaceStateContext.Provider value={workspaceState}>
+      <WorkspaceActivityContext.Provider
+        value={createWorkspaceActivityObserverStub(workspaceActivity)}
+      >
+        {children}
+      </WorkspaceActivityContext.Provider>
+    </WorkspaceStateContext.Provider>
+  </WorkspacePreviewTransitionGuardProvider>
 );
 
 const renderRail = (onOpenRepositoryModal = () => {}): ReturnType<typeof render> =>
   render(withProviders(<WorkspaceRail onOpenRepositoryModal={onOpenRepositoryModal} />));
+
+function DirtyPreview() {
+  const [file, setFile] = useState<TaskExecutionSelectedFile | null>({
+    rootPath: "/alpha",
+    relativePath: "draft.ts",
+  });
+  const { preview, onDiscard } = useWorkspaceSessionPreview(file, setFile);
+  return (
+    <>
+      <output data-testid="draft">{preview.model.selectedFile?.relativePath ?? "none"}</output>
+      <button onClick={() => preview.model.onLeavePolicyChange("confirm")}>Edit draft</button>
+      <button onClick={onDiscard}>Discard draft</button>
+    </>
+  );
+}
 
 const renderRailMarkup = (): string =>
   renderToStaticMarkup(withProviders(<WorkspaceRail onOpenRepositoryModal={() => {}} />));
@@ -132,6 +152,86 @@ describe("WorkspaceRail", () => {
     expect(selectWorkspaceMock).toHaveBeenCalledTimes(1);
     expect(selectWorkspaceMock).toHaveBeenCalledWith("beta");
     expect(openRepositoryModal).toHaveBeenCalledTimes(1);
+  });
+
+  test("keeps a dirty draft when workspace selection fails", async () => {
+    workspaceState.workspaces = [
+      workspaceRecord("alpha", { isActive: true }),
+      workspaceRecord("beta"),
+    ];
+    workspaceState.activeWorkspace = workspaceState.workspaces[0] ?? null;
+    let rejectSelection!: (reason: Error) => void;
+    selectWorkspaceMock.mockImplementationOnce(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectSelection = reject;
+        }),
+    );
+    const view = render(
+      withProviders(
+        <>
+          <WorkspaceRail onOpenRepositoryModal={() => {}} />
+          <DirtyPreview />
+        </>,
+      ),
+    );
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Edit draft" }));
+      fireEvent.click(screen.getByRole("button", { name: "BETA" }));
+      fireEvent.click(screen.getByText("Discard draft"));
+      await waitFor(() => expect(selectWorkspaceMock).toHaveBeenCalledWith("beta"));
+      expect(screen.getByTestId("draft").textContent).toBe("draft.ts");
+      await act(async () => rejectSelection(new Error("Selection failed")));
+      expect(screen.getByTestId("draft").textContent).toBe("draft.ts");
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test.each(["close", "remove"])("keeps a dirty draft when workspace %s fails", async (action) => {
+    const workspace = workspaceRecord("alpha", { isActive: true });
+    workspaceState.workspaces = [workspace];
+    workspaceState.activeWorkspace = workspace;
+    let rejectAction!: (reason: Error) => void;
+    const run = mock(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectAction = reject;
+        }),
+    );
+    if (action === "close") workspaceState.closeWorkspace = run;
+    else workspaceState.removeWorkspace = run;
+    const view = render(
+      withProviders(
+        <>
+          <WorkspaceRail onOpenRepositoryModal={() => {}} />
+          <DirtyPreview />
+        </>,
+      ),
+    );
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Edit draft" }));
+      fireEvent.contextMenu(screen.getByRole("button", { name: "ALPHA" }));
+      fireEvent.click(
+        await screen.findByRole("menuitem", {
+          name: action === "close" ? "Close workspace" : "Remove workspace",
+        }),
+      );
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: action === "close" ? "Close workspace" : "Remove workspace",
+        }),
+      );
+      expect(run).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByText("Discard draft"));
+      await waitFor(() => expect(run).toHaveBeenCalledTimes(1));
+      expect(screen.getByTestId("draft").textContent).toBe("draft.ts");
+      await act(async () => rejectAction(new Error(`${action} failed`)));
+      await screen.findByText(`${action} failed`);
+      expect(screen.getByTestId("draft").textContent).toBe("draft.ts");
+    } finally {
+      view.unmount();
+    }
   });
 
   test("uses the eye-off icon for the close workspace action", async () => {

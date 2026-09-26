@@ -8,7 +8,7 @@ export type GitConflictActionsModel = {
     label: string;
     onClick: () => void;
   };
-  askBuilder: {
+  askBuilder?: {
     isPending: boolean;
     label: string;
     onClick: () => void;
@@ -26,20 +26,25 @@ export const createGitConflictActionsModel = ({
   isHandlingConflict: boolean;
   conflictAction: GitConflictAction | undefined;
   onAbort: () => void;
-  onAskBuilder: () => void;
-}): GitConflictActionsModel => ({
-  isDisabled: isHandlingConflict,
-  abort: {
-    isPending: conflictAction === "abort",
-    label: conflictAction === "abort" ? "Aborting..." : getGitConflictCopy(operation).abortLabel,
-    onClick: onAbort,
-  },
-  askBuilder: {
-    isPending: conflictAction === "ask_builder",
-    label:
-      conflictAction === "ask_builder"
-        ? "Sending to Builder..."
-        : getGitConflictCopy(operation).askBuilderLabel,
-    onClick: onAskBuilder,
-  },
-});
+  onAskBuilder?: (() => void) | undefined;
+}): GitConflictActionsModel => {
+  const actions: GitConflictActionsModel = {
+    isDisabled: isHandlingConflict,
+    abort: {
+      isPending: conflictAction === "abort",
+      label: conflictAction === "abort" ? "Aborting..." : getGitConflictCopy(operation).abortLabel,
+      onClick: onAbort,
+    },
+  };
+  if (onAskBuilder) {
+    actions.askBuilder = {
+      isPending: conflictAction === "ask_builder",
+      label:
+        conflictAction === "ask_builder"
+          ? "Sending to Builder..."
+          : getGitConflictCopy(operation).askBuilderLabel,
+      onClick: onAskBuilder,
+    };
+  }
+  return actions;
+};

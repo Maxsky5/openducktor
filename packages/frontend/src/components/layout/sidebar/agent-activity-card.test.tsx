@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
+import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
 import { AgentActivityCard } from "./agent-activity-card";
 
 const activeSession = {
@@ -48,11 +49,13 @@ describe("AgentActivityCard", () => {
       createElement(
         MemoryRouter,
         {},
-        createElement(AgentActivityCard, {
-          activeSessionCount: 0,
-          waitingForInputCount: 1,
-          activeSessions: [],
-          waitingForInputSessions: [chat],
+        createElement(WorkspacePreviewTransitionGuardProvider, {
+          children: createElement(AgentActivityCard, {
+            activeSessionCount: 0,
+            waitingForInputCount: 1,
+            activeSessions: [],
+            waitingForInputSessions: [chat],
+          }),
         }),
       ),
     );
@@ -66,11 +69,13 @@ describe("AgentActivityCard", () => {
       createElement(
         MemoryRouter,
         { initialEntries: ["/kanban"] },
-        createElement(AgentActivityCard, {
-          activeSessionCount: 1,
-          waitingForInputCount: 1,
-          activeSessions: [activeSession],
-          waitingForInputSessions: [waitingSession],
+        createElement(WorkspacePreviewTransitionGuardProvider, {
+          children: createElement(AgentActivityCard, {
+            activeSessionCount: 1,
+            waitingForInputCount: 1,
+            activeSessions: [activeSession],
+            waitingForInputSessions: [waitingSession],
+          }),
         }),
       ),
     );
@@ -92,11 +97,13 @@ describe("AgentActivityCard", () => {
       createElement(
         MemoryRouter,
         { initialEntries: ["/kanban"] },
-        createElement(AgentActivityCard, {
-          activeSessionCount: 0,
-          waitingForInputCount: 0,
-          activeSessions: [],
-          waitingForInputSessions: [],
+        createElement(WorkspacePreviewTransitionGuardProvider, {
+          children: createElement(AgentActivityCard, {
+            activeSessionCount: 0,
+            waitingForInputCount: 0,
+            activeSessions: [],
+            waitingForInputSessions: [],
+          }),
         }),
       ),
     );

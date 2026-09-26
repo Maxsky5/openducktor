@@ -16,6 +16,7 @@ import { getDefaultOpenInTool, getOpenInToolLabel } from "./open-in-tool-metadat
 type OpenInMenuProps = {
   contextMode: "repository" | "worktree";
   targetPath: string | null;
+  targetLabel?: string;
   disabledReason: string | null;
   onOpenInTool?: ((toolId: SystemOpenInToolId) => Promise<void>) | undefined;
 };
@@ -23,6 +24,7 @@ type OpenInMenuProps = {
 export function OpenInMenu({
   contextMode,
   targetPath,
+  targetLabel: targetLabelOverride,
   disabledReason,
   onOpenInTool,
 }: OpenInMenuProps): ReactElement {
@@ -33,7 +35,8 @@ export function OpenInMenu({
   const [isRefreshingTools, setIsRefreshingTools] = useState(false);
   const queryClient = useQueryClient();
   const toolsQuery = useQuery(openInToolsQueryOptions());
-  const targetLabel = contextMode === "repository" ? "repository root" : "task worktree";
+  const targetLabel =
+    targetLabelOverride ?? (contextMode === "repository" ? "repository root" : "task worktree");
 
   const defaultTool = getDefaultOpenInTool(toolsQuery.data ?? [], preferredToolId);
   const alternativeTools = useMemo(() => {
