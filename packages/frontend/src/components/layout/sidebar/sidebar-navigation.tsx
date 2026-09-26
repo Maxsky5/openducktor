@@ -92,6 +92,10 @@ export function SidebarNavigation({
         linkTarget,
       })
     ) {
+      setNavigationState({
+        activatedNavigation: { route: linkTarget, sourceLocationKey: currentLocationKey },
+        committedLocationKey: currentLocationKey,
+      });
       if (onBeforeNavigate) {
         event.preventDefault();
         onBeforeNavigate(
@@ -103,10 +107,6 @@ export function SidebarNavigation({
             }),
         );
       }
-      setNavigationState({
-        activatedNavigation: { route: linkTarget, sourceLocationKey: currentLocationKey },
-        committedLocationKey: currentLocationKey,
-      });
     }
   };
 

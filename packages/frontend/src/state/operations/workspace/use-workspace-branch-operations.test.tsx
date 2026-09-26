@@ -3,6 +3,7 @@ import type { GitBranch, GitCurrentBranch } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { filesystemQueryKeys } from "../../queries/filesystem";
 import { gitQueryKeys } from "../../queries/git";
 import { useWorkspaceBranchOperations } from "./use-workspace-branch-operations";
 import { createDeferred, createWorkspaceHostClient, flush } from "./workspace-hook-test-fixtures";
@@ -85,6 +86,43 @@ const createBranchHarness = (initialArgs: BranchHarnessArgs) => {
 };
 
 describe("use-workspace-branch-operations", () => {
+  test("switching the root branch stales only its Git and file reads", async () => {
+    workspaceHost.gitGetCurrentBranch = mock(async () => ({ name: "main", detached: false }));
+    workspaceHost.gitGetBranches = mock(async () => [
+      { name: "main", isCurrent: false, isRemote: false },
+      { name: "feature", isCurrent: true, isRemote: false },
+    ]);
+    workspaceHost.gitSwitchBranch = mock(async () => ({ name: "feature", detached: false }));
+    const harness = createBranchHarness({ activeRepo: "/repo-a" });
+    try {
+      await harness.mount();
+      await harness.run((value) => value.refreshBranches());
+      const client = harness.getQueryClient();
+      const rootGit = gitQueryKeys.comparisonTarget(
+        "/repo-a",
+        "/repo-a",
+        { branch: "@{upstream}" },
+        "main",
+      );
+      const worktreeGit = gitQueryKeys.comparisonTarget(
+        "/repo-a",
+        "/worktree",
+        { branch: "main" },
+        "",
+      );
+      const rootTree = filesystemQueryKeys.tree("/repo-a");
+      for (const key of [rootGit, worktreeGit, rootTree]) client.setQueryData(key, {});
+
+      await harness.run((value) => value.switchBranch("feature"));
+
+      expect(client.getQueryState(rootGit)?.isInvalidated).toBe(true);
+      expect(client.getQueryState(rootTree)?.isInvalidated).toBe(true);
+      expect(client.getQueryState(worktreeGit)?.isInvalidated).toBe(false);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("shows loading only while an uncached first load is pending", async () => {
     const currentBranchDeferred = createDeferred<{ name: string; detached: boolean }>();
     const branchesDeferred = createDeferred<GitBranch[]>();

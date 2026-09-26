@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { render } from "@testing-library/react";
-import { act, type PropsWithChildren, useSyncExternalStore } from "react";
+import { act, type PropsWithChildren, useEffect, useSyncExternalStore } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import {
+  useWorkspacePreviewTransitionGuard,
+  WorkspacePreviewTransitionGuardProvider,
+} from "@/components/layout/workspace-preview-transition-guard";
 import { WorkspaceBranchStateContext } from "@/state/app-state-contexts";
 import type { WorkspaceBranchStateContextValue } from "@/types/state-slices";
 
@@ -102,11 +106,25 @@ const BranchStateProvider = ({ children }: PropsWithChildren) => {
   );
 
   return (
-    <WorkspaceBranchStateContext.Provider value={currentBranchState}>
-      {children}
-    </WorkspaceBranchStateContext.Provider>
+    <WorkspacePreviewTransitionGuardProvider>
+      <WorkspaceBranchStateContext.Provider value={currentBranchState}>
+        {children}
+      </WorkspaceBranchStateContext.Provider>
+    </WorkspacePreviewTransitionGuardProvider>
   );
 };
+
+function DenyBranchSwitch() {
+  const { register } = useWorkspacePreviewTransitionGuard();
+  useEffect(() => register((_apply, cancel) => cancel?.()), [register]);
+  return null;
+}
+
+function HoldBranchSwitch({ onRequest }: { onRequest: (apply: () => void) => void }) {
+  const { register } = useWorkspacePreviewTransitionGuard();
+  useEffect(() => register((apply) => onRequest(apply)), [onRequest, register]);
+  return null;
+}
 
 const renderBranchSwitcherMarkup = (
   BranchSwitcher: typeof import("./branch-switcher").BranchSwitcher,
@@ -262,6 +280,40 @@ describe("BranchSwitcher", () => {
     const html = renderBranchSwitcherMarkup(BranchSwitcher);
 
     expect(html).toContain('data-branch-value="feature/desloppify"');
+  });
+
+  test("keeps the current branch when the preview guard cancels", async () => {
+    const BranchSwitcher = await importBranchSwitcher();
+    const rendered = render(
+      <BranchStateProvider>
+        <DenyBranchSwitch />
+        <BranchSwitcher />
+      </BranchStateProvider>,
+    );
+
+    await act(async () => latestOnValueChange?.("feature"));
+
+    expect(switchBranch).not.toHaveBeenCalled();
+    expect(rendered.container.innerHTML).toContain('data-branch-value="main"');
+    rendered.unmount();
+  });
+
+  test("waits for the preview guard before switching branches", async () => {
+    const BranchSwitcher = await importBranchSwitcher();
+    let applySwitch: (() => void) | null = null;
+    const rendered = render(
+      <BranchStateProvider>
+        <HoldBranchSwitch onRequest={(apply) => (applySwitch = apply)} />
+        <BranchSwitcher />
+      </BranchStateProvider>,
+    );
+
+    await act(async () => latestOnValueChange?.("feature"));
+    expect(switchBranch).not.toHaveBeenCalled();
+    expect(applySwitch).not.toBeNull();
+    await act(async () => applySwitch?.());
+    expect(switchBranch).toHaveBeenCalledWith("feature");
+    rendered.unmount();
   });
 
   test("clears pending branch state after a successful switch completes", async () => {

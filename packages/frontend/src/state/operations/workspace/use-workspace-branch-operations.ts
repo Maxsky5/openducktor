@@ -3,10 +3,12 @@ import { CancelledError, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
+import { invalidateWorkspaceFileQueries } from "../../queries/filesystem";
 import {
   currentBranchQueryOptions,
   gitQueryKeys,
   invalidateCurrentBranchQuery,
+  invalidateGitWorkingDirectoryQueries,
   invalidateRepoBranchesQuery,
   loadCurrentBranchFromQuery,
   loadRepoBranchesFromQuery,
@@ -216,6 +218,10 @@ export function useWorkspaceBranchOperations({
         }
 
         queryClient.setQueryData(gitQueryKeys.currentBranch(repoPath), current);
+        await Promise.all([
+          invalidateGitWorkingDirectoryQueries(queryClient, repoPath, repoPath),
+          invalidateWorkspaceFileQueries(queryClient, repoPath),
+        ]);
         if (currentWorkspaceRepoPathRef.current === repoPath) {
           updateBranchSyncDegradedForRepo(repoPath, false);
         }

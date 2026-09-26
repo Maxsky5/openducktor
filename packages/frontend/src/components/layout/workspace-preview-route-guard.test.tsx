@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
-import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
+import { createMemoryRouter, Outlet, RouterProvider, useNavigate } from "react-router";
 import { useTaskExecutionFilePreviewController } from "@/components/features/agents/file-preview/use-task-execution-file-preview-controller";
 import {
   useWorkspacePreviewTransitionGuard,
@@ -10,7 +10,8 @@ import {
 } from "./workspace-preview-transition-guard";
 
 function PreviewPage() {
-  const { register } = useWorkspacePreviewTransitionGuard();
+  const { register, run } = useWorkspacePreviewTransitionGuard();
+  const navigate = useNavigate();
   const preview = useTaskExecutionFilePreviewController({
     rootPath: "/repo",
     relativePath: "draft.txt",
@@ -30,6 +31,9 @@ function PreviewPage() {
       </button>
       <button type="button" onClick={() => preview.model.onLeavePolicyChange("allow")}>
         Finish save
+      </button>
+      <button type="button" onClick={() => run(() => navigate("/kanban"))}>
+        Open Kanban
       </button>
       {preview.model.hasPendingDiscard ? (
         <div role="dialog" aria-label="Unsaved edits">
@@ -80,6 +84,32 @@ test("history exit keeps a dirty preview when editing continues and leaves after
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Unsaved edits" })).toBeNull());
     expect(view.router.state.location.pathname).toBe("/chats");
 
+    void view.router.navigate(-1);
+    await screen.findByRole("dialog", { name: "Unsaved edits" });
+    fireEvent.click(screen.getByRole("button", { name: "Discard edits" }));
+    await screen.findByText("Kanban page");
+  } finally {
+    view.unmount();
+    view.router.dispose();
+  }
+});
+
+test("a guarded click replaces a blocked history exit", async () => {
+  const view = renderHistoryExit();
+  try {
+    fireEvent.click(screen.getByRole("button", { name: "Make dirty" }));
+    void view.router.navigate(-1);
+    await screen.findByRole("dialog", { name: "Unsaved edits" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Kanban" }));
+    fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+
+    await waitFor(() =>
+      expect(
+        [...view.router.state.blockers.values()].some((blocker) => blocker.state === "blocked"),
+      ).toBe(false),
+    );
+    expect(view.router.state.location.pathname).toBe("/chats");
     void view.router.navigate(-1);
     await screen.findByRole("dialog", { name: "Unsaved edits" });
     fireEvent.click(screen.getByRole("button", { name: "Discard edits" }));

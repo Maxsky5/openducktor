@@ -1508,6 +1508,7 @@ describe("AgentStudioGitPanel", () => {
     const dialog = findByTestId(root, "agent-studio-git-conflict-modal");
     expect(countByTestId(root, "agent-studio-git-ask-builder-conflict-button")).toBe(0);
     expect(getNodeText(dialog)).not.toContain("Builder");
+    expect(getNodeText(dialog)).toContain("Abort the git operation.");
     expect(
       Boolean(findByTestId(root, "agent-studio-git-abort-conflict-button").props.disabled),
     ).toBe(false);

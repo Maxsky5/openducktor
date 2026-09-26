@@ -32,9 +32,8 @@ const toConflictDescription = (conflict: GitConflict, showBuilderAction: boolean
     <>
       The {operationLabel} onto{" "}
       <code className={INLINE_CODE_CLASS_NAME}>{conflict.targetBranch}</code> stopped on conflicts.
-      {showBuilderAction
-        ? " Abort the git operation or send the conflict to Builder for resolution."
-        : null}
+      {" Abort the git operation"}
+      {showBuilderAction ? " or send the conflict to Builder for resolution." : "."}
     </>
   );
 };

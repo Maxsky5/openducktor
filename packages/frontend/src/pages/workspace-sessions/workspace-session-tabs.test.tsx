@@ -13,6 +13,7 @@ import {
   ActiveWorkspaceContext,
   AgentSessionReadModelStateContext,
   AgentSessionsContext,
+  WorkspaceBranchStateContext,
 } from "@/state/app-state-contexts";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import {
@@ -445,9 +446,21 @@ function renderTabs(
               }}
             >
               <AgentSessionsContext value={store}>
-                <WorkspacePreviewTransitionGuardProvider>
-                  <WorkspaceSessions workspace={workspace} />
-                </WorkspacePreviewTransitionGuardProvider>
+                <WorkspaceBranchStateContext.Provider
+                  value={{
+                    activeWorkspace: null,
+                    branches: [],
+                    activeBranch: { name: "main", detached: false },
+                    isLoadingBranches: false,
+                    isSwitchingBranch: false,
+                    branchSyncDegraded: false,
+                    switchBranch: async () => {},
+                  }}
+                >
+                  <WorkspacePreviewTransitionGuardProvider>
+                    <WorkspaceSessions workspace={workspace} />
+                  </WorkspacePreviewTransitionGuardProvider>
+                </WorkspaceBranchStateContext.Provider>
               </AgentSessionsContext>
             </AgentSessionReadModelStateContext>
           </ActiveWorkspaceContext>

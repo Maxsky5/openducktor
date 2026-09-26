@@ -6,7 +6,7 @@ import type {
   WorkspaceFileTree,
 } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { createQueryClient } from "@/lib/query-client";
@@ -53,13 +53,14 @@ function worktreeSummary(targetBranch: string): GitWorktreeStatusSummary {
   };
 }
 
-function PanelHarness() {
+function PanelHarness({ branchKey = "feature" }: { branchKey?: string }) {
   const [activeTabId, setActiveTabId] = useState<WorkspaceToolsTabId>("git");
   return (
     <WorkspaceSessionToolsPanel
       repoPath="/repo"
       workingDirectory="/repo"
       contextMode="repository"
+      branchKey={branchKey}
       target={{ branch: "@{upstream}" }}
       targetError={null}
       activeTabId={activeTabId}
@@ -70,6 +71,174 @@ function PanelHarness() {
     />
   );
 }
+
+test("waits for the comparison target before reading Git status", async () => {
+  let finishComparison!: (value: GitComparisonTarget) => void;
+  const comparison = mock(
+    () => new Promise<GitComparisonTarget>((resolve) => (finishComparison = resolve)),
+  );
+  const statusTargets: string[] = [];
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        gitGetComparisonTarget: comparison,
+        gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) => {
+          statusTargets.push(targetBranch);
+          return worktreeStatus(targetBranch);
+        },
+        gitGetWorktreeStatusSummary: async (_repoPath: string, targetBranch: string) =>
+          worktreeSummary(targetBranch),
+        gitGetBranches: async () => [],
+      },
+    }),
+  );
+  const queryClient = createQueryClient();
+  const view = render(
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <PanelHarness />
+      </ThemeProvider>
+    </QueryClientProvider>,
+  );
+  try {
+    await waitFor(() => expect(comparison).toHaveBeenCalledTimes(1));
+    expect(statusTargets).toEqual([]);
+    await act(async () => finishComparison({ kind: "available", reference: targetReference }));
+    await waitFor(() => expect(statusTargets).toContain(targetReference));
+    expect(statusTargets).not.toContain("HEAD");
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
+test("rechecks a root chat target when its branch changes", async () => {
+  let hasUpstream = true;
+  const comparison = mock(async (): Promise<GitComparisonTarget> =>
+    hasUpstream
+      ? { kind: "available", reference: "@{upstream}" }
+      : { kind: "unavailable", reason: "No tracked upstream." },
+  );
+  const statusTargets: string[] = [];
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        gitGetComparisonTarget: comparison,
+        gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) => {
+          statusTargets.push(targetBranch);
+          return worktreeStatus(targetBranch);
+        },
+        gitGetWorktreeStatusSummary: async (_repoPath: string, targetBranch: string) =>
+          worktreeSummary(targetBranch),
+        gitGetBranches: async () => [],
+      },
+    }),
+  );
+  const queryClient = createQueryClient();
+  const panel = (branchKey: string) => (
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <PanelHarness branchKey={branchKey} />
+      </ThemeProvider>
+    </QueryClientProvider>
+  );
+  const view = render(panel("first"));
+  try {
+    await waitFor(() => expect(statusTargets).toContain("@{upstream}"));
+    hasUpstream = false;
+    act(() => view.rerender(panel("second")));
+    await screen.findByText("No tracked upstream.");
+    await waitFor(() => expect(statusTargets).toContain("HEAD"));
+    expect(comparison).toHaveBeenCalledTimes(2);
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
+test("manual refresh fetches before it reloads Git changes", async () => {
+  const calls: string[] = [];
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        gitGetComparisonTarget: async () => ({ kind: "available", reference: targetReference }),
+        gitFetchRemote: async () => {
+          calls.push("fetch");
+          return { outcome: "skipped_no_remote", output: "" };
+        },
+        gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) => {
+          calls.push(`status:${targetBranch}`);
+          return worktreeStatus(targetBranch);
+        },
+        gitGetWorktreeStatusSummary: async (_repoPath: string, targetBranch: string) =>
+          worktreeSummary(targetBranch),
+        gitGetBranches: async () => [],
+      },
+    }),
+  );
+  const queryClient = createQueryClient();
+  const view = render(
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <PanelHarness />
+      </ThemeProvider>
+    </QueryClientProvider>,
+  );
+  try {
+    await waitFor(() => expect(calls).toContain(`status:${targetReference}`));
+    calls.length = 0;
+    fireEvent.click(screen.getByTestId("agent-studio-git-refresh-button"));
+    await waitFor(() => expect(calls).toContain("fetch"));
+    await waitFor(() => expect(calls).toContain(`status:${targetReference}`));
+    expect(calls.indexOf("fetch")).toBeLessThan(calls.indexOf(`status:${targetReference}`));
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
+test("returning to the app rechecks the target and file tree", async () => {
+  const comparison = mock(async (): Promise<GitComparisonTarget> => ({
+    kind: "available",
+    reference: targetReference,
+  }));
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        gitGetComparisonTarget: comparison,
+        gitFetchRemote: async () => ({ outcome: "skipped_no_remote", output: "" }),
+        gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) =>
+          worktreeStatus(targetBranch),
+        gitGetWorktreeStatusSummary: async (_repoPath: string, targetBranch: string) =>
+          worktreeSummary(targetBranch),
+        gitGetBranches: async () => [],
+      },
+    }),
+  );
+  const queryClient = createQueryClient();
+  const treeKey = filesystemQueryKeys.tree("/repo", targetReference);
+  queryClient.setQueryData(treeKey, { rootPath: "/repo", entries: [] });
+  const view = render(
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <PanelHarness />
+      </ThemeProvider>
+    </QueryClientProvider>,
+  );
+  try {
+    await waitFor(() => expect(comparison).toHaveBeenCalledTimes(1));
+    act(() => globalThis.dispatchEvent(new Event("focus")));
+    await waitFor(() => expect(comparison.mock.calls.length).toBeGreaterThan(1));
+    await waitFor(() => expect(queryClient.getQueryState(treeKey)?.isInvalidated).toBe(true));
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
 
 test("refresh recovers local Git and file reads when the comparison target disappears", async () => {
   let targetAvailable = true;

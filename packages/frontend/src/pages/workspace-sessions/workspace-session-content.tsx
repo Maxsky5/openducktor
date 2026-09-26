@@ -11,10 +11,10 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import { Button } from "@/components/ui/button";
 import { TabsContent } from "@/components/ui/tabs";
 import { errorMessage } from "@/lib/errors";
-import { useAgentSessionReadModelState } from "@/state/app-state-provider";
+import { useAgentSessionReadModelState, useWorkspaceBranchState } from "@/state/app-state-provider";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { repoConfigQueryOptions } from "@/state/queries/workspace";
-import { gitQueryKeys } from "@/state/queries/git";
+import { invalidateGitWorkingDirectoryQueries } from "@/state/queries/git";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { WorkspaceSessionChat } from "./workspace-session-chat";
 import { WorkspaceSessionHeader } from "./workspace-session-header";
@@ -29,9 +29,11 @@ export type WorkspaceSessionPanelState = {
 function WorkspaceSessionChatPane({
   workspace,
   record,
+  onToolRefresh,
 }: {
   workspace: ActiveWorkspace;
   record: WorkspaceSession;
+  onToolRefresh: () => void;
 }) {
   const settings = useQuery(settingsSnapshotQueryOptions());
   if (settings.isPending)
@@ -53,6 +55,7 @@ function WorkspaceSessionChatPane({
       record={record}
       chatSettings={settings.data.chat}
       reusablePrompts={settings.data.reusablePrompts}
+      onToolRefresh={onToolRefresh}
     />
   );
 }
@@ -69,11 +72,13 @@ function sessionWorkingDirectory(
 function WorkspaceSessionMainContent({
   workspace,
   record,
+  onToolRefresh,
   previewContent,
   hasSelectedFile,
 }: {
   workspace: ActiveWorkspace;
   record: WorkspaceSession;
+  onToolRefresh: () => void;
   previewContent: ReactNode;
   hasSelectedFile: boolean;
 }) {
@@ -92,7 +97,11 @@ function WorkspaceSessionMainContent({
         style={{ visibility: hasSelectedFile ? "hidden" : undefined }}
         inert={hasSelectedFile}
       >
-        <WorkspaceSessionChatPane workspace={workspace} record={record} />
+        <WorkspaceSessionChatPane
+          workspace={workspace}
+          record={record}
+          onToolRefresh={onToolRefresh}
+        />
       </div>
     </div>
   );
@@ -157,6 +166,7 @@ export function WorkspaceSessionContent({
   panelState: WorkspaceSessionPanelState;
   onPanelStateChange: (update: Partial<WorkspaceSessionPanelState>) => void;
 }) {
+  const { activeBranch } = useWorkspaceBranchState();
   const repoConfig = useQuery(repoConfigQueryOptions(workspace.workspaceId));
   const queryClient = useQueryClient();
   const onSelectionChange = useCallback(
@@ -177,6 +187,10 @@ export function WorkspaceSessionContent({
     return () => media.removeEventListener("change", updateLayout);
   }, []);
   const workingDirectory = sessionWorkingDirectory(workspace, record);
+  const branchKey =
+    record.executionTarget.kind === "local_repo_root"
+      ? (activeBranch?.name ?? (activeBranch?.detached ? "detached" : "unknown"))
+      : "";
   const target: GitTargetBranch | null =
     record.executionTarget.kind === "local_repo_root"
       ? { branch: "@{upstream}" }
@@ -189,20 +203,18 @@ export function WorkspaceSessionContent({
     refreshRef.current = refresh;
   }, []);
   const onFileSaved = useCallback(() => {
-    void queryClient.invalidateQueries({
-      queryKey: gitQueryKeys.all,
-      predicate: (query) => query.queryKey.includes(workingDirectory),
-      refetchType: "none",
-    });
+    if (workingDirectory) {
+      void invalidateGitWorkingDirectoryQueries(queryClient, workspace.repoPath, workingDirectory);
+    }
     void refreshRef.current?.();
-  }, [queryClient, workingDirectory]);
+  }, [queryClient, workingDirectory, workspace.repoPath]);
   const onSelectFile = useCallback(
     (file: TaskExecutionSelectedFile) => preview.onSelectFile(file),
     [preview],
   );
   const previewContent = (
     <TaskExecutionSelectedFilePreview
-      key={preview.model.previewSessionKey}
+      key={`${preview.model.previewSessionKey}:${branchKey}`}
       model={{
         ...preview.model,
         onDiscard,
@@ -214,6 +226,7 @@ export function WorkspaceSessionContent({
     <WorkspaceSessionMainContent
       workspace={workspace}
       record={record}
+      onToolRefresh={onFileSaved}
       previewContent={previewContent}
       hasSelectedFile={Boolean(preview.model.selectedFile)}
     />
@@ -223,6 +236,7 @@ export function WorkspaceSessionContent({
       repoPath={workspace.repoPath}
       workingDirectory={workingDirectory}
       contextMode={record.executionTarget.kind === "local_repo_root" ? "repository" : "worktree"}
+      branchKey={branchKey}
       target={target}
       targetError={targetError}
       activeTabId={panelState.activeTabId}

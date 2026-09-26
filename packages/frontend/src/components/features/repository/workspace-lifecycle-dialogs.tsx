@@ -1,6 +1,6 @@
 import type { IncompleteWorkspaceRemoval, WorkspaceRecord } from "@openducktor/contracts";
 import { EyeOff, FolderGit2, Loader2, Trash2, type LucideIcon } from "lucide-react";
-import { type ReactElement, type ReactNode, useState } from "react";
+import { type ReactElement, type ReactNode, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -93,25 +93,45 @@ function LifecycleDialog({
   requestTransition,
   children,
 }: LifecycleDialogProps): ReactElement {
+  const [waiting, setWaiting] = useState(false);
+  const waitingRef = useRef(false);
+  const busy = submitting || waiting;
   const confirm = () => {
-    if (requestTransition) requestTransition(() => void onConfirm(), onCancel);
-    else void onConfirm();
+    if (submitting || waitingRef.current) return;
+    if (!requestTransition) {
+      void onConfirm();
+      return;
+    }
+    waitingRef.current = true;
+    setWaiting(true);
+    requestTransition(
+      () => {
+        waitingRef.current = false;
+        setWaiting(false);
+        void onConfirm();
+      },
+      () => {
+        waitingRef.current = false;
+        setWaiting(false);
+        onCancel();
+      },
+    );
   };
   return (
     <Dialog
       open
       onOpenChange={(nextOpen) => {
-        if (!submitting && !nextOpen) onCancel();
+        if (!busy && !nextOpen) onCancel();
       }}
     >
       <DialogContent
         className="max-w-lg"
-        {...(submitting ? { closeButton: null } : {})}
+        {...(busy ? { closeButton: null } : {})}
         onEscapeKeyDown={(event) => {
-          if (submitting) event.preventDefault();
+          if (busy) event.preventDefault();
         }}
         onPointerDownOutside={(event) => {
-          if (submitting) event.preventDefault();
+          if (busy) event.preventDefault();
         }}
       >
         <DialogHeader>
@@ -119,7 +139,9 @@ function LifecycleDialog({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <DialogBody className="flex flex-col gap-3 py-4 text-sm text-muted-foreground">
-          {children}
+          <fieldset disabled={busy} className="flex min-w-0 flex-col gap-3">
+            {children}
+          </fieldset>
           {error ? (
             <p className="text-destructive-muted" role="alert">
               {error}
@@ -127,14 +149,14 @@ function LifecycleDialog({
           ) : null}
         </DialogBody>
         <DialogFooter className="mt-0 flex flex-row justify-between gap-2 border-t border-border pt-5">
-          <Button type="button" variant="outline" disabled={submitting} onClick={onCancel}>
+          <Button type="button" variant="outline" disabled={busy} onClick={onCancel}>
             Cancel
           </Button>
           <Button
             type="button"
             variant={destructive ? "destructive" : "default"}
-            disabled={submitting}
-            aria-busy={submitting}
+            disabled={busy}
+            aria-busy={busy}
             onClick={confirm}
           >
             {submitting ? (
@@ -142,7 +164,7 @@ function LifecycleDialog({
             ) : (
               <ActionIcon data-icon="inline-start" />
             )}
-            {submitting ? pendingActionLabel : actionLabel}
+            {submitting ? pendingActionLabel : waiting ? "Waiting for file choice..." : actionLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

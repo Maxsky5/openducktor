@@ -23,7 +23,12 @@ export const gitQueryKeys = {
   canonicalPath: (path: string) => [...gitQueryKeys.all, "canonical-path", path] as const,
   branches: (repoPath: string) => [...gitQueryKeys.all, "branches", repoPath] as const,
   currentBranch: (repoPath: string) => [...gitQueryKeys.all, "current-branch", repoPath] as const,
-  comparisonTarget: (repoPath: string, workingDir: string, target: GitTargetBranch) =>
+  comparisonTarget: (
+    repoPath: string,
+    workingDir: string,
+    target: GitTargetBranch,
+    branchKey: string,
+  ) =>
     [
       ...gitQueryKeys.all,
       "comparison-target",
@@ -31,6 +36,7 @@ export const gitQueryKeys = {
       workingDir,
       target.remote ?? "",
       target.branch,
+      branchKey,
     ] as const,
   worktreeStatus: (
     repoPath: string,
@@ -96,13 +102,33 @@ export const gitComparisonTargetQueryOptions = (
   repoPath: string,
   workingDir: string,
   target: GitTargetBranch,
+  branchKey: string,
   hostClient: GitComparisonTargetQueryHost = host,
 ) =>
   queryOptions({
-    queryKey: gitQueryKeys.comparisonTarget(repoPath, workingDir, target),
+    queryKey: gitQueryKeys.comparisonTarget(repoPath, workingDir, target, branchKey),
     queryFn: (): Promise<GitComparisonTarget> =>
       hostClient.gitGetComparisonTarget(repoPath, workingDir, target),
     staleTime: 0,
+  });
+
+export const invalidateGitWorkingDirectoryQueries = (
+  queryClient: QueryClient,
+  repoPath: string,
+  workingDir: string,
+): Promise<void> =>
+  queryClient.invalidateQueries({
+    queryKey: gitQueryKeys.all,
+    predicate: (query) => {
+      const key = query.queryKey;
+      if (key[2] !== repoPath) return false;
+      if (key[1] === "comparison-target") return key[3] === workingDir;
+      if (key[1] === "worktree-status" || key[1] === "worktree-status-summary") {
+        return key[5] === workingDir;
+      }
+      return false;
+    },
+    refetchType: "none",
   });
 
 const worktreeStatusQueryOptions = (
