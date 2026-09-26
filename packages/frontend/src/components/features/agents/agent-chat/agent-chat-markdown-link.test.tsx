@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, test, mock } from "bun:test";
 import { fireEvent, render, waitFor } from "@testing-library/react";
+import { act } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { CHAT_MARKDOWN_LINK_POLICY } from "./agent-chat-markdown-link-policy";
@@ -61,13 +62,16 @@ describe("chat Markdown links", () => {
 
   test("keeps file links active beside a blocked task asset in chat", async () => {
     const open = mock<(href: string, trigger: HTMLAnchorElement) => void>(() => {});
-    const view = render(
-      <ChatFileLinkContext value={open}>
-        <AgentChatMarkdownRenderer markdown="[file](src/a.ts)\n\n![asset](odt-asset://example)" />
-      </ChatFileLinkContext>,
-    );
+    let view!: ReturnType<typeof render>;
+    await act(async () => {
+      view = render(
+        <ChatFileLinkContext value={open}>
+          <AgentChatMarkdownRenderer markdown="[file](src/a.ts)\n\n![asset](odt-asset://example)" />
+        </ChatFileLinkContext>,
+      );
+    });
     try {
-      const link = await view.findByRole("link", { name: "file" });
+      const link = view.getByRole("link", { name: "file" });
       expect(view.getByRole("alert").textContent).toContain("task asset reference is invalid");
       expect(view.queryByRole("img")).toBeNull();
       fireEvent.click(link);
@@ -80,17 +84,19 @@ describe("chat Markdown links", () => {
 
   test("premium content forwards the policy", async () => {
     const open = mock<(href: string, trigger: HTMLAnchorElement) => void>(() => {});
-    const view = render(
-      <ChatFileLinkContext value={open}>
-        <MarkdownRenderer
-          markdown="[file](file:///repo/a.ts:42)"
-          premiumCodeBlocks
-          linkPolicy={CHAT_MARKDOWN_LINK_POLICY}
-        />
-      </ChatFileLinkContext>,
-    );
+    let view!: ReturnType<typeof render>;
+    await act(async () => {
+      view = render(
+        <ChatFileLinkContext value={open}>
+          <MarkdownRenderer
+            markdown="[file](file:///repo/a.ts:42)"
+            premiumCodeBlocks
+            linkPolicy={CHAT_MARKDOWN_LINK_POLICY}
+          />
+        </ChatFileLinkContext>,
+      );
+    });
     try {
-      await waitFor(() => expect(view.getByRole("link")).toBeTruthy());
       fireEvent.click(view.getByRole("link"));
       expect(open.mock.calls.at(-1)?.[0]).toBe("file:///repo/a.ts:42");
     } finally {
