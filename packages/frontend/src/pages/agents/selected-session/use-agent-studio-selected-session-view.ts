@@ -223,6 +223,7 @@ export function useAgentStudioSelectedSessionView({
 
   const runtimeData = useSessionRuntimeData({
     repoPath: workspaceRepoPath,
+    sessionState: loadedSession,
     selectedSession: toSessionRuntimeDataTarget(
       loadedSession,
       selectedSessionIdentity,

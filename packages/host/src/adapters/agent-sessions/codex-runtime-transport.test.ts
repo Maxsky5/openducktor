@@ -1,5 +1,11 @@
 import { expect, mock, test } from "bun:test";
-import { AgentRuntimeQueryError } from "@openducktor/core";
+import { CodexAppServerAdapter } from "@openducktor/adapters-codex-app-server";
+import {
+  CODEX_RUNTIME_DESCRIPTOR,
+  DEFAULT_CODEX_RUNTIME_POLICY,
+  type CodexAppServerThread,
+} from "@openducktor/contracts";
+import { AgentRuntimeQueryError, workflowAgentSessionScope } from "@openducktor/core";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import { CodexSessionHistoryError } from "../../ports/codex-session-history-error";
@@ -137,4 +143,179 @@ test("keeps a Codex RPC error isolated to the calling surface", async () => {
   const transport = createTransportWithRequest(() => Effect.fail(rpcError));
 
   await expect(transport.request({ method: "model/list", params: {} })).rejects.toBe(rpcError);
+});
+
+test("fresh history and todos accept the host-wrapped empty rollout error", async () => {
+  const runtimeId = "runtime-live";
+  const threadId = "thread/start-runtime-live";
+  const thread: CodexAppServerThread = {
+    id: threadId,
+    extra: null,
+    sessionId: threadId,
+    forkedFromId: null,
+    parentThreadId: null,
+    preview: "",
+    ephemeral: false,
+    section: null,
+    sectionEnteredAt: null,
+    projectId: null,
+    historyMode: "paginated",
+    modelProvider: "openai",
+    createdAt: 1_778_112_000,
+    updatedAt: 1_778_112_000,
+    recencyAt: 1_778_112_000,
+    status: { type: "active", activeFlags: [] },
+    path: null,
+    cwd: "/repo",
+    cliVersion: "0.156.0-test",
+    source: "appServer",
+    canAcceptDirectInput: true,
+    threadSource: null,
+    agentNickname: null,
+    agentRole: null,
+    gitInfo: null,
+    name: null,
+    turns: [],
+  };
+  const scope = workflowAgentSessionScope("task-1", "build");
+  const runtimePolicy = {
+    kind: "codex" as const,
+    policy: { ...DEFAULT_CODEX_RUNTIME_POLICY, approvalsReviewerApplies: true },
+  };
+  const ref = {
+    repoPath: "/repo",
+    runtimeKind: "codex" as const,
+    workingDirectory: "/repo",
+    externalSessionId: threadId,
+    sessionScope: scope,
+    runtimePolicy,
+  };
+  const nativeMethods: string[] = [];
+  const registry = createCodexAppServerTransportRegistry();
+  let turnsFail = true;
+  const rawError = new HostOperationError({
+    operation: "codexAppServerTransport.request.thread/turns/list",
+    message: "Codex app-server request thread/turns/list failed",
+    cause: {
+      code: -32603,
+      message:
+        "failed to read thread: thread-store internal error: failed to read session metadata /repo/rollout.jsonl: thread-store internal error: failed to read session metadata /repo/rollout.jsonl: rollout at /repo/rollout.jsonl is empty",
+    },
+    details: { method: "thread/turns/list" },
+  });
+  registry.registerTransport(runtimeId, {
+    request: (input) => {
+      nativeMethods.push(input.method);
+      if (input.method === "thread/turns/list" && turnsFail) return Effect.fail(rawError);
+      if (input.method === "initialize") {
+        return Effect.succeed({
+          codexHome: "/tmp/codex-home",
+          platformFamily: "unix",
+          platformOs: "macos",
+          userAgent: "codex_cli_rs/0.156.0-test",
+        });
+      }
+      if (input.method === "model/list") {
+        return Effect.succeed({
+          data: [
+            {
+              id: "gpt-5",
+              additionalSpeedTiers: [],
+              availabilityNux: null,
+              model: "gpt-5",
+              displayName: "GPT-5",
+              description: "GPT-5 model",
+              hidden: false,
+              supportedReasoningEfforts: [
+                { reasoningEffort: "medium", description: "Balanced reasoning" },
+              ],
+              defaultReasoningEffort: "medium",
+              defaultServiceTier: null,
+              inputModalities: ["text"],
+              modelSpecialty: null,
+              multiAgentVersion: null,
+              serviceTiers: [],
+              supportsPersonality: true,
+              isDefault: true,
+              upgrade: null,
+              upgradeInfo: null,
+            },
+          ],
+          nextCursor: null,
+        });
+      }
+      if (input.method === "thread/start") {
+        return Effect.succeed({
+          approvalPolicy: "on-request",
+          approvalsReviewer: "user",
+          activePermissionProfile: null,
+          cwd: "/repo",
+          instructionSources: [],
+          model: "gpt-5",
+          modelProvider: "openai",
+          multiAgentMode: "explicitRequestOnly",
+          reasoningEffort: "medium",
+          runtimeWorkspaceRoots: ["/repo"],
+          sandbox: {
+            type: "workspaceWrite",
+            excludeSlashTmp: false,
+            excludeTmpdirEnvVar: false,
+            networkAccess: false,
+            writableRoots: ["/repo"],
+          },
+          serviceTier: null,
+          thread,
+        });
+      }
+      if (input.method === "thread/read") return Effect.succeed({ thread });
+      if (input.method === "thread/name/set") return Effect.succeed({});
+      if (input.method === "thread/turns/list") {
+        return Effect.succeed({ data: [], nextCursor: null, backwardsCursor: null });
+      }
+      return Effect.dieMessage(`Unexpected native request ${input.method}`);
+    },
+    respond: () => Effect.succeed(undefined),
+  });
+  const adapter = new CodexAppServerAdapter({
+    repoRuntimeResolver: {
+      requireRepoRuntime: async () => ({
+        kind: "codex",
+        runtimeId,
+        repoPath: "/repo",
+        taskId: null,
+        role: "workspace",
+        workingDirectory: "/repo",
+        runtimeRoute: { type: "stdio", identity: runtimeId },
+        startedAt: "2026-05-07T00:00:00.000Z",
+        descriptor: CODEX_RUNTIME_DESCRIPTOR,
+      }),
+    },
+    transportFactory: () => createCodexRuntimeTransport(registry, runtimeId),
+    subscribeEvents: () => () => {},
+    respondServerRequest: async () => {},
+    onRuntimeEventQueueFailure: () => undefined,
+  });
+
+  await adapter.startSession({
+    ...ref,
+    systemPrompt: "Use the repo rules.",
+    model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+  });
+  await expect(adapter.loadSessionHistory(ref)).resolves.toEqual([
+    expect.objectContaining({ role: "system" }),
+  ]);
+  await expect(adapter.loadSessionTodos(ref)).resolves.toEqual([]);
+  expect(nativeMethods.filter((method) => method === "thread/read")).toHaveLength(2);
+
+  turnsFail = false;
+  await adapter.loadSessionHistory(ref);
+  turnsFail = true;
+  const failure = await adapter.loadSessionHistory(ref).catch((cause) => cause);
+  expect(failure).toBeInstanceOf(CodexSessionHistoryError);
+  expect(failure.cause).toBe(rawError);
+  expect(failure.failure).toMatchObject({
+    code: "request_failed",
+    method: "thread/turns/list",
+    diagnosticId: expect.any(String),
+  });
 });

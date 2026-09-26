@@ -91,8 +91,22 @@ const codexRpcErrorSchema = z.object({
   details: z.object({ method: z.string() }),
 });
 
-export const isCodexEmptyRolloutError = (cause: unknown): boolean => {
-  const parsed = codexRpcErrorSchema.safeParse(cause);
+const hostHistoryErrorSchema = z.object({
+  _tag: z.literal("CodexSessionHistoryError"),
+  threadId: z.string(),
+  failure: z.object({
+    code: z.literal("request_failed"),
+    diagnosticId: z.string().min(1),
+    method: z.literal("thread/turns/list"),
+  }),
+  cause: codexRpcErrorSchema,
+});
+
+export const isCodexEmptyRolloutError = (cause: unknown, threadId: string): boolean => {
+  const wrapped = hostHistoryErrorSchema.safeParse(cause);
+  const nativeCause =
+    wrapped.success && wrapped.data.threadId === threadId ? wrapped.data.cause : cause;
+  const parsed = codexRpcErrorSchema.safeParse(nativeCause);
   if (
     !parsed.success ||
     !["thread/read", "thread/turns/list"].includes(parsed.data.details.method) ||

@@ -230,7 +230,7 @@ export class CodexThreadInventoryReader {
       onThreadRead?.();
     } catch (error) {
       let emptyThreadCwd: string | undefined;
-      if (isCodexEmptyRolloutError(error)) {
+      if (isCodexEmptyRolloutError(error, threadId)) {
         emptyThreadCwd = getFreshThreadCwd?.();
       } else if (isCodexUnmaterializedThreadError(error)) {
         emptyThreadCwd = localThreadCwd;

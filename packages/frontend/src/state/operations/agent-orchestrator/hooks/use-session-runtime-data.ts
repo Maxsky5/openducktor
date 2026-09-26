@@ -24,6 +24,8 @@ import {
   type SelectedSessionRuntimeData,
 } from "@/types/selected-session-runtime-data";
 import type { SessionRuntimeDataTarget } from "../support/session-runtime-data-refs";
+import { isMatchingFreshCodexSessionAwaitingKickoff } from "../support/fresh-codex-session";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { resolveSessionRuntimeDataRefs } from "../support/session-runtime-data-refs";
 import {
   resolveAgentSessionRuntimePolicyFromSnapshot,
@@ -34,6 +36,7 @@ import { resolveSessionRuntimeScope } from "../support/session-runtime-scope";
 type UseSessionRuntimeDataArgs = {
   repoPath: string | null;
   selectedSession: SessionRuntimeDataTarget | null;
+  sessionState?: AgentSessionState | null;
   runtimeDefinitions: RuntimeDescriptor[];
   repoReadinessState: RepoRuntimeReadinessState;
   loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
@@ -43,6 +46,7 @@ type UseSessionRuntimeDataArgs = {
 export const useSessionRuntimeData = ({
   repoPath,
   selectedSession,
+  sessionState,
   runtimeDefinitions,
   repoReadinessState,
   loadRuntimeCatalog,
@@ -143,6 +147,10 @@ export const useSessionRuntimeData = ({
   const isRuntimeReady = repoReadinessState === "ready";
   const catalogRef = runtimeDataRefs.kind === "available" ? runtimeDataRefs.catalogRef : null;
   const todosRef = runtimeDataRefs.kind === "available" ? runtimeDataRefs.todosRef : null;
+  const ownsFreshCodexEmptyState = isMatchingFreshCodexSessionAwaitingKickoff(
+    sessionState,
+    selectedSession?.identity,
+  );
 
   const catalogQuery = useQuery({
     ...(catalogRef
@@ -156,7 +164,7 @@ export const useSessionRuntimeData = ({
     ...(todosRef
       ? sessionTodosQueryOptions(todosRef, readSessionTodos)
       : skippedSessionTodosQueryOptions()),
-    enabled: todosRef !== null && isRuntimeReady,
+    enabled: todosRef !== null && isRuntimeReady && !ownsFreshCodexEmptyState,
   });
 
   return useMemo(() => {

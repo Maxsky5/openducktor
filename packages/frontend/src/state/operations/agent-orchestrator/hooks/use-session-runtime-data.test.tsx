@@ -17,6 +17,7 @@ import { host } from "@/state/operations/shared/host";
 import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
 import { useRuntimeModelCatalogs } from "@/state/queries/use-runtime-model-catalogs";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "../support/messages";
 import { useSessionRuntimeData } from "./use-session-runtime-data";
@@ -657,6 +658,42 @@ describe("useSessionRuntimeData", () => {
           contextError: null,
         }),
       );
+    } finally {
+      await harness.unmount();
+      host.workspaceGetSettingsSnapshot = original;
+    }
+  });
+
+  test("waits for a fresh Codex kickoff before reading todos", async () => {
+    const original = host.workspaceGetSettingsSnapshot;
+    host.workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshotFixture());
+    const starting = sessionState({
+      runtimeKind: "codex",
+      status: "starting",
+      historyLoadState: "loaded",
+    });
+    const readSessionTodos = mock(async () => [todoFixture]);
+    const props: Parameters<typeof useSessionRuntimeData>[0] = {
+      repoPath: "/repo",
+      selectedSession: sessionTarget(starting),
+      sessionState: starting,
+      runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR],
+      repoReadinessState: "ready",
+      loadRuntimeCatalog: mock(async () =>
+        availableRuntimeCatalog({ ...emptyCatalog, runtime: CODEX_RUNTIME_DESCRIPTOR }),
+      ),
+      readSessionTodos,
+    };
+    const harness = createHookHarness(useSessionRuntimeData, props, { wrapper });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((latest) => latest.modelCatalog !== null);
+      expect(readSessionTodos).not.toHaveBeenCalled();
+
+      await harness.update({ ...props, sessionState: { ...starting, status: "running" } });
+      await harness.waitFor((latest) => latest.todos.length === 1);
+      expect(readSessionTodos).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
       host.workspaceGetSettingsSnapshot = original;

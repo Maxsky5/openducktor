@@ -5,6 +5,7 @@ import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-id
 import { useAgentSessionHistoryLoadContext } from "@/state/app-state-contexts";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
+import { isFreshCodexSessionAwaitingKickoff } from "../support/fresh-codex-session";
 import { shouldRequestSelectedSessionBaselineHistory } from "./session-history-load-policy";
 
 type SelectedSessionHistoryAction = {
@@ -20,6 +21,10 @@ const resolveSelectedSessionHistoryAction = ({
   repoReadinessState: RepoRuntimeReadinessState;
 }): SelectedSessionHistoryAction | null => {
   if (session === null || repoReadinessState !== "ready") {
+    return null;
+  }
+
+  if (isFreshCodexSessionAwaitingKickoff(session)) {
     return null;
   }
 
