@@ -848,7 +848,7 @@ describe("Issue import dialog", () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(list.mock.calls.some(([input]) => input.search === "second")).toBe(true);
     view.unmount();
-  });
+  }, 3_000);
 
   test("refreshes a changed item outside the current search before retry", async () => {
     host.issueItemsList = async (input: IssueItemsListInput) => ({
