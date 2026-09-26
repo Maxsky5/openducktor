@@ -39,10 +39,10 @@ It uses a workspace-scoped SQLite task store as the task source of truth, orches
 
 ### Desktop app
 
-macOS arm64 or x64, and Linux x64:
+macOS arm64, macOS x64, or Linux x64:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Maxsky5/openducktor/main/install.sh | sh
+bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/Maxsky5/openducktor/main/install.sh | sh'
 ```
 
 Windows x64 (PowerShell):

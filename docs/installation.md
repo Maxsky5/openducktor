@@ -4,17 +4,17 @@
 
 The scripts install the latest stable GitHub release for the current user. They select the desktop file for your system and processor, check its SHA-256 digest against the GitHub release, and report success after installation ends.
 
-### macOS arm64 or x64, and Linux x64
+### macOS arm64, macOS x64, or Linux x64
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Maxsky5/openducktor/main/install.sh | sh
+bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/Maxsky5/openducktor/main/install.sh | sh'
 ```
 
-The shell script needs `curl` and Python 3. It also uses `shasum` on macOS or `sha256sum` on Linux.
+The shell script needs Bash, `curl`, and Python 3. It also uses `shasum` on macOS or `sha256sum` on Linux.
 
 ### Windows x64
 
-Run this command in PowerShell:
+Run this command in Windows PowerShell 5.1 or PowerShell 7:
 
 ```powershell
 irm https://raw.githubusercontent.com/Maxsky5/openducktor/main/install.ps1 | iex
@@ -30,7 +30,7 @@ The Windows script runs the NSIS installer for the current user and checks its r
 | Linux | `~/.local/bin/OpenDucktor.AppImage` |
 | Windows | `$env:LOCALAPPDATA\Programs\OpenDucktor\OpenDucktor.exe` |
 
-On Linux, the script adds a launcher at `~/.local/share/applications/openducktor.desktop`. The app stays an AppImage so its updater can use it. On Windows, NSIS adds shortcuts.
+On Linux, the script adds a launcher at `~/.local/share/applications/openducktor.desktop` and an icon at `~/.local/share/icons/openducktor.png`. The app stays an AppImage so its updater can use it. On Windows, NSIS adds shortcuts.
 
 ### Updates
 

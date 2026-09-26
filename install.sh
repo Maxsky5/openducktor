@@ -16,7 +16,7 @@ case "$os:$arch" in
   Darwin:arm64) target=mac-arm64.zip ;;
   Darwin:x86_64) target=mac-x64.zip ;;
   Linux:x86_64) target=linux-x86_64.AppImage ;;
-  *) error "Unsupported system $os/$arch. Use macOS arm64 or x64, or Linux x64." ;;
+  *) error "Unsupported system $os/$arch. Use macOS arm64, macOS x64, or Linux x64." ;;
 esac
 
 if [ "$os" = Darwin ]; then
@@ -43,12 +43,14 @@ else
   installed="$install_dir/OpenDucktor.AppImage"
   marker="$HOME/.local/share/applications/.openducktor-script-install"
   desktop="$HOME/.local/share/applications/openducktor.desktop"
+  icon="$HOME/.local/share/icons/openducktor.png"
   [ ! -e /usr/share/applications/openducktor.desktop ] || error 'A system desktop install exists. Update it with its package manager before using this script.'
   [ ! -e /usr/local/share/applications/openducktor.desktop ] || error 'A system desktop install exists. Remove it before using this script.'
   if command -v openducktor >/dev/null 2>&1; then
     error 'Another openducktor executable is on PATH. Update or remove that install before using this script.'
   fi
   [ ! -e "$desktop" ] || [ -f "$marker" ] || error "An unmanaged desktop launcher exists at $desktop. Remove it before using this script."
+  [ ! -e "$icon" ] || [ -f "$marker" ] || error "An unmanaged icon exists at $icon. Remove it before using this script."
 fi
 
 if [ -e "$installed" ] && [ ! -f "$marker" ]; then
@@ -68,15 +70,21 @@ fi
 if [ "$os" = Linux ] && [ -L "$desktop" ]; then
   error "The desktop launcher $desktop is a symlink. Remove it before using this script."
 fi
+if [ "$os" = Linux ] && [ -L "$icon" ]; then
+  error "The icon $icon is a symlink. Remove it before using this script."
+fi
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/openducktor-install.XXXXXXXX") || error 'Could not create a temporary directory.'
 backup_app=
 backup_desktop=
+backup_icon=
 stage_app=
 stage_desktop=
+stage_icon=
 stage_marker=
 new_app=0
 new_desktop=0
+new_icon=0
 new_marker=0
 install_done=0
 cleanup() {
@@ -95,9 +103,16 @@ cleanup() {
     elif [ "$new_desktop" -eq 1 ]; then
       rm -f "$desktop"
     fi
+    if [ -n "$backup_icon" ] && [ -e "$backup_icon" ]; then
+      [ "$new_icon" -eq 0 ] || rm -f "$icon"
+      mv "$backup_icon" "$icon" || printf 'Restore the previous icon from %s\n' "$backup_icon" >&2
+    elif [ "$new_icon" -eq 1 ]; then
+      rm -f "$icon"
+    fi
   fi
   [ -z "$stage_app" ] || rm -rf "$stage_app"
   [ -z "$stage_desktop" ] || rm -f "$stage_desktop"
+  [ -z "$stage_icon" ] || rm -f "$stage_icon"
   [ -z "$stage_marker" ] || rm -f "$stage_marker"
   rm -rf "$work"
 }
@@ -107,7 +122,7 @@ trap 'exit 143' TERM
 trap 'exit 129' HUP
 
 api=https://api.github.com/repos/Maxsky5/openducktor/releases/latest
-curl -fsSL --proto '=https' -H 'Accept: application/vnd.github+json' -H 'User-Agent: OpenDucktor-installer' "$api" -o "$work/release.json" || error 'Could not load the latest stable GitHub release.'
+curl -fsSL --proto '=https' --connect-timeout 15 --speed-time 30 --speed-limit 1024 -H 'Accept: application/vnd.github+json' -H 'User-Agent: OpenDucktor-installer' "$api" -o "$work/release.json" || error 'Could not load the latest stable GitHub release.'
 python3 - "$work/release.json" "$target" > "$work/selection" <<'PY' || error 'The latest release has no single matching desktop asset with a SHA-256 digest.'
 import json
 import re
@@ -135,7 +150,7 @@ PY
 asset_url=$(sed -n '1p' "$work/selection")
 expected_sha=$(sed -n '2p' "$work/selection")
 download="$work/asset"
-curl -fsSL --proto '=https' "$asset_url" -o "$download" || error 'Could not download the desktop asset.'
+curl -fsSL --proto '=https' --connect-timeout 15 --speed-time 30 --speed-limit 1024 "$asset_url" -o "$download" || error 'Could not download the desktop asset.'
 if [ "$os" = Darwin ]; then
   actual_sha=$(shasum -a 256 "$download" | cut -d ' ' -f 1)
 else
@@ -164,9 +179,14 @@ if [ "$os" = Darwin ]; then
   fi
 else
   mkdir -p "$(dirname "$desktop")" || error 'Could not create the desktop launcher directory.'
+  mkdir -p "$(dirname "$icon")" || error 'Could not create the icon directory.'
   stage_app=$(mktemp "$install_dir/.OpenDucktor.AppImage.stage.XXXXXXXX") || error 'Could not stage the AppImage.'
   cp "$download" "$stage_app" || error 'Could not stage the AppImage.'
   chmod 755 "$stage_app" || error 'Could not make the AppImage executable.'
+  (cd "$work" && "$stage_app" --appimage-extract >/dev/null) || error 'Could not extract the AppImage icon.'
+  [ -f "$work/squashfs-root/.DirIcon" ] || error 'The AppImage has no icon.'
+  stage_icon=$(mktemp "$(dirname "$icon")/.openducktor-icon.stage.XXXXXXXX") || error 'Could not stage the icon.'
+  cp "$work/squashfs-root/.DirIcon" "$stage_icon" || error 'Could not copy the AppImage icon.'
   # Desktop entry strings and quoted Exec values each escape backslashes.
   desktop_exec=$(python3 - "$installed" <<'PY'
 import sys
@@ -177,8 +197,14 @@ for char in ('\\', '"', '`', '$'):
 print(path.replace('\\', '\\\\'))
 PY
   )
+  desktop_icon=$(python3 - "$icon" <<'PY'
+import sys
+
+print(sys.argv[1].replace('\\', '\\\\'))
+PY
+  )
   stage_desktop=$(mktemp "$(dirname "$desktop")/.openducktor.desktop.stage.XXXXXXXX") || error 'Could not stage the desktop launcher.'
-  printf '[Desktop Entry]\nType=Application\nName=OpenDucktor\nExec="%s"\nIcon=openducktor\nTerminal=false\nCategories=Development;\n' "$desktop_exec" > "$stage_desktop"
+  printf '[Desktop Entry]\nType=Application\nName=OpenDucktor\nExec="%s"\nIcon=%s\nTerminal=false\nCategories=Development;\n' "$desktop_exec" "$desktop_icon" > "$stage_desktop"
   if [ -e "$installed" ]; then
     backup_app="$install_dir/.OpenDucktor.AppImage.backup.$$"
     mv "$installed" "$backup_app" || error 'Could not move the previous AppImage out of the way.'
@@ -187,8 +213,14 @@ PY
     backup_desktop="$(dirname "$desktop")/.openducktor.desktop.backup.$$"
     mv "$desktop" "$backup_desktop" || error 'Could not move the previous desktop launcher out of the way.'
   fi
+  if [ -e "$icon" ]; then
+    backup_icon="$(dirname "$icon")/.openducktor-icon.backup.$$"
+    mv "$icon" "$backup_icon" || error 'Could not move the previous icon out of the way.'
+  fi
   new_app=1
   mv "$stage_app" "$installed" || error 'Could not install the AppImage.'
+  new_icon=1
+  mv "$stage_icon" "$icon" || error 'Could not install the icon.'
   new_desktop=1
   mv "$stage_desktop" "$desktop" || error 'Could not install the desktop launcher.'
   if [ ! -f "$marker" ]; then
@@ -205,5 +237,8 @@ if [ -n "$backup_app" ]; then
 fi
 if [ -n "$backup_desktop" ]; then
   rm -f "$backup_desktop" || error "OpenDucktor is installed at $installed, but could not remove the old launcher backup at $backup_desktop. Remove it after checking the app."
+fi
+if [ -n "$backup_icon" ]; then
+  rm -f "$backup_icon" || error "OpenDucktor is installed at $installed, but could not remove the old icon backup at $backup_icon. Remove it after checking the app."
 fi
 printf 'OpenDucktor is installed at %s\n' "$installed"

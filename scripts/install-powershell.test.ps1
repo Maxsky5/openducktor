@@ -114,7 +114,7 @@ try {
 
     $global:exitCode = 7
     try { & $scriptPath; throw 'A failed first NSIS process was accepted.' } catch {
-        Assert ($_.Exception.Message -like '*exit code 7*') 'The first NSIS exit code was not reported.'
+        Assert ($_.Exception.Message -like '*exit code 7*') "The first NSIS exit code was not reported: $($_.Exception.Message)"
     }
     Assert (-not (Test-Path -LiteralPath $appPath)) 'A failed first install left an app.'
     Assert (-not $global:registered) 'A failed first install left an uninstall record.'
