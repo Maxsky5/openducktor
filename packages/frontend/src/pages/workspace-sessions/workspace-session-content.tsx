@@ -19,6 +19,7 @@ import type { ActiveWorkspace } from "@/types/state-slices";
 import { WorkspaceSessionChat } from "./workspace-session-chat";
 import { WorkspaceSessionHeader } from "./workspace-session-header";
 import { useWorkspaceSessionPreview } from "./use-workspace-session-preview";
+import { usePreviewBranchKey } from "./use-preview-branch-key";
 
 export type WorkspaceSessionPanelState = {
   isOpen: boolean;
@@ -191,6 +192,10 @@ export function WorkspaceSessionContent({
     record.executionTarget.kind === "local_repo_root"
       ? (activeBranch?.name ?? (activeBranch?.detached ? "detached" : "unknown"))
       : "";
+  const branchReady = activeBranch?.detached === true || activeBranch?.name != null;
+  const previewBranch =
+    record.executionTarget.kind === "local_repo_root" && branchReady ? branchKey : null;
+  const previewBranchKey = usePreviewBranchKey(previewBranch);
   const target: GitTargetBranch | null =
     record.executionTarget.kind === "local_repo_root"
       ? { branch: "@{upstream}" }
@@ -225,7 +230,7 @@ export function WorkspaceSessionContent({
   );
   const previewContent = (
     <TaskExecutionSelectedFilePreview
-      key={`${preview.model.previewSessionKey}:${branchKey}`}
+      key={`${preview.model.previewSessionKey}:${previewBranchKey}`}
       model={{
         ...preview.model,
         onDiscard,
@@ -250,6 +255,10 @@ export function WorkspaceSessionContent({
       branchKey={branchKey}
       target={target}
       targetError={targetError}
+      retryTarget={async () => {
+        const result = await repoConfig.refetch();
+        if (result.isError) throw result.error;
+      }}
       activeTabId={panelState.activeTabId}
       onActiveTabChange={(activeTabId) => onPanelStateChange({ activeTabId })}
       selectedFile={preview.model.selectedFile}

@@ -32,6 +32,7 @@ export function WorkspaceSessionToolsPanel({
   branchKey,
   target,
   targetError,
+  retryTarget,
   activeTabId,
   onActiveTabChange,
   selectedFile,
@@ -44,6 +45,7 @@ export function WorkspaceSessionToolsPanel({
   branchKey: string;
   target: GitTargetBranch | null;
   targetError: string | null;
+  retryTarget: () => Promise<void>;
   activeTabId: WorkspaceToolsTabId;
   onActiveTabChange: (tab: WorkspaceToolsTabId) => void;
   selectedFile: TaskExecutionSelectedFile | null;
@@ -76,9 +78,15 @@ export function WorkspaceSessionToolsPanel({
   const refresh = useCallback(
     async (mode: WorkspaceRefreshMode = "hard", includeFiles = true) => {
       const fetchTarget =
-        mode === "hard" && !resolvedTarget && !targetError && !!workingDirectory && !!target;
+        mode === "hard" &&
+        !!workingDirectory &&
+        (targetError !== null || (!resolvedTarget && !!target));
       if (fetchTarget) setIsFetchingTarget(true);
       try {
+        if (mode === "hard" && targetError) {
+          await retryTarget();
+          return;
+        }
         await refreshWorkspaceSessionData({
           queryClient,
           diffData,
@@ -104,6 +112,7 @@ export function WorkspaceSessionToolsPanel({
       resolvedTarget,
       target,
       targetError,
+      retryTarget,
       workingDirectory,
       repoPath,
     ],

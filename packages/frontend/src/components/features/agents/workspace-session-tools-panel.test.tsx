@@ -1,6 +1,7 @@
 import { expect, mock, spyOn, test } from "bun:test";
 import type {
   GitComparisonTarget,
+  GitTargetBranch,
   GitWorktreeStatus,
   GitWorktreeStatusSummary,
   WorkspaceFileTree,
@@ -57,11 +58,15 @@ function worktreeSummary(targetBranch: string): GitWorktreeStatusSummary {
 function PanelHarness({
   branchKey = "feature",
   targetError = null,
+  target = { branch: "@{upstream}" },
+  retryTarget = async () => {},
   contextMode = "repository",
   onRefreshReady = () => {},
 }: {
   branchKey?: string;
   targetError?: string | null;
+  target?: GitTargetBranch | null;
+  retryTarget?: () => Promise<void>;
   contextMode?: "repository" | "worktree";
   onRefreshReady?: Parameters<typeof WorkspaceSessionToolsPanel>[0]["onRefreshReady"];
 }) {
@@ -72,8 +77,9 @@ function PanelHarness({
       workingDirectory="/repo"
       contextMode={contextMode}
       branchKey={branchKey}
-      target={{ branch: "@{upstream}" }}
+      target={target}
       targetError={targetError}
+      retryTarget={retryTarget}
       activeTabId={activeTabId}
       onActiveTabChange={setActiveTabId}
       selectedFile={null}
@@ -220,6 +226,92 @@ test.each(["repository settings", "comparison"] as const)(
       view.unmount();
       queryClient.clear();
       configureShellBridge(createUnavailableShellBridge());
+    }
+  },
+);
+
+test.each(["recovers", "fails"] as const)(
+  "manual refresh %s after a repository settings error",
+  async (outcome) => {
+    const comparison = mock(async (): Promise<GitComparisonTarget> => ({
+      kind: "available",
+      reference: targetReference,
+    }));
+    const statusTargets: string[] = [];
+    let finishRetry!: () => void;
+    const retry = mock(async () => {
+      await new Promise<void>((resolve) => (finishRetry = resolve));
+      if (outcome === "fails") throw new Error("Repository settings still unavailable");
+    });
+    const reportError = spyOn(toast, "error").mockImplementation(() => "toast-id");
+    configureShellBridge(
+      createShellBridgeFixture({
+        client: {
+          gitGetComparisonTarget: comparison,
+          gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) => {
+            statusTargets.push(targetBranch);
+            return worktreeStatus(targetBranch);
+          },
+          gitGetWorktreeStatusSummary: async (_repoPath: string, targetBranch: string) =>
+            worktreeSummary(targetBranch),
+          gitGetBranches: async () => [],
+        },
+      }),
+    );
+    function RetryPanel() {
+      const [target, setTarget] = useState<GitTargetBranch | null>(null);
+      const [targetError, setTargetError] = useState<string | null>(
+        "Could not read repository settings",
+      );
+      return (
+        <PanelHarness
+          contextMode="worktree"
+          target={target}
+          targetError={targetError}
+          retryTarget={async () => {
+            await retry();
+            setTarget({ remote: "origin", branch: "main" });
+            setTargetError(null);
+          }}
+        />
+      );
+    }
+    const queryClient = createQueryClient();
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <RetryPanel />
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+    try {
+      await waitFor(() => expect(statusTargets).toContain("HEAD"));
+      expect(screen.getByText("Could not read repository settings")).toBeTruthy();
+      const refreshButton = screen.getByTestId("agent-studio-git-refresh-button");
+      await waitFor(() => expect(refreshButton.hasAttribute("disabled")).toBe(false));
+      fireEvent.click(refreshButton);
+      await waitFor(() => expect(retry).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(refreshButton.hasAttribute("disabled")).toBe(true));
+      await act(async () => finishRetry());
+      if (outcome === "recovers") {
+        await waitFor(() => expect(statusTargets).toContain(targetReference));
+        expect(screen.queryByText("Could not read repository settings")).toBeNull();
+        expect(reportError).not.toHaveBeenCalled();
+        expect(comparison).toHaveBeenCalledTimes(1);
+      } else {
+        await waitFor(() =>
+          expect(reportError).toHaveBeenCalledWith("Could not refresh Git changes", {
+            description: "Repository settings still unavailable",
+          }),
+        );
+        expect(screen.getByText("Could not read repository settings")).toBeTruthy();
+        expect(comparison).not.toHaveBeenCalled();
+      }
+    } finally {
+      view.unmount();
+      queryClient.clear();
+      configureShellBridge(createUnavailableShellBridge());
+      reportError.mockRestore();
     }
   },
 );
