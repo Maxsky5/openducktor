@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
+import { cn } from "@/lib/utils";
 import type { RuntimeModelCatalogQueryResource } from "@/state/queries/use-runtime-model-catalogs";
 import { buildRepositoryAgentControls } from "./repository-agent-controls";
 import { resolveRepoAgentDefaultModelPickerSelection } from "./repository-agent-selection";
@@ -19,6 +20,7 @@ import {
 } from "./model-defaults-model";
 
 export type RepositoryModelDefaultsFieldsProps = {
+  presentation?: "settings" | "creation";
   selectedRepoConfig: ModelDefaultsValue;
   availableRuntimeDefinitions: RuntimeDescriptor[];
   catalogResources: RuntimeModelCatalogQueryResource[];
@@ -92,6 +94,7 @@ const buildRepositoryAgentRoleViewModel = ({
 };
 
 export function RepositoryModelDefaultsFields({
+  presentation = "settings",
   selectedRepoConfig,
   availableRuntimeDefinitions,
   catalogResources,
@@ -110,13 +113,15 @@ export function RepositoryModelDefaultsFields({
 }: RepositoryModelDefaultsFieldsProps): ReactElement {
   const { isLoadingRuntimeDefinitions, isLoadingCatalog, isLoadingSettings, isSaving } =
     loadingState;
+  const isCreation = presentation === "creation";
 
-  const agentDropdownClassName = "sm:min-w-[18rem]";
-  const variantDropdownClassName = "sm:min-w-[16rem]";
+  const agentDropdownClassName = isCreation ? "w-full min-w-0" : "sm:min-w-[18rem]";
+  const variantDropdownClassName = isCreation ? "w-full min-w-0" : "sm:min-w-[16rem]";
 
   return (
-    <div className="grid gap-4 p-4">
+    <div className={cn("grid", isCreation ? "gap-5" : "gap-4 p-4")}>
       <RepositoryDefaultModelBlock
+        presentation={presentation}
         selectedRepoConfig={selectedRepoConfig}
         availableRuntimeDefinitions={availableRuntimeDefinitions}
         catalogResources={catalogResources}
@@ -130,9 +135,13 @@ export function RepositoryModelDefaultsFields({
       />
 
       <div className="space-y-2">
-        <h3 className="text-sm font-semibold text-foreground">Agent Defaults (Per Role)</h3>
+        <h3 className="text-sm font-semibold text-foreground">
+          {isCreation ? "Role defaults" : "Agent Defaults (Per Role)"}
+        </h3>
         <p className="text-xs text-muted-foreground">
-          Defaults are applied when starting sessions in this repository.
+          {isCreation
+            ? "Leave a role empty to use the workspace default."
+            : "Defaults are applied when starting sessions in this repository."}
         </p>
       </div>
 
@@ -156,7 +165,7 @@ export function RepositoryModelDefaultsFields({
       ) : null}
       {roleNotice}
 
-      <div className="grid gap-3">
+      <div className={cn("grid gap-3", isCreation && "lg:grid-cols-2")}>
         {ROLE_DEFAULTS.map(({ role, label }) => {
           const roleViewModel = buildRepositoryAgentRoleViewModel({
             selectedRepoConfig,
@@ -169,7 +178,13 @@ export function RepositoryModelDefaultsFields({
           const controls = buildRepositoryAgentControls({ ...roleViewModel, isSaving });
 
           return (
-            <div key={role} className="grid gap-2 rounded-md border border-border bg-card p-3">
+            <div
+              key={role}
+              className={cn(
+                "grid border border-border bg-card",
+                isCreation ? "gap-3 rounded-xl p-4" : "gap-2 rounded-md p-3",
+              )}
+            >
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {label}
@@ -185,43 +200,50 @@ export function RepositoryModelDefaultsFields({
                 </Button>
               </div>
 
-              <div className="grid gap-2 md:grid-cols-3">
-                <RepositoryModelPickerField
-                  runtimeDefinitions={availableRuntimeDefinitions}
-                  catalogResources={catalogResources}
-                  value={controls.selectedPickerValue}
-                  favoriteState={favoriteState}
-                  isReadOnly={isSaving || isLoadingSettings}
-                  isLoadingCatalog={isRoleCatalogLoading}
-                  onSelect={(selectedValue, targetCatalog) => {
-                    onUpdateSelectedRepoConfig((repoConfig) => {
-                      const currentValue = repoConfig.agentDefaults[role] ?? null;
-                      const currentRuntimeKind = resolveRepoAgentDefaultRuntimeKind({
-                        selectedRepoConfig: repoConfig,
-                        runtimeDefinitions: availableRuntimeDefinitions,
-                        role,
+              <div className={cn("grid gap-2", isCreation ? "sm:grid-cols-2" : "md:grid-cols-3")}>
+                <div className={cn("min-w-0", isCreation && "sm:col-span-2")}>
+                  <RepositoryModelPickerField
+                    runtimeDefinitions={availableRuntimeDefinitions}
+                    catalogResources={catalogResources}
+                    value={controls.selectedPickerValue}
+                    favoriteState={favoriteState}
+                    isReadOnly={isSaving || isLoadingSettings}
+                    isLoadingCatalog={isRoleCatalogLoading}
+                    onSelect={(selectedValue, targetCatalog) => {
+                      onUpdateSelectedRepoConfig((repoConfig) => {
+                        const currentValue = repoConfig.agentDefaults[role] ?? null;
+                        const currentRuntimeKind = resolveRepoAgentDefaultRuntimeKind({
+                          selectedRepoConfig: repoConfig,
+                          runtimeDefinitions: availableRuntimeDefinitions,
+                          role,
+                        });
+                        const nextDefault = resolveRepoAgentDefaultModelPickerSelection({
+                          currentValue: currentValue ? ensureDraftAgentDefault(currentValue) : null,
+                          currentRuntimeKind,
+                          targetCatalog,
+                          value: selectedValue,
+                        });
+                        if (!nextDefault) {
+                          return repoConfig;
+                        }
+                        return {
+                          ...repoConfig,
+                          agentDefaults: {
+                            ...repoConfig.agentDefaults,
+                            [role]: nextDefault,
+                          },
+                        };
                       });
-                      const nextDefault = resolveRepoAgentDefaultModelPickerSelection({
-                        currentValue: currentValue ? ensureDraftAgentDefault(currentValue) : null,
-                        currentRuntimeKind,
-                        targetCatalog,
-                        value: selectedValue,
-                      });
-                      if (!nextDefault) {
-                        return repoConfig;
-                      }
-                      return {
-                        ...repoConfig,
-                        agentDefaults: {
-                          ...repoConfig.agentDefaults,
-                          [role]: nextDefault,
-                        },
-                      };
-                    });
-                  }}
-                />
+                    }}
+                  />
+                </div>
 
-                <div className="grid min-w-0 gap-1">
+                <div
+                  className={cn(
+                    "grid min-w-0 gap-1",
+                    isCreation && !controls.variant.visible && "sm:col-span-2",
+                  )}
+                >
                   <Label className="text-xs">Agent Profile</Label>
                   <Combobox
                     value={value.profileId}

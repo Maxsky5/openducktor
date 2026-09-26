@@ -1,12 +1,19 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { DEFAULT_AGENT_RUNTIMES, type WorkspaceRecord } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { useState } from "react";
+import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
+import {
+  useWorkspacePreviewTransitionGuard,
+  WorkspacePreviewTransitionGuardProvider,
+} from "@/components/layout/workspace-preview-transition-guard";
 import { createQueryClient } from "@/lib/query-client";
+import { useWorkspaceSessionPreview } from "@/pages/workspace-sessions/use-workspace-session-preview";
 import { RuntimeDefinitionsContext, WorkspaceStateContext } from "@/state/app-state-contexts";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type {
   WorkspaceSelectionOperationsInput,
   WorkspaceStateContextValue,
@@ -71,14 +78,31 @@ const workspaceState = (
   ...overrides,
 });
 
+const runtimeDefinitionsValue = {
+  runtimeDefinitions: [],
+  availableRuntimeDefinitions: [],
+  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+  isLoadingRuntimeDefinitions: false,
+  runtimeDefinitionsError: null,
+  refreshRuntimeDefinitions: async () => [],
+  isLoadingRuntimeSettings: false,
+  runtimeSettingsError: null,
+  hasRuntimeSettingsSnapshot: true,
+  refreshRuntimeSettings: async () => {},
+  loadRepoRuntimeCatalog: async () => ({}),
+  loadRepoRuntimeFileSearch: async () => [],
+};
+
 const renderModal = ({
   state = workspaceState(),
   onOpenChange = () => {},
+  requestTransition = allowTransition,
   canClose = true,
   open = true,
 }: {
   state?: WorkspaceStateContextValue;
   onOpenChange?: (open: boolean) => void;
+  requestTransition?: Parameters<typeof OpenRepositoryModal>[0]["requestTransition"];
   canClose?: boolean;
   open?: boolean;
 } = {}) => {
@@ -93,28 +117,13 @@ const renderModal = ({
   client.setQueryData(settingsSnapshotQueryOptions().queryKey, createSettingsSnapshotFixture());
   const tree = (isOpen: boolean) => (
     <QueryClientProvider client={client}>
-      <RuntimeDefinitionsContext.Provider
-        value={{
-          runtimeDefinitions: [],
-          availableRuntimeDefinitions: [],
-          agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-          isLoadingRuntimeDefinitions: false,
-          runtimeDefinitionsError: null,
-          refreshRuntimeDefinitions: async () => [],
-          isLoadingRuntimeSettings: false,
-          runtimeSettingsError: null,
-          hasRuntimeSettingsSnapshot: true,
-          refreshRuntimeSettings: async () => {},
-          loadRepoRuntimeCatalog: async () => ({}),
-          loadRepoRuntimeFileSearch: async () => [],
-        }}
-      >
+      <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsValue}>
         <WorkspaceStateContext.Provider value={state}>
           <OpenRepositoryModal
             open={isOpen}
             canClose={canClose}
             onOpenChange={onOpenChange}
-            requestTransition={allowTransition}
+            requestTransition={requestTransition}
           />
         </WorkspaceStateContext.Provider>
       </RuntimeDefinitionsContext.Provider>
@@ -125,6 +134,57 @@ const renderModal = ({
   return { ...view, rerenderOpen: (nextOpen: boolean) => view.rerender(tree(nextOpen)) };
 };
 
+function DirtyPreview() {
+  const [file, setFile] = useState<TaskExecutionSelectedFile | null>({
+    rootPath: "/repo",
+    relativePath: "draft.ts",
+  });
+  const { preview, onDiscard } = useWorkspaceSessionPreview(file, setFile, false);
+  return (
+    <>
+      <output data-testid="draft">{preview.model.selectedFile?.relativePath ?? "none"}</output>
+      <output data-testid="pending-discard">{String(preview.model.hasPendingDiscard)}</output>
+      <button type="button" onClick={() => preview.model.onLeavePolicyChange("confirm")}>
+        Edit draft
+      </button>
+      <button type="button" onClick={onDiscard}>
+        Discard draft
+      </button>
+    </>
+  );
+}
+
+function GuardedModal() {
+  const { run } = useWorkspacePreviewTransitionGuard();
+  return <OpenRepositoryModal open canClose onOpenChange={() => {}} requestTransition={run} />;
+}
+
+const renderGuardedModal = (state: WorkspaceStateContextValue) => {
+  const client = createQueryClient();
+  client.setQueryData(filesystemQueryKeys.directory(), {
+    currentPath: "/repo",
+    currentPathIsGitRepo: true,
+    parentPath: "/",
+    homePath: "/repo",
+    entries: [],
+  });
+  client.setQueryData(settingsSnapshotQueryOptions().queryKey, createSettingsSnapshotFixture());
+  const view = render(
+    <QueryClientProvider client={client}>
+      <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsValue}>
+        <WorkspaceStateContext.Provider value={state}>
+          <WorkspacePreviewTransitionGuardProvider>
+            <GuardedModal />
+            <DirtyPreview />
+          </WorkspacePreviewTransitionGuardProvider>
+        </WorkspaceStateContext.Provider>
+      </RuntimeDefinitionsContext.Provider>
+    </QueryClientProvider>,
+  );
+  views.add(view);
+  return view;
+};
+
 const chooseRepository = async () => {
   fireEvent.click(screen.getByRole("button", { name: "Choose repository folder" }));
   fireEvent.click(await screen.findByRole("button", { name: "Choose This Folder" }));
@@ -132,6 +192,53 @@ const chooseRepository = async () => {
 };
 
 describe("OpenRepositoryModal", () => {
+  test.each(["add", "closed row", "closed folder"] as const)(
+    "keeps the dirty draft when %s fails",
+    async (path) => {
+      const action = createDeferred<void>();
+      const addWorkspace = mock(async (input: WorkspaceSelectionOperationsInput) => {
+        await action.promise;
+        return record(input);
+      });
+      const reopenWorkspace = mock(() => action.promise);
+      const closed = {
+        ...record({ workspaceId: "closed", workspaceName: "Closed", repoPath: "/repo" }),
+        isActive: false,
+      };
+      renderGuardedModal(
+        workspaceState({
+          addWorkspace,
+          reopenWorkspace,
+          closedWorkspaces: path === "add" ? [] : [closed],
+          resolveWorkspacePath: async () =>
+            path === "closed folder" ? { kind: "closed", workspace: closed } : { kind: "new" },
+        }),
+      );
+
+      fireEvent.click(screen.getByText("Edit draft"));
+      if (path === "closed row") {
+        fireEvent.click(screen.getByRole("button", { name: /Closed.*\/repo/ }));
+      } else {
+        fireEvent.click(screen.getByRole("button", { name: "Choose repository folder" }));
+        fireEvent.click(await screen.findByRole("button", { name: "Choose This Folder" }));
+        if (path === "add") {
+          await screen.findByLabelText("Workspace ID");
+          fireEvent.click(screen.getByRole("button", { name: "Continue to models" }));
+          fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
+        }
+      }
+      await waitFor(() => expect(screen.getByTestId("pending-discard").textContent).toBe("true"));
+      fireEvent.click(screen.getByText("Discard draft"));
+      await waitFor(() =>
+        expect(path === "add" ? addWorkspace : reopenWorkspace).toHaveBeenCalledTimes(1),
+      );
+      expect(screen.getByTestId("draft").textContent).toBe("draft.ts");
+      await act(async () => action.reject(new Error("Workspace failed")));
+      expect(await screen.findByText("Workspace failed")).toBeTruthy();
+      expect(screen.getByTestId("draft").textContent).toBe("draft.ts");
+    },
+  );
+
   test("starts a fresh draft when reopened", async () => {
     const view = renderModal();
     await chooseRepository();
@@ -144,10 +251,17 @@ describe("OpenRepositoryModal", () => {
 
   test("uses three stages and keeps Close left and Open repository right in the footer", async () => {
     const addWorkspace = mock(async (input: WorkspaceSelectionOperationsInput) => record(input));
-    renderModal({ state: workspaceState({ addWorkspace }) });
-    expect(screen.queryByText("Closed workspaces")).toBeNull();
-    expect(screen.queryByText("No closed workspaces")).toBeNull();
+    const closed = {
+      ...record({ workspaceId: "old", workspaceName: "Old", repoPath: "/old" }),
+      isActive: false,
+    };
+    renderModal({ state: workspaceState({ addWorkspace, closedWorkspaces: [closed] }) });
+    expect(screen.getByText("Open a new workspace")).toBeTruthy();
+    expect(screen.getByText("Reopen a workspace")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Old.*\/old/ })).toBeTruthy();
     await chooseRepository();
+    expect(screen.queryByText("Reopen a workspace")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Old.*\/old/ })).toBeNull();
     expect(screen.getByLabelText<HTMLInputElement>("Workspace ID").value).toBe("repo");
     expect(addWorkspace).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Continue to models" }));
@@ -160,7 +274,31 @@ describe("OpenRepositoryModal", () => {
     await waitFor(() => expect(addWorkspace).toHaveBeenCalledTimes(1));
   });
 
-  test("reopens a closed workspace from its folder without showing a closed list", async () => {
+  test("reserves workspace IDs used by closed and incomplete-removal workspaces", async () => {
+    const closed = {
+      ...record({ workspaceId: "repo", workspaceName: "Closed", repoPath: "/closed" }),
+      isActive: false,
+    };
+    const removing = {
+      ...record({ workspaceId: "repo-2", workspaceName: "Removing", repoPath: "/removing" }),
+      isActive: false,
+    };
+    renderModal({
+      state: workspaceState({
+        closedWorkspaces: [closed],
+        incompleteRemovals: [
+          {
+            workspace: removing,
+            record: { phase: "attachments", removeTaskWorktrees: false, pendingWorktreePath: null },
+          },
+        ],
+      }),
+    });
+    await chooseRepository();
+    expect(screen.getByLabelText<HTMLInputElement>("Workspace ID").value).toBe("repo-3");
+  });
+
+  test("reopens a closed workspace directly from the entry screen", async () => {
     const closed = {
       ...record({ workspaceId: "old", workspaceName: "Old", repoPath: "/repo" }),
       isActive: false,
@@ -175,7 +313,63 @@ describe("OpenRepositoryModal", () => {
       }),
       onOpenChange,
     });
-    expect(screen.queryByText("Closed workspaces")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Old.*\/repo/ }));
+    await waitFor(() =>
+      expect(reopenWorkspace).toHaveBeenCalledWith({
+        workspaceId: "old",
+        expectedRepoPath: "/repo",
+      }),
+    );
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  test("waits for the preview decision before reopening a closed workspace", async () => {
+    const closed = {
+      ...record({ workspaceId: "old", workspaceName: "Old", repoPath: "/repo" }),
+      isActive: false,
+    };
+    const reopenWorkspace = mock(async () => {});
+    const onOpenChange = mock((_open: boolean) => {});
+    const transitions: Array<{ apply: () => Promise<boolean>; cancel: () => void }> = [];
+    renderModal({
+      state: workspaceState({ closedWorkspaces: [closed], reopenWorkspace }),
+      onOpenChange,
+      requestTransition: (apply, cancel) => {
+        transitions.push({ apply, cancel: cancel ?? (() => {}) });
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Old.*\/repo/ }));
+    expect(transitions).toHaveLength(1);
+    expect(reopenWorkspace).not.toHaveBeenCalled();
+    await act(async () => transitions[0]?.cancel());
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+
+    fireEvent.click(screen.getByRole("button", { name: /Old.*\/repo/ }));
+    expect(transitions).toHaveLength(2);
+    await act(async () => {
+      await transitions[1]?.apply();
+    });
+    expect(reopenWorkspace).toHaveBeenCalledTimes(1);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  test("keeps closed workspaces on the entry screen while a folder can still reopen one", async () => {
+    const closed = {
+      ...record({ workspaceId: "old", workspaceName: "Old", repoPath: "/repo" }),
+      isActive: false,
+    };
+    const reopenWorkspace = mock(async () => {});
+    const onOpenChange = mock((_open: boolean) => {});
+    renderModal({
+      state: workspaceState({
+        closedWorkspaces: [closed],
+        resolveWorkspacePath: async () => ({ kind: "closed", workspace: closed }),
+        reopenWorkspace,
+      }),
+      onOpenChange,
+    });
+    expect(screen.getByText("Reopen a workspace")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Choose repository folder" }));
     fireEvent.click(await screen.findByRole("button", { name: "Choose This Folder" }));
     await waitFor(() =>

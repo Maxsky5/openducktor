@@ -72,7 +72,12 @@ test("notification workspace selection keeps the draft on cancel and failure", a
     isLoadingBranches: false,
     isSwitchingBranch: false,
     branchSyncDegraded: false,
-    addWorkspace: async () => {},
+    addWorkspace: async () => {
+      throw new Error("Not used in this test");
+    },
+    saveWorkspaceModelDefaults: async () => {
+      throw new Error("Not used in this test");
+    },
     selectWorkspace,
     reorderWorkspaces: async () => {},
     refreshBranches: async () => {},

@@ -5,6 +5,7 @@ import type { ModelPickerFavoriteState } from "@/components/features/agents/mode
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import {
   filterRuntimeDefinitionsForDefaultSelection,
   findRuntimeDefinition,
@@ -17,6 +18,7 @@ import { resolveRepoAgentDefaultModelPickerSelection } from "./repository-agent-
 import { RepositoryModelPickerField } from "./repository-model-picker-field";
 
 type RepositoryDefaultModelBlockProps = {
+  presentation?: "settings" | "creation";
   selectedRepoConfig: Pick<SettingsRepoConfig, "defaultModel" | "agentDefaults">;
   availableRuntimeDefinitions: RuntimeDescriptor[];
   catalogResources: RuntimeModelCatalogQueryResource[];
@@ -41,6 +43,7 @@ type RepositoryDefaultModelBlockProps = {
 };
 
 export function RepositoryDefaultModelBlock({
+  presentation = "settings",
   selectedRepoConfig,
   availableRuntimeDefinitions,
   catalogResources,
@@ -77,9 +80,19 @@ export function RepositoryDefaultModelBlock({
     isSaving,
   });
   const isClearDisabled = isLoadingSettings || isSaving || defaultModel === null;
+  const isCreation = presentation === "creation";
+  let fieldGridClass = "md:grid-cols-3";
+  if (isCreation) {
+    fieldGridClass = controls.variant.visible ? "sm:grid-cols-2 xl:grid-cols-3" : "sm:grid-cols-2";
+  }
 
   return (
-    <div className="grid gap-2 rounded-md border border-border bg-card p-3">
+    <div
+      className={cn(
+        "grid border border-border bg-card",
+        isCreation ? "gap-3 rounded-xl p-4 sm:p-5" : "gap-2 rounded-md p-3",
+      )}
+    >
       <div className="flex items-center justify-between gap-2">
         <div className="grid gap-1">
           <h3 className="text-sm font-semibold text-foreground">Default Model</h3>
@@ -102,7 +115,7 @@ export function RepositoryDefaultModelBlock({
         <p className="text-xs text-muted-foreground">Loading available agents and models…</p>
       ) : null}
 
-      <div className="grid gap-2 md:grid-cols-3">
+      <div className={cn("grid gap-3", fieldGridClass)}>
         <RepositoryModelPickerField
           runtimeDefinitions={runtimeDefinitions}
           catalogResources={catalogResources}

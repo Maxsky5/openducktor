@@ -1,4 +1,4 @@
-import { Sparkles } from "lucide-react";
+import { ArrowLeft, Sparkles } from "lucide-react";
 import { type ReactElement, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,15 +10,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { errorMessage } from "@/lib/errors";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { FolderPickerDialog } from "./folder-picker-dialog";
+import { OpenRepositoryChoices } from "./open-repository-choices";
 import {
   WorkspaceCreationBackAction,
   WorkspaceCreationFields,
   WorkspaceCreationSubmitAction,
 } from "./workspace-creation-form";
-import { useWorkspaceCreation } from "./use-workspace-creation";
-import { useWorkspaceCreationModels } from "./use-workspace-creation-models";
+import { useWorkspaceCreation, type WorkspaceCreationController } from "./use-workspace-creation";
+import {
+  useWorkspaceCreationModels,
+  type WorkspaceCreationModelSurface,
+} from "./use-workspace-creation-models";
 
 type OpenRepositoryModalProps = {
   open: boolean;
@@ -31,24 +36,9 @@ type OpenRepositoryModalProps = {
   ) => void;
 };
 
-function OpenRepositoryModalSession({
-  open,
-  canClose,
-  onOpenChange,
-  requestTransition,
-}: OpenRepositoryModalProps): ReactElement {
-  const {
-    workspaces,
-    closedWorkspaces,
-    incompleteRemovals,
-    addWorkspace,
-    saveWorkspaceModelDefaults,
-    saveAgentModelFavorites,
-    reopenWorkspace,
-    resolveWorkspacePath,
-    isSwitchingWorkspace,
-  } = useWorkspaceState();
-  const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
+function useGuardedWorkspaceChange(
+  requestTransition: OpenRepositoryModalProps["requestTransition"],
+) {
   const [isChangingWorkspace, setIsChangingWorkspace] = useState(false);
   const runWorkspaceChange = async (change: () => Promise<void>): Promise<boolean> => {
     setIsChangingWorkspace(true);
@@ -73,6 +63,109 @@ function OpenRepositoryModalSession({
       setIsChangingWorkspace(false);
     }
   };
+  return { isChangingWorkspace, runWorkspaceChange };
+}
+
+function useClosedWorkspaceReopen({
+  runWorkspaceChange,
+  reopenWorkspace,
+  onOpenChange,
+  disabled,
+}: {
+  runWorkspaceChange: (change: () => Promise<void>) => Promise<boolean>;
+  reopenWorkspace: (input: { workspaceId: string; expectedRepoPath: string }) => Promise<void>;
+  onOpenChange: (open: boolean) => void;
+  disabled: boolean;
+}) {
+  const [selectionError, setSelectionError] = useState<string | null>(null);
+  const reopenClosedWorkspace = async (workspaceId: string, repoPath: string): Promise<void> => {
+    if (disabled) return;
+    setSelectionError(null);
+    try {
+      if (
+        !(await runWorkspaceChange(() =>
+          reopenWorkspace({ workspaceId, expectedRepoPath: repoPath }),
+        ))
+      )
+        return;
+      onOpenChange(false);
+    } catch (cause) {
+      setSelectionError(errorMessage(cause));
+    }
+  };
+  return { selectionError, reopenClosedWorkspace };
+}
+
+function OpenRepositoryModalFooter({
+  canClose,
+  interactionLocked,
+  showCreationFlow,
+  creation,
+  models,
+  onClose,
+  onBackToWorkspaces,
+}: {
+  canClose: boolean;
+  interactionLocked: boolean;
+  showCreationFlow: boolean;
+  creation: WorkspaceCreationController;
+  models: WorkspaceCreationModelSurface;
+  onClose: () => void;
+  onBackToWorkspaces: () => void;
+}): ReactElement {
+  return (
+    <DialogFooter
+      className="mt-0 flex-col-reverse items-stretch justify-between gap-3 border-t border-border px-6 py-4 sm:flex-row sm:items-center"
+      role="group"
+      aria-label="Repository actions"
+    >
+      <div className="flex flex-wrap gap-2">
+        {canClose ? (
+          <Button type="button" variant="outline" disabled={interactionLocked} onClick={onClose}>
+            Close
+          </Button>
+        ) : null}
+        {showCreationFlow && creation.stage === "repository" && !creation.pickerOpen ? (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={interactionLocked}
+            onClick={onBackToWorkspaces}
+          >
+            <ArrowLeft data-icon="inline-start" /> Back to workspaces
+          </Button>
+        ) : null}
+        {showCreationFlow ? <WorkspaceCreationBackAction controller={creation} /> : null}
+      </div>
+      {showCreationFlow ? (
+        <div className="w-full sm:w-auto [&>button]:w-full">
+          <WorkspaceCreationSubmitAction controller={creation} modelSurface={models} />
+        </div>
+      ) : null}
+    </DialogFooter>
+  );
+}
+
+function OpenRepositoryModalSession({
+  open,
+  canClose,
+  onOpenChange,
+  requestTransition,
+}: OpenRepositoryModalProps): ReactElement {
+  const {
+    workspaces,
+    closedWorkspaces,
+    incompleteRemovals,
+    addWorkspace,
+    saveWorkspaceModelDefaults,
+    saveAgentModelFavorites,
+    reopenWorkspace,
+    resolveWorkspacePath,
+    isSwitchingWorkspace,
+  } = useWorkspaceState();
+  const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
+  const { isChangingWorkspace, runWorkspaceChange } = useGuardedWorkspaceChange(requestTransition);
+  const [showCreationFlow, setShowCreationFlow] = useState(false);
   const configuredWorkspaces = [
     ...workspaces,
     ...closedWorkspaces,
@@ -95,10 +188,16 @@ function OpenRepositoryModalSession({
   });
   const models = useWorkspaceCreationModels({
     repoPath: creation.repoPath,
-    active: open && creation.stage === "models",
+    active: open && showCreationFlow && creation.stage === "models",
     saveAgentModelFavorites,
   });
   const interactionLocked = isSwitchingWorkspace || isCreatingWorkspace || isChangingWorkspace;
+  const { selectionError, reopenClosedWorkspace } = useClosedWorkspaceReopen({
+    runWorkspaceChange,
+    reopenWorkspace,
+    onOpenChange,
+    disabled: interactionLocked,
+  });
 
   return (
     <Dialog
@@ -108,7 +207,7 @@ function OpenRepositoryModalSession({
       }}
     >
       <DialogContent
-        className="max-w-3xl"
+        className="grid max-h-[92vh] max-w-6xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-0"
         {...(canClose && !interactionLocked ? {} : { closeButton: null })}
         onEscapeKeyDown={(event) => {
           if (!canClose || interactionLocked) event.preventDefault();
@@ -117,40 +216,46 @@ function OpenRepositoryModalSession({
           if (!canClose || interactionLocked) event.preventDefault();
         }}
       >
-        <DialogHeader>
+        <DialogHeader className="border-b border-border px-6 py-5">
           <DialogTitle className="flex items-center gap-2 text-2xl">
-            <Sparkles />
-            Open a Repository
+            <Sparkles className="size-5 text-primary" />
+            Open a repository
           </DialogTitle>
           <DialogDescription>
-            Choose a repository folder, review workspace information, then choose models.
+            {showCreationFlow
+              ? "Choose a Git folder, review workspace details, and set model defaults."
+              : "Start a new workspace or reopen one you closed earlier."}
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="flex flex-col gap-5 py-4">
-          <WorkspaceCreationFields controller={creation} modelSurface={models} />
+        <DialogBody className="px-6 py-5">
+          {showCreationFlow ? (
+            <WorkspaceCreationFields controller={creation} modelSurface={models} />
+          ) : (
+            <OpenRepositoryChoices
+              closedWorkspaces={closedWorkspaces}
+              disabled={interactionLocked}
+              error={selectionError}
+              onChooseNew={() => {
+                setShowCreationFlow(true);
+                creation.openPicker();
+              }}
+              onReopen={(workspaceId, repoPath) => {
+                void reopenClosedWorkspace(workspaceId, repoPath);
+              }}
+            />
+          )}
         </DialogBody>
 
-        <DialogFooter
-          className="flex-row justify-between"
-          role="group"
-          aria-label="Repository actions"
-        >
-          <div className="flex gap-2">
-            {canClose ? (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={interactionLocked}
-                onClick={() => onOpenChange(false)}
-              >
-                Close
-              </Button>
-            ) : null}
-            <WorkspaceCreationBackAction controller={creation} />
-          </div>
-          <WorkspaceCreationSubmitAction controller={creation} modelSurface={models} />
-        </DialogFooter>
+        <OpenRepositoryModalFooter
+          canClose={canClose}
+          interactionLocked={interactionLocked}
+          showCreationFlow={showCreationFlow}
+          creation={creation}
+          models={models}
+          onClose={() => onOpenChange(false)}
+          onBackToWorkspaces={() => setShowCreationFlow(false)}
+        />
       </DialogContent>
       <FolderPickerDialog
         open={creation.pickerOpen}

@@ -6,13 +6,19 @@ import { WorkspaceIdentityFields } from "@/components/features/workspace-identit
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Stepper, type StepperStep } from "@/components/ui/stepper";
 import type { WorkspaceCreationController, WorkspaceCreationStage } from "./use-workspace-creation";
 import type { WorkspaceCreationModelSurface } from "./use-workspace-creation-models";
 
-const STAGES: ReadonlyArray<{ id: WorkspaceCreationStage; label: string }> = [
-  { id: "repository", label: "Repository folder" },
-  { id: "information", label: "Workspace information" },
-  { id: "models", label: "Models" },
+const STAGES: readonly StepperStep<WorkspaceCreationStage>[] = [
+  { id: "repository", title: "Repository", shortTitle: "Repo", description: "Choose a Git folder" },
+  {
+    id: "information",
+    title: "Workspace details",
+    shortTitle: "Details",
+    description: "Name and color",
+  },
+  { id: "models", title: "Models", description: "Set your defaults" },
 ];
 
 function WorkspaceRepositoryChooser({
@@ -21,9 +27,18 @@ function WorkspaceRepositoryChooser({
   controller: WorkspaceCreationController;
 }): ReactElement {
   return (
-    <div className="grid gap-3">
+    <div className="flex min-h-56 flex-col items-start justify-center gap-4 rounded-xl border border-border bg-card p-6 sm:p-8">
+      <div className="flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+        <FolderOpen className="size-6" aria-hidden="true" />
+      </div>
+      <div className="space-y-1">
+        <h3 className="text-base font-semibold text-foreground">Choose a repository</h3>
+        <p className="text-sm text-muted-foreground">
+          Select the local Git folder you want to use for this workspace.
+        </p>
+      </div>
       {controller.repoPath ? (
-        <div className="grid gap-1">
+        <div className="grid w-full gap-1">
           <Label htmlFor="workspace-selected-repo-path">Selected repository path</Label>
           <Input id="workspace-selected-repo-path" value={controller.repoPath} readOnly />
         </div>
@@ -43,27 +58,29 @@ function WorkspaceRepositoryFields({
 }): ReactElement {
   const invalidWorkspaceId = controller.validationError?.startsWith("Workspace ID") ?? false;
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
+    <div className="grid gap-5 rounded-xl border border-border bg-card p-5 sm:p-6">
       <div className="flex flex-col gap-1">
         <Label htmlFor="workspace-repo-path">Repository path</Label>
         <Input id="workspace-repo-path" value={controller.repoPath} readOnly />
       </div>
-      <div className="flex flex-col gap-1">
-        <Label htmlFor="workspace-id">Workspace ID</Label>
-        <Input
-          id="workspace-id"
-          value={controller.workspaceId}
-          aria-invalid={invalidWorkspaceId}
-          onChange={(event) => controller.updateWorkspaceId(event.currentTarget.value)}
-        />
-      </div>
-      <div className="flex flex-col gap-1">
-        <Label htmlFor="workspace-name">Workspace name</Label>
-        <Input
-          id="workspace-name"
-          value={controller.workspaceName}
-          onChange={(event) => controller.updateWorkspaceName(event.currentTarget.value)}
-        />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="workspace-name">Workspace name</Label>
+          <Input
+            id="workspace-name"
+            value={controller.workspaceName}
+            onChange={(event) => controller.updateWorkspaceName(event.currentTarget.value)}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="workspace-id">Workspace ID</Label>
+          <Input
+            id="workspace-id"
+            value={controller.workspaceId}
+            aria-invalid={invalidWorkspaceId}
+            onChange={(event) => controller.updateWorkspaceId(event.currentTarget.value)}
+          />
+        </div>
       </div>
       <WorkspaceIdentityFields
         idPrefix="workspace-create"
@@ -92,7 +109,7 @@ function WorkspaceModelsFields({
       </p>
     );
   return (
-    <div className="space-y-3">
+    <div className="space-y-5">
       <div className="grid gap-1">
         <Label htmlFor="workspace-models-repo-path">Repository path</Label>
         <Input id="workspace-models-repo-path" value={controller.repoPath} readOnly />
@@ -101,6 +118,7 @@ function WorkspaceModelsFields({
         Choose defaults for this workspace. You can leave every choice blank.
       </p>
       <RepositoryModelDefaultsFields
+        presentation="creation"
         selectedRepoConfig={controller.modelDraft}
         availableRuntimeDefinitions={surface.availableRuntimeDefinitions}
         catalogResources={surface.catalogResources}
@@ -169,19 +187,9 @@ export function WorkspaceCreationFields({
   modelSurface?: WorkspaceCreationModelSurface | undefined;
 }): ReactElement {
   return (
-    <div className="flex min-w-0 flex-col gap-4">
-      <ol className="grid grid-cols-3 gap-2" aria-label="Workspace setup stages">
-        {STAGES.map((step, index) => (
-          <li
-            key={step.id}
-            aria-current={controller.stage === step.id ? "step" : undefined}
-            className={`rounded-md border px-2 py-2 text-xs sm:text-sm ${controller.stage === step.id ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground"}`}
-          >
-            {index + 1}. {step.label}
-          </li>
-        ))}
-      </ol>
-      <fieldset disabled={controller.busy} className="flex min-w-0 flex-col gap-4">
+    <div className="flex min-w-0 flex-col gap-5">
+      <Stepper steps={STAGES} step={controller.stage} label="Workspace setup stages" fill />
+      <fieldset disabled={controller.busy} className="flex min-w-0 flex-col gap-5">
         {controller.stage === "repository" ? (
           picker !== undefined && controller.pickerOpen ? (
             picker
