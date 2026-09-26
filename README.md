@@ -37,57 +37,19 @@ It uses a workspace-scoped SQLite task store as the task source of truth, orches
 
 ## Install OpenDucktor
 
-### One-line desktop install
-
-The scripts install the latest stable GitHub release for the current user. Run the same command again to update a script-managed install. Quit OpenDucktor first.
-
 macOS arm64 or x64, and Linux x64:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Maxsky5/openducktor/main/install.sh | sh
 ```
 
-Windows x64 in PowerShell:
+Windows x64 (PowerShell):
 
 ```powershell
 irm https://raw.githubusercontent.com/Maxsky5/openducktor/main/install.ps1 | iex
 ```
 
-The shell script needs `curl` and Python 3. It puts the macOS app in `~/Applications`. On Linux, it puts the AppImage in `~/.local/bin` and adds a desktop launcher.
-
-The Windows script runs the NSIS installer for the current user. Both scripts check the asset against the SHA-256 digest in the GitHub release before installation.
-
-If Homebrew, a system package, or another installer manages OpenDucktor, use that method to update it.
-
-### Homebrew (macOS only)
-
-```sh
-brew install --cask Maxsky5/openducktor/openducktor
-```
-
-Homebrew requires explicit trust for non-official taps. The fully-qualified command above trusts only the OpenDucktor cask. If you already tapped the repository and want to install by short name, run `brew trust --cask Maxsky5/openducktor/openducktor` once, then `brew install --cask openducktor`.
-
-### Direct Download (macOS, Linux & Windows)
-
-1. Open the [GitHub Releases page](https://github.com/Maxsky5/openducktor/releases).
-2. Download the latest desktop asset that matches your machine.
-3. Launch OpenDucktor and open the local repository you want to work on.
-
-Homebrew installs the same signed and notarized desktop app that is published on GitHub Releases.
-
-Windows and Linux desktop builds are published from the Electron release pipeline, but they are experimental. They are useful for feedback and compatibility testing, not yet as stable as the macOS build. Please open issues with platform details, logs, and the action you were trying to perform.
-
-### Local Web Runner (macOS, Linux & Windows)
-
-If you prefer to use OpenDucktor in a browser instead of a desktop window:
-
-The web runner needs Node.js 24.14 or later.
-
-```sh
-npx @openducktor/web
-```
-
-The web runner opens OpenDucktor in your browser. Choose the desktop app or the web runner based on what best fits your workflow.
+See the [installation guide](docs/installation.md) for Homebrew, manual downloads, the browser runner, install paths, and update steps.
 
 ## User Prerequisites
 
