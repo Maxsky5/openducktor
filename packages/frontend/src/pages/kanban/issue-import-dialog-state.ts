@@ -53,49 +53,46 @@ export function useIssueImportSearch() {
 }
 
 export function useIssueSelectionState() {
-  const [selected, setSelected] = useState<Map<string, SourceIssue>>(() => new Map());
-  const [reviews, setReviews] = useState<Map<string, IssueReview>>(() => new Map());
+  const [entries, setEntries] = useState<Map<string, { item: SourceIssue; review: IssueReview }>>(
+    () => new Map(),
+  );
+  const selected = new Map<string, SourceIssue>();
+  const reviews = new Map<string, IssueReview>();
+  for (const [sourceId, entry] of entries) {
+    selected.set(sourceId, entry.item);
+    reviews.set(sourceId, entry.review);
+  }
   const toggleItem = (item: SourceIssue): void => {
-    const isRemoving = selected.has(item.sourceId);
-    setSelected((current) => {
+    setEntries((current) => {
       const next = new Map(current);
       if (next.has(item.sourceId)) next.delete(item.sourceId);
-      else next.set(item.sourceId, item);
-      return next;
-    });
-    setReviews((current) => {
-      const next = new Map(current);
-      if (isRemoving) next.delete(item.sourceId);
-      else next.set(item.sourceId, initialReview(item));
+      else next.set(item.sourceId, { item, review: initialReview(item) });
       return next;
     });
   };
   const removeItem = (sourceId: string): void => {
-    setSelected((current) => {
-      const next = new Map(current);
-      next.delete(sourceId);
-      return next;
-    });
-    setReviews((current) => {
+    setEntries((current) => {
+      if (!current.has(sourceId)) return current;
       const next = new Map(current);
       next.delete(sourceId);
       return next;
     });
   };
   const changeReview = (sourceId: string, update: Partial<IssueReview>): void => {
-    setReviews((current) => {
+    setEntries((current) => {
+      const entry = current.get(sourceId);
+      if (!entry) return current;
       const next = new Map(current);
-      const item = selected.get(sourceId);
-      if (item)
-        next.set(sourceId, { ...(current.get(sourceId) ?? initialReview(item)), ...update });
+      next.set(sourceId, { ...entry, review: { ...entry.review, ...update } });
       return next;
     });
   };
   const replaceItem = (item: SourceIssue): void => {
-    setSelected((current) => {
-      if (!current.has(item.sourceId)) return current;
+    setEntries((current) => {
+      const entry = current.get(item.sourceId);
+      if (!entry) return current;
       const next = new Map(current);
-      next.set(item.sourceId, item);
+      next.set(item.sourceId, { ...entry, item });
       return next;
     });
   };

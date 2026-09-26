@@ -262,6 +262,51 @@ const requireAreaAndStates = (
     return { area, states };
   });
 
+const readIssue = (
+  client: AzureDevOpsRestClient,
+  config: RepoConfig,
+  repository: AzureDevOpsRepository,
+  area: string,
+  states: TypeStates,
+  sourceId: string,
+) =>
+  Effect.gen(function* () {
+    if (!/^[1-9]\d*$/u.test(sourceId)) {
+      return yield* new HostValidationError({
+        field: "sourceId",
+        message: "Choose a valid Azure DevOps work item ID.",
+      });
+    }
+    const response = yield* client.request(config, repository, {
+      operation: "read work item",
+      path: `wit/workitems/${sourceId}`,
+      apiVersion: issueApiVersion(repository),
+    });
+    const item = yield* parse(response.body, workItemSchema, "azureDevOps.workItem.parse");
+    return yield* Effect.try({
+      try: () => toIssue(item, repository, area, states),
+      catch: (cause) =>
+        cause instanceof HostValidationError
+          ? cause
+          : new HostOperationError({
+              operation: "azureDevOps.issues.get",
+              message: "Azure DevOps returned an incomplete work item. Refresh and try again.",
+              cause,
+            }),
+    });
+  });
+
+const prepareAzureIssueGet = (
+  client: AzureDevOpsRestClient,
+  repositoryPort: GitProviderRepositoryPort<AzureDevOpsRepository>,
+  repoConfig: RepoConfig,
+) =>
+  Effect.gen(function* () {
+    const repository = yield* repositoryPort.getRepository(repoConfig);
+    const { area, states } = yield* requireAreaAndStates(client, repoConfig, repository);
+    return (sourceId: string) => readIssue(client, repoConfig, repository, area, states, sourceId);
+  });
+
 export const createAzureDevOpsIssueReader = ({
   client,
   repositoryPort,
@@ -328,32 +373,18 @@ export const createAzureDevOpsIssueReader = ({
   },
   get(input) {
     return Effect.gen(function* () {
-      const repository = yield* repositoryPort.getRepository(input.repoConfig);
       if (!/^[1-9]\d*$/u.test(input.sourceId)) {
         return yield* new HostValidationError({
           field: "sourceId",
           message: "Choose a valid Azure DevOps work item ID.",
         });
       }
-      const { area, states } = yield* requireAreaAndStates(client, input.repoConfig, repository);
-      const response = yield* client.request(input.repoConfig, repository, {
-        operation: "read work item",
-        path: `wit/workitems/${input.sourceId}`,
-        apiVersion: issueApiVersion(repository),
-      });
-      const item = yield* parse(response.body, workItemSchema, "azureDevOps.workItem.parse");
-      return yield* Effect.try({
-        try: () => toIssue(item, repository, area, states),
-        catch: (cause) =>
-          cause instanceof HostValidationError
-            ? cause
-            : new HostOperationError({
-                operation: "azureDevOps.issues.get",
-                message: "Azure DevOps returned an incomplete work item. Refresh and try again.",
-                cause,
-              }),
-      });
+      const preparedGet = yield* prepareAzureIssueGet(client, repositoryPort, input.repoConfig);
+      return yield* preparedGet(input.sourceId);
     });
+  },
+  prepareGet(repoConfig) {
+    return prepareAzureIssueGet(client, repositoryPort, repoConfig);
   },
 });
 

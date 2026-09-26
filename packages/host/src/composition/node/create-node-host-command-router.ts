@@ -436,6 +436,7 @@ export const assembleNodeEffectHostCommandRouter = (
       ...createNodeGitProviderCommandHandlers({
         resolver: gitProviderResolver,
         issueImportStore: assets.issueImportStore,
+        taskSyncService,
         workspaceSettingsService,
         azureDevOpsConnection,
         azureAreaPaths,

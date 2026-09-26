@@ -10,7 +10,6 @@ import {
   azureDevOpsCollectionUrl,
   azureDevOpsConnectionConfigurationFingerprint,
   azureDevOpsRepositoryKey,
-  isAzureDevOpsRepository,
 } from "@openducktor/core";
 import { type AccountInfo, type DeviceCodeRequest } from "@azure/msal-node";
 import { Effect, Fiber } from "effect";
@@ -22,7 +21,7 @@ import {
   toHostOperationError,
 } from "../../../effect/host-errors";
 import type { AzureDevOpsConnectionPort } from "../../../ports/azure-devops-connection-port";
-import { loadConnection, saveConnection } from "./connection-storage";
+import { loadConnection, saveConnection, saveConnectionRecord } from "./connection-storage";
 import { createAzureDevOpsConnectionScopeGate } from "./connection-scope-gate";
 import type { AzureDevOpsCredentialIndex } from "./credential-index";
 import { validatePat } from "./pat-validation";
@@ -236,11 +235,12 @@ export const createAzureDevOpsConnectionAdapter = ({
             yield* requireConnectionTransport(repoConfig, repository);
             yield* validatePat(fetchImplementation, repository, value);
             yield* scopeGate.requireCurrent(scope, generation);
+            const connectionStore = yield* protectedStorage.open(scope, "connection");
             yield* credentialIndex.register(repoConfig.workspaceId, {
               scope,
               deployment: repository.deployment,
             });
-            yield* saveConnection(protectedStorage, scope, {
+            yield* saveConnectionRecord(connectionStore, {
               kind: "server_pat",
               pat: value,
             });
@@ -397,20 +397,8 @@ export const createAzureDevOpsConnectionAdapter = ({
     removeWorkspaceCredentials(repoConfig) {
       return Effect.gen(function* () {
         const credentials = yield* credentialIndex.list(repoConfig.workspaceId);
-        const provider = repoConfig.git.provider;
-        if (
-          provider?.id === "azure_devops" &&
-          provider.repository &&
-          isAzureDevOpsRepository(provider.repository)
-        ) {
-          credentials.push({
-            scope: connectionScope(repoConfig, provider.repository),
-            deployment: provider.repository.deployment,
-          });
-        }
-        const unique = new Map(credentials.map((credential) => [credential.scope, credential]));
         yield* Effect.forEach(
-          unique.values(),
+          credentials,
           ({ scope, deployment }) => disconnectScope(repoConfig.workspaceId, scope, deployment),
           { discard: true },
         );

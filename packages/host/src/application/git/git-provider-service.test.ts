@@ -68,6 +68,7 @@ describe("GitProviderService", () => {
           scope: () => Effect.die("Unexpected scope call"),
           list: () => Effect.die("Unexpected Issue list call"),
           get: () => Effect.die("Unexpected Issue get call"),
+          prepareGet: () => Effect.die("Unexpected Issue import call"),
         }),
     };
     const resolver = await Effect.runPromise(createGitProviderResolver([provider]));

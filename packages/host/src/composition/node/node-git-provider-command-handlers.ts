@@ -3,6 +3,7 @@ import { createAzureAreaPathsService } from "../../application/git/azure-area-pa
 import { createGitProviderService } from "../../application/git/git-provider-service";
 import type { GitProviderResolver } from "../../application/git/git-provider-resolver";
 import { createIssueImportService } from "../../application/git/issue-import-service";
+import type { TaskSyncService } from "../../application/tasks/sync/task-sync-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-model";
 import { createAzureDevOpsConnectionCommandHandlers } from "../../interface/commands/azure-devops-connection-command-handlers";
 import { createAzureAreaPathsCommandHandlers } from "../../interface/commands/azure-area-paths-command-handlers";
@@ -20,12 +21,14 @@ type NodeGitProviderCommandHandlers = ReturnType<typeof createGitProviderCommand
 export const createNodeGitProviderCommandHandlers = ({
   resolver,
   issueImportStore,
+  taskSyncService,
   workspaceSettingsService,
   azureDevOpsConnection,
   azureAreaPaths,
 }: {
   resolver: GitProviderResolver;
   issueImportStore: IssueImportStorePort;
+  taskSyncService: Pick<TaskSyncService, "publishExternalTaskCreated">;
   workspaceSettingsService: WorkspaceSettingsService;
   azureDevOpsConnection: AzureDevOpsConnectionPort | undefined;
   azureAreaPaths: AzureAreaPathsPort;
@@ -34,7 +37,12 @@ export const createNodeGitProviderCommandHandlers = ({
     service: createGitProviderService({ resolver, workspaceSettingsService }),
   }),
   ...createIssueImportCommandHandlers(
-    createIssueImportService({ resolver, store: issueImportStore, workspaceSettingsService }),
+    createIssueImportService({
+      resolver,
+      store: issueImportStore,
+      workspaceSettingsService,
+      publishTaskCreated: taskSyncService.publishExternalTaskCreated,
+    }),
   ),
   ...createAzureAreaPathsCommandHandlers(
     createAzureAreaPathsService({ resolver, areaPaths: azureAreaPaths, workspaceSettingsService }),

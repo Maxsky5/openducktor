@@ -9,7 +9,15 @@ import {
   type SourceIssue,
 } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { toast } from "sonner";
 import { SettingsModalProvider } from "@/components/features/settings/settings-modal";
 import { createQueryClient } from "@/lib/query-client";
@@ -17,6 +25,7 @@ import { host } from "@/state/operations/shared/host";
 import { invalidateRepoIssueItemsQueries, issueItemsQueryKeys } from "@/state/queries/issue-items";
 import { enableReactActEnvironment } from "../agents/agent-studio-test-utils";
 import { IssueImportDialog } from "./issue-import-dialog";
+import { useIssueSelectionState } from "./issue-import-dialog-state";
 
 enableReactActEnvironment();
 
@@ -106,6 +115,18 @@ afterEach(() => {
 });
 
 describe("Issue import dialog", () => {
+  test("keeps selection and review together across batched toggles", () => {
+    const { result } = renderHook(() => useIssueSelectionState());
+
+    act(() => {
+      result.current.toggleItem(issue("1"));
+      result.current.toggleItem(issue("1"));
+    });
+
+    expect(result.current.selected.size).toBe(0);
+    expect(result.current.reviews.size).toBe(0);
+  });
+
   test("closes after every selected issue is created and reports the count", async () => {
     host.issueItemsList = async () => ({
       items: [issue("1"), issue("2")],

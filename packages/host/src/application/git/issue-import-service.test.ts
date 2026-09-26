@@ -6,6 +6,7 @@ import {
   type TaskCard,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { HostValidationError } from "../../effect/host-errors";
 import type { GitProviderPort, IssueReaderPort } from "../../ports/git-provider-port";
 import type { IssueImportStorePort } from "../../ports/issue-import-store-port";
 import type { GitProviderResolver } from "./git-provider-resolver";
@@ -45,6 +46,7 @@ const fixture = (issueAccess: "browse" | "search" = "search") => {
   ]);
   const linked = new Map<string, string>();
   const created: string[] = [];
+  const published: string[] = [];
   const reader: IssueReaderPort = {
     providerId: "github",
     scope: () => Effect.succeed("github.com/example/repo"),
@@ -54,6 +56,7 @@ const fixture = (issueAccess: "browse" | "search" = "search") => {
         nextPage: page === 1 ? 2 : undefined,
       }),
     get: ({ sourceId }) => Effect.succeed(sources.get(sourceId)!),
+    prepareGet: () => Effect.succeed((sourceId: string) => reader.get({ repoConfig, sourceId })),
   };
   const provider: GitProviderPort = {
     getDescriptor: () => ({
@@ -102,8 +105,12 @@ const fixture = (issueAccess: "browse" | "search" = "search") => {
     resolver,
     store,
     workspaceSettingsService: { getRepoConfigByRepoPath: () => Effect.succeed(repoConfig) },
+    publishTaskCreated: (_repoPath, task) =>
+      Effect.sync(() => {
+        published.push(task.id);
+      }),
   });
-  return { service, sources, linked, created };
+  return { service, reader, sources, linked, created, published };
 };
 
 describe("Issue import service", () => {
@@ -135,7 +142,7 @@ describe("Issue import service", () => {
   });
 
   test("keeps successes and reports source changes and duplicates per item", async () => {
-    const { service, sources, linked, created } = fixture();
+    const { service, sources, linked, created, published } = fixture();
     sources.set("2", issue("2", "2"));
     const result = await Effect.runPromise(
       service.import({
@@ -154,6 +161,7 @@ describe("Issue import service", () => {
       reason: expect.stringContaining("changed since review"),
     });
     expect(created).toEqual(["1"]);
+    expect(published).toEqual(["task-1"]);
     linked.set("2", "other-task");
     const retry = await Effect.runPromise(
       service.import({
@@ -164,6 +172,32 @@ describe("Issue import service", () => {
     expect(retry.results[0]).toMatchObject({ sourceId: "2", outcome: "failed" });
     expect(retry.results[0]).toMatchObject({ reason: expect.stringContaining("other-task") });
     expect(created).toEqual(["1"]);
+    expect(published).toEqual(["task-1"]);
+  });
+
+  test("reports reader setup failure for each item without creating Tasks", async () => {
+    const { service, reader, created, published } = fixture();
+    reader.prepareGet = () =>
+      Effect.fail(
+        new HostValidationError({ field: "provider", message: "Area access is unavailable." }),
+      );
+
+    const result = await Effect.runPromise(
+      service.import({
+        repoPath: "/repo",
+        items: [
+          { sourceId: "1", revision: "1", issueType: "task", priority: 2, labels: [] },
+          { sourceId: "2", revision: "1", issueType: "task", priority: 2, labels: [] },
+        ],
+      }),
+    );
+
+    expect(result.results).toEqual([
+      { sourceId: "1", outcome: "failed", reason: "Area access is unavailable." },
+      { sourceId: "2", outcome: "failed", reason: "Area access is unavailable." },
+    ]);
+    expect(created).toEqual([]);
+    expect(published).toEqual([]);
   });
 
   test("refreshes a source item by ID outside the current page and reports its Task link", async () => {

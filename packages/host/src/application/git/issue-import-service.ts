@@ -5,6 +5,7 @@ import type {
   IssueItemGetInput,
   IssueImageGetInput,
   SourceIssue,
+  TaskCard,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { z } from "zod";
@@ -56,10 +57,12 @@ export const createIssueImportService = ({
   resolver,
   store,
   workspaceSettingsService,
+  publishTaskCreated,
 }: {
   resolver: GitProviderResolver;
   store: IssueImportStorePort;
   workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfigByRepoPath">;
+  publishTaskCreated: (repoPath: string, task: TaskCard) => Effect.Effect<void>;
 }) => {
   const resolve = (repoPath: string) =>
     Effect.gen(function* () {
@@ -164,6 +167,7 @@ export const createIssueImportService = ({
     import(input: IssueItemsImportInput) {
       return Effect.gen(function* () {
         const { repoConfig, reader, scope } = yield* resolve(input.repoPath);
+        const preparedGet = yield* Effect.either(reader.prepareGet(repoConfig));
         const seen = new Set<string>();
         const results: IssueItemsImportResult["results"] = [];
         for (const review of input.items) {
@@ -176,9 +180,17 @@ export const createIssueImportService = ({
             continue;
           }
           seen.add(review.sourceId);
+          if (preparedGet._tag === "Left") {
+            results.push({
+              sourceId: review.sourceId,
+              outcome: "failed",
+              reason: errorMessage(preparedGet.left),
+            });
+            continue;
+          }
           const outcome = yield* Effect.either(
             Effect.gen(function* () {
-              const source = yield* reader.get({ repoConfig, sourceId: review.sourceId });
+              const source = yield* preparedGet.right(review.sourceId);
               if (
                 source.sourceId !== review.sourceId ||
                 source.providerId !== reader.providerId ||
@@ -216,6 +228,7 @@ export const createIssueImportService = ({
                   reason: `This source item is already linked to Task ${created.taskId}.`,
                 };
               }
+              yield* publishTaskCreated(input.repoPath, created.task);
               return { outcome: "created" as const, taskId: created.task.id };
             }),
           );
