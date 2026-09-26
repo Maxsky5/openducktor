@@ -78,6 +78,7 @@ export const workspaceTextFileWriteInputSchema = z
     relativePath: z.string().min(1),
     contents: z.string(),
     revision: z.string().min(1),
+    expectedBranch: z.string().min(1).optional(),
   })
   .strict();
 export type WorkspaceTextFileWriteInput = z.infer<typeof workspaceTextFileWriteInputSchema>;

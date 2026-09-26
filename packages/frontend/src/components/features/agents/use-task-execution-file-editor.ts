@@ -1,5 +1,6 @@
 import type {
   WorkspaceTextFileReadResult,
+  WorkspaceTextFileWriteInput,
   WorkspaceTextFileWriteFailure,
   WorkspaceTextFileWriteResult,
 } from "@openducktor/contracts";
@@ -326,12 +327,14 @@ export const useTaskExecutionFileEditor = ({
     const contentsToSave = draftRef.current;
     let didSaveActiveSession = false;
     try {
-      const saved: WorkspaceTextFileWriteResult = await mutation.mutateAsync({
+      const input: WorkspaceTextFileWriteInput = {
         rootPath: session.baseline.rootPath,
         relativePath: session.baseline.relativePath,
         contents: contentsToSave,
         revision: baselineRevision,
-      });
+      };
+      if (session.branch) input.expectedBranch = session.branch;
+      const saved: WorkspaceTextFileWriteResult = await mutation.mutateAsync(input);
       const activeSession = stateRef.current.session;
       const saveStillMatchesActiveSession =
         selectedFileIdRef.current === session.id &&

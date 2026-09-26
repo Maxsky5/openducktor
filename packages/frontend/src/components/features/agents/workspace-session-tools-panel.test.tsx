@@ -233,10 +233,16 @@ test.each(["repository settings", "comparison"] as const)(
 test.each(["recovers", "fails"] as const)(
   "manual refresh %s after a repository settings error",
   async (outcome) => {
-    const comparison = mock(async (): Promise<GitComparisonTarget> => ({
-      kind: "available",
-      reference: targetReference,
-    }));
+    let fetched = false;
+    const fetchRemote = mock(async () => {
+      fetched = true;
+      return { outcome: "fetched" as const, output: "" };
+    });
+    const comparison = mock(async (): Promise<GitComparisonTarget> =>
+      fetched
+        ? { kind: "available", reference: targetReference }
+        : { kind: "unavailable", reason: "Remote target is missing." },
+    );
     const statusTargets: string[] = [];
     let finishRetry!: () => void;
     const retry = mock(async () => {
@@ -248,6 +254,7 @@ test.each(["recovers", "fails"] as const)(
       createShellBridgeFixture({
         client: {
           gitGetComparisonTarget: comparison,
+          gitFetchRemote: fetchRemote,
           gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) => {
             statusTargets.push(targetBranch);
             return worktreeStatus(targetBranch);
@@ -277,6 +284,10 @@ test.each(["recovers", "fails"] as const)(
       );
     }
     const queryClient = createQueryClient();
+    const treeKey = filesystemQueryKeys.tree("/repo", null);
+    const textKey = filesystemQueryKeys.textFile("/repo", "draft.txt");
+    queryClient.setQueryData(treeKey, { rootPath: "/repo", entries: [] });
+    queryClient.setQueryData(textKey, "old text");
     const view = render(
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
@@ -297,7 +308,11 @@ test.each(["recovers", "fails"] as const)(
         await waitFor(() => expect(statusTargets).toContain(targetReference));
         expect(screen.queryByText("Could not read repository settings")).toBeNull();
         expect(reportError).not.toHaveBeenCalled();
-        expect(comparison).toHaveBeenCalledTimes(1);
+        expect(fetchRemote).toHaveBeenCalledTimes(1);
+        await waitFor(() => {
+          expect(queryClient.getQueryState(treeKey)?.isInvalidated).toBe(true);
+          expect(queryClient.getQueryState(textKey)?.isInvalidated).toBe(true);
+        });
       } else {
         await waitFor(() =>
           expect(reportError).toHaveBeenCalledWith("Could not refresh Git changes", {

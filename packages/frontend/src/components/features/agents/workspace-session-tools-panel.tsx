@@ -1,7 +1,7 @@
 import type { GitComparisonTarget, GitTargetBranch } from "@openducktor/contracts";
 import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderTree, GitBranch } from "lucide-react";
-import { useCallback, useEffect, useEffectEvent, useMemo, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { TaskExecutionSelectedFile } from "./task-execution-file-explorer-model";
 import { TaskExecutionFileExplorerPanel } from "./task-execution-file-explorer-panel";
@@ -54,6 +54,8 @@ export function WorkspaceSessionToolsPanel({
 }) {
   const queryClient = useQueryClient();
   const [isFetchingTarget, setIsFetchingTarget] = useState(false);
+  const [retryRun, setRetryRun] = useState(0);
+  const handledRetry = useRef(0);
   const { resolvedTarget, unavailableReason, isReady, refetchComparison } =
     useWorkspaceSessionComparison({
       repoPath,
@@ -85,6 +87,7 @@ export function WorkspaceSessionToolsPanel({
       try {
         if (mode === "hard" && targetError) {
           await retryTarget();
+          setRetryRun((run) => run + 1);
           return;
         }
         await refreshWorkspaceSessionData({
@@ -117,6 +120,12 @@ export function WorkspaceSessionToolsPanel({
       repoPath,
     ],
   );
+  useEffect(() => {
+    if (retryRun === handledRetry.current || targetError) return;
+    // Use the target from the render after the settings read succeeds.
+    handledRetry.current = retryRun;
+    void refresh("hard");
+  }, [refresh, retryRun, targetError]);
   useEffect(() => {
     onRefreshReady((scope) => refresh("soft", scope === "all"));
     return () => onRefreshReady(null);
@@ -328,10 +337,18 @@ async function refreshWorkspaceSessionData(input: {
         ? checkedComparison.data.reference
         : null;
     if (checkedTarget !== resolvedTarget) {
-      await queryClient.invalidateQueries({
-        queryKey: filesystemQueryKeys.treeRoot(workingDirectory),
-        refetchType: "none",
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: filesystemQueryKeys.treeRoot(workingDirectory),
+          refetchType: "none",
+        }),
+        includeFiles
+          ? queryClient.invalidateQueries({
+              queryKey: filesystemQueryKeys.textFileRoot(workingDirectory),
+            })
+          : Promise.resolve(),
+        invalidateGitWorkingDirectoryQueries(queryClient, repoPath, workingDirectory),
+      ]);
       return;
     }
   }

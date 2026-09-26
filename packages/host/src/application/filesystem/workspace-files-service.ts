@@ -159,7 +159,12 @@ export const createWorkspaceFilesService = (
   filesystem: FilesystemPort,
   gitPort: Pick<
     GitPort,
-    "getRepositoryRoot" | "getStatus" | "isGitRepository" | "listChangedFiles" | "listFiles"
+    | "getCurrentBranch"
+    | "getRepositoryRoot"
+    | "getStatus"
+    | "isGitRepository"
+    | "listChangedFiles"
+    | "listFiles"
   >,
 ): WorkspaceFilesService => {
   const textFiles = createWorkspaceTextFileService(filesystem, gitPort);

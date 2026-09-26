@@ -848,6 +848,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
       contents: "second save",
       revision: "revision:const first = true;:saved",
     });
+    expect(writeTextFileMock.mock.calls[1]?.[0]).not.toHaveProperty("expectedBranch");
   });
 
   test("ignores a completed save after the active editor session changes", async () => {
@@ -916,7 +917,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
   test("keeps a draft but blocks saving it on another branch with the same file revision", async () => {
     const onClose = mock(() => {});
     const model = { selectedFile: firstFile, onClose };
-    const view = render(renderPreview(model, "light", undefined, "main"));
+    const view = render(renderPreview(model, "light", undefined, "branch:main"));
     await screen.findByText("const first = true;");
     const item = firstCodeViewItem();
     act(() => {
@@ -924,7 +925,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     });
     await waitForDirtyFile();
 
-    view.rerender(renderPreview(model, "light", undefined, "feature"));
+    view.rerender(renderPreview(model, "light", undefined, "branch:feature"));
 
     expect(screen.getByRole("status", { name: "Unsaved changes" })).toBeTruthy();
     expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save file" }).disabled).toBe(
@@ -955,6 +956,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(writeTextFileMock.mock.calls[0]?.[0]).toMatchObject({
       contents: "draft",
       revision: "revision:const first = true;",
+      expectedBranch: "branch:feature",
     });
   });
 
