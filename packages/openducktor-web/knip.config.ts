@@ -7,5 +7,7 @@ export default {
     "@ff-labs/fff-node",
     // The host bundle externalizes MSAL's native persistence package.
     "@azure/msal-node-extensions",
+    // The host bundle externalizes the native terminal package.
+    "node-pty",
   ],
 };

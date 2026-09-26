@@ -1,6 +1,6 @@
 # CLI and tool discovery
 
-OpenDucktor uses local Git, GitHub CLI, Bun, OpenCode, Codex, and Claude Code. The TypeScript host finds these tools for both Electron and web shells.
+OpenDucktor uses local Git, GitHub CLI, Node.js, Bun, OpenCode, Codex, and Claude Code. The TypeScript host finds these tools for both Electron and web shells.
 
 A consumer asks `ToolDiscoveryPort` for a tool. It does not search files, read `process.env`, run `which`, or inspect an app bundle.
 
@@ -107,7 +107,8 @@ A descriptor can list exact files that do not fit a directory search. Codex uses
 
 | ID | Command | Environment variable | Extra sources | Main use |
 |---|---|---|---|---|
-| `bun` | `bun` | `OPENDUCKTOR_BUN_PATH` | None | Run source or web MCP file |
+| `bun` | `bun` | `OPENDUCKTOR_BUN_PATH` | None | Run workspace source tools |
+| `node` | `node` | `OPENDUCKTOR_NODE_PATH` | None | Run the published web MCP file |
 | `codex` | `codex` | `OPENDUCKTOR_CODEX_BINARY` | Bundled directory and macOS app files | Setup and rediscovery |
 | `claude` | `claude` | `OPENDUCKTOR_CLAUDE_BINARY` | None | Setup and rediscovery |
 | `git` | `git` | `OPENDUCKTOR_GIT_PATH` | None | Git and diagnostics |
@@ -130,7 +131,7 @@ All package paths must come from the active app resources. Never use a developme
 
 ### Web package
 
-`bunx @openducktor/web` passes an artifact distribution. It runs `dist/openducktor-mcp.js` with the Bun executable that started the web package.
+`npx @openducktor/web` passes an artifact distribution. It runs `dist/openducktor-mcp.js` with Node.js. Bun remains the package manager for repository development.
 
 The web package does not use Electron resources and has no bundled runtime CLI directory. It finds runtime CLIs through descriptor rules unless the shell supplies an exact path. A future bundled CLI must use an npm package path.
 

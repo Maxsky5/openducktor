@@ -6,7 +6,7 @@ import {
 } from "./web-runtime-distribution";
 
 describe("resolveWebRuntimeDistribution", () => {
-  test("uses the workspace source distribution for web dev mode", () => {
+  test("uses the Node MCP bundle for web dev mode", () => {
     expect(
       resolveWebRuntimeDistribution({
         packageRoot: "/repo/packages/openducktor-web",
@@ -14,8 +14,8 @@ describe("resolveWebRuntimeDistribution", () => {
         workspaceRoot: "/repo",
       }),
     ).toMatchObject({
-      mode: "source",
-      workspaceRoot: "/repo",
+      mode: "artifact",
+      mcpLauncher: { kind: "toolScript", toolId: "node" },
     });
   });
 
@@ -31,15 +31,25 @@ describe("resolveWebRuntimeDistribution", () => {
     expect(resolveDistribution).toThrow(expect.objectContaining({ _tag: "WebValidationError" }));
   });
 
+  test("rejects a blank workspace root in web dev mode", () => {
+    expect(() =>
+      resolveWebRuntimeDistribution({
+        packageRoot: "/repo/packages/openducktor-web",
+        workspaceMode: true,
+        workspaceRoot: " ",
+      }),
+    ).toThrow("workspaceRoot cannot be empty.");
+  });
+
   test("uses the self-contained package MCP entrypoint in npm package mode", () => {
     const mcpEntrypoint = path.join(
-      "/tmp/bunx/@openducktor/web",
+      "/tmp/npx/@openducktor/web",
       "dist",
       WEB_PACKAGE_MCP_ENTRYPOINT,
     );
 
     const distribution = resolveWebRuntimeDistribution({
-      packageRoot: "/tmp/bunx/@openducktor/web",
+      packageRoot: "/tmp/npx/@openducktor/web",
       workspaceMode: false,
       workspaceRoot: "/repo/that/must/not/be/used",
     });
@@ -49,7 +59,7 @@ describe("resolveWebRuntimeDistribution", () => {
       mcpLauncher: {
         kind: "toolScript",
         scriptPath: mcpEntrypoint,
-        toolId: "bun",
+        toolId: "node",
       },
     });
     expect("bundledToolBinDirs" in distribution).toBe(false);

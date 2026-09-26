@@ -1,16 +1,17 @@
 # OpenDucktor web runner
 
 The web runner opens OpenDucktor in a browser. It uses the same React frontend and TypeScript host contract as the Electron app.
+The web runner needs Node.js 24.14 or later. It uses `node-pty` to run terminals.
 
 ## Start the runner
 
-Use the published package:
+Use the published package with Node.js. This command does not need Bun:
 
 ```sh
-bunx @openducktor/web
+npx @openducktor/web
 ```
 
-Use this command while you work in the repository:
+Use Bun for repository development and workspace commands:
 
 ```sh
 bun run browser:dev
@@ -25,7 +26,7 @@ The runner can serve browsers on the network, for example from a VPS on a Tailsc
 Start the runner with a bind host and an external URL:
 
 ```sh
-bunx @openducktor/web --host 0.0.0.0 --external-url http://100.64.0.1:1420
+npx @openducktor/web --host 0.0.0.0 --external-url http://100.64.0.1:1420
 ```
 
 The `--host` value is the bind address for the frontend and the host. The `--external-url` value is the origin browsers use to reach the frontend. The host URL derives from the same host and the backend port.
@@ -49,7 +50,7 @@ The launcher fails fast when it binds a non-loopback host without `--external-ur
 A reverse proxy can expose the frontend and the host on the same origin and port. The runner then needs no CORS and no second port. Use `--base-path` to mount the host under a path:
 
 ```sh
-bunx @openducktor/web --host 127.0.0.1 --external-url https://machine.ts.net --base-path /api
+npx @openducktor/web --host 127.0.0.1 --external-url https://machine.ts.net --base-path /api
 ```
 
 The browser config uses `https://machine.ts.net/api` as the host URL. The host strips the `/api` prefix from its routes, so the proxy may keep or strip the prefix:
@@ -96,7 +97,7 @@ The host CORS allowlist includes the configured frontend origin, its hostname wi
 
 The launcher serves the browser config through `/openducktor-config.json` without authentication. Anyone who can reach the frontend port can read the app token. Restrict access as described in [Serve the runner on another machine](#serve-the-runner-on-another-machine).
 
-Workspace mode serves the frontend with the Vite dev server. The dev server exposes its module graph and `fs.allow` paths, so prefer production mode (`bunx @openducktor/web` without `--workspace`) on a remote machine. The launcher restricts Vite `fs.allow` to the web package, the frontend sources, and the workspace `node_modules` directory, and allows the external URL hostname when it is not an IP address.
+Workspace mode serves the frontend with the Vite dev server. The dev server exposes its module graph and `fs.allow` paths, so use production mode (`npx @openducktor/web` without `--workspace`) on a remote machine. The launcher restricts Vite `fs.allow` to the web package, the frontend sources, and the workspace `node_modules` directory, and allows the external URL hostname when it is not an IP address.
 
 The browser shell requires `VITE_ODT_BROWSER_BACKEND_URL` and `VITE_ODT_BROWSER_AUTH_TOKEN`. It does not use a default URL. The launcher injects both through `/openducktor-config.json`. The host accepts a configured `http` or `https` origin without user info, path, query, or fragment. The port is optional. The web host does not fall back to a desktop runtime route.
 

@@ -6,7 +6,8 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./generated-image-worker": "./src/adapters/attachments/generated-image-worker.ts"
+    "./generated-image-worker": "./src/adapters/attachments/generated-image-worker.ts",
+    "./node-pty": "./src/adapters/node/pty-process-adapter.ts"
   },
   "scripts": {
     "build": "bunx tsc -p tsconfig.build.json",
@@ -25,6 +26,8 @@
     "@openducktor/contracts": "workspace:*",
     "@openducktor/core": "workspace:*",
     "@openducktor/path-support": "workspace:*",
+    "@xterm/addon-serialize": "0.14.0",
+    "@xterm/headless": "6.0.0",
     "diff": "9.0.0",
     "drizzle-orm": "0.45.2",
     "effect": "^3.22.2",
@@ -38,6 +41,7 @@
   "devDependencies": {
     "@types/node": "^26.6.1",
     "bun-types": "^1.4.2",
-    "drizzle-kit": "0.31.10"
+    "drizzle-kit": "0.31.10",
+    "node-pty": "1.2.0-beta.15"
   }
 }

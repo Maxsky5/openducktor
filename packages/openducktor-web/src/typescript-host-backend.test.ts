@@ -18,6 +18,7 @@ import { WorkspaceTextFileWriteError } from "../../host/src/application/filesyst
 import { HostOperationError } from "../../host/src/effect/host-errors";
 import type { HostCommandHandlerError } from "../../host/src/interface/router/host-command-router";
 import type { WebLogger } from "./logger";
+import { startNodeFetchServer, type NodeFetchServer } from "./node-fetch-server";
 import { allowedHostnamesFor, parseHostEffect } from "./http-origin";
 import { validateLauncherNetworkOptionsEffect } from "./launcher";
 import {
@@ -250,10 +251,15 @@ describe("TypeScript web host backend", () => {
   const createTerminalUpgradeTestServer = (
     basePath = TERMINAL_UPGRADE_BASE_PATH,
     bindHost = "127.0.0.1",
-  ): ReturnType<typeof Bun.serve> =>
-    Bun.serve({
+  ): Promise<
+    NodeFetchServer<import("./terminals/terminal-websocket-handler").TerminalWebSocketData>
+  > =>
+    startNodeFetchServer({
       hostname: bindHost,
       port: 0,
+      onError: (cause) => {
+        throw cause;
+      },
       fetch: (request, requestServer) =>
         handleHostFetch({
           allowedHostnames: allowedHostnamesFor({
@@ -347,7 +353,7 @@ describe("TypeScript web host backend", () => {
         }),
       );
       expect(basePath).toBe("/api");
-      const server = createTerminalUpgradeTestServer(basePath);
+      const server = await createTerminalUpgradeTestServer(basePath);
 
       try {
         const port = server.port;
@@ -384,14 +390,14 @@ describe("TypeScript web host backend", () => {
         expect(responseHead).toContain("101 Switching Protocols");
         expect(responseHead).toContain(`Sec-WebSocket-Protocol: ${TERMINAL_PROTOCOL_SUBPROTOCOL}`);
       } finally {
-        server.stop(true);
+        await server.stop(true);
       }
     },
   );
 
   test("probes a normalized IPv6 wildcard bind through the allowed loopback Host", async () => {
     const bindHost = await Effect.runPromise(parseHostEffect("::", "--host", true));
-    const server = createTerminalUpgradeTestServer("/api", bindHost);
+    const server = await createTerminalUpgradeTestServer("/api", bindHost);
     try {
       const port = server.port;
       if (port === undefined) throw new Error("Expected the test server to expose a port.");
@@ -411,12 +417,12 @@ describe("TypeScript web host backend", () => {
         exited: new Promise<number>(() => {}),
       });
     } finally {
-      server.stop(true);
+      await server.stop(true);
     }
   });
 
   test("rejects terminal upgrades when the Host header is not allowed", async () => {
-    const server = createTerminalUpgradeTestServer();
+    const server = await createTerminalUpgradeTestServer();
 
     try {
       const port = server.port;
@@ -431,13 +437,13 @@ describe("TypeScript web host backend", () => {
       );
       expect(responseHead).toContain("403");
     } finally {
-      server.stop(true);
+      await server.stop(true);
     }
   });
 
   test("probes a mapped wildcard with an isolated proxy and loopback bypass", async () => {
     const bindHost = await Effect.runPromise(parseHostEffect("[::ffff:0.0.0.0]", "--host"));
-    const server = createTerminalUpgradeTestServer("/api", bindHost);
+    const server = await createTerminalUpgradeTestServer("/api", bindHost);
     let proxyRequests = 0;
     const proxy = Bun.serve({
       hostname: "127.0.0.1",
@@ -483,7 +489,7 @@ describe("TypeScript web host backend", () => {
     } finally {
       child.kill();
       await child.exited;
-      server.stop(true);
+      await server.stop(true);
       proxy.stop(true);
     }
   }, 10_000);
@@ -491,7 +497,7 @@ describe("TypeScript web host backend", () => {
   test.each(["runner.localhost", "nested.runner.localhost", "127.0.0.2", "[::ffff:7f00:1]"])(
     "rejects unconfigured Host and Origin %s",
     async (hostname) => {
-      const server = createTerminalUpgradeTestServer();
+      const server = await createTerminalUpgradeTestServer();
       try {
         for (const headers of [
           { host: `${hostname}:${server.port}` },
@@ -505,7 +511,7 @@ describe("TypeScript web host backend", () => {
           await response.text();
         }
       } finally {
-        server.stop(true);
+        await server.stop(true);
       }
     },
   );
@@ -514,9 +520,12 @@ describe("TypeScript web host backend", () => {
     const BASE_PATH = "/api";
     const eventBus = new BufferedHostEventBus({ report: () => {} });
     let shutdownStarted = false;
-    const server = Bun.serve({
+    const server = await startNodeFetchServer({
       hostname: "127.0.0.1",
       port: 0,
+      onError: (cause) => {
+        throw cause;
+      },
       fetch: (request, requestServer) =>
         handleHostFetch({
           allowedHostnames: allowedHostnamesFor({
@@ -562,7 +571,7 @@ describe("TypeScript web host backend", () => {
       expect(response.status).toBe(200);
       await response.json();
     } finally {
-      server.stop(true);
+      await server.stop(true);
     }
   });
 
@@ -643,7 +652,7 @@ describe("TypeScript web host backend", () => {
           taskAssetReadService: missingTaskAssetReadService,
           localAttachments: createLocalAttachmentAdapter(),
           logger: testLogger,
-          request: new Request("http://127.0.0.1/session", {
+          request: new TestServerRequest("http://127.0.0.1/session", {
             method: "OPTIONS",
             headers: { origin, "access-control-request-method": "POST" },
           }),
@@ -1532,7 +1541,7 @@ describe("TypeScript web host backend", () => {
     const disposeStarted = createDeferred();
     const disposeReleased = createDeferred();
     let shutdownStarted = false;
-    let server!: ReturnType<typeof Bun.serve>;
+    let server!: NodeFetchServer<never>;
     let stopPromise: Promise<void> | null = null;
     const stop = (): Promise<void> => {
       if (stopPromise) {
@@ -1551,9 +1560,12 @@ describe("TypeScript web host backend", () => {
       });
       return stopPromise;
     };
-    server = Bun.serve({
+    server = await startNodeFetchServer({
       hostname: "127.0.0.1",
       port: 0,
+      onError: (cause) => {
+        throw cause;
+      },
       fetch: (request, requestServer) =>
         Effect.runPromise(
           handleTypescriptHostBackendRequest({
@@ -1613,12 +1625,12 @@ describe("TypeScript web host backend", () => {
       if (stopPromise) {
         await stopPromise;
       } else {
-        server.stop(true);
+        await server.stop(true);
       }
       try {
         await reader?.cancel();
       } catch {
-        // Bun rejects an SSE reader after server.stop(true) force-closes its socket.
+        // A forced server close can reject an active SSE reader.
       }
     }
   });
@@ -1631,7 +1643,7 @@ describe("TypeScript web host backend", () => {
         timeoutRequests.push(request);
       },
     } as Parameters<typeof handleHostFetch>[0]["server"];
-    const originalRequest = new Request(
+    const originalRequest = new TestServerRequest(
       `http://127.0.0.1:1420${TERMINAL_UPGRADE_BASE_PATH}/events`,
       {
         headers: {

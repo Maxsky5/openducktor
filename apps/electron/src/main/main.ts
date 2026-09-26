@@ -94,7 +94,7 @@ import { registerElectronTaskStreamIpc } from "./electron-task-stream-ipc";
 import { resolveElectronWindowChromeOptions } from "./electron-window-chrome";
 import { installApplicationMenu } from "./main-menu";
 import { registerElectronTerminalIpc } from "./terminals/electron-terminal-ipc";
-import { createNodePtyPort } from "./terminals/node-pty-adapter";
+import { createNodePtyPort } from "@openducktor/host/node-pty";
 
 const {
   app,

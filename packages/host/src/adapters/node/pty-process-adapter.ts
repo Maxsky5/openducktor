@@ -4,16 +4,27 @@ import {
   type ProcessTreeTerminator,
   processTreeHasChildren,
   processTreeIsAlive,
+  terminateProcessTree,
+  waitForObservedState,
+} from "../../infrastructure/process/process-tree";
+import {
   TerminalPtyError,
   type TerminalPtyHandle,
   type TerminalPtyPort,
-  terminateProcessTree,
-  waitForObservedState,
-} from "@openducktor/host";
+} from "../../ports/terminal-pty-port";
 import { Effect } from "effect";
 import { spawn } from "node-pty";
 
-type NodePtyModule = { readonly spawn: typeof spawn };
+type NodePtyProcess = Pick<
+  ReturnType<typeof spawn>,
+  "pid" | "onExit" | "write" | "resize" | "pause" | "resume"
+> & {
+  onData(listener: (value: string | Buffer) => void): { dispose(): void };
+};
+
+type NodePtyModule = {
+  readonly spawn: (...args: Parameters<typeof spawn>) => NodePtyProcess;
+};
 
 type CreateNodePtyPortInput = {
   nodePty?: NodePtyModule;
@@ -51,6 +62,10 @@ export const createNodePtyPort = ({
         let nativeExit: NativeExit | null = null;
         let receivedOutput = false;
         let cleanupPromise: Promise<void> | null = null;
+        let terminating = false;
+        let terminated = false;
+        let outputPaused = false;
+        const terminationPermit = Effect.unsafeMakeSemaphore(1);
         const pty = nodePty.spawn(plan.shell, [...plan.args], {
           cols: plan.grid.columns,
           cwd: plan.cwd,
@@ -146,9 +161,20 @@ export const createNodePtyPort = ({
             ? Effect.sync(publishExit)
             : ensureProcessTreeTerminated().pipe(Effect.tap(() => Effect.sync(publishExit)));
         const requireOpen = (name: TerminalPtyError["operation"], run: () => void) =>
-          operation(name, () => {
-            if (closed) throw new Error("The terminal is already closed.");
-            run();
+          Effect.suspend(() => {
+            if ((name === "write" || name === "resize") && (terminating || terminated)) {
+              return Effect.fail(
+                new TerminalPtyError({
+                  code: "operation_failed",
+                  operation: name,
+                  message: "Terminal is closing. Wait for close to finish or retry if it fails.",
+                }),
+              );
+            }
+            return operation(name, () => {
+              if (closed) throw new Error("The terminal is already closed.");
+              run();
+            });
           });
         const handle: TerminalPtyHandle = {
           supportsOutputPause: true,
@@ -166,9 +192,65 @@ export const createNodePtyPort = ({
             ),
           write: (data) => requireOpen("write", () => pty.write(Buffer.from(data))),
           resize: ({ columns, rows }) => requireOpen("resize", () => pty.resize(columns, rows)),
-          pauseOutput: () => requireOpen("pause", () => pty.pause()),
-          resumeOutput: () => requireOpen("resume", () => pty.resume()),
-          terminate: () => (exitPublished ? Effect.void : finalizeExit()),
+          pauseOutput: () =>
+            Effect.suspend(() =>
+              terminating
+                ? Effect.sync(() => {
+                    outputPaused = true;
+                  })
+                : requireOpen("pause", () => {
+                    pty.pause();
+                    outputPaused = true;
+                  }),
+            ),
+          resumeOutput: () =>
+            Effect.suspend(() =>
+              terminating
+                ? Effect.sync(() => {
+                    outputPaused = false;
+                  })
+                : requireOpen("resume", () => {
+                    pty.resume();
+                    outputPaused = false;
+                  }),
+            ),
+          terminate: () =>
+            terminationPermit.withPermits(1)(
+              Effect.gen(function* () {
+                if (exitPublished || terminated) return;
+                terminating = true;
+                const result = yield* Effect.either(
+                  Effect.gen(function* () {
+                    // node-pty delays onExit until its output stream closes.
+                    if (!closed) yield* operation("terminate", () => pty.resume());
+                    yield* finalizeExit();
+                  }),
+                );
+                if (result._tag === "Right") {
+                  terminating = false;
+                  terminated = true;
+                  return;
+                }
+
+                const restore = yield* Effect.either(
+                  operation("terminate", () => {
+                    if (!closed && outputPaused) pty.pause();
+                  }),
+                );
+                terminating = false;
+                if (restore._tag === "Left") {
+                  return yield* Effect.fail(
+                    new TerminalPtyError({
+                      code: "operation_failed",
+                      operation: "terminate",
+                      message: "node-pty could not restore output pause after termination failed.",
+                      cause: new AggregateError([result.left, restore.left]),
+                    }),
+                  );
+                }
+                return yield* Effect.fail(result.left);
+              }),
+            ),
         };
         return handle;
       },

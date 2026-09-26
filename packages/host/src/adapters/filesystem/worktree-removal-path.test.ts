@@ -48,7 +48,7 @@ describe("worktree removal path resolution", () => {
     await writeFile(file, "keep");
     await expect(
       Effect.runPromise(resolveWorktreeRemovalPath(path.join(file, "tree"))),
-    ).rejects.toThrow("ENOTDIR");
+    ).rejects.toThrow(/ENOTDIR|not a directory/);
   });
 
   test("propagates a symlink cycle instead of treating it as a removed path", async () => {

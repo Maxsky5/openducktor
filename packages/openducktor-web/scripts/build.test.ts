@@ -5,9 +5,9 @@ import { join } from "node:path";
 import {
   copyWebSqliteTaskStoreMigrations,
   resolveWebSqliteTaskStoreMigrationCopyPlan,
-} from "./build";
+} from "./build-cli";
 
-describe("web package build", () => {
+describe("web CLI build", () => {
   it("places SQLite task-store migrations next to the bundled CLI", () => {
     const workspaceRoot = join("/", "workspace");
     const packageRoot = join(workspaceRoot, "packages", "openducktor-web");

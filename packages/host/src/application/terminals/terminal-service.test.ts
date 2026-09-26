@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, posix } from "node:path";
@@ -12,6 +12,7 @@ import {
   type TerminalPtyPort,
 } from "../../ports/terminal-pty-port";
 import { TERMINAL_LIMITS } from "./terminal-limits";
+import { TerminalScreenState } from "./terminal-screen-state";
 import { HostValidationError } from "../../effect/host-errors";
 import { createTerminalService } from "./terminal-service";
 import type { WithProcessStartAdmission } from "../workspaces/workspace-admission-service";
@@ -82,6 +83,21 @@ const makePty = (supportsOutputPause = true, hasChildProcesses = true) => {
       terminateFailuresRemaining += 1;
     },
   };
+};
+
+const waitForPtyOperation = async (operations: string[], operation: string): Promise<void> => {
+  for (let attempt = 0; attempt < 200 && !operations.includes(operation); attempt += 1) {
+    await Bun.sleep(10);
+  }
+  expect(operations).toContain(operation);
+};
+
+const emitEvictedReplay = async (pty: ReturnType<typeof makePty>): Promise<void> => {
+  const chunk = new Uint8Array(64 * 1024).fill(120);
+  for (let index = 0; index < TERMINAL_LIMITS.replayBytes / chunk.byteLength + 1; index += 1) {
+    pty.emit(chunk);
+    await Bun.sleep(0);
+  }
 };
 
 const makeTitleSettlementScheduler = () => {
@@ -427,22 +443,196 @@ describe("TerminalService", () => {
     expect(pty.operations).toEqual(["write:first", "resize:120x40", "write:second"]);
   });
 
-  test("reports an exact replay gap before the retained tail", async () => {
+  test("restores the current screen after old replay bytes are evicted", async () => {
     const { service, pty } = await makeService();
     await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
-    pty.emit(new Uint8Array(TERMINAL_LIMITS.replayBytes + 1));
+    await emitEvictedReplay(pty);
+    const tui = new TextEncoder().encode("\u001b[?1049h\u001b[HREADY");
+    pty.emit(tui);
+    await Bun.sleep(0);
     const eventTypes: string[] = [];
+    let restoredScreen = "";
     await Effect.runPromise(
       service.attach({
         terminalId: "terminal-1",
         attachmentId: "attachment-1",
         lastConsumedSequence: 0,
-        sink: (event) => eventTypes.push(event.type),
+        sink: (event, payload) => {
+          eventTypes.push(event.type);
+          if (event.type === "screen_restore") restoredScreen = new TextDecoder().decode(payload);
+        },
       }),
     );
     expect(eventTypes[0]).toBe("snapshot");
-    expect(eventTypes[1]).toBe("replay_gap");
-    expect(eventTypes[2]).toBe("output");
+    expect(eventTypes[1]).toBe("screen_restore");
+    expect(eventTypes).not.toContain("output");
+    expect(restoredScreen).toContain("\u001b[?1049h");
+    expect(restoredScreen).toContain("READY");
+  });
+
+  test.each(["success", "sink failure"])(
+    "pauses PTY output before a replay-gap restore and releases it after %s",
+    async (result) => {
+      const { service, pty } = await makeService();
+      await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
+      await emitEvictedReplay(pty);
+      const drainGate = Promise.withResolvers<void>();
+      const originalDrained = TerminalScreenState.prototype.drained;
+      const drained = spyOn(TerminalScreenState.prototype, "drained").mockImplementation(function (
+        this: TerminalScreenState,
+      ) {
+        return drainGate.promise.then(() => originalDrained.call(this));
+      });
+      const events: string[] = [];
+      const attaching = Effect.runPromise(
+        service.attach({
+          terminalId: "terminal-1",
+          attachmentId: "attachment-1",
+          lastConsumedSequence: 0,
+          sink: (event) => {
+            if (result === "sink failure") throw new Error("socket closed");
+            events.push(event.type);
+          },
+        }),
+      );
+      try {
+        await waitForPtyOperation(pty.operations, "pause");
+        expect(events).toEqual([]);
+        drainGate.resolve();
+        if (result === "sink failure") await expect(attaching).rejects.toThrow("socket closed");
+        else {
+          await attaching;
+          expect(events).toEqual(["snapshot", "screen_restore"]);
+        }
+        await waitForPtyOperation(pty.operations, "resume");
+        expect(pty.operations).toEqual(["pause", "resume"]);
+      } finally {
+        drainGate.resolve();
+        drained.mockRestore();
+        await attaching.catch(() => undefined);
+      }
+    },
+  );
+
+  test("releases a replay-gap hold when PTY pause fails", async () => {
+    const pty = makePty();
+    const start = pty.port.start;
+    let pauseFails = true;
+    pty.port.start = (plan, handlers) =>
+      start(plan, handlers).pipe(
+        Effect.map((handle) => ({
+          ...handle,
+          pauseOutput: () =>
+            pauseFails
+              ? Effect.fail(
+                  new TerminalPtyError({
+                    code: "operation_failed",
+                    operation: "pause",
+                    message: "PTY pause failed",
+                  }),
+                )
+              : handle.pauseOutput(),
+        })),
+      );
+    const { service } = await makeService(pty);
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
+    await emitEvictedReplay(pty);
+    const attach = () =>
+      Effect.runPromise(
+        service.attach({
+          terminalId: "terminal-1",
+          attachmentId: "attachment-1",
+          lastConsumedSequence: 0,
+          sink: () => undefined,
+        }),
+      );
+    await expect(attach()).rejects.toThrow("could not pause for a correct screen restore");
+    pauseFails = false;
+    await attach();
+    await waitForPtyOperation(pty.operations, "resume");
+    expect(pty.operations).toEqual(["pause", "resume"]);
+  });
+
+  test("keeps output paused until concurrent replay-gap restores finish", async () => {
+    const { service, pty } = await makeService();
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
+    await emitEvictedReplay(pty);
+    const gates = [Promise.withResolvers<void>(), Promise.withResolvers<void>()] as const;
+    const originalDrained = TerminalScreenState.prototype.drained;
+    let drainCalls = 0;
+    const drained = spyOn(TerminalScreenState.prototype, "drained").mockImplementation(function (
+      this: TerminalScreenState,
+    ) {
+      const gate = gates[drainCalls++];
+      if (!gate) throw new Error("Unexpected screen drain.");
+      return gate.promise.then(() => originalDrained.call(this));
+    });
+    const firstEvents: string[] = [];
+    const secondEvents: string[] = [];
+    const attach = (index: number, events: string[]) =>
+      Effect.runPromise(
+        service.attach({
+          terminalId: "terminal-1",
+          attachmentId: `attachment-${index}`,
+          lastConsumedSequence: 0,
+          sink: (event) => events.push(event.type),
+        }),
+      );
+    const first = attach(0, firstEvents);
+    const second = attach(1, secondEvents);
+    try {
+      await waitForPtyOperation(pty.operations, "pause");
+      for (let attempt = 0; attempt < 200 && drainCalls < 2; attempt += 1) await Bun.sleep(10);
+      expect(drainCalls).toBe(2);
+      gates[0].resolve();
+      await first;
+      await Bun.sleep(0);
+      expect(pty.operations).toEqual(["pause"]);
+      gates[1].resolve();
+      await second;
+      await waitForPtyOperation(pty.operations, "resume");
+      expect(pty.operations).toEqual(["pause", "resume"]);
+      expect([firstEvents, secondEvents]).toEqual([
+        ["snapshot", "screen_restore"],
+        ["snapshot", "screen_restore"],
+      ]);
+    } finally {
+      for (const gate of gates) gate.resolve();
+      drained.mockRestore();
+      await Promise.all([first.catch(() => undefined), second.catch(() => undefined)]);
+    }
+  });
+
+  test("replays retained output without waiting for the screen parser", async () => {
+    const { service, pty } = await makeService();
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
+    pty.emit(new TextEncoder().encode("A"));
+    let releaseDrain!: () => void;
+    const drain = new Promise<void>((resolve) => {
+      releaseDrain = resolve;
+    });
+    const drained = spyOn(TerminalScreenState.prototype, "drained").mockImplementation(() => drain);
+    const eventTypes: string[] = [];
+    const attaching = Effect.runPromise(
+      service.attach({
+        terminalId: "terminal-1",
+        attachmentId: "replay",
+        lastConsumedSequence: 0,
+        sink: (event) => eventTypes.push(event.type),
+      }),
+    );
+    try {
+      const result = await Promise.race([
+        attaching.then(() => "attached"),
+        Bun.sleep(1000).then(() => "blocked"),
+      ]);
+      expect(result).toBe("attached");
+      expect(eventTypes).toEqual(["snapshot", "output"]);
+    } finally {
+      releaseDrain();
+      drained.mockRestore();
+      await attaching;
+    }
   });
 
   test("rejects an attachment position beyond published output", async () => {
@@ -549,7 +739,7 @@ describe("TerminalService", () => {
     await Effect.runPromise(
       service.acknowledge("terminal-1", "a", TERMINAL_LIMITS.pendingOutputBytes),
     );
-    expect(pty.operations).toContain("resume");
+    await waitForPtyOperation(pty.operations, "resume");
   });
 
   test("resumes output when the pressure-causing attachment detaches", async () => {
@@ -565,9 +755,9 @@ describe("TerminalService", () => {
     );
     pty.emit(new Uint8Array(TERMINAL_LIMITS.pendingOutputBytes));
     await Bun.sleep(0);
-
     await Effect.runPromise(service.detach("terminal-1", "slow-renderer"));
 
+    await waitForPtyOperation(pty.operations, "resume");
     expect(pty.operations).toEqual(["pause", "resume"]);
     const replayed: string[] = [];
     await Effect.runPromise(
@@ -580,6 +770,58 @@ describe("TerminalService", () => {
     );
     expect(replayed).toEqual(["snapshot"]);
   });
+
+  test.each(["ack", "detach"] as const)(
+    "resumes output after a pending pause when %s releases pressure",
+    async (unblock) => {
+      const pty = makePty();
+      const start = pty.port.start;
+      const pauseStarted = Promise.withResolvers<void>();
+      const pauseGate = Promise.withResolvers<void>();
+      pty.port.start = (plan, handlers) =>
+        start(plan, handlers).pipe(
+          Effect.map((handle) => ({
+            ...handle,
+            pauseOutput: () =>
+              Effect.promise(async () => {
+                pauseStarted.resolve();
+                await pauseGate.promise;
+                pty.operations.push("pause");
+              }),
+          })),
+        );
+      const { service } = await makeService(pty);
+      await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
+      await Effect.runPromise(
+        service.attach({
+          terminalId: "terminal-1",
+          attachmentId: "slow-renderer",
+          lastConsumedSequence: 0,
+          sink: () => undefined,
+        }),
+      );
+
+      pty.emit(new Uint8Array(TERMINAL_LIMITS.pendingOutputBytes));
+      await pauseStarted.promise;
+      const released =
+        unblock === "ack"
+          ? Effect.runPromise(
+              service.acknowledge(
+                "terminal-1",
+                "slow-renderer",
+                TERMINAL_LIMITS.pendingOutputBytes,
+              ),
+            )
+          : Effect.runPromise(service.detach("terminal-1", "slow-renderer"));
+      await Bun.sleep(0);
+      expect(pty.operations).toEqual([]);
+
+      pauseGate.resolve();
+      await released;
+      await waitForPtyOperation(pty.operations, "resume");
+      expect(pty.operations).toEqual(["pause", "resume"]);
+    },
+  );
 
   test("resumes output when a failed sink removes the last attachment", async () => {
     const { service, pty, settleTitles } = await makeService();

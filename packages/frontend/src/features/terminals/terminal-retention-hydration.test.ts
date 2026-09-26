@@ -76,16 +76,34 @@ const sendStaleBuffer = (listener: TerminalFrameListener, terminalId: string): v
 
 const createLightweightBinding = () => {
   let output = "";
+  let inputListener: (data: string) => void = () => undefined;
+  let resizeListener: (grid: { cols: number; rows: number }) => void = () => undefined;
   const parsedCallbacks: Array<() => void> = [];
   const subscription = { dispose: mock(() => undefined) };
   const terminal = {
+    cols: 80,
     rows: 24,
+    _core: { _inputHandler: { _parser: { precedingJoinState: 0 } } },
     write: mock((payload: Uint8Array, parsed: () => void) => {
       output += new TextDecoder().decode(payload);
       parsedCallbacks.push(parsed);
     }),
-    onResize: () => subscription,
-    onData: () => subscription,
+    onResize: (listener: typeof resizeListener) => {
+      resizeListener = listener;
+      return subscription;
+    },
+    onData: (listener: typeof inputListener) => {
+      inputListener = listener;
+      return subscription;
+    },
+    reset: mock(() => {
+      output = "";
+    }),
+    resize: mock((cols: number, rows: number) => {
+      terminal.cols = cols;
+      terminal.rows = rows;
+      resizeListener({ cols, rows });
+    }),
     parser: { registerOscHandler: () => subscription },
     attachCustomKeyEventHandler: () => undefined,
     scrollToBottom: mock(() => undefined),
@@ -98,10 +116,116 @@ const createLightweightBinding = () => {
     resetLinkState: mock(() => undefined),
     dispose: mock(() => undefined),
   };
-  return { binding, parsedCallbacks, readOutput: () => output };
+  return {
+    binding,
+    parsedCallbacks,
+    readOutput: () => output,
+    sendInput: (data: string) => inputListener(data),
+  };
 };
 
 describe("retained terminal rendering", () => {
+  test("holds input during restore and refits the live viewport after parsing", async () => {
+    const lightweight = createLightweightBinding();
+    const fit = lightweight.binding.fitAddon.fit;
+    fit.mockImplementation(() => {
+      lightweight.binding.terminal.resize(120, 40);
+    });
+    const createBinding = spyOn(sharedTerminalBinding, "createTerminalBinding").mockImplementation(
+      // SAFETY: the fake terminal implements each method used by this mount test.
+      () => Object.assign(Object.create(null), lightweight.binding) as TerminalBinding,
+    );
+    const { controller, listeners } = createController();
+    const operations: string[] = [];
+    controller.resize = async (_terminalId, columns, rows) => {
+      operations.push(`resize:${columns}x${rows}`);
+    };
+    controller.write = async (_terminalId, data) => {
+      operations.push(`input:${new TextDecoder().decode(data)}`);
+    };
+    const container = document.createElement("div");
+    Object.defineProperties(container, {
+      clientHeight: { value: 400 },
+      clientWidth: { value: 800 },
+    });
+    document.body.append(container);
+    const nativeResizeObserver = globalThis.ResizeObserver;
+    let notifyResize: ResizeObserverCallback = () => undefined;
+    globalThis.ResizeObserver = class {
+      constructor(callback: ResizeObserverCallback) {
+        notifyResize = callback;
+      }
+      observe(): void {}
+      unobserve(): void {}
+      disconnect(): void {}
+    };
+    let mount: InteractiveTerminalMount;
+    try {
+      mount = mountInteractiveTerminal({
+        container,
+        terminalId: "terminal-1",
+        controller,
+        isActive: () => true,
+        getPlatform: () => "darwin",
+        stageFile: async () => "/tmp/image.png",
+        preparePathInput: async () => "/tmp/image.png",
+        writeClipboard: async () => undefined,
+        onAttention: () => undefined,
+        onLifecycle: () => undefined,
+        onForgotten: () => undefined,
+        onTitleChange: () => undefined,
+        onHydrated: () => undefined,
+        onImageDragActiveChange: () => undefined,
+        onInteractionFailure: (_title, cause) => {
+          throw cause;
+        },
+      });
+    } finally {
+      globalThis.ResizeObserver = nativeResizeObserver;
+    }
+    try {
+      await nextFrame();
+      operations.length = 0;
+      fit.mockClear();
+      const listener = listeners.get("terminal-1");
+      if (!listener) throw new Error("Expected terminal to subscribe.");
+      notifyResize([], new nativeResizeObserver(() => undefined));
+      listener(
+        {
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "screen_restore",
+          terminalId: "terminal-1",
+          sequenceEnd: 1,
+          columns: 80,
+          rows: 24,
+          precedingJoinState: 2,
+        },
+        new TextEncoder().encode("restored"),
+      );
+      lightweight.sendInput("a");
+      mount.activate(false);
+      await nextFrame();
+      await Promise.resolve();
+      expect(operations).toEqual([]);
+      expect(fit).not.toHaveBeenCalled();
+      expect(lightweight.binding.terminal.cols).toBe(80);
+      expect(lightweight.binding.terminal.rows).toBe(24);
+      expect(lightweight.binding.terminal._core._inputHandler._parser.precedingJoinState).toBe(0);
+      expect(lightweight.binding.terminal.resize).toHaveBeenCalledWith(80, 24);
+      expect(lightweight.readOutput()).toBe("restored");
+      lightweight.parsedCallbacks[0]?.();
+      await Bun.sleep(0);
+      expect(fit).toHaveBeenCalledTimes(1);
+      expect(lightweight.binding.terminal._core._inputHandler._parser.precedingJoinState).toBe(2);
+      expect(lightweight.readOutput()).toBe("restored");
+      expect(operations).toEqual(["resize:120x40", "input:a"]);
+    } finally {
+      mount.dispose();
+      container.remove();
+      createBinding.mockRestore();
+    }
+  });
+
   test("hydrates and retains 96 terminal identities through the binding boundary", async () => {
     const bindings: ReturnType<typeof createLightweightBinding>[] = [];
     const createBinding = spyOn(sharedTerminalBinding, "createTerminalBinding").mockImplementation(

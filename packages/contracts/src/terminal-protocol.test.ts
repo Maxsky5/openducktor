@@ -11,7 +11,11 @@ import {
   terminalServerMessageSchema,
 } from "./terminal-protocol";
 
-const inputMessage = { version: 1 as const, type: "input" as const, terminalId: "terminal-1" };
+const inputMessage = {
+  version: TERMINAL_PROTOCOL_VERSION,
+  type: "input" as const,
+  terminalId: "terminal-1",
+};
 
 describe("terminal protocol", () => {
   test("round trips binary input at the exact input limit", () => {
@@ -33,7 +37,7 @@ describe("terminal protocol", () => {
   });
 
   test("accepts exact grid maxima and rejects maximum plus one", () => {
-    const base = { version: 1, type: "resize", terminalId: "terminal-1" };
+    const base = { version: TERMINAL_PROTOCOL_VERSION, type: "resize", terminalId: "terminal-1" };
     expect(
       terminalClientMessageSchema.parse({
         ...base,
@@ -52,7 +56,7 @@ describe("terminal protocol", () => {
 
   test("compiled output retains the sequence validation message and field path", () => {
     const result = terminalServerMessageSchema.safeParse({
-      version: 1,
+      version: TERMINAL_PROTOCOL_VERSION,
       type: "output",
       terminalId: "terminal-1",
       sequenceStart: 2,
@@ -72,11 +76,15 @@ describe("terminal protocol", () => {
 
   test("rejects malformed discriminants and wrong versions", () => {
     expect(() =>
-      terminalClientMessageSchema.parse({ version: 1, type: "unknown", terminalId: "x" }),
+      terminalClientMessageSchema.parse({
+        version: TERMINAL_PROTOCOL_VERSION,
+        type: "unknown",
+        terminalId: "x",
+      }),
     ).toThrow();
     expect(() =>
       terminalClientMessageSchema.parse({
-        version: 2,
+        version: 1,
         type: "attach",
         terminalId: "x",
         lastConsumedSequence: null,
@@ -114,11 +122,65 @@ describe("terminal protocol", () => {
     ).toEqual(title);
   });
 
+  test("round trips a screen restore with its terminal grid", () => {
+    const message = {
+      version: TERMINAL_PROTOCOL_VERSION,
+      type: "screen_restore" as const,
+      terminalId: "terminal-1",
+      sequenceEnd: 2_097_152,
+      columns: 120,
+      rows: 40,
+      precedingJoinState: 2,
+    };
+    const payload = new TextEncoder().encode("\u001b[?1049h\u001b[Hcurrent screen");
+    const decoded = decodeTerminalProtocolFrame(encodeTerminalProtocolFrame({ message, payload }));
+    expect(decoded).toEqual({ message, payload });
+    expect(() => encodeTerminalProtocolFrame({ message, payload: new Uint8Array() })).toThrow(
+      "requires a non-empty binary payload",
+    );
+  });
+
+  test("rejects an invalid restore grid and the previous protocol version", () => {
+    const restore = {
+      version: TERMINAL_PROTOCOL_VERSION,
+      type: "screen_restore",
+      terminalId: "terminal-1",
+      sequenceEnd: 1,
+      columns: TERMINAL_PROTOCOL_MAX_COLUMNS,
+      rows: TERMINAL_PROTOCOL_MAX_ROWS,
+      precedingJoinState: 0,
+    };
+    expect(() =>
+      terminalServerMessageSchema.parse({ ...restore, columns: restore.columns + 1 }),
+    ).toThrow();
+    expect(() =>
+      terminalServerMessageSchema.parse({ ...restore, precedingJoinState: 0.5 }),
+    ).toThrow();
+    expect(() => terminalServerMessageSchema.parse({ ...restore, version: 1 })).toThrow();
+  });
+
+  test("carries a full large TUI screen in one restore frame", () => {
+    const message = {
+      version: TERMINAL_PROTOCOL_VERSION,
+      type: "screen_restore" as const,
+      terminalId: "terminal-1",
+      sequenceEnd: 1,
+      columns: 500,
+      rows: 300,
+      precedingJoinState: 0,
+    };
+    const payload = new Uint8Array(2 * 1024 * 1024);
+    payload.fill(65);
+    const decoded = decodeTerminalProtocolFrame(encodeTerminalProtocolFrame({ message, payload }));
+    expect(decoded.message).toEqual(message);
+    expect(decoded.payload).toEqual(payload);
+  });
+
   test("rejects truncated, oversized, and mismatched frames before payload use", () => {
     expect(() => decodeTerminalProtocolFrame(new Uint8Array(3))).toThrow("header length");
     expect(() =>
       decodeTerminalProtocolFrame(new Uint8Array(TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES + 1)),
-    ).toThrow("1 MiB");
+    ).toThrow("8 MiB");
     const encoded = encodeTerminalProtocolFrame({
       message: inputMessage,
       payload: new Uint8Array([1]),

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import type { TerminalSummary } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { TerminalPtyHandle } from "../../ports/terminal-pty-port";
@@ -6,8 +6,8 @@ import {
   activateTerminalSession,
   beginTerminalClose,
   createTerminalSession,
-  disposeTerminalSession,
   exitTerminalSession,
+  forgetTerminalSession,
   markTerminalCloseFailed,
 } from "./terminal-session";
 
@@ -44,6 +44,7 @@ const makeSession = async () => {
     operations: await Effect.runPromise(Effect.makeSemaphore(1)),
     replayByteLimit: 1024,
     shell: "/bin/zsh",
+    grid: { columns: 80, rows: 24 },
   });
   return { session, disposeCalls: () => disposeCalls };
 };
@@ -59,11 +60,15 @@ describe("TerminalSession", () => {
     expect(session.summary.lifecycle).toBe("close_failed");
     expect(session.resources.handle).toBe(handle);
 
-    disposeTerminalSession(session);
-    disposeTerminalSession(session);
+    const disposeScreen = spyOn(session.screen, "dispose");
+    forgetTerminalSession(session);
+    forgetTerminalSession(session);
+    await session.screen.drained();
 
     expect(disposeCalls()).toBe(1);
+    expect(disposeScreen).toHaveBeenCalledTimes(1);
     expect(session.resources.handle).toBeNull();
+    disposeScreen.mockRestore();
   });
 
   test("does not reactivate a session that exited while its PTY was starting", async () => {
@@ -81,5 +86,6 @@ describe("TerminalSession", () => {
     expect(session.summary.lifecycle).toBe("exited");
     expect(session.resources.handle).toBeNull();
     expect(disposeCalls()).toBe(1);
+    expect(() => session.screen.snapshot()).not.toThrow();
   });
 });

@@ -8,6 +8,8 @@ export default {
     "react-dom",
     // The Node bundle externalizes MSAL's native persistence package for the packaged app.
     "@azure/msal-node-extensions",
+    // The Node bundle externalizes the host's native terminal package for the packaged app.
+    "node-pty",
   ],
   project: ["src/**/*.{ts,tsx}", "scripts/**/*.ts"],
 };

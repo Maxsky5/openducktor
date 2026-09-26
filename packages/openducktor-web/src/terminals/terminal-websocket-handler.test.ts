@@ -2,6 +2,9 @@ import { describe, expect, test } from "bun:test";
 import {
   decodeTerminalProtocolFrame,
   encodeTerminalProtocolFrame,
+  TERMINAL_PROTOCOL_MAX_HEADER_BYTES,
+  TERMINAL_PROTOCOL_MAX_INPUT_BYTES,
+  TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES,
   TERMINAL_PROTOCOL_VERSION,
 } from "@openducktor/contracts";
 import {
@@ -46,6 +49,10 @@ const makeSocket = (
       inFlightBytes: 0,
       pendingBytes: 0,
       pendingFrames: [],
+      drainWaiters: new Set(),
+      attachPermit: Effect.unsafeMakeSemaphore(1),
+      messagePermits: new Map(),
+      closed: false,
       logger: {
         error: () => Effect.void,
         info: () => Effect.void,
@@ -63,6 +70,316 @@ const makeSocket = (
 };
 
 describe("terminalWebSocketHandler", () => {
+  test("paces concurrent attaches after an asynchronous first restore", async () => {
+    const payload = new Uint8Array(6 * 1024 * 1024);
+    let releaseFirst!: () => void;
+    const firstReady = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let markFirstStarted!: () => void;
+    const firstStarted = new Promise<void>((resolve) => {
+      markFirstStarted = resolve;
+    });
+    let attachCount = 0;
+    const service = createTerminalServiceFixture({
+      attach: (input) =>
+        Effect.promise(async () => {
+          attachCount += 1;
+          if (attachCount === 1) {
+            markFirstStarted();
+            await firstReady;
+          }
+          input.sink(
+            {
+              version: TERMINAL_PROTOCOL_VERSION,
+              type: "screen_restore",
+              terminalId: input.terminalId,
+              sequenceEnd: 1,
+              columns: 500,
+              rows: 300,
+              precedingJoinState: 0,
+            },
+            payload,
+          );
+        }),
+    });
+    const harness = makeSocket(service, () => -1);
+    for (const terminalId of ["terminal-1", "terminal-2", "terminal-3"]) {
+      terminalWebSocketHandler.message(
+        harness.socket,
+        Buffer.from(
+          encodeTerminalProtocolFrame({
+            message: {
+              version: TERMINAL_PROTOCOL_VERSION,
+              type: "attach",
+              terminalId,
+              lastConsumedSequence: null,
+            },
+            payload: new Uint8Array(),
+          }),
+        ),
+      );
+    }
+    await firstStarted;
+    await Bun.sleep(0);
+    releaseFirst();
+    await Bun.sleep(0);
+    expect(harness.sent).toHaveLength(1);
+    expect(harness.closed).toEqual([]);
+    for (let index = 2; index <= 3; index += 1) {
+      terminalWebSocketHandler.drain(harness.socket);
+      await Bun.sleep(0);
+      expect(harness.sent).toHaveLength(index);
+      expect(harness.closed).toEqual([]);
+    }
+  });
+
+  test("paces large restores for several terminals while the socket is backpressured", async () => {
+    const payload = new Uint8Array(6 * 1024 * 1024);
+    const service = createTerminalServiceFixture({
+      attach: (input) =>
+        Effect.sync(() => {
+          input.sink(
+            {
+              version: TERMINAL_PROTOCOL_VERSION,
+              type: "screen_restore",
+              terminalId: input.terminalId,
+              sequenceEnd: 1,
+              columns: 500,
+              rows: 300,
+              precedingJoinState: 0,
+            },
+            payload,
+          );
+        }),
+    });
+    const harness = makeSocket(service, () => -1);
+    for (const terminalId of ["terminal-1", "terminal-2", "terminal-3"]) {
+      terminalWebSocketHandler.message(
+        harness.socket,
+        Buffer.from(
+          encodeTerminalProtocolFrame({
+            message: {
+              version: TERMINAL_PROTOCOL_VERSION,
+              type: "attach",
+              terminalId,
+              lastConsumedSequence: null,
+            },
+            payload: new Uint8Array(),
+          }),
+        ),
+      );
+    }
+    await Bun.sleep(0);
+    expect(harness.closed).toEqual([]);
+    expect(harness.sent).toHaveLength(1);
+    for (let index = 2; index <= 3; index += 1) {
+      terminalWebSocketHandler.drain(harness.socket);
+      await Bun.sleep(0);
+      expect(harness.sent).toHaveLength(index);
+      expect(harness.closed).toEqual([]);
+    }
+    expect(
+      harness.sent.map((frame) => decodeTerminalProtocolFrame(frame).message.terminalId),
+    ).toEqual(["terminal-1", "terminal-2", "terminal-3"]);
+  });
+
+  test("stops an attach waiting for socket drain when the connection closes", async () => {
+    const attached: string[] = [];
+    const detached: string[] = [];
+    const payload = new Uint8Array(2 * 1024 * 1024);
+    const service = createTerminalServiceFixture({
+      attach: (input) =>
+        Effect.sync(() => {
+          attached.push(input.terminalId);
+          input.sink(
+            {
+              version: TERMINAL_PROTOCOL_VERSION,
+              type: "screen_restore",
+              terminalId: input.terminalId,
+              sequenceEnd: 1,
+              columns: 80,
+              rows: 24,
+              precedingJoinState: 0,
+            },
+            payload,
+          );
+        }),
+      detach: (terminalId) => Effect.sync(() => detached.push(terminalId)),
+    });
+    const harness = makeSocket(service, () => -1);
+    for (const terminalId of ["terminal-1", "terminal-2"]) {
+      terminalWebSocketHandler.message(
+        harness.socket,
+        Buffer.from(
+          encodeTerminalProtocolFrame({
+            message: {
+              version: TERMINAL_PROTOCOL_VERSION,
+              type: "attach",
+              terminalId,
+              lastConsumedSequence: null,
+            },
+            payload: new Uint8Array(),
+          }),
+        ),
+      );
+    }
+    await Bun.sleep(0);
+    expect(attached).toEqual(["terminal-1"]);
+    terminalWebSocketHandler.close(harness.socket);
+    await Bun.sleep(0);
+    expect(attached).toEqual(["terminal-1"]);
+    expect(detached).toEqual(["terminal-1"]);
+    expect(harness.data.drainWaiters.size).toBe(0);
+  });
+
+  test("handles input on an attached terminal while another attach waits for drain", async () => {
+    const operations: string[] = [];
+    const payload = new Uint8Array(2 * 1024 * 1024);
+    const service = createTerminalServiceFixture({
+      attach: (input) =>
+        Effect.sync(() => {
+          operations.push(`attach:${input.terminalId}`);
+          input.sink(
+            {
+              version: TERMINAL_PROTOCOL_VERSION,
+              type: "screen_restore",
+              terminalId: input.terminalId,
+              sequenceEnd: 1,
+              columns: 80,
+              rows: 24,
+              precedingJoinState: 0,
+            },
+            payload,
+          );
+        }),
+      write: (terminalId) =>
+        Effect.sync(() => {
+          operations.push(`write:${terminalId}`);
+        }),
+    });
+    const harness = makeSocket(service, () => -1);
+    const send = (
+      message: Parameters<typeof encodeTerminalProtocolFrame>[0]["message"],
+      data = new Uint8Array(),
+    ) =>
+      terminalWebSocketHandler.message(
+        harness.socket,
+        Buffer.from(encodeTerminalProtocolFrame({ message, payload: data })),
+      );
+    send({
+      version: TERMINAL_PROTOCOL_VERSION,
+      type: "attach",
+      terminalId: "terminal-1",
+      lastConsumedSequence: null,
+    });
+    await Bun.sleep(0);
+    send({
+      version: TERMINAL_PROTOCOL_VERSION,
+      type: "attach",
+      terminalId: "terminal-2",
+      lastConsumedSequence: null,
+    });
+    send(
+      { version: TERMINAL_PROTOCOL_VERSION, type: "input", terminalId: "terminal-1" },
+      new Uint8Array([65]),
+    );
+    await Bun.sleep(0);
+    expect(operations).toEqual(["attach:terminal-1", "write:terminal-1"]);
+    expect(harness.data.messagePermits.size).toBe(1);
+    terminalWebSocketHandler.drain(harness.socket);
+    await Bun.sleep(0);
+    expect(operations).toEqual(["attach:terminal-1", "write:terminal-1", "attach:terminal-2"]);
+    expect(harness.data.messagePermits.size).toBe(0);
+  });
+
+  test("reports a failed socket send to the terminal attachment", async () => {
+    let failed = false;
+    const service = createTerminalServiceFixture({
+      attach: (input) =>
+        Effect.sync(() => {
+          try {
+            input.sink(
+              {
+                version: TERMINAL_PROTOCOL_VERSION,
+                type: "snapshot",
+                terminalId: input.terminalId,
+                earliestRetainedSequence: 0,
+                snapshotSequenceEnd: 0,
+                lifecycle: "running",
+                title: "/repo",
+                complete: true,
+              },
+              new Uint8Array(),
+            );
+          } catch {
+            failed = true;
+          }
+        }),
+    });
+    const harness = makeSocket(service, () => 0);
+    terminalWebSocketHandler.message(
+      harness.socket,
+      Buffer.from(
+        encodeTerminalProtocolFrame({
+          message: {
+            version: TERMINAL_PROTOCOL_VERSION,
+            type: "attach",
+            terminalId: "terminal-1",
+            lastConsumedSequence: null,
+          },
+          payload: new Uint8Array(),
+        }),
+      ),
+    );
+    await Bun.sleep(0);
+    expect(failed).toBe(true);
+    expect(harness.closed).toEqual([[1011, "Terminal connection could not send data."]]);
+  });
+
+  test("sends a large screen restore without closing the outbound queue", async () => {
+    const payload = new Uint8Array(2 * 1024 * 1024);
+    payload.fill(65);
+    const service = createTerminalServiceFixture({
+      attach: (input) =>
+        Effect.sync(() => {
+          input.sink(
+            {
+              version: TERMINAL_PROTOCOL_VERSION,
+              type: "screen_restore",
+              terminalId: input.terminalId,
+              sequenceEnd: 1,
+              columns: 500,
+              rows: 300,
+              precedingJoinState: 0,
+            },
+            payload,
+          );
+        }),
+    });
+    const harness = makeSocket(service, () => -1);
+    terminalWebSocketHandler.message(
+      harness.socket,
+      Buffer.from(
+        encodeTerminalProtocolFrame({
+          message: {
+            version: TERMINAL_PROTOCOL_VERSION,
+            type: "attach",
+            terminalId: "terminal-1",
+            lastConsumedSequence: null,
+          },
+          payload: new Uint8Array(),
+        }),
+      ),
+    );
+    await Bun.sleep(0);
+    expect(harness.closed).toEqual([]);
+    expect(harness.data.inFlightBytes).toBeGreaterThan(2 * 1024 * 1024);
+    expect(decodeTerminalProtocolFrame(harness.sent[0] ?? new Uint8Array()).payload).toEqual(
+      payload,
+    );
+  });
+
   test("multiplexes attach, input, resize, ACK, and detach by opaque terminal id", async () => {
     const operations: string[] = [];
     const service = createTerminalServiceFixture({
@@ -226,8 +543,11 @@ describe("terminalWebSocketHandler", () => {
     });
 
     const oversized = makeSocket(service);
-    terminalWebSocketHandler.message(oversized.socket, Buffer.alloc(1024 * 1024 + 1));
-    expect(oversized.closed).toEqual([[1009, "Invalid terminal frame."]]);
+    terminalWebSocketHandler.message(
+      oversized.socket,
+      Buffer.alloc(4 + TERMINAL_PROTOCOL_MAX_HEADER_BYTES + TERMINAL_PROTOCOL_MAX_INPUT_BYTES + 1),
+    );
+    expect(oversized.closed).toEqual([[1009, "Terminal client frame is too large."]]);
   });
 
   test("does not retain failed terminal attachments", async () => {
@@ -337,7 +657,7 @@ describe("terminalWebSocketHandler", () => {
     const service = createTerminalServiceFixture({
       attach: (input: Parameters<TerminalWebSocketService["attach"]>[0]) =>
         Effect.sync(() => {
-          for (let index = 0; index < 3; index += 1) {
+          for (let index = 0; index < 24; index += 1) {
             input.sink(
               {
                 version: TERMINAL_PROTOCOL_VERSION,
@@ -369,7 +689,8 @@ describe("terminalWebSocketHandler", () => {
     );
     await Bun.sleep(10);
     expect(harness.closed).toContainEqual([1013, "Terminal outbound queue limit exceeded."]);
-    expect(harness.data.pendingBytes).toBeLessThanOrEqual(700 * 1024 + 256);
+    expect(harness.closed).toHaveLength(1);
+    expect(harness.data.pendingBytes).toBeLessThanOrEqual(TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES * 2);
   });
   test("rejects text and server-directed frames", () => {
     const harness = makeSocket(createTerminalServiceFixture({}));

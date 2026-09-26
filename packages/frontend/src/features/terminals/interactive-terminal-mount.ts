@@ -1,4 +1,9 @@
-import type { AppPlatform, TerminalLifecycle, TerminalServerMessage } from "@openducktor/contracts";
+import {
+  TERMINAL_PROTOCOL_MAX_INPUT_BYTES,
+  type AppPlatform,
+  type TerminalLifecycle,
+  type TerminalServerMessage,
+} from "@openducktor/contracts";
 import {
   createLatestResizeScheduler,
   createLiveTerminalFitScheduler,
@@ -16,6 +21,7 @@ import {
 import { createTerminalKeyEventHandler, encodeTerminalTextInput } from "./terminal-keyboard-policy";
 import type { TerminalTransportController } from "./terminal-transport-controller";
 import { createTerminalOptions } from "./terminal-xterm-options";
+import { restoreTerminalPrecedingJoinState } from "./terminal-rep-state";
 import { createTerminalBinding } from "./shared-terminal-binding";
 
 export type InteractiveTerminalMount = {
@@ -67,12 +73,20 @@ export const mountInteractiveTerminal = ({
     createTerminalOptions(container, { cursorBlink: true, screenReaderMode: true }),
   );
   const { fitAddon, terminal } = binding;
+  let restoringScreen = false;
+  let restoreGeneration = 0;
+  let inputGate: Promise<void> | null = null;
+  let releaseInput: (() => void) | null = null;
+  let deferredInputBytes = 0;
   const resetTerminal = (): void => {
     binding.resetLinkState();
     terminal.reset();
   };
+  const fitViewport = (): void => {
+    if (!restoringScreen) fitAddon.fit();
+  };
   const activateViewport = createTerminalViewportActivator({
-    fit: () => fitAddon.fit(),
+    fit: fitViewport,
     scrollToBottom: () => terminal.scrollToBottom(),
     refresh: (start, end) => terminal.refresh(start, end),
     readRows: () => terminal.rows,
@@ -91,7 +105,10 @@ export const mountInteractiveTerminal = ({
   });
   const enqueueInput = createTerminalInputSequencer({
     isActive,
-    writeInput: (data) => controller.write(terminalId, data),
+    writeInput: async (data) => {
+      if (inputGate) await inputGate;
+      if (!disposed) await controller.write(terminalId, data);
+    },
     reportFailure: (cause) => reportFailure("Terminal input failed", cause),
   });
   const resizeScheduler = createLatestResizeScheduler((columns, rows) => {
@@ -100,12 +117,23 @@ export const mountInteractiveTerminal = ({
       .catch((cause) => reportFailure("Terminal resize failed", cause));
   });
   const resizeSubscription = terminal.onResize(({ cols, rows }) => {
+    if (restoringScreen) return;
     resizeScheduler.schedule(cols, rows);
   });
   const dataSubscription = terminal.onData((data) => {
     const input = encodeTerminalTextInput(data);
     if (!input) return;
-    resizeScheduler.flush();
+    if (restoringScreen) {
+      deferredInputBytes += input.byteLength;
+      if (deferredInputBytes > TERMINAL_PROTOCOL_MAX_INPUT_BYTES) {
+        deferredInputBytes -= input.byteLength;
+        reportFailure(
+          "Terminal input failed",
+          new Error("Terminal input during screen restore exceeds the 64 KiB limit."),
+        );
+        return;
+      }
+    } else resizeScheduler.flush();
     void enqueueInput(() => input);
   });
   const oscClipboardSubscription = terminal.parser.registerOscHandler(52, () => true);
@@ -162,15 +190,43 @@ export const mountInteractiveTerminal = ({
     if (message.type === "snapshot") {
       outputSequencer.setSnapshotBoundary(message.snapshotSequenceEnd);
     }
-    const isReplayGap = message.type === "replay_gap";
-    if (isReplayGap) {
+    if (message.type === "screen_restore") {
+      const generation = ++restoreGeneration;
+      restoringScreen = true;
+      if (!inputGate) {
+        inputGate = new Promise<void>((resolve) => {
+          releaseInput = resolve;
+        });
+      }
       void outputSequencer
-        .skipTo(message.missingSequenceEnd, resetTerminal)
+        .restore(
+          message.sequenceEnd,
+          payload,
+          () => {
+            resetTerminal();
+            terminal.resize(message.columns, message.rows);
+          },
+          (completed) => {
+            if (generation !== restoreGeneration) return;
+            restoringScreen = false;
+            try {
+              if (completed)
+                restoreTerminalPrecedingJoinState(terminal, message.precedingJoinState);
+              if (isActive()) fitViewport();
+              resizeScheduler.flush();
+            } finally {
+              deferredInputBytes = 0;
+              releaseInput?.();
+              releaseInput = null;
+              inputGate = null;
+            }
+          },
+        )
         .catch((cause) => reportFailure("Terminal output failed", cause));
+      return;
     }
     if (
       handleTerminalMetadataFrame(message, {
-        reset: isReplayGap ? () => undefined : resetTerminal,
         onAttention,
         onLifecycle,
         onTitle: onTitleChange,
@@ -185,10 +241,10 @@ export const mountInteractiveTerminal = ({
       .catch((cause) => reportFailure("Terminal output failed", cause));
   };
   const unsubscribe = controller.subscribe(terminalId, handleFrame);
-  const fitScheduler = createLiveTerminalFitScheduler({ fit: () => fitAddon.fit(), isActive });
+  const fitScheduler = createLiveTerminalFitScheduler({ fit: fitViewport, isActive });
   const observer = new ResizeObserver(() => fitScheduler.schedule());
   observer.observe(container);
-  if (isActive()) fitAddon.fit();
+  if (isActive()) fitViewport();
 
   return {
     activate: (focus) => {
@@ -198,6 +254,9 @@ export const mountInteractiveTerminal = ({
     dispose: () => {
       if (disposed) return;
       disposed = true;
+      releaseInput?.();
+      releaseInput = null;
+      inputGate = null;
       controller.releaseEmulator(terminalId);
       unsubscribe();
       observer.disconnect();

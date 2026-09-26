@@ -2,6 +2,8 @@ import {
   decodeTerminalProtocolFrame,
   encodeTerminalProtocolFrame,
   isTerminalClientMessage,
+  TERMINAL_PROTOCOL_MAX_HEADER_BYTES,
+  TERMINAL_PROTOCOL_MAX_INPUT_BYTES,
   TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES,
   TERMINAL_PROTOCOL_VERSION,
   type TerminalFailure,
@@ -14,8 +16,11 @@ import {
 } from "@openducktor/host";
 import { Effect } from "effect";
 import { type WebLogger, writeWebLogEffect } from "../logger";
+import type { NodeServerSocket } from "../node-fetch-server";
 
-const OUTBOUND_QUEUE_LIMIT = 2 * 1024 * 1024;
+const OUTBOUND_QUEUE_LIMIT = TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES * 2;
+const MAX_CLIENT_FRAME_BYTES =
+  4 + TERMINAL_PROTOCOL_MAX_HEADER_BYTES + TERMINAL_PROTOCOL_MAX_INPUT_BYTES;
 const EMPTY_PAYLOAD: Uint8Array = new Uint8Array(0);
 
 export type TerminalWebSocketService = Pick<
@@ -31,47 +36,84 @@ export type TerminalWebSocketData = {
   inFlightBytes: number;
   pendingBytes: number;
   pendingFrames: Uint8Array[];
+  drainWaiters: Set<(writable: boolean) => void>;
+  attachPermit: ReturnType<typeof Effect.unsafeMakeSemaphore>;
+  messagePermits: Map<
+    string,
+    { permit: ReturnType<typeof Effect.unsafeMakeSemaphore>; pending: number }
+  >;
+  closed: boolean;
   logger: WebLogger;
   onBackgroundFailure(cause: unknown): void;
 };
 
-type TerminalServerSocket = Pick<
-  Bun.ServerWebSocket<TerminalWebSocketData>,
-  "close" | "data" | "send"
->;
+export type TerminalServerSocket = NodeServerSocket<TerminalWebSocketData>;
 
-const closeForQueueOverflow = (socket: TerminalServerSocket): void => {
-  socket.close(1013, "Terminal outbound queue limit exceeded.");
+const beginClose = (socket: TerminalServerSocket, code: number, reason: string): void => {
+  if (socket.data.closed) return;
+  socket.data.closed = true;
+  for (const finish of socket.data.drainWaiters) finish(false);
+  socket.close(code, reason);
 };
 
-const sendFrame = (socket: TerminalServerSocket, frame: Uint8Array): void => {
+const closeForQueueOverflow = (socket: TerminalServerSocket): void => {
+  beginClose(socket, 1013, "Terminal outbound queue limit exceeded.");
+};
+
+const sendFrame = (socket: TerminalServerSocket, frame: Uint8Array): boolean => {
   const data = socket.data;
+  if (data.closed) return false;
   const queuedBytes = data.inFlightBytes + data.pendingBytes;
   if (queuedBytes + frame.byteLength > OUTBOUND_QUEUE_LIMIT) {
     closeForQueueOverflow(socket);
-    return;
+    return false;
   }
   if (data.backpressured) {
     data.pendingFrames.push(frame);
     data.pendingBytes += frame.byteLength;
-    return;
+    return true;
   }
-  const status = socket.send(frame, false);
+  const status = socket.send(frame);
   if (status === 0) {
-    socket.close(1011, "Terminal connection could not send data.");
-    return;
+    beginClose(socket, 1011, "Terminal connection could not send data.");
+    return false;
   }
   if (status === -1) {
     data.backpressured = true;
     data.inFlightBytes = frame.byteLength;
   }
+  return true;
 };
 
 const sendMessage = (
   socket: TerminalServerSocket,
   message: TerminalServerMessage,
   payload: Uint8Array = EMPTY_PAYLOAD,
-): void => sendFrame(socket, encodeTerminalProtocolFrame({ message, payload }));
+): boolean => sendFrame(socket, encodeTerminalProtocolFrame({ message, payload }));
+
+const waitForWritable = (socket: TerminalServerSocket): Effect.Effect<void> =>
+  Effect.async<void>((resume, signal) => {
+    const data = socket.data;
+    if (data.closed) {
+      resume(Effect.interrupt);
+      return;
+    }
+    if (!data.backpressured) {
+      resume(Effect.void);
+      return;
+    }
+    const finish = (writable: boolean): void => {
+      data.drainWaiters.delete(finish);
+      signal.removeEventListener("abort", canceled);
+      resume(writable ? Effect.void : Effect.interrupt);
+    };
+    const canceled = (): void => {
+      data.drainWaiters.delete(finish);
+      signal.removeEventListener("abort", canceled);
+    };
+    data.drainWaiters.add(finish);
+    signal.addEventListener("abort", canceled, { once: true });
+  });
 
 const sendProtocolError = (
   socket: TerminalServerSocket,
@@ -95,7 +137,10 @@ const getClientSession = (socket: TerminalServerSocket): TerminalClientSession =
   const clientSession = createTerminalClientSession({
     clientId: `browser:${socket.data.connectionId}`,
     terminalService: socket.data.terminalService,
-    send: (message, payload) => sendMessage(socket, message, payload),
+    send: (message, payload) => {
+      if (!sendMessage(socket, message, payload))
+        throw new Error("Terminal WebSocket could not queue an outbound frame.");
+    },
   });
   socket.data.clientSession = clientSession;
   return clientSession;
@@ -107,7 +152,15 @@ const runClientMessage = (socket: TerminalServerSocket, raw: string | Buffer): v
       code: "protocol_error",
       message: "Terminal WebSocket messages must be binary.",
     });
-    socket.close(1003, "Binary terminal frames required.");
+    beginClose(socket, 1003, "Binary terminal frames required.");
+    return;
+  }
+  if (raw.byteLength > MAX_CLIENT_FRAME_BYTES) {
+    sendProtocolError(socket, {
+      code: "message_too_large",
+      message: "Terminal client frame exceeds the 128 KiB input and header limit.",
+    });
+    beginClose(socket, 1009, "Terminal client frame is too large.");
     return;
   }
   let decoded: ReturnType<typeof decodeTerminalProtocolFrame>;
@@ -117,16 +170,10 @@ const runClientMessage = (socket: TerminalServerSocket, raw: string | Buffer): v
     );
   } catch (cause) {
     sendProtocolError(socket, {
-      code:
-        raw.byteLength > TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES
-          ? "message_too_large"
-          : "protocol_error",
+      code: "protocol_error",
       message: cause instanceof Error ? cause.message : String(cause),
     });
-    socket.close(
-      raw.byteLength > TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES ? 1009 : 1002,
-      "Invalid terminal frame.",
-    );
+    beginClose(socket, 1002, "Invalid terminal frame.");
     return;
   }
   if (!isTerminalClientMessage(decoded.message)) {
@@ -134,29 +181,66 @@ const runClientMessage = (socket: TerminalServerSocket, raw: string | Buffer): v
       code: "protocol_error",
       message: "Browser terminal traffic must use a client message type.",
     });
-    socket.close(1002, "Invalid terminal message direction.");
+    beginClose(socket, 1002, "Invalid terminal message direction.");
     return;
   }
-  Effect.runFork(getClientSession(socket).handle(decoded.message, decoded.payload));
+  const message = decoded.message;
+  let entry = socket.data.messagePermits.get(message.terminalId);
+  if (!entry) {
+    entry = { permit: Effect.unsafeMakeSemaphore(1), pending: 0 };
+    socket.data.messagePermits.set(message.terminalId, entry);
+  }
+  entry.pending += 1;
+  const messageEntry = entry;
+  const handle = Effect.suspend(() =>
+    socket.data.closed ? Effect.void : getClientSession(socket).handle(message, decoded.payload),
+  );
+  const operation =
+    message.type === "attach"
+      ? socket.data.attachPermit.withPermits(1)(
+          waitForWritable(socket).pipe(Effect.flatMap(() => handle)),
+        )
+      : handle;
+  Effect.runFork(
+    messageEntry.permit
+      .withPermits(1)(operation)
+      .pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            messageEntry.pending -= 1;
+            if (messageEntry.pending === 0) socket.data.messagePermits.delete(message.terminalId);
+          }),
+        ),
+      ),
+  );
 };
 
 export const terminalWebSocketHandler = {
   perMessageDeflate: false,
-  maxPayloadLength: TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES,
+  maxPayloadLength: MAX_CLIENT_FRAME_BYTES,
   message: runClientMessage,
   drain(socket: TerminalServerSocket) {
     const data = socket.data;
+    if (data.closed) return;
     data.backpressured = false;
     data.inFlightBytes = 0;
     while (data.pendingFrames.length > 0 && !data.backpressured) {
       const frame = data.pendingFrames.shift();
       if (!frame) break;
       data.pendingBytes -= frame.byteLength;
-      sendFrame(socket, frame);
+      if (!sendFrame(socket, frame)) return;
+    }
+    if (!data.backpressured) {
+      for (const finish of data.drainWaiters) finish(true);
     }
   },
   close(socket: TerminalServerSocket) {
-    const { clientSession, connectionId, logger, onBackgroundFailure } = socket.data;
+    const { clientSession, connectionId, logger, onBackgroundFailure, drainWaiters } = socket.data;
+    socket.data.closed = true;
+    for (const finish of drainWaiters) finish(false);
+    socket.data.pendingFrames.length = 0;
+    socket.data.pendingBytes = 0;
+    socket.data.messagePermits.clear();
     socket.data.clientSession = null;
     if (!clientSession) return;
     void Effect.runPromise(clientSession.close()).catch((cause: unknown) => {

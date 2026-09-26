@@ -1,6 +1,8 @@
 import type { TerminalSummary } from "@openducktor/contracts";
 import type { Effect } from "effect";
 import type { TerminalPtyHandle } from "../../ports/terminal-pty-port";
+import type { TerminalGrid } from "../../ports/terminal-pty-port";
+import { TerminalScreenState } from "./terminal-screen-state";
 import { TerminalSessionOutput } from "./terminal-session-output";
 import type { TerminalTitleTracker } from "./terminal-title-tracker";
 
@@ -8,6 +10,8 @@ export type TerminalSession = {
   summary: TerminalSummary;
   resources: TerminalSessionResources;
   output: TerminalSessionOutput;
+  screen: TerminalScreenState;
+  screenReleaseStarted: boolean;
   operations: Effect.Semaphore;
 };
 
@@ -48,18 +52,25 @@ export const createTerminalSession = ({
   operations,
   replayByteLimit,
   shell,
+  grid,
 }: {
   summary: TerminalSummary;
   titleTracker: TerminalTitleTracker;
   operations: Effect.Semaphore;
   replayByteLimit: number;
   shell: string;
-}): TerminalSession => ({
-  summary,
-  resources: new TerminalSessionResources(shell, titleTracker),
-  output: new TerminalSessionOutput(summary.terminalId, replayByteLimit),
-  operations,
-});
+  grid: TerminalGrid;
+}): TerminalSession => {
+  const screen = new TerminalScreenState(grid);
+  return {
+    summary,
+    resources: new TerminalSessionResources(shell, titleTracker),
+    output: new TerminalSessionOutput(summary.terminalId, replayByteLimit, () => screen.snapshot()),
+    screen,
+    screenReleaseStarted: false,
+    operations,
+  };
+};
 
 export const isLiveTerminal = (session: TerminalSession): boolean =>
   session.summary.lifecycle === "starting" ||
@@ -88,8 +99,11 @@ export const markTerminalOverflowed = (session: TerminalSession): boolean => {
   return session.output.markOverflowed();
 };
 
-export const disposeTerminalSession = (session: TerminalSession): void => {
+export const forgetTerminalSession = (session: TerminalSession): void => {
   session.resources.dispose();
+  if (session.screenReleaseStarted) return;
+  session.screenReleaseStarted = true;
+  void session.screen.drained().then(() => session.screen.dispose());
 };
 
 export const exitTerminalSession = (
@@ -101,7 +115,7 @@ export const exitTerminalSession = (
   }: { exitCode: number | null; signal: string | null; exitedAt: string },
 ): boolean => {
   if (session.summary.lifecycle === "exited") return false;
-  disposeTerminalSession(session);
+  session.resources.dispose();
   session.summary.lifecycle = "exited";
   session.summary.exit = {
     exitCode,

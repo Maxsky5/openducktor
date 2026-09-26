@@ -14,6 +14,7 @@ const paths = {
   claude: "/tools/claude",
   git: "",
   githubCli: "",
+  node: "",
 } satisfies Record<ToolDiscoveryId, string>;
 
 const toolDiscovery: ToolDiscoveryPort = {

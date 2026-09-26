@@ -5,9 +5,9 @@ import {
   terminalLifecycleSchema,
 } from "./terminal-schemas";
 
-export const TERMINAL_PROTOCOL_VERSION = 1 as const;
-export const TERMINAL_PROTOCOL_SUBPROTOCOL = "openducktor-terminal.v1";
-export const TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES = 1024 * 1024;
+export const TERMINAL_PROTOCOL_VERSION = 2 as const;
+export const TERMINAL_PROTOCOL_SUBPROTOCOL = "openducktor-terminal.v2";
+export const TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES = 8 * 1024 * 1024;
 export const TERMINAL_PROTOCOL_MAX_HEADER_BYTES = 64 * 1024;
 export const TERMINAL_PROTOCOL_MAX_INPUT_BYTES = 64 * 1024;
 export const TERMINAL_PROTOCOL_MAX_COLUMNS = 500;
@@ -79,21 +79,14 @@ export const terminalServerMessageSchema = z.discriminatedUnion("type", [
   ),
   protocolBaseSchema
     .extend({
-      type: z.literal("replay_gap"),
+      type: z.literal("screen_restore"),
       terminalId: terminalIdSchema,
-      missingSequenceStart: sequenceSchema,
-      missingSequenceEnd: sequenceSchema,
+      sequenceEnd: sequenceSchema,
+      columns: z.number().int().min(1).max(TERMINAL_PROTOCOL_MAX_COLUMNS),
+      rows: z.number().int().min(1).max(TERMINAL_PROTOCOL_MAX_ROWS),
+      precedingJoinState: z.number().int(),
     })
-    .strict()
-    .superRefine((message, context) => {
-      if (message.missingSequenceEnd <= message.missingSequenceStart) {
-        context.addIssue({
-          code: "custom",
-          message: "missingSequenceEnd must be greater than missingSequenceStart",
-          path: ["missingSequenceEnd"],
-        });
-      }
-    }),
+    .strict(),
   protocolBaseSchema
     .extend({
       type: z.literal("lifecycle"),
@@ -146,7 +139,8 @@ export type TerminalProtocolFrame = {
 };
 
 const assertPayloadContract = (message: TerminalProtocolMessage, payloadLength: number): void => {
-  const requiresPayload = message.type === "input" || message.type === "output";
+  const requiresPayload =
+    message.type === "input" || message.type === "output" || message.type === "screen_restore";
   if (requiresPayload && payloadLength === 0) {
     throw new Error(`Terminal ${message.type} frame requires a non-empty binary payload.`);
   }
@@ -175,7 +169,7 @@ export const encodeTerminalProtocolFrame = ({
   }
   const frameLength = 4 + headerBytes.byteLength + payload.byteLength;
   if (frameLength > TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES) {
-    throw new Error("Terminal protocol frame exceeds the 1 MiB message limit.");
+    throw new Error("Terminal protocol frame exceeds the 8 MiB message limit.");
   }
   const frame = new Uint8Array(frameLength);
   new DataView(frame.buffer).setUint32(0, headerBytes.byteLength, false);
@@ -186,7 +180,7 @@ export const encodeTerminalProtocolFrame = ({
 
 export const decodeTerminalProtocolFrame = (frame: Uint8Array): TerminalProtocolFrame => {
   if (frame.byteLength > TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES) {
-    throw new Error("Terminal protocol frame exceeds the 1 MiB message limit.");
+    throw new Error("Terminal protocol frame exceeds the 8 MiB message limit.");
   }
   if (frame.byteLength < 4) {
     throw new Error("Terminal protocol frame is missing its header length.");

@@ -7,6 +7,7 @@ import {
 import { Effect } from "effect";
 import type { TerminalPtyError, TerminalPtyHandle } from "../../ports/terminal-pty-port";
 import { TERMINAL_LIMITS } from "./terminal-limits";
+import { TerminalScreenBusyError, type TerminalScreenSnapshot } from "./terminal-screen-state";
 
 const OUTPUT_CHUNK_BYTES = 64 * 1024;
 const EMPTY_PAYLOAD = new Uint8Array(0);
@@ -23,6 +24,7 @@ type TerminalAttachment = {
   acknowledgedSequence: number;
   deliveredSequence: number;
   pendingBytes: number;
+  restoredSequence: number;
   replaySummary: TerminalSummary | null;
 };
 
@@ -35,9 +37,9 @@ export type TerminalSessionAttachInput = {
 
 export type TerminalOutputEvent =
   | { type: "attachments_empty" }
-  | { type: "incomplete_replay" }
   | { type: "overflow" }
-  | { type: "pause_requested" };
+  | { type: "pause_requested" }
+  | { type: "resume_requested" };
 
 export type TerminalOutputEvents = TerminalOutputEvent[];
 
@@ -72,12 +74,18 @@ export class TerminalSessionOutput {
   private sequence = 0;
   private readonly attachments = new Map<string, TerminalAttachment>();
   private paused = false;
+  private ptyPaused = false;
   private overflowed = false;
   private failureFrame: Extract<TerminalServerMessage, { type: "protocol_error" }> | null = null;
+  private parserPendingBytes = 0;
+  private screenFlushPending = false;
+  private snapshotHolds = 0;
+  private readonly flowOperations = Effect.unsafeMakeSemaphore(1);
 
   constructor(
     private readonly terminalId: string,
     private readonly replayByteLimit: number,
+    private readonly screenSnapshot: () => TerminalScreenSnapshot,
   ) {}
 
   get nextSequence(): number {
@@ -106,6 +114,7 @@ export class TerminalSessionOutput {
       acknowledgedSequence: requested,
       deliveredSequence: requested,
       pendingBytes: 0,
+      restoredSequence: 0,
       replaySummary: summary,
     };
     const previous = this.attachments.get(input.attachmentId);
@@ -164,6 +173,16 @@ export class TerminalSessionOutput {
     return events;
   }
 
+  updateParserBacklog(bytes: number, handle: TerminalPtyHandle | null): TerminalOutputEvents {
+    const wasBacklogged = this.parserPendingBytes > TERMINAL_LIMITS.resumeOutputBytes;
+    this.parserPendingBytes = bytes;
+    const pressure = bytes >= TERMINAL_LIMITS.pendingOutputBytes ? this.requestPause(handle) : [];
+    const canResume =
+      (wasBacklogged && bytes <= TERMINAL_LIMITS.resumeOutputBytes) ||
+      (this.screenFlushPending && bytes === 0);
+    return canResume ? mergeEvents(pressure, event("resume_requested")) : pressure;
+  }
+
   acknowledge(attachmentId: string, sequenceEnd: number): void {
     const attachment = this.attachments.get(attachmentId);
     if (!attachment) {
@@ -172,6 +191,13 @@ export class TerminalSessionOutput {
         `Terminal attachment not found: ${attachmentId}`,
       );
     }
+    if (
+      Number.isInteger(sequenceEnd) &&
+      sequenceEnd >= 0 &&
+      sequenceEnd < attachment.acknowledgedSequence &&
+      sequenceEnd <= attachment.restoredSequence
+    )
+      return;
     if (
       !Number.isInteger(sequenceEnd) ||
       sequenceEnd < attachment.acknowledgedSequence ||
@@ -190,19 +216,61 @@ export class TerminalSessionOutput {
     this.attachments.delete(attachmentId);
   }
 
+  beginSnapshotHold(): void {
+    this.snapshotHolds += 1;
+    this.paused = true;
+  }
+
+  endSnapshotHold(): TerminalOutputEvents {
+    if (this.snapshotHolds === 0) throw new Error("Terminal screen snapshot hold is not active.");
+    this.snapshotHolds -= 1;
+    return this.snapshotHolds === 0 ? event("resume_requested") : [];
+  }
+
   resumeIfUnblocked(
     handle: TerminalPtyHandle | null,
   ): Effect.Effect<TerminalOutputEvents, TerminalPtyError> {
+    return this.flowOperations.withPermits(1)(this.resumeUnblocked(handle));
+  }
+
+  pauseIfRequested(
+    handle: TerminalPtyHandle,
+  ): Effect.Effect<TerminalOutputEvents, TerminalPtyError> {
+    return this.flowOperations.withPermits(1)(
+      Effect.gen(this, function* () {
+        if (!this.paused || this.overflowed) return [];
+        if (!this.ptyPaused) {
+          yield* handle.pauseOutput();
+          this.ptyPaused = true;
+        }
+        return yield* this.resumeUnblocked(handle);
+      }),
+    );
+  }
+
+  private resumeUnblocked(
+    handle: TerminalPtyHandle | null,
+  ): Effect.Effect<TerminalOutputEvents, TerminalPtyError> {
     return Effect.gen(this, function* () {
+      if (this.snapshotHolds > 0) return [];
       if (this.paused) {
         if (
+          this.parserPendingBytes > TERMINAL_LIMITS.resumeOutputBytes ||
           ![...this.attachments.values()].every(
             (candidate) => candidate.pendingBytes <= TERMINAL_LIMITS.resumeOutputBytes,
           )
         )
           return [];
-        if (handle) yield* handle.resumeOutput();
+        if (handle && this.ptyPaused) yield* handle.resumeOutput();
+        this.ptyPaused = false;
         this.paused = false;
+        if (
+          this.parserPendingBytes >= TERMINAL_LIMITS.pendingOutputBytes ||
+          [...this.attachments.values()].some(
+            (candidate) => candidate.pendingBytes >= TERMINAL_LIMITS.pendingOutputBytes,
+          )
+        )
+          return this.requestPause(handle);
       }
       let events: TerminalOutputEvents = [];
       // oxlint-disable-next-line unicorn/no-useless-spread -- flushing can change attachments
@@ -214,6 +282,9 @@ export class TerminalSessionOutput {
           );
         }
       }
+      this.screenFlushPending = [...this.attachments.values()].some(
+        (candidate) => candidate.deliveredSequence < this.earliestRetainedSequence,
+      );
       return events;
     });
   }
@@ -317,19 +388,51 @@ export class TerminalSessionOutput {
     let events: TerminalOutputEvents = [];
     const earliest = this.earliestRetainedSequence;
     if (attachment.deliveredSequence < earliest) {
-      const published = this.tryPublish(attachment, {
-        version: TERMINAL_PROTOCOL_VERSION,
-        type: "replay_gap",
-        terminalId: this.terminalId,
-        missingSequenceStart: attachment.deliveredSequence,
-        missingSequenceEnd: earliest,
-      });
+      let snapshot: TerminalScreenSnapshot;
+      try {
+        snapshot = this.screenSnapshot();
+      } catch (cause) {
+        if (cause instanceof TerminalScreenBusyError) {
+          this.screenFlushPending = true;
+          return events;
+        }
+        const message = cause instanceof Error ? cause.message : String(cause);
+        const failed = this.tryPublish(attachment, {
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "protocol_error",
+          terminalId: this.terminalId,
+          failure: {
+            code: "protocol_error",
+            message,
+            terminalId: this.terminalId,
+          },
+        });
+        this.attachments.delete(attachment.attachmentId);
+        return mergeEvents(
+          failed.events,
+          this.attachments.size === 0 ? event("attachments_empty") : [],
+        );
+      }
+      this.screenFlushPending = false;
+      const published = this.tryPublish(
+        attachment,
+        {
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "screen_restore",
+          terminalId: this.terminalId,
+          sequenceEnd: this.sequence,
+          columns: snapshot.columns,
+          rows: snapshot.rows,
+          precedingJoinState: snapshot.precedingJoinState,
+        },
+        snapshot.payload,
+      );
       events = mergeEvents(events, published.events);
       if (!published.delivered) return events;
-      attachment.deliveredSequence = earliest;
-      attachment.acknowledgedSequence = earliest;
+      attachment.deliveredSequence = this.sequence;
+      attachment.acknowledgedSequence = this.sequence;
+      attachment.restoredSequence = this.sequence;
       attachment.pendingBytes = 0;
-      events = mergeEvents(events, event("incomplete_replay"));
     }
     for (const chunk of this.replay) {
       const delivered = this.deliver(attachment, chunk, replay, handle);

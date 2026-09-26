@@ -8,6 +8,7 @@ export const TOOL_DISCOVERY_IDS = [
   "codex",
   "git",
   "githubCli",
+  "node",
   "opencode",
 ] as const;
 

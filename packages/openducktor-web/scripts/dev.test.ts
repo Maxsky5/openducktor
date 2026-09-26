@@ -10,10 +10,10 @@ import {
 describe("web dev script", () => {
   test("launches the workspace CLI with forwarded arguments", () => {
     expect(
-      buildWebDevCommand(["--port", "1440", "--backend-port", "1441"], "/usr/local/bin/bun"),
+      buildWebDevCommand(["--port", "1440", "--backend-port", "1441"], "/usr/local/bin/node"),
     ).toEqual([
-      "/usr/local/bin/bun",
-      "src/cli.ts",
+      "/usr/local/bin/node",
+      "dist/cli.js",
       "--workspace",
       "--port",
       "1440",
