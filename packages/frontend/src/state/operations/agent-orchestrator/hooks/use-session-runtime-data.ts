@@ -149,7 +149,7 @@ export const useSessionRuntimeData = ({
   const todosRef = runtimeDataRefs.kind === "available" ? runtimeDataRefs.todosRef : null;
   const ownsFreshCodexEmptyState = isMatchingFreshCodexSessionAwaitingKickoff(
     sessionState,
-    selectedSession?.identity,
+    stableSelectedSessionIdentity,
   );
 
   const catalogQuery = useQuery({
