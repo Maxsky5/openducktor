@@ -19,11 +19,21 @@ const modelsCatalog = {
   models: [],
   defaultModelsByProvider: {},
 };
-const handlers = createAgentRuntimeQueryCommandHandlers({
-  ...unexpectedRuntimeQueries,
-  loadRuntimeCatalog: () =>
-    Effect.succeed({ models: { status: "available" as const, catalog: modelsCatalog } }),
-});
+const previewCatalog = {
+  runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+  models: {
+    status: "available" as const,
+    catalog: { ...modelsCatalog, runtime: OPENCODE_RUNTIME_DESCRIPTOR },
+  },
+};
+const handlers = createAgentRuntimeQueryCommandHandlers(
+  {
+    ...unexpectedRuntimeQueries,
+    loadRuntimeCatalog: () =>
+      Effect.succeed({ models: { status: "available" as const, catalog: modelsCatalog } }),
+  },
+  () => Effect.succeed(previewCatalog),
+);
 
 for (const invalid of [
   undefined,
@@ -51,15 +61,45 @@ test("returns the combined catalog through the shared command", async () => {
   });
 });
 
-test("rejects a catalog describing the wrong runtime", async () => {
-  const handlers = createAgentRuntimeQueryCommandHandlers({
-    ...unexpectedRuntimeQueries,
-    loadRuntimeCatalog: () =>
-      Effect.succeed({
-        runtime: OPENCODE_RUNTIME_DESCRIPTOR,
-        models: { status: "available" as const, catalog: modelsCatalog },
+test("previews only a repository and supported runtime, without a client-selected route", async () => {
+  expect(await Effect.runPromise(handlers.agent_runtime_preview_models({ input }))).toEqual(
+    previewCatalog,
+  );
+  for (const invalid of [
+    { ...input, workingDirectory: "/other" },
+    { ...input, runtimeKind: "claude" },
+    { ...input, repoPath: "" },
+  ]) {
+    const error = await Effect.runPromise(
+      Effect.flip(handlers.agent_runtime_preview_models({ input: invalid })),
+    );
+    expect(error.failure.code).toBe("invalid_input");
+  }
+});
+
+test("rejects a preview catalog for another runtime", async () => {
+  const error = await Effect.runPromise(
+    Effect.flip(
+      handlers.agent_runtime_preview_models({
+        input: { ...input, runtimeKind: "codex" },
       }),
-  });
+    ),
+  );
+  expect(error.failure.code).toBe("invalid_runtime_response");
+});
+
+test("rejects a catalog describing the wrong runtime", async () => {
+  const handlers = createAgentRuntimeQueryCommandHandlers(
+    {
+      ...unexpectedRuntimeQueries,
+      loadRuntimeCatalog: () =>
+        Effect.succeed({
+          runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+          models: { status: "available" as const, catalog: modelsCatalog },
+        }),
+    },
+    () => Effect.succeed(previewCatalog),
+  );
   const error = await Effect.runPromise(
     Effect.flip(
       handlers.agent_runtime_load_catalog({
@@ -71,14 +111,17 @@ test("rejects a catalog describing the wrong runtime", async () => {
 });
 
 test("rejects a malformed combined catalog response", async () => {
-  const handlers = createAgentRuntimeQueryCommandHandlers({
-    ...unexpectedRuntimeQueries,
-    // SAFETY: Invalid catalog data tests host response checks.
-    loadRuntimeCatalog: () =>
-      Effect.succeed({
-        models: { status: "available", catalog: { models: [{ id: "broken" }] } },
-      } as never),
-  });
+  const handlers = createAgentRuntimeQueryCommandHandlers(
+    {
+      ...unexpectedRuntimeQueries,
+      // SAFETY: Invalid catalog data tests host response checks.
+      loadRuntimeCatalog: () =>
+        Effect.succeed({
+          models: { status: "available", catalog: { models: [{ id: "broken" }] } },
+        } as never),
+    },
+    () => Effect.succeed(previewCatalog),
+  );
   expect(
     (
       await Effect.runPromise(

@@ -233,6 +233,8 @@ OpenDucktor can add session workflow tools, MCP servers, hooks, or instructions.
 
 Read the effective model catalog from the runtime so proxy and third-party providers remain present. Use native metadata to separate commands, bundled workflows, user skills, and model skills. Keep a bounded classification rule in one runtime module only when the API has no type field.
 
+For a repository that is not yet a workspace, `agent_runtime_preview_models` reads Codex or OpenCode models through a short-lived native process. The host checks the Git path, does not connect the OpenDucktor MCP bridge, and stops the process after the read. Keep this preview out of the workspace runtime registry and use a separate frontend query key.
+
 Keep names that the runtime accepts. A bad catalog entry fails that catalog request and names the entry. It does not block history or session reads.
 
 ### Workflow prompts

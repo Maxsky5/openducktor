@@ -15,6 +15,10 @@ import {
   useRuntimeModelCatalogs,
 } from "@/state/queries/use-runtime-model-catalogs";
 import { errorMessage } from "@/lib/errors";
+import { useWorkspaceCreationPreviewCatalogs } from "./use-workspace-creation-preview-catalogs";
+
+const isPreviewRuntimeKind = (kind: RuntimeKind): kind is "codex" | "opencode" =>
+  kind === "codex" || kind === "opencode";
 
 type RuntimeStartState = {
   key: string;
@@ -50,6 +54,14 @@ export function useWorkspaceCreationModels({
     () => runtime.availableRuntimeDefinitions.map((definition) => definition.kind),
     [runtime.availableRuntimeDefinitions],
   );
+  const previewRuntimeKinds = useMemo(
+    () => runtimeKinds.filter(isPreviewRuntimeKind),
+    [runtimeKinds],
+  );
+  const liveRuntimeKinds = useMemo(
+    () => runtimeKinds.filter((kind) => !isPreviewRuntimeKind(kind)),
+    [runtimeKinds],
+  );
   const key = `${repoPath}\0${runtimeKinds.join(",")}`;
   const [attempt, setAttempt] = useState(0);
   const [startState, setStartState] = useState<RuntimeStartState>({
@@ -63,9 +75,9 @@ export function useWorkspaceCreationModels({
   useEffect(() => {
     if (!active || !repoPath) return;
     let cancelled = false;
-    setStartState({ key, ready: [], errors: [], pending: runtimeKinds.length > 0 });
+    setStartState({ key, ready: [], errors: [], pending: liveRuntimeKinds.length > 0 });
     void Promise.all(
-      runtimeKinds.map(async (runtimeKind) => {
+      liveRuntimeKinds.map(async (runtimeKind) => {
         try {
           await host.runtimeEnsure(repoPath, runtimeKind);
           if (!cancelled) {
@@ -98,15 +110,22 @@ export function useWorkspaceCreationModels({
     return () => {
       cancelled = true;
     };
-  }, [active, attempt, key, repoPath, runtimeKinds]);
+  }, [active, attempt, key, repoPath, liveRuntimeKinds]);
 
   const readyKinds = startState.key === key ? startState.ready : [];
-  const { resources } = useRuntimeModelCatalogs({
+  const { resources: liveResources } = useRuntimeModelCatalogs({
     repoPath: active && repoPath ? repoPath : null,
-    runtimeKinds,
+    runtimeKinds: liveRuntimeKinds,
     enabledRuntimeKinds: readyKinds,
     loadRuntimeCatalog: runtime.loadRepoRuntimeCatalog,
   });
+  const previewResources = useWorkspaceCreationPreviewCatalogs({
+    repoPath,
+    active,
+    runtimeKinds: previewRuntimeKinds,
+    loadPreviewModels: host.agentRuntimePreviewModels,
+  });
+  const resources = [...liveResources, ...previewResources];
   const errors = [
     ...(runtime.runtimeDefinitionsError
       ? [`Runtime definitions: ${runtime.runtimeDefinitionsError}`]

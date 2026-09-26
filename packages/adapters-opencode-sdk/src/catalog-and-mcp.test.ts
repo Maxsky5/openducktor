@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { Agent, Command } from "@opencode-ai/sdk/v2/client";
-import { loadRuntimeCatalog, searchFiles } from "./catalog-and-mcp";
+import { loadModelCatalog, loadRuntimeCatalog, searchFiles } from "./catalog-and-mcp";
 
 const commandFixture = (overrides: Partial<Command>): Command => ({
   hints: [],
@@ -71,6 +71,26 @@ const failureMessage = (surface: { status: string; cause?: unknown } | undefined
   }
   return String(surface.cause);
 };
+
+test("model-only catalog read keeps repository profiles without reading commands", async () => {
+  const commandList = mock(async () => ({ data: [] }));
+  const client = catalogClient({
+    app: { agents: async () => ({ data: [agentFixture({ name: "build", mode: "primary" })] }) },
+    config: { providers: async () => ({ data: { default: {}, providers: [] } }) },
+    command: { list: commandList },
+  });
+  const catalog = await loadModelCatalog(
+    // SAFETY: The test client implements the model and agent namespaces used by this read.
+    (() => client) as never,
+    {
+      runtimeEndpoint: "http://127.0.0.1:1234",
+      workingDirectory: "/repo",
+      repoPath: "/repo",
+    },
+  );
+  expect(catalog.profiles?.map((profile) => profile.id)).toEqual(["build"]);
+  expect(commandList).not.toHaveBeenCalled();
+});
 
 describe("catalog-and-mcp combined runtime catalog", () => {
   test("normalizes command payloads into the slash command surface", async () => {

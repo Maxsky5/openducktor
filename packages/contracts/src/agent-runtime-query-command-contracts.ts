@@ -18,6 +18,14 @@ import {
   agentRuntimeLoadCatalogInputSchema,
 } from "./runtime-catalog-schemas";
 
+export const agentRuntimePreviewModelsInputSchema = z
+  .object({
+    repoPath: z.string().trim().min(1),
+    runtimeKind: z.enum(["codex", "opencode"]),
+  })
+  .strict();
+export type AgentRuntimePreviewModelsInput = z.infer<typeof agentRuntimePreviewModelsInputSchema>;
+
 const opencodePolicySchema = z.object({ kind: z.literal("opencode") }).strict();
 const claudePolicySchema = z.object({ kind: z.literal("claude") }).strict();
 const codexPolicySchema = z
@@ -105,6 +113,11 @@ export type AgentRuntimeQueryCommandContract<Input = unknown, Response = unknown
 };
 
 export const AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS = {
+  previewModels: {
+    command: "agent_runtime_preview_models",
+    inputSchema: agentRuntimePreviewModelsInputSchema,
+    responseSchema: agentRuntimeCatalogSchema,
+  },
   loadCatalog: {
     command: "agent_runtime_load_catalog",
     inputSchema: agentRuntimeLoadCatalogInputSchema,

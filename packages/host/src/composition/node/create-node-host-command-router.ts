@@ -84,6 +84,7 @@ import {
   resolveWorkspaceRuntimeMcpBridgeConnection,
 } from "./workspace-runtime-mcp-bridge-connection";
 import { guardRuntimeStart } from "./user-path-start-guard";
+import { createModelCatalogPreviewComposition as previewModels } from "./model-catalog-preview-composition";
 
 export type { CreateNodeHostCommandRouterInput, EffectNodeHostCommandRouter };
 export const assembleNodeEffectHostCommandRouter = (
@@ -430,6 +431,7 @@ export const assembleNodeEffectHostCommandRouter = (
           worktreeReads: taskSessionLifecycleCoordinator,
           worktreeFiles,
         }),
+        previewModels(defaultPorts, git, runtimeDefinitionsService, clientVersion),
       ),
       ...createDevServerCommandHandlers(devServerService),
       ...createFilesystemCommandHandlers(filesystemService),

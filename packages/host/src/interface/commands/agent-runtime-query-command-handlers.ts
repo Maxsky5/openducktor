@@ -1,5 +1,7 @@
 import {
   AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS,
+  type AgentRuntimeCatalog,
+  type AgentRuntimePreviewModelsInput,
   type AgentRuntimeQueryCommandContract,
   type RepoRuntimeRef,
   runtimeKindSchema,
@@ -15,8 +17,18 @@ import {
 import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
 import type { HostCommandArgs } from "./command-inputs";
 
-export const createAgentRuntimeQueryCommandHandlers = (service: AgentRuntimeQueryPort) =>
+export const createAgentRuntimeQueryCommandHandlers = (
+  service: AgentRuntimeQueryPort,
+  previewModels: (
+    input: AgentRuntimePreviewModelsInput,
+  ) => Effect.Effect<AgentRuntimeCatalog, RuntimeQueryError>,
+) =>
   ({
+    agent_runtime_preview_models: createQueryHandler(
+      AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.previewModels,
+      previewModels,
+      (input, result) => result.runtime?.kind === input.runtimeKind,
+    ),
     agent_runtime_load_catalog: createQueryHandler(
       AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.loadCatalog,
       (input) => service.loadRuntimeCatalog(input),
