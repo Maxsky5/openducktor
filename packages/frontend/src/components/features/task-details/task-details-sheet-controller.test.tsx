@@ -154,16 +154,18 @@ describe("TaskDetailsSheetController", () => {
     }
   });
 
-  test("reports a missing task after a failed delete and a later removal", async () => {
+  test("reports a task removed by another process while deletion fails", async () => {
     const TaskDetailsSheetController = await importMockedTaskDetailsSheetController();
     const task = createTaskCardFixture({ id: "task-1" });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const queryKey = taskQueryKeys.repoData(activeWorkspace.repoPath);
     client.setQueryData(queryKey, { tasks: [task] });
     const ref = createRef<TaskDetailsSheetControllerHandle>();
-    const actions = createWorkflowActions(async () => {
-      throw new Error("Delete failed");
+    let failDelete = (_error: Error): void => {};
+    const deletePending = new Promise<void>((_resolve, reject) => {
+      failDelete = reject;
     });
+    const actions = createWorkflowActions(() => deletePending);
     const controller = (allTasks: TaskCard[]) =>
       createElement(
         TaskWorkflowActionsContext.Provider,
@@ -175,16 +177,27 @@ describe("TaskDetailsSheetController", () => {
     });
     try {
       await act(async () => ref.current?.openTask(task.id));
-      const sheet = taskDetailsSheetRenderMock.mock.calls.at(-1)?.[0];
-      if (!sheet?.onDelete) throw new Error("Expected task delete action.");
-      await expect(sheet.onDelete(task.id, { deleteSubtasks: true })).rejects.toThrow(
-        "Delete failed",
-      );
       await withMockedToast(async ({ toastErrorMock }) => {
+        const onDelete = taskDetailsSheetRenderMock.mock.calls.at(-1)?.[0]?.onDelete;
+        if (!onDelete) throw new Error("Expected task delete action.");
+        let deletion: Promise<void> = Promise.resolve();
         await act(async () => {
+          deletion = onDelete(task.id, { deleteSubtasks: true });
           client.setQueryData(queryKey, { tasks: [] });
           rendered.rerender(controller([]));
         });
+        expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ task, open: true }),
+        );
+        expect(toastErrorMock).not.toHaveBeenCalled();
+
+        await act(async () => {
+          failDelete(new Error("Delete failed"));
+          await expect(deletion).rejects.toThrow("Delete failed");
+        });
+        expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ task: null, open: false }),
+        );
         expect(toastErrorMock).toHaveBeenCalledWith("Notification task no longer exists", {
           id: "task-details-unavailable:/repo-a:task-1",
           description: "The task was removed from this workspace.",

@@ -1,12 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import {
-  type ReactElement,
-  type Ref,
-  useEffect,
-  useImperativeHandle,
-  useRef,
-  useState,
-} from "react";
+import { type ReactElement, type Ref, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "sonner";
 import { useTaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
 import { unfilteredRepoTaskDataQueryOptions } from "@/state/queries/tasks";
@@ -35,7 +28,10 @@ function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerPr
   const deleteTask = workflowActions?.onDelete;
   const repoPath = sheetProps.activeWorkspace?.repoPath ?? null;
   const [taskId, setTaskId] = useState<string | null>(null);
-  const deletingTaskRef = useRef<{ id: string; task: TaskDetailsSheetProps["task"] } | null>(null);
+  const [deletingTask, setDeletingTask] = useState<{
+    id: string;
+    task: TaskDetailsSheetProps["task"];
+  } | null>(null);
   const boardTask = allTasks.find((entry) => entry.id === taskId);
   const taskQuery = useQuery({
     ...unfilteredRepoTaskDataQueryOptions(repoPath ?? ""),
@@ -44,11 +40,11 @@ function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerPr
   const sheetTasks = boardTask || !taskQuery.isSuccess ? allTasks : taskQuery.data.tasks;
   const task =
     sheetTasks.find((entry) => entry.id === taskId) ??
-    (deletingTaskRef.current?.id === taskId ? deletingTaskRef.current.task : null);
+    (deletingTask?.id === taskId ? deletingTask.task : null);
   useEffect(() => {
     if (!taskId || boardTask || taskQuery.isFetching || taskQuery.isPending) return;
     if (taskQuery.isSuccess && taskQuery.data.tasks.some((entry) => entry.id === taskId)) return;
-    if (deletingTaskRef.current?.id === taskId) return;
+    if (deletingTask?.id === taskId) return;
     toast.error(
       taskQuery.isError ? "Could not load notification task" : "Notification task no longer exists",
       {
@@ -60,6 +56,7 @@ function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerPr
     );
   }, [
     boardTask,
+    deletingTask,
     repoPath,
     taskId,
     taskQuery.data,
@@ -74,11 +71,11 @@ function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerPr
     ref,
     () => ({
       openTask: (nextTaskId: string) => {
-        deletingTaskRef.current = null;
+        setDeletingTask(null);
         setTaskId(nextTaskId);
       },
       close: () => {
-        deletingTaskRef.current = null;
+        setDeletingTask(null);
         setTaskId(null);
       },
     }),
@@ -93,19 +90,20 @@ function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerPr
       open={open}
       {...(deleteTask && {
         onDelete: async (deletedTaskId: string, options: { deleteSubtasks: boolean }) => {
-          deletingTaskRef.current = { id: deletedTaskId, task };
+          setDeletingTask({ id: deletedTaskId, task });
           try {
             await deleteTask(deletedTaskId, options);
             setTaskId((currentTaskId) => (currentTaskId === deletedTaskId ? null : currentTaskId));
+            setDeletingTask((current) => (current?.id === deletedTaskId ? null : current));
           } catch (error) {
-            deletingTaskRef.current = null;
+            setDeletingTask((current) => (current?.id === deletedTaskId ? null : current));
             throw error;
           }
         },
       })}
       onOpenChange={(nextOpen) => {
         if (!nextOpen) {
-          deletingTaskRef.current = null;
+          setDeletingTask(null);
           setTaskId(null);
         }
       }}
