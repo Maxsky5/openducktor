@@ -175,7 +175,9 @@ export function WorkspaceSessionContent({
   workspace: ActiveWorkspace;
   record: WorkspaceSession;
   panelState: WorkspaceSessionPanelState;
-  onPanelStateChange: (update: Partial<WorkspaceSessionPanelState>) => void;
+  onPanelStateChange: (
+    update: Partial<Pick<WorkspaceSessionPanelState, "activeTabId" | "selectedFile">>,
+  ) => void;
 }) {
   const { activeBranch, isSwitchingBranch } = useWorkspaceBranchState();
   const repoConfig = useQuery(repoConfigQueryOptions(workspace.workspaceId));

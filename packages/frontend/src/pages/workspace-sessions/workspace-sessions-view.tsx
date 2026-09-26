@@ -6,6 +6,7 @@ import { useLocation, useNavigationType, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
 import { BrowserTabsBar, BrowserTabsRoot } from "@/components/ui/browser-tabs";
 import { SharedToolsPanelToggleButton } from "@/components/features/agents/shared-tools-panel";
+import { useRightPanelOpen } from "@/components/features/agents/use-right-panel-open";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
 import { errorMessage } from "@/lib/errors";
 import { host } from "@/state/operations/host";
@@ -70,7 +71,7 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
   const selected =
     orderedSessions.find((record) => record.id === visibleSelectedId) ?? requestedSelected;
   const selectedId = selected?.id ?? null;
-  const { panelState, onPanelStateChange } = useSessionPanelState(selectedId);
+  const { panelState, onPanelStateChange, togglePanel } = useSessionPanelState(selectedId);
   useEffect(() => {
     if (records.data && sessionId !== requestedSelectedId)
       updateNavigation({ sessionId: requestedSelectedId });
@@ -127,13 +128,6 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
         }
         actions={
           <>
-            {selected ? (
-              <SharedToolsPanelToggleButton
-                label="workspace tools"
-                isOpen={panelState.isOpen}
-                onToggle={() => onPanelStateChange({ isOpen: !panelState.isOpen })}
-              />
-            ) : null}
             <Button
               variant="ghost"
               size="icon"
@@ -154,6 +148,15 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
             >
               <History />
             </Button>
+            {selected ? (
+              <div className="flex shrink-0 items-center pl-0.5">
+                <SharedToolsPanelToggleButton
+                  label="workspace tools"
+                  isOpen={panelState.isOpen}
+                  onToggle={togglePanel}
+                />
+              </div>
+            ) : null}
           </>
         }
       >
@@ -213,22 +216,22 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
 }
 
 function useSessionPanelState(selectedId: string | null) {
-  const [panelStates, setPanelStates] = useState<Record<string, WorkspaceSessionPanelState>>({});
+  const { isOpen, toggle: togglePanel } = useRightPanelOpen();
+  type TabState = Pick<WorkspaceSessionPanelState, "activeTabId" | "selectedFile">;
+  const [panelStates, setPanelStates] = useState<Record<string, TabState>>({});
   const panelState: WorkspaceSessionPanelState = selectedId
-    ? (panelStates[selectedId] ?? { isOpen: true, activeTabId: "git", selectedFile: null })
+    ? { isOpen, ...(panelStates[selectedId] ?? { activeTabId: "git", selectedFile: null }) }
     : { isOpen: false, activeTabId: "git", selectedFile: null };
   const onPanelStateChange = useCallback(
-    (update: Partial<WorkspaceSessionPanelState>) => {
+    (update: Partial<TabState>) => {
       if (!selectedId) return;
       setPanelStates((current) => {
         const previous = current[selectedId] ?? {
-          isOpen: true,
           activeTabId: "git",
           selectedFile: null,
         };
         const next = { ...previous, ...update };
         if (
-          previous.isOpen === next.isOpen &&
           previous.activeTabId === next.activeTabId &&
           previous.selectedFile?.rootPath === next.selectedFile?.rootPath &&
           previous.selectedFile?.relativePath === next.selectedFile?.relativePath
@@ -239,7 +242,7 @@ function useSessionPanelState(selectedId: string | null) {
     },
     [selectedId],
   );
-  return { panelState, onPanelStateChange };
+  return { panelState, onPanelStateChange, togglePanel };
 }
 
 function WorkspaceSessionArchiveError({ error }: { error: Error | null }): ReactElement | null {

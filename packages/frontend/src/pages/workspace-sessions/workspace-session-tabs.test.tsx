@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { act, type ReactNode, useState } from "react";
 import { Link, MemoryRouter, useLocation, useNavigate } from "react-router";
 import { QueryProvider } from "@/lib/query-provider";
+import { RIGHT_PANEL_OPEN_STORAGE_KEY } from "@/components/features/agents/use-right-panel-open";
 import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
@@ -38,6 +39,7 @@ afterEach(() => {
     localStorage.removeItem(workspaceSessionTabOrderStorageKey(workspaceId));
   }
   testWorkspaceIds.clear();
+  localStorage.removeItem(RIGHT_PANEL_OPEN_STORAGE_KEY);
 });
 
 const sessionRecord = (id: string): WorkspaceSession => ({
@@ -186,6 +188,9 @@ test.each([true, false])(
       expect(importButton.getAttribute("title")).toBe("Import session");
       expect(importButton.closest('[role="tablist"]')).toBeNull();
       if (hasSessions) {
+        const panelButton = view.getByRole("button", { name: "Hide workspace tools panel" });
+        expect(historyButton.nextElementSibling?.contains(panelButton)).toBe(true);
+        expect(historyButton.nextElementSibling?.nextElementSibling).toBeNull();
         expect(
           view.getByRole("tab", { name: /First/ }).closest('[data-slot="browser-tab"]'),
         ).not.toBeNull();
@@ -489,7 +494,7 @@ function DirtyPreview() {
   );
 }
 
-test("each selected chat keeps its own tools tab and open state", async () => {
+test("chats share panel visibility and keep their own tools tab", async () => {
   configureShellBridge(
     createShellBridgeFixture({
       client: {
@@ -507,6 +512,9 @@ test("each selected chat keeps its own tools tab and open state", async () => {
     await waitFor(() =>
       expect(view.getByRole("tab", { name: /Second/ }).getAttribute("data-state")).toBe("active"),
     );
+    expect(view.getByRole("button", { name: "Show workspace tools panel" })).toBeTruthy();
+    expect(view.queryByRole("tablist", { name: "Workspace session tools" })).toBeNull();
+    fireEvent.click(view.getByRole("button", { name: "Show workspace tools panel" }));
     await view.findByRole("tablist", { name: "Workspace session tools" });
     fireEvent.mouseDown(view.getByRole("tab", { name: "File explorer" }), {
       button: 0,
@@ -518,14 +526,38 @@ test("each selected chat keeps its own tools tab and open state", async () => {
       ),
     );
     fireEvent.mouseUp(view.getByRole("tab", { name: /First/ }), { button: 0 });
-    await view.findByRole("button", { name: "Show workspace tools panel" });
-    expect(view.queryByRole("tablist", { name: "Workspace session tools" })).toBeNull();
+    await view.findByRole("tablist", { name: "Workspace session tools" });
+    expect(view.getByRole("tab", { name: "Git" }).getAttribute("aria-selected")).toBe("true");
     fireEvent.mouseUp(view.getByRole("tab", { name: /Second/ }), { button: 0 });
     await waitFor(() =>
       expect(view.getByRole("tab", { name: "File explorer" }).getAttribute("aria-selected")).toBe(
         "true",
       ),
     );
+    expect(localStorage.getItem(RIGHT_PANEL_OPEN_STORAGE_KEY)).toBe("true");
+  } finally {
+    view.unmount();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+}, 5_000);
+
+test("workspace tools use the saved panel choice", async () => {
+  localStorage.setItem(RIGHT_PANEL_OPEN_STORAGE_KEY, "false");
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        workspaceSessionListActive: async () => [sessionRecord("First")],
+        workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+      },
+    }),
+  );
+  const view = renderTabs("First");
+  try {
+    await view.findByRole("button", { name: "Show workspace tools panel" });
+    expect(view.queryByRole("tablist", { name: "Workspace session tools" })).toBeNull();
+    fireEvent.click(view.getByRole("button", { name: "Show workspace tools panel" }));
+    await view.findByRole("tablist", { name: "Workspace session tools" });
+    expect(localStorage.getItem(RIGHT_PANEL_OPEN_STORAGE_KEY)).toBe("true");
   } finally {
     view.unmount();
     configureShellBridge(createUnavailableShellBridge());
