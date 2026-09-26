@@ -34,6 +34,7 @@ export function WorkspaceSessionToolsPanel({
   target,
   targetError,
   retryTarget,
+  readBranch,
   activeTabId,
   onActiveTabChange,
   selectedFile,
@@ -48,16 +49,13 @@ export function WorkspaceSessionToolsPanel({
   target: GitTargetBranch | null;
   targetError: string | null;
   retryTarget: () => Promise<void>;
+  readBranch: () => Promise<string>;
   activeTabId: WorkspaceToolsTabId;
   onActiveTabChange: (tab: WorkspaceToolsTabId) => void;
   selectedFile: TaskExecutionSelectedFile | null;
   onSelectFile: (file: TaskExecutionSelectedFile) => false | void;
   onRefreshReady: (refresh: ((scope: "git" | "all") => Promise<void>) | null) => void;
 }) {
-  const queryClient = useQueryClient();
-  const [isFetchingTarget, setIsFetchingTarget] = useState(false);
-  const [retryRun, setRetryRun] = useState(0);
-  const handledRetry = useRef(0);
   const { resolvedTarget, unavailableReason, isReady, refetchComparison } =
     useWorkspaceSessionComparison({
       repoPath,
@@ -80,6 +78,172 @@ export function WorkspaceSessionToolsPanel({
     branchIdentityKey: `${workingDirectory ?? ""}:${branchKey}`,
     enableScheduledRefresh: false,
   });
+  const { refresh, isFetchingTarget } = useWorkspaceSessionRefresh({
+    branchReady,
+    diffData,
+    refetchComparison,
+    resolvedTarget,
+    target,
+    targetError,
+    retryTarget,
+    workingDirectory,
+    repoPath,
+  });
+  const { manualRefresh, isWaitingForBranch } = useManualBranchRefresh({
+    branchKey,
+    branchReady,
+    readBranch,
+    refresh,
+  });
+  useEffect(() => {
+    onRefreshReady((scope) => refresh("soft", scope === "all"));
+    return () => onRefreshReady(null);
+  }, [onRefreshReady, refresh]);
+  const refreshWhenVisible = useEffectEvent(() => {
+    if (document.visibilityState === "visible") void refresh("scheduled");
+  });
+  useEffect(() => {
+    if (!workingDirectory) return;
+    globalThis.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      globalThis.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [workingDirectory]);
+  const conflictedFiles = useMemo(
+    () =>
+      diffData.fileStatuses
+        .filter((status) => status.status === "unmerged")
+        .map((status) => status.path),
+    [diffData.fileStatuses],
+  );
+  const actions = useAgentStudioGitActions({
+    repoPath: workingDirectory ? repoPath : null,
+    workingDir: workingDirectory,
+    branch: diffData.branch,
+    targetBranch: resolvedTarget ?? "",
+    resetTargetBranch: readTarget,
+    hashVersion: diffData.hashVersion,
+    statusHash: diffData.statusHash,
+    diffHash: diffData.diffHash,
+    upstreamAheadBehind: diffData.upstreamAheadBehind,
+    detectedConflict: diffData.gitConflict ?? null,
+    detectedConflictedFiles: conflictedFiles,
+    worktreeStatusSnapshotKey: diffData.statusSnapshotKey ?? null,
+    refreshDiffData: () => refresh("soft"),
+    isDiffDataLoading: diffData.isLoading,
+  });
+  const gitModel = workspaceGitModel({
+    diffData,
+    actions,
+    contextMode,
+    branchReady,
+    resolvedTarget,
+    unavailableReason,
+    workingDirectory,
+    isFetchingTarget: isFetchingTarget || isWaitingForBranch,
+    refresh: manualRefresh,
+  });
+  const fileModel = workspaceFileModel({
+    workingDirectory,
+    resolvedTarget,
+    isReady,
+    branchReady,
+    activeTabId,
+    selectedFile,
+    onSelectFile,
+  });
+  return (
+    <SharedToolsPanel
+      model={{
+        tabs: [
+          {
+            id: "git",
+            label: "Git",
+            icon: GitBranch,
+            content: <AgentStudioGitPanel model={gitModel} />,
+          },
+          {
+            id: "file_explorer",
+            label: "File explorer",
+            icon: FolderTree,
+            content: <TaskExecutionFileExplorerPanel model={fileModel} />,
+          },
+        ],
+        activeTabId,
+        onActiveTabChange,
+        tabListLabel: "Workspace session tools",
+        testIdPrefix: "workspace-session-tools",
+        headerActions: (
+          <WorkspaceOpenInAction contextMode={contextMode} workingDirectory={workingDirectory} />
+        ),
+      }}
+    />
+  );
+}
+
+function workspaceFileModel({
+  workingDirectory,
+  resolvedTarget,
+  isReady,
+  branchReady,
+  activeTabId,
+  selectedFile,
+  onSelectFile,
+}: {
+  workingDirectory: string | null;
+  resolvedTarget: string | null;
+  isReady: boolean;
+  branchReady: boolean;
+  activeTabId: WorkspaceToolsTabId;
+  selectedFile: TaskExecutionSelectedFile | null;
+  onSelectFile: (file: TaskExecutionSelectedFile) => false | void;
+}) {
+  return {
+    rootPath: workingDirectory,
+    targetBranch: resolvedTarget,
+    unavailableReason: !workingDirectory
+      ? missingWorkingDirectoryReason
+      : !isReady
+        ? branchReady
+          ? "Checking comparison target..."
+          : "Checking branch..."
+        : null,
+    isActive: activeTabId === "file_explorer" && isReady,
+    selectedFile,
+    onSelectFile,
+  };
+}
+
+function useWorkspaceSessionRefresh({
+  branchReady,
+  diffData,
+  refetchComparison,
+  resolvedTarget,
+  target,
+  targetError,
+  retryTarget,
+  workingDirectory,
+  repoPath,
+}: {
+  branchReady: boolean;
+  diffData: ReturnType<typeof useAgentStudioDiffData>;
+  refetchComparison: () => Promise<{
+    isError: boolean;
+    data: GitComparisonTarget | undefined;
+  }>;
+  resolvedTarget: string | null;
+  target: GitTargetBranch | null;
+  targetError: string | null;
+  retryTarget: () => Promise<void>;
+  workingDirectory: string | null;
+  repoPath: string;
+}) {
+  const queryClient = useQueryClient();
+  const [isFetchingTarget, setIsFetchingTarget] = useState(false);
+  const [retryRun, setRetryRun] = useState(0);
+  const handledRetry = useRef(0);
   const refresh = useCallback(
     async (mode: WorkspaceRefreshMode = "hard", includeFiles = true) => {
       if (!branchReady) return;
@@ -131,97 +295,50 @@ export function WorkspaceSessionToolsPanel({
     handledRetry.current = retryRun;
     void refresh("hard");
   }, [refresh, retryRun, targetError]);
+  return { refresh, isFetchingTarget };
+}
+
+function useManualBranchRefresh({
+  branchKey,
+  branchReady,
+  readBranch,
+  refresh,
+}: {
+  branchKey: string;
+  branchReady: boolean;
+  readBranch: () => Promise<string>;
+  refresh: (mode: WorkspaceRefreshMode, includeFiles?: boolean) => Promise<void>;
+}) {
+  const [pendingBranchKey, setPendingBranchKey] = useState<string | null>(null);
+  const activeRefresh = useRef<string | null>(null);
+  const manualRefresh = useCallback(async () => {
+    try {
+      const nextBranchKey = await readBranch();
+      if (nextBranchKey !== branchKey) {
+        setPendingBranchKey(nextBranchKey);
+        return;
+      }
+      await refresh("hard");
+    } catch (error) {
+      toast.error("Could not refresh Git changes", { description: errorMessage(error) });
+    }
+  }, [branchKey, readBranch, refresh]);
   useEffect(() => {
-    onRefreshReady((scope) => refresh("soft", scope === "all"));
-    return () => onRefreshReady(null);
-  }, [onRefreshReady, refresh]);
-  const refreshWhenVisible = useEffectEvent(() => {
-    if (document.visibilityState === "visible") void refresh("scheduled");
-  });
-  useEffect(() => {
-    if (!workingDirectory) return;
-    globalThis.addEventListener("focus", refreshWhenVisible);
-    document.addEventListener("visibilitychange", refreshWhenVisible);
-    return () => {
-      globalThis.removeEventListener("focus", refreshWhenVisible);
-      document.removeEventListener("visibilitychange", refreshWhenVisible);
-    };
-  }, [workingDirectory]);
-  const conflictedFiles = useMemo(
-    () =>
-      diffData.fileStatuses
-        .filter((status) => status.status === "unmerged")
-        .map((status) => status.path),
-    [diffData.fileStatuses],
-  );
-  const actions = useAgentStudioGitActions({
-    repoPath: workingDirectory ? repoPath : null,
-    workingDir: workingDirectory,
-    branch: diffData.branch,
-    targetBranch: resolvedTarget ?? "",
-    resetTargetBranch: readTarget,
-    hashVersion: diffData.hashVersion,
-    statusHash: diffData.statusHash,
-    diffHash: diffData.diffHash,
-    upstreamAheadBehind: diffData.upstreamAheadBehind,
-    detectedConflict: diffData.gitConflict ?? null,
-    detectedConflictedFiles: conflictedFiles,
-    worktreeStatusSnapshotKey: diffData.statusSnapshotKey ?? null,
-    refreshDiffData: () => refresh("soft"),
-    isDiffDataLoading: diffData.isLoading,
-  });
-  const gitModel = workspaceGitModel({
-    diffData,
-    actions,
-    contextMode,
-    branchReady,
-    resolvedTarget,
-    unavailableReason,
-    workingDirectory,
-    isFetchingTarget,
-    refresh: () => refresh("hard"),
-  });
-  const fileModel = {
-    rootPath: workingDirectory,
-    targetBranch: resolvedTarget,
-    unavailableReason: !workingDirectory
-      ? missingWorkingDirectoryReason
-      : !isReady
-        ? branchReady
-          ? "Checking comparison target..."
-          : "Checking branch..."
-        : null,
-    isActive: activeTabId === "file_explorer" && isReady,
-    selectedFile,
-    onSelectFile,
-  };
-  return (
-    <SharedToolsPanel
-      model={{
-        tabs: [
-          {
-            id: "git",
-            label: "Git",
-            icon: GitBranch,
-            content: <AgentStudioGitPanel model={gitModel} />,
-          },
-          {
-            id: "file_explorer",
-            label: "File explorer",
-            icon: FolderTree,
-            content: <TaskExecutionFileExplorerPanel model={fileModel} />,
-          },
-        ],
-        activeTabId,
-        onActiveTabChange,
-        tabListLabel: "Workspace session tools",
-        testIdPrefix: "workspace-session-tools",
-        headerActions: (
-          <WorkspaceOpenInAction contextMode={contextMode} workingDirectory={workingDirectory} />
-        ),
-      }}
-    />
-  );
+    if (
+      !pendingBranchKey ||
+      !branchReady ||
+      pendingBranchKey !== branchKey ||
+      activeRefresh.current === pendingBranchKey
+    )
+      return;
+    // The branch query changes the comparison key on the next render.
+    activeRefresh.current = pendingBranchKey;
+    void refresh("hard", false).finally(() => {
+      activeRefresh.current = null;
+      setPendingBranchKey(null);
+    });
+  }, [branchKey, branchReady, pendingBranchKey, refresh]);
+  return { manualRefresh, isWaitingForBranch: pendingBranchKey !== null };
 }
 
 function comparisonUnavailableReason(input: {

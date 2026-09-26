@@ -54,6 +54,22 @@ export function useWorkspaceSessionBranch({
     // The query holds the error so the preview can show a retry action.
     void loadCurrentBranchFromQuery(queryClient, repoPath).catch(() => {});
   }, [isWorktree, queryClient, repoPath, workingDirectory]);
+  const readBranch = useCallback(async (): Promise<string> => {
+    if (isWorktree) {
+      if (!workingDirectory) return "unknown";
+      await queryClient.invalidateQueries({
+        queryKey: gitQueryKeys.worktreeBranch(repoPath, workingDirectory),
+        exact: true,
+        refetchType: "none",
+      });
+      const next = await queryClient.fetchQuery(
+        worktreeBranchQueryOptions(repoPath, workingDirectory),
+      );
+      return branchKeyFor(next, true);
+    }
+    await invalidateCurrentBranchQuery(queryClient, repoPath);
+    return branchKeyFor(await loadCurrentBranchFromQuery(queryClient, repoPath), false);
+  }, [isWorktree, queryClient, repoPath, workingDirectory]);
   const refreshOnFocus = useEffectEvent(() => {
     if (document.visibilityState === "visible") refreshBranch();
   });
@@ -68,7 +84,15 @@ export function useWorkspaceSessionBranch({
     };
   }, [isWorktree, workingDirectory]);
 
-  return { rootBranch, worktreeBranch, previewBranch, branchKey, branchReady, refreshBranch };
+  return {
+    rootBranch,
+    worktreeBranch,
+    previewBranch,
+    branchKey,
+    branchReady,
+    refreshBranch,
+    readBranch,
+  };
 }
 
 type BranchRead = {
@@ -86,16 +110,19 @@ function branchState(
   if (isWorktree) {
     return {
       branch: worktree.isError || worktree.isFetching ? null : (worktree.data ?? null),
-      branchKey: worktree.isError
-        ? "unknown"
-        : (branchIdentity(worktree.data ?? null) ?? "unknown"),
+      branchKey: worktree.isError ? "unknown" : branchKeyFor(worktree.data ?? null, true),
     };
   }
   const branch = root.isError || root.isFetching ? null : (root.data ?? active);
   return {
     branch,
-    branchKey: branch?.name ?? (branch?.detached ? "detached" : "unknown"),
+    branchKey: branchKeyFor(branch, false),
   };
+}
+
+function branchKeyFor(branch: GitCurrentBranch | null, isWorktree: boolean): string {
+  if (isWorktree) return branchIdentity(branch) ?? "unknown";
+  return branch?.name ?? (branch?.detached ? "detached" : "unknown");
 }
 
 function branchIdentity(branch: GitCurrentBranch | null): string | null {

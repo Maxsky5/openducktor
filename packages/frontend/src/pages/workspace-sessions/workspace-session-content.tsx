@@ -182,14 +182,21 @@ export function WorkspaceSessionContent({
   const queryClient = useQueryClient();
   const workingDirectory = sessionWorkingDirectory(workspace, record);
   const isWorktree = record.executionTarget.kind === "local_worktree";
-  const { rootBranch, worktreeBranch, previewBranch, branchKey, branchReady, refreshBranch } =
-    useWorkspaceSessionBranch({
-      repoPath: workspace.repoPath,
-      workingDirectory,
-      isWorktree,
-      isSwitchingBranch,
-      activeBranch,
-    });
+  const {
+    rootBranch,
+    worktreeBranch,
+    previewBranch,
+    branchKey,
+    branchReady,
+    refreshBranch,
+    readBranch,
+  } = useWorkspaceSessionBranch({
+    repoPath: workspace.repoPath,
+    workingDirectory,
+    isWorktree,
+    isSwitchingBranch,
+    activeBranch,
+  });
   const onSelectionChange = useCallback(
     (selectedFile: TaskExecutionSelectedFile | null) => onPanelStateChange({ selectedFile }),
     [onPanelStateChange],
@@ -312,6 +319,7 @@ export function WorkspaceSessionContent({
       branchReady={branchReady}
       target={target}
       targetError={targetError}
+      readBranch={readBranch}
       retryTarget={async () => {
         const result = await repoConfig.refetch();
         if (result.isError) throw result.error;

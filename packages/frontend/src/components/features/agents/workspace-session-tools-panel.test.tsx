@@ -61,6 +61,7 @@ function PanelHarness({
   targetError = null,
   target = { branch: "@{upstream}" },
   retryTarget = async () => {},
+  readBranch = async () => branchKey,
   contextMode = "repository",
   initialTabId = "git",
   onRefreshReady = () => {},
@@ -70,6 +71,7 @@ function PanelHarness({
   targetError?: string | null;
   target?: GitTargetBranch | null;
   retryTarget?: () => Promise<void>;
+  readBranch?: () => Promise<string>;
   contextMode?: "repository" | "worktree";
   initialTabId?: WorkspaceToolsTabId;
   onRefreshReady?: Parameters<typeof WorkspaceSessionToolsPanel>[0]["onRefreshReady"];
@@ -85,6 +87,7 @@ function PanelHarness({
       target={target}
       targetError={targetError}
       retryTarget={retryTarget}
+      readBranch={readBranch}
       activeTabId={activeTabId}
       onActiveTabChange={setActiveTabId}
       selectedFile={null}
@@ -539,6 +542,68 @@ test("manual refresh fetches before it reloads Git changes", async () => {
     expect(calls.filter((call) => call === `status:${targetReference}:uncommitted`)).toHaveLength(
       1,
     );
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
+test("manual refresh reads a new branch before refreshing its comparison", async () => {
+  const calls: string[] = [];
+  let finishRead!: (branch: string) => void;
+  const read = mock(() => new Promise<string>((resolve) => (finishRead = resolve)));
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        gitGetComparisonTarget: async () => {
+          calls.push("comparison");
+          return { kind: "available", reference: targetReference };
+        },
+        gitFetchRemote: async () => {
+          calls.push("fetch");
+          return { outcome: "skipped_no_remote", output: "" };
+        },
+        gitGetWorktreeStatus: async (_repoPath, targetBranch) => worktreeStatus(targetBranch),
+        gitGetWorktreeStatusSummary: async (_repoPath, targetBranch) =>
+          worktreeSummary(targetBranch),
+        gitGetBranches: async () => [],
+      },
+    }),
+  );
+  function BranchPanel() {
+    const [branchKey, setBranchKey] = useState("main");
+    return (
+      <PanelHarness
+        branchKey={branchKey}
+        readBranch={async () => {
+          const next = await read();
+          setBranchKey(next);
+          return next;
+        }}
+      />
+    );
+  }
+  const queryClient = createQueryClient();
+  const view = render(
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <BranchPanel />
+      </ThemeProvider>
+    </QueryClientProvider>,
+  );
+  try {
+    await waitFor(() => expect(calls).toContain("comparison"));
+    const refreshButton = screen.getByTestId("agent-studio-git-refresh-button");
+    await waitFor(() => expect(refreshButton.hasAttribute("disabled")).toBe(false));
+    calls.length = 0;
+    fireEvent.click(refreshButton);
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    expect(calls).toEqual([]);
+    await act(async () => finishRead("feature"));
+    await waitFor(() => expect(calls).toContain("comparison"));
+    await waitFor(() => expect(calls).toContain("fetch"));
+    expect(calls.indexOf("comparison")).toBeLessThan(calls.indexOf("fetch"));
   } finally {
     view.unmount();
     queryClient.clear();
