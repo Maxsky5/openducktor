@@ -95,10 +95,10 @@ export const createWorkspaceSessionRuntimePersistence = ({
   const saveCodexMessage = (
     runtimeRef: AgentSessionLiveRef,
     known: { ref: WorkspaceSessionStoreRef; session: WorkspaceSession },
-    plan: AcceptedMessagePlan,
+    input: AcceptedMessagePlan["input"],
   ) =>
     Effect.gen(function* () {
-      const saved = yield* storeEffect(store.recordAcceptedMessage(plan.input));
+      const saved = yield* storeEffect(store.recordAcceptedMessage(input));
       if (known.session.generatedTitle === null) {
         const key = agentSessionRefKey(runtimeRef);
         if (!codexTitleSync.has(key)) codexTitleSync.set(key, "pending");
@@ -234,7 +234,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
     Effect.gen(function* () {
       const { input, runtimeRename } = plan;
       if (runtimeRef.runtimeKind === "codex")
-        return yield* saveCodexMessage(runtimeRef, known, plan);
+        return yield* saveCodexMessage(runtimeRef, known, input);
       // Rename the runtime session before the durable write, so a failed rename never
       // stores a title that the runtime session does not show.
       if (runtimeRename !== null) {
@@ -300,7 +300,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
       if (!known) return;
       const plan = yield* planAcceptedMessage(known, runtimeRef, message, false);
       if (runtimeRef.runtimeKind === "codex")
-        return yield* saveCodexMessage(runtimeRef, known, plan);
+        return yield* saveCodexMessage(runtimeRef, known, plan.input);
       // A manual rename can hold the title gate while it waits for live publication.
       // Save observed activity without a title and defer its native rename to avoid deadlock.
       const renamePending = plan.runtimeRename !== null || sessionTitleGate.isActive(known.ref);
