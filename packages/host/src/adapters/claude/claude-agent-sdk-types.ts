@@ -31,6 +31,7 @@ import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import type { OpenDucktorMcpBridgeConnection } from "../mcp/openducktor-mcp-environment";
 import type { HostRuntimeDistribution } from "../runtimes/runtime-distribution";
 import type { AsyncInputQueue } from "./claude-agent-sdk-queue";
+import type { ClaudeBackgroundToolState } from "./claude-agent-sdk-background-tools";
 import type { ClaudeProtocolObject } from "./claude-agent-sdk-ingress-schemas";
 import type { ClaudeWorkspaceFileSearch } from "./claude-agent-sdk-file-search";
 
@@ -102,7 +103,7 @@ export type ClaudeSessionQuery = AsyncGenerator<SDKMessage, void> &
     | "setModel"
   >;
 
-export type ClaudeSession = {
+export type ClaudeSession = ClaudeBackgroundToolState & {
   acceptedUserMessages: ClaudeAcceptedUserMessage[];
   activeBackgroundSubagentTaskIds?: Set<string>;
   activeManualCompaction?: ClaudeManualCompactionState;
@@ -137,9 +138,6 @@ export type ClaudeSession = {
   subagentAgentIdsByToolUseId?: Map<string, string>;
   subagentTaskIdsByToolUseId: Map<string, string>;
   toolEndedAtMsByCallId: Map<string, number>;
-  toolInputsByCallId: Map<string, ClaudeToolInput>;
-  toolMessageIdsByCallId: Map<string, string>;
-  toolNamesByCallId: Map<string, string>;
   toolStartedAtMsByCallId: Map<string, number>;
   todosById: Map<string, AgentSessionTodoItem>;
 };

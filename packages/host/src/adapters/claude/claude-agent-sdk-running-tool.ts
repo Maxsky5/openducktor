@@ -1,11 +1,45 @@
 import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
+import type { ClaudeSdkToolProgressMessageProjection } from "./claude-agent-sdk-message-projection";
 import {
   type ClaudeDecodedToolUse,
   createClaudeRunningToolPart,
+  timestampMs,
 } from "./claude-agent-sdk-tool-shapes";
 import type { ClaudeAgentSdkEvent } from "./claude-agent-sdk-types";
 
-export const emitClaudeRunningToolPart = ({
+export const handleClaudeToolProgressMessage = ({
+  emit,
+  message,
+  session,
+  timestamp,
+}: {
+  emit: (event: ClaudeAgentSdkEvent) => void;
+  message: ClaudeSdkToolProgressMessageProjection;
+  session: ClaudeEventSession;
+  timestamp: string;
+}): void => {
+  const elapsedMs = Math.max(0, Math.round(message.elapsed_time_seconds * 1000));
+  const startedAtMs = timestampMs(timestamp) - elapsedMs;
+
+  emitClaudeRunningToolPart({
+    emit,
+    fallbackMessageId: message.uuid,
+    session,
+    startedAtMs,
+    timestamp,
+    toolUse: {
+      blockType: "tool_progress",
+      callId: message.tool_use_id,
+      toolName: message.tool_name,
+      metadata: {
+        elapsedTimeSeconds: message.elapsed_time_seconds,
+        durationMs: elapsedMs,
+      },
+    },
+  });
+};
+
+const emitClaudeRunningToolPart = ({
   emit,
   fallbackMessageId,
   session,

@@ -4,6 +4,7 @@ import {
   type InterruptedTurnResumeError,
   type InterruptedTurnResumeFailureReason,
 } from "@openducktor/core";
+import { hasActiveClaudeBackgroundTools } from "./claude-agent-sdk-event-session";
 import { hasActiveClaudeWork } from "./claude-agent-sdk-session-store";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
 
@@ -44,7 +45,7 @@ export const decideClaudeLiveContinuation = (
       `Claude session '${externalSessionId}' is waiting for a pending approval or question.`,
     );
   }
-  if (hasActiveClaudeWork(session)) {
+  if (hasActiveClaudeWork(session) || hasActiveClaudeBackgroundTools(session)) {
     return reject("live_turn", `Claude session '${externalSessionId}' has live work.`);
   }
   const latestAcceptedTurnIndex = session.acceptedUserMessages.length;

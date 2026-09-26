@@ -31,6 +31,9 @@ export const emitClaudePendingToolPart = ({
   timestamp: string;
   toolUse: ClaudeDecodedToolUse;
 }): void => {
+  if (!session.toolMessageIdsByCallId.has(toolUse.callId)) {
+    session.backgroundToolCallIdsSinceSnapshot?.add(toolUse.callId);
+  }
   const messageId = session.toolMessageIdsByCallId.get(toolUse.callId) ?? fallbackMessageId;
   session.toolMessageIdsByCallId.set(toolUse.callId, messageId);
   session.toolNamesByCallId.set(toolUse.callId, toolUse.toolName);

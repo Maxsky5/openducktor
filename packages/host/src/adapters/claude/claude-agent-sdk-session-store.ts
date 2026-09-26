@@ -3,6 +3,7 @@ import { agentSessionRefsEqual } from "@openducktor/core";
 import { Effect } from "effect";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { flushClaudeLiveContextUsageRefresh } from "./claude-agent-sdk-context-usage";
+import { hasActiveClaudeBackgroundTools } from "./claude-agent-sdk-event-session";
 import { assertClaudeSessionRef } from "./claude-agent-sdk-session-shape";
 import type {
   ClaudeAgentSdkEventEmitter,
@@ -103,7 +104,9 @@ export const createClaudeAgentSdkSessionStore = ({
       const matchesRef = session ? agentSessionRefsEqual(claudeSessionRef(session), input) : false;
       return Effect.succeed({
         supported: true,
-        hasLiveSession: session ? matchesRef && hasActiveClaudeWork(session) : false,
+        hasLiveSession: session
+          ? matchesRef && (hasActiveClaudeWork(session) || hasActiveClaudeBackgroundTools(session))
+          : false,
       });
     },
     stopSession: (input: SessionRef) =>

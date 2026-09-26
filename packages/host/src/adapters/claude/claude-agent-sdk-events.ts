@@ -1,4 +1,8 @@
 import type { AgentModelSelection } from "@openducktor/core";
+import {
+  projectClaudeBackgroundTaskEdge,
+  projectClaudeBackgroundTaskSnapshot,
+} from "./claude-agent-sdk-background-tools";
 import { toClaudeSlashCommandCatalog } from "./claude-agent-sdk-catalog";
 import { handleClaudeCompactionBoundary } from "./claude-agent-sdk-compaction";
 import {
@@ -22,7 +26,7 @@ import {
   emitClaudePermissionDeniedToolPart,
   handleClaudeResultMessage,
 } from "./claude-agent-sdk-result-events";
-import { emitClaudeRunningToolPart } from "./claude-agent-sdk-running-tool";
+import { handleClaudeToolProgressMessage } from "./claude-agent-sdk-running-tool";
 import {
   emitClaudePendingToolPart,
   handleClaudeStreamEvent,
@@ -35,11 +39,7 @@ import {
   consumeClaudeStreamEmittedToolInput,
 } from "./claude-agent-sdk-tool-input-stream";
 import { handleClaudeUserToolResultMessage } from "./claude-agent-sdk-tool-results";
-import {
-  decodeClaudeToolUseBlock,
-  isClaudeToolUseBlockType,
-  timestampMs,
-} from "./claude-agent-sdk-tool-shapes";
+import { decodeClaudeToolUseBlock, isClaudeToolUseBlockType } from "./claude-agent-sdk-tool-shapes";
 import {
   claudeAssistantTextPartEvent,
   createClaudeAssistantReasoningPart,
@@ -50,12 +50,14 @@ import {
   settleClaudeStreamedAssistantText,
 } from "./claude-agent-sdk-transcript-retractions";
 import type { ClaudeAgentSdkEvent } from "./claude-agent-sdk-types";
-import { shouldFinalizeClaudeTurn } from "./claude-agent-sdk-user-messages";
+import {
+  isClaudeWakeUserMessage,
+  shouldFinalizeClaudeTurn,
+} from "./claude-agent-sdk-user-messages";
 import { readStringProp, textFromContentBlocks } from "./claude-agent-sdk-utils";
 import type {
   ClaudeSdkAssistantMessageProjection,
   ClaudeSdkMessageProjection,
-  ClaudeSdkToolProgressMessageProjection,
 } from "./claude-agent-sdk-message-projection";
 
 type SdkMessageHandlerInput = {
@@ -78,6 +80,7 @@ export const handleClaudeSdkMessage = ({
     return;
   }
   if (message.type === "system" && message.subtype === "init") {
+    // A new turn can start while earlier background tasks still run.
     return;
   }
   if (message.type === "user") {
@@ -97,9 +100,13 @@ export const handleClaudeSdkMessage = ({
     });
     return;
   }
+  const isRootSession = !isClaudeSubagentTranscriptTarget(session.externalSessionId);
   if (message.type === "assistant") {
     if (isClaudeSyntheticAssistantMessage(messageValue)) {
       return;
+    }
+    if (isRootSession && message.parent_tool_use_id === null) {
+      applyClaudeLifecycleEvent({ emit, session, timestamp, event: { kind: "sdk_turn_started" } });
     }
     handleAssistantMessage({
       emit,
@@ -118,21 +125,17 @@ export const handleClaudeSdkMessage = ({
     } else if (originKind !== undefined) {
       session.assistantTurnOriginKind = originKind;
     }
-    if (originKind === "task-notification") {
-      // The SDK starts this turn, so mark the session busy here to keep the live
-      // snapshot running until the turn result settles.
-      applyClaudeLifecycleEvent({
-        emit,
-        session,
-        timestamp,
-        event: { kind: "sdk_turn_started" },
-      });
+    if (isRootSession && isClaudeWakeUserMessage(message, userToolResultMessage)) {
+      applyClaudeLifecycleEvent({ emit, session, timestamp, event: { kind: "sdk_turn_started" } });
     }
     emitClaudeSubagentUserMessage({ emit, message, session, timestamp });
     handleClaudeUserToolResultMessage({ emit, message, session, timestamp });
     return;
   }
   if (message.type === "stream_event") {
+    if (isRootSession && message.parent_tool_use_id === null) {
+      applyClaudeLifecycleEvent({ emit, session, timestamp, event: { kind: "sdk_turn_started" } });
+    }
     handleClaudeStreamEvent({ emit, message, session, timestamp });
     return;
   }
@@ -175,7 +178,7 @@ export const handleClaudeSdkMessage = ({
     return;
   }
   if (message.type === "tool_progress") {
-    handleToolProgressMessage({ emit, message, session, timestamp });
+    handleClaudeToolProgressMessage({ emit, message, session, timestamp });
     return;
   }
   if (message.type === "system" && message.subtype === "commands_changed") {
@@ -185,6 +188,10 @@ export const handleClaudeSdkMessage = ({
       timestamp,
       catalog: toClaudeSlashCommandCatalog(message.commands),
     });
+    return;
+  }
+  if (message.type === "system" && message.subtype === "background_tasks_changed") {
+    emitBackgroundTaskSnapshot({ emit, message, session, timestamp });
     return;
   }
   if (
@@ -200,6 +207,23 @@ export const handleClaudeSdkMessage = ({
         readStringProp(messageValue, "tool_use_id"),
         message.task_id,
       ) ?? session;
+    const backgroundPart = projectClaudeBackgroundTaskEdge(
+      taskSession,
+      message,
+      timestamp,
+      session.backgroundToolCallIdsSinceSnapshot ? session.backgroundToolActiveTaskIds : undefined,
+    );
+    if (taskSession !== session) {
+      projectClaudeBackgroundTaskEdge(session, message, timestamp);
+    }
+    if (backgroundPart) {
+      emit({
+        type: "assistant_part",
+        externalSessionId: taskSession.externalSessionId,
+        timestamp,
+        part: backgroundPart,
+      });
+    }
     handleClaudeSubagentSystemMessage({ emit, message, session: taskSession, timestamp });
     return;
   }
@@ -240,6 +264,31 @@ export const handleClaudeSdkMessage = ({
       timestamp,
       permission,
     });
+  }
+};
+
+const emitBackgroundTaskSnapshot = ({
+  emit,
+  message,
+  session,
+  timestamp,
+  knownOnly = false,
+}: {
+  emit: SdkMessageHandlerInput["emit"];
+  message: Parameters<typeof projectClaudeBackgroundTaskSnapshot>[1];
+  session: ClaudeEventSession;
+  timestamp: string;
+  knownOnly?: boolean;
+}): void => {
+  const tasks = knownOnly
+    ? message.tasks.filter((task) => session.backgroundToolTasksById?.has(task.task_id))
+    : message.tasks;
+  const parts = projectClaudeBackgroundTaskSnapshot(session, { tasks }, timestamp);
+  for (const part of parts) {
+    emit({ type: "assistant_part", externalSessionId: session.externalSessionId, timestamp, part });
+  }
+  for (const child of session.subagentEventSessionsByToolUseId?.values() ?? []) {
+    emitBackgroundTaskSnapshot({ emit, message, session: child, timestamp, knownOnly: true });
   }
 };
 
@@ -416,34 +465,4 @@ const handleAssistantMessage = ({
       }),
     );
   }
-};
-
-const handleToolProgressMessage = ({
-  emit,
-  message,
-  session,
-  timestamp,
-}: Pick<SdkMessageHandlerInput, "emit" | "session" | "timestamp"> & {
-  message: ClaudeSdkToolProgressMessageProjection;
-}): void => {
-  const elapsedMs = Math.max(0, Math.round(message.elapsed_time_seconds * 1000));
-  const eventMs = timestampMs(timestamp);
-  const startedAtMs = eventMs - elapsedMs;
-
-  emitClaudeRunningToolPart({
-    emit,
-    fallbackMessageId: message.uuid,
-    session,
-    startedAtMs,
-    timestamp,
-    toolUse: {
-      blockType: "tool_progress",
-      callId: message.tool_use_id,
-      toolName: message.tool_name,
-      metadata: {
-        elapsedTimeSeconds: message.elapsed_time_seconds,
-        durationMs: elapsedMs,
-      },
-    },
-  });
 };

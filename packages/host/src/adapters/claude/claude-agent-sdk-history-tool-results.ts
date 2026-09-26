@@ -1,10 +1,26 @@
 import type { SessionMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent, AgentSessionHistoryMessage, AgentStreamPart } from "@openducktor/core";
+import {
+  type ClaudeBackgroundToolState,
+  projectClaudeBackgroundTaskEdge,
+  projectClaudeBackgroundActiveTasks,
+  projectClaudeBackgroundTaskSnapshot,
+  projectClaudeBackgroundToolResult,
+  projectClaudeBackgroundToolUse,
+} from "./claude-agent-sdk-background-tools";
 import { projectClaudeCompletedToolResult } from "./claude-agent-sdk-completed-tool-result";
+import { hasActiveClaudeBackgroundWork } from "./claude-agent-sdk-event-session";
 import type { MutableAssistantHistoryMessage } from "./claude-agent-sdk-history-assistant";
-import { readHistorySessionId } from "./claude-agent-sdk-history-entry";
-import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-import";
-import { readHistoryToolResults } from "./claude-agent-sdk-history-support";
+import { isNestedHistoryEntry, readHistorySessionId } from "./claude-agent-sdk-history-entry";
+import {
+  type ClaudeHistoryMessage,
+  isClaudeHistoryBackgroundTasksChangedMessage,
+} from "./claude-agent-sdk-history-import";
+import {
+  type ClaudeLiveUserMessage,
+  readHistoryToolResults,
+} from "./claude-agent-sdk-history-support";
+import { isClaudeSyntheticAssistantMessage } from "./claude-agent-sdk-local-commands";
 import {
   emitClaudeAgentToolResultSubagentPart,
   emitClaudeTaskStopSubagentPart,
@@ -21,7 +37,7 @@ import type { ClaudeToolInput } from "./claude-agent-sdk-types";
 
 type SubagentPart = Extract<AgentStreamPart, { kind: "subagent" }>;
 
-export type ClaudeHistoryToolResultState = {
+export type ClaudeHistoryToolResultState = ClaudeBackgroundToolState & {
   activeBackgroundSubagentTaskIds: Set<string>;
   assistantMessagesByToolCallId: Map<string, MutableAssistantHistoryMessage>;
   hiddenSubagentTaskIds: Set<string>;
@@ -33,10 +49,87 @@ export type ClaudeHistoryToolResultState = {
   subagentTaskIdsByToolUseId: Map<string, string>;
   todoProjectionState: ClaudeTodoProjectionState;
   todosById: ClaudeTodoState;
-  toolInputsByCallId: Map<string, ClaudeToolInput>;
-  toolMessageIdsByCallId: Map<string, string>;
-  toolNamesByCallId: Map<string, string>;
   transcriptExternalSessionId: string | undefined;
+};
+
+/** Live task IDs may be newer than saved snapshots or belong to a later prompt. */
+export const createClaudeHistoryTaskCheck = (
+  messages: ClaudeHistoryMessage[],
+  options: {
+    currentBackgroundTaskIds?: ReadonlySet<string>;
+    includeNestedEntries?: boolean;
+  },
+  liveUserMessages: readonly ClaudeLiveUserMessage[],
+) => {
+  const lastSnapshot = messages.findLastIndex(isClaudeHistoryBackgroundTasksChangedMessage);
+  const lastReply = messages.findLastIndex(
+    (message) =>
+      message.type === "assistant" &&
+      !isClaudeSyntheticAssistantMessage(message) &&
+      (options.includeNestedEntries || !isNestedHistoryEntry(message)),
+  );
+  const replyTime = messages[lastReply]?.timestamp;
+  const newerPrompt = liveUserMessages.some(
+    (message) =>
+      message.state !== "queued" &&
+      (!replyTime || Date.parse(message.timestamp) > Date.parse(replyTime)),
+  );
+  return (index: number, state: ClaudeHistoryToolResultState): boolean =>
+    hasActiveClaudeBackgroundWork(state) ||
+    (index > lastSnapshot &&
+      index >= lastReply &&
+      !newerPrompt &&
+      (options.currentBackgroundTaskIds?.size ?? 0) > 0);
+};
+
+export const applyClaudeHistoryTaskSnapshot = (
+  state: ClaudeHistoryToolResultState,
+  message: Parameters<typeof projectClaudeBackgroundTaskSnapshot>[1],
+  timestamp: string,
+): void => {
+  for (const part of projectClaudeBackgroundTaskSnapshot(state, message, timestamp)) {
+    replaceHistoryToolPart(state, part);
+  }
+};
+
+export const applyClaudeHistoryActiveTasks = (
+  state: ClaudeHistoryToolResultState,
+  activeTaskIds: ReadonlySet<string> | undefined,
+  now: () => string,
+): void => {
+  if (!activeTaskIds) return;
+  for (const part of projectClaudeBackgroundActiveTasks(state, activeTaskIds, now())) {
+    replaceHistoryToolPart(state, part);
+  }
+};
+
+export const applyClaudeHistoryToolUses = (
+  state: ClaudeHistoryToolResultState,
+  message: MutableAssistantHistoryMessage,
+  timestamp: string,
+): void => {
+  message.parts = message.parts.map((part) => {
+    if (part.kind !== "tool") return part;
+    const prior = state.assistantMessagesByToolCallId
+      .get(part.callId)
+      ?.parts.find((item) => item.kind === "tool" && item.callId === part.callId);
+    if (prior?.kind === "tool") {
+      return { ...prior, input: part.input ?? prior.input };
+    }
+    state.backgroundToolCallIdsSinceSnapshot?.add(part.callId);
+    return projectClaudeBackgroundToolUse(state, part, timestamp);
+  });
+};
+
+const replaceHistoryToolPart = (
+  state: ClaudeHistoryToolResultState,
+  part: Extract<AgentStreamPart, { kind: "tool" }>,
+): void => {
+  const message = state.assistantMessagesByToolCallId.get(part.callId);
+  if (!message) return;
+  message.parts = message.parts.map((candidate) =>
+    candidate.kind === "tool" && candidate.callId === part.callId ? part : candidate,
+  );
 };
 
 const historySessionId = (
@@ -107,6 +200,8 @@ export const appendClaudeHistorySubagentSystemMessage = ({
   state: ClaudeHistoryToolResultState;
   timestamp: string;
 }): void => {
+  const backgroundPart = projectClaudeBackgroundTaskEdge(state, message, timestamp);
+  if (backgroundPart) replaceHistoryToolPart(state, backgroundPart);
   const events: AgentEvent[] = [];
   handleClaudeSubagentSystemMessage({
     emit: (event) => events.push(event),
@@ -271,7 +366,14 @@ export const projectClaudeHistoryToolResults = ({
     if (existingPart?.preview) {
       completedToolInput.preview = existingPart.preview;
     }
-    const { part: completedPart } = projectClaudeCompletedToolResult(completedToolInput);
+    const { part: ordinaryCompletedPart } = projectClaudeCompletedToolResult(completedToolInput);
+    const completedPart = projectClaudeBackgroundToolResult(
+      state,
+      result.toolUseId,
+      result.raw,
+      ordinaryCompletedPart,
+      timestamp,
+    );
     const subagentParts =
       tool === "Agent"
         ? projectAgentResult({

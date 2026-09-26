@@ -19,6 +19,7 @@ import {
   isClaudeSubagentTranscriptTarget,
   parseClaudeTranscriptTarget,
 } from "./claude-agent-sdk-subagent-transcripts";
+import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
 import { hasActiveClaudeWork } from "./claude-agent-sdk-session-store";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
 import { readStringProp } from "./claude-agent-sdk-utils";
@@ -36,27 +37,60 @@ const claudeSubagentAssistantMessageSchema = z.looseObject({
 });
 
 export type ClaudeLiveHistoryContext = {
+  activeBackgroundTaskIds: () => ReadonlySet<string>;
   hasActiveWork: () => boolean;
   source: "fresh" | "persisted";
   userMessages: readonly ClaudeLiveUserMessage[];
 };
 
 /** A resumed or forked session must load its saved transcript. */
-export const claudeLiveHistoryContext = (session: ClaudeSession): ClaudeLiveHistoryContext => ({
-  hasActiveWork: () => hasActiveClaudeWork(session),
-  source:
-    "externalSessionId" in session.input || "parentExternalSessionId" in session.input
-      ? "persisted"
-      : "fresh",
-  userMessages: session.acceptedUserMessages.map((message) => ({
-    ...message,
-    state: session.queuedSdkMessages.some(
-      (queuedMessage) => queuedMessage.uuid === message.messageId,
-    )
-      ? ("queued" as const)
-      : ("read" as const),
-  })),
-});
+export const claudeLiveHistoryContext = (
+  session: ClaudeSession,
+  externalSessionId = session.externalSessionId,
+): ClaudeLiveHistoryContext => {
+  const isSubagent = isClaudeSubagentTranscriptTarget(externalSessionId);
+  return {
+    activeBackgroundTaskIds: () => {
+      const ids = new Set<string>();
+      const collect = (work: ClaudeEventSession): void => {
+        for (const id of work.backgroundToolActiveTaskIds ?? []) ids.add(id);
+        for (const child of work.subagentEventSessionsByToolUseId?.values() ?? []) collect(child);
+      };
+      const work = isSubagent ? findClaudeHistoryWork(session, externalSessionId) : session;
+      if (work) collect(work);
+      return ids;
+    },
+    hasActiveWork: () => hasActiveClaudeWork(session),
+    source:
+      isSubagent ||
+      "externalSessionId" in session.input ||
+      "parentExternalSessionId" in session.input
+        ? "persisted"
+        : "fresh",
+    userMessages: isSubagent
+      ? []
+      : session.acceptedUserMessages.map((message) => ({
+          ...message,
+          state: session.queuedSdkMessages.some(
+            (queuedMessage) => queuedMessage.uuid === message.messageId,
+          )
+            ? ("queued" as const)
+            : ("read" as const),
+        })),
+  };
+};
+
+const findClaudeHistoryWork = (
+  session: ClaudeEventSession,
+  externalSessionId: string,
+): ClaudeEventSession | null => {
+  if (session.externalSessionId === externalSessionId) return session;
+  for (const child of session.subagentEventSessionsByToolUseId?.values() ?? []) {
+    const match = findClaudeHistoryWork(child, externalSessionId);
+    if (match) return match;
+  }
+  return null;
+};
 
 export const isClaudeSubagentTranscriptComplete = (
   messages: readonly SessionMessage[],
@@ -246,11 +280,19 @@ export const loadClaudeHistory = async (
     };
   });
   const { messages, subagentAgentIdsByToolUseId } = projectionInput;
-  const history = toClaudeHistoryMessages(messages, now, liveContext?.userMessages ?? [], {
-    includeNestedEntries: isClaudeSubagentTranscriptTarget(input.externalSessionId),
+  const isSubagentTranscript = isClaudeSubagentTranscriptTarget(input.externalSessionId);
+  const projectionOptions: Parameters<typeof toClaudeHistoryMessages>[3] = {
+    includeNestedEntries: isSubagentTranscript,
     subagentAgentIdsByToolUseId,
     transcriptExternalSessionId: input.externalSessionId,
-  });
+  };
+  projectionOptions.currentBackgroundTaskIds = liveContext?.activeBackgroundTaskIds() ?? new Set();
+  const history = toClaudeHistoryMessages(
+    messages,
+    now,
+    liveContext?.userMessages ?? [],
+    projectionOptions,
+  );
   await reconcileClaudeSubagentStatuses(input, history, claudeSessionMessages(messages));
   return finalizeClaudeHistory(input, history);
 };

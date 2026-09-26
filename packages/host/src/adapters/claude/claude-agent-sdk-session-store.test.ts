@@ -228,6 +228,54 @@ describe("createClaudeAgentSdkSessionStore", () => {
     ).resolves.toEqual({ supported: true, hasLiveSession: true });
   });
 
+  test("reports an ordinary background tool as live until it ends", async () => {
+    const store = createClaudeAgentSdkSessionStore();
+    const session = createSession({
+      activity: "idle",
+      sdkState: "idle",
+      backgroundToolActiveTaskIds: new Set(["bash-task"]),
+    });
+    store.set(session);
+    const probe = () =>
+      Effect.runPromise(
+        store.probeSessionStatus({
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo",
+          externalSessionId: "session-1",
+        }),
+      );
+
+    await expect(probe()).resolves.toEqual({ supported: true, hasLiveSession: true });
+    session.backgroundToolActiveTaskIds?.clear();
+    await expect(probe()).resolves.toEqual({ supported: true, hasLiveSession: false });
+  });
+
+  test("reports an ordinary background tool in a child session as live", async () => {
+    const store = createClaudeAgentSdkSessionStore();
+    const child = createSession({ backgroundToolActiveTaskIds: new Set(["workflow-task"]) });
+    store.set(
+      Object.assign(
+        createSession({
+          activity: "idle",
+          sdkState: "idle",
+        }),
+        { subagentEventSessionsByToolUseId: new Map([["agent-tool", child]]) },
+      ),
+    );
+
+    await expect(
+      Effect.runPromise(
+        store.probeSessionStatus({
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo",
+          externalSessionId: "session-1",
+        }),
+      ),
+    ).resolves.toEqual({ supported: true, hasLiveSession: true });
+  });
+
   test("does not report a background subagent as parent session work", async () => {
     const store = createClaudeAgentSdkSessionStore();
     store.set(

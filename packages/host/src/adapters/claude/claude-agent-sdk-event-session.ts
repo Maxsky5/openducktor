@@ -1,4 +1,5 @@
 import type { AgentModelSelection } from "@openducktor/core";
+import type { ClaudeBackgroundToolState } from "./claude-agent-sdk-background-tools";
 import { claudeSubagentExternalSessionId } from "./claude-agent-sdk-subagent-transcripts";
 import type { ClaudeTodoProjection, ClaudeTodoState } from "./claude-agent-sdk-todos";
 import type {
@@ -7,10 +8,9 @@ import type {
   PendingApproval,
   PendingQuestion,
   ClaudeSessionActivity,
-  ClaudeToolInput,
 } from "./claude-agent-sdk-types";
 
-export type ClaudeEventSession = {
+export type ClaudeEventSession = ClaudeBackgroundToolState & {
   acceptedUserMessages?: readonly ClaudeAcceptedUserMessage[];
   activeBackgroundSubagentTaskIds?: Set<string>;
   activeManualCompaction?: ClaudeManualCompactionState;
@@ -43,9 +43,6 @@ export type ClaudeEventSession = {
   todoProjection?: ClaudeTodoProjection;
   todosById: ClaudeTodoState;
   toolEndedAtMsByCallId?: Map<string, number>;
-  toolInputsByCallId: Map<string, ClaudeToolInput>;
-  toolMessageIdsByCallId: Map<string, string>;
-  toolNamesByCallId: Map<string, string>;
   toolStartedAtMsByCallId: Map<string, number>;
   subagentMessageIdsByTaskId: Map<string, string>;
   subagentAgentIdsByToolUseId?: Map<string, string>;
@@ -54,12 +51,28 @@ export type ClaudeEventSession = {
 };
 
 export type ClaudeBackgroundWorkSession = {
+  backgroundToolActiveTaskIds?: ReadonlySet<string>;
   activeBackgroundSubagentTaskIds?: ReadonlySet<string>;
   subagentEventSessionsByToolUseId?: ReadonlyMap<string, ClaudeBackgroundWorkSession>;
 };
 
+export const hasActiveClaudeBackgroundTools = (session: ClaudeBackgroundWorkSession): boolean => {
+  if ((session.backgroundToolActiveTaskIds?.size ?? 0) > 0) {
+    return true;
+  }
+  for (const child of session.subagentEventSessionsByToolUseId?.values() ?? []) {
+    if (hasActiveClaudeBackgroundTools(child)) {
+      return true;
+    }
+  }
+  return false;
+};
+
 export const hasActiveClaudeBackgroundWork = (session: ClaudeBackgroundWorkSession): boolean => {
-  if ((session.activeBackgroundSubagentTaskIds?.size ?? 0) > 0) {
+  if (
+    (session.activeBackgroundSubagentTaskIds?.size ?? 0) > 0 ||
+    (session.backgroundToolActiveTaskIds?.size ?? 0) > 0
+  ) {
     return true;
   }
   for (const childSession of session.subagentEventSessionsByToolUseId?.values() ?? []) {
@@ -102,6 +115,9 @@ export const claudeSubagentEventSession = (
     subagentMessageIdsByTaskId: new Map(),
     subagentTaskIdsByToolUseId: new Map(),
   };
+  if (session.backgroundToolCallIdsSinceSnapshot) {
+    childSession.backgroundToolCallIdsSinceSnapshot = new Set();
+  }
   session.subagentEventSessionsByToolUseId.set(parentToolUseId, childSession);
   return childSession;
 };
@@ -180,7 +196,7 @@ export const findClaudeSubagentTaskSession = (
       return owner;
     }
   }
-  return null;
+  return session.backgroundToolTasksById?.get(taskId)?.toolUseId ? session : null;
 };
 
 const acceptedUserTurnCount = (session: ClaudeEventSession): number => {

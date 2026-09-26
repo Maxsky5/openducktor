@@ -153,6 +153,51 @@ describe("AgentChatMessageCard tool presentation", () => {
     expect(html).not.toContain(">Activity<");
   });
 
+  test("shows failed, stopped, and unknown background outcomes on tool cards", () => {
+    const renderCard = (
+      toolType: "bash" | "workflow",
+      outcome: "failed" | "stopped" | "unknown",
+    ): string =>
+      renderToStaticMarkup(
+        createMessageCardElement({
+          message: {
+            id: `${toolType}-${outcome}`,
+            role: "tool",
+            content: `Tool ${toolType} failed`,
+            timestamp: "2026-09-24T20:00:00.000Z",
+            meta: {
+              kind: "tool",
+              partId: `${toolType}-${outcome}`,
+              callId: `${toolType}-${outcome}`,
+              tool: toolType === "bash" ? "Bash" : "openducktor_odt_build_completed",
+              toolType,
+              status: "error",
+              error:
+                outcome === "failed"
+                  ? "Server stopped responding"
+                  : outcome === "stopped"
+                    ? "Stopped: User ended task"
+                    : "Claude ended the background task without a terminal outcome.",
+              metadata: { backgroundTaskStatus: outcome },
+            },
+          },
+          sessionAgentColors: {},
+        }),
+      );
+
+    expect(renderCard("bash", "failed")).toContain("text-destructive-muted");
+    expect(renderCard("bash", "failed")).not.toContain("text-cancelled-muted");
+    expect(renderCard("bash", "stopped")).toContain("text-cancelled-muted");
+    expect(renderCard("workflow", "failed")).toContain("FAILED");
+    expect(renderCard("workflow", "failed")).not.toContain("CANCELLED");
+    expect(renderCard("workflow", "stopped")).toContain("CANCELLED");
+    expect(renderCard("bash", "unknown")).toContain(
+      "Claude ended the background task without a terminal outcome.",
+    );
+    expect(renderCard("workflow", "unknown")).toContain("FAILED");
+    expect(renderCard("workflow", "unknown")).not.toContain("CANCELLED");
+  });
+
   test("auto-opens failed ODT workflow tool error details", () => {
     const html = renderToStaticMarkup(
       createMessageCardElement({

@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
-import type { AgentSessionSummary } from "@openducktor/core";
+import type { AgentEvent, AgentSessionSummary } from "@openducktor/core";
 import { AsyncInputQueue } from "../claude/claude-agent-sdk-queue";
-import type { ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
+import { handleClaudeSdkMessage } from "../claude/claude-agent-sdk-events";
+import { snapshotForClaudeSession } from "../claude/claude-agent-sdk-session-shape";
+import { emptyClaudeQuery } from "../claude/claude-agent-sdk-session-io.test-support";
+import { claudeSdkMessageFixture } from "../claude/claude-agent-sdk-test-messages";
+import type { ClaudeSession, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
 import { createClaudeLiveSessionState } from "./claude-live-session-state";
 
 const runtime = {
@@ -70,6 +74,87 @@ const ref = {
 };
 
 describe("Claude host live-session state", () => {
+  test("keeps a resumed wake-up turn running in the live snapshot until its result", () => {
+    const state = createClaudeLiveSessionState({ runtime });
+    state.applyControlSummary(summary);
+    const wakeSession: ClaudeSession = {
+      ...session,
+      activeSdkUserTurnCount: 0,
+      activity: "idle",
+      pendingApprovals: new Map(),
+      pendingQuestions: new Map(),
+      query: emptyClaudeQuery(),
+      sdkState: "idle",
+      toolInputsByCallId: new Map(),
+      toolMessageIdsByCallId: new Map(),
+      toolNamesByCallId: new Map(),
+      toolStartedAtMsByCallId: new Map(),
+    };
+    const commonInput = {
+      session: wakeSession,
+      timestamp: "2026-07-17T10:03:00.000Z",
+      modelSelection: (model: string) => ({
+        providerId: "claude",
+        modelId: model,
+        runtimeKind: "claude" as const,
+      }),
+      emit: (event: AgentEvent) => {
+        state.applyEvent(wakeSession, event);
+      },
+    };
+    const send = (message: Parameters<typeof handleClaudeSdkMessage>[0]["message"]) =>
+      handleClaudeSdkMessage({ ...commonInput, message });
+
+    send(
+      claudeSdkMessageFixture({
+        type: "user",
+        parent_tool_use_id: null,
+        origin: { kind: "auto-continuation" },
+        message: { role: "user", content: "Continue the check" },
+      }),
+    );
+    expect(state.readSnapshot(ref)).toMatchObject({
+      type: "live",
+      session: { activity: "running" },
+    });
+    expect(snapshotForClaudeSession(wakeSession).classification).toBe("running");
+
+    send(
+      claudeSdkMessageFixture({
+        type: "stream_event",
+        parent_tool_use_id: null,
+        event: {
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "text_delta", text: "Checking files" },
+        },
+      }),
+    );
+    expect(state.readSnapshot(ref)).toMatchObject({
+      type: "live",
+      session: { activity: "running" },
+    });
+    expect(snapshotForClaudeSession(wakeSession).classification).toBe("running");
+
+    send(
+      claudeSdkMessageFixture({
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        result: "Checks complete",
+        stop_reason: "end_turn",
+        terminal_reason: "completed",
+        usage: { input_tokens: 1, output_tokens: 1 },
+        origin: { kind: "auto-continuation" },
+      }),
+    );
+    expect(state.readSnapshot(ref)).toMatchObject({
+      type: "live",
+      session: { activity: "idle" },
+    });
+    expect(snapshotForClaudeSession(wakeSession).classification).toBe("idle");
+  });
+
   test("retains a subagent permission only on the child snapshot", () => {
     const state = createClaudeLiveSessionState({ runtime });
     state.applyControlSummary(summary);

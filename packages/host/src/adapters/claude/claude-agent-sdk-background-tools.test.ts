@@ -1,0 +1,1314 @@
+import { describe, expect, test } from "bun:test";
+import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
+import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
+import {
+  claudeSubagentEventSession,
+  hasActiveClaudeBackgroundWork,
+} from "./claude-agent-sdk-event-session";
+import { createEventTestSession } from "./claude-agent-sdk-events.test-support";
+import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
+import { filterClaudeHistoryMessages } from "./claude-agent-sdk-history-import";
+import {
+  claudeSdkMessageFixture,
+  claudeSdkMessageUuidFixture,
+  claudeSessionMessageFixture,
+} from "./claude-agent-sdk-test-messages";
+
+type ToolPart = Extract<AgentStreamPart, { kind: "tool" }>;
+const timestamp = "2026-09-24T20:00:00.000Z";
+
+const live = () => {
+  const session = createEventTestSession();
+  const events: AgentEvent[] = [];
+  const send = (message: Parameters<typeof handleClaudeSdkMessage>[0]["message"], at = timestamp) =>
+    handleClaudeSdkMessage({
+      emit: (event) => events.push(event),
+      message,
+      modelSelection: (model) => ({ modelId: model, providerId: "claude", runtimeKind: "claude" }),
+      session,
+      timestamp: at,
+    });
+  const parts = (callId: string): ToolPart[] =>
+    events.flatMap((event) =>
+      event.type === "assistant_part" && event.part.kind === "tool" && event.part.callId === callId
+        ? [event.part]
+        : [],
+    );
+  return { events, parts, send, session };
+};
+
+const toolUse = (callId: string, name: string, input: Record<string, string | boolean> = {}) =>
+  claudeSdkMessageFixture({
+    type: "assistant",
+    uuid: "b3f2889b-6b65-445e-b404-5fb8f18b7aa0",
+    session_id: "session-1",
+    message: { role: "assistant", content: [{ type: "tool_use", id: callId, name, input }] },
+  });
+
+const toolResult = (callId: string, content: string, backgroundTaskId?: string) => {
+  const toolUseResult = backgroundTaskId
+    ? { type: "tool_result", tool_use_id: callId, content, backgroundTaskId }
+    : { type: "tool_result", tool_use_id: callId, content };
+  return claudeSdkMessageFixture({
+    type: "user",
+    uuid: "46b4c9fc-354f-49f8-a6ed-afadf36b9095",
+    session_id: "session-1",
+    parent_tool_use_id: callId,
+    tool_use_result: toolUseResult,
+    message: { role: "user", content: [] },
+  });
+};
+
+const taskStart = (taskId: string, callId: string, description: string, isBackgrounded = true) =>
+  claudeSdkMessageFixture({
+    type: "system",
+    subtype: "task_started",
+    task_id: taskId,
+    tool_use_id: callId,
+    task_type: "local_bash",
+    is_backgrounded: isBackgrounded,
+    description,
+  });
+
+const snapshot = (
+  tasks: Array<{ task_id: string; description: string; task_type: string; ambient?: boolean }>,
+) => claudeSdkMessageFixture({ type: "system", subtype: "background_tasks_changed", tasks });
+
+const init = {
+  type: "system",
+  subtype: "init",
+  apiKeySource: "none",
+  claude_code_version: "test",
+  cwd: "/repo",
+  tools: [],
+  mcp_servers: [],
+  model: "claude-test",
+  permissionMode: "default",
+  slash_commands: [],
+  output_style: "default",
+  skills: [],
+  plugins: [],
+  uuid: claudeSdkMessageUuidFixture("background-task-init"),
+  session_id: "session-1",
+} satisfies Extract<SDKMessage, { type: "system"; subtype: "init" }>;
+
+const notification = (
+  taskId: string,
+  status: "completed" | "failed" | "stopped",
+  summary: string,
+  toolUseId?: string,
+) => {
+  const message = {
+    type: "system" as const,
+    subtype: "task_notification" as const,
+    task_id: taskId,
+    status,
+    summary,
+  };
+  return claudeSdkMessageFixture(toolUseId ? { ...message, tool_use_id: toolUseId } : message);
+};
+
+describe("Claude background ordinary tool parts", () => {
+  test("keeps the Bash call running after launch and shows progress and completion", () => {
+    const { parts, send, session } = live();
+    send(toolUse("bash-1", "Bash", { command: "sleep 10", run_in_background: true }));
+    send(snapshot([{ task_id: "task-1", task_type: "local_bash", description: "Compile source" }]));
+    send(taskStart("task-1", "bash-1", "Compile source"));
+    send(toolResult("bash-1", "Command started", "task-1"));
+    expect(parts("bash-1").at(-1)).toMatchObject({
+      callId: "bash-1",
+      partId: "bash-1",
+      messageId: "b3f2889b-6b65-445e-b404-5fb8f18b7aa0",
+      status: "running",
+      input: { command: "sleep 10", run_in_background: true },
+      metadata: { backgroundTaskId: "task-1" },
+    });
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(true);
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_progress",
+        task_id: "task-1",
+        description: "Compile source",
+        summary: "3 of 5 files done",
+      }),
+    );
+    expect(parts("bash-1").at(-1)).toMatchObject({
+      status: "running",
+      output: "Compile source\n3 of 5 files done",
+    });
+    send(snapshot([]));
+    expect(parts("bash-1").at(-1)).toMatchObject({
+      status: "error",
+      metadata: { backgroundTaskStatus: "unknown" },
+    });
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
+    send(notification("task-1", "completed", "Build passed"));
+    expect(parts("bash-1").at(-1)).toMatchObject({
+      status: "completed",
+      output: "Compile source\nBuild passed",
+      metadata: { backgroundTaskStatus: "completed" },
+    });
+    expect(session.backgroundToolActiveTaskIds?.size).toBe(0);
+    expect(parts("bash-1").every((part) => part.partId === "bash-1")).toBe(true);
+  });
+
+  test("keeps overlapping MCP and workflow calls separate, including failure and stop", () => {
+    const { parts, send } = live();
+    send(toolUse("mcp-1", "mcp__server__long_call", { query: "one" }));
+    send(toolUse("workflow-1", "mcp__openducktor__odt_build_completed", { taskId: "task-1" }));
+    send(
+      snapshot([
+        { task_id: "task-mcp", task_type: "mcp_task", description: "Fetch report" },
+        { task_id: "task-workflow", task_type: "local_workflow", description: "Finish build" },
+      ]),
+    );
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_started",
+        task_id: "task-mcp",
+        tool_use_id: "mcp-1",
+        task_type: "mcp_task",
+        description: "Fetch report",
+      }),
+    );
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_started",
+        task_id: "task-workflow",
+        tool_use_id: "workflow-1",
+        task_type: "local_workflow",
+        description: "Finish build",
+      }),
+    );
+    send(toolResult("mcp-1", "Running"));
+    send(toolResult("workflow-1", "Running"));
+    expect(parts("mcp-1").at(-1)?.status).toBe("running");
+    expect(parts("workflow-1").at(-1)?.status).toBe("running");
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_updated",
+        task_id: "task-mcp",
+        patch: { status: "failed", error: "Server rejected query" },
+      }),
+    );
+    send(notification("task-mcp", "failed", "Query failed"));
+    send(notification("task-workflow", "stopped", "Stopped by user"));
+    expect(parts("mcp-1").at(-1)).toMatchObject({
+      status: "error",
+      error: "Server rejected query",
+      metadata: { backgroundTaskStatus: "failed" },
+    });
+    expect(parts("workflow-1").at(-1)).toMatchObject({
+      status: "error",
+      error: "Stopped: Stopped by user",
+      metadata: { backgroundTaskStatus: "stopped" },
+    });
+  });
+
+  test("shows MCP file links from the terminal notice on the same card", () => {
+    const { parts, send } = live();
+    send(toolUse("mcp-files", "mcp__server__export", { query: "report" }));
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_started",
+        task_id: "files-task",
+        tool_use_id: "mcp-files",
+        task_type: "mcp_task",
+        description: "Export report",
+      }),
+    );
+    send(toolResult("mcp-files", "Running"));
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_notification",
+        task_id: "files-task",
+        tool_use_id: "mcp-files",
+        status: "completed",
+        output_file: "/tmp/files-task.output",
+        summary: "Report ready",
+        resource_links: [
+          { name: "report.csv", uri: "file:///reports/report.csv", mimeType: "text/csv" },
+        ],
+      }),
+    );
+    expect(parts("mcp-files").at(-1)).toMatchObject({
+      status: "completed",
+      output: "Export report\nReport ready\nreport.csv: file:///reports/report.csv",
+      metadata: {
+        outputFile: "/tmp/files-task.output",
+        resourceLinks: [
+          { name: "report.csv", uri: "file:///reports/report.csv", mimeType: "text/csv" },
+        ],
+      },
+    });
+  });
+
+  test("uses the native end time before or after the terminal notice", () => {
+    const endedAtMs = Date.parse("2026-09-24T20:00:03.000Z");
+    for (const updateFirst of [true, false]) {
+      const { parts, send } = live();
+      send(toolUse("timed-bash", "Bash", { command: "sleep 3" }));
+      send(taskStart("timed-task", "timed-bash", "Wait"));
+      send(toolResult("timed-bash", "Started", "timed-task"));
+      const update = claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_updated",
+        task_id: "timed-task",
+        patch: { status: "completed", end_time: endedAtMs },
+      });
+      const done = notification("timed-task", "completed", "Done");
+      if (updateFirst) {
+        send(update, "2026-09-24T20:00:10.000Z");
+        send(done, "2026-09-24T20:00:11.000Z");
+      } else {
+        send(done, "2026-09-24T20:00:10.000Z");
+        send(update, "2026-09-24T20:00:11.000Z");
+      }
+      expect(parts("timed-bash").at(-1)).toMatchObject({
+        status: "completed",
+        endedAtMs,
+      });
+    }
+  });
+
+  test("ignores ambient and uncorrelated tasks and leaves foreground results completed", () => {
+    const { events, parts, send, session } = live();
+    send(toolUse("foreground", "Bash", { command: "pwd" }));
+    send(taskStart("foreground-task", "foreground", "Print directory", false));
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_updated",
+        task_id: "foreground-task",
+        patch: { status: "completed" },
+      }),
+    );
+    expect(parts("foreground").at(-1)?.status).toBe("pending");
+    send(toolResult("foreground", "/repo"));
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_started",
+        task_id: "ambient",
+        tool_use_id: "foreground",
+        description: "Watch",
+        ambient: true,
+      }),
+    );
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_started",
+        task_id: "orphan",
+        description: "Unknown",
+      }),
+    );
+    send(
+      snapshot([
+        { task_id: "ambient", task_type: "local_bash", description: "Watch", ambient: true },
+      ]),
+    );
+    expect(parts("foreground").at(-1)).toMatchObject({ status: "completed", output: "/repo" });
+    expect(session.backgroundToolActiveTaskIds?.size).toBe(0);
+    expect(
+      events.some((event) => event.type === "assistant_part" && event.part.kind === "subagent"),
+    ).toBe(false);
+  });
+
+  test("stops a running card when its task becomes ambient", () => {
+    const { parts, send, session } = live();
+    send(toolUse("ambient-bash", "Bash", { command: "sleep 10" }));
+    send(taskStart("ambient-task", "ambient-bash", "Run check"));
+    send(toolResult("ambient-bash", "Started", "ambient-task"));
+    expect(parts("ambient-bash").at(-1)?.status).toBe("running");
+
+    send(
+      snapshot([
+        {
+          task_id: "ambient-task",
+          task_type: "local_bash",
+          description: "Run check",
+          ambient: true,
+        },
+      ]),
+    );
+    expect(parts("ambient-bash").at(-1)).toMatchObject({
+      status: "error",
+      error: "Claude moved the background task out of visible activity.",
+      metadata: { backgroundTaskStatus: "unknown" },
+    });
+    expect(parts("ambient-bash").at(-1)?.endedAtMs).toBeUndefined();
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
+
+    send(
+      snapshot([{ task_id: "ambient-task", task_type: "local_bash", description: "Run check" }]),
+    );
+    expect(parts("ambient-bash").at(-1)?.status).toBe("running");
+  });
+
+  test("stops a running card when an edge marks its task ambient", () => {
+    const { parts, send, session } = live();
+    send(toolUse("ambient-edge", "Bash", { command: "sleep 10" }));
+    send(taskStart("ambient-edge-task", "ambient-edge", "Run check"));
+    send(toolResult("ambient-edge", "Started", "ambient-edge-task"));
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_started",
+        task_id: "ambient-edge-task",
+        tool_use_id: "ambient-edge",
+        task_type: "local_bash",
+        description: "Run check",
+        ambient: true,
+      }),
+    );
+    expect(parts("ambient-edge").at(-1)).toMatchObject({
+      status: "error",
+      metadata: { backgroundTaskStatus: "unknown" },
+    });
+    expect(parts("ambient-edge").at(-1)?.endedAtMs).toBeUndefined();
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
+  });
+
+  test("keeps an ambient terminal notice on a card that was visible", () => {
+    for (const resultFirst of [true, false]) {
+      const { parts, send } = live();
+      send(toolUse("ambient-terminal", "mcp__server__export", { query: "report" }));
+      send(
+        claudeSdkMessageFixture({
+          type: "system",
+          subtype: "task_started",
+          task_id: "ambient-terminal-task",
+          tool_use_id: "ambient-terminal",
+          task_type: "mcp_task",
+          description: "Export report",
+        }),
+      );
+      if (resultFirst) {
+        send(toolResult("ambient-terminal", "Started", "ambient-terminal-task"));
+      } else {
+        send(
+          snapshot([
+            {
+              task_id: "ambient-terminal-task",
+              task_type: "mcp_task",
+              description: "Export report",
+              ambient: true,
+            },
+          ]),
+        );
+        expect(parts("ambient-terminal").at(-1)?.metadata?.backgroundTaskStatus).toBe("unknown");
+      }
+      send(
+        claudeSdkMessageFixture({
+          type: "system",
+          subtype: "task_notification",
+          task_id: "ambient-terminal-task",
+          tool_use_id: "ambient-terminal",
+          status: "completed",
+          output_file: "/tmp/report.output",
+          summary: "Report ready",
+          resource_links: [{ name: "report.csv", uri: "file:///reports/report.csv" }],
+          ambient: true,
+        }),
+      );
+      if (!resultFirst) send(toolResult("ambient-terminal", "Started", "ambient-terminal-task"));
+      expect(parts("ambient-terminal").at(-1)).toMatchObject({
+        status: "completed",
+        output: "Export report\nReport ready\nreport.csv: file:///reports/report.csv",
+        metadata: {
+          backgroundTaskStatus: "completed",
+          outputFile: "/tmp/report.output",
+          resourceLinks: [{ name: "report.csv", uri: "file:///reports/report.csv" }],
+        },
+      });
+    }
+  });
+
+  test("keeps a task that was always ambient off the card", () => {
+    const { parts, send } = live();
+    send(toolUse("ambient-only", "Bash", { command: "pwd" }));
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_started",
+        task_id: "ambient-only-task",
+        tool_use_id: "ambient-only",
+        task_type: "local_bash",
+        description: "Watch",
+        ambient: true,
+      }),
+    );
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_notification",
+        task_id: "ambient-only-task",
+        tool_use_id: "ambient-only",
+        status: "completed",
+        output_file: "",
+        summary: "Watch ended",
+        ambient: true,
+      }),
+    );
+    send(toolResult("ambient-only", "/repo"));
+    expect(parts("ambient-only").at(-1)).toMatchObject({ status: "completed", output: "/repo" });
+    expect(parts("ambient-only").at(-1)?.metadata?.backgroundTaskId).toBeUndefined();
+  });
+
+  test("keeps foreground Bash output after progress arrives before its start edge", () => {
+    const { parts, send, session } = live();
+    send(toolUse("foreground-progress", "Bash", { command: "pwd" }));
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_progress",
+        task_id: "foreground-progress-task",
+        tool_use_id: "foreground-progress",
+        description: "Print directory",
+        summary: "Still running",
+      }),
+    );
+    expect(parts("foreground-progress").at(-1)?.status).toBe("pending");
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
+    send(taskStart("foreground-progress-task", "foreground-progress", "Print directory", false));
+    send(toolResult("foreground-progress", "/repo"));
+    expect(parts("foreground-progress").at(-1)).toMatchObject({
+      status: "completed",
+      output: "/repo",
+    });
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
+  });
+
+  test("keeps active work through a turn init and starts a new session state with empty activity", () => {
+    const { parts, send, session } = live();
+    send(toolUse("bash-through-init", "Bash", { command: "sleep 2" }));
+    send(toolResult("bash-through-init", "Started", "task-through-init"));
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(true);
+    send(init);
+    expect(parts("bash-through-init").at(-1)?.status).toBe("running");
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(true);
+    const replacement = live();
+    replacement.send(init);
+    expect(hasActiveClaudeBackgroundWork(replacement.session)).toBe(false);
+  });
+
+  test("uses a snapshot and native result ID when the start edge is missing", () => {
+    const { parts, send, session } = live();
+    send(toolUse("bash-no-start", "Bash", { command: "sleep 2" }));
+    send(
+      snapshot([
+        { task_id: "task-no-start", task_type: "local_bash", description: "Wait for server" },
+      ]),
+    );
+    send(toolResult("bash-no-start", "Launched", "task-no-start"));
+    expect(parts("bash-no-start").at(-1)).toMatchObject({
+      status: "running",
+      metadata: { backgroundTaskId: "task-no-start" },
+    });
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_progress",
+        task_id: "task-no-start",
+        tool_use_id: "bash-no-start",
+        description: "Wait for server",
+        summary: "Server is starting",
+      }),
+    );
+    expect(parts("bash-no-start").at(-1)).toMatchObject({
+      output: "Wait for server\nServer is starting",
+    });
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(true);
+  });
+
+  test("correlates a snapshot task from its terminal notification when the start edge and result ID are missing", () => {
+    const { parts, send, session } = live();
+    send(toolUse("mcp-no-start", "mcp__server__long_call", { query: "report" }));
+    send(snapshot([{ task_id: "mcp-task", task_type: "mcp_task", description: "Fetch report" }]));
+    send(toolResult("mcp-no-start", "Running"));
+    expect(parts("mcp-no-start").at(-1)?.status).toBe("completed");
+    send(notification("mcp-task", "failed", "Server timed out", "mcp-no-start"));
+    expect(parts("mcp-no-start").at(-1)).toMatchObject({
+      status: "error",
+      title: "Fetch report",
+      output: "Fetch report\nServer timed out",
+      metadata: { backgroundTaskId: "mcp-task", backgroundTaskStatus: "failed" },
+    });
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
+  });
+
+  test("does not use an earlier empty snapshot to end a new background launch", () => {
+    const { parts, send, session } = live();
+    send(snapshot([]));
+    send(toolUse("bash-after-snapshot", "Bash", { command: "sleep 2" }));
+    send(taskStart("new-task", "bash-after-snapshot", "Wait"));
+    send(toolResult("bash-after-snapshot", "Started", "new-task"));
+    expect(parts("bash-after-snapshot").at(-1)).toMatchObject({
+      status: "running",
+      metadata: { backgroundTaskStatus: "running" },
+    });
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(true);
+    send(snapshot([]));
+    expect(parts("bash-after-snapshot").at(-1)).toMatchObject({
+      status: "error",
+      metadata: { backgroundTaskStatus: "unknown" },
+    });
+  });
+
+  test("does not restore an absent task from a late start or progress edge", () => {
+    const { parts, send, session } = live();
+    send(toolUse("bash-absent", "Bash", { command: "sleep 2" }));
+    send(snapshot([]));
+    send(taskStart("absent-task", "bash-absent", "Wait"));
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_progress",
+        task_id: "absent-task",
+        tool_use_id: "bash-absent",
+        description: "Wait",
+        summary: "Still waiting",
+      }),
+    );
+    expect(parts("bash-absent").at(-1)?.status).toBe("pending");
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
+    send(toolResult("bash-absent", "Started", "absent-task"));
+    expect(parts("bash-absent").at(-1)).toMatchObject({
+      status: "error",
+      metadata: { backgroundTaskStatus: "unknown" },
+    });
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
+  });
+
+  test("does not restore an excluded task from a late launch result without a start edge", () => {
+    const { parts, send, session } = live();
+    send(toolUse("bash-no-start", "Bash", { command: "sleep 2" }));
+    send(snapshot([]));
+    send(toolResult("bash-no-start", "Started", "no-start-task"));
+    expect(parts("bash-no-start").at(-1)).toMatchObject({
+      status: "error",
+      metadata: { backgroundTaskId: "no-start-task", backgroundTaskStatus: "unknown" },
+    });
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
+    send(snapshot([{ task_id: "no-start-task", task_type: "local_bash", description: "Wait" }]));
+    expect(parts("bash-no-start").at(-1)?.status).toBe("running");
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(true);
+  });
+
+  test("does not treat a repeated tool-use message after a snapshot as a new launch", () => {
+    const { parts, send, session } = live();
+    send(toolUse("bash-repeat", "Bash", { command: "sleep 2" }));
+    send(snapshot([]));
+    send(toolUse("bash-repeat", "Bash", { command: "sleep 2" }));
+    send(toolResult("bash-repeat", "Started", "repeat-task"));
+    expect(parts("bash-repeat").at(-1)).toMatchObject({
+      status: "error",
+      metadata: { backgroundTaskStatus: "unknown" },
+    });
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
+  });
+
+  test("activates a correlated task when a later snapshot confirms a new launch", () => {
+    const { parts, send, session } = live();
+    send(snapshot([]));
+    send(toolUse("bash-new", "Bash", { command: "sleep 2" }));
+    send(taskStart("new-task", "bash-new", "Wait"));
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
+    send(snapshot([{ task_id: "new-task", task_type: "local_bash", description: "Wait" }]));
+    expect(parts("bash-new").at(-1)).toMatchObject({
+      status: "running",
+      metadata: { backgroundTaskId: "new-task" },
+    });
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(true);
+  });
+
+  test("does not call an excluded background task successful when its result has no task ID", () => {
+    const { parts, send, session } = live();
+    send(toolUse("mcp-absent", "mcp__server__long_call", { query: "report" }));
+    send(snapshot([]));
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_started",
+        task_id: "mcp-absent-task",
+        tool_use_id: "mcp-absent",
+        task_type: "mcp_task",
+        description: "Fetch report",
+      }),
+    );
+    send(toolResult("mcp-absent", "Running"));
+    expect(parts("mcp-absent").at(-1)).toMatchObject({
+      status: "error",
+      metadata: { backgroundTaskStatus: "unknown" },
+    });
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
+  });
+
+  test("keeps snapshot activity when a foreground start edge arrives late", () => {
+    const { parts, send } = live();
+    send(toolUse("bash-backgrounded", "Bash", { command: "sleep 2" }));
+    send(snapshot([{ task_id: "moved-task", task_type: "local_bash", description: "Wait" }]));
+    send(taskStart("moved-task", "bash-backgrounded", "Wait", false));
+    send(toolResult("bash-backgrounded", "Started", "moved-task"));
+    expect(parts("bash-backgrounded").at(-1)).toMatchObject({
+      status: "running",
+      metadata: { backgroundTaskId: "moved-task" },
+    });
+  });
+
+  test("recovers an unknown card when a later snapshot confirms the task is active", () => {
+    const { parts, send } = live();
+    send(toolUse("bash-recovered", "Bash", { command: "sleep 2" }));
+    send(toolResult("bash-recovered", "Started", "recovered-task"));
+    send(snapshot([]));
+    expect(parts("bash-recovered").at(-1)?.metadata?.backgroundTaskStatus).toBe("unknown");
+    send(
+      snapshot([
+        { task_id: "recovered-task", task_type: "local_bash", description: "Still running" },
+      ]),
+    );
+    expect(parts("bash-recovered").at(-1)).toMatchObject({
+      status: "running",
+      title: "Still running",
+      metadata: { backgroundTaskStatus: "running" },
+    });
+  });
+
+  test("keeps the terminal summary when progress and updates arrive late", () => {
+    const { parts, send } = live();
+    send(toolUse("bash-final", "Bash", { command: "build" }));
+    send(taskStart("final-task", "bash-final", "Build"));
+    send(toolResult("bash-final", "Started", "final-task"));
+    send(notification("final-task", "completed", "Build passed"));
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_progress",
+        task_id: "final-task",
+        description: "Build",
+        summary: "2 of 3 files",
+      }),
+    );
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_updated",
+        task_id: "final-task",
+        patch: { status: "failed", error: "Old error" },
+      }),
+    );
+    expect(parts("bash-final").at(-1)).toMatchObject({
+      status: "completed",
+      output: "Build\nBuild passed",
+      metadata: { backgroundTaskStatus: "completed" },
+    });
+  });
+
+  test("keeps Agent tasks out of the ordinary tool activity set", () => {
+    const { send, session } = live();
+    send(
+      snapshot([{ task_id: "agent-task", task_type: "local_agent", description: "Review code" }]),
+    );
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_started",
+        task_id: "agent-task",
+        task_type: "local_agent",
+        description: "Review code",
+        subagent_type: "Explore",
+      }),
+    );
+    expect(session.backgroundToolActiveTaskIds?.size).toBe(0);
+    expect(session.backgroundToolTasksById?.has("agent-task")).toBeFalsy();
+    expect(session.backgroundToolAgentTaskIds?.has("agent-task")).toBe(true);
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_progress",
+        task_id: "agent-task",
+        description: "Review code",
+        summary: "Still working",
+      }),
+    );
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_updated",
+        task_id: "agent-task",
+        patch: { is_backgrounded: true },
+      }),
+    );
+    expect(session.backgroundToolTasksById?.has("agent-task")).toBeFalsy();
+  });
+
+  test("reconciles a child tool from process snapshots and a late task edge", () => {
+    const { events, send, session } = live();
+    session.subagentTaskIdsByToolUseId.set("agent-call", "agent-1");
+    const child = claudeSubagentEventSession(session, "agent-call");
+    expect(child).not.toBeNull();
+    if (!child) return;
+    child.toolNamesByCallId.set("child-bash", "Bash");
+    child.toolMessageIdsByCallId.set("child-bash", "child-message");
+    send(snapshot([{ task_id: "child-task", task_type: "local_bash", description: "Wait" }]));
+    send(taskStart("child-task", "child-bash", "Wait"));
+    const childParts = (callId = "child-bash") =>
+      events.flatMap((event) =>
+        event.type === "assistant_part" &&
+        event.externalSessionId === child.externalSessionId &&
+        event.part.kind === "tool" &&
+        event.part.callId === callId
+          ? [event.part]
+          : [],
+      );
+    expect(childParts().at(-1)).toMatchObject({ status: "running" });
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_progress",
+        task_id: "child-task",
+        description: "Wait",
+        summary: "Half done",
+      }),
+    );
+    expect(childParts().at(-1)?.output).toBe("Wait\nHalf done");
+    send(snapshot([]));
+    expect(childParts().at(-1)).toMatchObject({
+      status: "error",
+      metadata: { backgroundTaskStatus: "unknown" },
+    });
+    expect(child.backgroundToolActiveTaskIds?.size).toBe(0);
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
+    send(notification("child-task", "completed", "Done"));
+    expect(childParts().at(-1)).toMatchObject({
+      status: "completed",
+      output: "Wait\nDone",
+    });
+
+    child.toolNamesByCallId.set("child-next", "Bash");
+    child.toolMessageIdsByCallId.set("child-next", "child-next-message");
+    send(snapshot([{ task_id: "child-next-task", task_type: "local_bash", description: "Next" }]));
+    send(taskStart("child-next-task", "child-next", "Next"));
+    send(notification("child-next-task", "completed", "Next done"));
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
+    send(snapshot([{ task_id: "child-next-task", task_type: "local_bash", description: "Next" }]));
+    expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
+    expect(childParts("child-next").at(-1)).toMatchObject({
+      callId: "child-next",
+      status: "completed",
+    });
+  });
+
+  test("passes process snapshots through nested Agent sessions", () => {
+    const { events, send, session } = live();
+    session.subagentTaskIdsByToolUseId.set("first-agent", "agent-1");
+    const child = claudeSubagentEventSession(session, "first-agent");
+    expect(child).not.toBeNull();
+    if (!child) return;
+    child.subagentTaskIdsByToolUseId.set("second-agent", "agent-2");
+    const grandchild = claudeSubagentEventSession(child, "second-agent");
+    expect(grandchild).not.toBeNull();
+    if (!grandchild) return;
+    grandchild.toolNamesByCallId.set("nested-bash", "Bash");
+    grandchild.toolMessageIdsByCallId.set("nested-bash", "nested-message");
+    send(taskStart("nested-task", "nested-bash", "Wait"));
+    const nestedParts = () =>
+      events.flatMap((event) =>
+        event.type === "assistant_part" &&
+        event.externalSessionId === grandchild.externalSessionId &&
+        event.part.kind === "tool" &&
+        event.part.callId === "nested-bash"
+          ? [event.part]
+          : [],
+      );
+    expect(nestedParts().at(-1)?.status).toBe("running");
+    send(snapshot([{ task_id: "nested-task", task_type: "local_bash", description: "Wait" }]));
+    expect(nestedParts().at(-1)?.status).toBe("running");
+    send(snapshot([]));
+    expect(nestedParts().at(-1)?.metadata?.backgroundTaskStatus).toBe("unknown");
+  });
+
+  test("bounds unmatched results and drops each result after late correlation", () => {
+    const { send, session } = live();
+    send(snapshot([]));
+    for (let index = 0; index < 129; index += 1) {
+      const callId = `mcp-cache-${index}`;
+      send(toolUse(callId, "mcp__server__work"));
+      send(toolResult(callId, `Result ${index}`));
+    }
+    expect(session.backgroundToolCompletedPartsByCallId?.size).toBe(128);
+    expect(session.backgroundToolCompletedPartsByCallId?.has("mcp-cache-0")).toBe(false);
+    expect(session.backgroundToolCallIdsSinceSnapshot?.size).toBe(0);
+    send(taskStart("late-cache-task", "mcp-cache-128", "Late edge"));
+    expect(session.backgroundToolCompletedPartsByCallId?.has("mcp-cache-128")).toBe(false);
+  });
+
+  test("terminal outcome wins when the launch result and progress arrive late", () => {
+    const { parts, send } = live();
+    send(toolUse("bash-late", "Bash", { command: "sleep 1" }));
+    send(notification("late-task", "stopped", "Worker restarted"));
+    send(taskStart("late-task", "bash-late", "Long command"), "2026-09-24T20:00:01.000Z");
+    send(toolResult("bash-late", "Command started", "late-task"), "2026-09-24T20:00:02.000Z");
+    send(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_progress",
+        task_id: "late-task",
+        description: "Long command",
+        summary: "Old progress",
+      }),
+      "2026-09-24T20:00:03.000Z",
+    );
+    expect(parts("bash-late").at(-1)).toMatchObject({
+      status: "error",
+      metadata: { backgroundTaskStatus: "stopped" },
+      endedAtMs: Date.parse(timestamp),
+    });
+    expect(parts("bash-late").at(-1)?.startedAtMs).toBeUndefined();
+  });
+
+  test("does not turn a failed background launch into a running card", () => {
+    const { parts, send } = live();
+    send(toolUse("bash-failed-launch", "Bash", { command: "exit 1" }));
+    send(taskStart("failed-launch-task", "bash-failed-launch", "Start command"));
+    send(
+      claudeSdkMessageFixture({
+        type: "user",
+        parent_tool_use_id: "bash-failed-launch",
+        tool_use_result: {
+          type: "tool_result",
+          tool_use_id: "bash-failed-launch",
+          content: "Could not start command",
+          backgroundTaskId: "failed-launch-task",
+          is_error: true,
+        },
+        message: { role: "user", content: [] },
+      }),
+    );
+    expect(parts("bash-failed-launch").at(-1)).toMatchObject({
+      status: "error",
+      error: "Could not start command",
+      metadata: { backgroundTaskStatus: "failed" },
+    });
+  });
+
+  test("history replays the launch, progress, and terminal state on the same card", () => {
+    const assistant = claudeSessionMessageFixture({
+      type: "assistant",
+      uuid: "assistant-history",
+      session_id: "session-1",
+      parent_tool_use_id: null,
+      timestamp,
+      message: {
+        role: "assistant",
+        content: [
+          { type: "tool_use", id: "bash-history", name: "Bash", input: { command: "sleep 1" } },
+        ],
+      },
+    });
+    const result = claudeSessionMessageFixture({
+      type: "user",
+      uuid: "result-history",
+      session_id: "session-1",
+      parent_tool_use_id: "bash-history",
+      timestamp,
+      tool_use_result: {
+        type: "tool_result",
+        tool_use_id: "bash-history",
+        content: "Started",
+        backgroundTaskId: "history-task",
+      },
+      message: { role: "user", content: [] },
+    });
+    const entries = [
+      assistant,
+      {
+        type: "system" as const,
+        subtype: "task_started" as const,
+        uuid: "start-history",
+        session_id: "session-1",
+        task_id: "history-task",
+        tool_use_id: "bash-history",
+        task_type: "local_bash",
+        description: "Check files",
+        timestamp,
+      },
+      result,
+      {
+        type: "system" as const,
+        subtype: "task_progress" as const,
+        uuid: "progress-history",
+        session_id: "session-1",
+        task_id: "history-task",
+        description: "Check files",
+        summary: "2 files done",
+        usage: { total_tokens: 0, tool_uses: 0, duration_ms: 1000 },
+        timestamp,
+      },
+    ];
+    const running = toClaudeHistoryMessages(entries, () => timestamp);
+    const runningPart = running
+      .flatMap((message) => message.parts)
+      .find((part): part is ToolPart => part.kind === "tool" && part.callId === "bash-history");
+    expect(runningPart).toMatchObject({ status: "running", output: "Check files\n2 files done" });
+    expect(runningPart?.startedAtMs).toBe(Date.parse(timestamp));
+    const completed = toClaudeHistoryMessages(
+      [
+        ...entries,
+        {
+          type: "system",
+          subtype: "task_notification",
+          uuid: "notification-history",
+          session_id: "session-1",
+          task_id: "history-task",
+          status: "completed",
+          output_file: "",
+          summary: "All checks passed",
+          timestamp,
+        },
+      ],
+      () => timestamp,
+      [],
+      { currentBackgroundTaskIds: new Set() },
+    );
+    const finalPart = completed
+      .flatMap((message) => message.parts)
+      .find((part): part is ToolPart => part.kind === "tool" && part.callId === "bash-history");
+    expect(finalPart).toMatchObject({
+      status: "completed",
+      output: "Check files\nAll checks passed",
+    });
+
+    const lostTerminal = filterClaudeHistoryMessages([
+      ...entries,
+      {
+        type: "system",
+        subtype: "background_tasks_changed",
+        uuid: "snapshot-history",
+        session_id: "session-1",
+        timestamp,
+        tasks: [],
+      },
+    ]);
+    const unknown = toClaudeHistoryMessages(lostTerminal, () => timestamp);
+    const unknownPart = unknown
+      .flatMap((message) => message.parts)
+      .find((part): part is ToolPart => part.kind === "tool" && part.callId === "bash-history");
+    expect(unknownPart).toMatchObject({
+      status: "error",
+      metadata: { backgroundTaskStatus: "unknown" },
+    });
+  });
+
+  test("history correlates a task notification without a start edge or result task ID", () => {
+    const entries = filterClaudeHistoryMessages([
+      claudeSessionMessageFixture({
+        type: "assistant",
+        uuid: "history-mcp-call",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        timestamp,
+        message: {
+          role: "assistant",
+          content: [
+            { type: "tool_use", id: "history-mcp", name: "mcp__server__long_call", input: {} },
+          ],
+        },
+      }),
+      {
+        type: "system",
+        subtype: "background_tasks_changed",
+        uuid: "history-mcp-snapshot",
+        session_id: "session-1",
+        timestamp,
+        tasks: [
+          { task_id: "history-mcp-task", task_type: "mcp_task", description: "Fetch report" },
+        ],
+      },
+      claudeSessionMessageFixture({
+        type: "user",
+        uuid: "history-mcp-result",
+        session_id: "session-1",
+        parent_tool_use_id: "history-mcp",
+        timestamp,
+        tool_use_result: { type: "tool_result", tool_use_id: "history-mcp", content: "Running" },
+        message: { role: "user", content: [] },
+      }),
+      {
+        type: "system",
+        subtype: "task_notification",
+        uuid: "history-mcp-terminal",
+        session_id: "session-1",
+        task_id: "history-mcp-task",
+        tool_use_id: "history-mcp",
+        status: "failed",
+        output_file: "",
+        summary: "Server timed out",
+        timestamp,
+      },
+    ]);
+    const part = toClaudeHistoryMessages(entries, () => timestamp)
+      .flatMap((message) => message.parts)
+      .find(
+        (candidate): candidate is ToolPart =>
+          candidate.kind === "tool" && candidate.callId === "history-mcp",
+      );
+    expect(part).toMatchObject({
+      status: "error",
+      output: "Fetch report\nServer timed out",
+      metadata: { backgroundTaskStatus: "failed" },
+    });
+  });
+
+  test("history keeps file links from a saved MCP task notification", () => {
+    const entries = filterClaudeHistoryMessages([
+      claudeSessionMessageFixture({
+        type: "assistant",
+        uuid: "history-files-call",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        timestamp,
+        message: {
+          role: "assistant",
+          content: [
+            { type: "tool_use", id: "history-files", name: "mcp__server__export", input: {} },
+          ],
+        },
+      }),
+      claudeSessionMessageFixture({
+        type: "user",
+        uuid: "history-files-result",
+        session_id: "session-1",
+        parent_tool_use_id: "history-files",
+        timestamp,
+        tool_use_result: {
+          type: "tool_result",
+          tool_use_id: "history-files",
+          content: "Running",
+          backgroundTaskId: "history-files-task",
+        },
+        message: { role: "user", content: [] },
+      }),
+      {
+        type: "system",
+        subtype: "task_notification",
+        uuid: "history-files-notice",
+        session_id: "session-1",
+        task_id: "history-files-task",
+        tool_use_id: "history-files",
+        status: "completed",
+        output_file: "/tmp/history-files.output",
+        summary: "Report ready",
+        resource_links: [{ name: "report.csv", uri: "file:///reports/report.csv" }],
+        timestamp,
+      },
+    ]);
+    const part = toClaudeHistoryMessages(entries, () => timestamp)
+      .flatMap((message) => message.parts)
+      .find((candidate): candidate is ToolPart => candidate.kind === "tool");
+    expect(part).toMatchObject({
+      status: "completed",
+      output: "Report ready\nreport.csv: file:///reports/report.csv",
+      metadata: {
+        outputFile: "/tmp/history-files.output",
+        resourceLinks: [{ name: "report.csv", uri: "file:///reports/report.csv" }],
+      },
+    });
+  });
+
+  test("history leaves a foreground call completed when progress precedes its start", () => {
+    const entries = filterClaudeHistoryMessages([
+      claudeSessionMessageFixture({
+        type: "assistant",
+        uuid: "history-foreground-call",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        timestamp,
+        message: {
+          role: "assistant",
+          content: [
+            { type: "tool_use", id: "history-foreground", name: "Bash", input: { command: "pwd" } },
+          ],
+        },
+      }),
+      {
+        type: "system",
+        subtype: "task_progress",
+        uuid: "history-foreground-progress",
+        session_id: "session-1",
+        task_id: "history-foreground-task",
+        tool_use_id: "history-foreground",
+        description: "Print directory",
+        summary: "Still running",
+        usage: { total_tokens: 0, tool_uses: 0, duration_ms: 1000 },
+        timestamp,
+      },
+      {
+        type: "system",
+        subtype: "task_started",
+        uuid: "history-foreground-start",
+        session_id: "session-1",
+        task_id: "history-foreground-task",
+        tool_use_id: "history-foreground",
+        task_type: "local_bash",
+        is_backgrounded: false,
+        description: "Print directory",
+        timestamp,
+      },
+      claudeSessionMessageFixture({
+        type: "user",
+        uuid: "history-foreground-result",
+        session_id: "session-1",
+        parent_tool_use_id: "history-foreground",
+        timestamp,
+        tool_use_result: {
+          type: "tool_result",
+          tool_use_id: "history-foreground",
+          content: "/repo",
+        },
+        message: { role: "user", content: [] },
+      }),
+    ]);
+    const part = toClaudeHistoryMessages(entries, () => timestamp)
+      .flatMap((message) => message.parts)
+      .find(
+        (candidate): candidate is ToolPart =>
+          candidate.kind === "tool" && candidate.callId === "history-foreground",
+      );
+    expect(part).toMatchObject({ status: "completed", output: "/repo" });
+  });
+
+  test("history reconciles a saved launch with current process activity", () => {
+    const entries = filterClaudeHistoryMessages([
+      claudeSessionMessageFixture({
+        type: "assistant",
+        uuid: "history-restart-call",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        timestamp,
+        message: {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "history-restart",
+              name: "Bash",
+              input: { command: "sleep 2" },
+            },
+          ],
+        },
+      }),
+      claudeSessionMessageFixture({
+        type: "user",
+        uuid: "history-restart-result",
+        session_id: "session-1",
+        parent_tool_use_id: "history-restart",
+        timestamp,
+        tool_use_result: {
+          type: "tool_result",
+          tool_use_id: "history-restart",
+          content: "Started",
+          backgroundTaskId: "history-restart-task",
+        },
+        message: { role: "user", content: [] },
+      }),
+    ]);
+    const partFor = (activeTaskIds: ReadonlySet<string>, readAt = timestamp) =>
+      toClaudeHistoryMessages(entries, () => readAt, [], {
+        currentBackgroundTaskIds: activeTaskIds,
+      })
+        .flatMap((message) => message.parts)
+        .find(
+          (candidate): candidate is ToolPart =>
+            candidate.kind === "tool" && candidate.callId === "history-restart",
+        );
+    expect(partFor(new Set())).toMatchObject({
+      status: "error",
+      metadata: { backgroundTaskStatus: "unknown" },
+    });
+    expect(partFor(new Set(), "2026-09-25T20:00:00.000Z")?.endedAtMs).toBeUndefined();
+    expect(partFor(new Set(), "2026-09-26T20:00:00.000Z")?.endedAtMs).toBeUndefined();
+    expect(partFor(new Set(["history-restart-task"]))).toMatchObject({
+      status: "running",
+      metadata: { backgroundTaskStatus: "running" },
+    });
+    const childPart = toClaudeHistoryMessages(entries, () => timestamp, [], {
+      includeNestedEntries: true,
+      transcriptExternalSessionId: "session-1::claude-subagent::agent-1",
+      currentBackgroundTaskIds: new Set(),
+    })
+      .flatMap((message) => message.parts)
+      .find(
+        (candidate): candidate is ToolPart =>
+          candidate.kind === "tool" && candidate.callId === "history-restart",
+      );
+    expect(childPart).toMatchObject({
+      status: "error",
+      metadata: { backgroundTaskStatus: "unknown" },
+    });
+    expect(childPart?.endedAtMs).toBeUndefined();
+  });
+
+  test("history gives a snapshot authority over a later launch result", () => {
+    const assistant = claudeSessionMessageFixture({
+      type: "assistant",
+      uuid: "history-order-call",
+      session_id: "session-1",
+      parent_tool_use_id: null,
+      timestamp,
+      message: {
+        role: "assistant",
+        content: [{ type: "tool_use", id: "history-order", name: "Bash", input: {} }],
+      },
+    });
+    const emptySnapshot = {
+      type: "system" as const,
+      subtype: "background_tasks_changed" as const,
+      uuid: "history-order-snapshot",
+      session_id: "session-1",
+      timestamp,
+      tasks: [],
+    };
+    const result = claudeSessionMessageFixture({
+      type: "user",
+      uuid: "history-order-result",
+      session_id: "session-1",
+      parent_tool_use_id: "history-order",
+      timestamp,
+      tool_use_result: {
+        type: "tool_result",
+        tool_use_id: "history-order",
+        content: "Started",
+        backgroundTaskId: "history-order-task",
+      },
+      message: { role: "user", content: [] },
+    });
+    const partFor = (entries: Parameters<typeof filterClaudeHistoryMessages>[0]) =>
+      toClaudeHistoryMessages(filterClaudeHistoryMessages(entries), () => timestamp)
+        .flatMap((message) => message.parts)
+        .find(
+          (candidate): candidate is ToolPart =>
+            candidate.kind === "tool" && candidate.callId === "history-order",
+        );
+    expect(partFor([assistant, emptySnapshot, result])).toMatchObject({
+      status: "error",
+      metadata: { backgroundTaskStatus: "unknown" },
+    });
+    expect(partFor([assistant, emptySnapshot, assistant, result])).toMatchObject({
+      status: "error",
+      metadata: { backgroundTaskStatus: "unknown" },
+    });
+    expect(partFor([emptySnapshot, assistant, result])).toMatchObject({
+      status: "running",
+      metadata: { backgroundTaskStatus: "running" },
+    });
+  });
+});

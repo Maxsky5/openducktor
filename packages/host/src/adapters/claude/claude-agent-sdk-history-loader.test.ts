@@ -11,6 +11,7 @@ import {
   loadClaudeHistory,
   reconciledClaudeSubagentStatus,
 } from "./claude-agent-sdk-history-loader";
+import { claudeSubagentEventSession } from "./claude-agent-sdk-event-session";
 import { createClaudeSession } from "./claude-agent-sdk-session-io.test-support";
 
 const latestProjectedMessage: AgentSessionHistoryMessage = {
@@ -110,7 +111,12 @@ describe("loadClaudeHistory", () => {
           },
         },
         () => "2026-07-17T10:01:01.000Z",
-        { hasActiveWork: () => false, source: "fresh", userMessages: [] },
+        {
+          activeBackgroundTaskIds: () => new Set(),
+          hasActiveWork: () => false,
+          source: "fresh",
+          userMessages: [],
+        },
       ),
     ).resolves.toEqual([
       {
@@ -136,6 +142,7 @@ describe("loadClaudeHistory", () => {
           },
           () => "2026-07-17T10:01:01.000Z",
           {
+            activeBackgroundTaskIds: () => new Set(),
             hasActiveWork: () => true,
             source: "fresh",
             userMessages: [
@@ -175,6 +182,7 @@ describe("loadClaudeHistory", () => {
         },
         () => "2026-07-17T10:01:01.000Z",
         {
+          activeBackgroundTaskIds: () => new Set(),
           hasActiveWork: () => false,
           source: "fresh",
           userMessages: [
@@ -202,6 +210,7 @@ describe("loadClaudeHistory", () => {
       },
       () => "2026-07-17T10:01:01.000Z",
       {
+        activeBackgroundTaskIds: () => new Set(),
         hasActiveWork: () => hasActiveWork,
         source: "fresh",
         userMessages: [
@@ -231,7 +240,12 @@ describe("loadClaudeHistory", () => {
           runtimePolicy: { kind: "claude" },
         },
         () => "2026-07-17T10:01:01.000Z",
-        { hasActiveWork: () => false, source: "persisted", userMessages: [] },
+        {
+          activeBackgroundTaskIds: () => new Set(),
+          hasActiveWork: () => false,
+          source: "persisted",
+          userMessages: [],
+        },
       ),
     ).rejects.toMatchObject({
       code: "request_failed",
@@ -265,6 +279,7 @@ describe("claudeLiveHistoryContext", () => {
     );
 
     expect(context).toEqual({
+      activeBackgroundTaskIds: expect.any(Function),
       hasActiveWork: expect.any(Function),
       source: "fresh",
       userMessages: [{ ...acceptedUserMessage, state: "queued" }],
@@ -288,11 +303,47 @@ describe("claudeLiveHistoryContext", () => {
     );
 
     expect(context).toEqual({
+      activeBackgroundTaskIds: expect.any(Function),
       hasActiveWork: expect.any(Function),
       source: "persisted",
       userMessages: [{ ...acceptedUserMessage, state: "read" }],
     });
     expect(context.hasActiveWork()).toBe(false);
+  });
+
+  test("reads the current process task set after a snapshot replaces it", () => {
+    const session = createClaudeSession({ backgroundToolActiveTaskIds: new Set(["task-1"]) });
+    const context = claudeLiveHistoryContext(session);
+    expect([...context.activeBackgroundTaskIds()]).toEqual(["task-1"]);
+    session.backgroundToolActiveTaskIds = new Set();
+    expect(context.activeBackgroundTaskIds().size).toBe(0);
+  });
+
+  test("uses current child activity without adding parent turns to child history", () => {
+    const session = createClaudeSession({
+      acceptedUserMessages,
+      backgroundToolActiveTaskIds: new Set(["root-task"]),
+    });
+    session.subagentTaskIdsByToolUseId.set("agent-call", "agent-1");
+    session.subagentTaskIdsByToolUseId.set("sibling-call", "agent-2");
+    const child = claudeSubagentEventSession(session, "agent-call");
+    const sibling = claudeSubagentEventSession(session, "sibling-call");
+    expect(child).not.toBeNull();
+    expect(sibling).not.toBeNull();
+    if (!child || !sibling) return;
+    child.backgroundToolActiveTaskIds = new Set(["child-task"]);
+    sibling.backgroundToolActiveTaskIds = new Set(["sibling-task"]);
+    expect([...claudeLiveHistoryContext(session).activeBackgroundTaskIds()]).toEqual([
+      "root-task",
+      "child-task",
+      "sibling-task",
+    ]);
+    const context = claudeLiveHistoryContext(session, child.externalSessionId);
+    expect(context.source).toBe("persisted");
+    expect(context.userMessages).toEqual([]);
+    expect([...context.activeBackgroundTaskIds()]).toEqual(["child-task"]);
+    child.backgroundToolActiveTaskIds.clear();
+    expect(context.activeBackgroundTaskIds().size).toBe(0);
   });
 });
 

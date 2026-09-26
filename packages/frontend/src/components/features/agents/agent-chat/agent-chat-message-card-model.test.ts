@@ -195,6 +195,28 @@ describe("agent-chat-message-card-model", () => {
       ).toBe(true);
     });
 
+    test("uses a background task outcome before cancellation words in its failure text", () => {
+      const failed = createToolMeta({
+        status: "error",
+        error: "Server stopped responding",
+        metadata: { backgroundTaskStatus: "failed" },
+      });
+      const stopped = createToolMeta({
+        status: "error",
+        error: "Worker disconnected",
+        metadata: { backgroundTaskStatus: "stopped" },
+      });
+      const unknown = createToolMeta({
+        status: "error",
+        output: "Server stopped responding",
+        metadata: { backgroundTaskStatus: "unknown" },
+      });
+
+      expect(getToolLifecyclePhase(failed)).toBe("failed");
+      expect(getToolLifecyclePhase(stopped)).toBe("cancelled");
+      expect(getToolLifecyclePhase(unknown)).toBe("failed");
+    });
+
     test("derives lifecycle phases from status, payload and errors", () => {
       expect(getToolLifecyclePhase(createToolMeta({ status: "pending", input: {} }))).toBe(
         "queued",
