@@ -1,9 +1,12 @@
 import { planSubtaskIssueTypeSchema, type SourceIssue } from "@openducktor/contracts";
-import { CircleAlert, CircleCheck, Trash2 } from "lucide-react";
+import { ChevronDown, CircleAlert, CircleCheck, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
 import { ISSUE_TYPE_OPTIONS } from "@/components/features/task-composer/constants";
 import { toPriorityComboboxOptions } from "@/components/features/task-composer/utils";
 import { Button } from "@/components/ui/button";
+import { Collapsible } from "@/components/ui/collapsible-root";
+import { CollapsibleContent } from "@/components/ui/collapsible-content";
+import { CollapsibleTrigger } from "@/components/ui/collapsible-trigger";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
 import { IssueMarkdownRenderer } from "@/components/features/issue-source/issue-markdown-renderer";
@@ -125,24 +128,32 @@ function IssueReviewCard({
           Remove
         </Button>
       </div>
-      <div
-        aria-label={`Description for ${item.title}`}
-        className="max-h-40 overflow-y-auto rounded-md bg-muted/50 px-3 py-2"
-        role="region"
-        tabIndex={0}
-      >
-        {item.description ? (
-          <IssueMarkdownRenderer
-            markdown={item.description}
-            issueImageContext={{ repoPath, sourceId: item.sourceId, providerId: item.providerId }}
-            variant="compact"
-            lightweight
-            className="break-words prose-code:text-rose-700 dark:prose-code:text-rose-300 [&_img]:max-h-48 [&_img]:rounded-md [&_pre]:overflow-x-hidden [&_pre]:whitespace-pre-wrap [&_pre]:break-all"
-          />
-        ) : (
-          <p className="text-sm text-muted-foreground">No description</p>
-        )}
-      </div>
+      <Collapsible className="rounded-md bg-muted/50">
+        <CollapsibleTrigger asChild>
+          <Button type="button" variant="ghost" className="group w-full justify-between px-3">
+            Description
+            <ChevronDown className="size-4 transition-transform group-data-[state=open]:rotate-180 motion-reduce:transition-none" />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent
+          aria-label={`Description for ${item.title}`}
+          className="max-h-[32rem] overflow-y-auto px-3 pb-3"
+          role="region"
+          tabIndex={0}
+        >
+          {item.description ? (
+            <IssueMarkdownRenderer
+              markdown={item.description}
+              issueImageContext={{ repoPath, sourceId: item.sourceId, providerId: item.providerId }}
+              variant="compact"
+              lightweight
+              className="break-words prose-code:text-rose-700 dark:prose-code:text-rose-300 [&_img]:max-h-48 [&_img]:rounded-md [&_pre]:overflow-x-hidden [&_pre]:whitespace-pre-wrap [&_pre]:break-all"
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground">No description</p>
+          )}
+        </CollapsibleContent>
+      </Collapsible>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid gap-2">
           <Label id={`issue-type-label-${item.sourceId}`}>Issue type</Label>

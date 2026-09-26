@@ -281,12 +281,21 @@ describe("Issue import dialog", () => {
     );
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 132" }));
     fireEvent.click(screen.getByRole("button", { name: "Review Tasks" }));
+    const description = within(reviewCard("Issue 132")).getByRole("button", {
+      name: "Description",
+    });
+    expect(description.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("img", { name: "Screenshot" })).toBeNull();
+    fireEvent.click(description);
+    expect(description.getAttribute("aria-expanded")).toBe("true");
     await waitFor(() =>
       expect(screen.getByRole("img", { name: "Screenshot" }).getAttribute("src")).toBe(
         "data:image/png;base64,aGVsbG8=",
       ),
     );
     expect(imageGet).toHaveBeenCalledWith({ repoPath: "/repo", sourceId: "132", url });
+    fireEvent.click(description);
+    expect(screen.queryByRole("img", { name: "Screenshot" })).toBeNull();
     view.unmount();
   });
 
@@ -419,6 +428,7 @@ describe("Issue import dialog", () => {
 
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
     fireEvent.click(screen.getByRole("button", { name: "Review Tasks" }));
+    fireEvent.click(within(reviewCard("Issue 1")).getByRole("button", { name: "Description" }));
     expect(within(reviewCard("Issue 1")).getByText("Details").tagName).toBe("STRONG");
     expect(within(reviewCard("Issue 1")).getByRole("link", { name: "View image" })).toBeDefined();
     view.unmount();
@@ -939,7 +949,13 @@ describe("Issue import dialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Import selected" }));
     await screen.findByText("The source item changed since review. Refresh it.");
     fireEvent.click(screen.getByRole("button", { name: "Refresh item" }));
-    await screen.findByText("New body");
+    fireEvent.click(
+      within(await screen.findByRole("region", { name: "Review Updated issue" })).getByRole(
+        "button",
+        { name: "Description" },
+      ),
+    );
+    expect(within(reviewCard("Updated issue")).getByText("New body")).toBeDefined();
     expect(screen.getByText("#1 Updated issue")).toBeDefined();
     expect(
       within(reviewCard("Updated issue")).getByRole("button", { name: "Issue type" }).textContent,
