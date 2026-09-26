@@ -78,9 +78,10 @@ stage_marker=
 new_app=0
 new_desktop=0
 new_marker=0
+install_done=0
 cleanup() {
   status=$?
-  if [ "$status" -ne 0 ]; then
+  if [ "$status" -ne 0 ] && [ "$install_done" -eq 0 ]; then
     [ "$new_marker" -eq 0 ] || rm -f "$marker"
     if [ -n "$backup_app" ] && [ -e "$backup_app" ]; then
       [ "$new_app" -eq 0 ] || rm -rf "$installed"
@@ -103,6 +104,7 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+trap 'exit 129' HUP
 
 api=https://api.github.com/repos/Maxsky5/openducktor/releases/latest
 curl -fsSL --proto '=https' -H 'Accept: application/vnd.github+json' -H 'User-Agent: OpenDucktor-installer' "$api" -o "$work/release.json" || error 'Could not load the latest stable GitHub release.'
@@ -197,6 +199,11 @@ PY
   fi
 fi
 
-rm -rf "$backup_app"
-[ -z "$backup_desktop" ] || rm -f "$backup_desktop"
+install_done=1
+if [ -n "$backup_app" ]; then
+  rm -rf "$backup_app" || error "OpenDucktor is installed at $installed, but could not remove the old app backup at $backup_app. Remove it after checking the app."
+fi
+if [ -n "$backup_desktop" ]; then
+  rm -f "$backup_desktop" || error "OpenDucktor is installed at $installed, but could not remove the old launcher backup at $backup_desktop. Remove it after checking the app."
+fi
 printf 'OpenDucktor is installed at %s\n' "$installed"

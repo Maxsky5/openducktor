@@ -94,6 +94,45 @@ unixTest("a failed launcher install restores the previous Linux app and launcher
   expect(readFileSync(desktopPath)).toEqual(previousDesktop);
 });
 
+unixTest("a failed backup cleanup keeps the new Linux app and launcher", () => {
+  const setup = fixture("Linux", "x86_64");
+  expect(setup.run().status).toBe(0);
+  const next = Buffer.from("new AppImage fixture\n");
+  writeFileSync(setup.assetPath, next);
+  setup.asset.digest = `sha256:${createHash("sha256").update(next).digest("hex")}`;
+  setup.saveRelease();
+  writeFileSync(
+    join(setup.bin, "rm"),
+    '#!/bin/sh\ncase "$1:$2" in -f:*/.openducktor.desktop.backup.*) exit 7 ;; esac\nexec /bin/rm "$@"\n',
+    { mode: 0o755 },
+  );
+  const result = setup.run();
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("old launcher backup");
+  expect(readFileSync(setup.installed)).toEqual(next);
+  expect(existsSync(join(setup.home, ".local/share/applications/openducktor.desktop"))).toBe(true);
+  expect(
+    existsSync(join(setup.home, ".local/share/applications/.openducktor-script-install")),
+  ).toBe(true);
+});
+
+unixTest("a terminal hangup restores the previous Linux app", () => {
+  const setup = fixture("Linux", "x86_64");
+  expect(setup.run().status).toBe(0);
+  const previous = readFileSync(setup.installed);
+  const desktopPath = join(setup.home, ".local/share/applications/openducktor.desktop");
+  const previousDesktop = readFileSync(desktopPath);
+  writeFileSync(
+    join(setup.bin, "mv"),
+    '#!/bin/sh\ncase "$2" in */.OpenDucktor.AppImage.backup.*) /bin/mv "$@" || exit; kill -HUP "$(ps -o ppid= -p "$$" | tr -d "[:space:]")"; exit 0 ;; esac\nexec /bin/mv "$@"\n',
+    { mode: 0o755 },
+  );
+  const result = setup.run();
+  expect(result.status).toBe(129);
+  expect(readFileSync(setup.installed)).toEqual(previous);
+  expect(readFileSync(desktopPath)).toEqual(previousDesktop);
+});
+
 unixTest("missing or ambiguous assets and missing digests fail before installation", () => {
   const setup = fixture("Linux", "x86_64");
   for (const assets of [[], [setup.asset, setup.asset], [{ ...setup.asset, digest: null }]]) {
