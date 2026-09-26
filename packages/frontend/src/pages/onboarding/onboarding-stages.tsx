@@ -24,11 +24,11 @@ import {
   useInlineFolderPickerController,
 } from "@/components/features/repository/inline-folder-picker";
 import {
-  useWorkspaceCreation,
   WorkspaceCreationBackAction,
   WorkspaceCreationFields,
   WorkspaceCreationSubmitAction,
 } from "@/components/features/repository/workspace-creation-form";
+import { useWorkspaceCreation } from "@/components/features/repository/use-workspace-creation";
 import { useWorkspaceCreationModels } from "@/components/features/repository/use-workspace-creation-models";
 import { RuntimeExecutablePanel } from "@/components/features/settings/runtime-executable-panel";
 import { SettingsNotificationsSection } from "@/components/features/settings/settings-notifications-section";

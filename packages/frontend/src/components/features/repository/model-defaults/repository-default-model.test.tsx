@@ -8,7 +8,7 @@ import {
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { RepositoryDefaultModelBlock } from "./settings-repository-default-model";
+import { RepositoryDefaultModelBlock } from "./repository-default-model";
 
 const repoConfig: SettingsRepoConfig = {
   workspaceId: "repo",

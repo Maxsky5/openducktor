@@ -13,11 +13,11 @@ import {
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { FolderPickerDialog } from "./folder-picker-dialog";
 import {
-  useWorkspaceCreation,
   WorkspaceCreationBackAction,
   WorkspaceCreationFields,
   WorkspaceCreationSubmitAction,
 } from "./workspace-creation-form";
+import { useWorkspaceCreation } from "./use-workspace-creation";
 import { useWorkspaceCreationModels } from "./use-workspace-creation-models";
 
 type OpenRepositoryModalProps = {

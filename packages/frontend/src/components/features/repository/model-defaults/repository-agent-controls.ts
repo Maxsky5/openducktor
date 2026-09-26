@@ -4,7 +4,7 @@ import { toPrimaryAgentOptions } from "@/components/features/agents/catalog-sele
 import type { ModelPickerValue } from "@/components/features/agents/model-picker";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import type { RepoAgentDefaultInput } from "@/types/state-slices";
-import { selectedModelKey, toVariantOptionsForModelKey } from "./settings-modal-model";
+import { selectedModelKey, toVariantOptionsForModelKey } from "./model-defaults-model";
 
 type RepositoryAgentControl = {
   options: ComboboxOption[];

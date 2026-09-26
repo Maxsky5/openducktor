@@ -11,10 +11,10 @@ import {
   resolveRuntimeKindSelection,
 } from "@/lib/agent-runtime";
 import type { RuntimeModelCatalogQueryResource } from "@/state/queries/use-runtime-model-catalogs";
-import { buildRepositoryAgentControls } from "./settings-repository-agent-controls";
-import { resolveRepoAgentDefaultModelPickerSelection } from "./settings-repository-agent-selection";
-import { RepositoryModelPickerField } from "./settings-repository-model-picker-field";
-import { ensureDraftAgentDefault } from "./settings-modal-model";
+import { ensureDraftAgentDefault } from "./model-defaults-model";
+import { buildRepositoryAgentControls } from "./repository-agent-controls";
+import { resolveRepoAgentDefaultModelPickerSelection } from "./repository-agent-selection";
+import { RepositoryModelPickerField } from "./repository-model-picker-field";
 
 type RepositoryDefaultModelBlockProps = {
   selectedRepoConfig: Pick<SettingsRepoConfig, "defaultModel" | "agentDefaults">;

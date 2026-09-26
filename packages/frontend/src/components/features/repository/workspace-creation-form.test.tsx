@@ -9,11 +9,11 @@ import type {
   WorkspaceSelectionOperationsInput,
 } from "@/types/state-slices";
 import {
-  useWorkspaceCreation,
   WorkspaceCreationBackAction,
   WorkspaceCreationFields,
   WorkspaceCreationSubmitAction,
 } from "./workspace-creation-form";
+import { useWorkspaceCreation } from "./use-workspace-creation";
 import type { WorkspaceCreationModelSurface } from "./use-workspace-creation-models";
 
 const views = new Set<ReturnType<typeof render>>();

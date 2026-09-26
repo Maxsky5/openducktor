@@ -5,7 +5,7 @@ import {
   type RuntimeDescriptor,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import { buildRepositoryAgentControls } from "./settings-repository-agent-controls";
+import { buildRepositoryAgentControls } from "./repository-agent-controls";
 
 const savedDefault = {
   runtimeKind: "opencode",

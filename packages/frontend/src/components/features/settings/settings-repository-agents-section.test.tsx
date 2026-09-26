@@ -3,7 +3,7 @@ import { CODEX_RUNTIME_DESCRIPTOR, type SettingsRepoConfig } from "@openducktor/
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { resolveRepoAgentDefaultModelPickerSelection } from "./settings-repository-agent-selection";
+import { resolveRepoAgentDefaultModelPickerSelection } from "@/components/features/repository/model-defaults/repository-agent-selection";
 import { RepositoryAgentsSection } from "./settings-repository-agents-section";
 
 const codexCatalog: AgentModelCatalog = {
