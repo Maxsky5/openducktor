@@ -205,8 +205,6 @@ Resume keeps the current running turn, approval, or question until a newer nativ
 
 The persistence observer does not call the runtime inside the publication or lock scopes. A runtime-visible follow-up, such as a session rename, runs after those scopes release.
 
-Codex can report an idle status before `turn/completed`. Only a `session_idle` event from `turn/completed` has `turnCompleted: true`. A fresh Codex Workspace Session keeps its saved title and waits for this event before it sends the title to Codex.
-
 Renderer attachment is atomic. Its first envelope has the current snapshot. Later changes use the same ordered channel. Separate snapshot and subscribe calls have a race.
 
 Map native completion, stream end, runtime failure, stop, and release as different events. Final release removes the session tree and rejects unresolved requests.
