@@ -123,6 +123,7 @@ export type IssueReaderPort = {
     repoConfig: RepoConfig;
     sourceId: string;
     url: string;
+    savedDescription?: string | undefined;
   }): Effect.Effect<IssueImageGetResult, HostError | GitProviderRepositoryError>;
 };
 

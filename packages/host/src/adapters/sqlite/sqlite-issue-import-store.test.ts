@@ -51,7 +51,7 @@ describe("SQLite Issue imports", () => {
       await Effect.runPromise(
         store.getSourceIssue({ repoPath: harness.repoPath, taskId: first.task.id }),
       ),
-    ).toEqual(sourceIssue);
+    ).toEqual({ ...sourceIssue, description: "Issue body" });
     expect(
       await Effect.runPromise(
         store.getSourceIssue({ repoPath: harness.repoPath, taskId: "missing" }),

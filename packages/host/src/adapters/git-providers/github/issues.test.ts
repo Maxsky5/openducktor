@@ -160,6 +160,48 @@ describe("GitHub issue reader", () => {
     expect(calls).toHaveLength(1);
   });
 
+  test("loads a saved Task image after the live Issue removes its link", async () => {
+    const url = "https://github.com/user-attachments/assets/cda6c6b0-48b1-4d49-b8f2-78a1bd758be9";
+    const png =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/nwAAAABJRU5ErkJggg==";
+    const calls: string[][] = [];
+    const reader = createGithubIssueReader({
+      repositoryPort,
+      githubCli: {
+        resolve: () =>
+          Effect.succeed({
+            executablePath: "gh",
+            getAuth: () => Effect.die("Unexpected auth request"),
+            readVersion: () => Effect.die("Unexpected version request"),
+            run: (args) => {
+              calls.push(args);
+              if (!args.includes(url)) return Effect.die("Live Issue read must not run");
+              return Effect.succeed({ ok: true, stdout: png, stderr: "" });
+            },
+          }),
+      },
+    });
+
+    await expect(
+      Effect.runPromise(
+        reader.readImage!({
+          repoConfig,
+          sourceId: "132",
+          url,
+          savedDescription: `Saved image: ![Image](${url})`,
+        }),
+      ),
+    ).resolves.toEqual({ mediaType: "image/png", bytesBase64: png });
+    expect(calls).toEqual([["api", "--hostname", "github.com", url]]);
+
+    await expect(
+      Effect.runPromise(
+        reader.readImage!({ repoConfig, sourceId: "132", url, savedDescription: "No image" }),
+      ),
+    ).rejects.toThrow("not in the saved Task description");
+    expect(calls).toHaveLength(1);
+  });
+
   test("filters Pull Requests and closed search results while keeping an open Issue", async () => {
     const { reader, calls } = fixture([
       issue(1),

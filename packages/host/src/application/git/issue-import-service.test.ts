@@ -135,7 +135,7 @@ const fixture = (issueAccess: "browse" | "search" = "search") => {
 
 describe("Issue import service", () => {
   test("loads a saved Task image from its original GitHub repository after provider change", async () => {
-    const { service, reader, resolvedConfigs, setRepoConfig } = fixture();
+    const { service, store, reader, resolvedConfigs, setRepoConfig } = fixture();
     setRepoConfig(
       repoConfigSchema.parse({
         ...repoConfig,
@@ -158,7 +158,9 @@ describe("Issue import service", () => {
     );
     const imageUrl =
       "https://github.com/user-attachments/assets/cda6c6b0-48b1-4d49-b8f2-78a1bd758be9";
-    reader.readImage = ({ repoConfig: sourceConfig, sourceId, url }) => {
+    const description = `Saved image: ![Image](${imageUrl})`;
+    store.getSourceIssue = () => Effect.succeed({ ...issue("1"), description });
+    reader.readImage = ({ repoConfig: sourceConfig, sourceId, url, savedDescription }) => {
       expect(sourceConfig.git.provider?.id).toBe("github");
       expect(sourceConfig.git.provider?.repository).toEqual({
         host: "github.com",
@@ -167,6 +169,7 @@ describe("Issue import service", () => {
       });
       expect(sourceId).toBe("1");
       expect(url).toBe(imageUrl);
+      expect(savedDescription).toBe(description);
       return Effect.succeed({ mediaType: "image/png", bytesBase64: "aGVsbG8=" });
     };
 

@@ -51,6 +51,7 @@ export const createSqliteIssueImportStore = ({
                 sourceId: tasks.sourceId,
                 number: tasks.sourceNumber,
                 url: tasks.sourceUrl,
+                description: tasks.description,
               })
               .from(tasks)
               .where(eq(tasks.id, input.taskId))
@@ -66,6 +67,7 @@ export const createSqliteIssueImportStore = ({
                   sourceId: source.sourceId,
                   number: source.number,
                   url: source.url,
+                  description: source.description,
                 }
               : undefined,
           ),

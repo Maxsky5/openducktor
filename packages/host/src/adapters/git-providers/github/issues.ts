@@ -304,15 +304,22 @@ export const createGithubIssueReader = ({
           message: "This image is not a GitHub Issue attachment for the configured host.",
         });
       }
-      const payload = yield* runGithubApi(githubCli, input.repoConfig.repoPath, repository.host, [
-        "api",
-        `repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}/issues/${input.sourceId}`,
-      ]);
-      const issue = yield* parsePayload(payload, imageBodySchema, "github.issues.readImage");
-      if (!issue.body?.includes(input.url)) {
+      let description = input.savedDescription;
+      if (description === undefined) {
+        const payload = yield* runGithubApi(githubCli, input.repoConfig.repoPath, repository.host, [
+          "api",
+          `repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}/issues/${input.sourceId}`,
+        ]);
+        const issue = yield* parsePayload(payload, imageBodySchema, "github.issues.readImage");
+        description = readableDescription(issue.body ?? "");
+      }
+      if (!description.includes(input.url)) {
         return yield* new HostValidationError({
           field: "url",
-          message: "This image is not in the source Issue. Refresh the Issue and try again.",
+          message:
+            input.savedDescription === undefined
+              ? "This image is not in the source Issue. Refresh the Issue and try again."
+              : "This image is not in the saved Task description. Refresh the Task and try again.",
         });
       }
       const command = yield* githubCli.resolve();

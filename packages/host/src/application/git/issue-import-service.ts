@@ -135,6 +135,7 @@ export const createIssueImportService = ({
         let repoConfig: RepoConfig;
         let sourceId: string;
         let reader: IssueReaderPort;
+        let savedDescription: string | undefined;
         if ("taskId" in input) {
           const currentConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(
             input.repoPath,
@@ -151,6 +152,7 @@ export const createIssueImportService = ({
           }
           repoConfig = yield* githubImageRepoConfig(currentConfig, source);
           sourceId = source.sourceId;
+          savedDescription = source.description ?? "";
           const provider = yield* resolver.resolve(repoConfig);
           reader = yield* provider.issues();
         } else {
@@ -169,6 +171,7 @@ export const createIssueImportService = ({
           repoConfig,
           sourceId,
           url: input.url,
+          savedDescription,
         });
       });
     },
