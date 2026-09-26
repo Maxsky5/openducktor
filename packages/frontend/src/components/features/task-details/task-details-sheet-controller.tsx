@@ -35,18 +35,20 @@ function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerPr
   const deleteTask = workflowActions?.onDelete;
   const repoPath = sheetProps.activeWorkspace?.repoPath ?? null;
   const [taskId, setTaskId] = useState<string | null>(null);
-  const deletingTaskIdRef = useRef<string | null>(null);
+  const deletingTaskRef = useRef<{ id: string; task: TaskDetailsSheetProps["task"] } | null>(null);
   const boardTask = allTasks.find((entry) => entry.id === taskId);
   const taskQuery = useQuery({
     ...unfilteredRepoTaskDataQueryOptions(repoPath ?? ""),
     enabled: repoPath !== null && taskId !== null && !boardTask,
   });
   const sheetTasks = boardTask || !taskQuery.isSuccess ? allTasks : taskQuery.data.tasks;
-  const task = sheetTasks.find((entry) => entry.id === taskId) ?? null;
+  const task =
+    sheetTasks.find((entry) => entry.id === taskId) ??
+    (deletingTaskRef.current?.id === taskId ? deletingTaskRef.current.task : null);
   useEffect(() => {
     if (!taskId || boardTask || taskQuery.isFetching || taskQuery.isPending) return;
     if (taskQuery.isSuccess && taskQuery.data.tasks.some((entry) => entry.id === taskId)) return;
-    if (deletingTaskIdRef.current === taskId) return;
+    if (deletingTaskRef.current?.id === taskId) return;
     toast.error(
       taskQuery.isError ? "Could not load notification task" : "Notification task no longer exists",
       {
@@ -72,11 +74,11 @@ function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerPr
     ref,
     () => ({
       openTask: (nextTaskId: string) => {
-        deletingTaskIdRef.current = null;
+        deletingTaskRef.current = null;
         setTaskId(nextTaskId);
       },
       close: () => {
-        deletingTaskIdRef.current = null;
+        deletingTaskRef.current = null;
         setTaskId(null);
       },
     }),
@@ -91,19 +93,19 @@ function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerPr
       open={open}
       {...(deleteTask && {
         onDelete: async (deletedTaskId: string, options: { deleteSubtasks: boolean }) => {
-          deletingTaskIdRef.current = deletedTaskId;
+          deletingTaskRef.current = { id: deletedTaskId, task };
           try {
             await deleteTask(deletedTaskId, options);
             setTaskId((currentTaskId) => (currentTaskId === deletedTaskId ? null : currentTaskId));
           } catch (error) {
-            deletingTaskIdRef.current = null;
+            deletingTaskRef.current = null;
             throw error;
           }
         },
       })}
       onOpenChange={(nextOpen) => {
         if (!nextOpen) {
-          deletingTaskIdRef.current = null;
+          deletingTaskRef.current = null;
           setTaskId(null);
         }
       }}

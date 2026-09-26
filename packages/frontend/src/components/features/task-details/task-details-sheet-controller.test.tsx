@@ -108,6 +108,9 @@ describe("TaskDetailsSheetController", () => {
           deletion = onDelete(task.id, { deleteSubtasks: true });
           rendered.rerender(controller([]));
         });
+        expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ task, open: true }),
+        );
         expect(toastErrorMock).not.toHaveBeenCalled();
 
         let failRead = (_error: Error): void => {};
