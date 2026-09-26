@@ -214,6 +214,8 @@ const readableDescription = (html: string, baseUrl: string): string => {
       .replace(/<li\b[^>]*>/giu, "- ")
       .replace(/<[^>]+>/gu, ""),
   )
+    .replaceAll("<", "\\<")
+    .replaceAll(">", "\\>")
     .replace(/\n{3,}/gu, "\n\n")
     .trim();
 };

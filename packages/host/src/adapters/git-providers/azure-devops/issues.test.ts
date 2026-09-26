@@ -42,7 +42,7 @@ const workItem = {
   fields: {
     "System.Title": "Fix startup",
     "System.Description":
-      '<p>See <a href="/guide">guide</a> &amp; &#999999999;</p><p><a href="javascript:alert(1)">unsafe</a></p>',
+      '<p>See <a href="/guide">guide</a> &amp; &#999999999; and &lt;Widget&gt;</p><p><a href="javascript:alert(1)">unsafe</a></p>',
     "System.CreatedBy": { displayName: "Ada" },
     "System.ChangedDate": "2026-09-23T11:00:00Z",
     "System.Tags": "bug; ui",
@@ -115,6 +115,7 @@ describe("Azure DevOps issue reader", () => {
       },
     ]);
     expect(result.items[0]?.description).toContain("[guide](https://ado.example.test/guide)");
+    expect(result.items[0]?.description).toContain("\\<Widget\\>");
     expect(result.items[0]?.description).toContain("unsafe");
     expect(result.items[0]?.description).not.toContain("javascript:");
     expect(requests.map((request) => request.apiVersion)).toEqual([
