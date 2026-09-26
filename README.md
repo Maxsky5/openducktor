@@ -49,7 +49,13 @@ Windows x64 (PowerShell):
 irm https://raw.githubusercontent.com/Maxsky5/openducktor/main/install.ps1 | iex
 ```
 
-See the [installation guide](docs/installation.md) for Homebrew, manual downloads, the browser runner, install paths, and update steps.
+Homebrew on macOS:
+
+```sh
+brew install --cask Maxsky5/openducktor/openducktor
+```
+
+See the [installation guide](docs/installation.md) for more install options and update steps.
 
 ## User Prerequisites
 
