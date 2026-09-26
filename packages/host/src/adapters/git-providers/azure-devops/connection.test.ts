@@ -36,6 +36,44 @@ const createCredentialIndex = (): AzureDevOpsCredentialIndex => ({
 });
 
 describe("Azure DevOps connection", () => {
+  test("removes a workspace without opening secure storage when no credential exists", async () => {
+    const open = mock(() => Effect.die("Unexpected protected storage open"));
+    const connection = createAzureDevOpsConnectionAdapter({
+      clientId: undefined,
+      credentialIndex: createCredentialIndex(),
+      protectedStorage: { readConnection: () => Effect.succeed(null), open },
+    });
+
+    await Effect.runPromise(connection.removeWorkspaceCredentials(repoConfig));
+
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  test("does not index a PAT when secure storage cannot open", async () => {
+    const scopes = new Map<string, { scope: string; deployment: "services" | "server" }>();
+    const open = mock(() => Effect.die("Secure storage is unavailable"));
+    const connection = createAzureDevOpsConnectionAdapter({
+      clientId: undefined,
+      credentialIndex: {
+        register: (_workspaceId, credential) =>
+          Effect.sync(() => void scopes.set(credential.scope, credential)),
+        list: () => Effect.succeed([...scopes.values()]),
+        forget: (_workspaceId, scope) => Effect.sync(() => void scopes.delete(scope)),
+      },
+      protectedStorage: { readConnection: () => Effect.succeed(null), open },
+      fetchImplementation: mock(async () =>
+        Response.json(repositoryResponse()),
+      ) as unknown as typeof fetch,
+    });
+
+    await expect(
+      Effect.runPromise(connection.replacePat(repoConfig, repository, "secret")),
+    ).rejects.toThrow();
+    expect(scopes.size).toBe(0);
+    await Effect.runPromise(connection.removeWorkspaceCredentials(repoConfig));
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+
   test("reports a new repository as disconnected without opening protected storage", async () => {
     const open = mock(() => Effect.die("Unexpected protected storage open"));
     const connection = createAzureDevOpsConnectionAdapter({

@@ -107,6 +107,12 @@ export type IssueReaderPort = {
     repoConfig: RepoConfig;
     sourceId: string;
   }): Effect.Effect<SourceIssue, HostError | GitProviderRepositoryError>;
+  prepareGet(
+    repoConfig: RepoConfig,
+  ): Effect.Effect<
+    (sourceId: string) => Effect.Effect<SourceIssue, HostError | GitProviderRepositoryError>,
+    HostError | GitProviderRepositoryError
+  >;
   readImage?(input: {
     repoConfig: RepoConfig;
     sourceId: string;

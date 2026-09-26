@@ -274,6 +274,9 @@ export const createGithubIssueReader = ({
       });
     });
   },
+  prepareGet(repoConfig) {
+    return Effect.succeed((sourceId: string) => this.get({ repoConfig, sourceId }));
+  },
   readImage(input) {
     return Effect.gen(function* () {
       const repository = yield* repositoryPort.getRepository(input.repoConfig);

@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import type { IPersistence } from "@azure/msal-node-extensions";
 import { z } from "zod";
 import { HostOperationError, toHostOperationError } from "../../../effect/host-errors";
 import type { AzureDevOpsProtectedStorage } from "./protected-storage";
@@ -41,8 +42,11 @@ export const saveConnection = (
 ) =>
   Effect.gen(function* () {
     const store = yield* protectedStorage.open(scope, "connection");
-    yield* Effect.tryPromise({
-      try: () => store.save(JSON.stringify(connection)),
-      catch: (cause) => toHostOperationError(cause, "azureDevOps.connection.save"),
-    });
+    yield* saveConnectionRecord(store, connection);
+  });
+
+export const saveConnectionRecord = (store: IPersistence, connection: StoredConnection) =>
+  Effect.tryPromise({
+    try: () => store.save(JSON.stringify(connection)),
+    catch: (cause) => toHostOperationError(cause, "azureDevOps.connection.save"),
   });

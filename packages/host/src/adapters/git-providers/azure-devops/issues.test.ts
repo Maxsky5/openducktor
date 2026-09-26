@@ -147,4 +147,19 @@ describe("Azure DevOps issue reader", () => {
       Effect.runPromise(movedReader.get({ repoConfig, sourceId: "17" })),
     ).rejects.toThrow("no longer open in area");
   });
+
+  test("prepares area and state data once while reading each import item again", async () => {
+    const { reader, requests } = fixture();
+    const get = await Effect.runPromise(reader.prepareGet(repoConfig));
+
+    await Effect.runPromise(get("17"));
+    await Effect.runPromise(get("17"));
+
+    expect(requests.map((request) => request.path)).toEqual([
+      "wit/classificationnodes/Areas",
+      "wit/workitemtypes",
+      "wit/workitems/17",
+      "wit/workitems/17",
+    ]);
+  });
 });
