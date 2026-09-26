@@ -220,6 +220,7 @@ type UseTaskExecutionFileEditorInput = {
   selectedFile: TaskExecutionSelectedFile | null;
   readyResult: TextFileResult | null;
   branch: string | null;
+  requireBranch: boolean;
   onFileSaved(): void;
   onLeavePolicyChange(policy: TaskExecutionFilePreviewLeavePolicy): void;
 };
@@ -228,6 +229,7 @@ export const useTaskExecutionFileEditor = ({
   selectedFile,
   readyResult,
   branch,
+  requireBranch,
   onFileSaved,
   onLeavePolicyChange,
 }: UseTaskExecutionFileEditorInput) => {
@@ -305,8 +307,18 @@ export const useTaskExecutionFileEditor = ({
     [onLeavePolicyChange, state.session],
   );
 
-  const hasBranchConflict = state.isDirty && state.session?.branch !== branch;
+  const branchUnavailable = requireBranch && branch === null;
+  const hasBranchConflict =
+    state.isDirty && (state.session?.branch !== branch || branchUnavailable);
   const hasStaleConflict = state.saveFailure?.code === "stale_revision" || hasBranchConflict;
+  const canReviewConflict = hasStaleConflict && !branchUnavailable;
+  let saveError = state.saveFailure?.message ?? null;
+  if (branchUnavailable && state.isDirty) {
+    saveError = "Could not verify the current branch. Retry the branch read before saving.";
+  } else if (!saveError && hasBranchConflict) {
+    saveError =
+      "This draft has not been checked for the current branch. Review the file before saving.";
+  }
 
   const save = useCallback(async (): Promise<void> => {
     const session = state.session;
@@ -316,6 +328,7 @@ export const useTaskExecutionFileEditor = ({
       !state.isDirty ||
       hasStaleConflict ||
       session.branch !== branchRef.current ||
+      (requireBranch && !session.branch) ||
       saveInFlightRef.current
     ) {
       return;
@@ -392,6 +405,7 @@ export const useTaskExecutionFileEditor = ({
   }, [
     mutation,
     hasStaleConflict,
+    requireBranch,
     onFileSaved,
     onLeavePolicyChange,
     selectedFileId,
@@ -401,7 +415,12 @@ export const useTaskExecutionFileEditor = ({
 
   const reviewLatestVersion = useCallback(async (): Promise<void> => {
     const session = state.session;
-    if (!session || !hasStaleConflict || state.isReviewingConflict) {
+    if (
+      !session ||
+      !hasStaleConflict ||
+      state.isReviewingConflict ||
+      (requireBranch && branchRef.current === null)
+    ) {
       return;
     }
     const baselineRevision = session.baseline.revision;
@@ -433,14 +452,15 @@ export const useTaskExecutionFileEditor = ({
         message: errorMessage(cause),
       });
     }
-  }, [hasStaleConflict, queryClient, state.isReviewingConflict, state.session]);
+  }, [hasStaleConflict, queryClient, requireBranch, state.isReviewingConflict, state.session]);
 
   const closeConflictReview = useCallback(() => {
     dispatch({ type: "conflict_review_closed" });
   }, []);
   const acceptLatestBaseline = useCallback(() => {
     const review = state.conflictReview;
-    if (!review || review.branch !== branchRef.current) return;
+    if (!review || review.branch !== branchRef.current || (requireBranch && review.branch === null))
+      return;
     const isDirty = draftRef.current !== review.result.contents;
     dispatch({
       type: "conflict_baseline_accepted",
@@ -449,19 +469,16 @@ export const useTaskExecutionFileEditor = ({
       isDirty,
     });
     onLeavePolicyChange(isDirty ? "confirm" : "allow");
-  }, [onLeavePolicyChange, state.conflictReview]);
+  }, [onLeavePolicyChange, requireBranch, state.conflictReview]);
 
   return useMemo(
     () => ({
       session: state.session,
       isDirty: state.isDirty,
       isSaving: state.isSaving,
-      saveError:
-        state.saveFailure?.message ??
-        (hasBranchConflict
-          ? "This draft has not been checked for the current branch. Review the file before saving."
-          : null),
+      saveError,
       hasStaleConflict,
+      canReviewConflict,
       isReviewingConflict: state.isReviewingConflict,
       conflictReview: state.conflictReview?.result ?? null,
       onItemEditChange,
@@ -472,12 +489,13 @@ export const useTaskExecutionFileEditor = ({
     }),
     [
       acceptLatestBaseline,
+      canReviewConflict,
       closeConflictReview,
-      hasBranchConflict,
       hasStaleConflict,
       onItemEditChange,
       reviewLatestVersion,
       save,
+      saveError,
       state,
     ],
   );

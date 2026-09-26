@@ -55,19 +55,6 @@ export const useTaskExecutionFilePreviewController = (
     stateRef.current = state;
   }, [state]);
 
-  useEffect(() => {
-    if (state.pendingIntent?.type !== "leave_context" || state.leavePolicy === "defer") {
-      return;
-    }
-    const transition = pendingContextTransitionRef.current;
-    if (!transition || (!transition.force && state.leavePolicy !== "allow")) {
-      return;
-    }
-    pendingContextTransitionRef.current = null;
-    dispatch({ type: transition.force ? "force_clear" : "discard" });
-    transition.apply();
-  }, [state.leavePolicy, state.pendingIntent]);
-
   const onSelectFile = useCallback((file: TaskExecutionSelectedFile) => {
     const currentState = stateRef.current;
     const keepsCurrentSelection =
@@ -110,6 +97,23 @@ export const useTaskExecutionFilePreviewController = (
     },
     [],
   );
+  useEffect(() => {
+    if (state.pendingIntent?.type !== "leave_context" || state.leavePolicy === "defer") {
+      return;
+    }
+    const transition = pendingContextTransitionRef.current;
+    if (!transition || (!transition.force && state.leavePolicy !== "allow")) {
+      return;
+    }
+    const clear = { type: transition.force ? "force_clear" : "discard" } as const;
+    if (transition.waitForSuccess) {
+      applyAfterSuccess(transition.apply, clear);
+      return;
+    }
+    pendingContextTransitionRef.current = null;
+    dispatch(clear);
+    transition.apply();
+  }, [applyAfterSuccess, state.leavePolicy, state.pendingIntent]);
   const onDiscard = useCallback(() => {
     if (applyingTransitionRef.current) return;
     const pendingIntent = stateRef.current.pendingIntent;

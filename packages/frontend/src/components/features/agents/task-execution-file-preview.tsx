@@ -331,12 +331,12 @@ function FilePreviewHeader({
 
 function FileSaveErrorBanner({
   message,
-  hasStaleConflict,
+  canReview,
   isReviewingConflict,
   onReview,
 }: {
   message: string | null;
-  hasStaleConflict: boolean;
+  canReview: boolean;
   isReviewingConflict: boolean;
   onReview: () => void;
 }): ReactElement | null {
@@ -347,7 +347,7 @@ function FileSaveErrorBanner({
       role="alert"
     >
       <span className="min-w-0 flex-1">{message}</span>
-      {hasStaleConflict ? (
+      {canReview ? (
         <Button
           type="button"
           variant="outline"
@@ -506,10 +506,12 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   },
   onFileSaved,
   branch = null,
+  requireBranch = false,
 }: {
   model: TaskExecutionSelectedFilePreviewModel;
   onFileSaved(): void;
   branch?: string | null;
+  requireBranch?: boolean;
 }): ReactElement | null {
   const [committedSnapshot, setCommittedSnapshot] = useState<CommittedFilePreviewSnapshot | null>(
     null,
@@ -547,6 +549,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     selectedFile,
     readyResult: readyTextResult,
     branch,
+    requireBranch,
     onFileSaved,
     onLeavePolicyChange,
   });
@@ -745,7 +748,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
       />
       <FileSaveErrorBanner
         message={editor.saveError}
-        hasStaleConflict={editor.hasStaleConflict}
+        canReview={editor.canReviewConflict}
         isReviewingConflict={editor.isReviewingConflict}
         onReview={() => void editor.reviewLatestVersion()}
       />

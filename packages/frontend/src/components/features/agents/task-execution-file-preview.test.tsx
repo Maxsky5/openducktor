@@ -177,6 +177,7 @@ const renderPreview = (
   theme: "light" | "dark" = "light",
   onFileSaved: () => void = () => {},
   branch: string | null = null,
+  requireBranch = false,
 ) => {
   const fullModel: TaskExecutionSelectedFilePreviewModel = {
     selectedFile: model.selectedFile,
@@ -197,6 +198,7 @@ const renderPreview = (
         model={fullModel}
         onFileSaved={onFileSaved}
         branch={branch}
+        requireBranch={requireBranch}
       />
     </PreviewTestProviders>
   );
@@ -956,6 +958,43 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(writeTextFileMock.mock.calls[0]?.[0]).toMatchObject({
       contents: "draft",
       revision: "revision:const first = true;",
+      expectedBranch: "branch:feature",
+    });
+  });
+
+  test("blocks workspace Save and Review latest while the branch is unknown", async () => {
+    const model = { selectedFile: firstFile, onClose: mock(() => {}) };
+    const view = render(renderPreview(model, "light", undefined, "branch:main", true));
+    await screen.findByText("const first = true;");
+    const item = firstCodeViewItem();
+    act(() => {
+      latestCodeViewProps?.onItemEditChange?.(item, { ...item.file, contents: "draft" });
+    });
+    await waitForDirtyFile();
+
+    view.rerender(renderPreview(model, "light", undefined, null, true));
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save file" }).disabled).toBe(
+      true,
+    );
+    expect(screen.getByRole("alert").textContent).toContain("Retry the branch read");
+    expect(screen.queryByRole("button", { name: "Review latest version" })).toBeNull();
+    expect((await dispatchPreviewSaveShortcut("metaKey")).defaultPrevented).toBe(true);
+    expect(writeTextFileMock).toHaveBeenCalledTimes(0);
+
+    view.rerender(renderPreview(model, "light", undefined, "branch:feature", true));
+    await runAsyncUiAction(() =>
+      fireEvent.click(screen.getByRole("button", { name: "Review latest version" })),
+    );
+    await screen.findByRole("dialog", { name: "Review latest file" });
+    await runAsyncUiAction(() =>
+      fireEvent.click(screen.getByRole("button", { name: "Use latest as baseline" })),
+    );
+    await runAsyncUiAction(() =>
+      fireEvent.click(screen.getByRole("button", { name: "Save file" })),
+    );
+    await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(1));
+    expect(writeTextFileMock.mock.calls[0]?.[0]).toMatchObject({
+      contents: "draft",
       expectedBranch: "branch:feature",
     });
   });

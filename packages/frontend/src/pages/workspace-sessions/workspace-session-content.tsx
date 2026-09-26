@@ -77,19 +77,19 @@ function WorkspaceSessionMainContent({
   workspace,
   record,
   onToolRefresh,
+  fileLinkOwner,
   previewContent,
   hasSelectedFile,
-  fileLinkOwner,
 }: {
   workspace: ActiveWorkspace;
   record: WorkspaceSession;
   onToolRefresh: () => void;
+  fileLinkOwner: ChatFileLinkOwner;
   previewContent: ReactNode;
   hasSelectedFile: boolean;
-  fileLinkOwner: ChatFileLinkOwner;
 }) {
   return (
-    <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
+    <div className="relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
       {hasSelectedFile ? (
         <div
           className="absolute inset-0 z-10 h-full min-h-0 overflow-hidden"
@@ -99,17 +99,20 @@ function WorkspaceSessionMainContent({
         </div>
       ) : null}
       <div
-        className="min-h-0 flex-1 overflow-hidden"
+        className="flex min-h-0 flex-1 flex-col overflow-hidden"
         style={{ visibility: hasSelectedFile ? "hidden" : undefined }}
         inert={hasSelectedFile}
       >
-        <ChatFileLinkProvider owner={fileLinkOwner}>
-          <WorkspaceSessionChatPane
-            workspace={workspace}
-            record={record}
-            onToolRefresh={onToolRefresh}
-          />
-        </ChatFileLinkProvider>
+        <WorkspaceSessionHeader workspaceId={workspace.workspaceId} record={record} />
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <ChatFileLinkProvider owner={fileLinkOwner}>
+            <WorkspaceSessionChatPane
+              workspace={workspace}
+              record={record}
+              onToolRefresh={onToolRefresh}
+            />
+          </ChatFileLinkProvider>
+        </div>
       </div>
     </div>
   );
@@ -248,6 +251,7 @@ export function WorkspaceSessionContent({
         onDiscard,
       }}
       branch={previewBranch}
+      requireBranch
       onFileSaved={() => refreshAfterChange("git")}
     />
   );
@@ -282,27 +286,22 @@ export function WorkspaceSessionContent({
     </RepositoryFilePreview>
   );
   const mainContent = (
-    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-      <WorkspaceSessionHeader workspaceId={workspace.workspaceId} record={record} />
-      <div className="min-h-0 flex-1">
-        <WorkspaceSessionMainContent
-          workspace={workspace}
-          record={record}
-          onToolRefresh={() => refreshAfterChange("all")}
-          previewContent={previewContent}
-          hasSelectedFile={Boolean(preview.model.selectedFile)}
-          fileLinkOwner={{
-            kind: "workspace",
-            repoPath: workspace.repoPath,
-            workingDirectory,
-            ownerKey: `${record.id}:${branchKey}`,
-            onSelectFile: (file) => {
-              onSelectFile(file);
-            },
-          }}
-        />
-      </div>
-    </div>
+    <WorkspaceSessionMainContent
+      workspace={workspace}
+      record={record}
+      onToolRefresh={() => refreshAfterChange("all")}
+      previewContent={previewContent}
+      hasSelectedFile={Boolean(preview.model.selectedFile)}
+      fileLinkOwner={{
+        kind: "workspace",
+        repoPath: workspace.repoPath,
+        workingDirectory,
+        ownerKey: `${record.id}:${branchKey}`,
+        onSelectFile: (file) => {
+          onSelectFile(file);
+        },
+      }}
+    />
   );
   const toolsContent = (
     <WorkspaceSessionToolsPanel

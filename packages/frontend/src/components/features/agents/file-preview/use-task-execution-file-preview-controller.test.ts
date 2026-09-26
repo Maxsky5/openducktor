@@ -126,6 +126,38 @@ describe("useTaskExecutionFilePreviewController", () => {
     expect(view.result.current.model.selectedFile).toBeNull();
   });
 
+  test("keeps a deferred workspace preview until its switch succeeds", async () => {
+    const view = renderHook(() => useTaskExecutionFilePreviewController(firstFile));
+    const finishSwitches: Array<(switched: boolean) => void> = [];
+    const switchContext = mock(
+      () => new Promise<boolean>((resolve) => finishSwitches.push(resolve)),
+    );
+
+    act(() => view.result.current.model.onLeavePolicyChange("defer"));
+    act(() =>
+      view.result.current.requestContextTransition(switchContext, undefined, {
+        waitForSuccess: true,
+      }),
+    );
+    act(() => view.result.current.model.onLeavePolicyChange("allow"));
+    await waitFor(() => expect(switchContext).toHaveBeenCalledTimes(1));
+    expect(view.result.current.model.selectedFile).toEqual(firstFile);
+    await act(async () => finishSwitches[0]?.(false));
+    expect(view.result.current.model.selectedFile).toEqual(firstFile);
+
+    act(() => view.result.current.model.onLeavePolicyChange("defer"));
+    act(() =>
+      view.result.current.requestContextTransition(switchContext, undefined, {
+        waitForSuccess: true,
+      }),
+    );
+    act(() => view.result.current.model.onLeavePolicyChange("allow"));
+    await waitFor(() => expect(switchContext).toHaveBeenCalledTimes(2));
+    expect(view.result.current.model.selectedFile).toEqual(firstFile);
+    await act(async () => finishSwitches[1]?.(true));
+    await waitFor(() => expect(view.result.current.model.selectedFile).toBeNull());
+  });
+
   test("asks before a deferred context transition when Save fails", async () => {
     const view = renderHook(() => useTaskExecutionFilePreviewController());
     const applyContextTransition = mock(() => {});
