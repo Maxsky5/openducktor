@@ -83,7 +83,8 @@ export const mountInteractiveTerminal = ({
     terminal.reset();
   };
   const fitViewport = (): void => {
-    if (!restoringScreen) fitAddon.fit();
+    // FitAddon clamps a zero-size panel to 2x1, which can erase alternate-screen output.
+    if (!restoringScreen && container.clientWidth > 0 && container.clientHeight > 0) fitAddon.fit();
   };
   const activateViewport = createTerminalViewportActivator({
     fit: fitViewport,

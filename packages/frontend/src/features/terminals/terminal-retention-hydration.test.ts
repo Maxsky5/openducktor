@@ -125,6 +125,76 @@ const createLightweightBinding = () => {
 };
 
 describe("retained terminal rendering", () => {
+  test("does not resize a terminal while its task panel has no size", async () => {
+    const lightweight = createLightweightBinding();
+    const createBinding = spyOn(sharedTerminalBinding, "createTerminalBinding").mockImplementation(
+      // SAFETY: the fake terminal implements every binding method used by this mount test.
+      () => Object.assign(Object.create(null), lightweight.binding) as TerminalBinding,
+    );
+    const { controller } = createController();
+    const sizes: string[] = [];
+    let active = false;
+    controller.resize = async (_terminalId, columns, rows) => {
+      sizes.push(`${columns}x${rows}`);
+    };
+    let width = 800;
+    let height = 400;
+    const container = document.createElement("div");
+    Object.defineProperties(container, {
+      clientWidth: { get: () => width },
+      clientHeight: { get: () => height },
+    });
+    document.body.append(container);
+    lightweight.binding.fitAddon.fit.mockImplementation(() => {
+      lightweight.binding.terminal.resize(width === 0 ? 2 : 80, height === 0 ? 1 : 24);
+    });
+    const nativeResizeObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class {
+      observe(): void {}
+      unobserve(): void {}
+      disconnect(): void {}
+    };
+    let mount: InteractiveTerminalMount | null = null;
+    try {
+      mount = mountInteractiveTerminal({
+        container,
+        terminalId: "terminal-hidden-task",
+        controller,
+        isActive: () => active,
+        getPlatform: () => "darwin",
+        stageFile: async () => "/tmp/image.png",
+        preparePathInput: async () => "/tmp/image.png",
+        writeClipboard: async () => undefined,
+        onAttention: () => undefined,
+        onLifecycle: () => undefined,
+        onForgotten: () => undefined,
+        onTitleChange: () => undefined,
+        onHydrated: () => undefined,
+        onImageDragActiveChange: () => undefined,
+        onInteractionFailure: (_title, cause) => {
+          throw cause;
+        },
+      });
+      active = true;
+      width = 0;
+      height = 0;
+      mount.activate(false);
+      await Bun.sleep(0);
+      expect(sizes).toEqual([]);
+
+      width = 800;
+      height = 400;
+      mount.activate(false);
+      await Bun.sleep(0);
+      expect(sizes).toEqual(["80x24"]);
+    } finally {
+      mount?.dispose();
+      globalThis.ResizeObserver = nativeResizeObserver;
+      container.remove();
+      createBinding.mockRestore();
+    }
+  });
+
   test("holds input during restore and refits the live viewport after parsing", async () => {
     const lightweight = createLightweightBinding();
     const fit = lightweight.binding.fitAddon.fit;
