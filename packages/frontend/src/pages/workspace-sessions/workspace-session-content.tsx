@@ -15,11 +15,11 @@ import { useAgentSessionReadModelState, useWorkspaceBranchState } from "@/state/
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { repoConfigQueryOptions } from "@/state/queries/workspace";
 import { invalidateGitWorkingDirectoryQueries } from "@/state/queries/git";
+import { invalidateWorkspaceFileQueries } from "@/state/queries/filesystem";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { WorkspaceSessionChat } from "./workspace-session-chat";
 import { WorkspaceSessionHeader } from "./workspace-session-header";
 import { useWorkspaceSessionPreview } from "./use-workspace-session-preview";
-import { usePreviewBranchKey } from "./use-preview-branch-key";
 
 export type WorkspaceSessionPanelState = {
   isOpen: boolean;
@@ -195,7 +195,12 @@ export function WorkspaceSessionContent({
   const branchReady = activeBranch?.detached === true || activeBranch?.name != null;
   const previewBranch =
     record.executionTarget.kind === "local_repo_root" && branchReady ? branchKey : null;
-  const previewBranchKey = usePreviewBranchKey(previewBranch);
+  const lastBranch = useRef<string | null>(null);
+  useEffect(() => {
+    if (!previewBranch || !workingDirectory || lastBranch.current === previewBranch) return;
+    lastBranch.current = previewBranch;
+    void invalidateWorkspaceFileQueries(queryClient, workingDirectory);
+  }, [previewBranch, queryClient, workingDirectory]);
   const target: GitTargetBranch | null =
     record.executionTarget.kind === "local_repo_root"
       ? { branch: "@{upstream}" }
@@ -220,6 +225,9 @@ export function WorkspaceSessionContent({
           workingDirectory,
         );
       }
+      if (workingDirectory && scope === "all" && !refresh) {
+        void invalidateWorkspaceFileQueries(queryClient, workingDirectory);
+      }
       void refresh?.(scope);
     },
     [queryClient, workingDirectory, workspace.repoPath],
@@ -230,7 +238,7 @@ export function WorkspaceSessionContent({
   );
   const previewContent = (
     <TaskExecutionSelectedFilePreview
-      key={`${preview.model.previewSessionKey}:${previewBranchKey}`}
+      key={preview.model.previewSessionKey}
       model={{
         ...preview.model,
         onDiscard,
