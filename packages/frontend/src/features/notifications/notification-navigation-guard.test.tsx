@@ -32,7 +32,7 @@ test("notification workspace selection keeps the draft on cancel and failure", a
       rootPath: "/first",
       relativePath: "draft.ts",
     });
-    const { preview, onDiscard } = useWorkspaceSessionPreview(file, setFile);
+    const { preview, onDiscard } = useWorkspaceSessionPreview(file, setFile, false);
     return (
       <>
         <output data-testid="draft">{preview.model.selectedFile?.relativePath ?? "none"}</output>

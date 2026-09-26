@@ -94,7 +94,7 @@ export const BranchSwitcher = memo(function BranchSwitcher(): ReactElement | nul
               });
             },
             undefined,
-            { waitForSuccess: true },
+            { waitForSuccess: true, kind: "root_branch_switch" },
           );
         }}
       />

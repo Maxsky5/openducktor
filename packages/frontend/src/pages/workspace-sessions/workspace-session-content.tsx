@@ -204,6 +204,7 @@ export function WorkspaceSessionContent({
   const { preview, onDiscard } = useWorkspaceSessionPreview(
     panelState.selectedFile,
     onSelectionChange,
+    isWorktree,
   );
   const refreshRef = useRef<((scope: "git" | "all") => Promise<void>) | null>(null);
   const [isNarrow, setIsNarrow] = useState(false);

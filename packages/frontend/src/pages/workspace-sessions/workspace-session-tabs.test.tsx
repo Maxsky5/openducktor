@@ -479,7 +479,7 @@ function DirtyPreview() {
     rootPath: "/repo",
     relativePath: "draft.ts",
   });
-  const { preview, onDiscard } = useWorkspaceSessionPreview(file, setFile);
+  const { preview, onDiscard } = useWorkspaceSessionPreview(file, setFile, false);
   return (
     <>
       <output data-testid="draft">{preview.model.selectedFile?.relativePath ?? "none"}</output>

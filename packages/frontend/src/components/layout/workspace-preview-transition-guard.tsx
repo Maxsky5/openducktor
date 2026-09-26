@@ -12,7 +12,7 @@ import { useBlocker } from "react-router";
 type RequestTransition = (
   apply: () => void | Promise<void | boolean>,
   cancel?: () => void,
-  options?: { waitForSuccess?: boolean },
+  options?: { waitForSuccess?: boolean; kind?: "root_branch_switch" },
 ) => void;
 type GuardContext = {
   register: (guard: RequestTransition, cancelPending?: () => void) => () => void;

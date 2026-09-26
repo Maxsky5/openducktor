@@ -6,6 +6,7 @@ import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspac
 export function useWorkspaceSessionPreview(
   selectedFile: TaskExecutionSelectedFile | null,
   onSelectionChange: (selectedFile: TaskExecutionSelectedFile | null) => void,
+  isWorktree: boolean,
 ) {
   const { register } = useWorkspacePreviewTransitionGuard();
   const preview = useTaskExecutionFilePreviewController(selectedFile);
@@ -15,6 +16,10 @@ export function useWorkspaceSessionPreview(
     () =>
       register(
         (apply, cancel, options) => {
+          if (isWorktree && options?.kind === "root_branch_switch") {
+            void apply();
+            return;
+          }
           const pendingExit = { discarded: false };
           pendingExitRef.current = pendingExit;
           preview.requestContextTransition(
@@ -48,7 +53,7 @@ export function useWorkspaceSessionPreview(
           if (pendingExitRef.current) preview.model.onKeepEditing();
         },
       ),
-    [onSelectionChange, preview, register],
+    [isWorktree, onSelectionChange, preview, register],
   );
 
   const onDiscard = useCallback(() => {

@@ -15,11 +15,17 @@ const secondFile = { rootPath: "/repo", relativePath: "second.ts" };
 function SessionPreview({
   selectedFile,
   onSelectionChange,
+  isWorktree,
 }: {
   selectedFile: TaskExecutionSelectedFile | null;
   onSelectionChange: (file: TaskExecutionSelectedFile | null) => void;
+  isWorktree: boolean;
 }) {
-  const { preview, onDiscard } = useWorkspaceSessionPreview(selectedFile, onSelectionChange);
+  const { preview, onDiscard } = useWorkspaceSessionPreview(
+    selectedFile,
+    onSelectionChange,
+    isWorktree,
+  );
   return (
     <>
       <output data-testid="selected-file">
@@ -36,7 +42,13 @@ function SessionPreview({
   );
 }
 
-function SessionHarness({ switchBranch }: { switchBranch?: () => Promise<boolean> }) {
+function SessionHarness({
+  switchBranch,
+  isWorktree = false,
+}: {
+  switchBranch?: () => Promise<boolean>;
+  isWorktree?: boolean;
+}) {
   const { run } = useWorkspacePreviewTransitionGuard();
   const [activeSession, setActiveSession] = useState<"first" | "second">("first");
   const [selectedFiles, setSelectedFiles] = useState<{
@@ -49,12 +61,17 @@ function SessionHarness({ switchBranch }: { switchBranch?: () => Promise<boolean
       <button onClick={() => run(() => setActiveSession("first"))}>Switch to first</button>
       <button onClick={() => run(() => setActiveSession("second"))}>Switch to second</button>
       {switchBranch ? (
-        <button onClick={() => run(switchBranch, undefined, { waitForSuccess: true })}>
+        <button
+          onClick={() =>
+            run(switchBranch, undefined, { waitForSuccess: true, kind: "root_branch_switch" })
+          }
+        >
           Switch branch
         </button>
       ) : null}
       <SessionPreview
         key={activeSession}
+        isWorktree={isWorktree}
         selectedFile={selectedFiles[activeSession]}
         onSelectionChange={(file) =>
           setSelectedFiles((current) => ({ ...current, [activeSession]: file }))
@@ -85,6 +102,7 @@ function RoutedSessionHarness() {
       <button onClick={() => setRequested("second")}>Request second</button>
       <SessionPreview
         key={shown}
+        isWorktree={false}
         selectedFile={selectedFiles[shown]}
         onSelectionChange={(file) => setSelectedFiles((current) => ({ ...current, [shown]: file }))}
       />
@@ -165,6 +183,29 @@ test("keeps the dirty draft when branch checkout fails and clears it when checko
     await waitFor(() => expect(finishSwitches).toHaveLength(2));
     await act(async () => finishSwitches[1]?.(true));
     await waitFor(() => expect(screen.getByTestId("selected-file").textContent).toBe("none"));
+  } finally {
+    view.unmount();
+  }
+});
+
+test("keeps a worktree draft during a root branch switch but guards a chat switch", async () => {
+  const switchBranch = mock(async () => true);
+  const view = render(
+    <WorkspacePreviewTransitionGuardProvider>
+      <SessionHarness switchBranch={switchBranch} isWorktree />
+    </WorkspacePreviewTransitionGuardProvider>,
+  );
+  try {
+    fireEvent.click(screen.getByRole("button", { name: "Open first" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit file" }));
+    fireEvent.click(screen.getByRole("button", { name: "Switch branch" }));
+    await waitFor(() => expect(switchBranch).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId("selected-file").textContent).toBe("first.ts");
+    expect(screen.getByTestId("pending-discard").textContent).toBe("false");
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch to second" }));
+    await waitFor(() => expect(screen.getByTestId("pending-discard").textContent).toBe("true"));
+    expect(screen.getByTestId("active-session").textContent).toBe("first");
   } finally {
     view.unmount();
   }

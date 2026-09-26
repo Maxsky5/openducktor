@@ -123,10 +123,16 @@ function DenyBranchSwitch() {
 function HoldBranchSwitch({
   onRequest,
 }: {
-  onRequest: (apply: () => void | Promise<void | boolean>) => void;
+  onRequest: (
+    apply: () => void | Promise<void | boolean>,
+    options: Parameters<ReturnType<typeof useWorkspacePreviewTransitionGuard>["run"]>[2],
+  ) => void;
 }) {
   const { register } = useWorkspacePreviewTransitionGuard();
-  useEffect(() => register((apply) => onRequest(apply)), [onRequest, register]);
+  useEffect(
+    () => register((apply, _cancel, options) => onRequest(apply, options)),
+    [onRequest, register],
+  );
   return null;
 }
 
@@ -305,9 +311,15 @@ describe("BranchSwitcher", () => {
   test("waits for the preview guard before switching branches", async () => {
     const BranchSwitcher = await importBranchSwitcher();
     let applySwitch: (() => void | Promise<void | boolean>) | null = null;
+    let switchOptions: Parameters<ReturnType<typeof useWorkspacePreviewTransitionGuard>["run"]>[2];
     const rendered = render(
       <BranchStateProvider>
-        <HoldBranchSwitch onRequest={(apply) => (applySwitch = apply)} />
+        <HoldBranchSwitch
+          onRequest={(apply, options) => {
+            applySwitch = apply;
+            switchOptions = options;
+          }}
+        />
         <BranchSwitcher />
       </BranchStateProvider>,
     );
@@ -315,6 +327,7 @@ describe("BranchSwitcher", () => {
     await act(async () => latestOnValueChange?.("feature"));
     expect(switchBranch).not.toHaveBeenCalled();
     expect(applySwitch).not.toBeNull();
+    expect(switchOptions).toEqual({ waitForSuccess: true, kind: "root_branch_switch" });
     await act(async () => applySwitch?.());
     expect(switchBranch).toHaveBeenCalledWith("feature", expect.any(Function));
     rendered.unmount();
