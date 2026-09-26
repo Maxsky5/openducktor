@@ -177,7 +177,7 @@ export function WorkspaceSessionContent({
     panelState.selectedFile,
     onSelectionChange,
   );
-  const refreshRef = useRef<(() => Promise<void>) | null>(null);
+  const refreshRef = useRef<((scope: "git" | "all") => Promise<void>) | null>(null);
   const [isNarrow, setIsNarrow] = useState(false);
   useEffect(() => {
     const media = window.matchMedia("(max-width: 767px)");
@@ -199,15 +199,26 @@ export function WorkspaceSessionContent({
     record.executionTarget.kind === "local_worktree" && repoConfig.isError
       ? `Could not read the default target branch: ${errorMessage(repoConfig.error)}`
       : null;
-  const onRefreshReady = useCallback((refresh: (() => Promise<void>) | null) => {
-    refreshRef.current = refresh;
-  }, []);
-  const onFileSaved = useCallback(() => {
-    if (workingDirectory) {
-      void invalidateGitWorkingDirectoryQueries(queryClient, workspace.repoPath, workingDirectory);
-    }
-    void refreshRef.current?.();
-  }, [queryClient, workingDirectory, workspace.repoPath]);
+  const onRefreshReady = useCallback(
+    (refresh: ((scope: "git" | "all") => Promise<void>) | null) => {
+      refreshRef.current = refresh;
+    },
+    [],
+  );
+  const refreshAfterChange = useCallback(
+    (scope: "git" | "all") => {
+      const refresh = refreshRef.current;
+      if (workingDirectory && (scope === "git" || !refresh)) {
+        void invalidateGitWorkingDirectoryQueries(
+          queryClient,
+          workspace.repoPath,
+          workingDirectory,
+        );
+      }
+      void refresh?.(scope);
+    },
+    [queryClient, workingDirectory, workspace.repoPath],
+  );
   const onSelectFile = useCallback(
     (file: TaskExecutionSelectedFile) => preview.onSelectFile(file),
     [preview],
@@ -219,14 +230,14 @@ export function WorkspaceSessionContent({
         ...preview.model,
         onDiscard,
       }}
-      onFileSaved={onFileSaved}
+      onFileSaved={() => refreshAfterChange("git")}
     />
   );
   const mainContent = (
     <WorkspaceSessionMainContent
       workspace={workspace}
       record={record}
-      onToolRefresh={onFileSaved}
+      onToolRefresh={() => refreshAfterChange("all")}
       previewContent={previewContent}
       hasSelectedFile={Boolean(preview.model.selectedFile)}
     />

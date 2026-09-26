@@ -48,7 +48,7 @@ export function WorkspaceSessionToolsPanel({
   onActiveTabChange: (tab: WorkspaceToolsTabId) => void;
   selectedFile: TaskExecutionSelectedFile | null;
   onSelectFile: (file: TaskExecutionSelectedFile) => false | void;
-  onRefreshReady: (refresh: (() => Promise<void>) | null) => void;
+  onRefreshReady: (refresh: ((scope: "git" | "all") => Promise<void>) | null) => void;
 }) {
   const queryClient = useQueryClient();
   const [isFetchingTarget, setIsFetchingTarget] = useState(false);
@@ -74,7 +74,7 @@ export function WorkspaceSessionToolsPanel({
     enableScheduledRefresh: false,
   });
   const refresh = useCallback(
-    async (mode: WorkspaceRefreshMode = "hard") => {
+    async (mode: WorkspaceRefreshMode = "hard", includeFiles = true) => {
       const fetchTarget =
         mode === "hard" && !resolvedTarget && !targetError && !!workingDirectory && !!target;
       if (fetchTarget) setIsFetchingTarget(true);
@@ -89,6 +89,7 @@ export function WorkspaceSessionToolsPanel({
           workingDirectory,
           repoPath,
           mode,
+          includeFiles,
         });
       } catch (error) {
         toast.error("Could not refresh Git changes", { description: errorMessage(error) });
@@ -108,7 +109,7 @@ export function WorkspaceSessionToolsPanel({
     ],
   );
   useEffect(() => {
-    onRefreshReady(() => refresh("soft"));
+    onRefreshReady((scope) => refresh("soft", scope === "all"));
     return () => onRefreshReady(null);
   }, [onRefreshReady, refresh]);
   const refreshWhenVisible = useEffectEvent(() => {
@@ -290,6 +291,7 @@ async function refreshWorkspaceSessionData(input: {
   workingDirectory: string | null;
   repoPath: string;
   mode: WorkspaceRefreshMode;
+  includeFiles: boolean;
 }): Promise<void> {
   const {
     queryClient,
@@ -301,6 +303,7 @@ async function refreshWorkspaceSessionData(input: {
     workingDirectory,
     repoPath,
     mode,
+    includeFiles,
   } = input;
   if (workingDirectory && target && !targetError) {
     if (mode === "hard" && !resolvedTarget) {
@@ -337,10 +340,10 @@ async function refreshWorkspaceSessionData(input: {
   };
   await Promise.all([
     refreshGit(),
-    workingDirectory
+    includeFiles && workingDirectory
       ? invalidateWorkspaceFileQueries(queryClient, workingDirectory)
       : Promise.resolve(),
-    workingDirectory
+    includeFiles && workingDirectory
       ? invalidateGitWorkingDirectoryQueries(queryClient, repoPath, workingDirectory)
       : Promise.resolve(),
   ]);

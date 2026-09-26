@@ -58,10 +58,12 @@ function PanelHarness({
   branchKey = "feature",
   targetError = null,
   contextMode = "repository",
+  onRefreshReady = () => {},
 }: {
   branchKey?: string;
   targetError?: string | null;
   contextMode?: "repository" | "worktree";
+  onRefreshReady?: Parameters<typeof WorkspaceSessionToolsPanel>[0]["onRefreshReady"];
 }) {
   const [activeTabId, setActiveTabId] = useState<WorkspaceToolsTabId>("git");
   return (
@@ -76,7 +78,7 @@ function PanelHarness({
       onActiveTabChange={setActiveTabId}
       selectedFile={null}
       onSelectFile={() => {}}
-      onRefreshReady={() => {}}
+      onRefreshReady={onRefreshReady}
     />
   );
 }
@@ -115,6 +117,60 @@ test("waits for the comparison target before reading Git status", async () => {
     await act(async () => finishComparison({ kind: "available", reference: targetReference }));
     await waitFor(() => expect(statusTargets).toContain(targetReference));
     expect(statusTargets).not.toContain("HEAD");
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
+test("a save refresh reads Git without reading the file tree again", async () => {
+  const gitGetWorktreeStatus = mock(async (_repoPath: string, targetBranch: string) =>
+    worktreeStatus(targetBranch),
+  );
+  const filesystemListTree = mock(
+    async (input: { rootPath: string }): Promise<WorkspaceFileTree> => ({
+      rootPath: input.rootPath,
+      entries: [],
+    }),
+  );
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        gitGetComparisonTarget: async () => ({ kind: "available", reference: targetReference }),
+        gitGetWorktreeStatus,
+        gitGetWorktreeStatusSummary: async (_repoPath: string, targetBranch: string) =>
+          worktreeSummary(targetBranch),
+        gitGetBranches: async () => [],
+        filesystemListTree,
+      },
+    }),
+  );
+  let refresh: ((scope: "git" | "all") => Promise<void>) | null = null;
+  const queryClient = createQueryClient();
+  const view = render(
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <PanelHarness onRefreshReady={(ready) => (refresh = ready)} />
+      </ThemeProvider>
+    </QueryClientProvider>,
+  );
+  try {
+    await waitFor(() =>
+      expect(gitGetWorktreeStatus.mock.calls.some(([, target]) => target === targetReference)).toBe(
+        true,
+      ),
+    );
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "File explorer" }), { button: 0 });
+    await waitFor(() => expect(filesystemListTree).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await refresh?.("git");
+    });
+    expect(filesystemListTree).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await refresh?.("all");
+    });
+    expect(filesystemListTree).toHaveBeenCalledTimes(2);
   } finally {
     view.unmount();
     queryClient.clear();

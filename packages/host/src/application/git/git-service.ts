@@ -85,7 +85,10 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
           input.workingDir,
         );
         const currentBranch = yield* gitPort.getCurrentBranch(workingDirectory);
-        if (currentBranch.detached || !currentBranch.name) {
+        if (
+          input.target.branch === "@{upstream}" &&
+          (currentBranch.detached || !currentBranch.name)
+        ) {
           return {
             kind: "unavailable" as const,
             reason: "Branch comparison is unavailable on a detached HEAD.",

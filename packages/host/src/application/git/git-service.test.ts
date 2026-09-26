@@ -741,6 +741,38 @@ describe("createGitService", () => {
       reason: expect.stringContaining("no tracked upstream"),
     });
   });
+  test("compares a detached worktree with an explicit target", async () => {
+    const calls: string[] = [];
+    const service = createGitService(
+      createFakeGitPort({
+        canonicalPaths: { "/repo": "/repo", "/worktree": "/worktree" },
+        gitRepositories: ["/repo", "/worktree"],
+        sharedCommonDirectories: ["/repo|/worktree"],
+        currentBranches: { "/worktree": { detached: true } },
+        existingRefs: ["/worktree:origin/main"],
+        calls,
+      }),
+    );
+    await expect(
+      Effect.runPromise(
+        service.getComparisonTarget({
+          repoPath: "/repo",
+          workingDir: "/worktree",
+          target: { remote: "origin", branch: "main" },
+        }),
+      ),
+    ).resolves.toEqual({ kind: "available", reference: "origin/main" });
+    await expect(
+      Effect.runPromise(
+        service.getComparisonTarget({
+          repoPath: "/repo",
+          workingDir: "/worktree",
+          target: { branch: "@{upstream}" },
+        }),
+      ),
+    ).resolves.toMatchObject({ kind: "unavailable", reason: expect.stringContaining("detached") });
+    expect(calls).toContain("referenceExists:/worktree:origin/main");
+  });
   test("returns branches from the canonical repository path", async () => {
     const service = createGitService(
       createFakeGitPort({
