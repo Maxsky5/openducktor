@@ -13,6 +13,8 @@ $desktopLink = Join-Path $root 'Desktop\OpenDucktor.lnk'
 $menuLink = Join-Path $root 'Programs\OpenDucktor.lnk'
 $global:uninstallCalls = 0
 $global:failMarker = $false
+$global:failWorkRemoval = $false
+$global:warnings = @()
 $global:displayIcon = "$appPath,0"
 $global:displayName = 'OpenDucktor 0.8.0'
 $scriptPath = Join-Path $PSScriptRoot '..\install.ps1'
@@ -54,7 +56,16 @@ function Remove-Item {
         $global:registered = $false
         return
     }
+    if ($global:failWorkRemoval -and $LiteralPath -notlike "$root*") {
+        $global:failWorkRemoval = $false
+        Microsoft.PowerShell.Management\Remove-Item -LiteralPath $LiteralPath -Recurse:$Recurse -Force:$Force
+        throw 'Fixture temporary cleanup failed.'
+    }
     Microsoft.PowerShell.Management\Remove-Item -LiteralPath $LiteralPath -Recurse:$Recurse -Force:$Force
+}
+function Write-Warning {
+    param([string]$Message)
+    $global:warnings += $Message
 }
 function Get-Process {
     param([string]$Name)
@@ -178,6 +189,13 @@ try {
     Assert (Test-Path -LiteralPath $desktopLink) 'The failed update removed the desktop shortcut.'
     Assert (Test-Path -LiteralPath $menuLink) 'The failed update removed the Start Menu shortcut.'
     Assert ($global:uninstallCalls -eq 3) 'A failed update uninstalled the prior app.'
+
+    $global:failWorkRemoval = $true
+    try { & $scriptPath; throw 'A failed update with temporary cleanup failure was accepted.' } catch {
+        Assert ($_.Exception.Message -like '*exit code 7*') 'Temporary cleanup hid the NSIS exit code.'
+    }
+    Assert ($global:warnings[-1] -like '*Fixture temporary cleanup failed*') 'The cleanup failure was not reported.'
+    Assert ((Get-Content -LiteralPath $appPath -Raw) -eq $first) 'A failed cleanup changed the prior app.'
 
     $global:exitCode = 0
     & $scriptPath

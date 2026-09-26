@@ -185,7 +185,10 @@ try {
         throw $installError
     }
     finally {
-        if (-not $keepWork) { Remove-Item -LiteralPath $work -Recurse -Force }
+        if (-not $keepWork) {
+            try { Remove-Item -LiteralPath $work -Recurse -Force }
+            catch { Write-Warning "Could not remove temporary files at $work. Remove them after checking the install. $($_.Exception.Message)" }
+        }
     }
 }
 catch {
