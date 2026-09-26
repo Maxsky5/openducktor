@@ -1,11 +1,15 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { runElectronEffect } from "../src/effect/electron-boundary";
+import { resolveHostReleaseArch, resolveHostReleasePlatform } from "./electron-release-targets";
+import { prepareElectronSidecars } from "./prepare-electron-sidecars";
 import type { ElectronSidecarId } from "./electron-sidecar-manifest";
 import {
   resolvePackagedElectronSidecarPath,
   type VerifiedPackagedElectronSidecar,
+  verifyPackagedMcpInitializationEffect,
   verifyPackagedElectronSidecars,
 } from "./verify-electron-sidecar-package";
 
@@ -86,6 +90,59 @@ const writeRequiredPackagedSidecars = async ({
   );
 
 describe("verifyPackagedElectronSidecars", () => {
+  // This test compiles and starts the real MCP executable on the matching host.
+  test("initializes the compiled MCP sidecar from the package path", async () => {
+    const releaseDirectory = await makeReleaseDirectory();
+    const electronPackageDirectory = await makeReleaseDirectory();
+    const platform = resolveHostReleasePlatform(process.platform);
+    const arch = resolveHostReleaseArch(process.arch);
+    const prepared = await prepareElectronSidecars({
+      arch,
+      electronPackageDirectory,
+      platform,
+      workspaceRoot: resolve(import.meta.dir, "../../.."),
+    });
+    const path = resolvePackagedElectronSidecarPath({
+      arch,
+      platform,
+      releaseDirectory,
+      sidecarId: "openducktor-mcp",
+    });
+    await mkdir(dirname(path), { recursive: true });
+    await copyFile(prepared.sidecars[0]!.outputPath, path);
+    if (platform !== "windows") await chmod(path, 0o755);
+
+    await expect(
+      verifyPackagedElectronSidecars({ arch, platform, releaseDirectory }),
+    ).resolves.toEqual([{ id: "openducktor-mcp", path }]);
+    await expect(
+      runElectronEffect(
+        verifyPackagedMcpInitializationEffect({ path, platform, sidecarId: "openducktor-mcp" }),
+      ),
+    ).resolves.toBeUndefined();
+  }, 30_000);
+
+  test("rejects a packaged MCP sidecar that cannot initialize", async () => {
+    const releaseDirectory = await makeReleaseDirectory();
+    const platform = resolveHostReleasePlatform(process.platform);
+    const arch = resolveHostReleaseArch(process.arch);
+    const path = await writePackagedSidecar({
+      arch,
+      contents: "not an MCP executable",
+      platform,
+      releaseDirectory,
+      sidecarId: "openducktor-mcp",
+    });
+
+    const error = await runElectronEffect(
+      verifyPackagedMcpInitializationEffect({ path, platform, sidecarId: "openducktor-mcp" }),
+    ).catch(caughtError);
+
+    expect(error).toMatchObject({
+      operation: "electron.sidecar.verify-packaged-initialization",
+      path,
+    });
+  }, 15_000);
   test("resolves Electron Builder unpacked MCP sidecar paths", async () => {
     const releaseDirectory = await makeReleaseDirectory();
 

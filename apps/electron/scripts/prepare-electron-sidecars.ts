@@ -2,7 +2,7 @@ import type { Stats } from "node:fs";
 import { chmod, mkdir, rm, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { $ } from "bun";
+import { runCommand } from "@openducktor/build-tools";
 import { Effect } from "effect";
 import { runElectronEffect } from "../src/effect/electron-boundary";
 import {
@@ -13,6 +13,7 @@ import {
 import {
   type ElectronReleaseArch,
   type ElectronReleasePlatform,
+  assertMatchingElectronReleaseHost,
   resolveHostReleaseArch,
   resolveHostReleasePlatform,
 } from "./electron-release-targets";
@@ -23,6 +24,7 @@ import {
 } from "./electron-sidecar-manifest";
 
 export type ElectronSidecarBuildPlan = {
+  compileCommand: [string, ...string[]];
   entrypoint: string;
   outputDirectory: string;
   outputPaths: Record<ElectronSidecarId, string>;
@@ -35,6 +37,7 @@ export type PreparedElectronSidecar = {
 };
 
 type ResolveElectronSidecarBuildPlanInput = {
+  arch: ElectronReleaseArch;
   electronPackageDirectory: string;
   platform: ElectronReleasePlatform;
   workspaceRoot: string;
@@ -47,6 +50,7 @@ type PrepareElectronSidecarsInput = ResolveElectronSidecarBuildPlanInput & {
 };
 
 export const resolveElectronSidecarBuildPlan = ({
+  arch,
   electronPackageDirectory,
   platform,
   workspaceRoot,
@@ -58,9 +62,19 @@ export const resolveElectronSidecarBuildPlan = ({
       electronSidecarExecutableName("openducktor-mcp", platform),
     ),
   } satisfies Record<ElectronSidecarId, string>;
+  const entrypoint = join(workspaceRoot, "packages", "openducktor-mcp", "src", "index.ts");
 
   return {
-    entrypoint: join(workspaceRoot, "packages", "openducktor-mcp", "src", "index.ts"),
+    compileCommand: [
+      "bun",
+      "build",
+      "--compile",
+      `--target=bun-${platform === "macos" ? "darwin" : platform}-${arch}`,
+      "--outfile",
+      outputPaths["openducktor-mcp"],
+      entrypoint,
+    ],
+    entrypoint,
     outputDirectory,
     outputPaths,
     workspaceRoot,
@@ -121,7 +135,11 @@ const assertFileExistsEffect = (
   });
 
 const compileMcpSidecar = async (plan: ElectronSidecarBuildPlan): Promise<void> => {
-  await $`bun build --compile --outfile ${plan.outputPaths["openducktor-mcp"]} ${plan.entrypoint}`;
+  await runCommand({
+    command: plan.compileCommand,
+    cwd: plan.workspaceRoot,
+    label: "OpenDucktor MCP sidecar build",
+  });
 };
 
 const resetSidecarOutputEffect = (
@@ -210,8 +228,8 @@ export const prepareElectronSidecarsEffect = ({
   ElectronOperationError | ElectronValidationError
 > =>
   Effect.gen(function* () {
-    void arch;
-    const plan = resolveElectronSidecarBuildPlan(input);
+    yield* assertMatchingElectronReleaseHost({ arch, platform: input.platform });
+    const plan = resolveElectronSidecarBuildPlan({ arch, ...input });
 
     yield* resetSidecarOutputEffect(plan);
     const mcpSidecar = yield* compileAndVerifyMcpSidecarEffect({

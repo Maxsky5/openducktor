@@ -33,6 +33,8 @@ The workflow checks that the checked-out repository version matches the selected
 
 It signs and notarizes macOS files, packages the MCP sidecar, creates updater metadata, and uploads all files to the draft. It merges the two macOS manifests into `latest-mac.yml` or `beta-mac.yml`.
 
+The package build checks that the selected platform and architecture match the host before it removes old output. It compiles the MCP sidecar for that target, then starts the packaged executable and completes MCP initialization against a local test bridge. It also checks the packaged Claude file search module.
+
 Windows and Linux files are experimental. Do not call them stable release channels.
 
 ## Publish MCP
