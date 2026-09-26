@@ -2,6 +2,7 @@ import {
   TASK_ASSET_MAX_FILE_BYTES,
   issueImageGetResultSchema,
   type GithubGitProviderRepository,
+  type RepoConfig,
   type SourceIssue,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -62,8 +63,8 @@ const githubIssueLookupSchema = z.object({
     .optional(),
 });
 
-const scopeForRepository = (repository: GithubGitProviderRepository): string =>
-  `${repository.host}/${repository.owner}/${repository.name}`.toLowerCase();
+const scopeForRepository = (repository: GithubGitProviderRepository, id: number): string =>
+  `${repository.host}/@repository/${id}`.toLowerCase();
 
 const markdownParser = unified().use(remarkParse);
 const htmlImage = /^<img\b(?:[^>"']|"[^"]*"|'[^']*')*>$/iu;
@@ -126,6 +127,39 @@ const parsePayload = <T>(text: string, schema: z.ZodType<T>, operation: string) 
       }),
   });
 
+const githubRepositoryIdentitySchema = z.object({ id: z.number().int().positive() });
+
+const repositoryScope = (
+  githubCli: GithubCli,
+  repoConfig: RepoConfig,
+  repository: GithubGitProviderRepository,
+) =>
+  Effect.gen(function* () {
+    const payload = yield* runGithubApi(githubCli, repoConfig.repoPath, repository.host, [
+      "api",
+      `repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}`,
+    ]).pipe(
+      Effect.mapError(
+        (cause) =>
+          new HostValidationError({
+            field: "git.provider.repository",
+            message: `Cannot read GitHub repository ${repository.owner}/${repository.name}. Check GitHub access in Settings and retry.`,
+            cause,
+          }),
+      ),
+    );
+    const identity = yield* Effect.try({
+      try: () => githubRepositoryIdentitySchema.parse(JSON.parse(payload)),
+      catch: (cause) =>
+        new HostOperationError({
+          operation: "github.issues.repositoryScope",
+          message: "GitHub returned an invalid repository ID. Check GitHub access and retry.",
+          cause,
+        }),
+    });
+    return scopeForRepository(repository, identity.id);
+  });
+
 const imageBodySchema = z.object({ body: z.string().nullable() });
 
 export const createGithubIssueReader = ({
@@ -137,18 +171,52 @@ export const createGithubIssueReader = ({
 }): IssueReaderPort => ({
   providerId: "github",
   scope(repoConfig) {
-    return repositoryPort.getRepository(repoConfig).pipe(Effect.map(scopeForRepository));
+    return repositoryPort
+      .getRepository(repoConfig)
+      .pipe(Effect.flatMap((repository) => repositoryScope(githubCli, repoConfig, repository)));
+  },
+  resolveLegacyScope(repoConfig, legacyScope) {
+    return Effect.gen(function* () {
+      const repository = yield* repositoryPort.getRepository(repoConfig);
+      const parts = legacyScope.split("/");
+      if (parts[0]?.toLowerCase() !== repository.host.toLowerCase()) return undefined;
+      if (parts[1] === "@repository" && /^[1-9]\d*$/u.test(parts[2] ?? "")) {
+        return undefined;
+      }
+      if (parts.length !== 3 || !parts[1] || !parts[2]) {
+        return yield* new HostValidationError({
+          field: "sourceScope",
+          message:
+            "A saved GitHub Task link has an invalid repository. Check that Task before importing.",
+        });
+      }
+      return yield* repositoryScope(githubCli, repoConfig, {
+        host: repository.host,
+        owner: parts[1],
+        name: parts[2],
+      }).pipe(
+        Effect.mapError(
+          (cause) =>
+            new HostValidationError({
+              field: "sourceScope",
+              message: `Cannot verify saved GitHub Task links for ${legacyScope}. Check GitHub access or remove the old linked Task before importing.`,
+              cause,
+            }),
+        ),
+      );
+    });
   },
   list(input) {
     return Effect.gen(function* () {
       const repository = yield* repositoryPort.getRepository(input.repoConfig);
-      const scope = scopeForRepository(repository);
       const search = input.search.trim();
       const issueNumber = /^#?([1-9]\d*)$/u.exec(search)?.[1];
       if (issueNumber) {
         if (input.page !== 1) {
           return { items: [], nextPage: undefined, incompleteResults: false };
         }
+        const scope =
+          input.scope ?? (yield* repositoryScope(githubCli, input.repoConfig, repository));
         const query = `query { repository(owner: ${JSON.stringify(repository.owner)}, name: ${JSON.stringify(repository.name)}) { issue(number: ${issueNumber}) { number title body state updatedAt url author { login } labels(first: 100) { nodes { name } } } } }`;
         const command = yield* githubCli.resolve();
         const result = yield* command.run(
@@ -207,6 +275,8 @@ export const createGithubIssueReader = ({
           incompleteResults: false,
         };
       }
+      const scope =
+        input.scope ?? (yield* repositoryScope(githubCli, input.repoConfig, repository));
       const query = `repo:${repository.owner}/${repository.name} is:issue is:open${search ? ` in:title ${JSON.stringify(search)}` : ""}`;
       const payload = yield* runGithubApi(githubCli, input.repoConfig.repoPath, repository.host, [
         "api",
@@ -261,8 +331,10 @@ export const createGithubIssueReader = ({
         `repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}/issues/${input.sourceId}`,
       ]);
       const issue = yield* parsePayload(payload, githubIssueSchema, "github.issues.get");
+      const scope =
+        input.scope ?? (yield* repositoryScope(githubCli, input.repoConfig, repository));
       return yield* Effect.try({
-        try: () => parseIssue(issue, scopeForRepository(repository)),
+        try: () => parseIssue(issue, scope),
         catch: (cause) =>
           cause instanceof HostValidationError
             ? cause
@@ -274,8 +346,10 @@ export const createGithubIssueReader = ({
       });
     });
   },
-  prepareGet(repoConfig) {
-    return Effect.succeed((sourceId: string) => this.get({ repoConfig, sourceId }));
+  prepareGet(repoConfig, scope) {
+    return Effect.succeed((sourceId: string) =>
+      this.get(scope ? { repoConfig, scope, sourceId } : { repoConfig, sourceId }),
+    );
   },
   readImage(input) {
     return Effect.gen(function* () {

@@ -86,6 +86,65 @@ describe("SQLite Issue imports", () => {
     expect(edited.sourceIssue).toEqual(sourceIssue);
   });
 
+  test("moves a saved name-based GitHub link to the stable repository scope", async () => {
+    const harness = await createSqliteTaskStoreHarness();
+    cleanups.add(harness.cleanup);
+    const store = createSqliteIssueImportStore({ contextProvider: harness.contextProvider });
+    const created = await Effect.runPromise(
+      store.createImportedTask({
+        repoPath: harness.repoPath,
+        sourceIssue,
+        task: {
+          title: "Saved issue",
+          description: "Body",
+          issueType: "task",
+          priority: 2,
+          labels: [],
+          aiReviewEnabled: true,
+        },
+      }),
+    );
+    if (created.outcome !== "created") throw new Error("Expected an imported Task.");
+    const scope = "github.com/@repository/123";
+    const lookup = {
+      repoPath: harness.repoPath,
+      providerId: "github",
+      scope,
+      sourceIds: ["42"],
+    };
+
+    expect(await Effect.runPromise(store.findSourceScopes(lookup))).toEqual([sourceIssue.scope]);
+    await Effect.runPromise(store.replaceSourceScope({ ...lookup, oldScope: sourceIssue.scope }));
+    expect(await Effect.runPromise(store.findSourceScopes(lookup))).toEqual([]);
+    expect(await Effect.runPromise(store.findLinkedTaskIds(lookup))).toEqual({
+      42: created.task.id,
+    });
+    const other = await Effect.runPromise(
+      store.createImportedTask({
+        repoPath: harness.repoPath,
+        sourceIssue: {
+          ...sourceIssue,
+          scope: "github.com/@repository/456",
+          url: "https://github.com/example/unrelated/issues/42",
+        },
+        task: {
+          title: "Other repository issue",
+          description: "Other body",
+          issueType: "task",
+          priority: 2,
+          labels: [],
+          aiReviewEnabled: true,
+        },
+      }),
+    );
+    expect(other.outcome).toBe("created");
+    expect(
+      await Effect.runPromise(
+        store.getSourceIssue({ repoPath: harness.repoPath, taskId: created.task.id }),
+      ),
+    ).toMatchObject({ scope, url: sourceIssue.url });
+  });
+
   test("keeps old Task rows readable after the migration", async () => {
     const database = new Database(":memory:");
     try {

@@ -16,6 +16,19 @@ export type IssueImportStorePort = {
     scope: string;
     sourceIds: string[];
   }): Effect.Effect<Record<string, string>, TaskStoreError>;
+  findSourceScopes(input: {
+    repoPath: string;
+    providerId: string;
+    scope: string;
+    sourceIds: string[];
+  }): Effect.Effect<string[], TaskStoreError>;
+  replaceSourceScope(input: {
+    repoPath: string;
+    providerId: string;
+    oldScope: string;
+    scope: string;
+    sourceIds: string[];
+  }): Effect.Effect<void, TaskStoreError>;
   createImportedTask(input: {
     repoPath: string;
     sourceIssue: SourceIssueReference;

@@ -95,8 +95,13 @@ export type PullRequestProviderPort = {
 export type IssueReaderPort = {
   providerId: GitProviderId;
   scope(repoConfig: RepoConfig): Effect.Effect<string, HostError | GitProviderRepositoryError>;
+  resolveLegacyScope?(
+    repoConfig: RepoConfig,
+    legacyScope: string,
+  ): Effect.Effect<string | undefined, HostError | GitProviderRepositoryError>;
   list(input: {
     repoConfig: RepoConfig;
+    scope?: string;
     search: string;
     page: number;
     snapshot?: string;
@@ -111,10 +116,12 @@ export type IssueReaderPort = {
   >;
   get(input: {
     repoConfig: RepoConfig;
+    scope?: string;
     sourceId: string;
   }): Effect.Effect<SourceIssue, HostError | GitProviderRepositoryError>;
   prepareGet(
     repoConfig: RepoConfig,
+    scope?: string,
   ): Effect.Effect<
     (sourceId: string) => Effect.Effect<SourceIssue, HostError | GitProviderRepositoryError>,
     HostError | GitProviderRepositoryError

@@ -43,6 +43,8 @@ const issueImportUnavailable = () =>
 const unsupportedIssueImportStore: IssueImportStorePort = {
   getSourceIssue: issueImportUnavailable,
   findLinkedTaskIds: issueImportUnavailable,
+  findSourceScopes: issueImportUnavailable,
+  replaceSourceScope: issueImportUnavailable,
   createImportedTask: issueImportUnavailable,
 };
 

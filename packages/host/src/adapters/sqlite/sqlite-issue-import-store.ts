@@ -1,6 +1,7 @@
 import type { SourceIssueReference } from "@openducktor/contracts";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import { Effect } from "effect";
+import { HostValidationError } from "../../effect/host-errors";
 import type { IssueImportStorePort } from "../../ports/issue-import-store-port";
 import { getTaskCard } from "./sqlite-task-card-read-model";
 import { taskInsertFromCreateInput } from "./sqlite-task-create";
@@ -98,6 +99,90 @@ export const createSqliteIssueImportStore = ({
               rows.flatMap((row) => (row.sourceId === null ? [] : [[row.sourceId, row.id]])),
             ),
           ),
+        ),
+    );
+  },
+  findSourceScopes(input) {
+    if (input.sourceIds.length === 0) return Effect.succeed([]);
+    return withDatabase(input.repoPath, "sqliteIssueImportStore.findSourceScopes", ({ session }) =>
+      session
+        .execute(
+          (database) =>
+            database
+              .selectDistinct({ scope: tasks.sourceScope })
+              .from(tasks)
+              .where(
+                and(
+                  eq(tasks.sourceProviderId, input.providerId),
+                  ne(tasks.sourceScope, input.scope),
+                  inArray(tasks.sourceId, input.sourceIds),
+                ),
+              ),
+          "sqliteIssueImportStore.findSourceScopes.query",
+        )
+        .pipe(Effect.map((rows) => rows.flatMap(({ scope }) => (scope ? [scope] : [])))),
+    );
+  },
+  replaceSourceScope(input) {
+    if (input.sourceIds.length === 0 || input.oldScope === input.scope) return Effect.void;
+    return withDatabase(
+      input.repoPath,
+      "sqliteIssueImportStore.replaceSourceScope",
+      ({ session }) =>
+        session.transaction("sqliteIssueImportStore.replaceSourceScope", (transaction) =>
+          Effect.gen(function* () {
+            const oldRows = yield* transaction.execute(
+              (database) =>
+                database
+                  .select({ sourceId: tasks.sourceId })
+                  .from(tasks)
+                  .where(
+                    and(
+                      eq(tasks.sourceProviderId, input.providerId),
+                      eq(tasks.sourceScope, input.oldScope),
+                      inArray(tasks.sourceId, input.sourceIds),
+                    ),
+                  ),
+              "sqliteIssueImportStore.replaceSourceScope.oldRows",
+            );
+            const oldIds = oldRows.flatMap(({ sourceId }) => (sourceId ? [sourceId] : []));
+            if (oldIds.length === 0) return;
+            const currentRows = yield* transaction.execute(
+              (database) =>
+                database
+                  .select({ sourceId: tasks.sourceId })
+                  .from(tasks)
+                  .where(
+                    and(
+                      eq(tasks.sourceProviderId, input.providerId),
+                      eq(tasks.sourceScope, input.scope),
+                      inArray(tasks.sourceId, oldIds),
+                    ),
+                  ),
+              "sqliteIssueImportStore.replaceSourceScope.currentRows",
+            );
+            if (currentRows.length > 0) {
+              return yield* new HostValidationError({
+                field: "sourceScope",
+                message:
+                  "Two Tasks are linked to the same GitHub Issue. Remove one linked Task before importing again.",
+              });
+            }
+            yield* transaction.execute(
+              (database) =>
+                database
+                  .update(tasks)
+                  .set({ sourceScope: input.scope })
+                  .where(
+                    and(
+                      eq(tasks.sourceProviderId, input.providerId),
+                      eq(tasks.sourceScope, input.oldScope),
+                      inArray(tasks.sourceId, oldIds),
+                    ),
+                  ),
+              "sqliteIssueImportStore.replaceSourceScope.update",
+            );
+          }),
         ),
     );
   },

@@ -51,43 +51,46 @@ const fixture = (
       calls.push(args);
       const isSearch = args.includes("search/issues");
       const isNumberLookup = args.includes("graphql");
+      const repositoryRequest = args.find((arg) => /^repos\/[^/]+\/[^/]+$/u.test(arg));
       if (isNumberLookup && lookupResult) return Effect.succeed(lookupResult);
       const missingNumber = isNumberLookup && (!directIssue || directIssue.pull_request);
       return Effect.succeed({
         ok: !missingNumber,
         stdout: JSON.stringify(
-          isSearch
-            ? { total_count: 2, incomplete_results: false, items: searchItems }
-            : isNumberLookup
-              ? {
-                  data: {
-                    repository: {
-                      issue:
-                        directIssue && !directIssue.pull_request
-                          ? {
-                              number: directIssue.number,
-                              title: directIssue.title,
-                              body: directIssue.body,
-                              state: directIssue.state.toUpperCase(),
-                              updatedAt: directIssue.updated_at,
-                              url: directIssue.html_url,
-                              author: directIssue.user,
-                              labels: { nodes: directIssue.labels },
-                            }
-                          : null,
+          repositoryRequest
+            ? { id: repositoryRequest.endsWith("/unrelated") ? 456 : 123 }
+            : isSearch
+              ? { total_count: 2, incomplete_results: false, items: searchItems }
+              : isNumberLookup
+                ? {
+                    data: {
+                      repository: {
+                        issue:
+                          directIssue && !directIssue.pull_request
+                            ? {
+                                number: directIssue.number,
+                                title: directIssue.title,
+                                body: directIssue.body,
+                                state: directIssue.state.toUpperCase(),
+                                updatedAt: directIssue.updated_at,
+                                url: directIssue.html_url,
+                                author: directIssue.user,
+                                labels: { nodes: directIssue.labels },
+                              }
+                            : null,
+                      },
                     },
-                  },
-                  errors: missingNumber
-                    ? [
-                        {
-                          type: "NOT_FOUND",
-                          path: ["repository", "issue"],
-                          message: "Could not resolve to an Issue with that number.",
-                        },
-                      ]
-                    : undefined,
-                }
-              : directIssue,
+                    errors: missingNumber
+                      ? [
+                          {
+                            type: "NOT_FOUND",
+                            path: ["repository", "issue"],
+                            message: "Could not resolve to an Issue with that number.",
+                          },
+                        ]
+                      : undefined,
+                  }
+                : directIssue,
         ),
         stderr: missingNumber ? "gh: Could not resolve to an Issue with that number." : "",
       });
@@ -212,9 +215,29 @@ describe("GitHub issue reader", () => {
       reader.list({ repoConfig, search: "fix crash", page: 1 }),
     );
 
-    expect(result.items).toMatchObject([{ sourceId: "1", title: "Issue 1", tags: ["triage"] }]);
-    expect(calls[0]).toContain('q=repo:example/repo is:issue is:open in:title "fix crash"');
-    expect(calls[0]).toContain("per_page=20");
+    expect(result.items).toMatchObject([
+      { scope: "github.com/@repository/123", sourceId: "1", title: "Issue 1", tags: ["triage"] },
+    ]);
+    expect(calls[1]).toContain('q=repo:example/repo is:issue is:open in:title "fix crash"');
+    expect(calls[1]).toContain("per_page=20");
+  });
+
+  test("keeps source identity after a rename or transfer and separates other repositories", async () => {
+    const { reader } = fixture([]);
+    expect(await Effect.runPromise(reader.scope(repoConfig))).toBe("github.com/@repository/123");
+    expect(
+      await Effect.runPromise(
+        reader.resolveLegacyScope!(repoConfig, "github.com/example/old-name"),
+      ),
+    ).toBe("github.com/@repository/123");
+    expect(
+      await Effect.runPromise(reader.resolveLegacyScope!(repoConfig, "github.com/previous/repo")),
+    ).toBe("github.com/@repository/123");
+    expect(
+      await Effect.runPromise(
+        reader.resolveLegacyScope!(repoConfig, "github.com/example/unrelated"),
+      ),
+    ).toBe("github.com/@repository/456");
   });
 
   test.each(["132", "#132"])("finds an open Issue by number from %s", async (search) => {
@@ -223,12 +246,12 @@ describe("GitHub issue reader", () => {
 
     expect(result.items).toMatchObject([{ sourceId: "132", number: "132" }]);
     expect(result.nextPage).toBeUndefined();
-    expect(calls).toHaveLength(1);
-    expect(calls[0]).toContain("graphql");
-    expect(calls[0]).not.toContain("search/issues");
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toContain("graphql");
+    expect(calls[1]).not.toContain("search/issues");
     const nextPage = await Effect.runPromise(reader.list({ repoConfig, search, page: 2 }));
     expect(nextPage.items).toEqual([]);
-    expect(calls).toHaveLength(1);
+    expect(calls).toHaveLength(2);
   });
 
   test("returns no result when a GitHub issue number does not exist", async () => {
@@ -307,10 +330,14 @@ describe("GitHub issue reader", () => {
             executablePath: "gh",
             getAuth: () => Effect.die("Unexpected auth request"),
             readVersion: () => Effect.die("Unexpected version request"),
-            run: () =>
+            run: (args) =>
               Effect.succeed({
                 ok: true,
-                stdout: JSON.stringify(issue(1, { pull_request: {} })),
+                stdout: JSON.stringify(
+                  args.includes("repos/example/repo")
+                    ? { id: 123 }
+                    : issue(1, { pull_request: {} }),
+                ),
                 stderr: "",
               }),
           }),

@@ -28,7 +28,7 @@ const repoConfig = repoConfigSchema.parse({
 
 const issue = (sourceId: string, revision = "1"): SourceIssue => ({
   providerId: "github",
-  scope: "github.com/example/repo",
+  scope: "github.com/@repository/123",
   sourceId,
   number: sourceId,
   url: `https://github.com/example/repo/issues/${sourceId}`,
@@ -46,13 +46,18 @@ const fixture = (issueAccess: "browse" | "search" = "search") => {
     ["2", issue("2")],
   ]);
   const linked = new Map<string, string>();
+  const legacyLinked = new Map<string, string>();
   const created: string[] = [];
   const published: string[] = [];
   let currentRepoConfig: RepoConfig = repoConfig;
   const resolvedConfigs: RepoConfig[] = [];
   const reader: IssueReaderPort = {
     providerId: "github",
-    scope: () => Effect.succeed("github.com/example/repo"),
+    scope: () => Effect.succeed("github.com/@repository/123"),
+    resolveLegacyScope: (_repoConfig, legacyScope) =>
+      Effect.succeed(
+        legacyScope === "github.com/example/repo" ? "github.com/@repository/123" : undefined,
+      ),
     list: ({ page }) =>
       Effect.succeed({
         items: page === 1 ? [sources.get("1")!, sources.get("2")!] : [],
@@ -92,6 +97,19 @@ const fixture = (issueAccess: "browse" | "search" = "search") => {
           sourceIds.flatMap((id) => (linked.has(id) ? [[id, linked.get(id)!]] : [])),
         ),
       ),
+    findSourceScopes: ({ sourceIds }) =>
+      Effect.succeed(
+        sourceIds.some((id) => legacyLinked.has(id)) ? ["github.com/example/repo"] : [],
+      ),
+    replaceSourceScope: ({ sourceIds }) =>
+      Effect.sync(() => {
+        for (const id of sourceIds) {
+          const taskId = legacyLinked.get(id);
+          if (!taskId) continue;
+          legacyLinked.delete(id);
+          linked.set(id, taskId);
+        }
+      }),
     createImportedTask: ({ sourceIssue }) => {
       const taskId = linked.get(sourceIssue.sourceId);
       if (taskId)
@@ -124,6 +142,7 @@ const fixture = (issueAccess: "browse" | "search" = "search") => {
     reader,
     sources,
     linked,
+    legacyLinked,
     created,
     published,
     resolvedConfigs,
@@ -224,6 +243,62 @@ describe("Issue import service", () => {
         service.list({ repoPath: "/repo", search: "other", cursor: first.nextCursor }),
       ),
     ).rejects.toThrow("no longer valid");
+  });
+
+  test("keeps a saved link after a GitHub repository rename", async () => {
+    const { service, legacyLinked, created, setRepoConfig } = fixture();
+    legacyLinked.set("1", "old-task");
+    setRepoConfig(
+      repoConfigSchema.parse({
+        ...repoConfig,
+        git: {
+          provider: {
+            id: "github",
+            enabled: true,
+            repository: { host: "github.com", owner: "example", name: "renamed" },
+          },
+        },
+      }),
+    );
+
+    const result = await Effect.runPromise(
+      service.import({
+        repoPath: "/repo",
+        items: [{ sourceId: "1", revision: "1", issueType: "task", priority: 2, labels: [] }],
+      }),
+    );
+    expect(result.results[0]).toMatchObject({ outcome: "failed", taskId: "old-task" });
+    expect(created).toEqual([]);
+    legacyLinked.set("2", "other-old-task");
+    const listed = await Effect.runPromise(
+      service.list({ repoPath: "/repo", search: "", cursor: undefined }),
+    );
+    expect(listed.items[0]?.linkedTaskId).toBe("old-task");
+    expect(listed.items[1]?.linkedTaskId).toBe("other-old-task");
+  });
+
+  test("does not import when a saved GitHub link cannot be verified", async () => {
+    const { service, reader, legacyLinked, created } = fixture();
+    legacyLinked.set("1", "old-task");
+    reader.resolveLegacyScope = () =>
+      Effect.fail(
+        new HostValidationError({
+          field: "sourceScope",
+          message: "Cannot verify a saved GitHub Task link. Check access and retry.",
+        }),
+      );
+
+    const result = await Effect.runPromise(
+      service.import({
+        repoPath: "/repo",
+        items: [{ sourceId: "1", revision: "1", issueType: "task", priority: 2, labels: [] }],
+      }),
+    );
+    expect(result.results[0]).toMatchObject({
+      outcome: "failed",
+      reason: expect.stringContaining("Cannot verify a saved GitHub Task link"),
+    });
+    expect(created).toEqual([]);
   });
 
   test("keeps successes and reports source changes and duplicates per item", async () => {

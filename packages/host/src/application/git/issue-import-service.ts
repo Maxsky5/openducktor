@@ -11,7 +11,7 @@ import type {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { z } from "zod";
-import { errorMessage, HostValidationError } from "../../effect/host-errors";
+import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { IssueImportStorePort } from "../../ports/issue-import-store-port";
 import type { IssueReaderPort } from "../../ports/git-provider-port";
 import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-service";
@@ -69,6 +69,12 @@ const githubImageRepoConfig = (
 ): Effect.Effect<RepoConfig, HostValidationError> => {
   const issueUrl = URL.canParse(source.url) ? new URL(source.url) : null;
   const parts = issueUrl?.pathname.split("/").filter(Boolean);
+  const scopeParts = source.scope.toLowerCase().split("/");
+  const stableScopeMatches =
+    scopeParts.length === 3 &&
+    scopeParts[0] === issueUrl?.host.toLowerCase() &&
+    scopeParts[1] === "@repository" &&
+    /^[1-9]\d*$/u.test(scopeParts[2] ?? "");
   const owner = parts?.[0];
   const name = parts?.[1];
   if (
@@ -81,7 +87,8 @@ const githubImageRepoConfig = (
     parts?.length !== 4 ||
     parts[2] !== "issues" ||
     parts[3] !== source.sourceId ||
-    `${issueUrl.host}/${owner}/${name}`.toLowerCase() !== source.scope.toLowerCase()
+    (source.scope.toLowerCase() !== `${issueUrl.host}/${owner}/${name}`.toLowerCase() &&
+      !stableScopeMatches)
   ) {
     return Effect.fail(
       new HostValidationError({
@@ -115,18 +122,57 @@ export const createIssueImportService = ({
   workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfigByRepoPath">;
   publishTaskCreated: (repoPath: string, task: TaskCard) => Effect.Effect<void>;
 }) => {
-  const resolve = (repoPath: string) =>
+  const resolveReader = (repoPath: string) =>
     Effect.gen(function* () {
       const repoConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const provider = yield* resolver.resolve(repoConfig);
       const reader = yield* provider.issues();
-      const scope = yield* reader.scope(repoConfig);
       return {
         repoConfig,
         reader,
-        scope,
         searchSupported: provider.getDescriptor().capabilities.issueAccess === "search",
       };
+    });
+
+  const resolve = (repoPath: string) =>
+    Effect.gen(function* () {
+      const resolved = yield* resolveReader(repoPath);
+      const scope = yield* resolved.reader.scope(resolved.repoConfig);
+      return { ...resolved, scope };
+    });
+
+  const reconcileSourceScopes = (
+    repoPath: string,
+    repoConfig: RepoConfig,
+    reader: IssueReaderPort,
+    scope: string,
+    sourceIds: string[],
+  ) =>
+    Effect.gen(function* () {
+      if (reader.providerId !== "github" || sourceIds.length === 0) return;
+      const oldScopes = yield* store.findSourceScopes({
+        repoPath,
+        providerId: reader.providerId,
+        scope,
+        sourceIds,
+      });
+      if (oldScopes.length === 0) return;
+      if (!reader.resolveLegacyScope) {
+        return yield* new HostOperationError({
+          operation: "github.issues.reconcileSourceScopes",
+          message: "GitHub Issue links cannot be checked. Update OpenDucktor and retry.",
+        });
+      }
+      for (const oldScope of oldScopes) {
+        if ((yield* reader.resolveLegacyScope(repoConfig, oldScope)) !== scope) continue;
+        yield* store.replaceSourceScope({
+          repoPath,
+          providerId: reader.providerId,
+          oldScope,
+          scope,
+          sourceIds,
+        });
+      }
     });
 
   return {
@@ -156,7 +202,7 @@ export const createIssueImportService = ({
           const provider = yield* resolver.resolve(repoConfig);
           reader = yield* provider.issues();
         } else {
-          const resolved = yield* resolve(input.repoPath);
+          const resolved = yield* resolveReader(input.repoPath);
           repoConfig = resolved.repoConfig;
           reader = resolved.reader;
           sourceId = input.sourceId;
@@ -178,7 +224,7 @@ export const createIssueImportService = ({
     get(input: IssueItemGetInput) {
       return Effect.gen(function* () {
         const { repoConfig, reader, scope } = yield* resolve(input.repoPath);
-        const item = yield* reader.get({ repoConfig, sourceId: input.sourceId });
+        const item = yield* reader.get({ repoConfig, scope, sourceId: input.sourceId });
         if (
           item.sourceId !== input.sourceId ||
           item.scope !== scope ||
@@ -189,6 +235,7 @@ export const createIssueImportService = ({
             message: "The source item is outside the configured repository. Refresh the list.",
           });
         }
+        yield* reconcileSourceScopes(input.repoPath, repoConfig, reader, scope, [input.sourceId]);
         const linked = yield* store.findLinkedTaskIds({
           repoPath: input.repoPath,
           providerId: reader.providerId,
@@ -217,6 +264,7 @@ export const createIssueImportService = ({
         });
         const readerInput: Parameters<IssueReaderPort["list"]>[0] = {
           repoConfig,
+          scope,
           search,
           page: cursor.page,
         };
@@ -231,6 +279,13 @@ export const createIssueImportService = ({
               "The provider returned an Issue outside this repository. Check the provider settings and retry.",
           });
         }
+        yield* reconcileSourceScopes(
+          input.repoPath,
+          repoConfig,
+          reader,
+          scope,
+          result.items.map((item) => item.sourceId),
+        );
         const linked = yield* store.findLinkedTaskIds({
           repoPath: input.repoPath,
           providerId: reader.providerId,
@@ -259,7 +314,7 @@ export const createIssueImportService = ({
     import(input: IssueItemsImportInput) {
       return Effect.gen(function* () {
         const { repoConfig, reader, scope } = yield* resolve(input.repoPath);
-        const preparedGet = yield* Effect.either(reader.prepareGet(repoConfig));
+        const preparedGet = yield* Effect.either(reader.prepareGet(repoConfig, scope));
         const seen = new Set<string>();
         const results: IssueItemsImportResult["results"] = [];
         for (const review of input.items) {
@@ -301,6 +356,9 @@ export const createIssueImportService = ({
                     "The source item changed since review. Refresh it and review the new content.",
                 });
               }
+              yield* reconcileSourceScopes(input.repoPath, repoConfig, reader, scope, [
+                review.sourceId,
+              ]);
               const created = yield* store.createImportedTask({
                 repoPath: input.repoPath,
                 sourceIssue: source,
