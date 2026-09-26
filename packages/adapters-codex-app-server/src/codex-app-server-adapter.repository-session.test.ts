@@ -263,7 +263,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
     expect(transport.calls.filter((call) => call.method === "thread/name/set")).toEqual([]);
   });
 
-  test("reattaches and reconciles a title after the native name write failed its RPC", async () => {
+  test("reattaches and retries the title after Codex writes it but reports an error", async () => {
     const transport = new NameWriteThenFailTransport("runtime-live", false);
     const adapter = createAdapterWithTransport(transport);
     const sessionScope = { kind: "repository", title: "Saved title" } as const;

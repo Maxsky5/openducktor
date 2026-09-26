@@ -3,6 +3,7 @@ import {
   type WorkspaceSessionArchiveInput,
   type AgentSessionModelSelection,
   type AgentSessionControlStartInput,
+  type AgentSessionLiveRef,
   type WorkspaceSessionCreateInput,
   type WorkspaceSessionCreateResult,
   type WorkspaceSessionStartResult,
@@ -43,12 +44,7 @@ export type WorkspaceSessionServiceDependencies = WorkspaceSessionTargetDependen
   lifecycle: TaskSessionLifecycleCoordinator;
   operationGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
   sessionTitleGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
-  isCodexTitleSyncPending: (ref: {
-    repoPath: string;
-    runtimeKind: WorkspaceSession["runtimeKind"];
-    externalSessionId: string;
-    workingDirectory: string;
-  }) => boolean;
+  isCodexTitleSyncPending: (ref: AgentSessionLiveRef) => boolean;
   store: WorkspaceSessionStorePort;
   settings: Pick<WorkspaceSettingsService, "getRepoConfig" | "listCustomAgentRoles">;
   runtime: Pick<RuntimeOrchestratorService, "runtimeEnsure">;
@@ -281,8 +277,8 @@ export const createWorkspaceSessionService = (
                 nextTitle !== null
                   ? { externalSessionId: session.externalSessionId, title: nextTitle }
                   : null);
-              // Save the intended title first. Codex keeps it for a later reconciliation
-              // if its native rename fails after writing the name.
+              // Codex may write the native name before it reports a failed rename.
+              // Keep the saved title so the next attach or rename can try again.
               const saved = yield* Effect.either(
                 store.rename({ ...ref, manualTitle: input.manualTitle }),
               );

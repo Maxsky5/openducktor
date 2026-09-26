@@ -91,15 +91,20 @@ export const createWorkspaceSessionRuntimePersistence = ({
   } => {
   const pendingFinalMessages = new Map<string, { messageId: string; occurredAt: number }>();
   const sendsInFlight = new Set<string>();
-  const codexTitleSync = new Map<string, "pending" | "queued" | "done">();
-  const markCodexFirstMessage = (
+  const codexTitleSync = new Map<string, "pending" | "queued" | "handled">();
+  const saveCodexMessage = (
     runtimeRef: AgentSessionLiveRef,
-    known: { session: WorkspaceSession },
-  ) => {
-    if (runtimeRef.runtimeKind !== "codex" || known.session.generatedTitle !== null) return;
-    const key = agentSessionRefKey(runtimeRef);
-    if (!codexTitleSync.has(key)) codexTitleSync.set(key, "pending");
-  };
+    known: { ref: WorkspaceSessionStoreRef; session: WorkspaceSession },
+    plan: AcceptedMessagePlan,
+  ) =>
+    Effect.gen(function* () {
+      const saved = yield* storeEffect(store.recordAcceptedMessage(plan.input));
+      if (known.session.generatedTitle === null) {
+        const key = agentSessionRefKey(runtimeRef);
+        if (!codexTitleSync.has(key)) codexTitleSync.set(key, "pending");
+      }
+      yield* publishUpdated(known.ref.workspaceId, saved);
+    });
   const find = (runtimeRef: AgentSessionLiveRef) =>
     Effect.gen(function* () {
       const config = yield* settings.getRepoConfigByRepoPath(runtimeRef.repoPath);
@@ -187,6 +192,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
           );
         input.selectedModel = { ...message.model, runtimeKind: runtimeRef.runtimeKind };
       }
+      if (runtimeRef.runtimeKind === "codex") return { input, runtimeRename: null };
       const storedGeneratedTitle = known.session.generatedTitle ?? input.generatedTitle;
       const nextTitle = runtimeTitle({
         ...known.session,
@@ -227,12 +233,8 @@ export const createWorkspaceSessionRuntimePersistence = ({
   ) =>
     Effect.gen(function* () {
       const { input, runtimeRename } = plan;
-      if (runtimeRef.runtimeKind === "codex") {
-        const saved = yield* storeEffect(store.recordAcceptedMessage(input));
-        markCodexFirstMessage(runtimeRef, known);
-        yield* publishUpdated(known.ref.workspaceId, saved);
-        return;
-      }
+      if (runtimeRef.runtimeKind === "codex")
+        return yield* saveCodexMessage(runtimeRef, known, plan);
       // Rename the runtime session before the durable write, so a failed rename never
       // stores a title that the runtime session does not show.
       if (runtimeRename !== null) {
@@ -297,12 +299,8 @@ export const createWorkspaceSessionRuntimePersistence = ({
       const known = yield* find(runtimeRef);
       if (!known) return;
       const plan = yield* planAcceptedMessage(known, runtimeRef, message, false);
-      if (runtimeRef.runtimeKind === "codex") {
-        const saved = yield* storeEffect(store.recordAcceptedMessage(plan.input));
-        markCodexFirstMessage(runtimeRef, known);
-        yield* publishUpdated(known.ref.workspaceId, saved);
-        return;
-      }
+      if (runtimeRef.runtimeKind === "codex")
+        return yield* saveCodexMessage(runtimeRef, known, plan);
       // A manual rename can hold the title gate while it waits for live publication.
       // Save observed activity without a title and defer its native rename to avoid deadlock.
       const renamePending = plan.runtimeRename !== null || sessionTitleGate.isActive(known.ref);
@@ -352,7 +350,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
             known.ref,
             Effect.gen(function* () {
               if (codexTitleSync.get(key) !== "queued") return;
-              codexTitleSync.set(key, "done");
+              codexTitleSync.set(key, "handled");
               const current = yield* findActive(runtimeRef);
               if (!current) return;
               const title = runtimeTitle(current.session);
@@ -375,7 +373,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
           ),
           Effect.ensuring(
             Effect.sync(() => {
-              if (codexTitleSync.get(key) === "queued") codexTitleSync.set(key, "done");
+              if (codexTitleSync.get(key) === "queued") codexTitleSync.set(key, "handled");
             }),
           ),
         ),

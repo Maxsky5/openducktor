@@ -241,8 +241,7 @@ export class CodexAppServerAdapter
   private readonly activeTurnsBySessionId = new Map<string, ActiveCodexTurn>();
   // A new active session may have an empty rollout until a full history read succeeds.
   private readonly freshSessions = new WeakSet<CodexSessionState>();
-  private readonly pendingFreshRepositoryTitles = new WeakSet<CodexSessionState>();
-  private readonly attemptedFreshRepositoryTitles = new WeakSet<CodexSessionState>();
+  private readonly freshTitleState = new WeakMap<CodexSessionState, "pending" | "tried">();
   private readonly localSessions: CodexLocalSessionState;
   private readonly contextUsageLoader: CodexContextUsageLoader;
   private readonly runtimeEvents: CodexRuntimeSessionEvents;
@@ -461,7 +460,7 @@ export class CodexAppServerAdapter
     const { summary } = session;
     this.localSessions.remember(session);
     this.freshSessions.add(session);
-    if (sessionPolicy.kind === "repository") this.pendingFreshRepositoryTitles.add(session);
+    if (sessionPolicy.kind === "repository") this.freshTitleState.set(session, "pending");
     this.runtimeEvents.initializeFreshThreadContextUsage(runtimeId, session.threadId);
     if (title !== undefined && sessionPolicy.kind !== "repository") {
       await client.threadSetName({
@@ -540,12 +539,8 @@ export class CodexAppServerAdapter
     const session = sessionStateFromThreadResume(input, runtimeId, model, response);
     const repositoryTitle = sessionPolicy.kind === "repository" ? sessionPolicy.title : undefined;
     this.localSessions.remember(session);
-    if (
-      current &&
-      this.pendingFreshRepositoryTitles.has(current) &&
-      !this.attemptedFreshRepositoryTitles.has(current)
-    )
-      this.pendingFreshRepositoryTitles.add(session);
+    if (current && this.freshTitleState.get(current) === "pending")
+      this.freshTitleState.set(session, "pending");
     await this.applyRepositoryTitle(input, session, repositoryTitle);
 
     return session.summary;
@@ -1120,14 +1115,12 @@ export class CodexAppServerAdapter
     }
     assertCodexSessionRef(session, input, "update the title of");
     const { client } = await this.runtimeClients.resolve(input, "update session title");
-    if (this.pendingFreshRepositoryTitles.has(session))
-      this.attemptedFreshRepositoryTitles.add(session);
+    if (this.freshTitleState.has(session)) this.freshTitleState.set(session, "tried");
     await client.threadSetName({
       threadId: session.threadId,
       name: input.title,
     });
-    this.pendingFreshRepositoryTitles.delete(session);
-    this.attemptedFreshRepositoryTitles.delete(session);
+    this.freshTitleState.delete(session);
     session.summary = withSummaryTitle(session.summary, input.title);
     return { status: "renamed", summary: session.summary };
   }
@@ -1220,16 +1213,9 @@ export class CodexAppServerAdapter
     options: { tolerateFailure?: boolean } = {},
   ): Promise<void> {
     if (repositoryTitle === undefined) return;
-    if (
-      this.pendingFreshRepositoryTitles.has(session) &&
-      !this.attemptedFreshRepositoryTitles.has(session)
-    )
-      return;
-    if (
-      session.summary.title === repositoryTitle &&
-      !this.pendingFreshRepositoryTitles.has(session)
-    )
-      return;
+    const state = this.freshTitleState.get(session);
+    if (state === "pending") return;
+    if (session.summary.title === repositoryTitle && state === undefined) return;
     const { client } = await this.runtimeClients.resolve(
       input,
       "apply the repository session title",
@@ -1240,14 +1226,12 @@ export class CodexAppServerAdapter
         name: repositoryTitle,
       });
     } catch (cause) {
-      // An attach reconciles the durable title with the runtime. The native write may
-      // succeed before the RPC fails, so a later attach can read or retry the title.
+      // Codex may write the name before the call fails. Let a later attach try again.
       // A session replacement must still fail.
       if (options.tolerateFailure !== true) throw cause;
       return;
     }
-    this.pendingFreshRepositoryTitles.delete(session);
-    this.attemptedFreshRepositoryTitles.delete(session);
+    this.freshTitleState.delete(session);
     session.summary = withSummaryTitle(session.summary, repositoryTitle);
   }
 
