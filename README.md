@@ -37,6 +37,8 @@ It uses a workspace-scoped SQLite task store as the task source of truth, orches
 
 ## Install OpenDucktor
 
+### Desktop app
+
 macOS arm64 or x64, and Linux x64:
 
 ```sh
@@ -55,7 +57,15 @@ Homebrew on macOS:
 brew install --cask Maxsky5/openducktor/openducktor
 ```
 
-See the [installation guide](docs/installation.md) for more install options and update steps.
+### Web runner
+
+The web runner opens OpenDucktor in your browser on macOS, Linux, or Windows. It needs Node.js 24.14 or later.
+
+```sh
+npx @openducktor/web
+```
+
+See the [installation guide](docs/installation.md) for requirements, more install options, and update steps.
 
 ## User Prerequisites
 
