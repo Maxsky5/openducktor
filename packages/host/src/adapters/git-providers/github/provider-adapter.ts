@@ -10,6 +10,7 @@ import type {
   GitProviderHealthPort,
   GitProviderPort,
   GitProviderRepositoryPort,
+  IssueReaderPort,
   PullRequestProviderPort,
 } from "../../../ports/git-provider-port";
 import type { PullRequestReviewProviderPort } from "../../../ports/pull-request-review-provider-port";
@@ -17,6 +18,7 @@ import type { SystemCommandPort } from "../../../ports/system-command-port";
 import type { ToolDiscoveryPort } from "../../../ports/tool-discovery-port";
 import { createGithubCli } from "./cli";
 import { createGithubProviderHealthPort } from "./health";
+import { createGithubIssueReader } from "./issues";
 import { createGithubPullRequestProviderPort } from "./pull-requests";
 import { createGithubPullRequestReviewAdapter } from "./review/adapter";
 import { createGithubProviderRepositoryAdapter } from "./repository";
@@ -26,6 +28,7 @@ export class GithubProviderAdapter implements GitProviderPort {
   private readonly healthPort: GitProviderHealthPort;
   private readonly pullRequestsPort: PullRequestProviderPort;
   private readonly pullRequestReviewPort: PullRequestReviewProviderPort;
+  private readonly issueReaderPort: IssueReaderPort;
 
   constructor({
     gitPort,
@@ -55,6 +58,7 @@ export class GithubProviderAdapter implements GitProviderPort {
       githubCli,
       getRepository,
     });
+    this.issueReaderPort = createGithubIssueReader({ githubCli, repositoryPort });
   }
 
   getDescriptor(): GitProviderDescriptor {
@@ -75,5 +79,9 @@ export class GithubProviderAdapter implements GitProviderPort {
 
   pullRequestReview() {
     return Effect.succeed(this.pullRequestReviewPort);
+  }
+
+  issues() {
+    return Effect.succeed(this.issueReaderPort);
   }
 }

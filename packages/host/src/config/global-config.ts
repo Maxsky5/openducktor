@@ -33,34 +33,63 @@ const migrateReusablePrompts = (payload: PersistedConfigObject) => {
   };
 };
 
+const legacyAzureSettingsKeys = ["remoteMappings", "httpConsentCollectionUrl", "areaPath"] as const;
+
+const migrateAzureProviderSettings = (workspaceId: string, provider: JSONType): JSONType => {
+  if (!isPersistedConfigObject(provider) || provider.id !== "azure_devops") return provider;
+  const legacyKeys = legacyAzureSettingsKeys.filter((key) => Object.hasOwn(provider, key));
+  if (legacyKeys.length === 0) return provider;
+  if (Object.hasOwn(provider, "settings")) {
+    throw new HostValidationError({
+      message: `Repository "${workspaceId}" contains both nested and legacy Azure DevOps settings.`,
+    });
+  }
+  const migrated = { ...provider };
+  const settings: PersistedConfigObject = {};
+  for (const key of legacyKeys) {
+    settings[key] = migrated[key]!;
+    delete migrated[key];
+  }
+  return { ...migrated, settings };
+};
+
 const migrateRepositoryGitConfig = (workspaceId: string, workspace: JSONType): JSONType => {
   if (!isPersistedConfigObject(workspace) || !isPersistedConfigObject(workspace.git)) {
     return workspace;
   }
 
-  const { providers, ...git } = workspace.git;
-  if (!isPersistedConfigObject(providers)) {
-    return workspace;
+  let git = workspace.git;
+  if (isPersistedConfigObject(git.providers)) {
+    const { providers, ...withoutProviders } = git;
+    const entries = Object.entries(providers);
+    if (Object.hasOwn(withoutProviders, "provider")) {
+      throw new HostValidationError({
+        message: `Repository "${workspaceId}" contains both canonical and legacy Git provider configuration.`,
+      });
+    }
+    if (entries.length > 1) {
+      throw new HostValidationError({
+        message: `Repository "${workspaceId}" has ${entries.length} legacy Git providers; only one provider can be configured.`,
+      });
+    }
+    if (entries.length === 0) {
+      git = withoutProviders;
+    } else {
+      const [providerId, config] = entries[0]!;
+      git = {
+        ...withoutProviders,
+        provider: isPersistedConfigObject(config) ? { ...config, id: providerId } : config,
+      };
+    }
   }
 
-  const entries = Object.entries(providers);
-  if (Object.hasOwn(git, "provider")) {
-    throw new HostValidationError({
-      message: `Repository "${workspaceId}" contains both canonical and legacy Git provider configuration.`,
-    });
+  if (!Object.hasOwn(git, "provider")) {
+    return git === workspace.git ? workspace : { ...workspace, git };
   }
-  if (entries.length > 1) {
-    throw new HostValidationError({
-      message: `Repository "${workspaceId}" has ${entries.length} legacy Git providers; only one provider can be configured.`,
-    });
-  }
-  if (entries.length === 0) {
-    return { ...workspace, git };
-  }
-
-  const [providerId, config] = entries[0]!;
-  const provider = isPersistedConfigObject(config) ? { ...config, id: providerId } : config;
-  return { ...workspace, git: { ...git, provider } };
+  const provider = migrateAzureProviderSettings(workspaceId, git.provider!);
+  return git === workspace.git && provider === git.provider
+    ? workspace
+    : { ...workspace, git: { ...git, provider } };
 };
 
 const migrateRepositoryGitConfigs = (payload: PersistedConfigObject) => {

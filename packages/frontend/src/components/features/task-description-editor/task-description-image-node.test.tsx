@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import type { ComponentProps } from "react";
+import { QueryProvider } from "@/lib/query-provider";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { host } from "@/state/operations/shared/host";
 import { TaskDescriptionImageContext } from "./task-description-image-context";
 import { TaskDescriptionImageNode } from "./task-description-image-node";
 
@@ -10,6 +12,52 @@ afterEach(() => {
 });
 
 describe("TaskDescriptionImageNode", () => {
+  test("loads a linked GitHub issue image through the authenticated host request", async () => {
+    const originalImageGet = host.issueImageGet;
+    const url = "https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-446655440000";
+    const imageGet = mock(async () => ({
+      mediaType: "image/png" as const,
+      bytesBase64: "aW1hZ2U=",
+    }));
+    host.issueImageGet = imageGet;
+    try {
+      const view = render(
+        <QueryProvider useIsolatedClient>
+          <TaskDescriptionImageContext.Provider
+            value={{
+              previews: new Map(),
+              renderContext: null,
+              issueImageContext: {
+                providerId: "github",
+                repoPath: "/workspace/repo",
+                sourceId: "132",
+              },
+            }}
+          >
+            <TaskDescriptionImageNode
+              node={{ attrs: { src: url, alt: "Issue image", title: null } }}
+              selected={false}
+              updateAttributes={() => {}}
+            />
+          </TaskDescriptionImageContext.Provider>
+        </QueryProvider>,
+      );
+      try {
+        const image = await view.findByRole("img", { name: "Issue image" });
+        expect(image.getAttribute("src")).toBe("data:image/png;base64,aW1hZ2U=");
+        expect(imageGet).toHaveBeenCalledWith({
+          repoPath: "/workspace/repo",
+          sourceId: "132",
+          url,
+        });
+      } finally {
+        view.unmount();
+      }
+    } finally {
+      host.issueImageGet = originalImageGet;
+    }
+  });
+
   test("does not resolve the same durable image again when its context object is recreated", async () => {
     const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://resolved");
     configureShellBridge({

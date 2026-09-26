@@ -67,7 +67,6 @@ describe("AzureDevOpsConnectionSettings", () => {
           startSignIn,
         }}
         disabled={false}
-        onBack={() => {}}
         onSaveSettings={async () => true}
       />,
     );
@@ -97,7 +96,6 @@ describe("AzureDevOpsConnectionSettings", () => {
           savePat,
         }}
         disabled={false}
-        onBack={() => {}}
         onSaveSettings={async () => true}
       />,
     );
@@ -119,7 +117,6 @@ describe("AzureDevOpsConnectionSettings", () => {
       <AzureDevOpsConnectionSettings
         controller={controller}
         disabled={false}
-        onBack={() => {}}
         onSaveSettings={async () => true}
       />,
     );
@@ -147,7 +144,6 @@ describe("AzureDevOpsConnectionSettings", () => {
           savePat,
         }}
         disabled={false}
-        onBack={() => {}}
         onSaveSettings={async () => true}
       />,
     );
@@ -159,6 +155,27 @@ describe("AzureDevOpsConnectionSettings", () => {
     fireEvent.click(screen.getByRole("button", { name: "Replace PAT" }));
     expect(savePat).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "Disconnect" })).toBeTruthy();
+  });
+
+  test("offers to save a newly detected repository even if an old PAT state is cached", async () => {
+    const saveSettings = mock(async () => true);
+    render(
+      <AzureDevOpsConnectionSettings
+        controller={{
+          ...createPendingController(),
+          canManageConnection: false,
+          connectionState: { status: "connected", account: null },
+        }}
+        disabled={false}
+        onSaveSettings={saveSettings}
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: "Save and continue" });
+    expect(button.hasAttribute("disabled")).toBe(false);
+    expect(screen.queryByText("Connected with a personal access token.")).toBeNull();
+    fireEvent.click(button);
+    await waitFor(() => expect(saveSettings).toHaveBeenCalledTimes(1));
   });
 
   test("offers PAT replacement for a connected Azure DevOps Server", () => {
@@ -175,7 +192,6 @@ describe("AzureDevOpsConnectionSettings", () => {
           },
         }}
         disabled={false}
-        onBack={() => {}}
         onSaveSettings={async () => true}
       />,
     );
@@ -201,7 +217,6 @@ describe("AzureDevOpsConnectionSettings", () => {
           retryConnectionRead,
         }}
         disabled={false}
-        onBack={() => {}}
         onSaveSettings={async () => true}
       />,
     );
@@ -223,13 +238,12 @@ describe("AzureDevOpsConnectionSettings", () => {
         <AzureDevOpsConnectionSettings
           controller={createPendingController()}
           disabled={false}
-          onBack={() => {}}
           onSaveSettings={async () => true}
         />,
       );
 
       expect(screen.queryByText("Pull request actions")).toBeNull();
-      expect(screen.getByRole("button", { name: "Change repository" })).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "2. Connection" })).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Sign in with Microsoft" })).toBeNull();
       expect(
         screen.getByText("Microsoft sign-in accepts work or school accounts only."),

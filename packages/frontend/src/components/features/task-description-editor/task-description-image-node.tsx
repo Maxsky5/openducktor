@@ -2,6 +2,8 @@ import { parseTaskAssetUri } from "@openducktor/contracts";
 import { NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react";
 import { useContext, useEffect, useState } from "react";
 import { z } from "zod";
+import { GithubIssueImage } from "@/components/features/issue-source/github-issue-image";
+import { isGithubIssueAttachmentUrl } from "@/components/features/issue-source/issue-image-url";
 import { Input } from "@/components/ui/input";
 import { errorMessage } from "@/lib/errors";
 import { getShellBridge } from "@/lib/shell-bridge";
@@ -24,7 +26,7 @@ export function TaskDescriptionImageNode({
   selected,
   updateAttributes,
 }: TaskDescriptionImageNodeProps) {
-  const { previews, renderContext } = useContext(TaskDescriptionImageContext);
+  const { previews, renderContext, issueImageContext } = useContext(TaskDescriptionImageContext);
   const sourceResult = z.string().safeParse(node.attrs.src);
   const altResult = z.string().safeParse(node.attrs.alt);
   const titleResult = z.string().safeParse(node.attrs.title);
@@ -32,6 +34,8 @@ export function TaskDescriptionImageNode({
   const alt = altResult.success ? altResult.data : "";
   const title = titleResult.success ? titleResult.data : undefined;
   const assetId = parseTaskAssetUri(source);
+  const isGithubIssueImage =
+    issueImageContext?.providerId === "github" && isGithubIssueAttachmentUrl(source);
   const preview = assetId ? previews.get(assetId) : undefined;
   const workspaceId = renderContext?.workspaceId ?? null;
   const taskId = renderContext?.taskId ?? null;
@@ -41,6 +45,10 @@ export function TaskDescriptionImageNode({
   useEffect(() => {
     let active = true;
     setLoadError(null);
+    if (isGithubIssueImage) {
+      setResolvedSource(null);
+      return;
+    }
     if (!assetId) {
       setResolvedSource(source);
       return () => {
@@ -72,12 +80,20 @@ export function TaskDescriptionImageNode({
     return () => {
       active = false;
     };
-  }, [assetId, preview, source, taskId, workspaceId]);
+  }, [assetId, isGithubIssueImage, preview, source, taskId, workspaceId]);
 
   return (
     <NodeViewWrapper className="my-3" data-drag-handle>
       <figure className="overflow-hidden rounded-md border border-border bg-card p-2">
-        {resolvedSource ? (
+        {isGithubIssueImage && issueImageContext ? (
+          <GithubIssueImage
+            context={issueImageContext}
+            src={source}
+            alt={alt}
+            title={title}
+            className="mx-auto max-h-96 max-w-full rounded object-contain"
+          />
+        ) : resolvedSource ? (
           <img
             src={resolvedSource}
             alt={alt}
@@ -85,7 +101,11 @@ export function TaskDescriptionImageNode({
             className="mx-auto max-h-96 max-w-full rounded object-contain"
             onError={() => {
               setResolvedSource(null);
-              setLoadError("The task asset response failed to load.");
+              setLoadError(
+                assetId
+                  ? "The task asset response failed to load."
+                  : "The image could not be loaded.",
+              );
             }}
           />
         ) : (

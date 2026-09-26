@@ -818,9 +818,11 @@ describe("useSettingsModalController", () => {
                   enabled,
                   autoDetected: false,
                   repository,
-                  remoteMappings: [
-                    { remoteName: "origin", fetchUrl: "", pushUrls: [], repository },
-                  ],
+                  settings: {
+                    remoteMappings: [
+                      { remoteName: "origin", fetchUrl: "", pushUrls: [], repository },
+                    ],
+                  },
                 },
               },
             };

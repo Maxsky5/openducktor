@@ -111,7 +111,7 @@ const createCommands = ({
         },
       ]);
     }
-    if (command.includes("api graphql")) {
+    if (args[0] === "api" && args.includes("graphql")) {
       if (command.includes("PullRequestReviewOverview")) {
         const comments =
           "comments" in pullRequestViewResponse ? pullRequestViewResponse.comments : [];

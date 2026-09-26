@@ -5,6 +5,7 @@ import type { IPersistence } from "@azure/msal-node-extensions";
 import type { AuthenticationResult, DeviceCodeRequest } from "@azure/msal-node";
 import { Effect, Fiber, TestClock, TestContext } from "effect";
 import type { AzureDevOpsProtectedStorage } from "./protected-storage";
+import type { AzureDevOpsCredentialIndex } from "./credential-index";
 import { createAzureDevOpsConnectionAdapter } from "./connection";
 import { azureDevOpsRepositoryKey } from "@openducktor/core";
 
@@ -28,11 +29,60 @@ const repositoryResponse = (configured: AzureDevOpsRepository = repository) => (
   project: { id: "project-1", name: configured.project },
 });
 
+const createCredentialIndex = (): AzureDevOpsCredentialIndex => ({
+  register: () => Effect.void,
+  list: () => Effect.succeed([]),
+  forget: () => Effect.void,
+});
+
 describe("Azure DevOps connection", () => {
+  test("removes a workspace without opening secure storage when no credential exists", async () => {
+    const open = mock(() => Effect.die("Unexpected protected storage open"));
+    const connection = createAzureDevOpsConnectionAdapter({
+      clientId: undefined,
+      credentialIndex: createCredentialIndex(),
+      protectedStorage: { readConnection: () => Effect.succeed(null), open },
+    });
+
+    await Effect.runPromise(
+      connection.removeWorkspaceCredentials(repoConfigSchema.parse({ ...repoConfig, git: {} })),
+    );
+
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  test("does not index a PAT when secure storage cannot open", async () => {
+    const scopes = new Map<string, { scope: string; deployment: "services" | "server" }>();
+    const open = mock(() => Effect.die("Secure storage is unavailable"));
+    const connection = createAzureDevOpsConnectionAdapter({
+      clientId: undefined,
+      credentialIndex: {
+        register: (_workspaceId, credential) =>
+          Effect.sync(() => void scopes.set(credential.scope, credential)),
+        list: () => Effect.succeed([...scopes.values()]),
+        forget: (_workspaceId, scope) => Effect.sync(() => void scopes.delete(scope)),
+      },
+      protectedStorage: { readConnection: () => Effect.succeed(null), open },
+      fetchImplementation: mock(async () =>
+        Response.json(repositoryResponse()),
+      ) as unknown as typeof fetch,
+    });
+
+    await expect(
+      Effect.runPromise(connection.replacePat(repoConfig, repository, "secret")),
+    ).rejects.toThrow();
+    expect(scopes.size).toBe(0);
+    await Effect.runPromise(
+      connection.removeWorkspaceCredentials(repoConfigSchema.parse({ ...repoConfig, git: {} })),
+    );
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+
   test("reports a new repository as disconnected without opening protected storage", async () => {
     const open = mock(() => Effect.die("Unexpected protected storage open"));
     const connection = createAzureDevOpsConnectionAdapter({
       clientId: undefined,
+      credentialIndex: createCredentialIndex(),
       protectedStorage: {
         readConnection: () => Effect.succeed(null),
         open,
@@ -60,6 +110,7 @@ describe("Azure DevOps connection", () => {
     const fetchImplementation = mock(async () => new Response(null, { status: 200 }));
     const connection = createAzureDevOpsConnectionAdapter({
       clientId: undefined,
+      credentialIndex: createCredentialIndex(),
       protectedStorage: {
         readConnection: () => Effect.succeed(null),
         open: () =>
@@ -87,7 +138,7 @@ describe("Azure DevOps connection", () => {
           save: async (contents: string) => void records.set(`${scope}:${record}`, contents),
           load: async () => records.get(`${scope}:${record}`) ?? null,
           delete: async () => records.delete(`${scope}:${record}`),
-        } as IPersistence),
+        } as unknown as IPersistence),
     };
     const fetchImplementation = mock(async (_input: string | URL | Request, init?: RequestInit) => {
       const header = new Headers(init?.headers).get("Authorization");
@@ -97,6 +148,7 @@ describe("Azure DevOps connection", () => {
     });
     const connection = createAzureDevOpsConnectionAdapter({
       clientId: undefined,
+      credentialIndex: createCredentialIndex(),
       protectedStorage,
       fetchImplementation: fetchImplementation as unknown as typeof fetch,
     });
@@ -113,6 +165,69 @@ describe("Azure DevOps connection", () => {
     });
   });
 
+  test("removes an indexed PAT after the workspace changes provider", async () => {
+    const records = new Map<string, string>();
+    const scopes = new Map<string, { scope: string; deployment: "services" | "server" }>();
+    const protectedStorage: AzureDevOpsProtectedStorage = {
+      readConnection: (scope) => Effect.succeed(records.get(`${scope}:connection`) ?? null),
+      open: (scope, record) =>
+        Effect.succeed({
+          save: async (contents: string) => void records.set(`${scope}:${record}`, contents),
+          load: async () => records.get(`${scope}:${record}`) ?? null,
+          delete: async () => records.delete(`${scope}:${record}`),
+        } as IPersistence),
+    };
+    const credentialIndex: AzureDevOpsCredentialIndex = {
+      register: (_workspaceId, credential) =>
+        Effect.sync(() => void scopes.set(credential.scope, credential)),
+      list: () => Effect.succeed([...scopes.values()]),
+      forget: (_workspaceId, scope) => Effect.sync(() => void scopes.delete(scope)),
+    };
+    const connection = createAzureDevOpsConnectionAdapter({
+      clientId: undefined,
+      credentialIndex,
+      protectedStorage,
+      fetchImplementation: mock(async () =>
+        Response.json(repositoryResponse()),
+      ) as unknown as typeof fetch,
+    });
+
+    await Effect.runPromise(connection.replacePat(repoConfig, repository, "secret"));
+    const switchedConfig = repoConfigSchema.parse({ ...repoConfig, git: {} });
+    await Effect.runPromise(connection.removeWorkspaceCredentials(switchedConfig));
+
+    await expect(Effect.runPromise(connection.getState(repoConfig, repository))).resolves.toEqual({
+      status: "disconnected",
+    });
+    expect(scopes.size).toBe(0);
+  });
+
+  test("removes a PAT for the current repository when the credential index is empty", async () => {
+    const deleted: string[] = [];
+    const connection = createAzureDevOpsConnectionAdapter({
+      clientId: undefined,
+      credentialIndex: createCredentialIndex(),
+      protectedStorage: {
+        readConnection: () => Effect.succeed(null),
+        open: (scope, record) =>
+          Effect.succeed({
+            save: async () => undefined,
+            load: async () => null,
+            delete: async () => {
+              deleted.push(`${scope}:${record}`);
+              return true;
+            },
+          } as unknown as IPersistence),
+      },
+    });
+
+    await Effect.runPromise(connection.removeWorkspaceCredentials(repoConfig));
+
+    expect(deleted).toEqual([
+      `${repoConfig.workspaceId}\n${repoConfig.repoPath}\n${azureDevOpsRepositoryKey(repository)}:connection`,
+    ]);
+  });
+
   test.each([
     ["a generic success page", new Response("OK", { status: 200 })],
     ["another repository", Response.json(repositoryResponse({ ...repository, name: "other" }))],
@@ -120,6 +235,7 @@ describe("Azure DevOps connection", () => {
     const save = mock(async (_contents: string) => undefined);
     const connection = createAzureDevOpsConnectionAdapter({
       clientId: undefined,
+      credentialIndex: createCredentialIndex(),
       protectedStorage: {
         readConnection: () => Effect.succeed(null),
         open: () =>
@@ -169,6 +285,7 @@ describe("Azure DevOps connection", () => {
     });
     const connection = createAzureDevOpsConnectionAdapter({
       clientId: undefined,
+      credentialIndex: createCredentialIndex(),
       protectedStorage,
       fetchImplementation: fetchImplementation as unknown as typeof fetch,
     });
@@ -207,6 +324,7 @@ describe("Azure DevOps connection", () => {
     });
     const connection = createAzureDevOpsConnectionAdapter({
       clientId: undefined,
+      credentialIndex: createCredentialIndex(),
       protectedStorage: {
         readConnection: () => Effect.succeed(null),
         open: () =>
@@ -269,6 +387,7 @@ describe("Azure DevOps connection", () => {
     const events: unknown[] = [];
     const connection = createAzureDevOpsConnectionAdapter({
       clientId: "client-id",
+      credentialIndex: createCredentialIndex(),
       protectedStorage,
       publishConnectionState: (event) => events.push(event),
       publicClientFactory: () =>
@@ -323,6 +442,7 @@ describe("Azure DevOps connection", () => {
     const events: unknown[] = [];
     const connection = createAzureDevOpsConnectionAdapter({
       clientId: "client-id",
+      credentialIndex: createCredentialIndex(),
       protectedStorage: {
         readConnection: (scope) => Effect.succeed(records.get(`${scope}:connection`) ?? null),
         open: (scope, record) =>
@@ -374,6 +494,7 @@ describe("Azure DevOps connection", () => {
     const failure = Promise.withResolvers<void>();
     const connection = createAzureDevOpsConnectionAdapter({
       clientId: "client-id",
+      credentialIndex: createCredentialIndex(),
       protectedStorage: {
         readConnection: (scope) => Effect.succeed(records.get(`${scope}:connection`) ?? null),
         open: (scope, record) =>
@@ -442,6 +563,7 @@ describe("Azure DevOps connection", () => {
     });
     const connection = createAzureDevOpsConnectionAdapter({
       clientId: undefined,
+      credentialIndex: createCredentialIndex(),
       protectedStorage,
       fetchImplementation: fetchImplementation as unknown as typeof fetch,
     });
@@ -505,6 +627,7 @@ describe("Azure DevOps connection", () => {
     });
     const connection = createAzureDevOpsConnectionAdapter({
       clientId: "client-id",
+      credentialIndex: createCredentialIndex(),
       protectedStorage,
       publicClientFactory: (_clientId, storage, scope) =>
         Effect.succeed({

@@ -4,6 +4,10 @@ import { lazy, memo, type ReactElement, Suspense, useCallback, useState } from "
 
 import { Button } from "@/components/ui/button";
 import { MarkdownPreviewModal } from "@/components/ui/markdown-preview-modal";
+import {
+  type IssueImageContext,
+  useIssueImageComponents,
+} from "@/components/features/issue-source/issue-markdown-renderer";
 
 import { TaskDetailsCollapsibleCard } from "./task-details-collapsible-card";
 
@@ -23,6 +27,7 @@ type TaskDetailsDocumentSectionProps = {
   taskId?: string;
   stripTaskDescriptionFrontMatter?: boolean;
   taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
+  issueImageContext?: IssueImageContext;
 };
 
 export const TaskDetailsDocumentSection = memo(
@@ -36,7 +41,9 @@ export const TaskDetailsDocumentSection = memo(
     taskId,
     stripTaskDescriptionFrontMatter = false,
     taskAssetContext,
+    issueImageContext,
   }: TaskDetailsDocumentSectionProps): ReactElement {
+    const issueImageComponents = useIssueImageComponents(issueImageContext);
     const [modalSnapshot, setModalSnapshot] = useState<{
       markdown: string;
       title: string;
@@ -78,6 +85,7 @@ export const TaskDetailsDocumentSection = memo(
                   copyableMarkdown={markdown}
                   stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
                   {...(taskAssetContext ? { taskAssetContext } : {})}
+                  {...(issueImageContext ? { issueImageContext } : {})}
                 />
               </Suspense>
             )}
@@ -118,6 +126,7 @@ export const TaskDetailsDocumentSection = memo(
             title={modalSnapshot.title}
             stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
             {...(taskAssetContext ? { taskAssetContext } : {})}
+            {...(issueImageComponents ? { components: issueImageComponents } : {})}
           />
         ) : null}
       </>
@@ -133,5 +142,8 @@ export const TaskDetailsDocumentSection = memo(
     previous.stripTaskDescriptionFrontMatter === next.stripTaskDescriptionFrontMatter &&
     previous.taskAssetContext?.workspaceId === next.taskAssetContext?.workspaceId &&
     previous.taskAssetContext?.taskId === next.taskAssetContext?.taskId &&
-    previous.taskAssetContext?.scope === next.taskAssetContext?.scope,
+    previous.taskAssetContext?.scope === next.taskAssetContext?.scope &&
+    previous.issueImageContext?.repoPath === next.issueImageContext?.repoPath &&
+    previous.issueImageContext?.sourceId === next.issueImageContext?.sourceId &&
+    previous.issueImageContext?.providerId === next.issueImageContext?.providerId,
 );

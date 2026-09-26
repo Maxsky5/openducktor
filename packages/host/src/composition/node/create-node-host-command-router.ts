@@ -1,8 +1,8 @@
 import { createWorkspaceSessionImportCommandHandlers } from "../../interface/commands/workspace-session-import-command-handlers";
 import { createRuntimeLifecyclePublisher } from "./runtime-lifecycle-publisher";
 import { createNodeImageCommandHandlers } from "./node-image-command-handlers";
+import { createNodeGitProviderCommandHandlers } from "./node-git-provider-command-handlers";
 import { resolveCodexEffectivePolicy } from "@openducktor/contracts";
-import { isAzureDevOpsRepository } from "@openducktor/core";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import { createCodexLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/codex-live-session-adapter";
@@ -25,8 +25,6 @@ import {
   createWorkspaceLifecycleService,
 } from "../../application/workspaces/workspace-lifecycle-service";
 import { createGitService } from "../../application/git/git-service";
-import { createGitProviderService } from "../../application/git/git-provider-service";
-import { createAzureDevOpsConnectionService } from "../../application/git/azure-devops-connection-service";
 import { createOdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import { createPullRequestReviewService } from "../../application/pull-requests/pull-request-review-service";
 import { createRuntimeOrchestratorService } from "../../application/runtimes/runtime-orchestrator-service";
@@ -41,6 +39,7 @@ import { createWorkspaceSettingsService } from "../../application/workspaces/wor
 import { createWorkspaceSessionCommandHandlers } from "../../interface/commands/workspace-session-command-handlers";
 import type { GitProviderResolver } from "../../application/git/git-provider-resolver";
 import type { AzureDevOpsConnectionPort } from "../../ports/azure-devops-connection-port";
+import type { AzureAreaPathsPort } from "../../ports/azure-area-paths-port";
 import { createTerminalLaunchEnvironment } from "../../infrastructure/terminals/terminal-launch-environment";
 import { createAgentSessionLiveCommandHandlers } from "../../interface/commands/agent-session-live-command-handlers";
 import { createAgentRuntimeQueryCommandHandlers } from "../../interface/commands/agent-runtime-query-command-handlers";
@@ -48,8 +47,6 @@ import { createAgentRuntimeQueryService } from "../../application/runtimes/agent
 import { createDevServerCommandHandlers } from "../../interface/commands/dev-server-command-handlers";
 import { createFilesystemCommandHandlers } from "../../interface/commands/filesystem-command-handlers";
 import { createGitCommandHandlers } from "../../interface/commands/git-command-handlers";
-import { createGitProviderCommandHandlers } from "../../interface/commands/git-provider-command-handlers";
-import { createAzureDevOpsConnectionCommandHandlers } from "../../interface/commands/azure-devops-connection-command-handlers";
 import { createLocalAttachmentCommandHandlers } from "../../interface/commands/local-attachment-command-handlers";
 import { createOpenInToolsCommandHandlers } from "../../interface/commands/open-in-tools-command-handlers";
 import { createPullRequestReviewCommandHandlers } from "../../interface/commands/pull-request-review-command-handlers";
@@ -93,7 +90,8 @@ export const assembleNodeEffectHostCommandRouter = (
   input: CreateNodeHostCommandRouterInput,
   defaultPorts: NodeHostDefaultPorts,
   gitProviderResolver: GitProviderResolver,
-  azureDevOpsConnection?: AzureDevOpsConnectionPort,
+  azureDevOpsConnection: AzureDevOpsConnectionPort | undefined,
+  azureAreaPaths: AzureAreaPathsPort,
 ): EffectNodeHostCommandRouter => {
   const {
     clientVersion,
@@ -162,14 +160,6 @@ export const assembleNodeEffectHostCommandRouter = (
   const filesystemService = createFilesystemService(filesystem);
   const workspaceFilesService = createWorkspaceFilesService(filesystem, git);
   const gitService = createGitService({ gitPort: git, settingsConfig, worktreeFiles });
-  const gitProviderService = createGitProviderService({
-    resolver: gitProviderResolver,
-    workspaceSettingsService,
-  });
-  const azureDevOpsConnectionService = createAzureDevOpsConnectionService({
-    connection: azureDevOpsConnection,
-    workspaceSettingsService,
-  });
   const localAttachmentService = createLocalAttachmentService(localAttachments);
   const openInToolsService = createOpenInToolsService(openInTools);
   const runtimeDefinitionsService = createHostRuntimeDefinitionsService();
@@ -301,15 +291,9 @@ export const assembleNodeEffectHostCommandRouter = (
       removeWorkspaceTaskAssets: assets.removeWorkspaceTaskAssets,
       removeWorkspaceTaskStore: assets.removeWorkspaceTaskStore,
       removeWorkspaceCredentials: (repoConfig) => {
-        const provider = repoConfig.git.provider;
-        if (
-          provider?.id !== "azure_devops" ||
-          !provider.repository ||
-          !isAzureDevOpsRepository(provider.repository)
-        ) {
-          return Effect.void;
-        }
         if (!azureDevOpsConnection) {
+          const provider = repoConfig.git.provider;
+          if (provider?.id !== "azure_devops") return Effect.void;
           return Effect.fail(
             new HostOperationError({
               operation: "workspace.removeWorkspace.credentials",
@@ -318,7 +302,7 @@ export const assembleNodeEffectHostCommandRouter = (
             }),
           );
         }
-        return azureDevOpsConnection.disconnect(repoConfig, provider.repository).pipe(
+        return azureDevOpsConnection.removeWorkspaceCredentials(repoConfig).pipe(
           Effect.mapError(
             (cause) =>
               new HostOperationError({
@@ -449,10 +433,14 @@ export const assembleNodeEffectHostCommandRouter = (
       ...createFilesystemCommandHandlers(filesystemService),
       ...createWorkspaceFilesCommandHandlers(workspaceFilesService),
       ...createGitCommandHandlers(gitService),
-      ...createGitProviderCommandHandlers({
-        service: gitProviderService,
+      ...createNodeGitProviderCommandHandlers({
+        resolver: gitProviderResolver,
+        issueImportStore: assets.issueImportStore,
+        taskSyncService,
+        workspaceSettingsService,
+        azureDevOpsConnection,
+        azureAreaPaths,
       }),
-      ...createAzureDevOpsConnectionCommandHandlers({ service: azureDevOpsConnectionService }),
       ...createLocalAttachmentCommandHandlers(localAttachmentService),
       ...createNodeImageCommandHandlers(
         liveSessionAdapterRegistry,

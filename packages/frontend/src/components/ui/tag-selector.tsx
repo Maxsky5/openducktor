@@ -5,6 +5,7 @@ import { TaskLabelChip } from "@/components/ui/task-label-chip";
 import { cn } from "@/lib/utils";
 
 const EMPTY_SUGGESTIONS: string[] = [];
+const DEFAULT_COMMIT_KEYS = ["Enter", ","] as const;
 
 type TagSelectorProps = {
   value: string[];
@@ -12,6 +13,7 @@ type TagSelectorProps = {
   suggestions?: string[];
   disabled?: boolean;
   placeholder?: string;
+  commitKeys?: readonly ("Enter" | ",")[];
 };
 
 const normalizeTag = (label: string): string => label.trim().replace(/\s+/g, "-").toLowerCase();
@@ -22,6 +24,7 @@ export function TagSelector({
   suggestions = EMPTY_SUGGESTIONS,
   disabled = false,
   placeholder = "Type a label and press Enter",
+  commitKeys = DEFAULT_COMMIT_KEYS,
 }: TagSelectorProps): ReactElement {
   const [query, setQuery] = useState("");
   const [isFocused, setIsFocused] = useState(false);
@@ -75,17 +78,9 @@ export function TagSelector({
       return;
     }
 
-    if (event.key === "Enter") {
-      event.preventDefault();
-      if (candidateTag) {
-        addTag(candidateTag);
-      }
-      return;
-    }
-
-    if (event.key === "," && candidateTag) {
-      event.preventDefault();
-      addTag(candidateTag);
+    if (commitKeys.some((key) => key === event.key)) {
+      if (event.key === "Enter" || candidateTag) event.preventDefault();
+      if (candidateTag) addTag(candidateTag);
       return;
     }
 

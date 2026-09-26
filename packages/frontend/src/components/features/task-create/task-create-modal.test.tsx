@@ -4,6 +4,7 @@ import { render, screen } from "@testing-library/react";
 import { act, createElement } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
+import * as taskDetailsFormModule from "@/components/features/task-composer/task-details-form";
 import * as taskCreateModalControllerModule from "./use-task-create-modal-controller";
 
 enableReactActEnvironment();
@@ -30,6 +31,7 @@ const controllerMock: ReturnType<
 > = {
   mode: "edit",
   workspaceId: "workspace-1",
+  workspaceRepoPath: "/workspace/repo",
   onDialogOpenChange: (_open: boolean) => {},
   isBusy: false,
   isFormDisabled: false,
@@ -131,6 +133,52 @@ describe("TaskCreateModal", () => {
     await act(async () => {
       rendered.unmount();
     });
+  });
+
+  test("passes a linked issue's image context to the description form", async () => {
+    controllerMock.isEditingDocument = false;
+    controllerMock.editSection = "details";
+    controllerMock.activeDocumentSection = null;
+    const formSpy = spyOn(taskDetailsFormModule, "TaskDetailsForm").mockImplementation(() =>
+      createElement("div", { "data-testid": "task-details-form" }),
+    );
+    testSpies.push(formSpy);
+    const task = createTaskCardFixture({
+      id: "TASK-123",
+      sourceIssue: {
+        providerId: "github",
+        scope: "owner/repo",
+        sourceId: "132",
+        number: "132",
+        url: "https://github.com/owner/repo/issues/132",
+      },
+    });
+
+    try {
+      const rendered = render(
+        createElement(TaskCreateModal, {
+          open: true,
+          onOpenChange: () => {},
+          tasks: [task],
+          task,
+        }),
+      );
+      try {
+        expect(await screen.findByTestId("task-details-form")).toBeTruthy();
+        expect(formSpy.mock.calls[0]?.[0].issueImageContext).toEqual({
+          repoPath: "/workspace/repo",
+          sourceId: "132",
+          providerId: "github",
+          taskId: "TASK-123",
+        });
+      } finally {
+        await act(async () => rendered.unmount());
+      }
+    } finally {
+      controllerMock.isEditingDocument = true;
+      controllerMock.editSection = "spec";
+      controllerMock.activeDocumentSection = "spec";
+    }
   });
 
   test("locks mutation controls but keeps Close available after partial state", async () => {

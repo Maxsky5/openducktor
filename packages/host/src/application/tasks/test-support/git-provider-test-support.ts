@@ -36,6 +36,7 @@ export const createDefaultGitProviderResolver = (): GitProviderResolver => {
       }),
       pullRequests: () => Effect.dieMessage("unexpected Pull Request port"),
       pullRequestReview: () => Effect.dieMessage("unexpected Pull Request review port"),
+      issues: () => Effect.dieMessage("unexpected Issue reader port"),
     });
   return { resolve, resolveConfigured: resolve };
 };

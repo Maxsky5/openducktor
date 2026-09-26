@@ -124,6 +124,7 @@ export const createSystemCommandRunner = ({
           }
           const stdoutChunks: Buffer[] = [];
           const stderrChunks: Buffer[] = [];
+          let stdoutBytes = 0;
           let settled = false;
           const finish = (
             effect: Effect.Effect<SystemCommandRunResult, HostOperationErrorAggregate>,
@@ -165,7 +166,23 @@ export const createSystemCommandRunner = ({
             );
           };
           signal.addEventListener("abort", abort, { once: true });
-          child.stdout.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
+          child.stdout.on("data", (chunk: Buffer) => {
+            stdoutBytes += chunk.length;
+            if (options.maxStdoutBytes !== undefined && stdoutBytes > options.maxStdoutBytes) {
+              child.kill("SIGTERM");
+              finish(
+                Effect.fail(
+                  new HostOperationError({
+                    operation: "systemCommand.runCommandAllowFailure",
+                    message: `Command ${command} returned more than ${options.maxStdoutBytes} bytes.`,
+                    details: { command, args, maxStdoutBytes: options.maxStdoutBytes },
+                  }),
+                ),
+              );
+              return;
+            }
+            stdoutChunks.push(chunk);
+          });
           child.stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
           child.on("error", (error) => {
             finish(
@@ -183,7 +200,7 @@ export const createSystemCommandRunner = ({
               Effect.succeed({
                 ok: code === 0,
                 exitCode: code,
-                stdout: Buffer.concat(stdoutChunks).toString("utf8"),
+                stdout: Buffer.concat(stdoutChunks).toString(options.stdoutEncoding ?? "utf8"),
                 stderr: Buffer.concat(stderrChunks).toString("utf8"),
               }),
             );

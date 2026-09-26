@@ -3,6 +3,7 @@ import { Link2, Sparkles, Unlink } from "lucide-react";
 import type { ReactElement } from "react";
 import { IssueTypeBadge, PriorityBadge } from "@/components/features/kanban/kanban-task-badges";
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
+import { TaskSourceIssueLink } from "@/components/features/task-source-issue-link";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,7 @@ function TaskHeaderBadges({ task, subtasksCount }: { task: TaskCard; subtasksCou
       <IssueTypeBadge issueType={task.issueType} />
       <PriorityBadge priority={task.priority} />
       {task.pullRequest ? <TaskPullRequestLink pullRequest={task.pullRequest} /> : null}
+      {task.sourceIssue ? <TaskSourceIssueLink sourceIssue={task.sourceIssue} /> : null}
       {qaRejected ? (
         <Badge
           variant="outline"
