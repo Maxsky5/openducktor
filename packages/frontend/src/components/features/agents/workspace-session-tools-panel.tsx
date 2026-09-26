@@ -1,7 +1,8 @@
 import type { GitComparisonTarget, GitTargetBranch } from "@openducktor/contracts";
 import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderTree, GitBranch } from "lucide-react";
-import { useCallback, useEffect, useEffectEvent, useMemo } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useState } from "react";
+import { toast } from "sonner";
 import type { TaskExecutionSelectedFile } from "./task-execution-file-explorer-model";
 import { TaskExecutionFileExplorerPanel } from "./task-execution-file-explorer-panel";
 import { AgentStudioGitPanel } from "./agent-studio-git-panel/agent-studio-git-panel";
@@ -12,6 +13,7 @@ import { type DiffDataState, useAgentStudioDiffData } from "@/features/agent-stu
 import { useAgentStudioGitActions } from "@/pages/agents/use-agent-studio-git-actions";
 import { errorMessage } from "@/lib/errors";
 import { hostClient } from "@/lib/host-client";
+import { canonicalTargetBranch } from "@/lib/target-branch";
 import { filesystemQueryKeys, invalidateWorkspaceFileQueries } from "@/state/queries/filesystem";
 import {
   gitComparisonTargetQueryOptions,
@@ -49,6 +51,7 @@ export function WorkspaceSessionToolsPanel({
   onRefreshReady: (refresh: (() => Promise<void>) | null) => void;
 }) {
   const queryClient = useQueryClient();
+  const [isFetchingTarget, setIsFetchingTarget] = useState(false);
   const { resolvedTarget, unavailableReason, isReady, refetchComparison } =
     useWorkspaceSessionComparison({
       repoPath,
@@ -71,18 +74,28 @@ export function WorkspaceSessionToolsPanel({
     enableScheduledRefresh: false,
   });
   const refresh = useCallback(
-    (mode: WorkspaceRefreshMode = "hard") =>
-      refreshWorkspaceSessionData({
-        queryClient,
-        diffData,
-        refetchComparison,
-        resolvedTarget,
-        target,
-        targetError,
-        workingDirectory,
-        repoPath,
-        mode,
-      }),
+    async (mode: WorkspaceRefreshMode = "hard") => {
+      const fetchTarget =
+        mode === "hard" && !resolvedTarget && !targetError && !!workingDirectory && !!target;
+      if (fetchTarget) setIsFetchingTarget(true);
+      try {
+        await refreshWorkspaceSessionData({
+          queryClient,
+          diffData,
+          refetchComparison,
+          resolvedTarget,
+          target,
+          targetError,
+          workingDirectory,
+          repoPath,
+          mode,
+        });
+      } catch (error) {
+        toast.error("Could not refresh Git changes", { description: errorMessage(error) });
+      } finally {
+        setIsFetchingTarget(false);
+      }
+    },
     [
       diffData,
       queryClient,
@@ -140,6 +153,7 @@ export function WorkspaceSessionToolsPanel({
     resolvedTarget,
     unavailableReason,
     workingDirectory,
+    isFetchingTarget,
     refresh: () => refresh("hard"),
   });
   const fileModel = {
@@ -199,6 +213,7 @@ function workspaceGitModel(input: {
   resolvedTarget: string | null;
   unavailableReason: string | null;
   workingDirectory: string | null;
+  isFetchingTarget: boolean;
   refresh: () => Promise<void>;
 }): AgentStudioGitPanelModel {
   const {
@@ -208,12 +223,14 @@ function workspaceGitModel(input: {
     resolvedTarget,
     unavailableReason,
     workingDirectory,
+    isFetchingTarget,
     refresh,
   } = input;
   return {
     ...diffData,
     ...actions,
     refresh,
+    isLoading: diffData.isLoading || isFetchingTarget,
     contextMode,
     targetBranch: resolvedTarget ?? "",
     comparisonUnavailableReason: unavailableReason,
@@ -286,6 +303,9 @@ async function refreshWorkspaceSessionData(input: {
     mode,
   } = input;
   if (workingDirectory && target && !targetError) {
+    if (mode === "hard" && !resolvedTarget) {
+      await hostClient.gitFetchRemote(repoPath, canonicalTargetBranch(target), workingDirectory);
+    }
     const checkedComparison = await refetchComparison();
     const checkedTarget =
       !checkedComparison.isError && checkedComparison.data?.kind === "available"
@@ -304,7 +324,11 @@ async function refreshWorkspaceSessionData(input: {
       await diffData.refresh("soft");
       return;
     }
-    if (mode === "hard") await diffData.refresh("hard");
+    if (mode === "hard") {
+      await diffData.refresh("hard");
+      await diffData.refreshInactiveScope();
+      return;
+    }
     if (mode === "scheduled") {
       await diffData.refresh("scheduled");
       return;

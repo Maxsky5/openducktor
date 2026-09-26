@@ -5,6 +5,7 @@ import { act, render, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
 import { MemoryRouter } from "react-router";
 import { SettingsModalProvider } from "@/components/features/settings/settings-modal";
+import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import {
   useWorkspacePreviewTransitionGuard,
   WorkspacePreviewTransitionGuardProvider,
@@ -15,9 +16,16 @@ import {
   type NotificationContextValue,
 } from "@/state/notifications/notification-context";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
+import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { NotificationNavigationRegistrar } from "./notification-navigation";
 
 test("a notification cannot switch workspaces after the preview guard cancels", async () => {
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: { tasksList: async () => [createTaskCardFixture({ id: "task-1" })] },
+    }),
+  );
   const selectWorkspace = mock(async () => {});
   let navigateToNotification: ((target: NotificationNavigationTarget) => Promise<void>) | undefined;
   let cancelTransition: (() => void) | undefined;
@@ -134,7 +142,7 @@ test("a notification cannot switch workspaces after the preview guard cancels", 
       });
       await Promise.resolve();
     });
-    expect(cancelTransition).toBeDefined();
+    await waitFor(() => expect(cancelTransition).toBeDefined());
     expect(selectWorkspace).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -145,5 +153,6 @@ test("a notification cannot switch workspaces after the preview guard cancels", 
   } finally {
     view.unmount();
     queryClient.clear();
+    configureShellBridge(createUnavailableShellBridge());
   }
 });

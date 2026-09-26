@@ -1,7 +1,7 @@
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { History, Import, Plus } from "lucide-react";
-import { type ReactElement, useCallback, useEffect, useRef, useState } from "react";
+import { type ReactElement, useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigationType, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
 import { BrowserTabsBar, BrowserTabsRoot } from "@/components/ui/browser-tabs";
@@ -30,6 +30,7 @@ import { useMountedRef } from "./use-mounted-ref";
 import { useWorkspaceSessionNavigation } from "./use-workspace-session-navigation";
 import { useWorkspaceSessionSelection } from "./use-workspace-session-selection";
 import { useWorkspaceSessionTabOrder } from "./use-workspace-session-tab-order";
+import { useVisibleSessionId } from "./use-visible-session-id";
 
 type WorkspaceSessionsProps = { workspace: ActiveWorkspace };
 
@@ -208,34 +209,6 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
       />
     </BrowserTabsRoot>
   );
-}
-
-function useVisibleSessionId(
-  requestedSelectedId: string | null,
-  guardWorkspaceChange: ReturnType<typeof useWorkspacePreviewTransitionGuard>["run"],
-  updateNavigation: ReturnType<typeof useWorkspaceSessionNavigation>["updateNavigation"],
-): string | null {
-  const [visibleSelectedId, setVisibleSelectedId] = useState<string | null>(requestedSelectedId);
-  const pendingSelectedIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (
-      requestedSelectedId === visibleSelectedId ||
-      pendingSelectedIdRef.current === requestedSelectedId
-    )
-      return;
-    pendingSelectedIdRef.current = requestedSelectedId;
-    guardWorkspaceChange(
-      () => {
-        pendingSelectedIdRef.current = null;
-        setVisibleSelectedId(requestedSelectedId);
-      },
-      () => {
-        pendingSelectedIdRef.current = null;
-        updateNavigation({ sessionId: visibleSelectedId });
-      },
-    );
-  }, [guardWorkspaceChange, requestedSelectedId, updateNavigation, visibleSelectedId]);
-  return visibleSelectedId;
 }
 
 function useSessionPanelState(selectedId: string | null) {

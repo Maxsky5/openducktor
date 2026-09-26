@@ -1,4 +1,4 @@
-import { expect, mock, test } from "bun:test";
+import { expect, mock, spyOn, test } from "bun:test";
 import type {
   GitComparisonTarget,
   GitWorktreeStatus,
@@ -8,6 +8,7 @@ import type {
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { createQueryClient } from "@/lib/query-client";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
@@ -168,8 +169,68 @@ test("manual refresh fetches before it reloads Git changes", async () => {
           calls.push("fetch");
           return { outcome: "skipped_no_remote", output: "" };
         },
+        gitGetWorktreeStatus: async (
+          _repoPath: string,
+          targetBranch: string,
+          diffScope?: "target" | "uncommitted",
+        ) => {
+          calls.push(`status:${targetBranch}:${diffScope}`);
+          return worktreeStatus(targetBranch, diffScope);
+        },
+        gitGetWorktreeStatusSummary: async (_repoPath: string, targetBranch: string) =>
+          worktreeSummary(targetBranch),
+        gitGetBranches: async () => [],
+      },
+    }),
+  );
+  const queryClient = createQueryClient();
+  const view = render(
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <PanelHarness />
+      </ThemeProvider>
+    </QueryClientProvider>,
+  );
+  try {
+    await waitFor(() => expect(calls.some((call) => call.startsWith("status:"))).toBe(true));
+    calls.length = 0;
+    fireEvent.click(screen.getByTestId("agent-studio-git-refresh-button"));
+    await waitFor(() => expect(calls).toContain("fetch"));
+    await waitFor(() => expect(calls.filter((call) => call.startsWith("status:"))).toHaveLength(2));
+    expect(calls.indexOf("fetch")).toBeLessThan(
+      calls.findIndex((call) => call.startsWith("status:")),
+    );
+    expect(calls.filter((call) => call === `status:${targetReference}:target`)).toHaveLength(1);
+    expect(calls.filter((call) => call === `status:${targetReference}:uncommitted`)).toHaveLength(
+      1,
+    );
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
+test("manual refresh fetches a missing comparison target before checking it again", async () => {
+  let fetched = false;
+  const fetchRemote = mock(async (_repoPath: string, targetBranch: string) => {
+    expect(targetBranch).toBe("@{upstream}");
+    fetched = true;
+    return { outcome: "fetched" as const, output: "" };
+  });
+  const comparison = mock(async (): Promise<GitComparisonTarget> =>
+    fetched
+      ? { kind: "available", reference: targetReference }
+      : { kind: "unavailable", reason: "No tracked upstream." },
+  );
+  const statusTargets: string[] = [];
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        gitGetComparisonTarget: comparison,
+        gitFetchRemote: fetchRemote,
         gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) => {
-          calls.push(`status:${targetBranch}`);
+          statusTargets.push(targetBranch);
           return worktreeStatus(targetBranch);
         },
         gitGetWorktreeStatusSummary: async (_repoPath: string, targetBranch: string) =>
@@ -187,15 +248,58 @@ test("manual refresh fetches before it reloads Git changes", async () => {
     </QueryClientProvider>,
   );
   try {
-    await waitFor(() => expect(calls).toContain(`status:${targetReference}`));
-    calls.length = 0;
+    await screen.findByText("No tracked upstream.");
     fireEvent.click(screen.getByTestId("agent-studio-git-refresh-button"));
-    await waitFor(() => expect(calls).toContain("fetch"));
-    await waitFor(() => expect(calls).toContain(`status:${targetReference}`));
-    expect(calls.indexOf("fetch")).toBeLessThan(calls.indexOf(`status:${targetReference}`));
+    await waitFor(() => expect(fetchRemote).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(statusTargets).toContain(targetReference));
+    expect(comparison).toHaveBeenCalledTimes(2);
   } finally {
     view.unmount();
     queryClient.clear();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
+test("a missing target fetch failure tells the user what failed", async () => {
+  const reportError = spyOn(toast, "error").mockImplementation(() => "toast-id");
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        gitGetComparisonTarget: async () => ({
+          kind: "unavailable",
+          reason: "No tracked upstream.",
+        }),
+        gitFetchRemote: async () => {
+          throw new Error("Remote is offline");
+        },
+        gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) =>
+          worktreeStatus(targetBranch),
+        gitGetWorktreeStatusSummary: async (_repoPath: string, targetBranch: string) =>
+          worktreeSummary(targetBranch),
+        gitGetBranches: async () => [],
+      },
+    }),
+  );
+  const queryClient = createQueryClient();
+  const view = render(
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <PanelHarness />
+      </ThemeProvider>
+    </QueryClientProvider>,
+  );
+  try {
+    await screen.findByText("No tracked upstream.");
+    fireEvent.click(screen.getByTestId("agent-studio-git-refresh-button"));
+    await waitFor(() =>
+      expect(reportError).toHaveBeenCalledWith("Could not refresh Git changes", {
+        description: "Remote is offline",
+      }),
+    );
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    reportError.mockRestore();
     configureShellBridge(createUnavailableShellBridge());
   }
 });

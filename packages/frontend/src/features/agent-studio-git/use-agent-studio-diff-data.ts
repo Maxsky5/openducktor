@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { canonicalTargetBranch } from "@/lib/target-branch";
-import type { DiffDataState, UseAgentStudioDiffDataInput } from "./contracts";
+import type { DiffDataState, DiffScope, UseAgentStudioDiffDataInput } from "./contracts";
 import { useAgentStudioDiffController } from "./loading/use-diff-controller";
 import type { DiffRefreshContext } from "./refresh/refresh-types";
 import {
@@ -21,7 +21,10 @@ export function useAgentStudioDiffData({
   preconditionError = null,
   branchIdentityKey = null,
   enableScheduledRefresh,
-}: UseAgentStudioDiffDataInput): DiffDataState & { refreshAllScopes: () => Promise<void> } {
+}: UseAgentStudioDiffDataInput): DiffDataState & {
+  refreshAllScopes: () => Promise<void>;
+  refreshInactiveScope: () => Promise<void>;
+} {
   const targetBranch = canonicalTargetBranch(defaultTargetBranch);
   const effectiveRepoPath = preconditionError ? null : repoPath;
 
@@ -76,26 +79,32 @@ export function useAgentStudioDiffData({
     refreshActiveScopeSummary,
     refreshUi,
   });
+  const refreshScope = useCallback(
+    async (scope: DiffScope): Promise<void> => {
+      if (!effectiveRepoPath || shouldBlockDiffLoading || preconditionError) return;
+      await refreshActiveScope({
+        repoPath: effectiveRepoPath,
+        targetBranch,
+        workingDir: worktreePath,
+        scope,
+      });
+    },
+    [
+      effectiveRepoPath,
+      preconditionError,
+      refreshActiveScope,
+      shouldBlockDiffLoading,
+      targetBranch,
+      worktreePath,
+    ],
+  );
   const refreshAllScopes = useCallback(async (): Promise<void> => {
-    if (!effectiveRepoPath || shouldBlockDiffLoading || preconditionError) return;
-    await Promise.all(
-      (["target", "uncommitted"] as const).map((scope) =>
-        refreshActiveScope({
-          repoPath: effectiveRepoPath,
-          targetBranch,
-          workingDir: worktreePath,
-          scope,
-        }),
-      ),
-    );
-  }, [
-    effectiveRepoPath,
-    preconditionError,
-    refreshActiveScope,
-    shouldBlockDiffLoading,
-    targetBranch,
-    worktreePath,
-  ]);
+    await Promise.all([refreshScope("target"), refreshScope("uncommitted")]);
+  }, [refreshScope]);
+  const refreshInactiveScope = useCallback(
+    () => refreshScope(diffScope === "target" ? "uncommitted" : "target"),
+    [diffScope, refreshScope],
+  );
   const scheduledPoll = useCallback(() => {
     void refresh("scheduled");
   }, [refresh]);
@@ -114,7 +123,12 @@ export function useAgentStudioDiffData({
     activeScopeState.error;
   const isLoading = state.isLoading || isWorktreeResolutionResolving || refreshUi.isRefreshing;
 
-  return useMemo<DiffDataState & { refreshAllScopes: () => Promise<void> }>(
+  return useMemo<
+    DiffDataState & {
+      refreshAllScopes: () => Promise<void>;
+      refreshInactiveScope: () => Promise<void>;
+    }
+  >(
     () => ({
       branch: activeScopeState.branch,
       worktreePath,
@@ -137,6 +151,7 @@ export function useAgentStudioDiffData({
       error: displayError,
       refresh,
       refreshAllScopes,
+      refreshInactiveScope,
       setDiffScope,
     }),
     [
@@ -146,6 +161,7 @@ export function useAgentStudioDiffData({
       isLoading,
       refresh,
       refreshAllScopes,
+      refreshInactiveScope,
       setDiffScope,
       state.byScope,
       state.loadedByScope,

@@ -60,6 +60,7 @@ type NotificationNavigationDependencies = {
   navigate: (href: string, options?: { state?: unknown }) => void;
   reportStale: (message: string) => void;
   openSettings(): void;
+  beforeNavigate?: () => Promise<boolean>;
 };
 
 export const navigateToNotificationTarget = async (
@@ -76,15 +77,24 @@ export const navigateToNotificationTarget = async (
     return;
   }
 
-  const workspaceSelection =
+  const selectWorkspace = () =>
     dependencies.activeWorkspaceId === workspace.workspaceId
       ? Promise.resolve()
       : dependencies.selectWorkspace(workspace.workspaceId);
+  const workspaceSelection = dependencies.beforeNavigate ? null : selectWorkspace();
+  const open = async (href?: string, options?: { state?: unknown }) => {
+    if (dependencies.beforeNavigate && !(await dependencies.beforeNavigate())) return;
+    await (workspaceSelection ?? selectWorkspace());
+    if (href) {
+      if (options) dependencies.navigate(href, options);
+      else dependencies.navigate(href);
+    }
+  };
 
   const taskId = "taskId" in target ? target.taskId : undefined;
   if (!taskId) {
     if (target.type === "agent_studio_task" || target.type === "kanban_task") {
-      await workspaceSelection;
+      await open();
       return;
     }
     const [records] = await Promise.all([
@@ -97,10 +107,9 @@ export const navigateToNotificationTarget = async (
       return;
     }
     const href = `/chats?session=${encodeURIComponent(session.id)}`;
-    dependencies.navigate(
-      target.type === "agent_session" ? href : addNotificationAttention(href, target),
-      { state: { notificationTarget: target } },
-    );
+    await open(target.type === "agent_session" ? href : addNotificationAttention(href, target), {
+      state: { notificationTarget: target },
+    });
     return;
   }
 
@@ -112,12 +121,12 @@ export const navigateToNotificationTarget = async (
   }
 
   if (target.type === "kanban_task") {
-    dependencies.navigate(`/kanban?task=${encodeURIComponent(target.taskId)}`);
+    await open(`/kanban?task=${encodeURIComponent(target.taskId)}`);
     return;
   }
 
   if (target.type === "agent_studio_task") {
-    dependencies.navigate(
+    await open(
       buildAgentStudioHref({
         taskId: task.id,
         sessionExternalId: null,
@@ -139,10 +148,9 @@ export const navigateToNotificationTarget = async (
     sessionExternalId: session.externalSessionId,
     role: session.role,
   });
-  dependencies.navigate(
-    target.type === "agent_session" ? href : addNotificationAttention(href, target),
-    { state: { notificationTarget: target } },
-  );
+  await open(target.type === "agent_session" ? href : addNotificationAttention(href, target), {
+    state: { notificationTarget: target },
+  });
 };
 
 export const findNotificationAttentionTarget = (kind: string, id: string): HTMLElement | null => {

@@ -58,6 +58,7 @@ const useAgentStudioDiffDataMock = mock(
     error: args.worktreeResolutionError,
     refresh: refreshDiffMock,
     refreshAllScopes: async () => {},
+    refreshInactiveScope: async () => {},
     setDiffScope: setDiffScopeMock,
   }),
 );
