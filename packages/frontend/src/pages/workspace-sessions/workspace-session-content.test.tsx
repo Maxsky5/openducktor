@@ -1,4 +1,5 @@
 import { expect, spyOn, test } from "bun:test";
+import type { WorkspaceSession } from "@openducktor/contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, memo, type ReactElement, useState } from "react";
@@ -10,6 +11,8 @@ import {
 } from "@/state/app-state-contexts";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import * as filePreview from "@/components/features/agents/task-execution-file-preview";
 import * as sessionChat from "./workspace-session-chat";
@@ -33,7 +36,12 @@ const record = {
   archivedAt: null,
 };
 
-function renderClosedSession(queryClient: QueryClient, branch: string | null, revision?: string) {
+function renderClosedSession(
+  queryClient: QueryClient,
+  branch: string | null,
+  revision?: string,
+  sessionRecord: WorkspaceSession = record,
+) {
   const content = (name: string | null, currentRevision?: string) => (
     <QueryClientProvider client={queryClient}>
       <WorkspaceBranchStateContext.Provider
@@ -51,14 +59,17 @@ function renderClosedSession(queryClient: QueryClient, branch: string | null, re
         }}
       >
         <WorkspacePreviewTransitionGuardProvider>
-          <Tabs value={record.id}>
+          <Tabs value={sessionRecord.id}>
             <WorkspaceSessionContent
               workspace={workspace}
-              record={record}
+              record={sessionRecord}
               panelState={{
                 isOpen: false,
                 activeTabId: "file_explorer",
-                selectedFile: { rootPath: "/repo", relativePath: "file.ts" },
+                selectedFile: {
+                  rootPath: sessionRecord.executionTarget.workingDirectory,
+                  relativePath: "file.ts",
+                },
               }}
               onPanelStateChange={() => {}}
             />
@@ -122,6 +133,103 @@ test("an outside branch change keeps a dirty preview and refreshes file queries"
     chat.mockRestore();
     preview.mockRestore();
     queryClient.clear();
+  }
+});
+
+test("a closed worktree panel tracks branch changes without losing a draft", async () => {
+  function Preview() {
+    const [draft, setDraft] = useState("");
+    return (
+      <input
+        aria-label="File draft"
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+      />
+    );
+  }
+  const preview = mockFilePreview(Preview);
+  let refreshTools = () => {};
+  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(
+    ({ onToolRefresh }) => {
+      refreshTools = onToolRefresh;
+      return <div />;
+    },
+  );
+  const worktreePath = "/repo/worktree";
+  let worktreeBranch = "main";
+  let branchError: Error | null = null;
+  let holdBranchRead = false;
+  let releaseBranchRead: (() => void) | null = null;
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        gitGetCurrentBranch: async (_repoPath, workingDir) => {
+          if (holdBranchRead) {
+            await new Promise<void>((resolve) => (releaseBranchRead = resolve));
+          }
+          if (branchError) throw branchError;
+          return {
+            name: workingDir === worktreePath ? worktreeBranch : "repo-root",
+            detached: false,
+          };
+        },
+      },
+    }),
+  );
+  const queryClient = newQueryClient();
+  const worktreeRecord: WorkspaceSession = {
+    ...record,
+    executionTarget: {
+      kind: "local_worktree",
+      workingDirectory: worktreePath,
+      branchName: "main",
+      worktreeState: "present",
+    },
+  };
+  const view = renderClosedSession(queryClient, "main", undefined, worktreeRecord);
+  try {
+    await waitFor(() => expect(preview.mock.calls.at(-1)?.[0].branch).toBe("branch:main"));
+    const input = screen.getByRole("textbox", { name: "File draft" });
+    fireEvent.change(input, { target: { value: "unsaved draft" } });
+    const textKey = filesystemQueryKeys.textFile(worktreePath, "file.ts");
+    queryClient.setQueryData(textKey, "old branch");
+
+    worktreeBranch = "feature";
+    holdBranchRead = true;
+    act(() => refreshTools());
+    await waitFor(() => expect(releaseBranchRead).not.toBeNull());
+    expect(preview.mock.calls.at(-1)?.[0].branch).toBeNull();
+    expect(screen.getByDisplayValue("unsaved draft")).toBe(input);
+    holdBranchRead = false;
+    await act(async () => releaseBranchRead?.());
+
+    await waitFor(() => expect(preview.mock.calls.at(-1)?.[0].branch).toBe("branch:feature"));
+    expect(screen.getByDisplayValue("unsaved draft")).toBe(input);
+    await waitFor(() => expect(queryClient.getQueryState(textKey)?.isInvalidated).toBe(true));
+
+    branchError = new Error("Git branch read failed");
+    act(() => refreshTools());
+    await screen.findByText("Could not read worktree branch: Git branch read failed");
+    expect(preview.mock.calls.at(-1)?.[0].branch).toBeNull();
+    expect(screen.getByDisplayValue("unsaved draft")).toBe(input);
+
+    branchError = null;
+    fireEvent.click(screen.getByRole("button", { name: "Retry branch" }));
+    await waitFor(() => expect(preview.mock.calls.at(-1)?.[0].branch).toBe("branch:feature"));
+    expect(screen.getByDisplayValue("unsaved draft")).toBe(input);
+
+    queryClient.setQueryData(textKey, "cached before focus");
+    worktreeBranch = "focus-branch";
+    act(() => globalThis.dispatchEvent(new Event("focus")));
+    await waitFor(() => expect(preview.mock.calls.at(-1)?.[0].branch).toBe("branch:focus-branch"));
+    await waitFor(() => expect(queryClient.getQueryState(textKey)?.isInvalidated).toBe(true));
+    expect(screen.getByDisplayValue("unsaved draft")).toBe(input);
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    chat.mockRestore();
+    preview.mockRestore();
+    configureShellBridge(createUnavailableShellBridge());
   }
 });
 

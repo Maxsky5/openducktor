@@ -23,6 +23,8 @@ export const gitQueryKeys = {
   canonicalPath: (path: string) => [...gitQueryKeys.all, "canonical-path", path] as const,
   branches: (repoPath: string) => [...gitQueryKeys.all, "branches", repoPath] as const,
   currentBranch: (repoPath: string) => [...gitQueryKeys.all, "current-branch", repoPath] as const,
+  worktreeBranch: (repoPath: string, workingDir: string) =>
+    [...gitQueryKeys.all, "worktree-branch", repoPath, workingDir] as const,
   comparisonTarget: (
     repoPath: string,
     workingDir: string,
@@ -96,6 +98,17 @@ export const currentBranchQueryOptions = (
     queryKey: gitQueryKeys.currentBranch(repoPath),
     queryFn: (): Promise<GitCurrentBranch> => hostClient.gitGetCurrentBranch(repoPath),
     staleTime: BRANCH_DATA_STALE_TIME_MS,
+  });
+
+export const worktreeBranchQueryOptions = (
+  repoPath: string,
+  workingDir: string,
+  hostClient: GitCurrentBranchQueryHost = host,
+) =>
+  queryOptions({
+    queryKey: gitQueryKeys.worktreeBranch(repoPath, workingDir),
+    queryFn: (): Promise<GitCurrentBranch> => hostClient.gitGetCurrentBranch(repoPath, workingDir),
+    staleTime: 0,
   });
 
 export const gitComparisonTargetQueryOptions = (

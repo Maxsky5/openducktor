@@ -1,4 +1,4 @@
-import type { GitCurrentBranch, GitTargetBranch, WorkspaceSession } from "@openducktor/contracts";
+import type { GitTargetBranch, WorkspaceSession } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { TaskExecutionSelectedFilePreview } from "@/components/features/agents/task-execution-file-preview";
@@ -20,6 +20,7 @@ import type { ActiveWorkspace } from "@/types/state-slices";
 import { WorkspaceSessionChat } from "./workspace-session-chat";
 import { WorkspaceSessionHeader } from "./workspace-session-header";
 import { useWorkspaceSessionPreview } from "./use-workspace-session-preview";
+import { useWorkspaceSessionBranch } from "./use-workspace-session-branch";
 
 export type WorkspaceSessionPanelState = {
   isOpen: boolean;
@@ -170,6 +171,15 @@ export function WorkspaceSessionContent({
   const { activeBranch } = useWorkspaceBranchState();
   const repoConfig = useQuery(repoConfigQueryOptions(workspace.workspaceId));
   const queryClient = useQueryClient();
+  const workingDirectory = sessionWorkingDirectory(workspace, record);
+  const isWorktree = record.executionTarget.kind === "local_worktree";
+  const { worktreeBranch, previewBranch, branchKey, refreshWorktreeBranch } =
+    useWorkspaceSessionBranch({
+      repoPath: workspace.repoPath,
+      workingDirectory,
+      isWorktree,
+      activeBranch,
+    });
   const onSelectionChange = useCallback(
     (selectedFile: TaskExecutionSelectedFile | null) => onPanelStateChange({ selectedFile }),
     [onPanelStateChange],
@@ -187,18 +197,6 @@ export function WorkspaceSessionContent({
     media.addEventListener("change", updateLayout);
     return () => media.removeEventListener("change", updateLayout);
   }, []);
-  const workingDirectory = sessionWorkingDirectory(workspace, record);
-  const branchKey =
-    record.executionTarget.kind === "local_repo_root"
-      ? (activeBranch?.name ?? (activeBranch?.detached ? "detached" : "unknown"))
-      : "";
-  const previewBranch = sessionPreviewBranch(record, activeBranch);
-  const lastBranch = useRef<string | null>(null);
-  useEffect(() => {
-    if (!previewBranch || !workingDirectory || lastBranch.current === previewBranch) return;
-    lastBranch.current = previewBranch;
-    void invalidateWorkspaceFileQueries(queryClient, workingDirectory);
-  }, [previewBranch, queryClient, workingDirectory]);
   const target: GitTargetBranch | null =
     record.executionTarget.kind === "local_repo_root"
       ? { branch: "@{upstream}" }
@@ -215,6 +213,7 @@ export function WorkspaceSessionContent({
   );
   const refreshAfterChange = useCallback(
     (scope: "git" | "all") => {
+      refreshWorktreeBranch();
       const refresh = refreshRef.current;
       if (workingDirectory && (scope === "git" || !refresh)) {
         void invalidateGitWorkingDirectoryQueries(
@@ -228,13 +227,13 @@ export function WorkspaceSessionContent({
       }
       void refresh?.(scope);
     },
-    [queryClient, workingDirectory, workspace.repoPath],
+    [queryClient, refreshWorktreeBranch, workingDirectory, workspace.repoPath],
   );
   const onSelectFile = useCallback(
     (file: TaskExecutionSelectedFile) => preview.onSelectFile(file),
     [preview],
   );
-  const previewContent = (
+  const filePreview = (
     <TaskExecutionSelectedFilePreview
       key={preview.model.previewSessionKey}
       model={{
@@ -244,6 +243,29 @@ export function WorkspaceSessionContent({
       branch={previewBranch}
       onFileSaved={() => refreshAfterChange("git")}
     />
+  );
+  const previewContent = isWorktree ? (
+    <div className="flex h-full min-h-0 flex-col">
+      {worktreeBranch.isError ? (
+        <div role="alert" className="flex items-center gap-2 border-b border-border p-2 text-sm">
+          <span className="min-w-0 flex-1 text-destructive">
+            Could not read worktree branch: {errorMessage(worktreeBranch.error)}
+          </span>
+          <Button size="sm" variant="outline" onClick={() => void worktreeBranch.refetch()}>
+            Retry branch
+          </Button>
+        </div>
+      ) : null}
+      {worktreeBranch.data ? (
+        <div className="min-h-0 flex-1">{filePreview}</div>
+      ) : !worktreeBranch.isError ? (
+        <p role="status" className="p-3 text-sm">
+          Checking worktree branch…
+        </p>
+      ) : null}
+    </div>
+  ) : (
+    filePreview
   );
   const mainContent = (
     <WorkspaceSessionMainContent
@@ -287,13 +309,4 @@ export function WorkspaceSessionContent({
       />
     </TabsContent>
   );
-}
-
-function sessionPreviewBranch(
-  record: WorkspaceSession,
-  branch: GitCurrentBranch | null,
-): string | null {
-  if (record.executionTarget.kind !== "local_repo_root" || !branch) return null;
-  if (branch.detached) return `detached:${branch.revision ?? "unknown"}`;
-  return branch.name != null ? `branch:${branch.name}` : null;
 }
