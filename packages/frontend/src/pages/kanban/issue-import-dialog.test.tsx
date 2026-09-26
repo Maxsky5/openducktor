@@ -115,6 +115,41 @@ afterEach(() => {
 });
 
 describe("Issue import dialog", () => {
+  test("allows issue import when only the Git remote mapping is invalid", async () => {
+    const list = mock(async () => ({
+      items: [issue("1")],
+      nextCursor: undefined,
+      searchSupported: true,
+      incompleteResults: false,
+    }));
+    host.issueItemsList = list;
+    const view = render(
+      <QueryClientProvider client={createQueryClient()}>
+        <SettingsModalProvider>
+          <IssueImportDialog
+            open
+            onOpenChange={() => {}}
+            repoPath="/repo"
+            provider={{
+              ...provider,
+              health: {
+                ...provider.health,
+                available: false,
+                repositoryMappingValid: false,
+                reason: "The Git remote does not match this repository.",
+              },
+            }}
+            onImported={() => {}}
+          />
+        </SettingsModalProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByRole("checkbox", { name: "Select Issue 1" })).toBeDefined();
+    expect(list).toHaveBeenCalledTimes(1);
+    view.unmount();
+  });
+
   test("keeps selection and review together across batched toggles", () => {
     const { result } = renderHook(() => useIssueSelectionState());
 

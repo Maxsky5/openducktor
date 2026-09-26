@@ -329,82 +329,103 @@ export const createAzureDevOpsIssueReader = ({
 }: {
   client: AzureDevOpsRestClient;
   repositoryPort: GitProviderRepositoryPort<AzureDevOpsRepository>;
-}): IssueReaderPort => ({
-  providerId: "azure_devops",
-  scope(repoConfig) {
-    return repositoryPort.getRepository(repoConfig).pipe(Effect.map(scopeForRepository));
-  },
-  list(input) {
-    return Effect.gen(function* () {
-      const repository = yield* repositoryPort.getRepository(input.repoConfig);
-      const { area, states } = yield* requireAreaAndStates(client, input.repoConfig, repository);
-      const stateClause = openStateClause(states);
-      if (!stateClause) return { items: [], nextPage: undefined };
-      const searchClause = input.search.trim()
-        ? ` AND [System.Title] CONTAINS '${escapeWiql(input.search.trim())}'`
-        : "";
-      const query = `SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = '${escapeWiql(repository.project)}' AND ([System.AreaPath] = '${escapeWiql(area)}' OR [System.AreaPath] UNDER '${escapeWiql(area)}') AND (${stateClause})${searchClause} ORDER BY [System.ChangedDate] DESC, [System.Id] DESC${input.snapshot ? ` ASOF '${escapeWiql(input.snapshot)}'` : ""}`;
-      const wiql = yield* client.request(input.repoConfig, repository, {
-        operation: "query open work items",
-        path: "wit/wiql",
-        apiVersion: issueApiVersion(repository),
-        method: "POST",
-        query: { $top: input.page * 20 + 1 },
-        body: { query },
-      });
-      const wiqlResult = yield* parse(wiql.body, wiqlResultSchema, "azureDevOps.wiql.parse");
-      const snapshot = input.snapshot ?? wiqlResult.asOf;
-      const ids = wiqlResult.workItems.map((item) => item.id);
-      const pageIds = ids.slice((input.page - 1) * 20, input.page * 20);
-      if (pageIds.length === 0) return { items: [], nextPage: undefined };
-      const details = yield* client.request(input.repoConfig, repository, {
-        operation: "read work items",
-        path: "wit/workitems",
-        apiVersion: issueApiVersion(repository),
-        query: { ids: pageIds.join(","), asOf: snapshot },
-      });
-      const data = yield* parse(details.body, workItemsSchema, "azureDevOps.workItems.parse");
-      const byId = new Map(data.value.map((item) => [item.id, item]));
-      const items = yield* Effect.try({
-        try: () =>
-          pageIds.map((id) => {
-            const item = byId.get(id);
-            if (!item) throw new Error(`Work item ${id} was missing from the response.`);
-            return toIssue(item, repository, area, states);
-          }),
-        catch: (cause) =>
-          cause instanceof HostValidationError
-            ? cause
-            : new HostOperationError({
-                operation: "azureDevOps.issues.list",
-                message:
-                  "Azure DevOps could not return every work item on this page. Retry the request.",
-                cause,
-              }),
-      });
-      return {
-        items,
-        nextPage: ids.length > input.page * 20 ? input.page + 1 : undefined,
-        snapshot,
-      };
-    });
-  },
-  get(input) {
-    return Effect.gen(function* () {
-      if (!/^[1-9]\d*$/u.test(input.sourceId)) {
-        return yield* new HostValidationError({
-          field: "sourceId",
-          message: "Choose a valid Azure DevOps work item ID.",
+}): IssueReaderPort => {
+  const pageMetadata = new Map<string, { area: string; states: TypeStates }>();
+  const pageKey = (repoConfig: RepoConfig, repository: AzureDevOpsRepository, snapshot: string) =>
+    JSON.stringify([
+      repoConfig.workspaceId,
+      scopeForRepository(repository),
+      repoConfig.git.provider?.settings?.areaPath?.toLowerCase(),
+      snapshot,
+    ]);
+  return {
+    providerId: "azure_devops",
+    scope(repoConfig) {
+      return repositoryPort.getRepository(repoConfig).pipe(Effect.map(scopeForRepository));
+    },
+    list(input) {
+      return Effect.gen(function* () {
+        const repository = yield* repositoryPort.getRepository(input.repoConfig);
+        const prepared = input.snapshot
+          ? pageMetadata.get(pageKey(input.repoConfig, repository, input.snapshot))
+          : undefined;
+        const { area, states } =
+          prepared ?? (yield* requireAreaAndStates(client, input.repoConfig, repository));
+        const stateClause = openStateClause(states);
+        if (!stateClause) return { items: [], nextPage: undefined };
+        const searchClause = input.search.trim()
+          ? ` AND [System.Title] CONTAINS '${escapeWiql(input.search.trim())}'`
+          : "";
+        const query = `SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = '${escapeWiql(repository.project)}' AND ([System.AreaPath] = '${escapeWiql(area)}' OR [System.AreaPath] UNDER '${escapeWiql(area)}') AND (${stateClause})${searchClause} ORDER BY [System.ChangedDate] DESC, [System.Id] DESC${input.snapshot ? ` ASOF '${escapeWiql(input.snapshot)}'` : ""}`;
+        const wiql = yield* client.request(input.repoConfig, repository, {
+          operation: "query open work items",
+          path: "wit/wiql",
+          apiVersion: issueApiVersion(repository),
+          method: "POST",
+          query: { $top: input.page * 20 + 1 },
+          body: { query },
         });
-      }
-      const preparedGet = yield* prepareAzureIssueGet(client, repositoryPort, input.repoConfig);
-      return yield* preparedGet(input.sourceId);
-    });
-  },
-  prepareGet(repoConfig) {
-    return prepareAzureIssueGet(client, repositoryPort, repoConfig);
-  },
-});
+        const wiqlResult = yield* parse(wiql.body, wiqlResultSchema, "azureDevOps.wiql.parse");
+        const snapshot = input.snapshot ?? wiqlResult.asOf;
+        const ids = wiqlResult.workItems.map((item) => item.id);
+        const pageIds = ids.slice((input.page - 1) * 20, input.page * 20);
+        if (pageIds.length === 0) return { items: [], nextPage: undefined };
+        const details = yield* client.request(input.repoConfig, repository, {
+          operation: "read work items",
+          path: "wit/workitems",
+          apiVersion: issueApiVersion(repository),
+          query: { ids: pageIds.join(","), asOf: snapshot },
+        });
+        const data = yield* parse(details.body, workItemsSchema, "azureDevOps.workItems.parse");
+        const byId = new Map(data.value.map((item) => [item.id, item]));
+        const items = yield* Effect.try({
+          try: () =>
+            pageIds.map((id) => {
+              const item = byId.get(id);
+              if (!item) throw new Error(`Work item ${id} was missing from the response.`);
+              return toIssue(item, repository, area, states);
+            }),
+          catch: (cause) =>
+            cause instanceof HostValidationError
+              ? cause
+              : new HostOperationError({
+                  operation: "azureDevOps.issues.list",
+                  message:
+                    "Azure DevOps could not return every work item on this page. Retry the request.",
+                  cause,
+                }),
+        });
+        if (ids.length > input.page * 20) {
+          pageMetadata.set(pageKey(input.repoConfig, repository, snapshot), { area, states });
+          if (pageMetadata.size > 20) {
+            const oldest = pageMetadata.keys().next().value;
+            if (oldest) pageMetadata.delete(oldest);
+          }
+        }
+        return {
+          items,
+          nextPage: ids.length > input.page * 20 ? input.page + 1 : undefined,
+          snapshot,
+        };
+      });
+    },
+    get(input) {
+      return Effect.gen(function* () {
+        if (!/^[1-9]\d*$/u.test(input.sourceId)) {
+          return yield* new HostValidationError({
+            field: "sourceId",
+            message: "Choose a valid Azure DevOps work item ID.",
+          });
+        }
+        const preparedGet = yield* prepareAzureIssueGet(client, repositoryPort, input.repoConfig);
+        return yield* preparedGet(input.sourceId);
+      });
+    },
+    prepareGet(repoConfig) {
+      return prepareAzureIssueGet(client, repositoryPort, repoConfig);
+    },
+  };
+};
 
 export const createAzureDevOpsAreaPathsReader = ({
   client,

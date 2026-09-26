@@ -152,6 +152,35 @@ describe("Azure DevOps issue reader", () => {
         .filter((request) => request.path === "wit/workitems")
         .map((request) => request.query?.asOf),
     ).toEqual(["2026-09-23T11:00:00Z", "2026-09-23T11:00:00Z"]);
+    expect(
+      requests.filter((request) => request.path === "wit/classificationnodes/Areas"),
+    ).toHaveLength(1);
+    expect(requests.filter((request) => request.path === "wit/workitemtypes")).toHaveLength(1);
+    expect(
+      requests.filter((request) => request.path === "wit/workitemtypes/Bug/states"),
+    ).toHaveLength(1);
+  });
+
+  test("reloads page metadata when the saved area changes", async () => {
+    const { reader, requests } = fixture(Array.from({ length: 21 }, (_, index) => index + 1));
+    const first = await Effect.runPromise(reader.list({ repoConfig, search: "", page: 1 }));
+    if (!first.snapshot) throw new Error("Expected a WIQL snapshot");
+    const changedConfig = repoConfigSchema.parse({
+      ...repoConfig,
+      git: {
+        ...repoConfig.git,
+        provider: { ...repoConfig.git.provider, settings: { areaPath: "Desktop App" } },
+      },
+    });
+
+    await Effect.runPromise(
+      reader.list({ repoConfig: changedConfig, search: "", page: 2, snapshot: first.snapshot }),
+    );
+
+    expect(
+      requests.filter((request) => request.path === "wit/classificationnodes/Areas"),
+    ).toHaveLength(2);
+    expect(requests.filter((request) => request.path === "wit/workitemtypes")).toHaveLength(2);
   });
 
   test("rejects a work item that moved out of the saved area", async () => {

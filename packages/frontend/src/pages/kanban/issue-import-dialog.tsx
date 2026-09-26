@@ -186,7 +186,12 @@ function issueImportUnavailableReason(
   if (provider.config.id === "azure_devops" && !provider.config.settings?.areaPath) {
     return "Choose an Azure DevOps area path in repository settings before importing work items.";
   }
-  if (!provider.health.available) {
+  const issueConnectionReady =
+    provider.config.enabled &&
+    provider.config.repository &&
+    provider.health.authenticated &&
+    provider.health.repositoryMappingValid === false;
+  if (!provider.health.available && !issueConnectionReady) {
     return (
       provider.health.reason ?? "Connect the Git provider in repository settings before importing."
     );
