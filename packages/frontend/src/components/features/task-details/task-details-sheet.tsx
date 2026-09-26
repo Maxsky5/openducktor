@@ -63,6 +63,7 @@ export function TaskDetailsSheet(props: TaskDetailsSheetProps): ReactElement {
     open,
     onOpenChange,
     onEdit = workflowActions?.onEdit,
+    onDelete = workflowActions?.onDelete,
   } = props;
   const taskId = task?.id ?? null;
   const contextTaskSessions = getContextTaskSessions(workflowActions, taskId);
@@ -81,6 +82,7 @@ export function TaskDetailsSheet(props: TaskDetailsSheetProps): ReactElement {
       open,
       onOpenChange,
       workflowActions,
+      onDelete,
       historicalSessions,
       taskSessions: contextTaskSessions,
     }),
@@ -108,7 +110,7 @@ export function TaskDetailsSheet(props: TaskDetailsSheetProps): ReactElement {
     activeSessionRole,
     historicalSessionRoles,
     onEdit,
-    onDelete: workflowActions?.onDelete,
+    onDelete,
     runWorkflowAction: viewModel.runWorkflowAction,
     openDeleteDialog: viewModel.openDeleteDialog,
   });
@@ -169,7 +171,7 @@ export function TaskDetailsSheet(props: TaskDetailsSheetProps): ReactElement {
 
       <TaskDetailsDialogs
         viewModel={viewModel}
-        showDelete={workflowActions?.onDelete !== undefined}
+        showDelete={onDelete !== undefined}
         showReset={workflowActions?.onResetTask !== undefined}
         showClose={workflowActions?.onCloseTask !== undefined}
       />
@@ -214,6 +216,7 @@ function createTaskDetailsViewModelOptions({
   open,
   onOpenChange,
   workflowActions,
+  onDelete,
   historicalSessions,
   taskSessions,
 }: {
@@ -223,6 +226,7 @@ function createTaskDetailsViewModelOptions({
   open: boolean;
   onOpenChange: TaskDetailsSheetProps["onOpenChange"];
   workflowActions: TaskWorkflowActions | null;
+  onDelete: TaskDetailsSheetProps["onDelete"];
   historicalSessions: AgentSessionRecord[];
   taskSessions: KanbanTaskSession[];
 }): Parameters<typeof useTaskDetailsSheetViewModel>[0] {
@@ -233,6 +237,7 @@ function createTaskDetailsViewModelOptions({
     open,
     onOpenChange,
     ...workflowActions,
+    onDelete,
   };
   if (task) {
     options.resolveSessionOptionsByRole = (role: AgentRole) =>

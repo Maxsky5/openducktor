@@ -298,7 +298,12 @@ export const removeAgentSessionListQueries = async (
     queryKeys.map((queryKey) => queryClient.cancelQueries({ queryKey, exact: true })),
   );
   for (const queryKey of queryKeys) {
-    queryClient.removeQueries({ queryKey, exact: true });
+    const query = queryClient.getQueryCache().find({ queryKey, exact: true });
+    if (query && query.getObserversCount() > 0) {
+      queryClient.setQueryData(queryKey, []);
+    } else {
+      queryClient.removeQueries({ queryKey, exact: true });
+    }
   }
 };
 

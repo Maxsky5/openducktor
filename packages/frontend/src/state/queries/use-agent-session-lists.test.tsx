@@ -3,7 +3,11 @@ import type { AgentSessionRecord } from "@openducktor/contracts";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
-import { agentSessionQueryKeys, refreshAgentSessionListQuery } from "./agent-sessions";
+import {
+  agentSessionQueryKeys,
+  refreshAgentSessionListQuery,
+  removeAgentSessionListQueries,
+} from "./agent-sessions";
 import { useAgentSessionLists } from "./use-agent-session-lists";
 
 const sessionFixture: AgentSessionRecord = {
@@ -40,6 +44,46 @@ const createHarness = (initialProps: HarnessProps) => {
 };
 
 describe("useAgentSessionLists", () => {
+  test("does not read a deleted task while its session list observer is still mounted", async () => {
+    let deleted = false;
+    const batchList = mock(async () => {
+      if (deleted) throw new Error("Task not found: task-1");
+      return [{ taskId: "task-1", agentSessions: [sessionFixture] }];
+    });
+    const singleList = mock(async () => {
+      if (deleted) throw new Error("Task not found: task-1");
+      return [sessionFixture];
+    });
+    const props: HarnessProps = {
+      repoPath: "/repo",
+      taskIds: ["task-1"],
+      enabled: true,
+      readPort: {
+        agentSessionsList: singleList,
+        agentSessionsListForTasks: batchList,
+      },
+    };
+    const harness = createHarness(props);
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => !state.isPending);
+      expect(batchList).toHaveBeenCalledTimes(1);
+
+      deleted = true;
+      await harness.run(async () => {
+        await removeAgentSessionListQueries(harness.getQueryClient(), "/repo", ["task-1"]);
+      });
+      await harness.update(props);
+
+      expect(batchList).toHaveBeenCalledTimes(1);
+      expect(singleList).not.toHaveBeenCalled();
+      expect(harness.getLatest().error).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("stays pending without reading when disabled", async () => {
     const batchList = mock(async () => []);
     const singleList = mock(async () => []);
