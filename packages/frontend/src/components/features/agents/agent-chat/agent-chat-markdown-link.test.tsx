@@ -1,4 +1,4 @@
-import { describe, expect, test, mock } from "bun:test";
+import { beforeAll, describe, expect, test, mock } from "bun:test";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
@@ -7,6 +7,13 @@ import { ChatFileLinkContext } from "./agent-chat-file-link-context";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
 
 enableReactActEnvironment();
+
+beforeAll(async () => {
+  await Promise.all([
+    import("@/components/ui/markdown-renderer-premium"),
+    import("@/components/ui/markdown-renderer-rich"),
+  ]);
+});
 
 describe("chat Markdown links", () => {
   for (const markdown of [
