@@ -1,7 +1,14 @@
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { History, Import, Plus } from "lucide-react";
-import { type ReactElement, useCallback, useEffect, useState } from "react";
+import {
+  type ReactElement,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { useLocation, useNavigationType, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
 import { BrowserTabsBar, BrowserTabsRoot } from "@/components/ui/browser-tabs";
@@ -62,14 +69,13 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
     requestedSessionId: sessionId,
   });
   const requestedSelectedId = requestedSelected?.id ?? null;
-  const visibleSelectedId = useVisibleSessionId(
+  const { visibleSelectedId, selectTab } = useVisibleSessionId(
     requestedSelectedId,
     guardWorkspaceChange,
     updateNavigation,
     cancelPending,
   );
-  const selected =
-    orderedSessions.find((record) => record.id === visibleSelectedId) ?? requestedSelected;
+  const selected = useVisibleSessionRecord(orderedSessions, visibleSelectedId, requestedSelected);
   const selectedId = selected?.id ?? null;
   const { panelState, onPanelStateChange, togglePanel } = useSessionPanelState(selectedId);
   useEffect(() => {
@@ -109,7 +115,7 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
   return (
     <BrowserTabsRoot
       value={selectedId ?? ""}
-      onValueChange={(sessionId) => updateNavigation({ sessionId }, false)}
+      onValueChange={selectTab}
       className="h-full min-h-0 min-w-0 gap-0 overflow-hidden"
     >
       <BrowserTabsBar
@@ -213,6 +219,19 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
       />
     </BrowserTabsRoot>
   );
+}
+
+function useVisibleSessionRecord(
+  sessions: WorkspaceSession[],
+  visibleId: string | null,
+  fallback: WorkspaceSession | null,
+): WorkspaceSession | null {
+  const visible = sessions.find((record) => record.id === visibleId) ?? null;
+  const lastVisible = useRef<WorkspaceSession | null>(null);
+  useLayoutEffect(() => {
+    if (visible) lastVisible.current = visible;
+  }, [visible]);
+  return visible ?? (lastVisible.current?.id === visibleId ? lastVisible.current : fallback);
 }
 
 function useSessionPanelState(selectedId: string | null) {

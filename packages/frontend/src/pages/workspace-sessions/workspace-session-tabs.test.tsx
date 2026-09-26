@@ -25,10 +25,14 @@ import { WorkspaceSessions } from "./workspace-sessions-view";
 import { useWorkspaceSessionPreview } from "./use-workspace-session-preview";
 import { workspaceSessionSelectionStorageKey } from "./use-workspace-session-selection";
 import { workspaceSessionTabOrderStorageKey } from "./use-workspace-session-tab-order";
-import { updateWorkspaceSessionQueries } from "@/state/queries/workspace-sessions";
+import {
+  updateWorkspaceSessionQueries,
+  workspaceSessionListQueryOptions,
+} from "@/state/queries/workspace-sessions";
 import * as sessionImport from "./workspace-session-import-dialog";
 import * as chatCreate from "./workspace-session-create-dialog";
 import * as workspaceChat from "./workspace-session-chat";
+import * as sessionContent from "./workspace-session-content";
 
 const testWorkspaceIds = new Set<string>();
 const sessionTabs = (view: ReturnType<typeof render>) =>
@@ -560,6 +564,87 @@ test("workspace tools use the saved panel choice", async () => {
     expect(localStorage.getItem(RIGHT_PANEL_OPEN_STORAGE_KEY)).toBe("true");
   } finally {
     view.unmount();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+}, 5_000);
+
+test("an externally removed chat keeps its draft until the user leaves", async () => {
+  const workspaceId = crypto.randomUUID();
+  function RemoveFirst() {
+    const queryClient = useQueryClient();
+    return (
+      <button
+        onClick={() =>
+          queryClient.setQueryData(workspaceSessionListQueryOptions(workspaceId).queryKey, [
+            sessionRecord("Second"),
+          ])
+        }
+      >
+        Remove first chat
+      </button>
+    );
+  }
+  const content = spyOn(sessionContent, "WorkspaceSessionContent").mockImplementation(
+    function SessionContent({ record }) {
+      const [file, setFile] = useState<{ rootPath: string; relativePath: string } | null>(null);
+      const { preview, onDiscard } = useWorkspaceSessionPreview(file, setFile, false);
+      return (
+        <div data-testid="visible-draft">
+          {record.id}:{preview.model.selectedFile?.relativePath ?? "none"}
+          {record.id === "First" ? (
+            <button
+              onClick={() => {
+                const draft = { rootPath: "/repo", relativePath: "draft.ts" };
+                preview.onSelectFile(draft);
+                setFile(draft);
+              }}
+            >
+              Open draft
+            </button>
+          ) : null}
+          <button onClick={() => preview.model.onLeavePolicyChange("confirm")}>Edit draft</button>
+          {preview.model.hasPendingDiscard ? (
+            <>
+              <button onClick={preview.model.onKeepEditing}>Keep editing</button>
+              <button onClick={onDiscard}>Discard draft</button>
+            </>
+          ) : null}
+        </div>
+      );
+    },
+  );
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        workspaceSessionListActive: async () => [sessionRecord("First"), sessionRecord("Second")],
+        workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+      },
+    }),
+  );
+  const view = renderTabs(undefined, "/chats?session=First", workspaceId, <RemoveFirst />);
+  try {
+    const draft = await view.findByTestId("visible-draft");
+    fireEvent.click(view.getByRole("button", { name: "Open draft" }));
+    expect(draft.textContent).toContain("First:draft.ts");
+    fireEvent.click(view.getByRole("button", { name: "Edit draft" }));
+    expect(draft.textContent).toContain("First:draft.ts");
+    fireEvent.click(view.getByRole("button", { name: "Remove first chat" }));
+    expect(view.getByTestId("visible-draft").textContent).toContain("First:draft.ts");
+    await view.findByRole("button", { name: "Keep editing" });
+    expect(view.getByTestId("visible-draft")).toBe(draft);
+    expect(draft.textContent).toContain("First:draft.ts");
+
+    fireEvent.click(view.getByRole("button", { name: "Keep editing" }));
+    expect(view.queryByRole("button", { name: "Discard draft" })).toBeNull();
+    fireEvent.mouseUp(view.getByRole("tab", { name: /Second/ }), { button: 0 });
+    await view.findByRole("button", { name: "Discard draft" });
+    fireEvent.click(view.getByRole("button", { name: "Discard draft" }));
+    await waitFor(() =>
+      expect(view.getByTestId("visible-draft").textContent).toContain("Second:none"),
+    );
+  } finally {
+    view.unmount();
+    content.mockRestore();
     configureShellBridge(createUnavailableShellBridge());
   }
 }, 5_000);

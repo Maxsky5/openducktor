@@ -84,7 +84,7 @@ function SessionHarness({
 function RoutedSessionHarness() {
   const { run, cancelPending } = useWorkspacePreviewTransitionGuard();
   const [requested, setRequested] = useState<"first" | "second">("first");
-  const visible = useVisibleSessionId(
+  const { visibleSelectedId: visible } = useVisibleSessionId(
     requested,
     run,
     ({ sessionId }) => setRequested(sessionId === "second" ? "second" : "first"),
