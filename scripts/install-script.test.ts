@@ -234,23 +234,6 @@ unixTest("Linux rejects an AppImage without an icon before changing the installe
   expect(readFileSync(iconPath)).toEqual(previousIcon);
 });
 
-unixTest("the README and guide report a failed shell script download", () => {
-  const root = mkdtempSync(join(tmpdir(), "openducktor-install-command-"));
-  roots.push(root);
-  writeFileSync(join(root, "curl"), "#!/bin/sh\nexit 22\n", { mode: 0o755 });
-  for (const path of [
-    resolve(import.meta.dir, "../README.md"),
-    resolve(import.meta.dir, "../docs/installation.md"),
-  ]) {
-    const command = readFileSync(path, "utf8").match(/^bash -o pipefail -c 'curl[^\n]+'$/m)?.[0];
-    expect(command).toBeDefined();
-    const result = spawnSync("sh", ["-c", command!], {
-      env: { ...process.env, PATH: `${root}:${process.env.PATH}` },
-    });
-    expect(result.status).toBe(22);
-  }
-});
-
 unixTest("missing or ambiguous assets and missing digests fail before installation", () => {
   const setup = fixture("Linux", "x86_64");
   for (const assets of [[], [setup.asset, setup.asset], [{ ...setup.asset, digest: null }]]) {
