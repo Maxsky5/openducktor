@@ -250,20 +250,23 @@ export function WorkspaceSessionContent({
     [isWorktree, queryClient, refreshBranch, workingDirectory, workspace.repoPath],
   );
   const onSelectFile = useCallback(
-    (file: TaskExecutionSelectedFile) => preview.onSelectFile(file),
+    (file: TaskExecutionSelectedFile) =>
+      preview.model.isApplyingTransition ? false : preview.onSelectFile(file),
     [preview],
   );
   const filePreview = (
-    <TaskExecutionSelectedFilePreview
-      key={preview.model.previewSessionKey}
-      model={{
-        ...preview.model,
-        onDiscard,
-      }}
-      branch={previewBranch}
-      requireBranch
-      onFileSaved={() => refreshAfterChange("git")}
-    />
+    <div className="h-full min-h-0" inert={preview.model.isApplyingTransition}>
+      <TaskExecutionSelectedFilePreview
+        key={preview.model.previewSessionKey}
+        model={{
+          ...preview.model,
+          onDiscard,
+        }}
+        branch={previewBranch}
+        requireBranch
+        onFileSaved={() => refreshAfterChange("git")}
+      />
+    </div>
   );
   const previewContent = isWorktree ? (
     <div className="flex h-full min-h-0 flex-col">

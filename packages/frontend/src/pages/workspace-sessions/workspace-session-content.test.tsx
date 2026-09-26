@@ -5,7 +5,10 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, memo, type ReactElement, useState } from "react";
 import { toast } from "sonner";
 import { Tabs } from "@/components/ui/tabs";
-import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
+import {
+  useWorkspacePreviewTransitionGuard,
+  WorkspacePreviewTransitionGuardProvider,
+} from "@/components/layout/workspace-preview-transition-guard";
 import {
   AgentSessionReadModelStateContext,
   WorkspaceBranchStateContext,
@@ -54,6 +57,15 @@ const worktreeRecord: WorkspaceSession = {
   },
 };
 
+function WorkspaceChange({ apply }: { apply: () => Promise<boolean> }) {
+  const { run } = useWorkspacePreviewTransitionGuard();
+  return (
+    <button onClick={() => run(apply, undefined, { waitForSuccess: true })}>
+      Change workspace
+    </button>
+  );
+}
+
 function renderClosedSession(
   queryClient: QueryClient,
   branch: string | null | undefined,
@@ -63,6 +75,8 @@ function renderClosedSession(
     rootPath: sessionRecord.executionTarget.workingDirectory,
     relativePath: "file.ts",
   },
+  switchWorkspace?: () => Promise<boolean>,
+  panelOpen = false,
 ) {
   const content = (
     name: string | null | undefined,
@@ -87,12 +101,13 @@ function renderClosedSession(
         }}
       >
         <WorkspacePreviewTransitionGuardProvider>
+          {switchWorkspace ? <WorkspaceChange apply={switchWorkspace} /> : null}
           <Tabs value={sessionRecord.id}>
             <WorkspaceSessionContent
               workspace={workspace}
               record={sessionRecord}
               panelState={{
-                isOpen: false,
+                isOpen: panelOpen,
                 activeTabId: "file_explorer",
                 selectedFile,
               }}
@@ -216,6 +231,58 @@ test("an outside branch change keeps a dirty preview and refreshes file queries"
     chat.mockRestore();
     preview.mockRestore();
     queryClient.clear();
+  }
+});
+
+test("a guarded workspace change locks the preview and file selection until it fails", async () => {
+  const finishChanges: Array<(changed: boolean) => void> = [];
+  const switchWorkspace = () =>
+    new Promise<boolean>((resolve) => {
+      finishChanges.push(resolve);
+    });
+  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(() => <div />);
+  const preview = mockFilePreview(() => <input aria-label="File draft" />);
+  const tools = spyOn(toolsPanel, "WorkspaceSessionToolsPanel").mockImplementation(
+    ({ onSelectFile }) => (
+      <button onClick={() => onSelectFile({ rootPath: "/repo", relativePath: "next.ts" })}>
+        Open next file
+      </button>
+    ),
+  );
+  const queryClient = newQueryClient();
+  queryClient.setQueryData(currentBranchQueryOptions("/repo").queryKey, {
+    name: "main",
+    detached: false,
+  });
+  const view = renderClosedSession(
+    queryClient,
+    "main",
+    undefined,
+    record,
+    undefined,
+    switchWorkspace,
+    true,
+  );
+  try {
+    const file = screen.getByTestId("workspace-session-file-preview");
+    expect(file.querySelector("[inert]")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Change workspace" }));
+    await waitFor(() => expect(finishChanges).toHaveLength(1));
+    expect(file.querySelector("[inert]")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Open next file" }));
+    expect(preview.mock.calls.at(-1)?.[0].model.selectedFile?.relativePath).toBe("file.ts");
+
+    await act(async () => finishChanges[0]?.(false));
+    await waitFor(() => expect(file.querySelector("[inert]")).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "Open next file" }));
+    expect(preview.mock.calls.at(-1)?.[0].model.selectedFile?.relativePath).toBe("next.ts");
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    chat.mockRestore();
+    preview.mockRestore();
+    tools.mockRestore();
   }
 });
 
