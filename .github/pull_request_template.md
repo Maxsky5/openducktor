@@ -1,32 +1,17 @@
-## Summary
+<!-- Explain the problem and the result this PR aims to achieve. Write for someone who has not read the related issue. Replace this comment with a short paragraph. -->
 
-- What problem does this change solve?
-- What is intentionally out of scope?
+## What changes
 
-## Testing
+<!-- Describe the new behavior or outcome. Do not list changed files. -->
 
-- [ ] `bun run lint`
-- [ ] `bun run typecheck`
-- [ ] `bun run test`
-- [ ] `bun run build`
-- [ ] Not applicable
+## Review notes
 
-## Checklist
+<!-- Explain choices, tradeoffs, limits, setup steps, migrations, breaking changes, or planned follow-up work that reviewers need to know. Remove this section if none apply. -->
 
-- [ ] I updated docs when behavior, workflows, runtime contracts, or setup changed
-- [ ] I added or updated relevant tests
-- [ ] I kept failures explicit instead of adding fallback logic
-- [ ] I linked related issues or context below
+## UI/UX evidence
 
-## Related Issues
+<!-- For UI or UX changes, add screenshots or a short video. Show before and after when that helps. Include light and dark views when relevant. If you cannot capture media, explain why and describe the visible result. Remove this section for other changes. -->
 
-Closes #
+## Related issues and PRs
 
-## Breaking Changes
-
-- [ ] No breaking changes
-- [ ] Breaking changes are described below
-
-## Additional Context
-
-Add screenshots, logs, migration notes, or follow-up work if needed.
+<!-- Link relevant work. Use "Fixes #123" only when this PR fully resolves the issue. Remove this section if there are no links. -->

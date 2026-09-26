@@ -375,7 +375,7 @@ const AGENT_PROMPT_DEFINITIONS = {
   "kickoff.build_pull_request_generation": {
     id: "kickoff.build_pull_request_generation",
     purpose: "kickoff",
-    builtinVersion: 8,
+    builtinVersion: 9,
     template: joinPromptBlocks(
       "Publish a review-ready pull request for the current task.",
       lineSection("Pull request base", ["{{git.targetBranch}}"]),
@@ -391,7 +391,8 @@ const AGENT_PROMPT_DEFINITIONS = {
       bulletSection("Publish", [
         "Use a concise Conventional Commit-style pull request title that explains why the change matters.",
         "Start the body with the problem and goal. Add reviewer context and decisions or tradeoffs that affect review.",
-        "Follow the repository's pull request template and fill every relevant section. Keep the body focused on the current task.",
+        "For a new pull request, use the repository's template and fill each relevant section. Keep the body focused on the current task.",
+        "For an existing pull request, read its title and body. Preserve useful context, links, media, and edits from other authors. Update only what the current task makes inaccurate or what the user requests, and add missing task-specific context or UI evidence when relevant.",
         "Push the source branch, create or update the pull request against the base branch, and confirm the published title and body follow repository conventions.",
       ]),
       bulletSection("Complete", [
