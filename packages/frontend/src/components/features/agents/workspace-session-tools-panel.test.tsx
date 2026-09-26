@@ -54,16 +54,24 @@ function worktreeSummary(targetBranch: string): GitWorktreeStatusSummary {
   };
 }
 
-function PanelHarness({ branchKey = "feature" }: { branchKey?: string }) {
+function PanelHarness({
+  branchKey = "feature",
+  targetError = null,
+  contextMode = "repository",
+}: {
+  branchKey?: string;
+  targetError?: string | null;
+  contextMode?: "repository" | "worktree";
+}) {
   const [activeTabId, setActiveTabId] = useState<WorkspaceToolsTabId>("git");
   return (
     <WorkspaceSessionToolsPanel
       repoPath="/repo"
       workingDirectory="/repo"
-      contextMode="repository"
+      contextMode={contextMode}
       branchKey={branchKey}
       target={{ branch: "@{upstream}" }}
-      targetError={null}
+      targetError={targetError}
       activeTabId={activeTabId}
       onActiveTabChange={setActiveTabId}
       selectedFile={null}
@@ -113,6 +121,52 @@ test("waits for the comparison target before reading Git status", async () => {
     configureShellBridge(createUnavailableShellBridge());
   }
 });
+
+test.each(["repository settings", "comparison"] as const)(
+  "reads local changes when the %s lookup fails",
+  async (source) => {
+    const targetError =
+      source === "repository settings" ? "Could not load repository settings" : null;
+    const comparison = mock(async (): Promise<GitComparisonTarget> => {
+      throw new Error("Could not check comparison target");
+    });
+    const statusTargets: string[] = [];
+    configureShellBridge(
+      createShellBridgeFixture({
+        client: {
+          gitGetComparisonTarget: comparison,
+          gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) => {
+            statusTargets.push(targetBranch);
+            return worktreeStatus(targetBranch);
+          },
+          gitGetWorktreeStatusSummary: async (_repoPath: string, targetBranch: string) =>
+            worktreeSummary(targetBranch),
+          gitGetBranches: async () => [],
+        },
+      }),
+    );
+    const queryClient = createQueryClient();
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <PanelHarness contextMode="worktree" targetError={targetError} />
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+    try {
+      await waitFor(() => expect(statusTargets).toContain("HEAD"));
+      expect(statusTargets.every((target) => target === "HEAD")).toBe(true);
+      expect(
+        await screen.findByText(targetError ?? "Could not check comparison target"),
+      ).toBeTruthy();
+      expect(comparison).toHaveBeenCalledTimes(source === "comparison" ? 1 : 0);
+    } finally {
+      view.unmount();
+      queryClient.clear();
+      configureShellBridge(createUnavailableShellBridge());
+    }
+  },
+);
 
 test("rechecks a root chat target when its branch changes", async () => {
   let hasUpstream = true;

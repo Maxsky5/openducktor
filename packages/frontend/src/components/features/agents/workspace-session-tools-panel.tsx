@@ -373,7 +373,7 @@ function useWorkspaceSessionComparison(input: {
       : null;
   return {
     resolvedTarget,
-    isReady: comparison.data !== undefined && !comparison.isError,
+    isReady: targetError !== null || comparison.isError || comparison.data !== undefined,
     unavailableReason: comparisonUnavailableReason({
       targetError,
       isPending: comparison.isPending,
