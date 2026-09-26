@@ -10,6 +10,7 @@ import {
   WorkspaceBranchStateContext,
 } from "@/state/app-state-contexts";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
+import { currentBranchQueryOptions } from "@/state/queries/git";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
@@ -38,20 +39,22 @@ const record = {
 
 function renderClosedSession(
   queryClient: QueryClient,
-  branch: string | null,
+  branch: string | null | undefined,
   revision?: string,
   sessionRecord: WorkspaceSession = record,
 ) {
-  const content = (name: string | null, currentRevision?: string) => (
+  const content = (name: string | null | undefined, currentRevision?: string) => (
     <QueryClientProvider client={queryClient}>
       <WorkspaceBranchStateContext.Provider
         value={{
           activeWorkspace: null,
           branches: [],
           activeBranch:
-            name === null
-              ? { detached: true, revision: currentRevision }
-              : { name, detached: false },
+            name === undefined
+              ? null
+              : name === null
+                ? { detached: true, revision: currentRevision }
+                : { name, detached: false },
           isLoadingBranches: false,
           isSwitchingBranch: false,
           branchSyncDegraded: false,
@@ -81,7 +84,7 @@ function renderClosedSession(
   const view = render(content(branch, revision));
   return {
     ...view,
-    setBranch: (name: string | null, nextRevision?: string) =>
+    setBranch: (name: string | null | undefined, nextRevision?: string) =>
       view.rerender(content(name, nextRevision)),
   };
 }
@@ -230,6 +233,110 @@ test("a closed worktree panel tracks branch changes without losing a draft", asy
     chat.mockRestore();
     preview.mockRestore();
     configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
+test("a root chat checks the branch after a tool runs and keeps its draft on read failure", async () => {
+  function Preview() {
+    const [draft, setDraft] = useState("");
+    return (
+      <input
+        aria-label="File draft"
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+      />
+    );
+  }
+  const preview = mockFilePreview(Preview);
+  let refreshTools = () => {};
+  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(
+    ({ onToolRefresh }) => {
+      refreshTools = onToolRefresh;
+      return <div />;
+    },
+  );
+  let branch = "feature";
+  let branchError: Error | null = null;
+  let releaseRead: (() => void) | null = null;
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        gitGetCurrentBranch: async () => {
+          await new Promise<void>((resolve) => (releaseRead = resolve));
+          if (branchError) throw branchError;
+          return { name: branch, detached: false };
+        },
+      },
+    }),
+  );
+  const queryClient = newQueryClient();
+  queryClient.setQueryData(currentBranchQueryOptions("/repo").queryKey, {
+    name: "main",
+    detached: false,
+  });
+  const view = renderClosedSession(queryClient, "main");
+  try {
+    const input = screen.getByRole("textbox", { name: "File draft" });
+    fireEvent.change(input, { target: { value: "unsaved draft" } });
+
+    act(() => refreshTools());
+    await waitFor(() => expect(releaseRead).not.toBeNull());
+    expect(preview.mock.calls.at(-1)?.[0].branch).toBeNull();
+    expect(screen.getByDisplayValue("unsaved draft")).toBe(input);
+    await act(async () => releaseRead?.());
+    await waitFor(() => expect(preview.mock.calls.at(-1)?.[0].branch).toBe("branch:feature"));
+
+    branchError = new Error("Git branch read failed");
+    releaseRead = null;
+    act(() => refreshTools());
+    await waitFor(() => expect(releaseRead).not.toBeNull());
+    expect(preview.mock.calls.at(-1)?.[0].branch).toBeNull();
+    await act(async () => releaseRead?.());
+    await screen.findByText("Could not read repository branch: Git branch read failed");
+    expect(preview.mock.calls.at(-1)?.[0].branch).toBeNull();
+    expect(screen.getByDisplayValue("unsaved draft")).toBe(input);
+
+    branchError = null;
+    branch = "next";
+    releaseRead = null;
+    fireEvent.click(screen.getByRole("button", { name: "Retry branch" }));
+    await waitFor(() => expect(releaseRead).not.toBeNull());
+    await act(async () => releaseRead?.());
+    await waitFor(() => expect(preview.mock.calls.at(-1)?.[0].branch).toBe("branch:next"));
+    expect(screen.getByDisplayValue("unsaved draft")).toBe(input);
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    chat.mockRestore();
+    preview.mockRestore();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
+test("a root chat waits for its first branch before opening a file draft", async () => {
+  function Preview() {
+    return <input aria-label="File draft" />;
+  }
+  const preview = mockFilePreview(Preview);
+  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(() => <div />);
+  const queryClient = newQueryClient();
+  const view = renderClosedSession(queryClient, undefined);
+  try {
+    expect(screen.queryByRole("textbox", { name: "File draft" })).toBeNull();
+    expect(screen.getByRole("status").textContent).toContain("Checking repository branch");
+
+    act(() => {
+      queryClient.setQueryData(currentBranchQueryOptions("/repo").queryKey, {
+        name: "main",
+        detached: false,
+      });
+    });
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "File draft" })).toBeTruthy());
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    chat.mockRestore();
+    preview.mockRestore();
   }
 });
 

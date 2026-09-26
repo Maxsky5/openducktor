@@ -173,7 +173,7 @@ export function WorkspaceSessionContent({
   const queryClient = useQueryClient();
   const workingDirectory = sessionWorkingDirectory(workspace, record);
   const isWorktree = record.executionTarget.kind === "local_worktree";
-  const { worktreeBranch, previewBranch, branchKey, refreshWorktreeBranch } =
+  const { rootBranch, worktreeBranch, previewBranch, branchKey, refreshBranch } =
     useWorkspaceSessionBranch({
       repoPath: workspace.repoPath,
       workingDirectory,
@@ -213,7 +213,7 @@ export function WorkspaceSessionContent({
   );
   const refreshAfterChange = useCallback(
     (scope: "git" | "all") => {
-      refreshWorktreeBranch();
+      if (isWorktree || scope === "all") refreshBranch();
       const refresh = refreshRef.current;
       if (workingDirectory && (scope === "git" || !refresh)) {
         void invalidateGitWorkingDirectoryQueries(
@@ -227,7 +227,7 @@ export function WorkspaceSessionContent({
       }
       void refresh?.(scope);
     },
-    [queryClient, refreshWorktreeBranch, workingDirectory, workspace.repoPath],
+    [isWorktree, queryClient, refreshBranch, workingDirectory, workspace.repoPath],
   );
   const onSelectFile = useCallback(
     (file: TaskExecutionSelectedFile) => preview.onSelectFile(file),
@@ -265,7 +265,14 @@ export function WorkspaceSessionContent({
       ) : null}
     </div>
   ) : (
-    filePreview
+    <RepositoryFilePreview
+      hasBranch={rootBranch.data !== undefined || activeBranch !== null}
+      isError={rootBranch.isError}
+      error={rootBranch.error}
+      onRetry={refreshBranch}
+    >
+      {filePreview}
+    </RepositoryFilePreview>
   );
   const mainContent = (
     <WorkspaceSessionMainContent
@@ -308,5 +315,41 @@ export function WorkspaceSessionContent({
         toolsContent={toolsContent}
       />
     </TabsContent>
+  );
+}
+
+function RepositoryFilePreview({
+  hasBranch,
+  isError,
+  error,
+  onRetry,
+  children,
+}: {
+  hasBranch: boolean;
+  isError: boolean;
+  error: unknown;
+  onRetry: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      {isError ? (
+        <div role="alert" className="flex items-center gap-2 border-b border-border p-2 text-sm">
+          <span className="min-w-0 flex-1 text-destructive">
+            Could not read repository branch: {errorMessage(error)}
+          </span>
+          <Button size="sm" variant="outline" onClick={onRetry}>
+            Retry branch
+          </Button>
+        </div>
+      ) : null}
+      {hasBranch ? (
+        <div className="min-h-0 flex-1">{children}</div>
+      ) : !isError ? (
+        <p role="status" className="p-3 text-sm">
+          Checking repository branch…
+        </p>
+      ) : null}
+    </div>
   );
 }

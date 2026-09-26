@@ -2,7 +2,13 @@ import type { GitCurrentBranch } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useEffectEvent, useRef } from "react";
 import { invalidateWorkspaceFileQueries } from "@/state/queries/filesystem";
-import { gitQueryKeys, worktreeBranchQueryOptions } from "@/state/queries/git";
+import {
+  currentBranchQueryOptions,
+  gitQueryKeys,
+  invalidateCurrentBranchQuery,
+  loadCurrentBranchFromQuery,
+  worktreeBranchQueryOptions,
+} from "@/state/queries/git";
 
 export function useWorkspaceSessionBranch({
   repoPath,
@@ -16,21 +22,13 @@ export function useWorkspaceSessionBranch({
   activeBranch: GitCurrentBranch | null;
 }) {
   const queryClient = useQueryClient();
+  const rootBranch = useQuery({ ...currentBranchQueryOptions(repoPath), enabled: false });
   const worktreeBranch = useQuery({
     ...worktreeBranchQueryOptions(repoPath, workingDirectory ?? ""),
     enabled: isWorktree && workingDirectory !== null,
   });
-  const branch = isWorktree
-    ? worktreeBranch.isError || worktreeBranch.isFetching
-      ? null
-      : (worktreeBranch.data ?? null)
-    : activeBranch;
+  const { branch, branchKey } = branchState(isWorktree, rootBranch, worktreeBranch, activeBranch);
   const previewBranch = branchIdentity(branch);
-  const branchKey = isWorktree
-    ? worktreeBranch.isError
-      ? "unknown"
-      : (branchIdentity(worktreeBranch.data ?? null) ?? "unknown")
-    : (activeBranch?.name ?? (activeBranch?.detached ? "detached" : "unknown"));
   const lastBranch = useRef<string | null>(null);
   useEffect(() => {
     if (!previewBranch || !workingDirectory || lastBranch.current === previewBranch) return;
@@ -38,15 +36,21 @@ export function useWorkspaceSessionBranch({
     void invalidateWorkspaceFileQueries(queryClient, workingDirectory);
   }, [previewBranch, queryClient, workingDirectory]);
 
-  const refreshWorktreeBranch = useCallback(() => {
-    if (!isWorktree || !workingDirectory) return;
-    void queryClient.invalidateQueries({
-      queryKey: gitQueryKeys.worktreeBranch(repoPath, workingDirectory),
-      exact: true,
-    });
+  const refreshBranch = useCallback(() => {
+    if (isWorktree) {
+      if (!workingDirectory) return;
+      void queryClient.invalidateQueries({
+        queryKey: gitQueryKeys.worktreeBranch(repoPath, workingDirectory),
+        exact: true,
+      });
+      return;
+    }
+    void invalidateCurrentBranchQuery(queryClient, repoPath);
+    // The query holds the error so the preview can show a retry action.
+    void loadCurrentBranchFromQuery(queryClient, repoPath).catch(() => {});
   }, [isWorktree, queryClient, repoPath, workingDirectory]);
   const refreshOnFocus = useEffectEvent(() => {
-    if (document.visibilityState === "visible") refreshWorktreeBranch();
+    if (document.visibilityState === "visible") refreshBranch();
   });
   useEffect(() => {
     if (!isWorktree || !workingDirectory) return;
@@ -59,7 +63,34 @@ export function useWorkspaceSessionBranch({
     };
   }, [isWorktree, workingDirectory]);
 
-  return { worktreeBranch, previewBranch, branchKey, refreshWorktreeBranch };
+  return { rootBranch, worktreeBranch, previewBranch, branchKey, refreshBranch };
+}
+
+type BranchRead = {
+  data: GitCurrentBranch | undefined;
+  isError: boolean;
+  isFetching: boolean;
+};
+
+function branchState(
+  isWorktree: boolean,
+  root: BranchRead,
+  worktree: BranchRead,
+  active: GitCurrentBranch | null,
+) {
+  if (isWorktree) {
+    return {
+      branch: worktree.isError || worktree.isFetching ? null : (worktree.data ?? null),
+      branchKey: worktree.isError
+        ? "unknown"
+        : (branchIdentity(worktree.data ?? null) ?? "unknown"),
+    };
+  }
+  const branch = root.isError || root.isFetching ? null : (root.data ?? active);
+  return {
+    branch,
+    branchKey: branch?.name ?? (branch?.detached ? "detached" : "unknown"),
+  };
 }
 
 function branchIdentity(branch: GitCurrentBranch | null): string | null {
