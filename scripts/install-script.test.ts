@@ -24,13 +24,18 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-macTest.each(["arm64", "x86_64"])("macOS %s installs and updates the matching ZIP", (arch) => {
-  const setup = fixture("Darwin", arch);
-  expect(setup.run().status).toBe(0);
-  expect(readFileSync(setup.installed, "utf8")).toBe("installed app\n");
-  expect(setup.run().status).toBe(0);
-  expect(readFileSync(setup.installed, "utf8")).toBe("installed app\n");
-});
+// Each case runs the installer twice, which can take over five seconds on macOS CI.
+macTest.each(["arm64", "x86_64"])(
+  "macOS %s installs and updates the matching ZIP",
+  (arch) => {
+    const setup = fixture("Darwin", arch);
+    expect(setup.run().status).toBe(0);
+    expect(readFileSync(setup.installed, "utf8")).toBe("installed app\n");
+    expect(setup.run().status).toBe(0);
+    expect(readFileSync(setup.installed, "utf8")).toBe("installed app\n");
+  },
+  15_000,
+);
 
 macTest("a failed Spotlight search stops the macOS install", () => {
   const setup = fixture("Darwin", "arm64");
