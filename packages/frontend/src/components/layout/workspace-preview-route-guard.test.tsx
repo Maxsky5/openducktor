@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
 import { createMemoryRouter, Outlet, RouterProvider, useNavigate } from "react-router";
 import { useTaskExecutionFilePreviewController } from "@/components/features/agents/file-preview/use-task-execution-file-preview-controller";
@@ -124,7 +124,9 @@ test("history exit waits for a save before the preview can leave", async () => {
   const view = renderHistoryExit();
   try {
     fireEvent.click(screen.getByRole("button", { name: "Start save" }));
-    void view.router.navigate(-1);
+    act(() => {
+      void view.router.navigate(-1);
+    });
     await waitFor(() =>
       expect(
         [...view.router.state.blockers.values()].some((blocker) => blocker.state === "blocked"),
@@ -139,7 +141,7 @@ test("history exit waits for a save before the preview can leave", async () => {
     view.unmount();
     view.router.dispose();
   }
-});
+}, 5_000);
 
 test("a failed save returns the blocked history exit to the discard choice", async () => {
   const view = renderHistoryExit();
