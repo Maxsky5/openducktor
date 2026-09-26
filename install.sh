@@ -62,11 +62,26 @@ if [ -f "$marker" ] && [ ! -e "$installed" ]; then
   error "The managed install at $installed is missing. Remove $marker after checking your installation."
 fi
 if [ "$os" = Darwin ]; then
-  if pgrep -x OpenDucktor >/dev/null 2>&1; then
+  if pgrep -x OpenDucktor >/dev/null; then
     error 'Quit OpenDucktor before updating it.'
+  else
+    status=$?
+    [ "$status" -eq 1 ] || error 'Could not check if OpenDucktor is running. Check pgrep and retry.'
   fi
-elif [ -e "$installed" ] && pgrep -f "$installed" >/dev/null 2>&1; then
-  error 'Quit OpenDucktor before updating it.'
+elif [ -e "$installed" ]; then
+  pattern=$(python3 - "$installed" <<'PY'
+import sys
+
+chars = set(r'\.^$*+?()[]{}|')
+print(''.join('\\' + char if char in chars else char for char in sys.argv[1]))
+PY
+  ) || error 'Could not check the AppImage path.'
+  if pgrep -f "$pattern" >/dev/null; then
+    error 'Quit OpenDucktor before updating it.'
+  else
+    status=$?
+    [ "$status" -eq 1 ] || error 'Could not check if OpenDucktor is running. Check pgrep and retry.'
+  fi
 fi
 if [ "$os" = Linux ] && [ -L "$desktop" ]; then
   error "The desktop launcher $desktop is a symlink. Remove it before using this script."

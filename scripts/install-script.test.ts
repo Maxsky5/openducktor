@@ -234,6 +234,26 @@ unixTest("a running Linux app blocks an update without changing the installed fi
   expect(readFileSync(setup.installed)).toEqual(previous);
 });
 
+unixTest("a failed process check leaves the Linux app intact", () => {
+  const setup = fixture("Linux", "x86_64", "home[");
+  expect(setup.run().status).toBe(0);
+  const previous = readFileSync(setup.installed);
+  const patternPath = join(setup.home, "pgrep-pattern");
+  writeFileSync(
+    join(setup.bin, "pgrep"),
+    '#!/bin/sh\nprintf "%s\\n" "$2" > "$ODT_TEST_PGREP_PATTERN"\nexit "$ODT_TEST_PGREP_STATUS"\n',
+    { mode: 0o755 },
+  );
+  const result = setup.run({ ODT_TEST_PGREP_PATTERN: patternPath, ODT_TEST_PGREP_STATUS: "2" });
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("Could not check if OpenDucktor is running");
+  expect(readFileSync(setup.installed)).toEqual(previous);
+  expect(readFileSync(patternPath, "utf8")).toContain("\\[");
+  expect(
+    setup.run({ ODT_TEST_PGREP_PATTERN: patternPath, ODT_TEST_PGREP_STATUS: "1" }).status,
+  ).toBe(0);
+});
+
 type ReleaseFixture = {
   tag_name: string;
   draft: boolean;

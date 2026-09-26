@@ -17,7 +17,7 @@ try {
         'Registry::HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Uninstall',
         'Registry::HKEY_LOCAL_MACHINE\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
     )
-    $displayNamePattern = '^OpenDucktor(?: \d+\.\d+\.\d+)?$'
+    $displayNamePattern = '^OpenDucktor(?: \d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)?$'
     $installs = @(
         foreach ($root in $uninstallRoots) {
             if (Test-Path -LiteralPath $root) {

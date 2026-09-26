@@ -14,6 +14,7 @@ $menuLink = Join-Path $root 'Programs\OpenDucktor.lnk'
 $global:uninstallCalls = 0
 $global:failMarker = $false
 $global:displayIcon = "$appPath,0"
+$global:displayName = 'OpenDucktor 0.8.0'
 $scriptPath = Join-Path $PSScriptRoot '..\install.ps1'
 $name = 'OpenDucktor-0.8.0-win-x64.exe'
 $url = "https://github.com/Maxsky5/openducktor/releases/download/v0.8.0/$name"
@@ -45,7 +46,7 @@ function Get-ChildItem {
 }
 function Get-ItemProperty {
     param([string]$LiteralPath)
-    [pscustomobject]@{ DisplayName = 'OpenDucktor 0.8.0'; DisplayIcon = $global:displayIcon; PSPath = $LiteralPath }
+    [pscustomobject]@{ DisplayName = $global:displayName; DisplayIcon = $global:displayIcon; PSPath = $LiteralPath }
 }
 function Remove-Item {
     param([string]$LiteralPath, [switch]$Recurse, [switch]$Force)
@@ -110,6 +111,14 @@ try {
         Assert ($_.Exception.Message -like '*Another installer manages*') 'The unmanaged install was not reported.'
     }
     Assert (-not (Test-Path -LiteralPath $appPath)) 'The unmanaged install created a script-managed app.'
+    $global:registered = $false
+
+    $global:displayName = 'OpenDucktor 0.8.0-beta.1'
+    $global:registered = $true
+    try { & $scriptPath; throw 'A prerelease NSIS install was accepted.' } catch {
+        Assert ($_.Exception.Message -like '*Another installer manages*') 'The prerelease install was not reported.'
+    }
+    $global:displayName = 'OpenDucktor 0.8.0'
     $global:registered = $false
 
     $global:exitCode = 7
