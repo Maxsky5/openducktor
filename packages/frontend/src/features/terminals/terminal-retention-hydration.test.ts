@@ -125,7 +125,7 @@ const createLightweightBinding = () => {
 };
 
 describe("retained terminal rendering", () => {
-  test("does not resize a terminal while its task panel has no size", async () => {
+  test("does not resize a terminal when a task panel has only padding in one dimension", async () => {
     const lightweight = createLightweightBinding();
     const createBinding = spyOn(sharedTerminalBinding, "createTerminalBinding").mockImplementation(
       // SAFETY: the fake terminal implements every binding method used by this mount test.
@@ -144,9 +144,10 @@ describe("retained terminal rendering", () => {
       clientWidth: { get: () => width },
       clientHeight: { get: () => height },
     });
+    container.style.padding = "4px 8px";
     document.body.append(container);
     lightweight.binding.fitAddon.fit.mockImplementation(() => {
-      lightweight.binding.terminal.resize(width === 0 ? 2 : 80, height === 0 ? 1 : 24);
+      lightweight.binding.terminal.resize(width <= 16 ? 2 : 120, height <= 8 ? 1 : 40);
     });
     const nativeResizeObserver = globalThis.ResizeObserver;
     globalThis.ResizeObserver = class {
@@ -156,40 +157,52 @@ describe("retained terminal rendering", () => {
     };
     let mount: InteractiveTerminalMount | null = null;
     try {
-      mount = mountInteractiveTerminal({
-        container,
-        terminalId: "terminal-hidden-task",
-        controller,
-        isActive: () => active,
-        getPlatform: () => "darwin",
-        stageFile: async () => "/tmp/image.png",
-        preparePathInput: async () => "/tmp/image.png",
-        writeClipboard: async () => undefined,
-        onAttention: () => undefined,
-        onLifecycle: () => undefined,
-        onForgotten: () => undefined,
-        onTitleChange: () => undefined,
-        onHydrated: () => undefined,
-        onImageDragActiveChange: () => undefined,
-        onInteractionFailure: (_title, cause) => {
-          throw cause;
-        },
-      });
+      try {
+        mount = mountInteractiveTerminal({
+          container,
+          terminalId: "terminal-hidden-task",
+          controller,
+          isActive: () => active,
+          getPlatform: () => "darwin",
+          stageFile: async () => "/tmp/image.png",
+          preparePathInput: async () => "/tmp/image.png",
+          writeClipboard: async () => undefined,
+          onAttention: () => undefined,
+          onLifecycle: () => undefined,
+          onForgotten: () => undefined,
+          onTitleChange: () => undefined,
+          onHydrated: () => undefined,
+          onImageDragActiveChange: () => undefined,
+          onInteractionFailure: (_title, cause) => {
+            throw cause;
+          },
+        });
+      } finally {
+        globalThis.ResizeObserver = nativeResizeObserver;
+      }
       active = true;
-      width = 0;
-      height = 0;
-      mount.activate(false);
-      await Bun.sleep(0);
-      expect(sizes).toEqual([]);
+      for (const [collapsedWidth, collapsedHeight] of [
+        [800, 8],
+        [8, 400],
+      ] as const) {
+        width = collapsedWidth;
+        height = collapsedHeight;
+        mount.activate(false);
+        await Bun.sleep(0);
+        expect(lightweight.binding.terminal.cols).toBe(80);
+        expect(lightweight.binding.terminal.rows).toBe(24);
+        expect(sizes).toEqual([]);
+      }
 
       width = 800;
       height = 400;
       mount.activate(false);
       await Bun.sleep(0);
-      expect(sizes).toEqual(["80x24"]);
+      expect(lightweight.binding.terminal.cols).toBe(120);
+      expect(lightweight.binding.terminal.rows).toBe(40);
+      expect(sizes).toEqual(["120x40"]);
     } finally {
       mount?.dispose();
-      globalThis.ResizeObserver = nativeResizeObserver;
       container.remove();
       createBinding.mockRestore();
     }
