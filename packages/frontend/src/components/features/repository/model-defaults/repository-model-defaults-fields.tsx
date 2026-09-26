@@ -1,6 +1,6 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 import type { ModelPickerFavoriteState } from "@/components/features/agents/model-picker";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
@@ -31,6 +31,7 @@ export type RepositoryModelDefaultsFieldsProps = {
   };
   runtimeDefinitionsError: string | null;
   runtimeAvailabilityErrors: string[];
+  roleNotice?: ReactNode;
   getCatalogForRuntime: (runtimeKind: RuntimeKind) => AgentModelCatalog | null;
   isCatalogLoadingForRuntime: (runtimeKind: RuntimeKind) => boolean;
   onUpdateSelectedRepoConfig: (
@@ -98,6 +99,7 @@ export function RepositoryModelDefaultsFields({
   loadingState,
   runtimeDefinitionsError,
   runtimeAvailabilityErrors,
+  roleNotice,
   getCatalogForRuntime,
   isCatalogLoadingForRuntime,
   onUpdateSelectedRepoConfig,
@@ -152,6 +154,7 @@ export function RepositoryModelDefaultsFields({
           ))}
         </div>
       ) : null}
+      {roleNotice}
 
       <div className="grid gap-3">
         {ROLE_DEFAULTS.map(({ role, label }) => {

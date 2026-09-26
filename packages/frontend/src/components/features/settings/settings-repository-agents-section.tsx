@@ -68,22 +68,22 @@ export function RepositoryAgentsSection(props: RepositoryAgentsSectionProps): Re
     runtimeDefinitions: props.availableRuntimeDefinitions,
   });
   return (
-    <div>
-      <RepositoryModelDefaultsFields
-        {...props}
-        selectedRepoConfig={selectedRepoConfig}
-        onUpdateSelectedRepoConfig={(updater) =>
-          props.onUpdateSelectedRepoConfig((current) => ({
-            ...current,
-            ...updater(current),
-          }))
-        }
-      />
-      {missingRoleLabels.length > 0 ? (
-        <p className="px-4 pb-4 text-xs text-warning-muted">
-          Missing complete defaults for: {missingRoleLabels.join(", ")}.
-        </p>
-      ) : null}
-    </div>
+    <RepositoryModelDefaultsFields
+      {...props}
+      selectedRepoConfig={selectedRepoConfig}
+      onUpdateSelectedRepoConfig={(updater) =>
+        props.onUpdateSelectedRepoConfig((current) => ({
+          ...current,
+          ...updater(current),
+        }))
+      }
+      roleNotice={
+        missingRoleLabels.length > 0 ? (
+          <p className="text-xs text-warning-muted">
+            Missing complete defaults for: {missingRoleLabels.join(", ")}.
+          </p>
+        ) : null
+      }
+    />
   );
 }
