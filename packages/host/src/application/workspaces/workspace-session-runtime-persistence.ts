@@ -46,6 +46,7 @@ export type WorkspaceSessionRuntimeTitleUpdater = (
 export type WorkspaceSessionRenameFailureReporter = (
   runtimeRef: AgentSessionLiveRef,
   message: string,
+  operation?: "workspaceSession.accepted-message.rename" | "workspaceSession.title.sync",
 ) => Effect.Effect<void>;
 
 type AcceptedMessagePlan = {
@@ -84,9 +85,24 @@ export const createWorkspaceSessionRuntimePersistence = ({
   sessionTitleGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
   updateRuntimeSessionTitle: WorkspaceSessionRuntimeTitleUpdater;
   reportRenameFailure: WorkspaceSessionRenameFailureReporter;
-}): AgentSessionPersistencePort & AgentSessionOperationPolicy => {
+}): AgentSessionPersistencePort &
+  AgentSessionOperationPolicy & {
+    isCodexTitleSyncPending: (ref: AgentSessionLiveRef) => boolean;
+  } => {
   const pendingFinalMessages = new Map<string, { messageId: string; occurredAt: number }>();
   const sendsInFlight = new Set<string>();
+  const firstCodexMessages = new Set<string>();
+  const pendingCodexTitleSync = new Set<string>();
+  const markCodexFirstMessage = (
+    runtimeRef: AgentSessionLiveRef,
+    known: { session: WorkspaceSession },
+  ) => {
+    if (runtimeRef.runtimeKind !== "codex" || known.session.generatedTitle !== null) return;
+    const key = agentSessionRefKey(runtimeRef);
+    if (firstCodexMessages.has(key)) return;
+    firstCodexMessages.add(key);
+    pendingCodexTitleSync.add(key);
+  };
   const find = (runtimeRef: AgentSessionLiveRef) =>
     Effect.gen(function* () {
       const config = yield* settings.getRepoConfigByRepoPath(runtimeRef.repoPath);
@@ -210,9 +226,16 @@ export const createWorkspaceSessionRuntimePersistence = ({
   const applyAcceptedMessage = (
     known: { ref: WorkspaceSessionStoreRef; session: WorkspaceSession },
     plan: AcceptedMessagePlan,
+    runtimeRef: AgentSessionLiveRef,
   ) =>
     Effect.gen(function* () {
       const { input, runtimeRename } = plan;
+      if (runtimeRef.runtimeKind === "codex") {
+        const saved = yield* storeEffect(store.recordAcceptedMessage(input));
+        markCodexFirstMessage(runtimeRef, known);
+        yield* publishUpdated(known.ref.workspaceId, saved);
+        return;
+      }
       // Rename the runtime session before the durable write, so a failed rename never
       // stores a title that the runtime session does not show.
       if (runtimeRename !== null) {
@@ -264,6 +287,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
           yield* applyAcceptedMessage(
             known,
             yield* planAcceptedMessage(known, runtimeRef, message, saveModel),
+            runtimeRef,
           );
         }),
       );
@@ -276,6 +300,12 @@ export const createWorkspaceSessionRuntimePersistence = ({
       const known = yield* find(runtimeRef);
       if (!known) return;
       const plan = yield* planAcceptedMessage(known, runtimeRef, message, false);
+      if (runtimeRef.runtimeKind === "codex") {
+        const saved = yield* storeEffect(store.recordAcceptedMessage(plan.input));
+        markCodexFirstMessage(runtimeRef, known);
+        yield* publishUpdated(known.ref.workspaceId, saved);
+        return;
+      }
       // A manual rename saves the new title before its runtime call and holds the title gate
       // across it, so an observation in that window must not claim the generated title.
       // The check never waits: the rename holds the gate while it waits for the live
@@ -317,6 +347,41 @@ export const createWorkspaceSessionRuntimePersistence = ({
       }
       pendingFinalMessages.delete(key);
     });
+  const syncCodexTitleAfterTurn = (runtimeRef: AgentSessionLiveRef) =>
+    Effect.gen(function* () {
+      const key = agentSessionRefKey(runtimeRef);
+      if (!pendingCodexTitleSync.delete(key)) return;
+      yield* Effect.forkDaemon(
+        Effect.gen(function* () {
+          const known = yield* find(runtimeRef);
+          if (!known) return;
+          yield* sessionTitleGate.run(
+            known.ref,
+            Effect.gen(function* () {
+              const current = yield* findActive(runtimeRef);
+              if (!current) return;
+              const title = runtimeTitle(current.session);
+              if (title === null) return;
+              const result = yield* updateRuntimeSessionTitle({ ...runtimeRef, title });
+              if (result.status === "not_attached") {
+                return yield* new HostOperationError({
+                  operation: "workspaceSession.codex-title.sync",
+                  message: "Codex no longer holds this chat.",
+                });
+              }
+            }),
+          );
+        }).pipe(
+          Effect.catchAll((failure) =>
+            reportRenameFailure(
+              runtimeRef,
+              `Could not sync this Workspace Session title to Codex. The message was accepted and the saved title remains. Reattach this chat or rename it to retry. ${failure.message}`,
+              "workspaceSession.title.sync",
+            ),
+          ),
+        ),
+      );
+    });
   const validateRef = (runtimeRef: AgentSessionLiveRef) =>
     Effect.gen(function* () {
       yield* findActive(runtimeRef);
@@ -330,6 +395,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
       return yield* known ? operationGate.run(known.ref, effect) : effect;
     });
   return {
+    isCodexTitleSyncPending: (ref) => pendingCodexTitleSync.has(agentSessionRefKey(ref)),
     run: (runtimeRef, _operation, effect) => runOperation(runtimeRef, effect),
     runSend: (runtimeRef, effect) =>
       runOperation(
@@ -389,7 +455,10 @@ export const createWorkspaceSessionRuntimePersistence = ({
     observe: (envelope) =>
       Effect.gen(function* () {
         if (envelope.type === "session_removed") {
-          pendingFinalMessages.delete(agentSessionRefKey(envelope.ref));
+          const key = agentSessionRefKey(envelope.ref);
+          pendingFinalMessages.delete(key);
+          pendingCodexTitleSync.delete(key);
+          firstCodexMessages.delete(key);
           return;
         }
         if (envelope.type === "session_upsert") {
@@ -417,6 +486,12 @@ export const createWorkspaceSessionRuntimePersistence = ({
           (event.type === "session_status" && event.status.type === "idle")
         ) {
           yield* flushFinalMessage(event.sessionRef);
+          if (
+            event.type === "session_idle" &&
+            event.turnCompleted === true &&
+            event.sessionRef.runtimeKind === "codex"
+          )
+            yield* syncCodexTitleAfterTurn(event.sessionRef);
         }
       }),
   };

@@ -118,6 +118,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       lifecycle: createTaskSessionLifecycleCoordinator(),
       operationGate: createWorkspaceSessionOperationGate(),
       sessionTitleGate: createWorkspaceSessionOperationGate(),
+      isCodexTitleSyncPending: () => false,
       store: {
         ...store,
         archive: (request) =>

@@ -381,6 +381,7 @@ export const assembleNodeEffectHostCommandRouter = (
       lifecycle: taskSessionLifecycleCoordinator,
       operationGate: workspaceSessions.operationGate,
       sessionTitleGate: workspaceSessions.sessionTitleGate,
+      isCodexTitleSyncPending: workspaceSessions.isCodexTitleSyncPending,
       store: assets.workspaceSessionStore,
       settings: workspaceSettingsService,
       runtime: runtimeOrchestratorWithEffectiveRegistry,

@@ -28,6 +28,8 @@ import { createWorkspaceSessionOperationGate } from "../workspace-session-operat
 import { createWorkspaceSessionRuntimePersistence } from "../workspace-session-runtime-persistence";
 import { createWorkspaceSessionService } from "../workspace-session-service";
 
+type NativeTitleState = { nativeTitle: string | null };
+
 export const waitFor = async (check: () => Promise<boolean> | boolean, timeoutMs = 2_000) => {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -37,10 +39,13 @@ export const waitFor = async (check: () => Promise<boolean> | boolean, timeoutMs
   throw new Error("Timed out while waiting for the condition.");
 };
 
-export const createPersistenceHarness = async (database: SqliteTaskStoreTestHarness) => {
+export const createPersistenceHarness = async (
+  database: SqliteTaskStoreTestHarness,
+  runtimeKind: "opencode" | "codex" = "opencode",
+) => {
   const ref: AgentSessionLiveRef = {
     repoPath: database.repoPath,
-    runtimeKind: "opencode",
+    runtimeKind,
     externalSessionId: "native",
     workingDirectory: `${database.repoPath}/session-worktree`,
   };
@@ -51,7 +56,7 @@ export const createPersistenceHarness = async (database: SqliteTaskStoreTestHarn
   };
   const record: WorkspaceSession = {
     id: "session-1",
-    runtimeKind: "opencode",
+    runtimeKind,
     externalSessionId: "native",
     executionTarget: {
       kind: "local_worktree",
@@ -65,7 +70,7 @@ export const createPersistenceHarness = async (database: SqliteTaskStoreTestHarn
       systemPrompt: "Original instructions.",
     },
     selectedModel: {
-      runtimeKind: "opencode",
+      runtimeKind,
       providerId: "provider",
       modelId: "stored-model",
       variant: "high",
@@ -84,12 +89,15 @@ export const createPersistenceHarness = async (database: SqliteTaskStoreTestHarn
   const activityTimes: number[] = [];
   const models: AgentSessionControlUpdateModelInput["model"][] = [];
   const titleAttempts: string[] = [];
+  const titleState: NativeTitleState = { nativeTitle: null };
   const state = {
+    ...titleState,
     failSend: false,
     failModel: false,
     failModelSave: false,
     failRestore: false,
     failTitle: false,
+    failTitleAfterWrite: false,
     failTitleWrite: false,
     titleNotAttached: false,
     failPublish: false,
@@ -196,7 +204,7 @@ export const createPersistenceHarness = async (database: SqliteTaskStoreTestHarn
   updateLiveRuntimeTitle = (title) => live.updateSessionTitle({ ...ref, title });
   const registration = live.createRuntimeRegistration({
     runtimeId: "runtime",
-    runtimeKind: "opencode",
+    runtimeKind,
     repoPath: database.repoPath,
   });
   await Effect.runPromise(
@@ -258,6 +266,8 @@ export const createPersistenceHarness = async (database: SqliteTaskStoreTestHarn
                 titleAttempts.push(input.title);
                 if (state.failTitle) return failure("runtime title update failed");
                 if (state.titleNotAttached) return Effect.succeed({ status: "not_attached" });
+                state.nativeTitle = input.title;
+                if (state.failTitleAfterWrite) return failure("rollout was empty after name write");
                 return Effect.succeed({ status: "renamed" });
               }),
             ),
@@ -308,6 +318,7 @@ export const createPersistenceHarness = async (database: SqliteTaskStoreTestHarn
       lifecycle: createTaskSessionLifecycleCoordinator(),
       operationGate,
       sessionTitleGate,
+      isCodexTitleSyncPending: persistence.isCodexTitleSyncPending,
       store,
       settings: {
         getRepoConfig: () => Effect.succeed(config),

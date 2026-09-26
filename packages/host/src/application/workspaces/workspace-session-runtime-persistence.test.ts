@@ -97,6 +97,137 @@ describe("Workspace Session persistence through the shared command module", () =
     expect((await h.get()).generatedTitle).toBe("First accepted prompt");
   });
 
+  test("saves a fresh Codex title with the accepted prompt and syncs it after turn completion", async () => {
+    const h = await createPersistenceHarness(database, "codex");
+    await h.send("Name this chat");
+    expect((await h.get()).generatedTitle).toBe("First accepted prompt");
+    expect(h.titleAttempts).toEqual([]);
+
+    await h.emit({
+      type: "session_idle",
+      sessionRef: h.ref,
+      externalSessionId: h.ref.externalSessionId,
+      timestamp: "2026-09-07T10:00:30Z",
+    });
+    expect(h.titleAttempts).toEqual([]);
+
+    await h.emit({
+      type: "session_idle",
+      turnCompleted: true,
+      sessionRef: h.ref,
+      externalSessionId: h.ref.externalSessionId,
+      timestamp: "2026-09-07T10:01:00Z",
+    });
+    await waitFor(() => h.titleAttempts.length === 1);
+    expect(h.titleAttempts).toEqual(["First accepted prompt"]);
+    expect(h.renameFailures).toEqual([]);
+    await h.emit({
+      type: "session_idle",
+      turnCompleted: true,
+      sessionRef: h.ref,
+      externalSessionId: h.ref.externalSessionId,
+      timestamp: "2026-09-07T10:02:00Z",
+    });
+    expect(h.titleAttempts).toEqual(["First accepted prompt"]);
+  });
+
+  test("syncs the latest manual Codex title after the first turn", async () => {
+    const h = await createPersistenceHarness(database, "codex");
+    await Effect.runPromise(h.store.rename({ ...h.storeRef, manualTitle: "Startup title" }));
+    await h.send("First prompt");
+    const renamed = await Effect.runPromise(
+      h.workspaceService().rename({
+        workspaceId: "fairnest",
+        sessionId: "session-1",
+        manualTitle: "Manual title",
+      }),
+    );
+    expect(renamed.manualTitle).toBe("Manual title");
+    expect(h.titleAttempts).toEqual([]);
+
+    await h.emit({
+      type: "session_idle",
+      turnCompleted: true,
+      sessionRef: h.ref,
+      externalSessionId: h.ref.externalSessionId,
+      timestamp: "2026-09-07T10:01:00Z",
+    });
+    await waitFor(() => h.titleAttempts.length === 1);
+    expect(h.titleAttempts).toEqual(["Manual title"]);
+  });
+
+  test("reports a Codex title failure after acceptance and keeps the intended title", async () => {
+    const h = await createPersistenceHarness(database, "codex");
+    h.state.failTitle = true;
+    await h.send("First prompt");
+    await h.emit({
+      type: "session_idle",
+      turnCompleted: true,
+      sessionRef: h.ref,
+      externalSessionId: h.ref.externalSessionId,
+      timestamp: "2026-09-07T10:01:00Z",
+    });
+    await waitFor(() => h.renameFailures.length === 1);
+    expect(h.renameFailures[0]).toContain("title");
+    expect((await h.get()).generatedTitle).toBe("First accepted prompt");
+    expect(h.titleAttempts).toEqual(["First accepted prompt"]);
+    expect(h.state.nativeTitle).toBeNull();
+  });
+
+  test("keeps the Codex title when the RPC fails after its native name write", async () => {
+    const h = await createPersistenceHarness(database, "codex");
+    h.state.failTitleAfterWrite = true;
+    await h.send("First prompt");
+    await h.emit({
+      type: "session_idle",
+      turnCompleted: true,
+      sessionRef: h.ref,
+      externalSessionId: h.ref.externalSessionId,
+      timestamp: "2026-09-07T10:01:00Z",
+    });
+    await waitFor(() => h.renameFailures.length === 1);
+    expect(h.state.nativeTitle).toBe("First accepted prompt");
+    expect((await h.get()).generatedTitle).toBe("First accepted prompt");
+    expect(h.renameFailures[0]).toContain("Reattach this chat or rename it to retry");
+
+    h.state.failTitleAfterWrite = false;
+    const renamed = await Effect.runPromise(
+      h.workspaceService().rename({
+        workspaceId: "fairnest",
+        sessionId: "session-1",
+        manualTitle: "Manual title",
+      }),
+    );
+    expect(renamed.manualTitle).toBe("Manual title");
+    expect(h.state.nativeTitle).toBe("Manual title");
+  });
+
+  test("keeps a failed manual Codex rename for an explicit retry", async () => {
+    const h = await createPersistenceHarness(database, "codex");
+    h.state.failTitleAfterWrite = true;
+    await expect(
+      Effect.runPromise(
+        h.workspaceService().rename({
+          workspaceId: "fairnest",
+          sessionId: "session-1",
+          manualTitle: "Manual title",
+        }),
+      ),
+    ).rejects.toThrow("The saved title remains");
+    expect((await h.get()).manualTitle).toBe("Manual title");
+    expect(h.state.nativeTitle).toBe("Manual title");
+
+    h.state.failTitleAfterWrite = false;
+    await Effect.runPromise(
+      h.workspaceService().rename({
+        workspaceId: "fairnest",
+        sessionId: "session-1",
+        manualTitle: "Manual title",
+      }),
+    );
+    expect(h.titleAttempts).toEqual(["Manual title", "Manual title"]);
+  });
+
   test("records an accepted message that the runtime publishes during the send", async () => {
     const h = await setup();
     h.state.publishAcceptedMessageDuringSend = true;
@@ -519,6 +650,7 @@ describe("Workspace Session persistence through the shared command module", () =
       lifecycle: createTaskSessionLifecycleCoordinator(),
       operationGate: h.operationGate,
       sessionTitleGate: h.sessionTitleGate,
+      isCodexTitleSyncPending: h.persistence.isCodexTitleSyncPending,
       store: h.store,
       settings: {
         getRepoConfig: () => Effect.succeed(config),

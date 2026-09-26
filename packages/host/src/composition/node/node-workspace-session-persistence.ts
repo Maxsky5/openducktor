@@ -52,14 +52,14 @@ export const createNodeWorkspaceSessionPersistence = ({
           cause,
         }),
     });
-  const reportRenameFailure: WorkspaceSessionRenameFailureReporter = (ref, message) =>
+  const reportRenameFailure: WorkspaceSessionRenameFailureReporter = (ref, message, operation) =>
     Effect.try({
       try: () => {
         publishLiveEnvelope({
           type: "fault",
           repoPath: ref.repoPath,
           ref,
-          operation: "workspaceSession.accepted-message.rename",
+          operation: operation ?? "workspaceSession.accepted-message.rename",
           message,
         });
       },
@@ -70,16 +70,18 @@ export const createNodeWorkspaceSessionPersistence = ({
       ),
       Effect.ignore,
     );
-  return {
-    persistence: createWorkspaceSessionRuntimePersistence({
-      ...dependencies,
-      publishUpdated,
-      operationGate,
-      sessionTitleGate,
-      reportRenameFailure,
-    }),
+  const persistence = createWorkspaceSessionRuntimePersistence({
+    ...dependencies,
     publishUpdated,
     operationGate,
     sessionTitleGate,
+    reportRenameFailure,
+  });
+  return {
+    persistence,
+    publishUpdated,
+    operationGate,
+    sessionTitleGate,
+    isCodexTitleSyncPending: persistence.isCodexTitleSyncPending,
   };
 };

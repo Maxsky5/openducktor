@@ -426,6 +426,7 @@ const inferredAgentRuntimeEventSchema = z.discriminatedUnion("type", [
   }),
   transcriptEventSchema({
     type: z.literal("session_idle"),
+    turnCompleted: z.literal(true).optional(),
   }),
   transcriptEventSchema({
     type: z.literal("session_finished"),

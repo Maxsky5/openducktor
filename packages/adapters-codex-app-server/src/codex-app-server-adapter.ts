@@ -241,6 +241,8 @@ export class CodexAppServerAdapter
   private readonly activeTurnsBySessionId = new Map<string, ActiveCodexTurn>();
   // A new active session may have an empty rollout until a full history read succeeds.
   private readonly freshSessions = new WeakSet<CodexSessionState>();
+  private readonly pendingFreshRepositoryTitles = new WeakSet<CodexSessionState>();
+  private readonly attemptedFreshRepositoryTitles = new WeakSet<CodexSessionState>();
   private readonly localSessions: CodexLocalSessionState;
   private readonly contextUsageLoader: CodexContextUsageLoader;
   private readonly runtimeEvents: CodexRuntimeSessionEvents;
@@ -449,12 +451,19 @@ export class CodexAppServerAdapter
     });
     this.clearThreadInventory(runtimeId);
     const title = sessionPolicy.title;
-    const session = sessionStateFromThreadStart(input, runtimeId, model, response, title);
+    const session = sessionStateFromThreadStart(
+      input,
+      runtimeId,
+      model,
+      response,
+      sessionPolicy.kind === "repository" ? undefined : title,
+    );
     const { summary } = session;
     this.localSessions.remember(session);
     this.freshSessions.add(session);
+    if (sessionPolicy.kind === "repository") this.pendingFreshRepositoryTitles.add(session);
     this.runtimeEvents.initializeFreshThreadContextUsage(runtimeId, session.threadId);
-    if (title !== undefined) {
+    if (title !== undefined && sessionPolicy.kind !== "repository") {
       await client.threadSetName({
         threadId: session.threadId,
         name: title,
@@ -531,15 +540,13 @@ export class CodexAppServerAdapter
     const session = sessionStateFromThreadResume(input, runtimeId, model, response);
     const repositoryTitle = sessionPolicy.kind === "repository" ? sessionPolicy.title : undefined;
     this.localSessions.remember(session);
-    if (repositoryTitle !== undefined) {
-      await client.threadSetName({
-        threadId: session.threadId,
-        name: repositoryTitle,
-      });
-      // Apply the title only after the runtime accepts it. A failed rename keeps the
-      // session addressable, and its summary must report the runtime title.
-      session.summary = { ...session.summary, title: repositoryTitle };
-    }
+    if (
+      current &&
+      this.pendingFreshRepositoryTitles.has(current) &&
+      !this.attemptedFreshRepositoryTitles.has(current)
+    )
+      this.pendingFreshRepositoryTitles.add(session);
+    await this.applyRepositoryTitle(input, session, repositoryTitle);
 
     return session.summary;
   }
@@ -1113,10 +1120,14 @@ export class CodexAppServerAdapter
     }
     assertCodexSessionRef(session, input, "update the title of");
     const { client } = await this.runtimeClients.resolve(input, "update session title");
+    if (this.pendingFreshRepositoryTitles.has(session))
+      this.attemptedFreshRepositoryTitles.add(session);
     await client.threadSetName({
       threadId: session.threadId,
       name: input.title,
     });
+    this.pendingFreshRepositoryTitles.delete(session);
+    this.attemptedFreshRepositoryTitles.delete(session);
     session.summary = withSummaryTitle(session.summary, input.title);
     return { status: "renamed", summary: session.summary };
   }
@@ -1208,7 +1219,17 @@ export class CodexAppServerAdapter
     repositoryTitle: string | undefined,
     options: { tolerateFailure?: boolean } = {},
   ): Promise<void> {
-    if (repositoryTitle === undefined || session.summary.title === repositoryTitle) return;
+    if (repositoryTitle === undefined) return;
+    if (
+      this.pendingFreshRepositoryTitles.has(session) &&
+      !this.attemptedFreshRepositoryTitles.has(session)
+    )
+      return;
+    if (
+      session.summary.title === repositoryTitle &&
+      !this.pendingFreshRepositoryTitles.has(session)
+    )
+      return;
     const { client } = await this.runtimeClients.resolve(
       input,
       "apply the repository session title",
@@ -1219,12 +1240,14 @@ export class CodexAppServerAdapter
         name: repositoryTitle,
       });
     } catch (cause) {
-      // An attach reconciles the durable title with the runtime. A failed reconciliation
-      // keeps the durable title and leaves the native title unchanged, so the next attach
-      // can retry. A session replacement must fail instead.
+      // An attach reconciles the durable title with the runtime. The native write may
+      // succeed before the RPC fails, so a later attach can read or retry the title.
+      // A session replacement must still fail.
       if (options.tolerateFailure !== true) throw cause;
       return;
     }
+    this.pendingFreshRepositoryTitles.delete(session);
+    this.attemptedFreshRepositoryTitles.delete(session);
     session.summary = withSummaryTitle(session.summary, repositoryTitle);
   }
 
