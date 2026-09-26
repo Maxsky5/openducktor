@@ -8,6 +8,7 @@ New-Item -ItemType Directory -Path $root | Out-Null
 $env:LOCALAPPDATA = Join-Path $root 'LocalAppData'
 New-Item -ItemType Directory -Path $env:LOCALAPPDATA | Out-Null
 $appPath = Join-Path $env:LOCALAPPDATA 'Programs\OpenDucktor\OpenDucktor.exe'
+$markerPath = Join-Path $env:LOCALAPPDATA 'OpenDucktorInstaller\managed.txt'
 $cachePath = Join-Path $env:LOCALAPPDATA '@openducktorelectron-updater\installer.exe'
 $desktopLink = Join-Path $root 'Desktop\OpenDucktor.lnk'
 $menuLink = Join-Path $root 'Programs\OpenDucktor.lnk'
@@ -177,6 +178,17 @@ try {
     Assert (Test-Path -LiteralPath $appPath) 'The first run did not install OpenDucktor.exe.'
     $first = Get-Content -LiteralPath $appPath -Raw
     $firstCache = Get-Content -LiteralPath $cachePath -Raw
+
+    Remove-Item -LiteralPath (Split-Path -Parent $appPath) -Recurse -Force
+    $global:registered = $false
+    try { & $scriptPath; throw 'A stale marker after uninstall was accepted.' } catch {
+        Assert ($_.Exception.Message.Contains($markerPath)) 'The reinstall error did not name the stale marker.'
+        Assert ($_.Exception.Message -like '*Remove*run this script again*') 'The reinstall error did not give a recovery step.'
+    }
+    Assert (Test-Path -LiteralPath $markerPath) 'The blocked reinstall removed the marker.'
+    Remove-Item -LiteralPath $markerPath -Force
+    & $scriptPath
+    Assert (Test-Path -LiteralPath $appPath) 'Reinstall after marker removal did not install OpenDucktor.exe.'
 
     $global:displayIcon = 'C:\Other\OpenDucktor.exe,0'
     try { & $scriptPath; throw 'A managed marker with another app path was accepted.' } catch {

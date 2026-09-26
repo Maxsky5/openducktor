@@ -39,6 +39,9 @@ try {
     if ((Test-Path -LiteralPath $installPath) -and -not $managed) {
         throw "An unmanaged install exists at $installPath. Update or remove it before using this script."
     }
+    if ($managed -and -not (Test-Path -LiteralPath $appPath) -and $installs.Count -eq 0) {
+        throw "The managed install at $installPath is missing, but $markerPath remains. If you uninstalled OpenDucktor, remove $markerPath and run this script again."
+    }
     if ($managed -and (-not (Test-Path -LiteralPath $appPath) -or $installs.Count -ne 1)) {
         throw "The managed install at $installPath is incomplete. Repair or remove it before using this script."
     }
