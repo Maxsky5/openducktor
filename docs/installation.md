@@ -10,7 +10,7 @@ The scripts install the latest stable GitHub release for the current user. They 
 bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/Maxsky5/openducktor/main/install.sh | sh'
 ```
 
-The shell script needs Bash, `curl`, and Python 3. It also uses `shasum` on macOS or `sha256sum` on Linux.
+The shell script needs Bash, `curl`, `pgrep`, and Python 3. It also uses `shasum` on macOS or `sha256sum` on Linux.
 
 ### Windows x64
 

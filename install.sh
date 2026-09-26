@@ -8,6 +8,7 @@ error() {
 }
 
 command -v curl >/dev/null 2>&1 || error 'curl is required.'
+command -v pgrep >/dev/null 2>&1 || error 'pgrep is required to check if OpenDucktor is running.'
 command -v python3 >/dev/null 2>&1 || error 'Python 3 is required to read GitHub release metadata.'
 
 os=$(uname -s)

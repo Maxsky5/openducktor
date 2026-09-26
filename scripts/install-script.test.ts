@@ -1,7 +1,15 @@
 import { afterEach, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -204,6 +212,16 @@ unixTest("an unmanaged install and an unsupported processor fail without changes
   expect(setup.run().stderr).toContain("unmanaged install");
   expect(readFileSync(setup.installed, "utf8")).toBe("other installer");
   expect(setup.run({ ODT_TEST_ARCH: "aarch64" }).stderr).toContain("Unsupported system");
+});
+
+unixTest("a missing process check stops installation", () => {
+  const setup = fixture("Linux", "x86_64");
+  symlinkSync("/bin/sh", join(setup.bin, "sh"));
+  rmSync(join(setup.bin, "pgrep"));
+  const result = setup.run({ PATH: setup.bin });
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("pgrep is required");
+  expect(existsSync(setup.installed)).toBe(false);
 });
 
 unixTest("a running Linux app blocks an update without changing the installed file", () => {
