@@ -73,15 +73,20 @@ async function importMockedTaskDetailsSheetController(): Promise<TaskDetailsShee
 }
 
 describe("TaskDetailsSheetController", () => {
-  test("does not report a missing notification task after deleting an open task", async () => {
+  test("does not report an unavailable task during deletion and a failed refresh", async () => {
     const TaskDetailsSheetController = await importMockedTaskDetailsSheetController();
     const task = createTaskCardFixture({ id: "task-1" });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const queryKey = taskQueryKeys.repoData(activeWorkspace.repoPath);
     client.setQueryData(queryKey, { tasks: [task] });
     const ref = createRef<TaskDetailsSheetControllerHandle>();
+    let finishDelete = (): void => {};
+    const deletePending = new Promise<void>((resolve) => {
+      finishDelete = resolve;
+    });
     const actions = createWorkflowActions(async () => {
       client.setQueryData(queryKey, { tasks: [] });
+      await deletePending;
     });
     const controller = (allTasks: TaskCard[]) =>
       createElement(
@@ -96,15 +101,44 @@ describe("TaskDetailsSheetController", () => {
       await act(async () => ref.current?.openTask(task.id));
       await withMockedToast(async ({ toastErrorMock }) => {
         const sheet = taskDetailsSheetRenderMock.mock.calls.at(-1)?.[0];
-        if (!sheet?.onDelete) throw new Error("Expected task delete action.");
+        const onDelete = sheet?.onDelete;
+        if (!onDelete) throw new Error("Expected task delete action.");
+        let deletion: Promise<void> = Promise.resolve();
         await act(async () => {
-          await sheet.onDelete?.(task.id, { deleteSubtasks: true });
+          deletion = onDelete(task.id, { deleteSubtasks: true });
           rendered.rerender(controller([]));
+        });
+        expect(toastErrorMock).not.toHaveBeenCalled();
+
+        let failRead = (_error: Error): void => {};
+        const read = new Promise<never>((_resolve, reject) => {
+          failRead = reject;
+        });
+        let refresh: Promise<unknown> = Promise.resolve();
+        await act(async () => {
+          refresh = client
+            .fetchQuery({ queryKey, queryFn: () => read, staleTime: 0 })
+            .catch(() => {});
+        });
+        await act(async () => {
+          failRead(new Error("Task read failed"));
+          await refresh;
+          rendered.rerender(controller([]));
+        });
+        expect(client.getQueryState(queryKey)?.status).toBe("error");
+        expect(toastErrorMock).not.toHaveBeenCalled();
+
+        await act(async () => {
+          finishDelete();
+          await deletion;
         });
         expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
           expect.objectContaining({ task: null, open: false }),
         );
         expect(toastErrorMock).not.toHaveBeenCalled();
+        await act(async () => {
+          client.setQueryData(queryKey, { tasks: [] });
+        });
         await act(async () => ref.current?.openTask(task.id));
         expect(toastErrorMock).toHaveBeenCalledWith("Notification task no longer exists", {
           id: "task-details-unavailable:/repo-a:task-1",

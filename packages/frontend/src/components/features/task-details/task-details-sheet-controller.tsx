@@ -46,7 +46,7 @@ function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerPr
   useEffect(() => {
     if (!taskId || boardTask || taskQuery.isFetching || taskQuery.isPending) return;
     if (taskQuery.isSuccess && taskQuery.data.tasks.some((entry) => entry.id === taskId)) return;
-    if (taskQuery.isSuccess && deletingTaskIdRef.current === taskId) return;
+    if (deletingTaskIdRef.current === taskId) return;
     toast.error(
       taskQuery.isError ? "Could not load notification task" : "Notification task no longer exists",
       {
