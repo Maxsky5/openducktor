@@ -1,10 +1,15 @@
 import type { AzureDevOpsConnectionState, AzureDevOpsRepository } from "@openducktor/contracts";
+import {
+  azureDevOpsConnectionConfigurationFingerprint,
+  isAzureDevOpsRepository,
+} from "@openducktor/core";
 import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { errorMessage } from "@/lib/errors";
 import { subscribeAzureDevOpsConnectionUpdates } from "@/lib/host-client";
 import { host } from "@/state/operations/shared/host";
 import { repositoryGitProviderContextQueryKeys } from "@/state/queries/git-provider-context";
+import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import {
   azureDevOpsHttpConsentCollectionUrl,
   isAzureDevOpsConnectionEventCurrent,
@@ -117,6 +122,7 @@ type ConnectionActionDependencies = {
     operation: () => Promise<Result>,
     onResult?: (result: Result) => void,
   ) => void;
+  setConnectionState: (state: AzureDevOpsConnectionState) => void;
   setPat: (pat: string) => void;
   updatesReady: boolean;
 };
@@ -130,6 +136,7 @@ const createConnectionActions = ({
   httpConsentSaved,
   pat,
   runMutation,
+  setConnectionState,
   setPat,
   updatesReady,
 }: ConnectionActionDependencies) => ({
@@ -164,7 +171,10 @@ const createConnectionActions = ({
     if (!canManageConnection || !connectionInput || !httpConsentSaved) return;
     runMutation(
       () => host.workspaceReplaceAzureDevOpsPat({ ...connectionInput, pat }),
-      () => setPat(""),
+      (state) => {
+        setConnectionState(state);
+        setPat("");
+      },
     );
   },
 });
@@ -182,18 +192,33 @@ export const useAzureDevOpsConnectionController = ({
   const [actionError, setActionError] = useState<string | null>(null);
   const [isMutatingConnection, setIsMutatingConnection] = useState(false);
   const activeAttemptIdRef = useRef<string | null>(null);
-  const canManageConnection =
-    providerState.status === "loaded" && providerState.context?.config.id === "azure_devops";
+  const savedProvider = useQuery(settingsSnapshotQueryOptions()).data?.workspaces[workspaceId]?.git
+    .provider;
+  const loadedProvider =
+    providerState.status === "loaded" ? providerState.context?.config : undefined;
+  const persistedProvider = savedProvider ?? loadedProvider;
+  const persistedRepository = persistedProvider?.repository;
+  const canManageConnection = Boolean(
+    providerEnabled &&
+    persistedProvider?.id === "azure_devops" &&
+    persistedProvider.enabled &&
+    persistedRepository &&
+    isAzureDevOpsRepository(persistedRepository) &&
+    azureDevOpsConnectionConfigurationFingerprint(
+      workspaceId,
+      selectedRepoPath,
+      persistedRepository,
+    ) === configurationFingerprint,
+  );
   const httpCollectionUrl = connectionInput
     ? azureDevOpsHttpConsentCollectionUrl(connectionInput.repository)
     : null;
   const httpConsentSaved =
     httpCollectionUrl === null ||
-    (providerState.status === "loaded" &&
-      providerState.context?.config.settings?.httpConsentCollectionUrl === httpCollectionUrl);
+    persistedProvider?.settings?.httpConsentCollectionUrl === httpCollectionUrl;
   const connectionQuery = useQuery({
     queryKey: connectionKey(configurationFingerprint),
-    enabled: canManageConnection && providerEnabled && connectionInput !== null,
+    enabled: canManageConnection && connectionInput !== null,
     queryFn: () => host.workspaceGetAzureDevOpsConnection(connectionInput!),
     retry: false,
     staleTime: 30_000,
@@ -201,9 +226,7 @@ export const useAzureDevOpsConnectionController = ({
   const connectionReadFailed = connectionQuery.isError;
   const connectionState: AzureDevOpsConnectionState = connectionReadFailed
     ? { status: "error", reason: errorMessage(connectionQuery.error) }
-    : canManageConnection
-      ? (connectionQuery.data ?? disconnectedConnectionState)
-      : disconnectedConnectionState;
+    : (connectionQuery.data ?? disconnectedConnectionState);
   const invalidateProviderContext = useCallback(
     () =>
       queryClient.invalidateQueries({
@@ -272,6 +295,8 @@ export const useAzureDevOpsConnectionController = ({
       httpConsentSaved,
       pat,
       runMutation,
+      setConnectionState: (state) =>
+        queryClient.setQueryData(connectionKey(configurationFingerprint), state),
       setPat,
       updatesReady,
     }),

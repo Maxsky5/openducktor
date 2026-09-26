@@ -48,6 +48,7 @@ type ComboboxProps = {
   wrapOptionLabels?: boolean;
   matchAllSearchTerms?: boolean;
   searchable?: boolean;
+  popoverSide?: "top" | "bottom";
   onOpenChange?: (open: boolean) => void;
 };
 
@@ -226,6 +227,7 @@ export function Combobox({
   wrapOptionLabels,
   matchAllSearchTerms = false,
   searchable = true,
+  popoverSide = "bottom",
   onOpenChange,
 }: ComboboxProps): ReactElement {
   const [open, setOpen] = useState(false);
@@ -341,6 +343,7 @@ export function Combobox({
       </PopoverTrigger>
       <PopoverContent
         portalContainer={portalContainer}
+        side={popoverSide}
         className={cn("w-[var(--radix-popover-trigger-width)] p-0", className)}
       >
         <Command shouldFilter={searchable && !matchAllSearchTerms}>

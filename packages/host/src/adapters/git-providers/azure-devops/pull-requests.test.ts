@@ -74,6 +74,7 @@ const connection: AzureDevOpsConnectionPort = {
   startCloudSignIn: () => Effect.dieMessage("unexpected sign-in"),
   cancelCloudSignIn: () => Effect.dieMessage("unexpected sign-in cancellation"),
   disconnect: () => Effect.dieMessage("unexpected disconnect"),
+  removeWorkspaceCredentials: () => Effect.dieMessage("unexpected workspace cleanup"),
 };
 
 const repositoryPort: GitProviderRepositoryPort<AzureDevOpsRepository> = {
