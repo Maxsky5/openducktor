@@ -168,7 +168,7 @@ export function WorkspaceSessionContent({
   panelState: WorkspaceSessionPanelState;
   onPanelStateChange: (update: Partial<WorkspaceSessionPanelState>) => void;
 }) {
-  const { activeBranch } = useWorkspaceBranchState();
+  const { activeBranch, isSwitchingBranch } = useWorkspaceBranchState();
   const repoConfig = useQuery(repoConfigQueryOptions(workspace.workspaceId));
   const queryClient = useQueryClient();
   const workingDirectory = sessionWorkingDirectory(workspace, record);
@@ -178,6 +178,7 @@ export function WorkspaceSessionContent({
       repoPath: workspace.repoPath,
       workingDirectory,
       isWorktree,
+      isSwitchingBranch,
       activeBranch,
     });
   const onSelectionChange = useCallback(

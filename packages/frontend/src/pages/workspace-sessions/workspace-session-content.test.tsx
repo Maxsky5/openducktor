@@ -1,6 +1,6 @@
 import { expect, spyOn, test } from "bun:test";
 import type { WorkspaceSession } from "@openducktor/contracts";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, memo, type ReactElement, useState } from "react";
 import { Tabs } from "@/components/ui/tabs";
@@ -9,7 +9,7 @@ import {
   AgentSessionReadModelStateContext,
   WorkspaceBranchStateContext,
 } from "@/state/app-state-contexts";
-import { filesystemQueryKeys } from "@/state/queries/filesystem";
+import { filesystemQueryKeys, invalidateWorkspaceFileQueries } from "@/state/queries/filesystem";
 import { currentBranchQueryOptions } from "@/state/queries/git";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
@@ -43,7 +43,11 @@ function renderClosedSession(
   revision?: string,
   sessionRecord: WorkspaceSession = record,
 ) {
-  const content = (name: string | null | undefined, currentRevision?: string) => (
+  const content = (
+    name: string | null | undefined,
+    currentRevision?: string,
+    isSwitchingBranch = false,
+  ) => (
     <QueryClientProvider client={queryClient}>
       <WorkspaceBranchStateContext.Provider
         value={{
@@ -56,7 +60,7 @@ function renderClosedSession(
                 ? { detached: true, revision: currentRevision }
                 : { name, detached: false },
           isLoadingBranches: false,
-          isSwitchingBranch: false,
+          isSwitchingBranch,
           branchSyncDegraded: false,
           switchBranch: async () => {},
         }}
@@ -84,8 +88,11 @@ function renderClosedSession(
   const view = render(content(branch, revision));
   return {
     ...view,
-    setBranch: (name: string | null | undefined, nextRevision?: string) =>
-      view.rerender(content(name, nextRevision)),
+    setBranch: (
+      name: string | null | undefined,
+      nextRevision?: string,
+      isSwitchingBranch = false,
+    ) => view.rerender(content(name, nextRevision, isSwitchingBranch)),
   };
 }
 
@@ -136,6 +143,39 @@ test("an outside branch change keeps a dirty preview and refreshes file queries"
     chat.mockRestore();
     preview.mockRestore();
     queryClient.clear();
+  }
+});
+
+test("a sidebar branch switch reads the file tree once", async () => {
+  const treeKey = filesystemQueryKeys.tree("/repo");
+  let treeReads = 0;
+  function ChatWithTree() {
+    useQuery({
+      queryKey: treeKey,
+      queryFn: async () => ++treeReads,
+      staleTime: Infinity,
+    });
+    return <div />;
+  }
+  const preview = mockFilePreview(() => <div />);
+  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(ChatWithTree);
+  const queryClient = newQueryClient();
+  const view = renderClosedSession(queryClient, "main");
+  try {
+    await waitFor(() => expect(treeReads).toBe(1));
+
+    view.setBranch("feature", undefined, true);
+    await act(async () => {
+      await invalidateWorkspaceFileQueries(queryClient, "/repo");
+    });
+    view.setBranch("feature");
+
+    expect(treeReads).toBe(2);
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    chat.mockRestore();
+    preview.mockRestore();
   }
 });
 

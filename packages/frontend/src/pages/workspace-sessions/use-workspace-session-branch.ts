@@ -14,11 +14,13 @@ export function useWorkspaceSessionBranch({
   repoPath,
   workingDirectory,
   isWorktree,
+  isSwitchingBranch,
   activeBranch,
 }: {
   repoPath: string;
   workingDirectory: string | null;
   isWorktree: boolean;
+  isSwitchingBranch: boolean;
   activeBranch: GitCurrentBranch | null;
 }) {
   const queryClient = useQueryClient();
@@ -33,8 +35,9 @@ export function useWorkspaceSessionBranch({
   useEffect(() => {
     if (!previewBranch || !workingDirectory || lastBranch.current === previewBranch) return;
     lastBranch.current = previewBranch;
+    if (!isWorktree && isSwitchingBranch) return;
     void invalidateWorkspaceFileQueries(queryClient, workingDirectory);
-  }, [previewBranch, queryClient, workingDirectory]);
+  }, [isSwitchingBranch, isWorktree, previewBranch, queryClient, workingDirectory]);
 
   const refreshBranch = useCallback(() => {
     if (isWorktree) {
