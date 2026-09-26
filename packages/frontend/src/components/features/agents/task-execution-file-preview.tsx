@@ -423,7 +423,7 @@ function FileDiscardDialog({
             disabled={isApplyingTransition}
             onClick={discard}
           >
-            {isApplyingTransition ? "Switching branch..." : "Discard"}
+            {isApplyingTransition ? "Working..." : "Discard"}
           </Button>
         </DialogFooter>
       </DialogContent>

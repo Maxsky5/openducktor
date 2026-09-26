@@ -1532,9 +1532,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(screen.getByRole("button", { name: "Keep editing" }).hasAttribute("disabled")).toBe(
       true,
     );
-    expect(
-      screen.getByRole("button", { name: "Switching branch..." }).hasAttribute("disabled"),
-    ).toBe(true);
+    expect(screen.getByRole("button", { name: "Working..." }).hasAttribute("disabled")).toBe(true);
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     expect(onKeepEditing).not.toHaveBeenCalled();
     expect(onDiscard).not.toHaveBeenCalled();

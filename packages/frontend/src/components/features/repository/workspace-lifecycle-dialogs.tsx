@@ -25,21 +25,29 @@ const removalPhaseLabel = {
 type LifecycleSubmit = {
   submitting: boolean;
   error: string | null;
-  confirm: () => Promise<void>;
+  confirm: () => Promise<boolean>;
 };
+
+type RequestTransition = (
+  apply: () => Promise<boolean>,
+  cancel?: () => void,
+  options?: { waitForSuccess?: boolean },
+) => void;
 
 const useLifecycleSubmit = (run: () => Promise<void>, onSuccess: () => void): LifecycleSubmit => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const confirm = async (): Promise<void> => {
+  const confirm = async (): Promise<boolean> => {
     setSubmitting(true);
     setError(null);
     try {
       await run();
       onSuccess();
+      return true;
     } catch (cause) {
       setError(errorMessage(cause));
+      return false;
     } finally {
       setSubmitting(false);
     }
@@ -58,8 +66,8 @@ type LifecycleDialogProps = {
   submitting: boolean;
   error: string | null;
   onCancel: () => void;
-  onConfirm: () => Promise<void>;
-  requestTransition?: ((apply: () => void, cancel?: () => void) => void) | undefined;
+  onConfirm: () => Promise<boolean>;
+  requestTransition?: RequestTransition | undefined;
   children: ReactNode;
 };
 
@@ -105,16 +113,20 @@ function LifecycleDialog({
     waitingRef.current = true;
     setWaiting(true);
     requestTransition(
-      () => {
-        waitingRef.current = false;
-        setWaiting(false);
-        void onConfirm();
+      async () => {
+        try {
+          return await onConfirm();
+        } finally {
+          waitingRef.current = false;
+          setWaiting(false);
+        }
       },
       () => {
         waitingRef.current = false;
         setWaiting(false);
         onCancel();
       },
+      { waitForSuccess: true },
     );
   };
   return (
@@ -175,7 +187,7 @@ function LifecycleDialog({
 type WorkspaceLifecycleDialogProps = {
   workspace: WorkspaceRecord;
   onOpenChange: (open: boolean) => void;
-  requestTransition?: ((apply: () => void, cancel?: () => void) => void) | undefined;
+  requestTransition?: RequestTransition | undefined;
 };
 
 export function WorkspaceCloseDialog({

@@ -103,7 +103,7 @@ export const useTaskExecutionFilePreviewController = (
         .catch((error) => {
           pendingContextTransitionRef.current = null;
           dispatch({ type: "keep_editing" });
-          toast.error("Could not switch branch", { description: errorMessage(error) });
+          toast.error("Could not complete action", { description: errorMessage(error) });
         })
         .finally(() => {
           applyingTransitionRef.current = false;

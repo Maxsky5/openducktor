@@ -293,12 +293,22 @@ function useWorkspaceSessionArchive({
     removeWorktree: boolean,
     worktreeConfirmation?: { workingDirectory: string; branchName: string },
   ) => {
-    const apply = () => {
+    const apply = async () => {
       archive.reset();
-      archive.mutate({ sessionId, confirmStop: true, removeWorktree, worktreeConfirmation });
+      try {
+        await archive.mutateAsync({
+          sessionId,
+          confirmStop: true,
+          removeWorktree,
+          worktreeConfirmation,
+        });
+        return true;
+      } catch {
+        return false;
+      }
     };
-    if (sessionId === selectedId) guardWorkspaceChange(apply);
-    else apply();
+    if (sessionId === selectedId) guardWorkspaceChange(apply, undefined, { waitForSuccess: true });
+    else void apply();
   };
   const handleTabArchive = (target: WorkspaceSession) => {
     archive.reset();

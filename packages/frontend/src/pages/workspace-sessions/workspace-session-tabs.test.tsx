@@ -2,7 +2,7 @@ import { afterEach, expect, jest, spyOn, test } from "bun:test";
 import type { WorkspaceSession, WorkspaceSessionArchiveInput } from "@openducktor/contracts";
 import { fireEvent, render, waitFor, within } from "@testing-library/react";
 import { useQueryClient } from "@tanstack/react-query";
-import { act, type ReactNode } from "react";
+import { act, type ReactNode, useState } from "react";
 import { Link, MemoryRouter, useLocation, useNavigate } from "react-router";
 import { QueryProvider } from "@/lib/query-provider";
 import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
@@ -21,6 +21,7 @@ import {
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
 import { WorkspaceSessions } from "./workspace-sessions-view";
+import { useWorkspaceSessionPreview } from "./use-workspace-session-preview";
 import { workspaceSessionSelectionStorageKey } from "./use-workspace-session-selection";
 import { workspaceSessionTabOrderStorageKey } from "./use-workspace-session-tab-order";
 import { updateWorkspaceSessionQueries } from "@/state/queries/workspace-sessions";
@@ -406,6 +407,7 @@ function renderTabs(
   initialEntry = "/chats",
   workspaceId = crypto.randomUUID(),
   queryControls: ReactNode = null,
+  previewControls: ReactNode = null,
 ) {
   testWorkspaceIds.add(workspaceId);
   const workspace = { workspaceId, workspaceName: "A", repoPath: "/repo" };
@@ -459,6 +461,7 @@ function renderTabs(
                 >
                   <WorkspacePreviewTransitionGuardProvider>
                     <WorkspaceSessions workspace={workspace} />
+                    {previewControls}
                   </WorkspacePreviewTransitionGuardProvider>
                 </WorkspaceBranchStateContext.Provider>
               </AgentSessionsContext>
@@ -469,6 +472,21 @@ function renderTabs(
     </MemoryRouter>,
   );
   return { ...view, workspaceId, store };
+}
+
+function DirtyPreview() {
+  const [file, setFile] = useState<{ rootPath: string; relativePath: string } | null>({
+    rootPath: "/repo",
+    relativePath: "draft.ts",
+  });
+  const { preview, onDiscard } = useWorkspaceSessionPreview(file, setFile);
+  return (
+    <>
+      <output data-testid="draft">{preview.model.selectedFile?.relativePath ?? "none"}</output>
+      <button onClick={() => preview.model.onLeavePolicyChange("confirm")}>Edit draft</button>
+      <button onClick={onDiscard}>Discard draft</button>
+    </>
+  );
 }
 
 test("each selected chat keeps its own tools tab and open state", async () => {
@@ -1249,6 +1267,45 @@ test("running archive confirms inline and retains the tab and selection when Sto
     expect(view.queryByRole("dialog")).toBeNull();
     expect(sessionTabs(view)).toHaveLength(2);
     expect(view.getByRole("tab", { name: /First/ }).getAttribute("aria-selected")).toBe("true");
+  } finally {
+    view.unmount();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
+test("failed selected-chat archive keeps the dirty draft", async () => {
+  let rejectArchive!: (reason: Error) => void;
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        workspaceSessionListActive: async () => [sessionRecord("First")],
+        workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+        workspaceSessionArchive: () =>
+          new Promise((_resolve, reject) => {
+            rejectArchive = reject;
+          }),
+      },
+    }),
+  );
+  const view = renderTabs(
+    undefined,
+    "/chats?session=First",
+    crypto.randomUUID(),
+    null,
+    <DirtyPreview />,
+  );
+  try {
+    await view.findByRole("button", { name: "Archive First" }, { timeout: 800 });
+    fireEvent.click(view.getByRole("button", { name: "Edit draft" }));
+    fireEvent.click(view.getByRole("button", { name: "Archive First" }));
+    fireEvent.click(view.getByRole("button", { name: "Confirm stop and archive First" }));
+    expect(view.getByTestId("draft").textContent).toBe("draft.ts");
+    fireEvent.click(view.getByRole("button", { name: "Discard draft" }));
+    await waitFor(() => expect(rejectArchive).toBeDefined());
+    expect(view.getByTestId("draft").textContent).toBe("draft.ts");
+    await act(async () => rejectArchive(new Error("Archive failed")));
+    await view.findByText("Archive failed", {}, { timeout: 800 });
+    expect(view.getByTestId("draft").textContent).toBe("draft.ts");
   } finally {
     view.unmount();
     configureShellBridge(createUnavailableShellBridge());

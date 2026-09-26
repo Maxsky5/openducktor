@@ -376,9 +376,18 @@ export function WorkspaceRail({
                       isSwitchingWorkspace={isSwitchingWorkspace}
                       onSelectWorkspace={(workspaceId) => {
                         if (workspaceId === activeWorkspace?.workspaceId) return;
-                        guardWorkspaceChange(() => {
-                          void selectWorkspace(workspaceId);
-                        });
+                        guardWorkspaceChange(
+                          async () => {
+                            try {
+                              await selectWorkspace(workspaceId);
+                              return true;
+                            } catch {
+                              return false;
+                            }
+                          },
+                          undefined,
+                          { waitForSuccess: true },
+                        );
                       }}
                       onRequestCloseWorkspace={(workspace) =>
                         setLifecycleRequest({ action: "close", workspace })
