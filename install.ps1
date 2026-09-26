@@ -1,3 +1,4 @@
+& {
 $ErrorActionPreference = 'Stop'
 
 try {
@@ -193,4 +194,5 @@ try {
 }
 catch {
     throw "OpenDucktor install: $($_.Exception.Message)"
+}
 }

@@ -843,7 +843,7 @@ describe("TerminalService", () => {
     expect(pty.operations).toEqual(["pause"]);
 
     settleTitles();
-    await Bun.sleep(0);
+    await waitForPtyOperation(pty.operations, "resume");
 
     expect(pty.operations).toEqual(["pause", "resume"]);
   });

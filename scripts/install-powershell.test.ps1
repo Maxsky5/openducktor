@@ -13,6 +13,7 @@ $desktopLink = Join-Path $root 'Desktop\OpenDucktor.lnk'
 $menuLink = Join-Path $root 'Programs\OpenDucktor.lnk'
 $global:uninstallCalls = 0
 $global:failMarker = $false
+$global:failDownload = $false
 $global:failWorkRemoval = $false
 $global:warnings = @()
 $global:displayIcon = "$appPath,0"
@@ -56,7 +57,7 @@ function Remove-Item {
         $global:registered = $false
         return
     }
-    if ($global:failWorkRemoval -and $LiteralPath -notlike "$root*") {
+    if ($global:failWorkRemoval) {
         $global:failWorkRemoval = $false
         Microsoft.PowerShell.Management\Remove-Item -LiteralPath $LiteralPath -Recurse:$Recurse -Force:$Force
         throw 'Fixture temporary cleanup failed.'
@@ -78,6 +79,10 @@ function Get-CimInstance {
 function Invoke-RestMethod { return $global:release }
 function Invoke-WebRequest {
     param([string]$Uri, [string]$OutFile, [switch]$UseBasicParsing)
+    if ($global:failDownload) {
+        $global:failDownload = $false
+        throw 'Fixture download failed.'
+    }
     [IO.File]::WriteAllBytes($OutFile, $global:payload)
 }
 function Set-Content {
@@ -190,9 +195,10 @@ try {
     Assert (Test-Path -LiteralPath $menuLink) 'The failed update removed the Start Menu shortcut.'
     Assert ($global:uninstallCalls -eq 3) 'A failed update uninstalled the prior app.'
 
+    $global:failDownload = $true
     $global:failWorkRemoval = $true
-    try { & $scriptPath; throw 'A failed update with temporary cleanup failure was accepted.' } catch {
-        Assert ($_.Exception.Message -like '*exit code 7*') 'Temporary cleanup hid the NSIS exit code.'
+    try { & $scriptPath; throw 'A failed download with temporary cleanup failure was accepted.' } catch {
+        Assert ($_.Exception.Message -like '*Fixture download failed*') 'Temporary cleanup hid the download error.'
     }
     Assert ($global:warnings[-1] -like '*Fixture temporary cleanup failed*') 'The cleanup failure was not reported.'
     Assert ((Get-Content -LiteralPath $appPath -Raw) -eq $first) 'A failed cleanup changed the prior app.'
@@ -200,6 +206,16 @@ try {
     $global:exitCode = 0
     & $scriptPath
     Assert (Test-Path -LiteralPath $appPath) 'The repeat run did not leave one installed app.'
+
+    $priorPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $work = 'caller work'
+    try {
+        Get-Content -LiteralPath $scriptPath -Raw | Invoke-Expression
+        Assert ($ErrorActionPreference -eq 'Continue') 'The piped installer changed the caller error preference.'
+        Assert ($work -eq 'caller work') 'The piped installer changed a caller variable.'
+    }
+    finally { $ErrorActionPreference = $priorPreference }
 
     $global:release.assets[0].digest = 'sha256:' + ('0' * 64)
     try { & $scriptPath; throw 'A changed download was accepted.' } catch {
