@@ -3,7 +3,6 @@ import { createRuntimeLifecyclePublisher } from "./runtime-lifecycle-publisher";
 import { createNodeImageCommandHandlers } from "./node-image-command-handlers";
 import { createNodeGitProviderCommandHandlers } from "./node-git-provider-command-handlers";
 import { resolveCodexEffectivePolicy } from "@openducktor/contracts";
-import { isAzureDevOpsRepository } from "@openducktor/core";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import { createCodexLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/codex-live-session-adapter";
@@ -292,15 +291,9 @@ export const assembleNodeEffectHostCommandRouter = (
       removeWorkspaceTaskAssets: assets.removeWorkspaceTaskAssets,
       removeWorkspaceTaskStore: assets.removeWorkspaceTaskStore,
       removeWorkspaceCredentials: (repoConfig) => {
-        const provider = repoConfig.git.provider;
-        if (
-          provider?.id !== "azure_devops" ||
-          !provider.repository ||
-          !isAzureDevOpsRepository(provider.repository)
-        ) {
-          return Effect.void;
-        }
         if (!azureDevOpsConnection) {
+          const provider = repoConfig.git.provider;
+          if (provider?.id !== "azure_devops") return Effect.void;
           return Effect.fail(
             new HostOperationError({
               operation: "workspace.removeWorkspace.credentials",
@@ -309,7 +302,7 @@ export const assembleNodeEffectHostCommandRouter = (
             }),
           );
         }
-        return azureDevOpsConnection.disconnect(repoConfig, provider.repository).pipe(
+        return azureDevOpsConnection.removeWorkspaceCredentials(repoConfig).pipe(
           Effect.mapError(
             (cause) =>
               new HostOperationError({

@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import { AzureDevOpsProviderAdapter } from "../../adapters/git-providers/azure-devops/provider-adapter";
 import { createAzureDevOpsConnectionAdapter } from "../../adapters/git-providers/azure-devops/connection";
+import { createAzureDevOpsCredentialIndex } from "../../adapters/git-providers/azure-devops/credential-index";
 import { createAzureDevOpsProtectedStorage } from "../../adapters/git-providers/azure-devops/protected-storage";
 import type { AzureDevOpsFetch } from "../../adapters/git-providers/azure-devops/rest-client";
 import { GithubProviderAdapter } from "../../adapters/git-providers/github/provider-adapter";
@@ -49,6 +50,7 @@ export const createNodeGitProviderComposition = ({
     fetchImplementation: azureDevOpsFetch ?? fetch,
     clientId: resolveAzureDevOpsEntraClientId(processEnv),
     protectedStorage: createAzureDevOpsProtectedStorage({ configDir }),
+    credentialIndex: createAzureDevOpsCredentialIndex({ configDir }),
     publishConnectionState: (payload) =>
       eventBus?.publish({
         channel: "openducktor://azure-devops-connection-updated",

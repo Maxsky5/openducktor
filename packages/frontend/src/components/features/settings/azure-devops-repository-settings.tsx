@@ -1,4 +1,4 @@
-import { Check, ChevronRight, LoaderCircle, PencilLine, RefreshCcw } from "lucide-react";
+import { Check, LoaderCircle, PencilLine, RefreshCcw } from "lucide-react";
 import { type ReactElement, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,6 @@ type AzureDevOpsRepositorySettingsProps = {
   disabled: boolean;
   repoPath: string;
   workspaceName: string;
-  onContinue: () => void;
 };
 
 const fieldLabels = {
@@ -46,7 +45,6 @@ const fieldErrorMessage = (
 export function AzureDevOpsRepositorySettings({
   controller,
   disabled,
-  onContinue,
   repoPath,
   workspaceName,
 }: AzureDevOpsRepositorySettingsProps): ReactElement {
@@ -74,7 +72,7 @@ export function AzureDevOpsRepositorySettings({
     <section className="grid min-w-0 gap-4" aria-labelledby="azure-repository-heading">
       <div className="space-y-1">
         <h3 id="azure-repository-heading" className="text-sm font-semibold text-foreground">
-          Link the repository
+          1. Repository
         </h3>
         <p className="text-xs text-muted-foreground">
           Detect the Azure Repos remote from the selected workspace, or enter its address.
@@ -148,10 +146,6 @@ export function AzureDevOpsRepositorySettings({
         </div>
       ) : null}
 
-      {repositoryReady ? (
-        <AzureAreaPathSettings controller={controller} disabled={disabled} />
-      ) : null}
-
       {manualOpen ? (
         <ManualRepositoryForm
           controller={controller}
@@ -161,62 +155,7 @@ export function AzureDevOpsRepositorySettings({
           updateField={updateField}
         />
       ) : null}
-
-      {repositoryReady ? (
-        <div className="flex justify-end border-t border-border pt-4">
-          <Button type="button" disabled={disabled} onClick={onContinue}>
-            Continue to connection
-            <ChevronRight data-icon="inline-end" />
-          </Button>
-        </div>
-      ) : null}
     </section>
-  );
-}
-
-function AzureAreaPathSettings({
-  controller,
-  disabled,
-}: {
-  controller: AzureDevOpsGitProviderFormController;
-  disabled: boolean;
-}): ReactElement {
-  return (
-    <div className="grid gap-2 rounded-lg border border-border p-4">
-      <Label htmlFor="azure-area-path">Work item area path</Label>
-      <p className="text-xs text-muted-foreground">
-        Import uses this area and its child areas. Save the project settings before loading areas.
-      </p>
-      <div className="flex gap-2">
-        <select
-          id="azure-area-path"
-          className="h-10 min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-sm text-foreground"
-          disabled={disabled || controller.isLoadingAreaPaths || controller.areaPaths.length === 0}
-          value={controller.selectedAreaPath}
-          onChange={(event) => controller.setAreaPath(event.target.value)}
-        >
-          <option value="">Choose an area path</option>
-          {controller.areaPaths.map((path) => (
-            <option key={path} value={path}>
-              {path}
-            </option>
-          ))}
-        </select>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={disabled || controller.isLoadingAreaPaths}
-          onClick={controller.reloadAreaPaths}
-        >
-          {controller.isLoadingAreaPaths ? "Loading..." : "Load areas"}
-        </Button>
-      </div>
-      {controller.areaPathsError ? (
-        <p role="alert" className="text-xs text-destructive">
-          {controller.areaPathsError}
-        </p>
-      ) : null}
-    </div>
   );
 }
 

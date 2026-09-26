@@ -29,6 +29,7 @@ const connection: AzureDevOpsConnectionPort = {
   startCloudSignIn: () => Effect.die("unexpected sign-in"),
   cancelCloudSignIn: () => Effect.void,
   disconnect: () => Effect.void,
+  removeWorkspaceCredentials: () => Effect.void,
 };
 
 describe("Azure DevOps REST client", () => {

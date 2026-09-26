@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { errorMessage } from "@/lib/errors";
 import { host } from "@/state/operations/shared/host";
+import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import {
   type AzureRemoteMappingDraft,
   type AzureRepositoryDraft,
@@ -104,19 +105,18 @@ export const useAzureDevOpsGitProviderForm = ({
       configurationFingerprint,
       connectionInput,
     });
-  const areasQuery = useQuery({
-    queryKey: ["azure-devops", "area-paths", selectedRepoPath, configurationFingerprint],
-    enabled: providerEnabled && parsedRepository !== undefined,
-    queryFn: async () => {
-      if (!parsedRepository)
-        throw new Error("Set an Azure DevOps project before loading its areas.");
-      const saved = await host.workspaceGetRepoConfig(selectedRepoConfig.workspaceId);
-      const savedRepository = configuredAzureRepository(saved.git.provider);
-      if (!savedRepository || !sameAzureProject(savedRepository, parsedRepository)) {
-        throw new Error("Save the Azure DevOps project settings, then load its area paths.");
-      }
-      return host.azureAreaPathsList(selectedRepoPath);
-    },
+  const hasConnectedAccount =
+    connectionController.canManageConnection &&
+    connectionController.connectionState.status === "connected";
+  const areaController = useAzureDevOpsAreaPaths({
+    selectedRepoConfig,
+    selectedRepoPath,
+    parsedRepository,
+    configurationFingerprint,
+    providerEnabled,
+    canManageConnection: connectionController.canManageConnection,
+    hasConnectedAccount,
+    onUpdateSelectedRepoConfig,
   });
 
   useEffect(() => {
@@ -199,29 +199,7 @@ export const useAzureDevOpsGitProviderForm = ({
     isReady,
     readinessMessage,
     remoteMappingDrafts,
-    areaPaths: areasQuery.data ?? [],
-    areaPathsError: areasQuery.isError ? errorMessage(areasQuery.error) : null,
-    isLoadingAreaPaths: areasQuery.isFetching,
-    selectedAreaPath: configuredProvider?.settings?.areaPath ?? "",
-    reloadAreaPaths: () => void areasQuery.refetch(),
-    setAreaPath(areaPath: string) {
-      onUpdateSelectedRepoConfig((repoConfig) => ({
-        ...repoConfig,
-        git: {
-          ...repoConfig.git,
-          provider: {
-            ...repoConfig.git.provider,
-            id: "azure_devops",
-            enabled: repoConfig.git.provider?.enabled ?? true,
-            autoDetected: repoConfig.git.provider?.autoDetected ?? false,
-            settings: {
-              ...repoConfig.git.provider?.settings,
-              areaPath: areaPath || undefined,
-            },
-          },
-        },
-      }));
-    },
+    ...areaController,
     repositoryActionError,
     repositoryErrors,
     setProviderEnabled(enabled: boolean) {
@@ -308,6 +286,75 @@ export const useAzureDevOpsGitProviderForm = ({
             settings: {
               ...repoConfig.git.provider?.settings,
               httpConsentCollectionUrl: checked ? (httpCollectionUrl ?? undefined) : undefined,
+            },
+          },
+        },
+      }));
+    },
+  };
+};
+
+const useAzureDevOpsAreaPaths = ({
+  selectedRepoConfig,
+  selectedRepoPath,
+  parsedRepository,
+  configurationFingerprint,
+  providerEnabled,
+  canManageConnection,
+  hasConnectedAccount,
+  onUpdateSelectedRepoConfig,
+}: Pick<
+  UseAzureDevOpsGitProviderFormInput,
+  "selectedRepoConfig" | "selectedRepoPath" | "onUpdateSelectedRepoConfig"
+> & {
+  parsedRepository: AzureDevOpsRepository | undefined;
+  configurationFingerprint: string | null;
+  providerEnabled: boolean;
+  canManageConnection: boolean;
+  hasConnectedAccount: boolean;
+}) => {
+  const selectedAreaPath = selectedRepoConfig.git.provider?.settings?.areaPath ?? "";
+  const savedAreaPath =
+    useQuery(settingsSnapshotQueryOptions()).data?.workspaces[selectedRepoConfig.workspaceId]?.git
+      .provider?.settings?.areaPath ?? "";
+  const canLoadAreaPaths = canManageConnection && providerEnabled && hasConnectedAccount;
+  const areasQuery = useQuery({
+    queryKey: ["azure-devops", "area-paths", selectedRepoPath, configurationFingerprint],
+    enabled: canLoadAreaPaths && parsedRepository !== undefined,
+    queryFn: async () => {
+      if (!parsedRepository)
+        throw new Error("Set an Azure DevOps project before loading its areas.");
+      const saved = await host.workspaceGetRepoConfig(selectedRepoConfig.workspaceId);
+      const savedRepository = configuredAzureRepository(saved.git.provider);
+      if (!savedRepository || !sameAzureProject(savedRepository, parsedRepository)) {
+        throw new Error("Save the Azure DevOps project settings, then load its area paths.");
+      }
+      return host.azureAreaPathsList(selectedRepoPath);
+    },
+  });
+
+  return {
+    areaPaths: areasQuery.data ?? [],
+    areaPathsError: areasQuery.isError ? errorMessage(areasQuery.error) : null,
+    canLoadAreaPaths,
+    hasConnectedAccount,
+    isAreaPathDirty: selectedAreaPath !== savedAreaPath,
+    isLoadingAreaPaths: areasQuery.isFetching,
+    selectedAreaPath,
+    reloadAreaPaths: () => void areasQuery.refetch(),
+    setAreaPath(areaPath: string) {
+      onUpdateSelectedRepoConfig((repoConfig) => ({
+        ...repoConfig,
+        git: {
+          ...repoConfig.git,
+          provider: {
+            ...repoConfig.git.provider,
+            id: "azure_devops",
+            enabled: repoConfig.git.provider?.enabled ?? true,
+            autoDetected: repoConfig.git.provider?.autoDetected ?? false,
+            settings: {
+              ...repoConfig.git.provider?.settings,
+              areaPath: areaPath || undefined,
             },
           },
         },
