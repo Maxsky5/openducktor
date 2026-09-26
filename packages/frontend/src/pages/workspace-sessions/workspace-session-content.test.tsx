@@ -3,6 +3,7 @@ import { repoConfigSchema, type WorkspaceSession } from "@openducktor/contracts"
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, memo, type ReactElement, useState } from "react";
+import { toast } from "sonner";
 import { Tabs } from "@/components/ui/tabs";
 import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
 import {
@@ -12,15 +13,21 @@ import {
 import { filesystemQueryKeys, invalidateWorkspaceFileQueries } from "@/state/queries/filesystem";
 import { currentBranchQueryOptions } from "@/state/queries/git";
 import { repoConfigQueryOptions, settingsSnapshotQueryOptions } from "@/state/queries/workspace";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import {
+  configureShellBridge,
+  createUnavailableShellBridge,
+  getShellBridge,
+} from "@/lib/shell-bridge";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import * as filePreview from "@/components/features/agents/task-execution-file-preview";
 import * as toolsPanel from "@/components/features/agents/workspace-session-tools-panel";
 import * as sessionChat from "./workspace-session-chat";
+import { AgentChatMarkdownRenderer } from "@/components/features/agents/agent-chat/agent-chat-markdown-renderer";
 import {
   WorkspaceSessionContent,
   WorkspaceSessionReadModelNotice,
+  type WorkspaceSessionPanelState,
 } from "./workspace-session-content";
 
 const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
@@ -37,12 +44,25 @@ const record = {
   updatedAt: 1,
   archivedAt: null,
 };
+const worktreeRecord: WorkspaceSession = {
+  ...record,
+  executionTarget: {
+    kind: "local_worktree",
+    workingDirectory: "/repo/worktree",
+    branchName: "main",
+    worktreeState: "present",
+  },
+};
 
 function renderClosedSession(
   queryClient: QueryClient,
   branch: string | null | undefined,
   revision?: string,
   sessionRecord: WorkspaceSession = record,
+  selectedFile: WorkspaceSessionPanelState["selectedFile"] = {
+    rootPath: sessionRecord.executionTarget.workingDirectory,
+    relativePath: "file.ts",
+  },
 ) {
   const content = (
     name: string | null | undefined,
@@ -74,10 +94,7 @@ function renderClosedSession(
               panelState={{
                 isOpen: false,
                 activeTabId: "file_explorer",
-                selectedFile: {
-                  rootPath: sessionRecord.executionTarget.workingDirectory,
-                  relativePath: "file.ts",
-                },
+                selectedFile,
               }}
               onPanelStateChange={() => {}}
             />
@@ -112,6 +129,61 @@ function mockFilePreview(Preview: () => ReactElement) {
     Object.assign(Preview, memo(Preview)),
   );
 }
+
+test.each([
+  { name: "repository", sessionRecord: record, rootPath: "/repo" },
+  { name: "worktree", sessionRecord: worktreeRecord, rootPath: "/repo/worktree" },
+])(
+  "$name chat links open repo files and name the workspace in path errors",
+  async ({ sessionRecord, rootPath }) => {
+    const previousBridge = getShellBridge();
+    configureShellBridge(
+      createShellBridgeFixture({
+        client: {
+          gitCanonicalizePath: async (path) => path,
+          gitGetCurrentBranch: async () => ({ name: "main", detached: false }),
+        },
+      }),
+    );
+    const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(() => (
+      <AgentChatMarkdownRenderer markdown="[outside](../secret.md) [README](./README.md)" />
+    ));
+    const error = spyOn(toast, "error").mockReturnValue("error");
+    const preview = mockFilePreview(() => <div>File preview</div>);
+    const queryClient = newQueryClient();
+    queryClient.setQueryData(currentBranchQueryOptions("/repo").queryKey, {
+      name: "main",
+      detached: false,
+    });
+    const view = renderClosedSession(queryClient, "main", undefined, sessionRecord, null);
+    try {
+      fireEvent.click(screen.getByRole("link", { name: "outside" }));
+      await waitFor(() => expect(error).toHaveBeenCalledTimes(1));
+      fireEvent.click(screen.getByRole("link", { name: "README" }));
+      await waitFor(() =>
+        expect(screen.getByTestId("workspace-session-file-preview")).toBeTruthy(),
+      );
+      expect(screen.getByTestId("workspace-session-file-preview").textContent).toContain(
+        "File preview",
+      );
+      expect(preview.mock.calls.at(-1)?.[0].model.selectedFile).toEqual({
+        rootPath,
+        relativePath: "README.md",
+      });
+      expect(error).toHaveBeenCalledTimes(1);
+      expect(error.mock.calls[0]?.[1]?.description).toBe(
+        "The file path leaves the workspace directory.",
+      );
+    } finally {
+      view.unmount();
+      queryClient.clear();
+      chat.mockRestore();
+      preview.mockRestore();
+      error.mockRestore();
+      configureShellBridge(previousBridge);
+    }
+  },
+);
 
 test("an outside branch change keeps a dirty preview and refreshes file queries", async () => {
   function Preview() {

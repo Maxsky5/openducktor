@@ -2,6 +2,8 @@ import type { GitTargetBranch, WorkspaceSession } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { TaskExecutionSelectedFilePreview } from "@/components/features/agents/task-execution-file-preview";
+import { ChatFileLinkProvider } from "@/components/features/agents/agent-chat/agent-chat-file-link-provider";
+import type { ChatFileLinkOwner } from "@/components/features/agents/agent-chat/agent-chat-file-link-context";
 import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
 import {
   WorkspaceSessionToolsPanel,
@@ -77,12 +79,14 @@ function WorkspaceSessionMainContent({
   onToolRefresh,
   previewContent,
   hasSelectedFile,
+  fileLinkOwner,
 }: {
   workspace: ActiveWorkspace;
   record: WorkspaceSession;
   onToolRefresh: () => void;
   previewContent: ReactNode;
   hasSelectedFile: boolean;
+  fileLinkOwner: ChatFileLinkOwner;
 }) {
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
@@ -99,11 +103,13 @@ function WorkspaceSessionMainContent({
         style={{ visibility: hasSelectedFile ? "hidden" : undefined }}
         inert={hasSelectedFile}
       >
-        <WorkspaceSessionChatPane
-          workspace={workspace}
-          record={record}
-          onToolRefresh={onToolRefresh}
-        />
+        <ChatFileLinkProvider owner={fileLinkOwner}>
+          <WorkspaceSessionChatPane
+            workspace={workspace}
+            record={record}
+            onToolRefresh={onToolRefresh}
+          />
+        </ChatFileLinkProvider>
       </div>
     </div>
   );
@@ -285,6 +291,15 @@ export function WorkspaceSessionContent({
           onToolRefresh={() => refreshAfterChange("all")}
           previewContent={previewContent}
           hasSelectedFile={Boolean(preview.model.selectedFile)}
+          fileLinkOwner={{
+            kind: "workspace",
+            repoPath: workspace.repoPath,
+            workingDirectory,
+            ownerKey: `${record.id}:${branchKey}`,
+            onSelectFile: (file) => {
+              onSelectFile(file);
+            },
+          }}
         />
       </div>
     </div>

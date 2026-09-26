@@ -6,6 +6,7 @@ export type ChatFileLink =
   | { kind: "invalid"; message: string };
 
 type InvalidFileLink = Extract<ChatFileLink, { kind: "invalid" }>;
+type ChatFileRoot = "task" | "workspace";
 type ChatFileDestination =
   | { kind: "external" | "fragment" }
   | { kind: "path"; path: string; absolute: boolean }
@@ -22,6 +23,22 @@ const ROOT_FILE_CITATION = /^(?:[^/:]+:[+-]?\d|[^/:]+\.[^/:]+:)/;
 // ASCII drive letters, literal or percent-encoded. Encoded colons remain filename characters.
 const ENCODED_DRIVE = /^(?:[a-z]|%[46][1-9a-f]|%[57][0-9a]):/i;
 const ENCODED_SEPARATOR = /^(?:[/\\]|%2f|%5c)/i;
+const ROOT_ERRORS = {
+  task: {
+    unavailable: "The Task's Build Worktree is unavailable.",
+    platform: "The absolute path does not match the Build Worktree platform.",
+    leaves: "The file path leaves the Build Worktree.",
+    invalid: "The Build Worktree path is invalid.",
+    outside: "The file is outside the Task's Build Worktree.",
+  },
+  workspace: {
+    unavailable: "The workspace directory is unavailable.",
+    platform: "The absolute path uses a different path style from the workspace directory.",
+    leaves: "The file path leaves the workspace directory.",
+    invalid: "The workspace directory path is invalid.",
+    outside: "The file is outside the workspace directory.",
+  },
+} as const;
 
 /** Parse line suffixes before decoding so encoded colons and hashes stay in file names. */
 export function parseChatFileLink(href: string): ChatFileDestination {
@@ -51,10 +68,11 @@ export function parseChatFileLink(href: string): ChatFileDestination {
 export function resolveChatFileLink(
   destination: ChatFileDestination,
   rootPath: string | null,
+  root: ChatFileRoot = "task",
 ): ChatFileLink {
   if (destination.kind !== "path") return destination;
-  if (!rootPath) return invalid("The Task's Build Worktree is unavailable.");
-  return resolveWorktreeFile(destination.path, rootPath);
+  if (!rootPath) return invalid(ROOT_ERRORS[root].unavailable);
+  return resolveWorktreeFile(destination.path, rootPath, root);
 }
 
 export const isChatLocalDestination = (href: string): boolean =>
@@ -91,28 +109,28 @@ function parseFileDestination(href: string): { kind: "path"; path: string } | In
   return { kind: "path", path: prefix + path };
 }
 
-function resolveWorktreeFile(path: string, rootPath: string): ChatFileLink {
+function resolveWorktreeFile(path: string, rootPath: string, root: ChatFileRoot): ChatFileLink {
   const hasDrive = /^[a-z]:[/\\]/i.test(path);
   const windows = /^[a-z]:[/\\]/i.test(rootPath);
   if (path.startsWith("//") || path.startsWith("\\\\"))
     return invalid("Network file paths are not supported.");
   if (windows) path = path.replaceAll("\\", "/");
   if ((hasDrive && (!windows || !/^[a-z]:\//i.test(path))) || (windows && path.startsWith("/")))
-    return invalid("The absolute path does not match the Build Worktree platform.");
+    return invalid(ROOT_ERRORS[root].platform);
   if (!path || path.endsWith("/") || /(?:^|\/)\.{1,2}$/.test(path))
     return invalid("The destination must name a file.");
   const absolute = path.startsWith("/") || hasDrive;
   const parts = segments(path);
-  if (!parts) return invalid("The file path leaves the Build Worktree.");
+  if (!parts) return invalid(ROOT_ERRORS[root].leaves);
   const rootParts = segments(windows ? rootPath.replaceAll("\\", "/") : rootPath);
-  if (!rootParts) return invalid("The Build Worktree path is invalid.");
+  if (!rootParts) return invalid(ROOT_ERRORS[root].invalid);
   if (absolute) {
     // Compare a root prefix; contained files have additional path segments.
     // react-doctor-disable-next-line react-doctor/js-length-check-first
     const matchesRoot = rootParts.every((part, index) =>
       windows ? part.toLowerCase() === parts[index]?.toLowerCase() : part === parts[index],
     );
-    if (!matchesRoot) return invalid("The file is outside the Task's Build Worktree.");
+    if (!matchesRoot) return invalid(ROOT_ERRORS[root].outside);
     parts.splice(0, rootParts.length);
   }
   if (!parts.length) return invalid("The destination must name a file.");
