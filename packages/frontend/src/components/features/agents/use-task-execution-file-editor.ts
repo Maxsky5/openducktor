@@ -22,6 +22,7 @@ type TextFileResult = Extract<WorkspaceTextFileReadResult, { kind: "text" }>;
 
 type EditorSession = {
   id: string;
+  branch: string | null;
   baseline: TextFileResult;
   source: TextFileResult;
   version: number;
@@ -38,13 +39,13 @@ type EditorState = {
   isSaving: boolean;
   saveFailure: SaveFailure | null;
   isReviewingConflict: boolean;
-  conflictReview: TextFileResult | null;
+  conflictReview: { result: TextFileResult; branch: string | null } | null;
 };
 
 type EditorAction =
   | { type: "reset" }
-  | { type: "seed"; id: string; result: TextFileResult }
-  | { type: "adopt_clean_result"; result: TextFileResult }
+  | { type: "seed"; id: string; branch: string | null; result: TextFileResult }
+  | { type: "adopt_clean_result"; branch: string | null; result: TextFileResult }
   | { type: "edit"; isDirty: boolean }
   | { type: "save_started" }
   | {
@@ -65,6 +66,7 @@ type EditorAction =
       type: "conflict_review_loaded";
       sessionId: string;
       baselineRevision: string;
+      branch: string | null;
       result: TextFileResult;
     }
   | {
@@ -74,7 +76,12 @@ type EditorAction =
       message: string;
     }
   | { type: "conflict_review_closed" }
-  | { type: "conflict_baseline_accepted"; result: TextFileResult; isDirty: boolean };
+  | {
+      type: "conflict_baseline_accepted";
+      branch: string | null;
+      result: TextFileResult;
+      isDirty: boolean;
+    };
 
 const INITIAL_EDITOR_STATE: EditorState = {
   session: null,
@@ -92,7 +99,13 @@ const editorStateReducer = (state: EditorState, action: EditorAction): EditorSta
     case "seed":
       return {
         ...INITIAL_EDITOR_STATE,
-        session: { id: action.id, baseline: action.result, source: action.result, version: 0 },
+        session: {
+          id: action.id,
+          branch: action.branch,
+          baseline: action.result,
+          source: action.result,
+          version: 0,
+        },
       };
     case "adopt_clean_result":
       if (!state.session) return state;
@@ -100,6 +113,7 @@ const editorStateReducer = (state: EditorState, action: EditorAction): EditorSta
         ...state,
         session: {
           ...state.session,
+          branch: action.branch,
           baseline: action.result,
           source: action.result,
           version: state.session.version + 1,
@@ -157,7 +171,11 @@ const editorStateReducer = (state: EditorState, action: EditorAction): EditorSta
       ) {
         return state;
       }
-      return { ...state, isReviewingConflict: false, conflictReview: action.result };
+      return {
+        ...state,
+        isReviewingConflict: false,
+        conflictReview: { result: action.result, branch: action.branch },
+      };
     case "conflict_review_failed":
       if (
         !state.session ||
@@ -179,6 +197,7 @@ const editorStateReducer = (state: EditorState, action: EditorAction): EditorSta
         ...state,
         session: {
           ...state.session,
+          branch: action.branch,
           baseline: action.result,
           source: { ...action.result, revision: state.session.source.revision },
         },
@@ -199,6 +218,7 @@ const workspaceWriteFailure = (cause: unknown): WorkspaceTextFileWriteFailure | 
 type UseTaskExecutionFileEditorInput = {
   selectedFile: TaskExecutionSelectedFile | null;
   readyResult: TextFileResult | null;
+  branch: string | null;
   onFileSaved(): void;
   onLeavePolicyChange(policy: TaskExecutionFilePreviewLeavePolicy): void;
 };
@@ -206,6 +226,7 @@ type UseTaskExecutionFileEditorInput = {
 export const useTaskExecutionFileEditor = ({
   selectedFile,
   readyResult,
+  branch,
   onFileSaved,
   onLeavePolicyChange,
 }: UseTaskExecutionFileEditorInput) => {
@@ -215,6 +236,7 @@ export const useTaskExecutionFileEditor = ({
   const draftRef = useRef("");
   const saveInFlightRef = useRef(false);
   const stateRef = useRef(state);
+  const branchRef = useRef(branch);
   const selectedFileId = selectedFile ? taskExecutionSelectedFileKey(selectedFile) : null;
   const selectedFileIdRef = useRef(selectedFileId);
 
@@ -225,6 +247,10 @@ export const useTaskExecutionFileEditor = ({
   useLayoutEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  useLayoutEffect(() => {
+    branchRef.current = branch;
+  }, [branch]);
 
   useLayoutEffect(() => {
     if (!selectedFile) {
@@ -243,20 +269,27 @@ export const useTaskExecutionFileEditor = ({
     if (!readyResult) return;
     if (!state.session) {
       draftRef.current = readyResult.contents;
-      dispatch({ type: "seed", id, result: readyResult });
+      dispatch({ type: "seed", id, branch, result: readyResult });
+      return;
+    }
+    if (state.isDirty || state.isSaving || saveInFlightRef.current) {
       return;
     }
     if (
-      state.session.baseline.revision === readyResult.revision ||
-      state.isDirty ||
-      state.isSaving ||
-      saveInFlightRef.current
+      state.session.baseline.revision === readyResult.revision &&
+      state.session.branch === branch
     ) {
       return;
     }
     draftRef.current = readyResult.contents;
-    dispatch({ type: "adopt_clean_result", result: readyResult });
-  }, [readyResult, selectedFile, state.isDirty, state.isSaving, state.session]);
+    dispatch({ type: "adopt_clean_result", branch, result: readyResult });
+  }, [branch, readyResult, selectedFile, state.isDirty, state.isSaving, state.session]);
+
+  useLayoutEffect(() => {
+    if (state.conflictReview && state.conflictReview.branch !== branch) {
+      dispatch({ type: "conflict_review_closed" });
+    }
+  }, [branch, state.conflictReview]);
 
   const onItemEditChange = useCallback(
     (item: CodeViewItem<undefined>, file: FileContents) => {
@@ -271,13 +304,17 @@ export const useTaskExecutionFileEditor = ({
     [onLeavePolicyChange, state.session],
   );
 
+  const hasBranchConflict = state.isDirty && state.session?.branch !== branch;
+  const hasStaleConflict = state.saveFailure?.code === "stale_revision" || hasBranchConflict;
+
   const save = useCallback(async (): Promise<void> => {
     const session = state.session;
     if (
       !session ||
       session.id !== selectedFileId ||
       !state.isDirty ||
-      state.saveFailure?.code === "stale_revision" ||
+      hasStaleConflict ||
+      session.branch !== branchRef.current ||
       saveInFlightRef.current
     ) {
       return;
@@ -351,20 +388,21 @@ export const useTaskExecutionFileEditor = ({
     }
   }, [
     mutation,
+    hasStaleConflict,
     onFileSaved,
     onLeavePolicyChange,
     selectedFileId,
     state.isDirty,
-    state.saveFailure?.code,
     state.session,
   ]);
 
   const reviewLatestVersion = useCallback(async (): Promise<void> => {
     const session = state.session;
-    if (!session || state.saveFailure?.code !== "stale_revision" || state.isReviewingConflict) {
+    if (!session || !hasStaleConflict || state.isReviewingConflict) {
       return;
     }
     const baselineRevision = session.baseline.revision;
+    const reviewBranch = branchRef.current;
     dispatch({ type: "conflict_review_started" });
     try {
       const result = await queryClient.fetchQuery({
@@ -374,10 +412,14 @@ export const useTaskExecutionFileEditor = ({
       if (result.kind !== "text") {
         throw new Error(result.message);
       }
+      if (branchRef.current !== reviewBranch) {
+        throw new Error("The branch changed during review. Review the file again.");
+      }
       dispatch({
         type: "conflict_review_loaded",
         sessionId: session.id,
         baselineRevision,
+        branch: reviewBranch,
         result,
       });
     } catch (cause) {
@@ -388,17 +430,19 @@ export const useTaskExecutionFileEditor = ({
         message: errorMessage(cause),
       });
     }
-  }, [queryClient, state.isReviewingConflict, state.saveFailure?.code, state.session]);
+  }, [hasStaleConflict, queryClient, state.isReviewingConflict, state.session]);
 
   const closeConflictReview = useCallback(() => {
     dispatch({ type: "conflict_review_closed" });
   }, []);
   const acceptLatestBaseline = useCallback(() => {
-    if (!state.conflictReview) return;
-    const isDirty = draftRef.current !== state.conflictReview.contents;
+    const review = state.conflictReview;
+    if (!review || review.branch !== branchRef.current) return;
+    const isDirty = draftRef.current !== review.result.contents;
     dispatch({
       type: "conflict_baseline_accepted",
-      result: state.conflictReview,
+      branch: review.branch,
+      result: review.result,
       isDirty,
     });
     onLeavePolicyChange(isDirty ? "confirm" : "allow");
@@ -409,16 +453,29 @@ export const useTaskExecutionFileEditor = ({
       session: state.session,
       isDirty: state.isDirty,
       isSaving: state.isSaving,
-      saveError: state.saveFailure?.message ?? null,
-      hasStaleConflict: state.saveFailure?.code === "stale_revision",
+      saveError:
+        state.saveFailure?.message ??
+        (hasBranchConflict
+          ? "This draft has not been checked for the current branch. Review the file before saving."
+          : null),
+      hasStaleConflict,
       isReviewingConflict: state.isReviewingConflict,
-      conflictReview: state.conflictReview,
+      conflictReview: state.conflictReview?.result ?? null,
       onItemEditChange,
       save,
       reviewLatestVersion,
       closeConflictReview,
       acceptLatestBaseline,
     }),
-    [acceptLatestBaseline, closeConflictReview, onItemEditChange, reviewLatestVersion, save, state],
+    [
+      acceptLatestBaseline,
+      closeConflictReview,
+      hasBranchConflict,
+      hasStaleConflict,
+      onItemEditChange,
+      reviewLatestVersion,
+      save,
+      state,
+    ],
   );
 };

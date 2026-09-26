@@ -33,14 +33,17 @@ const record = {
   archivedAt: null,
 };
 
-function renderClosedSession(queryClient: QueryClient, branch: string) {
-  const content = (name: string) => (
+function renderClosedSession(queryClient: QueryClient, branch: string | null, revision?: string) {
+  const content = (name: string | null, currentRevision?: string) => (
     <QueryClientProvider client={queryClient}>
       <WorkspaceBranchStateContext.Provider
         value={{
           activeWorkspace: null,
           branches: [],
-          activeBranch: { name, detached: false },
+          activeBranch:
+            name === null
+              ? { detached: true, revision: currentRevision }
+              : { name, detached: false },
           isLoadingBranches: false,
           isSwitchingBranch: false,
           branchSyncDegraded: false,
@@ -64,8 +67,12 @@ function renderClosedSession(queryClient: QueryClient, branch: string) {
       </WorkspaceBranchStateContext.Provider>
     </QueryClientProvider>
   );
-  const view = render(content(branch));
-  return { ...view, setBranch: (name: string) => view.rerender(content(name)) };
+  const view = render(content(branch, revision));
+  return {
+    ...view,
+    setBranch: (name: string | null, nextRevision?: string) =>
+      view.rerender(content(name, nextRevision)),
+  };
 }
 
 function newQueryClient() {
@@ -108,7 +115,30 @@ test("an outside branch change keeps a dirty preview and refreshes file queries"
     view.setBranch("feature");
 
     expect(screen.getByDisplayValue("unsaved draft")).toBe(input);
+    expect(preview.mock.calls.at(-1)?.[0].branch).toBe("branch:feature");
     await waitFor(() => expect(queryClient.getQueryState(textKey)?.isInvalidated).toBe(true));
+  } finally {
+    view.unmount();
+    chat.mockRestore();
+    preview.mockRestore();
+    queryClient.clear();
+  }
+});
+
+test("a detached HEAD change gets a new preview branch identity", () => {
+  function Preview() {
+    return <div />;
+  }
+  const preview = mockFilePreview(Preview);
+  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(() => <div />);
+  const queryClient = newQueryClient();
+  const view = renderClosedSession(queryClient, null, "first");
+  try {
+    expect(preview.mock.calls.at(-1)?.[0].branch).toBe("detached:first");
+
+    view.setBranch(null, "second");
+
+    expect(preview.mock.calls.at(-1)?.[0].branch).toBe("detached:second");
   } finally {
     view.unmount();
     chat.mockRestore();

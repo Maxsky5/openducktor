@@ -226,8 +226,7 @@ function FileConflictReviewDialog({
         <DialogHeader>
           <DialogTitle>Review latest file</DialogTitle>
           <DialogDescription>
-            This file changed outside OpenDucktor. Review the latest contents below. Your draft
-            stays unchanged.
+            Review the latest contents below. Your draft stays unchanged.
           </DialogDescription>
         </DialogHeader>
         <section aria-label="Latest file contents">
@@ -489,9 +488,11 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     onDiscard,
   },
   onFileSaved,
+  branch = null,
 }: {
   model: TaskExecutionSelectedFilePreviewModel;
   onFileSaved(): void;
+  branch?: string | null;
 }): ReactElement | null {
   const [committedSnapshot, setCommittedSnapshot] = useState<CommittedFilePreviewSnapshot | null>(
     null,
@@ -528,6 +529,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   const editor = useTaskExecutionFileEditor({
     selectedFile,
     readyResult: readyTextResult,
+    branch,
     onFileSaved,
     onLeavePolicyChange,
   });

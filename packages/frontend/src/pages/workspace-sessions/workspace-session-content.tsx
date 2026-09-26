@@ -1,4 +1,4 @@
-import type { GitTargetBranch, WorkspaceSession } from "@openducktor/contracts";
+import type { GitCurrentBranch, GitTargetBranch, WorkspaceSession } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { TaskExecutionSelectedFilePreview } from "@/components/features/agents/task-execution-file-preview";
@@ -192,9 +192,7 @@ export function WorkspaceSessionContent({
     record.executionTarget.kind === "local_repo_root"
       ? (activeBranch?.name ?? (activeBranch?.detached ? "detached" : "unknown"))
       : "";
-  const branchReady = activeBranch?.detached === true || activeBranch?.name != null;
-  const previewBranch =
-    record.executionTarget.kind === "local_repo_root" && branchReady ? branchKey : null;
+  const previewBranch = sessionPreviewBranch(record, activeBranch);
   const lastBranch = useRef<string | null>(null);
   useEffect(() => {
     if (!previewBranch || !workingDirectory || lastBranch.current === previewBranch) return;
@@ -243,6 +241,7 @@ export function WorkspaceSessionContent({
         ...preview.model,
         onDiscard,
       }}
+      branch={previewBranch}
       onFileSaved={() => refreshAfterChange("git")}
     />
   );
@@ -288,4 +287,13 @@ export function WorkspaceSessionContent({
       />
     </TabsContent>
   );
+}
+
+function sessionPreviewBranch(
+  record: WorkspaceSession,
+  branch: GitCurrentBranch | null,
+): string | null {
+  if (record.executionTarget.kind !== "local_repo_root" || !branch) return null;
+  if (branch.detached) return `detached:${branch.revision ?? "unknown"}`;
+  return branch.name != null ? `branch:${branch.name}` : null;
 }
