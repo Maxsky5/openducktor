@@ -125,7 +125,12 @@ test("history exit waits for a save before the preview can leave", async () => {
   try {
     fireEvent.click(screen.getByRole("button", { name: "Start save" }));
     void view.router.navigate(-1);
-    await waitFor(() => expect(view.router.state.location.pathname).toBe("/chats"));
+    await waitFor(() =>
+      expect(
+        [...view.router.state.blockers.values()].some((blocker) => blocker.state === "blocked"),
+      ).toBe(true),
+    );
+    expect(view.router.state.location.pathname).toBe("/chats");
     expect(screen.getByText("Chat preview")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Finish save" }));
