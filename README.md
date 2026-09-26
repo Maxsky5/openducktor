@@ -37,35 +37,35 @@ It uses a workspace-scoped SQLite task store as the task source of truth, orches
 
 ## Install OpenDucktor
 
-### Homebrew (macOS only)
+### Desktop app
+
+macOS arm64, macOS x64, or Linux x64:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Maxsky5/openducktor/main/install.sh | sh
+```
+
+Windows x64 (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/Maxsky5/openducktor/main/install.ps1 | iex
+```
+
+Homebrew on macOS:
 
 ```sh
 brew install --cask Maxsky5/openducktor/openducktor
 ```
 
-Homebrew requires explicit trust for non-official taps. The fully-qualified command above trusts only the OpenDucktor cask. If you already tapped the repository and want to install by short name, run `brew trust --cask Maxsky5/openducktor/openducktor` once, then `brew install --cask openducktor`.
+### Web runner
 
-### Direct Download (macOS, Linux & Windows)
-
-1. Open the [GitHub Releases page](https://github.com/Maxsky5/openducktor/releases).
-2. Download the latest desktop asset that matches your machine.
-3. Launch OpenDucktor and open the local repository you want to work on.
-
-Homebrew installs the same signed and notarized desktop app that is published on GitHub Releases.
-
-Windows and Linux desktop builds are published from the Electron release pipeline, but they are experimental. They are useful for feedback and compatibility testing, not yet as stable as the macOS build. Please open issues with platform details, logs, and the action you were trying to perform.
-
-### Local Web Runner (macOS, Linux & Windows)
-
-If you prefer to use OpenDucktor in a browser instead of a desktop window:
-
-The web runner needs Node.js 24.14 or later.
+The web runner opens OpenDucktor in your browser on macOS, Linux, or Windows. It needs Node.js 24.14 or later.
 
 ```sh
 npx @openducktor/web
 ```
 
-The web runner opens OpenDucktor in your browser. Choose the desktop app or the web runner based on what best fits your workflow.
+See the [installation guide](docs/installation.md) for requirements, more install options, and update steps.
 
 ## User Prerequisites
 
