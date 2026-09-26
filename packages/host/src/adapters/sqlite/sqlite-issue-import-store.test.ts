@@ -49,6 +49,16 @@ describe("SQLite Issue imports", () => {
     });
     expect(
       await Effect.runPromise(
+        store.getSourceIssue({ repoPath: harness.repoPath, taskId: first.task.id }),
+      ),
+    ).toEqual(sourceIssue);
+    expect(
+      await Effect.runPromise(
+        store.getSourceIssue({ repoPath: harness.repoPath, taskId: "missing" }),
+      ),
+    ).toBeUndefined();
+    expect(
+      await Effect.runPromise(
         store.findLinkedTaskIds({
           repoPath: harness.repoPath,
           providerId: sourceIssue.providerId,

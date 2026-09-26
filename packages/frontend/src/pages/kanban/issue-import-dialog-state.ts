@@ -163,9 +163,13 @@ export function useIssueImportSubmission({
       }
       if (
         selectedItems.length > 0 &&
-        selectedItems.every((item) => nextOutcomes.get(item.sourceId)?.outcome === "created")
+        selectedItems.every(
+          (item) => item.linkedTaskId || nextOutcomes.get(item.sourceId)?.outcome === "created",
+        )
       ) {
-        completedCount = selectedItems.length;
+        completedCount = selectedItems.filter(
+          (item) => nextOutcomes.get(item.sourceId)?.outcome === "created",
+        ).length;
       }
     } catch (cause) {
       setSubmitError(errorMessage(cause));

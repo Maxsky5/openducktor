@@ -52,7 +52,7 @@ const workItem = {
   },
 };
 
-const fixture = () => {
+const fixture = (ids: number[] = [17]) => {
   const requests: AzureDevOpsRequest[] = [];
   const client: AzureDevOpsRestClient = {
     request: (_config, _repository, request) => {
@@ -61,24 +61,25 @@ const fixture = () => {
         request.path === "wit/classificationnodes/Areas"
           ? { name: "Desktop App", hasChildren: true, children: [{ name: "Client" }] }
           : request.path === "wit/workitemtypes"
-            ? {
-                value: [
-                  {
-                    name: "Bug",
-                    states: [
-                      { name: "Active", category: "InProgress" },
-                      { name: "Closed", category: "Completed" },
-                    ],
-                  },
-                ],
-              }
-            : request.path === "wit/wiql"
-              ? { workItems: [{ id: 17 }] }
-              : request.path === "wit/workitems" || request.path === "wit/workitems/17"
-                ? request.path === "wit/workitems"
-                  ? { value: [workItem] }
-                  : workItem
-                : null;
+            ? { value: [{ name: "Bug" }] }
+            : request.path === "wit/workitemtypes/Bug/states"
+              ? {
+                  value: [
+                    { name: "Active", category: "InProgress" },
+                    { name: "Closed", category: "Completed" },
+                  ],
+                }
+              : request.path === "wit/wiql"
+                ? { asOf: "2026-09-23T11:00:00Z", workItems: ids.map((id) => ({ id })) }
+                : request.path === "wit/workitems" || request.path === "wit/workitems/17"
+                  ? request.path === "wit/workitems"
+                    ? {
+                        value: String(request.query?.ids ?? "")
+                          .split(",")
+                          .map((id) => ({ ...workItem, id: Number(id) })),
+                      }
+                    : workItem
+                  : null;
       return Effect.succeed({ body, continuationToken: null });
     },
     readContinuationPages: () => Effect.die("Unexpected continuation request"),
@@ -116,11 +117,41 @@ describe("Azure DevOps issue reader", () => {
     expect(result.items[0]?.description).toContain("[guide](https://ado.example.test/guide)");
     expect(result.items[0]?.description).toContain("unsafe");
     expect(result.items[0]?.description).not.toContain("javascript:");
-    expect(requests.map((request) => request.apiVersion)).toEqual(["7.0", "7.0", "7.0", "7.0"]);
-    expect(JSON.stringify(requests[2]?.body)).toContain("[System.Title] CONTAINS 'startup'");
-    expect(JSON.stringify(requests[2]?.body)).toContain(
+    expect(requests.map((request) => request.apiVersion)).toEqual([
+      "7.0",
+      "7.0",
+      "7.0",
+      "7.0",
+      "7.0",
+    ]);
+    expect(JSON.stringify(requests[3]?.body)).toContain("[System.Title] CONTAINS 'startup'");
+    expect(JSON.stringify(requests[3]?.body)).toContain(
       "[System.AreaPath] UNDER 'Desktop App\\\\Client'",
     );
+    expect(requests[4]?.query?.asOf).toBe("2026-09-23T11:00:00Z");
+  });
+
+  test("keeps later pages on the first WIQL snapshot", async () => {
+    const { reader, requests } = fixture(Array.from({ length: 21 }, (_, index) => index + 1));
+    const first = await Effect.runPromise(reader.list({ repoConfig, search: "", page: 1 }));
+    expect(first.items).toHaveLength(20);
+    expect(first.nextPage).toBe(2);
+    expect(first.snapshot).toBe("2026-09-23T11:00:00Z");
+    if (!first.snapshot) throw new Error("Expected a WIQL snapshot");
+
+    const second = await Effect.runPromise(
+      reader.list({ repoConfig, search: "", page: 2, snapshot: first.snapshot }),
+    );
+    expect(second.items.map((item) => item.sourceId)).toEqual(["21"]);
+    expect(second.nextPage).toBeUndefined();
+    const wiqlRequests = requests.filter((request) => request.path === "wit/wiql");
+    expect(JSON.stringify(wiqlRequests[0]?.body)).not.toContain("ASOF");
+    expect(JSON.stringify(wiqlRequests[1]?.body)).toContain("ASOF '2026-09-23T11:00:00Z'");
+    expect(
+      requests
+        .filter((request) => request.path === "wit/workitems")
+        .map((request) => request.query?.asOf),
+    ).toEqual(["2026-09-23T11:00:00Z", "2026-09-23T11:00:00Z"]);
   });
 
   test("rejects a work item that moved out of the saved area", async () => {
@@ -135,8 +166,10 @@ describe("Azure DevOps issue reader", () => {
             request.path === "wit/classificationnodes/Areas"
               ? { name: "Desktop App", children: [{ name: "Client" }] }
               : request.path === "wit/workitemtypes"
-                ? { value: [{ name: "Bug", states: [{ name: "Active", category: "InProgress" }] }] }
-                : moved,
+                ? { value: [{ name: "Bug" }] }
+                : request.path === "wit/workitemtypes/Bug/states"
+                  ? { value: [{ name: "Active", category: "InProgress" }] }
+                  : moved,
           continuationToken: null,
         }),
       readContinuationPages: () => Effect.die("Unexpected continuation request"),
@@ -158,6 +191,7 @@ describe("Azure DevOps issue reader", () => {
     expect(requests.map((request) => request.path)).toEqual([
       "wit/classificationnodes/Areas",
       "wit/workitemtypes",
+      "wit/workitemtypes/Bug/states",
       "wit/workitems/17",
       "wit/workitems/17",
     ]);

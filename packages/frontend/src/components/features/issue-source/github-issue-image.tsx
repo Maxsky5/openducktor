@@ -7,6 +7,7 @@ export type IssueImageContext = {
   repoPath: string;
   sourceId: string;
   providerId: string;
+  taskId?: string | undefined;
 };
 
 type GithubIssueImageProps = {
@@ -17,9 +18,6 @@ type GithubIssueImageProps = {
   className?: string;
 };
 
-export const isGithubIssueAttachmentUrl = (url: string): boolean =>
-  /^https:\/\/[^/]+\/user-attachments\/assets\/[a-f\d-]{36}$/iu.test(url);
-
 export function GithubIssueImage({
   context,
   src,
@@ -28,9 +26,19 @@ export function GithubIssueImage({
   className,
 }: GithubIssueImageProps): ReactElement {
   const image = useQuery({
-    queryKey: ["issue-image", context.providerId, context.repoPath, context.sourceId, src],
+    queryKey: [
+      "issue-image",
+      context.providerId,
+      context.repoPath,
+      context.taskId ?? context.sourceId,
+      src,
+    ],
     queryFn: () =>
-      host.issueImageGet({ repoPath: context.repoPath, sourceId: context.sourceId, url: src }),
+      host.issueImageGet(
+        context.taskId
+          ? { repoPath: context.repoPath, taskId: context.taskId, url: src }
+          : { repoPath: context.repoPath, sourceId: context.sourceId, url: src },
+      ),
     staleTime: Infinity,
   });
   if (image.isPending) {

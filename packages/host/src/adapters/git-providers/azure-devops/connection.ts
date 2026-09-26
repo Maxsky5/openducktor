@@ -397,6 +397,17 @@ export const createAzureDevOpsConnectionAdapter = ({
     removeWorkspaceCredentials(repoConfig) {
       return Effect.gen(function* () {
         const credentials = yield* credentialIndex.list(repoConfig.workspaceId);
+        const provider = repoConfig.git.provider;
+        if (
+          provider?.id === "azure_devops" &&
+          provider.repository &&
+          "deployment" in provider.repository
+        ) {
+          const scope = connectionScope(repoConfig, provider.repository);
+          if (!credentials.some((entry) => entry.scope === scope)) {
+            credentials.push({ scope, deployment: provider.repository.deployment });
+          }
+        }
         yield* Effect.forEach(
           credentials,
           ({ scope, deployment }) => disconnectScope(repoConfig.workspaceId, scope, deployment),

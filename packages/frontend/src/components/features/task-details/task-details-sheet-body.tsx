@@ -65,6 +65,7 @@ export function TaskDetailsSheetBody({
                 repoPath,
                 sourceId: task.sourceIssue.sourceId,
                 providerId: task.sourceIssue.providerId,
+                taskId: task.id,
               },
             }
           : {})}

@@ -3,6 +3,7 @@ import {
   GITHUB_PROVIDER_DESCRIPTOR,
   repoConfigSchema,
   type SourceIssue,
+  type RepoConfig,
   type TaskCard,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -47,6 +48,8 @@ const fixture = (issueAccess: "browse" | "search" = "search") => {
   const linked = new Map<string, string>();
   const created: string[] = [];
   const published: string[] = [];
+  let currentRepoConfig: RepoConfig = repoConfig;
+  const resolvedConfigs: RepoConfig[] = [];
   const reader: IssueReaderPort = {
     providerId: "github",
     scope: () => Effect.succeed("github.com/example/repo"),
@@ -74,10 +77,15 @@ const fixture = (issueAccess: "browse" | "search" = "search") => {
     issues: () => Effect.succeed(reader),
   };
   const resolver: GitProviderResolver = {
-    resolve: () => Effect.succeed(provider),
+    resolve: (config) =>
+      Effect.sync(() => {
+        resolvedConfigs.push(config);
+        return provider;
+      }),
     resolveConfigured: () => Effect.succeed(provider),
   };
   const store: IssueImportStorePort = {
+    getSourceIssue: ({ taskId }) => Effect.succeed(taskId === "task-1" ? issue("1") : undefined),
     findLinkedTaskIds: ({ sourceIds }) =>
       Effect.succeed(
         Object.fromEntries(
@@ -104,16 +112,90 @@ const fixture = (issueAccess: "browse" | "search" = "search") => {
   const service = createIssueImportService({
     resolver,
     store,
-    workspaceSettingsService: { getRepoConfigByRepoPath: () => Effect.succeed(repoConfig) },
+    workspaceSettingsService: { getRepoConfigByRepoPath: () => Effect.succeed(currentRepoConfig) },
     publishTaskCreated: (_repoPath, task) =>
       Effect.sync(() => {
         published.push(task.id);
       }),
   });
-  return { service, reader, sources, linked, created, published };
+  return {
+    service,
+    store,
+    reader,
+    sources,
+    linked,
+    created,
+    published,
+    resolvedConfigs,
+    setRepoConfig: (config: RepoConfig) => {
+      currentRepoConfig = config;
+    },
+  };
 };
 
 describe("Issue import service", () => {
+  test("loads a saved Task image from its original GitHub repository after provider change", async () => {
+    const { service, reader, resolvedConfigs, setRepoConfig } = fixture();
+    setRepoConfig(
+      repoConfigSchema.parse({
+        ...repoConfig,
+        git: {
+          provider: {
+            id: "azure_devops",
+            enabled: true,
+            autoDetected: false,
+            repository: {
+              providerId: "azure_devops",
+              deployment: "services",
+              serviceUrl: "https://dev.azure.com",
+              organization: "example",
+              project: "app",
+              name: "repo",
+            },
+          },
+        },
+      }),
+    );
+    const imageUrl =
+      "https://github.com/user-attachments/assets/cda6c6b0-48b1-4d49-b8f2-78a1bd758be9";
+    reader.readImage = ({ repoConfig: sourceConfig, sourceId, url }) => {
+      expect(sourceConfig.git.provider?.id).toBe("github");
+      expect(sourceConfig.git.provider?.repository).toEqual({
+        host: "github.com",
+        owner: "example",
+        name: "repo",
+      });
+      expect(sourceId).toBe("1");
+      expect(url).toBe(imageUrl);
+      return Effect.succeed({ mediaType: "image/png", bytesBase64: "aGVsbG8=" });
+    };
+
+    await expect(
+      Effect.runPromise(service.getImage({ repoPath: "/repo", taskId: "task-1", url: imageUrl })),
+    ).resolves.toEqual({ mediaType: "image/png", bytesBase64: "aGVsbG8=" });
+    expect(resolvedConfigs.at(-1)?.git.provider?.id).toBe("github");
+  });
+
+  test("rejects a saved Task source whose URL does not match its stored scope", async () => {
+    const { service, store, reader } = fixture();
+    store.getSourceIssue = () =>
+      Effect.succeed({
+        ...issue("1"),
+        scope: "github.com/other/repo",
+      });
+    reader.readImage = () => Effect.die("Image fetch must not run");
+
+    await expect(
+      Effect.runPromise(
+        service.getImage({
+          repoPath: "/repo",
+          taskId: "task-1",
+          url: "https://github.com/user-attachments/assets/cda6c6b0-48b1-4d49-b8f2-78a1bd758be9",
+        }),
+      ),
+    ).rejects.toThrow("no valid GitHub Issue source");
+  });
+
   test("lists browse-only issues and rejects search", async () => {
     const { service } = fixture("browse");
     const first = await Effect.runPromise(
