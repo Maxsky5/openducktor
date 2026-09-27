@@ -30,6 +30,7 @@ type PreviewProcess = {
   isClosed: () => boolean;
   transport: ReturnType<typeof createCodexAppServerTransport> | null;
 };
+type PreviewCleanup = { failure: HostError | null };
 
 export const createCodexModelCatalogPreview =
   ({
@@ -60,7 +61,7 @@ export const createCodexModelCatalogPreview =
         try: () => createProcessCommandLaunch(binary, ["app-server"], processEnv, process.platform),
         catch: (cause) => toHostOperationError(cause, "codexModelCatalogPreview.command"),
       });
-      let cleanupFailure: HostError | null = null;
+      const cleanup: PreviewCleanup = { failure: null };
       const result = yield* Effect.either(
         Effect.acquireUseRelease(
           Effect.try({
@@ -162,7 +163,7 @@ export const createCodexModelCatalogPreview =
                 outcome._tag === "Left" ? [outcome.left.message] : [],
               );
               if (failures.length > 0) {
-                cleanupFailure = new HostOperationError({
+                cleanup.failure = new HostOperationError({
                   operation: "codexModelCatalogPreview.cleanup",
                   message: failures.join("\n"),
                 });
@@ -170,6 +171,16 @@ export const createCodexModelCatalogPreview =
             }),
         ),
       );
-      if (cleanupFailure) return yield* Effect.fail(cleanupFailure);
-      return yield* result;
+      if (result._tag === "Left") {
+        if (cleanup.failure) {
+          return yield* new HostOperationError({
+            operation: "codexModelCatalogPreview.readAndCleanup",
+            message: `${result.left.message}\nCleanup also failed: ${cleanup.failure.message}`,
+            cause: result.left,
+          });
+        }
+        return yield* Effect.fail(result.left);
+      }
+      if (cleanup.failure) return yield* Effect.fail(cleanup.failure);
+      return result.right;
     });

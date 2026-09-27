@@ -36,6 +36,7 @@ type PreviewProcessState = {
   stderr: string;
   stdout: string;
 };
+type PreviewCleanup = { failure: HostError | null };
 
 export const createOpenCodeModelCatalogPreview =
   ({
@@ -82,7 +83,7 @@ export const createOpenCodeModelCatalogPreview =
           ),
         catch: (cause) => toHostOperationError(cause, "opencodeModelCatalogPreview.command"),
       });
-      let cleanupFailure: HostError | null = null;
+      const cleanup: PreviewCleanup = { failure: null };
       const result = yield* Effect.either(
         Effect.acquireUseRelease(
           Effect.try({
@@ -179,7 +180,7 @@ export const createOpenCodeModelCatalogPreview =
                   });
               const outcome = yield* Effect.either(stop);
               if (outcome._tag === "Left") {
-                cleanupFailure = toHostOperationError(
+                cleanup.failure = toHostOperationError(
                   outcome.left,
                   "opencodeModelCatalogPreview.cleanup",
                 );
@@ -187,6 +188,16 @@ export const createOpenCodeModelCatalogPreview =
             }),
         ),
       );
-      if (cleanupFailure) return yield* Effect.fail(cleanupFailure);
-      return yield* result;
+      if (result._tag === "Left") {
+        if (cleanup.failure) {
+          return yield* new HostOperationError({
+            operation: "opencodeModelCatalogPreview.readAndCleanup",
+            message: `${result.left.message}\nCleanup also failed: ${cleanup.failure.message}`,
+            cause: result.left,
+          });
+        }
+        return yield* Effect.fail(result.left);
+      }
+      if (cleanup.failure) return yield* Effect.fail(cleanup.failure);
+      return result.right;
     });

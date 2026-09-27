@@ -4,6 +4,7 @@ import type { Readable } from "node:stream";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { Effect } from "effect";
+import { HostOperationError } from "../../effect/host-errors";
 import type { ProcessTreeTerminator } from "../../infrastructure/process/process-tree";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
@@ -133,6 +134,41 @@ describe("OpenCode model catalog preview lifecycle", () => {
     expect(failure._tag).toBe("HostOperationError");
     expect(failure).toMatchObject({ operation: "opencodeModelCatalogPreview.read" });
     expect(processTreeTerminator).toHaveBeenCalledTimes(1);
+    expect(children[0]?.killed).toBe(true);
+  });
+
+  test("reports both a catalog read failure and a cleanup failure", async () => {
+    const children: ChildProcessByStdio<null, Readable, Readable>[] = [];
+    const processTreeTerminator: ProcessTreeTerminator = () =>
+      Effect.sync(() => {
+        children[0]?.kill();
+      }).pipe(
+        Effect.zipRight(
+          Effect.fail(
+            new HostOperationError({
+              operation: "test.cleanup",
+              message: "OpenCode cleanup failed",
+            }),
+          ),
+        ),
+      );
+    const readModels = createPreview({
+      processTreeTerminator,
+      readinessProbe: () => Effect.succeed(true),
+      readModelCatalog: async () => {
+        throw new Error("OpenCode catalog read failed");
+      },
+      spawnProcess: (_command, _args, options) => {
+        const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], options);
+        children.push(child);
+        return child;
+      },
+    });
+
+    const failure = await Effect.runPromise(Effect.flip(readModels(process.cwd())));
+
+    expect(failure.message).toContain("OpenCode catalog read failed");
+    expect(failure.message).toContain("OpenCode cleanup failed");
     expect(children[0]?.killed).toBe(true);
   });
 });

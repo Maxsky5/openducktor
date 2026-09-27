@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { Effect } from "effect";
+import { HostOperationError } from "../../effect/host-errors";
 import type { ProcessTreeTerminator } from "../../infrastructure/process/process-tree";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
@@ -112,6 +113,38 @@ describe("Codex model catalog preview lifecycle", () => {
     expect(failure._tag).toBe("HostOperationError");
     expect(processTreeTerminator).toHaveBeenCalledTimes(1);
     expect(children[0]?.stdin.destroyed).toBe(true);
+    expect(children[0]?.killed).toBe(true);
+  });
+
+  test("reports both a model read failure and a cleanup failure", async () => {
+    const children: CodexChildProcess[] = [];
+    const processTreeTerminator: ProcessTreeTerminator = () =>
+      Effect.sync(() => {
+        children[0]?.kill();
+      }).pipe(
+        Effect.zipRight(
+          Effect.fail(
+            new HostOperationError({
+              operation: "test.cleanup",
+              message: "Codex cleanup failed",
+            }),
+          ),
+        ),
+      );
+    const readModels = createPreview({
+      processTreeTerminator,
+      requestTimeoutMs: 500,
+      spawnProcess: (_command, _args, options) => {
+        const child = spawn(process.execPath, ["-e", serverScript(false)], options);
+        children.push(child);
+        return child;
+      },
+    });
+
+    const failure = await Effect.runPromise(Effect.flip(readModels(process.cwd())));
+
+    expect(failure.message).toContain("model/list");
+    expect(failure.message).toContain("Codex cleanup failed");
     expect(children[0]?.killed).toBe(true);
   });
 });
