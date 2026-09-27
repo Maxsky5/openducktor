@@ -25,10 +25,16 @@ export function OpenRepositoryChoices({
           <FolderOpen className="size-6" aria-hidden="true" />
         </div>
         <h3 className="text-base font-semibold text-foreground">Open a new workspace</h3>
-        <p className="mt-1 max-w-sm text-sm leading-relaxed text-muted-foreground">
-          Choose a local Git repository, then set its name, color, and models.
+        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+          Choose a Git folder, then set its name, color, and models.
         </p>
-        <Button type="button" size="lg" className="mt-6" disabled={disabled} onClick={onChooseNew}>
+        <Button
+          type="button"
+          size="lg"
+          className="mt-6 w-full"
+          disabled={disabled}
+          onClick={onChooseNew}
+        >
           <FolderOpen data-icon="inline-start" /> Choose repository folder
         </Button>
       </section>

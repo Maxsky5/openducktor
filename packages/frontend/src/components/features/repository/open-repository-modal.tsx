@@ -1,5 +1,5 @@
 import { ArrowLeft, Sparkles } from "lucide-react";
-import { type ReactElement, useState } from "react";
+import { type ReactElement, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -99,6 +99,7 @@ function useClosedWorkspaceReopen({
 
 function OpenRepositoryModalFooter({
   canClose,
+  canBackToWorkspaces,
   interactionLocked,
   showCreationFlow,
   creation,
@@ -107,6 +108,7 @@ function OpenRepositoryModalFooter({
   onBackToWorkspaces,
 }: {
   canClose: boolean;
+  canBackToWorkspaces: boolean;
   interactionLocked: boolean;
   showCreationFlow: boolean;
   creation: WorkspaceCreationController;
@@ -126,7 +128,10 @@ function OpenRepositoryModalFooter({
             Close
           </Button>
         ) : null}
-        {showCreationFlow && creation.stage === "repository" && !creation.pickerOpen ? (
+        {canBackToWorkspaces &&
+        showCreationFlow &&
+        creation.stage === "repository" &&
+        !creation.pickerOpen ? (
           <Button
             type="button"
             variant="outline"
@@ -164,9 +169,11 @@ function OpenRepositoryModalSession({
     resolveWorkspacePath,
     isSwitchingWorkspace,
   } = useWorkspaceState();
+  const hasClosedWorkspaces = closedWorkspaces.length > 0;
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
   const { isChangingWorkspace, runWorkspaceChange } = useGuardedWorkspaceChange(requestTransition);
-  const [showCreationFlow, setShowCreationFlow] = useState(false);
+  const [showCreationFlow, setShowCreationFlow] = useState(() => !hasClosedWorkspaces);
+  const initialPickerRequested = useRef(false);
   const configuredWorkspaces = [
     ...workspaces,
     ...closedWorkspaces,
@@ -187,6 +194,11 @@ function OpenRepositoryModalSession({
     onSubmittingChange: setIsCreatingWorkspace,
     onSuccess: () => onOpenChange(false),
   });
+  useLayoutEffect(() => {
+    if (initialPickerRequested.current || hasClosedWorkspaces) return;
+    initialPickerRequested.current = true;
+    creation.openPicker();
+  }, [creation, hasClosedWorkspaces]);
   const models = useWorkspaceCreationModels({
     repoPath: creation.repoPath,
     active: open && showCreationFlow && creation.stage === "models",
@@ -210,7 +222,7 @@ function OpenRepositoryModalSession({
       <DialogContent
         className={cn(
           "grid max-h-[92vh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-0",
-          showCreationFlow || closedWorkspaces.length > 0 ? "max-w-6xl" : "max-w-2xl",
+          showCreationFlow || hasClosedWorkspaces ? "max-w-6xl" : "max-w-2xl",
         )}
         {...(canClose && !interactionLocked ? {} : { closeButton: null })}
         onEscapeKeyDown={(event) => {
@@ -228,7 +240,7 @@ function OpenRepositoryModalSession({
           <DialogDescription>
             {showCreationFlow
               ? "Choose a Git folder, review workspace details, and set model defaults."
-              : closedWorkspaces.length > 0
+              : hasClosedWorkspaces
                 ? "Start a new workspace or reopen one you closed earlier."
                 : "Choose a local Git repository to start a workspace."}
           </DialogDescription>
@@ -255,6 +267,7 @@ function OpenRepositoryModalSession({
 
         <OpenRepositoryModalFooter
           canClose={canClose}
+          canBackToWorkspaces={hasClosedWorkspaces}
           interactionLocked={interactionLocked}
           showCreationFlow={showCreationFlow}
           creation={creation}

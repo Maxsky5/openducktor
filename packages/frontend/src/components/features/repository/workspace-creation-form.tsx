@@ -27,7 +27,7 @@ function WorkspaceRepositoryChooser({
   controller: WorkspaceCreationController;
 }): ReactElement {
   return (
-    <div className="flex min-h-56 flex-col items-start justify-center gap-4 rounded-xl border border-border bg-card p-6 sm:p-8">
+    <div className="mx-auto flex min-h-56 w-full max-w-2xl flex-col items-start justify-center gap-4 rounded-xl border border-border bg-card p-6 sm:p-8">
       <div className="flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
         <FolderOpen className="size-6" aria-hidden="true" />
       </div>
@@ -43,7 +43,7 @@ function WorkspaceRepositoryChooser({
           <Input id="workspace-selected-repo-path" value={controller.repoPath} readOnly />
         </div>
       ) : null}
-      <Button type="button" size="lg" className="w-fit" onClick={controller.openPicker}>
+      <Button type="button" size="lg" className="w-full" onClick={controller.openPicker}>
         <FolderOpen data-icon="inline-start" />
         {controller.repoPath ? "Choose different repository" : "Choose repository folder"}
       </Button>

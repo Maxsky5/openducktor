@@ -186,17 +186,26 @@ const renderGuardedModal = (state: WorkspaceStateContextValue) => {
 };
 
 const chooseRepository = async () => {
-  fireEvent.click(screen.getByRole("button", { name: "Choose repository folder" }));
+  if (screen.queryByRole("heading", { name: "Open a new workspace" })) {
+    fireEvent.click(screen.getByRole("button", { name: "Choose repository folder" }));
+  }
   fireEvent.click(await screen.findByRole("button", { name: "Choose This Folder" }));
   await screen.findByLabelText("Workspace ID");
 };
 
 describe("OpenRepositoryModal", () => {
-  test("shows only the new-workspace choice when no workspaces are closed", () => {
+  test("opens the folder picker directly when no workspaces are closed", async () => {
     renderModal();
 
-    expect(screen.getByRole("heading", { name: "Open a new workspace" })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: "Open Repository" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Choose This Folder" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Open a new workspace" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "Reopen a workspace" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(await screen.findByRole("heading", { name: "Choose a repository" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Back to workspaces" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Choose repository folder" }));
+    expect(await screen.findByRole("button", { name: "Choose This Folder" })).toBeTruthy();
   });
 
   test.each(["add", "closed row", "closed folder"] as const)(
@@ -226,7 +235,9 @@ describe("OpenRepositoryModal", () => {
       if (path === "closed row") {
         fireEvent.click(screen.getByRole("button", { name: /Closed.*\/repo/ }));
       } else {
-        fireEvent.click(screen.getByRole("button", { name: "Choose repository folder" }));
+        if (path === "closed folder") {
+          fireEvent.click(screen.getByRole("button", { name: "Choose repository folder" }));
+        }
         fireEvent.click(await screen.findByRole("button", { name: "Choose This Folder" }));
         if (path === "add") {
           await screen.findByLabelText("Workspace ID");
@@ -252,7 +263,7 @@ describe("OpenRepositoryModal", () => {
     fireEvent.change(screen.getByLabelText("Workspace name"), { target: { value: "Edited" } });
     view.rerenderOpen(false);
     view.rerenderOpen(true);
-    expect(screen.getByRole("button", { name: "Choose repository folder" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Choose This Folder" })).toBeTruthy();
     expect(screen.queryByLabelText("Workspace name")).toBeNull();
   });
 
@@ -408,7 +419,6 @@ describe("OpenRepositoryModal", () => {
         }),
       }),
     });
-    fireEvent.click(screen.getByRole("button", { name: "Choose repository folder" }));
     fireEvent.click(await screen.findByRole("button", { name: "Choose This Folder" }));
     expect(await screen.findByText(/Workspace removal is incomplete/)).toBeTruthy();
   });
