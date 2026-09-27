@@ -7,7 +7,7 @@ import {
   MessageSquare,
   Undo2,
 } from "lucide-react";
-import { memo, type ReactElement, useRef } from "react";
+import { memo, type ReactElement, useState } from "react";
 import type { PierreDiffStyle } from "@/components/features/agents/pierre-diff-viewer";
 import { PierreDiffViewer } from "@/components/features/agents/pierre-diff-viewer";
 import { Button } from "@/components/ui/button";
@@ -91,11 +91,15 @@ function FileDiffEntryHeader({
   } = status;
 
   return (
-    <div className="flex items-center gap-1 px-3 py-1.5 hover:bg-muted/50">
+    <div className="relative hover:bg-muted/50">
       <button
         type="button"
-        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 overflow-hidden text-left text-xs"
+        className={cn(
+          "flex min-h-11 w-full min-w-0 cursor-pointer items-center gap-2 overflow-hidden px-3 py-1.5 text-left text-xs",
+          canReset && "pr-12",
+        )}
         aria-label={`Toggle diff for ${diff.file}`}
+        aria-expanded={isExpanded}
         data-testid="agent-studio-git-file-toggle-button"
         onClick={() => onToggle(diff.file)}
       >
@@ -160,7 +164,7 @@ function FileDiffEntryHeader({
               type="button"
               variant="ghost"
               size="icon"
-              className="size-6 shrink-0"
+              className="absolute top-1/2 right-3 z-10 size-6 -translate-y-1/2"
               aria-label="Reset file"
               title="Reset file"
               data-testid="agent-studio-git-reset-file-button"
@@ -280,16 +284,9 @@ function FileDiffEntry({
   // Keep diff subtrees mounted after first expand in production for cheap reopen,
   // but reset them in tests so assertions stay deterministic.
   const shouldPersistMountedDiffBody = process.env.NODE_ENV !== "test";
-  const hasMountedDiffBodyRef = useRef(false);
-
-  if (shouldPersistMountedDiffBody && isExpanded && hasDiffContent) {
-    hasMountedDiffBodyRef.current = true;
-  } else if (!shouldPersistMountedDiffBody) {
-    hasMountedDiffBodyRef.current = false;
-  }
-
+  const [hasMountedDiffBody, setHasMountedDiffBody] = useState(false);
   const shouldRenderPersistedDiffBody =
-    hasDiffContent && shouldPersistMountedDiffBody && hasMountedDiffBodyRef.current;
+    hasDiffContent && shouldPersistMountedDiffBody && hasMountedDiffBody;
   const shouldRenderDiffBody = isExpanded || shouldRenderPersistedDiffBody;
 
   return (
@@ -307,7 +304,12 @@ function FileDiffEntry({
           statusColor,
         }}
         onRequestFileReset={onRequestFileReset}
-        onToggle={onToggle}
+        onToggle={(filePath) => {
+          if (shouldPersistMountedDiffBody && isExpanded && hasDiffContent) {
+            setHasMountedDiffBody(true);
+          }
+          onToggle(filePath);
+        }}
       />
       <FileDiffEntryBody
         diff={diff}

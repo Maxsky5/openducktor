@@ -199,7 +199,15 @@ afterAll(() => {
   }
 });
 
-function FileDiffListHarness(): ReactElement {
+function FileDiffListHarness({
+  file = "src/example.ts",
+  canResetFiles = false,
+  onRequestFileReset,
+}: {
+  file?: string;
+  canResetFiles?: boolean;
+  onRequestFileReset?: (filePath: string) => void;
+} = {}): ReactElement {
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
 
   return (
@@ -207,7 +215,7 @@ function FileDiffListHarness(): ReactElement {
       <FileDiffList
         fileDiffs={[
           {
-            file: "src/example.ts",
+            file,
             type: "modified",
             additions: 1,
             deletions: 1,
@@ -232,9 +240,10 @@ function FileDiffListHarness(): ReactElement {
           });
         }}
         preloadLimit={1}
-        canResetFiles={false}
+        canResetFiles={canResetFiles}
         isResetDisabled={false}
         resetDisabledReason={null}
+        onRequestFileReset={onRequestFileReset}
       />
     </TooltipProvider>
   );
@@ -331,6 +340,36 @@ function OwnerSwitchFileDiffListHarness(): ReactElement {
 }
 
 describe("FileDiffList", () => {
+  test("uses the whole root file row as a toggle while reset stays separate", () => {
+    for (const canResetFiles of [false, true]) {
+      const requestFileReset = mock((_filePath: string) => {});
+      const { unmount } = render(
+        <FileDiffListHarness
+          file="root.ts"
+          canResetFiles={canResetFiles}
+          onRequestFileReset={requestFileReset}
+        />,
+      );
+      const toggle = screen.getByRole("button", { name: "Toggle diff for root.ts" });
+
+      expect(toggle.className).toContain("min-h-11");
+      expect(toggle.className).toContain("w-full");
+      expect(toggle.getAttribute("aria-expanded")).toBe("false");
+      fireEvent.click(screen.getByTestId("agent-studio-git-file-stats"));
+      expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+      if (canResetFiles) {
+        fireEvent.click(screen.getByRole("button", { name: "Reset file" }));
+        expect(requestFileReset).toHaveBeenCalledWith("root.ts");
+        expect(toggle.getAttribute("aria-expanded")).toBe("true");
+      }
+
+      fireEvent.click(toggle);
+      expect(toggle.getAttribute("aria-expanded")).toBe("false");
+      unmount();
+    }
+  });
+
   test("keeps row expansion working while preload entries are mounted", () => {
     render(<FileDiffListHarness />);
 
