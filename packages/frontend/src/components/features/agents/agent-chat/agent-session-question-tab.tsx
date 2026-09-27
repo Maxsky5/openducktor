@@ -36,6 +36,7 @@ export const QuestionTab = ({
   panelProps,
 }: QuestionTabProps): ReactElement => {
   const { className: panelClassName, ...rootProps } = panelProps ?? {};
+  const selectedOptionLabels = new Set(entry?.selectedOptionLabels ?? []);
 
   return (
     <div {...rootProps} className={cn("space-y-2", panelClassName)}>
@@ -57,14 +58,14 @@ export const QuestionTab = ({
       {question.options.length > 0 ? (
         <div className="space-y-1">
           {question.options.map((option) => {
-            const isSelected = Boolean(entry?.selectedOptionLabels.includes(option.label));
+            const isSelected = selectedOptionLabels.has(option.label);
             return (
               <button
                 key={`option:${questionIndex}:${option.label}`}
                 type="button"
                 disabled={disabled}
                 className={cn(
-                  "w-full cursor-pointer rounded-md border px-2 py-1 text-left",
+                  "flex min-h-10 w-full cursor-pointer items-center rounded-md border px-2 py-1 text-left",
                   isSelected
                     ? "border-muted-foreground bg-secondary text-foreground"
                     : "border-border bg-card text-foreground hover:border-input hover:bg-accent",
@@ -72,7 +73,7 @@ export const QuestionTab = ({
                 )}
                 onClick={() => onSelectOption(option.label)}
               >
-                <div className="flex items-start gap-1.5">
+                <div className="flex flex-1 items-start gap-1.5">
                   <span className="inline-flex size-4 shrink-0 items-center justify-center pt-0.5">
                     {renderOptionIcon(Boolean(question.multiple), isSelected)}
                   </span>
