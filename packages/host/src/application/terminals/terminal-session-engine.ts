@@ -13,8 +13,10 @@ import type {
 } from "../../ports/terminal-pty-port";
 import {
   type TerminalTaskScope,
+  type TerminalWorkspaceSessionScope,
   terminalContextKey,
   terminalContextMatchesTaskScope,
+  terminalContextMatchesWorkspaceSession,
 } from "./terminal-context";
 import { TERMINAL_LIMITS } from "./terminal-limits";
 import { formatTerminalPathInput, TerminalPathInputError } from "./terminal-path-input";
@@ -106,7 +108,7 @@ export const createTerminalSessionEngine = ({
         const unknownTerminalIds: string[] = [];
         for (const session of sessions.values()) {
           const context = session.summary.context;
-          if (!isLiveTerminal(session) || !("taskId" in context)) {
+          if (!isLiveTerminal(session) || !("repoPath" in context)) {
             continue;
           }
           if (normalizePathForComparison(context.repoPath) !== normalizedRepoPath) {
@@ -213,10 +215,13 @@ export const createTerminalSessionEngine = ({
       return [...sessions.values()].flatMap((session) => {
         const matches =
           filter.kind === "all" ||
-          (filter.kind === "unassociated" && !("taskId" in session.summary.context)) ||
+          (filter.kind === "unassociated" && !("repoPath" in session.summary.context)) ||
           (filter.kind === "task" &&
+            "taskId" in session.summary.context &&
             terminalContextKey(session.summary.context) ===
-              terminalContextKey({ repoPath: filter.repoPath, taskId: filter.taskId }));
+              terminalContextKey({ repoPath: filter.repoPath, taskId: filter.taskId })) ||
+          (filter.kind === "workspace_session" &&
+            terminalContextMatchesWorkspaceSession(session.summary.context, filter));
         return matches ? [{ ...session.summary, context: { ...session.summary.context } }] : [];
       });
     },
@@ -464,6 +469,15 @@ export const createTerminalSessionEngine = ({
           terminalContextMatchesTaskScope(session.summary.context, scope),
         );
         return closeSessions(targets, "close_by_task");
+      }),
+    closeByWorkspaceSession: (
+      scope: TerminalWorkspaceSessionScope,
+    ): Effect.Effect<string[], TerminalServiceError> =>
+      Effect.suspend(() => {
+        const targets = [...sessions.values()].filter((session) =>
+          terminalContextMatchesWorkspaceSession(session.summary.context, scope),
+        );
+        return closeSessions(targets, "close_by_workspace_session");
       }),
     dispose: (): Effect.Effect<void, TerminalServiceError> =>
       closeSessions([...sessions.values()], "dispose").pipe(Effect.asVoid),

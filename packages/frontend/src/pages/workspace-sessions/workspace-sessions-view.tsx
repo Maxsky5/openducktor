@@ -1,6 +1,6 @@
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { History, Import, Plus } from "lucide-react";
+import { History, Import, Plus, SquareTerminal } from "lucide-react";
 import {
   type ReactElement,
   useCallback,
@@ -11,6 +11,7 @@ import {
 } from "react";
 import { useLocation, useNavigationType, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
+import type { TerminalPanelModel } from "@/features/terminals";
 import { BrowserTabsBar, BrowserTabsRoot } from "@/components/ui/browser-tabs";
 import { SharedToolsPanelToggleButton } from "@/components/features/agents/shared-tools-panel";
 import { useRightPanelOpen } from "@/components/features/agents/use-right-panel-open";
@@ -18,6 +19,7 @@ import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspac
 import { errorMessage } from "@/lib/errors";
 import { host } from "@/state/operations/host";
 import { invalidateRepoBranchesQuery } from "@/state/queries/git";
+import { terminalQueryKeys } from "@/state/queries/terminals";
 import {
   updateWorkspaceSessionQueries,
   workspaceSessionListQueryOptions,
@@ -34,6 +36,8 @@ import { WorkspaceSessionHistoryDialog } from "./workspace-session-history-dialo
 import { WorkspaceSessionImportDialog } from "./workspace-session-import-dialog";
 import { WorkspaceSessionArchiveDialog } from "./workspace-session-archive-dialog";
 import { WorkspaceSessionTabs } from "./workspace-session-tabs";
+import { WorkspaceSessionTerminalLayout } from "./workspace-session-terminal-layout";
+import { useWorkspaceSessionTerminals } from "./use-workspace-session-terminals";
 import { useMountedRef } from "./use-mounted-ref";
 import { useWorkspaceSessionNavigation } from "./use-workspace-session-navigation";
 import { useWorkspaceSessionSelection } from "./use-workspace-session-selection";
@@ -77,6 +81,11 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
   );
   const selected = useVisibleSessionRecord(orderedSessions, visibleSelectedId, requestedSelected);
   const selectedId = selected?.id ?? null;
+  const terminalModel = useWorkspaceSessionTerminals({
+    workspace,
+    selected,
+    sessions: orderedSessions,
+  });
   const { panelState, onPanelStateChange, togglePanel } = useSessionPanelState(selectedId);
   useEffect(() => {
     if (records.data && sessionId !== requestedSelectedId)
@@ -133,37 +142,14 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
           </Button>
         }
         actions={
-          <>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8 shrink-0 text-studio-chrome-foreground hover:bg-transparent"
-              aria-label="Import session"
-              title="Import session"
-              onClick={() => setImportOpen(true)}
-            >
-              <Import />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8 shrink-0 text-studio-chrome-foreground hover:bg-transparent"
-              aria-label="Session history"
-              title="Archived chats"
-              onClick={() => setHistoryOpen(true)}
-            >
-              <History />
-            </Button>
-            {selected ? (
-              <div className="flex shrink-0 items-center pl-0.5">
-                <SharedToolsPanelToggleButton
-                  label="workspace tools"
-                  isOpen={panelState.isOpen}
-                  onToggle={togglePanel}
-                />
-              </div>
-            ) : null}
-          </>
+          <WorkspaceSessionToolbarActions
+            hasSelectedSession={selected !== null}
+            terminalModel={terminalModel}
+            toolsOpen={panelState.isOpen}
+            onToggleTools={togglePanel}
+            onImport={() => setImportOpen(true)}
+            onHistory={() => setHistoryOpen(true)}
+          />
         }
       >
         <WorkspaceSessionTabs
@@ -177,21 +163,16 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
       </BrowserTabsBar>
       <WorkspaceSessionReadModelNotice />
       {archiveTarget === null && <WorkspaceSessionArchiveError error={archive.error} />}
-      {selected ? (
-        <WorkspaceSessionContent
-          key={selected.id}
-          workspace={workspace}
-          record={selected}
-          panelState={panelState}
-          onPanelStateChange={onPanelStateChange}
-          onSafeToLeave={leaveRemovedChat}
-        />
-      ) : (
-        <WorkspaceSessionEmptyState
-          hasSessions={records.data.length > 0}
-          onCreate={() => setCreating(true)}
-        />
-      )}
+      <WorkspaceSessionActiveContent
+        workspace={workspace}
+        selected={selected}
+        terminalModel={terminalModel}
+        panelState={panelState}
+        onPanelStateChange={onPanelStateChange}
+        onSafeToLeave={leaveRemovedChat}
+        hasSessions={records.data.length > 0}
+        onCreate={() => setCreating(true)}
+      />
       <WorkspaceSessionDialogs
         workspace={workspace}
         importOpen={importOpen}
@@ -219,6 +200,104 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
         }}
       />
     </BrowserTabsRoot>
+  );
+}
+
+function WorkspaceSessionToolbarActions({
+  hasSelectedSession,
+  terminalModel,
+  toolsOpen,
+  onToggleTools,
+  onImport,
+  onHistory,
+}: {
+  hasSelectedSession: boolean;
+  terminalModel: TerminalPanelModel;
+  toolsOpen: boolean;
+  onToggleTools: () => void;
+  onImport: () => void;
+  onHistory: () => void;
+}): ReactElement {
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="size-8 shrink-0 text-studio-chrome-foreground hover:bg-transparent"
+        aria-label="Import session"
+        title="Import session"
+        onClick={onImport}
+      >
+        <Import />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="size-8 shrink-0 text-studio-chrome-foreground hover:bg-transparent"
+        aria-label="Session history"
+        title="Archived chats"
+        onClick={onHistory}
+      >
+        <History />
+      </Button>
+      {hasSelectedSession ? (
+        <div className="flex shrink-0 items-center pl-0.5">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8 text-studio-chrome-foreground hover:bg-transparent"
+            aria-label={terminalModel.isVisible ? "Hide terminal" : "Show terminal"}
+            title={terminalModel.isVisible ? "Hide terminal" : "Show terminal"}
+            disabled={!terminalModel.isAvailable}
+            onClick={terminalModel.onToggle}
+          >
+            <SquareTerminal />
+          </Button>
+          <SharedToolsPanelToggleButton
+            label="workspace tools"
+            isOpen={toolsOpen}
+            onToggle={onToggleTools}
+          />
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function WorkspaceSessionActiveContent({
+  workspace,
+  selected,
+  terminalModel,
+  panelState,
+  onPanelStateChange,
+  onSafeToLeave,
+  hasSessions,
+  onCreate,
+}: {
+  workspace: ActiveWorkspace;
+  selected: WorkspaceSession | null;
+  terminalModel: TerminalPanelModel;
+  panelState: WorkspaceSessionPanelState;
+  onPanelStateChange: (
+    update: Partial<Pick<WorkspaceSessionPanelState, "activeTabId" | "selectedFile">>,
+  ) => void;
+  onSafeToLeave: () => void;
+  hasSessions: boolean;
+  onCreate: () => void;
+}): ReactElement {
+  if (!selected)
+    return <WorkspaceSessionEmptyState hasSessions={hasSessions} onCreate={onCreate} />;
+  return (
+    <WorkspaceSessionTerminalLayout model={terminalModel}>
+      <WorkspaceSessionContent
+        key={selected.id}
+        workspace={workspace}
+        record={selected}
+        panelState={panelState}
+        onPanelStateChange={onPanelStateChange}
+        onSafeToLeave={onSafeToLeave}
+      />
+    </WorkspaceSessionTerminalLayout>
   );
 }
 
@@ -306,8 +385,16 @@ function useWorkspaceSessionArchive({
       if (!mounted.current) return;
       setArchiveTarget(null);
     },
-    onSettled: () => {
+    onSettled: (_record, _error, variables) => {
       void invalidateRepoBranchesQuery(queryClient, workspace.repoPath);
+      if (variables) {
+        void queryClient.invalidateQueries({
+          queryKey: terminalQueryKeys.workspaceSession({
+            workspaceId: workspace.workspaceId,
+            sessionId: variables.sessionId,
+          }),
+        });
+      }
     },
   });
   const beginArchive = (

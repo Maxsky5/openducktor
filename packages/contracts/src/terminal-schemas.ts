@@ -10,6 +10,8 @@ export const terminalIdSchema = withMaxUtf16Length(
 );
 export const terminalTaskIdSchema = z.string().trim().min(1);
 const terminalRepoPathSchema = z.string().trim().min(1);
+const terminalWorkspaceIdSchema = z.string().trim().min(1);
+const terminalSessionIdSchema = z.string().trim().min(1);
 
 export const terminalContextSchema = z.union([
   z.object({}).strict(),
@@ -17,6 +19,14 @@ export const terminalContextSchema = z.union([
     .object({
       repoPath: terminalRepoPathSchema,
       taskId: terminalTaskIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("workspace_session"),
+      workspaceId: terminalWorkspaceIdSchema,
+      sessionId: terminalSessionIdSchema,
+      repoPath: terminalRepoPathSchema,
     })
     .strict(),
 ]);
@@ -71,6 +81,7 @@ export const terminalFailureCodeSchema = z.enum([
   "working_directory_inaccessible",
   "working_directory_not_directory",
   "task_worktree_unavailable",
+  "workspace_session_unavailable",
   "shell_unavailable",
   "unsupported_shell",
   "unsupported_runtime",
@@ -125,6 +136,13 @@ export const terminalListFilterSchema = z.discriminatedUnion("kind", [
     })
     .strict(),
   z.object({ kind: z.literal("unassociated") }).strict(),
+  z
+    .object({
+      kind: z.literal("workspace_session"),
+      workspaceId: terminalWorkspaceIdSchema,
+      sessionId: terminalSessionIdSchema,
+    })
+    .strict(),
 ]);
 export type TerminalListFilter = z.infer<typeof terminalListFilterSchema>;
 

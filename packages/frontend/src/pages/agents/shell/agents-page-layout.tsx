@@ -6,21 +6,22 @@ import {
   type ReactElement,
   type ReactNode,
   useCallback,
-  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
-  useState,
 } from "react";
-import type { GroupImperativeHandle } from "react-resizable-panels";
 import { AgentChatSurface } from "@/components/features/agents/agent-chat/agent-chat";
 import { AgentStudioHeader } from "@/components/features/agents/agent-studio-header";
 import { AgentStudioTaskTabs } from "@/components/features/agents/agent-studio-task-tabs";
-import { AgentStudioTerminalPanel } from "@/components/features/agents/interactive-terminal/agent-studio-terminal-panel";
 import { TaskExecutionSelectedFilePreview } from "@/components/features/agents/task-execution-file-preview";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { DiffWorkerProvider } from "@/contexts/DiffWorkerProvider";
 import type { GitDiffRefresh } from "@/features/agent-studio-git";
+import {
+  TerminalSplitLayout,
+  type TerminalSplitIds,
+  useTerminalSplit,
+} from "@/features/terminals/terminal-split-layout";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { AgentStudioTerminalPanelModel } from "../terminals/use-agent-studio-terminals";
 import { AgentStudioRightPanelBridge } from "./agent-studio-right-panel-bridge";
@@ -41,17 +42,11 @@ import type {
 const PANEL_CONTAINMENT_STYLE = {
   contain: "layout paint",
 } as const;
-const TERMINAL_GROUP_ID = "agent-studio-terminal-layout";
-const WORKSPACE_PANEL_ID = "agent-studio-workspace-panel";
-const TERMINAL_PANEL_ID = "agent-studio-terminal-panel";
-const TERMINAL_SEPARATOR_ID = "agent-studio-terminal-separator";
-const TERMINAL_HIDDEN_LAYOUT = {
-  [WORKSPACE_PANEL_ID]: 100,
-  [TERMINAL_PANEL_ID]: 0,
-};
-const TERMINAL_VISIBLE_LAYOUT = {
-  [WORKSPACE_PANEL_ID]: 72,
-  [TERMINAL_PANEL_ID]: 28,
+const TERMINAL_SPLIT_IDS: TerminalSplitIds = {
+  group: "agent-studio-terminal-layout",
+  content: "agent-studio-workspace-panel",
+  terminal: "agent-studio-terminal-panel",
+  separator: "agent-studio-terminal-separator",
 };
 
 type AgentsPageWorkspaceProps = {
@@ -129,37 +124,7 @@ export function AgentsPageWorkspace({
   rightPanelContent,
   terminalPanel,
 }: AgentsPageWorkspaceProps): ReactElement {
-  const [isNarrow, setIsNarrow] = useState(false);
-  const terminalGroupRef = useRef<GroupImperativeHandle | null>(null);
-  const terminalPanelSizeRef = useRef(TERMINAL_VISIBLE_LAYOUT[TERMINAL_PANEL_ID]);
-  useEffect(() => {
-    const media = window.matchMedia("(max-width: 767px)");
-    const sync = () => setIsNarrow(media.matches);
-    sync();
-    media.addEventListener("change", sync);
-    return () => media.removeEventListener("change", sync);
-  }, []);
-  useLayoutEffect(() => {
-    const group = terminalGroupRef.current;
-    if (!group) return;
-    let terminalSize = 0;
-    if (terminalPanel.isVisible) {
-      terminalSize = isNarrow ? 100 : terminalPanelSizeRef.current;
-    }
-    group.setLayout({
-      [WORKSPACE_PANEL_ID]: 100 - terminalSize,
-      [TERMINAL_PANEL_ID]: terminalSize,
-    });
-  }, [isNarrow, terminalPanel.isVisible]);
-  const handleTerminalLayoutChanged = useCallback(
-    (layout: Record<string, number>): void => {
-      const terminalSize = layout[TERMINAL_PANEL_ID];
-      if (!isNarrow && terminalSize !== undefined && terminalSize > 0) {
-        terminalPanelSizeRef.current = terminalSize;
-      }
-    },
-    [isNarrow],
-  );
+  const layout = useTerminalSplit(TERMINAL_SPLIT_IDS, terminalPanel.isVisible);
   if (!hasSelectedTask) {
     return (
       <div className="flex h-full min-h-0 items-center justify-center border border-dashed border-input bg-card text-sm text-muted-foreground">
@@ -179,39 +144,15 @@ export function AgentsPageWorkspace({
   );
   return (
     <DiffWorkerProvider>
-      <ResizablePanelGroup
-        id={TERMINAL_GROUP_ID}
-        defaultLayout={terminalPanel.isVisible ? TERMINAL_VISIBLE_LAYOUT : TERMINAL_HIDDEN_LAYOUT}
-        groupRef={terminalGroupRef}
-        onLayoutChanged={handleTerminalLayoutChanged}
-        direction="vertical"
+      <TerminalSplitLayout
+        ids={TERMINAL_SPLIT_IDS}
+        model={terminalPanel}
+        layout={layout}
         className="h-full min-h-0 overflow-hidden"
+        contentClassName="h-full min-h-0"
       >
-        <ResizablePanel id={WORKSPACE_PANEL_ID} defaultSize="72%" minSize={isNarrow ? "0%" : "30%"}>
-          <div className="h-full min-h-0" hidden={isNarrow && terminalPanel.isVisible}>
-            {workspacePanes}
-          </div>
-        </ResizablePanel>
-        {!isNarrow && terminalPanel.isVisible ? (
-          <ResizableHandle
-            id={TERMINAL_SEPARATOR_ID}
-            aria-label="Resize terminal panel"
-            withHandle
-          />
-        ) : null}
-        <ResizablePanel
-          id={TERMINAL_PANEL_ID}
-          collapsible
-          collapsedSize="0%"
-          defaultSize="28%"
-          minSize={isNarrow ? "0%" : "16%"}
-          maxSize={isNarrow ? "100%" : "70%"}
-        >
-          <div className="h-full min-h-0" hidden={!terminalPanel.isVisible}>
-            <AgentStudioTerminalPanel model={terminalPanel} />
-          </div>
-        </ResizablePanel>
-      </ResizablePanelGroup>
+        {workspacePanes}
+      </TerminalSplitLayout>
     </DiffWorkerProvider>
   );
 }

@@ -41,10 +41,24 @@ const terminalContextsEqual = (
   left: TerminalSummary["context"],
   right: TerminalSummary["context"],
 ): boolean => {
-  if (!("taskId" in left) || !("taskId" in right)) {
-    return !("taskId" in left) && !("taskId" in right);
+  if ("taskId" in left || "taskId" in right) {
+    return (
+      "taskId" in left &&
+      "taskId" in right &&
+      left.repoPath === right.repoPath &&
+      left.taskId === right.taskId
+    );
   }
-  return left.repoPath === right.repoPath && left.taskId === right.taskId;
+  if ("kind" in left || "kind" in right) {
+    return (
+      "kind" in left &&
+      "kind" in right &&
+      left.workspaceId === right.workspaceId &&
+      left.sessionId === right.sessionId &&
+      left.repoPath === right.repoPath
+    );
+  }
+  return true;
 };
 
 const terminalExitsEqual = (

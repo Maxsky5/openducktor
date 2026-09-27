@@ -1,6 +1,5 @@
 import {
   type TerminalCloseRequest,
-  type TerminalContext,
   type TerminalCreateRequest,
   type TerminalCreateResponse,
   type TerminalListFilter,
@@ -14,10 +13,9 @@ import {
   terminalPreparePathInputRequestSchema,
 } from "@openducktor/contracts";
 import { Effect, type Scope } from "effect";
-import type { FilesystemPort } from "../../ports/filesystem-port";
 import type { TerminalGrid, TerminalPtyPort } from "../../ports/terminal-pty-port";
 import { createTerminalAdmission } from "./terminal-admission";
-import type { TerminalTaskScope } from "./terminal-context";
+import { type TerminalTaskScope, type TerminalWorkspaceSessionScope } from "./terminal-context";
 import {
   createTerminalLaunchPolicy,
   type TerminalLaunchEnvironmentPort,
@@ -30,6 +28,7 @@ import {
 } from "./terminal-session-engine";
 import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler";
 import type { WithProcessStartAdmission } from "../workspaces/workspace-admission-service";
+import { createTerminalTargetResolver, type TerminalTargetServices } from "./terminal-target";
 
 const DEFAULT_GRID: TerminalGrid = { columns: 80, rows: 24 };
 
@@ -63,12 +62,14 @@ export type TerminalService = {
   acquireTaskCleanup(
     scope: TerminalTaskScope,
   ): Effect.Effect<TerminalCloseByTaskResult, TerminalServiceError, Scope.Scope>;
+  acquireWorkspaceSessionCleanup(
+    scope: TerminalWorkspaceSessionScope,
+  ): Effect.Effect<TerminalCloseByTaskResult, TerminalServiceError, Scope.Scope>;
   dispose(): Effect.Effect<void, TerminalServiceError>;
 };
 
-type CreateTerminalServiceInput = {
+type CreateTerminalServiceInput = TerminalTargetServices & {
   withProcessStartAdmission?: WithProcessStartAdmission;
-  filesystem: FilesystemPort;
   ptyPort: TerminalPtyPort;
   resolveLaunchEnvironment: TerminalLaunchEnvironmentPort;
   now?: () => Date;
@@ -80,6 +81,9 @@ type CreateTerminalServiceInput = {
 export const createTerminalService = ({
   withProcessStartAdmission,
   filesystem,
+  git,
+  taskWorktrees,
+  workspaceSessions,
   ptyPort,
   resolveLaunchEnvironment,
   now = () => new Date(),
@@ -102,31 +106,13 @@ export const createTerminalService = ({
       countLive: engine.countLive,
       countLiveForContext: engine.countLiveForContext,
     });
-    const canonicalizeRepositoryPath = (
-      repoPath: string,
-      operation: "create" | "list" | "close_by_task",
-    ): Effect.Effect<string, TerminalServiceError> =>
-      filesystem.canonicalize(repoPath).pipe(
-        Effect.mapError(
-          (cause) =>
-            new TerminalServiceError({
-              code: "working_directory_inaccessible",
-              operation,
-              message: `Cannot resolve terminal repository path: ${repoPath}`,
-              workingDir: repoPath,
-              cause,
-            }),
-        ),
-      );
-    const canonicalizeContext = (
-      context: TerminalContext,
-      operation: "create" | "list",
-    ): Effect.Effect<TerminalContext, TerminalServiceError> =>
-      "taskId" in context
-        ? canonicalizeRepositoryPath(context.repoPath, operation).pipe(
-            Effect.map((repoPath) => ({ repoPath, taskId: context.taskId })),
-          )
-        : Effect.succeed(context);
+    const target = createTerminalTargetResolver({
+      filesystem,
+      git,
+      taskWorktrees,
+      workspaceSessions,
+    });
+    const canonicalizeRepositoryPath = target.canonicalizeRepositoryPath;
     const canonicalizeTaskScope = (
       scope: TerminalTaskScope,
     ): Effect.Effect<TerminalTaskScope, TerminalServiceError> =>
@@ -140,13 +126,14 @@ export const createTerminalService = ({
         Effect.gen(function* () {
           const input = terminalCreateRequestSchema.parse(rawInput);
           return yield* Effect.acquireUseRelease(
-            admission.beginCreation(),
+            admission.beginCreation("taskId" in input.context ? undefined : input.context),
             (reservation) =>
               Effect.gen(function* () {
-                const context = yield* canonicalizeContext(input.context, "create");
+                const resolved = yield* target.resolve(input);
+                const { context, workingDir } = resolved;
                 const start = Effect.gen(function* () {
                   yield* reservation.bind(context);
-                  const plan = yield* launch({ ...input, context }, DEFAULT_GRID);
+                  const plan = yield* launch({ workingDir, context }, DEFAULT_GRID);
                   const terminalId = idFactory();
                   const summary: TerminalSummary = {
                     terminalId,
@@ -160,7 +147,7 @@ export const createTerminalService = ({
                   const started = yield* engine.start(summary, plan);
                   return { ref: { terminalId }, summary: started };
                 });
-                if (!("taskId" in context) || !withProcessStartAdmission) {
+                if (!("repoPath" in context) || !withProcessStartAdmission) {
                   return yield* start;
                 }
                 return yield* withProcessStartAdmission(context.repoPath, start).pipe(
@@ -208,7 +195,7 @@ export const createTerminalService = ({
         Effect.gen(function* () {
           const context = engine.getContext(terminalId);
           const write = engine.write(terminalId, data);
-          if (!context || !("taskId" in context) || !withProcessStartAdmission) {
+          if (!context || !("repoPath" in context) || !withProcessStartAdmission) {
             return yield* write;
           }
           yield* withProcessStartAdmission(context.repoPath, write).pipe(
@@ -259,6 +246,16 @@ export const createTerminalService = ({
           );
           yield* cleanupLease.lease.awaitPending;
           const closedTerminalIds = yield* engine.closeByTaskScope(cleanupLease.canonicalScope);
+          return { closedTerminalIds };
+        }),
+      acquireWorkspaceSessionCleanup: (scope) =>
+        Effect.gen(function* () {
+          const lease = yield* Effect.acquireRelease(
+            admission.acquireWorkspaceSessionCleanupLease(scope),
+            (held) => Effect.sync(() => held.release()),
+          );
+          yield* lease.awaitPending;
+          const closedTerminalIds = yield* engine.closeByWorkspaceSession(scope);
           return { closedTerminalIds };
         }),
       dispose: () =>

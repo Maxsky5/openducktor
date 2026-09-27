@@ -1018,6 +1018,33 @@ describe("createTaskService build and review", () => {
     ]);
     expect(completed).toMatchObject({ id: "task-1", status: "ai_review" });
   });
+  test("does not run post-complete hooks outside the task worktree", async () => {
+    const taskId = "../elsewhere";
+    const calls: unknown[] = [];
+    const current = task({ id: taskId, status: "in_progress", aiReviewEnabled: false });
+    const taskStore: TaskStorePort = {
+      listTasks: () => Effect.succeed([current]),
+      transitionTask: (input) => {
+        calls.push({ type: "transition", input });
+        return Effect.succeed({ ...current, status: input.status });
+      },
+    };
+    const service = createTaskService({
+      taskStore,
+      settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/../elsewhere"])),
+      systemCommands: createBuildSystemCommands(calls),
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { preStart: [], postComplete: ["sh -lc 'printf cleanup'"] },
+      }),
+    });
+
+    await expect(
+      Effect.runPromise(service.buildCompleted({ repoPath: "/repo", taskId })),
+    ).rejects.toThrow("Task ID must name one worktree directory");
+    expect(calls).not.toContainEqual(expect.objectContaining({ command: "sh" }));
+  });
   test("completes a build into human review when QA is already approved", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {

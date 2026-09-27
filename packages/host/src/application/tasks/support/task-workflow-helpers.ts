@@ -18,6 +18,7 @@ import { errorMessage, HostOperationError, HostValidationError } from "../../../
 import type { SettingsConfigError, SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { TaskStoreError, TaskStorePort } from "../../../ports/task-repository-ports";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
+import { taskWorktreeIdError } from "../worktrees/task-worktree-id";
 import { validateTaskTransitionEffect } from "./task-validation-effects";
 export const enrichTasks = (tasks: TaskCard[]): TaskCard[] =>
   tasks.map((task) => ({
@@ -185,6 +186,8 @@ export const buildCompletionWorktreePath = (
   taskId: string,
 ) =>
   Effect.gen(function* () {
+    const idError = taskWorktreeIdError(taskId);
+    if (idError) return yield* idError;
     const basePath =
       repoConfig.worktreeBasePath === undefined
         ? settingsConfig.defaultWorktreeBasePath(repoConfig.workspaceId)

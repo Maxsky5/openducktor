@@ -1,6 +1,7 @@
 export const TERMINAL_LIMITS = {
   livePerHost: 32,
   livePerTask: 8,
+  livePerWorkspaceSession: 8,
   liveUnassociated: 8,
   inputBytes: 64 * 1024,
   columns: 500,

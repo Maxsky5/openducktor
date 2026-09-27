@@ -7,6 +7,136 @@ import { createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { useTerminals } from "./use-terminals";
 
 describe("useTerminals", () => {
+  test("keeps Workspace Session tabs separate through switches and a renderer remount", async () => {
+    const unavailable = createUnavailableShellBridge();
+    const terminals: TerminalSummary[] = [
+      {
+        terminalId: "task-terminal",
+        label: "Task",
+        context: { repoPath: "/repo", taskId: "task" },
+        initialWorkingDir: "/repo",
+        createdAt: "2026-07-19T00:00:00.000Z",
+        lifecycle: "running",
+        exit: null,
+      },
+    ];
+    const filters: string[] = [];
+    const dependencies: NonNullable<Parameters<typeof useTerminals>[1]> = {
+      hostClient: {
+        ...unavailable.client,
+        systemGetPlatform: async () => "darwin",
+        terminalList: async ({ filter }) => {
+          filters.push(JSON.stringify(filter));
+          return {
+            hostInstanceId: "host-1",
+            terminals: terminals.filter(
+              (entry) =>
+                filter.kind === "workspace_session" &&
+                "kind" in entry.context &&
+                entry.context.workspaceId === filter.workspaceId &&
+                entry.context.sessionId === filter.sessionId,
+            ),
+          };
+        },
+        terminalCreate: async (request) => {
+          const terminalId = `session-terminal-${terminals.length}`;
+          const summary: TerminalSummary = {
+            terminalId,
+            label: request.workingDir,
+            context: request.context,
+            initialWorkingDir: request.workingDir,
+            createdAt: "2026-07-19T00:00:00.000Z",
+            lifecycle: "running",
+            exit: null,
+          };
+          terminals.push(summary);
+          return { ref: { terminalId }, summary };
+        },
+      },
+      terminalBridge: {
+        connect: async (_onFrame, onStateChange) => {
+          onStateChange("connected");
+          return { send: async () => undefined, close: () => undefined };
+        },
+      },
+    };
+    let latest: ReturnType<typeof useTerminals> | null = null;
+    const Harness = ({ sessionId }: { sessionId: string | null }) => {
+      latest = useTerminals(
+        {
+          scope: sessionId
+            ? {
+                key: `workspace-1:${sessionId}`,
+                context: {
+                  kind: "workspace_session",
+                  workspaceId: "workspace-1",
+                  sessionId,
+                  repoPath: "/repo",
+                },
+                workingDirectory: sessionId === "first" ? "/repo" : "/worktree",
+                workingDirectoryError: "Missing chat directory.",
+              }
+            : null,
+          isScopeLoading: false,
+          mountedScopeKeys: ["workspace-1:first", "workspace-1:second"],
+        },
+        dependencies,
+      );
+      return null;
+    };
+    const getLatest = () => {
+      if (!latest) throw new Error("Terminal hook result is not ready.");
+      return latest;
+    };
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness sessionId="first" />
+      </QueryProvider>,
+    );
+    try {
+      await waitFor(() => expect(getLatest().isLoading).toBe(false));
+      act(() => getLatest().onCreate());
+      await waitFor(() => expect(getLatest().tabs[0]?.terminalId).toBe("session-terminal-1"));
+      view.rerender(
+        <QueryProvider useIsolatedClient>
+          <Harness sessionId="second" />
+        </QueryProvider>,
+      );
+      await waitFor(() => expect(getLatest().isLoading).toBe(false));
+      expect(getLatest().tabs).toEqual([]);
+      act(() => getLatest().onCreate());
+      await waitFor(() => expect(getLatest().tabs[0]?.terminalId).toBe("session-terminal-2"));
+      view.rerender(
+        <QueryProvider useIsolatedClient>
+          <Harness sessionId="first" />
+        </QueryProvider>,
+      );
+      await waitFor(() => expect(getLatest().tabs[0]?.terminalId).toBe("session-terminal-1"));
+      expect(getLatest().mountedTabs).toHaveLength(2);
+      view.rerender(
+        <QueryProvider useIsolatedClient>
+          <Harness sessionId={null} />
+        </QueryProvider>,
+      );
+      expect(getLatest().isAvailable).toBe(false);
+      expect(getLatest().tabs).toEqual([]);
+    } finally {
+      view.unmount();
+    }
+    const restored = render(
+      <QueryProvider useIsolatedClient>
+        <Harness sessionId="second" />
+      </QueryProvider>,
+    );
+    try {
+      await waitFor(() => expect(getLatest().tabs[0]?.terminalId).toBe("session-terminal-2"));
+      expect(getLatest().tabs).toHaveLength(1);
+      expect(filters).not.toContain(JSON.stringify({ kind: "all" }));
+    } finally {
+      restored.unmount();
+    }
+  });
+
   test("manages terminals for a non-task scope", async () => {
     const unavailable = createUnavailableShellBridge();
     const terminals: TerminalSummary[] = [];

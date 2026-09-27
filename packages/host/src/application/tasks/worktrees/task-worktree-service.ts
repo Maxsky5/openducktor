@@ -13,6 +13,7 @@ import type {
   WorkspaceSettingsError,
   WorkspaceSettingsService,
 } from "../../workspaces/workspace-settings-service";
+import { taskWorktreeIdError } from "./task-worktree-id";
 
 export type TaskWorktreeServiceError =
   | HostValidationErrorAggregate
@@ -48,6 +49,8 @@ export const createTaskWorktreeService = ({
   getTaskWorktree(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
+      const idError = taskWorktreeIdError(taskId);
+      if (idError) return yield* idError;
       const repoConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const worktreePath = settingsConfig.join(
         resolveWorktreeBasePath(settingsConfig, repoConfig),
