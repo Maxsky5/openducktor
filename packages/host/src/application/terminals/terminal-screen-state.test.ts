@@ -1285,6 +1285,7 @@ describe("TerminalScreenState", () => {
     reloaded.dispose();
   });
 
+  // This test parses and restores an 8 MiB screen, which takes longer on CI workers.
   test("trims old scrollback when a screen restore exceeds the frame limit", async () => {
     const screen = new TerminalScreenState({ columns: 500, rows: 10 });
     const restored = new Terminal({
@@ -1320,7 +1321,7 @@ describe("TerminalScreenState", () => {
       screen.dispose();
       restored.dispose();
     }
-  });
+  }, 30_000);
 
   test("rejects a screen restore when the visible rows exceed the frame limit", async () => {
     const screen = new TerminalScreenState({ columns: 500, rows: 300 });
