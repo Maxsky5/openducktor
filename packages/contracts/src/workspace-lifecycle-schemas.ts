@@ -22,13 +22,11 @@ export type WorkspaceResolvePathInput = z.infer<typeof workspaceResolvePathInput
 export const workspaceRemovalPhaseSchema = z.enum(["worktrees", "attachments", "task_store"]);
 export type WorkspaceRemovalPhase = z.infer<typeof workspaceRemovalPhaseSchema>;
 
-export const workspaceRemovalRecordSchema = z
-  .object({
-    removeTaskWorktrees: z.boolean(),
-    phase: workspaceRemovalPhaseSchema,
-    pendingWorktreePath: z.string().nullable().default(null),
-  })
-  .strict();
+export const workspaceRemovalRecordSchema = z.object({
+  removeTaskWorktrees: z.boolean(),
+  phase: workspaceRemovalPhaseSchema,
+  pendingWorktreePath: z.string().nullable().default(null),
+});
 export type WorkspaceRemovalRecord = z.infer<typeof workspaceRemovalRecordSchema>;
 
 export const incompleteWorkspaceRemovalSchema = z.object({

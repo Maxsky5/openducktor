@@ -106,6 +106,18 @@ describe("global config", () => {
   const unknownNestedSettings: Array<[Record<string, JSONType>, string]> = [
     [{ git: { extra: true } }, "git.extra"],
     [
+      { reusablePrompts: [{ id: "review", name: "review", content: "Review this", extra: true }] },
+      "reusablePrompts.0.extra",
+    ],
+    [
+      {
+        autopilot: {
+          rules: [{ eventId: "taskProgressedToSpecReady", actionIds: [], extra: true }],
+        },
+      },
+      "autopilot.rules.0.extra",
+    ],
+    [
       {
         workspaces: {
           repo: {
@@ -138,6 +150,68 @@ describe("global config", () => {
         },
       },
       "workspaces.repo.agentStudioState.extra",
+    ],
+    [
+      {
+        workspaces: {
+          repo: {
+            workspaceId: "repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+            hooks: { preStart: [], postComplete: [], extra: true },
+          },
+        },
+      },
+      "workspaces.repo.hooks.extra",
+    ],
+    [
+      {
+        workspaces: {
+          repo: {
+            workspaceId: "repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+            devServers: [{ id: "web", name: "Web", command: "bun dev", extra: true }],
+          },
+        },
+      },
+      "workspaces.repo.devServers.0.extra",
+    ],
+    [
+      {
+        workspaces: {
+          repo: {
+            workspaceId: "repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+            defaultModel: {
+              runtimeKind: "opencode",
+              providerId: "openai",
+              modelId: "gpt-5",
+              extra: true,
+            },
+          },
+        },
+      },
+      "workspaces.repo.defaultModel.extra",
+    ],
+    [
+      {
+        workspaces: {
+          repo: {
+            workspaceId: "repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+            git: {
+              provider: {
+                id: "github",
+                repository: { host: "github.com", owner: "duck", name: "app", extra: true },
+              },
+            },
+          },
+        },
+      },
+      "workspaces.repo.git.provider.repository.extra",
     ],
   ];
   test.each(unknownNestedSettings)("rejects an unknown nested setting at %s", (fields, path) => {

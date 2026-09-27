@@ -92,13 +92,11 @@ export const gitConflictOperationSchema = z.enum([
 ]);
 export type GitConflictOperation = z.infer<typeof gitConflictOperationSchema>;
 
-export const githubGitProviderRepositorySchema = z
-  .object({
-    host: z.string().trim().min(1).default("github.com"),
-    owner: z.string().trim().min(1),
-    name: z.string().trim().min(1),
-  })
-  .strict();
+export const githubGitProviderRepositorySchema = z.object({
+  host: z.string().trim().min(1).default("github.com"),
+  owner: z.string().trim().min(1),
+  name: z.string().trim().min(1),
+});
 export type GithubGitProviderRepository = z.infer<typeof githubGitProviderRepositorySchema>;
 
 export const gitProviderRepositorySchema = z.union([
@@ -164,11 +162,9 @@ export const repoGitConfigSchema = z
   .strict();
 export type RepoGitConfig = z.infer<typeof repoGitConfigSchema>;
 
-export const globalGitConfigSchema = z
-  .object({
-    defaultMergeMethod: gitMergeMethodSchema.default("merge_commit"),
-  })
-  .strict();
+export const globalGitConfigSchema = z.object({
+  defaultMergeMethod: gitMergeMethodSchema.default("merge_commit"),
+});
 export type GlobalGitConfig = z.infer<typeof globalGitConfigSchema>;
 
 export const gitPullRequestStateSchema = z.enum(["open", "draft", "merged", "closed_unmerged"]);

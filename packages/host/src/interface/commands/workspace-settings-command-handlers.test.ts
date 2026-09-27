@@ -449,7 +449,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
     await expect(
       router.invoke("workspace_update_repo_hooks", {
         workspaceId: "repo",
-        hooks: { preStart: [], postComplete: [] },
+        hooks: { preStart: [], postComplete: [], extra: true },
       }),
     ).resolves.toMatchObject({ workspaceId: "repo" });
     await expect(router.invoke("workspace_get_settings_snapshot")).resolves.toMatchObject({
@@ -463,7 +463,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
           git: { defaultMergeMethod: "merge_commit" },
           general: { openAgentStudioTabOnBackgroundSessionStart: true },
           appearance: { horizontalScrollbarVisibility: "system" },
-          chat: { showThinkingMessages: false },
+          chat: { showThinkingMessages: false, extra: true },
           reusablePrompts: [],
           kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "normal" },
           autopilot: { alwaysStartQaReviewsFresh: false, rules: [] },
@@ -491,7 +491,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
     await expect(router.invoke("set_theme", { theme: "dark" })).resolves.toBeUndefined();
     await expect(
       router.invoke("workspace_update_global_git_config", {
-        git: { defaultMergeMethod: "squash" },
+        git: { defaultMergeMethod: "squash", extra: true },
       }),
     ).resolves.toBeUndefined();
     expect(calls).toEqual([
