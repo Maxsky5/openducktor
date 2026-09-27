@@ -69,3 +69,55 @@ test.each([
     }
   },
 );
+
+test("a worktree branch check keeps Git ready while the file preview waits", async () => {
+  let holdRead = false;
+  const release = Promise.withResolvers<void>();
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        gitGetCurrentBranch: async () => {
+          if (holdRead) await release.promise;
+          return { name: "main", detached: false };
+        },
+      },
+    }),
+  );
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const view = renderHook(
+    () =>
+      useWorkspaceSessionBranch({
+        repoPath: "/repo",
+        workingDirectory: "/repo/worktree",
+        isWorktree: true,
+        isSwitchingBranch: false,
+        activeBranch: { name: "repo-root", detached: false },
+      }),
+    {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      ),
+    },
+  );
+  try {
+    await waitFor(() => expect(view.result.current.previewBranch).toBe("branch:main"));
+    holdRead = true;
+    let pending!: Promise<string>;
+    act(() => {
+      pending = view.result.current.readBranch();
+    });
+    await waitFor(() => expect(view.result.current.previewBranch).toBeNull());
+    expect(view.result.current.branchKey).toBe("branch:main");
+    expect(view.result.current.branchReady).toBe(true);
+    await act(async () => {
+      release.resolve();
+      await pending;
+    });
+    await waitFor(() => expect(view.result.current.previewBranch).toBe("branch:main"));
+  } finally {
+    release.resolve();
+    view.unmount();
+    queryClient.clear();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});

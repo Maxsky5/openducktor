@@ -15,6 +15,7 @@ import { createQueryClient } from "@/lib/query-client";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import { useWorkspaceSessionBranch } from "@/pages/workspace-sessions/use-workspace-session-branch";
 import {
   WorkspaceSessionToolsPanel,
   type WorkspaceToolsTabId,
@@ -543,6 +544,103 @@ test("manual refresh fetches before it reloads Git changes", async () => {
       1,
     );
   } finally {
+    view.unmount();
+    queryClient.clear();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
+test("manual refresh keeps the branch and diff through branch and status reads", async () => {
+  let finishBranchRead!: (branch: { name: string; detached: false }) => void;
+  const releaseStatusRead = Promise.withResolvers<void>();
+  let statusReadHeld = false;
+  let holdNextStatusRead = false;
+  const readBranch = mock(
+    () =>
+      new Promise<{ name: string; detached: false }>((resolve) => {
+        finishBranchRead = resolve;
+      }),
+  );
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        gitGetCurrentBranch: readBranch,
+        gitGetComparisonTarget: async () => ({ kind: "available", reference: targetReference }),
+        gitFetchRemote: async () => ({ outcome: "skipped_no_remote" as const, output: "" }),
+        gitGetWorktreeStatus: async (_repoPath, targetBranch) => {
+          if (holdNextStatusRead) {
+            holdNextStatusRead = false;
+            statusReadHeld = true;
+            await releaseStatusRead.promise;
+          }
+          return {
+            ...worktreeStatus(targetBranch),
+            fileDiffs: [
+              {
+                file: "draft.txt",
+                type: "modified" as const,
+                additions: 1,
+                deletions: 1,
+                diff: "@@ -1 +1 @@\n-old\n+new\n",
+              },
+            ],
+          };
+        },
+        gitGetWorktreeStatusSummary: async (_repoPath, targetBranch) =>
+          worktreeSummary(targetBranch),
+        gitGetBranches: async () => [],
+      },
+    }),
+  );
+  function BranchPanel() {
+    const {
+      rootBranch,
+      branchKey,
+      branchReady,
+      readBranch: refreshBranch,
+    } = useWorkspaceSessionBranch({
+      repoPath: "/repo",
+      workingDirectory: "/repo",
+      isWorktree: false,
+      isSwitchingBranch: false,
+      activeBranch: { name: "feature", detached: false },
+    });
+    return (
+      <>
+        <output data-testid="branch-read-state">
+          {rootBranch.isFetching ? "fetching" : "idle"}
+        </output>
+        <PanelHarness branchKey={branchKey} branchReady={branchReady} readBranch={refreshBranch} />
+      </>
+    );
+  }
+  const queryClient = createQueryClient();
+  const view = render(
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <BranchPanel />
+      </ThemeProvider>
+    </QueryClientProvider>,
+  );
+  try {
+    const diff = await screen.findByText("draft.txt");
+    expect(screen.getByTestId("agent-studio-git-current-branch").textContent).toBe("feature");
+    fireEvent.click(screen.getByTestId("agent-studio-git-refresh-button"));
+    await waitFor(() => expect(readBranch).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByTestId("branch-read-state").textContent).toBe("fetching"),
+    );
+    expect(screen.getByTestId("agent-studio-git-current-branch").textContent).toBe("feature");
+    expect(diff.isConnected).toBe(true);
+    holdNextStatusRead = true;
+    await act(async () => finishBranchRead({ name: "feature", detached: false }));
+    await waitFor(() => expect(statusReadHeld).toBe(true));
+    expect(screen.getByTestId("agent-studio-git-current-branch").textContent).toBe("feature");
+    expect(diff.isConnected).toBe(true);
+    await act(async () => releaseStatusRead.resolve());
+  } finally {
+    finishBranchRead?.({ name: "feature", detached: false });
+    releaseStatusRead.resolve();
     view.unmount();
     queryClient.clear();
     configureShellBridge(createUnavailableShellBridge());

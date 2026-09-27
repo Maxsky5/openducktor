@@ -29,10 +29,12 @@ export function useWorkspaceSessionBranch({
     ...worktreeBranchQueryOptions(repoPath, workingDirectory ?? ""),
     enabled: isWorktree && workingDirectory !== null,
   });
-  const { branch, branchKey } = branchState(isWorktree, rootBranch, worktreeBranch, activeBranch);
-  const previewBranch = branchIdentity(branch);
-  const branchReady =
-    previewBranch !== null || (isWorktree ? worktreeBranch.isError : rootBranch.isError);
+  const { previewBranch, branchKey, branchReady } = branchState(
+    isWorktree,
+    rootBranch,
+    worktreeBranch,
+    activeBranch,
+  );
   const lastBranch = useRef<string | null>(null);
   useEffect(() => {
     if (!previewBranch || !workingDirectory || lastBranch.current === previewBranch) return;
@@ -107,16 +109,13 @@ function branchState(
   worktree: BranchRead,
   active: GitCurrentBranch | null,
 ) {
-  if (isWorktree) {
-    return {
-      branch: worktree.isError || worktree.isFetching ? null : (worktree.data ?? null),
-      branchKey: worktree.isError ? "unknown" : branchKeyFor(worktree.data ?? null, true),
-    };
-  }
-  const branch = root.isError || root.isFetching ? null : (root.data ?? active);
+  const read = isWorktree ? worktree : root;
+  const cached = isWorktree ? (worktree.data ?? null) : (root.data ?? active);
+  const cachedKey = branchIdentity(cached);
   return {
-    branch,
-    branchKey: branchKeyFor(branch, false),
+    previewBranch: read.isError || read.isFetching ? null : cachedKey,
+    branchKey: read.isError ? "unknown" : branchKeyFor(cached, isWorktree),
+    branchReady: cachedKey !== null || read.isError,
   };
 }
 
