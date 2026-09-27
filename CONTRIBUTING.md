@@ -150,8 +150,6 @@ Important paths:
 - Electron and web lifecycle logs: `<config-root>/logs/` (daily files, retained for 30 local calendar dates)
 - workspace task-store databases: `<config-root>/task-stores/<workspaceId>/database.sqlite`
 
-If `config.json` is invalid, the browser runner and Electron development command show the file and setting error, then stop. The packaged Electron app shows the same error in a window. Fix the file or move it aside, then restart OpenDucktor. OpenDucktor does not change the invalid file.
-
 OpenDucktor uses one SQLite database per configured workspace.
 
 ## Development Expectations
