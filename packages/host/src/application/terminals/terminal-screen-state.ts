@@ -123,20 +123,53 @@ export class TerminalScreenState {
     const maxPayloadBytes = TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES - 1024;
     let payload = serialize(SCREEN_SCROLLBACK_ROWS);
     if (payload.byteLength > maxPayloadBytes) {
-      let minimum = 0;
-      let maximum = SCREEN_SCROLLBACK_ROWS - 1;
-      let fittingPayload: Uint8Array | null = null;
-      while (minimum <= maximum) {
-        const middle = Math.floor((minimum + maximum) / 2);
-        const candidate = serialize(middle);
-        if (candidate.byteLength <= maxPayloadBytes) {
-          fittingPayload = candidate;
-          minimum = middle + 1;
-        } else {
-          maximum = middle - 1;
+      const visiblePayload = serialize(0);
+      if (visiblePayload.byteLength <= maxPayloadBytes) {
+        const availableRows = Math.min(
+          SCREEN_SCROLLBACK_ROWS,
+          Math.max(0, this.terminal.buffer.normal.length - this.terminal.rows),
+        );
+        let fittingRows = 0;
+        let fittingPayload = visiblePayload;
+        let oversizedRows = availableRows;
+        let oversizedBytes = payload.byteLength;
+        let requestedRows = Math.max(
+          1,
+          Math.floor(
+            (availableRows * (maxPayloadBytes - visiblePayload.byteLength)) /
+              (payload.byteLength - visiblePayload.byteLength),
+          ),
+        );
+        while (requestedRows > 0 && requestedRows < oversizedRows) {
+          const candidate = serialize(requestedRows);
+          if (candidate.byteLength <= maxPayloadBytes) {
+            fittingRows = requestedRows;
+            fittingPayload = candidate;
+            break;
+          }
+          oversizedRows = requestedRows;
+          oversizedBytes = candidate.byteLength;
+          // Shrink each failed probe so large rows cannot cause repeated full-buffer scans.
+          requestedRows = Math.floor(requestedRows / 2);
         }
+        if (
+          fittingRows > 0 &&
+          oversizedRows - fittingRows > 1 &&
+          maxPayloadBytes - fittingPayload.byteLength > maxPayloadBytes / 100
+        ) {
+          const additionalRows = Math.floor(
+            ((oversizedRows - fittingRows) * (maxPayloadBytes - fittingPayload.byteLength)) /
+              (oversizedBytes - fittingPayload.byteLength),
+          );
+          const nextRows = Math.min(
+            oversizedRows - 1,
+            Math.max(fittingRows + 1, fittingRows + additionalRows),
+          );
+          const candidate = serialize(nextRows);
+          if (candidate.byteLength <= maxPayloadBytes) fittingPayload = candidate;
+        }
+        payload = fittingPayload;
       }
-      if (fittingPayload) payload = fittingPayload;
     }
     if (payload.byteLength > maxPayloadBytes) {
       throw new Error(
