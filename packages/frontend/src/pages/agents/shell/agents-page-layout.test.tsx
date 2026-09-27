@@ -226,7 +226,10 @@ describe("AgentsPageWorkspace terminal visibility", () => {
       removeEventListener: () => undefined,
       dispatchEvent: () => true,
     });
-    const onHide = () => undefined;
+    let hideCount = 0;
+    const onHide = () => {
+      hideCount += 1;
+    };
     const terminalPanel: AgentStudioTerminalPanelModel = {
       scopeKey: "repo:task-1",
       isAvailable: true,
@@ -266,5 +269,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
     expect(view.getByRole("button", { name: "Back to workspace" })).toBeTruthy();
     expect(view.getByTestId("narrow-chat").closest("[hidden]")).toBeTruthy();
     expect(view.getByText("No terminals.").closest("[hidden]")).toBeNull();
+    fireEvent.click(view.getByRole("button", { name: "Back to workspace" }));
+    expect(hideCount).toBe(1);
   });
 });

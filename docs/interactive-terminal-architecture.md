@@ -54,7 +54,7 @@ The UI hides a tab while close is pending. It restores the tab when confirmation
 
 Task close, delete, reset, and merged-worktree cleanup take a terminal cleanup lease. They stop task terminals before dev servers, worktrees, branches, or task records. A terminal failure stops later cleanup. The lease blocks a new task terminal during cleanup.
 
-Workspace Session archive takes a lease for that workspace and session pair. It waits for pending starts, stops and forgets only that session's terminals, then continues runtime and worktree cleanup. A stop failure leaves the failed terminal owned by the host and prevents worktree removal. New terminals for that session fail during archive.
+Workspace Session archive checks for an active runtime turn first and asks for Stop consent when needed. It stops an active turn, takes a lease for that workspace and session pair, waits for pending starts, and stops only that session's terminals before worktree removal. A terminal stop failure leaves the terminal owned by the host and prevents worktree removal. New terminals for that session fail during archive.
 
 Host shutdown stops admission, stops all PTYs and process trees, then continues host cleanup. An exited session can stay in memory for bounded replay until time or count limits remove it.
 

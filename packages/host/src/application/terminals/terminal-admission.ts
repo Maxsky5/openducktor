@@ -14,7 +14,7 @@ type TerminalAdmissionReservation = {
   release(): void;
 };
 
-type TerminalTaskCleanupLease = {
+type TerminalCleanupLease = {
   awaitPending: Effect.Effect<void>;
   release(): void;
 };
@@ -55,6 +55,23 @@ export const createTerminalAdmission = ({
       waiters.add(waiter);
       return Effect.sync(() => waiters.delete(waiter));
     });
+
+  const holdContexts = (keys: readonly string[]): TerminalCleanupLease => {
+    for (const key of keys) blockedContexts.set(key, (blockedContexts.get(key) ?? 0) + 1);
+    let released = false;
+    return {
+      awaitPending: waitUntil(() => keys.every((key) => (pendingByContext.get(key) ?? 0) === 0)),
+      release(): void {
+        if (released) return;
+        released = true;
+        for (const key of keys) {
+          const remaining = (blockedContexts.get(key) ?? 1) - 1;
+          if (remaining === 0) blockedContexts.delete(key);
+          else blockedContexts.set(key, remaining);
+        }
+      },
+    };
+  };
 
   const beginCreation = (
     initialContext?: TerminalContext,
@@ -156,7 +173,7 @@ export const createTerminalAdmission = ({
   const acquireTaskCleanupLease = ({
     repoPath,
     taskIds,
-  }: TerminalTaskScope): Effect.Effect<TerminalTaskCleanupLease> => {
+  }: TerminalTaskScope): Effect.Effect<TerminalCleanupLease> => {
     const lastPreexistingReservationId = nextReservationId;
     return waitUntil(() =>
       [...unboundReservations].every(
@@ -168,22 +185,7 @@ export const createTerminalAdmission = ({
           const keys = [
             ...new Set(taskIds.map((taskId) => terminalContextKey({ repoPath, taskId }))),
           ];
-          for (const key of keys) blockedContexts.set(key, (blockedContexts.get(key) ?? 0) + 1);
-          let released = false;
-          return {
-            awaitPending: waitUntil(() =>
-              keys.every((key) => (pendingByContext.get(key) ?? 0) === 0),
-            ),
-            release(): void {
-              if (released) return;
-              released = true;
-              for (const key of keys) {
-                const remaining = (blockedContexts.get(key) ?? 1) - 1;
-                if (remaining === 0) blockedContexts.delete(key);
-                else blockedContexts.set(key, remaining);
-              }
-            },
-          };
+          return holdContexts(keys);
         }),
       ),
     );
@@ -193,22 +195,8 @@ export const createTerminalAdmission = ({
     acquireTaskCleanupLease,
     acquireWorkspaceSessionCleanupLease: (
       scope: TerminalWorkspaceSessionScope,
-    ): Effect.Effect<TerminalTaskCleanupLease> =>
-      Effect.sync(() => {
-        const key = terminalWorkspaceSessionKey(scope);
-        blockedContexts.set(key, (blockedContexts.get(key) ?? 0) + 1);
-        let released = false;
-        return {
-          awaitPending: waitUntil(() => (pendingByContext.get(key) ?? 0) === 0),
-          release(): void {
-            if (released) return;
-            released = true;
-            const remaining = (blockedContexts.get(key) ?? 1) - 1;
-            if (remaining === 0) blockedContexts.delete(key);
-            else blockedContexts.set(key, remaining);
-          },
-        };
-      }),
+    ): Effect.Effect<TerminalCleanupLease> =>
+      Effect.sync(() => holdContexts([terminalWorkspaceSessionKey(scope)])),
     beginTaskCleanupPreparation: (): Effect.Effect<{ release(): void }> =>
       Effect.sync(() => {
         cleanupPreparations += 1;
