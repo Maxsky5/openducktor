@@ -5,6 +5,7 @@ import {
 import { Deferred, Effect, FiberId } from "effect";
 import {
   errorMessage,
+  hasNestedNodeErrorCode,
   HostOperationError,
   type HostOperationErrorAggregate,
   HostValidationError,
@@ -331,14 +332,22 @@ export const createLocalAttachmentService = (
               ),
             );
           const canonicalPath = yield* localAttachmentPort.canonicalizePath(trimmedPath).pipe(
-            Effect.mapError(
-              (error) =>
-                new HostOperationError({
-                  operation: "local_attachment.resolve_path",
-                  message: `Failed to resolve staged attachment path: ${errorMessage(error)}`,
-                  cause: error,
-                }),
-            ),
+            Effect.mapError((error) => {
+              if (
+                hasNestedNodeErrorCode(error, "ENOENT") ||
+                hasNestedNodeErrorCode(error, "ENOTDIR")
+              ) {
+                return new HostValidationError({
+                  message: "Attachment is no longer available locally. Add it again to use it.",
+                  field: "path",
+                });
+              }
+              return new HostOperationError({
+                operation: "local_attachment.resolve_path",
+                message: `Failed to resolve staged attachment path: ${errorMessage(error)}`,
+                cause: error,
+              });
+            }),
           );
           if (isWithinDirectory(localAttachmentPort, canonicalDirectory, canonicalPath)) {
             return { path: trimmedPath };

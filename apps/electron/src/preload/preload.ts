@@ -14,6 +14,7 @@ import {
   ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL,
   ELECTRON_EDITOR_CLIPBOARD_READ_CHANNEL,
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL,
+  electronLocalAttachmentPreviewResultSchema,
   ELECTRON_OPEN_EXTERNAL_URL_CHANNEL,
   ELECTRON_NOTIFICATION_CLICKED_CHANNEL,
   ELECTRON_NOTIFICATION_GET_APP_FOCUS_CHANNEL,
@@ -160,8 +161,14 @@ const electronApi: OpenDucktorElectronApi = {
   openExternalUrl(url) {
     return ipcRenderer.invoke(ELECTRON_OPEN_EXTERNAL_URL_CHANNEL, url);
   },
-  resolveLocalAttachmentPreviewSrc(path) {
-    return ipcRenderer.invoke(ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL, path);
+  async resolveLocalAttachmentPreviewSrc(path) {
+    const result = electronLocalAttachmentPreviewResultSchema.parse(
+      await ipcRenderer.invoke(ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL, path),
+    );
+    if (!result.ok) {
+      throw new Error(result.message);
+    }
+    return result.src;
   },
   terminals,
   taskStream,

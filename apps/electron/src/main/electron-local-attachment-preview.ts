@@ -1,6 +1,7 @@
 import { pathToFileURL } from "node:url";
 import { Cause, Chunk, Effect, Exit, Option } from "effect";
 import { z } from "zod";
+import type { ElectronLocalAttachmentPreviewResult } from "../shared/electron-bridge-contract";
 import {
   ElectronOperationError,
   type ElectronOperationErrorAggregate,
@@ -65,6 +66,28 @@ export const readLocalAttachmentPreviewPathEffect = (
 export const createElectronLocalAttachmentPreviewUrl = (filePath: string): string => {
   const previewPath = readLocalAttachmentPreviewPath(filePath);
   return `${ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL}://${ELECTRON_LOCAL_ATTACHMENT_PREVIEW_HOST}/${encodeURIComponent(previewPath)}`;
+};
+
+export const resolveElectronLocalAttachmentPreview = async (
+  resolveLocalAttachmentPath: (filePath: string) => Promise<string>,
+  filePath: string,
+): Promise<ElectronLocalAttachmentPreviewResult> => {
+  try {
+    const requestedPath = readLocalAttachmentPreviewPath(filePath);
+    const resolvedPath = await resolveLocalAttachmentPath(requestedPath);
+    return { ok: true, src: createElectronLocalAttachmentPreviewUrl(resolvedPath) };
+  } catch (cause) {
+    if (
+      cause instanceof ElectronValidationError &&
+      cause.operation === "electron.preview.resolve-host-path"
+    ) {
+      return {
+        ok: false,
+        message: "Attachment is no longer available locally. Add it again to use it.",
+      };
+    }
+    return { ok: false, message: errorMessage(cause) };
+  }
 };
 
 export const readElectronLocalAttachmentPreviewRequestPath = (requestUrl: string): string => {

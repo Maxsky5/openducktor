@@ -68,7 +68,7 @@ const createFakeLocalAttachmentPort = (options: FakeLocalAttachmentPortOptions =
       return Effect.tryPromise({
         try: async () => {
           if (!directories.has(path) && !files.has(path)) {
-            throw new Error(`missing path fixture: ${path}`);
+            throw Object.assign(new Error(`missing path fixture: ${path}`), { code: "ENOENT" });
           }
           return path;
         },
@@ -434,8 +434,8 @@ describe("createLocalAttachmentService", () => {
     expect(files.has(expectedPath)).toBe(true);
     expect(calls.modifiedTimeMs).toBe(modifiedTimeCallsBeforeStage);
   });
-  test("resolves absolute staged paths and rejects outside absolute paths", async () => {
-    const { calls, port } = createFakeLocalAttachmentPort();
+  test("resolves absolute staged paths and reports missing files without filesystem details", async () => {
+    const { calls, files, port } = createFakeLocalAttachmentPort();
     const service = createLocalAttachmentService(port);
     const staged = await Effect.runPromise(
       service.stage({ name: "brief.pdf", base64Data: "YnJpZWY=" }),
@@ -443,9 +443,17 @@ describe("createLocalAttachmentService", () => {
     await expect(Effect.runPromise(service.resolve({ path: staged.path }))).resolves.toEqual({
       path: staged.path,
     });
+    files.delete(staged.path);
+    const missing = await Effect.runPromise(Effect.flip(service.resolve({ path: staged.path })));
+    expect(missing).toMatchObject({
+      _tag: "HostValidationError",
+      field: "path",
+      message: "Attachment is no longer available locally. Add it again to use it.",
+    });
+    files.set("/tmp/not-staged.pdf", { bytes: new Uint8Array(), modifiedTimeMs: 1 });
     await expect(
       Effect.runPromise(service.resolve({ path: "/tmp/not-staged.pdf" })),
-    ).rejects.toThrow("Failed to resolve staged attachment path:");
+    ).rejects.toThrow("Attachment path is not a staged local attachment.");
     expect(calls.readDirectory).toBe(0);
     expect(calls.modifiedTimeMs).toBe(0);
   });

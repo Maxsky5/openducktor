@@ -6,6 +6,7 @@ import {
   readElectronLocalAttachmentPreviewRequestPath,
   readLocalAttachmentPreviewPath,
   registerElectronLocalAttachmentPreviewProtocol,
+  resolveElectronLocalAttachmentPreview,
 } from "./electron-local-attachment-preview";
 
 const captureThrown = (action: () => void): Error => {
@@ -18,6 +19,44 @@ const captureThrown = (action: () => void): Error => {
 };
 
 describe("electron local attachment previews", () => {
+  test("returns a preview URL in a successful IPC result", async () => {
+    const result = await resolveElectronLocalAttachmentPreview(async (path) => {
+      expect(path).toBe("staged.png");
+      return "/tmp/openducktor-local-attachments/staged.png";
+    }, " staged.png ");
+
+    expect(result).toEqual({
+      ok: true,
+      src: `${ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL}://preview/%2Ftmp%2Fopenducktor-local-attachments%2Fstaged.png`,
+    });
+  });
+
+  test("returns an actionable IPC result when a staged attachment is unavailable", async () => {
+    const result = await resolveElectronLocalAttachmentPreview(async () => {
+      throw new ElectronValidationError({
+        operation: "electron.preview.resolve-host-path",
+        message: "Attachment path is not a staged local attachment.",
+        field: "path",
+      });
+    }, "old-staged.png");
+
+    expect(result).toEqual({
+      ok: false,
+      message: "Attachment is no longer available locally. Add it again to use it.",
+    });
+  });
+
+  test("keeps unexpected preview failures visible in the IPC result", async () => {
+    const result = await resolveElectronLocalAttachmentPreview(async () => {
+      throw new ElectronOperationError({
+        operation: "electron.preview.resolve-host-path",
+        message: "Attachment storage is not readable.",
+      });
+    }, "staged.png");
+
+    expect(result).toEqual({ ok: false, message: "Attachment storage is not readable." });
+  });
+
   test("creates an app protocol URL for staged attachment paths", () => {
     const previewUrl = createElectronLocalAttachmentPreviewUrl(
       "/tmp/openducktor-local-attachments/staged screenshot.png",

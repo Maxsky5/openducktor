@@ -65,11 +65,10 @@ import { forwardElectronHostEvent } from "./electron-host-event-forwarding";
 import { runElectronHostInvoke } from "./electron-host-invoke";
 import { registerElectronHostInvokeHandler } from "./electron-host-invoke-handler";
 import {
-  createElectronLocalAttachmentPreviewUrl,
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL,
-  readLocalAttachmentPreviewPath,
   readLocalAttachmentPreviewPathEffect,
   registerElectronLocalAttachmentPreviewProtocol,
+  resolveElectronLocalAttachmentPreview,
 } from "./electron-local-attachment-preview";
 import {
   configureElectronLoopbackCorsPolicy,
@@ -734,13 +733,12 @@ const registerIpcHandlers = (
     await runElectronEffect(openExternalUrlEffect(url));
   });
 
-  ipcMain.handle(ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL, async (_event, filePath) => {
-    const resolvedPath = await resolveLocalAttachmentPathForPreview(
-      hostCommandRouter,
-      readLocalAttachmentPreviewPath(filePath),
-    );
-    return createElectronLocalAttachmentPreviewUrl(resolvedPath);
-  });
+  ipcMain.handle(ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL, (_event, filePath) =>
+    resolveElectronLocalAttachmentPreview(
+      (requestedPath) => resolveLocalAttachmentPathForPreview(hostCommandRouter, requestedPath),
+      filePath,
+    ),
+  );
 
   ipcMain.handle(ELECTRON_APP_UPDATE_GET_STATE_CHANNEL, () =>
     readAppUpdateStateForIpc(appUpdateService.getState()),
