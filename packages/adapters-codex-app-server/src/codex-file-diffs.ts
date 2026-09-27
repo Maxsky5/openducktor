@@ -44,7 +44,7 @@ const selectCodexRenderableDiff = (
   diff: string,
   displayedFile: string,
   sourceFile: string,
-  type: string,
+  type: FileDiff["type"],
 ): string => {
   const fileCandidates =
     sourceFile === displayedFile ? [displayedFile] : [sourceFile, displayedFile];
@@ -59,10 +59,10 @@ const selectCodexRenderableDiff = (
 };
 
 const parseFileDiffEntry = (entry: CodexAppServerFileUpdateChange, index: number): FileDiff => {
-  const sourceFile = entry.path.trim();
-  const movePath = entry.kind.type === "update" ? (entry.kind.move_path?.trim() ?? null) : null;
+  const sourceFile = entry.path;
+  const movePath = entry.kind.type === "update" ? (entry.kind.move_path ?? null) : null;
   const file = movePath ?? sourceFile;
-  if (file.length === 0) {
+  if (file.trim().length === 0) {
     throw new CodexFileDiffParseError(`entry ${index} has empty file path.`);
   }
   const type = CODEX_DIFF_TYPES[entry.kind.type];
@@ -90,8 +90,8 @@ const unifiedDiffHeaderPath = (candidate: string, prefix: "--- " | "+++ "): stri
   if (!line) {
     return null;
   }
-  const path = line.slice(prefix.length).split("\t", 1)[0]?.trim();
-  if (!path || path === "/dev/null") {
+  const path = line.slice(prefix.length).split("\t", 1)[0];
+  if (!path?.trim() || path === "/dev/null") {
     return null;
   }
   return path.replace(/^"|"$/g, "").replace(/^(?:a|b)\//, "");
@@ -155,24 +155,22 @@ const applyPatchFileHeader = (line: string): ApplyPatchFileHeader | null => {
   const match = /^\*\*\* (Add|Delete|Update) File: (.+)$/.exec(line);
   const operation = match?.[1];
   const file = match?.[2];
-  if (!isApplyPatchFileType(operation) || !file) {
+  if (!isApplyPatchFileType(operation) || !file?.trim()) {
     return null;
   }
 
   return {
     operation,
-    file: file.trim(),
+    file,
   };
 };
 
 const finishApplyPatchEntry = (entry: ApplyPatchFileEntry): FileDiff | null => {
-  if (entry.file.length === 0) {
+  if (entry.file.trim().length === 0) {
     return null;
   }
 
-  const rawDiff = [`*** ${entry.operation} File: ${entry.file}`, ...entry.lines]
-    .join("\n")
-    .trimEnd();
+  const rawDiff = [`*** ${entry.operation} File: ${entry.file}`, ...entry.lines].join("\n");
   const type = APPLY_PATCH_FILE_TYPES[entry.operation];
   const diff = selectRenderableFileDiff(rawDiff, entry.file, { changeType: type }) ?? "";
   const counts = countRenderableFileDiffLines(diff);
@@ -210,7 +208,7 @@ export const codexApplyPatchFileDiffs = (patch: string): FileDiff[] => {
     const moveMatch = /^\*\*\* Move to: (.+)$/.exec(line);
     const movedFile = moveMatch?.[1];
     if (movedFile) {
-      current.file = movedFile.trim();
+      current.file = movedFile;
       continue;
     }
     current.lines.push(line);

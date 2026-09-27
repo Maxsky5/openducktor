@@ -73,11 +73,10 @@ const readStructuredPatch = (
     return null;
   }
   const hunks = value.map(readStructuredPatchHunk).filter((hunk): hunk is string => hunk !== null);
-  const normalizedFile = file?.trim();
-  if (hunks.length === 0 || !normalizedFile) {
+  if (hunks.length === 0 || !file?.trim()) {
     return null;
   }
-  const fileHeaderPath = diffHeaderPath(normalizedFile);
+  const fileHeaderPath = diffHeaderPath(file);
   return [
     `diff --git a/${fileHeaderPath} b/${fileHeaderPath}`,
     `--- a/${fileHeaderPath}`,
@@ -254,17 +253,16 @@ const normalizeClaudeFileDiff = ({
   patch: string | null;
   type: FileDiff["type"];
 }): FileDiff | null => {
-  const normalizedFile = file?.trim();
-  if (!normalizedFile || !patch) {
+  if (!file?.trim() || !patch) {
     return null;
   }
-  const diff = selectRenderableFileDiff(patch, normalizedFile, { changeType: type });
+  const diff = selectRenderableFileDiff(patch, file, { changeType: type });
   if (!diff) {
     return null;
   }
   const counts = countRenderableFileDiffLines(diff);
   return {
-    file: normalizedFile,
+    file,
     type,
     additions: additions ?? counts.additions,
     deletions: deletions ?? counts.deletions,

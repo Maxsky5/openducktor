@@ -1,10 +1,34 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentEvent } from "@openducktor/core";
+import { createTwoFilesPatch } from "diff";
+import { readClaudeFileEditPayload } from "./claude-agent-sdk-file-edits";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
 import { createEventTestSession as createSession } from "./claude-agent-sdk-events.test-support";
 import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 
 describe("handleClaudeSdkMessage file edit tool events", () => {
+  test("keeps literal a/ and b/ paths in a diff-generated Claude patch", () => {
+    const patch = createTwoFilesPatch("a/my file.ts", "b/my file.ts", "old\n", "new\n");
+
+    expect(
+      readClaudeFileEditPayload({
+        tool: "Edit",
+        input: { file_path: "a/my file.ts", old_string: "old", new_string: "new" },
+        raw: { file: "a/my file.ts", patch },
+      }),
+    ).toEqual({
+      fileDiffs: [
+        {
+          file: "a/my file.ts",
+          type: "modified",
+          additions: 1,
+          deletions: 1,
+          diff: patch.slice(patch.indexOf("--- ")),
+        },
+      ],
+    });
+  });
+
   test("maps completed Claude Edit results to canonical file diffs", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
@@ -30,7 +54,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
               id: "tool-edit-1",
               name: "Edit",
               input: {
-                file_path: "apps/api/src/lib/auth.ts",
+                file_path: "apps/api/src/lib/auth.ts ",
                 old_string: "providers: []",
                 new_string: "providers: [facebook]",
               },
@@ -60,7 +84,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
           content: [{ type: "text", text: "edited" }],
           gitDiff: {
             patch:
-              "diff --git a/apps/api/src/lib/auth.ts b/apps/api/src/lib/auth.ts\n--- a/apps/api/src/lib/auth.ts\n+++ b/apps/api/src/lib/auth.ts\n@@ -1 +1 @@\n-providers: []\n+providers: [facebook]\n",
+              "diff --git a/apps/api/src/lib/auth.ts  b/apps/api/src/lib/auth.ts \n--- a/apps/api/src/lib/auth.ts \n+++ b/apps/api/src/lib/auth.ts \n@@ -1 +1 @@\n-providers: []\n+providers: [facebook]\n",
           },
         },
         message: {
@@ -80,7 +104,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
           toolType: "file_edit",
           fileDiffs: [
             expect.objectContaining({
-              file: "apps/api/src/lib/auth.ts",
+              file: "apps/api/src/lib/auth.ts ",
               additions: 1,
               deletions: 1,
               diff: expect.stringContaining("+providers: [facebook]"),
@@ -116,7 +140,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
               id: "tool-edit-1",
               name: "Edit",
               input: {
-                file_path: "apps/api/src/lib/auth.ts",
+                file_path: "apps/api/src/lib/auth.ts ",
                 old_string: "providers: []",
                 new_string: "providers: [facebook]",
               },
@@ -144,7 +168,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
           type: "tool_result",
           tool_use_id: "tool-edit-1",
           content: [{ type: "text", text: "edited" }],
-          filePath: "apps/api/src/lib/auth.ts",
+          filePath: "apps/api/src/lib/auth.ts ",
           oldString: "providers: []",
           newString: "providers: [facebook]",
           originalFile: "providers: []\n",
@@ -177,7 +201,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
           toolType: "file_edit",
           fileDiffs: [
             expect.objectContaining({
-              file: "apps/api/src/lib/auth.ts",
+              file: "apps/api/src/lib/auth.ts ",
               additions: 1,
               deletions: 1,
               diff: expect.stringContaining("@@ -1,1 +1,1 @@"),

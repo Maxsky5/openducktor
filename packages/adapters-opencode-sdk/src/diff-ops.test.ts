@@ -147,6 +147,47 @@ describe("diff-ops", () => {
     ]);
   });
 
+  test("loadSessionDiff preserves standalone Git add and delete paths without changing literal paths", async () => {
+    const added = "--- /dev/null\n+++ b/src/new file.ts\n@@ -0,0 +1 @@\n+created";
+    const deleted = "--- a/src/old file.ts\n+++ /dev/null\n@@ -1 +0,0 @@\n-removed";
+    const literal = "--- /dev/null\n+++ b/src/literal.ts\n@@ -0,0 +1 @@\n+literal";
+    installFetch(() =>
+      jsonResponse([
+        { file: "src/new file.ts", patch: added, additions: 1, deletions: 0, status: "added" },
+        {
+          file: "/repo/src/new file.ts",
+          patch: added,
+          additions: 1,
+          deletions: 0,
+          status: "added",
+        },
+        { file: "src/old file.ts", patch: deleted, additions: 0, deletions: 1, status: "deleted" },
+        { file: "b/src/literal.ts", patch: literal, additions: 1, deletions: 0, status: "added" },
+        { file: "src/other.ts", patch: added, additions: 1, deletions: 0, status: "added" },
+      ]),
+    );
+
+    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1", "/repo")).resolves.toEqual([
+      { file: "src/new file.ts", type: "added", additions: 1, deletions: 0, diff: `${added}\n` },
+      {
+        file: "/repo/src/new file.ts",
+        type: "added",
+        additions: 1,
+        deletions: 0,
+        diff: `${added}\n`,
+      },
+      {
+        file: "src/old file.ts",
+        type: "deleted",
+        additions: 0,
+        deletions: 1,
+        diff: `${deleted}\n`,
+      },
+      { file: "b/src/literal.ts", type: "added", additions: 1, deletions: 0, diff: `${literal}\n` },
+      { file: "src/other.ts", type: "added", additions: 1, deletions: 0, diff: "" },
+    ]);
+  });
+
   test("loadSessionDiff rejects malformed snapshot diff entries", async () => {
     installFetch(() =>
       jsonResponse([

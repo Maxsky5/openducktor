@@ -444,6 +444,22 @@ describe("stream-part-mapper", () => {
     });
   });
 
+  test("keeps a trailing space in OpenCode file diff metadata", () => {
+    const file = "/repo/src/main.ts ";
+    const patch = `--- ${file}\n+++ ${file}\n@@ -1 +1 @@\n-old\n+new`;
+    const part = createToolPart({
+      id: "tool-edit-spaced-path",
+      tool: "edit",
+      status: "completed",
+      input: { filePath: file },
+      metadata: { filediff: { file, patch } },
+    });
+
+    expect(mapPartToAgentStreamPart(part)).toMatchObject({
+      fileDiffs: [expect.objectContaining({ file, diff: `${patch}\n` })],
+    });
+  });
+
   test("keeps modified full-file tool metadata path-only instead of rendering file contents", () => {
     const part = createToolPart({
       id: "tool-edit-full-file-1",
@@ -629,7 +645,7 @@ describe("stream-part-mapper", () => {
             filePath: "/repo/src/new.ts",
             relativePath: "src/new.ts",
             type: "add",
-            patch: "--- /dev/null\n+++ b/src/new.ts\n@@ -0,0 +1 @@\n+created",
+            patch: "--- /repo/src/new.ts\n+++ /repo/src/new.ts\n@@ -0,0 +1 @@\n+created",
             additions: 1,
             deletions: 0,
           },
@@ -650,8 +666,82 @@ describe("stream-part-mapper", () => {
           type: "added",
           additions: 1,
           deletions: 0,
-          diff: "--- /dev/null\n+++ b/src/new.ts\n@@ -0,0 +1 @@\n+created\n",
+          diff: "--- /repo/src/new.ts\n+++ /repo/src/new.ts\n@@ -0,0 +1 @@\n+created\n",
         },
+      ],
+    });
+  });
+
+  for (const [kind, path] of [
+    ["plain", "b/src/new file.ts"],
+    ["quoted", '"b/src/new file.ts"'],
+  ] as const) {
+    test(`maps a ${kind} standalone add patch from apply_patch metadata`, () => {
+      const patch = `--- /dev/null\n+++ ${path}\n@@ -0,0 +1 @@\n+created`;
+      const part = createToolPart({
+        id: `tool-patch-${kind}-add`,
+        tool: "apply_patch",
+        status: "completed",
+        input: { patch: "*** Begin Patch\n*** Add File: src/new file.ts\n+created\n*** End Patch" },
+        output: "Patch applied",
+        metadata: {
+          files: [
+            {
+              filePath: "/repo/src/new file.ts",
+              relativePath: "src/new file.ts",
+              type: "add",
+              patch,
+              additions: 1,
+              deletions: 0,
+            },
+          ],
+        },
+      });
+
+      expect(mapPartToAgentStreamPart(part)).toMatchObject({
+        fileDiffs: [
+          {
+            file: "src/new file.ts",
+            type: "added",
+            additions: 1,
+            deletions: 0,
+            diff: `${patch}\n`,
+          },
+        ],
+      });
+    });
+  }
+
+  test("keeps literal b/ paths and rejects unrelated apply_patch metadata", () => {
+    const patch = "--- /dev/null\n+++ b/src/literal.ts\n@@ -0,0 +1 @@\n+created";
+    const part = createToolPart({
+      id: "tool-patch-literal-b-path",
+      tool: "apply_patch",
+      status: "completed",
+      input: { patch: "*** Begin Patch\n*** Add File: b/src/literal.ts\n+created\n*** End Patch" },
+      output: "Patch applied",
+      metadata: {
+        files: [
+          {
+            filePath: "/repo/b/src/literal.ts",
+            relativePath: "b/src/literal.ts",
+            type: "add",
+            patch,
+          },
+          {
+            filePath: "/repo/src/other.ts",
+            relativePath: "src/other.ts",
+            type: "add",
+            patch,
+          },
+        ],
+      },
+    });
+
+    expect(mapPartToAgentStreamPart(part)).toMatchObject({
+      fileDiffs: [
+        { file: "b/src/literal.ts", diff: `${patch}\n` },
+        { file: "src/other.ts", diff: "" },
       ],
     });
   });
