@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { DEFAULT_NOTIFICATION_SETTINGS } from "@openducktor/contracts";
+import type { JSONType } from "zod";
 import {
   createDefaultGlobalConfig,
   parsePersistedGlobalConfig,
@@ -70,6 +71,193 @@ describe("global config", () => {
     expect(withoutGit.workspaces.repo?.git).toEqual({});
     expect(withEmptyLegacyProviders.workspaces.repo?.git).toEqual({});
   });
+
+  test("migrates legacy reusable prompts before strict settings validation", () => {
+    const prompts = [{ id: "review", name: "review", content: "Review this" }];
+    const config = parsePersistedGlobalConfig({
+      version: 4,
+      chat: { customPrompts: prompts },
+    });
+
+    expect(config.reusablePrompts).toEqual([{ ...prompts[0]!, description: "" }]);
+    expect(config.chat).not.toHaveProperty("customPrompts");
+  });
+
+  test("keeps top-level reusable prompts when legacy chat prompts also exist", () => {
+    const config = parsePersistedGlobalConfig({
+      version: 4,
+      reusablePrompts: [{ id: "current", name: "Current", content: "Current prompt" }],
+      chat: {
+        customPrompts: [{ id: "old", name: "Old", content: "Old prompt" }],
+      },
+    });
+
+    expect(config.reusablePrompts).toEqual([
+      { id: "current", name: "Current", content: "Current prompt", description: "" },
+    ]);
+    expect(config.chat).not.toHaveProperty("customPrompts");
+  });
+
+  test("keeps supported legacy fields out of strict persisted validation", () => {
+    const config = parsePersistedGlobalConfig({
+      version: 4,
+      trustedHooks: true,
+      trustedHooksFingerprint: "old",
+      workspaces: {
+        repo: {
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
+          defaultRuntimeKind: "opencode",
+          trustedHooks: true,
+          trustedHooksFingerprint: "old",
+        },
+      },
+    });
+
+    expect(config).not.toHaveProperty("trustedHooks");
+    expect(config).not.toHaveProperty("trustedHooksFingerprint");
+    expect(config.workspaces.repo).not.toHaveProperty("defaultRuntimeKind");
+    expect(config.workspaces.repo).not.toHaveProperty("trustedHooks");
+    expect(config.workspaces.repo).not.toHaveProperty("trustedHooksFingerprint");
+  });
+
+  const unknownNestedSettings: Array<[Record<string, JSONType>, string]> = [
+    [{ git: { extra: true } }, "git.extra"],
+    [
+      { reusablePrompts: [{ id: "review", name: "review", content: "Review this", extra: true }] },
+      "reusablePrompts.0.extra",
+    ],
+    [
+      {
+        autopilot: {
+          rules: [{ eventId: "taskProgressedToSpecReady", actionIds: [], extra: true }],
+        },
+      },
+      "autopilot.rules.0.extra",
+    ],
+    [
+      {
+        workspaces: {
+          repo: {
+            workspaceId: "repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+            defaultTargetBranch: { branch: "main", extra: true },
+          },
+        },
+      },
+      "workspaces.repo.defaultTargetBranch.extra",
+    ],
+    [
+      {
+        globalPromptOverrides: {
+          "system.shared.workflow_guards": { template: "text", baseVersion: 1, extra: true },
+        },
+      },
+      "globalPromptOverrides.system.shared.workflow_guards.extra",
+    ],
+    [
+      {
+        workspaces: {
+          repo: {
+            workspaceId: "repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+            agentStudioState: { openTaskIds: [], extra: true },
+          },
+        },
+      },
+      "workspaces.repo.agentStudioState.extra",
+    ],
+    [
+      {
+        workspaces: {
+          repo: {
+            workspaceId: "repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+            hooks: { preStart: [], postComplete: [], extra: true },
+          },
+        },
+      },
+      "workspaces.repo.hooks.extra",
+    ],
+    [
+      {
+        workspaces: {
+          repo: {
+            workspaceId: "repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+            devServers: [{ id: "web", name: "Web", command: "bun dev", extra: true }],
+          },
+        },
+      },
+      "workspaces.repo.devServers.0.extra",
+    ],
+    [
+      {
+        workspaces: {
+          repo: {
+            workspaceId: "repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+            defaultModel: {
+              runtimeKind: "opencode",
+              providerId: "openai",
+              modelId: "gpt-5",
+              extra: true,
+            },
+          },
+        },
+      },
+      "workspaces.repo.defaultModel.extra",
+    ],
+    [
+      {
+        workspaces: {
+          repo: {
+            workspaceId: "repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+            git: {
+              provider: {
+                id: "github",
+                repository: { host: "github.com", owner: "duck", name: "app", extra: true },
+              },
+            },
+          },
+        },
+      },
+      "workspaces.repo.git.provider.repository.extra",
+    ],
+  ];
+  test.each(unknownNestedSettings)("rejects an unknown nested setting at %s", (fields, path) => {
+    expect(() => parsePersistedGlobalConfig({ version: 4, ...fields })).toThrow(
+      `${path}: Unknown setting.`,
+    );
+  });
+
+  test.each([2, 3] as const)(
+    "rejects an unknown target branch setting in version %i",
+    (version) => {
+      const parse = version === 2 ? parsePersistedGlobalConfigV2 : parsePersistedGlobalConfigV3;
+      expect(() =>
+        parse({
+          version,
+          workspaces: {
+            repo: {
+              workspaceId: "repo",
+              workspaceName: "Repo",
+              repoPath: "/repo",
+              defaultTargetBranch: { branch: "main", extra: true },
+            },
+          },
+        }),
+      ).toThrow("workspaces.repo.defaultTargetBranch.extra: Unknown setting.");
+    },
+  );
 
   test("migrates one legacy repository Git provider without losing values", () => {
     const config = parsePersistedGlobalConfig({

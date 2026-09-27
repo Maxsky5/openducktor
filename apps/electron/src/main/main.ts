@@ -14,7 +14,9 @@ import {
 } from "@openducktor/contracts";
 import { OPEN_DUCKTOR_STARTUP_BACKGROUND } from "@openducktor/frontend/startup-splash/theme";
 import {
+  checkStartupSettingsEffect,
   createHostEventBus,
+  findInvalidSettingsFileError,
   type EffectHostCommandRouter,
   type EffectNodeHostCommandRouter,
   type HostRuntimeDistribution,
@@ -81,6 +83,7 @@ import {
 } from "./electron-main-lifecycle";
 import { createElectronMainLogger, initializeElectronMainLogger } from "./electron-main-logger";
 import { createElectronMainRuntimeBindings } from "./electron-main-runtime-bindings";
+import { renderInvalidSettingsErrorHtml } from "./electron-settings-error-window";
 import { resolveElectronRuntimeDistribution } from "./electron-runtime-distribution";
 import { createElectronNotificationRuntime } from "./electron-notification-runtime";
 import {
@@ -318,6 +321,16 @@ const prepareElectronPreReadyRuntimeEffect = (): Effect.Effect<
     if (developmentInstanceClaim === "duplicate") {
       return process.exit(0);
     }
+    yield* checkStartupSettingsEffect(app.isPackaged ? "production" : "dev", process.env).pipe(
+      Effect.mapError(
+        (cause) =>
+          new ElectronLifecycleError({
+            operation: "electron.main.check-settings",
+            message: errorMessage(cause),
+            cause,
+          }),
+      ),
+    );
     yield* Effect.try({
       try: () => disableElectronKeychainStorage(app.commandLine),
       catch: (cause) =>
@@ -988,16 +1001,50 @@ const startupEffect = composeElectronMainStartupEffect({
   waitUntilReady: waitForElectronReadyEffect,
 });
 
+let startupFailureWindow: ElectronBrowserWindow | null = null;
+const showInvalidSettingsError = async (message: string): Promise<void> => {
+  if (startupFailureWindow !== null) {
+    startupFailureWindow.focus();
+    return;
+  }
+  await app.whenReady();
+  const window = new BrowserWindow({
+    width: 760,
+    height: 520,
+    minWidth: 560,
+    minHeight: 360,
+    title: "OpenDucktor settings error",
+    autoHideMenuBar: true,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  startupFailureWindow = window;
+  window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  window.webContents.on("will-navigate", (event) => event.preventDefault());
+  window.on("closed", () => {
+    startupFailureWindow = null;
+    app.exit(1);
+  });
+  await window.loadURL(
+    `data:text/html;charset=UTF-8,${encodeURIComponent(renderInvalidSettingsErrorHtml(message))}`,
+  );
+};
+
 runElectronMainTask(() =>
   runElectronMainStartupBoundary({
     cleanupAfterFailure: () => disposeActiveElectronRuntimeEffect("startup-failure"),
     exitProcess: (exitCode) => {
       process.exit(exitCode);
     },
+    invalidSettingsMessage: (cause) => findInvalidSettingsFileError(cause)?.message ?? null,
     logger: electronLifecycleLogger,
     markShutdownComplete: shutdownController.markHostShutdownComplete,
     markShutdownStarted: shutdownController.markHostShutdownStarted,
     reportFailure: reportElectronMainFailure,
+    ...(app.isPackaged && { showInvalidSettingsError }),
     startupEffect,
   }),
 );

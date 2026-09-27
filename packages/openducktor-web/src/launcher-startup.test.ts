@@ -42,6 +42,61 @@ test.each(["", " \t\n "])(
   },
 );
 
+test.each([false, true])(
+  "rejects invalid settings before starting services in workspace mode %s",
+  async (workspaceMode) => {
+    const configDir = await mkdtemp(path.join(os.tmpdir(), "odt-launcher-settings-"));
+    const previousConfigDir = process.env.OPENDUCKTOR_CONFIG_DIR;
+    const startHost = spyOn(backend, "startTypescriptHostBackendEffect");
+    const serve = spyOn(nodeServer, "startNodeFetchServer");
+    const messages: string[] = [];
+    try {
+      const configPath = path.join(configDir, "config.json");
+      const payload = JSON.stringify({ version: 4, theme: "blue" });
+      await writeFile(configPath, payload);
+      process.env.OPENDUCKTOR_CONFIG_DIR = configDir;
+      const options = workspaceMode
+        ? {
+            packageRoot: "/missing-web-package",
+            workspaceMode: true as const,
+            workspaceRoot: "/missing-workspace",
+            developmentInstanceId: "browser-test",
+            frontendPort: 0,
+            backendPort: 0,
+          }
+        : {
+            packageRoot: "/missing-web-package",
+            workspaceMode: false as const,
+            frontendPort: 0,
+            backendPort: 0,
+          };
+
+      await expect(
+        runWebBoundary(
+          runLauncherEffect(options, {
+            error: () => Effect.void,
+            info: (message) => Effect.sync(() => messages.push(message)),
+            success: (message) => Effect.sync(() => messages.push(message)),
+          }),
+        ),
+      ).rejects.toMatchObject({
+        operation: "web.launcher.check-settings",
+        message: expect.stringContaining(`Invalid config file ${configPath}:`),
+      });
+      expect(startHost).not.toHaveBeenCalled();
+      expect(serve).not.toHaveBeenCalled();
+      expect(messages).not.toContain("OpenDucktor web is ready:");
+      expect(await Bun.file(configPath).text()).toBe(payload);
+    } finally {
+      if (previousConfigDir === undefined) delete process.env.OPENDUCKTOR_CONFIG_DIR;
+      else process.env.OPENDUCKTOR_CONFIG_DIR = previousConfigDir;
+      startHost.mockRestore();
+      serve.mockRestore();
+      await rm(configDir, { recursive: true, force: true });
+    }
+  },
+);
+
 test.each(["/session", "/health", "/invoke", "/task-events/subscriptions", "/task-assets/w/t"])(
   "rejects conflicting base path %s before discovery or binds",
   async (basePath) => {

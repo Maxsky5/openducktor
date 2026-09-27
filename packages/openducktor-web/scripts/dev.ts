@@ -187,8 +187,8 @@ export const runWebDevEffect = (
       startWebCliEffect(args),
       (webCli) =>
         Effect.gen(function* () {
-          let resolveExit: (exitCode: number) => void = () => {};
-          let rejectExit: (cause: unknown) => void = () => {};
+          let resolveExit!: (exitCode: number) => void;
+          let rejectExit!: (cause: unknown) => void;
           const exited = new Promise<number>((resolve, reject) => {
             resolveExit = resolve;
             rejectExit = reject;
@@ -213,7 +213,7 @@ export const runWebDevEffect = (
             (exitCode) => {
               webCliExited = true;
               if (!shutdownStarted) {
-                void shutdown(exitCode);
+                resolveExit(exitCode);
               }
             },
             (cause: unknown) => {

@@ -1,14 +1,24 @@
 import { z } from "zod";
+import { azureDevOpsRepositorySchema } from "./azure-devops-schemas";
 import { systemOpenInToolIdSchema } from "./system-open-schemas";
 import { runtimeKindSchema } from "./agent-runtime-schemas";
 import { type AgentRole, agentRoleSchema } from "./agent-workflow-schemas";
-import { gitTargetBranchSchema, globalGitConfigSchema, repoGitConfigSchema } from "./git-schemas";
+import {
+  gitProviderConfigSchema,
+  gitTargetBranchSchema,
+  githubGitProviderRepositorySchema,
+  globalGitConfigSchema,
+  repoGitConfigSchema,
+} from "./git-schemas";
 import {
   createDefaultNotificationSettings,
   notificationSettingsSchema,
 } from "./notification-schemas";
-import { repoPromptOverridesSchema } from "./prompt-schemas";
-import { workspaceAgentStudioStateSchema } from "./workspace-agent-studio-state-schemas";
+import { agentPromptOverrideSchema, repoPromptOverridesSchema } from "./prompt-schemas";
+import {
+  workspaceAgentStudioActiveTaskSchema,
+  workspaceAgentStudioStateSchema,
+} from "./workspace-agent-studio-state-schemas";
 import {
   workspaceAbbreviationSchema,
   workspaceTileColorSchema,
@@ -296,46 +306,51 @@ export const reusablePromptSchema = z.object({
 });
 export type ReusablePrompt = z.infer<typeof reusablePromptSchema>;
 
+const checkReusablePrompts = (
+  prompts: ReusablePrompt[],
+  context: z.core.$RefinementCtx<ReusablePrompt[]>,
+): void => {
+  const seenIds = new Map<string, number>();
+  const seenNames = new Map<string, number>();
+  for (const [index, prompt] of prompts.entries()) {
+    const firstIdIndex = seenIds.get(prompt.id);
+    if (firstIdIndex !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate reusable prompt id: ${prompt.id}`,
+        path: [index, "id"],
+      });
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate reusable prompt id: ${prompt.id}`,
+        path: [firstIdIndex, "id"],
+      });
+    } else {
+      seenIds.set(prompt.id, index);
+    }
+
+    const name = prompt.name.toLowerCase();
+    const firstIndex = seenNames.get(name);
+    if (firstIndex !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate reusable prompt name: ${prompt.name}`,
+        path: [index, "name"],
+      });
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate reusable prompt name: ${prompt.name}`,
+        path: [firstIndex, "name"],
+      });
+    } else {
+      seenNames.set(name, index);
+    }
+  }
+};
+
 export const reusablePromptsSchema = z
   .array(reusablePromptSchema)
-  .superRefine((prompts, context) => {
-    const seenIds = new Map<string, number>();
-    const seenNames = new Map<string, number>();
-    for (const [index, prompt] of prompts.entries()) {
-      const firstIdIndex = seenIds.get(prompt.id);
-      if (firstIdIndex !== undefined) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `Duplicate reusable prompt id: ${prompt.id}`,
-          path: [index, "id"],
-        });
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `Duplicate reusable prompt id: ${prompt.id}`,
-          path: [firstIdIndex, "id"],
-        });
-      } else {
-        seenIds.set(prompt.id, index);
-      }
-
-      const normalizedName = prompt.name.toLowerCase();
-      const firstIndex = seenNames.get(normalizedName);
-      if (firstIndex !== undefined) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `Duplicate reusable prompt name: ${prompt.name}`,
-          path: [index, "name"],
-        });
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `Duplicate reusable prompt name: ${prompt.name}`,
-          path: [firstIndex, "name"],
-        });
-      } else {
-        seenNames.set(normalizedName, index);
-      }
-    }
-  })
+  .superRefine(checkReusablePrompts)
   .default([]);
 
 const dedupeValues = <T>(values: readonly T[]) => [...new Set(values)];
@@ -382,6 +397,30 @@ export const repoAgentDefaultsSchema = z.object({
 });
 export type RepoAgentDefaults = z.infer<typeof repoAgentDefaultsSchema>;
 
+const persistedAgentModelDefaultSchema = agentModelDefaultSchema.strict();
+const persistedRepoAgentDefaultsSchema = repoAgentDefaultsSchema
+  .safeExtend({
+    spec: nullableToOptional(persistedAgentModelDefaultSchema),
+    planner: nullableToOptional(persistedAgentModelDefaultSchema),
+    build: nullableToOptional(persistedAgentModelDefaultSchema),
+    qa: nullableToOptional(persistedAgentModelDefaultSchema),
+  })
+  .strict();
+
+const persistedPromptOverridesSchema = z
+  .record(z.string(), agentPromptOverrideSchema.strict())
+  .pipe(repoPromptOverridesSchema.removeDefault());
+
+const persistedGitProviderSchema = gitProviderConfigSchema.safeExtend({
+  repository: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    z.union([azureDevOpsRepositorySchema, githubGitProviderRepositorySchema.strict()]).optional(),
+  ),
+});
+const persistedRepoGitConfigSchema = repoGitConfigSchema.safeExtend({
+  provider: persistedGitProviderSchema.optional(),
+});
+
 export const workspaceIdSchema = z
   .string()
   .trim()
@@ -393,6 +432,8 @@ export const workspaceIdSchema = z
 
 export const workspaceNameSchema = trimmedRequiredString("Workspace name");
 
+const DEFAULT_REPO_TARGET_BRANCH = { remote: "origin", branch: "main" };
+
 export const repoConfigSchema = z.object({
   workspaceId: workspaceIdSchema,
   workspaceName: workspaceNameSchema,
@@ -402,10 +443,7 @@ export const repoConfigSchema = z.object({
   defaultModel: nullableToOptional(agentModelDefaultSchema),
   worktreeBasePath: nullableToOptional(z.string().min(1)),
   branchPrefix: z.string().min(1).default(DEFAULT_BRANCH_PREFIX),
-  defaultTargetBranch: gitTargetBranchSchema.default({
-    remote: "origin",
-    branch: "main",
-  }),
+  defaultTargetBranch: gitTargetBranchSchema.default(DEFAULT_REPO_TARGET_BRANCH),
   git: repoGitConfigSchema.default({}),
   hooks: repoHooksSchema.default({ preStart: [], postComplete: [] }),
   devServers: z
@@ -437,6 +475,32 @@ export const repoConfigSchema = z.object({
   removal: workspaceRemovalRecordSchema.optional(),
 });
 export type RepoConfig = z.infer<typeof repoConfigSchema>;
+
+const persistedRepoConfigSchema = repoConfigSchema
+  .safeExtend({
+    defaultModel: nullableToOptional(persistedAgentModelDefaultSchema),
+    defaultTargetBranch: gitTargetBranchSchema.strict().default(DEFAULT_REPO_TARGET_BRANCH),
+    git: persistedRepoGitConfigSchema.default({}),
+    hooks: repoHooksSchema.strict().default({ preStart: [], postComplete: [] }),
+    devServers: z
+      .array(repoDevServerScriptSchema.strict())
+      .pipe(repoConfigSchema.shape.devServers.removeDefault())
+      .default([]),
+    promptOverrides: persistedPromptOverridesSchema.default({}),
+    agentDefaults: persistedRepoAgentDefaultsSchema.default({
+      spec: undefined,
+      planner: undefined,
+      build: undefined,
+      qa: undefined,
+    }),
+    agentStudioState: workspaceAgentStudioStateSchema
+      .removeDefault()
+      .safeExtend({ activeTask: workspaceAgentStudioActiveTaskSchema.strict().optional() })
+      .strict()
+      .default({ openTaskIds: [] }),
+    removal: workspaceRemovalRecordSchema.strict().optional(),
+  })
+  .strict();
 
 export const settingsRepoConfigSchema = repoConfigSchema.omit({
   agentStudioState: true,
@@ -577,13 +641,20 @@ const normalizeAutopilotSettings = (value: {
   };
 };
 
-export const autopilotSettingsSchema = z
-  .object({
-    alwaysStartQaReviewsFresh: z.boolean().default(false),
-    rules: z.array(autopilotRuleSchema).default([]),
-  })
-  .transform(normalizeAutopilotSettings);
+const autopilotSettingsInputSchema = z.object({
+  alwaysStartQaReviewsFresh: z.boolean().default(false),
+  rules: z.array(autopilotRuleSchema).default([]),
+});
+
+export const autopilotSettingsSchema = autopilotSettingsInputSchema.transform(
+  normalizeAutopilotSettings,
+);
 export type AutopilotSettings = z.infer<typeof autopilotSettingsSchema>;
+
+const persistedAutopilotSettingsSchema = autopilotSettingsInputSchema
+  .safeExtend({ rules: z.array(autopilotRuleSchema.strict()).default([]) })
+  .strict()
+  .transform(normalizeAutopilotSettings);
 
 export const createDefaultAutopilotSettings = (): AutopilotSettings =>
   normalizeAutopilotSettings({ alwaysStartQaReviewsFresh: false, rules: [] });
@@ -701,16 +772,38 @@ const globalConfigSharedFields = {
   recentWorkspaces: z.array(workspaceIdSchema).default([]),
 };
 
-export const persistedGlobalConfigV2Schema = z.object({
-  version: z.literal(2),
+const persistedGlobalConfigFields = {
   ...globalConfigSharedFields,
+  system: systemSettingsSchema.strict().default({}),
+  git: globalGitConfigSchema.strict().default({ defaultMergeMethod: "merge_commit" }),
+  general: generalSettingsSchema.strict().default(DEFAULT_GENERAL_SETTINGS),
+  appearance: appearanceSettingsSchema.strict().default(DEFAULT_APPEARANCE_SETTINGS),
+  chat: chatSettingsSchema.strict().default(DEFAULT_CHAT_SETTINGS),
+  reusablePrompts: z
+    .array(reusablePromptSchema.strict())
+    .superRefine(checkReusablePrompts)
+    .default(() => [...DEFAULT_REUSABLE_PROMPTS]),
+  kanban: kanbanSettingsSchema.strict().default(DEFAULT_KANBAN_SETTINGS),
+  autopilot: persistedAutopilotSettingsSchema.default(() => createDefaultAutopilotSettings()),
+  globalPromptOverrides: persistedPromptOverridesSchema.default({}),
+};
+
+const persistedWorkspacesSchema = z
+  .record(workspaceIdSchema, persistedRepoConfigSchema)
+  .default({});
+
+export const persistedGlobalConfigV2Schema = z.strictObject({
+  version: z.literal(2),
+  ...persistedGlobalConfigFields,
+  workspaces: persistedWorkspacesSchema,
   agentRuntimes: persistedAgentRuntimesV2Schema,
 });
 export type PersistedGlobalConfigV2 = z.infer<typeof persistedGlobalConfigV2Schema>;
 
-export const persistedGlobalConfigV3Schema = z.object({
+export const persistedGlobalConfigV3Schema = z.strictObject({
   version: z.literal(3),
-  ...globalConfigSharedFields,
+  ...persistedGlobalConfigFields,
+  workspaces: persistedWorkspacesSchema,
   agentRuntimes: agentRuntimesSchema,
 });
 export type PersistedGlobalConfigV3 = z.infer<typeof persistedGlobalConfigV3Schema>;
@@ -720,6 +813,9 @@ export const globalConfigSchema = z.object({
   ...globalConfigSharedFields,
   agentRuntimes: agentRuntimesSchema,
 });
+export const persistedGlobalConfigV4Schema = globalConfigSchema
+  .safeExtend({ ...persistedGlobalConfigFields, workspaces: persistedWorkspacesSchema })
+  .strict();
 type ParsedGlobalConfig = z.infer<typeof globalConfigSchema>;
 export type GlobalConfig = ParsedGlobalConfig;
 

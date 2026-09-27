@@ -5,6 +5,7 @@ import {
   persistedGlobalConfigV2Schema,
   type PersistedGlobalConfigV3,
   persistedGlobalConfigV3Schema,
+  persistedGlobalConfigV4Schema,
 } from "@openducktor/contracts";
 import { z, type JSONType } from "zod";
 import { HostValidationError } from "../effect/host-errors";
@@ -22,14 +23,15 @@ export const createDefaultGlobalConfig = (): LoadedGlobalConfig =>
 
 const migrateReusablePrompts = (payload: PersistedConfigObject) => {
   const chat = payload.chat;
-  const customPrompts = chat && isPersistedConfigObject(chat) ? chat.customPrompts : undefined;
-  if (payload.reusablePrompts !== undefined || !Array.isArray(customPrompts)) {
+  if (!isPersistedConfigObject(chat) || !Array.isArray(chat.customPrompts)) {
     return payload;
   }
 
+  const { customPrompts, ...currentChat } = chat;
   return {
     ...payload,
-    reusablePrompts: customPrompts,
+    chat: currentChat,
+    ...(payload.reusablePrompts === undefined && { reusablePrompts: customPrompts }),
   };
 };
 
@@ -107,8 +109,26 @@ const migrateRepositoryGitConfigs = (payload: PersistedConfigObject) => {
   };
 };
 
-const migratePersistedConfig = (payload: PersistedConfigObject) =>
-  migrateRepositoryGitConfigs(migrateReusablePrompts(payload));
+const migratePersistedConfig = (payload: PersistedConfigObject) => {
+  const migrated = { ...payload };
+  delete migrated.trustedHooks;
+  delete migrated.trustedHooksFingerprint;
+  if (isPersistedConfigObject(migrated.workspaces)) {
+    migrated.workspaces = Object.fromEntries(
+      Object.entries(migrated.workspaces).map(([id, workspace]) => {
+        if (!isPersistedConfigObject(workspace)) {
+          return [id, workspace];
+        }
+        const currentWorkspace = { ...workspace };
+        delete currentWorkspace.defaultRuntimeKind;
+        delete currentWorkspace.trustedHooks;
+        delete currentWorkspace.trustedHooksFingerprint;
+        return [id, currentWorkspace];
+      }),
+    );
+  }
+  return migrateRepositoryGitConfigs(migrateReusablePrompts(migrated));
+};
 
 const parseSupportedConfigObject = (
   payload: JSONType,
@@ -148,7 +168,7 @@ const parsePersistedConfig = <Output>(
 };
 
 export const parsePersistedGlobalConfig = (payload: JSONType): LoadedGlobalConfig =>
-  parsePersistedConfig(payload, 4, globalConfigSchema);
+  parsePersistedConfig(payload, 4, persistedGlobalConfigV4Schema);
 
 export const parsePersistedGlobalConfigV3 = (payload: JSONType): PersistedGlobalConfigV3 =>
   parsePersistedConfig(payload, 3, persistedGlobalConfigV3Schema);

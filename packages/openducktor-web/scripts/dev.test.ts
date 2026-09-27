@@ -1,9 +1,10 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import {
   buildWebDevCommand,
   buildWebDevProcessEnvironment,
   keepWebDevProcessAliveDuring,
   resolveWebCliStopSignal,
+  runWebDev,
   shouldDetachWebProcessGroup,
 } from "./dev";
 
@@ -62,6 +63,25 @@ describe("web dev script", () => {
     finishOperation();
     await keepAlivePromise;
     expect(intervalCancelled).toBe(true);
+  });
+
+  test("returns an exited child status without signaling it", async () => {
+    let killCalls = 0;
+    const sigintListeners = process.listenerCount("SIGINT");
+    // SAFETY: runWebDev uses only the exited promise and kill method of this child process.
+    const spawn = spyOn(Bun, "spawn").mockReturnValue({
+      exited: Promise.resolve(7),
+      kill: () => {
+        killCalls += 1;
+      },
+    } as never);
+    try {
+      expect(await runWebDev()).toBe(7);
+      expect(killCalls).toBe(0);
+      expect(process.listenerCount("SIGINT")).toBe(sigintListeners);
+    } finally {
+      spawn.mockRestore();
+    }
   });
 
   test("uses persistent signal handlers so duplicate wrapper signals do not terminate by default", () => {
