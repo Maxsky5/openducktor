@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { resolveHostReleaseArch, resolveHostReleasePlatform } from "./electron-release-targets";
 import { electronSidecarExecutableName } from "./electron-sidecar-manifest";
 import {
   prepareElectronSidecars,
@@ -12,6 +13,9 @@ type PrepareElectronSidecarsHooks = Pick<
   Parameters<typeof prepareElectronSidecars>[0],
   "chmodFile" | "compileMcp"
 >;
+
+const hostPlatform = resolveHostReleasePlatform(process.platform);
+const hostArch = resolveHostReleaseArch(process.arch);
 
 const makeTempWorkspace = async (): Promise<{
   electronPackageDirectory: string;
@@ -50,11 +54,21 @@ describe("prepareElectronSidecars", () => {
 
     expect(
       resolveElectronSidecarBuildPlan({
+        arch: "arm64",
         electronPackageDirectory,
         platform: "macos",
         workspaceRoot,
       }),
     ).toEqual({
+      compileCommand: [
+        "bun",
+        "build",
+        "--compile",
+        "--target=bun-darwin-arm64",
+        "--outfile",
+        join(electronPackageDirectory, "build", "sidecars", "openducktor-mcp"),
+        join(workspaceRoot, "packages", "openducktor-mcp", "src", "index.ts"),
+      ],
       entrypoint: join(workspaceRoot, "packages", "openducktor-mcp", "src", "index.ts"),
       outputDirectory: join(electronPackageDirectory, "build", "sidecars"),
       outputPaths: {
@@ -64,7 +78,26 @@ describe("prepareElectronSidecars", () => {
     });
   });
 
-  test("cleans, compiles, and marks Linux MCP sidecar executable", async () => {
+  test.each([
+    ["linux", "arm64", "bun-linux-arm64"],
+    ["linux", "x64", "bun-linux-x64"],
+    ["macos", "arm64", "bun-darwin-arm64"],
+    ["macos", "x64", "bun-darwin-x64"],
+    ["windows", "arm64", "bun-windows-arm64"],
+    ["windows", "x64", "bun-windows-x64"],
+  ] as const)("passes %s %s to the Bun compile command", (platform, arch, target) => {
+    const plan = resolveElectronSidecarBuildPlan({
+      arch,
+      electronPackageDirectory: "/electron",
+      platform,
+      workspaceRoot: "/workspace",
+    });
+    expect(plan.compileCommand).toContain(`--target=${target}`);
+    expect(plan.compileCommand.at(-1)).toBe(plan.entrypoint);
+    expect(plan.compileCommand.at(-2)).toBe(plan.outputPaths["openducktor-mcp"]);
+  });
+
+  test("cleans and compiles the MCP sidecar for the host", async () => {
     const { electronPackageDirectory, workspaceRoot } = await makeTempWorkspace();
     const staleOutput = join(electronPackageDirectory, "build", "sidecars", "stale");
     const chmodCalls: Array<{ mode: number; path: string }> = [];
@@ -72,11 +105,14 @@ describe("prepareElectronSidecars", () => {
     await writeFile(staleOutput, "stale");
 
     const prepared = await prepareElectronSidecars({
-      arch: "x64",
+      arch: hostArch,
       electronPackageDirectory,
-      platform: "linux",
+      platform: hostPlatform,
       workspaceRoot,
-      compileMcp: async ({ outputPaths }) => {
+      compileMcp: async ({ compileCommand, outputPaths }) => {
+        expect(compileCommand).toContain(
+          `--target=bun-${hostPlatform === "macos" ? "darwin" : hostPlatform}-${hostArch}`,
+        );
         await writeFile(outputPaths["openducktor-mcp"], "#!/bin/sh\nexit 0\n");
       },
       chmodFile: async (path, mode) => {
@@ -90,12 +126,11 @@ describe("prepareElectronSidecars", () => {
     await expect(stat(prepared.plan.outputPaths["openducktor-mcp"])).resolves.toMatchObject({
       size: 17,
     });
-    expect(chmodCalls).toEqual([
-      {
-        mode: 0o755,
-        path: prepared.plan.outputPaths["openducktor-mcp"],
-      },
-    ]);
+    expect(chmodCalls).toEqual(
+      hostPlatform === "windows"
+        ? []
+        : [{ mode: 0o755, path: prepared.plan.outputPaths["openducktor-mcp"] }],
+    );
   }, 5_000);
 
   test("rejects a missing MCP entrypoint before mutating sidecar output", async () => {
@@ -108,9 +143,9 @@ describe("prepareElectronSidecars", () => {
     await rm(mcpEntrypoint);
 
     const error = await prepareElectronSidecars({
-      arch: "x64",
+      arch: hostArch,
       electronPackageDirectory,
-      platform: "linux",
+      platform: hostPlatform,
       workspaceRoot,
       ...makeSideEffectingHooks(sideEffects),
     }).catch((cause: unknown): Error =>
@@ -130,12 +165,34 @@ describe("prepareElectronSidecars", () => {
     await expect(stat(staleOutput)).resolves.toMatchObject({ size: 5 });
   });
 
-  test("does not chmod Windows MCP sidecar", async () => {
+  test("rejects a different host platform before cleaning sidecar output", async () => {
+    const { electronPackageDirectory, workspaceRoot } = await makeTempWorkspace();
+    const staleOutput = join(electronPackageDirectory, "build", "sidecars", "stale");
+    const sideEffects: string[] = [];
+    await mkdir(dirname(staleOutput), { recursive: true });
+    await writeFile(staleOutput, "stale");
+
+    const error = await prepareElectronSidecars({
+      arch: hostArch,
+      electronPackageDirectory,
+      platform: hostPlatform === "macos" ? "windows" : "macos",
+      workspaceRoot,
+      ...makeSideEffectingHooks(sideEffects),
+    }).catch((cause: unknown): Error =>
+      cause instanceof Error ? cause : new Error(String(cause), { cause }),
+    );
+
+    expect(error).toMatchObject({ operation: "electron.release-target.assert-matching-host" });
+    expect(sideEffects).toEqual([]);
+    await expect(stat(staleOutput)).resolves.toMatchObject({ size: 5 });
+  });
+
+  test.skipIf(process.platform !== "win32")("does not chmod Windows MCP sidecar", async () => {
     const { electronPackageDirectory, workspaceRoot } = await makeTempWorkspace();
     const chmodCalls: Array<{ mode: number; path: string }> = [];
 
     await prepareElectronSidecars({
-      arch: "x64",
+      arch: hostArch,
       electronPackageDirectory,
       platform: "windows",
       workspaceRoot,

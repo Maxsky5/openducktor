@@ -1,8 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import { resolveHostReleaseArch, resolveHostReleasePlatform } from "./electron-release-targets";
 import {
+  buildElectronPackage,
   collectReleaseArtifacts,
   isInstallableReleaseArtifact,
   isReleaseArtifact,
@@ -17,6 +19,36 @@ const caughtError = (cause: unknown): Error =>
   cause instanceof Error ? cause : new Error(String(cause), { cause });
 
 describe("build Electron release artifact", () => {
+  it("rejects a host mismatch before deleting release or sidecar output", async () => {
+    const electronPackageDirectory = await mkdtemp(join(tmpdir(), "openducktor-host-mismatch-"));
+    const releaseFile = join(electronPackageDirectory, "release", "keep");
+    const sidecarFile = join(electronPackageDirectory, "build", "sidecars", "keep");
+    await mkdir(join(electronPackageDirectory, "release"), { recursive: true });
+    await mkdir(join(electronPackageDirectory, "build", "sidecars"), { recursive: true });
+    await writeFile(releaseFile, "release");
+    await writeFile(sidecarFile, "sidecar");
+
+    try {
+      const hostArch = resolveHostReleaseArch(process.arch);
+      const error = await buildElectronPackage({
+        arch: hostArch === "x64" ? "arm64" : "x64",
+        electronPackageDirectory,
+        outputDirectory: undefined,
+        platform: resolveHostReleasePlatform(process.platform),
+        signed: false,
+        stageReleaseArtifacts: false,
+        workspaceRoot: electronPackageDirectory,
+      }).catch(caughtError);
+
+      expect(error).toMatchObject({ operation: "electron.release-target.assert-matching-host" });
+      if (!(error instanceof Error)) throw new TypeError("Expected a host mismatch error.");
+      expect(error.message).toContain("Build the package on a");
+      await expect(stat(releaseFile)).resolves.toMatchObject({ size: 7 });
+      await expect(stat(sidecarFile)).resolves.toMatchObject({ size: 7 });
+    } finally {
+      await rm(electronPackageDirectory, { force: true, recursive: true });
+    }
+  });
   it("builds signed macOS artifacts without disabling notarization", () => {
     expect(
       resolveElectronBuilderArgs({

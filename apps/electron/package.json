@@ -37,6 +37,7 @@
   },
   "devDependencies": {
     "@electron/osx-sign": "1.3.3",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@openducktor/build-tools": "workspace:*",
     "@openducktor/contracts": "workspace:*",
     "@openducktor/frontend": "workspace:*",

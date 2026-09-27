@@ -24,6 +24,7 @@ import {
   localElectronPackageTargets,
 } from "./electron-release-artifacts";
 import {
+  assertMatchingElectronReleaseHost,
   detectHostReleaseArch,
   detectHostReleasePlatform,
   type ElectronReleaseArch,
@@ -32,7 +33,10 @@ import {
 import { electronSidecarDisplayName } from "./electron-sidecar-manifest";
 import { prepareElectronSidecarsEffect } from "./prepare-electron-sidecars";
 import { verifyPackagedFffFileSearchEffect } from "./verify-electron-fff-package";
-import { verifyPackagedElectronSidecarsEffect } from "./verify-electron-sidecar-package";
+import {
+  verifyPackagedElectronSidecarsEffect,
+  verifyPackagedMcpInitializationEffect,
+} from "./verify-electron-sidecar-package";
 
 export { isInstallableReleaseArtifact, isReleaseArtifact, isUpdateMetadataArtifact };
 
@@ -352,6 +356,7 @@ export const buildElectronPackageEffect = ({
   ElectronOperationErrorAggregate | ElectronValidationErrorAggregate
 > =>
   Effect.gen(function* () {
+    yield* assertMatchingElectronReleaseHost({ arch, platform });
     const releaseDirectory = join(electronPackageDirectory, "release");
     const releaseMetadata = resolveElectronReleaseVersionMetadata(releaseVersion);
     const electronBuildEnv = releaseMetadata.releaseVersion
@@ -409,6 +414,11 @@ export const buildElectronPackageEffect = ({
       releaseDirectory,
     });
     for (const sidecar of verifiedSidecars) {
+      yield* verifyPackagedMcpInitializationEffect({
+        path: sidecar.path,
+        platform,
+        sidecarId: sidecar.id,
+      });
       console.log(
         `Verified packaged Electron ${electronSidecarDisplayName(sidecar.id)} sidecar payload: ${
           sidecar.path
