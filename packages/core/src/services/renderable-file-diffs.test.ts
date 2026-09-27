@@ -129,6 +129,25 @@ describe("renderable file diffs", () => {
     ).toBeNull();
   });
 
+  test("selects unprefixed Git-only patches by their full path", () => {
+    const mode = "diff --git file.bin file.bin\nold mode 100644\nnew mode 100755\n";
+    const binary = "diff --git other.bin other.bin\nBinary files differ\n";
+
+    expect(selectRenderableFileDiff(mode + binary, "file.bin")).toBe(mode);
+    expect(selectRenderableFileDiff(mode + binary, "other.bin")).toBe(binary);
+    expect(selectRenderableFileDiff(mode + binary, "missing.bin")).toBeNull();
+  });
+
+  test("keeps a literal a/ folder in an unprefixed Git-only patch", () => {
+    const diff = "diff --git a/file.bin a/file.bin\nold mode 100644\nnew mode 100755\n";
+    const quoted = 'diff --git "a/my file.bin" "a/my file.bin"\nBinary files differ\n';
+
+    expect(selectRenderableFileDiff(diff, "a/file.bin")).toBe(diff);
+    expect(selectRenderableFileDiff(diff, "file.bin")).toBeNull();
+    expect(selectRenderableFileDiff(quoted, "a/my file.bin")).toBe(quoted);
+    expect(selectRenderableFileDiff(quoted, "my file.bin")).toBeNull();
+  });
+
   test("uses rename metadata before an ambiguous Git-only header", () => {
     const rename =
       "diff --git a/foo b/bar b/foo b/bar\n" +
@@ -388,6 +407,18 @@ function AuthConsumer() {}
     expect(
       selectRenderableFileDiff("old\ncontent\n", "src/old.ts", { changeType: "deleted" }),
     ).toBe("--- a/src/old.ts\n+++ /dev/null\n@@ -1,2 +0,0 @@\n-old\n-content\n");
+  });
+
+  test("keeps header-looking lines in added and deleted full-file text", () => {
+    const added = "--- heading\nbody\n";
+    const deleted = "Index: entries\nbody\n";
+
+    expect(selectRenderableFileDiff(added, "src/new.md", { changeType: "added" })).toBe(
+      "--- /dev/null\n+++ b/src/new.md\n@@ -0,0 +1,2 @@\n+--- heading\n+body\n",
+    );
+    expect(selectRenderableFileDiff(deleted, "src/old.md", { changeType: "deleted" })).toBe(
+      "--- a/src/old.md\n+++ /dev/null\n@@ -1,2 +0,0 @@\n-Index: entries\n-body\n",
+    );
   });
 
   test("does not turn an unrelated explicit patch into an added-file diff", () => {

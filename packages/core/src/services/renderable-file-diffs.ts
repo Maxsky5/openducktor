@@ -22,6 +22,10 @@ export const selectRenderableFileDiff = (
   if (candidates.length === 0) {
     return null;
   }
+  const fullFileDiffMode = fullFileDiffModeFromChangeType(options.changeType);
+  if (fullFileDiffMode && !hasPatchMarkers(rawDiff)) {
+    return fullFileContentDiff(rawDiff, filePath, fullFileDiffMode);
+  }
 
   let matchingCandidate: string | null = null;
   let strongestMatch: DiffPathMatch | null = null;
@@ -54,11 +58,6 @@ export const selectRenderableFileDiff = (
     if (normalizedCandidate) {
       return normalizedCandidate;
     }
-  }
-
-  const fullFileDiffMode = fullFileDiffModeFromChangeType(options.changeType);
-  if (fullFileDiffMode && !hasFileHeader) {
-    return fullFileContentDiff(rawDiff, filePath, fullFileDiffMode);
   }
 
   return null;
@@ -230,6 +229,17 @@ const splitUnifiedFileDiffCandidates = (diff: string): string[] => {
   return candidates;
 };
 
+const hasPatchMarkers = (rawDiff: string): boolean => {
+  const diff = normalizeNewlines(rawDiff);
+  return (
+    GIT_DIFF_HEADER.test(diff) ||
+    UNIFIED_MULTI_FILE_HEADER.test(diff) ||
+    APPLY_PATCH_FILE_HEADER.test(diff) ||
+    /^@@/m.test(diff) ||
+    (CLASSIC_DIFF_HEADER.test(diff) && /^={3,}$/m.test(diff))
+  );
+};
+
 export const splitFileDiffCandidates = (rawDiff: string): string[] => {
   const diff = trimNewlines(normalizeNewlines(rawDiff));
   if (diff.trim().length === 0) {
@@ -386,7 +396,19 @@ const diffHeaderPaths = (line: string): string[] => {
     if (separator >= 0 && separator === paths.lastIndexOf(" b/")) {
       return [paths.slice(0, separator), paths.slice(separator + 1)];
     }
-    return [];
+    if (separator >= 0) {
+      return [];
+    }
+  }
+
+  if (line.startsWith("diff --git ")) {
+    const paths = line.slice("diff --git ".length);
+    const samePath = /^(.+) \1$/.exec(paths);
+    if (samePath) {
+      return [samePath[1] ?? "", samePath[1] ?? ""];
+    }
+    const twoPaths = /^(\S+) (\S+)$/.exec(paths);
+    return twoPaths ? [twoPaths[1] ?? "", twoPaths[2] ?? ""] : [];
   }
 
   for (const prefix of ["--- ", "+++ ", "Index: "]) {
@@ -400,10 +422,20 @@ const diffHeaderPaths = (line: string): string[] => {
   return applyPatchHeader ? [applyPatchHeader[1] ?? ""] : [];
 };
 
-const hasGitHeader = (lines: string[]): boolean => {
+const hasPrefixedGitHeader = (lines: string[]): boolean => {
   const hunkIndex = lines.findIndex((line) => line.startsWith("@@"));
   const headerLines = hunkIndex >= 0 ? lines.slice(0, hunkIndex) : lines;
-  return headerLines.some((line) => line.startsWith("diff --git "));
+  const header = headerLines.find((line) => line.startsWith("diff --git "));
+  if (!header) {
+    return false;
+  }
+  const [oldHeader, newHeader] = diffHeaderPaths(header);
+  const oldPath = decodeGitQuotedPath(oldHeader ?? "");
+  const newPath = decodeGitQuotedPath(newHeader ?? "");
+  return (
+    (oldPath?.startsWith("a/") && newPath?.startsWith("b/")) ||
+    (header.startsWith("diff --git a/") && header.includes(" b/"))
+  );
 };
 
 const standaloneGitPath = (lines: string[], changeType?: string | null): string | null => {
@@ -450,7 +482,7 @@ const fileDiffCandidateMatch = (
   changeType?: string | null,
 ): DiffPathMatch | null => {
   const lines = normalizeNewlines(candidate).split("\n");
-  const stripGitPrefix = hasGitHeader(lines);
+  const stripGitPrefix = hasPrefixedGitHeader(lines);
   let hasUnifiedHeader = false;
   let hasGitPathMetadata = false;
   let unifiedMatch: DiffPathMatch | null = null;
