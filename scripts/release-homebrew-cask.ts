@@ -151,7 +151,7 @@ export function resolveHomebrewMacosRequirement(minimumSystemVersion: string): s
     );
   }
 
-  return `>= :${symbol}`;
+  return `:${symbol}`;
 }
 
 export function readDesktopReleaseMetadata(workspaceRoot = process.cwd()) {
@@ -223,7 +223,7 @@ export function renderHomebrewCask(input: HomebrewCaskRenderInput): string {
     "    strategy :github_latest",
     "  end",
     "",
-    `  depends_on macos: "${rubyStringLiteral(minimumMacosRequirement)}"`,
+    `  depends_on macos: ${minimumMacosRequirement}`,
     "",
     `  app "${rubyStringLiteral(`${input.productName}.app`)}"`,
     "",

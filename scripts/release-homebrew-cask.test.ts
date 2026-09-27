@@ -60,7 +60,7 @@ test("resolveAssetPattern rejects asset names without the version token", () => 
 });
 
 test("resolveHomebrewMacosRequirement maps macOS 12 to monterey", () => {
-  expect(resolveHomebrewMacosRequirement("12.0")).toBe(">= :monterey");
+  expect(resolveHomebrewMacosRequirement("12.0")).toBe(":monterey");
 });
 
 test("resolveHomebrewMacosRequirement rejects unsupported future macOS symbols", () => {
@@ -88,7 +88,7 @@ test("renderHomebrewCask renders the expected OpenDucktor cask", () => {
   expect(contents).toContain(
     'url "https://github.com/Maxsky5/openducktor/releases/download/v#{version}/OpenDucktor-#{version}-macos-#{arch}.dmg"',
   );
-  expect(contents).toContain('depends_on macos: ">= :monterey"');
+  expect(contents).toContain("depends_on macos: :monterey");
   expect(contents).toContain('app "OpenDucktor.app"');
   expect(contents).toContain('"~/.openducktor"');
   expect(contents).toContain('"~/Library/Preferences/com.openducktor.app.plist"');
