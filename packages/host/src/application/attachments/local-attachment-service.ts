@@ -144,6 +144,15 @@ const isWithinDirectory = (
     relative === "" || (!relative.startsWith("..") && !localAttachmentPort.isAbsolutePath(relative))
   );
 };
+const isMissingAttachmentPath = (error: HostOperationErrorAggregate): boolean =>
+  hasNestedNodeErrorCode(error, "ENOENT") || hasNestedNodeErrorCode(error, "ENOTDIR");
+
+const attachmentUnavailableError = (): HostValidationError =>
+  new HostValidationError({
+    message: "Attachment is no longer available locally. Add it again to use it.",
+    field: "path",
+  });
+
 const completeIndexLoadFlight = (
   flight: StagedAttachmentIndexFlight,
   loadIndex: Effect.Effect<StagedAttachmentIndex, HostOperationErrorAggregate>,
@@ -322,25 +331,21 @@ export const createLocalAttachmentService = (
           const canonicalDirectory = yield* localAttachmentPort
             .canonicalizePath(attachmentDirectory)
             .pipe(
-              Effect.mapError(
-                (error) =>
-                  new HostOperationError({
-                    operation: "local_attachment.resolve_stage_directory",
-                    message: `Failed to resolve staged attachment directory: ${errorMessage(error)}`,
-                    cause: error,
-                  }),
-              ),
+              Effect.mapError((error) => {
+                if (isMissingAttachmentPath(error)) {
+                  return attachmentUnavailableError();
+                }
+                return new HostOperationError({
+                  operation: "local_attachment.resolve_stage_directory",
+                  message: `Failed to resolve staged attachment directory: ${errorMessage(error)}`,
+                  cause: error,
+                });
+              }),
             );
           const canonicalPath = yield* localAttachmentPort.canonicalizePath(trimmedPath).pipe(
             Effect.mapError((error) => {
-              if (
-                hasNestedNodeErrorCode(error, "ENOENT") ||
-                hasNestedNodeErrorCode(error, "ENOTDIR")
-              ) {
-                return new HostValidationError({
-                  message: "Attachment is no longer available locally. Add it again to use it.",
-                  field: "path",
-                });
+              if (isMissingAttachmentPath(error)) {
+                return attachmentUnavailableError();
               }
               return new HostOperationError({
                 operation: "local_attachment.resolve_path",

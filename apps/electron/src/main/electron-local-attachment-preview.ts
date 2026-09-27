@@ -79,7 +79,7 @@ export const resolveElectronLocalAttachmentPreview = async (
   } catch (cause) {
     if (
       cause instanceof ElectronValidationError &&
-      cause.operation === "electron.preview.resolve-host-path"
+      cause.operation === "electron.preview.resolve-staged-path"
     ) {
       return {
         ok: false,

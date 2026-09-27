@@ -12,6 +12,7 @@ type FakeFile = {
   modifiedTimeMs: number;
 };
 type FakeLocalAttachmentPortOptions = {
+  canonicalizeStageDirectoryError?: Error;
   includeStageDirectory?: boolean;
   readDirectoryDelay?: () => Promise<void>;
 };
@@ -67,6 +68,9 @@ const createFakeLocalAttachmentPort = (options: FakeLocalAttachmentPortOptions =
     canonicalizePath(path) {
       return Effect.tryPromise({
         try: async () => {
+          if (path === attachmentDirectory && options.canonicalizeStageDirectoryError) {
+            throw options.canonicalizeStageDirectoryError;
+          }
           if (!directories.has(path) && !files.has(path)) {
             throw Object.assign(new Error(`missing path fixture: ${path}`), { code: "ENOENT" });
           }
@@ -456,6 +460,35 @@ describe("createLocalAttachmentService", () => {
     ).rejects.toThrow("Attachment path is not a staged local attachment.");
     expect(calls.readDirectory).toBe(0);
     expect(calls.modifiedTimeMs).toBe(0);
+  });
+  test("reports a missing staging directory as an unavailable attachment", async () => {
+    const { port } = createFakeLocalAttachmentPort({ includeStageDirectory: false });
+    const service = createLocalAttachmentService(port);
+
+    const failure = await Effect.runPromise(
+      Effect.flip(service.resolve({ path: "/tmp/openducktor-local-attachments/old-brief.pdf" })),
+    );
+    expect(failure).toMatchObject({
+      _tag: "HostValidationError",
+      field: "path",
+      message: "Attachment is no longer available locally. Add it again to use it.",
+    });
+  });
+  test("keeps staging directory access failures as operation errors", async () => {
+    const { port } = createFakeLocalAttachmentPort({
+      canonicalizeStageDirectoryError: Object.assign(new Error("permission denied"), {
+        code: "EACCES",
+      }),
+    });
+    const service = createLocalAttachmentService(port);
+
+    const failure = await Effect.runPromise(
+      Effect.flip(service.resolve({ path: "/tmp/openducktor-local-attachments/brief.pdf" })),
+    );
+    expect(failure).toMatchObject({
+      _tag: "HostOperationError",
+      message: "Failed to resolve staged attachment directory: permission denied",
+    });
   });
   test("prunes stale indexed attachment entries before resolving relative tokens", async () => {
     const { calls, files, port } = createFakeLocalAttachmentPort();

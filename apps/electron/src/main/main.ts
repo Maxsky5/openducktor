@@ -589,7 +589,7 @@ const resolveLocalAttachmentPathForPreviewEffect = (
           }
           if (isTaggedHostValidationError(cause)) {
             return new ElectronValidationError({
-              operation: "electron.preview.resolve-host-path",
+              operation: "electron.preview.resolve-staged-path",
               message: cause.message,
               field: cause.field ?? "path",
               cause,

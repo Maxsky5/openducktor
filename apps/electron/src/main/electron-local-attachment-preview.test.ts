@@ -34,7 +34,7 @@ describe("electron local attachment previews", () => {
   test("returns an actionable IPC result when a staged attachment is unavailable", async () => {
     const result = await resolveElectronLocalAttachmentPreview(async () => {
       throw new ElectronValidationError({
-        operation: "electron.preview.resolve-host-path",
+        operation: "electron.preview.resolve-staged-path",
         message: "Attachment path is not a staged local attachment.",
         field: "path",
       });
@@ -43,6 +43,21 @@ describe("electron local attachment previews", () => {
     expect(result).toEqual({
       ok: false,
       message: "Attachment is no longer available locally. Add it again to use it.",
+    });
+  });
+
+  test("reports an invalid host response without calling the attachment missing", async () => {
+    const result = await resolveElectronLocalAttachmentPreview(async () => {
+      throw new ElectronValidationError({
+        operation: "electron.preview.resolve-host-path",
+        message: "Local attachment preview resolver returned an invalid response.",
+        field: "path",
+      });
+    }, "staged.png");
+
+    expect(result).toEqual({
+      ok: false,
+      message: "Local attachment preview resolver returned an invalid response.",
     });
   });
 
