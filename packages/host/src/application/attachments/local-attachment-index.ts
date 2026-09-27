@@ -1,3 +1,8 @@
+import {
+  LOCAL_ATTACHMENT_UNAVAILABLE_MESSAGE,
+  LOCAL_ATTACHMENT_UNAVAILABLE_REASON,
+  type LocalAttachmentUnavailableDetails,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   errorMessage,
@@ -30,11 +35,13 @@ export const readStagedAttachmentOriginalName = (entry: LocalAttachmentEntry): s
   return entry.fileName.slice(uuidPrefixMatch[0].length);
 };
 
-const createNoStagedAttachmentMatchError = (displayName: string): HostValidationError =>
-  new HostValidationError({
-    message: `No staged local attachment matches '${displayName}'.`,
-    field: "path",
-  });
+const createNoStagedAttachmentMatchError =
+  (): HostValidationError<LocalAttachmentUnavailableDetails> =>
+    new HostValidationError({
+      message: LOCAL_ATTACHMENT_UNAVAILABLE_MESSAGE,
+      field: "path",
+      details: { reason: LOCAL_ATTACHMENT_UNAVAILABLE_REASON },
+    });
 
 const compareNewestStagedAttachmentFirst = (
   left: IndexedStagedAttachment,
@@ -149,7 +156,6 @@ export const resolveIndexedStagedAttachment = (
   localAttachmentPort: LocalAttachmentPort,
   index: StagedAttachmentIndex,
   lookupToken: string,
-  displayName: string,
 ): Effect.Effect<
   IndexedStagedAttachment,
   HostOperationErrorAggregate | HostValidationErrorAggregate
@@ -157,7 +163,7 @@ export const resolveIndexedStagedAttachment = (
   Effect.gen(function* () {
     const matches = index.byLookupToken.get(lookupToken);
     if (!matches || matches.length === 0) {
-      return yield* Effect.fail(createNoStagedAttachmentMatchError(displayName));
+      return yield* Effect.fail(createNoStagedAttachmentMatchError());
     }
     // Stale entries are pruned while scanning, so iterate over a stable snapshot.
     // oxlint-disable-next-line unicorn/no-useless-spread -- pruning mutates matches during iteration
@@ -202,12 +208,12 @@ export const resolveIndexedStagedAttachment = (
     }
     const refreshedMatches = index.byLookupToken.get(lookupToken);
     if (!refreshedMatches || refreshedMatches.length === 0) {
-      return yield* Effect.fail(createNoStagedAttachmentMatchError(displayName));
+      return yield* Effect.fail(createNoStagedAttachmentMatchError());
     }
     refreshedMatches.sort(compareNewestStagedAttachmentFirst);
     const newestMatch = refreshedMatches[0];
     if (!newestMatch) {
-      return yield* Effect.fail(createNoStagedAttachmentMatchError(displayName));
+      return yield* Effect.fail(createNoStagedAttachmentMatchError());
     }
     return newestMatch;
   });

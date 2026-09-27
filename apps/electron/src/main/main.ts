@@ -65,11 +65,10 @@ import { forwardElectronHostEvent } from "./electron-host-event-forwarding";
 import { runElectronHostInvoke } from "./electron-host-invoke";
 import { registerElectronHostInvokeHandler } from "./electron-host-invoke-handler";
 import {
-  createElectronLocalAttachmentPreviewUrl,
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL,
-  readLocalAttachmentPreviewPath,
   readLocalAttachmentPreviewPathEffect,
   registerElectronLocalAttachmentPreviewProtocol,
+  resolveElectronLocalAttachmentPreview,
 } from "./electron-local-attachment-preview";
 import {
   configureElectronLoopbackCorsPolicy,
@@ -142,16 +141,14 @@ const electronMainLogger = await initializeElectronMainLogger({
 const electronMainRuntimeBindings = createElectronMainRuntimeBindings(electronMainLogger);
 const electronAppUpdateLogger = electronMainRuntimeBindings.appUpdateLogger;
 const electronLifecycleLogger = electronMainRuntimeBindings.lifecycleLogger;
-const reportElectronNonFatalDeliveryFailure = (message: string, cause: unknown): void => {
+const reportElectronNonFatalFailure = (message: string, cause: unknown): void => {
   void runElectronEffect(electronMainLogger.error(message, cause)).catch((cause: unknown) => {
-    process.stderr.write(
-      `OpenDucktor Electron non-fatal event delivery reporting failed: ${errorMessage(cause)}\n`,
-    );
+    process.stderr.write(`OpenDucktor Electron error reporting failed: ${errorMessage(cause)}\n`);
   });
 };
 const hostEventBus = createHostEventBus({
   report: ({ channel, cause }) =>
-    reportElectronNonFatalDeliveryFailure(
+    reportElectronNonFatalFailure(
       `OpenDucktor host event delivery failed for channel '${channel}'.`,
       cause,
     ),
@@ -272,7 +269,7 @@ const createElectronHostCommandRouter = (runtimeDistribution: HostRuntimeDistrib
     taskEventPublicationReporter: {
       report: (failure) =>
         Effect.sync(() =>
-          reportElectronNonFatalDeliveryFailure(
+          reportElectronNonFatalFailure(
             `OpenDucktor task event publication failed during '${failure.operation}' for '${failure.repoPath}'.`,
             failure.cause,
           ),
@@ -535,7 +532,7 @@ const registerHostEventForwarding = (): void => {
         BrowserWindow.getAllWindows(),
         envelope,
         ({ channel: failedChannel, cause }) =>
-          reportElectronNonFatalDeliveryFailure(
+          reportElectronNonFatalFailure(
             `OpenDucktor renderer event delivery failed for channel '${failedChannel}'.`,
             cause,
           ),
@@ -590,7 +587,7 @@ const resolveLocalAttachmentPathForPreviewEffect = (
           }
           if (isTaggedHostValidationError(cause)) {
             return new ElectronValidationError({
-              operation: "electron.preview.resolve-host-path",
+              operation: "electron.preview.resolve-staged-path",
               message: cause.message,
               field: cause.field ?? "path",
               cause,
@@ -705,7 +702,7 @@ const registerIpcHandlers = (
   registerElectronTaskStreamIpc({
     ipcMain,
     reportDeliveryFailure: ({ cause, subscriptionId }) =>
-      reportElectronNonFatalDeliveryFailure(
+      reportElectronNonFatalFailure(
         `OpenDucktor task stream delivery failed for subscription '${subscriptionId}'.`,
         cause,
       ),
@@ -734,13 +731,13 @@ const registerIpcHandlers = (
     await runElectronEffect(openExternalUrlEffect(url));
   });
 
-  ipcMain.handle(ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL, async (_event, filePath) => {
-    const resolvedPath = await resolveLocalAttachmentPathForPreview(
-      hostCommandRouter,
-      readLocalAttachmentPreviewPath(filePath),
-    );
-    return createElectronLocalAttachmentPreviewUrl(resolvedPath);
-  });
+  ipcMain.handle(ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL, (_event, filePath) =>
+    resolveElectronLocalAttachmentPreview(
+      (requestedPath) => resolveLocalAttachmentPathForPreview(hostCommandRouter, requestedPath),
+      filePath,
+      (cause) => reportElectronNonFatalFailure("OpenDucktor attachment preview failed.", cause),
+    ),
+  );
 
   ipcMain.handle(ELECTRON_APP_UPDATE_GET_STATE_CHANNEL, () =>
     readAppUpdateStateForIpc(appUpdateService.getState()),

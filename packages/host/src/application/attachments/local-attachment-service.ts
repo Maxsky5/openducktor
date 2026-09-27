@@ -1,10 +1,14 @@
 import {
   LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT,
   LOCAL_ATTACHMENT_BYTE_LIMIT,
+  LOCAL_ATTACHMENT_UNAVAILABLE_MESSAGE,
+  LOCAL_ATTACHMENT_UNAVAILABLE_REASON,
+  type LocalAttachmentUnavailableDetails,
 } from "@openducktor/contracts";
 import { Deferred, Effect, FiberId } from "effect";
 import {
   errorMessage,
+  hasNestedNodeErrorCode,
   HostOperationError,
   type HostOperationErrorAggregate,
   HostValidationError,
@@ -38,7 +42,6 @@ export type LocalAttachmentService = {
     input: LocalAttachmentResolveInput,
   ): Effect.Effect<ResolvedLocalAttachment, LocalAttachmentServiceError>;
 };
-const maxAttachmentLookupDisplayLength = 128;
 export type LocalAttachmentStageInput = {
   base64Data: string;
   name: string;
@@ -91,20 +94,6 @@ const sanitizeAttachmentLookupToken = (pathOrName: string): string => {
   }
   return trimmed;
 };
-const formatAttachmentLookupDisplayName = (token: string): string => {
-  const sanitized = [...token]
-    .map((character) => {
-      if (character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127) {
-        return "_";
-      }
-      return character;
-    })
-    .join("");
-  if (sanitized.length <= maxAttachmentLookupDisplayLength) {
-    return sanitized;
-  }
-  return `${sanitized.slice(0, maxAttachmentLookupDisplayLength - 3)}...`;
-};
 const decodeBase64 = (value: string): Uint8Array => {
   if (value.length > LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT) {
     throw new HostValidationError({
@@ -143,6 +132,31 @@ const isWithinDirectory = (
     relative === "" || (!relative.startsWith("..") && !localAttachmentPort.isAbsolutePath(relative))
   );
 };
+const isMissingAttachmentPath = (error: HostOperationErrorAggregate): boolean =>
+  hasNestedNodeErrorCode(error, "ENOENT") || hasNestedNodeErrorCode(error, "ENOTDIR");
+
+const attachmentUnavailableError = (): HostValidationError<LocalAttachmentUnavailableDetails> =>
+  new HostValidationError({
+    message: LOCAL_ATTACHMENT_UNAVAILABLE_MESSAGE,
+    field: "path",
+    details: { reason: LOCAL_ATTACHMENT_UNAVAILABLE_REASON },
+  });
+
+const resolvePathError = (
+  error: HostOperationErrorAggregate,
+  operation: string,
+  message: string,
+): HostOperationError | HostValidationError<LocalAttachmentUnavailableDetails> => {
+  if (isMissingAttachmentPath(error)) {
+    return attachmentUnavailableError();
+  }
+  return new HostOperationError<never>({
+    operation,
+    message: `${message}: ${errorMessage(error)}`,
+    cause: error,
+  });
+};
+
 const completeIndexLoadFlight = (
   flight: StagedAttachmentIndexFlight,
   loadIndex: Effect.Effect<StagedAttachmentIndex, HostOperationErrorAggregate>,
@@ -321,25 +335,25 @@ export const createLocalAttachmentService = (
           const canonicalDirectory = yield* localAttachmentPort
             .canonicalizePath(attachmentDirectory)
             .pipe(
-              Effect.mapError(
-                (error) =>
-                  new HostOperationError({
-                    operation: "local_attachment.resolve_stage_directory",
-                    message: `Failed to resolve staged attachment directory: ${errorMessage(error)}`,
-                    cause: error,
-                  }),
+              Effect.mapError((error) =>
+                resolvePathError(
+                  error,
+                  "local_attachment.resolve_stage_directory",
+                  "Failed to resolve staged attachment directory",
+                ),
               ),
             );
-          const canonicalPath = yield* localAttachmentPort.canonicalizePath(trimmedPath).pipe(
-            Effect.mapError(
-              (error) =>
-                new HostOperationError({
-                  operation: "local_attachment.resolve_path",
-                  message: `Failed to resolve staged attachment path: ${errorMessage(error)}`,
-                  cause: error,
-                }),
-            ),
-          );
+          const canonicalPath = yield* localAttachmentPort
+            .canonicalizePath(trimmedPath)
+            .pipe(
+              Effect.mapError((error) =>
+                resolvePathError(
+                  error,
+                  "local_attachment.resolve_path",
+                  "Failed to resolve staged attachment path",
+                ),
+              ),
+            );
           if (isWithinDirectory(localAttachmentPort, canonicalDirectory, canonicalPath)) {
             return { path: trimmedPath };
           }
@@ -347,6 +361,7 @@ export const createLocalAttachmentService = (
             new HostValidationError({
               message: "Attachment path is not a staged local attachment.",
               field: "path",
+              details: { reason: LOCAL_ATTACHMENT_UNAVAILABLE_REASON },
             }),
           );
         }
@@ -361,13 +376,11 @@ export const createLocalAttachmentService = (
               },
             }),
         });
-        const displayName = formatAttachmentLookupDisplayName(lookupToken);
         const index = yield* getStagedAttachmentIndex(attachmentDirectory);
         const match = yield* resolveIndexedStagedAttachment(
           localAttachmentPort,
           index,
           lookupToken,
-          displayName,
         );
         return { path: match.entry.path };
       });

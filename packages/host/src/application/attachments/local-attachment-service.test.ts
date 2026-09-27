@@ -12,6 +12,7 @@ type FakeFile = {
   modifiedTimeMs: number;
 };
 type FakeLocalAttachmentPortOptions = {
+  canonicalizeStageDirectoryError?: Error;
   includeStageDirectory?: boolean;
   readDirectoryDelay?: () => Promise<void>;
 };
@@ -67,8 +68,11 @@ const createFakeLocalAttachmentPort = (options: FakeLocalAttachmentPortOptions =
     canonicalizePath(path) {
       return Effect.tryPromise({
         try: async () => {
+          if (path === attachmentDirectory && options.canonicalizeStageDirectoryError) {
+            throw options.canonicalizeStageDirectoryError;
+          }
           if (!directories.has(path) && !files.has(path)) {
-            throw new Error(`missing path fixture: ${path}`);
+            throw Object.assign(new Error(`missing path fixture: ${path}`), { code: "ENOENT" });
           }
           return path;
         },
@@ -434,8 +438,8 @@ describe("createLocalAttachmentService", () => {
     expect(files.has(expectedPath)).toBe(true);
     expect(calls.modifiedTimeMs).toBe(modifiedTimeCallsBeforeStage);
   });
-  test("resolves absolute staged paths and rejects outside absolute paths", async () => {
-    const { calls, port } = createFakeLocalAttachmentPort();
+  test("resolves absolute staged paths and reports missing files without filesystem details", async () => {
+    const { calls, files, port } = createFakeLocalAttachmentPort();
     const service = createLocalAttachmentService(port);
     const staged = await Effect.runPromise(
       service.stage({ name: "brief.pdf", base64Data: "YnJpZWY=" }),
@@ -443,11 +447,54 @@ describe("createLocalAttachmentService", () => {
     await expect(Effect.runPromise(service.resolve({ path: staged.path }))).resolves.toEqual({
       path: staged.path,
     });
-    await expect(
-      Effect.runPromise(service.resolve({ path: "/tmp/not-staged.pdf" })),
-    ).rejects.toThrow("Failed to resolve staged attachment path:");
+    files.delete(staged.path);
+    const missing = await Effect.runPromise(Effect.flip(service.resolve({ path: staged.path })));
+    expect(missing).toMatchObject({
+      _tag: "HostValidationError",
+      field: "path",
+      message: "This attachment cannot be opened.",
+      details: { reason: "attachment_unavailable" },
+    });
+    files.set("/tmp/not-staged.pdf", { bytes: new Uint8Array(), modifiedTimeMs: 1 });
+    const outside = await Effect.runPromise(
+      Effect.flip(service.resolve({ path: "/tmp/not-staged.pdf" })),
+    );
+    expect(outside).toMatchObject({
+      message: "Attachment path is not a staged local attachment.",
+      details: { reason: "attachment_unavailable" },
+    });
     expect(calls.readDirectory).toBe(0);
     expect(calls.modifiedTimeMs).toBe(0);
+  });
+  test("reports a missing staging directory as an unavailable attachment", async () => {
+    const { port } = createFakeLocalAttachmentPort({ includeStageDirectory: false });
+    const service = createLocalAttachmentService(port);
+
+    const failure = await Effect.runPromise(
+      Effect.flip(service.resolve({ path: "/tmp/openducktor-local-attachments/old-brief.pdf" })),
+    );
+    expect(failure).toMatchObject({
+      _tag: "HostValidationError",
+      field: "path",
+      message: "This attachment cannot be opened.",
+      details: { reason: "attachment_unavailable" },
+    });
+  });
+  test("keeps staging directory access failures as operation errors", async () => {
+    const { port } = createFakeLocalAttachmentPort({
+      canonicalizeStageDirectoryError: Object.assign(new Error("permission denied"), {
+        code: "EACCES",
+      }),
+    });
+    const service = createLocalAttachmentService(port);
+
+    const failure = await Effect.runPromise(
+      Effect.flip(service.resolve({ path: "/tmp/openducktor-local-attachments/brief.pdf" })),
+    );
+    expect(failure).toMatchObject({
+      _tag: "HostOperationError",
+      message: "Failed to resolve staged attachment directory: permission denied",
+    });
   });
   test("prunes stale indexed attachment entries before resolving relative tokens", async () => {
     const { calls, files, port } = createFakeLocalAttachmentPort();
@@ -466,18 +513,22 @@ describe("createLocalAttachmentService", () => {
       path: older.path,
     });
     files.delete(older.path);
-    await expect(Effect.runPromise(service.resolve({ path: "brief.pdf" }))).rejects.toThrow(
-      "No staged local attachment matches 'brief.pdf'.",
-    );
+    const missing = await Effect.runPromise(Effect.flip(service.resolve({ path: "brief.pdf" })));
+    expect(missing).toMatchObject({
+      message: "This attachment cannot be opened.",
+      details: { reason: "attachment_unavailable" },
+    });
     expect(calls.readDirectory).toBe(1);
     expect(calls.existsPaths).toEqual([older.path, newer.path, newer.path, older.path, older.path]);
   });
   test("returns a validation error when resolving a relative token without a staging directory", async () => {
     const { calls, port } = createFakeLocalAttachmentPort({ includeStageDirectory: false });
     const service = createLocalAttachmentService(port);
-    await expect(Effect.runPromise(service.resolve({ path: "brief.pdf" }))).rejects.toThrow(
-      "No staged local attachment matches 'brief.pdf'.",
-    );
+    const missing = await Effect.runPromise(Effect.flip(service.resolve({ path: "brief.pdf" })));
+    expect(missing).toMatchObject({
+      message: "This attachment cannot be opened.",
+      details: { reason: "attachment_unavailable" },
+    });
     expect(calls.readDirectory).toBe(1);
   });
   test("rejects blank names, blank payloads, and unsafe lookup tokens", async () => {
@@ -492,9 +543,13 @@ describe("createLocalAttachmentService", () => {
     await expect(Effect.runPromise(service.resolve({ path: " " }))).rejects.toThrow(
       "Attachment path is required.",
     );
-    await expect(Effect.runPromise(service.resolve({ path: "../brief.pdf" }))).rejects.toThrow(
+    const invalidToken = await Effect.runPromise(
+      Effect.flip(service.resolve({ path: "../brief.pdf" })),
+    );
+    expect(invalidToken.message).toBe(
       "Attachment path must be a staged attachment filename token.",
     );
+    expect(invalidToken.details).toEqual({ field: "path" });
     await expect(Effect.runPromise(service.resolve({ path: "folder\\brief.pdf" }))).rejects.toThrow(
       "Attachment path must be a staged attachment filename token.",
     );

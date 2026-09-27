@@ -1,6 +1,11 @@
+import {
+  LOCAL_ATTACHMENT_UNAVAILABLE_MESSAGE,
+  localAttachmentUnavailableDetailsSchema,
+} from "@openducktor/contracts";
 import { pathToFileURL } from "node:url";
 import { Cause, Chunk, Effect, Exit, Option } from "effect";
 import { z } from "zod";
+import type { ElectronLocalAttachmentPreviewResult } from "../shared/electron-bridge-contract";
 import {
   ElectronOperationError,
   type ElectronOperationErrorAggregate,
@@ -13,6 +18,10 @@ export const ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL = "openducktor-local-att
 
 const ELECTRON_LOCAL_ATTACHMENT_PREVIEW_HOST = "preview";
 const localAttachmentPreviewPathSchema = z.string().refine((path) => path.trim().length > 0);
+const unavailableHostAttachmentErrorSchema = z.object({
+  _tag: z.literal("HostValidationError"),
+  details: localAttachmentUnavailableDetailsSchema,
+});
 
 type ElectronPreviewProtocol = {
   handle(scheme: string, handler: (request: Request) => Response | Promise<Response>): void;
@@ -65,6 +74,51 @@ export const readLocalAttachmentPreviewPathEffect = (
 export const createElectronLocalAttachmentPreviewUrl = (filePath: string): string => {
   const previewPath = readLocalAttachmentPreviewPath(filePath);
   return `${ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL}://${ELECTRON_LOCAL_ATTACHMENT_PREVIEW_HOST}/${encodeURIComponent(previewPath)}`;
+};
+
+export const resolveElectronLocalAttachmentPreview = async (
+  resolveLocalAttachmentPath: (filePath: string) => Promise<string>,
+  filePath: string,
+  reportFailure: (cause: unknown) => void,
+): Promise<ElectronLocalAttachmentPreviewResult> => {
+  let requestedPath: string;
+  try {
+    requestedPath = readLocalAttachmentPreviewPath(filePath);
+  } catch (cause) {
+    if (
+      !(
+        cause instanceof ElectronValidationError && cause.operation === "electron.preview.read-path"
+      )
+    ) {
+      reportFailure(cause);
+    }
+    return { ok: false, message: errorMessage(cause) };
+  }
+
+  try {
+    const resolvedPath = await resolveLocalAttachmentPath(requestedPath);
+    return { ok: true, src: createElectronLocalAttachmentPreviewUrl(resolvedPath) };
+  } catch (cause) {
+    if (
+      cause instanceof ElectronValidationError &&
+      cause.operation === "electron.preview.resolve-staged-path" &&
+      unavailableHostAttachmentErrorSchema.safeParse(cause.cause).success
+    ) {
+      return {
+        ok: false,
+        message: LOCAL_ATTACHMENT_UNAVAILABLE_MESSAGE,
+      };
+    }
+    if (
+      !(
+        cause instanceof ElectronValidationError &&
+        cause.operation === "electron.preview.resolve-staged-path"
+      )
+    ) {
+      reportFailure(cause);
+    }
+    return { ok: false, message: errorMessage(cause) };
+  }
 };
 
 export const readElectronLocalAttachmentPreviewRequestPath = (requestUrl: string): string => {

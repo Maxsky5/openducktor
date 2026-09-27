@@ -6,6 +6,7 @@ import {
   readElectronLocalAttachmentPreviewRequestPath,
   readLocalAttachmentPreviewPath,
   registerElectronLocalAttachmentPreviewProtocol,
+  resolveElectronLocalAttachmentPreview,
 } from "./electron-local-attachment-preview";
 
 const captureThrown = (action: () => void): Error => {
@@ -17,7 +18,131 @@ const captureThrown = (action: () => void): Error => {
   throw new Error("Expected action to fail.");
 };
 
+const failOnReport = (): never => {
+  throw new Error("Expected preview state must not report a failure.");
+};
+
 describe("electron local attachment previews", () => {
+  test("returns a preview URL in a successful IPC result", async () => {
+    const result = await resolveElectronLocalAttachmentPreview(
+      async (path) => {
+        expect(path).toBe("staged.png");
+        return "/tmp/openducktor-local-attachments/staged.png";
+      },
+      " staged.png ",
+      failOnReport,
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      src: `${ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL}://preview/%2Ftmp%2Fopenducktor-local-attachments%2Fstaged.png`,
+    });
+  });
+
+  test("returns a short IPC error when a staged attachment is unavailable", async () => {
+    const result = await resolveElectronLocalAttachmentPreview(
+      async () => {
+        throw new ElectronValidationError({
+          operation: "electron.preview.resolve-staged-path",
+          message: "Attachment path is not a staged local attachment.",
+          field: "path",
+          cause: {
+            _tag: "HostValidationError",
+            field: "path",
+            message: "Attachment path is not a staged local attachment.",
+            details: { reason: "attachment_unavailable" },
+          },
+        });
+      },
+      "old-staged.png",
+      failOnReport,
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      message: "This attachment cannot be opened.",
+    });
+  });
+
+  test("keeps other host path validation messages", async () => {
+    const result = await resolveElectronLocalAttachmentPreview(
+      async () => {
+        throw new ElectronValidationError({
+          operation: "electron.preview.resolve-staged-path",
+          message: "Attachment path must be a staged attachment filename token.",
+          field: "path",
+          cause: {
+            _tag: "HostValidationError",
+            field: "path",
+            message: "Attachment path must be a staged attachment filename token.",
+          },
+        });
+      },
+      "../brief.pdf",
+      failOnReport,
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      message: "Attachment path must be a staged attachment filename token.",
+    });
+  });
+
+  test("reports an invalid host response without calling the attachment missing", async () => {
+    const failure = new ElectronValidationError({
+      operation: "electron.preview.resolve-host-path",
+      message: "Local attachment preview resolver returned an invalid response.",
+      field: "path",
+    });
+    const reported: unknown[] = [];
+    const result = await resolveElectronLocalAttachmentPreview(
+      async () => {
+        throw failure;
+      },
+      "staged.png",
+      (cause) => reported.push(cause),
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      message: "Local attachment preview resolver returned an invalid response.",
+    });
+    expect(reported).toEqual([failure]);
+  });
+
+  test("keeps unexpected preview failures visible in the IPC result", async () => {
+    const failure = new ElectronOperationError({
+      operation: "electron.preview.resolve-host-path",
+      message: "Attachment storage is not readable.",
+    });
+    const reported: unknown[] = [];
+    const result = await resolveElectronLocalAttachmentPreview(
+      async () => {
+        throw failure;
+      },
+      "staged.png",
+      (cause) => reported.push(cause),
+    );
+
+    expect(result).toEqual({ ok: false, message: "Attachment storage is not readable." });
+    expect(reported).toEqual([failure]);
+  });
+
+  test("returns a structured IPC error for a blank path without calling the host", async () => {
+    const result = await resolveElectronLocalAttachmentPreview(
+      async () => {
+        throw new Error("A blank path must not reach the host.");
+      },
+      " ",
+      failOnReport,
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      message: "Local attachment preview path must be a non-empty string.",
+    });
+  });
+
   test("creates an app protocol URL for staged attachment paths", () => {
     const previewUrl = createElectronLocalAttachmentPreviewUrl(
       "/tmp/openducktor-local-attachments/staged screenshot.png",
