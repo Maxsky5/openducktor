@@ -356,6 +356,7 @@ export const createPersistenceHarness = async (
     renameFailures,
     state,
     accepted,
+    emitEffect,
     emit,
     send,
     get,

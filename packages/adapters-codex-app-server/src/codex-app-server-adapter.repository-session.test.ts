@@ -4,9 +4,11 @@ import { AGENT_ROLE_TOOL_POLICY } from "@openducktor/core";
 import {
   codexSessionRuntimeRef,
   codexThreadStartResultFixture,
+  codexTurnFixture,
   codexUserMessageInput,
   createAdapterWithTransport,
   createHarness,
+  createRuntimeStreamSubscription,
   defaultCodexEffectivePolicy,
   flushCodexAdapterWork,
   makeRuntimeSummary,
@@ -441,6 +443,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
     });
 
     expect(resumed.title).toBe("Fairnest");
+    expect(resumed.firstTurnCompleted).toBe(true);
     expect(transport.calls.find((call) => call.method === "thread/resume")?.params).toEqual({
       threadId: "thread-resume",
       excludeTurns: true,
@@ -472,18 +475,89 @@ describe("CodexAppServerAdapter repository sessions", () => {
   });
 
   test.each([
-    { name: "no first turn", status: null, historyMode: "paginated" as const },
+    {
+      name: "no first turn",
+      status: null,
+      historyMode: "paginated" as const,
+      systemPrompt: "Use the repo rules.",
+    },
     {
       name: "a running first turn",
       status: "inProgress" as const,
       historyMode: "paginated" as const,
+      systemPrompt: "Use the repo rules.",
     },
-    { name: "an empty legacy thread", status: null, historyMode: "legacy" as const },
-  ])("reattaches with $name without writing its title", async ({ status, historyMode }) => {
-    const transport = new NameFailingTransport("runtime-live", false);
-    transport.firstTurnStatus = status;
-    transport.historyMode = historyMode;
-    const adapter = createAdapterWithTransport(transport);
+    {
+      name: "an empty legacy thread",
+      status: null,
+      historyMode: "legacy" as const,
+      systemPrompt: "Use the repo rules.",
+    },
+    {
+      name: "a cold thread with no first turn",
+      status: null,
+      historyMode: "paginated" as const,
+      systemPrompt: "",
+    },
+    {
+      name: "a cold thread with a running first turn",
+      status: "inProgress" as const,
+      historyMode: "paginated" as const,
+      systemPrompt: "",
+    },
+  ])(
+    "reattaches with $name without writing its title",
+    async ({ status, historyMode, systemPrompt }) => {
+      const transport = new NameFailingTransport("runtime-live", false);
+      transport.firstTurnStatus = status;
+      transport.historyMode = historyMode;
+      const adapter = createAdapterWithTransport(transport);
+
+      const resumed = await adapter.resumeSession({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread-resume",
+        sessionScope: { kind: "repository", title: "Saved title" },
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+        systemPrompt,
+        model: { providerId: "openai", modelId: "gpt-5" },
+      });
+
+      expect(resumed.firstTurnCompleted).toBe(false);
+      expect(transport.calls.some((call) => call.method === "thread/name/set")).toBe(false);
+    },
+  );
+
+  test("keeps a completion event received during the first-turn read", async () => {
+    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+    const completions: boolean[] = [];
+    class CompletingTransport extends RecordingTransport {
+      async request(request: Parameters<RecordingTransport["request"]>[0]) {
+        const result = await super.request(request);
+        if (request.method === "thread/turns/list" && request.params.limit === 1) {
+          emitNotification({
+            method: "turn/completed",
+            params: {
+              threadId: "thread-resume",
+              turn: codexTurnFixture({ id: "turn-live", status: "completed", items: [] }),
+            },
+          });
+          await flushCodexAdapterWork();
+        }
+        return result;
+      }
+    }
+    const transport = new CompletingTransport("runtime-live", false);
+    transport.firstTurnStatus = "inProgress";
+    const adapter = createAdapterWithTransport(transport, {
+      subscribeEvents,
+      onLiveSessionMutation: (mutation) => {
+        for (const event of mutation.transcriptEvents) {
+          if (event.type === "session_idle") completions.push(event.turnCompleted === true);
+        }
+      },
+    });
 
     const resumed = await adapter.resumeSession({
       repoPath: "/repo",
@@ -497,6 +571,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
     });
 
     expect(resumed.firstTurnCompleted).toBe(false);
+    expect(completions).toContain(true);
     expect(transport.calls.some((call) => call.method === "thread/name/set")).toBe(false);
   });
 

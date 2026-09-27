@@ -103,6 +103,54 @@ describe("Codex Workspace Session title sync", () => {
     expect(h.titleAttempts).toEqual(["Cold title", "Later title"]);
   });
 
+  test("syncs a saved title when the first turn ends during reattach", async () => {
+    const h = await createPersistenceHarness(database, "codex");
+    await Effect.runPromise(h.store.rename({ ...h.storeRef, manualTitle: "Saved title" }));
+    h.state.firstTurnCompleted = false;
+    h.state.beforeControl = h
+      .emitEffect({
+        type: "session_idle",
+        turnCompleted: true,
+        sessionRef: h.ref,
+        externalSessionId: h.ref.externalSessionId,
+        timestamp: "2026-09-07T10:01:00Z",
+      })
+      .pipe(Effect.orDie);
+
+    await Effect.runPromise(
+      h.live.resumeSession({
+        ...h.ref,
+        resumeMode: "reattach",
+        sessionScope: { kind: "repository" },
+      }),
+    );
+
+    await waitFor(() => h.titleAttempts.length === 1);
+    expect(h.titleAttempts).toEqual(["Saved title"]);
+    expect(h.persistence.isCodexTitleSyncPending(h.ref)).toBe(false);
+  });
+
+  test("clears a reattach gate when the runtime resume fails", async () => {
+    const h = await createPersistenceHarness(database, "codex");
+    await Effect.runPromise(h.store.rename({ ...h.storeRef, manualTitle: "Saved title" }));
+    let pendingDuringResume = false;
+    h.state.beforeControl = Effect.sync(() => {
+      pendingDuringResume = h.persistence.isCodexTitleSyncPending(h.ref);
+    }).pipe(Effect.zipRight(Effect.dieMessage("resume failed")));
+
+    await expect(
+      Effect.runPromise(
+        h.live.resumeSession({
+          ...h.ref,
+          resumeMode: "reattach",
+          sessionScope: { kind: "repository" },
+        }),
+      ),
+    ).rejects.toThrow("resume failed");
+    expect(pendingDuringResume).toBe(true);
+    expect(h.persistence.isCodexTitleSyncPending(h.ref)).toBe(false);
+  });
+
   test("syncs a later Codex title after a titleless completed turn", async () => {
     const h = await createPersistenceHarness(database, "codex");
     await h.emit(titlelessMessage(h.ref));
