@@ -43,11 +43,9 @@ describe("agent-orchestrator/support/kickoff-prompts", () => {
     );
   });
 
-  test("includes task id instruction in kickoff prompts", () => {
+  test("includes the task id and completion action in Builder kickoffs", () => {
     const prompt = kickoffPrompt("build", "kickoff.build_implementation_start", "task-1");
     expect(prompt).toContain("taskId task-1");
-    expect(prompt).toContain("odt_build_blocked");
-    expect(prompt).toContain("odt_build_resumed");
     expect(prompt).toContain("odt_build_completed");
   });
 

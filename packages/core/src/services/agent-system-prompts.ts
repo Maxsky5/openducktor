@@ -362,23 +362,23 @@ const AGENT_PROMPT_DEFINITIONS = {
   "kickoff.build_implementation_start": {
     id: "kickoff.build_implementation_start",
     purpose: "kickoff",
-    builtinVersion: 4,
+    builtinVersion: 5,
     template:
-      "Read the task, available spec and plan, repo guidance, and relevant code. Choose implementation details, work order, and verification while preserving required outcomes and design contracts. Complete the work, fix scope-aligned issues, and create a meaningful Conventional Commit before odt_build_completed when code changed. Use odt_build_blocked for unresolved blockers and odt_build_resumed when work resumes. Use taskId {{task.id}} for every task-bound odt_* tool call.",
+      "Implement this task and submit the completed change with odt_build_completed. Use taskId {{task.id}} for every task-bound odt_* tool call.",
   },
   "kickoff.build_after_qa_rejected": {
     id: "kickoff.build_after_qa_rejected",
     purpose: "kickoff",
-    builtinVersion: 4,
+    builtinVersion: 5,
     template:
-      "Read the latest QA report, task, available spec and plan, and affected code. Validate each rejection finding against the current implementation, fix the root causes, and explain any finding the code does not support. Choose the implementation and checks needed to preserve required outcomes and design contracts. Create a meaningful Conventional Commit before odt_build_completed when code changed. Use taskId {{task.id}} for every task-bound odt_* tool call.",
+      "Address the latest QA rejection for this task. Check each finding against the current code. Fix valid in-scope issues and explain why you decline any other finding. Submit the completed change with odt_build_completed. Use taskId {{task.id}} for every task-bound odt_* tool call.",
   },
   "kickoff.build_after_human_request_changes": {
     id: "kickoff.build_after_human_request_changes",
     purpose: "kickoff",
-    builtinVersion: 5,
+    builtinVersion: 6,
     template:
-      "Review the requested changes below plus the current spec, plan, and affected code before editing.\n\nRequested changes from human review:\n{{humanFeedback}}\n\nComplete the requested changes while preserving required outcomes and design contracts. Choose the implementation and checks needed for the change, and create a meaningful Conventional Commit before odt_build_completed when code changed. Use taskId {{task.id}} for every task-bound odt_* tool call.",
+      "Address the requested changes for this task.\n\nRequested changes from human review:\n{{humanFeedback}}\n\nSubmit the completed change with odt_build_completed. Use taskId {{task.id}} for every task-bound odt_* tool call.",
   },
   "kickoff.build_pull_request_generation": {
     id: "kickoff.build_pull_request_generation",
@@ -415,9 +415,9 @@ const AGENT_PROMPT_DEFINITIONS = {
   "kickoff.qa_review": {
     id: "kickoff.qa_review",
     purpose: "kickoff",
-    builtinVersion: 3,
+    builtinVersion: 4,
     template:
-      "Review the task, available spec and plan, repo guidance, and implementation against required outcomes and design contracts. Choose checks based on risk, inspect wiring and failure paths, and report material findings with their impact and support. Accept valid implementation choices that preserve the contracts. Call exactly one of odt_qa_approved or odt_qa_rejected with taskId {{task.id}} and the QA report.",
+      "Review this task's implementation and submit one QA report with exactly one of odt_qa_approved or odt_qa_rejected. Use taskId {{task.id}} for every task-bound odt_* tool call.",
   },
   "message.build_rebase_conflict_resolution": {
     id: "message.build_rebase_conflict_resolution",
