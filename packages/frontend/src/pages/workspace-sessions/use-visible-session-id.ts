@@ -73,5 +73,14 @@ export function useVisibleSessionId(
     canceledTargetRef.current = undefined;
     setRetryCount((count) => count + 1);
   }, [requestedSelectedId, visibleSelectedId]);
-  return { visibleSelectedId, selectTab, leaveRemovedChat };
+  const completeArchive = useCallback(
+    (sessionId: string | null) => {
+      pendingRef.current = null;
+      canceledTargetRef.current = undefined;
+      setVisibleSelectedId(sessionId);
+      updateNavigation({ sessionId });
+    },
+    [updateNavigation],
+  );
+  return { visibleSelectedId, selectTab, leaveRemovedChat, completeArchive };
 }

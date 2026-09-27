@@ -69,7 +69,7 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
     requestedSessionId: sessionId,
   });
   const requestedSelectedId = requestedSelected?.id ?? null;
-  const { visibleSelectedId, selectTab, leaveRemovedChat } = useVisibleSessionId(
+  const { visibleSelectedId, selectTab, leaveRemovedChat, completeArchive } = useVisibleSessionId(
     requestedSelectedId,
     guardWorkspaceChange,
     updateNavigation,
@@ -89,7 +89,7 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
       mounted,
       selectedId,
       orderedSessions,
-      updateNavigation,
+      completeArchive,
       guardWorkspaceChange,
     });
   const archivingId = archive.isPending ? (archive.variables?.sessionId ?? null) : null;
@@ -280,7 +280,7 @@ function useWorkspaceSessionArchive({
   mounted,
   selectedId,
   orderedSessions,
-  updateNavigation,
+  completeArchive,
   guardWorkspaceChange,
 }: {
   workspace: ActiveWorkspace;
@@ -288,7 +288,7 @@ function useWorkspaceSessionArchive({
   mounted: ReturnType<typeof useMountedRef>;
   selectedId: string | null;
   orderedSessions: WorkspaceSession[];
-  updateNavigation: ReturnType<typeof useWorkspaceSessionNavigation>["updateNavigation"];
+  completeArchive: ReturnType<typeof useVisibleSessionId>["completeArchive"];
   guardWorkspaceChange: ReturnType<typeof useWorkspacePreviewTransitionGuard>["run"];
 }) {
   const [archiveTarget, setArchiveTarget] = useState<WorkspaceSession | null>(null);
@@ -300,13 +300,11 @@ function useWorkspaceSessionArchive({
       worktreeConfirmation?: { workingDirectory: string; branchName: string } | undefined;
     }) => host.workspaceSessionArchive({ workspaceId: workspace.workspaceId, ...input }),
     onSuccess: (record) => {
+      if (mounted.current && selectedId === record.id)
+        completeArchive(orderedSessions.find((entry) => entry.id !== record.id)?.id ?? null);
       updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, record);
       if (!mounted.current) return;
       setArchiveTarget(null);
-      if (selectedId === record.id)
-        updateNavigation({
-          sessionId: orderedSessions.find((entry) => entry.id !== record.id)?.id ?? null,
-        });
     },
     onSettled: () => {
       void invalidateRepoBranchesQuery(queryClient, workspace.repoPath);

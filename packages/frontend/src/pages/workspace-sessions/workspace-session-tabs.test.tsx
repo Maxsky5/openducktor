@@ -483,15 +483,26 @@ function renderTabs(
   return { ...view, workspaceId, store };
 }
 
-function DirtyPreview() {
-  const [file, setFile] = useState<{ rootPath: string; relativePath: string } | null>({
+function DirtyPreview({ startOpen = true }: { startOpen?: boolean }) {
+  const draft = {
     rootPath: "/repo",
     relativePath: "draft.ts",
-  });
+  };
+  const [file, setFile] = useState<{ rootPath: string; relativePath: string } | null>(
+    startOpen ? draft : null,
+  );
   const { preview, onDiscard } = useWorkspaceSessionPreview(file, setFile, false);
   return (
     <>
       <output data-testid="draft">{preview.model.selectedFile?.relativePath ?? "none"}</output>
+      <button
+        onClick={() => {
+          preview.onSelectFile(draft);
+          setFile(draft);
+        }}
+      >
+        Open draft
+      </button>
       <button onClick={() => preview.model.onLeavePolicyChange("confirm")}>Edit draft</button>
       <button onClick={onDiscard}>Discard draft</button>
     </>
@@ -1527,6 +1538,76 @@ test("failed selected-chat archive keeps the dirty draft", async () => {
     configureShellBridge(createUnavailableShellBridge());
   }
 });
+
+test.each([true, false])(
+  "a successful archive leaves the previewed chat when another chat exists=%s",
+  async (hasNextChat) => {
+    const first = sessionRecord("First");
+    const archiveDone = Promise.withResolvers<WorkspaceSession>();
+    const content = spyOn(sessionContent, "WorkspaceSessionContent").mockImplementation(
+      function SessionContent({ record }) {
+        return (
+          <div data-testid="visible-chat">
+            {record.id}
+            <DirtyPreview startOpen={false} />
+          </div>
+        );
+      },
+    );
+    configureShellBridge(
+      createShellBridgeFixture({
+        client: {
+          workspaceSessionListActive: async () =>
+            hasNextChat ? [first, sessionRecord("Second")] : [first],
+          workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+          workspaceSessionArchive: () => archiveDone.promise,
+        },
+      }),
+    );
+    const view = renderTabs(undefined, "/chats?session=First");
+    try {
+      await view.findByRole("button", { name: "Archive First" }, { timeout: 800 });
+      fireEvent.click(view.getByRole("button", { name: "Open draft" }));
+      fireEvent.click(view.getByRole("button", { name: "Edit draft" }));
+      expect(view.getByTestId("draft").textContent).toBe("draft.ts");
+      fireEvent.click(view.getByRole("button", { name: "Archive First" }));
+      fireEvent.click(view.getByRole("button", { name: "Confirm stop and archive First" }));
+      expect(view.getByTestId("draft").textContent).toBe("draft.ts");
+      fireEvent.click(view.getByRole("button", { name: "Discard draft" }));
+      expect(view.getByRole("tab", { name: /First/ }).getAttribute("aria-selected")).toBe("true");
+      expect(view.getByTestId("draft").textContent).toBe("draft.ts");
+
+      archiveDone.resolve({ ...first, archivedAt: 2000 });
+      if (hasNextChat) {
+        await waitFor(
+          () =>
+            expect(view.getByRole("tab", { name: /Second/ }).getAttribute("aria-selected")).toBe(
+              "true",
+            ),
+          { timeout: 800 },
+        );
+        expect(view.getByTestId("visible-chat").textContent).toContain("Second");
+      } else {
+        await view.findByText("No active sessions.", {}, { timeout: 800 });
+        expect(view.queryByRole("tabpanel", { name: /First/ })).toBeNull();
+      }
+      await waitFor(
+        () => {
+          const url = new URL(
+            view.getByTestId("session-url").textContent ?? "",
+            "http://localhost",
+          );
+          expect(url.searchParams.get("session")).toBe(hasNextChat ? "Second" : null);
+        },
+        { timeout: 800 },
+      );
+    } finally {
+      view.unmount();
+      content.mockRestore();
+      configureShellBridge(createUnavailableShellBridge());
+    }
+  },
+);
 
 test("an archive in flight shows a loader on its tab, disables all archive controls, and removes the tab when it settles", async () => {
   let complete!: (record: WorkspaceSession) => void;
