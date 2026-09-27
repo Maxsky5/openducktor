@@ -100,7 +100,7 @@ const remoteMatches = (
   repository: AzureDevOpsRepository,
   remote: GitRemoteEndpoint,
 ): boolean => {
-  const explicit = repoConfig.git.provider?.remoteMappings?.find(
+  const explicit = repoConfig.git.provider?.settings?.remoteMappings?.find(
     (mapping) => mapping.remoteName === remote.name,
   );
   if (explicit) {

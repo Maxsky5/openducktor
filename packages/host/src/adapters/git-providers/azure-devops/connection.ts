@@ -21,8 +21,9 @@ import {
   toHostOperationError,
 } from "../../../effect/host-errors";
 import type { AzureDevOpsConnectionPort } from "../../../ports/azure-devops-connection-port";
-import { loadConnection, saveConnection } from "./connection-storage";
+import { loadConnection, saveConnection, saveConnectionRecord } from "./connection-storage";
 import { createAzureDevOpsConnectionScopeGate } from "./connection-scope-gate";
+import type { AzureDevOpsCredentialIndex } from "./credential-index";
 import { validatePat } from "./pat-validation";
 import type { AzureDevOpsProtectedStorage } from "./protected-storage";
 import {
@@ -42,12 +43,14 @@ type SignInAttempt = {
 export const createAzureDevOpsConnectionAdapter = ({
   clientId,
   protectedStorage,
+  credentialIndex,
   fetchImplementation = fetch,
   publishConnectionState,
   publicClientFactory = createAzureDevOpsPublicClient,
 }: {
   clientId: string | undefined;
   protectedStorage: AzureDevOpsProtectedStorage;
+  credentialIndex: AzureDevOpsCredentialIndex;
   fetchImplementation?: AzureDevOpsFetch;
   publishConnectionState?: (
     event: HostEventPayload<"openducktor://azure-devops-connection-updated">,
@@ -85,6 +88,36 @@ export const createAzureDevOpsConnectionAdapter = ({
         }
       }
       yield* Effect.forEach(fibers, (fiber) => Fiber.interrupt(fiber), { discard: true });
+    });
+
+  const disconnectScope = (
+    workspaceId: string,
+    scope: string,
+    deployment: AzureDevOpsRepository["deployment"],
+  ) =>
+    Effect.gen(function* () {
+      scopeGate.invalidate(scope);
+      yield* cancelScopeAttempts(scope);
+      pendingByScope.delete(scope);
+      errorsByScope.delete(scope);
+      yield* scopeGate.run(
+        scope,
+        Effect.gen(function* () {
+          const connectionStore = yield* protectedStorage.open(scope, "connection");
+          yield* Effect.tryPromise({
+            try: () => connectionStore.delete(),
+            catch: (cause) => toHostOperationError(cause, "azureDevOps.connection.disconnect"),
+          });
+          if (deployment === "services") {
+            const msalStore = yield* protectedStorage.open(scope, "msal");
+            yield* Effect.tryPromise({
+              try: () => msalStore.delete(),
+              catch: (cause) => toHostOperationError(cause, "azureDevOps.connection.disconnect"),
+            });
+          }
+          yield* credentialIndex.forget(workspaceId, scope);
+        }),
+      );
     });
 
   const getAuthorization: AzureDevOpsConnectionPort["getAuthorization"] = (
@@ -202,7 +235,12 @@ export const createAzureDevOpsConnectionAdapter = ({
             yield* requireConnectionTransport(repoConfig, repository);
             yield* validatePat(fetchImplementation, repository, value);
             yield* scopeGate.requireCurrent(scope, generation);
-            yield* saveConnection(protectedStorage, scope, {
+            const connectionStore = yield* protectedStorage.open(scope, "connection");
+            yield* credentialIndex.register(repoConfig.workspaceId, {
+              scope,
+              deployment: repository.deployment,
+            });
+            yield* saveConnectionRecord(connectionStore, {
               kind: "server_pat",
               pat: value,
             });
@@ -226,6 +264,10 @@ export const createAzureDevOpsConnectionAdapter = ({
         yield* cancelScopeAttempts(scope);
         const generation = scopeGate.invalidate(scope);
         const application = yield* publicClientFactory(configuredClientId, protectedStorage, scope);
+        yield* credentialIndex.register(repoConfig.workspaceId, {
+          scope,
+          deployment: repository.deployment,
+        });
         const attemptId = randomUUID();
         return yield* Effect.async<AzureDevOpsDeviceCode, HostError>((resume) => {
           let codeReturned = false;
@@ -346,29 +388,30 @@ export const createAzureDevOpsConnectionAdapter = ({
       });
     },
     disconnect(repoConfig, repository) {
+      return disconnectScope(
+        repoConfig.workspaceId,
+        connectionScope(repoConfig, repository),
+        repository.deployment,
+      );
+    },
+    removeWorkspaceCredentials(repoConfig) {
       return Effect.gen(function* () {
-        const scope = connectionScope(repoConfig, repository);
-        scopeGate.invalidate(scope);
-        yield* cancelScopeAttempts(scope);
-        pendingByScope.delete(scope);
-        errorsByScope.delete(scope);
-        yield* scopeGate.run(
-          scope,
-          Effect.gen(function* () {
-            const connectionStore = yield* protectedStorage.open(scope, "connection");
-            yield* Effect.tryPromise({
-              try: () => connectionStore.delete(),
-              catch: (cause) => toHostOperationError(cause, "azureDevOps.connection.disconnect"),
-            });
-            if (repository.deployment !== "services") {
-              return;
-            }
-            const msalStore = yield* protectedStorage.open(scope, "msal");
-            yield* Effect.tryPromise({
-              try: () => msalStore.delete(),
-              catch: (cause) => toHostOperationError(cause, "azureDevOps.connection.disconnect"),
-            });
-          }),
+        const credentials = yield* credentialIndex.list(repoConfig.workspaceId);
+        const provider = repoConfig.git.provider;
+        if (
+          provider?.id === "azure_devops" &&
+          provider.repository &&
+          "deployment" in provider.repository
+        ) {
+          const scope = connectionScope(repoConfig, provider.repository);
+          if (!credentials.some((entry) => entry.scope === scope)) {
+            credentials.push({ scope, deployment: provider.repository.deployment });
+          }
+        }
+        yield* Effect.forEach(
+          credentials,
+          ({ scope, deployment }) => disconnectScope(repoConfig.workspaceId, scope, deployment),
+          { discard: true },
         );
       });
     },
@@ -401,11 +444,11 @@ const requireConnectionTransport = (repoConfig: RepoConfig, repository: AzureDev
     if (
       repository.deployment === "server" &&
       transportProtocol === "http:" &&
-      repoConfig.git.provider?.httpConsentCollectionUrl !== collectionUrl
+      repoConfig.git.provider?.settings?.httpConsentCollectionUrl !== collectionUrl
     ) {
       return yield* Effect.fail(
         new HostValidationError({
-          field: "git.provider.httpConsentCollectionUrl",
+          field: "git.provider.settings.httpConsentCollectionUrl",
           message: `Confirm the unencrypted Azure DevOps Server connection for ${collectionUrl} before sending credentials.`,
         }),
       );

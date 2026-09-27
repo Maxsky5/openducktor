@@ -9,7 +9,10 @@ import {
   useReducer,
 } from "react";
 import { CopyIconButton } from "@/components/ui/copy-icon-button";
-import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
+import {
+  IssueMarkdownRenderer,
+  type IssueImageContext,
+} from "@/components/features/issue-source/issue-markdown-renderer";
 import { buildCopyPreview } from "@/lib/copy-preview";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 
@@ -20,6 +23,7 @@ type TaskDetailsMarkdownContentProps = {
   copyableMarkdown?: string;
   stripTaskDescriptionFrontMatter?: boolean;
   taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
+  issueImageContext?: IssueImageContext;
 };
 
 const LARGE_MARKDOWN_DEFER_THRESHOLD = 2000;
@@ -29,6 +33,7 @@ type TaskDetailsRenderedMarkdownProps = {
   hasLabeledCodeFence: boolean;
   stripTaskDescriptionFrontMatter: boolean;
   taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
+  issueImageContext?: IssueImageContext;
 };
 
 const TaskDetailsRenderedMarkdown = memo(function TaskDetailsRenderedMarkdown({
@@ -36,9 +41,10 @@ const TaskDetailsRenderedMarkdown = memo(function TaskDetailsRenderedMarkdown({
   hasLabeledCodeFence,
   stripTaskDescriptionFrontMatter,
   taskAssetContext,
+  issueImageContext,
 }: TaskDetailsRenderedMarkdownProps): ReactElement {
   return (
-    <MarkdownRenderer
+    <IssueMarkdownRenderer
       markdown={markdown}
       variant="document"
       premiumCodeBlocks={hasLabeledCodeFence}
@@ -49,6 +55,7 @@ const TaskDetailsRenderedMarkdown = memo(function TaskDetailsRenderedMarkdown({
         </p>
       }
       {...(taskAssetContext ? { taskAssetContext } : {})}
+      {...(issueImageContext ? { issueImageContext } : {})}
     />
   );
 });
@@ -70,6 +77,7 @@ function DeferredTaskDetailsMarkdown({
   copied,
   onCopy,
   taskAssetContext,
+  issueImageContext,
 }: DeferredTaskDetailsMarkdownProps): ReactElement {
   const [isMarkdownReady, setIsMarkdownReady] = useReducer(
     (_current: boolean, next: boolean) => next,
@@ -110,6 +118,7 @@ function DeferredTaskDetailsMarkdown({
           hasLabeledCodeFence={hasLabeledCodeFence}
           stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
           {...(taskAssetContext ? { taskAssetContext } : {})}
+          {...(issueImageContext ? { issueImageContext } : {})}
         />
       </div>
       {copyableMarkdown ? (
@@ -132,6 +141,7 @@ export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownConte
   copyableMarkdown,
   stripTaskDescriptionFrontMatter = false,
   taskAssetContext,
+  issueImageContext,
 }: TaskDetailsMarkdownContentProps): ReactElement {
   const { copied, copyToClipboard } = useCopyToClipboard({
     getSuccessDescription: buildCopyPreview,
@@ -173,6 +183,7 @@ export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownConte
         copied={copied}
         onCopy={handleCopy}
         {...(taskAssetContext ? { taskAssetContext } : {})}
+        {...(issueImageContext ? { issueImageContext } : {})}
       />
     );
   }
@@ -185,6 +196,7 @@ export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownConte
           hasLabeledCodeFence={hasLabeledCodeFence}
           stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
           {...(taskAssetContext ? { taskAssetContext } : {})}
+          {...(issueImageContext ? { issueImageContext } : {})}
         />
       </div>
       {copyableMarkdown ? (

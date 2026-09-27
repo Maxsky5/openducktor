@@ -73,56 +73,69 @@ function TaskCreateModalFooterActions({
 }: {
   controller: TaskCreateModalController;
 }): ReactElement {
-  if (controller.mode === "create" && controller.step === "type") {
-    return <span />;
+  if (controller.mode === "create" && controller.step === "type") return <span />;
+  return controller.isEditingDocument ? (
+    <TaskDocumentFooterActions controller={controller} />
+  ) : (
+    <TaskSubmitFooterActions controller={controller} />
+  );
+}
+
+function TaskDocumentFooterActions({
+  controller,
+}: {
+  controller: TaskCreateModalController;
+}): ReactElement {
+  const isSaving = controller.isSavingDocument === controller.activeDocumentSection;
+  let saveLabel = "Save Plan";
+  if (isSaving) {
+    saveLabel = "Saving...";
+  } else if (controller.activeDocumentSection === "spec") {
+    saveLabel = "Save Spec";
   }
 
-  if (controller.isEditingDocument) {
-    const isSaving = controller.isSavingDocument === controller.activeDocumentSection;
-    let saveLabel = "Save Plan";
-    if (isSaving) {
-      saveLabel = "Saving...";
-    } else if (controller.activeDocumentSection === "spec") {
-      saveLabel = "Save Spec";
-    }
+  return (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        className="cursor-pointer"
+        onClick={controller.discardCurrentDocumentDraft}
+        disabled={controller.isFormDisabled || !controller.isActiveDocumentDirty}
+      >
+        <RotateCcw className="size-4" />
+        Revert
+      </Button>
+      <Button
+        type="button"
+        className="cursor-pointer"
+        onClick={() => void controller.saveActiveDocument()}
+        disabled={
+          controller.isFormDisabled ||
+          !controller.taskId ||
+          !controller.activeDocument ||
+          !controller.activeDocument.loaded ||
+          controller.activeDocument.isLoading ||
+          controller.activeDraft.trim().length === 0 ||
+          !controller.isActiveDocumentDirty
+        }
+      >
+        {isSaving ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          <WandSparkles className="size-4" />
+        )}
+        {saveLabel}
+      </Button>
+    </>
+  );
+}
 
-    return (
-      <>
-        <Button
-          type="button"
-          variant="outline"
-          className="cursor-pointer"
-          onClick={controller.discardCurrentDocumentDraft}
-          disabled={controller.isFormDisabled || !controller.isActiveDocumentDirty}
-        >
-          <RotateCcw className="size-4" />
-          Revert
-        </Button>
-        <Button
-          type="button"
-          className="cursor-pointer"
-          onClick={() => void controller.saveActiveDocument()}
-          disabled={
-            controller.isFormDisabled ||
-            !controller.taskId ||
-            !controller.activeDocument ||
-            !controller.activeDocument.loaded ||
-            controller.activeDocument.isLoading ||
-            controller.activeDraft.trim().length === 0 ||
-            !controller.isActiveDocumentDirty
-          }
-        >
-          {isSaving ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <WandSparkles className="size-4" />
-          )}
-          {saveLabel}
-        </Button>
-      </>
-    );
-  }
-
+function TaskSubmitFooterActions({
+  controller,
+}: {
+  controller: TaskCreateModalController;
+}): ReactElement {
   const SubmitIcon = controller.mode === "create" ? Flag : WandSparkles;
   let submitLabel = controller.mode === "create" ? "Create Task" : "Save Changes";
   if (controller.isSubmitting) {
@@ -164,6 +177,108 @@ function TaskCreateModalFooterActions({
   );
 }
 
+function TaskCreateModalSectionNavigation({
+  controller,
+}: {
+  controller: TaskCreateModalController;
+}): ReactElement {
+  if (controller.mode === "create") {
+    return (
+      <TaskComposerStepper
+        step={controller.step}
+        onStepChange={(nextStep) => {
+          if (nextStep === "details" && controller.step !== "details") return;
+          controller.setStep(nextStep);
+        }}
+      />
+    );
+  }
+  return (
+    <TaskEditSectionSwitcher
+      section={controller.editSection}
+      hasUnsavedSpec={controller.isSpecDirty}
+      hasUnsavedPlan={controller.isPlanDirty}
+      disabled={controller.isFormDisabled}
+      onSectionChange={controller.requestSectionChange}
+    />
+  );
+}
+
+function TaskCreateModalSectionContent({
+  controller,
+  task,
+}: {
+  controller: TaskCreateModalController;
+  task: TaskCard | null;
+}): ReactElement {
+  if (controller.isTypeStepVisible) {
+    return (
+      <IssueTypeGrid
+        selectedIssueType={controller.selectedCreateIssueType}
+        onSelectIssueType={controller.selectCreateIssueType}
+      />
+    );
+  }
+  const section = controller.activeDocumentSection;
+  if (controller.mode === "edit" && section) {
+    return (
+      <Suspense fallback={<TaskDocumentEditorFallback />}>
+        <TaskDocumentEditor
+          key={section}
+          title={section === "spec" ? "Specification" : "Implementation Plan"}
+          subtitle={
+            section === "spec"
+              ? "Edit the canonical specification markdown for this task."
+              : "Edit the implementation plan markdown for this task."
+          }
+          placeholder={
+            section === "spec"
+              ? "# Purpose\n\nDescribe expected outcome..."
+              : "## Milestones\n\n- ..."
+          }
+          markdown={controller.activeDraft}
+          view={controller.views[section]}
+          onViewChange={(nextView) => controller.setDocumentView(section, nextView)}
+          updatedAt={controller.activeDocument?.updatedAt ?? null}
+          isLoading={controller.activeDocument?.isLoading ?? false}
+          isSaving={controller.isSavingDocument === section}
+          error={controller.activeDocument?.error ?? null}
+          hasUnsavedChanges={controller.isActiveDocumentDirty}
+          onMarkdownChange={(value) => controller.updateDocumentDraft(section, value)}
+          onRetryLoad={() => {
+            void controller.loadDocumentSection(section, true);
+          }}
+        />
+      </Suspense>
+    );
+  }
+  return (
+    <TaskDetailsForm
+      mode={controller.mode}
+      state={controller.state}
+      priorityOptions={controller.priorityComboboxOptions}
+      knownLabels={controller.knownLabels}
+      onStateChange={controller.updateState}
+      onRequestTypeChange={() => controller.setStep("type")}
+      workspaceId={controller.workspaceId}
+      taskId={controller.taskId}
+      issueImageContext={
+        controller.workspaceRepoPath && task?.sourceIssue
+          ? {
+              repoPath: controller.workspaceRepoPath,
+              sourceId: task.sourceIssue.sourceId,
+              providerId: task.sourceIssue.providerId,
+              taskId: task.id,
+            }
+          : undefined
+      }
+      onDescriptionImageUpload={controller.stageDescriptionImage}
+      descriptionAssetUploads={controller.descriptionAssetUploads}
+      descriptionAssetPreviews={controller.descriptionAssetPreviews}
+    />
+  );
+}
+
 export function TaskCreateModal({
   open,
   onOpenChange,
@@ -176,8 +291,6 @@ export function TaskCreateModal({
     tasks,
     task,
   });
-  const activeDocumentSection = controller.activeDocumentSection;
-
   return (
     <>
       <Dialog open={open} onOpenChange={controller.onDialogOpenChange}>
@@ -206,81 +319,8 @@ export function TaskCreateModal({
                   controller.isBusy && "cursor-wait",
                 )}
               >
-                {controller.mode === "create" ? (
-                  <TaskComposerStepper
-                    step={controller.step}
-                    onStepChange={(nextStep) => {
-                      if (nextStep === "details" && controller.step !== "details") {
-                        return;
-                      }
-                      controller.setStep(nextStep);
-                    }}
-                  />
-                ) : (
-                  <TaskEditSectionSwitcher
-                    section={controller.editSection}
-                    hasUnsavedSpec={controller.isSpecDirty}
-                    hasUnsavedPlan={controller.isPlanDirty}
-                    disabled={controller.isFormDisabled}
-                    onSectionChange={controller.requestSectionChange}
-                  />
-                )}
-
-                {controller.isTypeStepVisible ? (
-                  <IssueTypeGrid
-                    selectedIssueType={controller.selectedCreateIssueType}
-                    onSelectIssueType={controller.selectCreateIssueType}
-                  />
-                ) : controller.mode === "edit" && activeDocumentSection ? (
-                  <Suspense fallback={<TaskDocumentEditorFallback />}>
-                    <TaskDocumentEditor
-                      key={activeDocumentSection}
-                      title={
-                        activeDocumentSection === "spec" ? "Specification" : "Implementation Plan"
-                      }
-                      subtitle={
-                        activeDocumentSection === "spec"
-                          ? "Edit the canonical specification markdown for this task."
-                          : "Edit the implementation plan markdown for this task."
-                      }
-                      placeholder={
-                        activeDocumentSection === "spec"
-                          ? "# Purpose\n\nDescribe expected outcome..."
-                          : "## Milestones\n\n- ..."
-                      }
-                      markdown={controller.activeDraft}
-                      view={controller.views[activeDocumentSection]}
-                      onViewChange={(nextView) =>
-                        controller.setDocumentView(activeDocumentSection, nextView)
-                      }
-                      updatedAt={controller.activeDocument?.updatedAt ?? null}
-                      isLoading={controller.activeDocument?.isLoading ?? false}
-                      isSaving={controller.isSavingDocument === activeDocumentSection}
-                      error={controller.activeDocument?.error ?? null}
-                      hasUnsavedChanges={controller.isActiveDocumentDirty}
-                      onMarkdownChange={(value) =>
-                        controller.updateDocumentDraft(activeDocumentSection, value)
-                      }
-                      onRetryLoad={() => {
-                        void controller.loadDocumentSection(activeDocumentSection, true);
-                      }}
-                    />
-                  </Suspense>
-                ) : (
-                  <TaskDetailsForm
-                    mode={controller.mode}
-                    state={controller.state}
-                    priorityOptions={controller.priorityComboboxOptions}
-                    knownLabels={controller.knownLabels}
-                    onStateChange={controller.updateState}
-                    onRequestTypeChange={() => controller.setStep("type")}
-                    workspaceId={controller.workspaceId}
-                    taskId={controller.taskId}
-                    onDescriptionImageUpload={controller.stageDescriptionImage}
-                    descriptionAssetUploads={controller.descriptionAssetUploads}
-                    descriptionAssetPreviews={controller.descriptionAssetPreviews}
-                  />
-                )}
+                <TaskCreateModalSectionNavigation controller={controller} />
+                <TaskCreateModalSectionContent controller={controller} task={task} />
               </div>
             </DialogBody>
           </fieldset>

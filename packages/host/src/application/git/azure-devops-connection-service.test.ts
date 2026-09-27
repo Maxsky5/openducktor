@@ -32,6 +32,7 @@ describe("AzureDevOpsConnectionService", () => {
       startCloudSignIn,
       cancelCloudSignIn: () => Effect.void,
       disconnect: () => Effect.void,
+      removeWorkspaceCredentials: () => Effect.void,
     };
     const repoConfig = repoConfigSchema.parse({
       workspaceId: "repo",

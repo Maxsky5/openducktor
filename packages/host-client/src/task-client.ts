@@ -21,6 +21,23 @@ import {
   taskAssetStageInputSchema,
   taskAssetStageResultSchema,
   taskCardSchema,
+  type IssueItemsImportInput,
+  type IssueItemsImportResult,
+  type IssueItemsListInput,
+  type IssueItemsListResult,
+  type IssueItemGetInput,
+  type IssueImageGetInput,
+  type IssueImageGetResult,
+  type SourceIssue,
+  issueItemGetInputSchema,
+  issueImageGetInputSchema,
+  issueImageGetResultSchema,
+  sourceIssueSchema,
+  issueItemsImportInputSchema,
+  issueItemsImportResultSchema,
+  issueItemsListInputSchema,
+  issueItemsListResultSchema,
+  azureAreaPathsResultSchema,
   taskCreateInputSchema,
   taskMetadataDocumentSchema,
   taskMetadataPayloadSchema,
@@ -137,6 +154,38 @@ export class HostTaskClient {
   async tasksList(repoPath: string): Promise<TaskCard[]> {
     const args: TasksListArgs = { repoPath };
     return this.invokeFn("tasks_list", args, arrayResultSchema(taskCardSchema, "tasks_list"));
+  }
+
+  async issueItemsList(input: IssueItemsListInput): Promise<IssueItemsListResult> {
+    return this.invokeFn(
+      "issue_items_list",
+      issueItemsListInputSchema.parse(input),
+      issueItemsListResultSchema,
+    );
+  }
+
+  async issueItemGet(input: IssueItemGetInput): Promise<SourceIssue> {
+    return this.invokeFn("issue_item_get", issueItemGetInputSchema.parse(input), sourceIssueSchema);
+  }
+
+  async issueImageGet(input: IssueImageGetInput): Promise<IssueImageGetResult> {
+    return this.invokeFn(
+      "issue_image_get",
+      issueImageGetInputSchema.parse(input),
+      issueImageGetResultSchema,
+    );
+  }
+
+  async issueItemsImport(input: IssueItemsImportInput): Promise<IssueItemsImportResult> {
+    return this.invokeFn(
+      "issue_items_import",
+      issueItemsImportInputSchema.parse(input),
+      issueItemsImportResultSchema,
+    );
+  }
+
+  async azureAreaPathsList(repoPath: string): Promise<string[]> {
+    return this.invokeFn("azure_area_paths_list", { repoPath }, azureAreaPathsResultSchema);
   }
 
   async taskCreate(

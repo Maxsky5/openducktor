@@ -6,7 +6,6 @@ import {
   KeyRound,
   LoaderCircle,
   LogIn,
-  PencilLine,
   UserRound,
 } from "lucide-react";
 import { type MouseEvent, type ReactElement, useState } from "react";
@@ -43,41 +42,27 @@ type AzureDevOpsConnectionController = Pick<
 type AzureDevOpsConnectionSettingsProps = {
   controller: AzureDevOpsConnectionController;
   disabled: boolean;
-  onBack: () => void;
   onSaveSettings: () => Promise<boolean>;
 };
 
 export function AzureDevOpsConnectionSettings({
   controller,
   disabled,
-  onBack,
   onSaveSettings,
 }: AzureDevOpsConnectionSettingsProps): ReactElement {
-  const { connectionInput } = controller;
-
   return (
-    <section className="grid min-w-0 gap-4" aria-labelledby="azure-connection-heading">
-      <h3 id="azure-connection-heading" className="sr-only">
-        Azure DevOps connection
-      </h3>
-
-      {connectionInput ? (
-        <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <p className="text-xs font-medium text-muted-foreground">Repository</p>
-            <p className="truncate text-sm font-medium text-foreground">
-              {connectionInput.repository.project} / {connectionInput.repository.name}
-            </p>
-            <p className="truncate text-xs text-muted-foreground" title={connectionInput.repoPath}>
-              {connectionInput.repoPath}
-            </p>
-          </div>
-          <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={onBack}>
-            <PencilLine data-icon="inline-start" />
-            Change repository
-          </Button>
-        </div>
-      ) : null}
+    <section
+      className="grid min-w-0 gap-3 border-t border-border pt-5"
+      aria-labelledby="azure-connection-heading"
+    >
+      <div className="space-y-1">
+        <h3 id="azure-connection-heading" className="text-sm font-semibold text-foreground">
+          2. Connection
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          Sign in with an account that can access the project and its work items.
+        </p>
+      </div>
 
       <ConnectionStatePanel
         controller={controller}
@@ -123,7 +108,12 @@ function ConnectionStatePanel({
       </section>
     );
   }
-  return <ManagedConnection controller={controller} disabled={disabled} />;
+  return (
+    <ManagedConnection
+      controller={controller}
+      disabled={disabled || !controller.canManageConnection}
+    />
+  );
 }
 
 function UnsavedConnection({

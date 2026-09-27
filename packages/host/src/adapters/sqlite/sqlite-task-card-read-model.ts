@@ -1,6 +1,7 @@
 import {
   gitTargetBranchSchema,
   pullRequestSchema,
+  sourceIssueReferenceSchema,
   type TaskCard,
   type TaskDocumentSummary,
   taskCardSchema,
@@ -46,6 +47,21 @@ const rowToTaskCard = (
     const pullRequest = yield* optionalJsonFromRow(row, "pullRequestJson", (value) =>
       decodeWithSchema(pullRequestSchema, value, "pull_request_json", { taskId: row.id }),
     );
+    const sourceIssue =
+      row.sourceProviderId === null
+        ? undefined
+        : yield* validateWithSchema(
+            sourceIssueReferenceSchema,
+            {
+              providerId: row.sourceProviderId,
+              scope: row.sourceScope,
+              sourceId: row.sourceId,
+              number: row.sourceNumber,
+              url: row.sourceUrl,
+            },
+            "source issue reference",
+            { taskId: row.id },
+          );
     const labels = yield* labelsFromRow(row);
     const summary = documentSummaryOverride ?? (yield* documentSummary(session, row.id));
     const taskCard: TaskCard = {
@@ -66,6 +82,7 @@ const rowToTaskCard = (
       parentId: row.parentId ?? undefined,
       priority: row.priority,
       pullRequest,
+      sourceIssue,
       status: row.status,
       subtaskIds: [],
       targetBranch,

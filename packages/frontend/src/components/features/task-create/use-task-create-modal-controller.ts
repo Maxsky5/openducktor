@@ -1,5 +1,5 @@
 import type { IssueType, TaskAssetFailure, TaskCard } from "@openducktor/contracts";
-import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import { type Dispatch, useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import { toast } from "sonner";
 import type { TaskDocumentSection } from "@/components/features/task-composer";
 import {
@@ -180,61 +180,21 @@ const taskCreateModalReducer = (
   }
 };
 
-export function useTaskCreateModalController({
+function useExternalTaskSync({
   open,
-  onOpenChange,
-  tasks,
   task,
-}: UseTaskCreateModalControllerOptions) {
-  const { activeWorkspace } = useWorkspaceState();
-  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const workspaceId = activeWorkspace?.workspaceId ?? null;
-  const { createTask, updateTask } = useTasksState();
-  const { loadSpecDocument, loadPlanDocument, saveSpecDocument, savePlanDocument } = useSpecState();
-  const descriptionAssetOperations = useTaskDescriptionAssetOperations(workspaceId);
-
-  const mode: ComposerMode = task ? "edit" : "create";
-  const taskId = task?.id ?? null;
-
-  const [modalState, dispatch] = useReducer(
-    taskCreateModalReducer,
-    task,
-    initialTaskCreateModalState,
-  );
-  const {
-    step,
-    editSection,
-    composer,
-    selectedCreateIssueType,
-    error,
-    documentError,
-    isSubmitting,
-    isSavingDocument,
-    pendingDiscardIntent,
-    taskAssetFailure,
-    hasExternalTaskConflict,
-  } = modalState;
-
+  taskId,
+  composer,
+  dispatch,
+}: {
+  open: boolean;
+  task: TaskCard | null;
+  taskId: string | null;
+  composer: ComposerState;
+  dispatch: Dispatch<TaskCreateModalAction>;
+}): void {
   const previousModalContext = useRef<{ open: boolean; taskId: string | null } | null>(null);
   const serverComposer = useRef<ComposerState | null>(null);
-  const activeDocumentSection =
-    mode === "edit" && isDocumentSection(editSection) ? editSection : null;
-
-  const {
-    documents,
-    views,
-    loadSection: loadDocumentSection,
-    setView: setDocumentView,
-    updateDraft: updateDocumentDraft,
-    discardDraft: discardDocumentDraft,
-    applySaved: applySavedDocument,
-  } = useTaskDocumentEditorState({
-    open,
-    taskId,
-    activeSection: activeDocumentSection,
-    loadSpecDocument,
-    loadPlanDocument,
-  });
 
   useEffect(() => {
     const nextServerComposer = toComposerState(task);
@@ -244,141 +204,56 @@ export function useTaskCreateModalController({
     if (contextChanged) {
       previousModalContext.current = { open, taskId };
       serverComposer.current = nextServerComposer;
-      if (open) {
-        dispatch({ type: "resetForOpenTask", task });
-      }
+      if (open) dispatch({ type: "resetForOpenTask", task });
       return;
     }
-    if (!open) {
-      return;
-    }
+    if (!open) return;
 
     const previousServerComposer = serverComposer.current;
     if (
       previousServerComposer === null ||
       areComposerStatesEqual(previousServerComposer, nextServerComposer)
-    ) {
+    )
       return;
-    }
 
     serverComposer.current = nextServerComposer;
     const draftWasUntouched = areComposerStatesEqual(composer, previousServerComposer);
     const draftMatchesReplacement = areComposerStatesEqual(composer, nextServerComposer);
-    if (draftWasUntouched || draftMatchesReplacement) {
-      dispatch({ type: "externalTaskApplied", composer: nextServerComposer });
-      return;
-    }
+    dispatch(
+      draftWasUntouched || draftMatchesReplacement
+        ? { type: "externalTaskApplied", composer: nextServerComposer }
+        : { type: "externalTaskConflictDetected" },
+    );
+  }, [composer, dispatch, open, task, taskId]);
+}
 
-    dispatch({ type: "externalTaskConflictDetected" });
-  }, [composer, open, task, taskId]);
-
-  const reportDescriptionAssetDiscardError = useCallback((cause: unknown): void => {
-    toast.error("Temporary image cleanup failed", {
-      description: `${errorMessage(cause)} Refresh before continuing.`,
-    });
-  }, []);
-
-  const referencedDescriptionAssetIds = useMemo(
-    () => collectTaskDescriptionAssetIds(composer.description),
-    [composer.description],
-  );
-
-  const descriptionAssetDraft = useTaskDescriptionAssetDraft({
-    active: open,
-    draftKey: taskId ?? "new-task",
-    workspaceId,
-    referencedAssetIds: referencedDescriptionAssetIds,
-    stageImage: descriptionAssetOperations.stageImage,
-    discardStaged: descriptionAssetOperations.discardStaged,
-    onDiscardError: reportDescriptionAssetDiscardError,
-  });
-
-  const knownLabels = useMemo(() => collectKnownLabels(tasks), [tasks]);
-  const priorityComboboxOptions = useMemo(() => toPriorityComboboxOptions(), []);
-
-  const isSpecDirty =
-    documents.spec.loaded && documents.spec.draftMarkdown !== documents.spec.serverMarkdown;
-  const isPlanDirty =
-    documents.plan.loaded && documents.plan.draftMarkdown !== documents.plan.serverMarkdown;
-  const activeDocument = activeDocumentSection ? documents[activeDocumentSection] : null;
-  const activeDraft = activeDocument?.draftMarkdown ?? "";
-  const hasUnsavedActiveDocument = hasUnsavedDocumentChanges(activeDocumentSection, {
-    isSpecDirty,
-    isPlanDirty,
-  });
-
-  const isBusy = isSubmitting || isSavingDocument !== null || descriptionAssetDraft.isUploading;
-  const isRecoveryBlocked = taskAssetFailureRequiresLock(taskAssetFailure);
-  const isFormDisabled = isBusy || isRecoveryBlocked;
-  const isTypeStepVisible = mode === "create" && step === "type";
-  const isEditingDocument = mode === "edit" && activeDocumentSection !== null;
-  let footerError = error;
-  if (isEditingDocument) {
-    footerError = documentError;
-  } else if (hasExternalTaskConflict) {
-    footerError = EXTERNAL_TASK_CONFLICT_MESSAGE;
-  }
-  const isActiveDocumentDirty =
-    activeDocumentSection === "spec"
-      ? isSpecDirty
-      : activeDocumentSection === "plan"
-        ? isPlanDirty
-        : false;
-
-  const updateState = (patch: Partial<ComposerState>): void => {
-    dispatch({ type: "composerPatched", patch });
-  };
-
-  const selectCreateIssueType = (issueType: IssueType): void => {
-    dispatch({ type: "issueTypeSelected", issueType });
-  };
-
-  const discardCurrentDocumentDraft = (): void => {
-    if (!activeDocumentSection) {
-      return;
-    }
-    discardDocumentDraft(activeDocumentSection);
-    dispatch({ type: "documentErrorCleared" });
-  };
-
-  const close = async (): Promise<void> => {
-    if (isBusy) {
-      return;
-    }
-    if (hasUnsavedActiveDocument) {
-      dispatch({ type: "discardIntentSet", intent: { type: "close-modal" } });
-      return;
-    }
-    try {
-      await descriptionAssetDraft.discardAll();
-      onOpenChange(false);
-    } catch (reason) {
-      dispatch({
-        type: "submitBlocked",
-        error: `Could not discard staged images: ${errorMessage(reason)}`,
-      });
-    }
-  };
-
-  const requestSectionChange = (next: EditTaskSection): void => {
-    if (next === editSection || isBusy) {
-      return;
-    }
-    if (hasUnsavedActiveDocument) {
-      dispatch({ type: "discardIntentSet", intent: { type: "switch-section", next } });
-      return;
-    }
-
-    dispatch({ type: "sectionChanged", section: next });
-    if (isDocumentSection(next)) {
-      void loadDocumentSection(next);
-    }
-  };
-
-  const submit = async (): Promise<void> => {
-    if (isRecoveryBlocked || hasExternalTaskConflict) {
-      return;
-    }
+function createTaskSubmit({
+  composer,
+  createTask,
+  descriptionAssetDraft,
+  dispatch,
+  hasExternalTaskConflict,
+  isRecoveryBlocked,
+  mode,
+  onOpenChange,
+  task,
+  updateTask,
+  workspaceRepoPath,
+}: {
+  composer: ComposerState;
+  createTask: ReturnType<typeof useTasksState>["createTask"];
+  descriptionAssetDraft: ReturnType<typeof useTaskDescriptionAssetDraft>;
+  dispatch: Dispatch<TaskCreateModalAction>;
+  hasExternalTaskConflict: boolean;
+  isRecoveryBlocked: boolean;
+  mode: ComposerMode;
+  onOpenChange: (open: boolean) => void;
+  task: TaskCard | null;
+  updateTask: ReturnType<typeof useTasksState>["updateTask"];
+  workspaceRepoPath: string | null;
+}): () => Promise<void> {
+  return async () => {
+    if (isRecoveryBlocked || hasExternalTaskConflict) return;
     if (descriptionAssetDraft.isUploading) {
       dispatch({
         type: "submitBlocked",
@@ -428,6 +303,278 @@ export function useTaskCreateModalController({
       dispatch({ type: "submitFinished" });
     }
   };
+}
+
+function createDocumentNavigationActions({
+  activeDocumentSection,
+  descriptionAssetDraft,
+  discardDocumentDraft,
+  dispatch,
+  editSection,
+  hasUnsavedActiveDocument,
+  isBusy,
+  loadDocumentSection,
+  onOpenChange,
+  pendingDiscardIntent,
+}: {
+  activeDocumentSection: DocumentSection | null;
+  descriptionAssetDraft: ReturnType<typeof useTaskDescriptionAssetDraft>;
+  discardDocumentDraft: ReturnType<typeof useTaskDocumentEditorState>["discardDraft"];
+  dispatch: Dispatch<TaskCreateModalAction>;
+  editSection: EditTaskSection;
+  hasUnsavedActiveDocument: boolean;
+  isBusy: boolean;
+  loadDocumentSection: ReturnType<typeof useTaskDocumentEditorState>["loadSection"];
+  onOpenChange: (open: boolean) => void;
+  pendingDiscardIntent: PendingDiscardIntent | null;
+}) {
+  const discardCurrentDocumentDraft = (): void => {
+    if (!activeDocumentSection) return;
+    discardDocumentDraft(activeDocumentSection);
+    dispatch({ type: "documentErrorCleared" });
+  };
+
+  const requestSectionChange = (next: EditTaskSection): void => {
+    if (next === editSection || isBusy) return;
+    if (hasUnsavedActiveDocument) {
+      dispatch({ type: "discardIntentSet", intent: { type: "switch-section", next } });
+      return;
+    }
+    dispatch({ type: "sectionChanged", section: next });
+    if (isDocumentSection(next)) void loadDocumentSection(next);
+  };
+
+  const confirmDiscard = async (): Promise<void> => {
+    if (!pendingDiscardIntent) return;
+    discardCurrentDocumentDraft();
+    if (pendingDiscardIntent.type === "close-modal") {
+      try {
+        await descriptionAssetDraft.discardAll();
+        onOpenChange(false);
+      } catch (reason) {
+        dispatch({
+          type: "submitBlocked",
+          error: `Could not discard staged images: ${errorMessage(reason)}`,
+        });
+        return;
+      }
+    } else {
+      dispatch({ type: "sectionChanged", section: pendingDiscardIntent.next });
+      if (isDocumentSection(pendingDiscardIntent.next)) {
+        void loadDocumentSection(pendingDiscardIntent.next);
+      }
+    }
+    dispatch({ type: "discardIntentCleared" });
+  };
+
+  return { discardCurrentDocumentDraft, requestSectionChange, confirmDiscard };
+}
+
+function selectTaskCreateModalView({
+  activeDocumentSection,
+  documents,
+  isUploading,
+  modalState,
+  mode,
+}: {
+  activeDocumentSection: DocumentSection | null;
+  documents: ReturnType<typeof useTaskDocumentEditorState>["documents"];
+  isUploading: boolean;
+  modalState: TaskCreateModalState;
+  mode: ComposerMode;
+}) {
+  const isSpecDirty =
+    documents.spec.loaded && documents.spec.draftMarkdown !== documents.spec.serverMarkdown;
+  const isPlanDirty =
+    documents.plan.loaded && documents.plan.draftMarkdown !== documents.plan.serverMarkdown;
+  const activeDocument = activeDocumentSection ? documents[activeDocumentSection] : null;
+  const activeDraft = activeDocument?.draftMarkdown ?? "";
+  const hasUnsavedActiveDocument = hasUnsavedDocumentChanges(activeDocumentSection, {
+    isSpecDirty,
+    isPlanDirty,
+  });
+  const isBusy = modalState.isSubmitting || modalState.isSavingDocument !== null || isUploading;
+  const isRecoveryBlocked = taskAssetFailureRequiresLock(modalState.taskAssetFailure);
+  const isFormDisabled = isBusy || isRecoveryBlocked;
+  const isTypeStepVisible = mode === "create" && modalState.step === "type";
+  const isEditingDocument = mode === "edit" && activeDocumentSection !== null;
+  let footerError = modalState.error;
+  if (isEditingDocument) footerError = modalState.documentError;
+  else if (modalState.hasExternalTaskConflict) footerError = EXTERNAL_TASK_CONFLICT_MESSAGE;
+  const isActiveDocumentDirty =
+    activeDocumentSection === "spec"
+      ? isSpecDirty
+      : activeDocumentSection === "plan"
+        ? isPlanDirty
+        : false;
+  return {
+    isSpecDirty,
+    isPlanDirty,
+    activeDocument,
+    activeDraft,
+    hasUnsavedActiveDocument,
+    isBusy,
+    isRecoveryBlocked,
+    isFormDisabled,
+    isTypeStepVisible,
+    isEditingDocument,
+    footerError,
+    isActiveDocumentDirty,
+  };
+}
+
+export function useTaskCreateModalController({
+  open,
+  onOpenChange,
+  tasks,
+  task,
+}: UseTaskCreateModalControllerOptions) {
+  const { activeWorkspace } = useWorkspaceState();
+  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
+  const workspaceId = activeWorkspace?.workspaceId ?? null;
+  const { createTask, updateTask } = useTasksState();
+  const { loadSpecDocument, loadPlanDocument, saveSpecDocument, savePlanDocument } = useSpecState();
+  const descriptionAssetOperations = useTaskDescriptionAssetOperations(workspaceId);
+
+  const mode: ComposerMode = task ? "edit" : "create";
+  const taskId = task?.id ?? null;
+
+  const [modalState, dispatch] = useReducer(
+    taskCreateModalReducer,
+    task,
+    initialTaskCreateModalState,
+  );
+  const {
+    step,
+    editSection,
+    composer,
+    selectedCreateIssueType,
+    isSubmitting,
+    isSavingDocument,
+    pendingDiscardIntent,
+    hasExternalTaskConflict,
+  } = modalState;
+
+  const activeDocumentSection =
+    mode === "edit" && isDocumentSection(editSection) ? editSection : null;
+
+  const {
+    documents,
+    views,
+    loadSection: loadDocumentSection,
+    setView: setDocumentView,
+    updateDraft: updateDocumentDraft,
+    discardDraft: discardDocumentDraft,
+    applySaved: applySavedDocument,
+  } = useTaskDocumentEditorState({
+    open,
+    taskId,
+    activeSection: activeDocumentSection,
+    loadSpecDocument,
+    loadPlanDocument,
+  });
+
+  useExternalTaskSync({ open, task, taskId, composer, dispatch });
+
+  const reportDescriptionAssetDiscardError = useCallback((cause: unknown): void => {
+    toast.error("Temporary image cleanup failed", {
+      description: `${errorMessage(cause)} Refresh before continuing.`,
+    });
+  }, []);
+
+  const referencedDescriptionAssetIds = useMemo(
+    () => collectTaskDescriptionAssetIds(composer.description),
+    [composer.description],
+  );
+
+  const descriptionAssetDraft = useTaskDescriptionAssetDraft({
+    active: open,
+    draftKey: taskId ?? "new-task",
+    workspaceId,
+    referencedAssetIds: referencedDescriptionAssetIds,
+    stageImage: descriptionAssetOperations.stageImage,
+    discardStaged: descriptionAssetOperations.discardStaged,
+    onDiscardError: reportDescriptionAssetDiscardError,
+  });
+
+  const knownLabels = useMemo(() => collectKnownLabels(tasks), [tasks]);
+  const priorityComboboxOptions = useMemo(() => toPriorityComboboxOptions(), []);
+
+  const {
+    isSpecDirty,
+    isPlanDirty,
+    activeDocument,
+    activeDraft,
+    hasUnsavedActiveDocument,
+    isBusy,
+    isRecoveryBlocked,
+    isFormDisabled,
+    isTypeStepVisible,
+    isEditingDocument,
+    footerError,
+    isActiveDocumentDirty,
+  } = selectTaskCreateModalView({
+    activeDocumentSection,
+    documents,
+    isUploading: descriptionAssetDraft.isUploading,
+    modalState,
+    mode,
+  });
+
+  const updateState = (patch: Partial<ComposerState>): void => {
+    dispatch({ type: "composerPatched", patch });
+  };
+
+  const selectCreateIssueType = (issueType: IssueType): void => {
+    dispatch({ type: "issueTypeSelected", issueType });
+  };
+
+  const { discardCurrentDocumentDraft, requestSectionChange, confirmDiscard } =
+    createDocumentNavigationActions({
+      activeDocumentSection,
+      descriptionAssetDraft,
+      discardDocumentDraft,
+      dispatch,
+      editSection,
+      hasUnsavedActiveDocument,
+      isBusy,
+      loadDocumentSection,
+      onOpenChange,
+      pendingDiscardIntent,
+    });
+
+  const close = async (): Promise<void> => {
+    if (isBusy) {
+      return;
+    }
+    if (hasUnsavedActiveDocument) {
+      dispatch({ type: "discardIntentSet", intent: { type: "close-modal" } });
+      return;
+    }
+    try {
+      await descriptionAssetDraft.discardAll();
+      onOpenChange(false);
+    } catch (reason) {
+      dispatch({
+        type: "submitBlocked",
+        error: `Could not discard staged images: ${errorMessage(reason)}`,
+      });
+    }
+  };
+
+  const submit = createTaskSubmit({
+    composer,
+    createTask,
+    descriptionAssetDraft,
+    dispatch,
+    hasExternalTaskConflict,
+    isRecoveryBlocked,
+    mode,
+    onOpenChange,
+    task,
+    updateTask,
+    workspaceRepoPath,
+  });
 
   const saveActiveDocument = async (): Promise<void> => {
     if (!taskId || !activeDocumentSection || !activeDocument) {
@@ -447,33 +594,6 @@ export function useTaskCreateModalController({
     } finally {
       dispatch({ type: "documentSaveFinished" });
     }
-  };
-
-  const confirmDiscard = async (): Promise<void> => {
-    if (!pendingDiscardIntent) {
-      return;
-    }
-
-    discardCurrentDocumentDraft();
-    if (pendingDiscardIntent.type === "close-modal") {
-      try {
-        await descriptionAssetDraft.discardAll();
-        onOpenChange(false);
-      } catch (reason) {
-        dispatch({
-          type: "submitBlocked",
-          error: `Could not discard staged images: ${errorMessage(reason)}`,
-        });
-        return;
-      }
-    } else {
-      dispatch({ type: "sectionChanged", section: pendingDiscardIntent.next });
-      if (isDocumentSection(pendingDiscardIntent.next)) {
-        void loadDocumentSection(pendingDiscardIntent.next);
-      }
-    }
-
-    dispatch({ type: "discardIntentCleared" });
   };
 
   const onDialogOpenChange = (nextOpen: boolean): void => {
@@ -496,6 +616,7 @@ export function useTaskCreateModalController({
     mode,
     taskId,
     workspaceId,
+    workspaceRepoPath,
     step,
     setStep,
     selectedCreateIssueType,

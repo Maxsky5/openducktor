@@ -62,6 +62,14 @@ describe("GitProviderService", () => {
           providerId: "github",
           readContext: () => Effect.die("Unexpected readContext call"),
         }),
+      issues: () =>
+        Effect.succeed({
+          providerId: "github",
+          scope: () => Effect.die("Unexpected scope call"),
+          list: () => Effect.die("Unexpected Issue list call"),
+          get: () => Effect.die("Unexpected Issue get call"),
+          prepareGet: () => Effect.die("Unexpected Issue import call"),
+        }),
     };
     const resolver = await Effect.runPromise(createGitProviderResolver([provider]));
     const detectionRepoConfig = repoConfigSchema.parse({

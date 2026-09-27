@@ -4,6 +4,7 @@ import {
   gitMergeMethodSchema,
   gitTargetBranchSchema,
   pullRequestSchema,
+  sourceIssueReferenceSchema,
 } from "./git-schemas";
 
 export const taskStatusSchema = z.enum([
@@ -182,6 +183,10 @@ export const taskCardSchema = z.object({
   pullRequest: z.preprocess(
     (value) => (value === null ? undefined : value),
     pullRequestSchema.optional(),
+  ),
+  sourceIssue: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    sourceIssueReferenceSchema.optional(),
   ),
   documentSummary: taskDocumentSummarySchema.optional().default(EMPTY_TASK_DOCUMENT_SUMMARY),
   agentWorkflows: agentWorkflowsSchema.optional().default(EMPTY_AGENT_WORKFLOWS),

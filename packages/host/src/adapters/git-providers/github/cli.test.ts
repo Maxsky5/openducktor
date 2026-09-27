@@ -6,7 +6,7 @@ import type {
   SystemCommandRunResult,
 } from "../../../ports/system-command-port";
 import type { ToolDiscoveryPort } from "../../../ports/tool-discovery-port";
-import { createGithubCli } from "./cli";
+import { createGithubCli, runGithubApi } from "./cli";
 
 type RunCall = {
   command: string;
@@ -45,6 +45,31 @@ const createSystemCommandPort = ({
 };
 
 describe("createGithubCli", () => {
+  test("passes the configured host to gh api for issues and Pull Requests", async () => {
+    const { port, runCalls } = createSystemCommandPort();
+    const githubCli = createGithubCli({
+      systemCommands: port,
+      toolDiscovery: createToolDiscovery(),
+    });
+
+    await Effect.runPromise(
+      runGithubApi(githubCli, "/repo", " github.example.com ", [
+        "api",
+        "search/issues",
+        "-f",
+        "q=repo:example/repo",
+      ]),
+    );
+    await Effect.runPromise(
+      runGithubApi(githubCli, "/repo", "github.example.com", ["api", "repos/example/repo/pulls/1"]),
+    );
+
+    expect(runCalls.map(({ args }) => args)).toEqual([
+      ["api", "--hostname", "github.example.com", "search/issues", "-f", "q=repo:example/repo"],
+      ["api", "--hostname", "github.example.com", "repos/example/repo/pulls/1"],
+    ]);
+  });
+
   test("reads the API user for the configured host", async () => {
     const { port, runCalls } = createSystemCommandPort({
       runResult: { ok: true, stdout: "active-user\n", stderr: "" },

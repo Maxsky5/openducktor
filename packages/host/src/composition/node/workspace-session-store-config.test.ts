@@ -5,7 +5,68 @@ import path from "node:path";
 import { repoConfigSchema, type WorkspaceSession } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-model";
+import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import { createNodeTaskAssetServices } from "./node-task-asset-services";
+
+test("does not import Issues into SQLite when a custom Task store is active", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "odt-custom-task-store-"));
+  const repoPath = path.join(root, "repo");
+  const repoConfig = repoConfigSchema.parse({
+    workspaceId: "repo",
+    workspaceName: "Repo",
+    repoPath,
+  });
+  const settings: Pick<WorkspaceSettingsService, "getRepoConfig" | "getRepoConfigByRepoPath"> = {
+    getRepoConfig: () => Effect.succeed(repoConfig),
+    getRepoConfigByRepoPath: () => Effect.succeed(repoConfig),
+  };
+  const services = createNodeTaskAssetServices({
+    configDir: { root, scope: "test" },
+    configuredTaskStore: createTaskStoreTestDouble({}),
+    onBackgroundFailure: () => Effect.void,
+    processEnv: {},
+    // SAFETY: This composition test only reads the two workspace methods above.
+    workspaceSettingsService: settings as WorkspaceSettingsService,
+  });
+  const sourceIssue = {
+    providerId: "github",
+    scope: "github.com/example/repo",
+    sourceId: "42",
+    number: "42",
+    url: "https://github.com/example/repo/issues/42",
+  };
+  try {
+    await expect(
+      Effect.runPromise(
+        services.issueImportStore.findLinkedTaskIds({
+          repoPath,
+          providerId: "github",
+          scope: sourceIssue.scope,
+          sourceIds: [sourceIssue.sourceId],
+        }),
+      ),
+    ).rejects.toThrow("requires the default SQLite Task store");
+    await expect(
+      Effect.runPromise(
+        services.issueImportStore.createImportedTask({
+          repoPath,
+          sourceIssue,
+          task: {
+            title: "Issue 42",
+            description: "Body",
+            issueType: "task",
+            priority: 2,
+            labels: [],
+            aiReviewEnabled: true,
+          },
+        }),
+      ),
+    ).rejects.toThrow("requires the default SQLite Task store");
+  } finally {
+    await Effect.runPromise(services.taskStoreConnectionShutdownStep.run());
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test("custom config session ownership and import do not read other installations", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "odt-import-config-"));

@@ -1,0 +1,239 @@
+import type { SourceIssueReference } from "@openducktor/contracts";
+import { and, eq, inArray, ne } from "drizzle-orm";
+import { Effect } from "effect";
+import { HostValidationError } from "../../effect/host-errors";
+import type { IssueImportStorePort } from "../../ports/issue-import-store-port";
+import { getTaskCard } from "./sqlite-task-card-read-model";
+import { taskInsertFromCreateInput } from "./sqlite-task-create";
+import {
+  firstTaskIdHashLength,
+  taskIdCandidates,
+  taskIdExhaustedError,
+  taskIdPrefixForWorkspaceId,
+} from "./sqlite-task-ids";
+import type { SqliteTaskRepositoryContextProvider } from "./sqlite-task-repository-context";
+import { type TaskStoreSession, tasks } from "./sqlite-task-store-schema";
+
+const linkedTask = (session: TaskStoreSession, source: SourceIssueReference) =>
+  session
+    .execute(
+      (database) =>
+        database
+          .select({ id: tasks.id })
+          .from(tasks)
+          .where(
+            and(
+              eq(tasks.sourceProviderId, source.providerId),
+              eq(tasks.sourceScope, source.scope),
+              eq(tasks.sourceId, source.sourceId),
+            ),
+          )
+          .limit(1),
+      "sqliteIssueImportStore.linkedTask",
+    )
+    .pipe(Effect.map((rows) => rows[0]?.id));
+
+export const createSqliteIssueImportStore = ({
+  contextProvider: withDatabase,
+  now = () => new Date(),
+}: {
+  contextProvider: SqliteTaskRepositoryContextProvider;
+  now?: () => Date;
+}): IssueImportStorePort => ({
+  getSourceIssue(input) {
+    return withDatabase(input.repoPath, "sqliteIssueImportStore.getSourceIssue", ({ session }) =>
+      session
+        .execute(
+          (database) =>
+            database
+              .select({
+                providerId: tasks.sourceProviderId,
+                scope: tasks.sourceScope,
+                sourceId: tasks.sourceId,
+                number: tasks.sourceNumber,
+                url: tasks.sourceUrl,
+                description: tasks.description,
+              })
+              .from(tasks)
+              .where(eq(tasks.id, input.taskId))
+              .limit(1),
+          "sqliteIssueImportStore.getSourceIssue.query",
+        )
+        .pipe(
+          Effect.map(([source]) =>
+            source?.providerId && source.scope && source.sourceId && source.number && source.url
+              ? {
+                  providerId: source.providerId,
+                  scope: source.scope,
+                  sourceId: source.sourceId,
+                  number: source.number,
+                  url: source.url,
+                  description: source.description,
+                }
+              : undefined,
+          ),
+        ),
+    );
+  },
+  findLinkedTaskIds(input) {
+    if (input.sourceIds.length === 0) return Effect.succeed({});
+    return withDatabase(input.repoPath, "sqliteIssueImportStore.findLinkedTaskIds", ({ session }) =>
+      session
+        .execute(
+          (database) =>
+            database
+              .select({ id: tasks.id, sourceId: tasks.sourceId })
+              .from(tasks)
+              .where(
+                and(
+                  eq(tasks.sourceProviderId, input.providerId),
+                  eq(tasks.sourceScope, input.scope),
+                  inArray(tasks.sourceId, input.sourceIds),
+                ),
+              ),
+          "sqliteIssueImportStore.findLinkedTaskIds.query",
+        )
+        .pipe(
+          Effect.map((rows) =>
+            Object.fromEntries(
+              rows.flatMap((row) => (row.sourceId === null ? [] : [[row.sourceId, row.id]])),
+            ),
+          ),
+        ),
+    );
+  },
+  findSourceScopes(input) {
+    if (input.sourceIds.length === 0) return Effect.succeed([]);
+    return withDatabase(input.repoPath, "sqliteIssueImportStore.findSourceScopes", ({ session }) =>
+      session
+        .execute(
+          (database) =>
+            database
+              .selectDistinct({ scope: tasks.sourceScope })
+              .from(tasks)
+              .where(
+                and(
+                  eq(tasks.sourceProviderId, input.providerId),
+                  ne(tasks.sourceScope, input.scope),
+                  inArray(tasks.sourceId, input.sourceIds),
+                ),
+              ),
+          "sqliteIssueImportStore.findSourceScopes.query",
+        )
+        .pipe(Effect.map((rows) => rows.flatMap(({ scope }) => (scope ? [scope] : [])))),
+    );
+  },
+  replaceSourceScope(input) {
+    if (input.sourceIds.length === 0 || input.oldScope === input.scope) return Effect.void;
+    return withDatabase(
+      input.repoPath,
+      "sqliteIssueImportStore.replaceSourceScope",
+      ({ session }) =>
+        session.transaction("sqliteIssueImportStore.replaceSourceScope", (transaction) =>
+          Effect.gen(function* () {
+            const oldRows = yield* transaction.execute(
+              (database) =>
+                database
+                  .select({ sourceId: tasks.sourceId })
+                  .from(tasks)
+                  .where(
+                    and(
+                      eq(tasks.sourceProviderId, input.providerId),
+                      eq(tasks.sourceScope, input.oldScope),
+                      inArray(tasks.sourceId, input.sourceIds),
+                    ),
+                  ),
+              "sqliteIssueImportStore.replaceSourceScope.oldRows",
+            );
+            const oldIds = oldRows.flatMap(({ sourceId }) => (sourceId ? [sourceId] : []));
+            if (oldIds.length === 0) return;
+            const currentRows = yield* transaction.execute(
+              (database) =>
+                database
+                  .select({ sourceId: tasks.sourceId })
+                  .from(tasks)
+                  .where(
+                    and(
+                      eq(tasks.sourceProviderId, input.providerId),
+                      eq(tasks.sourceScope, input.scope),
+                      inArray(tasks.sourceId, oldIds),
+                    ),
+                  ),
+              "sqliteIssueImportStore.replaceSourceScope.currentRows",
+            );
+            if (currentRows.length > 0) {
+              return yield* new HostValidationError({
+                field: "sourceScope",
+                message:
+                  "Two Tasks are linked to the same GitHub Issue. Remove one linked Task before importing again.",
+              });
+            }
+            yield* transaction.execute(
+              (database) =>
+                database
+                  .update(tasks)
+                  .set({ sourceScope: input.scope })
+                  .where(
+                    and(
+                      eq(tasks.sourceProviderId, input.providerId),
+                      eq(tasks.sourceScope, input.oldScope),
+                      inArray(tasks.sourceId, oldIds),
+                    ),
+                  ),
+              "sqliteIssueImportStore.replaceSourceScope.update",
+            );
+          }),
+        ),
+    );
+  },
+  createImportedTask(input) {
+    return withDatabase(
+      input.repoPath,
+      "sqliteIssueImportStore.createImportedTask",
+      ({ session, workspaceId }) =>
+        session.transaction("sqliteIssueImportStore.createImportedTask", (transaction) =>
+          Effect.gen(function* () {
+            const existing = yield* linkedTask(transaction, input.sourceIssue);
+            if (existing) return { outcome: "duplicate" as const, taskId: existing };
+            const createdAt = now();
+            const prefix = taskIdPrefixForWorkspaceId(workspaceId);
+            const firstLength = yield* firstTaskIdHashLength(transaction, prefix);
+            const candidates = taskIdCandidates({
+              createdAt,
+              description: input.task.description,
+              firstLength,
+              prefix,
+              title: input.task.title,
+            });
+            for (const taskId of candidates) {
+              const row = {
+                ...taskInsertFromCreateInput(input.task, taskId, createdAt),
+                sourceProviderId: input.sourceIssue.providerId,
+                sourceScope: input.sourceIssue.scope,
+                sourceId: input.sourceIssue.sourceId,
+                sourceNumber: input.sourceIssue.number,
+                sourceUrl: input.sourceIssue.url,
+              };
+              const inserted = yield* transaction.execute(
+                (database) =>
+                  database
+                    .insert(tasks)
+                    .values(row)
+                    .onConflictDoNothing()
+                    .returning({ id: tasks.id }),
+                "sqliteIssueImportStore.createImportedTask.insert",
+                { taskId },
+              );
+              if (inserted.length > 0) {
+                const task = yield* getTaskCard(transaction, taskId, input.repoPath);
+                return { outcome: "created" as const, task };
+              }
+              const concurrent = yield* linkedTask(transaction, input.sourceIssue);
+              if (concurrent) return { outcome: "duplicate" as const, taskId: concurrent };
+            }
+            return yield* taskIdExhaustedError(prefix);
+          }),
+        ),
+    );
+  },
+});

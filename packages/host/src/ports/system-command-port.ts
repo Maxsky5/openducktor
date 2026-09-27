@@ -8,6 +8,8 @@ export type SystemCommandRunOptions = {
   cwd?: string;
   env?: Record<string, string>;
   timeoutMs?: number;
+  stdoutEncoding?: "utf8" | "base64";
+  maxStdoutBytes?: number;
 };
 
 export type SystemCommandRunResult = {

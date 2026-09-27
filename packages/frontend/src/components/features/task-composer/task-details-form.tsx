@@ -4,6 +4,7 @@ import type { ReactElement } from "react";
 import { ISSUE_TYPE_OPTIONS } from "@/components/features/task-composer/constants";
 import { issueTypeGuidance } from "@/components/features/task-composer/utils";
 import TaskDescriptionEditor from "@/components/features/task-description-editor/task-description-editor";
+import type { IssueImageContext } from "@/components/features/issue-source/github-issue-image";
 import type { TaskDescriptionAssetUpload } from "@/components/features/task-description-editor/use-task-description-asset-draft";
 import { Button } from "@/components/ui/button";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
@@ -23,6 +24,7 @@ type TaskDetailsFormProps = {
   onRequestTypeChange: () => void;
   workspaceId: string | null;
   taskId: string | null;
+  issueImageContext?: IssueImageContext | undefined;
   onDescriptionImageUpload(file: File): Promise<TaskAssetStageResult>;
   descriptionAssetUploads: TaskDescriptionAssetUpload[];
   descriptionAssetPreviews: ReadonlyMap<string, string>;
@@ -37,6 +39,7 @@ export function TaskDetailsForm({
   onRequestTypeChange,
   workspaceId,
   taskId,
+  issueImageContext,
   onDescriptionImageUpload,
   descriptionAssetUploads,
   descriptionAssetPreviews,
@@ -127,6 +130,7 @@ export function TaskDetailsForm({
           markdown={state.description}
           workspaceId={workspaceId}
           taskId={taskId}
+          issueImageContext={issueImageContext}
           onUpload={onDescriptionImageUpload}
           uploads={descriptionAssetUploads}
           previews={descriptionAssetPreviews}

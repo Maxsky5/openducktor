@@ -1,16 +1,21 @@
 import {
   AZURE_DEVOPS_PROVIDER_DESCRIPTOR,
   GITHUB_PROVIDER_DESCRIPTOR,
+  repoConfigSchema,
   type GitProviderConfig,
   type GitProviderHealth,
   type SettingsRepoConfig,
 } from "@openducktor/contracts";
 import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { act, createElement, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryProvider } from "@/lib/query-provider";
+import { createQueryClient } from "@/lib/query-client";
 import { host } from "@/state/operations/shared/host";
+import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { SettingsGitSection } from "./settings-git-section";
 import { RepositoryGitSection } from "./settings-repository-git-section";
 import type { GitProviderState } from "./use-repository-git-section-model";
@@ -812,15 +817,198 @@ describe("settings git sections", () => {
       });
 
       expect(getConnection).toHaveBeenCalledTimes(0);
-      expect(screen.getByRole("navigation", { name: "Azure DevOps setup" })).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "1. Repository" })).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "2. Connection" })).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "3. Work item area" })).toBeTruthy();
       expect(screen.getByRole("switch", { name: "Enable Azure DevOps provider" })).toBeTruthy();
-      fireEvent.click(screen.getByRole("button", { name: /Connection/ }));
       expect(screen.queryByRole("button", { name: "Sign in with Microsoft" })).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: "Save and continue" }));
       await waitFor(() => expect(saveSettings).toHaveBeenCalledTimes(1));
     } finally {
       rendered.unmount();
       host.workspaceGetAzureDevOpsConnection = originalGetConnection;
+    }
+  });
+
+  test("keeps an old Azure connection out of a new unsaved repository", async () => {
+    const savedConfig: SettingsRepoConfig = {
+      ...baseRepoConfig,
+      git: {
+        provider: {
+          id: "azure_devops",
+          enabled: true,
+          autoDetected: false,
+          repository: {
+            providerId: "azure_devops",
+            deployment: "services",
+            serviceUrl: "https://dev.azure.com",
+            organization: "OpenDucktor",
+            project: "Desktop",
+            name: "old",
+          },
+        },
+      },
+    };
+    const draftConfig: SettingsRepoConfig = {
+      ...savedConfig,
+      git: {
+        provider: {
+          ...savedConfig.git.provider!,
+          repository: { ...savedConfig.git.provider!.repository!, name: "new" },
+        },
+      },
+    };
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(
+      settingsSnapshotQueryOptions().queryKey,
+      createSettingsSnapshotFixture({ workspaces: { repo: savedConfig } }),
+    );
+    const originalGetConnection = host.workspaceGetAzureDevOpsConnection;
+    const getConnection = mock(async () => ({ status: "connected" as const, account: null }));
+    host.workspaceGetAzureDevOpsConnection = getConnection;
+    const rendered = render(
+      <QueryClientProvider client={queryClient}>
+        <RepositoryGitSection
+          selectedRepoPath="/repo"
+          selectedRepoConfig={draftConfig}
+          providerState={{
+            status: "loaded",
+            context: {
+              descriptor: AZURE_DEVOPS_PROVIDER_DESCRIPTOR,
+              config: savedConfig.git.provider!,
+              health: {
+                providerId: "azure_devops",
+                enabled: true,
+                available: true,
+                executablePath: null,
+                version: null,
+                authenticated: true,
+                account: null,
+                repositoryMappingValid: true,
+              },
+            },
+          }}
+          disabled={false}
+          onDetectGithubRepository={async () => null}
+          onSaveSettings={async () => true}
+          onUpdateSelectedRepoConfig={() => draftConfig}
+        />
+      </QueryClientProvider>,
+    );
+
+    try {
+      expect(screen.getByRole("button", { name: "Save and continue" })).toBeTruthy();
+      expect(
+        screen.getByText("Save the repository mapping in Connection before choosing an area."),
+      ).toBeTruthy();
+      expect(getConnection).not.toHaveBeenCalled();
+    } finally {
+      rendered.unmount();
+      queryClient.clear();
+      host.workspaceGetAzureDevOpsConnection = originalGetConnection;
+    }
+  });
+
+  test("keeps the connection while a changed area waits for the main settings save", async () => {
+    const repository = {
+      providerId: "azure_devops" as const,
+      deployment: "services" as const,
+      serviceUrl: "https://dev.azure.com",
+      organization: "OpenDucktor",
+      project: "Desktop",
+      name: "app",
+    };
+    const savedConfig: SettingsRepoConfig = {
+      ...baseRepoConfig,
+      git: {
+        provider: {
+          id: "azure_devops",
+          enabled: true,
+          autoDetected: false,
+          repository,
+          settings: { areaPath: "desktop" },
+        },
+      },
+    };
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(
+      settingsSnapshotQueryOptions().queryKey,
+      createSettingsSnapshotFixture({ workspaces: { repo: savedConfig } }),
+    );
+    const originalGetConnection = host.workspaceGetAzureDevOpsConnection;
+    const originalGetRepoConfig = host.workspaceGetRepoConfig;
+    const originalListAreas = host.azureAreaPathsList;
+    const connection = createDeferred<{ status: "connected"; account: null }>();
+    const getConnection = mock(() => connection.promise);
+    const listAreas = mock(async () => ["Desktop", "Desktop\\Team"]);
+    host.workspaceGetAzureDevOpsConnection = getConnection;
+    host.workspaceGetRepoConfig = async () => repoConfigSchema.parse(savedConfig);
+    host.azureAreaPathsList = listAreas;
+    const saveSettings = mock(async () => true);
+
+    const ControlledSection = () => {
+      const [repoConfig, setRepoConfig] = useState(savedConfig);
+      const areaPath = repoConfig.git.provider?.settings?.areaPath;
+      const providerState: GitProviderState =
+        areaPath === "desktop"
+          ? {
+              status: "loaded",
+              context: {
+                descriptor: AZURE_DEVOPS_PROVIDER_DESCRIPTOR,
+                config: savedConfig.git.provider!,
+                health: {
+                  providerId: "azure_devops",
+                  enabled: true,
+                  available: true,
+                  executablePath: null,
+                  version: null,
+                  authenticated: true,
+                  account: null,
+                  repositoryMappingValid: true,
+                },
+              },
+            }
+          : { status: "draft" };
+      return (
+        <RepositoryGitSection
+          selectedRepoPath="/repo"
+          selectedRepoConfig={repoConfig}
+          providerState={providerState}
+          disabled={false}
+          onDetectGithubRepository={async () => null}
+          onUpdateSelectedRepoConfig={setRepoConfig}
+          onSaveSettings={saveSettings}
+        />
+      );
+    };
+    const rendered = render(
+      <QueryClientProvider client={queryClient}>
+        <ControlledSection />
+      </QueryClientProvider>,
+    );
+
+    try {
+      expect(listAreas).toHaveBeenCalledTimes(0);
+      await act(async () => connection.resolve({ status: "connected", account: null }));
+      await waitFor(() => expect(listAreas).toHaveBeenCalledTimes(1));
+      const areaPicker = screen.getByRole("button", { name: "Area path" });
+      expect(areaPicker.hasAttribute("disabled")).toBe(false);
+      expect(areaPicker.className).toContain("bg-card");
+      expect(areaPicker.textContent).toContain("Desktop");
+      fireEvent.click(areaPicker);
+      fireEvent.click(screen.getByRole("option", { name: "Desktop\\Team" }));
+
+      expect(screen.getByText("Connected with a personal access token.")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Save area path" })).toBeNull();
+      expect(screen.queryByText("Save this area path to use it for work item imports.")).toBeNull();
+      expect(saveSettings).not.toHaveBeenCalled();
+      expect(getConnection).toHaveBeenCalledTimes(1);
+    } finally {
+      rendered.unmount();
+      queryClient.clear();
+      host.workspaceGetAzureDevOpsConnection = originalGetConnection;
+      host.workspaceGetRepoConfig = originalGetRepoConfig;
+      host.azureAreaPathsList = originalListAreas;
     }
   });
 
@@ -989,20 +1177,22 @@ describe("settings git sections", () => {
           enabled: true,
           autoDetected: false,
           repository,
-          remoteMappings: [
-            {
-              remoteName: "origin",
-              fetchUrl: "git@one:repo",
-              pushUrls: ["git@one:repo"],
-              repository,
-            },
-            {
-              remoteName: "backup",
-              fetchUrl: "git@two:repo",
-              pushUrls: ["git@two:repo"],
-              repository,
-            },
-          ],
+          settings: {
+            remoteMappings: [
+              {
+                remoteName: "origin",
+                fetchUrl: "git@one:repo",
+                pushUrls: ["git@one:repo"],
+                repository,
+              },
+              {
+                remoteName: "backup",
+                fetchUrl: "git@two:repo",
+                pushUrls: ["git@two:repo"],
+                repository,
+              },
+            ],
+          },
         },
       },
     };
@@ -1061,18 +1251,20 @@ describe("settings git sections", () => {
           enabled: false,
           autoDetected: false,
           repository: oldRepository,
-          remoteMappings: [
-            {
-              remoteName: "origin",
-              fetchUrl:
-                "http://azure.example.test/installation/DefaultCollection/Desktop/_git/OpenDucktor",
-              pushUrls: [
-                "http://azure.example.test/installation/DefaultCollection/Desktop/_git/OpenDucktor",
-              ],
-              repository: oldRepository,
-            },
-          ],
-          httpConsentCollectionUrl: "http://azure.example.test/installation/DefaultCollection",
+          settings: {
+            remoteMappings: [
+              {
+                remoteName: "origin",
+                fetchUrl:
+                  "http://azure.example.test/installation/DefaultCollection/Desktop/_git/OpenDucktor",
+                pushUrls: [
+                  "http://azure.example.test/installation/DefaultCollection/Desktop/_git/OpenDucktor",
+                ],
+                repository: oldRepository,
+              },
+            ],
+            httpConsentCollectionUrl: "http://azure.example.test/installation/DefaultCollection",
+          },
         },
       },
     };
@@ -1145,11 +1337,13 @@ describe("settings git sections", () => {
           enabled: true,
           autoDetected: false,
           repository,
-          httpConsentCollectionUrl: "http://azure.example.test/installation/DefaultCollection",
+          settings: {
+            httpConsentCollectionUrl: "http://azure.example.test/installation/DefaultCollection",
+          },
         },
       },
     };
-    const savedProvider = { ...repoConfig.git.provider!, httpConsentCollectionUrl: undefined };
+    const savedProvider = { ...repoConfig.git.provider!, settings: undefined };
     const originalGetConnection = host.workspaceGetAzureDevOpsConnection;
     const originalReplacePat = host.workspaceReplaceAzureDevOpsPat;
     const replacePat = mock(async () => ({ status: "connected" as const, account: null }));
@@ -1284,6 +1478,83 @@ describe("settings git sections", () => {
       await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("rejected"));
       expect(patInput.value).toBe("rejected-pat");
     } finally {
+      rendered.unmount();
+      host.workspaceGetAzureDevOpsConnection = originalGetConnection;
+      host.workspaceReplaceAzureDevOpsPat = originalReplacePat;
+    }
+  });
+
+  test("shows a saved PAT connection before a slow connection refresh finishes", async () => {
+    const azureRepoConfig: SettingsRepoConfig = {
+      ...baseRepoConfig,
+      git: {
+        provider: {
+          id: "azure_devops",
+          enabled: true,
+          autoDetected: false,
+          repository: {
+            providerId: "azure_devops",
+            deployment: "server",
+            serviceUrl: "https://azure.example.test/installation",
+            organization: "DefaultCollection",
+            project: "Desktop",
+            name: "OpenDucktor",
+          },
+        },
+      },
+    };
+    const originalGetConnection = host.workspaceGetAzureDevOpsConnection;
+    const originalReplacePat = host.workspaceReplaceAzureDevOpsPat;
+    const slowRefresh = createDeferred<{ status: "connected"; account: null }>();
+    let patSaved = false;
+    host.workspaceGetAzureDevOpsConnection = mock(() =>
+      patSaved ? slowRefresh.promise : Promise.resolve({ status: "disconnected" as const }),
+    );
+    host.workspaceReplaceAzureDevOpsPat = mock(async () => {
+      patSaved = true;
+      return { status: "connected" as const, account: null };
+    });
+    const rendered = render(
+      createElement(
+        QueryProvider,
+        { useIsolatedClient: true },
+        createElement(RepositoryGitSection, {
+          selectedRepoPath: "/repo",
+          selectedRepoConfig: azureRepoConfig,
+          providerState: {
+            status: "loaded",
+            context: {
+              descriptor: AZURE_DEVOPS_PROVIDER_DESCRIPTOR,
+              config: azureRepoConfig.git.provider!,
+              health: {
+                providerId: "azure_devops",
+                enabled: true,
+                available: false,
+                executablePath: null,
+                version: null,
+                authenticated: false,
+                account: null,
+                repositoryMappingValid: true,
+              },
+            },
+          },
+          disabled: false,
+          onDetectGithubRepository: async () => null,
+          onUpdateSelectedRepoConfig: () => azureRepoConfig,
+        }),
+      ),
+    );
+
+    try {
+      const patInput = await screen.findByLabelText("Personal access token");
+      const setupCard = screen.getByRole("region", { name: "Azure DevOps setup" });
+      fireEvent.change(patInput, { target: { value: "valid-pat" } });
+      fireEvent.click(screen.getByRole("button", { name: "Save and validate PAT" }));
+      await waitFor(() => expect(host.workspaceReplaceAzureDevOpsPat).toHaveBeenCalledTimes(1));
+      expect(screen.getByText("Connected with a personal access token.")).toBeTruthy();
+      expect(screen.getByRole("region", { name: "Azure DevOps setup" })).toBe(setupCard);
+    } finally {
+      slowRefresh.resolve({ status: "connected", account: null });
       rendered.unmount();
       host.workspaceGetAzureDevOpsConnection = originalGetConnection;
       host.workspaceReplaceAzureDevOpsPat = originalReplacePat;
