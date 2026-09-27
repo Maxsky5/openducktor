@@ -152,18 +152,20 @@ const makeService = async (
   idFactory: () => string = () => "terminal-1",
   filesystemPort: FilesystemPort = filesystem,
   withProcessStartAdmission?: WithProcessStartAdmission,
-  workspaceSessions?: Parameters<typeof createTerminalService>[0]["workspaceSessions"],
+  workspaceSessions?: ReturnType<typeof workspaceTerminalDependencies>,
   taskWorktrees?: Pick<TaskWorktreeService, "getTaskWorktree">,
 ) => {
   const titleSettlement = makeTitleSettlementScheduler();
   const shellPath = await resolveFakeShellPath();
+  const targets = workspaceSessions ?? workspaceTerminalDependencies(new Map());
   const serviceInput: Parameters<typeof createTerminalService>[0] = {
     filesystem: filesystemPort,
+    git: targets.git,
     taskWorktrees: taskWorktrees ?? {
       getTaskWorktree: ({ repoPath }) =>
         Effect.succeed({ workingDirectory: repoPath.replace(/^\/canonical/, "") }),
     },
-    workspaceSessions: workspaceSessions ?? workspaceTerminalDependencies(new Map()),
+    workspaceSessions: { settings: targets.settings, store: targets.store },
     ptyPort: pty.port,
     resolveLaunchEnvironment: createTerminalLaunchEnvironment({
       processEnv: { PATH: "/usr/bin" },
@@ -396,6 +398,39 @@ describe("TerminalService", () => {
       Effect.runPromise(service.create({ workingDir: "/task-worktree", context })),
     ).rejects.toThrow("Create or restore its worktree");
     expect(pty.startDirectories).toEqual(["/task-worktree"]);
+  });
+
+  test("rejects a task worktree that Git no longer owns", async () => {
+    const pty = makePty();
+    let realPath = "/task-worktree";
+    let registered = false;
+    const dependencies = workspaceTerminalDependencies(new Map());
+    dependencies.git.isRegisteredWorktree = (_repoPath, worktreePath) =>
+      Effect.succeed(registered && worktreePath === "/task-worktree");
+    const { service } = await makeService(
+      pty,
+      undefined,
+      {
+        ...filesystem,
+        canonicalize: (path) => Effect.succeed(path === "/task-worktree" ? realPath : path),
+      },
+      undefined,
+      dependencies,
+      { getTaskWorktree: () => Effect.succeed({ workingDirectory: "/task-worktree" }) },
+    );
+    const create = () =>
+      Effect.runPromise(
+        service.create({
+          workingDir: "/task-worktree",
+          context: { repoPath: "/repo", taskId: "task-1" },
+        }),
+      );
+
+    await expect(create()).rejects.toThrow("registered worktree");
+    registered = true;
+    realPath = "/other-directory";
+    await expect(create()).rejects.toThrow("registered worktree");
+    expect(pty.startDirectories).toEqual([]);
   });
 
   test("limits each chat owner and keeps a failed cleanup terminal for retry", async () => {

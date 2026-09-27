@@ -48,6 +48,20 @@ export const createTaskWorktreeService = ({
   getTaskWorktree(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
+      if (
+        !taskId ||
+        taskId === "." ||
+        taskId === ".." ||
+        /[\\/:]/.test(taskId) ||
+        taskId.includes("\0")
+      ) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "taskId",
+            message: "Task ID must name one worktree directory. Select a task and retry.",
+          }),
+        );
+      }
       const repoConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const worktreePath = settingsConfig.join(
         resolveWorktreeBasePath(settingsConfig, repoConfig),

@@ -620,12 +620,12 @@ describe("terminalWebSocketHandler", () => {
     const service = await Effect.runPromise(
       createTerminalService({
         filesystem: unusedFilesystem,
+        // SAFETY: This test only attaches a missing terminal; it never resolves a launch target.
+        git: {} as GitPort,
         taskWorktrees: { getTaskWorktree: () => unusedDependency("getTaskWorktree") },
         workspaceSessions: {
           settings: { getRepoConfig: () => unusedDependency("getRepoConfig") },
           store: { get: () => unusedDependency("getWorkspaceSession") },
-          // SAFETY: This test only attaches a missing terminal; it never resolves a launch target.
-          git: {} as GitPort,
         },
         ptyPort: unusedPtyPort,
         resolveLaunchEnvironment: () =>

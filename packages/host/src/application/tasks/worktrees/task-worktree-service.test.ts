@@ -141,4 +141,22 @@ describe("createTaskWorktreeService", () => {
       "Builder continuation cannot start until a task worktree exists for task task-1. The resolved worktree points to the repository root.",
     );
   });
+
+  test("rejects task IDs that can name another directory", async () => {
+    const taskIds = ["../other", "nested/child", "nested\\child", "C:other", ".", ".."];
+    const service = createTaskWorktreeService({
+      settingsConfig: createSettingsConfig({
+        existingPaths: new Set(taskIds.map((taskId) => `/home/dev/worktrees/${taskId}`)),
+      }),
+      workspaceSettingsService: createWorkspaceSettingsService(
+        repoConfig({ worktreeBasePath: "~/worktrees" }),
+      ),
+    });
+
+    for (const taskId of taskIds) {
+      await expect(
+        Effect.runPromise(service.getTaskWorktree({ repoPath: "/repo", taskId })),
+      ).rejects.toThrow("Task ID must name one worktree directory");
+    }
+  });
 });

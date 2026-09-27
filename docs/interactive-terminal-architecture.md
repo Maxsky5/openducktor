@@ -26,7 +26,7 @@ A terminal can have no owner, a task owner with `repoPath` and `taskId`, or a Wo
 
 For a Workspace Session terminal, the host reads the active session record before launch. It checks the saved repository root or registered worktree and starts the shell in that saved directory. The request must name the same repository and canonical working directory. A missing, archived, or removed session target fails before launch.
 
-For a task terminal, the host reads the current task worktree before launch. It rejects a missing worktree or a requested directory outside that worktree. The host starts the shell in the resolved worktree directory.
+For a task terminal, the host requires a task ID that names one directory. It reads the current task worktree and checks that Git still registers it under the requested repository. It rejects a missing worktree or a requested directory outside that worktree. The host starts the shell in the resolved worktree directory.
 
 The first title is the canonical start directory. The host then reads bounded OSC 0 and OSC 2 title codes without changing PTY output. It cleans and stores the latest title, then sends it in snapshots and title events.
 

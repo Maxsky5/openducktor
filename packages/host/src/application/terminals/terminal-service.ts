@@ -81,6 +81,7 @@ type CreateTerminalServiceInput = TerminalTargetServices & {
 export const createTerminalService = ({
   withProcessStartAdmission,
   filesystem,
+  git,
   taskWorktrees,
   workspaceSessions,
   ptyPort,
@@ -105,7 +106,12 @@ export const createTerminalService = ({
       countLive: engine.countLive,
       countLiveForContext: engine.countLiveForContext,
     });
-    const target = createTerminalTargetResolver({ filesystem, taskWorktrees, workspaceSessions });
+    const target = createTerminalTargetResolver({
+      filesystem,
+      git,
+      taskWorktrees,
+      workspaceSessions,
+    });
     const canonicalizeRepositoryPath = target.canonicalizeRepositoryPath;
     const canonicalizeTaskScope = (
       scope: TerminalTaskScope,

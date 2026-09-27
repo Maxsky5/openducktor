@@ -264,11 +264,11 @@ export const assembleNodeEffectHostCommandRouter = (
     createTerminalService({
       withProcessStartAdmission: workspaceAdmissionService.withProcessStartAdmission,
       filesystem,
+      git,
       taskWorktrees: taskWorktreeService,
       workspaceSessions: {
         settings: workspaceSettingsService,
         store: assets.workspaceSessionStore,
-        git,
       },
       ptyPort: terminalPty,
       resolveLaunchEnvironment: createTerminalLaunchEnvironment({ processEnv }),

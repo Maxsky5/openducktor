@@ -14,16 +14,17 @@ type TerminalTarget = { context: TerminalContext; workingDir: string };
 
 export type TerminalTargetServices = {
   filesystem: FilesystemPort;
+  git: GitPort;
   taskWorktrees: Pick<TaskWorktreeService, "getTaskWorktree">;
   workspaceSessions: {
     settings: Pick<WorkspaceSettingsService, "getRepoConfig">;
     store: Pick<WorkspaceSessionStorePort, "get">;
-    git: GitPort;
   };
 };
 
 export const createTerminalTargetResolver = ({
   filesystem,
+  git,
   taskWorktrees,
   workspaceSessions,
 }: TerminalTargetServices) => {
@@ -84,6 +85,28 @@ export const createTerminalTargetResolver = ({
             }),
         ),
       );
+      const registered = yield* Effect.gen(function* () {
+        if (!(yield* git.isGitRepository(savedWorkingDir))) return false;
+        if (!(yield* git.shareGitCommonDirectory(repoPath, savedWorkingDir))) return false;
+        return yield* git.isRegisteredWorktree(repoPath, savedWorkingDir);
+      }).pipe(
+        Effect.mapError(
+          (cause) =>
+            new TerminalServiceError({
+              code: "task_worktree_unavailable",
+              operation: "create",
+              message: `Cannot check task ${context.taskId}'s worktree: ${cause.message}`,
+              cause,
+            }),
+        ),
+      );
+      if (!registered) {
+        return yield* new TerminalServiceError({
+          code: "task_worktree_unavailable",
+          operation: "create",
+          message: `Task ${context.taskId}'s directory is not a registered worktree of this repository. Restore the worktree before opening a terminal.`,
+        });
+      }
       const requestedWorkingDir = yield* filesystem.canonicalize(workingDir).pipe(
         Effect.mapError(
           (cause) =>
@@ -112,7 +135,7 @@ export const createTerminalTargetResolver = ({
     workingDir: string,
   ): Effect.Effect<TerminalTarget, TerminalServiceError> =>
     Effect.gen(function* () {
-      const { settings, store, git } = workspaceSessions;
+      const { settings, store } = workspaceSessions;
       const config = yield* settings.getRepoConfig(context.workspaceId).pipe(
         Effect.mapError(
           (cause) =>
