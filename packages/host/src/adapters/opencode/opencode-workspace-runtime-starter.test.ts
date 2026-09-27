@@ -1050,7 +1050,8 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
     try {
       const repo = join(root, "repo");
       await mkdir(repo);
-      const opencodeBinary = await createFakeOpenCode(root);
+      const startupPath = join(root, "opencode-started.json");
+      const opencodeBinary = await createFakeOpenCode(root, { configCapturePath: startupPath });
       const pathWithFakeRuntime = `${root};${process.env.PATH ?? ""}`;
       const starter = createOpenCodeWorkspaceRuntimeStarter({
         systemCommands: createSystemCommandRunner({
@@ -1067,7 +1068,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
         startupTimeoutMs: 2_000,
         retryDelayMs: 20,
         portAllocator: () => Effect.succeed(43123),
-        readinessProbe: () => Effect.succeed(true),
+        readinessProbe: () => Effect.sync(() => existsSync(startupPath)),
         runtimeId: () => "runtime-path",
       });
 
@@ -1082,6 +1083,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
       );
 
       expect(handle.runtime.runtimeId).toBe("runtime-path");
+      expect(existsSync(startupPath)).toBe(true);
       await expect(Effect.runPromise(handle.stop())).resolves.toBeUndefined();
     } finally {
       await removeTestDirectory(root);
