@@ -138,14 +138,17 @@ describe("renderable file diffs", () => {
     expect(selectRenderableFileDiff(mode + binary, "missing.bin")).toBeNull();
   });
 
-  test("keeps a literal a/ folder in an unprefixed Git-only patch", () => {
+  test("keeps literal a/ folders in unprefixed Git-only patches", () => {
     const diff = "diff --git a/file.bin a/file.bin\nold mode 100644\nnew mode 100755\n";
     const quoted = 'diff --git "a/my file.bin" "a/my file.bin"\nBinary files differ\n';
+    const spaced = "diff --git a/foo b/bar a/foo b/bar\nold mode 100644\nnew mode 100755\n";
 
     expect(selectRenderableFileDiff(diff, "a/file.bin")).toBe(diff);
     expect(selectRenderableFileDiff(diff, "file.bin")).toBeNull();
     expect(selectRenderableFileDiff(quoted, "a/my file.bin")).toBe(quoted);
     expect(selectRenderableFileDiff(quoted, "my file.bin")).toBeNull();
+    expect(selectRenderableFileDiff(diff + spaced, "a/foo b/bar")).toBe(spaced);
+    expect(selectRenderableFileDiff(diff + spaced, "foo b/bar")).toBeNull();
   });
 
   test("uses rename metadata before an ambiguous Git-only header", () => {

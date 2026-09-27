@@ -384,29 +384,29 @@ const diffHeaderPaths = (line: string): string[] => {
     return [quotedGitHeader[1] ?? "", quotedGitHeader[2] ?? ""];
   }
 
-  if (line.startsWith("diff --git a/")) {
-    const paths = line.slice("diff --git ".length);
-    const samePath = /^a\/(.+) b\/\1$/.exec(paths);
-    if (samePath) {
-      return [`a/${samePath[1]}`, `b/${samePath[1]}`];
-    }
-
-    // With two " b/" breaks, we cannot tell where the first path ends.
-    const separator = paths.indexOf(" b/");
-    if (separator >= 0 && separator === paths.lastIndexOf(" b/")) {
-      return [paths.slice(0, separator), paths.slice(separator + 1)];
-    }
-    if (separator >= 0) {
-      return [];
-    }
-  }
-
   if (line.startsWith("diff --git ")) {
     const paths = line.slice("diff --git ".length);
-    const samePath = /^(.+) \1$/.exec(paths);
-    if (samePath) {
-      return [samePath[1] ?? "", samePath[1] ?? ""];
+    const repeatedPath = /^(.+) \1$/.exec(paths);
+    if (repeatedPath) {
+      return [repeatedPath[1] ?? "", repeatedPath[1] ?? ""];
     }
+
+    if (paths.startsWith("a/")) {
+      const samePath = /^a\/(.+) b\/\1$/.exec(paths);
+      if (samePath) {
+        return [`a/${samePath[1]}`, `b/${samePath[1]}`];
+      }
+
+      // With two " b/" breaks, we cannot tell where the first path ends.
+      const separator = paths.indexOf(" b/");
+      if (separator >= 0 && separator === paths.lastIndexOf(" b/")) {
+        return [paths.slice(0, separator), paths.slice(separator + 1)];
+      }
+      if (separator >= 0) {
+        return [];
+      }
+    }
+
     const twoPaths = /^(\S+) (\S+)$/.exec(paths);
     return twoPaths ? [twoPaths[1] ?? "", twoPaths[2] ?? ""] : [];
   }
@@ -432,6 +432,9 @@ const hasPrefixedGitHeader = (lines: string[]): boolean => {
   const [oldHeader, newHeader] = diffHeaderPaths(header);
   const oldPath = decodeGitQuotedPath(oldHeader ?? "");
   const newPath = decodeGitQuotedPath(newHeader ?? "");
+  if (oldPath && oldPath === newPath) {
+    return false;
+  }
   return (
     (oldPath?.startsWith("a/") && newPath?.startsWith("b/")) ||
     (header.startsWith("diff --git a/") && header.includes(" b/"))
