@@ -515,7 +515,7 @@ describe("createLocalAttachmentService", () => {
     files.delete(older.path);
     const missing = await Effect.runPromise(Effect.flip(service.resolve({ path: "brief.pdf" })));
     expect(missing).toMatchObject({
-      message: "No staged local attachment matches 'brief.pdf'.",
+      message: "This attachment cannot be opened.",
       details: { reason: "attachment_unavailable" },
     });
     expect(calls.readDirectory).toBe(1);
@@ -524,9 +524,11 @@ describe("createLocalAttachmentService", () => {
   test("returns a validation error when resolving a relative token without a staging directory", async () => {
     const { calls, port } = createFakeLocalAttachmentPort({ includeStageDirectory: false });
     const service = createLocalAttachmentService(port);
-    await expect(Effect.runPromise(service.resolve({ path: "brief.pdf" }))).rejects.toThrow(
-      "No staged local attachment matches 'brief.pdf'.",
-    );
+    const missing = await Effect.runPromise(Effect.flip(service.resolve({ path: "brief.pdf" })));
+    expect(missing).toMatchObject({
+      message: "This attachment cannot be opened.",
+      details: { reason: "attachment_unavailable" },
+    });
     expect(calls.readDirectory).toBe(1);
   });
   test("rejects blank names, blank payloads, and unsafe lookup tokens", async () => {

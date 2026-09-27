@@ -32,8 +32,8 @@ export const ELECTRON_HOST_EVENT_CHANNEL = "openducktor:host-event";
 export const ELECTRON_OPEN_EXTERNAL_URL_CHANNEL = "openducktor:open-external-url";
 export const ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL = "openducktor:local-attachment-preview-src";
 export const electronLocalAttachmentPreviewResultSchema = z.discriminatedUnion("ok", [
-  z.object({ ok: z.literal(true), src: z.string() }),
-  z.object({ ok: z.literal(false), message: z.string() }),
+  z.strictObject({ ok: z.literal(true), src: z.string() }),
+  z.strictObject({ ok: z.literal(false), message: z.string() }),
 ]);
 export type ElectronLocalAttachmentPreviewResult = z.infer<
   typeof electronLocalAttachmentPreviewResultSchema

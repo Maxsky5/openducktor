@@ -141,16 +141,14 @@ const electronMainLogger = await initializeElectronMainLogger({
 const electronMainRuntimeBindings = createElectronMainRuntimeBindings(electronMainLogger);
 const electronAppUpdateLogger = electronMainRuntimeBindings.appUpdateLogger;
 const electronLifecycleLogger = electronMainRuntimeBindings.lifecycleLogger;
-const reportElectronNonFatalDeliveryFailure = (message: string, cause: unknown): void => {
+const reportElectronNonFatalFailure = (message: string, cause: unknown): void => {
   void runElectronEffect(electronMainLogger.error(message, cause)).catch((cause: unknown) => {
-    process.stderr.write(
-      `OpenDucktor Electron non-fatal event delivery reporting failed: ${errorMessage(cause)}\n`,
-    );
+    process.stderr.write(`OpenDucktor Electron error reporting failed: ${errorMessage(cause)}\n`);
   });
 };
 const hostEventBus = createHostEventBus({
   report: ({ channel, cause }) =>
-    reportElectronNonFatalDeliveryFailure(
+    reportElectronNonFatalFailure(
       `OpenDucktor host event delivery failed for channel '${channel}'.`,
       cause,
     ),
@@ -271,7 +269,7 @@ const createElectronHostCommandRouter = (runtimeDistribution: HostRuntimeDistrib
     taskEventPublicationReporter: {
       report: (failure) =>
         Effect.sync(() =>
-          reportElectronNonFatalDeliveryFailure(
+          reportElectronNonFatalFailure(
             `OpenDucktor task event publication failed during '${failure.operation}' for '${failure.repoPath}'.`,
             failure.cause,
           ),
@@ -534,7 +532,7 @@ const registerHostEventForwarding = (): void => {
         BrowserWindow.getAllWindows(),
         envelope,
         ({ channel: failedChannel, cause }) =>
-          reportElectronNonFatalDeliveryFailure(
+          reportElectronNonFatalFailure(
             `OpenDucktor renderer event delivery failed for channel '${failedChannel}'.`,
             cause,
           ),
@@ -704,7 +702,7 @@ const registerIpcHandlers = (
   registerElectronTaskStreamIpc({
     ipcMain,
     reportDeliveryFailure: ({ cause, subscriptionId }) =>
-      reportElectronNonFatalDeliveryFailure(
+      reportElectronNonFatalFailure(
         `OpenDucktor task stream delivery failed for subscription '${subscriptionId}'.`,
         cause,
       ),
@@ -737,6 +735,7 @@ const registerIpcHandlers = (
     resolveElectronLocalAttachmentPreview(
       (requestedPath) => resolveLocalAttachmentPathForPreview(hostCommandRouter, requestedPath),
       filePath,
+      (cause) => reportElectronNonFatalFailure("OpenDucktor attachment preview failed.", cause),
     ),
   );
 

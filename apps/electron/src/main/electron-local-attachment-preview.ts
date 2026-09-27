@@ -79,9 +79,23 @@ export const createElectronLocalAttachmentPreviewUrl = (filePath: string): strin
 export const resolveElectronLocalAttachmentPreview = async (
   resolveLocalAttachmentPath: (filePath: string) => Promise<string>,
   filePath: string,
+  reportFailure: (cause: unknown) => void,
 ): Promise<ElectronLocalAttachmentPreviewResult> => {
+  let requestedPath: string;
   try {
-    const requestedPath = readLocalAttachmentPreviewPath(filePath);
+    requestedPath = readLocalAttachmentPreviewPath(filePath);
+  } catch (cause) {
+    if (
+      !(
+        cause instanceof ElectronValidationError && cause.operation === "electron.preview.read-path"
+      )
+    ) {
+      reportFailure(cause);
+    }
+    return { ok: false, message: errorMessage(cause) };
+  }
+
+  try {
     const resolvedPath = await resolveLocalAttachmentPath(requestedPath);
     return { ok: true, src: createElectronLocalAttachmentPreviewUrl(resolvedPath) };
   } catch (cause) {
@@ -94,6 +108,14 @@ export const resolveElectronLocalAttachmentPreview = async (
         ok: false,
         message: LOCAL_ATTACHMENT_UNAVAILABLE_MESSAGE,
       };
+    }
+    if (
+      !(
+        cause instanceof ElectronValidationError &&
+        cause.operation === "electron.preview.resolve-staged-path"
+      )
+    ) {
+      reportFailure(cause);
     }
     return { ok: false, message: errorMessage(cause) };
   }

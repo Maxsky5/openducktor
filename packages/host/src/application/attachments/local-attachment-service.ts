@@ -42,7 +42,6 @@ export type LocalAttachmentService = {
     input: LocalAttachmentResolveInput,
   ): Effect.Effect<ResolvedLocalAttachment, LocalAttachmentServiceError>;
 };
-const maxAttachmentLookupDisplayLength = 128;
 export type LocalAttachmentStageInput = {
   base64Data: string;
   name: string;
@@ -94,20 +93,6 @@ const sanitizeAttachmentLookupToken = (pathOrName: string): string => {
     });
   }
   return trimmed;
-};
-const formatAttachmentLookupDisplayName = (token: string): string => {
-  const sanitized = [...token]
-    .map((character) => {
-      if (character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127) {
-        return "_";
-      }
-      return character;
-    })
-    .join("");
-  if (sanitized.length <= maxAttachmentLookupDisplayLength) {
-    return sanitized;
-  }
-  return `${sanitized.slice(0, maxAttachmentLookupDisplayLength - 3)}...`;
 };
 const decodeBase64 = (value: string): Uint8Array => {
   if (value.length > LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT) {
@@ -391,13 +376,11 @@ export const createLocalAttachmentService = (
               },
             }),
         });
-        const displayName = formatAttachmentLookupDisplayName(lookupToken);
         const index = yield* getStagedAttachmentIndex(attachmentDirectory);
         const match = yield* resolveIndexedStagedAttachment(
           localAttachmentPort,
           index,
           lookupToken,
-          displayName,
         );
         return { path: match.entry.path };
       });
