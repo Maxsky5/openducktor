@@ -32,11 +32,13 @@ const validateLinkDestination = (href: string): string | null => {
 
 export function TaskDescriptionLinkDialog({
   href,
+  disabled,
   onCancel,
   onRemove,
   onSubmit,
 }: {
   href: string;
+  disabled: boolean;
   onCancel(): void;
   onRemove(): void;
   onSubmit(href: string): boolean;
@@ -46,6 +48,7 @@ export function TaskDescriptionLinkDialog({
   const editing = href.length > 0;
 
   const save = (): void => {
+    if (disabled) return;
     const nextDestination = destination.trim();
     const validationError = validateLinkDestination(nextDestination);
     if (validationError) {
@@ -75,6 +78,7 @@ export function TaskDescriptionLinkDialog({
             <Input
               id="task-description-link-destination"
               autoFocus
+              disabled={disabled}
               value={destination}
               placeholder="https://example.com/docs"
               aria-invalid={error ? true : undefined}
@@ -93,14 +97,16 @@ export function TaskDescriptionLinkDialog({
           </DialogBody>
           <DialogFooter>
             {editing ? (
-              <Button type="button" variant="destructive" onClick={onRemove}>
+              <Button type="button" variant="destructive" disabled={disabled} onClick={onRemove}>
                 Remove link
               </Button>
             ) : null}
             <Button type="button" variant="outline" onClick={onCancel}>
               Cancel
             </Button>
-            <Button type="submit">{editing ? "Save link" : "Insert link"}</Button>
+            <Button type="submit" disabled={disabled}>
+              {editing ? "Save link" : "Insert link"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

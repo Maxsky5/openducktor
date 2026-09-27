@@ -82,6 +82,7 @@ const specState = {
 
 const createTasksState = (
   updateTask: TasksStateContextValue["updateTask"],
+  createTask: TasksStateContextValue["createTask"] = async () => {},
 ): TasksStateContextValue => ({
   tasksAreCurrent: true,
   isForegroundLoadingTasks: false,
@@ -97,7 +98,7 @@ const createTasksState = (
   linkMergedPullRequest: async () => {},
   cancelLinkMergedPullRequest: () => {},
   unlinkPullRequest: async () => {},
-  createTask: async () => {},
+  createTask,
   updateTask,
   setTaskTargetBranch: async () => {},
   deleteTask: async () => {},
@@ -112,16 +113,17 @@ const createTasksState = (
 type Controller = ReturnType<typeof useTaskCreateModalController>;
 
 const renderController = (
-  initialTask: ReturnType<typeof createTaskCardFixture>,
+  initialTask: ReturnType<typeof createTaskCardFixture> | null,
   updateTask: TasksStateContextValue["updateTask"],
+  createTask: TasksStateContextValue["createTask"] = async () => {},
 ) => {
   let latest: Controller | null = null;
 
-  const Probe = ({ task }: { task: ReturnType<typeof createTaskCardFixture> }): null => {
+  const Probe = ({ task }: { task: ReturnType<typeof createTaskCardFixture> | null }): null => {
     latest = useTaskCreateModalController({
       open: true,
       onOpenChange: () => {},
-      tasks: [task],
+      tasks: task ? [task] : [],
       task,
     });
     return null;
@@ -130,7 +132,7 @@ const renderController = (
   const providers = (children: ReactNode): ReactElement => (
     <QueryProvider useIsolatedClient>
       <WorkspaceStateContext.Provider value={workspaceState}>
-        <TasksStateContext.Provider value={createTasksState(updateTask)}>
+        <TasksStateContext.Provider value={createTasksState(updateTask, createTask)}>
           <SpecStateContext.Provider value={specState}>{children}</SpecStateContext.Provider>
         </TasksStateContext.Provider>
       </WorkspaceStateContext.Provider>
@@ -153,6 +155,41 @@ const renderController = (
 };
 
 describe("useTaskCreateModalController", () => {
+  test.each(["create", "edit"])(
+    "locks a held %s request and restores the draft after failure",
+    async (mode) => {
+      let rejectRequest: ((reason: Error) => void) | undefined;
+      const pendingRequest = new Promise<void>((_resolve, reject) => {
+        rejectRequest = reject;
+      });
+      const createTask = mock(async () => pendingRequest);
+      const updateTask = mock(async () => pendingRequest);
+      const task = mode === "edit" ? createTaskCardFixture({ id: "task-1" }) : null;
+      const harness = renderController(task, updateTask, createTask);
+      try {
+        act(() =>
+          harness.getController().updateState({ title: "Draft", description: "Draft body" }),
+        );
+        let submission: Promise<void> | undefined;
+        act(() => {
+          submission = harness.getController().submit();
+        });
+        expect(harness.getController().isFormDisabled).toBe(true);
+        expect(mode === "create" ? createTask : updateTask).toHaveBeenCalledTimes(1);
+
+        await act(async () => {
+          rejectRequest?.(new Error("Save failed"));
+          await submission;
+        });
+        expect(harness.getController().isFormDisabled).toBe(false);
+        expect(harness.getController().state.description).toBe("Draft body");
+        expect(harness.getController().footerError).toBe("Save failed");
+      } finally {
+        harness.unmount();
+      }
+    },
+  );
+
   test("rehydrates an untouched draft when the open task changes with the same ID", async () => {
     const original = createTaskCardFixture({
       id: "task-1",

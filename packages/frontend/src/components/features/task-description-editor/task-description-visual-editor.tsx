@@ -42,6 +42,7 @@ const VisualImage = TaskDescriptionImage.extend({
 
 type TaskDescriptionVisualEditorProps = {
   body: string;
+  disabled: boolean;
   frontMatter: string;
   onChange(markdown: string): void;
   onUpload(file: File): Promise<TaskAssetStageResult>;
@@ -68,6 +69,7 @@ const applyMathEdit = (editor: Editor, edit: TaskDescriptionMathEdit, latex: str
 
 export default function TaskDescriptionVisualEditor({
   body,
+  disabled,
   frontMatter,
   onChange,
   onUpload,
@@ -77,20 +79,25 @@ export default function TaskDescriptionVisualEditor({
   previews,
   mermaidPreviews,
 }: TaskDescriptionVisualEditorProps) {
+  const uploading = uploads.some((upload) => upload.status === "uploading");
+  const canEdit = !disabled && !uploading;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadFilesRef = useRef<(files: File[]) => void>(() => {});
+  const disabledRef = useRef(disabled);
+  const canEditRef = useRef(canEdit);
   const hydratedBody = useRef(body);
   const [linkHref, setLinkHref] = useState<string | null>(null);
   const [mathEdit, setMathEdit] = useState<TaskDescriptionMathEdit | null>(null);
-  const openMathEditor = useCallback((edit: TaskDescriptionMathEdit) => setMathEdit(edit), []);
-  const uploading = uploads.some((upload) => upload.status === "uploading");
+  const openMathEditor = useCallback((edit: TaskDescriptionMathEdit) => {
+    if (canEditRef.current) setMathEdit(edit);
+  }, []);
   const imageContext = useMemo(
     () => ({ previews, renderContext, issueImageContext }),
     [previews, renderContext, issueImageContext],
   );
 
   const editor = useEditor({
-    editable: !uploading,
+    editable: canEdit,
     extensions: createTaskDescriptionMarkdownExtensions({
       codeBlock: MermaidCodeBlock,
       image: VisualImage,
@@ -123,6 +130,7 @@ export default function TaskDescriptionVisualEditor({
     },
     onUpdate: ({ editor: updatedEditor }) => {
       const nextBody = updatedEditor.getMarkdown();
+      if (nextBody === hydratedBody.current) return;
       hydratedBody.current = nextBody;
       onChange(`${frontMatter}${nextBody}`);
     },
@@ -137,18 +145,26 @@ export default function TaskDescriptionVisualEditor({
   }, [body, editor]);
 
   useEffect(() => {
-    if (!editor || editor.isDestroyed || editor.isEditable === !uploading) {
+    disabledRef.current = disabled;
+  }, [disabled]);
+
+  useEffect(() => {
+    canEditRef.current = canEdit;
+  }, [canEdit]);
+
+  useEffect(() => {
+    if (!editor || editor.isDestroyed || editor.isEditable === canEdit) {
       return;
     }
-    editor.setEditable(!uploading);
-  }, [editor, uploading]);
+    editor.setEditable(canEdit);
+  }, [canEdit, editor]);
 
   const uploadFiles = useCallback(
     (files: File[]): void => {
-      if (!editor || uploading) return;
+      if (!editor || !canEdit || files.length === 0) return;
       const insertAt = editor.state.selection.from;
       void Promise.allSettled(files.map((file) => onUpload(file))).then((results) => {
-        if (editor.isDestroyed) return;
+        if (editor.isDestroyed || disabledRef.current) return;
         const images = results.flatMap((result, index) => {
           const file = files[index];
           if (result.status === "rejected" || !file) return [];
@@ -168,7 +184,7 @@ export default function TaskDescriptionVisualEditor({
         }
       });
     },
-    [editor, onUpload, uploading],
+    [canEdit, editor, onUpload],
   );
 
   useEffect(() => {
@@ -221,12 +237,14 @@ export default function TaskDescriptionVisualEditor({
         <TaskDescriptionFormattingToolbar
           editor={editor}
           state={toolbar}
+          disabled={!canEdit}
           onEditLink={() => {
+            if (!canEditRef.current) return;
             const href = editor.getAttributes("link").href;
             const hrefResult = z.string().safeParse(href);
             setLinkHref(hrefResult.success ? hrefResult.data : "");
           }}
-          onEditMath={(kind) => setMathEdit({ kind, latex: "" })}
+          onEditMath={(kind) => openMathEditor({ kind, latex: "" })}
         />
         <Button
           type="button"
@@ -235,7 +253,7 @@ export default function TaskDescriptionVisualEditor({
           className="size-8"
           aria-label={uploading ? "Uploading image" : "Insert image"}
           title={uploading ? "Uploading image" : "Insert image"}
-          disabled={uploading}
+          disabled={!canEdit}
           onClick={() => fileInputRef.current?.click()}
         >
           <ImagePlus className={cn("size-4", uploading && "animate-pulse")} />
@@ -245,6 +263,7 @@ export default function TaskDescriptionVisualEditor({
           aria-label="Task description images"
           type="file"
           className="sr-only"
+          disabled={!canEdit}
           accept="image/png,image/jpeg,image/webp,image/gif"
           multiple
           onChange={(event) => {
@@ -258,6 +277,10 @@ export default function TaskDescriptionVisualEditor({
           <EditorContent
             editor={editor}
             onDrop={(event) => {
+              if (!canEdit) {
+                event.preventDefault();
+                return;
+              }
               const files = Array.from(event.dataTransfer.files).filter((file) =>
                 file.type.startsWith("image/"),
               );
@@ -266,6 +289,10 @@ export default function TaskDescriptionVisualEditor({
               uploadFilesRef.current(files);
             }}
             onPaste={(event) => {
+              if (!canEdit) {
+                event.preventDefault();
+                return;
+              }
               const files = Array.from(event.clipboardData.files).filter((file) =>
                 file.type.startsWith("image/"),
               );
@@ -280,12 +307,15 @@ export default function TaskDescriptionVisualEditor({
         <TaskDescriptionLinkDialog
           key={linkHref || "new"}
           href={linkHref}
+          disabled={!canEdit}
           onCancel={() => setLinkHref(null)}
           onRemove={() => {
+            if (!canEditRef.current) return;
             editor.chain().focus().extendMarkRange("link").unsetLink().run();
             setLinkHref(null);
           }}
           onSubmit={(href) => {
+            if (!canEditRef.current) return false;
             const applied = editor.chain().focus().extendMarkRange("link").setLink({ href }).run();
             if (applied) {
               setLinkHref(null);
@@ -298,8 +328,10 @@ export default function TaskDescriptionVisualEditor({
         <TaskDescriptionMathDialog
           key={`${mathEdit.kind}:${mathEdit.position ?? "new"}`}
           edit={mathEdit}
+          disabled={!canEdit}
           onCancel={() => setMathEdit(null)}
           onSubmit={(latex) => {
+            if (!canEditRef.current) return false;
             const applied = applyMathEdit(editor, mathEdit, latex);
             if (applied) {
               setMathEdit(null);

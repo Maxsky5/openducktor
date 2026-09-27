@@ -67,11 +67,13 @@ const ToolbarButton = ({
 export function TaskDescriptionFormattingToolbar({
   editor,
   state,
+  disabled,
   onEditLink,
   onEditMath,
 }: {
   editor: Editor;
   state: TaskDescriptionToolbarState;
+  disabled: boolean;
   onEditLink(): void;
   onEditMath(kind: "inline" | "block"): void;
 }): ReactElement {
@@ -79,24 +81,29 @@ export function TaskDescriptionFormattingToolbar({
     <>
       <ToolbarButton
         label="Undo"
-        disabled={!state.canUndo}
+        disabled={disabled || !state.canUndo}
         onClick={() => editor.chain().focus().undo().run()}
       >
         <Undo2 className="size-4" />
       </ToolbarButton>
       <ToolbarButton
         label="Redo"
-        disabled={!state.canRedo}
+        disabled={disabled || !state.canRedo}
         onClick={() => editor.chain().focus().redo().run()}
       >
         <Redo2 className="size-4" />
       </ToolbarButton>
       <span className="mx-1 w-px bg-border" />
-      <ToolbarButton label="Paragraph" onClick={() => editor.chain().focus().setParagraph().run()}>
+      <ToolbarButton
+        disabled={disabled}
+        label="Paragraph"
+        onClick={() => editor.chain().focus().setParagraph().run()}
+      >
         <Pilcrow className="size-4" />
       </ToolbarButton>
       <ToolbarButton
         label="Heading 2"
+        disabled={disabled}
         active={state.heading}
         onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
       >
@@ -104,6 +111,7 @@ export function TaskDescriptionFormattingToolbar({
       </ToolbarButton>
       <ToolbarButton
         label="Bold"
+        disabled={disabled}
         active={state.bold}
         onClick={() => editor.chain().focus().toggleBold().run()}
       >
@@ -111,6 +119,7 @@ export function TaskDescriptionFormattingToolbar({
       </ToolbarButton>
       <ToolbarButton
         label="Italic"
+        disabled={disabled}
         active={state.italic}
         onClick={() => editor.chain().focus().toggleItalic().run()}
       >
@@ -118,6 +127,7 @@ export function TaskDescriptionFormattingToolbar({
       </ToolbarButton>
       <ToolbarButton
         label="Strikethrough"
+        disabled={disabled}
         active={state.strike}
         onClick={() => editor.chain().focus().toggleStrike().run()}
       >
@@ -125,17 +135,19 @@ export function TaskDescriptionFormattingToolbar({
       </ToolbarButton>
       <ToolbarButton
         label="Inline code"
+        disabled={disabled}
         active={state.code}
         onClick={() => editor.chain().focus().toggleCode().run()}
       >
         <Code className="size-4" />
       </ToolbarButton>
-      <ToolbarButton label="Link" active={state.link} onClick={onEditLink}>
+      <ToolbarButton disabled={disabled} label="Link" active={state.link} onClick={onEditLink}>
         <LinkIcon className="size-4" />
       </ToolbarButton>
       <span className="mx-1 w-px bg-border" />
       <ToolbarButton
         label="Bullet list"
+        disabled={disabled}
         active={state.bulletList}
         onClick={() => editor.chain().focus().toggleBulletList().run()}
       >
@@ -143,6 +155,7 @@ export function TaskDescriptionFormattingToolbar({
       </ToolbarButton>
       <ToolbarButton
         label="Numbered list"
+        disabled={disabled}
         active={state.orderedList}
         onClick={() => editor.chain().focus().toggleOrderedList().run()}
       >
@@ -150,6 +163,7 @@ export function TaskDescriptionFormattingToolbar({
       </ToolbarButton>
       <ToolbarButton
         label="Task list"
+        disabled={disabled}
         active={state.taskList}
         onClick={() => editor.chain().focus().toggleTaskList().run()}
       >
@@ -157,6 +171,7 @@ export function TaskDescriptionFormattingToolbar({
       </ToolbarButton>
       <ToolbarButton
         label="Blockquote"
+        disabled={disabled}
         active={state.blockquote}
         onClick={() => editor.chain().focus().toggleBlockquote().run()}
       >
@@ -164,32 +179,36 @@ export function TaskDescriptionFormattingToolbar({
       </ToolbarButton>
       <ToolbarButton
         label="Code block"
+        disabled={disabled}
         onClick={() => editor.chain().focus().toggleCodeBlock().run()}
       >
         <Braces className="size-4" />
       </ToolbarButton>
       <ToolbarButton
         label="Horizontal rule"
+        disabled={disabled}
         onClick={() => editor.chain().focus().setHorizontalRule().run()}
       >
         <Minus className="size-4" />
       </ToolbarButton>
       <ToolbarButton
         label="Table"
+        disabled={disabled}
         onClick={() =>
           editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
         }
       >
         <Table2 className="size-4" />
       </ToolbarButton>
-      <ToolbarButton label="Inline math" onClick={() => onEditMath("inline")}>
+      <ToolbarButton disabled={disabled} label="Inline math" onClick={() => onEditMath("inline")}>
         <Sigma className="size-4" />
       </ToolbarButton>
-      <ToolbarButton label="Block math" onClick={() => onEditMath("block")}>
+      <ToolbarButton disabled={disabled} label="Block math" onClick={() => onEditMath("block")}>
         <Sigma className="size-4 stroke-[2.5]" />
       </ToolbarButton>
       <ToolbarButton
         label="Mermaid diagram"
+        disabled={disabled}
         onClick={() =>
           editor
             .chain()

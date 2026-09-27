@@ -255,6 +255,7 @@ function TaskCreateModalSectionContent({
   return (
     <TaskDetailsForm
       mode={controller.mode}
+      disabled={controller.isFormDisabled}
       state={controller.state}
       priorityOptions={controller.priorityComboboxOptions}
       knownLabels={controller.knownLabels}

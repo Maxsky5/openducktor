@@ -17,6 +17,7 @@ import type { ComposerMode, ComposerState } from "@/types/task-composer";
 
 type TaskDetailsFormProps = {
   mode: ComposerMode;
+  disabled: boolean;
   state: ComposerState;
   priorityOptions: ComboboxOption[];
   knownLabels: string[];
@@ -32,6 +33,7 @@ type TaskDetailsFormProps = {
 
 export function TaskDetailsForm({
   mode,
+  disabled,
   state,
   priorityOptions,
   knownLabels,
@@ -127,6 +129,7 @@ export function TaskDetailsForm({
         <Label htmlFor="task-description">Description</Label>
         <TaskDescriptionEditor
           key={`${workspaceId ?? "no-workspace"}:${taskId ?? "new-task"}`}
+          disabled={disabled}
           markdown={state.description}
           workspaceId={workspaceId}
           taskId={taskId}

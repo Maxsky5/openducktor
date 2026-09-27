@@ -165,6 +165,7 @@ describe("TaskCreateModal", () => {
       );
       try {
         expect(await screen.findByTestId("task-details-form")).toBeTruthy();
+        expect(formSpy.mock.calls[0]?.[0].disabled).toBe(false);
         expect(formSpy.mock.calls[0]?.[0].issueImageContext).toEqual({
           repoPath: "/workspace/repo",
           sourceId: "132",
@@ -185,8 +186,14 @@ describe("TaskCreateModal", () => {
     controllerMock.isRecoveryBlocked = true;
     controllerMock.isFormDisabled = true;
     controllerMock.isEditingDocument = false;
+    controllerMock.editSection = "details";
+    controllerMock.activeDocumentSection = null;
     controllerMock.footerError =
       "Refresh before continuing. Task: created-task · Phase: compensate_create · Durable state: created_partial";
+    const formSpy = spyOn(taskDetailsFormModule, "TaskDetailsForm").mockImplementation(() =>
+      createElement("div", { "data-testid": "task-details-form" }),
+    );
+    testSpies.push(formSpy);
     const task = createTaskCardFixture({ id: "TASK-123" });
 
     try {
@@ -207,11 +214,15 @@ describe("TaskCreateModal", () => {
       expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save Changes" }).disabled).toBe(
         true,
       );
+      expect(await screen.findByTestId("task-details-form")).toBeTruthy();
+      expect(formSpy.mock.calls[0]?.[0].disabled).toBe(true);
       await act(async () => rendered.unmount());
     } finally {
       controllerMock.isRecoveryBlocked = false;
       controllerMock.isFormDisabled = false;
       controllerMock.isEditingDocument = true;
+      controllerMock.editSection = "spec";
+      controllerMock.activeDocumentSection = "spec";
       controllerMock.footerError = null;
     }
   });

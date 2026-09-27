@@ -42,10 +42,12 @@ const validateFormula = (latex: string, kind: TaskDescriptionMathKind): string |
 
 export function TaskDescriptionMathDialog({
   edit,
+  disabled,
   onCancel,
   onSubmit,
 }: {
   edit: TaskDescriptionMathEdit;
+  disabled: boolean;
   onCancel(): void;
   onSubmit(latex: string): boolean;
 }) {
@@ -56,6 +58,7 @@ export function TaskDescriptionMathDialog({
   const title = `${action} ${edit.kind} formula`;
 
   const save = (): void => {
+    if (disabled) return;
     const nextLatex = latex.trim();
     const validationError = validateFormula(nextLatex, edit.kind);
     if (validationError) {
@@ -69,6 +72,7 @@ export function TaskDescriptionMathDialog({
 
   const fieldProps = {
     id: "task-description-latex",
+    disabled,
     value: latex,
     "aria-invalid": error ? true : undefined,
     "aria-describedby": error ? "task-description-latex-error" : undefined,
@@ -128,7 +132,9 @@ export function TaskDescriptionMathDialog({
             <Button type="button" variant="outline" onClick={onCancel}>
               Cancel
             </Button>
-            <Button type="submit">{editing ? "Save formula" : "Insert formula"}</Button>
+            <Button type="submit" disabled={disabled}>
+              {editing ? "Save formula" : "Insert formula"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
