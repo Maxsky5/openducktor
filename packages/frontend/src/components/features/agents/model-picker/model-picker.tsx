@@ -69,13 +69,18 @@ const activeViewFor = (
   favorites: readonly AgentModelFavorite[] | null,
   selectionPolicy: ModelPickerSelectionPolicy,
 ): ModelPickerView => {
+  const availableFavorites = favorites?.filter((favorite) =>
+    runtimes.some((runtime) => runtime.descriptor.kind === favorite.runtimeKind),
+  );
   if (selectionPolicy.kind === "runtime_locked") {
-    if (favorites?.some((favorite) => favorite.runtimeKind === selectionPolicy.runtimeKind)) {
+    if (
+      availableFavorites?.some((favorite) => favorite.runtimeKind === selectionPolicy.runtimeKind)
+    ) {
       return "favorites";
     }
     return selectionPolicy.runtimeKind;
   }
-  if (favorites?.length) {
+  if (availableFavorites?.length) {
     return "favorites";
   }
   return runtimes[0]?.descriptor.kind ?? "favorites";

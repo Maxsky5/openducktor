@@ -115,6 +115,50 @@ describe("ModelPicker", () => {
     }
   });
 
+  test("opens the available runtime when its only favorite belongs to a disabled runtime", async () => {
+    render(
+      <ModelPicker
+        runtimes={[makeRuntimes()[1]!]}
+        value={{ runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" }}
+        favoriteState={favoriteState({ favorites: [value] })}
+        selectionPolicy={{ kind: "editable" }}
+        onValueChange={() => {}}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Select model, Codex, GPT 5 Codex" }));
+    });
+    expect(screen.getByRole("button", { name: "Codex runtime" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Select GPT 5 Codex model" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Select GPT Five model" })).toBeNull();
+  });
+
+  test("shows only favorites from available runtimes", async () => {
+    render(
+      <ModelPicker
+        runtimes={[makeRuntimes()[1]!]}
+        value={null}
+        favoriteState={favoriteState({
+          favorites: [value, { ...value, runtimeKind: "codex" }],
+        })}
+        selectionPolicy={{ kind: "editable" }}
+        onValueChange={() => {}}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Select model, Select a model" }));
+    });
+    expect(
+      screen.getByRole("button", { name: "Favorite models" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(screen.getByRole("button", { name: "Select GPT 5 Codex model" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Select GPT Five model" })).toBeNull();
+  });
+
   test.each([
     { favorites: [value], expectedView: "Favorite models" },
     {
