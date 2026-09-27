@@ -723,7 +723,7 @@ export function ModelPicker({
   const modelButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const listRef = useRef<ListImperativeAPI | null>(null);
   const pendingFocusIndex = useRef<number | null>(null);
-  const focusedModelIndex = useRef<number | null>(null);
+  const focusedModelKey = useRef<string | null>(null);
   const lockedRuntimeKind =
     selectionPolicy.kind === "runtime_locked" ? selectionPolicy.runtimeKind : null;
   const items = useMemo(
@@ -804,15 +804,19 @@ export function ModelPicker({
     }
     onValueChange(item.value);
     pendingFocusIndex.current = null;
-    focusedModelIndex.current = null;
+    focusedModelKey.current = null;
     setSearchQuery("");
     setOpen(false);
     onOpenChange?.(false);
   };
 
   const onModelBlur = (index: number, relatedTarget: EventTarget | null): void => {
-    if (relatedTarget && focusedModelIndex.current === index) {
-      focusedModelIndex.current = null;
+    if (
+      relatedTarget &&
+      relatedTarget !== document.body &&
+      focusedModelKey.current === modelPickerValueKey(items[index]!.value)
+    ) {
+      focusedModelKey.current = null;
     }
   };
 
@@ -831,7 +835,7 @@ export function ModelPicker({
     }
     if (!nextOpen) {
       pendingFocusIndex.current = null;
-      focusedModelIndex.current = null;
+      focusedModelKey.current = null;
     }
     setOpen(nextOpen);
     onOpenChange?.(nextOpen);
@@ -847,13 +851,13 @@ export function ModelPicker({
         return;
       }
     }
-    const focusedIndex = focusedModelIndex.current;
-    if (
-      focusedIndex !== null &&
-      (focusedIndex < allRows.startIndex || focusedIndex > allRows.stopIndex) &&
-      document.activeElement === document.body
-    ) {
-      focusedModelIndex.current = null;
+    const focusedKey = focusedModelKey.current;
+    if (focusedKey === null || document.activeElement !== document.body) {
+      return;
+    }
+    const focusedIndex = items.findIndex((item) => modelPickerValueKey(item.value) === focusedKey);
+    if (focusedIndex < allRows.startIndex || focusedIndex > allRows.stopIndex) {
+      focusedModelKey.current = null;
       searchInputRef.current?.focus();
     }
   };
@@ -935,7 +939,7 @@ export function ModelPicker({
                   getModelDisabledReason={getModelDisabledReason}
                   registerButton={registerButton}
                   onFocus={(index) => {
-                    focusedModelIndex.current = index;
+                    focusedModelKey.current = modelPickerValueKey(items[index]!.value);
                   }}
                   onBlur={onModelBlur}
                   onNavigate={onNavigate}

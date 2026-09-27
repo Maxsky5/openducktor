@@ -6,7 +6,7 @@ import {
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { act } from "react";
+import { act, useState } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { ModelPicker, type ModelPickerFavoriteState } from "./model-picker";
 import type { ModelPickerCatalogResource, ModelPickerRuntime } from "./model-picker-model";
@@ -56,6 +56,7 @@ const makeRuntimes = (): ModelPickerRuntime[] => [
 const makeLargeRuntimes = (count = 80): ModelPickerRuntime[] => [
   {
     descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+    isEnabledForFavorites: true,
     resource: {
       status: "ready",
       catalog: {
@@ -652,6 +653,47 @@ describe("ModelPicker", () => {
       expect(document.activeElement).toBe(search);
     },
   );
+
+  test("returns focus to search when favoriting moves the focused row out of the window", async () => {
+    const runtimes = makeLargeRuntimes();
+    const PickerWithFavorites = () => {
+      const [favorites, setFavorites] = useState<AgentModelFavorite[]>([]);
+      return (
+        <ModelPicker
+          runtimes={runtimes}
+          value={null}
+          favoriteState={favoriteState({
+            favorites,
+            toggleFavorite: (favorite) => setFavorites([favorite]),
+          })}
+          selectionPolicy={{ kind: "editable" }}
+          onValueChange={() => {}}
+        />
+      );
+    };
+    render(<PickerWithFavorites />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Select model, Select a model" }));
+    });
+    const search = screen.getByRole("textbox", { name: "Search models" });
+    await act(async () => {
+      const list = screen.getByRole("list", { name: "Models" });
+      list.scrollTop = 52 * 40;
+      fireEvent.scroll(list);
+    });
+    const favoriteAction = screen.getByRole("button", {
+      name: "Add Model 40 to favorites",
+    });
+    favoriteAction.focus();
+
+    await act(async () => {
+      fireEvent.click(favoriteAction);
+    });
+
+    expect(screen.queryByRole("button", { name: "Select Model 40 model" })).toBeNull();
+    expect(document.activeElement).toBe(search);
+  });
 
   test("shows the settings read failure before an overlapping mutation failure", async () => {
     const retryRead = mock(() => {});
