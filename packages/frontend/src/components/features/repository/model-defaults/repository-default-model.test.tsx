@@ -8,7 +8,7 @@ import {
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { RepositoryDefaultModelBlock } from "./settings-repository-default-model";
+import { RepositoryDefaultModelBlock } from "./repository-default-model";
 
 const repoConfig: SettingsRepoConfig = {
   workspaceId: "repo",
@@ -92,7 +92,7 @@ const renderBlock = ({
         },
       ],
       favoriteState,
-      loadingState: { isLoadingCatalog: false, isLoadingSettings: false, isSaving: false },
+      loadingState: { isLoadingSettings: false, isSaving: false },
       getCatalogForRuntime: () => catalog,
       isCatalogLoadingForRuntime: () => false,
       onUpdateSelectedRepoConfig: () => {},
@@ -111,6 +111,33 @@ const profileTriggerTag = (html: string): string => {
 };
 
 describe("RepositoryDefaultModelBlock", () => {
+  test("shows disabled effort when the runtime has no effort control", () => {
+    const descriptor: RuntimeDescriptor = {
+      ...CODEX_RUNTIME_DESCRIPTOR,
+      capabilities: {
+        ...CODEX_RUNTIME_DESCRIPTOR.capabilities,
+        optionalSurfaces: {
+          ...CODEX_RUNTIME_DESCRIPTOR.capabilities.optionalSurfaces,
+          supportsVariants: false,
+        },
+      },
+    };
+    const html = renderBlock({
+      descriptor,
+      catalog: codexCatalog,
+      defaultModel: {
+        runtimeKind: "codex",
+        providerId: "openai",
+        modelId: "o3",
+        variant: "",
+        profileId: "",
+      },
+    });
+
+    expect(html).toContain("Effort");
+    expect(html).toContain("Runtime sets effort");
+  });
+
   test("renders the profile control disabled when the runtime does not support profiles", () => {
     const html = renderBlock({
       descriptor: CODEX_RUNTIME_DESCRIPTOR,
@@ -124,7 +151,7 @@ describe("RepositoryDefaultModelBlock", () => {
       },
     });
 
-    expect(profileControlHtml(html)).toContain("Runtime does not support agent profiles");
+    expect(profileControlHtml(html)).toContain("Not supported by runtime");
     expect(profileTriggerTag(html)).toMatch(/ disabled=""/);
   });
 

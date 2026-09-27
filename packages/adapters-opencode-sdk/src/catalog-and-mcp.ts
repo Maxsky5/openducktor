@@ -46,6 +46,34 @@ type OpencodeRuntimeCatalogInput = OpencodeRuntimeClientInput & {
   repoPath: string;
 };
 
+const readModelCatalog = async (
+  client: Pick<ReturnType<ClientFactory>, "app" | "config">,
+  repoPath: string,
+  readAgents: (directory: string) => Promise<ParsedOpencodeAgent[]>,
+): Promise<AgentModelCatalog> => {
+  try {
+    const response = await client.config.providers({ directory: repoPath });
+    const providerData = unwrapData(response, "list configured providers");
+    return {
+      ...mapProviderListToCatalog(providerData),
+      profiles: toOpencodeProfiles(await readAgents(repoPath)),
+    };
+  } catch (error) {
+    throw toOpenCodeRequestError("list model catalog", error);
+  }
+};
+
+export const loadModelCatalog = (
+  createClient: ClientFactoryFor<"app" | "config">,
+  input: OpencodeRuntimeCatalogInput,
+): Promise<AgentModelCatalog> => {
+  const client = createClient({
+    runtimeEndpoint: input.runtimeEndpoint,
+    workingDirectory: input.workingDirectory,
+  });
+  return readModelCatalog(client, input.repoPath, (directory) => readAgentList(client, directory));
+};
+
 export const loadRuntimeCatalog = async (
   createClient: ClientFactoryFor<"app" | "config" | "command">,
   input: OpencodeRuntimeCatalogInput,
@@ -64,14 +92,8 @@ export const loadRuntimeCatalog = async (
     agentLists.set(directory, pending);
     return pending;
   };
-  const readModels = async (): Promise<AgentModelCatalog> => {
-    const response = await client.config.providers({ directory: input.repoPath });
-    const providerData = unwrapData(response, "list configured providers");
-    return {
-      ...mapProviderListToCatalog(providerData),
-      profiles: toOpencodeProfiles(await readAgents(input.repoPath)),
-    };
-  };
+  const readModels = (): Promise<AgentModelCatalog> =>
+    readModelCatalog(client, input.repoPath, readAgents);
   const readSlashCommands = async (): Promise<AgentSlashCommandCatalog> => {
     try {
       const payload = unwrapData(

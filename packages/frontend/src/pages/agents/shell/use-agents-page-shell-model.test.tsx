@@ -490,7 +490,12 @@ const workspaceStateValue = (): WorkspaceStateContextValue => ({
   isSwitchingBranch: false,
   branchSyncDegraded: false,
   workspaces: [],
-  addWorkspace: async () => undefined,
+  addWorkspace: async () => {
+    throw new Error("Not used");
+  },
+  saveWorkspaceModelDefaults: async () => {
+    throw new Error("Not used");
+  },
   selectWorkspace: async () => undefined,
   reorderWorkspaces: async () => undefined,
   refreshBranches: async () => undefined,

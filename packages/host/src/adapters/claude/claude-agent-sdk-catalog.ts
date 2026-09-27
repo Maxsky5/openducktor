@@ -46,6 +46,30 @@ type ClaudeCatalogSession = {
   sdkQuery: ClaudeCatalogQuery;
 };
 
+export const loadClaudeModelCatalog = async (
+  repoPath: string,
+  processEnv: NodeJS.ProcessEnv | undefined,
+  claudeExecutablePath: string,
+  createQuery: ClaudeCatalogQueryFactory,
+): Promise<AgentModelCatalog> => {
+  const session = await openClaudeCatalogSession(
+    repoPath,
+    processEnv,
+    claudeExecutablePath,
+    createQuery,
+  );
+  try {
+    const models = await withTimeout(
+      session.sdkQuery.supportedModels(),
+      INIT_TIMEOUT_MS,
+      "Claude did not return its model catalog. Check Claude authentication and retry.",
+    );
+    return toClaudeModelCatalog(models);
+  } finally {
+    closeClaudeCatalogSession(session);
+  }
+};
+
 export const loadClaudeRuntimeCatalog = async (
   input: LoadAgentRuntimeCatalogInput,
   processEnv: NodeJS.ProcessEnv | undefined,

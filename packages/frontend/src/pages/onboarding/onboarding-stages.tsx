@@ -24,10 +24,12 @@ import {
   useInlineFolderPickerController,
 } from "@/components/features/repository/inline-folder-picker";
 import {
-  useWorkspaceCreation,
+  WorkspaceCreationBackAction,
   WorkspaceCreationFields,
   WorkspaceCreationSubmitAction,
 } from "@/components/features/repository/workspace-creation-form";
+import { useWorkspaceCreation } from "@/components/features/repository/use-workspace-creation";
+import { useWorkspaceCreationModels } from "@/components/features/repository/use-workspace-creation-models";
 import { RuntimeExecutablePanel } from "@/components/features/settings/runtime-executable-panel";
 import { SettingsNotificationsSection } from "@/components/features/settings/settings-notifications-section";
 import { Button } from "@/components/ui/button";
@@ -386,23 +388,40 @@ export function NotificationsStage({
 }
 
 type WorkspaceStageProps = {
-  workspaces: WorkspaceStateContextValue["workspaces"];
-  addWorkspace: WorkspaceStateContextValue["addWorkspace"];
+  workspaceState: WorkspaceStateContextValue;
   isFinalizing: boolean;
   onBack: () => void;
+  onComplete: (repoPath: string) => Promise<void>;
 };
 
 export function WorkspaceStage({
-  workspaces,
-  addWorkspace,
+  workspaceState,
   isFinalizing,
   onBack,
+  onComplete,
 }: WorkspaceStageProps): ReactElement {
   const workspaceCreation = useWorkspaceCreation({
-    workspaces,
-    addWorkspace,
+    workspaces: [
+      ...workspaceState.workspaces,
+      ...workspaceState.closedWorkspaces,
+      ...workspaceState.incompleteRemovals.map((removal) => removal.workspace),
+    ],
+    addWorkspace: workspaceState.addWorkspace,
+    saveWorkspaceModelDefaults: workspaceState.saveWorkspaceModelDefaults,
+    resolveRepoPath: workspaceState.resolveWorkspacePath,
+    onReopenClosedWorkspace: (workspace) =>
+      workspaceState.reopenWorkspace({
+        workspaceId: workspace.workspaceId,
+        expectedRepoPath: workspace.repoPath,
+      }),
+    onSuccess: onComplete,
     disabled: isFinalizing,
     initialPickerOpen: true,
+  });
+  const models = useWorkspaceCreationModels({
+    repoPath: workspaceCreation.repoPath,
+    active: workspaceCreation.stage === "models",
+    saveAgentModelFavorites: workspaceState.saveAgentModelFavorites,
   });
   const folderPickerInput: Parameters<typeof useInlineFolderPickerController>[0] = {
     requireGitRepo: true,
@@ -431,6 +450,7 @@ export function WorkspaceStage({
         <div className="relative rounded-xl border border-border bg-card p-4 sm:p-5">
           <WorkspaceCreationFields
             controller={workspaceCreation}
+            modelSurface={models}
             picker={
               <InlineFolderPickerContent
                 controller={folderPicker}
@@ -456,20 +476,23 @@ export function WorkspaceStage({
         data-testid="onboarding-workspace-footer"
         className="flex flex-col-reverse justify-between gap-3 border-t border-border bg-card px-6 py-4 sm:flex-row sm:items-center sm:px-9"
       >
-        <Button
-          type="button"
-          variant="outline"
-          disabled={workspaceCreation.submitting || isFinalizing}
-          onClick={onBack}
-        >
-          <ArrowLeft data-icon="inline-start" />
-          Back to notifications
-        </Button>
+        {workspaceCreation.stage === "repository" ? (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={workspaceCreation.busy}
+            onClick={onBack}
+          >
+            <ArrowLeft data-icon="inline-start" /> Back to notifications
+          </Button>
+        ) : (
+          <WorkspaceCreationBackAction controller={workspaceCreation} />
+        )}
         <div
           data-testid="onboarding-workspace-actions"
           className="flex flex-col gap-3 sm:ml-auto sm:flex-row sm:items-center sm:justify-end"
         >
-          {workspaceCreation.pickerOpen ? (
+          {workspaceCreation.stage === "repository" && workspaceCreation.pickerOpen ? (
             <>
               {workspaceCreation.repoPath ? (
                 <FolderPickerCancelAction controller={folderPicker} />
@@ -480,7 +503,7 @@ export function WorkspaceStage({
               />
             </>
           ) : (
-            <WorkspaceCreationSubmitAction controller={workspaceCreation} />
+            <WorkspaceCreationSubmitAction controller={workspaceCreation} modelSurface={models} />
           )}
         </div>
       </div>

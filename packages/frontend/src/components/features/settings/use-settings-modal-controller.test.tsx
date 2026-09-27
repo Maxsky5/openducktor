@@ -149,7 +149,9 @@ const createHookHarness = (
     activeWorkspace: workspaceRecords[0] ?? null,
     branches: EMPTY_BRANCHES,
     activeBranch: null,
-    addWorkspace: async () => {},
+    addWorkspace: async () => {
+      throw new Error("Not used");
+    },
     selectWorkspace: async () => {},
     reorderWorkspaces: async () => {},
     refreshBranches: async () => {},
@@ -159,6 +161,9 @@ const createHookHarness = (
     },
     saveRepoSettings: async () => {
       throw new Error("saveRepoSettings is not used in this test");
+    },
+    saveWorkspaceModelDefaults: async () => {
+      throw new Error("Not used");
     },
     loadSettingsSnapshot,
     detectGithubRepository: async () => null,

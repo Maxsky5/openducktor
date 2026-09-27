@@ -43,7 +43,12 @@ test("the task card opens and closes the real detail sheet without leaving chat"
       defaultWorktreeBasePath: "/tmp/worktrees",
       effectiveWorktreeBasePath: "/tmp/worktrees",
     },
-    addWorkspace: async () => {},
+    addWorkspace: async () => {
+      throw new Error("Not used");
+    },
+    saveWorkspaceModelDefaults: async () => {
+      throw new Error("Not used");
+    },
     selectWorkspace: async () => {},
     closeWorkspace: async () => {},
     removeWorkspace: async () => {},

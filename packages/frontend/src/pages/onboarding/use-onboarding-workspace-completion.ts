@@ -13,19 +13,18 @@ export const useOnboardingWorkspaceCompletion = ({
   onComplete: () => void;
 }) => {
   const queryClient = useQueryClient();
-  const { workspaces, addWorkspace } = useWorkspaceState();
+  const workspaceState = useWorkspaceState();
   const [completionRepoPath, setCompletionRepoPath] = useState<string | null>(null);
 
-  const addFirstWorkspace = useCallback(
-    async (input: Parameters<typeof addWorkspace>[0]): Promise<void> => {
+  const completeWorkspace = useCallback(
+    async (repoPath: string): Promise<void> => {
       if (!settingsSnapshot) {
         throw new Error("Settings must be loaded before opening the first workspace.");
       }
-      await addWorkspace(input);
-      setCompletionRepoPath(input.repoPath);
+      setCompletionRepoPath(repoPath);
 
       const destinationQueries: Promise<unknown>[] = [
-        queryClient.fetchQuery(repoTaskDataQueryOptions(input.repoPath)),
+        queryClient.fetchQuery(repoTaskDataQueryOptions(repoPath)),
       ];
       if (settingsSnapshot.appearance.horizontalScrollbarVisibility === "system") {
         destinationQueries.push(queryClient.fetchQuery(platformQueryOptions()));
@@ -35,12 +34,12 @@ export const useOnboardingWorkspaceCompletion = ({
       await Promise.allSettled(destinationQueries);
       onComplete();
     },
-    [addWorkspace, onComplete, queryClient, settingsSnapshot],
+    [onComplete, queryClient, settingsSnapshot],
   );
 
   return {
-    workspaces,
-    addFirstWorkspace,
+    workspaceState,
+    completeWorkspace,
     isFinalizing: completionRepoPath !== null,
   };
 };

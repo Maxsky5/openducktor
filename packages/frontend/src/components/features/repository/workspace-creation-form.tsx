@@ -1,264 +1,53 @@
-import type { WorkspacePathResolution, WorkspaceRecord } from "@openducktor/contracts";
-import { FolderOpen } from "lucide-react";
-import { type ReactElement, type ReactNode, useMemo, useReducer, useRef } from "react";
+import { ArrowLeft, ArrowRight, FolderOpen } from "lucide-react";
+import type { ReactElement, ReactNode } from "react";
+import { ensureDraftAgentDefault } from "@/components/features/repository/model-defaults/model-defaults-model";
+import { RepositoryModelDefaultsFields } from "@/components/features/repository/model-defaults/repository-model-defaults-fields";
 import { WorkspaceIdentityFields } from "@/components/features/workspace-identity/workspace-identity-fields";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { errorMessage } from "@/lib/errors";
-import type { WorkspaceSelectionOperationsInput } from "@/types/state-slices";
-import { FolderPickerDialog } from "./folder-picker-dialog";
+import { Stepper, type StepperStep } from "@/components/ui/stepper";
+import type { WorkspaceCreationController, WorkspaceCreationStage } from "./use-workspace-creation";
+import type { WorkspaceCreationModelSurface } from "./use-workspace-creation-models";
 
-const WORKSPACE_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-
-const deriveWorkspaceNameFromRepoPath = (repoPath: string): string => {
-  const trimmedPath = repoPath.trim().replace(/[\\/]+$/, "");
-  const segments = trimmedPath.split(/[\\/]+/).filter(Boolean);
-  return segments.at(-1)?.trim() || repoPath.trim();
-};
-
-const proposeWorkspaceId = (input: string): string => {
-  const normalized = input
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return normalized || "workspace";
-};
-
-const uniquifyWorkspaceId = (candidate: string, existingIds: Set<string>): string => {
-  if (!existingIds.has(candidate)) return candidate;
-  let suffix = 2;
-  while (existingIds.has(`${candidate}-${suffix}`)) suffix += 1;
-  return `${candidate}-${suffix}`;
-};
-
-type State = {
-  pickerOpen: boolean;
-  repoPath: string;
-  workspaceName: string;
-  workspaceId: string;
-  abbreviation: string;
-  tileColor: string | null;
-  editedId: boolean;
-  submitting: boolean;
-  error: string | null;
-};
-
-type Action =
-  | { type: "picker"; open: boolean }
-  | { type: "repo"; repoPath: string; workspaceName: string; workspaceId: string }
-  | { type: "name"; workspaceName: string; workspaceId: string }
-  | { type: "id"; workspaceId: string }
-  | { type: "abbreviation"; abbreviation: string }
-  | { type: "tileColor"; tileColor: string | null }
-  | { type: "submitting"; value: boolean }
-  | { type: "error"; error: string | null };
-
-const initialState: State = {
-  pickerOpen: false,
-  repoPath: "",
-  workspaceName: "",
-  workspaceId: "",
-  abbreviation: "",
-  tileColor: null,
-  editedId: false,
-  submitting: false,
-  error: null,
-};
-
-const reducer = (state: State, action: Action): State => {
-  switch (action.type) {
-    case "picker":
-      return { ...state, pickerOpen: action.open, error: null };
-    case "repo":
-      return { ...state, ...action, pickerOpen: false, editedId: false, error: null };
-    case "name":
-      return { ...state, workspaceName: action.workspaceName, workspaceId: action.workspaceId };
-    case "id":
-      return { ...state, workspaceId: action.workspaceId, editedId: true };
-    case "abbreviation":
-      return { ...state, abbreviation: action.abbreviation };
-    case "tileColor":
-      return { ...state, tileColor: action.tileColor };
-    case "submitting":
-      return { ...state, submitting: action.value };
-    case "error":
-      return { ...state, error: action.error };
-  }
-};
-
-type WorkspaceCreationFormProps = {
-  workspaces: WorkspaceRecord[];
-  addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<void>;
-  disabled?: boolean;
-  onSubmittingChange?: (submitting: boolean) => void;
-  onSuccess?: () => void;
-  resolveRepoPath?: (repoPath: string) => Promise<WorkspacePathResolution>;
-  onReopenClosedWorkspace?: (workspace: WorkspaceRecord) => Promise<void>;
-  runWorkspaceChange?: (change: () => Promise<void>) => Promise<boolean>;
-};
-
-export type WorkspaceCreationController = {
-  repoPath: string;
-  workspaceName: string;
-  workspaceId: string;
-  abbreviation: string;
-  tileColor: string | null;
-  pickerOpen: boolean;
-  submitting: boolean;
-  busy: boolean;
-  validationError: string | null;
-  error: string | null;
-  openPicker: () => void;
-  closePicker: () => void;
-  confirmRepo: (repoPath: string) => Promise<void>;
-  updateWorkspaceId: (workspaceId: string) => void;
-  updateWorkspaceName: (workspaceName: string) => void;
-  updateAbbreviation: (abbreviation: string) => void;
-  updateTileColor: (tileColor: string | null) => void;
-  submit: () => Promise<void>;
-};
-
-export function useWorkspaceCreation({
-  workspaces,
-  addWorkspace,
-  disabled = false,
-  onSubmittingChange,
-  onSuccess,
-  resolveRepoPath,
-  onReopenClosedWorkspace,
-  runWorkspaceChange,
-  initialPickerOpen = false,
-}: WorkspaceCreationFormProps & { initialPickerOpen?: boolean }): WorkspaceCreationController {
-  const [state, dispatch] = useReducer(reducer, {
-    ...initialState,
-    pickerOpen: initialPickerOpen,
-  });
-  const submitInFlight = useRef(false);
-  const existingIds = useMemo(
-    () => new Set(workspaces.map((workspace) => workspace.workspaceId)),
-    [workspaces],
-  );
-  const duplicateRepo = workspaces.find((workspace) => workspace.repoPath === state.repoPath);
-  let validationError: string | null = null;
-  if (state.repoPath) {
-    if (duplicateRepo)
-      validationError = `Repository is already configured as ${duplicateRepo.workspaceName}.`;
-    else if (!state.workspaceName.trim()) validationError = "Workspace name cannot be blank.";
-    else if (!WORKSPACE_ID_PATTERN.test(state.workspaceId.trim()))
-      validationError =
-        "Workspace ID must contain only lowercase letters, digits, and single dashes.";
-    else if (existingIds.has(state.workspaceId.trim()))
-      validationError = `Workspace ID already exists: ${state.workspaceId.trim()}`;
-  }
-  const busy = disabled || state.submitting;
-  const runChange =
-    runWorkspaceChange ??
-    (async (change: () => Promise<void>) => {
-      await change();
-      return true;
-    });
-
-  const confirmRepo = async (repoPath: string): Promise<void> => {
-    if (resolveRepoPath) {
-      const resolution = await resolveRepoPath(repoPath);
-      if (resolution.kind === "removing") {
-        throw new Error(
-          `Workspace removal is incomplete for ${resolution.removal.workspace.workspaceName}. Retry removal from the workspace rail.`,
-        );
-      }
-      if (resolution.kind === "closed") {
-        if (!(await runChange(async () => onReopenClosedWorkspace?.(resolution.workspace)))) return;
-        onSuccess?.();
-        return;
-      }
-    }
-    const workspaceName = deriveWorkspaceNameFromRepoPath(repoPath);
-    dispatch({
-      type: "repo",
-      repoPath,
-      workspaceName,
-      workspaceId: uniquifyWorkspaceId(proposeWorkspaceId(workspaceName), existingIds),
-    });
-  };
-
-  const submit = async (): Promise<void> => {
-    if (submitInFlight.current || !state.repoPath || validationError) return;
-    submitInFlight.current = true;
-    onSubmittingChange?.(true);
-    dispatch({ type: "submitting", value: true });
-    dispatch({ type: "error", error: null });
-    try {
-      const workspaceInput: WorkspaceSelectionOperationsInput = {
-        workspaceId: state.workspaceId.trim(),
-        workspaceName: state.workspaceName.trim(),
-        repoPath: state.repoPath,
-      };
-      const abbreviation = state.abbreviation.trim();
-      if (abbreviation) {
-        workspaceInput.abbreviation = abbreviation;
-      }
-      if (state.tileColor) {
-        workspaceInput.tileColor = state.tileColor;
-      }
-      if (!(await runChange(() => addWorkspace(workspaceInput)))) return;
-      onSuccess?.();
-    } catch (cause) {
-      dispatch({ type: "error", error: errorMessage(cause) });
-    } finally {
-      submitInFlight.current = false;
-      dispatch({ type: "submitting", value: false });
-      onSubmittingChange?.(false);
-    }
-  };
-
-  return {
-    repoPath: state.repoPath,
-    workspaceName: state.workspaceName,
-    workspaceId: state.workspaceId,
-    abbreviation: state.abbreviation,
-    tileColor: state.tileColor,
-    pickerOpen: state.pickerOpen,
-    submitting: state.submitting,
-    busy,
-    validationError,
-    error: state.error,
-    openPicker: () => dispatch({ type: "picker", open: true }),
-    closePicker: () => dispatch({ type: "picker", open: false }),
-    confirmRepo,
-    updateWorkspaceId: (workspaceId) => dispatch({ type: "id", workspaceId: workspaceId.trim() }),
-    updateWorkspaceName: (workspaceName) =>
-      dispatch({
-        type: "name",
-        workspaceName,
-        workspaceId: state.editedId
-          ? state.workspaceId
-          : uniquifyWorkspaceId(proposeWorkspaceId(workspaceName), existingIds),
-      }),
-    updateAbbreviation: (abbreviation) => dispatch({ type: "abbreviation", abbreviation }),
-    updateTileColor: (tileColor) => dispatch({ type: "tileColor", tileColor }),
-    submit,
-  };
-}
+const STAGES: readonly StepperStep<WorkspaceCreationStage>[] = [
+  { id: "repository", title: "Repository", shortTitle: "Repo", description: "Choose a Git folder" },
+  {
+    id: "information",
+    title: "Workspace details",
+    shortTitle: "Details",
+    description: "Name and color",
+  },
+  { id: "models", title: "Models", description: "Set your defaults" },
+];
 
 function WorkspaceRepositoryChooser({
   controller,
 }: {
   controller: WorkspaceCreationController;
 }): ReactElement {
-  const hasRepoPath = controller.repoPath !== "";
   return (
-    <Button
-      type="button"
-      size={hasRepoPath ? "default" : "lg"}
-      variant={hasRepoPath ? "outline" : "default"}
-      className={hasRepoPath ? "w-fit" : undefined}
-      onClick={controller.openPicker}
-    >
-      <FolderOpen data-icon="inline-start" />
-      {hasRepoPath ? "Choose different repository" : "Choose repository folder"}
-    </Button>
+    <div className="mx-auto flex min-h-56 w-full max-w-2xl flex-col items-start justify-center gap-4 rounded-xl border border-border bg-card p-6 sm:p-8">
+      <div className="flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+        <FolderOpen className="size-6" aria-hidden="true" />
+      </div>
+      <div className="space-y-1">
+        <h3 className="text-base font-semibold text-foreground">Choose a repository</h3>
+        <p className="text-sm text-muted-foreground">
+          Select the local Git folder you want to use for this workspace.
+        </p>
+      </div>
+      {controller.repoPath ? (
+        <div className="grid w-full gap-1">
+          <Label htmlFor="workspace-selected-repo-path">Selected repository path</Label>
+          <Input id="workspace-selected-repo-path" value={controller.repoPath} readOnly />
+        </div>
+      ) : null}
+      <Button type="button" size="lg" className="w-full" onClick={controller.openPicker}>
+        <FolderOpen data-icon="inline-start" />
+        {controller.repoPath ? "Choose different repository" : "Choose repository folder"}
+      </Button>
+    </div>
   );
 }
 
@@ -269,27 +58,29 @@ function WorkspaceRepositoryFields({
 }): ReactElement {
   const invalidWorkspaceId = controller.validationError?.startsWith("Workspace ID") ?? false;
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
+    <div className="grid gap-5 rounded-xl border border-border bg-card p-5 sm:p-6">
       <div className="flex flex-col gap-1">
         <Label htmlFor="workspace-repo-path">Repository path</Label>
         <Input id="workspace-repo-path" value={controller.repoPath} readOnly />
       </div>
-      <div className="flex flex-col gap-1">
-        <Label htmlFor="workspace-id">Workspace ID</Label>
-        <Input
-          id="workspace-id"
-          value={controller.workspaceId}
-          aria-invalid={invalidWorkspaceId}
-          onChange={(event) => controller.updateWorkspaceId(event.currentTarget.value)}
-        />
-      </div>
-      <div className="flex flex-col gap-1">
-        <Label htmlFor="workspace-name">Workspace name</Label>
-        <Input
-          id="workspace-name"
-          value={controller.workspaceName}
-          onChange={(event) => controller.updateWorkspaceName(event.currentTarget.value)}
-        />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="workspace-name">Workspace name</Label>
+          <Input
+            id="workspace-name"
+            value={controller.workspaceName}
+            onChange={(event) => controller.updateWorkspaceName(event.currentTarget.value)}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="workspace-id">Workspace ID</Label>
+          <Input
+            id="workspace-id"
+            value={controller.workspaceId}
+            aria-invalid={invalidWorkspaceId}
+            onChange={(event) => controller.updateWorkspaceId(event.currentTarget.value)}
+          />
+        </div>
       </div>
       <WorkspaceIdentityFields
         idPrefix="workspace-create"
@@ -304,75 +95,177 @@ function WorkspaceRepositoryFields({
   );
 }
 
-function WorkspaceCreationError({
+function WorkspaceModelsFields({
   controller,
+  surface,
 }: {
   controller: WorkspaceCreationController;
-}): ReactElement | null {
-  const message = controller.error ?? controller.validationError;
-  if (!message) return null;
+  surface?: WorkspaceCreationModelSurface | undefined;
+}): ReactElement {
+  if (!surface)
+    return (
+      <p className="text-sm text-muted-foreground">
+        Model choices are unavailable. You can open this repository without defaults.
+      </p>
+    );
   return (
-    <p className="text-sm text-destructive" role="alert">
-      {message}
-    </p>
+    <div className="space-y-5">
+      <div className="grid gap-1">
+        <Label htmlFor="workspace-models-repo-path">Repository path</Label>
+        <Input id="workspace-models-repo-path" value={controller.repoPath} readOnly />
+      </div>
+      <p className="text-sm text-muted-foreground">
+        Choose defaults for this workspace. You can leave every choice blank.
+      </p>
+      <RepositoryModelDefaultsFields
+        presentation="creation"
+        selectedRepoConfig={controller.modelDraft}
+        availableRuntimeDefinitions={surface.availableRuntimeDefinitions}
+        catalogResources={surface.catalogResources}
+        favoriteState={surface.favoriteState}
+        loadingState={{
+          isLoadingRuntimeDefinitions: surface.isLoadingRuntimeDefinitions,
+          isLoadingCatalog: surface.isLoadingCatalog,
+          isLoadingSettings: false,
+          isSaving: controller.busy,
+        }}
+        runtimeDefinitionsError={null}
+        runtimeAvailabilityErrors={surface.errors}
+        getCatalogForRuntime={surface.getCatalogForRuntime}
+        isCatalogLoadingForRuntime={surface.isCatalogLoadingForRuntime}
+        onUpdateSelectedRepoConfig={controller.updateModelDraft}
+        onUpdateSelectedRepoAgentDefault={(role, field, value) =>
+          controller.updateModelDraft((current) => {
+            const roleDefault = current.agentDefaults[role];
+            return {
+              ...current,
+              agentDefaults: {
+                ...current.agentDefaults,
+                [role]: {
+                  ...ensureDraftAgentDefault(roleDefault),
+                  runtimeKind: roleDefault?.runtimeKind ?? current.defaultModel?.runtimeKind,
+                  [field]: value,
+                },
+              },
+            };
+          })
+        }
+        onClearSelectedRepoAgentDefault={(role) =>
+          controller.updateModelDraft((current) => ({
+            ...current,
+            agentDefaults: { ...current.agentDefaults, [role]: undefined },
+          }))
+        }
+        onUpdateSelectedRepoDefaultModel={(field, value) =>
+          controller.updateModelDraft((current) => ({
+            ...current,
+            defaultModel: current.defaultModel
+              ? { ...current.defaultModel, [field]: value }
+              : current.defaultModel,
+          }))
+        }
+        onClearSelectedRepoDefaultModel={() =>
+          controller.updateModelDraft((current) => ({ ...current, defaultModel: undefined }))
+        }
+      />
+      {surface.errors.length > 0 ? (
+        <Button type="button" variant="outline" onClick={() => void surface.retry()}>
+          Retry model list
+        </Button>
+      ) : null}
+    </div>
   );
 }
 
 export function WorkspaceCreationFields({
   controller,
   picker,
+  modelSurface,
 }: {
   controller: WorkspaceCreationController;
   picker?: ReactNode;
+  modelSurface?: WorkspaceCreationModelSurface | undefined;
 }): ReactElement {
-  const showInlinePicker = picker !== undefined && controller.pickerOpen;
-  const showRepositoryFields = controller.repoPath !== "" && !controller.pickerOpen;
-
   return (
-    <fieldset disabled={controller.busy} className="flex min-w-0 flex-col gap-4">
-      {!showInlinePicker ? <WorkspaceRepositoryChooser controller={controller} /> : null}
+    <div className="flex min-w-0 flex-col gap-5">
+      <Stepper steps={STAGES} step={controller.stage} label="Workspace setup stages" fill />
+      <fieldset disabled={controller.busy} className="flex min-w-0 flex-col gap-5">
+        {controller.stage === "repository" ? (
+          picker !== undefined && controller.pickerOpen ? (
+            picker
+          ) : (
+            <WorkspaceRepositoryChooser controller={controller} />
+          )
+        ) : null}
+        {controller.stage === "information" ? (
+          <WorkspaceRepositoryFields controller={controller} />
+        ) : null}
+        {controller.stage === "models" ? (
+          <WorkspaceModelsFields controller={controller} surface={modelSurface} />
+        ) : null}
+      </fieldset>
+      {controller.error || (controller.stage === "information" && controller.validationError) ? (
+        <p className="text-sm text-destructive" role="alert">
+          {controller.error ?? controller.validationError}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
-      {showInlinePicker ? picker : null}
-
-      {showRepositoryFields ? <WorkspaceRepositoryFields controller={controller} /> : null}
-
-      <WorkspaceCreationError controller={controller} />
-    </fieldset>
+export function WorkspaceCreationBackAction({
+  controller,
+}: {
+  controller: WorkspaceCreationController;
+}): ReactElement | null {
+  if (controller.stage === "repository" || controller.createdWorkspaceId) return null;
+  return (
+    <Button type="button" variant="outline" disabled={controller.busy} onClick={controller.back}>
+      <ArrowLeft data-icon="inline-start" /> Back
+    </Button>
   );
 }
 
 export function WorkspaceCreationSubmitAction({
   controller,
+  modelSurface,
 }: {
   controller: WorkspaceCreationController;
+  modelSurface?: WorkspaceCreationModelSurface | undefined;
 }): ReactElement | null {
-  if (!controller.repoPath || controller.pickerOpen) return null;
+  if (controller.stage === "repository") {
+    return controller.repoPath && !controller.pickerOpen ? (
+      <Button type="button" disabled={controller.busy} onClick={controller.reviewRepo}>
+        Continue to workspace information <ArrowRight data-icon="inline-end" />
+      </Button>
+    ) : null;
+  }
+  if (controller.stage === "information") {
+    return (
+      <Button
+        type="button"
+        disabled={controller.busy || controller.validationError !== null}
+        onClick={controller.next}
+      >
+        Continue to models <ArrowRight data-icon="inline-end" />
+      </Button>
+    );
+  }
+  const progressLabel =
+    controller.progress === "creating"
+      ? "Creating workspace..."
+      : controller.progress === "saving"
+        ? "Saving model defaults..."
+        : controller.progress === "finishing"
+          ? "Opening repository..."
+          : "Open repository";
   return (
     <Button
       type="button"
       disabled={controller.busy || controller.validationError !== null}
-      onClick={() => void controller.submit()}
+      onClick={() => void controller.submit(modelSurface)}
     >
-      {controller.submitting ? "Opening repository..." : "Open repository"}
+      {progressLabel}
     </Button>
-  );
-}
-
-export function WorkspaceCreationForm(props: WorkspaceCreationFormProps): ReactElement {
-  const controller = useWorkspaceCreation(props);
-  return (
-    <div className="flex min-w-0 flex-col gap-4">
-      <WorkspaceCreationFields controller={controller} />
-      <WorkspaceCreationSubmitAction controller={controller} />
-      <FolderPickerDialog
-        open={controller.pickerOpen}
-        onOpenChange={(open) => (open ? controller.openPicker() : controller.closePicker())}
-        title="Open Repository"
-        description="Choose an existing Git repository on disk."
-        confirmLabel="Choose This Folder"
-        requireGitRepo
-        onConfirm={controller.confirmRepo}
-      />
-    </div>
   );
 }

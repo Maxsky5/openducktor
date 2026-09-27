@@ -10,6 +10,7 @@ import type {
   RuntimeApprovalReplyOutcome,
   RuntimeCheck,
   RuntimeKind,
+  SettingsRepoConfig,
   SettingsSnapshot,
   SettingsSnapshotSaveInput,
   TaskAssetDescriptionMutation,
@@ -64,6 +65,11 @@ export type RepoAgentDefaultInput = {
   profileId: string;
 };
 
+export type WorkspaceModelDefaultsDraft = Pick<
+  SettingsRepoConfig,
+  "defaultModel" | "agentDefaults"
+>;
+
 export type RepoSettingsInput = {
   defaultModel: RepoAgentDefaultInput | null;
   worktreeBasePath: string;
@@ -94,7 +100,11 @@ export type WorkspaceStateContextValue = {
   activeWorkspace: WorkspaceRecord | null;
   branches: GitBranch[];
   activeBranch: GitCurrentBranch | null;
-  addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<void>;
+  addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<WorkspaceRecord>;
+  saveWorkspaceModelDefaults: (
+    workspaceId: string,
+    draft: WorkspaceModelDefaultsDraft,
+  ) => Promise<void>;
   selectWorkspace: (workspaceId: string) => Promise<void>;
   closeWorkspace: (input: WorkspaceLifecycleTargetInput) => Promise<void>;
   removeWorkspace: (input: WorkspaceRemovalInput) => Promise<void>;

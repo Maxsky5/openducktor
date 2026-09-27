@@ -327,7 +327,12 @@ const createWorkspaceStateValue = (
   isLoadingBranches: false,
   isSwitchingBranch: false,
   branchSyncDegraded: false,
-  addWorkspace: async () => {},
+  addWorkspace: async () => {
+    throw new Error("Not used");
+  },
+  saveWorkspaceModelDefaults: async () => {
+    throw new Error("Not used");
+  },
   selectWorkspace: async () => {},
   reorderWorkspaces: async () => {},
   refreshBranches: async () => {},

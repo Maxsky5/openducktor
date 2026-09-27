@@ -94,8 +94,8 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps): ReactElemen
       ) : null}
       {stage === "workspace" ? (
         <WorkspaceStage
-          workspaces={workspaceCompletion.workspaces}
-          addWorkspace={workspaceCompletion.addFirstWorkspace}
+          workspaceState={workspaceCompletion.workspaceState}
+          onComplete={workspaceCompletion.completeWorkspace}
           isFinalizing={workspaceCompletion.isFinalizing}
           onBack={() => changeStage("notifications")}
         />

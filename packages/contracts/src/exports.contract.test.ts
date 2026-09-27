@@ -479,6 +479,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "runtimeCapabilitiesSchema",
   "agentRuntimeCatalogSchema",
   "agentRuntimeLoadCatalogInputSchema",
+  "agentRuntimePreviewModelsInputSchema",
   "runtimeCapabilityClasses",
   "runtimeCapabilityKeySchema",
   "runtimeCapabilityKeyValues",

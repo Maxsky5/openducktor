@@ -1,4 +1,7 @@
-import { AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS } from "@openducktor/contracts";
+import {
+  AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS,
+  type AgentRuntimePreviewModelsInput,
+} from "@openducktor/contracts";
 import type {
   LoadAgentRuntimeCatalogInput,
   LoadAgentFileStatusInput,
@@ -11,6 +14,15 @@ import type { InvokeFn } from "./invoke-utils";
 
 export class HostAgentRuntimeQueryClient {
   constructor(private readonly invokeFn: InvokeFn) {}
+
+  agentRuntimePreviewModels(input: AgentRuntimePreviewModelsInput) {
+    const contract = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.previewModels;
+    return this.invokeFn(
+      contract.command,
+      { input: contract.inputSchema.parse(input) },
+      contract.responseSchema,
+    );
+  }
 
   agentRuntimeLoadCatalog(input: LoadAgentRuntimeCatalogInput) {
     const contract = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.loadCatalog;

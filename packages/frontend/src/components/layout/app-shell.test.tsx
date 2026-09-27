@@ -8,7 +8,7 @@ import {
 } from "@openducktor/contracts";
 import { type QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { type ReactElement, useState } from "react";
+import { type ReactElement, useEffect, useState } from "react";
 import { MemoryRouter, Navigate, Route, Routes, useLocation } from "react-router";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
@@ -186,7 +186,10 @@ const createWorkspaceState = (
   activeWorkspace,
   branches: [],
   activeBranch: null,
-  addWorkspace: async () => undefined,
+  addWorkspace: async () => {
+    throw new Error("Not used");
+  },
+  saveWorkspaceModelDefaults: async () => {},
   selectWorkspace: async () => undefined,
   reorderWorkspaces: async () => undefined,
   refreshBranches: async () => undefined,
@@ -219,7 +222,9 @@ const createWorkspaceBranchState = (
 });
 
 type RenderAppShellForTestOptions = {
+  closedOnly?: boolean;
   initialEntry?: string;
+  initiallyUnselectedWorkspace?: boolean;
   isLoadingRuntimeDefinitions?: boolean;
   runtimeDefinitionsError?: string | null;
   workspaceAdd?: (
@@ -280,7 +285,8 @@ function AppShellTestEnvironment({
   queryClient: ReturnType<typeof createQueryClient>;
   settingsSnapshot: ReturnType<typeof createSettingsSnapshotFixture>;
 }): ReactElement {
-  const startsWithWorkspaces = options.workspacePresence?.hasWorkspaces ?? true;
+  const startsWithWorkspaces =
+    !options.closedOnly && (options.workspacePresence?.hasWorkspaces ?? true);
   const [workspaces, setWorkspaces] = useState<WorkspaceRecord[]>(
     startsWithWorkspaces ? [activeWorkspace] : [],
   );
@@ -288,16 +294,22 @@ function AppShellTestEnvironment({
     startsWithWorkspaces ? activeWorkspace : null,
   );
   const [currentActiveWorkspace, setCurrentActiveWorkspace] = useState<ActiveWorkspace | null>(
-    startsWithWorkspaces ? activeWorkspace : null,
+    startsWithWorkspaces && !options.initiallyUnselectedWorkspace ? activeWorkspace : null,
   );
+  useEffect(() => {
+    if (options.initiallyUnselectedWorkspace) setCurrentActiveWorkspace(activeWorkspace);
+  }, [options.initiallyUnselectedWorkspace]);
   const publishesWorkspaceAfterAdd = options.workspaceAdd !== undefined;
-  const hasWorkspaces = publishesWorkspaceAfterAdd ? workspaces.length > 0 : startsWithWorkspaces;
+  const hasWorkspaces =
+    options.closedOnly ||
+    (publishesWorkspaceAfterAdd ? workspaces.length > 0 : startsWithWorkspaces);
   const addWorkspace: WorkspaceStateContextValue["addWorkspace"] = async (input) => {
-    if (!options.workspaceAdd) return;
+    if (!options.workspaceAdd) throw new Error("Not used");
     const workspace = await options.workspaceAdd(input);
     setWorkspaces([workspace]);
     setCurrentWorkspace(workspace);
     setCurrentActiveWorkspace(workspace);
+    return workspace;
   };
 
   return (
@@ -324,6 +336,9 @@ function AppShellTestEnvironment({
               <WorkspaceStateContext.Provider
                 value={createWorkspaceState({
                   workspaces,
+                  closedWorkspaces: options.closedOnly
+                    ? [{ ...activeWorkspace, isActive: false }]
+                    : [],
                   activeWorkspace: currentWorkspace,
                   addWorkspace,
                 })}
@@ -477,6 +492,20 @@ describe("AppShell", () => {
     expect(screen.queryByText("Kanban")).toBeNull();
   });
 
+  test("does not open the repository modal while selecting an existing workspace on startup", async () => {
+    renderAppShellForTest({ initiallyUnselectedWorkspace: true });
+
+    await waitFor(() => expect(screen.getByText("OpenDucktor", { selector: "p" })).toBeTruthy());
+    expect(screen.queryByRole("dialog", { name: "Open a repository" })).toBeNull();
+  });
+
+  test("opens the repository modal when only closed workspaces exist", () => {
+    renderAppShellForTest({ closedOnly: true });
+
+    expect(screen.getByRole("dialog", { name: "Open a repository" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Reopen a workspace" })).toBeTruthy();
+  });
+
   test("shows the workspace load failure when no cached workspace exists", () => {
     renderAppShellForTest({
       workspacePresence: {
@@ -620,18 +649,16 @@ describe("AppShell", () => {
     fireEvent.click(within(workspaceFooter).getByRole("button", { name: "Choose This Folder" }));
     const submitActions = await screen.findByTestId("onboarding-workspace-actions");
     expect(workspaceFooter.contains(submitActions)).toBe(true);
-    expect(
-      within(workspaceFooter).getByRole("button", { name: "Back to notifications" }),
-    ).toBeTruthy();
+    expect(within(workspaceFooter).getByRole("button", { name: "Back" })).toBeTruthy();
+    expect(workspaceAdd).not.toHaveBeenCalled();
+    fireEvent.click(within(workspaceFooter).getByRole("button", { name: "Continue to models" }));
     const openRepositoryButton = await within(workspaceFooter).findByRole("button", {
       name: "Open repository",
     });
     fireEvent.click(openRepositoryButton);
 
-    expect(await screen.findByRole("button", { name: "Opening repository..." })).toBeTruthy();
-    expect(
-      screen.getByRole<HTMLButtonElement>("button", { name: "Back to notifications" }).disabled,
-    ).toBe(true);
+    expect(await screen.findByRole("button", { name: "Creating workspace..." })).toBeTruthy();
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Back" }).disabled).toBe(true);
     expect(screen.getByTestId("current-route").textContent).toBe("/onboarding");
     expect(screen.queryByText("Kanban")).toBeNull();
     expect(workspaceAdd).toHaveBeenCalledWith({
@@ -694,9 +721,10 @@ describe("AppShell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
     await screen.findByRole("heading", { name: "Open your first workspace" });
     fireEvent.click(await screen.findByRole("button", { name: "Choose This Folder" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Continue to models" }));
     fireEvent.click(await screen.findByRole("button", { name: "Open repository" }));
 
-    const backButton = screen.getByRole("button", { name: "Back to notifications" });
+    const backButton = screen.getByRole("button", { name: "Back" });
     if (!(backButton instanceof HTMLButtonElement)) {
       throw new TypeError("Expected the back action to be a button.");
     }

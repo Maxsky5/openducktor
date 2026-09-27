@@ -25,7 +25,11 @@ import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspac
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { OnboardingPage } from "@/pages/onboarding/onboarding-page";
-import { useActiveWorkspace, useWorkspacePresence } from "@/state/app-state-provider";
+import {
+  useActiveWorkspace,
+  useWorkspacePresence,
+  useWorkspaceState,
+} from "@/state/app-state-provider";
 import { repoConfigQueryOptions } from "@/state/queries/workspace";
 import { useShellAgentActivity } from "@/state/queries/use-shell-agent-activity";
 
@@ -74,6 +78,7 @@ const persistLeftSidebarPreference = (preference: AppShellSidebarPreference): vo
 const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
   const { run: guardWorkspaceChange } = useWorkspacePreviewTransitionGuard();
   const activeWorkspace = useActiveWorkspace();
+  const { workspaces } = useWorkspaceState();
   useQuery({
     ...repoConfigQueryOptions(activeWorkspace?.workspaceId ?? NO_ACTIVE_WORKSPACE_ID),
     enabled: activeWorkspace !== null,
@@ -96,12 +101,8 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
   );
 
   useEffect(() => {
-    if (hasActiveWorkspace) {
-      setRepositoryModalOpen(false);
-      return;
-    }
-    setRepositoryModalOpen(true);
-  }, [hasActiveWorkspace]);
+    if (workspaces.length === 0) setRepositoryModalOpen(true);
+  }, [workspaces.length]);
 
   const handleRepositoryModalOpenChange = useCallback((open: boolean) => {
     setRepositoryModalOpen(open);

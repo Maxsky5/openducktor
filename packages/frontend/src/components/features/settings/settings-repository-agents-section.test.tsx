@@ -3,7 +3,7 @@ import { CODEX_RUNTIME_DESCRIPTOR, type SettingsRepoConfig } from "@openducktor/
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { resolveRepoAgentDefaultModelPickerSelection } from "./settings-repository-agent-selection";
+import { resolveRepoAgentDefaultModelPickerSelection } from "@/components/features/repository/model-defaults/repository-agent-selection";
 import { RepositoryAgentsSection } from "./settings-repository-agents-section";
 
 const codexCatalog: AgentModelCatalog = {
@@ -177,7 +177,7 @@ describe("RepositoryAgentsSection", () => {
     );
 
     expect(html).toContain("Agent Profile");
-    expect(html).toContain("Runtime does not support agent profiles");
+    expect(html).toContain("Not supported by runtime");
     expect(html).toContain("disabled");
     expect(html).toContain("o3");
     expect(html).toContain("Default Model runtime &quot;Codex&quot; is disabled.");

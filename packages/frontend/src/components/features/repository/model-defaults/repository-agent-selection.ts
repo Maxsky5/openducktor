@@ -3,7 +3,7 @@ import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import type { ModelPickerValue } from "@/components/features/agents/model-picker";
 import { resolveModelSelectionForPair } from "@/features/model-selection/model-selection-state";
 import type { RuntimeBoundModelSelection } from "@/lib/repo-agent-defaults";
-import type { ensureDraftAgentDefault } from "./settings-modal-model";
+import type { ensureDraftAgentDefault } from "./model-defaults-model";
 
 export const resolveRepoAgentDefaultModelPickerSelection = ({
   currentValue,

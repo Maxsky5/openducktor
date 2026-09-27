@@ -4,7 +4,7 @@ import { toPrimaryAgentOptions } from "@/components/features/agents/catalog-sele
 import type { ModelPickerValue } from "@/components/features/agents/model-picker";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import type { RepoAgentDefaultInput } from "@/types/state-slices";
-import { selectedModelKey, toVariantOptionsForModelKey } from "./settings-modal-model";
+import { selectedModelKey, toVariantOptionsForModelKey } from "./model-defaults-model";
 
 type RepositoryAgentControl = {
   options: ComboboxOption[];
@@ -15,7 +15,7 @@ type RepositoryAgentControl = {
 export type RepositoryAgentControls = {
   selectedPickerValue: ModelPickerValue | null;
   profile: RepositoryAgentControl;
-  variant: RepositoryAgentControl & { visible: boolean };
+  variant: RepositoryAgentControl;
 };
 
 const profilePlaceholderFor = ({
@@ -28,7 +28,7 @@ const profilePlaceholderFor = ({
   supportsProfiles: boolean;
 }): string => {
   if (!supportsProfiles) {
-    return "Runtime does not support agent profiles";
+    return "Not supported by runtime";
   }
   if (isCatalogLoading) {
     return "Loading agents…";
@@ -37,6 +37,24 @@ const profilePlaceholderFor = ({
     return "Select a model first";
   }
   return "Select agent";
+};
+
+const effortPlaceholderFor = ({
+  hasSelectedModel,
+  isCatalogLoading,
+  supportsVariants,
+  hasOptions,
+}: {
+  hasSelectedModel: boolean;
+  isCatalogLoading: boolean;
+  supportsVariants: boolean;
+  hasOptions: boolean;
+}): string => {
+  if (isCatalogLoading) return "Loading effort…";
+  if (!hasSelectedModel) return "Select a model first";
+  if (!supportsVariants) return "Runtime sets effort";
+  if (!hasOptions) return "No effort options";
+  return "Select effort";
 };
 
 export const buildRepositoryAgentControls = ({
@@ -64,8 +82,12 @@ export const buildRepositoryAgentControls = ({
       : null;
   const supportsProfiles =
     runtimeDescriptor?.capabilities.optionalSurfaces.supportsProfiles === true;
+  const supportsVariants =
+    runtimeDescriptor?.capabilities.optionalSurfaces.supportsVariants === true;
   const profileOptions = toPrimaryAgentOptions(catalog);
-  const variantOptions = toVariantOptionsForModelKey(catalog, selectedModelKey(value));
+  const variantOptions = supportsVariants
+    ? toVariantOptionsForModelKey(catalog, selectedModelKey(value))
+    : [];
 
   return {
     selectedPickerValue,
@@ -84,10 +106,19 @@ export const buildRepositoryAgentControls = ({
         profileOptions.length === 0,
     },
     variant: {
-      visible: runtimeDescriptor?.capabilities.optionalSurfaces.supportsVariants === true,
       options: variantOptions,
-      placeholder: variantOptions.length > 0 ? "Select variant" : "No variants for model",
-      disabled: isCatalogLoading || isSaving || !selectedPickerValue || variantOptions.length === 0,
+      placeholder: effortPlaceholderFor({
+        hasSelectedModel: selectedPickerValue !== null,
+        isCatalogLoading,
+        supportsVariants,
+        hasOptions: variantOptions.length > 0,
+      }),
+      disabled:
+        isCatalogLoading ||
+        isSaving ||
+        !selectedPickerValue ||
+        !supportsVariants ||
+        variantOptions.length === 0,
     },
   };
 };

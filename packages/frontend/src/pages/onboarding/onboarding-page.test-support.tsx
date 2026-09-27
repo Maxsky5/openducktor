@@ -5,12 +5,13 @@ import {
   CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeExecutableCheck,
+  type WorkspaceRecord,
 } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { createQueryClient } from "@/lib/query-client";
-import { WorkspaceStateContext } from "@/state/app-state-contexts";
+import { RuntimeDefinitionsContext, WorkspaceStateContext } from "@/state/app-state-contexts";
 import {
   NotificationContext,
   type NotificationContextValue,
@@ -128,7 +129,21 @@ export const createOnboardingTestHarness = () => {
       activeWorkspace: null,
       branches: [],
       activeBranch: null,
-      addWorkspace: mock(async () => {}),
+      addWorkspace: mock(
+        async (input) =>
+          ({
+            workspaceId: input.workspaceId,
+            workspaceName: input.workspaceName,
+            repoPath: input.repoPath,
+            abbreviation: null,
+            tileColor: null,
+            isActive: true,
+            hasConfig: true,
+            configuredWorktreeBasePath: null,
+            defaultWorktreeBasePath: null,
+            effectiveWorktreeBasePath: null,
+          }) satisfies WorkspaceRecord,
+      ),
       selectWorkspace: mock(async () => {}),
       reorderWorkspaces: mock(async () => {}),
       refreshBranches: mock(async () => {}),
@@ -137,6 +152,7 @@ export const createOnboardingTestHarness = () => {
         throw new Error("Not used");
       }),
       saveRepoSettings: mock(async () => {}),
+      saveWorkspaceModelDefaults: mock(async () => {}),
       loadSettingsSnapshot: mock(async () => createSettingsSnapshotFixture()),
       detectGithubRepository: mock(async () => null),
       saveGlobalGitConfig: mock(async () => {}),
@@ -144,14 +160,30 @@ export const createOnboardingTestHarness = () => {
       saveAgentModelFavorites: mock(async () => createSettingsSnapshotFixture()),
     } satisfies WorkspaceStateContextValue;
 
+    const runtimeContextValue = {
+      runtimeDefinitions,
+      availableRuntimeDefinitions: [],
+      agentRuntimes: runtimes,
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
+      refreshRuntimeDefinitions: async () => runtimeDefinitions,
+      isLoadingRuntimeSettings: false,
+      runtimeSettingsError: null,
+      hasRuntimeSettingsSnapshot: true,
+      refreshRuntimeSettings: async () => {},
+      loadRepoRuntimeCatalog: async () => ({}),
+      loadRepoRuntimeFileSearch: async () => [],
+    };
     const view = render(
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
-          <WorkspaceStateContext value={workspaceState}>
-            <NotificationContext.Provider value={notificationContextValue}>
-              <OnboardingPage onComplete={() => {}} />
-            </NotificationContext.Provider>
-          </WorkspaceStateContext>
+          <RuntimeDefinitionsContext.Provider value={runtimeContextValue}>
+            <WorkspaceStateContext value={workspaceState}>
+              <NotificationContext.Provider value={notificationContextValue}>
+                <OnboardingPage onComplete={() => {}} />
+              </NotificationContext.Provider>
+            </WorkspaceStateContext>
+          </RuntimeDefinitionsContext.Provider>
         </ThemeProvider>
       </QueryClientProvider>,
     );

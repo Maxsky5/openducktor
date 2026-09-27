@@ -59,7 +59,7 @@ export const requireDirectSessionSelection = ({
     (!runtime.capabilities.optionalSurfaces.supportsVariants ||
       !model.variants.includes(selection.variant))
   ) {
-    throw new Error("The selected model variant is unavailable. Select a current variant.");
+    throw new Error("The selected model effort is unavailable. Select a current effort.");
   }
   return { ...selection };
 };

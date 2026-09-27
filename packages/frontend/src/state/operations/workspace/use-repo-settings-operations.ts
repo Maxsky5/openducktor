@@ -15,7 +15,11 @@ import {
 } from "@/lib/repo-agent-defaults";
 import { normalizeTargetBranch } from "@/lib/target-branch";
 import { normalizeRepoScripts } from "@/state/read-models/settings-read-model";
-import type { RepoAgentDefaultInput, RepoSettingsInput } from "@/types/state-slices";
+import type {
+  RepoAgentDefaultInput,
+  RepoSettingsInput,
+  WorkspaceModelDefaultsDraft,
+} from "@/types/state-slices";
 import { checksQueryKeys } from "../../queries/checks";
 import { repositoryGitProviderContextQueryKeys } from "../../queries/git-provider-context";
 import { runtimeQueryKeys } from "../../queries/runtime";
@@ -40,6 +44,10 @@ type UseRepoSettingsOperationsArgs = {
 type UseRepoSettingsOperationsResult = {
   loadRepoSettings: () => Promise<RepoSettingsInput>;
   saveRepoSettings: (input: RepoSettingsInput) => Promise<void>;
+  saveWorkspaceModelDefaults: (
+    workspaceId: string,
+    draft: WorkspaceModelDefaultsDraft,
+  ) => Promise<void>;
   loadSettingsSnapshot: () => Promise<SettingsSnapshot>;
   detectGithubRepository: (repoPath: string) => Promise<GitProviderRepository | null>;
   saveGlobalGitConfig: (git: GlobalGitConfig) => Promise<void>;
@@ -157,6 +165,41 @@ export function useRepoSettingsOperations({
     ],
   );
 
+  const saveWorkspaceModelDefaults = useCallback(
+    async (workspaceId: string, draft: WorkspaceModelDefaultsDraft): Promise<void> => {
+      const requireComplete = (
+        label: string,
+        entry: WorkspaceModelDefaultsDraft["defaultModel"],
+      ): void => {
+        if (entry && (!entry.runtimeKind || !entry.providerId.trim() || !entry.modelId.trim())) {
+          throw new Error(
+            `${label} needs a runtime and model. Choose a model or clear this choice.`,
+          );
+        }
+      };
+      requireComplete("Default Model", draft.defaultModel);
+      const agentDefaults: RepoAgentDefaults = {};
+      for (const role of ["spec", "planner", "build", "qa"] as const) {
+        const entry = draft.agentDefaults[role];
+        requireComplete(`${role} default`, entry);
+        const normalized = normalizeRepoAgentDefaultForSave(role, entry);
+        if (normalized) agentDefaults[role] = normalized;
+      }
+      const defaultModel = normalizeRepoDefaultModelForSave(draft.defaultModel);
+      if (!defaultModel && Object.keys(agentDefaults).length === 0) return;
+
+      const update: Parameters<typeof host.workspaceSaveRepoSettings>[1] = {};
+      if (defaultModel) update.defaultModel = defaultModel;
+      if (Object.keys(agentDefaults).length > 0) update.agentDefaults = agentDefaults;
+      const workspace = await host.workspaceSaveRepoSettings(workspaceId, update);
+      syncWorkspaceListRecord(workspace);
+      applyWorkspaceRecord(workspace);
+      await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.repoConfig(workspaceId) });
+      queryClient.removeQueries({ queryKey: settingsSnapshotQueryKey, exact: true });
+    },
+    [applyWorkspaceRecord, queryClient, settingsSnapshotQueryKey, syncWorkspaceListRecord],
+  );
+
   const loadSettingsSnapshot = useCallback(async (): Promise<SettingsSnapshot> => {
     return loadSettingsSnapshotFromQuery(queryClient);
   }, [queryClient]);
@@ -228,6 +271,7 @@ export function useRepoSettingsOperations({
   return {
     loadRepoSettings,
     saveRepoSettings,
+    saveWorkspaceModelDefaults,
     loadSettingsSnapshot,
     detectGithubRepository,
     saveGlobalGitConfig,

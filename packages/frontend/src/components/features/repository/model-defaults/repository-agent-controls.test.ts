@@ -5,7 +5,7 @@ import {
   type RuntimeDescriptor,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import { buildRepositoryAgentControls } from "./settings-repository-agent-controls";
+import { buildRepositoryAgentControls } from "./repository-agent-controls";
 
 const savedDefault = {
   runtimeKind: "opencode",
@@ -82,7 +82,7 @@ describe("buildRepositoryAgentControls", () => {
     });
 
     expect(controls.profile.disabled).toBeTrue();
-    expect(controls.profile.placeholder).toBe("Runtime does not support agent profiles");
+    expect(controls.profile.placeholder).toBe("Not supported by runtime");
   });
 
   test("disables the profile control while the catalog loads", () => {
@@ -111,10 +111,10 @@ describe("buildRepositoryAgentControls", () => {
 
     expect(controls.variant.options).toEqual([]);
     expect(controls.variant.disabled).toBeTrue();
-    expect(controls.variant.placeholder).toBe("No variants for model");
+    expect(controls.variant.placeholder).toBe("No effort options");
   });
 
-  test("hides the variant control when the runtime has no variant support", () => {
+  test("disables effort when the runtime handles it", () => {
     const controls = buildRepositoryAgentControls({
       value: savedDefault,
       runtimeKind: "opencode",
@@ -124,7 +124,9 @@ describe("buildRepositoryAgentControls", () => {
       isSaving: false,
     });
 
-    expect(controls.variant.visible).toBeFalse();
+    expect(controls.variant.disabled).toBeTrue();
+    expect(controls.variant.options).toEqual([]);
+    expect(controls.variant.placeholder).toBe("Runtime sets effort");
   });
 
   test("disables the profile and variant controls while settings save", () => {
