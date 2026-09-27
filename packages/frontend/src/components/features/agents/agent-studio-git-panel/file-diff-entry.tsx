@@ -95,7 +95,7 @@ function FileDiffEntryHeader({
       <button
         type="button"
         className={cn(
-          "flex min-h-11 w-full min-w-0 cursor-pointer items-center gap-2 overflow-hidden px-3 py-1.5 text-left text-xs",
+          "flex min-h-10 w-full min-w-0 cursor-pointer items-center gap-2 overflow-hidden px-3 py-1 text-left text-xs",
           canReset && "pr-12",
         )}
         aria-label={`Toggle diff for ${diff.file}`}
@@ -284,20 +284,16 @@ function FileDiffEntry({
   const hasDiffContent = diff.diff.trim().length > 0;
   const fileCommentCount = fileComments.length;
 
-  // Keep diff subtrees mounted after first expand in production for cheap reopen,
-  // but reset them in tests so assertions stay deterministic.
-  const shouldPersistMountedDiffBody = process.env.NODE_ENV !== "test";
   const [hasMountedDiffBody, setHasMountedDiffBody] = useState(false);
   const bodyRef = useCallback(
     (element: HTMLDivElement | null): void => {
-      if (element && shouldPersistMountedDiffBody && hasDiffContent) {
+      if (element && hasDiffContent) {
         setHasMountedDiffBody(true);
       }
     },
-    [shouldPersistMountedDiffBody, hasDiffContent],
+    [hasDiffContent],
   );
-  const shouldRenderPersistedDiffBody =
-    hasDiffContent && shouldPersistMountedDiffBody && hasMountedDiffBody;
+  const shouldRenderPersistedDiffBody = hasDiffContent && hasMountedDiffBody;
   const shouldRenderDiffBody = isExpanded || shouldRenderPersistedDiffBody;
 
   return (

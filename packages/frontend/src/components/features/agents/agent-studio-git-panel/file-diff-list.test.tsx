@@ -255,7 +255,13 @@ function ScopeSwitchFileDiffListHarness(): ReactElement {
 
   return (
     <TooltipProvider>
-      <button type="button" onClick={() => setDiffScope("target")}>
+      <button
+        type="button"
+        onClick={() => {
+          setDiffScope("target");
+          setExpandedFiles(new Set());
+        }}
+      >
         Switch scope
       </button>
       <FileDiffList
@@ -352,7 +358,7 @@ describe("FileDiffList", () => {
       );
       const toggle = screen.getByRole("button", { name: "Toggle diff for root.ts" });
 
-      expect(toggle.className).toContain("min-h-11");
+      expect(toggle.className).toContain("min-h-10");
       expect(toggle.className).toContain("w-full");
       expect(toggle.getAttribute("aria-expanded")).toBe("false");
       fireEvent.click(screen.getByTestId("agent-studio-git-file-stats"));
@@ -473,6 +479,20 @@ describe("FileDiffList", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Switch scope" }));
     expect(screen.queryByTestId("agent-studio-git-new-comment-form")).toBeNull();
+  });
+
+  test("keeps an opened diff mounted but hidden when a scope change closes its row", () => {
+    render(<ScopeSwitchFileDiffListHarness />);
+    const viewer = screen.getByTestId("pierre-diff-viewer");
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch scope" }));
+
+    expect(screen.getByTestId("pierre-diff-viewer")).toBe(viewer);
+    expect(viewer.closest(".hidden")).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle diff for src/example.ts" }));
+    expect(screen.getByTestId("pierre-diff-viewer")).toBe(viewer);
+    expect(viewer.closest(".hidden")).toBeNull();
   });
 
   test("clears an unsaved selection form when the comment owner changes for the same file row", () => {
