@@ -165,7 +165,7 @@ describe("prepareElectronSidecars", () => {
     await expect(stat(staleOutput)).resolves.toMatchObject({ size: 5 });
   });
 
-  test("rejects a different host architecture before cleaning sidecar output", async () => {
+  test("rejects a different host platform before cleaning sidecar output", async () => {
     const { electronPackageDirectory, workspaceRoot } = await makeTempWorkspace();
     const staleOutput = join(electronPackageDirectory, "build", "sidecars", "stale");
     const sideEffects: string[] = [];
@@ -173,9 +173,9 @@ describe("prepareElectronSidecars", () => {
     await writeFile(staleOutput, "stale");
 
     const error = await prepareElectronSidecars({
-      arch: hostArch === "x64" ? "arm64" : "x64",
+      arch: hostArch,
       electronPackageDirectory,
-      platform: hostPlatform,
+      platform: hostPlatform === "macos" ? "windows" : "macos",
       workspaceRoot,
       ...makeSideEffectingHooks(sideEffects),
     }).catch((cause: unknown): Error =>

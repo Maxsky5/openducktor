@@ -180,6 +180,24 @@ describe("verifyPackagedElectronSidecars", () => {
         "openducktor-mcp",
       ),
     );
+    expect(
+      resolvePackagedElectronSidecarPath({
+        arch: "x64",
+        platform: "macos",
+        releaseDirectory,
+        sidecarId: "openducktor-mcp",
+      }),
+    ).toBe(
+      join(
+        releaseDirectory,
+        "mac",
+        "OpenDucktor.app",
+        "Contents",
+        "Resources",
+        "bin",
+        "openducktor-mcp",
+      ),
+    );
   });
 
   test("accepts non-empty Windows MCP sidecar without Unix executable-bit validation", async () => {
