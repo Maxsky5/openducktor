@@ -113,5 +113,9 @@ jobs:
       - name: Install Electron runtime for worker checks
         run: node apps/electron/node_modules/electron/install.js
 
+      - name: Check Electron startup with saved settings
+        if: runner.os == 'macOS'
+        run: bun run --filter @openducktor/electron test:startup
+
       - name: Check built image workers in Node, Bun, and Electron
         run: bun run test:workers

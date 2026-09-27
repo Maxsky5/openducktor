@@ -25,6 +25,7 @@
     "preview": "electron dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "bun test --preload ../../scripts/bun-test-preload.ts --pass-with-no-tests --timeout 1000",
+    "test:startup": "bun run build:main && bun run scripts/check-startup.ts",
     "lint": "oxlint -c ../../.oxlintrc.json src scripts vite.config.ts"
   },
   "dependencies": {
