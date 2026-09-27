@@ -87,7 +87,7 @@ test("a new output revision fetches new bytes while replay reuses the cached ima
   } finally {
     client.clear();
   }
-  // CI runs this queue coordination beside the host suite on 3-4 vCPUs.
+  // This test coordinates queued image queries and cache updates.
 }, 2_500);
 
 test("reads identity only and caches a Blob rather than encoded bytes", async () => {
@@ -241,7 +241,7 @@ test("limits pending host reads to two and removes cancelled previews from the q
     remove.forEach((unsubscribe) => unsubscribe());
     client.clear();
   }
-  // CI runs this queue coordination beside the host suite on 3-4 vCPUs.
+  // This test coordinates queued image queries and cache updates.
 }, 2_500);
 
 test("eight preview queries share one batch while two reads run and one bad image stays isolated", async () => {
@@ -330,7 +330,7 @@ test("new work at batch completion and concurrent revisions both reach a fresh b
   } finally {
     client.clear();
   }
-  // CI runs this queue coordination beside the host suite on 3-4 vCPUs.
+  // This test coordinates queued image queries and cache updates.
 }, 2_500);
 
 test("partial batch admission queues excess images until release", async () => {
@@ -369,5 +369,5 @@ test("partial batch admission queues excess images until release", async () => {
   } finally {
     client.clear();
   }
-  // CI runs this queue coordination beside the host suite on 3-4 vCPUs.
+  // This test coordinates queued image queries and cache updates.
 }, 5_000);

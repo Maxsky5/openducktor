@@ -690,6 +690,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
     }
   });
 
+  // This test starts a real fake runtime and waits for its process tree to stop.
   test("discards prepared observation when live-adapter registration fails", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-opencode-live-register-failure-"));
     try {
@@ -750,7 +751,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
     } finally {
       await removeTestDirectory(root);
     }
-  });
+  }, 10_000);
 
   test("removes a registered live adapter when forwarding startup fails", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-opencode-live-forward-failure-"));
@@ -1039,6 +1040,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
     }
   });
 
+  // Windows starts a cmd shim and stops the resulting process tree.
   test("starts a Windows PATH-discovered cmd OpenCode runtime", async () => {
     if (process.platform !== "win32") {
       return;
@@ -1084,5 +1086,5 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
     } finally {
       await removeTestDirectory(root);
     }
-  });
+  }, 10_000);
 });

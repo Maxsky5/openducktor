@@ -270,6 +270,6 @@ describe("TaskDetailsMarkdownContent", () => {
     } finally {
       renderSpy.mockRestore();
     }
-    // CI runs this render-heavy flow beside the host suite on 3-4 vCPUs.
+    // This test renders a full task document with rich Markdown.
   }, 5_000);
 });

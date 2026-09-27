@@ -339,7 +339,7 @@ describe("useOnboardingRuntimeSetup", () => {
       latestValidation.resolve(createCheck(runtimes, true));
       host.runtimeExecutablesCheck = originalCheck;
     }
-    // CI runs this render-heavy flow beside the host suite on 3-4 vCPUs.
+    // This flow renders runtime setup and waits for validation updates.
   }, 2_500);
 
   test("does not block onboarding when validation fails for a disabled runtime", async () => {
@@ -461,7 +461,7 @@ describe("useOnboardingRuntimeSetup", () => {
     } finally {
       host.runtimeExecutablesCheck = originalCheck;
     }
-    // CI runs this render-heavy flow beside the host suite on 3-4 vCPUs.
+    // This flow renders runtime setup and waits for validation updates.
   }, 2_500);
 
   test("runs explicit runtime discovery through the shared Query cache", async () => {
@@ -501,7 +501,7 @@ describe("useOnboardingRuntimeSetup", () => {
     } finally {
       host.runtimeExecutablesCheck = originalCheck;
     }
-    // CI runs this render-heavy flow beside the host suite on 3-4 vCPUs.
+    // This flow renders runtime setup and waits for validation updates.
   }, 2_500);
 
   test("locks runtime edits and navigation while explicit discovery is pending", async () => {

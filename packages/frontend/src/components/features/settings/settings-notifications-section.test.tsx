@@ -91,7 +91,7 @@ describe("SettingsNotificationsSection", () => {
           false,
         ),
       );
-      // CI runs this render-heavy flow beside the host suite on 3-4 vCPUs.
+      // This flow renders notification controls and handles async updates.
     },
     2_500,
   );
@@ -115,7 +115,7 @@ describe("SettingsNotificationsSection", () => {
     await waitFor(() =>
       expect(screen.queryByText(/Notification sound could not play/) === null).toBe(true),
     );
-    // CI runs this render-heavy flow beside the host suite on 3-4 vCPUs.
+    // This flow renders notification controls and handles async updates.
   }, 2_500);
 
   // This test renders the full notification form while its capability query settles.
@@ -214,7 +214,7 @@ describe("SettingsNotificationsSection", () => {
     fireEvent.click(testOsButton);
     await waitFor(() => expect(testOs).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(getCapability).toHaveBeenCalledTimes(2));
-    // CI runs this render-heavy flow beside the host suite on 3-4 vCPUs.
+    // This flow renders notification controls and handles async updates.
   }, 2_500);
 
   // This test renders the full notification form through two capability states.

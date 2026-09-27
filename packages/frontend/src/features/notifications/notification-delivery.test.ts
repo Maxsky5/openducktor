@@ -85,6 +85,7 @@ describe("notification delivery adapters", () => {
     expect(navigate).toHaveBeenCalledWith(occurrence.navigationTarget);
   });
 
+  // Sonner renders two portal toasts and removes one through its close action.
   test("renders agent notifications with the shared close control and full-width action", async () => {
     const navigate = mock(async () => {});
     let toastId: string | number | undefined;
@@ -145,7 +146,7 @@ describe("notification delivery adapters", () => {
         act(() => toast.dismiss(unrelatedToastId));
       }
     }
-  });
+  }, 2_500);
 
   test("plays Cuelume through its imperative API with a normalized volume", async () => {
     const play = mock((_sound?: string, _options?: { volume?: number }) => {});
