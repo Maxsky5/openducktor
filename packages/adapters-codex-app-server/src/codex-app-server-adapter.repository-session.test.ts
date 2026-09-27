@@ -3,6 +3,7 @@ import { ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
 import { AGENT_ROLE_TOOL_POLICY } from "@openducktor/core";
 import {
   codexSessionRuntimeRef,
+  codexThreadStartResultFixture,
   codexUserMessageInput,
   createAdapterWithTransport,
   createHarness,
@@ -34,11 +35,41 @@ class NameFailingTransport extends RecordingTransport {
   }
 }
 
+class MatchingPreviewTransport extends RecordingTransport {
+  nativeName: string | null = null;
+  failNextNameWrite = true;
+
+  async request(request: Parameters<RecordingTransport["request"]>[0]) {
+    if (request.method === "thread/resume") {
+      this.calls.push(request);
+      const result = codexThreadStartResultFixture(request.params.threadId, "thread/resume");
+      return {
+        ...result,
+        thread: { ...result.thread, preview: "Saved title", name: this.nativeName },
+      };
+    }
+    if (request.method === "thread/name/set") {
+      if (this.failNextNameWrite) {
+        this.failNextNameWrite = false;
+        this.calls.push(request);
+        throw new Error("name failed before write");
+      }
+      this.nativeName = request.params.name;
+    }
+    return super.request(request);
+  }
+}
+
 class NameWriteThenFailTransport extends RecordingTransport {
   nativeName: string | null = null;
   failNextNameWrite = true;
 
   async request(request: Parameters<RecordingTransport["request"]>[0]) {
+    if (request.method === "thread/resume") {
+      this.calls.push(request);
+      const result = codexThreadStartResultFixture(request.params.threadId, "thread/resume");
+      return { ...result, thread: { ...result.thread, name: this.nativeName } };
+    }
     const result = await super.request(request);
     if (request.method === "thread/name/set") {
       this.nativeName = request.params.name;
@@ -263,7 +294,27 @@ describe("CodexAppServerAdapter repository sessions", () => {
     expect(transport.calls.filter((call) => call.method === "thread/name/set")).toEqual([]);
   });
 
-  test("reattaches and retries the title after Codex writes it but reports an error", async () => {
+  test("reattaches and retries after a failed name write with a matching preview", async () => {
+    const transport = new MatchingPreviewTransport("runtime-live", false);
+    const adapter = createAdapterWithTransport(transport);
+    const input = {
+      repoPath: "/repo",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo",
+      externalSessionId: "thread-resume",
+      sessionScope: { kind: "repository" as const, title: "Saved title" },
+      runtimePolicy: { kind: "codex" as const, policy: defaultCodexEffectivePolicy() },
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5" },
+    };
+
+    await expect(adapter.resumeSession(input)).rejects.toThrow("name failed before write");
+    expect((await adapter.resumeSession(input)).title).toBe("Saved title");
+    expect(transport.nativeName).toBe("Saved title");
+    expect(transport.calls.filter((call) => call.method === "thread/name/set")).toHaveLength(2);
+  });
+
+  test("reattaches without retry when Codex wrote the name before reporting an error", async () => {
     const transport = new NameWriteThenFailTransport("runtime-live", false);
     const adapter = createAdapterWithTransport(transport);
     const sessionScope = { kind: "repository", title: "Saved title" } as const;
@@ -308,7 +359,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
       model: { providerId: "openai", modelId: "gpt-5" },
     });
     expect(resumed.title).toBe("Saved title");
-    expect(transport.calls.filter((call) => call.method === "thread/name/set")).toHaveLength(2);
+    expect(transport.calls.filter((call) => call.method === "thread/name/set")).toHaveLength(1);
   });
 
   test("reports a title update for an unknown Codex session as not attached", async () => {

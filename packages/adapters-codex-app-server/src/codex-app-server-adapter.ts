@@ -729,6 +729,7 @@ export class CodexAppServerAdapter
         threadId: session.threadId,
         name: title,
       });
+      session.nativeName = title;
     }
 
     return summary;
@@ -1121,6 +1122,7 @@ export class CodexAppServerAdapter
       name: input.title,
     });
     this.freshTitleState.delete(session);
+    session.nativeName = input.title;
     session.summary = withSummaryTitle(session.summary, input.title);
     return { status: "renamed", summary: session.summary };
   }
@@ -1215,7 +1217,7 @@ export class CodexAppServerAdapter
     if (repositoryTitle === undefined) return;
     const state = this.freshTitleState.get(session);
     if (state === "pending") return;
-    if (session.summary.title === repositoryTitle && state === undefined) return;
+    if (session.nativeName === repositoryTitle) return;
     const { client } = await this.runtimeClients.resolve(
       input,
       "apply the repository session title",
@@ -1226,12 +1228,13 @@ export class CodexAppServerAdapter
         name: repositoryTitle,
       });
     } catch (cause) {
-      // Codex may write the name before the call fails. Let a later attach try again.
-      // A session replacement must still fail.
+      // Codex may write the name before this call fails. A later attach checks it.
+      // Session replacement must still fail.
       if (options.tolerateFailure !== true) throw cause;
       return;
     }
     this.freshTitleState.delete(session);
+    session.nativeName = repositoryTitle;
     session.summary = withSummaryTitle(session.summary, repositoryTitle);
   }
 
