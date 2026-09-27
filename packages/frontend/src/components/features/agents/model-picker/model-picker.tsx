@@ -65,14 +65,23 @@ type ModelPickerProps = {
 };
 
 const activeViewFor = (
-  value: ModelPickerValue | null,
   runtimes: readonly ModelPickerRuntime[],
+  favorites: readonly AgentModelFavorite[] | null,
   selectionPolicy: ModelPickerSelectionPolicy,
 ): ModelPickerView => {
+  if (
+    favorites?.some(
+      (favorite) =>
+        selectionPolicy.kind !== "runtime_locked" ||
+        favorite.runtimeKind === selectionPolicy.runtimeKind,
+    )
+  ) {
+    return "favorites";
+  }
   if (selectionPolicy.kind === "runtime_locked") {
     return selectionPolicy.runtimeKind;
   }
-  return value?.runtimeKind ?? runtimes[0]?.descriptor.kind ?? "favorites";
+  return runtimes[0]?.descriptor.kind ?? "favorites";
 };
 
 const ResourceNotice = ({ runtime }: { runtime: ModelPickerRuntime }): ReactElement | null => {
@@ -407,7 +416,7 @@ export function ModelPicker({
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeView, setActiveView] = useState<ModelPickerView>(() =>
-    activeViewFor(value, runtimes, selectionPolicy),
+    activeViewFor(runtimes, favoriteState.favorites, selectionPolicy),
   );
   const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
   const readOnlyReasonId = useId();
@@ -465,7 +474,7 @@ export function ModelPicker({
       return;
     }
     if (nextOpen) {
-      setActiveView(activeViewFor(value, runtimes, selectionPolicy));
+      setActiveView(activeViewFor(runtimes, favoriteState.favorites, selectionPolicy));
       const activeElement = document.activeElement;
       setPortalContainer(
         activeElement instanceof HTMLElement

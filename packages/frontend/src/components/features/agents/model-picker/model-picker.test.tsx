@@ -73,6 +73,79 @@ const favoriteState = (
 });
 
 describe("ModelPicker", () => {
+  test.each([
+    {
+      name: "Favorites when a favorite exists",
+      favorites: [value],
+      expectedView: "Favorite models",
+      expectedModel: "Select GPT Five model",
+    },
+    {
+      name: "the first runtime when there are no favorites",
+      favorites: [],
+      expectedView: "OpenCode runtime",
+      expectedModel: "Select GPT Five model",
+    },
+  ])("opens $name on every opening", async ({ favorites, expectedView, expectedModel }) => {
+    render(
+      <ModelPicker
+        runtimes={makeRuntimes()}
+        value={{ runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" }}
+        favoriteState={favoriteState({ favorites: [...favorites] })}
+        selectionPolicy={{ kind: "editable" }}
+        onValueChange={() => {}}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Select model, Codex, GPT 5 Codex" });
+    for (let opening = 0; opening < 2; opening += 1) {
+      await act(async () => {
+        fireEvent.click(trigger);
+      });
+      expect(screen.getByRole("button", { name: expectedView }).getAttribute("aria-pressed")).toBe(
+        "true",
+      );
+      expect(screen.getByRole("button", { name: expectedModel })).toBeTruthy();
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Codex runtime" }));
+        fireEvent.keyDown(screen.getByRole("button", { name: "Codex runtime" }), {
+          key: "Escape",
+        });
+      });
+    }
+  });
+
+  test.each([
+    { favorites: [value], expectedView: "Favorite models" },
+    {
+      favorites: [{ runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" }],
+      expectedView: "OpenCode runtime",
+    },
+  ] as const)("opens a locked runtime on $expectedView", async ({ favorites, expectedView }) => {
+    render(
+      <ModelPicker
+        runtimes={makeRuntimes()}
+        value={value}
+        favoriteState={favoriteState({ favorites: [...favorites] })}
+        selectionPolicy={{
+          kind: "runtime_locked",
+          runtimeKind: "opencode",
+          reason: "Start a new session to switch runtimes.",
+        }}
+        onValueChange={() => {}}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
+    });
+    expect(screen.getByRole("button", { name: expectedView }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Select GPT Five model" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Select GPT 5 Codex model" })).toBeNull();
+  });
+
   test("shows the selected runtime icon and model label in the trigger", () => {
     const { container } = render(
       <ModelPicker
