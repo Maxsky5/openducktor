@@ -213,7 +213,6 @@ export const runWebDevEffect = (
             (exitCode) => {
               webCliExited = true;
               if (!shutdownStarted) {
-                cleanupCompleted = true;
                 resolveExit(exitCode);
               }
             },

@@ -1,19 +1,3 @@
-const escapeHtml = (text: string): string =>
-  text.replace(/[&<>"']/gu, (character) => {
-    switch (character) {
-      case "&":
-        return "&amp;";
-      case "<":
-        return "&lt;";
-      case ">":
-        return "&gt;";
-      case '"':
-        return "&quot;";
-      default:
-        return "&#39;";
-    }
-  });
-
 export const renderInvalidSettingsErrorHtml = (message: string): string => `<!doctype html>
 <html lang="en">
 <head>
@@ -35,3 +19,19 @@ export const renderInvalidSettingsErrorHtml = (message: string): string => `<!do
   <p>Close OpenDucktor and restart it after you fix or move the file.</p>
 </body>
 </html>`;
+
+const escapeHtml = (text: string): string =>
+  text.replace(/[&<>"']/gu, (character) => {
+    switch (character) {
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      case '"':
+        return "&quot;";
+      default:
+        return "&#39;";
+    }
+  });
