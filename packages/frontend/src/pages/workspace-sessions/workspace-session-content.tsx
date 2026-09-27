@@ -1,10 +1,13 @@
 import type { GitTargetBranch, WorkspaceSession } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { TaskExecutionSelectedFilePreview } from "@/components/features/agents/task-execution-file-preview";
 import { ChatFileLinkProvider } from "@/components/features/agents/agent-chat/agent-chat-file-link-provider";
 import type { ChatFileLinkOwner } from "@/components/features/agents/agent-chat/agent-chat-file-link-context";
-import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
+import {
+  taskExecutionSelectedFileKey,
+  type TaskExecutionSelectedFile,
+} from "@/components/features/agents/task-execution-file-explorer-model";
 import type { TaskExecutionFilePreviewLeavePolicy } from "@/components/features/agents/task-execution-file-preview";
 import {
   WorkspaceSessionToolsPanel,
@@ -214,6 +217,17 @@ export function WorkspaceSessionContent({
   const canLeaveRef = useRef(true);
   // Discard can finish a file switch too; only a close may release a removed chat.
   const closingRef = useRef(false);
+  // A new file starts clean, but its editor does not report that on load.
+  const selectedFileKey = preview.model.selectedFile
+    ? taskExecutionSelectedFileKey(preview.model.selectedFile)
+    : null;
+  const selectedFileKeyRef = useRef(selectedFileKey);
+  useLayoutEffect(() => {
+    if (selectedFileKeyRef.current === selectedFileKey) return;
+    selectedFileKeyRef.current = selectedFileKey;
+    canLeaveRef.current = true;
+    closingRef.current = false;
+  }, [selectedFileKey]);
   const reportLeavePolicy = preview.model.onLeavePolicyChange;
   const closeFile = preview.model.onClose;
   const keepDraft = preview.model.onKeepEditing;

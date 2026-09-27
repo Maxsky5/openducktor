@@ -178,6 +178,72 @@ test.each(["clean", "close"])("a kept file preview is safe after it is %s", asyn
   }
 });
 
+test("a failed switch keeps the dirty draft guarded until a new file opens", async () => {
+  const finishChanges: Array<(changed: boolean) => void> = [];
+  const switchWorkspace = () =>
+    new Promise<boolean>((resolve) => {
+      finishChanges.push(resolve);
+    });
+  const onSafeToLeave = mock(() => {});
+  const preview = mockFilePreview(({ model }) => (
+    <>
+      <button onClick={() => model.onLeavePolicyChange("confirm")}>Edit file</button>
+      <button onClick={model.onClose}>Close file</button>
+      <button onClick={model.onKeepEditing}>Keep editing</button>
+      {model.hasPendingDiscard ? <button onClick={model.onDiscard}>Discard draft</button> : null}
+    </>
+  ));
+  const tools = spyOn(toolsPanel, "WorkspaceSessionToolsPanel").mockImplementation(
+    ({ onSelectFile }) => (
+      <button onClick={() => onSelectFile({ rootPath: "/repo", relativePath: "next.ts" })}>
+        Open next file
+      </button>
+    ),
+  );
+  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(() => <div />);
+  const queryClient = newQueryClient();
+  const view = renderClosedSession(
+    queryClient,
+    "main",
+    undefined,
+    record,
+    undefined,
+    switchWorkspace,
+    true,
+    onSafeToLeave,
+  );
+  try {
+    fireEvent.click(screen.getByRole("button", { name: "Edit file" }));
+    fireEvent.click(screen.getByRole("button", { name: "Change workspace" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Discard draft" }));
+    await waitFor(() => expect(finishChanges).toHaveLength(1));
+    await act(async () => finishChanges[0]?.(false));
+    await waitFor(() =>
+      expect(preview.mock.calls.at(-1)?.[0].model.isApplyingTransition).toBe(false),
+    );
+    expect(preview.mock.calls.at(-1)?.[0].model.selectedFile?.relativePath).toBe("file.ts");
+    expect(onSafeToLeave).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close file" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Keep editing" }));
+    expect(onSafeToLeave).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Open next file" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Discard draft" }));
+    await waitFor(() =>
+      expect(preview.mock.calls.at(-1)?.[0].model.selectedFile?.relativePath).toBe("next.ts"),
+    );
+    expect(onSafeToLeave).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Close file" }));
+    expect(onSafeToLeave).toHaveBeenCalledTimes(1);
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    chat.mockRestore();
+    preview.mockRestore();
+    tools.mockRestore();
+  }
+});
+
 function newQueryClient() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   queryClient.setQueryData(
