@@ -83,6 +83,21 @@ describe("global config", () => {
     expect(config.chat).not.toHaveProperty("customPrompts");
   });
 
+  test("keeps top-level reusable prompts when legacy chat prompts also exist", () => {
+    const config = parsePersistedGlobalConfig({
+      version: 4,
+      reusablePrompts: [{ id: "current", name: "Current", content: "Current prompt" }],
+      chat: {
+        customPrompts: [{ id: "old", name: "Old", content: "Old prompt" }],
+      },
+    });
+
+    expect(config.reusablePrompts).toEqual([
+      { id: "current", name: "Current", content: "Current prompt", description: "" },
+    ]);
+    expect(config.chat).not.toHaveProperty("customPrompts");
+  });
+
   test("keeps supported legacy fields out of strict persisted validation", () => {
     const config = parsePersistedGlobalConfig({
       version: 4,
@@ -94,6 +109,8 @@ describe("global config", () => {
           workspaceName: "Repo",
           repoPath: "/repo",
           defaultRuntimeKind: "opencode",
+          trustedHooks: true,
+          trustedHooksFingerprint: "old",
         },
       },
     });
@@ -101,6 +118,8 @@ describe("global config", () => {
     expect(config).not.toHaveProperty("trustedHooks");
     expect(config).not.toHaveProperty("trustedHooksFingerprint");
     expect(config.workspaces.repo).not.toHaveProperty("defaultRuntimeKind");
+    expect(config.workspaces.repo).not.toHaveProperty("trustedHooks");
+    expect(config.workspaces.repo).not.toHaveProperty("trustedHooksFingerprint");
   });
 
   const unknownNestedSettings: Array<[Record<string, JSONType>, string]> = [

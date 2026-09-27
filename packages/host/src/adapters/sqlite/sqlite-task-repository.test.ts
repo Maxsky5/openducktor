@@ -396,14 +396,10 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     }
 
     const targetBranch = { remote: "origin", branch: "main" };
-    expect(await Effect.runPromise(store.listTasks({ repoPath }))).toContainEqual(
-      expect.objectContaining({ id: task.id, targetBranch }),
-    );
-    expect(
-      await Effect.runPromise(store.getTaskMetadata({ repoPath, taskId: task.id })),
-    ).toMatchObject({
-      targetBranch,
-    });
+    const tasks = await Effect.runPromise(store.listTasks({ repoPath }));
+    expect(tasks.find((item) => item.id === task.id)?.targetBranch).toEqual(targetBranch);
+    const metadata = await Effect.runPromise(store.getTaskMetadata({ repoPath, taskId: task.id }));
+    expect(metadata.targetBranch).toEqual(targetBranch);
   });
 
   test("wraps raw SQLite execution failures as operation errors", async () => {

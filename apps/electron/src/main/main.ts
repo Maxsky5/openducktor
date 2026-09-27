@@ -1029,7 +1029,7 @@ const showInvalidSettingsError = async (message: string): Promise<void> => {
   window.webContents.on("will-navigate", (event) => event.preventDefault());
   window.on("closed", () => {
     startupFailureWindow = null;
-    app.quit();
+    app.exit(1);
   });
   await window.loadURL(
     `data:text/html;charset=UTF-8,${encodeURIComponent(renderInvalidSettingsErrorHtml(message))}`,

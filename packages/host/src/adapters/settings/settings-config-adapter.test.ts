@@ -249,6 +249,7 @@ describe("settings config adapter initialization", () => {
         if (result._tag === "Left") {
           expect(result.left).toBeInstanceOf(HostValidationError);
           expect(result.left.message).toContain("extra:");
+          expect(result.left.details).toEqual({ kind: "invalid-settings-file", path: configPath });
         }
         expect(await readFile(configPath, "utf8")).toBe(payload);
       });

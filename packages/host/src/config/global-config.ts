@@ -121,6 +121,8 @@ const migratePersistedConfig = (payload: PersistedConfigObject) => {
         }
         const currentWorkspace = { ...workspace };
         delete currentWorkspace.defaultRuntimeKind;
+        delete currentWorkspace.trustedHooks;
+        delete currentWorkspace.trustedHooksFingerprint;
         return [id, currentWorkspace];
       }),
     );

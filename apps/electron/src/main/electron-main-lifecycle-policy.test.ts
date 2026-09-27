@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { Cause, Chunk, Effect, Exit } from "effect";
+import { checkStartupSettingsEffect, findInvalidSettingsFileError } from "@openducktor/host";
 import { runElectronEffect } from "../effect/electron-boundary";
-import { ElectronLifecycleError } from "../effect/electron-errors";
+import { causeToElectronBoundaryError, ElectronLifecycleError } from "../effect/electron-errors";
 import {
   composeElectronMainStartupEffect,
   createElectronMainShutdownController,
@@ -313,6 +314,46 @@ describe("Electron main lifecycle policy", () => {
     expect(html).toContain("&lt;/pre&gt;&lt;script&gt;alert(1)&lt;/script&gt;");
     expect(html).toContain("Close OpenDucktor and restart it after you fix or move the file.");
     expect(html).not.toContain("<script>");
+  });
+
+  test("closing the packaged settings error window exits with a failure status", () => {
+    const source = readRepoFile("apps/electron/src/main/main.ts");
+    expect(source).toContain(
+      'window.on("closed", () => {\n    startupFailureWindow = null;\n    app.exit(1);',
+    );
+  });
+
+  test("finds an invalid settings file through the Electron startup error", async () => {
+    const configDir = mkdtempSync(resolve(tmpdir(), "odt-electron-settings-"));
+    try {
+      writeFileSync(
+        resolve(configDir, "config.json"),
+        JSON.stringify({ version: 4, theme: "blue" }),
+      );
+      const startupExit = await Effect.runPromiseExit(
+        checkStartupSettingsEffect("production", { OPENDUCKTOR_CONFIG_DIR: configDir }).pipe(
+          Effect.mapError(
+            (cause) =>
+              new ElectronLifecycleError({
+                operation: "electron.main.check-settings",
+                message: cause.message,
+                cause,
+              }),
+          ),
+        ),
+      );
+
+      expect(Exit.isFailure(startupExit)).toBe(true);
+      if (Exit.isFailure(startupExit)) {
+        const error = findInvalidSettingsFileError(causeToElectronBoundaryError(startupExit.cause));
+        expect(error?.message).toContain(
+          `Invalid config file ${resolve(configDir, "config.json")}`,
+        );
+        expect(error?.message).toContain("theme:");
+      }
+    } finally {
+      rmSync(configDir, { recursive: true, force: true });
+    }
   });
 
   test("startup boundary still cleans up and exits when persistent logging fails", async () => {
