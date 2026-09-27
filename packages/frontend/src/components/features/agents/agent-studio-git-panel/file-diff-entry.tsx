@@ -7,7 +7,7 @@ import {
   MessageSquare,
   Undo2,
 } from "lucide-react";
-import { memo, type ReactElement, useRef } from "react";
+import { memo, type ReactElement, type RefCallback, useCallback, useState } from "react";
 import type { PierreDiffStyle } from "@/components/features/agents/pierre-diff-viewer";
 import { PierreDiffViewer } from "@/components/features/agents/pierre-diff-viewer";
 import { Button } from "@/components/ui/button";
@@ -91,11 +91,15 @@ function FileDiffEntryHeader({
   } = status;
 
   return (
-    <div className="flex items-center gap-1 px-3 py-1.5 hover:bg-muted/50">
+    <div className="relative hover:bg-muted/50">
       <button
         type="button"
-        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 overflow-hidden text-left text-xs"
+        className={cn(
+          "flex min-h-10 w-full min-w-0 cursor-pointer items-center gap-2 overflow-hidden px-3 py-1 text-left text-xs",
+          canReset && "pr-12",
+        )}
         aria-label={`Toggle diff for ${diff.file}`}
+        aria-expanded={isExpanded}
         data-testid="agent-studio-git-file-toggle-button"
         onClick={() => onToggle(diff.file)}
       >
@@ -133,7 +137,7 @@ function FileDiffEntryHeader({
             </span>
           ) : null}
         </span>
-        <div
+        <span
           className="ml-2 flex min-w-[4.75rem] shrink-0 items-center justify-end gap-2"
           data-testid="agent-studio-git-file-stats"
         >
@@ -150,7 +154,7 @@ function FileDiffEntryHeader({
             {diff.additions > 0 ? <span className="text-green-400">+{diff.additions}</span> : null}
             {diff.deletions > 0 ? <span className="text-red-400">-{diff.deletions}</span> : null}
           </span>
-        </div>
+        </span>
       </button>
 
       {canReset ? (
@@ -160,7 +164,7 @@ function FileDiffEntryHeader({
               type="button"
               variant="ghost"
               size="icon"
-              className="size-6 shrink-0"
+              className="absolute top-1/2 right-3 z-10 size-6 -translate-y-1/2 disabled:pointer-events-auto"
               aria-label="Reset file"
               title="Reset file"
               data-testid="agent-studio-git-reset-file-button"
@@ -192,6 +196,7 @@ function FileDiffEntryBody({
   isExpanded,
   canReset,
   isResetDisabled,
+  bodyRef,
   onRequestHunkReset,
 }: {
   diff: FileDiff;
@@ -203,6 +208,7 @@ function FileDiffEntryBody({
   isExpanded: boolean;
   canReset: boolean;
   isResetDisabled: boolean;
+  bodyRef: RefCallback<HTMLDivElement>;
   onRequestHunkReset?: ((filePath: string, hunkIndex: number) => void) | undefined;
 }): ReactElement | null {
   const {
@@ -220,6 +226,7 @@ function FileDiffEntryBody({
   const hasDiffContent = diff.diff.trim().length > 0;
   return (
     <div
+      ref={bodyRef}
       className={cn("border-t border-border/50", !isExpanded && "hidden")}
       style={DIFF_BODY_CONTAINER_STYLE}
     >
@@ -277,19 +284,16 @@ function FileDiffEntry({
   const hasDiffContent = diff.diff.trim().length > 0;
   const fileCommentCount = fileComments.length;
 
-  // Keep diff subtrees mounted after first expand in production for cheap reopen,
-  // but reset them in tests so assertions stay deterministic.
-  const shouldPersistMountedDiffBody = process.env.NODE_ENV !== "test";
-  const hasMountedDiffBodyRef = useRef(false);
-
-  if (shouldPersistMountedDiffBody && isExpanded && hasDiffContent) {
-    hasMountedDiffBodyRef.current = true;
-  } else if (!shouldPersistMountedDiffBody) {
-    hasMountedDiffBodyRef.current = false;
-  }
-
-  const shouldRenderPersistedDiffBody =
-    hasDiffContent && shouldPersistMountedDiffBody && hasMountedDiffBodyRef.current;
+  const [hasMountedDiffBody, setHasMountedDiffBody] = useState(false);
+  const bodyRef = useCallback(
+    (element: HTMLDivElement | null): void => {
+      if (element && hasDiffContent) {
+        setHasMountedDiffBody(true);
+      }
+    },
+    [hasDiffContent],
+  );
+  const shouldRenderPersistedDiffBody = hasDiffContent && hasMountedDiffBody;
   const shouldRenderDiffBody = isExpanded || shouldRenderPersistedDiffBody;
 
   return (
@@ -319,6 +323,7 @@ function FileDiffEntry({
         isExpanded={isExpanded}
         canReset={canReset}
         isResetDisabled={isResetDisabled}
+        bodyRef={bodyRef}
         onRequestHunkReset={onRequestHunkReset}
       />
     </div>

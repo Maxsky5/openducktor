@@ -199,7 +199,17 @@ afterAll(() => {
   }
 });
 
-function FileDiffListHarness(): ReactElement {
+function FileDiffListHarness({
+  file = "src/example.ts",
+  canResetFiles = false,
+  isResetDisabled = false,
+  onRequestFileReset,
+}: {
+  file?: string;
+  canResetFiles?: boolean;
+  isResetDisabled?: boolean;
+  onRequestFileReset?: (filePath: string) => void;
+} = {}): ReactElement {
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
 
   return (
@@ -207,7 +217,7 @@ function FileDiffListHarness(): ReactElement {
       <FileDiffList
         fileDiffs={[
           {
-            file: "src/example.ts",
+            file,
             type: "modified",
             additions: 1,
             deletions: 1,
@@ -232,9 +242,10 @@ function FileDiffListHarness(): ReactElement {
           });
         }}
         preloadLimit={1}
-        canResetFiles={false}
-        isResetDisabled={false}
+        canResetFiles={canResetFiles}
+        isResetDisabled={isResetDisabled}
         resetDisabledReason={null}
+        onRequestFileReset={onRequestFileReset}
       />
     </TooltipProvider>
   );
@@ -246,7 +257,13 @@ function ScopeSwitchFileDiffListHarness(): ReactElement {
 
   return (
     <TooltipProvider>
-      <button type="button" onClick={() => setDiffScope("target")}>
+      <button
+        type="button"
+        onClick={() => {
+          setDiffScope("target");
+          setExpandedFiles(new Set());
+        }}
+      >
         Switch scope
       </button>
       <FileDiffList
@@ -331,6 +348,57 @@ function OwnerSwitchFileDiffListHarness(): ReactElement {
 }
 
 describe("FileDiffList", () => {
+  test("uses the whole root file row as a toggle while reset stays separate", () => {
+    for (const canResetFiles of [false, true]) {
+      const requestFileReset = mock((_filePath: string) => {});
+      const { unmount } = render(
+        <FileDiffListHarness
+          file="root.ts"
+          canResetFiles={canResetFiles}
+          onRequestFileReset={requestFileReset}
+        />,
+      );
+      const toggle = screen.getByRole("button", { name: "Toggle diff for root.ts" });
+
+      expect(toggle.className).toContain("min-h-10");
+      expect(toggle.className).toContain("w-full");
+      expect(toggle.getAttribute("aria-expanded")).toBe("false");
+      fireEvent.click(screen.getByTestId("agent-studio-git-file-stats"));
+      expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+      if (canResetFiles) {
+        fireEvent.click(screen.getByRole("button", { name: "Reset file" }));
+        expect(requestFileReset).toHaveBeenCalledWith("root.ts");
+        expect(toggle.getAttribute("aria-expanded")).toBe("true");
+      }
+
+      fireEvent.click(toggle);
+      expect(toggle.getAttribute("aria-expanded")).toBe("false");
+      unmount();
+    }
+  });
+
+  test("keeps a disabled Reset as the pointer target above the row toggle", () => {
+    const requestFileReset = mock((_filePath: string) => {});
+    render(
+      <FileDiffListHarness
+        file="root.ts"
+        canResetFiles
+        isResetDisabled
+        onRequestFileReset={requestFileReset}
+      />,
+    );
+
+    const resetButton = screen.getByRole("button", { name: "Reset file" });
+    const toggle = screen.getByRole("button", { name: "Toggle diff for root.ts" });
+    expect(resetButton.hasAttribute("disabled")).toBe(true);
+    expect(resetButton.className).toContain("disabled:pointer-events-auto");
+
+    fireEvent.click(resetButton);
+    expect(requestFileReset).not.toHaveBeenCalled();
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  });
+
   test("keeps row expansion working while preload entries are mounted", () => {
     render(<FileDiffListHarness />);
 
@@ -434,6 +502,20 @@ describe("FileDiffList", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Switch scope" }));
     expect(screen.queryByTestId("agent-studio-git-new-comment-form")).toBeNull();
+  });
+
+  test("keeps an opened diff mounted but hidden when a scope change closes its row", () => {
+    render(<ScopeSwitchFileDiffListHarness />);
+    const viewer = screen.getByTestId("pierre-diff-viewer");
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch scope" }));
+
+    expect(screen.getByTestId("pierre-diff-viewer")).toBe(viewer);
+    expect(viewer.closest(".hidden")).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle diff for src/example.ts" }));
+    expect(screen.getByTestId("pierre-diff-viewer")).toBe(viewer);
+    expect(viewer.closest(".hidden")).toBeNull();
   });
 
   test("clears an unsaved selection form when the comment owner changes for the same file row", () => {

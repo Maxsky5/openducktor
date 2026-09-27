@@ -1003,7 +1003,8 @@ describe("AgentStudioGitPanel", () => {
       diffButton.props.onClick();
       await flush();
     });
-    expect(countByTestId(root, "mock-pierre-diff-viewer")).toBe(0);
+    expect(countByTestId(root, "mock-pierre-diff-viewer")).toBe(1);
+    expect(findByTestId(root, "mock-pierre-diff-viewer").element.closest(".hidden")).not.toBeNull();
 
     await act(async () => {
       ensureRenderer(renderer).unmount();
@@ -1818,7 +1819,8 @@ describe("AgentStudioGitPanel", () => {
       await flush();
     });
 
-    expect(countByTestId(root, "mock-pierre-diff-viewer")).toBe(0);
+    expect(countByTestId(root, "mock-pierre-diff-viewer")).toBe(1);
+    expect(findByTestId(root, "mock-pierre-diff-viewer").element.closest(".hidden")).not.toBeNull();
 
     await act(async () => {
       ensureRenderer(renderer).unmount();
