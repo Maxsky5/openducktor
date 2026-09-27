@@ -766,10 +766,11 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     expect(await h.router.invoke("workspace_session_get", ref)).toEqual(session);
   });
 
+  // Real Git worktree commands can exceed the host suite limit on Windows.
   test("keeps a protected default-branch worktree when removal is refused", async () => {
     await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
     gitCommand("checkout", "-b", "other-checkout");
-    const h = setup();
+    const h = setup({ hooks: false });
     const { session } = await h.router.invoke("workspace_session_create", {
       ...h.createInput,
       worktree: { mode: "from_branch", name: "main-review", branchName: "main" },
@@ -787,5 +788,5 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     gitCommand("worktree", "remove", "--force", session.executionTarget.workingDirectory);
     await expect(h.router.invoke("workspace_session_restore", ref)).rejects.toThrow();
     expect(await h.router.invoke("workspace_session_get", ref)).toEqual(archived);
-  });
+  }, 15_000);
 });

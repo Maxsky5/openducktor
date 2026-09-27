@@ -53,12 +53,15 @@ jobs:
           - label: Linux
             runner: ubuntu-latest
             bunCacheDir: ~/.bun/install/cache
+            testScript: test
           - label: macOS
             runner: macos-15
             bunCacheDir: ~/.bun/install/cache
+            testScript: test
           - label: Windows
             runner: windows-latest
             bunCacheDir: D:/bun-cache
+            testScript: test:parallel
 
     steps:
       - name: Checkout
@@ -102,7 +105,7 @@ jobs:
         run: bun run typecheck
 
       - name: Test workspaces
-        run: bun run test
+        run: bun run ${{ matrix.testScript }}
 
       - name: Build workspaces
         run: bun run build

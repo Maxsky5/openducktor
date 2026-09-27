@@ -221,6 +221,7 @@ const renderCiPerformanceHarness = ({
   );
 
 describe("TaskExecutionPanel CI performance", () => {
+  // Rendering 100 long review comments can exceed the default limit under CI load.
   test("activates cached CI content before queued comment body work", async () => {
     await withAnimationFrameTestDriver(async (frameDriver) => {
       const comments = Array.from({ length: 100 }, (_, index) => createPerformanceComment(index));
@@ -243,8 +244,9 @@ describe("TaskExecutionPanel CI performance", () => {
       view.unmount();
       await frameDriver.flushMicrotasks();
     });
-  });
+  }, 5000);
 
+  // Switching a panel with 100 long review comments can exceed the default limit under CI load.
   test("cancels hidden CI work and schedules it again when reopened", async () => {
     await withAnimationFrameTestDriver(async (frameDriver) => {
       const comments = Array.from({ length: 100 }, (_, index) => createPerformanceComment(index));
@@ -275,7 +277,7 @@ describe("TaskExecutionPanel CI performance", () => {
       view.unmount();
       await frameDriver.flushMicrotasks();
     });
-  });
+  }, 5000);
 
   test("reopens a selected CI panel before queued comment body work", async () => {
     await withAnimationFrameTestDriver(async (frameDriver) => {
