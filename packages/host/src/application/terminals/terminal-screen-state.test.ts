@@ -1299,6 +1299,27 @@ describe("TerminalScreenState", () => {
     restored.dispose();
   });
 
+  test("restores a pending wrap from the current viewport after scrollback", async () => {
+    const grid = { columns: 4, rows: 2 };
+    const screen = new TerminalScreenState(grid);
+    const original = new Terminal({ cols: 4, rows: 2, scrollback: 2000, allowProposedApi: true });
+    const restored = new Terminal({ cols: 4, rows: 2, scrollback: 2000, allowProposedApi: true });
+    // Custom tabs require cursor repair after the screen is serialized.
+    const first = encoder.encode("\u001b[3gOLD1\r\nOLD2\r\nNOW1\r\nLAST");
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    expect(original.buffer.active.viewportY).toBeGreaterThan(0);
+
+    await write(restored, screen.snapshot().payload);
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+
+    const next = encoder.encode("!");
+    await Promise.all([writeScreen(screen, next), write(original, next), write(restored, next)]);
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
   test("continues a saved cursor at the right edge", async () => {
     const screen = new TerminalScreenState({ columns: 4, rows: 2 });
     const original = new Terminal({ cols: 4, rows: 2, allowProposedApi: true });

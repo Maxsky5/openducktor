@@ -186,7 +186,9 @@ export class TerminalScreenTail {
         parts.push(`\u001b[${row};${cursorX + 1}H`);
       } else {
         // CUP clamps at the right edge. Reprint the existing last cell to restore pending wrap.
-        const line = terminal.buffer.active.getLine(terminal.buffer.active.cursorY);
+        const line = terminal.buffer.active.getLine(
+          terminal.buffer.active.baseY + terminal.buffer.active.cursorY,
+        );
         const last = line?.getCell(terminal.cols - 1);
         const start = last?.getWidth() === 0 ? terminal.cols - 2 : terminal.cols - 1;
         const cell = line?.getCell(start);
