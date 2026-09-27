@@ -7,7 +7,7 @@ import {
   MessageSquare,
   Undo2,
 } from "lucide-react";
-import { memo, type ReactElement, useState } from "react";
+import { memo, type ReactElement, type RefCallback, useCallback, useState } from "react";
 import type { PierreDiffStyle } from "@/components/features/agents/pierre-diff-viewer";
 import { PierreDiffViewer } from "@/components/features/agents/pierre-diff-viewer";
 import { Button } from "@/components/ui/button";
@@ -196,6 +196,7 @@ function FileDiffEntryBody({
   isExpanded,
   canReset,
   isResetDisabled,
+  bodyRef,
   onRequestHunkReset,
 }: {
   diff: FileDiff;
@@ -207,6 +208,7 @@ function FileDiffEntryBody({
   isExpanded: boolean;
   canReset: boolean;
   isResetDisabled: boolean;
+  bodyRef: RefCallback<HTMLDivElement>;
   onRequestHunkReset?: ((filePath: string, hunkIndex: number) => void) | undefined;
 }): ReactElement | null {
   const {
@@ -224,6 +226,7 @@ function FileDiffEntryBody({
   const hasDiffContent = diff.diff.trim().length > 0;
   return (
     <div
+      ref={bodyRef}
       className={cn("border-t border-border/50", !isExpanded && "hidden")}
       style={DIFF_BODY_CONTAINER_STYLE}
     >
@@ -285,6 +288,14 @@ function FileDiffEntry({
   // but reset them in tests so assertions stay deterministic.
   const shouldPersistMountedDiffBody = process.env.NODE_ENV !== "test";
   const [hasMountedDiffBody, setHasMountedDiffBody] = useState(false);
+  const bodyRef = useCallback(
+    (element: HTMLDivElement | null): void => {
+      if (element && shouldPersistMountedDiffBody && hasDiffContent) {
+        setHasMountedDiffBody(true);
+      }
+    },
+    [shouldPersistMountedDiffBody, hasDiffContent],
+  );
   const shouldRenderPersistedDiffBody =
     hasDiffContent && shouldPersistMountedDiffBody && hasMountedDiffBody;
   const shouldRenderDiffBody = isExpanded || shouldRenderPersistedDiffBody;
@@ -304,12 +315,7 @@ function FileDiffEntry({
           statusColor,
         }}
         onRequestFileReset={onRequestFileReset}
-        onToggle={(filePath) => {
-          if (shouldPersistMountedDiffBody && isExpanded && hasDiffContent) {
-            setHasMountedDiffBody(true);
-          }
-          onToggle(filePath);
-        }}
+        onToggle={onToggle}
       />
       <FileDiffEntryBody
         diff={diff}
@@ -321,6 +327,7 @@ function FileDiffEntry({
         isExpanded={isExpanded}
         canReset={canReset}
         isResetDisabled={isResetDisabled}
+        bodyRef={bodyRef}
         onRequestHunkReset={onRequestHunkReset}
       />
     </div>
