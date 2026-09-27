@@ -123,21 +123,35 @@ export class TerminalScreenState {
     const maxPayloadBytes = TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES - 1024;
     let payload = serialize(SCREEN_SCROLLBACK_ROWS);
     if (payload.byteLength > maxPayloadBytes) {
+      const availableRows = Math.min(
+        SCREEN_SCROLLBACK_ROWS,
+        Math.max(0, this.terminal.buffer.normal.length - this.terminal.rows),
+      );
+      let oversizedRows = availableRows;
+      let oversizedBytes = payload.byteLength;
+      if (oversizedRows > 0) {
+        // One old row can be the only excess, so check the next smaller suffix first.
+        const boundaryPayload = serialize(oversizedRows - 1);
+        if (boundaryPayload.byteLength <= maxPayloadBytes) {
+          return {
+            columns: this.terminal.cols,
+            rows: this.terminal.rows,
+            payload: boundaryPayload,
+            precedingJoinState,
+          };
+        }
+        oversizedRows -= 1;
+        oversizedBytes = boundaryPayload.byteLength;
+      }
       const visiblePayload = serialize(0);
       if (visiblePayload.byteLength <= maxPayloadBytes) {
-        const availableRows = Math.min(
-          SCREEN_SCROLLBACK_ROWS,
-          Math.max(0, this.terminal.buffer.normal.length - this.terminal.rows),
-        );
         let fittingRows = 0;
         let fittingPayload = visiblePayload;
-        let oversizedRows = availableRows;
-        let oversizedBytes = payload.byteLength;
         let requestedRows = Math.max(
           1,
           Math.floor(
-            (availableRows * (maxPayloadBytes - visiblePayload.byteLength)) /
-              (payload.byteLength - visiblePayload.byteLength),
+            (oversizedRows * (maxPayloadBytes - visiblePayload.byteLength)) /
+              (oversizedBytes - visiblePayload.byteLength),
           ),
         );
         while (requestedRows > 0 && requestedRows < oversizedRows) {
