@@ -47,8 +47,16 @@ const favorite: AgentModelFavorite = {
 };
 
 const runtimes = [
-  { descriptor: OPENCODE_RUNTIME_DESCRIPTOR, resource: resource("opencode") },
-  { descriptor: CODEX_RUNTIME_DESCRIPTOR, resource: resource("codex") },
+  {
+    descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+    resource: resource("opencode"),
+    isEnabledForFavorites: true,
+  },
+  {
+    descriptor: CODEX_RUNTIME_DESCRIPTOR,
+    resource: resource("codex"),
+    isEnabledForFavorites: true,
+  },
 ];
 
 describe("model-picker-model", () => {
@@ -126,6 +134,7 @@ describe("model-picker-model", () => {
     const failedRuntimes: ModelPickerRuntime[] = [
       {
         descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+        isEnabledForFavorites: true,
         resource: {
           status: "failed",
           catalog: catalog("opencode"),
@@ -150,6 +159,7 @@ describe("model-picker-model", () => {
     const refreshingRuntimes: ModelPickerRuntime[] = [
       {
         descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+        isEnabledForFavorites: true,
         resource: {
           status: "refreshing",
           catalog: catalog("opencode"),

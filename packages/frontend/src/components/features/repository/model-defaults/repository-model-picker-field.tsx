@@ -78,6 +78,7 @@ const toModelPickerRuntimes = ({
     );
     return {
       descriptor,
+      isEnabledForFavorites: true,
       resource: resource
         ? toModelPickerCatalogResource({
             catalog: resource.catalog,

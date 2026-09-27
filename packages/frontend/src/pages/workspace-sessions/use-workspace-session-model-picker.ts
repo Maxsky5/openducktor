@@ -64,8 +64,15 @@ export function useWorkspaceSessionModelPicker(
   const selection = session ? session.selection : (draftSelection ?? creationDefaultSelection);
   const creationResources = session ? noCreationResources : resources;
   const projected = useMemo(
-    () => projectWorkspaceModelResources(definitions, creationResources, selection, session),
-    [definitions, creationResources, selection, session],
+    () =>
+      projectWorkspaceModelResources(
+        definitions,
+        availableRuntimeDefinitions,
+        creationResources,
+        selection,
+        session,
+      ),
+    [definitions, availableRuntimeDefinitions, creationResources, selection, session],
   );
   const { catalog, runtimes, runtimeKind, sessionRuntimeKind, supportsProfiles, isLoading } =
     projected;

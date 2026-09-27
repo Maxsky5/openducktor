@@ -95,6 +95,7 @@ export const toModelPickerCatalogResource = ({
 export type ModelPickerRuntime = {
   descriptor: RuntimeDescriptor;
   resource: ModelPickerCatalogResource;
+  isEnabledForFavorites: boolean;
   disabledReason?: string | null;
 };
 
@@ -103,6 +104,7 @@ export type ModelPickerItem = {
   runtime: RuntimeDescriptor;
   model: AgentModelCatalog["models"][number];
   isFavorite: boolean;
+  isEnabledForFavorites: boolean;
   runtimeIndex: number;
   catalogIndex: number;
 };
@@ -188,6 +190,7 @@ export const buildModelPickerItems = ({
         runtime: runtime.descriptor,
         model,
         isFavorite: favoriteKeys.has(modelPickerValueKey(value)),
+        isEnabledForFavorites: runtime.isEnabledForFavorites,
         runtimeIndex,
         catalogIndex,
       } satisfies ModelPickerItem;
@@ -209,7 +212,9 @@ export const buildModelPickerItems = ({
       .map(({ item }) => item);
   }
   if (activeView === "favorites") {
-    return items.filter((item) => item.isFavorite).toSorted(compareStableCatalogOrder);
+    return items
+      .filter((item) => item.isFavorite && item.isEnabledForFavorites)
+      .toSorted(compareStableCatalogOrder);
   }
   return items
     .filter((item) => item.runtime.kind === activeView)

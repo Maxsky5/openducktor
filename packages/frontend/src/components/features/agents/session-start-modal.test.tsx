@@ -40,6 +40,7 @@ const createModel = (overrides: Partial<SessionStartModalModel> = {}): SessionSt
   modelPickerRuntimes: [
     {
       descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      isEnabledForFavorites: true,
       resource: {
         status: "ready",
         catalog: {

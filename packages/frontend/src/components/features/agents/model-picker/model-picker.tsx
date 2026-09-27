@@ -65,14 +65,32 @@ type ModelPickerProps = {
 };
 
 const activeViewFor = (
-  value: ModelPickerValue | null,
   runtimes: readonly ModelPickerRuntime[],
+  favorites: readonly AgentModelFavorite[] | null,
   selectionPolicy: ModelPickerSelectionPolicy,
 ): ModelPickerView => {
+  const availableFavorites = favorites?.filter((favorite) =>
+    runtimes.some(
+      (runtime) =>
+        runtime.isEnabledForFavorites && runtime.descriptor.kind === favorite.runtimeKind,
+    ),
+  );
   if (selectionPolicy.kind === "runtime_locked") {
+    if (
+      availableFavorites?.some((favorite) => favorite.runtimeKind === selectionPolicy.runtimeKind)
+    ) {
+      return "favorites";
+    }
     return selectionPolicy.runtimeKind;
   }
-  return value?.runtimeKind ?? runtimes[0]?.descriptor.kind ?? "favorites";
+  if (availableFavorites?.length) {
+    return "favorites";
+  }
+  return (
+    runtimes.find((runtime) => runtime.isEnabledForFavorites)?.descriptor.kind ??
+    runtimes[0]?.descriptor.kind ??
+    "favorites"
+  );
 };
 
 const ResourceNotice = ({ runtime }: { runtime: ModelPickerRuntime }): ReactElement | null => {
@@ -407,7 +425,7 @@ export function ModelPicker({
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeView, setActiveView] = useState<ModelPickerView>(() =>
-    activeViewFor(value, runtimes, selectionPolicy),
+    activeViewFor(runtimes, favoriteState.favorites, selectionPolicy),
   );
   const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
   const readOnlyReasonId = useId();
@@ -465,7 +483,7 @@ export function ModelPicker({
       return;
     }
     if (nextOpen) {
-      setActiveView(activeViewFor(value, runtimes, selectionPolicy));
+      setActiveView(activeViewFor(runtimes, favoriteState.favorites, selectionPolicy));
       const activeElement = document.activeElement;
       setPortalContainer(
         activeElement instanceof HTMLElement
