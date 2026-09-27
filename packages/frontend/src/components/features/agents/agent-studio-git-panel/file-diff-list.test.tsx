@@ -202,10 +202,12 @@ afterAll(() => {
 function FileDiffListHarness({
   file = "src/example.ts",
   canResetFiles = false,
+  isResetDisabled = false,
   onRequestFileReset,
 }: {
   file?: string;
   canResetFiles?: boolean;
+  isResetDisabled?: boolean;
   onRequestFileReset?: (filePath: string) => void;
 } = {}): ReactElement {
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
@@ -241,7 +243,7 @@ function FileDiffListHarness({
         }}
         preloadLimit={1}
         canResetFiles={canResetFiles}
-        isResetDisabled={false}
+        isResetDisabled={isResetDisabled}
         resetDisabledReason={null}
         onRequestFileReset={onRequestFileReset}
       />
@@ -374,6 +376,27 @@ describe("FileDiffList", () => {
       expect(toggle.getAttribute("aria-expanded")).toBe("false");
       unmount();
     }
+  });
+
+  test("keeps a disabled Reset as the pointer target above the row toggle", () => {
+    const requestFileReset = mock((_filePath: string) => {});
+    render(
+      <FileDiffListHarness
+        file="root.ts"
+        canResetFiles
+        isResetDisabled
+        onRequestFileReset={requestFileReset}
+      />,
+    );
+
+    const resetButton = screen.getByRole("button", { name: "Reset file" });
+    const toggle = screen.getByRole("button", { name: "Toggle diff for root.ts" });
+    expect(resetButton.hasAttribute("disabled")).toBe(true);
+    expect(resetButton.className).toContain("disabled:pointer-events-auto");
+
+    fireEvent.click(resetButton);
+    expect(requestFileReset).not.toHaveBeenCalled();
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
   });
 
   test("keeps row expansion working while preload entries are mounted", () => {

@@ -164,7 +164,7 @@ function FileDiffEntryHeader({
               type="button"
               variant="ghost"
               size="icon"
-              className="absolute top-1/2 right-3 z-10 size-6 -translate-y-1/2"
+              className="absolute top-1/2 right-3 z-10 size-6 -translate-y-1/2 disabled:pointer-events-auto"
               aria-label="Reset file"
               title="Reset file"
               data-testid="agent-studio-git-reset-file-button"
