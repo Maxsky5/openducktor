@@ -306,6 +306,7 @@ export function useAgentStudioChatComposer({
     loadRuntimeCatalog,
   });
   const modelPickerRuntimes = useMemo<ModelPickerRuntime[]>(() => {
+    const availableKinds = new Set(availableRuntimeDefinitions.map((runtime) => runtime.kind));
     if (!hasSessionTarget) {
       return modelPickerRuntimeDefinitions.map((descriptor) => {
         const resource = repoModelPickerResources.find(
@@ -313,6 +314,7 @@ export function useAgentStudioChatComposer({
         );
         return {
           descriptor,
+          isEnabledForFavorites: availableKinds.has(descriptor.kind),
           resource: resource
             ? toModelPickerCatalogResource({
                 catalog: resource.catalog,
@@ -330,6 +332,7 @@ export function useAgentStudioChatComposer({
       if (descriptor.kind !== selectedSessionIdentity?.runtimeKind) {
         return {
           descriptor,
+          isEnabledForFavorites: availableKinds.has(descriptor.kind),
           resource: unavailableModelPickerCatalogResource(
             "Start a new session to use another runtime.",
           ),
@@ -337,6 +340,7 @@ export function useAgentStudioChatComposer({
       }
       return {
         descriptor,
+        isEnabledForFavorites: availableKinds.has(descriptor.kind),
         resource: toModelPickerCatalogResource({
           catalog: sessionModelCatalog,
           isFetching: isSessionModelCatalogLoading,
@@ -363,6 +367,7 @@ export function useAgentStudioChatComposer({
       };
     });
   }, [
+    availableRuntimeDefinitions,
     hasSessionTarget,
     isSessionModelCatalogLoading,
     loadRuntimeCatalog,

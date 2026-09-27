@@ -1,6 +1,7 @@
 import { expect, mock, test } from "bun:test";
 import {
   CLAUDE_RUNTIME_DESCRIPTOR,
+  CODEX_RUNTIME_DESCRIPTOR,
   DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
 } from "@openducktor/contracts";
@@ -109,7 +110,7 @@ test("allows a new workspace session model choice while a stale catalog refreshe
   }
 });
 
-test("live model picker keeps stable props and refreshes when catalog or selection changes", async () => {
+test("live model picker retains a disabled runtime and refreshes when catalog or selection changes", async () => {
   const catalog: AgentModelCatalog = {
     models: [
       {
@@ -125,8 +126,8 @@ test("live model picker keeps stable props and refreshes when catalog or selecti
   };
   const runtimeCatalog: AgentRuntimeCatalog = createRuntimeCatalogFixture({ models: catalog });
   const definitions: RuntimeDefinitionsContextValue = {
-    runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-    availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+    availableRuntimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR],
     agentRuntimes: DEFAULT_AGENT_RUNTIMES,
     isLoadingRuntimeDefinitions: false,
     runtimeDefinitionsError: null,
@@ -176,6 +177,10 @@ test("live model picker keeps stable props and refreshes when catalog or selecti
     await harness.mount();
     await harness.waitFor((state) => state.modelPicker.favoriteState.favorites !== null, 2000);
     const initial = harness.getLatest();
+    expect(
+      initial.modelPicker.runtimes.map(({ isEnabledForFavorites }) => isEnabledForFavorites),
+    ).toEqual([false, true]);
+    expect(initial.modelPicker.runtimes[0]?.resource.status).toBe("ready");
     await harness.update(target);
     expect(harness.getLatest().modelPicker).toBe(initial.modelPicker);
     expect(harness.getLatest().variantOptions).toBe(initial.variantOptions);

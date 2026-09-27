@@ -29,10 +29,12 @@ export type SessionModelTarget = {
 
 export function projectWorkspaceModelResources(
   definitions: readonly ModelPickerRuntime["descriptor"][],
+  availableDefinitions: readonly ModelPickerRuntime["descriptor"][],
   resources: readonly RuntimeModelCatalogQueryResource[],
   selection: AgentModelSelection | null,
   session?: SessionModelTarget,
 ) {
+  const availableKinds = new Set(availableDefinitions.map((definition) => definition.kind));
   const sessionRuntimeKind = session?.identity?.runtimeKind ?? session?.runtimeKind;
   const runtimeKind = sessionRuntimeKind ?? selection?.runtimeKind ?? null;
   const catalog = session
@@ -42,6 +44,7 @@ export function projectWorkspaceModelResources(
     if (session) {
       return {
         descriptor,
+        isEnabledForFavorites: availableKinds.has(descriptor.kind),
         resource:
           descriptor.kind === sessionRuntimeKind
             ? toModelPickerCatalogResource({
@@ -58,6 +61,7 @@ export function projectWorkspaceModelResources(
     const resource = resources.find((entry) => entry.runtimeKind === descriptor.kind);
     return {
       descriptor,
+      isEnabledForFavorites: availableKinds.has(descriptor.kind),
       resource: resource
         ? toModelPickerCatalogResource({
             catalog: resource.catalog,

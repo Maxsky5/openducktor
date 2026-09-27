@@ -617,7 +617,7 @@ describe("useAgentStudioChatComposer", () => {
       }),
       {
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
-        availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+        availableRuntimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR],
       },
     );
 
@@ -632,6 +632,9 @@ describe("useAgentStudioChatComposer", () => {
       expect(
         harness.getLatest().modelPicker.runtimes.map((runtime) => runtime.descriptor.kind),
       ).toEqual(["opencode", "codex"]);
+      expect(
+        harness.getLatest().modelPicker.runtimes.map((runtime) => runtime.isEnabledForFavorites),
+      ).toEqual([false, true]);
       expect(loadCatalog).not.toHaveBeenCalledWith(
         expect.objectContaining({ runtimeKind: "codex" }),
       );

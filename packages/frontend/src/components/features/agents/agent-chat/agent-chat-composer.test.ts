@@ -53,6 +53,7 @@ const buildModel = () => ({
     runtimes: [
       {
         descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+        isEnabledForFavorites: true,
         resource: {
           status: "ready" as const,
           catalog: {

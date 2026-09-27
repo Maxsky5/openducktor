@@ -43,10 +43,12 @@ const resource = (runtimeKind: "opencode" | "codex"): ModelPickerCatalogResource
 const makeRuntimes = (): ModelPickerRuntime[] => [
   {
     descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+    isEnabledForFavorites: true,
     resource: resource("opencode"),
   },
   {
     descriptor: CODEX_RUNTIME_DESCRIPTOR,
+    isEnabledForFavorites: true,
     resource: resource("codex"),
   },
 ];
@@ -116,9 +118,10 @@ describe("ModelPicker", () => {
   });
 
   test("opens the available runtime when its only favorite belongs to a disabled runtime", async () => {
+    const disabledRuntime = { ...makeRuntimes()[0]!, isEnabledForFavorites: false };
     render(
       <ModelPicker
-        runtimes={[makeRuntimes()[1]!]}
+        runtimes={[disabledRuntime, makeRuntimes()[1]!]}
         value={{ runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" }}
         favoriteState={favoriteState({ favorites: [value] })}
         selectionPolicy={{ kind: "editable" }}
@@ -137,9 +140,10 @@ describe("ModelPicker", () => {
   });
 
   test("shows only favorites from available runtimes", async () => {
+    const disabledRuntime = { ...makeRuntimes()[0]!, isEnabledForFavorites: false };
     render(
       <ModelPicker
-        runtimes={[makeRuntimes()[1]!]}
+        runtimes={[disabledRuntime, makeRuntimes()[1]!]}
         value={null}
         favoriteState={favoriteState({
           favorites: [value, { ...value, runtimeKind: "codex" }],
@@ -156,6 +160,37 @@ describe("ModelPicker", () => {
       screen.getByRole("button", { name: "Favorite models" }).getAttribute("aria-pressed"),
     ).toBe("true");
     expect(screen.getByRole("button", { name: "Select GPT 5 Codex model" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Select GPT Five model" })).toBeNull();
+  });
+
+  test("keeps a disabled session runtime selectable but out of Favorites", async () => {
+    const disabledRuntime = { ...makeRuntimes()[0]!, isEnabledForFavorites: false };
+    render(
+      <ModelPicker
+        runtimes={[disabledRuntime]}
+        value={value}
+        favoriteState={favoriteState({ favorites: [value] })}
+        selectionPolicy={{
+          kind: "runtime_locked",
+          runtimeKind: "opencode",
+          reason: "An existing session cannot change runtime.",
+        }}
+        onValueChange={() => {}}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
+    });
+    expect(
+      screen.getByRole("button", { name: "OpenCode runtime" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(screen.getByRole("button", { name: "Select GPT Five model" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Remove GPT Five from favorites" })).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Favorite models" }));
+    });
     expect(screen.queryByRole("button", { name: "Select GPT Five model" })).toBeNull();
   });
 
@@ -291,6 +326,7 @@ describe("ModelPicker", () => {
     const refreshingRuntimes: ModelPickerRuntime[] = [
       {
         descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+        isEnabledForFavorites: true,
         resource: {
           status: "refreshing",
           catalog: catalog("opencode"),
@@ -591,6 +627,7 @@ describe("ModelPicker", () => {
     const failedRuntimes: ModelPickerRuntime[] = [
       {
         descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+        isEnabledForFavorites: true,
         resource: {
           status: "failed",
           catalog: catalog("opencode"),
@@ -748,6 +785,7 @@ describe("ModelPicker", () => {
         runtimes={[
           {
             descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+            isEnabledForFavorites: true,
             resource: { status: "ready", catalog: bareCatalog },
           },
         ]}
@@ -788,6 +826,7 @@ describe("ModelPicker", () => {
         runtimes={[
           {
             descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+            isEnabledForFavorites: true,
             resource: { status: "ready", catalog: catalogWithoutSupport },
           },
         ]}
@@ -832,6 +871,7 @@ describe("ModelPicker", () => {
         runtimes={[
           {
             descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+            isEnabledForFavorites: true,
             resource: { status: "ready", catalog: catalogWithoutContext },
           },
         ]}

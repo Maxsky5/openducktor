@@ -70,7 +70,10 @@ const activeViewFor = (
   selectionPolicy: ModelPickerSelectionPolicy,
 ): ModelPickerView => {
   const availableFavorites = favorites?.filter((favorite) =>
-    runtimes.some((runtime) => runtime.descriptor.kind === favorite.runtimeKind),
+    runtimes.some(
+      (runtime) =>
+        runtime.isEnabledForFavorites && runtime.descriptor.kind === favorite.runtimeKind,
+    ),
   );
   if (selectionPolicy.kind === "runtime_locked") {
     if (
@@ -83,7 +86,11 @@ const activeViewFor = (
   if (availableFavorites?.length) {
     return "favorites";
   }
-  return runtimes[0]?.descriptor.kind ?? "favorites";
+  return (
+    runtimes.find((runtime) => runtime.isEnabledForFavorites)?.descriptor.kind ??
+    runtimes[0]?.descriptor.kind ??
+    "favorites"
+  );
 };
 
 const ResourceNotice = ({ runtime }: { runtime: ModelPickerRuntime }): ReactElement | null => {

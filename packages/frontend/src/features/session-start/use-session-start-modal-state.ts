@@ -238,6 +238,9 @@ export function useSessionStartModalState({
         return [
           {
             descriptor,
+            isEnabledForFavorites: availableRuntimeDefinitions.some(
+              (runtime) => runtime.kind === descriptor.kind,
+            ),
             resource: toModelPickerCatalogResource({
               catalog: resource.catalog,
               isFetching: resource.isFetching,
@@ -249,7 +252,7 @@ export function useSessionStartModalState({
           },
         ];
       }),
-    [catalogResources, eligibleRuntimeDefinitions],
+    [availableRuntimeDefinitions, catalogResources, eligibleRuntimeDefinitions],
   );
 
   const handleSelectModelPair = useCallback(
