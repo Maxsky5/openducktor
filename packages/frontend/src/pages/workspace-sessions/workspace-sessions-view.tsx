@@ -248,6 +248,7 @@ function WorkspaceSessionToolbarActions({
             className="size-8 text-studio-chrome-foreground hover:bg-transparent"
             aria-label={terminalModel.isVisible ? "Hide terminal" : "Show terminal"}
             title={terminalModel.isVisible ? "Hide terminal" : "Show terminal"}
+            disabled={!terminalModel.isAvailable}
             onClick={terminalModel.onToggle}
           >
             <SquareTerminal />

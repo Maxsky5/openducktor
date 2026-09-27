@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import {
   type TerminalTaskScope,
   type TerminalWorkspaceSessionScope,
+  isWorkspaceSessionTerminalContext,
   terminalContextKey,
   terminalWorkspaceSessionKey,
 } from "./terminal-context";
@@ -132,7 +133,7 @@ export const createTerminalAdmission = ({
             let contextLimit = TERMINAL_LIMITS.liveUnassociated;
             if (taskId) {
               contextLimit = TERMINAL_LIMITS.livePerTask;
-            } else if ("kind" in context) {
+            } else if (isWorkspaceSessionTerminalContext(context)) {
               contextLimit = TERMINAL_LIMITS.livePerWorkspaceSession;
             }
             if (countLiveForContext(context) + pendingForContext >= contextLimit) {

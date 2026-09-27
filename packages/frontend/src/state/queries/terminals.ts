@@ -1,7 +1,8 @@
-import type { TerminalListFilter } from "@openducktor/contracts";
+import type { TerminalListFilter, TerminalListResponse } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
-import { queryOptions } from "@tanstack/react-query";
+import { type QueryKey, queryOptions } from "@tanstack/react-query";
 import { host } from "../operations/host";
+import { skippedQueryOptions } from "./skipped-query";
 
 type TerminalQueryInput = {
   repoPath: string;
@@ -27,14 +28,19 @@ export const terminalListByFilterQueryOptions = ({
   hostClient = host,
   enabled = true,
 }: {
-  filter: TerminalListFilter;
+  filter: TerminalListFilter | null;
   hostClient?: Pick<HostClient, "terminalList">;
   enabled?: boolean;
 }) =>
-  queryOptions({
-    queryKey: enabled ? terminalQueryKeys.filter(filter) : terminalQueryKeys.skipped,
-    queryFn: () => hostClient.terminalList({ filter }),
-    enabled,
-    retry: false,
-    staleTime: 0,
-  });
+  filter === null
+    ? skippedQueryOptions<TerminalListResponse, QueryKey>({
+        queryKey: terminalQueryKeys.skipped,
+        staleTime: 0,
+      })
+    : queryOptions<TerminalListResponse, Error, TerminalListResponse, QueryKey>({
+        queryKey: terminalQueryKeys.filter(filter),
+        queryFn: () => hostClient.terminalList({ filter }),
+        enabled,
+        retry: false,
+        staleTime: 0,
+      });

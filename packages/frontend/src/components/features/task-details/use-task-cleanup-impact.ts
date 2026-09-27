@@ -217,7 +217,7 @@ export function useTaskCleanupImpact(
         if (readPorts.terminals) {
           input.hostClient = readPorts.terminals;
         }
-        return { ...terminalListByFilterQueryOptions(input), enabled: shouldLoadImpact };
+        return terminalListByFilterQueryOptions({ ...input, enabled: shouldLoadImpact });
       }),
     },
     queryClient,

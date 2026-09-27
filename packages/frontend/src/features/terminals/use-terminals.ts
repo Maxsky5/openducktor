@@ -4,6 +4,7 @@ import type {
   TerminalContext,
   TerminalLifecycle,
   TerminalListFilter,
+  TerminalListResponse,
 } from "@openducktor/contracts";
 import { HostTerminalClientError } from "@openducktor/host-client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -111,17 +112,15 @@ export const useTerminals = (
   );
   const abandonedCreationTabIds = useRef(new Set<string>());
   const { controller, transportError } = useTerminalTransport(dependencies.terminalBridge);
-  const enabled = scope !== null;
   const listFilter = useMemo(
     () => terminalListFilterForContext(scope?.context ?? null),
     [scope?.context],
   );
   const terminalOptions = terminalListByFilterQueryOptions({
-    filter: listFilter,
+    filter: scope === null ? null : listFilter,
     hostClient: dependencies.hostClient,
-    enabled,
   });
-  const terminalQuery = useQuery(terminalOptions);
+  const terminalQuery = useQuery<TerminalListResponse>(terminalOptions);
   const platformQuery = useQuery(platformQueryOptions(dependencies.hostClient));
 
   // Activate the scope during render so consumers never commit the previous scope for one frame.

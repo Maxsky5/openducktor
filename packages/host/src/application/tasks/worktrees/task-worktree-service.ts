@@ -13,6 +13,7 @@ import type {
   WorkspaceSettingsError,
   WorkspaceSettingsService,
 } from "../../workspaces/workspace-settings-service";
+import { taskWorktreeIdError } from "./task-worktree-id";
 
 export type TaskWorktreeServiceError =
   | HostValidationErrorAggregate
@@ -48,20 +49,8 @@ export const createTaskWorktreeService = ({
   getTaskWorktree(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
-      if (
-        !taskId ||
-        taskId === "." ||
-        taskId === ".." ||
-        /[\\/:]/.test(taskId) ||
-        taskId.includes("\0")
-      ) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "taskId",
-            message: "Task ID must name one worktree directory. Select a task and retry.",
-          }),
-        );
-      }
+      const idError = taskWorktreeIdError(taskId);
+      if (idError) return yield* idError;
       const repoConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const worktreePath = settingsConfig.join(
         resolveWorktreeBasePath(settingsConfig, repoConfig),
