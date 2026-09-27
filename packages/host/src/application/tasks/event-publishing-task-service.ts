@@ -121,56 +121,6 @@ export const createEventPublishingTaskService = ({
       return result.right;
     }).pipe((mutation) => taskSyncService.runMutation(repoPath, mutation));
 
-  const publishSetPlan = (input: Parameters<TaskService["setPlan"]>[0]) =>
-    Effect.gen(function* () {
-      const { result, statusChanges } = yield* collectTaskStatusChanges(taskService.setPlan(input));
-      if (result._tag === "Right") {
-        yield* taskSyncService.publishTasksUpdated(
-          input.repoPath,
-          result.right.changes,
-          "set-plan",
-          statusChanges,
-        );
-        return result.right;
-      }
-      if (result.left instanceof TaskMutationProgressFailure) {
-        yield* taskSyncService.publishTasksUpdated(
-          input.repoPath,
-          result.left.changes,
-          "set-plan",
-          statusChanges,
-          result.left.failure,
-        );
-        return yield* Effect.fail(result.left.failure);
-      }
-      return yield* Effect.fail(result.left);
-    }).pipe((mutation) => taskSyncService.runMutation(input.repoPath, mutation));
-
-  const publishSetSpec = (input: Parameters<TaskService["setSpec"]>[0]) =>
-    Effect.gen(function* () {
-      const { result, statusChanges } = yield* collectTaskStatusChanges(taskService.setSpec(input));
-      if (result._tag === "Right") {
-        yield* taskSyncService.publishTasksUpdated(
-          input.repoPath,
-          changeForTask(input.taskId),
-          "set-spec",
-          statusChanges,
-        );
-        return result.right;
-      }
-      if (result.left instanceof TaskMutationProgressFailure) {
-        yield* taskSyncService.publishTasksUpdated(
-          input.repoPath,
-          result.left.changes,
-          "set-spec",
-          statusChanges,
-          result.left.failure,
-        );
-        return yield* Effect.fail(result.left.failure);
-      }
-      return yield* Effect.fail(result.left);
-    }).pipe((mutation) => taskSyncService.runMutation(input.repoPath, mutation));
-
   return {
     listTasks: (input) => taskService.listTasks(input),
     listKanbanTasks: (input) => taskService.listKanbanTasks(input),
@@ -303,7 +253,13 @@ export const createEventPublishingTaskService = ({
         taskService.transitionTask(input),
       ),
     specGet: (input) => taskService.specGet(input),
-    setSpec: publishSetSpec,
+    setSpec: (input) =>
+      publishAfterMutation(
+        "set-spec",
+        input.repoPath,
+        changeForTask(input.taskId),
+        Effect.suspend(() => taskService.setSpec(input)),
+      ),
     saveSpecDocument: (input) =>
       publishAfterMutation(
         "save-spec-document",
@@ -312,7 +268,14 @@ export const createEventPublishingTaskService = ({
         taskService.saveSpecDocument(input),
       ),
     planGet: (input) => taskService.planGet(input),
-    setPlan: publishSetPlan,
+    setPlan: (input) =>
+      publishAfterMutation(
+        "set-plan",
+        input.repoPath,
+        changeForTask(input.taskId),
+        Effect.suspend(() => taskService.setPlan(input)),
+        (result) => result.changes,
+      ),
     savePlanDocument: (input) =>
       publishAfterMutation(
         "save-plan-document",

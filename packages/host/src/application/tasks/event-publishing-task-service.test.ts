@@ -55,6 +55,134 @@ const sync = (
 });
 
 describe("createEventPublishingTaskService", () => {
+  test("publishes a successful set-spec once and returns its document", async () => {
+    const document = { markdown: "# Spec" };
+    const publications: Array<{ operation: string; taskIds: string[]; removedTaskIds: string[] }> =
+      [];
+    const service = createEventPublishingTaskService({
+      taskService: fakeTaskService({ setSpec: () => Effect.succeed(document) }),
+      taskSyncService: {
+        ...sync([]),
+        publishTasksUpdated: (_repoPath, changes, operation) =>
+          Effect.sync(() => {
+            publications.push({ operation, ...changes });
+          }),
+      },
+    });
+
+    const result = await Effect.runPromise(
+      service.setSpec({ repoPath: "/repo", taskId: "task-1", markdown: "# Spec" }),
+    );
+
+    expect(result).toBe(document);
+    expect(publications).toEqual([
+      { operation: "set-spec", taskIds: ["task-1"], removedTaskIds: [] },
+    ]);
+  });
+
+  test("publishes a successful set-plan once with its result changes", async () => {
+    const plan = {
+      document: { markdown: "# Plan" },
+      changes: { taskIds: ["epic-1", "child-1"], removedTaskIds: ["old-child"] },
+    };
+    const publications: Array<{ operation: string; taskIds: string[]; removedTaskIds: string[] }> =
+      [];
+    const service = createEventPublishingTaskService({
+      taskService: fakeTaskService({ setPlan: () => Effect.succeed(plan) }),
+      taskSyncService: {
+        ...sync([]),
+        publishTasksUpdated: (_repoPath, changes, operation) =>
+          Effect.sync(() => {
+            publications.push({ operation, ...changes });
+          }),
+      },
+    });
+
+    const result = await Effect.runPromise(
+      service.setPlan({
+        repoPath: "/repo",
+        taskId: "epic-1",
+        markdown: "# Plan",
+        subtasks: [],
+        hasExplicitSubtasks: true,
+      }),
+    );
+
+    expect(result).toBe(plan);
+    expect(publications).toEqual([
+      { operation: "set-plan", taskIds: ["epic-1", "child-1"], removedTaskIds: ["old-child"] },
+    ]);
+  });
+
+  test("defers each set-spec service call until execution inside the mutation gate", async () => {
+    let gateActive = false;
+    const calls: boolean[] = [];
+    const taskSyncService = sync([]);
+    const service = createEventPublishingTaskService({
+      taskService: fakeTaskService({
+        setSpec: () => {
+          calls.push(gateActive);
+          return Effect.succeed({ markdown: "# Spec" });
+        },
+      }),
+      taskSyncService: {
+        ...taskSyncService,
+        runMutation: (_repoPath, mutation) =>
+          Effect.gen(function* () {
+            gateActive = true;
+            const result = yield* mutation;
+            gateActive = false;
+            return result;
+          }),
+      },
+    });
+    const mutation = service.setSpec({ repoPath: "/repo", taskId: "task-1", markdown: "# Spec" });
+
+    expect(calls).toEqual([]);
+    await Effect.runPromise(mutation);
+    await Effect.runPromise(mutation);
+    expect(calls).toEqual([true, true]);
+  });
+
+  test("defers each set-plan service call until execution inside the mutation gate", async () => {
+    let gateActive = false;
+    const calls: boolean[] = [];
+    const taskSyncService = sync([]);
+    const service = createEventPublishingTaskService({
+      taskService: fakeTaskService({
+        setPlan: () => {
+          calls.push(gateActive);
+          return Effect.succeed({
+            document: { markdown: "# Plan" },
+            changes: { taskIds: ["task-1"], removedTaskIds: [] },
+          });
+        },
+      }),
+      taskSyncService: {
+        ...taskSyncService,
+        runMutation: (_repoPath, mutation) =>
+          Effect.gen(function* () {
+            gateActive = true;
+            const result = yield* mutation;
+            gateActive = false;
+            return result;
+          }),
+      },
+    });
+    const mutation = service.setPlan({
+      repoPath: "/repo",
+      taskId: "task-1",
+      markdown: "# Plan",
+      subtasks: [],
+      hasExplicitSubtasks: true,
+    });
+
+    expect(calls).toEqual([]);
+    await Effect.runPromise(mutation);
+    await Effect.runPromise(mutation);
+    expect(calls).toEqual([true, true]);
+  });
+
   test("separates a model save from publication and keeps the same publication rules", async () => {
     const events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }> = [];
     let saves = 0;
