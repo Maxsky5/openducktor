@@ -157,6 +157,20 @@ describe("workspace creation stages", () => {
     expect(screen.queryByText("Variant")).toBeNull();
   });
 
+  test("shows one catalog loading status and removes it when models are ready", async () => {
+    const addWorkspace = async (input: WorkspaceSelectionOperationsInput) => record(input);
+    const loadingSurface = { ...surface, isLoadingCatalog: true };
+    const view = renderHarness({ addWorkspace, modelSurface: loadingSurface });
+    await advanceToModels();
+
+    expect(screen.getAllByRole("status")).toHaveLength(1);
+    expect(screen.getByRole("status").textContent).toBe("Loading models…");
+
+    view.rerender(<CreationHarness addWorkspace={addWorkspace} modelSurface={surface} />);
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Role defaults" })).toBeTruthy();
+  });
+
   test("keeps identity changes while moving back and forward without creating a workspace", async () => {
     const addWorkspace = mock(async (input: WorkspaceSelectionOperationsInput) => record(input));
     renderHarness({ addWorkspace });

@@ -123,7 +123,7 @@ export function RepositoryModelDefaultsFields({
         availableRuntimeDefinitions={availableRuntimeDefinitions}
         catalogResources={catalogResources}
         favoriteState={favoriteState}
-        loadingState={{ isLoadingCatalog, isLoadingSettings, isSaving }}
+        loadingState={{ isLoadingSettings, isSaving }}
         getCatalogForRuntime={getCatalogForRuntime}
         isCatalogLoadingForRuntime={isCatalogLoadingForRuntime}
         onUpdateSelectedRepoConfig={onUpdateSelectedRepoConfig}
@@ -132,9 +132,16 @@ export function RepositoryModelDefaultsFields({
       />
 
       <div className="space-y-2">
-        <h3 className="text-sm font-semibold text-foreground">
-          {isCreation ? "Role defaults" : "Agent Defaults (Per Role)"}
-        </h3>
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-foreground">
+            {isCreation ? "Role defaults" : "Agent Defaults (Per Role)"}
+          </h3>
+          {isLoadingCatalog || isLoadingRuntimeDefinitions ? (
+            <span role="status" className="whitespace-nowrap text-xs text-muted-foreground">
+              {isLoadingRuntimeDefinitions ? "Loading runtimes…" : "Loading models…"}
+            </span>
+          ) : null}
+        </div>
         <p className="text-xs text-muted-foreground">
           {isCreation
             ? "Leave a role empty to use the workspace default."
@@ -142,12 +149,6 @@ export function RepositoryModelDefaultsFields({
         </p>
       </div>
 
-      {isLoadingCatalog ? (
-        <p className="text-xs text-muted-foreground">Loading available agents and models…</p>
-      ) : null}
-      {isLoadingRuntimeDefinitions ? (
-        <p className="text-xs text-muted-foreground">Loading available runtimes…</p>
-      ) : null}
       {runtimeDefinitionsError ? (
         <p className="text-xs text-warning-muted">
           Failed to load runtime definitions: {runtimeDefinitionsError}

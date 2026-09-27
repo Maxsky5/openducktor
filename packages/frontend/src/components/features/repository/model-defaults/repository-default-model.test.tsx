@@ -92,7 +92,7 @@ const renderBlock = ({
         },
       ],
       favoriteState,
-      loadingState: { isLoadingCatalog: false, isLoadingSettings: false, isSaving: false },
+      loadingState: { isLoadingSettings: false, isSaving: false },
       getCatalogForRuntime: () => catalog,
       isCatalogLoadingForRuntime: () => false,
       onUpdateSelectedRepoConfig: () => {},

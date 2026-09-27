@@ -24,7 +24,6 @@ type RepositoryDefaultModelBlockProps = {
   catalogResources: RuntimeModelCatalogQueryResource[];
   favoriteState: ModelPickerFavoriteState;
   loadingState: {
-    isLoadingCatalog: boolean;
     isLoadingSettings: boolean;
     isSaving: boolean;
   };
@@ -55,7 +54,7 @@ export function RepositoryDefaultModelBlock({
   onUpdateSelectedRepoDefaultModel,
   onClearSelectedRepoDefaultModel,
 }: RepositoryDefaultModelBlockProps): ReactElement {
-  const { isLoadingCatalog, isLoadingSettings, isSaving } = loadingState;
+  const { isLoadingSettings, isSaving } = loadingState;
   const defaultModel = selectedRepoConfig.defaultModel ?? null;
   const runtimeDefinitions = useMemo(
     () => filterRuntimeDefinitionsForDefaultSelection(availableRuntimeDefinitions),
@@ -106,10 +105,6 @@ export function RepositoryDefaultModelBlock({
           Clear
         </Button>
       </div>
-
-      {isLoadingCatalog ? (
-        <p className="text-xs text-muted-foreground">Loading available agents and models…</p>
-      ) : null}
 
       <div className="grid gap-3 @2xl:grid-cols-3">
         <RepositoryModelPickerField
