@@ -51,7 +51,7 @@ test.each([
     { profileId: "other" },
     "The selected runtime profile is unavailable. Select a current profile.",
   ],
-  [{ variant: "other" }, "The selected model variant is unavailable. Select a current variant."],
+  [{ variant: "other" }, "The selected model effort is unavailable. Select a current effort."],
   [{ runtimeKind: "codex" as const }, "Select an available runtime and model before sending."],
 ] as const)("direct selection rejects unavailable selection %j", (patch, message) => {
   expect(() =>

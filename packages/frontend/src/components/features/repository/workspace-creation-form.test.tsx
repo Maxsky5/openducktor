@@ -149,6 +149,14 @@ const advanceToModels = async () => {
 };
 
 describe("workspace creation stages", () => {
+  test("shows effort for the workspace default and every role before models are selected", async () => {
+    renderHarness({ addWorkspace: async (input) => record(input) });
+    await advanceToModels();
+
+    expect(screen.getAllByText("Effort")).toHaveLength(5);
+    expect(screen.queryByText("Variant")).toBeNull();
+  });
+
   test("keeps identity changes while moving back and forward without creating a workspace", async () => {
     const addWorkspace = mock(async (input: WorkspaceSelectionOperationsInput) => record(input));
     renderHarness({ addWorkspace });

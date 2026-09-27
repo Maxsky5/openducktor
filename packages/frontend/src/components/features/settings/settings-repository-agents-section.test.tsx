@@ -177,7 +177,7 @@ describe("RepositoryAgentsSection", () => {
     );
 
     expect(html).toContain("Agent Profile");
-    expect(html).toContain("Runtime does not support agent profiles");
+    expect(html).toContain("Not supported by runtime");
     expect(html).toContain("disabled");
     expect(html).toContain("o3");
     expect(html).toContain("Default Model runtime &quot;Codex&quot; is disabled.");

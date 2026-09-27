@@ -81,7 +81,7 @@ const selectedModelError = (
       return `${label} is unavailable. Retry the model list or clear this choice.`;
     }
     if (entry.variant && !model.variants.includes(entry.variant)) {
-      return `${label} has an unavailable effort or variant. Choose one again or clear this choice.`;
+      return `${label} has an unavailable effort. Choose one again or clear this choice.`;
     }
     if (
       entry.profileId &&

@@ -115,9 +115,6 @@ export function RepositoryModelDefaultsFields({
     loadingState;
   const isCreation = presentation === "creation";
 
-  const agentDropdownClassName = isCreation ? "w-full min-w-0" : "sm:min-w-[18rem]";
-  const variantDropdownClassName = isCreation ? "w-full min-w-0" : "sm:min-w-[16rem]";
-
   return (
     <div className={cn("grid", isCreation ? "gap-5" : "gap-4 p-4")}>
       <RepositoryDefaultModelBlock
@@ -165,7 +162,7 @@ export function RepositoryModelDefaultsFields({
       ) : null}
       {roleNotice}
 
-      <div className={cn("grid gap-3", isCreation && "lg:grid-cols-2")}>
+      <div className="grid gap-3">
         {ROLE_DEFAULTS.map(({ role, label }) => {
           const roleViewModel = buildRepositoryAgentRoleViewModel({
             selectedRepoConfig,
@@ -181,7 +178,7 @@ export function RepositoryModelDefaultsFields({
             <div
               key={role}
               className={cn(
-                "grid border border-border bg-card",
+                "@container grid border border-border bg-card",
                 isCreation ? "gap-3 rounded-xl p-4" : "gap-2 rounded-md p-3",
               )}
             >
@@ -200,8 +197,8 @@ export function RepositoryModelDefaultsFields({
                 </Button>
               </div>
 
-              <div className={cn("grid gap-2", isCreation ? "sm:grid-cols-2" : "md:grid-cols-3")}>
-                <div className={cn("min-w-0", isCreation && "sm:col-span-2")}>
+              <div className="grid gap-3 @2xl:grid-cols-3">
+                <div className="min-w-0">
                   <RepositoryModelPickerField
                     runtimeDefinitions={availableRuntimeDefinitions}
                     catalogResources={catalogResources}
@@ -238,40 +235,33 @@ export function RepositoryModelDefaultsFields({
                   />
                 </div>
 
-                <div
-                  className={cn(
-                    "grid min-w-0 gap-1",
-                    isCreation && !controls.variant.visible && "sm:col-span-2",
-                  )}
-                >
+                <div className="grid min-w-0 gap-1">
                   <Label className="text-xs">Agent Profile</Label>
                   <Combobox
                     value={value.profileId}
                     options={controls.profile.options}
                     placeholder={controls.profile.placeholder}
                     disabled={controls.profile.disabled}
-                    className={agentDropdownClassName}
+                    className="w-full min-w-0"
                     onValueChange={(profileId) =>
                       onUpdateSelectedRepoAgentDefault(role, "profileId", profileId)
                     }
                   />
                 </div>
 
-                {controls.variant.visible ? (
-                  <div className="grid min-w-0 gap-1">
-                    <Label className="text-xs">Variant</Label>
-                    <Combobox
-                      value={value.variant}
-                      options={controls.variant.options}
-                      placeholder={controls.variant.placeholder}
-                      disabled={controls.variant.disabled}
-                      className={variantDropdownClassName}
-                      onValueChange={(variant) =>
-                        onUpdateSelectedRepoAgentDefault(role, "variant", variant)
-                      }
-                    />
-                  </div>
-                ) : null}
+                <div className="grid min-w-0 gap-1">
+                  <Label className="text-xs">Effort</Label>
+                  <Combobox
+                    value={value.variant}
+                    options={controls.variant.options}
+                    placeholder={controls.variant.placeholder}
+                    disabled={controls.variant.disabled}
+                    className="w-full min-w-0"
+                    onValueChange={(variant) =>
+                      onUpdateSelectedRepoAgentDefault(role, "variant", variant)
+                    }
+                  />
+                </div>
               </div>
             </div>
           );

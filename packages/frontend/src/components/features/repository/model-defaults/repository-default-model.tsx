@@ -81,15 +81,11 @@ export function RepositoryDefaultModelBlock({
   });
   const isClearDisabled = isLoadingSettings || isSaving || defaultModel === null;
   const isCreation = presentation === "creation";
-  let fieldGridClass = "md:grid-cols-3";
-  if (isCreation) {
-    fieldGridClass = controls.variant.visible ? "sm:grid-cols-2 xl:grid-cols-3" : "sm:grid-cols-2";
-  }
 
   return (
     <div
       className={cn(
-        "grid border border-border bg-card",
+        "@container grid border border-border bg-card",
         isCreation ? "gap-3 rounded-xl p-4 sm:p-5" : "gap-2 rounded-md p-3",
       )}
     >
@@ -115,7 +111,7 @@ export function RepositoryDefaultModelBlock({
         <p className="text-xs text-muted-foreground">Loading available agents and models…</p>
       ) : null}
 
-      <div className={cn("grid gap-3", fieldGridClass)}>
+      <div className="grid gap-3 @2xl:grid-cols-3">
         <RepositoryModelPickerField
           runtimeDefinitions={runtimeDefinitions}
           catalogResources={catalogResources}
@@ -152,24 +148,22 @@ export function RepositoryDefaultModelBlock({
             options={controls.profile.options}
             placeholder={controls.profile.placeholder}
             disabled={controls.profile.disabled}
-            className="sm:min-w-[18rem]"
+            className="w-full min-w-0"
             onValueChange={(profileId) => onUpdateSelectedRepoDefaultModel("profileId", profileId)}
           />
         </div>
 
-        {controls.variant.visible ? (
-          <div className="grid min-w-0 gap-1">
-            <Label className="text-xs">Effort</Label>
-            <Combobox
-              value={value.variant}
-              options={controls.variant.options}
-              placeholder={controls.variant.placeholder}
-              disabled={controls.variant.disabled}
-              className="sm:min-w-[16rem]"
-              onValueChange={(variant) => onUpdateSelectedRepoDefaultModel("variant", variant)}
-            />
-          </div>
-        ) : null}
+        <div className="grid min-w-0 gap-1">
+          <Label className="text-xs">Effort</Label>
+          <Combobox
+            value={value.variant}
+            options={controls.variant.options}
+            placeholder={controls.variant.placeholder}
+            disabled={controls.variant.disabled}
+            className="w-full min-w-0"
+            onValueChange={(variant) => onUpdateSelectedRepoDefaultModel("variant", variant)}
+          />
+        </div>
       </div>
     </div>
   );

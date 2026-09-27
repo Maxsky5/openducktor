@@ -242,7 +242,7 @@ describe("AgentChatComposer", () => {
 
     expect(html).toContain("GPT-5.3 Codex");
     expect(html).not.toContain("lucide-brain-cog");
-    expect(html).not.toContain("Search variant...");
+    expect(html).not.toContain("Search effort...");
   });
 
   test("stop button is enabled when session is working even when sends are otherwise disabled", () => {

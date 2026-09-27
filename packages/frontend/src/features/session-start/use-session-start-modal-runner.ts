@@ -75,7 +75,6 @@ export function useSessionStartModalRunner({
   scopeKey?: string | null;
 }): SessionStartModalRunnerResult {
   const scopeRef = useRef(scopeKey);
-  const selectionRef = useRef<AgentModelSelection | null>(null);
   const pendingRunRef = useRef<PendingModalRun | null>(null);
   const confirmationsRef = useRef(new Map<string | null, PendingModalRun>());
   const [confirmations, setConfirmations] = useState(confirmationsRef.current);
@@ -123,7 +122,6 @@ export function useSessionStartModalRunner({
     workspaceRepoPath,
   });
 
-  selectionRef.current = selection;
   const { kickoffPrompt, isKickoffPromptLoading, kickoffPromptError, onRetryKickoffPrompt } =
     useSessionStartKickoffPrompt({
       requestId: intent?.requestId,
@@ -240,7 +238,7 @@ export function useSessionStartModalRunner({
           input,
           existingSessionOptions,
           requestContext,
-          selectedModel: selectionRef.current,
+          selectedModel: selection,
         });
 
         if (decision.startMode === "reuse") {
@@ -298,6 +296,7 @@ export function useSessionStartModalRunner({
       eligibleRuntimeDefinitions,
       existingSessionOptions,
       resolvePendingRun,
+      selection,
       selectedRuntimeDescriptor,
       selectedRuntimeKind,
     ],
@@ -318,7 +317,7 @@ export function useSessionStartModalRunner({
       title: intent.title,
       description:
         intent.description ??
-        "Choose how to start the session, then pick the runtime profile, model, and variant.",
+        "Choose how to start the session, then pick the runtime profile, model, and effort.",
       confirmLabel: "Start session",
       selectedModelSelection: selection,
       selectedRuntimeKind,
