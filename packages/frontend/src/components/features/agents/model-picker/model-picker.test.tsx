@@ -53,6 +53,27 @@ const makeRuntimes = (): ModelPickerRuntime[] => [
   },
 ];
 
+const makeLargeRuntimes = (count = 80): ModelPickerRuntime[] => [
+  {
+    descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+    resource: {
+      status: "ready",
+      catalog: {
+        runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+        models: Array.from({ length: count }, (_, index) => ({
+          id: `openai/model-${index}`,
+          providerId: "openai",
+          providerName: "OpenAI",
+          modelId: `model-${index}`,
+          modelName: `Model ${index}`,
+          variants: [],
+        })),
+        defaultModelsByProvider: {},
+      },
+    },
+  },
+];
+
 const value: AgentModelFavorite = {
   runtimeKind: "opencode",
   providerId: "openai",
@@ -522,6 +543,115 @@ describe("ModelPicker", () => {
       modelId: "gpt-5",
     });
   });
+
+  test("mounts only visible rows and navigates the full catalog", async () => {
+    const onValueChange = mock(() => {});
+    render(
+      <ModelPicker
+        runtimes={makeLargeRuntimes()}
+        value={null}
+        favoriteState={favoriteState()}
+        selectionPolicy={{ kind: "editable" }}
+        getModelDisabledReason={(item) => (item.model.modelId === "model-1" ? "Unavailable" : null)}
+        onValueChange={onValueChange}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Select model, Select a model" }));
+    });
+
+    const list = screen.getByRole("list", { name: "Models" });
+    // Happy DOM has no Element.scrollTo, so emit the scroll event it would send.
+    Object.defineProperty(list, "scrollTo", {
+      value: ({ top }: { top: number }) => {
+        list.scrollTop = top;
+        fireEvent.scroll(list);
+      },
+    });
+    expect(within(list).getAllByRole("listitem").length).toBeLessThan(20);
+    expect(screen.queryByRole("button", { name: "Select Model 79 model" })).toBeNull();
+
+    const search = screen.getByRole("textbox", { name: "Search models" });
+    fireEvent.keyDown(search, { key: "ArrowDown" });
+    let focused = screen.getByRole("button", { name: "Select Model 0 model" });
+    expect(document.activeElement).toBe(focused);
+    expect(focused.closest("li")?.getAttribute("aria-posinset")).toBe("1");
+    expect(focused.closest("li")?.getAttribute("aria-setsize")).toBe("80");
+
+    fireEvent.keyDown(focused, { key: "ArrowDown" });
+    focused = screen.getByRole("button", { name: "Select Model 2 model" });
+    expect(document.activeElement).toBe(focused);
+
+    await act(async () => {
+      fireEvent.keyDown(focused, { key: "End" });
+    });
+    focused = screen.getByRole("button", { name: "Select Model 79 model" });
+    expect(document.activeElement).toBe(focused);
+    expect(focused.closest("li")?.getAttribute("aria-posinset")).toBe("80");
+
+    await act(async () => {
+      fireEvent.keyDown(focused, { key: "ArrowDown" });
+    });
+    focused = screen.getByRole("button", { name: "Select Model 0 model" });
+    expect(document.activeElement).toBe(focused);
+
+    await act(async () => {
+      fireEvent.keyDown(focused, { key: "ArrowUp" });
+    });
+    focused = screen.getByRole("button", { name: "Select Model 79 model" });
+    expect(document.activeElement).toBe(focused);
+
+    await act(async () => {
+      fireEvent.keyDown(focused, { key: "Home" });
+    });
+    focused = screen.getByRole("button", { name: "Select Model 0 model" });
+    expect(document.activeElement).toBe(focused);
+
+    search.focus();
+    fireEvent.change(search, { target: { value: "model-79" } });
+    expect(
+      within(screen.getByRole("list", { name: "Models" })).getAllByRole("listitem"),
+    ).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Select Model 79 model" }));
+    expect(onValueChange).toHaveBeenCalledWith({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "model-79",
+    });
+  });
+
+  test.each(["Select Model 0 model", "Add Model 0 to favorites"])(
+    "returns focus to search when pointer scrolling unmounts %s",
+    async (focusedAction) => {
+      render(
+        <ModelPicker
+          runtimes={makeLargeRuntimes()}
+          value={null}
+          favoriteState={favoriteState()}
+          selectionPolicy={{ kind: "editable" }}
+          onValueChange={() => {}}
+        />,
+      );
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Select model, Select a model" }));
+      });
+      const search = screen.getByRole("textbox", { name: "Search models" });
+      const focusedButton = screen.getByRole("button", { name: focusedAction });
+      focusedButton.focus();
+      expect(document.activeElement).toBe(focusedButton);
+
+      await act(async () => {
+        const list = screen.getByRole("list", { name: "Models" });
+        list.scrollTop = 52 * 40;
+        fireEvent.scroll(list);
+      });
+
+      expect(screen.queryByRole("button", { name: "Select Model 0 model" })).toBeNull();
+      expect(document.activeElement).toBe(search);
+    },
+  );
 
   test("shows the settings read failure before an overlapping mutation failure", async () => {
     const retryRead = mock(() => {});

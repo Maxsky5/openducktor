@@ -1,5 +1,5 @@
 import { resolveModelPickerPresentation } from "./model-picker-presentation";
-import type { AgentModelFavorite, RuntimeKind } from "@openducktor/contracts";
+import type { AgentModelFavorite, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelAttachmentSupport } from "@openducktor/core";
 import {
   ChevronsUpDown,
@@ -11,13 +11,19 @@ import {
   Star,
 } from "lucide-react";
 import {
+  type CSSProperties,
+  type ComponentProps,
   type ReactElement,
+  type RefObject,
   type KeyboardEvent as ReactKeyboardEvent,
+  forwardRef,
+  useCallback,
   useId,
   useMemo,
   useRef,
   useState,
 } from "react";
+import { List, type ListImperativeAPI, type RowComponentProps } from "react-window";
 import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -233,6 +239,10 @@ const MODEL_CAPABILITY_ICONS = [
   },
 ] as const;
 
+const VIRTUALIZATION_MIN_MODEL_COUNT = 30;
+const MODEL_ROW_HEIGHT_PX = 52;
+const MODEL_LIST_MAX_HEIGHT_PX = 320;
+
 const ModelCapabilityIcons = ({
   support,
 }: {
@@ -276,109 +286,119 @@ const modelMetadataDescription = (item: ModelPickerItem): string | null => {
   return parts.length > 0 ? parts.join(". ") : null;
 };
 
-const ModelRow = ({
-  item,
-  selected,
-  favoriteState,
-  disabledReason,
-  buttonRef,
-  onNavigate,
-  onSelect,
-}: {
+type ModelRowProps = {
   item: ModelPickerItem;
   selected: boolean;
   favoriteState: ModelPickerFavoriteState;
   disabledReason: string | null;
   buttonRef: (element: HTMLButtonElement | null) => void;
+  onFocus: () => void;
+  onBlur: (relatedTarget: EventTarget | null) => void;
   onNavigate: (key: "ArrowDown" | "ArrowUp" | "Home" | "End") => void;
   onSelect: () => void;
-}): ReactElement => {
+  style?: CSSProperties;
+  ariaAttributes?: RowComponentProps["ariaAttributes"];
+};
+
+const ModelSelectionButton = ({
+  item,
+  selected,
+  disabledReason,
+  buttonRef,
+  onNavigate,
+  onSelect,
+}: Pick<
+  ModelRowProps,
+  "item" | "selected" | "disabledReason" | "buttonRef" | "onNavigate" | "onSelect"
+>): ReactElement => {
+  const contextWindowLabel = formatTokenCompact(item.model.contextWindow);
+  const metadataDescription = modelMetadataDescription(item);
+  const selectionDescription = [metadataDescription, disabledReason].filter(Boolean).join(". ");
+  return (
+    <Button
+      ref={buttonRef}
+      type="button"
+      variant="ghost"
+      disabled={disabledReason !== null}
+      aria-label={`Select ${item.model.modelName} model`}
+      aria-pressed={selected}
+      aria-description={selectionDescription || undefined}
+      className={cn(
+        "relative min-h-12 min-w-0 flex-1 justify-start rounded-r-none px-3 py-2 font-normal",
+        selected && "bg-accent text-accent-foreground",
+      )}
+      onKeyDown={(event: ReactKeyboardEvent<HTMLButtonElement>) => {
+        if (
+          event.key === "ArrowDown" ||
+          event.key === "ArrowUp" ||
+          event.key === "Home" ||
+          event.key === "End"
+        ) {
+          event.preventDefault();
+          onNavigate(event.key);
+        }
+      }}
+      onClick={onSelect}
+    >
+      {selected ? (
+        <span
+          aria-hidden="true"
+          className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-primary"
+        />
+      ) : null}
+      <AgentRuntimeIcon runtimeKind={item.runtime.kind} />
+      <span className="flex min-w-0 flex-1 flex-col items-start">
+        <span className="truncate font-medium">{item.model.modelName}</span>
+        <span
+          className={cn(
+            "truncate text-xs",
+            selected ? "text-accent-foreground" : "text-muted-foreground",
+          )}
+        >
+          {item.model.providerName} · {item.model.modelId}
+        </span>
+      </span>
+      <span
+        className={cn(
+          "ml-auto flex shrink-0 items-center gap-2 self-center text-xs",
+          selected ? "text-accent-foreground" : "text-muted-foreground",
+        )}
+      >
+        <ModelCapabilityIcons support={item.model.attachmentSupport} />
+        {contextWindowLabel ? <span className="shrink-0">{contextWindowLabel} context</span> : null}
+      </span>
+    </Button>
+  );
+};
+
+const favoriteDisabledReasonFor = (state: ModelPickerFavoriteState): string | null => {
+  if (state.canMutate) {
+    return null;
+  }
+  if (state.readError) {
+    return `Favorites unavailable: ${state.readError}`;
+  }
+  if (state.isLoading) {
+    return "Favorites are loading.";
+  }
+  if (state.isMutationPending) {
+    return "Saving favorite changes.";
+  }
+  return state.mutationError ?? "Favorites are unavailable.";
+};
+
+const ModelFavoriteButton = ({
+  item,
+  favoriteState,
+}: Pick<ModelRowProps, "item" | "favoriteState">): ReactElement => {
+  const favoriteDisabledReasonId = useId();
+  const favoriteDisabledReason = favoriteDisabledReasonFor(favoriteState);
   const favoriteLabel = item.isFavorite
     ? `Remove ${item.model.modelName} from favorites`
     : `Add ${item.model.modelName} to favorites`;
   const favoriteTooltip = item.isFavorite ? "Remove from favorites" : "Add to favorites";
-  const contextWindowLabel = formatTokenCompact(item.model.contextWindow);
-  const metadataDescription = modelMetadataDescription(item);
-  const selectionDescription = [metadataDescription, disabledReason].filter(Boolean).join(". ");
-  const favoriteDisabledReasonId = useId();
-  const favoriteDisabledReason = (() => {
-    if (favoriteState.canMutate) {
-      return null;
-    }
-    if (favoriteState.readError) {
-      return `Favorites unavailable: ${favoriteState.readError}`;
-    }
-    if (favoriteState.isLoading) {
-      return "Favorites are loading.";
-    }
-    if (favoriteState.isMutationPending) {
-      return "Saving favorite changes.";
-    }
-    return favoriteState.mutationError ?? "Favorites are unavailable.";
-  })();
   return (
-    <li
-      aria-label={`${item.model.modelName} model actions`}
-      className={cn(
-        "flex min-w-0 items-center gap-1 rounded-md",
-        selected && "bg-accent text-accent-foreground",
-      )}
-    >
-      <Button
-        ref={buttonRef}
-        type="button"
-        variant="ghost"
-        disabled={disabledReason !== null}
-        aria-label={`Select ${item.model.modelName} model`}
-        aria-pressed={selected}
-        aria-description={selectionDescription || undefined}
-        className={cn(
-          "relative min-h-12 min-w-0 flex-1 justify-start rounded-r-none px-3 py-2 font-normal",
-          selected && "bg-accent text-accent-foreground",
-        )}
-        onKeyDown={(event: ReactKeyboardEvent<HTMLButtonElement>) => {
-          if (
-            event.key === "ArrowDown" ||
-            event.key === "ArrowUp" ||
-            event.key === "Home" ||
-            event.key === "End"
-          ) {
-            event.preventDefault();
-            onNavigate(event.key);
-          }
-        }}
-        onClick={onSelect}
-      >
-        {selected ? (
-          <span
-            aria-hidden="true"
-            className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-primary"
-          />
-        ) : null}
-        <AgentRuntimeIcon runtimeKind={item.runtime.kind} />
-        <span className="flex min-w-0 flex-1 flex-col items-start">
-          <span className="truncate font-medium">{item.model.modelName}</span>
-          <span
-            className={cn(
-              "truncate text-xs",
-              selected ? "text-accent-foreground" : "text-muted-foreground",
-            )}
-          >
-            {item.model.providerName} · {item.model.modelId}
-          </span>
-        </span>
-        <span
-          className={cn(
-            "ml-auto flex shrink-0 items-center gap-2 self-center text-xs",
-            selected ? "text-accent-foreground" : "text-muted-foreground",
-          )}
-        >
-          <ModelCapabilityIcons support={item.model.attachmentSupport} />
-          {contextWindowLabel ? (
-            <span className="shrink-0">{contextWindowLabel} context</span>
-          ) : null}
-        </span>
-      </Button>
+    <>
       {favoriteDisabledReason ? (
         <span id={favoriteDisabledReasonId} className="sr-only">
           {favoriteDisabledReason}
@@ -407,9 +427,279 @@ const ModelRow = ({
         </TooltipTrigger>
         <TooltipContent side="top">{favoriteDisabledReason ?? favoriteTooltip}</TooltipContent>
       </Tooltip>
+    </>
+  );
+};
+
+const ModelRow = ({
+  item,
+  selected,
+  favoriteState,
+  disabledReason,
+  buttonRef,
+  onFocus,
+  onBlur,
+  onNavigate,
+  onSelect,
+  style,
+  ariaAttributes,
+}: ModelRowProps): ReactElement => {
+  return (
+    <li
+      {...ariaAttributes}
+      aria-label={`${item.model.modelName} model actions`}
+      onFocus={onFocus}
+      onBlur={(event) => onBlur(event.relatedTarget)}
+      className={cn(
+        "flex min-w-0 items-center gap-1 rounded-md",
+        style && "px-1 pt-1",
+        selected && "bg-accent text-accent-foreground",
+      )}
+      style={style}
+    >
+      <ModelSelectionButton
+        item={item}
+        selected={selected}
+        disabledReason={disabledReason}
+        buttonRef={buttonRef}
+        onNavigate={onNavigate}
+        onSelect={onSelect}
+      />
+      <ModelFavoriteButton item={item} favoriteState={favoriteState} />
     </li>
   );
 };
+
+type VirtualModelRowData = {
+  items: ModelPickerItem[];
+  value: ModelPickerValue | null;
+  favoriteState: ModelPickerFavoriteState;
+  getModelDisabledReason: ((item: ModelPickerItem) => string | null) | undefined;
+  registerButton: (index: number, element: HTMLButtonElement | null) => void;
+  onFocus: (index: number) => void;
+  onBlur: (index: number, relatedTarget: EventTarget | null) => void;
+  onNavigate: (index: number, key: "ArrowDown" | "ArrowUp" | "Home" | "End") => void;
+  onSelect: (index: number) => void;
+};
+
+const VirtualModelRow = ({
+  index,
+  style,
+  ariaAttributes,
+  items,
+  value,
+  favoriteState,
+  getModelDisabledReason,
+  registerButton,
+  onFocus,
+  onBlur,
+  onNavigate,
+  onSelect,
+}: RowComponentProps<VirtualModelRowData>): ReactElement => {
+  const item = items[index]!;
+  return (
+    <ModelRow
+      item={item}
+      selected={isSameModelPickerValue(value, item.value)}
+      favoriteState={favoriteState}
+      disabledReason={getModelDisabledReason?.(item) ?? null}
+      buttonRef={(element) => registerButton(index, element)}
+      onFocus={() => onFocus(index)}
+      onBlur={(relatedTarget) => onBlur(index, relatedTarget)}
+      onNavigate={(key) => onNavigate(index, key)}
+      onSelect={() => onSelect(index)}
+      style={style}
+      ariaAttributes={ariaAttributes}
+    />
+  );
+};
+
+const ModelPickerList = ({
+  items,
+  value,
+  favoriteState,
+  getModelDisabledReason,
+  registerButton,
+  onFocus,
+  onBlur,
+  onNavigate,
+  onSelect,
+  activeView,
+  searchQuery,
+  emptyMessage,
+  listRef,
+  onRowsRendered,
+}: VirtualModelRowData & {
+  activeView: ModelPickerView;
+  searchQuery: string;
+  emptyMessage: string | null;
+  listRef: RefObject<ListImperativeAPI | null>;
+  onRowsRendered: (range: { startIndex: number; stopIndex: number }) => void;
+}): ReactElement | null => {
+  const rowKey = useCallback(
+    (index: number, data: VirtualModelRowData) => modelPickerValueKey(data.items[index]!.value),
+    [],
+  );
+
+  if (items.length >= VIRTUALIZATION_MIN_MODEL_COUNT) {
+    return (
+      <List
+        key={`${activeView}:${searchQuery}`}
+        tagName="ul"
+        aria-label="Models"
+        className="min-h-0 overflow-x-hidden"
+        style={{
+          height: Math.min(items.length * MODEL_ROW_HEIGHT_PX + 4, MODEL_LIST_MAX_HEIGHT_PX),
+        }}
+        defaultHeight={MODEL_LIST_MAX_HEIGHT_PX}
+        listRef={listRef}
+        rowComponent={VirtualModelRow}
+        rowCount={items.length}
+        rowHeight={MODEL_ROW_HEIGHT_PX}
+        rowKey={rowKey}
+        rowProps={{
+          items,
+          value,
+          favoriteState,
+          getModelDisabledReason,
+          registerButton,
+          onFocus,
+          onBlur,
+          onNavigate,
+          onSelect,
+        }}
+        onRowsRendered={(_visibleRows, allRows) => onRowsRendered(allRows)}
+      />
+    );
+  }
+
+  if (items.length > 0) {
+    return (
+      <ul aria-label="Models" className="space-y-1 p-1">
+        {items.map((item, index) => (
+          <ModelRow
+            key={modelPickerValueKey(item.value)}
+            item={item}
+            selected={isSameModelPickerValue(value, item.value)}
+            favoriteState={favoriteState}
+            disabledReason={getModelDisabledReason?.(item) ?? null}
+            buttonRef={(element) => registerButton(index, element)}
+            onFocus={() => onFocus(index)}
+            onBlur={(relatedTarget) => onBlur(index, relatedTarget)}
+            onNavigate={(key) => onNavigate(index, key)}
+            onSelect={() => onSelect(index)}
+          />
+        ))}
+      </ul>
+    );
+  }
+
+  return emptyMessage ? (
+    <div className="px-4 py-8 text-center text-sm text-muted-foreground">{emptyMessage}</div>
+  ) : null;
+};
+
+const ModelPickerRail = ({
+  runtimes,
+  activeView,
+  selectionPolicy,
+  onSelectView,
+}: {
+  runtimes: readonly ModelPickerRuntime[];
+  activeView: ModelPickerView;
+  selectionPolicy: ModelPickerSelectionPolicy;
+  onSelectView: (view: ModelPickerView) => void;
+}): ReactElement => (
+  <div className="flex min-h-0 flex-col items-center gap-1 overflow-y-auto border-r border-border bg-muted/40 p-2">
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          size="icon"
+          variant={activeView === "favorites" ? "secondary" : "ghost"}
+          className={cn("size-9", activeView === "favorites" && "ring-1 ring-ring")}
+          aria-label="Favorite models"
+          aria-pressed={activeView === "favorites"}
+          onClick={() => onSelectView("favorites")}
+        >
+          <Star aria-hidden="true" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="right">Favorites</TooltipContent>
+    </Tooltip>
+    {runtimes.map((runtime) => {
+      const policyDisabledReason =
+        selectionPolicy.kind === "runtime_locked" &&
+        runtime.descriptor.kind !== selectionPolicy.runtimeKind
+          ? selectionPolicy.reason
+          : null;
+      return (
+        <RuntimeRailButton
+          key={runtime.descriptor.kind}
+          runtime={runtime}
+          active={activeView === runtime.descriptor.kind}
+          disabledReason={runtime.disabledReason ?? policyDisabledReason}
+          onSelect={() => onSelectView(runtime.descriptor.kind)}
+        />
+      );
+    })}
+  </div>
+);
+
+const ModelPickerTriggerButton = forwardRef<
+  HTMLButtonElement,
+  Omit<ComponentProps<typeof Button>, "children"> & {
+    triggerRuntime: RuntimeDescriptor | null;
+    triggerModelLabel: string;
+    triggerAriaLabel: string;
+    readOnlyReason: string | null;
+    readOnlyReasonId: string;
+    triggerClassName: string | undefined;
+  }
+>(function ModelPickerTriggerButton(
+  {
+    triggerRuntime,
+    triggerModelLabel,
+    triggerAriaLabel,
+    readOnlyReason,
+    readOnlyReasonId,
+    triggerClassName,
+    onClick,
+    className,
+    ...buttonProps
+  },
+  ref,
+) {
+  return (
+    <Button
+      {...buttonProps}
+      ref={ref}
+      type="button"
+      variant="outline"
+      aria-label={triggerAriaLabel}
+      aria-disabled={readOnlyReason !== null}
+      aria-describedby={readOnlyReason ? readOnlyReasonId : undefined}
+      onClick={(event) => {
+        if (readOnlyReason) {
+          event.preventDefault();
+        }
+        onClick?.(event);
+      }}
+      className={cn(
+        "h-9 w-full min-w-0 justify-between border-input bg-card px-3 font-normal",
+        readOnlyReason && "cursor-not-allowed opacity-50",
+        triggerClassName,
+        className,
+      )}
+    >
+      <span className="flex min-w-0 items-center gap-2">
+        {triggerRuntime ? <AgentRuntimeIcon runtimeKind={triggerRuntime.kind} /> : null}
+        <span className="truncate">{triggerModelLabel}</span>
+      </span>
+      <ChevronsUpDown className="text-muted-foreground" aria-hidden="true" />
+    </Button>
+  );
+});
 
 export function ModelPicker({
   runtimes,
@@ -431,6 +721,9 @@ export function ModelPicker({
   const readOnlyReasonId = useId();
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const modelButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const listRef = useRef<ListImperativeAPI | null>(null);
+  const pendingFocusIndex = useRef<number | null>(null);
+  const focusedModelIndex = useRef<number | null>(null);
   const lockedRuntimeKind =
     selectionPolicy.kind === "runtime_locked" ? selectionPolicy.runtimeKind : null;
   const items = useMemo(
@@ -456,25 +749,70 @@ export function ModelPicker({
     });
   const readOnlyReason = selectionPolicy.kind === "read_only" ? selectionPolicy.reason : null;
 
-  const focusModelBoundary = (fromEnd: boolean): void => {
-    const indexes = Array.from({ length: items.length }, (_, index) => index);
-    if (fromEnd) {
-      indexes.reverse();
+  const registerButton = (index: number, element: HTMLButtonElement | null): void => {
+    modelButtonRefs.current[index] = element;
+  };
+
+  const focusModel = (index: number): void => {
+    const button = modelButtonRefs.current[index];
+    if (button) {
+      button.focus();
+      return;
     }
-    const target = indexes
-      .map((index) => modelButtonRefs.current[index])
-      .find((button) => button && !button.disabled);
-    target?.focus();
+    if (!listRef.current) {
+      throw new Error("Model list is unavailable for keyboard navigation.");
+    }
+    pendingFocusIndex.current = index;
+    listRef.current.scrollToRow({ index, align: "auto" });
+  };
+
+  const focusModelBoundary = (fromEnd: boolean): void => {
+    for (
+      let index = fromEnd ? items.length - 1 : 0;
+      fromEnd ? index >= 0 : index < items.length;
+      index += fromEnd ? -1 : 1
+    ) {
+      if (!getModelDisabledReason?.(items[index]!)) {
+        focusModel(index);
+        return;
+      }
+    }
   };
 
   const focusAdjacentModel = (currentIndex: number, direction: 1 | -1): void => {
     for (let step = 1; step <= items.length; step += 1) {
       const targetIndex = (currentIndex + direction * step + items.length) % items.length;
-      const target = modelButtonRefs.current[targetIndex];
-      if (target && !target.disabled) {
-        target.focus();
+      if (!getModelDisabledReason?.(items[targetIndex]!)) {
+        focusModel(targetIndex);
         return;
       }
+    }
+  };
+
+  const onNavigate = (index: number, key: "ArrowDown" | "ArrowUp" | "Home" | "End"): void => {
+    if (key === "ArrowDown" || key === "ArrowUp") {
+      focusAdjacentModel(index, key === "ArrowDown" ? 1 : -1);
+      return;
+    }
+    focusModelBoundary(key === "End");
+  };
+
+  const onSelect = (index: number): void => {
+    const item = items[index]!;
+    if (getModelDisabledReason?.(item)) {
+      return;
+    }
+    onValueChange(item.value);
+    pendingFocusIndex.current = null;
+    focusedModelIndex.current = null;
+    setSearchQuery("");
+    setOpen(false);
+    onOpenChange?.(false);
+  };
+
+  const onModelBlur = (index: number, relatedTarget: EventTarget | null): void => {
+    if (relatedTarget && focusedModelIndex.current === index) {
+      focusedModelIndex.current = null;
     }
   };
 
@@ -491,78 +829,51 @@ export function ModelPicker({
           : null,
       );
     }
+    if (!nextOpen) {
+      pendingFocusIndex.current = null;
+      focusedModelIndex.current = null;
+    }
     setOpen(nextOpen);
     onOpenChange?.(nextOpen);
   };
 
-  let listContent: ReactElement | null = null;
-  if (items.length > 0) {
-    listContent = (
-      <ul aria-label="Models" className="space-y-1 p-1">
-        {items.map((item, index) => {
-          const disabledReason = getModelDisabledReason?.(item) ?? null;
-          return (
-            <ModelRow
-              key={modelPickerValueKey(item.value)}
-              item={item}
-              selected={isSameModelPickerValue(value, item.value)}
-              favoriteState={favoriteState}
-              disabledReason={disabledReason}
-              buttonRef={(element) => {
-                modelButtonRefs.current[index] = element;
-              }}
-              onNavigate={(key) => {
-                if (key === "ArrowDown") {
-                  focusAdjacentModel(index, 1);
-                  return;
-                }
-                if (key === "ArrowUp") {
-                  focusAdjacentModel(index, -1);
-                  return;
-                }
-                focusModelBoundary(key === "End");
-              }}
-              onSelect={() => {
-                if (disabledReason) {
-                  return;
-                }
-                onValueChange(item.value);
-                setSearchQuery("");
-                setOpen(false);
-                onOpenChange?.(false);
-              }}
-            />
-          );
-        })}
-      </ul>
-    );
-  } else if (emptyMessage) {
-    listContent = (
-      <div className="px-4 py-8 text-center text-sm text-muted-foreground">{emptyMessage}</div>
-    );
-  }
+  const onRowsRendered = (allRows: { startIndex: number; stopIndex: number }): void => {
+    const pendingIndex = pendingFocusIndex.current;
+    if (pendingIndex !== null) {
+      const target = modelButtonRefs.current[pendingIndex];
+      if (target) {
+        pendingFocusIndex.current = null;
+        target.focus();
+        return;
+      }
+    }
+    const focusedIndex = focusedModelIndex.current;
+    if (
+      focusedIndex !== null &&
+      (focusedIndex < allRows.startIndex || focusedIndex > allRows.stopIndex) &&
+      document.activeElement === document.body
+    ) {
+      focusedModelIndex.current = null;
+      searchInputRef.current?.focus();
+    }
+  };
 
   const trigger = (
-    <Button
-      type="button"
-      variant="outline"
-      aria-label={triggerAriaLabel}
-      aria-disabled={readOnlyReason !== null}
-      aria-describedby={readOnlyReason ? readOnlyReasonId : undefined}
-      onClick={readOnlyReason ? (event) => event.preventDefault() : undefined}
-      className={cn(
-        "h-9 w-full min-w-0 justify-between border-input bg-card px-3 font-normal",
-        readOnlyReason && "cursor-not-allowed opacity-50",
-        triggerClassName,
-      )}
-    >
-      <span className="flex min-w-0 items-center gap-2">
-        {triggerRuntime ? <AgentRuntimeIcon runtimeKind={triggerRuntime.kind} /> : null}
-        <span className="truncate">{triggerModelLabel}</span>
-      </span>
-      <ChevronsUpDown className="text-muted-foreground" aria-hidden="true" />
-    </Button>
+    <ModelPickerTriggerButton
+      triggerRuntime={triggerRuntime}
+      triggerModelLabel={triggerModelLabel}
+      triggerAriaLabel={triggerAriaLabel}
+      readOnlyReason={readOnlyReason}
+      readOnlyReasonId={readOnlyReasonId}
+      triggerClassName={triggerClassName}
+    />
   );
+
+  const selectView = (view: ModelPickerView): void => {
+    setActiveView(view);
+    setSearchQuery("");
+    searchInputRef.current?.focus();
+  };
 
   return (
     <TooltipProvider>
@@ -590,48 +901,12 @@ export function ModelPicker({
           }}
         >
           <div className="grid min-h-0 grid-cols-[3.5rem_minmax(0,1fr)]">
-            <div className="flex min-h-0 flex-col items-center gap-1 overflow-y-auto border-r border-border bg-muted/40 p-2">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant={activeView === "favorites" ? "secondary" : "ghost"}
-                    className={cn("size-9", activeView === "favorites" && "ring-1 ring-ring")}
-                    aria-label="Favorite models"
-                    aria-pressed={activeView === "favorites"}
-                    onClick={() => {
-                      setActiveView("favorites");
-                      setSearchQuery("");
-                      searchInputRef.current?.focus();
-                    }}
-                  >
-                    <Star aria-hidden="true" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="right">Favorites</TooltipContent>
-              </Tooltip>
-              {runtimes.map((runtime) => {
-                const policyDisabledReason =
-                  selectionPolicy.kind === "runtime_locked" &&
-                  runtime.descriptor.kind !== selectionPolicy.runtimeKind
-                    ? selectionPolicy.reason
-                    : null;
-                return (
-                  <RuntimeRailButton
-                    key={runtime.descriptor.kind}
-                    runtime={runtime}
-                    active={activeView === runtime.descriptor.kind}
-                    disabledReason={runtime.disabledReason ?? policyDisabledReason}
-                    onSelect={() => {
-                      setActiveView(runtime.descriptor.kind);
-                      setSearchQuery("");
-                      searchInputRef.current?.focus();
-                    }}
-                  />
-                );
-              })}
-            </div>
+            <ModelPickerRail
+              runtimes={runtimes}
+              activeView={activeView}
+              selectionPolicy={selectionPolicy}
+              onSelectView={selectView}
+            />
             <div className="flex min-h-0 min-w-0 flex-col">
               <div className="shrink-0 border-b border-border p-2">
                 <Input
@@ -649,11 +924,28 @@ export function ModelPicker({
                 />
               </div>
               <FavoriteNotice state={favoriteState} />
-              <div className="min-h-0 max-h-80 overflow-y-auto overflow-x-hidden">
+              <div className="flex min-h-0 max-h-80 flex-col overflow-y-auto overflow-x-hidden">
                 {visibleResources.map((runtime) => (
                   <ResourceNotice key={runtime.descriptor.kind} runtime={runtime} />
                 ))}
-                {listContent}
+                <ModelPickerList
+                  items={items}
+                  value={value}
+                  favoriteState={favoriteState}
+                  getModelDisabledReason={getModelDisabledReason}
+                  registerButton={registerButton}
+                  onFocus={(index) => {
+                    focusedModelIndex.current = index;
+                  }}
+                  onBlur={onModelBlur}
+                  onNavigate={onNavigate}
+                  onSelect={onSelect}
+                  activeView={activeView}
+                  searchQuery={searchQuery}
+                  emptyMessage={emptyMessage}
+                  listRef={listRef}
+                  onRowsRendered={onRowsRendered}
+                />
               </div>
             </div>
           </div>
