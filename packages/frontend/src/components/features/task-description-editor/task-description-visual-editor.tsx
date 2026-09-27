@@ -174,6 +174,17 @@ export default function TaskDescriptionVisualEditor({
     uploadFilesRef.current = uploadFiles;
   }, [uploadFiles]);
 
+  const uploadImages = (files: FileList, preventDefault: () => void): void => {
+    if (!canEdit) {
+      preventDefault();
+      return;
+    }
+    const images = Array.from(files).filter((file) => file.type.startsWith("image/"));
+    if (images.length === 0) return;
+    preventDefault();
+    uploadFilesRef.current(images);
+  };
+
   const toolbar = useEditorState({
     editor,
     selector: ({ editor: current }) => {
@@ -259,30 +270,10 @@ export default function TaskDescriptionVisualEditor({
         <MermaidPreviewProvider previews={mermaidPreviews}>
           <EditorContent
             editor={editor}
-            onDrop={(event) => {
-              if (!canEdit) {
-                event.preventDefault();
-                return;
-              }
-              const files = Array.from(event.dataTransfer.files).filter((file) =>
-                file.type.startsWith("image/"),
-              );
-              if (files.length === 0) return;
-              event.preventDefault();
-              uploadFilesRef.current(files);
-            }}
-            onPaste={(event) => {
-              if (!canEdit) {
-                event.preventDefault();
-                return;
-              }
-              const files = Array.from(event.clipboardData.files).filter((file) =>
-                file.type.startsWith("image/"),
-              );
-              if (files.length === 0) return;
-              event.preventDefault();
-              uploadFilesRef.current(files);
-            }}
+            onDrop={(event) => uploadImages(event.dataTransfer.files, () => event.preventDefault())}
+            onPaste={(event) =>
+              uploadImages(event.clipboardData.files, () => event.preventDefault())
+            }
           />
         </MermaidPreviewProvider>
       </TaskDescriptionImageContext.Provider>
