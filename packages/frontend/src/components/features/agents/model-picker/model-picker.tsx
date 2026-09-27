@@ -1,5 +1,5 @@
 import { resolveModelPickerPresentation } from "./model-picker-presentation";
-import type { AgentModelFavorite, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
+import type { AgentModelFavorite, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelAttachmentSupport } from "@openducktor/core";
 import {
   ChevronsUpDown,
@@ -12,12 +12,11 @@ import {
 } from "lucide-react";
 import {
   type CSSProperties,
-  type ComponentProps,
   type ReactElement,
   type RefObject,
   type KeyboardEvent as ReactKeyboardEvent,
-  forwardRef,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -647,61 +646,6 @@ const ModelPickerRail = ({
   </div>
 );
 
-const ModelPickerTriggerButton = forwardRef<
-  HTMLButtonElement,
-  Omit<ComponentProps<typeof Button>, "children"> & {
-    triggerRuntime: RuntimeDescriptor | null;
-    triggerModelLabel: string;
-    triggerAriaLabel: string;
-    readOnlyReason: string | null;
-    readOnlyReasonId: string;
-    triggerClassName: string | undefined;
-  }
->(function ModelPickerTriggerButton(
-  {
-    triggerRuntime,
-    triggerModelLabel,
-    triggerAriaLabel,
-    readOnlyReason,
-    readOnlyReasonId,
-    triggerClassName,
-    onClick,
-    className,
-    ...buttonProps
-  },
-  ref,
-) {
-  return (
-    <Button
-      {...buttonProps}
-      ref={ref}
-      type="button"
-      variant="outline"
-      aria-label={triggerAriaLabel}
-      aria-disabled={readOnlyReason !== null}
-      aria-describedby={readOnlyReason ? readOnlyReasonId : undefined}
-      onClick={(event) => {
-        if (readOnlyReason) {
-          event.preventDefault();
-        }
-        onClick?.(event);
-      }}
-      className={cn(
-        "h-9 w-full min-w-0 justify-between border-input bg-card px-3 font-normal",
-        readOnlyReason && "cursor-not-allowed opacity-50",
-        triggerClassName,
-        className,
-      )}
-    >
-      <span className="flex min-w-0 items-center gap-2">
-        {triggerRuntime ? <AgentRuntimeIcon runtimeKind={triggerRuntime.kind} /> : null}
-        <span className="truncate">{triggerModelLabel}</span>
-      </span>
-      <ChevronsUpDown className="text-muted-foreground" aria-hidden="true" />
-    </Button>
-  );
-});
-
 export function ModelPicker({
   runtimes,
   value,
@@ -738,6 +682,20 @@ export function ModelPicker({
       }),
     [activeView, favoriteState.favorites, lockedRuntimeKind, runtimes, searchQuery],
   );
+  useLayoutEffect(() => {
+    const focusedKey = focusedModelKey.current;
+    if (!open || focusedKey === null || document.activeElement !== document.body) {
+      return;
+    }
+    const focusedIndex = items.findIndex((item) => modelPickerValueKey(item.value) === focusedKey);
+    const button = focusedIndex >= 0 ? modelButtonRefs.current[focusedIndex] : null;
+    if (button?.isConnected && !button.disabled) {
+      button.focus();
+      return;
+    }
+    focusedModelKey.current = null;
+    searchInputRef.current?.focus();
+  }, [items, open]);
   const { triggerRuntime, triggerModelLabel, triggerAriaLabel, visibleResources, emptyMessage } =
     resolveModelPickerPresentation({
       runtimes,
@@ -857,14 +815,25 @@ export function ModelPicker({
   };
 
   const trigger = (
-    <ModelPickerTriggerButton
-      triggerRuntime={triggerRuntime}
-      triggerModelLabel={triggerModelLabel}
-      triggerAriaLabel={triggerAriaLabel}
-      readOnlyReason={readOnlyReason}
-      readOnlyReasonId={readOnlyReasonId}
-      triggerClassName={triggerClassName}
-    />
+    <Button
+      type="button"
+      variant="outline"
+      aria-label={triggerAriaLabel}
+      aria-disabled={readOnlyReason !== null}
+      aria-describedby={readOnlyReason ? readOnlyReasonId : undefined}
+      onClick={readOnlyReason ? (event) => event.preventDefault() : undefined}
+      className={cn(
+        "h-9 w-full min-w-0 justify-between border-input bg-card px-3 font-normal",
+        readOnlyReason && "cursor-not-allowed opacity-50",
+        triggerClassName,
+      )}
+    >
+      <span className="flex min-w-0 items-center gap-2">
+        {triggerRuntime ? <AgentRuntimeIcon runtimeKind={triggerRuntime.kind} /> : null}
+        <span className="truncate">{triggerModelLabel}</span>
+      </span>
+      <ChevronsUpDown className="text-muted-foreground" aria-hidden="true" />
+    </Button>
   );
 
   const selectView = (view: ModelPickerView): void => {

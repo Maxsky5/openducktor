@@ -303,7 +303,7 @@ describe("ModelPicker", () => {
     expect(screen.queryByText("GPT 5 Codex")).toBeNull();
   });
 
-  test.each(["Enter", " "])(
+  test.each(["Enter", " ", "click"])(
     "keeps a read-only trigger focusable and closed for %s",
     async (key) => {
       const onValueChange = mock(() => {});
@@ -333,8 +333,12 @@ describe("ModelPicker", () => {
       expect(trigger.getAttribute("aria-disabled")).toBe("true");
 
       await act(async () => {
-        fireEvent.keyDown(trigger, { key });
-        fireEvent.keyUp(trigger, { key });
+        if (key === "click") {
+          fireEvent.click(trigger);
+        } else {
+          fireEvent.keyDown(trigger, { key });
+          fireEvent.keyUp(trigger, { key });
+        }
       });
 
       expect(screen.queryByPlaceholderText("Search models...")).toBeNull();
@@ -653,6 +657,66 @@ describe("ModelPicker", () => {
       expect(document.activeElement).toBe(search);
     },
   );
+
+  test.each([
+    { before: 29, after: 30 },
+    { before: 30, after: 29 },
+  ])(
+    "keeps model focus when the catalog changes from $before to $after rows",
+    async ({ before, after }) => {
+      const favorites = favoriteState();
+      const renderPicker = (count: number) => (
+        <ModelPicker
+          runtimes={makeLargeRuntimes(count)}
+          value={null}
+          favoriteState={favorites}
+          selectionPolicy={{ kind: "editable" }}
+          onValueChange={() => {}}
+        />
+      );
+      const { rerender } = render(renderPicker(before));
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Select model, Select a model" }));
+      });
+      screen.getByRole("button", { name: "Select Model 0 model" }).focus();
+
+      await act(async () => {
+        rerender(renderPicker(after));
+      });
+
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: "Select Model 0 model" }),
+      );
+    },
+  );
+
+  test("returns focus to search when a catalog update removes the focused model", async () => {
+    const favorites = favoriteState();
+    const renderPicker = (count: number) => (
+      <ModelPicker
+        runtimes={makeLargeRuntimes(count)}
+        value={null}
+        favoriteState={favorites}
+        selectionPolicy={{ kind: "editable" }}
+        onValueChange={() => {}}
+      />
+    );
+    const { rerender } = render(renderPicker(29));
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Select model, Select a model" }));
+    });
+    const search = screen.getByRole("textbox", { name: "Search models" });
+    screen.getByRole("button", { name: "Select Model 28 model" }).focus();
+
+    await act(async () => {
+      rerender(renderPicker(28));
+    });
+
+    expect(screen.queryByRole("button", { name: "Select Model 28 model" })).toBeNull();
+    expect(document.activeElement).toBe(search);
+  });
 
   test("returns focus to search when favoriting moves the focused row out of the window", async () => {
     const runtimes = makeLargeRuntimes();
