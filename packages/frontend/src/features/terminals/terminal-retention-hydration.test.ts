@@ -112,7 +112,10 @@ const createLightweightBinding = () => {
   };
   const binding = {
     terminal,
-    fitAddon: { fit: mock(() => undefined) },
+    fitAddon: {
+      fit: mock(() => undefined),
+      proposeDimensions: mock(() => ({ cols: 120, rows: 40 })),
+    },
     resetLinkState: mock(() => undefined),
     dispose: mock(() => undefined),
   };
@@ -125,6 +128,106 @@ const createLightweightBinding = () => {
 };
 
 describe("retained terminal rendering", () => {
+  test("skips unusable grids and fits the smallest usable grid", async () => {
+    const lightweight = createLightweightBinding();
+    const createBinding = spyOn(sharedTerminalBinding, "createTerminalBinding").mockImplementation(
+      // SAFETY: the fake terminal implements every binding method used by this mount test.
+      () => Object.assign(Object.create(null), lightweight.binding) as TerminalBinding,
+    );
+    const { controller } = createController();
+    const sizes: string[] = [];
+    let active = false;
+    controller.resize = async (_terminalId, columns, rows) => {
+      sizes.push(`${columns}x${rows}`);
+    };
+    let width = 800;
+    let height = 400;
+    const container = document.createElement("div");
+    Object.defineProperties(container, {
+      clientWidth: { get: () => width },
+      clientHeight: { get: () => height },
+    });
+    container.style.padding = "4px 8px";
+    document.body.append(container);
+    lightweight.binding.fitAddon.fit.mockImplementation(() => {
+      lightweight.binding.terminal.resize(
+        width <= 17 ? 2 : width <= 18 ? 3 : 120,
+        height <= 9 ? 1 : height <= 10 ? 2 : 40,
+      );
+    });
+    lightweight.binding.fitAddon.proposeDimensions.mockImplementation(() => ({
+      cols: width <= 17 ? 2 : width <= 18 ? 3 : 120,
+      rows: height <= 9 ? 1 : height <= 10 ? 2 : 40,
+    }));
+    const nativeResizeObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class {
+      observe(): void {}
+      unobserve(): void {}
+      disconnect(): void {}
+    };
+    let mount: InteractiveTerminalMount | null = null;
+    try {
+      try {
+        mount = mountInteractiveTerminal({
+          container,
+          terminalId: "terminal-hidden-task",
+          controller,
+          isActive: () => active,
+          getPlatform: () => "darwin",
+          stageFile: async () => "/tmp/image.png",
+          preparePathInput: async () => "/tmp/image.png",
+          writeClipboard: async () => undefined,
+          onAttention: () => undefined,
+          onLifecycle: () => undefined,
+          onForgotten: () => undefined,
+          onTitleChange: () => undefined,
+          onHydrated: () => undefined,
+          onImageDragActiveChange: () => undefined,
+          onInteractionFailure: (_title, cause) => {
+            throw cause;
+          },
+        });
+      } finally {
+        globalThis.ResizeObserver = nativeResizeObserver;
+      }
+      active = true;
+      for (const [collapsedWidth, collapsedHeight] of [
+        [800, 8],
+        [8, 400],
+        [800, 9],
+        [17, 400],
+      ] as const) {
+        width = collapsedWidth;
+        height = collapsedHeight;
+        mount.activate(false);
+        await Bun.sleep(0);
+        expect(lightweight.binding.terminal.cols).toBe(80);
+        expect(lightweight.binding.terminal.rows).toBe(24);
+        expect(sizes).toEqual([]);
+      }
+
+      width = 18;
+      height = 10;
+      mount.activate(false);
+      await Bun.sleep(0);
+      expect(lightweight.binding.terminal.cols).toBe(3);
+      expect(lightweight.binding.terminal.rows).toBe(2);
+      expect(sizes).toEqual(["3x2"]);
+
+      width = 800;
+      height = 400;
+      mount.activate(false);
+      await Bun.sleep(0);
+      expect(lightweight.binding.terminal.cols).toBe(120);
+      expect(lightweight.binding.terminal.rows).toBe(40);
+      expect(sizes).toEqual(["3x2", "120x40"]);
+    } finally {
+      mount?.dispose();
+      container.remove();
+      createBinding.mockRestore();
+    }
+  });
+
   test("holds input during restore and refits the live viewport after parsing", async () => {
     const lightweight = createLightweightBinding();
     const fit = lightweight.binding.fitAddon.fit;

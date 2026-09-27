@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES } from "@openducktor/contracts";
 import { Terminal } from "@xterm/headless";
 import type { IBufferCell } from "@xterm/headless";
 import { TerminalScreenState } from "./terminal-screen-state";
@@ -11,7 +12,9 @@ const writeScreen = (screen: TerminalScreenState, data: Uint8Array): Promise<voi
 const visibleLines = (terminal: Terminal): string[] =>
   Array.from(
     { length: terminal.rows },
-    (_, row) => terminal.buffer.active.getLine(row)?.translateToString() ?? "",
+    (_, row) =>
+      terminal.buffer.active.getLine(terminal.buffer.active.viewportY + row)?.translateToString() ??
+      "",
   );
 const linkAt = (terminal: Terminal, column: number) => {
   // SAFETY: xterm 6.0.0 stores OSC 8 IDs on cells and resolves them through this core service.
@@ -1259,6 +1262,128 @@ describe("TerminalScreenState", () => {
     restored.dispose();
   });
 
+  test("keeps idle logs through a one-row resize and a screen restore", async () => {
+    const screen = new TerminalScreenState({ columns: 12, rows: 4 });
+    const restored = new Terminal({ cols: 2, rows: 1, scrollback: 2000, allowProposedApi: true });
+    await writeScreen(screen, encoder.encode("start log\r\nready\r\n"));
+
+    screen.resize({ columns: 2, rows: 1 });
+    await screen.drained();
+    await write(restored, screen.snapshot().payload);
+    restored.resize(12, 4);
+    expect(visibleLines(restored).join("\n")).toContain("start log");
+    expect(visibleLines(restored).join("\n")).toContain("ready");
+
+    screen.resize({ columns: 12, rows: 4 });
+    await screen.drained();
+    const reloaded = new Terminal({ cols: 12, rows: 4, allowProposedApi: true });
+    await write(reloaded, screen.snapshot().payload);
+    expect(visibleLines(reloaded).join("\n")).toContain("start log");
+    expect(visibleLines(reloaded).join("\n")).toContain("ready");
+    screen.dispose();
+    restored.dispose();
+    reloaded.dispose();
+  });
+
+  // This test parses and restores an 8 MiB screen, which takes longer on CI workers.
+  test("trims old scrollback when a screen restore exceeds the frame limit", async () => {
+    const screen = new TerminalScreenState({ columns: 500, rows: 10 });
+    const restored = new Terminal({
+      cols: 500,
+      rows: 10,
+      scrollback: 2000,
+      allowProposedApi: true,
+    });
+    try {
+      const styledCells = Array.from(
+        { length: 490 },
+        (_, column) => `\u001b[38;2;${column % 2 ? 255 : 0};0;0mX`,
+      ).join("");
+      const output = Array.from(
+        { length: 1300 },
+        (_, row) => `ROW${String(row).padStart(4, "0")}:` + styledCells + "\r\n",
+      ).join("");
+      await writeScreen(screen, encoder.encode(output));
+
+      const snapshot = screen.snapshot();
+      expect(snapshot.payload.byteLength).toBeLessThanOrEqual(
+        TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES - 1024,
+      );
+      await write(restored, snapshot.payload);
+      const retainedLines = Array.from(
+        { length: restored.buffer.normal.length },
+        (_, row) => restored.buffer.normal.getLine(row)?.translateToString() ?? "",
+      );
+      expect(retainedLines.some((line) => line.startsWith("ROW0000:"))).toBe(false);
+      expect(retainedLines.some((line) => line.startsWith("ROW1200:"))).toBe(true);
+      expect(visibleLines(restored).some((line) => line.startsWith("ROW1299:"))).toBe(true);
+    } finally {
+      screen.dispose();
+      restored.dispose();
+    }
+  }, 30_000);
+
+  // This test parses an 8 MiB screen with an old row that does not fit in the restore.
+  test("keeps small log rows when an older large row exceeds the frame limit", async () => {
+    const screen = new TerminalScreenState({ columns: 500, rows: 300 });
+    try {
+      const richRow = (cells: number) =>
+        "\u001b[4:3m" +
+        Array.from(
+          { length: cells },
+          (_, column) =>
+            `\u001b[38;2;${column % 2 ? 255 : 0};0;0;48;2;0;${column % 2 ? 0 : 255};0mX`,
+        ).join("") +
+        "\r\n";
+      const logRows = Array.from(
+        { length: 1000 },
+        (_, row) => `ROW${String(row).padStart(4, "0")}\r\n`,
+      ).join("");
+      await writeScreen(
+        screen,
+        encoder.encode(
+          richRow(494) +
+            "\u001b[0m" +
+            logRows +
+            "\r\n".repeat(63) +
+            richRow(492).repeat(100) +
+            richRow(494).repeat(137),
+        ),
+      );
+
+      const snapshot = screen.snapshot();
+      const retainedRows = Array.from(
+        new TextDecoder().decode(snapshot.payload).matchAll(/ROW\d{4}/g),
+        (match) => match[0],
+      );
+      expect(snapshot.payload.byteLength).toBeLessThanOrEqual(
+        TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES - 1024,
+      );
+      expect(retainedRows).toHaveLength(1000);
+      expect(retainedRows[0]).toBe("ROW0000");
+      expect(retainedRows.at(-1)).toBe("ROW0999");
+    } finally {
+      screen.dispose();
+    }
+  }, 30_000);
+
+  test("rejects a screen restore when the visible rows exceed the frame limit", async () => {
+    const screen = new TerminalScreenState({ columns: 500, rows: 300 });
+    try {
+      const styledCells = Array.from(
+        { length: 499 },
+        (_, column) => `\u001b[38;2;${column % 2 ? 255 : 0};0;0;48;2;0;${column % 2 ? 0 : 255};0mX`,
+      ).join("");
+      await writeScreen(screen, encoder.encode(("\u001b[4:3m" + styledCells + "\r\n").repeat(300)));
+
+      expect(() => screen.snapshot()).toThrow(
+        "Terminal screen is too large to restore. Resize the terminal and reconnect.",
+      );
+    } finally {
+      screen.dispose();
+    }
+  });
+
   test("continues a line that ends at the right edge", async () => {
     const screen = new TerminalScreenState({ columns: 4, rows: 2 });
     const original = new Terminal({ cols: 4, rows: 2, allowProposedApi: true });
@@ -1267,6 +1392,27 @@ describe("TerminalScreenState", () => {
     await Promise.all([writeScreen(screen, first), write(original, first)]);
     await write(restored, screen.snapshot().payload);
     const next = encoder.encode("E");
+    await Promise.all([writeScreen(screen, next), write(original, next), write(restored, next)]);
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+    screen.dispose();
+    original.dispose();
+    restored.dispose();
+  });
+
+  test("restores a pending wrap from the current viewport after scrollback", async () => {
+    const grid = { columns: 4, rows: 2 };
+    const screen = new TerminalScreenState(grid);
+    const original = new Terminal({ cols: 4, rows: 2, scrollback: 2000, allowProposedApi: true });
+    const restored = new Terminal({ cols: 4, rows: 2, scrollback: 2000, allowProposedApi: true });
+    // Custom tabs require cursor repair after the screen is serialized.
+    const first = encoder.encode("\u001b[3gOLD1\r\nOLD2\r\nNOW1\r\nLAST");
+    await Promise.all([writeScreen(screen, first), write(original, first)]);
+    expect(original.buffer.active.viewportY).toBeGreaterThan(0);
+
+    await write(restored, screen.snapshot().payload);
+    expect(visibleLines(restored)).toEqual(visibleLines(original));
+
+    const next = encoder.encode("!");
     await Promise.all([writeScreen(screen, next), write(original, next), write(restored, next)]);
     expect(visibleLines(restored)).toEqual(visibleLines(original));
     screen.dispose();

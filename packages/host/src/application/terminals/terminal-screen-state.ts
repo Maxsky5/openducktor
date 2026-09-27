@@ -15,6 +15,7 @@ type XtermColorRequest =
   | { type: 2; index?: number };
 
 const COLOR_RESET = "\u001b]104\u001b\\\u001b]110\u001b\\\u001b]111\u001b\\\u001b]112\u001b\\";
+const SCREEN_SCROLLBACK_ROWS = 2000;
 
 export type TerminalScreenSnapshot = {
   columns: number;
@@ -40,7 +41,7 @@ export class TerminalScreenState {
     this.terminal = new Terminal({
       cols: grid.columns,
       rows: grid.rows,
-      scrollback: 0,
+      scrollback: SCREEN_SCROLLBACK_ROWS,
       allowProposedApi: true,
     });
     this.terminal.loadAddon(this.serializer);
@@ -86,36 +87,116 @@ export class TerminalScreenState {
   snapshot(): TerminalScreenSnapshot {
     if (this.writing || this.nextOperation < this.operations.length)
       throw new TerminalScreenBusyError();
-    const screen = this.serializer.serialize({ scrollback: 0 }) || "\u001b[0m";
     const normalPrelude = this.tail.normalPrelude(this.terminal);
     const normalOverlay = attributeOverlay(this.terminal, this.terminal.buffer.normal);
     const alternateOverlay =
       this.terminal.buffer.active.type === "alternate"
         ? attributeOverlay(this.terminal, this.terminal.buffer.alternate)
         : "";
-    const alternateStart = "\u001b[?1049h";
-    const alternateIndex = normalPrelude ? screen.indexOf(alternateStart) : -1;
-    if (normalPrelude && alternateIndex < 0)
-      throw new Error(
-        "Terminal alternate screen state is unavailable. Resize the terminal and reconnect.",
-      );
-    const screenContent =
-      alternateIndex < 0
-        ? screen + normalOverlay
-        : screen.slice(0, alternateIndex) +
-          normalOverlay +
-          normalPrelude +
-          screen.slice(alternateIndex) +
-          alternateOverlay;
-    const serialized = new TextEncoder().encode(this.colorPrelude() + screenContent);
     const { payload: suffix, precedingJoinState } = this.tail.suffix(
       this.terminal,
       !!normalOverlay || !!alternateOverlay,
     );
-    const payload = new Uint8Array(serialized.byteLength + suffix.byteLength);
-    payload.set(serialized);
-    payload.set(suffix, serialized.byteLength);
-    if (payload.byteLength > TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES - 1024) {
+    const colorPrelude = this.colorPrelude();
+    const serialize = (scrollback: number): Uint8Array => {
+      const screen = this.serializer.serialize({ scrollback }) || "\u001b[0m";
+      const alternateStart = "\u001b[?1049h";
+      const alternateIndex = normalPrelude ? screen.indexOf(alternateStart) : -1;
+      if (normalPrelude && alternateIndex < 0)
+        throw new Error(
+          "Terminal alternate screen state is unavailable. Resize the terminal and reconnect.",
+        );
+      const screenContent =
+        alternateIndex < 0
+          ? screen + normalOverlay
+          : screen.slice(0, alternateIndex) +
+            normalOverlay +
+            normalPrelude +
+            screen.slice(alternateIndex) +
+            alternateOverlay;
+      const serialized = new TextEncoder().encode(colorPrelude + screenContent);
+      const payload = new Uint8Array(serialized.byteLength + suffix.byteLength);
+      payload.set(serialized);
+      payload.set(suffix, serialized.byteLength);
+      return payload;
+    };
+    const maxPayloadBytes = TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES - 1024;
+    let payload = serialize(SCREEN_SCROLLBACK_ROWS);
+    if (payload.byteLength > maxPayloadBytes) {
+      const availableRows = Math.min(
+        SCREEN_SCROLLBACK_ROWS,
+        Math.max(0, this.terminal.buffer.normal.length - this.terminal.rows),
+      );
+      let oversizedRows = availableRows;
+      let oversizedBytes = payload.byteLength;
+      if (oversizedRows > 0) {
+        // One old row can be the only excess, so check the next smaller suffix first.
+        const boundaryPayload = serialize(oversizedRows - 1);
+        if (boundaryPayload.byteLength <= maxPayloadBytes) {
+          return {
+            columns: this.terminal.cols,
+            rows: this.terminal.rows,
+            payload: boundaryPayload,
+            precedingJoinState,
+          };
+        }
+        oversizedRows -= 1;
+        oversizedBytes = boundaryPayload.byteLength;
+      }
+      const visiblePayload = serialize(0);
+      if (visiblePayload.byteLength <= maxPayloadBytes) {
+        let fittingRows = 0;
+        let fittingPayload = visiblePayload;
+        let requestedRows = Math.max(
+          1,
+          Math.floor(
+            (oversizedRows * (maxPayloadBytes - visiblePayload.byteLength)) /
+              (oversizedBytes - visiblePayload.byteLength),
+          ),
+        );
+        while (requestedRows > 0 && requestedRows < oversizedRows) {
+          const candidate = serialize(requestedRows);
+          if (candidate.byteLength <= maxPayloadBytes) {
+            fittingRows = requestedRows;
+            fittingPayload = candidate;
+            break;
+          }
+          oversizedRows = requestedRows;
+          oversizedBytes = candidate.byteLength;
+          // Shrink each failed probe so large rows cannot cause repeated full-buffer scans.
+          requestedRows = Math.floor(requestedRows / 2);
+        }
+        if (fittingRows > 0 && oversizedRows - fittingRows > 1) {
+          const additionalRows = Math.floor(
+            ((oversizedRows - fittingRows) * (maxPayloadBytes - fittingPayload.byteLength)) /
+              (oversizedBytes - fittingPayload.byteLength),
+          );
+          const nextRows = Math.min(
+            oversizedRows - 1,
+            Math.max(fittingRows + 1, fittingRows + additionalRows),
+          );
+          const candidate = serialize(nextRows);
+          if (candidate.byteLength <= maxPayloadBytes) {
+            fittingRows = nextRows;
+            fittingPayload = candidate;
+          } else {
+            oversizedRows = nextRows;
+          }
+          while (oversizedRows - fittingRows > 1) {
+            const middleRows = Math.floor((fittingRows + oversizedRows) / 2);
+            const middle = serialize(middleRows);
+            if (middle.byteLength <= maxPayloadBytes) {
+              fittingRows = middleRows;
+              fittingPayload = middle;
+            } else {
+              oversizedRows = middleRows;
+            }
+          }
+        }
+        payload = fittingPayload;
+      }
+    }
+    if (payload.byteLength > maxPayloadBytes) {
       throw new Error(
         "Terminal screen is too large to restore. Resize the terminal and reconnect.",
       );

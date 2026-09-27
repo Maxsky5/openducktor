@@ -83,7 +83,17 @@ export const mountInteractiveTerminal = ({
     terminal.reset();
   };
   const fitViewport = (): void => {
-    if (!restoringScreen) fitAddon.fit();
+    if (restoringScreen) return;
+    const style = getComputedStyle(container);
+    const contentWidth =
+      container.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    const contentHeight =
+      container.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+    // FitAddon clamps a collapsed panel to 2x1, which can erase screen output.
+    if (contentWidth <= 0 || contentHeight <= 0) return;
+    const proposed = fitAddon.proposeDimensions();
+    if (!proposed || proposed.cols <= 2 || proposed.rows <= 1) return;
+    fitAddon.fit();
   };
   const activateViewport = createTerminalViewportActivator({
     fit: fitViewport,
