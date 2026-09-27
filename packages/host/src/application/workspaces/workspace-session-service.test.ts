@@ -1234,24 +1234,32 @@ describe("host-owned Workspace Session lifecycle", () => {
     const { session } = await Effect.runPromise(h.service.create(input()));
     const ref = { workspaceId: "fairnest", sessionId: session.id };
     const started = await Effect.runPromise(h.service.start(ref));
+    h.dependencies.terminalService.acquireWorkspaceSessionCleanup = (scope) => {
+      h.calls.push(`stop-terminals:${scope.sessionId}`);
+      return Effect.succeed({ closedTerminalIds: [] });
+    };
     h.state.observation = "running";
     await expect(
       Effect.runPromise(h.service.archive({ ...ref, confirmStop: false, removeWorktree: false })),
     ).rejects.toThrow("Confirm Stop");
+    expect(h.calls).not.toContain(`stop-terminals:${session.id}`);
     h.state.failStop = true;
     await expect(
       Effect.runPromise(h.service.archive({ ...ref, confirmStop: true, removeWorktree: false })),
     ).rejects.toThrow("stop failed");
+    expect(h.calls).not.toContain(`stop-terminals:${session.id}`);
     h.state.observation = "error";
     await expect(
       Effect.runPromise(h.service.archive({ ...ref, confirmStop: true, removeWorktree: false })),
     ).rejects.toThrow("observation failed");
+    expect(h.calls).not.toContain(`stop-terminals:${session.id}`);
     expect((await Effect.runPromise(h.service.get(ref))).archivedAt).toBeNull();
     h.state.observation = "running";
     h.state.failStop = false;
     const archived = await Effect.runPromise(
       h.service.archive({ ...ref, confirmStop: true, removeWorktree: false }),
     );
+    expect(h.calls).toContain(`stop-terminals:${session.id}`);
     expect(archived.archivedAt).not.toBeNull();
     expect(archived.updatedAt).toBe(session.updatedAt);
     await expect(

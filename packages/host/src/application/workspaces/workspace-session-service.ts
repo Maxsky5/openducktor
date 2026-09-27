@@ -402,21 +402,6 @@ export const createWorkspaceSessionService = (
               )
                 yield* validateWorkspaceSessionTarget(dependencies, ref.repoPath, target);
             }
-            yield* dependencies.terminalService
-              .acquireWorkspaceSessionCleanup({
-                workspaceId: input.workspaceId,
-                sessionId: input.sessionId,
-              })
-              .pipe(
-                Effect.mapError(
-                  (cause) =>
-                    new HostOperationError({
-                      operation: "workspaceSession.archive.terminals",
-                      message: `Could not stop this chat's terminals: ${cause.message}`,
-                      cause,
-                    }),
-                ),
-              );
             if (session.externalSessionId !== null) {
               const runtimeRef = {
                 repoPath: ref.repoPath,
@@ -434,6 +419,21 @@ export const createWorkspaceSessionService = (
                 yield* live.stopSession(runtimeRef);
               }
             }
+            yield* dependencies.terminalService
+              .acquireWorkspaceSessionCleanup({
+                workspaceId: input.workspaceId,
+                sessionId: input.sessionId,
+              })
+              .pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new HostOperationError({
+                      operation: "workspaceSession.archive.terminals",
+                      message: `Could not stop this chat's terminals: ${cause.message}`,
+                      cause,
+                    }),
+                ),
+              );
             return yield* Effect.uninterruptible(
               Effect.gen(function* () {
                 if (
