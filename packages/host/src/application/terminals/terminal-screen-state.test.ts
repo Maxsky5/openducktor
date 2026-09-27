@@ -1323,6 +1323,50 @@ describe("TerminalScreenState", () => {
     }
   }, 30_000);
 
+  // This test parses an 8 MiB screen with an old row that does not fit in the restore.
+  test("keeps small log rows when an older large row exceeds the frame limit", async () => {
+    const screen = new TerminalScreenState({ columns: 500, rows: 300 });
+    try {
+      const richRow = (cells: number) =>
+        "\u001b[4:3m" +
+        Array.from(
+          { length: cells },
+          (_, column) =>
+            `\u001b[38;2;${column % 2 ? 255 : 0};0;0;48;2;0;${column % 2 ? 0 : 255};0mX`,
+        ).join("") +
+        "\r\n";
+      const logRows = Array.from(
+        { length: 1000 },
+        (_, row) => `ROW${String(row).padStart(4, "0")}\r\n`,
+      ).join("");
+      await writeScreen(
+        screen,
+        encoder.encode(
+          richRow(494) +
+            "\u001b[0m" +
+            logRows +
+            "\r\n".repeat(63) +
+            richRow(492).repeat(100) +
+            richRow(494).repeat(137),
+        ),
+      );
+
+      const snapshot = screen.snapshot();
+      const retainedRows = Array.from(
+        new TextDecoder().decode(snapshot.payload).matchAll(/ROW\d{4}/g),
+        (match) => match[0],
+      );
+      expect(snapshot.payload.byteLength).toBeLessThanOrEqual(
+        TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES - 1024,
+      );
+      expect(retainedRows).toHaveLength(1000);
+      expect(retainedRows[0]).toBe("ROW0000");
+      expect(retainedRows.at(-1)).toBe("ROW0999");
+    } finally {
+      screen.dispose();
+    }
+  }, 30_000);
+
   test("rejects a screen restore when the visible rows exceed the frame limit", async () => {
     const screen = new TerminalScreenState({ columns: 500, rows: 300 });
     try {

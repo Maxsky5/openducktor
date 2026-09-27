@@ -152,11 +152,7 @@ export class TerminalScreenState {
           // Shrink each failed probe so large rows cannot cause repeated full-buffer scans.
           requestedRows = Math.floor(requestedRows / 2);
         }
-        if (
-          fittingRows > 0 &&
-          oversizedRows - fittingRows > 1 &&
-          maxPayloadBytes - fittingPayload.byteLength > maxPayloadBytes / 100
-        ) {
+        if (fittingRows > 0 && oversizedRows - fittingRows > 1) {
           const additionalRows = Math.floor(
             ((oversizedRows - fittingRows) * (maxPayloadBytes - fittingPayload.byteLength)) /
               (oversizedBytes - fittingPayload.byteLength),
@@ -166,7 +162,22 @@ export class TerminalScreenState {
             Math.max(fittingRows + 1, fittingRows + additionalRows),
           );
           const candidate = serialize(nextRows);
-          if (candidate.byteLength <= maxPayloadBytes) fittingPayload = candidate;
+          if (candidate.byteLength <= maxPayloadBytes) {
+            fittingRows = nextRows;
+            fittingPayload = candidate;
+          } else {
+            oversizedRows = nextRows;
+          }
+          while (oversizedRows - fittingRows > 1) {
+            const middleRows = Math.floor((fittingRows + oversizedRows) / 2);
+            const middle = serialize(middleRows);
+            if (middle.byteLength <= maxPayloadBytes) {
+              fittingRows = middleRows;
+              fittingPayload = middle;
+            } else {
+              oversizedRows = middleRows;
+            }
+          }
         }
         payload = fittingPayload;
       }
