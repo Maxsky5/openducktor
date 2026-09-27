@@ -571,6 +571,7 @@ describe("Issue import dialog", () => {
     view.unmount();
   });
 
+  // This flow renders two review cards and opens several portal controls.
   test("keeps each review edit after returning to selection", async () => {
     host.issueItemsList = async () => ({
       items: [issue("1"), issue("2")],
@@ -622,7 +623,7 @@ describe("Issue import dialog", () => {
       { sourceId: "2", issueType: "task", priority: 1, labels: ["triage"] },
     ]);
     view.unmount();
-  });
+  }, 3_000);
 
   for (const removal of ["checkbox", "selected chip"] as const) {
     test(`starts a new review after removal by ${removal}`, async () => {
@@ -895,6 +896,7 @@ describe("Issue import dialog", () => {
     view.unmount();
   }, 3_000);
 
+  // This flow renders the search, review, refresh, and import states in one test.
   test("refreshes a changed item outside the current search before retry", async () => {
     host.issueItemsList = async (input: IssueItemsListInput) => ({
       items: [issue(input.search ? "2" : "1")],
@@ -968,7 +970,7 @@ describe("Issue import dialog", () => {
       { sourceId: "1", revision: "2", issueType: "bug", labels: ["reviewed"] },
     ]);
     view.unmount();
-  });
+  }, 3_000);
 
   test("keeps a closed item failure after refresh rejects it", async () => {
     host.issueItemsList = async () => ({

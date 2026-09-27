@@ -115,7 +115,7 @@ describe("TaskDescriptionEditor", () => {
     } finally {
       renderSpy.mockRestore();
     }
-    // CI runs this editor flow beside the host suite on 3-4 vCPUs.
+    // This flow renders the rich editor and processes user input.
   }, 5_000);
 
   test("keeps Markdown typing stable and uses the normal interface font", async () => {
@@ -137,7 +137,7 @@ describe("TaskDescriptionEditor", () => {
 
     expect(view.queryByText("Checking whether Visual mode can preserve this Markdown…")).toBeNull();
     expect(requireTextArea(view.getByRole("textbox")).value).toBe("Body!");
-    // CI runs this editor flow beside the host suite on 3-4 vCPUs.
+    // This flow renders the rich editor and processes user input.
   }, 5_000);
 
   test("uses the card surface for the Visual editor in both themes", async () => {

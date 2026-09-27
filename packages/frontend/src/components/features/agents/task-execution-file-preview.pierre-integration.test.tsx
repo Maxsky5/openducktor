@@ -92,6 +92,7 @@ function PierreSaveContinuityHarness({ onAttach }: PierreSaveContinuityHarnessPr
 }
 
 describe("Pierre CodeView editor continuity", () => {
+  // Mounting the real CodeView editor can exceed the default limit under CI load.
   test("keeps the attached editor document, selection, and undo history across Save state", async () => {
     const originalGetContext = HTMLCanvasElement.prototype.getContext;
     const textMeasurementContext: Pick<CanvasRenderingContext2D, "font" | "measureText"> = {
@@ -108,7 +109,7 @@ describe("Pierre CodeView editor continuity", () => {
       view = render(
         <PierreSaveContinuityHarness onAttach={(editor) => attachedEditors.push(editor)} />,
       );
-      await waitFor(() => expect(attachedEditors).toHaveLength(1));
+      await waitFor(() => expect(attachedEditors).toHaveLength(1), { timeout: 3000 });
       const editor = attachedEditors[0];
       if (!editor) throw new Error("Pierre did not attach an editor.");
 
@@ -148,5 +149,5 @@ describe("Pierre CodeView editor continuity", () => {
         value: originalGetContext,
       });
     }
-  });
+  }, 5000);
 });

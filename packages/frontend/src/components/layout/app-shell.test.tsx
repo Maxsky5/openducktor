@@ -670,7 +670,7 @@ describe("AppShell", () => {
     expect(document.querySelector("main")?.textContent).toBe("Kanban");
     expect(mainFrames).not.toContain("");
     expect(screen.queryByRole("heading", { name: "Open your first workspace" })).toBeNull();
-    // CI runs this render-heavy flow beside the host suite on 3-4 vCPUs.
+    // This flow renders the app shell and several onboarding stages.
   }, 2_500);
 
   test("keeps the workspace draft in onboarding after a pending add fails", async () => {
@@ -708,7 +708,7 @@ describe("AppShell", () => {
     expect(screen.getByTestId("current-route").textContent).toBe("/onboarding");
     expect(screen.getByLabelText<HTMLInputElement>("Repository path").value).toBe("/repo");
     expect(backButton.disabled).toBe(false);
-    // CI runs this render-heavy flow beside the host suite on 3-4 vCPUs.
+    // This flow renders the app shell and several onboarding stages.
   }, 2_500);
 
   test("moves from welcome to runtime setup without mounting the workspace shell", () => {

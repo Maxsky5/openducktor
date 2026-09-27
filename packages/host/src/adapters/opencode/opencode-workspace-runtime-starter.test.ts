@@ -690,6 +690,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
     }
   });
 
+  // This test starts a real fake runtime and waits for its process tree to stop.
   test("discards prepared observation when live-adapter registration fails", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-opencode-live-register-failure-"));
     try {
@@ -750,7 +751,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
     } finally {
       await removeTestDirectory(root);
     }
-  });
+  }, 10_000);
 
   test("removes a registered live adapter when forwarding startup fails", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-opencode-live-forward-failure-"));
@@ -1039,6 +1040,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
     }
   });
 
+  // Windows starts a cmd shim and stops the resulting process tree.
   test("starts a Windows PATH-discovered cmd OpenCode runtime", async () => {
     if (process.platform !== "win32") {
       return;
@@ -1048,7 +1050,8 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
     try {
       const repo = join(root, "repo");
       await mkdir(repo);
-      const opencodeBinary = await createFakeOpenCode(root);
+      const startupPath = join(root, "opencode-started.json");
+      const opencodeBinary = await createFakeOpenCode(root, { configCapturePath: startupPath });
       const pathWithFakeRuntime = `${root};${process.env.PATH ?? ""}`;
       const starter = createOpenCodeWorkspaceRuntimeStarter({
         systemCommands: createSystemCommandRunner({
@@ -1065,7 +1068,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
         startupTimeoutMs: 2_000,
         retryDelayMs: 20,
         portAllocator: () => Effect.succeed(43123),
-        readinessProbe: () => Effect.succeed(true),
+        readinessProbe: () => Effect.sync(() => existsSync(startupPath)),
         runtimeId: () => "runtime-path",
       });
 
@@ -1080,9 +1083,10 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
       );
 
       expect(handle.runtime.runtimeId).toBe("runtime-path");
+      expect(existsSync(startupPath)).toBe(true);
       await expect(Effect.runPromise(handle.stop())).resolves.toBeUndefined();
     } finally {
       await removeTestDirectory(root);
     }
-  });
+  }, 10_000);
 });

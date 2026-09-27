@@ -4,6 +4,7 @@ import { render } from "@testing-library/react";
 import { act, createElement, type ReactElement } from "react";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
 import { useKanbanVirtualization } from "./use-kanban-virtualization";
 
 Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {
@@ -415,24 +416,28 @@ describe("useKanbanVirtualization", () => {
   });
 
   test("invalidates visible-card measurements when the lane container resizes", async () => {
-    const resizeObserver = installMockResizeObserver();
-    const harness = createHarness({ tasks: createTasks(30) });
+    await withAnimationFrameTestDriver(async (frameDriver) => {
+      const resizeObserver = installMockResizeObserver();
+      const harness = createHarness({ tasks: createTasks(30) });
 
-    try {
-      await harness.mount();
-      await attachContainer(harness);
+      try {
+        await harness.mount();
+        await attachContainer(harness);
 
-      const initialMeasurementVersion = harness.getLatest().measurementVersion;
+        const initialMeasurementVersion = harness.getLatest().measurementVersion;
 
-      await harness.run(() => {
-        resizeObserver.trigger();
-      });
+        await harness.run(() => {
+          resizeObserver.trigger();
+        });
 
-      expect(harness.getLatest().measurementVersion).toBe(initialMeasurementVersion + 1);
-    } finally {
-      await harness.unmount();
-      resizeObserver.restore();
-    }
+        expect(harness.getLatest().measurementVersion).toBe(initialMeasurementVersion);
+        await frameDriver.flushFrame();
+        expect(harness.getLatest().measurementVersion).toBe(initialMeasurementVersion + 1);
+      } finally {
+        await harness.unmount();
+        resizeObserver.restore();
+      }
+    });
   });
 
   test("recomputes the virtual window when the lane container resizes", async () => {

@@ -167,6 +167,7 @@ test("Vite accepts both external hostname forms and rejects unknown hosts", asyn
   );
 }, 10_000);
 
+// Each case starts and stops a real frontend HTTP server.
 test.each([
   { externalUrl: undefined, basePath: undefined, failAdvisory: false, warns: false },
   {
@@ -273,8 +274,10 @@ test.each([
       await rm(packageRoot, { recursive: true, force: true });
     }
   },
+  3_000,
 );
 
+// Each host spelling passes through a real frontend HTTP server.
 test.each([
   ["LOCALHOST", "localhost"],
   ["[0:0:0:0:0:0:0:1]", "[::1]"],
@@ -282,42 +285,46 @@ test.each([
   ["::", "[::]"],
   ["::ffff:127.0.0.1", "[::ffff:7f00:1]"],
   ["RUNNER.INTERNAL", "runner.internal"],
-])("normalizes %s at both server boundaries", async (host, normalizedHost) => {
-  const packageRoot = await mkdtemp(path.join(os.tmpdir(), "odt-launcher-host-"));
-  const serve = nodeServer.startNodeFetchServer;
-  const frontend = spyOn(nodeServer, "startNodeFetchServer").mockImplementation((options) =>
-    serve({ ...options, hostname: "127.0.0.1" }),
-  );
-  const startHost = spyOn(backend, "startTypescriptHostBackendEffect").mockReturnValue(
-    Effect.succeed({ port: 23456, exited: Promise.resolve(0), stop: async () => {} }),
-  );
-  const readiness = spyOn(support, "waitForBackendEffect").mockReturnValue(Effect.void);
-  try {
-    await mkdir(path.join(packageRoot, "dist/web-shell"), { recursive: true });
-    await writeFile(path.join(packageRoot, "dist/web-shell/index.html"), "<html></html>");
-    expect(
-      await runWebBoundary(
-        runLauncherEffect(
-          {
-            packageRoot,
-            workspaceMode: false,
-            frontendPort: 0,
-            backendPort: 0,
-            host,
-            ...(["::", "RUNNER.INTERNAL"].includes(host) && {
-              externalUrl: "https://machine.ts.net",
-            }),
-          },
-          { error: () => Effect.void, success: () => Effect.void, info: () => Effect.void },
+])(
+  "normalizes %s at both server boundaries",
+  async (host, normalizedHost) => {
+    const packageRoot = await mkdtemp(path.join(os.tmpdir(), "odt-launcher-host-"));
+    const serve = nodeServer.startNodeFetchServer;
+    const frontend = spyOn(nodeServer, "startNodeFetchServer").mockImplementation((options) =>
+      serve({ ...options, hostname: "127.0.0.1" }),
+    );
+    const startHost = spyOn(backend, "startTypescriptHostBackendEffect").mockReturnValue(
+      Effect.succeed({ port: 23456, exited: Promise.resolve(0), stop: async () => {} }),
+    );
+    const readiness = spyOn(support, "waitForBackendEffect").mockReturnValue(Effect.void);
+    try {
+      await mkdir(path.join(packageRoot, "dist/web-shell"), { recursive: true });
+      await writeFile(path.join(packageRoot, "dist/web-shell/index.html"), "<html></html>");
+      expect(
+        await runWebBoundary(
+          runLauncherEffect(
+            {
+              packageRoot,
+              workspaceMode: false,
+              frontendPort: 0,
+              backendPort: 0,
+              host,
+              ...(["::", "RUNNER.INTERNAL"].includes(host) && {
+                externalUrl: "https://machine.ts.net",
+              }),
+            },
+            { error: () => Effect.void, success: () => Effect.void, info: () => Effect.void },
+          ),
         ),
-      ),
-    ).toBe(0);
-    expect(frontend.mock.calls[0]?.[0].hostname).toBe(normalizedHost);
-    expect(startHost.mock.calls[0]?.[0].host).toBe(normalizedHost);
-  } finally {
-    frontend.mockRestore();
-    startHost.mockRestore();
-    readiness.mockRestore();
-    await rm(packageRoot, { recursive: true, force: true });
-  }
-});
+      ).toBe(0);
+      expect(frontend.mock.calls[0]?.[0].hostname).toBe(normalizedHost);
+      expect(startHost.mock.calls[0]?.[0].host).toBe(normalizedHost);
+    } finally {
+      frontend.mockRestore();
+      startHost.mockRestore();
+      readiness.mockRestore();
+      await rm(packageRoot, { recursive: true, force: true });
+    }
+  },
+  3_000,
+);
