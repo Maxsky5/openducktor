@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const LOCAL_ATTACHMENT_UNAVAILABLE_REASON = "attachment_unavailable";
 export const LOCAL_ATTACHMENT_UNAVAILABLE_MESSAGE =
-  "Attachment is no longer available locally. Add it again to use it.";
+  "This attachment is not available. Add it again to use it.";
 
 export const localAttachmentUnavailableDetailsSchema = z.object({
   reason: z.literal(LOCAL_ATTACHMENT_UNAVAILABLE_REASON),

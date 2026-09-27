@@ -452,7 +452,7 @@ describe("createLocalAttachmentService", () => {
     expect(missing).toMatchObject({
       _tag: "HostValidationError",
       field: "path",
-      message: "Attachment is no longer available locally. Add it again to use it.",
+      message: "This attachment is not available. Add it again to use it.",
       details: { reason: "attachment_unavailable" },
     });
     files.set("/tmp/not-staged.pdf", { bytes: new Uint8Array(), modifiedTimeMs: 1 });
@@ -476,7 +476,7 @@ describe("createLocalAttachmentService", () => {
     expect(failure).toMatchObject({
       _tag: "HostValidationError",
       field: "path",
-      message: "Attachment is no longer available locally. Add it again to use it.",
+      message: "This attachment is not available. Add it again to use it.",
       details: { reason: "attachment_unavailable" },
     });
   });

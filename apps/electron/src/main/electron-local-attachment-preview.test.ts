@@ -48,7 +48,7 @@ describe("electron local attachment previews", () => {
 
     expect(result).toEqual({
       ok: false,
-      message: "Attachment is no longer available locally. Add it again to use it.",
+      message: "This attachment is not available. Add it again to use it.",
     });
   });
 
