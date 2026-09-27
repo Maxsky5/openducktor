@@ -17,7 +17,6 @@ import {
   type RefObject,
   type KeyboardEvent as ReactKeyboardEvent,
   forwardRef,
-  useCallback,
   useId,
   useMemo,
   useRef,
@@ -476,11 +475,14 @@ type VirtualModelRowData = {
   favoriteState: ModelPickerFavoriteState;
   getModelDisabledReason: ((item: ModelPickerItem) => string | null) | undefined;
   registerButton: (index: number, element: HTMLButtonElement | null) => void;
-  onFocus: (index: number) => void;
-  onBlur: (index: number, relatedTarget: EventTarget | null) => void;
+  onFocus: (modelKey: string) => void;
+  onBlur: (modelKey: string, relatedTarget: EventTarget | null) => void;
   onNavigate: (index: number, key: "ArrowDown" | "ArrowUp" | "Home" | "End") => void;
   onSelect: (index: number) => void;
 };
+
+const modelRowKey = (index: number, data: VirtualModelRowData): string =>
+  modelPickerValueKey(data.items[index]!.value);
 
 const VirtualModelRow = ({
   index,
@@ -497,6 +499,7 @@ const VirtualModelRow = ({
   onSelect,
 }: RowComponentProps<VirtualModelRowData>): ReactElement => {
   const item = items[index]!;
+  const modelKey = modelPickerValueKey(item.value);
   return (
     <ModelRow
       item={item}
@@ -504,8 +507,8 @@ const VirtualModelRow = ({
       favoriteState={favoriteState}
       disabledReason={getModelDisabledReason?.(item) ?? null}
       buttonRef={(element) => registerButton(index, element)}
-      onFocus={() => onFocus(index)}
-      onBlur={(relatedTarget) => onBlur(index, relatedTarget)}
+      onFocus={() => onFocus(modelKey)}
+      onBlur={(relatedTarget) => onBlur(modelKey, relatedTarget)}
       onNavigate={(key) => onNavigate(index, key)}
       onSelect={() => onSelect(index)}
       style={style}
@@ -536,11 +539,6 @@ const ModelPickerList = ({
   listRef: RefObject<ListImperativeAPI | null>;
   onRowsRendered: (range: { startIndex: number; stopIndex: number }) => void;
 }): ReactElement | null => {
-  const rowKey = useCallback(
-    (index: number, data: VirtualModelRowData) => modelPickerValueKey(data.items[index]!.value),
-    [],
-  );
-
   if (items.length >= VIRTUALIZATION_MIN_MODEL_COUNT) {
     return (
       <List
@@ -556,7 +554,7 @@ const ModelPickerList = ({
         rowComponent={VirtualModelRow}
         rowCount={items.length}
         rowHeight={MODEL_ROW_HEIGHT_PX}
-        rowKey={rowKey}
+        rowKey={modelRowKey}
         rowProps={{
           items,
           value,
@@ -576,20 +574,23 @@ const ModelPickerList = ({
   if (items.length > 0) {
     return (
       <ul aria-label="Models" className="space-y-1 p-1">
-        {items.map((item, index) => (
-          <ModelRow
-            key={modelPickerValueKey(item.value)}
-            item={item}
-            selected={isSameModelPickerValue(value, item.value)}
-            favoriteState={favoriteState}
-            disabledReason={getModelDisabledReason?.(item) ?? null}
-            buttonRef={(element) => registerButton(index, element)}
-            onFocus={() => onFocus(index)}
-            onBlur={(relatedTarget) => onBlur(index, relatedTarget)}
-            onNavigate={(key) => onNavigate(index, key)}
-            onSelect={() => onSelect(index)}
-          />
-        ))}
+        {items.map((item, index) => {
+          const modelKey = modelPickerValueKey(item.value);
+          return (
+            <ModelRow
+              key={modelKey}
+              item={item}
+              selected={isSameModelPickerValue(value, item.value)}
+              favoriteState={favoriteState}
+              disabledReason={getModelDisabledReason?.(item) ?? null}
+              buttonRef={(element) => registerButton(index, element)}
+              onFocus={() => onFocus(modelKey)}
+              onBlur={(relatedTarget) => onBlur(modelKey, relatedTarget)}
+              onNavigate={(key) => onNavigate(index, key)}
+              onSelect={() => onSelect(index)}
+            />
+          );
+        })}
       </ul>
     );
   }
@@ -767,11 +768,8 @@ export function ModelPicker({
   };
 
   const focusModelBoundary = (fromEnd: boolean): void => {
-    for (
-      let index = fromEnd ? items.length - 1 : 0;
-      fromEnd ? index >= 0 : index < items.length;
-      index += fromEnd ? -1 : 1
-    ) {
+    for (let step = 0; step < items.length; step += 1) {
+      const index = fromEnd ? items.length - 1 - step : step;
       if (!getModelDisabledReason?.(items[index]!)) {
         focusModel(index);
         return;
@@ -810,12 +808,8 @@ export function ModelPicker({
     onOpenChange?.(false);
   };
 
-  const onModelBlur = (index: number, relatedTarget: EventTarget | null): void => {
-    if (
-      relatedTarget &&
-      relatedTarget !== document.body &&
-      focusedModelKey.current === modelPickerValueKey(items[index]!.value)
-    ) {
+  const onModelBlur = (modelKey: string, relatedTarget: EventTarget | null): void => {
+    if (relatedTarget && relatedTarget !== document.body && focusedModelKey.current === modelKey) {
       focusedModelKey.current = null;
     }
   };
@@ -938,8 +932,8 @@ export function ModelPicker({
                   favoriteState={favoriteState}
                   getModelDisabledReason={getModelDisabledReason}
                   registerButton={registerButton}
-                  onFocus={(index) => {
-                    focusedModelKey.current = modelPickerValueKey(items[index]!.value);
+                  onFocus={(modelKey) => {
+                    focusedModelKey.current = modelKey;
                   }}
                   onBlur={onModelBlur}
                   onNavigate={onNavigate}
