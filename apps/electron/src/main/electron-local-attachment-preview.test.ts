@@ -31,7 +31,7 @@ describe("electron local attachment previews", () => {
     });
   });
 
-  test("returns an actionable IPC result when a staged attachment is unavailable", async () => {
+  test("returns a short IPC error when a staged attachment is unavailable", async () => {
     const result = await resolveElectronLocalAttachmentPreview(async () => {
       throw new ElectronValidationError({
         operation: "electron.preview.resolve-staged-path",
@@ -48,7 +48,7 @@ describe("electron local attachment previews", () => {
 
     expect(result).toEqual({
       ok: false,
-      message: "This attachment is not available. Add it again to use it.",
+      message: "This attachment cannot be opened.",
     });
   });
 
