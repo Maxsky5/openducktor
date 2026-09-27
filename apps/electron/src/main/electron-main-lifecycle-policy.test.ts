@@ -21,6 +21,17 @@ const readRepoFile = (relativePath: string): string =>
   readFileSync(resolve(REPO_ROOT, relativePath), "utf8");
 
 describe("Electron main lifecycle policy", () => {
+  test("privileged protocols register synchronously before startup awaits", () => {
+    const source = readRepoFile("apps/electron/src/main/main.ts");
+    const registrationIndex = source.search(/^protocol\.registerSchemesAsPrivileged\(/m);
+    const firstAwaitIndex = source.search(/^const \w+ = await /m);
+
+    expect(registrationIndex).toBeGreaterThan(-1);
+    if (firstAwaitIndex !== -1) {
+      expect(registrationIndex).toBeLessThan(firstAwaitIndex);
+    }
+  });
+
   test("main window uses the tracked application icon", () => {
     const source = readRepoFile("apps/electron/src/main/main.ts");
 
