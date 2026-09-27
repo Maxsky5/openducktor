@@ -415,6 +415,8 @@ function AuthConsumer() {}
   test("keeps header-looking lines in added and deleted full-file text", () => {
     const added = "--- heading\nbody\n";
     const deleted = "Index: entries\nbody\n";
+    const pairedHeaders = "--- old\n+++ new\n# note\n";
+    const gitHeader = "# guide\ndiff --git a/other.md b/other.md\nexample\n";
 
     expect(selectRenderableFileDiff(added, "src/new.md", { changeType: "added" })).toBe(
       "--- /dev/null\n+++ b/src/new.md\n@@ -0,0 +1,2 @@\n+--- heading\n+body\n",
@@ -422,13 +424,24 @@ function AuthConsumer() {}
     expect(selectRenderableFileDiff(deleted, "src/old.md", { changeType: "deleted" })).toBe(
       "--- a/src/old.md\n+++ /dev/null\n@@ -1,2 +0,0 @@\n-Index: entries\n-body\n",
     );
+    expect(selectRenderableFileDiff(pairedHeaders, "src/new.md", { changeType: "added" })).toBe(
+      "--- /dev/null\n+++ b/src/new.md\n@@ -0,0 +1,3 @@\n+--- old\n++++ new\n+# note\n",
+    );
+    expect(selectRenderableFileDiff(gitHeader, "src/old.md", { changeType: "deleted" })).toBe(
+      "--- a/src/old.md\n+++ /dev/null\n@@ -1,3 +0,0 @@\n-# guide\n-diff --git a/other.md b/other.md\n-example\n",
+    );
   });
 
   test("does not turn an unrelated explicit patch into an added-file diff", () => {
     const diff = "--- /dev/null\n+++ b/src/other file.ts\n@@ -0,0 +1 @@\n+other\n";
+    const mode =
+      "diff --git a/src/other file.ts b/src/other file.ts\nold mode 100644\nnew mode 100755\n";
 
     expect(
       selectRenderableFileDiff(diff, "src/target file.ts", { changeType: "added" }),
+    ).toBeNull();
+    expect(
+      selectRenderableFileDiff(mode, "src/target file.ts", { changeType: "added" }),
     ).toBeNull();
   });
 

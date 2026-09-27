@@ -8,6 +8,9 @@ export type SelectRenderableFileDiffOptions = {
 };
 
 const GIT_DIFF_HEADER = /^diff --git /m;
+// File text can contain a Git header, so wait for a change line.
+const GIT_PATCH_BODY =
+  /^(?:index |old mode |new mode |new file mode |deleted file mode |similarity index |dissimilarity index |rename (?:from|to) |copy (?:from|to) |Binary files |GIT binary patch$)/m;
 const CLASSIC_DIFF_HEADER = /^Index: /m;
 const UNIFIED_MULTI_FILE_HEADER = /^--- .+\n\+\+\+ .+/m;
 const UNIFIED_HUNK_HEADER = /^@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@/;
@@ -232,8 +235,7 @@ const splitUnifiedFileDiffCandidates = (diff: string): string[] => {
 const hasPatchMarkers = (rawDiff: string): boolean => {
   const diff = normalizeNewlines(rawDiff);
   return (
-    GIT_DIFF_HEADER.test(diff) ||
-    UNIFIED_MULTI_FILE_HEADER.test(diff) ||
+    (GIT_DIFF_HEADER.test(diff) && GIT_PATCH_BODY.test(diff)) ||
     APPLY_PATCH_FILE_HEADER.test(diff) ||
     /^@@/m.test(diff) ||
     (CLASSIC_DIFF_HEADER.test(diff) && /^={3,}$/m.test(diff))
