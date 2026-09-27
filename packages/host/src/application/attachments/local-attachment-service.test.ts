@@ -453,11 +453,16 @@ describe("createLocalAttachmentService", () => {
       _tag: "HostValidationError",
       field: "path",
       message: "Attachment is no longer available locally. Add it again to use it.",
+      details: { reason: "attachment_unavailable" },
     });
     files.set("/tmp/not-staged.pdf", { bytes: new Uint8Array(), modifiedTimeMs: 1 });
-    await expect(
-      Effect.runPromise(service.resolve({ path: "/tmp/not-staged.pdf" })),
-    ).rejects.toThrow("Attachment path is not a staged local attachment.");
+    const outside = await Effect.runPromise(
+      Effect.flip(service.resolve({ path: "/tmp/not-staged.pdf" })),
+    );
+    expect(outside).toMatchObject({
+      message: "Attachment path is not a staged local attachment.",
+      details: { reason: "attachment_unavailable" },
+    });
     expect(calls.readDirectory).toBe(0);
     expect(calls.modifiedTimeMs).toBe(0);
   });
@@ -472,6 +477,7 @@ describe("createLocalAttachmentService", () => {
       _tag: "HostValidationError",
       field: "path",
       message: "Attachment is no longer available locally. Add it again to use it.",
+      details: { reason: "attachment_unavailable" },
     });
   });
   test("keeps staging directory access failures as operation errors", async () => {
@@ -507,9 +513,11 @@ describe("createLocalAttachmentService", () => {
       path: older.path,
     });
     files.delete(older.path);
-    await expect(Effect.runPromise(service.resolve({ path: "brief.pdf" }))).rejects.toThrow(
-      "No staged local attachment matches 'brief.pdf'.",
-    );
+    const missing = await Effect.runPromise(Effect.flip(service.resolve({ path: "brief.pdf" })));
+    expect(missing).toMatchObject({
+      message: "No staged local attachment matches 'brief.pdf'.",
+      details: { reason: "attachment_unavailable" },
+    });
     expect(calls.readDirectory).toBe(1);
     expect(calls.existsPaths).toEqual([older.path, newer.path, newer.path, older.path, older.path]);
   });
@@ -533,9 +541,13 @@ describe("createLocalAttachmentService", () => {
     await expect(Effect.runPromise(service.resolve({ path: " " }))).rejects.toThrow(
       "Attachment path is required.",
     );
-    await expect(Effect.runPromise(service.resolve({ path: "../brief.pdf" }))).rejects.toThrow(
+    const invalidToken = await Effect.runPromise(
+      Effect.flip(service.resolve({ path: "../brief.pdf" })),
+    );
+    expect(invalidToken.message).toBe(
       "Attachment path must be a staged attachment filename token.",
     );
+    expect(invalidToken.details).toEqual({ field: "path" });
     await expect(Effect.runPromise(service.resolve({ path: "folder\\brief.pdf" }))).rejects.toThrow(
       "Attachment path must be a staged attachment filename token.",
     );

@@ -1,3 +1,4 @@
+import { localAttachmentUnavailableDetailsSchema } from "@openducktor/contracts";
 import { pathToFileURL } from "node:url";
 import { Cause, Chunk, Effect, Exit, Option } from "effect";
 import { z } from "zod";
@@ -14,6 +15,10 @@ export const ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL = "openducktor-local-att
 
 const ELECTRON_LOCAL_ATTACHMENT_PREVIEW_HOST = "preview";
 const localAttachmentPreviewPathSchema = z.string().refine((path) => path.trim().length > 0);
+const unavailableHostAttachmentErrorSchema = z.object({
+  _tag: z.literal("HostValidationError"),
+  details: localAttachmentUnavailableDetailsSchema,
+});
 
 type ElectronPreviewProtocol = {
   handle(scheme: string, handler: (request: Request) => Response | Promise<Response>): void;
@@ -79,7 +84,8 @@ export const resolveElectronLocalAttachmentPreview = async (
   } catch (cause) {
     if (
       cause instanceof ElectronValidationError &&
-      cause.operation === "electron.preview.resolve-staged-path"
+      cause.operation === "electron.preview.resolve-staged-path" &&
+      unavailableHostAttachmentErrorSchema.safeParse(cause.cause).success
     ) {
       return {
         ok: false,

@@ -1,6 +1,8 @@
 import {
   LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT,
   LOCAL_ATTACHMENT_BYTE_LIMIT,
+  LOCAL_ATTACHMENT_UNAVAILABLE_REASON,
+  type LocalAttachmentUnavailableDetails,
 } from "@openducktor/contracts";
 import { Deferred, Effect, FiberId } from "effect";
 import {
@@ -147,10 +149,11 @@ const isWithinDirectory = (
 const isMissingAttachmentPath = (error: HostOperationErrorAggregate): boolean =>
   hasNestedNodeErrorCode(error, "ENOENT") || hasNestedNodeErrorCode(error, "ENOTDIR");
 
-const attachmentUnavailableError = (): HostValidationError =>
+const attachmentUnavailableError = (): HostValidationError<LocalAttachmentUnavailableDetails> =>
   new HostValidationError({
     message: "Attachment is no longer available locally. Add it again to use it.",
     field: "path",
+    details: { reason: LOCAL_ATTACHMENT_UNAVAILABLE_REASON },
   });
 
 const completeIndexLoadFlight = (
@@ -361,6 +364,7 @@ export const createLocalAttachmentService = (
             new HostValidationError({
               message: "Attachment path is not a staged local attachment.",
               field: "path",
+              details: { reason: LOCAL_ATTACHMENT_UNAVAILABLE_REASON },
             }),
           );
         }

@@ -37,12 +37,38 @@ describe("electron local attachment previews", () => {
         operation: "electron.preview.resolve-staged-path",
         message: "Attachment path is not a staged local attachment.",
         field: "path",
+        cause: {
+          _tag: "HostValidationError",
+          field: "path",
+          message: "Attachment path is not a staged local attachment.",
+          details: { reason: "attachment_unavailable" },
+        },
       });
     }, "old-staged.png");
 
     expect(result).toEqual({
       ok: false,
       message: "Attachment is no longer available locally. Add it again to use it.",
+    });
+  });
+
+  test("keeps other host path validation messages", async () => {
+    const result = await resolveElectronLocalAttachmentPreview(async () => {
+      throw new ElectronValidationError({
+        operation: "electron.preview.resolve-staged-path",
+        message: "Attachment path must be a staged attachment filename token.",
+        field: "path",
+        cause: {
+          _tag: "HostValidationError",
+          field: "path",
+          message: "Attachment path must be a staged attachment filename token.",
+        },
+      });
+    }, "../brief.pdf");
+
+    expect(result).toEqual({
+      ok: false,
+      message: "Attachment path must be a staged attachment filename token.",
     });
   });
 

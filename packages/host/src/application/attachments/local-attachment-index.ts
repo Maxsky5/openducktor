@@ -1,3 +1,7 @@
+import {
+  LOCAL_ATTACHMENT_UNAVAILABLE_REASON,
+  type LocalAttachmentUnavailableDetails,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   errorMessage,
@@ -30,10 +34,13 @@ export const readStagedAttachmentOriginalName = (entry: LocalAttachmentEntry): s
   return entry.fileName.slice(uuidPrefixMatch[0].length);
 };
 
-const createNoStagedAttachmentMatchError = (displayName: string): HostValidationError =>
+const createNoStagedAttachmentMatchError = (
+  displayName: string,
+): HostValidationError<LocalAttachmentUnavailableDetails> =>
   new HostValidationError({
     message: `No staged local attachment matches '${displayName}'.`,
     field: "path",
+    details: { reason: LOCAL_ATTACHMENT_UNAVAILABLE_REASON },
   });
 
 const compareNewestStagedAttachmentFirst = (
