@@ -385,7 +385,7 @@ const taskPullRequestUnlink = async (
     { repoPath, taskId },
     booleanResultSchema,
   );
-  return okResultSchema("task_pull_request_unlink").parse(payload);
+  return { ok: payload };
 };
 
 const taskPullRequestDetect = async (invokeFn: InvokeFn, repoPath: string, taskId: string) => {

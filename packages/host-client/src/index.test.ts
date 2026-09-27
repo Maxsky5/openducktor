@@ -2370,4 +2370,30 @@ describe("HostClient", () => {
       "Expected { ok: boolean } payload from host command repo_pull_request_sync",
     );
   });
+
+  test("taskPullRequestUnlink maps a validated boolean host response", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "task_pull_request_unlink") {
+        return true;
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await expect(client.taskPullRequestUnlink("/repo", "task-1")).resolves.toEqual({ ok: true });
+    expect(calls).toEqual([
+      { command: "task_pull_request_unlink", args: { repoPath: "/repo", taskId: "task-1" } },
+    ]);
+  });
+
+  test("taskPullRequestUnlink propagates a host failure", async () => {
+    const hostFailure = new Error("Failed to unlink pull request");
+    const { client } = createClient((command) => {
+      if (command === "task_pull_request_unlink") {
+        throw hostFailure;
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await expect(client.taskPullRequestUnlink("/repo", "task-1")).rejects.toBe(hostFailure);
+  });
 });
