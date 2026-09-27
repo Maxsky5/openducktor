@@ -26,6 +26,7 @@ export {
   type ToolScriptMcpLauncher,
 } from "./adapters/runtimes/runtime-distribution";
 export { createRuntimeRegistry } from "./adapters/runtimes/runtime-registry";
+export { findInvalidSettingsFileError } from "./adapters/settings/settings-config-adapter";
 export {
   type AgentSessionLiveStateService,
   createAgentSessionLiveStateService,
@@ -54,6 +55,7 @@ export {
   type EffectNodeHostCommandRouter,
 } from "./composition/node/create-node-host-command-router";
 export { createNodeEffectHostCommandRouter } from "./composition/node/create-node-effect-host-command-router";
+export { checkStartupSettingsEffect } from "./composition/node/check-startup-settings";
 export { createNodeHostCommandRouter } from "./composition/node/create-node-host-command-router-promise";
 export {
   type DevelopmentInstanceMode,

@@ -12,6 +12,7 @@ import {
 } from "./electron-main-lifecycle";
 import { createElectronMainLogger } from "./electron-main-logger";
 import { createElectronMainRuntimeBindings } from "./electron-main-runtime-bindings";
+import { renderInvalidSettingsErrorHtml } from "./electron-settings-error-window";
 
 const REPO_ROOT = resolve(import.meta.dir, "../../../..");
 
@@ -273,6 +274,45 @@ describe("Electron main lifecycle policy", () => {
         error: startupError,
       },
     ]);
+  });
+
+  test("packaged settings failure logs once, cleans up, then opens an error screen", async () => {
+    const startupError = new ElectronLifecycleError({
+      operation: "electron.main.check-settings",
+      message: "Invalid config file /config/config.json",
+    });
+    const steps: string[] = [];
+    const errors: Array<{ message: string; cause: unknown }> = [];
+
+    await runElectronMainStartupBoundary({
+      cleanupAfterFailure: () => Effect.sync(() => steps.push("cleanup")),
+      exitProcess: () => steps.push("exit"),
+      invalidSettingsMessage: () => startupError.message,
+      logger: {
+        error: (message, cause) => Effect.sync(() => errors.push({ message, cause })),
+        info: () => Effect.void,
+      },
+      markShutdownComplete: () => steps.push("shutdown-complete"),
+      markShutdownStarted: () => steps.push("shutdown-started"),
+      reportFailure: () => steps.push("report-failure"),
+      showInvalidSettingsError: async (message) => {
+        expect(message).toBe(startupError.message);
+        steps.push("show-error");
+      },
+      startupEffect: Effect.fail(startupError),
+    });
+
+    expect(errors).toEqual([{ message: startupError.message, cause: undefined }]);
+    expect(steps).toEqual(["shutdown-started", "cleanup", "shutdown-complete", "show-error"]);
+  });
+
+  test("settings error screen escapes file content and shows restart advice", () => {
+    const html = renderInvalidSettingsErrorHtml(
+      "Invalid config file </pre><script>alert(1)</script>",
+    );
+    expect(html).toContain("&lt;/pre&gt;&lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(html).toContain("Close OpenDucktor and restart it after you fix or move the file.");
+    expect(html).not.toContain("<script>");
   });
 
   test("startup boundary still cleans up and exits when persistent logging fails", async () => {

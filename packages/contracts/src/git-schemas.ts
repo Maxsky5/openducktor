@@ -92,11 +92,13 @@ export const gitConflictOperationSchema = z.enum([
 ]);
 export type GitConflictOperation = z.infer<typeof gitConflictOperationSchema>;
 
-export const githubGitProviderRepositorySchema = z.object({
-  host: z.string().trim().min(1).default("github.com"),
-  owner: z.string().trim().min(1),
-  name: z.string().trim().min(1),
-});
+export const githubGitProviderRepositorySchema = z
+  .object({
+    host: z.string().trim().min(1).default("github.com"),
+    owner: z.string().trim().min(1),
+    name: z.string().trim().min(1),
+  })
+  .strict();
 export type GithubGitProviderRepository = z.infer<typeof githubGitProviderRepositorySchema>;
 
 export const gitProviderRepositorySchema = z.union([
@@ -105,13 +107,15 @@ export const gitProviderRepositorySchema = z.union([
 ]);
 export type GitProviderRepository = z.infer<typeof gitProviderRepositorySchema>;
 
-export const gitTargetBranchSchema = z.object({
-  remote: z.preprocess(
-    (value) => (value === null ? undefined : value),
-    z.string().trim().min(1).optional(),
-  ),
-  branch: z.string().trim().min(1).default("main"),
-});
+export const gitTargetBranchSchema = z
+  .object({
+    remote: z.preprocess(
+      (value) => (value === null ? undefined : value),
+      z.string().trim().min(1).optional(),
+    ),
+    branch: z.string().trim().min(1).default("main"),
+  })
+  .strict();
 export type GitTargetBranch = z.infer<typeof gitTargetBranchSchema>;
 
 export const gitComparisonTargetSchema = z.union([
@@ -162,9 +166,11 @@ export const repoGitConfigSchema = z
   .strict();
 export type RepoGitConfig = z.infer<typeof repoGitConfigSchema>;
 
-export const globalGitConfigSchema = z.object({
-  defaultMergeMethod: gitMergeMethodSchema.default("merge_commit"),
-});
+export const globalGitConfigSchema = z
+  .object({
+    defaultMergeMethod: gitMergeMethodSchema.default("merge_commit"),
+  })
+  .strict();
 export type GlobalGitConfig = z.infer<typeof globalGitConfigSchema>;
 
 export const gitPullRequestStateSchema = z.enum(["open", "draft", "merged", "closed_unmerged"]);

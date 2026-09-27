@@ -89,6 +89,24 @@ describe("config validation message", () => {
     );
   });
 
+  test("names distinct unknown nested settings and counts those omitted", () => {
+    const schema = z.object({ general: z.object({ enabled: z.boolean() }).strict() }).strict();
+    const payload = {
+      general: { enabled: true, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 },
+    };
+    const result = schema.safeParse(payload);
+    if (result.success) throw new Error("Expected unknown settings to fail");
+
+    expect(configValidationMessage(result.error, payload).split("\n")).toEqual([
+      "general.one: Unknown setting.",
+      "general.two: Unknown setting.",
+      "general.three: Unknown setting.",
+      "general.four: Unknown setting.",
+      "general.five: Unknown setting.",
+      "1 more problem not shown.",
+    ]);
+  });
+
   test("collapses newlines in a rejected field reason", () => {
     const multiline = z.string().refine(() => false, "First line.\nSecond line.");
     const result = multiline.safeParse("x");

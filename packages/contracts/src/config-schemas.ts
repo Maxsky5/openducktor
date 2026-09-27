@@ -285,7 +285,7 @@ const reusablePromptNameSchema = trimmedRequiredString("Reusable prompt name").r
   "Reusable prompt name must contain only letters, digits, dots, underscores, colons, or dashes.",
 );
 
-export const reusablePromptSchema = z.object({
+export const reusablePromptSchema = z.strictObject({
   id: trimmedRequiredString("Reusable prompt id"),
   name: reusablePromptNameSchema,
   description: z
@@ -340,7 +340,7 @@ export const reusablePromptsSchema = z
 
 const dedupeValues = <T>(values: readonly T[]) => [...new Set(values)];
 
-export const softGuardrailsSchema = z.object({
+export const softGuardrailsSchema = z.strictObject({
   cpuHighWatermarkPercent: z
     .number()
     .int()
@@ -352,20 +352,20 @@ export const softGuardrailsSchema = z.object({
 });
 export type SoftGuardrails = z.infer<typeof softGuardrailsSchema>;
 
-export const repoHooksSchema = z.object({
+export const repoHooksSchema = z.strictObject({
   preStart: z.array(z.string()).default([]),
   postComplete: z.array(z.string()).default([]),
 });
 export type RepoHooks = z.infer<typeof repoHooksSchema>;
 
-export const repoDevServerScriptSchema = z.object({
+export const repoDevServerScriptSchema = z.strictObject({
   id: trimmedRequiredString("Dev server id"),
   name: trimmedRequiredString("Dev server name"),
   command: trimmedRequiredString("Dev server command"),
 });
 export type RepoDevServerScript = z.infer<typeof repoDevServerScriptSchema>;
 
-export const agentModelDefaultSchema = z.object({
+export const agentModelDefaultSchema = z.strictObject({
   runtimeKind: runtimeKindSchema,
   providerId: z.string().min(1),
   modelId: z.string().min(1),
@@ -374,7 +374,7 @@ export const agentModelDefaultSchema = z.object({
 });
 export type AgentModelDefault = z.infer<typeof agentModelDefaultSchema>;
 
-export const repoAgentDefaultsSchema = z.object({
+export const repoAgentDefaultsSchema = z.strictObject({
   spec: nullableToOptional(agentModelDefaultSchema),
   planner: nullableToOptional(agentModelDefaultSchema),
   build: nullableToOptional(agentModelDefaultSchema),
@@ -468,7 +468,7 @@ export const workspaceRepoSettingsInputSchema = workspaceRepoConfigInputSchema.e
 });
 export type WorkspaceRepoSettingsInput = z.output<typeof workspaceRepoSettingsInputSchema>;
 
-export const chatSettingsSchema = z.object({
+export const chatSettingsSchema = z.strictObject({
   showThinkingMessages: z.boolean().default(DEFAULT_CHAT_SETTINGS.showThinkingMessages),
   expandFileDiffsByDefault: z.boolean().default(DEFAULT_CHAT_SETTINGS.expandFileDiffsByDefault),
   diffStyle: z.enum(CHAT_DIFF_STYLE_VALUES).default(DEFAULT_CHAT_SETTINGS.diffStyle),
@@ -484,7 +484,7 @@ export type ChatDiffHeight = z.infer<typeof chatSettingsSchema>["diffHeight"];
 export type ChatLineOverflow = z.infer<typeof chatSettingsSchema>["lineOverflow"];
 export type ChatHunkSeparators = z.infer<typeof chatSettingsSchema>["hunkSeparators"];
 
-export const generalSettingsSchema = z.object({
+export const generalSettingsSchema = z.strictObject({
   openAgentStudioTabOnBackgroundSessionStart: z
     .boolean()
     .default(DEFAULT_GENERAL_SETTINGS.openAgentStudioTabOnBackgroundSessionStart),
@@ -497,7 +497,7 @@ export type HorizontalScrollbarVisibility = z.infer<typeof horizontalScrollbarVi
 export const appPlatformSchema = z.enum(APP_PLATFORM_VALUES);
 export type AppPlatform = z.infer<typeof appPlatformSchema>;
 
-export const appearanceSettingsSchema = z.object({
+export const appearanceSettingsSchema = z.strictObject({
   horizontalScrollbarVisibility: horizontalScrollbarVisibilitySchema.default(
     DEFAULT_APPEARANCE_SETTINGS.horizontalScrollbarVisibility,
   ),
@@ -527,7 +527,7 @@ export const resolveHorizontalScrollbarVisibility = (
   return parsedPlatform.data === "darwin" ? "hide" : "show";
 };
 
-export const kanbanSettingsSchema = z.object({
+export const kanbanSettingsSchema = z.strictObject({
   doneVisibleDays: z.number().int().min(0).default(DEFAULT_KANBAN_SETTINGS.doneVisibleDays),
   emptyColumnDisplay: z
     .enum(KANBAN_EMPTY_COLUMN_DISPLAY_VALUES)
@@ -546,7 +546,7 @@ export type AutopilotEventId = z.infer<typeof autopilotEventIdSchema>;
 export const autopilotActionIdSchema = z.enum(AUTOPILOT_ACTION_IDS);
 export type AutopilotActionId = z.infer<typeof autopilotActionIdSchema>;
 
-export const autopilotRuleSchema = z.object({
+export const autopilotRuleSchema = z.strictObject({
   eventId: autopilotEventIdSchema,
   actionIds: z.array(autopilotActionIdSchema).default([]).transform(dedupeValues),
 });
@@ -578,7 +578,7 @@ const normalizeAutopilotSettings = (value: {
 };
 
 export const autopilotSettingsSchema = z
-  .object({
+  .strictObject({
     alwaysStartQaReviewsFresh: z.boolean().default(false),
     rules: z.array(autopilotRuleSchema).default([]),
   })
@@ -657,7 +657,7 @@ export const agentModelFavoritesSchema = z
   })
   .default([]);
 
-export const systemSettingsSchema = z.object({
+export const systemSettingsSchema = z.strictObject({
   preferredOpenInToolId: systemOpenInToolIdSchema.optional(),
 });
 export type SystemSettings = z.infer<typeof systemSettingsSchema>;
@@ -701,16 +701,22 @@ const globalConfigSharedFields = {
   recentWorkspaces: z.array(workspaceIdSchema).default([]),
 };
 
-export const persistedGlobalConfigV2Schema = z.object({
+const persistedWorkspacesSchema = z
+  .record(workspaceIdSchema, repoConfigSchema.strict())
+  .default({});
+
+export const persistedGlobalConfigV2Schema = z.strictObject({
   version: z.literal(2),
   ...globalConfigSharedFields,
+  workspaces: persistedWorkspacesSchema,
   agentRuntimes: persistedAgentRuntimesV2Schema,
 });
 export type PersistedGlobalConfigV2 = z.infer<typeof persistedGlobalConfigV2Schema>;
 
-export const persistedGlobalConfigV3Schema = z.object({
+export const persistedGlobalConfigV3Schema = z.strictObject({
   version: z.literal(3),
   ...globalConfigSharedFields,
+  workspaces: persistedWorkspacesSchema,
   agentRuntimes: agentRuntimesSchema,
 });
 export type PersistedGlobalConfigV3 = z.infer<typeof persistedGlobalConfigV3Schema>;

@@ -23,6 +23,7 @@ import {
   errorMessage,
   HostOperationError,
   HostValidationError,
+  type HostValidationErrorAggregate,
   toHostOperationError,
   toHostPathStatError,
 } from "../../effect/host-errors";
@@ -31,6 +32,7 @@ import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settin
 
 const USER_SETTINGS_FILENAME = "config.json";
 const missingConfigFileErrorSchema = z.object({ code: z.literal("ENOENT") }).passthrough();
+const errorCauseSchema = z.object({ cause: z.unknown().optional() }).passthrough();
 
 const sanitizeRepoSlug = (input: string): string => {
   let slug = "";
@@ -68,6 +70,9 @@ const formatConfigFileProblem = (heading: string, problem: string): string =>
   [heading, problem, CONFIG_FILE_RECOVERY_HINT].join("\n\n");
 
 const configFileProblem = (cause: unknown): string | null => {
+  if (cause instanceof SyntaxError) {
+    return `Invalid JSON: ${cause.message}`;
+  }
   if (cause instanceof HostValidationError) {
     return cause.message;
   }
@@ -96,8 +101,32 @@ const invalidConfigFileError = (resolvedConfigPath: string, cause: unknown) => {
   return new HostValidationError({
     message: formatConfigFileProblem(`Invalid config file ${configPath}:`, problem),
     cause,
-    details: { path: resolvedConfigPath },
+    details: { kind: "invalid-settings-file", path: resolvedConfigPath },
   });
+};
+
+export const findInvalidSettingsFileError = (
+  cause: unknown,
+): HostValidationErrorAggregate | null => {
+  const visited = new Set<unknown>();
+  let current = cause;
+  while (!visited.has(current)) {
+    visited.add(current);
+    if (
+      current instanceof HostValidationError &&
+      current.details !== undefined &&
+      "kind" in current.details &&
+      current.details.kind === "invalid-settings-file"
+    ) {
+      return current;
+    }
+    const parsed = errorCauseSchema.safeParse(current);
+    if (!parsed.success) {
+      break;
+    }
+    current = parsed.data.cause;
+  }
+  return null;
 };
 
 export type CreateSettingsConfigAdapterInput = {

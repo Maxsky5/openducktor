@@ -15,10 +15,17 @@ export const configValidationMessage = (cause: unknown, payload?: PayloadValue):
     return errorMessage(cause);
   }
 
-  const lines = cause.issues
-    .slice(0, MAX_REPORTED_ISSUES)
-    .map((issue) => formatIssueLine(issue, payload));
-  const remaining = cause.issues.length - MAX_REPORTED_ISSUES;
+  const problems = [
+    ...new Set(
+      cause.issues.flatMap((issue) =>
+        issue.code === "unrecognized_keys"
+          ? issue.keys.map((key) => `${formatPath([...issue.path, key])}: Unknown setting.`)
+          : [formatIssueLine(issue, payload)],
+      ),
+    ),
+  ];
+  const lines = problems.slice(0, MAX_REPORTED_ISSUES);
+  const remaining = problems.length - MAX_REPORTED_ISSUES;
   if (remaining > 0) {
     lines.push(`${remaining} more ${remaining === 1 ? "problem" : "problems"} not shown.`);
   }

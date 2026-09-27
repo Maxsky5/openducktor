@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { DEFAULT_NOTIFICATION_SETTINGS } from "@openducktor/contracts";
+import type { JSONType } from "zod";
 import {
   createDefaultGlobalConfig,
   parsePersistedGlobalConfig,
@@ -69,6 +70,80 @@ describe("global config", () => {
 
     expect(withoutGit.workspaces.repo?.git).toEqual({});
     expect(withEmptyLegacyProviders.workspaces.repo?.git).toEqual({});
+  });
+
+  test("migrates legacy reusable prompts before strict settings validation", () => {
+    const prompts = [{ id: "review", name: "review", content: "Review this" }];
+    const config = parsePersistedGlobalConfig({
+      version: 4,
+      chat: { customPrompts: prompts },
+    });
+
+    expect(config.reusablePrompts).toEqual([{ ...prompts[0]!, description: "" }]);
+    expect(config.chat).not.toHaveProperty("customPrompts");
+  });
+
+  test("keeps supported legacy fields out of strict persisted validation", () => {
+    const config = parsePersistedGlobalConfig({
+      version: 4,
+      trustedHooks: true,
+      trustedHooksFingerprint: "old",
+      workspaces: {
+        repo: {
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
+          defaultRuntimeKind: "opencode",
+        },
+      },
+    });
+
+    expect(config).not.toHaveProperty("trustedHooks");
+    expect(config).not.toHaveProperty("trustedHooksFingerprint");
+    expect(config.workspaces.repo).not.toHaveProperty("defaultRuntimeKind");
+  });
+
+  const unknownNestedSettings: Array<[Record<string, JSONType>, string]> = [
+    [{ git: { extra: true } }, "git.extra"],
+    [
+      {
+        workspaces: {
+          repo: {
+            workspaceId: "repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+            defaultTargetBranch: { branch: "main", extra: true },
+          },
+        },
+      },
+      "workspaces.repo.defaultTargetBranch.extra",
+    ],
+    [
+      {
+        globalPromptOverrides: {
+          "system.shared.workflow_guards": { template: "text", baseVersion: 1, extra: true },
+        },
+      },
+      "globalPromptOverrides.system.shared.workflow_guards.extra",
+    ],
+    [
+      {
+        workspaces: {
+          repo: {
+            workspaceId: "repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+            agentStudioState: { openTaskIds: [], extra: true },
+          },
+        },
+      },
+      "workspaces.repo.agentStudioState.extra",
+    ],
+  ];
+  test.each(unknownNestedSettings)("rejects an unknown nested setting at %s", (fields, path) => {
+    expect(() => parsePersistedGlobalConfig({ version: 4, ...fields })).toThrow(
+      `${path}: Unknown setting.`,
+    );
   });
 
   test("migrates one legacy repository Git provider without losing values", () => {

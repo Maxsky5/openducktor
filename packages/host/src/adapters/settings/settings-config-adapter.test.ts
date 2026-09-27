@@ -8,7 +8,10 @@ import {
   upgradePersistedGlobalConfigV2,
 } from "../../config/global-config";
 import { HostValidationError } from "../../effect/host-errors";
-import { createSettingsConfigAdapter } from "./settings-config-adapter";
+import {
+  createSettingsConfigAdapter,
+  findInvalidSettingsFileError,
+} from "./settings-config-adapter";
 
 const withTempConfig = async (run: (configPath: string) => Promise<void>): Promise<void> => {
   const root = await mkdtemp(join(tmpdir(), "odt-settings-config-"));
@@ -201,7 +204,11 @@ describe("settings config adapter initialization", () => {
           "Fix the values in this file, or move it aside to reset OpenDucktor settings.",
         ].join("\n\n"),
       );
-      expect(result.left.details).toEqual({ path: configPath });
+      expect(result.left.details).toEqual({ kind: "invalid-settings-file", path: configPath });
+      expect(findInvalidSettingsFileError({ cause: result.left })).toBe(result.left);
+      expect(
+        findInvalidSettingsFileError(new HostValidationError({ message: "Other failure" })),
+      ).toBeNull();
     });
   });
 
@@ -211,13 +218,13 @@ describe("settings config adapter initialization", () => {
       const adapter = createSettingsConfigAdapter({ configPath });
 
       const result = await Effect.runPromise(adapter.readConfig().pipe(Effect.either));
-      if (result._tag !== "Left") {
-        throw new Error("Expected a config parse failure");
+      if (result._tag !== "Left" || !(result.left instanceof HostValidationError)) {
+        throw new Error("Expected an invalid settings failure");
       }
 
-      expect(result.left.message.startsWith(`Failed parsing config file ${configPath}:\n\n`)).toBe(
-        true,
-      );
+      expect(
+        result.left.message.startsWith(`Invalid config file ${configPath}:\n\nInvalid JSON`),
+      ).toBe(true);
       expect(
         result.left.message.endsWith(
           "Fix the values in this file, or move it aside to reset OpenDucktor settings.",
@@ -225,6 +232,28 @@ describe("settings config adapter initialization", () => {
       ).toBe(true);
     });
   });
+
+  test.each([2, 3, 4] as const)(
+    "rejects unknown settings in version %i without changing the file",
+    async (version) => {
+      await withTempConfig(async (configPath) => {
+        const payload = JSON.stringify({ version, theme: "dark", extra: true });
+        await writeFile(configPath, payload);
+        const adapter = createSettingsConfigAdapter({ configPath });
+
+        const result = await Effect.runPromise(
+          adapter.readConfig({ initialize: false }).pipe(Effect.either),
+        );
+
+        expect(result._tag).toBe("Left");
+        if (result._tag === "Left") {
+          expect(result.left).toBeInstanceOf(HostValidationError);
+          expect(result.left.message).toContain("extra:");
+        }
+        expect(await readFile(configPath, "utf8")).toBe(payload);
+      });
+    },
+  );
 
   test("reports a config value that JSON cannot represent as a validation failure", async () => {
     await withTempConfig(async (configPath) => {

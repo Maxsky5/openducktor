@@ -88,11 +88,13 @@ export const validatePromptTemplatePlaceholders = (
   };
 };
 
-export const agentPromptOverrideSchema = z.object({
-  template: z.string(),
-  baseVersion: z.number().int().min(1),
-  enabled: z.boolean().optional(),
-});
+export const agentPromptOverrideSchema = z
+  .object({
+    template: z.string(),
+    baseVersion: z.number().int().min(1),
+    enabled: z.boolean().optional(),
+  })
+  .strict();
 export type AgentPromptOverride = z.infer<typeof agentPromptOverrideSchema>;
 
 export const repoPromptOverridesSchema = z

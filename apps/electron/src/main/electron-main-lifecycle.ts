@@ -134,20 +134,24 @@ export const composeElectronMainStartupEffect = <PreReady, Ready>({
 type StartupBoundaryOptions = {
   cleanupAfterFailure(): Effect.Effect<void, ElectronLifecycleError>;
   exitProcess(exitCode: number): void;
+  invalidSettingsMessage?(cause: unknown): string | null;
   logger: ElectronMainLifecycleLogger;
   markShutdownComplete(): void;
   markShutdownStarted(): void;
   reportFailure(cause: unknown): void;
+  showInvalidSettingsError?(message: string): Promise<void>;
   startupEffect: Effect.Effect<unknown, ElectronError>;
 };
 
 export const runElectronMainStartupBoundary = async ({
   cleanupAfterFailure,
   exitProcess,
+  invalidSettingsMessage,
   logger,
   markShutdownComplete,
   markShutdownStarted,
   reportFailure,
+  showInvalidSettingsError,
   startupEffect,
 }: StartupBoundaryOptions): Promise<void> => {
   const startupExit = await Effect.runPromiseExit(startupEffect);
@@ -157,10 +161,12 @@ export const runElectronMainStartupBoundary = async ({
 
   markShutdownStarted();
   const loggingFailures: Error[] = [];
+  const startupFailure = causeToElectronBoundaryError(startupExit.cause);
+  const settingsMessage = invalidSettingsMessage?.(startupFailure) ?? null;
   const startupLoggingFailure = await captureLoggingFailure(() =>
     logger.error(
-      "OpenDucktor Electron startup failed",
-      causeToElectronBoundaryError(startupExit.cause),
+      settingsMessage ?? "OpenDucktor Electron startup failed",
+      settingsMessage === null ? startupFailure : undefined,
     ),
   );
   if (startupLoggingFailure !== undefined) {
@@ -187,6 +193,20 @@ export const runElectronMainStartupBoundary = async ({
   });
   if (reportingFailure !== undefined) {
     reportFailure(reportingFailure);
+  }
+  if (settingsMessage !== null && showInvalidSettingsError !== undefined) {
+    try {
+      await showInvalidSettingsError(settingsMessage);
+      return;
+    } catch (cause) {
+      const displayFailure = toLifecycleError(cause, "electron.main.show-settings-error");
+      const displayLoggingFailure = await captureLoggingFailure(() =>
+        logger.error("OpenDucktor could not show the settings error window", displayFailure),
+      );
+      if (displayLoggingFailure !== undefined) {
+        reportFailure(displayLoggingFailure);
+      }
+    }
   }
   exitProcess(1);
 };
