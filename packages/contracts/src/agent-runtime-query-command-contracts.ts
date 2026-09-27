@@ -21,7 +21,7 @@ import {
 export const agentRuntimePreviewModelsInputSchema = z
   .object({
     repoPath: z.string().trim().min(1),
-    runtimeKind: z.enum(["codex", "opencode"]),
+    runtimeKind: z.enum(["claude", "codex", "opencode"]),
   })
   .strict();
 export type AgentRuntimePreviewModelsInput = z.infer<typeof agentRuntimePreviewModelsInputSchema>;

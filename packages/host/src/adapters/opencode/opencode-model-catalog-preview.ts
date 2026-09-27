@@ -1,11 +1,19 @@
-import { type ChildProcessByStdio, spawn } from "node:child_process";
+import {
+  type ChildProcessByStdio,
+  type SpawnOptionsWithStdioTuple,
+  type StdioNull,
+  type StdioPipe,
+  spawn,
+} from "node:child_process";
 import type { Readable } from "node:stream";
 import { loadOpencodeModelCatalogFromEndpoint } from "@openducktor/adapters-opencode-sdk";
+import type { AgentModelCatalog } from "@openducktor/core";
 import { Clock, Effect } from "effect";
 import { resolveSavedRuntimeExecutableConfig } from "../../application/runtimes/saved-runtime-executable";
 import { HostOperationError, type HostError, toHostOperationError } from "../../effect/host-errors";
 import { createProcessCommandLaunch } from "../../infrastructure/process/process-command-launch";
 import {
+  type ProcessTreeTerminator,
   shouldStartDetachedProcessGroup,
   terminateProcessTree,
   waitForChildProcessClose,
@@ -17,6 +25,11 @@ import { isOpenCodeHealthy, pickFreePort } from "./opencode-local-port";
 const STARTUP_TIMEOUT_MS = 30_000;
 const STOP_TIMEOUT_MS = 3_000;
 type OpenCodeChild = ChildProcessByStdio<null, Readable, Readable>;
+type OpenCodePreviewSpawner = (
+  command: string,
+  args: string[],
+  options: SpawnOptionsWithStdioTuple<StdioNull, StdioPipe, StdioPipe>,
+) => OpenCodeChild;
 type PreviewProcessState = {
   closed: boolean;
   error: Error | null;
@@ -29,10 +42,24 @@ export const createOpenCodeModelCatalogPreview =
     settingsConfig,
     toolDiscovery,
     processEnv,
+    portAllocator = pickFreePort,
+    processTreeTerminator = terminateProcessTree,
+    readinessProbe = isOpenCodeHealthy,
+    readModelCatalog = loadOpencodeModelCatalogFromEndpoint,
+    readTimeoutMs = 30_000,
+    spawnProcess = spawn,
+    startupTimeoutMs = STARTUP_TIMEOUT_MS,
   }: {
     settingsConfig: SettingsConfigPort;
     toolDiscovery: ToolDiscoveryPort;
     processEnv: NodeJS.ProcessEnv;
+    portAllocator?: typeof pickFreePort;
+    processTreeTerminator?: ProcessTreeTerminator;
+    readinessProbe?: typeof isOpenCodeHealthy;
+    readModelCatalog?: (repoPath: string, baseUrl: string) => Promise<AgentModelCatalog>;
+    readTimeoutMs?: number;
+    spawnProcess?: OpenCodePreviewSpawner;
+    startupTimeoutMs?: number;
   }) =>
   (repoPath: string) =>
     Effect.gen(function* () {
@@ -41,7 +68,7 @@ export const createOpenCodeModelCatalogPreview =
         settingsConfig,
         toolDiscovery,
       });
-      const port = yield* pickFreePort();
+      const port = yield* portAllocator();
       const runtimeEnv: NodeJS.ProcessEnv = { ...processEnv, OPENCODE_CONFIG_CONTENT: "{}" };
       delete runtimeEnv.OPENCODE_SERVER_PASSWORD;
       delete runtimeEnv.OPENCODE_SERVER_USERNAME;
@@ -60,7 +87,7 @@ export const createOpenCodeModelCatalogPreview =
         Effect.acquireUseRelease(
           Effect.try({
             try: () => {
-              const child: OpenCodeChild = spawn(command.command, command.args, {
+              const child = spawnProcess(command.command, command.args, {
                 cwd: repoPath,
                 detached: shouldStartDetachedProcessGroup(process.platform),
                 env: command.env,
@@ -112,28 +139,26 @@ export const createOpenCodeModelCatalogPreview =
                     message: `OpenCode server exited before the model list was ready. ${state.stderr.trim() || state.stdout.trim()}`,
                   });
                 }
-                if (yield* isOpenCodeHealthy(port, 250)) break;
+                if (yield* readinessProbe(port, 250)) break;
                 const elapsed = (yield* Clock.currentTimeMillis) - startedAt;
-                if (elapsed >= STARTUP_TIMEOUT_MS) {
+                if (elapsed >= startupTimeoutMs) {
                   return yield* new HostOperationError({
                     operation: "opencodeModelCatalogPreview.start",
-                    message: `OpenCode model catalog server did not start within ${STARTUP_TIMEOUT_MS}ms. ${state.stderr.trim() || state.stdout.trim()}`,
+                    message: `OpenCode model catalog server did not start within ${startupTimeoutMs}ms. ${state.stderr.trim() || state.stdout.trim()}`,
                   });
                 }
                 yield* Effect.sleep("100 millis");
               }
               return yield* Effect.tryPromise({
-                try: () =>
-                  loadOpencodeModelCatalogFromEndpoint(repoPath, `http://127.0.0.1:${port}`),
+                try: () => readModelCatalog(repoPath, `http://127.0.0.1:${port}`),
                 catch: (cause) => toHostOperationError(cause, "opencodeModelCatalogPreview.read"),
               }).pipe(
                 Effect.timeoutFail({
-                  duration: "30 seconds",
+                  duration: `${readTimeoutMs} millis`,
                   onTimeout: () =>
                     new HostOperationError({
                       operation: "opencodeModelCatalogPreview.read",
-                      message:
-                        "OpenCode did not return its model catalog within 30 seconds. Retry the model list.",
+                      message: `OpenCode did not return its model catalog within ${readTimeoutMs}ms. Retry the model list.`,
                     }),
                 }),
               );
@@ -141,7 +166,7 @@ export const createOpenCodeModelCatalogPreview =
           ({ child, state }) =>
             Effect.gen(function* () {
               const stop = child.pid
-                ? terminateProcessTree({
+                ? processTreeTerminator({
                     pid: child.pid,
                     label: "OpenCode model catalog preview",
                     isClosed: () => state.closed,

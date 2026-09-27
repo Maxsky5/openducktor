@@ -92,6 +92,29 @@ test("model-only catalog read keeps repository profiles without reading commands
   expect(commandList).not.toHaveBeenCalled();
 });
 
+test("model-only catalog read preserves typed request failures", async () => {
+  const client = catalogClient({
+    config: {
+      providers: async () => {
+        throw Object.assign(new Error("provider request timed out"), { code: "ETIMEDOUT" });
+      },
+    },
+  });
+
+  await expect(
+    // SAFETY: The test client implements the model and agent namespaces used by this read.
+    loadModelCatalog((() => client) as never, {
+      runtimeEndpoint: "http://127.0.0.1:1234",
+      workingDirectory: "/repo",
+      repoPath: "/repo",
+    }),
+  ).rejects.toMatchObject({
+    name: "OpenCodeRequestError",
+    failureKind: "timeout",
+    message: expect.stringContaining("list model catalog"),
+  });
+});
+
 describe("catalog-and-mcp combined runtime catalog", () => {
   test("normalizes command payloads into the slash command surface", async () => {
     const list = mock(async () => ({

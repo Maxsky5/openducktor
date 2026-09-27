@@ -67,7 +67,7 @@ test("previews only a repository and supported runtime, without a client-selecte
   );
   for (const invalid of [
     { ...input, workingDirectory: "/other" },
-    { ...input, runtimeKind: "claude" },
+    { ...input, runtimeKind: "other" },
     { ...input, repoPath: "" },
   ]) {
     const error = await Effect.runPromise(

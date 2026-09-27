@@ -51,12 +51,16 @@ const readModelCatalog = async (
   repoPath: string,
   readAgents: (directory: string) => Promise<ParsedOpencodeAgent[]>,
 ): Promise<AgentModelCatalog> => {
-  const response = await client.config.providers({ directory: repoPath });
-  const providerData = unwrapData(response, "list configured providers");
-  return {
-    ...mapProviderListToCatalog(providerData),
-    profiles: toOpencodeProfiles(await readAgents(repoPath)),
-  };
+  try {
+    const response = await client.config.providers({ directory: repoPath });
+    const providerData = unwrapData(response, "list configured providers");
+    return {
+      ...mapProviderListToCatalog(providerData),
+      profiles: toOpencodeProfiles(await readAgents(repoPath)),
+    };
+  } catch (error) {
+    throw toOpenCodeRequestError("list model catalog", error);
+  }
 };
 
 export const loadModelCatalog = (

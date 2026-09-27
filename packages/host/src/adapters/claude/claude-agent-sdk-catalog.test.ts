@@ -12,6 +12,7 @@ import {
 } from "@openducktor/contracts";
 import {
   type ClaudeCatalogQueryFactory,
+  loadClaudeModelCatalog,
   loadClaudeRuntimeCatalog,
   toClaudeHistoryMessages,
   toClaudeModelDescriptor,
@@ -473,6 +474,72 @@ describe("loadClaudeRuntimeCatalog", () => {
 
     await expect(
       loadClaudeRuntimeCatalog(catalogInput, undefined, process.execPath, () => sdkQuery),
+    ).rejects.toBe(failure);
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("loadClaudeModelCatalog", () => {
+  const model: ModelInfo = {
+    value: "claude-sonnet-4-6",
+    displayName: "Claude Sonnet 4.6",
+    description: "Claude Sonnet",
+  };
+
+  test("reads only models and closes its short-lived session", async () => {
+    const close = mock(() => {});
+    const supportedModels = mock(async () => [model]);
+    const supportedAgents = mock(async () => []);
+    const supportedCommands = mock(async () => []);
+    const sdkQuery = createClaudeQueryFixture({
+      close,
+      supportedModels,
+      supportedAgents,
+      supportedCommands,
+    });
+
+    const catalog = await loadClaudeModelCatalog(
+      "/repo",
+      undefined,
+      process.execPath,
+      () => sdkQuery,
+    );
+
+    expect(catalog.models).toMatchObject([{ id: "claude-sonnet-4-6" }]);
+    expect(supportedModels).toHaveBeenCalledTimes(1);
+    expect(supportedAgents).not.toHaveBeenCalled();
+    expect(supportedCommands).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  test("closes the session when the model read fails", async () => {
+    const failure = new Error("Claude model read failed.");
+    const close = mock(() => {});
+    const sdkQuery = createClaudeQueryFixture({
+      close,
+      supportedModels: mock(async () => {
+        throw failure;
+      }),
+    });
+
+    await expect(
+      loadClaudeModelCatalog("/repo", undefined, process.execPath, () => sdkQuery),
+    ).rejects.toBe(failure);
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  test("closes the session when initialization fails", async () => {
+    const failure = new Error("Claude catalog initialization failed.");
+    const close = mock(() => {});
+    const sdkQuery = createClaudeQueryFixture({
+      close,
+      initializationResult: mock(async () => {
+        throw failure;
+      }),
+    });
+
+    await expect(
+      loadClaudeModelCatalog("/repo", undefined, process.execPath, () => sdkQuery),
     ).rejects.toBe(failure);
     expect(close).toHaveBeenCalledTimes(1);
   });

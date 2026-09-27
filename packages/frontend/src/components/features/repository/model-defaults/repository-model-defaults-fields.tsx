@@ -5,7 +5,7 @@ import type { ModelPickerFavoriteState } from "@/components/features/agents/mode
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
-import { findRuntimeDefinition } from "@/lib/agent-runtime";
+import { filterRuntimeDefinitionsForRole, findRuntimeDefinition } from "@/lib/agent-runtime";
 import { cn } from "@/lib/utils";
 import type { RuntimeModelCatalogQueryResource } from "@/state/queries/use-runtime-model-catalogs";
 import { buildRepositoryAgentControls } from "./repository-agent-controls";
@@ -165,9 +165,13 @@ export function RepositoryModelDefaultsFields({
 
       <div className="grid gap-3">
         {ROLE_DEFAULTS.map(({ role, label }) => {
+          const runtimeDefinitions = filterRuntimeDefinitionsForRole(
+            availableRuntimeDefinitions,
+            role,
+          );
           const roleViewModel = buildRepositoryAgentRoleViewModel({
             selectedRepoConfig,
-            runtimeDefinitions: availableRuntimeDefinitions,
+            runtimeDefinitions,
             role,
             getCatalogForRuntime,
             isCatalogLoadingForRuntime,
@@ -201,7 +205,7 @@ export function RepositoryModelDefaultsFields({
               <div className="grid gap-3 @2xl:grid-cols-3">
                 <div className="min-w-0">
                   <RepositoryModelPickerField
-                    runtimeDefinitions={availableRuntimeDefinitions}
+                    runtimeDefinitions={runtimeDefinitions}
                     catalogResources={catalogResources}
                     value={controls.selectedPickerValue}
                     favoriteState={favoriteState}
@@ -212,7 +216,7 @@ export function RepositoryModelDefaultsFields({
                         const currentValue = repoConfig.agentDefaults[role] ?? null;
                         const currentRuntimeKind = resolveRepoAgentDefaultRuntimeKind({
                           selectedRepoConfig: repoConfig,
-                          runtimeDefinitions: availableRuntimeDefinitions,
+                          runtimeDefinitions,
                           role,
                         });
                         const nextDefault = resolveRepoAgentDefaultModelPickerSelection({

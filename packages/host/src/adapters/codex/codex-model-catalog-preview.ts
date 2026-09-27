@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { type SpawnOptionsWithStdioTuple, type StdioPipe, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { toCodexModelCatalog } from "@openducktor/adapters-codex-app-server";
 import { parseCodexAppServerRequestResult } from "@openducktor/contracts";
@@ -7,6 +7,7 @@ import { resolveSavedRuntimeExecutableConfig } from "../../application/runtimes/
 import { HostOperationError, type HostError, toHostOperationError } from "../../effect/host-errors";
 import { createProcessCommandLaunch } from "../../infrastructure/process/process-command-launch";
 import {
+  type ProcessTreeTerminator,
   shouldStartDetachedProcessGroup,
   terminateProcessTree,
   waitForChildProcessClose,
@@ -18,6 +19,12 @@ import type { CodexChildProcess } from "./codex-workspace-runtime-cleanup";
 
 const REQUEST_TIMEOUT_MS = 30_000;
 const STOP_TIMEOUT_MS = 3_000;
+const handleEarlySpawnError = () => undefined;
+type CodexPreviewSpawner = (
+  command: string,
+  args: string[],
+  options: SpawnOptionsWithStdioTuple<StdioPipe, StdioPipe, StdioPipe>,
+) => CodexChildProcess;
 type PreviewProcess = {
   child: CodexChildProcess;
   isClosed: () => boolean;
@@ -30,11 +37,17 @@ export const createCodexModelCatalogPreview =
     toolDiscovery,
     processEnv,
     clientVersion,
+    processTreeTerminator = terminateProcessTree,
+    requestTimeoutMs = REQUEST_TIMEOUT_MS,
+    spawnProcess = spawn,
   }: {
     settingsConfig: SettingsConfigPort;
     toolDiscovery: ToolDiscoveryPort;
     processEnv: NodeJS.ProcessEnv;
     clientVersion: string;
+    processTreeTerminator?: ProcessTreeTerminator;
+    requestTimeoutMs?: number;
+    spawnProcess?: CodexPreviewSpawner;
   }) =>
   (repoPath: string) =>
     Effect.gen(function* () {
@@ -52,7 +65,7 @@ export const createCodexModelCatalogPreview =
         Effect.acquireUseRelease(
           Effect.try({
             try: () => {
-              const child: CodexChildProcess = spawn(command.command, command.args, {
+              const child = spawnProcess(command.command, command.args, {
                 cwd: repoPath,
                 detached: shouldStartDetachedProcessGroup(process.platform),
                 env: command.env,
@@ -60,6 +73,7 @@ export const createCodexModelCatalogPreview =
                 windowsHide: command.windowsHide,
                 windowsVerbatimArguments: command.windowsVerbatimArguments,
               });
+              child.once("error", handleEarlySpawnError);
               let closed = false;
               child.once("close", () => {
                 closed = true;
@@ -87,12 +101,13 @@ export const createCodexModelCatalogPreview =
                   createCodexAppServerTransport(
                     `catalog-preview-${randomUUID()}`,
                     process.child,
-                    REQUEST_TIMEOUT_MS,
+                    requestTimeoutMs,
                     () => undefined,
                   ),
                 catch: (cause) => toHostOperationError(cause, "codexModelCatalogPreview.transport"),
               });
               process.transport = transport;
+              process.child.removeListener("error", handleEarlySpawnError);
               yield* transport.request({
                 method: "initialize",
                 params: {
@@ -122,7 +137,7 @@ export const createCodexModelCatalogPreview =
           ({ child, transport, isClosed }) =>
             Effect.gen(function* () {
               const stop = child.pid
-                ? terminateProcessTree({
+                ? processTreeTerminator({
                     pid: child.pid,
                     label: "Codex model catalog preview",
                     isClosed,

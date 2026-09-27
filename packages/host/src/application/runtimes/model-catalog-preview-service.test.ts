@@ -51,6 +51,26 @@ test("rejects a non-Git folder before starting a catalog reader", async () => {
   expect(readModels).not.toHaveBeenCalled();
 });
 
+test("rejects an unavailable runtime before starting a catalog reader", async () => {
+  const readModels = mock(() => Effect.succeed(catalog));
+  const service = createModelCatalogPreviewService({
+    gitPort: {
+      canonicalizePath: () => Effect.succeed("/repo"),
+      isGitRepository: () => Effect.succeed(true),
+    },
+    runtimeDefinitionsService: {
+      listRuntimeDefinitions: () => [],
+    },
+    readModels,
+  });
+
+  const error = await Effect.runPromise(
+    Effect.flip(service({ repoPath: "/repo", runtimeKind: "opencode" })),
+  );
+  expect(error.failure.code).toBe("runtime_unavailable");
+  expect(readModels).not.toHaveBeenCalled();
+});
+
 test("reports native catalog failures and rejects a mismatched runtime", async () => {
   const dependencies = {
     gitPort: {

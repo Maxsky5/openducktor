@@ -3,6 +3,7 @@ import type { ModelCatalogPreviewReader } from "../../application/runtimes/model
 import { HostOperationError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
+import { createClaudeModelCatalogPreview } from "../claude/claude-model-catalog-preview";
 import { createCodexModelCatalogPreview } from "../codex/codex-model-catalog-preview";
 import { createOpenCodeModelCatalogPreview } from "../opencode/opencode-model-catalog-preview";
 
@@ -19,6 +20,11 @@ export const createNodeModelCatalogPreview = ({
   processPathError: string | null;
   clientVersion: string;
 }): ModelCatalogPreviewReader => {
+  const readClaude = createClaudeModelCatalogPreview({
+    settingsConfig,
+    toolDiscovery,
+    processEnv,
+  });
   const readCodex = createCodexModelCatalogPreview({
     settingsConfig,
     toolDiscovery,
@@ -39,6 +45,13 @@ export const createNodeModelCatalogPreview = ({
         }),
       );
     }
-    return runtimeKind === "codex" ? readCodex(repoPath) : readOpenCode(repoPath);
+    switch (runtimeKind) {
+      case "claude":
+        return readClaude(repoPath);
+      case "codex":
+        return readCodex(repoPath);
+      case "opencode":
+        return readOpenCode(repoPath);
+    }
   };
 };
