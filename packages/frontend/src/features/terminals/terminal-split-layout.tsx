@@ -1,6 +1,7 @@
 import {
   type ReactElement,
   type ReactNode,
+  type RefObject,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -20,19 +21,37 @@ export type TerminalSplitIds = {
   separator?: string;
 };
 
-export function useTerminalSplit(ids: TerminalSplitIds, isVisible: boolean) {
+type TerminalSplitState = {
+  isNarrow: boolean;
+  groupRef: RefObject<GroupImperativeHandle | null>;
+  onLayoutChanged(layout: Record<string, number>): void;
+};
+
+type TerminalSplitLayoutProps = {
+  ids: TerminalSplitIds;
+  model: TerminalPanelModel;
+  layout: TerminalSplitState;
+  className: string;
+  contentClassName: string;
+  children: ReactNode;
+};
+
+export function useTerminalSplit(ids: TerminalSplitIds, isVisible: boolean): TerminalSplitState {
   const [isNarrow, setIsNarrow] = useState(false);
   const groupRef = useRef<GroupImperativeHandle | null>(null);
   const terminalSizeRef = useRef(28);
   useEffect(() => {
     const media = window.matchMedia("(max-width: 767px)");
-    const sync = () => setIsNarrow(media.matches);
-    sync();
-    media.addEventListener("change", sync);
-    return () => media.removeEventListener("change", sync);
+    const updateNarrow = () => setIsNarrow(media.matches);
+    updateNarrow();
+    media.addEventListener("change", updateNarrow);
+    return () => media.removeEventListener("change", updateNarrow);
   }, []);
   useLayoutEffect(() => {
-    const terminalSize = isVisible ? (isNarrow ? 100 : terminalSizeRef.current) : 0;
+    let terminalSize = 0;
+    if (isVisible) {
+      terminalSize = isNarrow ? 100 : terminalSizeRef.current;
+    }
     groupRef.current?.setLayout({
       [ids.content]: 100 - terminalSize,
       [ids.terminal]: terminalSize,
@@ -55,14 +74,7 @@ export function TerminalSplitLayout({
   className,
   contentClassName,
   children,
-}: {
-  ids: TerminalSplitIds;
-  model: TerminalPanelModel;
-  layout: ReturnType<typeof useTerminalSplit>;
-  className: string;
-  contentClassName: string;
-  children: ReactNode;
-}): ReactElement {
+}: TerminalSplitLayoutProps): ReactElement {
   const { isNarrow, groupRef, onLayoutChanged } = layout;
   return (
     <ResizablePanelGroup

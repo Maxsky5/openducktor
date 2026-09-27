@@ -128,11 +128,12 @@ export const createTerminalAdmission = ({
               );
             }
             const pendingForContext = pendingByContext.get(key) ?? 0;
-            const contextLimit = taskId
-              ? TERMINAL_LIMITS.livePerTask
-              : "kind" in context
-                ? TERMINAL_LIMITS.livePerWorkspaceSession
-                : TERMINAL_LIMITS.liveUnassociated;
+            let contextLimit = TERMINAL_LIMITS.liveUnassociated;
+            if (taskId) {
+              contextLimit = TERMINAL_LIMITS.livePerTask;
+            } else if ("kind" in context) {
+              contextLimit = TERMINAL_LIMITS.livePerWorkspaceSession;
+            }
             if (countLiveForContext(context) + pendingForContext >= contextLimit) {
               return Effect.fail(
                 new TerminalServiceError({
