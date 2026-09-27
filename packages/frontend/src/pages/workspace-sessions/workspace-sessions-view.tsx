@@ -69,7 +69,7 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
     requestedSessionId: sessionId,
   });
   const requestedSelectedId = requestedSelected?.id ?? null;
-  const { visibleSelectedId, selectTab } = useVisibleSessionId(
+  const { visibleSelectedId, selectTab, leaveRemovedChat } = useVisibleSessionId(
     requestedSelectedId,
     guardWorkspaceChange,
     updateNavigation,
@@ -184,6 +184,7 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
           record={selected}
           panelState={panelState}
           onPanelStateChange={onPanelStateChange}
+          onSafeToLeave={leaveRemovedChat}
         />
       ) : (
         <WorkspaceSessionEmptyState

@@ -5,6 +5,7 @@ import { TaskExecutionSelectedFilePreview } from "@/components/features/agents/t
 import { ChatFileLinkProvider } from "@/components/features/agents/agent-chat/agent-chat-file-link-provider";
 import type { ChatFileLinkOwner } from "@/components/features/agents/agent-chat/agent-chat-file-link-context";
 import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
+import type { TaskExecutionFilePreviewLeavePolicy } from "@/components/features/agents/task-execution-file-preview";
 import {
   WorkspaceSessionToolsPanel,
   type WorkspaceToolsTabId,
@@ -171,6 +172,7 @@ export function WorkspaceSessionContent({
   record,
   panelState,
   onPanelStateChange,
+  onSafeToLeave,
 }: {
   workspace: ActiveWorkspace;
   record: WorkspaceSession;
@@ -178,6 +180,7 @@ export function WorkspaceSessionContent({
   onPanelStateChange: (
     update: Partial<Pick<WorkspaceSessionPanelState, "activeTabId" | "selectedFile">>,
   ) => void;
+  onSafeToLeave?: () => void;
 }) {
   const { activeBranch, isSwitchingBranch } = useWorkspaceBranchState();
   const repoConfig = useQuery(repoConfigQueryOptions(workspace.workspaceId));
@@ -208,6 +211,38 @@ export function WorkspaceSessionContent({
     onSelectionChange,
     isWorktree,
   );
+  const canLeaveRef = useRef(true);
+  // Discard can finish a file switch too; only a close may release a removed chat.
+  const closingRef = useRef(false);
+  const reportLeavePolicy = preview.model.onLeavePolicyChange;
+  const closeFile = preview.model.onClose;
+  const keepDraft = preview.model.onKeepEditing;
+  const onLeavePolicyChange = useCallback(
+    (policy: TaskExecutionFilePreviewLeavePolicy) => {
+      reportLeavePolicy(policy);
+      canLeaveRef.current = policy === "allow";
+      if (canLeaveRef.current) {
+        closingRef.current = false;
+        onSafeToLeave?.();
+      }
+    },
+    [onSafeToLeave, reportLeavePolicy],
+  );
+  const closePreview = useCallback(() => {
+    closingRef.current = !canLeaveRef.current;
+    closeFile();
+    if (canLeaveRef.current) onSafeToLeave?.();
+  }, [closeFile, onSafeToLeave]);
+  const keepEditing = useCallback(() => {
+    closingRef.current = false;
+    keepDraft();
+  }, [keepDraft]);
+  const discardDraft = useCallback(() => {
+    const closing = closingRef.current;
+    closingRef.current = false;
+    onDiscard();
+    if (closing) onSafeToLeave?.();
+  }, [onDiscard, onSafeToLeave]);
   const refreshRef = useRef<((scope: "git" | "all") => Promise<void>) | null>(null);
   const [isNarrow, setIsNarrow] = useState(false);
   useEffect(() => {
@@ -260,7 +295,10 @@ export function WorkspaceSessionContent({
         key={preview.model.previewSessionKey}
         model={{
           ...preview.model,
-          onDiscard,
+          onClose: closePreview,
+          onKeepEditing: keepEditing,
+          onDiscard: discardDraft,
+          onLeavePolicyChange,
         }}
         branch={previewBranch}
         requireBranch

@@ -1,4 +1,4 @@
-import { expect, spyOn, test } from "bun:test";
+import { expect, mock, spyOn, test } from "bun:test";
 import { repoConfigSchema, type WorkspaceSession } from "@openducktor/contracts";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -77,6 +77,7 @@ function renderClosedSession(
   },
   switchWorkspace?: () => Promise<boolean>,
   panelOpen = false,
+  onSafeToLeave?: () => void,
 ) {
   const content = (
     name: string | null | undefined,
@@ -112,6 +113,7 @@ function renderClosedSession(
                 selectedFile,
               }}
               onPanelStateChange={() => {}}
+              {...(onSafeToLeave ? { onSafeToLeave } : {})}
             />
           </Tabs>
         </WorkspacePreviewTransitionGuardProvider>
@@ -129,6 +131,53 @@ function renderClosedSession(
   };
 }
 
+test.each(["clean", "close"])("a kept file preview is safe after it is %s", async (finish) => {
+  const onSafeToLeave = mock(() => {});
+  const preview = mockFilePreview(({ model }) => (
+    <>
+      <button onClick={() => model.onLeavePolicyChange("confirm")}>Edit file</button>
+      <button onClick={() => model.onLeavePolicyChange("allow")}>Save file</button>
+      <button onClick={model.onClose}>Close file</button>
+      <button onClick={model.onKeepEditing}>Keep editing</button>
+      {model.hasPendingDiscard ? <button onClick={model.onDiscard}>Discard file</button> : null}
+    </>
+  ));
+  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(() => <div />);
+  const queryClient = newQueryClient();
+  const view = renderClosedSession(
+    queryClient,
+    "main",
+    undefined,
+    record,
+    undefined,
+    undefined,
+    false,
+    onSafeToLeave,
+  );
+  try {
+    fireEvent.click(screen.getByRole("button", { name: "Edit file" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close file" }));
+    fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+    expect(onSafeToLeave).not.toHaveBeenCalled();
+
+    if (finish === "clean") {
+      fireEvent.click(screen.getByRole("button", { name: "Save file" }));
+      expect(onSafeToLeave).toHaveBeenCalledTimes(1);
+      fireEvent.click(screen.getByRole("button", { name: "Close file" }));
+      expect(onSafeToLeave).toHaveBeenCalledTimes(2);
+    } else {
+      fireEvent.click(screen.getByRole("button", { name: "Close file" }));
+      fireEvent.click(screen.getByRole("button", { name: "Discard file" }));
+      expect(onSafeToLeave).toHaveBeenCalledTimes(1);
+    }
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    preview.mockRestore();
+    chat.mockRestore();
+  }
+});
+
 function newQueryClient() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   queryClient.setQueryData(
@@ -138,7 +187,11 @@ function newQueryClient() {
   return queryClient;
 }
 
-function mockFilePreview(Preview: () => ReactElement) {
+function mockFilePreview(
+  Preview: (
+    props: Parameters<typeof filePreview.TaskExecutionSelectedFilePreview>[0],
+  ) => ReactElement,
+) {
   // Bun calls the mock as a function, but the exported component has React's memo shape.
   return spyOn(filePreview, "TaskExecutionSelectedFilePreview").mockImplementation(
     Object.assign(Preview, memo(Preview)),

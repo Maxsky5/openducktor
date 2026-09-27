@@ -2,7 +2,7 @@ import { afterEach, expect, jest, spyOn, test } from "bun:test";
 import type { WorkspaceSession, WorkspaceSessionArchiveInput } from "@openducktor/contracts";
 import { fireEvent, render, waitFor, within } from "@testing-library/react";
 import { useQueryClient } from "@tanstack/react-query";
-import { act, type ReactNode, useState } from "react";
+import { act, type ReactNode, useEffect, useState } from "react";
 import { Link, MemoryRouter, useLocation, useNavigate } from "react-router";
 import { QueryProvider } from "@/lib/query-provider";
 import { RIGHT_PANEL_OPEN_STORAGE_KEY } from "@/components/features/agents/use-right-panel-open";
@@ -648,6 +648,105 @@ test("an externally removed chat keeps its draft until the user leaves", async (
     configureShellBridge(createUnavailableShellBridge());
   }
 }, 5_000);
+
+test.each(["clean", "close"])(
+  "the last removed chat shows the empty view after its draft is %s",
+  async (finish) => {
+    const workspaceId = crypto.randomUUID();
+    function RemoveLast() {
+      const queryClient = useQueryClient();
+      return (
+        <button
+          onClick={() =>
+            queryClient.setQueryData(workspaceSessionListQueryOptions(workspaceId).queryKey, [])
+          }
+        >
+          Remove last chat
+        </button>
+      );
+    }
+    const content = spyOn(sessionContent, "WorkspaceSessionContent").mockImplementation(
+      function SessionContent({ record, onSafeToLeave }) {
+        const [file, setFile] = useState<{ rootPath: string; relativePath: string } | null>(null);
+        const [canLeave, setCanLeave] = useState(true);
+        const { preview, onDiscard } = useWorkspaceSessionPreview(file, setFile, false);
+        useEffect(() => {
+          if (canLeave || preview.model.selectedFile === null) onSafeToLeave?.();
+        }, [canLeave, onSafeToLeave, preview.model.selectedFile]);
+        return (
+          <div data-testid="visible-draft">
+            {record.id}:{preview.model.selectedFile?.relativePath ?? "none"}
+            <button
+              onClick={() => {
+                const draft = { rootPath: "/repo", relativePath: "draft.ts" };
+                preview.onSelectFile(draft);
+                setFile(draft);
+              }}
+            >
+              Open draft
+            </button>
+            <button
+              onClick={() => {
+                preview.model.onLeavePolicyChange("confirm");
+                setCanLeave(false);
+              }}
+            >
+              Edit draft
+            </button>
+            <button
+              onClick={() => {
+                preview.model.onLeavePolicyChange("allow");
+                setCanLeave(true);
+              }}
+            >
+              Make draft clean
+            </button>
+            <button onClick={preview.model.onClose}>Close draft</button>
+            {preview.model.hasPendingDiscard ? (
+              <>
+                <button onClick={preview.model.onKeepEditing}>Keep editing</button>
+                <button onClick={onDiscard}>Discard draft</button>
+              </>
+            ) : null}
+          </div>
+        );
+      },
+    );
+    configureShellBridge(
+      createShellBridgeFixture({
+        client: {
+          workspaceSessionListActive: async () => [sessionRecord("First")],
+          workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+        },
+      }),
+    );
+    const view = renderTabs(undefined, "/chats?session=First", workspaceId, <RemoveLast />);
+    try {
+      await view.findByTestId("visible-draft");
+      fireEvent.click(view.getByRole("button", { name: "Open draft" }));
+      fireEvent.click(view.getByRole("button", { name: "Edit draft" }));
+      fireEvent.click(view.getByRole("button", { name: "Remove last chat" }));
+      await view.findByRole("button", { name: "Keep editing" });
+      fireEvent.click(view.getByRole("button", { name: "Keep editing" }));
+      expect(view.getByTestId("visible-draft").textContent).toContain("First:draft.ts");
+      expect(sessionTabs(view)).toHaveLength(0);
+
+      if (finish === "clean") {
+        fireEvent.click(view.getByRole("button", { name: "Make draft clean" }));
+      } else {
+        fireEvent.click(view.getByRole("button", { name: "Close draft" }));
+        fireEvent.click(await view.findByRole("button", { name: "Discard draft" }));
+      }
+      await waitFor(() => expect(view.queryByTestId("visible-draft")).toBeNull());
+      expect(view.getByText("No active sessions.")).toBeTruthy();
+    } finally {
+      view.unmount();
+      content.mockRestore();
+      configureShellBridge(createUnavailableShellBridge());
+    }
+  },
+  5_000,
+);
 
 test("tabs read activity without subscribing to session transcripts", async () => {
   configureShellBridge(
