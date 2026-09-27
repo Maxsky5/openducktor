@@ -29,6 +29,7 @@ import {
   toPromiseHostCommandRouter,
 } from "../../interface/router/host-command-router";
 import { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
+import { TerminalServiceError } from "../terminals/terminal-service";
 import {
   createGitPortTestDouble,
   createSettingsConfigTestDouble,
@@ -116,6 +117,9 @@ describe("host-owned Workspace Session lifecycle", () => {
     const failure = (message: string) =>
       Effect.fail(new HostOperationError({ operation: "test", message }));
     const dependencies: WorkspaceSessionServiceDependencies = {
+      terminalService: {
+        acquireWorkspaceSessionCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
+      },
       lifecycle: createTaskSessionLifecycleCoordinator(),
       operationGate: createWorkspaceSessionOperationGate(),
       sessionTitleGate: createWorkspaceSessionOperationGate(),
@@ -1256,6 +1260,46 @@ describe("host-owned Workspace Session lifecycle", () => {
     const restored = await Effect.runPromise(h.service.restore(ref));
     expect(restored).toEqual(started.session);
     expect(h.starts).toHaveLength(1);
+  });
+
+  test("stops chat terminals before worktree removal and leaves the worktree after a stop failure", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    h.dependencies.terminalService.acquireWorkspaceSessionCleanup = (scope) => {
+      h.calls.push(`stop-terminals:${scope.sessionId}`);
+      return Effect.fail(
+        new TerminalServiceError({
+          code: "close_failed",
+          operation: "close_by_workspace_session",
+          message: "Failed to terminate terminal-1. Retry after resolving the stop failure.",
+        }),
+      );
+    };
+    const archive = () =>
+      Effect.runPromise(
+        h.service.archive({
+          ...ref,
+          confirmStop: true,
+          removeWorktree: true,
+          worktreeConfirmation: {
+            workingDirectory: session.executionTarget.workingDirectory,
+            branchName: "odt/my-feature",
+          },
+        }),
+      );
+    await expect(archive()).rejects.toThrow("terminal-1");
+    expect(h.calls).toContain(`stop-terminals:${session.id}`);
+    expect(h.calls).not.toContain("remove-worktree");
+    expect((await Effect.runPromise(h.service.get(ref))).archivedAt).toBeNull();
+    h.dependencies.terminalService.acquireWorkspaceSessionCleanup = (scope) => {
+      h.calls.push(`stop-terminals:${scope.sessionId}`);
+      return Effect.succeed({ closedTerminalIds: ["terminal-1"] });
+    };
+    await archive();
+    expect(h.calls.indexOf(`stop-terminals:${session.id}`)).toBeLessThan(
+      h.calls.indexOf("remove-worktree"),
+    );
   });
 
   test.each(["missing directory", "unregistered worktree"] as const)(

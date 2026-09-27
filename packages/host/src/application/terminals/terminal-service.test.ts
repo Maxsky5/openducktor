@@ -2,7 +2,11 @@ import { afterAll, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, posix } from "node:path";
-import type { TerminalServerMessage } from "@openducktor/contracts";
+import {
+  repoConfigSchema,
+  type TerminalServerMessage,
+  type WorkspaceSession,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createTerminalLaunchEnvironment } from "../../infrastructure/terminals/terminal-launch-environment";
 import type { FilesystemPort } from "../../ports/filesystem-port";
@@ -13,7 +17,8 @@ import {
 } from "../../ports/terminal-pty-port";
 import { TERMINAL_LIMITS } from "./terminal-limits";
 import { TerminalScreenState } from "./terminal-screen-state";
-import { HostValidationError } from "../../effect/host-errors";
+import { HostResourceError, HostValidationError } from "../../effect/host-errors";
+import { createGitPortTestDouble } from "../../test-support/service-test-doubles";
 import { createTerminalService } from "./terminal-service";
 import type { WithProcessStartAdmission } from "../workspaces/workspace-admission-service";
 import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler";
@@ -35,11 +40,13 @@ const filesystem: FilesystemPort = {
 
 const makePty = (supportsOutputPause = true, hasChildProcesses = true) => {
   const operations: string[] = [];
+  const startDirectories: string[] = [];
   let handlers: TerminalPtyHandlers | null = null;
   let terminateFails = false;
   let terminateFailuresRemaining = 0;
   const port: TerminalPtyPort = {
-    start: (_plan, nextHandlers) => {
+    start: (plan, nextHandlers) => {
+      startDirectories.push(plan.cwd);
       handlers = nextHandlers;
       return Effect.succeed({
         supportsOutputPause,
@@ -73,6 +80,7 @@ const makePty = (supportsOutputPause = true, hasChildProcesses = true) => {
   return {
     port,
     operations,
+    startDirectories,
     emit: (data: Uint8Array) => handlers?.onOutput(data),
     exit: (exitCode: number | null = 0) => handlers?.onExit({ exitCode, signal: null }),
     fail: (failure: TerminalPtyError) => handlers?.onFailure(failure),
@@ -143,6 +151,7 @@ const makeService = async (
   idFactory: () => string = () => "terminal-1",
   filesystemPort: FilesystemPort = filesystem,
   withProcessStartAdmission?: WithProcessStartAdmission,
+  workspaceSessions?: Parameters<typeof createTerminalService>[0]["workspaceSessions"],
 ) => {
   const titleSettlement = makeTitleSettlementScheduler();
   const shellPath = await resolveFakeShellPath();
@@ -162,6 +171,7 @@ const makeService = async (
   if (withProcessStartAdmission) {
     serviceInput.withProcessStartAdmission = withProcessStartAdmission;
   }
+  if (workspaceSessions) serviceInput.workspaceSessions = workspaceSessions;
   return {
     pty,
     settleTitles: titleSettlement.flush,
@@ -169,7 +179,415 @@ const makeService = async (
   };
 };
 
+const workspaceSessionRecord = (
+  id: string,
+  executionTarget: WorkspaceSession["executionTarget"],
+): WorkspaceSession => ({
+  id,
+  runtimeKind: "opencode",
+  externalSessionId: null,
+  executionTarget,
+  roleSnapshot: null,
+  selectedModel: null,
+  generatedTitle: null,
+  manualTitle: null,
+  createdAt: 1,
+  updatedAt: 1,
+  archivedAt: null,
+});
+
+const workspaceTerminalDependencies = (records: Map<string, WorkspaceSession>) => ({
+  settings: {
+    getRepoConfig: () =>
+      Effect.succeed(
+        repoConfigSchema.parse({
+          workspaceId: "workspace-1",
+          workspaceName: "Workspace",
+          repoPath: "/repo",
+        }),
+      ),
+  },
+  store: {
+    get: ({ sessionId }: { sessionId: string }) => {
+      const record = records.get(sessionId);
+      return record
+        ? Effect.succeed(record)
+        : Effect.fail(
+            new HostResourceError({
+              resource: sessionId,
+              operation: "workspaceSessionStore.get",
+              message: "Missing chat",
+            }),
+          );
+    },
+  },
+  git: createGitPortTestDouble({
+    canonicalizePath: (path) => Effect.succeed(path),
+    isGitRepository: () => Effect.succeed(true),
+    shareGitCommonDirectory: () => Effect.succeed(true),
+    isRegisteredWorktree: () => Effect.succeed(true),
+  }),
+});
+
 describe("TerminalService", () => {
+  test("starts root and worktree chat terminals in their saved directories and keeps owners separate", async () => {
+    const records = new Map<string, WorkspaceSession>([
+      [
+        "root",
+        workspaceSessionRecord("root", { kind: "local_repo_root", workingDirectory: "/repo" }),
+      ],
+      [
+        "worktree",
+        workspaceSessionRecord("worktree", {
+          kind: "local_worktree",
+          workingDirectory: "/repo-worktree",
+          branchName: "chat",
+          worktreeState: "present",
+        }),
+      ],
+    ]);
+    const pty = makePty();
+    let nextId = 0;
+    const { service } = await makeService(
+      pty,
+      () => `terminal-${++nextId}`,
+      { ...filesystem, canonicalize: (path) => Effect.succeed(path) },
+      undefined,
+      workspaceTerminalDependencies(records),
+    );
+    const owner = (sessionId: string) => ({
+      kind: "workspace_session" as const,
+      workspaceId: "workspace-1",
+      sessionId,
+      repoPath: "/repo",
+    });
+    const root = await Effect.runPromise(
+      service.create({ workingDir: "/repo", context: owner("root") }),
+    );
+    const worktree = await Effect.runPromise(
+      service.create({ workingDir: "/repo-worktree", context: owner("worktree") }),
+    );
+    await Effect.runPromise(
+      service.create({ workingDir: "/repo", context: { repoPath: "/repo", taskId: "task" } }),
+    );
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
+    expect(pty.startDirectories).toEqual(["/repo", "/repo-worktree", "/repo", "/repo"]);
+    expect(root.summary.context).toEqual(owner("root"));
+    expect(worktree.summary.initialWorkingDir).toBe("/repo-worktree");
+    expect(
+      (
+        await Effect.runPromise(
+          service.list({
+            kind: "workspace_session",
+            workspaceId: "workspace-1",
+            sessionId: "root",
+          }),
+        )
+      ).terminals.map((entry) => entry.terminalId),
+    ).toEqual([root.ref.terminalId]);
+    expect(
+      (
+        await Effect.runPromise(
+          service.list({
+            kind: "workspace_session",
+            workspaceId: "workspace-1",
+            sessionId: "worktree",
+          }),
+        )
+      ).terminals.map((entry) => entry.terminalId),
+    ).toEqual([worktree.ref.terminalId]);
+    expect(
+      (await Effect.runPromise(service.list({ kind: "unassociated" }))).terminals,
+    ).toHaveLength(1);
+    expect(
+      (await Effect.runPromise(service.inspectWorkspaceActivity("/repo"))).activeTerminalIds,
+    ).toEqual([root.ref.terminalId, worktree.ref.terminalId, "terminal-3"]);
+  });
+
+  test("rejects stale or unsafe chat targets before starting a PTY", async () => {
+    const root = workspaceSessionRecord("root", {
+      kind: "local_repo_root",
+      workingDirectory: "/repo",
+    });
+    const worktree = workspaceSessionRecord("worktree", {
+      kind: "local_worktree",
+      workingDirectory: "/repo-worktree",
+      branchName: "chat",
+      worktreeState: "present",
+    });
+    const records = new Map([
+      ["root", root],
+      ["worktree", worktree],
+    ]);
+    const dependencies = workspaceTerminalDependencies(records);
+    const pty = makePty();
+    const { service } = await makeService(
+      pty,
+      undefined,
+      { ...filesystem, canonicalize: (path) => Effect.succeed(path) },
+      undefined,
+      dependencies,
+    );
+    const create = (sessionId: string, workingDir: string, repoPath = "/repo") =>
+      Effect.runPromise(
+        service.create({
+          workingDir,
+          context: { kind: "workspace_session", workspaceId: "workspace-1", sessionId, repoPath },
+        }),
+      );
+    await expect(create("missing", "/repo")).rejects.toThrow("no longer exists");
+    records.set("root", { ...root, archivedAt: 2 });
+    await expect(create("root", "/repo")).rejects.toThrow("archived");
+    records.set("worktree", {
+      ...worktree,
+      executionTarget: {
+        kind: "local_worktree",
+        workingDirectory: "/repo-worktree",
+        branchName: "chat",
+        worktreeState: "removed",
+      },
+    });
+    await expect(create("worktree", "/repo-worktree")).rejects.toThrow("removed");
+    records.set("worktree", worktree);
+    await expect(create("worktree", "/other")).rejects.toThrow("does not match");
+    await expect(create("worktree", "/repo-worktree", "/other-repo")).rejects.toThrow(
+      "repository changed",
+    );
+    dependencies.git.isRegisteredWorktree = () => Effect.succeed(false);
+    await expect(create("worktree", "/repo-worktree")).rejects.toThrow("registered worktree");
+    expect(pty.startDirectories).toEqual([]);
+  });
+
+  test("limits each chat owner and keeps a failed cleanup terminal for retry", async () => {
+    const records = new Map<string, WorkspaceSession>([
+      [
+        "first",
+        workspaceSessionRecord("first", { kind: "local_repo_root", workingDirectory: "/repo" }),
+      ],
+      [
+        "second",
+        workspaceSessionRecord("second", { kind: "local_repo_root", workingDirectory: "/repo" }),
+      ],
+    ]);
+    const pty = makePty();
+    let nextId = 0;
+    const { service } = await makeService(
+      pty,
+      () => `terminal-${++nextId}`,
+      { ...filesystem, canonicalize: (path) => Effect.succeed(path) },
+      undefined,
+      workspaceTerminalDependencies(records),
+    );
+    const create = (sessionId: string) =>
+      Effect.runPromise(
+        service.create({
+          workingDir: "/repo",
+          context: {
+            kind: "workspace_session",
+            workspaceId: "workspace-1",
+            sessionId,
+            repoPath: "/repo",
+          },
+        }),
+      );
+    for (let index = 0; index < TERMINAL_LIMITS.livePerWorkspaceSession; index += 1) {
+      await create("first");
+    }
+    await expect(create("first")).rejects.toThrow("limit");
+    const second = await create("second");
+    pty.failNextTerminate();
+    await expect(
+      Effect.runPromise(
+        Effect.scoped(
+          service.acquireWorkspaceSessionCleanup({
+            workspaceId: "workspace-1",
+            sessionId: "first",
+          }),
+        ),
+      ),
+    ).rejects.toThrow("terminal-1");
+    expect(
+      (
+        await Effect.runPromise(
+          service.list({
+            kind: "workspace_session",
+            workspaceId: "workspace-1",
+            sessionId: "first",
+          }),
+        )
+      ).terminals.map((entry) => entry.terminalId),
+    ).toEqual(["terminal-1"]);
+    expect(
+      (
+        await Effect.runPromise(
+          service.list({
+            kind: "workspace_session",
+            workspaceId: "workspace-1",
+            sessionId: "second",
+          }),
+        )
+      ).terminals.map((entry) => entry.terminalId),
+    ).toEqual([second.ref.terminalId]);
+    await Effect.runPromise(
+      Effect.scoped(
+        service.acquireWorkspaceSessionCleanup({ workspaceId: "workspace-1", sessionId: "first" }),
+      ),
+    );
+    expect(
+      (
+        await Effect.runPromise(
+          service.list({
+            kind: "workspace_session",
+            workspaceId: "workspace-1",
+            sessionId: "first",
+          }),
+        )
+      ).terminals,
+    ).toEqual([]);
+  });
+
+  test("waits for an admitted chat start and blocks new starts for only that chat during cleanup", async () => {
+    const records = new Map<string, WorkspaceSession>([
+      [
+        "first",
+        workspaceSessionRecord("first", { kind: "local_repo_root", workingDirectory: "/repo" }),
+      ],
+      [
+        "second",
+        workspaceSessionRecord("second", { kind: "local_repo_root", workingDirectory: "/repo" }),
+      ],
+    ]);
+    const dependencies = workspaceTerminalDependencies(records);
+    let reportResolving = (): void => undefined;
+    const resolving = new Promise<void>((resolve) => {
+      reportResolving = resolve;
+    });
+    let releaseResolve = (): void => undefined;
+    const resolveReleased = new Promise<void>((resolve) => {
+      releaseResolve = resolve;
+    });
+    let delayFirst = true;
+    dependencies.git.canonicalizePath = (path) =>
+      Effect.promise(async () => {
+        if (delayFirst) {
+          delayFirst = false;
+          reportResolving();
+          await resolveReleased;
+        }
+        return path;
+      });
+    let nextId = 0;
+    const { service } = await makeService(
+      makePty(),
+      () => `terminal-${++nextId}`,
+      { ...filesystem, canonicalize: (path) => Effect.succeed(path) },
+      undefined,
+      dependencies,
+    );
+    const create = (sessionId: string) =>
+      service.create({
+        workingDir: "/repo",
+        context: {
+          kind: "workspace_session",
+          workspaceId: "workspace-1",
+          sessionId,
+          repoPath: "/repo",
+        },
+      });
+    const first = Effect.runPromise(create("first"));
+    await resolving;
+    let releaseCleanup = (): void => undefined;
+    const cleanupReleased = new Promise<void>((resolve) => {
+      releaseCleanup = resolve;
+    });
+    let reportCleanupDone = (): void => undefined;
+    const cleanupDone = new Promise<void>((resolve) => {
+      reportCleanupDone = resolve;
+    });
+    const cleanup = Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* service.acquireWorkspaceSessionCleanup({
+            workspaceId: "workspace-1",
+            sessionId: "first",
+          });
+          reportCleanupDone();
+          yield* Effect.promise(() => cleanupReleased);
+        }),
+      ),
+    );
+    await Bun.sleep(0);
+    const blocked = await Effect.runPromise(Effect.either(create("first")));
+    expect(blocked._tag).toBe("Left");
+    const other = await Effect.runPromise(create("second"));
+    expect(other.summary.context).toMatchObject({ sessionId: "second" });
+    releaseResolve();
+    await first;
+    await cleanupDone;
+    expect(
+      (
+        await Effect.runPromise(
+          service.list({
+            kind: "workspace_session",
+            workspaceId: "workspace-1",
+            sessionId: "first",
+          }),
+        )
+      ).terminals,
+    ).toEqual([]);
+    releaseCleanup();
+    await cleanup;
+  });
+
+  test("applies workspace process admission to chat terminal creation and input", async () => {
+    const records = new Map<string, WorkspaceSession>([
+      [
+        "chat",
+        workspaceSessionRecord("chat", { kind: "local_repo_root", workingDirectory: "/repo" }),
+      ],
+    ]);
+    const admittedRepos: string[] = [];
+    let blocked = true;
+    const withProcessStartAdmission: WithProcessStartAdmission = (repoPath, effect) => {
+      admittedRepos.push(repoPath);
+      return blocked
+        ? Effect.fail(
+            new HostValidationError({
+              message: "Workspace is closed. Reopen it.",
+              field: "workspaceId",
+            }),
+          )
+        : effect;
+    };
+    const pty = makePty();
+    const { service } = await makeService(
+      pty,
+      undefined,
+      { ...filesystem, canonicalize: (path) => Effect.succeed(path) },
+      withProcessStartAdmission,
+      workspaceTerminalDependencies(records),
+    );
+    const request = {
+      workingDir: "/repo",
+      context: {
+        kind: "workspace_session" as const,
+        workspaceId: "workspace-1",
+        sessionId: "chat",
+        repoPath: "/repo",
+      },
+    };
+    await expect(Effect.runPromise(service.create(request))).rejects.toThrow("Workspace is closed");
+    expect(pty.startDirectories).toEqual([]);
+    blocked = false;
+    const created = await Effect.runPromise(service.create(request));
+    blocked = true;
+    await expect(
+      Effect.runPromise(service.write(created.ref.terminalId, new TextEncoder().encode("pwd"))),
+    ).rejects.toThrow("Workspace is closed");
+    expect(pty.operations).not.toContain("write:pwd");
+    expect(admittedRepos).toEqual(["/repo", "/repo", "/repo"]);
+  });
+
   test("rejects task terminal creation and input for a blocked workspace", async () => {
     let blocked = true;
     const withProcessStartAdmission: WithProcessStartAdmission = (_repoPath, effect) =>

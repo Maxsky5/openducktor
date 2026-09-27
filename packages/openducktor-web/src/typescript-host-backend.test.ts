@@ -145,6 +145,8 @@ const createTestNodeHostCommandRouter = (): EffectNodeHostCommandRouter => ({
   terminalService: {
     acknowledge: () => unexpectedTerminalOperation("acknowledge"),
     acquireTaskCleanup: () => unexpectedTerminalOperation("acquireTaskCleanup"),
+    acquireWorkspaceSessionCleanup: () =>
+      unexpectedTerminalOperation("acquireWorkspaceSessionCleanup"),
     attach: () => unexpectedTerminalOperation("attach"),
     close: () => unexpectedTerminalOperation("close"),
     closeByTaskScope: () => unexpectedTerminalOperation("closeByTaskScope"),

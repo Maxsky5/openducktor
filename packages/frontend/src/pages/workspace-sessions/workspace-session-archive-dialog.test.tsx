@@ -65,7 +65,9 @@ test.each([false, true])(
       expect(view.getByText(/Commits that exist only on this branch/).textContent).toContain(
         "feature/chat",
       );
-      expect(view.getByText(/Archiving stops this session if it is running/)).toBeTruthy();
+      expect(
+        view.getByText(/Archiving stops this chat's terminals and its running session/),
+      ).toBeTruthy();
       fireEvent.click(submit);
       expect(requests).toEqual([true]);
     } finally {
@@ -105,7 +107,9 @@ test("turning removal off keeps Git resources and Cancel sends no archive reques
   );
   try {
     await view.findByText(/This worktree has local changes/, {}, { timeout: 800 });
-    expect(view.getByText(/Archiving stops this session if it is running/)).toBeTruthy();
+    expect(
+      view.getByText(/Archiving stops this chat's terminals and its running session/),
+    ).toBeTruthy();
     fireEvent.click(view.getByRole("button", { name: "Cancel" }));
     expect(closed).toBe(1);
     expect(requests).toEqual([]);

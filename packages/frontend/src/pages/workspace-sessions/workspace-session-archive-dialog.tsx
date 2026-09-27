@@ -108,7 +108,7 @@ export function WorkspaceSessionArchiveDialog({
             <DialogTitle>Archive chat</DialogTitle>
             <DialogDescription>
               Archive "{workspaceSessionTitle(record)}". Your chat history will stay available.
-              {" Archiving stops this session if it is running."}
+              {" Archiving stops this chat's terminals and its running session."}
             </DialogDescription>
           </DialogHeader>
           <fieldset disabled={isArchiving}>

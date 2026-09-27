@@ -516,6 +516,9 @@ describe("Workspace Session persistence through the shared command module", () =
       repoPath: database.repoPath,
     });
     const workspace = createWorkspaceSessionService({
+      terminalService: {
+        acquireWorkspaceSessionCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
+      },
       lifecycle: createTaskSessionLifecycleCoordinator(),
       operationGate: h.operationGate,
       sessionTitleGate: h.sessionTitleGate,

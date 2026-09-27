@@ -264,6 +264,11 @@ export const assembleNodeEffectHostCommandRouter = (
     createTerminalService({
       withProcessStartAdmission: workspaceAdmissionService.withProcessStartAdmission,
       filesystem,
+      workspaceSessions: {
+        settings: workspaceSettingsService,
+        store: assets.workspaceSessionStore,
+        git,
+      },
       ptyPort: terminalPty,
       resolveLaunchEnvironment: createTerminalLaunchEnvironment({ processEnv }),
     }),
@@ -378,6 +383,7 @@ export const assembleNodeEffectHostCommandRouter = (
   });
   const { workspaceSessionService, workspaceSessionImports, unsubscribeImportCatalogs } =
     createNodeWorkspaceSessionServices({
+      terminalService,
       lifecycle: taskSessionLifecycleCoordinator,
       operationGate: workspaceSessions.operationGate,
       sessionTitleGate: workspaceSessions.sessionTitleGate,

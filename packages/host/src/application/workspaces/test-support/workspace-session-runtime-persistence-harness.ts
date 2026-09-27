@@ -317,6 +317,9 @@ export const createPersistenceHarness = async (
   });
   const workspaceService = () =>
     createWorkspaceSessionService({
+      terminalService: {
+        acquireWorkspaceSessionCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
+      },
       lifecycle: createTaskSessionLifecycleCoordinator(),
       operationGate,
       sessionTitleGate,

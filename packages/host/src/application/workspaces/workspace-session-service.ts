@@ -18,6 +18,7 @@ import {
   HostValidationError,
 } from "../../effect/host-errors";
 import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
+import type { TerminalService } from "../terminals/terminal-service";
 import {
   planRuntimeTitleRename,
   runtimeTitle,
@@ -47,6 +48,7 @@ export type WorkspaceSessionServiceDependencies = WorkspaceSessionTargetDependen
   isCodexTitleSyncPending: (ref: AgentSessionLiveRef) => boolean;
   markCodexTitleSyncPending: (ref: AgentSessionLiveRef) => void;
   store: WorkspaceSessionStorePort;
+  terminalService: Pick<TerminalService, "acquireWorkspaceSessionCleanup">;
   settings: Pick<WorkspaceSettingsService, "getRepoConfig" | "listCustomAgentRoles">;
   runtime: Pick<RuntimeOrchestratorService, "runtimeEnsure">;
   live: Pick<
@@ -400,6 +402,21 @@ export const createWorkspaceSessionService = (
               )
                 yield* validateWorkspaceSessionTarget(dependencies, ref.repoPath, target);
             }
+            yield* dependencies.terminalService
+              .acquireWorkspaceSessionCleanup({
+                workspaceId: input.workspaceId,
+                sessionId: input.sessionId,
+              })
+              .pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new HostOperationError({
+                      operation: "workspaceSession.archive.terminals",
+                      message: `Could not stop this chat's terminals: ${cause.message}`,
+                      cause,
+                    }),
+                ),
+              );
             if (session.externalSessionId !== null) {
               const runtimeRef = {
                 repoPath: ref.repoPath,

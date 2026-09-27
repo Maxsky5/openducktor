@@ -76,7 +76,7 @@ export function WorkspaceSessionTabs({
 
 const archiveButtonLabel = (title: string, confirming: boolean, archiving: boolean): string => {
   if (archiving) return `Archiving ${title}`;
-  if (confirming) return `Confirm stop and archive ${title}`;
+  if (confirming) return `Confirm archive and stop terminals for ${title}`;
   return `Archive ${title}`;
 };
 

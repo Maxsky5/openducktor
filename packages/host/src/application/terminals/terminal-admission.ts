@@ -1,6 +1,11 @@
 import type { TerminalContext } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { type TerminalTaskScope, terminalContextKey } from "./terminal-context";
+import {
+  type TerminalTaskScope,
+  type TerminalWorkspaceSessionScope,
+  terminalContextKey,
+  terminalWorkspaceSessionKey,
+} from "./terminal-context";
 import { TERMINAL_LIMITS } from "./terminal-limits";
 import { TerminalServiceError } from "./terminal-service-error";
 
@@ -51,7 +56,9 @@ export const createTerminalAdmission = ({
       return Effect.sync(() => waiters.delete(waiter));
     });
 
-  const beginCreation = (): Effect.Effect<TerminalAdmissionReservation, TerminalServiceError> =>
+  const beginCreation = (
+    initialContext?: TerminalContext,
+  ): Effect.Effect<TerminalAdmissionReservation, TerminalServiceError> =>
     Effect.suspend(() => {
       if (!accepting) {
         return Effect.fail(
@@ -86,7 +93,7 @@ export const createTerminalAdmission = ({
       unboundReservations.add(reservationId);
       let contextKey: string | null = null;
       let released = false;
-      return Effect.succeed({
+      const reservation: TerminalAdmissionReservation = {
         bind(context): Effect.Effect<void, TerminalServiceError> {
           return Effect.suspend(() => {
             if (contextKey !== null) return Effect.void;
@@ -106,7 +113,9 @@ export const createTerminalAdmission = ({
             const pendingForContext = pendingByContext.get(key) ?? 0;
             const contextLimit = taskId
               ? TERMINAL_LIMITS.livePerTask
-              : TERMINAL_LIMITS.liveUnassociated;
+              : "kind" in context
+                ? TERMINAL_LIMITS.livePerWorkspaceSession
+                : TERMINAL_LIMITS.liveUnassociated;
             if (countLiveForContext(context) + pendingForContext >= contextLimit) {
               return Effect.fail(
                 new TerminalServiceError({
@@ -135,7 +144,13 @@ export const createTerminalAdmission = ({
           }
           notifyWaiters();
         },
-      });
+      };
+      return initialContext
+        ? reservation.bind(initialContext).pipe(
+            Effect.tapError(() => Effect.sync(() => reservation.release())),
+            Effect.as(reservation),
+          )
+        : Effect.succeed(reservation);
     });
 
   const acquireTaskCleanupLease = ({
@@ -176,6 +191,24 @@ export const createTerminalAdmission = ({
 
   return {
     acquireTaskCleanupLease,
+    acquireWorkspaceSessionCleanupLease: (
+      scope: TerminalWorkspaceSessionScope,
+    ): Effect.Effect<TerminalTaskCleanupLease> =>
+      Effect.sync(() => {
+        const key = terminalWorkspaceSessionKey(scope);
+        blockedContexts.set(key, (blockedContexts.get(key) ?? 0) + 1);
+        let released = false;
+        return {
+          awaitPending: waitUntil(() => (pendingByContext.get(key) ?? 0) === 0),
+          release(): void {
+            if (released) return;
+            released = true;
+            const remaining = (blockedContexts.get(key) ?? 1) - 1;
+            if (remaining === 0) blockedContexts.delete(key);
+            else blockedContexts.set(key, remaining);
+          },
+        };
+      }),
     beginTaskCleanupPreparation: (): Effect.Effect<{ release(): void }> =>
       Effect.sync(() => {
         cleanupPreparations += 1;

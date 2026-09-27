@@ -247,7 +247,7 @@ export const createTerminalSessionLifecycle = ({
 
   const closeSessions = (
     targets: readonly TerminalSession[],
-    operation: "close_by_task" | "dispose",
+    operation: "close_by_task" | "close_by_workspace_session" | "dispose",
   ): Effect.Effect<string[], TerminalServiceError> =>
     Effect.gen(function* () {
       const results = yield* Effect.forEach(
@@ -263,11 +263,15 @@ export const createTerminalSessionLifecycle = ({
       );
       if (errors.length > 0) {
         const context = operation === "dispose" ? " during shutdown" : "";
+        const message =
+          operation === "close_by_workspace_session"
+            ? `Failed to terminate terminal(s) ${errors.map(({ terminalId }) => terminalId).join(", ")}. Retry after resolving the stop failure.`
+            : `Failed to terminate ${errors.length} terminal(s)${context}.`;
         return yield* Effect.fail(
           new TerminalServiceError({
             code: "close_failed",
             operation,
-            message: `Failed to terminate ${errors.length} terminal(s)${context}.`,
+            message,
             details: { errors },
           }),
         );

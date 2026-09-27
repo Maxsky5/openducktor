@@ -16,6 +16,7 @@ export class TerminalServiceError extends Data.TaggedError("TerminalServiceError
     | "detach"
     | "close"
     | "close_by_task"
+    | "close_by_workspace_session"
     | "dispose";
   readonly message: string;
   readonly terminalId?: string;

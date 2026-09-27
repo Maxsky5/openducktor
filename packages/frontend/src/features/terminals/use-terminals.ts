@@ -54,6 +54,13 @@ const terminalListFilterForContext = (context: TerminalContext | null): Terminal
   if ("taskId" in context) {
     return { kind: "task", repoPath: context.repoPath, taskId: context.taskId };
   }
+  if ("kind" in context) {
+    return {
+      kind: "workspace_session",
+      workspaceId: context.workspaceId,
+      sessionId: context.sessionId,
+    };
+  }
   return { kind: "unassociated" };
 };
 
@@ -112,11 +119,9 @@ export const useTerminals = (
   const terminalOptions = terminalListByFilterQueryOptions({
     filter: listFilter,
     hostClient: dependencies.hostClient,
-  });
-  const terminalQuery = useQuery({
-    ...terminalOptions,
     enabled,
   });
+  const terminalQuery = useQuery(terminalOptions);
   const platformQuery = useQuery(platformQueryOptions(dependencies.hostClient));
 
   // Activate the scope during render so consumers never commit the previous scope for one frame.

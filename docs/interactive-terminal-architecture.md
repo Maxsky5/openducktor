@@ -22,7 +22,9 @@ The host resolves one user environment during startup. On Unix, it uses a login-
 
 The host selects the terminal shell, arguments, and clean child environment. The renderer cannot choose an executable, arguments, or environment variables. On Unix, use the login shell from the user account. If it is not available, use the `SHELL` environment variable. Run the shell with `-l` on the PTY, `TERM=xterm-256color`, and `COLORTERM=truecolor`. Shell startup lines that test for a real tty can change the terminal environment after launch, so their result can differ from the startup snapshot.
 
-A terminal can have no task or have `repoPath` and `taskId`. The host uses this context for lists, limits, and cleanup. It does not restrict file access inside the shell.
+A terminal can have no owner, a task owner with `repoPath` and `taskId`, or a Workspace Session owner with `workspaceId` and `sessionId`. The host uses this context for lists, limits, and cleanup. It does not restrict file access inside the shell.
+
+For a Workspace Session terminal, the host reads the active session record before launch. It checks the saved repository root or registered worktree and starts the shell in that saved directory. The request must name the same repository and canonical working directory. A missing, archived, or removed session target fails before launch.
 
 The first title is the canonical start directory. The host then reads bounded OSC 0 and OSC 2 title codes without changing PTY output. It cleans and stores the latest title, then sends it in snapshots and title events.
 
@@ -52,6 +54,8 @@ The UI hides a tab while close is pending. It restores the tab when confirmation
 
 Task close, delete, reset, and merged-worktree cleanup take a terminal cleanup lease. They stop task terminals before dev servers, worktrees, branches, or task records. A terminal failure stops later cleanup. The lease blocks a new task terminal during cleanup.
 
+Workspace Session archive takes a lease for that workspace and session pair. It waits for pending starts, stops and forgets only that session's terminals, then continues runtime and worktree cleanup. A stop failure leaves the failed terminal owned by the host and prevents worktree removal. New terminals for that session fail during archive.
+
 Host shutdown stops admission, stops all PTYs and process trees, then continues host cleanup. An exited session can stay in memory for bounded replay until time or count limits remove it.
 
 Do not persist a PTY handle, PID, route, terminal ID, live state, or transcript. Terminal persistence needs a separate decision about privacy, retention, recovery, and access.
@@ -66,7 +70,7 @@ Drag and drop accepts at most eight images, 20 MiB each, and 40 MiB total. An in
 
 ## Limits and security
 
-The host limits terminals per task and host, input bytes, grid size, replay bytes, unacknowledged output, and retained exited sessions. The transports limit frame size and output queues. Each operation uses an opaque terminal ID.
+The host limits terminals per task, per Workspace Session, and per host. It also limits input bytes, grid size, replay bytes, unacknowledged output, and retained exited sessions. Each operation uses an opaque terminal ID. Workspace activity checks include live Workspace Session terminals in the matching repository.
 
 A browser WebSocket upgrade needs the HttpOnly app session, an allowed frontend origin, and the exact protocol name. Invalid direction, frame, or protocol version fails.
 

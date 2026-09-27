@@ -55,6 +55,34 @@ describe("terminal schemas", () => {
       terminalListFilterSchema.parse({ kind: "task", repoPath: "/repo", taskId: "" }),
     ).toThrow();
     expect(() => terminalListFilterSchema.parse({ kind: "task", taskId: "task-1" })).toThrow();
+    expect(
+      terminalListFilterSchema.parse({
+        kind: "workspace_session",
+        workspaceId: "workspace-1",
+        sessionId: "session-1",
+      }),
+    ).toEqual({ kind: "workspace_session", workspaceId: "workspace-1", sessionId: "session-1" });
+    expect(() =>
+      terminalListFilterSchema.parse({ kind: "workspace_session", workspaceId: "workspace-1" }),
+    ).toThrow();
+  });
+
+  test("requires the full Workspace Session terminal owner", () => {
+    const context = {
+      kind: "workspace_session",
+      workspaceId: "workspace-1",
+      sessionId: "session-1",
+      repoPath: "/repo",
+    };
+    expect(terminalLaunchSpecSchema.parse({ workingDir: "/repo", context }).context).toEqual(
+      context,
+    );
+    expect(() =>
+      terminalLaunchSpecSchema.parse({
+        workingDir: "/repo",
+        context: { ...context, sessionId: "" },
+      }),
+    ).toThrow();
   });
 
   test("requires explicit termination confirmation input", () => {
