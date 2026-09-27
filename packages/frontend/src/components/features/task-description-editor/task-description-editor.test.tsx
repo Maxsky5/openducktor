@@ -44,6 +44,9 @@ const requireButton = (element: HTMLElement): HTMLButtonElement => {
   return element;
 };
 
+const isDisabled = (button: HTMLButtonElement): boolean =>
+  button.disabled || button.closest("fieldset[disabled]") !== null;
+
 const createProps = () => ({
   disabled: false,
   workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
@@ -84,8 +87,10 @@ describe("TaskDescriptionEditor", () => {
 
     view.rerender(<TaskDescriptionEditor {...props} disabled />);
     await waitFor(() => expect(content.getAttribute("contenteditable")).toBe("false"));
-    expect(requireButton(view.getByRole("button", { name: "Bold" })).disabled).toBe(true);
-    expect(requireButton(view.getByRole("button", { name: "Insert image" })).disabled).toBe(true);
+    expect(isDisabled(requireButton(view.getByRole("button", { name: "Bold" })))).toBe(true);
+    expect(isDisabled(requireButton(view.getByRole("button", { name: "Insert image" })))).toBe(
+      true,
+    );
     const image = new File([new Uint8Array([1])], "draft.png", { type: "image/png" });
     const input = requireInput(view.getByLabelText("Task description images"));
     fireEvent.change(input, { target: { files: [image] } });
@@ -96,7 +101,7 @@ describe("TaskDescriptionEditor", () => {
 
     view.rerender(<TaskDescriptionEditor {...props} />);
     await waitFor(() => expect(content.getAttribute("contenteditable")).toBe("true"));
-    expect(requireButton(view.getByRole("button", { name: "Bold" })).disabled).toBe(false);
+    expect(isDisabled(requireButton(view.getByRole("button", { name: "Bold" })))).toBe(false);
   });
 
   test.each([

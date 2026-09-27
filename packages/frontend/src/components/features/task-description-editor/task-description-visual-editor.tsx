@@ -227,45 +227,44 @@ export default function TaskDescriptionVisualEditor({
 
   return (
     <div className="overflow-hidden rounded-md border border-input bg-card focus-within:ring-2 focus-within:ring-ring/40">
-      <div className="flex flex-wrap gap-0.5 border-b border-border bg-muted/30 p-1.5">
-        <TaskDescriptionFormattingToolbar
-          editor={editor}
-          state={toolbar}
-          disabled={!canEdit}
-          onEditLink={() => {
-            if (!canEditRef.current) return;
-            const href = editor.getAttributes("link").href;
-            const hrefResult = z.string().safeParse(href);
-            setLinkHref(hrefResult.success ? hrefResult.data : "");
-          }}
-          onEditMath={(kind) => openMathEditor({ kind, latex: "" })}
-        />
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="size-8"
-          aria-label={uploading ? "Uploading image" : "Insert image"}
-          title={uploading ? "Uploading image" : "Insert image"}
-          disabled={!canEdit}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <ImagePlus className={cn("size-4", uploading && "animate-pulse")} />
-        </Button>
-        <input
-          ref={fileInputRef}
-          aria-label="Task description images"
-          type="file"
-          className="sr-only"
-          disabled={!canEdit}
-          accept="image/png,image/jpeg,image/webp,image/gif"
-          multiple
-          onChange={(event) => {
-            uploadFilesRef.current(Array.from(event.currentTarget.files ?? []));
-            event.currentTarget.value = "";
-          }}
-        />
-      </div>
+      <fieldset disabled={!canEdit} className="min-w-0 border-0 p-0">
+        <div className="flex flex-wrap gap-0.5 border-b border-border bg-muted/30 p-1.5">
+          <TaskDescriptionFormattingToolbar
+            editor={editor}
+            state={toolbar}
+            onEditLink={() => {
+              if (!canEditRef.current) return;
+              const href = editor.getAttributes("link").href;
+              const hrefResult = z.string().safeParse(href);
+              setLinkHref(hrefResult.success ? hrefResult.data : "");
+            }}
+            onEditMath={(kind) => openMathEditor({ kind, latex: "" })}
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8"
+            aria-label={uploading ? "Uploading image" : "Insert image"}
+            title={uploading ? "Uploading image" : "Insert image"}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <ImagePlus className={cn("size-4", uploading && "animate-pulse")} />
+          </Button>
+          <input
+            ref={fileInputRef}
+            aria-label="Task description images"
+            type="file"
+            className="sr-only"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            multiple
+            onChange={(event) => {
+              uploadFilesRef.current(Array.from(event.currentTarget.files ?? []));
+              event.currentTarget.value = "";
+            }}
+          />
+        </div>
+      </fieldset>
       <TaskDescriptionImageContext.Provider value={imageContext}>
         <MermaidPreviewProvider previews={mermaidPreviews}>
           <EditorContent
