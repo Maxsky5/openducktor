@@ -16,7 +16,7 @@ export function AgentStudioTerminalPanel({
           type="button"
           size="xs"
           variant="ghost"
-          className="md:hidden"
+          className="shrink-0 text-(--dev-server-terminal-foreground) hover:bg-(--dev-server-terminal-tab-inactive) hover:text-(--dev-server-terminal-foreground) md:hidden"
           onClick={model.onHide}
         >
           Back to workspace
