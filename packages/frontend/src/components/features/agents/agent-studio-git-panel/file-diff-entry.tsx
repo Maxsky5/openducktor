@@ -137,7 +137,7 @@ function FileDiffEntryHeader({
             </span>
           ) : null}
         </span>
-        <div
+        <span
           className="ml-2 flex min-w-[4.75rem] shrink-0 items-center justify-end gap-2"
           data-testid="agent-studio-git-file-stats"
         >
@@ -154,7 +154,7 @@ function FileDiffEntryHeader({
             {diff.additions > 0 ? <span className="text-green-400">+{diff.additions}</span> : null}
             {diff.deletions > 0 ? <span className="text-red-400">-{diff.deletions}</span> : null}
           </span>
-        </div>
+        </span>
       </button>
 
       {canReset ? (
