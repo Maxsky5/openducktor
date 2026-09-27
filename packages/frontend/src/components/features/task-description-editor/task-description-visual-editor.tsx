@@ -53,20 +53,6 @@ type TaskDescriptionVisualEditorProps = {
   mermaidPreviews: MermaidPreviews;
 };
 
-const applyMathEdit = (editor: Editor, edit: TaskDescriptionMathEdit, latex: string): boolean => {
-  const chain = editor.chain().focus();
-  if (edit.kind === "inline") {
-    if (edit.position === undefined) {
-      return chain.insertInlineMath({ latex }).run();
-    }
-    return chain.updateInlineMath({ latex, pos: edit.position }).run();
-  }
-  if (edit.position === undefined) {
-    return chain.insertBlockMath({ latex }).run();
-  }
-  return chain.updateBlockMath({ latex, pos: edit.position }).run();
-};
-
 export default function TaskDescriptionVisualEditor({
   body,
   disabled,
@@ -146,11 +132,8 @@ export default function TaskDescriptionVisualEditor({
 
   useEffect(() => {
     disabledRef.current = disabled;
-  }, [disabled]);
-
-  useEffect(() => {
     canEditRef.current = canEdit;
-  }, [canEdit]);
+  }, [canEdit, disabled]);
 
   useEffect(() => {
     if (!editor || editor.isDestroyed || editor.isEditable === canEdit) {
@@ -342,4 +325,18 @@ export default function TaskDescriptionVisualEditor({
       ) : null}
     </div>
   );
+}
+
+function applyMathEdit(editor: Editor, edit: TaskDescriptionMathEdit, latex: string): boolean {
+  const chain = editor.chain().focus();
+  if (edit.kind === "inline") {
+    if (edit.position === undefined) {
+      return chain.insertInlineMath({ latex }).run();
+    }
+    return chain.updateInlineMath({ latex, pos: edit.position }).run();
+  }
+  if (edit.position === undefined) {
+    return chain.insertBlockMath({ latex }).run();
+  }
+  return chain.updateBlockMath({ latex, pos: edit.position }).run();
 }
