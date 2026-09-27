@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES } from "@openducktor/contracts";
 import { Terminal } from "@xterm/headless";
 import type { IBufferCell } from "@xterm/headless";
 import { TerminalScreenState } from "./terminal-screen-state";
@@ -1282,6 +1283,60 @@ describe("TerminalScreenState", () => {
     screen.dispose();
     restored.dispose();
     reloaded.dispose();
+  });
+
+  test("trims old scrollback when a screen restore exceeds the frame limit", async () => {
+    const screen = new TerminalScreenState({ columns: 500, rows: 10 });
+    const restored = new Terminal({
+      cols: 500,
+      rows: 10,
+      scrollback: 2000,
+      allowProposedApi: true,
+    });
+    try {
+      const styledCells = Array.from(
+        { length: 490 },
+        (_, column) => `\u001b[38;2;${column % 2 ? 255 : 0};0;0mX`,
+      ).join("");
+      const output = Array.from(
+        { length: 1300 },
+        (_, row) => `ROW${String(row).padStart(4, "0")}:` + styledCells + "\r\n",
+      ).join("");
+      await writeScreen(screen, encoder.encode(output));
+
+      const snapshot = screen.snapshot();
+      expect(snapshot.payload.byteLength).toBeLessThanOrEqual(
+        TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES - 1024,
+      );
+      await write(restored, snapshot.payload);
+      const retainedLines = Array.from(
+        { length: restored.buffer.normal.length },
+        (_, row) => restored.buffer.normal.getLine(row)?.translateToString() ?? "",
+      );
+      expect(retainedLines.some((line) => line.startsWith("ROW0000:"))).toBe(false);
+      expect(retainedLines.some((line) => line.startsWith("ROW1200:"))).toBe(true);
+      expect(visibleLines(restored).some((line) => line.startsWith("ROW1299:"))).toBe(true);
+    } finally {
+      screen.dispose();
+      restored.dispose();
+    }
+  });
+
+  test("rejects a screen restore when the visible rows exceed the frame limit", async () => {
+    const screen = new TerminalScreenState({ columns: 500, rows: 300 });
+    try {
+      const styledCells = Array.from(
+        { length: 499 },
+        (_, column) => `\u001b[38;2;${column % 2 ? 255 : 0};0;0;48;2;0;${column % 2 ? 0 : 255};0mX`,
+      ).join("");
+      await writeScreen(screen, encoder.encode(("\u001b[4:3m" + styledCells + "\r\n").repeat(300)));
+
+      expect(() => screen.snapshot()).toThrow(
+        "Terminal screen is too large to restore. Resize the terminal and reconnect.",
+      );
+    } finally {
+      screen.dispose();
+    }
   });
 
   test("continues a line that ends at the right edge", async () => {

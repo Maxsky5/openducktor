@@ -128,7 +128,7 @@ const createLightweightBinding = () => {
 };
 
 describe("retained terminal rendering", () => {
-  test("does not resize a terminal when a task panel is too small for a grid", async () => {
+  test("skips unusable grids and fits the smallest usable grid", async () => {
     const lightweight = createLightweightBinding();
     const createBinding = spyOn(sharedTerminalBinding, "createTerminalBinding").mockImplementation(
       // SAFETY: the fake terminal implements every binding method used by this mount test.
@@ -150,11 +150,14 @@ describe("retained terminal rendering", () => {
     container.style.padding = "4px 8px";
     document.body.append(container);
     lightweight.binding.fitAddon.fit.mockImplementation(() => {
-      lightweight.binding.terminal.resize(width <= 17 ? 2 : 120, height <= 9 ? 1 : 40);
+      lightweight.binding.terminal.resize(
+        width <= 17 ? 2 : width <= 18 ? 3 : 120,
+        height <= 9 ? 1 : height <= 10 ? 2 : 40,
+      );
     });
     lightweight.binding.fitAddon.proposeDimensions.mockImplementation(() => ({
-      cols: width <= 17 ? 2 : 120,
-      rows: height <= 9 ? 1 : 40,
+      cols: width <= 17 ? 2 : width <= 18 ? 3 : 120,
+      rows: height <= 9 ? 1 : height <= 10 ? 2 : 40,
     }));
     const nativeResizeObserver = globalThis.ResizeObserver;
     globalThis.ResizeObserver = class {
@@ -203,13 +206,21 @@ describe("retained terminal rendering", () => {
         expect(sizes).toEqual([]);
       }
 
+      width = 18;
+      height = 10;
+      mount.activate(false);
+      await Bun.sleep(0);
+      expect(lightweight.binding.terminal.cols).toBe(3);
+      expect(lightweight.binding.terminal.rows).toBe(2);
+      expect(sizes).toEqual(["3x2"]);
+
       width = 800;
       height = 400;
       mount.activate(false);
       await Bun.sleep(0);
       expect(lightweight.binding.terminal.cols).toBe(120);
       expect(lightweight.binding.terminal.rows).toBe(40);
-      expect(sizes).toEqual(["120x40"]);
+      expect(sizes).toEqual(["3x2", "120x40"]);
     } finally {
       mount?.dispose();
       container.remove();
