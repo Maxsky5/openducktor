@@ -1,6 +1,7 @@
 import { expect, mock, test } from "bun:test";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
+  DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type AgentRuntimeCatalog,
   type AgentRuntimePreviewModelsInput,
@@ -38,6 +39,7 @@ test("loads preview catalogs only on the models stage and scopes them to the cho
         repoPath,
         active,
         runtimeKinds: ["codex", "opencode"],
+        agentRuntimes: DEFAULT_AGENT_RUNTIMES,
         loadPreviewModels,
       }),
     { wrapper, initialProps: { repoPath: "/first", active: false } },
@@ -77,6 +79,7 @@ test("shows a preview failure and retries the same repository", async () => {
         repoPath: "/repo",
         active: true,
         runtimeKinds: ["codex"],
+        agentRuntimes: DEFAULT_AGENT_RUNTIMES,
         loadPreviewModels,
       }),
     { wrapper },
@@ -88,5 +91,34 @@ test("shows a preview failure and retries the same repository", async () => {
   });
   await waitFor(() => expect(view.result.current[0]?.catalog).not.toBeNull());
   expect(loadPreviewModels).toHaveBeenCalledTimes(2);
+  view.unmount();
+});
+
+test("reloads a preview when the saved executable path changes", async () => {
+  const client = createQueryClient();
+  const loadPreviewModels = mock(async (input: AgentRuntimePreviewModelsInput) =>
+    preview(input.runtimeKind),
+  );
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  );
+  const view = renderHook(
+    ({ executablePath }) =>
+      useWorkspaceCreationPreviewCatalogs({
+        repoPath: "/repo",
+        active: true,
+        runtimeKinds: ["codex"],
+        agentRuntimes: {
+          ...DEFAULT_AGENT_RUNTIMES,
+          codex: { ...DEFAULT_AGENT_RUNTIMES.codex, executablePath },
+        },
+        loadPreviewModels,
+      }),
+    { wrapper, initialProps: { executablePath: "/tools/codex-old" } },
+  );
+
+  await waitFor(() => expect(loadPreviewModels).toHaveBeenCalledTimes(1));
+  view.rerender({ executablePath: "/tools/codex-new" });
+  await waitFor(() => expect(loadPreviewModels).toHaveBeenCalledTimes(2));
   view.unmount();
 });

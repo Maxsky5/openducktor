@@ -46,6 +46,7 @@ export function useWorkspaceCreationModels({
     repoPath,
     active,
     runtimeKinds,
+    agentRuntimes: runtime.agentRuntimes,
     loadPreviewModels: host.agentRuntimePreviewModels,
   });
   const errors = [

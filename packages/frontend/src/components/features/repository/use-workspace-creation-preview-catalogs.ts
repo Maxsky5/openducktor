@@ -1,4 +1,8 @@
-import type { AgentRuntimeCatalog, AgentRuntimePreviewModelsInput } from "@openducktor/contracts";
+import type {
+  AgentRuntimeCatalog,
+  AgentRuntimePreviewModelsInput,
+  AgentRuntimes,
+} from "@openducktor/contracts";
 import { useQueries, useQueryClient, queryOptions } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
@@ -15,6 +19,7 @@ type PreviewRuntimeKind = AgentRuntimePreviewModelsInput["runtimeKind"];
 const previewQueryOptions = (
   repoPath: string,
   runtimeKind: PreviewRuntimeKind,
+  executablePath: string,
   loadPreviewModels: (input: AgentRuntimePreviewModelsInput) => Promise<AgentRuntimeCatalog>,
 ) =>
   queryOptions({
@@ -22,6 +27,7 @@ const previewQueryOptions = (
       "workspace-model-preview",
       normalizeWorkingDirectory(repoPath),
       runtimeKind,
+      executablePath,
     ] as const,
     queryFn: (): Promise<AgentRuntimeCatalog> => loadPreviewModels({ repoPath, runtimeKind }),
     staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
@@ -33,11 +39,13 @@ export const useWorkspaceCreationPreviewCatalogs = ({
   repoPath,
   active,
   runtimeKinds,
+  agentRuntimes,
   loadPreviewModels,
 }: {
   repoPath: string;
   active: boolean;
   runtimeKinds: readonly PreviewRuntimeKind[];
+  agentRuntimes: AgentRuntimes;
   loadPreviewModels: (input: AgentRuntimePreviewModelsInput) => Promise<AgentRuntimeCatalog>;
 }): RuntimeModelCatalogQueryResource[] => {
   const queryClient = useQueryClient();
@@ -45,7 +53,15 @@ export const useWorkspaceCreationPreviewCatalogs = ({
   const queries = useQueries({
     queries: kinds.map((runtimeKind) =>
       repoPath
-        ? { ...previewQueryOptions(repoPath, runtimeKind, loadPreviewModels), enabled: active }
+        ? {
+            ...previewQueryOptions(
+              repoPath,
+              runtimeKind,
+              agentRuntimes[runtimeKind].executablePath,
+              loadPreviewModels,
+            ),
+            enabled: active,
+          }
         : skippedQueryOptions<AgentRuntimeCatalog>({
             queryKey: ["workspace-model-preview", SKIPPED_QUERY_KEY_SEGMENT, runtimeKind],
             staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
@@ -65,7 +81,12 @@ export const useWorkspaceCreationPreviewCatalogs = ({
       isEnabled: active && Boolean(repoPath),
       retry: async () => {
         if (!repoPath) throw new Error("Choose a repository before retrying its models.");
-        const options = previewQueryOptions(repoPath, runtimeKind, loadPreviewModels);
+        const options = previewQueryOptions(
+          repoPath,
+          runtimeKind,
+          agentRuntimes[runtimeKind].executablePath,
+          loadPreviewModels,
+        );
         await queryClient.invalidateQueries({
           queryKey: options.queryKey,
           exact: true,
