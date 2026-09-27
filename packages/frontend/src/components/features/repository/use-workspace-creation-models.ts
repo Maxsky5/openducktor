@@ -10,9 +10,11 @@ import type { ModelPickerFavoriteState } from "@/components/features/agents/mode
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import { useAgentModelFavorites } from "@/state/mutations/use-agent-model-favorites";
 import { host } from "@/state/operations/shared/host";
-import type { RuntimeModelCatalogQueryResource } from "@/state/queries/use-runtime-model-catalogs";
+import {
+  type RuntimeModelCatalogQueryResource,
+  useRuntimeModelCatalogs,
+} from "@/state/queries/use-runtime-model-catalogs";
 import { errorMessage } from "@/lib/errors";
-import { useWorkspaceCreationPreviewCatalogs } from "./use-workspace-creation-preview-catalogs";
 
 export type WorkspaceCreationModelSurface = {
   availableRuntimeDefinitions: RuntimeDescriptor[];
@@ -25,6 +27,8 @@ export type WorkspaceCreationModelSurface = {
   isCatalogLoadingForRuntime: (runtimeKind: RuntimeKind) => boolean;
   retry: () => Promise<void>;
 };
+
+const NO_RUNTIME_KINDS: readonly RuntimeKind[] = [];
 
 export function useWorkspaceCreationModels({
   repoPath,
@@ -42,10 +46,10 @@ export function useWorkspaceCreationModels({
     [runtime.availableRuntimeDefinitions],
   );
   const [retryError, setRetryError] = useState<string | null>(null);
-  const resources = useWorkspaceCreationPreviewCatalogs({
+  const { resources } = useRuntimeModelCatalogs({
     repoPath,
-    active,
     runtimeKinds,
+    enabledRuntimeKinds: active ? runtimeKinds : NO_RUNTIME_KINDS,
     agentRuntimes: runtime.agentRuntimes,
     loadPreviewModels: host.agentRuntimePreviewModels,
   });
