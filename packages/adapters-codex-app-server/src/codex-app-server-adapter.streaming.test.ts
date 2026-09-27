@@ -1079,6 +1079,9 @@ describe("CodexAppServerAdapter streaming", () => {
       }),
     ).resolves.toMatchObject({ classification: "idle" });
     expect(events.some((event) => event.type === "session_idle")).toBe(true);
+    expect(events.find((event) => event.type === "session_idle")).not.toHaveProperty(
+      "turnCompleted",
+    );
 
     await adapter.sendUserMessage(
       codexUserMessageInput({
@@ -1192,6 +1195,10 @@ describe("CodexAppServerAdapter streaming", () => {
     const sessionIdleIndex = events.findLastIndex((event) => event.type === "session_idle");
     expect(assistantMessageIndex).toBeGreaterThanOrEqual(0);
     expect(sessionIdleIndex).toBeGreaterThan(assistantMessageIndex);
+    expect(events[sessionIdleIndex]).toMatchObject({
+      type: "session_idle",
+      turnCompleted: true,
+    });
     expect(events.filter((event) => event.type === "assistant_message")).toHaveLength(1);
     expect(events.filter((event) => event.type === "session_idle")).toHaveLength(1);
     expect(

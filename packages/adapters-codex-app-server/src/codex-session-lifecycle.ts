@@ -275,5 +275,7 @@ const sessionStateFromThreadResumeResponse = (
     sessionAssociation: inputAssociation(input),
     status: agentSessionStatusFromActivity(threadSnapshot.status.classification),
   });
-  return buildSessionState(input, summary, runtimeId, model, threadSnapshot.status);
+  const session = buildSessionState(input, summary, runtimeId, model, threadSnapshot.status);
+  session.nativeName = response.thread.name;
+  return session;
 };

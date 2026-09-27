@@ -63,6 +63,7 @@ export type CodexCanonicalSessionErrorEvent = CodexCanonicalEventBase & {
 
 export type CodexCanonicalSessionIdleEvent = CodexCanonicalEventBase & {
   kind: "session_idle";
+  turnCompleted: true;
 };
 
 export type CodexCanonicalSessionCompactionStartedEvent = CodexCanonicalEventBase & {

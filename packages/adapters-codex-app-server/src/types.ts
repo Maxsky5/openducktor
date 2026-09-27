@@ -174,6 +174,7 @@ export type CodexThreadHistoryReadResponse = {
 
 export type CodexSessionState = {
   summary: AgentSessionSummary;
+  nativeName?: string | null;
   contextOwnerThreadId?: string;
   model?: AgentModelSelection;
   systemPrompt: string;

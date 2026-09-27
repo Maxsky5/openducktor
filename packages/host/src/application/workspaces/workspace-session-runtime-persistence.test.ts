@@ -519,6 +519,8 @@ describe("Workspace Session persistence through the shared command module", () =
       lifecycle: createTaskSessionLifecycleCoordinator(),
       operationGate: h.operationGate,
       sessionTitleGate: h.sessionTitleGate,
+      isCodexTitleSyncPending: h.persistence.isCodexTitleSyncPending,
+      markCodexTitleSyncPending: h.persistence.markCodexTitleSyncPending,
       store: h.store,
       settings: {
         getRepoConfig: () => Effect.succeed(config),

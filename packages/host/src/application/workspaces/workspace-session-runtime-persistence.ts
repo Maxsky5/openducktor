@@ -6,8 +6,8 @@ import type {
   AgentSessionLiveRef,
   WorkspaceSession,
 } from "@openducktor/contracts";
-import { agentSessionRefKey } from "@openducktor/core";
-import { Effect } from "effect";
+import { agentSessionRefKey, type AgentSessionSummary } from "@openducktor/core";
+import { Effect, Exit } from "effect";
 import {
   buildWorkspaceSessionTitle,
   planRuntimeTitleRename,
@@ -30,6 +30,10 @@ import type { WorkspaceSettingsService } from "./workspace-settings-model";
 import type { AgentSessionOperationPolicy } from "../agent-sessions/agent-session-operation-policy";
 import type { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
 import {
+  syncCodexTitleAfterTurn,
+  type CodexTitleSyncState,
+} from "./workspace-session-codex-title-sync";
+import {
   validateWorkspaceSessionTarget,
   type WorkspaceSessionTargetDependencies,
 } from "./workspace-session-target";
@@ -46,6 +50,7 @@ export type WorkspaceSessionRuntimeTitleUpdater = (
 export type WorkspaceSessionRenameFailureReporter = (
   runtimeRef: AgentSessionLiveRef,
   message: string,
+  operation?: "workspaceSession.accepted-message.rename" | "workspaceSession.title.sync",
 ) => Effect.Effect<void>;
 
 type AcceptedMessagePlan = {
@@ -84,9 +89,30 @@ export const createWorkspaceSessionRuntimePersistence = ({
   sessionTitleGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
   updateRuntimeSessionTitle: WorkspaceSessionRuntimeTitleUpdater;
   reportRenameFailure: WorkspaceSessionRenameFailureReporter;
-}): AgentSessionPersistencePort & AgentSessionOperationPolicy => {
+}): AgentSessionPersistencePort &
+  AgentSessionOperationPolicy & {
+    isCodexTitleSyncPending: (ref: AgentSessionLiveRef) => boolean;
+    markCodexTitleSyncPending: (ref: AgentSessionLiveRef) => void;
+  } => {
   const pendingFinalMessages = new Map<string, { messageId: string; occurredAt: number }>();
   const sendsInFlight = new Set<string>();
+  const codexTitleSync: CodexTitleSyncState = new Map();
+  const saveCodexMessage = (
+    runtimeRef: AgentSessionLiveRef,
+    known: { ref: WorkspaceSessionStoreRef; session: WorkspaceSession },
+    input: AcceptedMessagePlan["input"],
+  ) =>
+    Effect.gen(function* () {
+      const saved = yield* storeEffect(store.recordAcceptedMessage(input));
+      if (known.session.generatedTitle === null) {
+        const key = agentSessionRefKey(runtimeRef);
+        const state = codexTitleSync.get(key);
+        const titleAdded = runtimeTitle(known.session) === null && input.generatedTitle !== null;
+        if (state === undefined || (state !== "pending" && titleAdded))
+          codexTitleSync.set(key, "pending");
+      }
+      yield* publishUpdated(known.ref.workspaceId, saved);
+    });
   const find = (runtimeRef: AgentSessionLiveRef) =>
     Effect.gen(function* () {
       const config = yield* settings.getRepoConfigByRepoPath(runtimeRef.repoPath);
@@ -174,6 +200,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
           );
         input.selectedModel = { ...message.model, runtimeKind: runtimeRef.runtimeKind };
       }
+      if (runtimeRef.runtimeKind === "codex") return { input, runtimeRename: null };
       const storedGeneratedTitle = known.session.generatedTitle ?? input.generatedTitle;
       const nextTitle = runtimeTitle({
         ...known.session,
@@ -210,15 +237,16 @@ export const createWorkspaceSessionRuntimePersistence = ({
   const applyAcceptedMessage = (
     known: { ref: WorkspaceSessionStoreRef; session: WorkspaceSession },
     plan: AcceptedMessagePlan,
+    runtimeRef: AgentSessionLiveRef,
   ) =>
     Effect.gen(function* () {
       const { input, runtimeRename } = plan;
-      // Rename the runtime session before the durable write, so a failed rename never
-      // stores a title that the runtime session does not show.
+      if (runtimeRef.runtimeKind === "codex")
+        return yield* saveCodexMessage(runtimeRef, known, input);
+      // Rename before saving so a failed native rename leaves the saved title alone.
       if (runtimeRename !== null) {
         const renamed = yield* Effect.either(renameRuntimeTitle(runtimeRename));
         if (renamed._tag === "Left") {
-          // Keep the accepted-message activity, but leave the title on its prior value.
           const recorded = yield* Effect.either(
             storeEffect(store.recordAcceptedMessage({ ...input, generatedTitle: null })),
           );
@@ -264,6 +292,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
           yield* applyAcceptedMessage(
             known,
             yield* planAcceptedMessage(known, runtimeRef, message, saveModel),
+            runtimeRef,
           );
         }),
       );
@@ -276,22 +305,17 @@ export const createWorkspaceSessionRuntimePersistence = ({
       const known = yield* find(runtimeRef);
       if (!known) return;
       const plan = yield* planAcceptedMessage(known, runtimeRef, message, false);
-      // A manual rename saves the new title before its runtime call and holds the title gate
-      // across it, so an observation in that window must not claim the generated title.
-      // The check never waits: the rename holds the gate while it waits for the live
-      // coordinator, so waiting here would deadlock.
+      if (runtimeRef.runtimeKind === "codex")
+        return yield* saveCodexMessage(runtimeRef, known, plan.input);
+      // Defer observed renames because a manual rename can hold the gate during live publication.
       const renamePending = plan.runtimeRename !== null || sessionTitleGate.isActive(known.ref);
-      // A runtime rename cannot run inside the live publication scopes, because the
-      // runtime holds its lock until the publication ends. A send completes the rename
-      // after the runtime call returns; every other observation defers it to a fiber.
       const saved = yield* storeEffect(
         store.recordAcceptedMessage(
           renamePending ? { ...plan.input, generatedTitle: null } : plan.input,
         ),
       );
       const published = yield* Effect.either(publishUpdated(known.ref.workspaceId, saved));
-      // Start the deferred rename before a publication failure propagates, or the write that
-      // held the generated title back would leave the title unapplied.
+      // Start the saved title's rename before a publication failure can stop it.
       if (renamePending && !sendsInFlight.has(agentSessionRefKey(runtimeRef)))
         yield* Effect.forkDaemon(
           recordAcceptedMessage(runtimeRef, message, false).pipe(
@@ -330,13 +354,37 @@ export const createWorkspaceSessionRuntimePersistence = ({
       return yield* known ? operationGate.run(known.ref, effect) : effect;
     });
   return {
-    run: (runtimeRef, _operation, effect) => runOperation(runtimeRef, effect),
+    markCodexTitleSyncPending: (ref) => {
+      codexTitleSync.set(agentSessionRefKey(ref), "pending");
+    },
+    isCodexTitleSyncPending: (ref) => {
+      const state = codexTitleSync.get(agentSessionRefKey(ref));
+      return state === "pending" || state === "queued";
+    },
+    run: (runtimeRef, operation, effect) => {
+      if (operation !== "resume session" || runtimeRef.runtimeKind !== "codex")
+        return runOperation(runtimeRef, effect);
+      return Effect.suspend(() => {
+        const key = agentSessionRefKey(runtimeRef);
+        const previous = codexTitleSync.get(key);
+        return runOperation(runtimeRef, effect).pipe(
+          Effect.onExit((exit) =>
+            Exit.isFailure(exit)
+              ? Effect.sync(() => {
+                  if (codexTitleSync.get(key) !== "pending") return;
+                  if (previous === undefined) codexTitleSync.delete(key);
+                  else codexTitleSync.set(key, previous);
+                })
+              : Effect.void,
+          ),
+        );
+      });
+    },
     runSend: (runtimeRef, effect) =>
       runOperation(
         runtimeRef,
         Effect.sync(() => {
-          // A send renames the runtime session after the runtime call returns, so an
-          // observation during the send must not start a background rename.
+          // Do not rename from an observation while a send still runs.
           sendsInFlight.add(agentSessionRefKey(runtimeRef));
         }).pipe(
           Effect.zipRight(effect),
@@ -348,12 +396,24 @@ export const createWorkspaceSessionRuntimePersistence = ({
         ),
       ),
     prepareResume: (input) =>
-      prepare(input).pipe(
-        Effect.map((prepared) => ({
+      Effect.gen(function* () {
+        const prepared = yield* prepare(input);
+        if (
+          prepared.runtimeKind === "codex" &&
+          prepared.sessionScope.kind === "repository" &&
+          prepared.resumeMode !== "continue_interrupted_turn" &&
+          codexTitleSync.get(agentSessionRefKey(prepared)) !== "queued"
+        )
+          codexTitleSync.set(agentSessionRefKey(prepared), "pending");
+        return {
           input: prepared,
-          save: () => Effect.void,
-        })),
-      ),
+          save: (summary: AgentSessionSummary) =>
+            Effect.sync(() => {
+              if (prepared.runtimeKind === "codex" && summary.firstTurnCompleted === true)
+                codexTitleSync.set(agentSessionRefKey(prepared), "handled");
+            }),
+        };
+      }),
     prepareSend: prepare,
     validateRef,
     prepareModelUpdate: (input) =>
@@ -389,7 +449,9 @@ export const createWorkspaceSessionRuntimePersistence = ({
     observe: (envelope) =>
       Effect.gen(function* () {
         if (envelope.type === "session_removed") {
-          pendingFinalMessages.delete(agentSessionRefKey(envelope.ref));
+          const key = agentSessionRefKey(envelope.ref);
+          pendingFinalMessages.delete(key);
+          codexTitleSync.delete(key);
           return;
         }
         if (envelope.type === "session_upsert") {
@@ -417,6 +479,19 @@ export const createWorkspaceSessionRuntimePersistence = ({
           (event.type === "session_status" && event.status.type === "idle")
         ) {
           yield* flushFinalMessage(event.sessionRef);
+          if (
+            event.type === "session_idle" &&
+            event.turnCompleted === true &&
+            event.sessionRef.runtimeKind === "codex"
+          )
+            yield* syncCodexTitleAfterTurn(event.sessionRef, {
+              state: codexTitleSync,
+              find,
+              findActive,
+              gate: sessionTitleGate,
+              updateTitle: updateRuntimeSessionTitle,
+              reportFailure: reportRenameFailure,
+            });
         }
       }),
   };

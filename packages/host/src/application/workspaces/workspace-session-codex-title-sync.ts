@@ -1,0 +1,77 @@
+import type { AgentSessionLiveRef, WorkspaceSession } from "@openducktor/contracts";
+import { agentSessionRefKey } from "@openducktor/core";
+import { Effect } from "effect";
+import { runtimeTitle } from "../../domain/workspace-sessions/workspace-session-title";
+import { type HostError, HostOperationError } from "../../effect/host-errors";
+import type { WorkspaceSessionStoreRef } from "../../ports/workspace-session-store-port";
+import type { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
+import type {
+  WorkspaceSessionRenameFailureReporter,
+  WorkspaceSessionRuntimeTitleUpdater,
+} from "./workspace-session-runtime-persistence";
+
+export type CodexTitleSyncState = Map<string, "pending" | "queued" | "handled">;
+
+type LocatedSession = { ref: WorkspaceSessionStoreRef; session: WorkspaceSession };
+
+export const syncCodexTitleAfterTurn = (
+  runtimeRef: AgentSessionLiveRef,
+  {
+    state,
+    find,
+    findActive,
+    gate,
+    updateTitle,
+    reportFailure,
+  }: {
+    state: CodexTitleSyncState;
+    find: (ref: AgentSessionLiveRef) => Effect.Effect<LocatedSession | null, HostError>;
+    findActive: (ref: AgentSessionLiveRef) => Effect.Effect<LocatedSession | null, HostError>;
+    gate: ReturnType<typeof createWorkspaceSessionOperationGate>;
+    updateTitle: WorkspaceSessionRuntimeTitleUpdater;
+    reportFailure: WorkspaceSessionRenameFailureReporter;
+  },
+) =>
+  Effect.gen(function* () {
+    const key = agentSessionRefKey(runtimeRef);
+    if (state.get(key) !== "pending") return;
+    state.set(key, "queued");
+    yield* Effect.forkDaemon(
+      Effect.gen(function* () {
+        const known = yield* find(runtimeRef);
+        if (!known) return;
+        yield* gate.run(
+          known.ref,
+          Effect.gen(function* () {
+            const current = yield* findActive(runtimeRef);
+            if (!current || state.get(key) !== "queued") return;
+            const title = runtimeTitle(current.session);
+            if (title === null) {
+              state.delete(key);
+              return;
+            }
+            state.set(key, "handled");
+            const result = yield* updateTitle({ ...runtimeRef, title });
+            if (result.status === "not_attached")
+              return yield* new HostOperationError({
+                operation: "workspaceSession.codex-title.sync",
+                message: "Codex no longer holds this chat.",
+              });
+          }),
+        );
+      }).pipe(
+        Effect.catchAll((failure) =>
+          reportFailure(
+            runtimeRef,
+            `Could not sync this Workspace Session title to Codex. The message was accepted and the saved title remains. Reattach this chat or rename it to retry. ${failure.message}`,
+            "workspaceSession.title.sync",
+          ),
+        ),
+        Effect.ensuring(
+          Effect.sync(() => {
+            if (state.get(key) === "queued") state.set(key, "handled");
+          }),
+        ),
+      ),
+    );
+  });

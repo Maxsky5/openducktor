@@ -22,6 +22,9 @@ export const toAgentSessionControlSummary = (
       if (summary.title !== undefined) {
         control.title = summary.title;
       }
+      if (summary.firstTurnCompleted !== undefined) {
+        control.firstTurnCompleted = summary.firstTurnCompleted;
+      }
       return agentSessionControlSummarySchema.parse(control);
     },
     catch: (cause) =>

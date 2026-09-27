@@ -2410,6 +2410,38 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
+  test("shows a Codex title failure without a live-observation prefix", async () => {
+    const state = createState((emit) => {
+      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    });
+    const message = "Could not sync this Workspace Session title to Codex. Reattach this chat.";
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.run(() => {
+        state.emit({
+          type: "fault",
+          repoPath: "/repo",
+          ref: snapshot().ref,
+          operation: "workspaceSession.title.sync",
+          message,
+        });
+      });
+
+      expect(
+        state.harness.getLatest().getSessionFault({
+          externalSessionId: record.externalSessionId,
+          runtimeKind: record.runtimeKind,
+          workingDirectory: record.workingDirectory,
+        }),
+      ).toEqual({ message });
+      expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("ready");
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
   test("records a scoped fault before the initial snapshot without failing the repository", async () => {
     const state = createState((emit) => {
       emit(scopedFault());

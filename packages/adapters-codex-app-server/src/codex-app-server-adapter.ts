@@ -149,6 +149,7 @@ import {
 } from "./model-catalog";
 import { toCodexSkillCatalog } from "./skill-catalog";
 import type {
+  CodexAppServerClient,
   CodexAppServerAdapterOptions,
   CodexLiveApprovalReplyInput,
   CodexLiveQuestionReplyInput,
@@ -156,6 +157,7 @@ import type {
   CodexServerRequestResponder,
   CodexSessionContextUsage,
   CodexSessionState,
+  CodexThreadResumeResult,
 } from "./types";
 
 export { createCodexAppServerClient } from "./app-server-client";
@@ -241,6 +243,7 @@ export class CodexAppServerAdapter
   private readonly activeTurnsBySessionId = new Map<string, ActiveCodexTurn>();
   // A new active session may have an empty rollout until a full history read succeeds.
   private readonly freshSessions = new WeakSet<CodexSessionState>();
+  private readonly freshTitleState = new WeakMap<CodexSessionState, "pending" | "tried">();
   private readonly localSessions: CodexLocalSessionState;
   private readonly contextUsageLoader: CodexContextUsageLoader;
   private readonly runtimeEvents: CodexRuntimeSessionEvents;
@@ -449,12 +452,19 @@ export class CodexAppServerAdapter
     });
     this.clearThreadInventory(runtimeId);
     const title = sessionPolicy.title;
-    const session = sessionStateFromThreadStart(input, runtimeId, model, response, title);
+    const session = sessionStateFromThreadStart(
+      input,
+      runtimeId,
+      model,
+      response,
+      sessionPolicy.kind === "repository" ? undefined : title,
+    );
     const { summary } = session;
     this.localSessions.remember(session);
     this.freshSessions.add(session);
+    if (sessionPolicy.kind === "repository") this.freshTitleState.set(session, "pending");
     this.runtimeEvents.initializeFreshThreadContextUsage(runtimeId, session.threadId);
-    if (title !== undefined) {
+    if (title !== undefined && sessionPolicy.kind !== "repository") {
       await client.threadSetName({
         threadId: session.threadId,
         name: title,
@@ -487,18 +497,56 @@ export class CodexAppServerAdapter
       (!current || current.preserveNativeSettings)
     ) {
       if (current) {
+        const { client, runtimeId } = await this.runtimeClients.resolve(input, "resume session");
+        await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
+        const response = await client.threadResume({
+          threadId: input.externalSessionId,
+          excludeTurns: true,
+        });
+        if (
+          response.thread.id !== input.externalSessionId ||
+          response.cwd !== input.workingDirectory
+        )
+          throw new Error("Codex resumed a different conversation or directory.");
+        const previousTitleState = this.freshTitleState.get(current);
+        this.freshTitleState.set(current, "pending");
+        let firstTurnCompleted: boolean;
+        try {
+          firstTurnCompleted = await this.readFirstTurnCompleted(
+            client,
+            response,
+            input.externalSessionId,
+          );
+        } catch (cause) {
+          if (previousTitleState === undefined) this.freshTitleState.delete(current);
+          else this.freshTitleState.set(current, previousTitleState);
+          throw cause;
+        }
+        if (firstTurnCompleted) this.freshTitleState.delete(current);
         await this.applyRepositoryTitle(input, current, sessionPolicy.title, {
           tolerateFailure: true,
         });
-        return current.summary;
+        return { ...current.summary, firstTurnCompleted };
       }
-      const handle = await this.openExistingSession(input);
-      await handle.attach();
-      const attached = this.localSessions.get(input.externalSessionId)!;
-      await this.applyRepositoryTitle(input, attached, sessionPolicy.title, {
+      const { client, response, session } = await this.resumeExistingThread(input);
+      this.localSessions.remember(session);
+      this.freshTitleState.set(session, "pending");
+      let firstTurnCompleted: boolean;
+      try {
+        firstTurnCompleted = await this.readFirstTurnCompleted(
+          client,
+          response,
+          input.externalSessionId,
+        );
+      } catch (cause) {
+        this.localSessions.release(session.threadId);
+        throw cause;
+      }
+      if (firstTurnCompleted) this.freshTitleState.delete(session);
+      await this.applyRepositoryTitle(input, session, sessionPolicy.title, {
         tolerateFailure: true,
       });
-      return attached.summary;
+      return { ...session.summary, firstTurnCompleted };
     }
     const model = requireModelSelection(input.model);
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "resume session");
@@ -523,25 +571,37 @@ export class CodexAppServerAdapter
       excludeTurns: true,
       model: toTransportModelSelection(model).model,
     };
+    const checkFirstTurn =
+      sessionPolicy.kind === "repository" &&
+      (!current || this.freshTitleState.get(current) === "pending");
     if (input.systemPrompt) {
       threadResumeInput.developerInstructions = input.systemPrompt;
     }
     const response = await client.threadResume(threadResumeInput);
-    this.clearThreadInventory(runtimeId);
     const session = sessionStateFromThreadResume(input, runtimeId, model, response);
+    if (!current) this.localSessions.remember(session);
+    if (checkFirstTurn) this.freshTitleState.set(session, "pending");
+    let firstTurnCompleted = true;
+    try {
+      if (checkFirstTurn)
+        firstTurnCompleted = await this.readFirstTurnCompleted(
+          client,
+          response,
+          input.externalSessionId,
+        );
+    } catch (cause) {
+      if (!current) this.localSessions.release(session.threadId);
+      throw cause;
+    }
+    this.clearThreadInventory(runtimeId);
     const repositoryTitle = sessionPolicy.kind === "repository" ? sessionPolicy.title : undefined;
     this.localSessions.remember(session);
-    if (repositoryTitle !== undefined) {
-      await client.threadSetName({
-        threadId: session.threadId,
-        name: repositoryTitle,
-      });
-      // Apply the title only after the runtime accepts it. A failed rename keeps the
-      // session addressable, and its summary must report the runtime title.
-      session.summary = { ...session.summary, title: repositoryTitle };
-    }
+    if (firstTurnCompleted) this.freshTitleState.delete(session);
+    await this.applyRepositoryTitle(input, session, repositoryTitle);
 
-    return session.summary;
+    return sessionPolicy.kind === "repository"
+      ? { ...session.summary, firstTurnCompleted }
+      : session.summary;
   }
 
   async continueInterruptedTurn(
@@ -727,6 +787,7 @@ export class CodexAppServerAdapter
         threadId: session.threadId,
         name: title,
       });
+      session.nativeName = title;
     }
 
     return summary;
@@ -1066,6 +1127,17 @@ export class CodexAppServerAdapter
   }
 
   async openExistingSession(input: PolicyBoundSessionRef): Promise<RuntimeSessionImportSource> {
+    const { metadata, session } = await this.resumeExistingThread(input);
+    return {
+      metadata,
+      selectedModel: session.model ? { ...session.model, runtimeKind: "codex" } : null,
+      attach: async () => {
+        this.localSessions.remember(session);
+      },
+    };
+  }
+
+  private async resumeExistingThread(input: PolicyBoundSessionRef) {
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "open existing session");
     const metadata = await getCodexSessionMetadata(client, input);
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
@@ -1078,13 +1150,7 @@ export class CodexAppServerAdapter
     const session = sessionStateFromExistingThread(input, runtimeId, undefined, response);
     session.preserveNativeSettings = true;
     session.summary = { ...session.summary, title: metadata.title ?? input.externalSessionId };
-    return {
-      metadata,
-      selectedModel: session.model ? { ...session.model, runtimeKind: "codex" } : null,
-      attach: async () => {
-        this.localSessions.remember(session);
-      },
-    };
+    return { client, metadata, response, session };
   }
 
   async updateSessionModel(
@@ -1113,10 +1179,13 @@ export class CodexAppServerAdapter
     }
     assertCodexSessionRef(session, input, "update the title of");
     const { client } = await this.runtimeClients.resolve(input, "update session title");
+    if (this.freshTitleState.has(session)) this.freshTitleState.set(session, "tried");
     await client.threadSetName({
       threadId: session.threadId,
       name: input.title,
     });
+    this.freshTitleState.delete(session);
+    session.nativeName = input.title;
     session.summary = withSummaryTitle(session.summary, input.title);
     return { status: "renamed", summary: session.summary };
   }
@@ -1202,13 +1271,37 @@ export class CodexAppServerAdapter
     return summary;
   }
 
+  private async readFirstTurnCompleted(
+    client: CodexAppServerClient,
+    response: CodexThreadResumeResult,
+    threadId: string,
+  ): Promise<boolean> {
+    if (response.thread.historyMode === "paginated" && response.turnsBackwardsCursor === undefined)
+      throw new Error("Codex did not report turn history. Reattach this chat to retry.");
+    if (response.thread.historyMode !== "legacy" && response.turnsBackwardsCursor === null)
+      return false;
+    const firstTurn = await client.threadTurnsList({
+      threadId,
+      cursor: null,
+      limit: 1,
+      sortDirection: "asc",
+      itemsView: "notLoaded",
+    });
+    if (!firstTurn.data[0] && response.turnsBackwardsCursor)
+      throw new Error("Codex did not return the first turn. Reattach this chat to retry.");
+    return firstTurn.data[0] !== undefined && firstTurn.data[0].status !== "inProgress";
+  }
+
   private async applyRepositoryTitle(
     input: PolicyBoundSessionRef,
     session: CodexSessionState,
     repositoryTitle: string | undefined,
     options: { tolerateFailure?: boolean } = {},
   ): Promise<void> {
-    if (repositoryTitle === undefined || session.summary.title === repositoryTitle) return;
+    if (repositoryTitle === undefined) return;
+    const state = this.freshTitleState.get(session);
+    if (state === "pending") return;
+    if (session.nativeName === repositoryTitle) return;
     const { client } = await this.runtimeClients.resolve(
       input,
       "apply the repository session title",
@@ -1219,12 +1312,13 @@ export class CodexAppServerAdapter
         name: repositoryTitle,
       });
     } catch (cause) {
-      // An attach reconciles the durable title with the runtime. A failed reconciliation
-      // keeps the durable title and leaves the native title unchanged, so the next attach
-      // can retry. A session replacement must fail instead.
+      // Codex may write the name before this call fails. A later attach checks it.
+      // Session replacement must still fail.
       if (options.tolerateFailure !== true) throw cause;
       return;
     }
+    this.freshTitleState.delete(session);
+    session.nativeName = repositoryTitle;
     session.summary = withSummaryTitle(session.summary, repositoryTitle);
   }
 

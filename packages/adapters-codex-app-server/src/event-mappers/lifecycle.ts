@@ -91,6 +91,7 @@ export const lifecycleMapper: CodexEventMapper = {
 
     const idleEvent: CodexCanonicalSessionIdleEvent = {
       kind: "session_idle",
+      turnCompleted: true,
       source: ctx.source,
       mapper: "lifecycle",
       threadId: ctx.threadId,

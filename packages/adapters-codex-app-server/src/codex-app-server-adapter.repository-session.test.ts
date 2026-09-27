@@ -3,9 +3,12 @@ import { ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
 import { AGENT_ROLE_TOOL_POLICY } from "@openducktor/core";
 import {
   codexSessionRuntimeRef,
+  codexThreadStartResultFixture,
+  codexTurnFixture,
   codexUserMessageInput,
   createAdapterWithTransport,
   createHarness,
+  createRuntimeStreamSubscription,
   defaultCodexEffectivePolicy,
   flushCodexAdapterWork,
   makeRuntimeSummary,
@@ -31,6 +34,63 @@ class NameFailingTransport extends RecordingTransport {
       throw new Error("name failed");
     }
     return super.request(request);
+  }
+}
+
+class MatchingPreviewTransport extends RecordingTransport {
+  nativeName: string | null = null;
+  failNextNameWrite = true;
+
+  async request(request: Parameters<RecordingTransport["request"]>[0]) {
+    if (request.method === "thread/resume") {
+      this.calls.push(request);
+      const result = codexThreadStartResultFixture(
+        request.params.threadId,
+        "thread/resume",
+        this.firstTurnStatus,
+        this.historyMode,
+      );
+      return {
+        ...result,
+        thread: { ...result.thread, preview: "Saved title", name: this.nativeName },
+      };
+    }
+    if (request.method === "thread/name/set") {
+      if (this.failNextNameWrite) {
+        this.failNextNameWrite = false;
+        this.calls.push(request);
+        throw new Error("name failed before write");
+      }
+      this.nativeName = request.params.name;
+    }
+    return super.request(request);
+  }
+}
+
+class NameWriteThenFailTransport extends RecordingTransport {
+  nativeName: string | null = null;
+  failNextNameWrite = true;
+
+  async request(request: Parameters<RecordingTransport["request"]>[0]) {
+    if (request.method === "thread/resume") {
+      this.calls.push(request);
+      const result = codexThreadStartResultFixture(
+        request.params.threadId,
+        "thread/resume",
+        this.firstTurnStatus,
+        this.historyMode,
+      );
+      return { ...result, thread: { ...result.thread, name: this.nativeName } };
+    }
+    const result = await super.request(request);
+    if (request.method === "thread/name/set") {
+      this.nativeName = request.params.name;
+      if (this.failNextNameWrite) {
+        this.failNextNameWrite = false;
+        throw new Error("rollout was empty after name write");
+      }
+    }
+    return result;
   }
 }
 
@@ -130,10 +190,10 @@ describe("CodexAppServerAdapter repository sessions", () => {
     });
 
     expect(started).toMatchObject({
-      title: "Fairnest",
       sessionAssociation: sessionScope,
       workingDirectory: "/repo",
     });
+    expect(started.title).toBeUndefined();
     expect(forked).toMatchObject({
       title: "Fairnest",
       sessionAssociation: sessionScope,
@@ -144,10 +204,6 @@ describe("CodexAppServerAdapter repository sessions", () => {
     });
     const calls = transports.get("runtime-live")?.calls ?? [];
     expect(calls.filter((call) => call.method === "thread/name/set")).toEqual([
-      {
-        method: "thread/name/set",
-        params: { threadId: started.externalSessionId, name: "Fairnest" },
-      },
       {
         method: "thread/name/set",
         params: { threadId: forked.externalSessionId, name: "Fairnest" },
@@ -204,6 +260,121 @@ describe("CodexAppServerAdapter repository sessions", () => {
     });
   });
 
+  test("starts a named repository session while its rollout is unreadable", async () => {
+    const transport = new NameFailingTransport("runtime-live", false);
+    transport.firstTurnStatus = null;
+    const adapter = createAdapterWithTransport(transport);
+    const started = await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      sessionScope: { kind: "repository", title: "Saved title" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      systemPrompt: "",
+      model: { providerId: "openai", modelId: "gpt-5" },
+    });
+
+    expect(started.title).toBeUndefined();
+    expect(transport.calls.filter((call) => call.method === "thread/name/set")).toEqual([]);
+    await adapter.resumeSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: started.externalSessionId,
+      sessionScope: { kind: "repository", title: "Saved title" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      model: { providerId: "openai", modelId: "gpt-5" },
+    });
+    expect(transport.calls.filter((call) => call.method === "thread/name/set")).toEqual([]);
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: started.externalSessionId,
+        sessionScope: { kind: "repository", title: "Saved title" },
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+        parts: [{ kind: "text", text: "First prompt" }],
+      }),
+    );
+    await flushCodexAdapterWork();
+    await adapter.resumeSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: started.externalSessionId,
+      sessionScope: { kind: "repository", title: "Saved title" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      model: { providerId: "openai", modelId: "gpt-5" },
+    });
+    expect(transport.calls.filter((call) => call.method === "thread/name/set")).toEqual([]);
+  });
+
+  test("reattaches and retries after a failed name write with a matching preview", async () => {
+    const transport = new MatchingPreviewTransport("runtime-live", false);
+    const adapter = createAdapterWithTransport(transport);
+    const input = {
+      repoPath: "/repo",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo",
+      externalSessionId: "thread-resume",
+      sessionScope: { kind: "repository" as const, title: "Saved title" },
+      runtimePolicy: { kind: "codex" as const, policy: defaultCodexEffectivePolicy() },
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5" },
+    };
+
+    await expect(adapter.resumeSession(input)).rejects.toThrow("name failed before write");
+    expect((await adapter.resumeSession(input)).title).toBe("Saved title");
+    expect(transport.nativeName).toBe("Saved title");
+    expect(transport.calls.filter((call) => call.method === "thread/name/set")).toHaveLength(2);
+  });
+
+  test("reattaches without retry when Codex wrote the name before reporting an error", async () => {
+    const transport = new NameWriteThenFailTransport("runtime-live", false);
+    const adapter = createAdapterWithTransport(transport);
+    const sessionScope = { kind: "repository", title: "Saved title" } as const;
+    const runtimePolicy = { kind: "codex" as const, policy: defaultCodexEffectivePolicy() };
+    const started = await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      sessionScope,
+      runtimePolicy,
+      systemPrompt: "",
+      model: { providerId: "openai", modelId: "gpt-5" },
+    });
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: started.externalSessionId,
+        sessionScope,
+        runtimePolicy,
+        parts: [{ kind: "text", text: "First prompt" }],
+      }),
+    );
+    await flushCodexAdapterWork();
+
+    await expect(
+      adapter.updateSessionTitle({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: started.externalSessionId,
+        title: "Saved title",
+      }),
+    ).rejects.toThrow("rollout was empty after name write");
+    expect(transport.nativeName).toBe("Saved title");
+
+    const resumed = await adapter.resumeSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: started.externalSessionId,
+      sessionScope,
+      runtimePolicy,
+      model: { providerId: "openai", modelId: "gpt-5" },
+    });
+    expect(resumed.title).toBe("Saved title");
+    expect(transport.calls.filter((call) => call.method === "thread/name/set")).toHaveLength(1);
+  });
+
   test("reports a title update for an unknown Codex session as not attached", async () => {
     const { adapter, transports } = createHarness();
 
@@ -220,7 +391,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
     expect(calls.findLast((call) => call.method === "thread/name/set")).toBeUndefined();
   });
 
-  test("keeps the summary title when the native thread rename fails", async () => {
+  test("does not claim the requested title when the native thread rename fails", async () => {
     const sessionScope = { kind: "repository", title: "Fairnest" } as const;
     const transport = new NameFailingTransport("runtime-live", false, "Renamed");
     const adapter = createAdapterWithTransport(transport);
@@ -255,7 +426,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
         workingDirectory: "/repo",
         externalSessionId: started.externalSessionId,
       }),
-    ).resolves.toMatchObject({ availability: "runtime", title: "Fairnest" });
+    ).resolves.toMatchObject({ availability: "runtime", title: "Codex" });
   });
 
   test("reconciles the durable repository title on a cold preserve-native resume", async () => {
@@ -272,6 +443,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
     });
 
     expect(resumed.title).toBe("Fairnest");
+    expect(resumed.firstTurnCompleted).toBe(true);
     expect(transport.calls.find((call) => call.method === "thread/resume")?.params).toEqual({
       threadId: "thread-resume",
       excludeTurns: true,
@@ -301,6 +473,133 @@ describe("CodexAppServerAdapter repository sessions", () => {
       params: { threadId: "thread-resume", name: "Fairnest" },
     });
   });
+
+  test.each([
+    {
+      name: "no first turn",
+      status: null,
+      historyMode: "paginated" as const,
+      systemPrompt: "Use the repo rules.",
+    },
+    {
+      name: "a running first turn",
+      status: "inProgress" as const,
+      historyMode: "paginated" as const,
+      systemPrompt: "Use the repo rules.",
+    },
+    {
+      name: "an empty legacy thread",
+      status: null,
+      historyMode: "legacy" as const,
+      systemPrompt: "Use the repo rules.",
+    },
+    {
+      name: "a cold thread with no first turn",
+      status: null,
+      historyMode: "paginated" as const,
+      systemPrompt: "",
+    },
+    {
+      name: "a cold thread with a running first turn",
+      status: "inProgress" as const,
+      historyMode: "paginated" as const,
+      systemPrompt: "",
+    },
+  ])(
+    "reattaches with $name without writing its title",
+    async ({ status, historyMode, systemPrompt }) => {
+      const transport = new NameFailingTransport("runtime-live", false);
+      transport.firstTurnStatus = status;
+      transport.historyMode = historyMode;
+      const adapter = createAdapterWithTransport(transport);
+
+      const resumed = await adapter.resumeSession({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread-resume",
+        sessionScope: { kind: "repository", title: "Saved title" },
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+        systemPrompt,
+        model: { providerId: "openai", modelId: "gpt-5" },
+      });
+
+      expect(resumed.firstTurnCompleted).toBe(false);
+      expect(transport.calls.some((call) => call.method === "thread/name/set")).toBe(false);
+    },
+  );
+
+  test("keeps a completion event received during the first-turn read", async () => {
+    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+    const completions: boolean[] = [];
+    class CompletingTransport extends RecordingTransport {
+      async request(request: Parameters<RecordingTransport["request"]>[0]) {
+        const result = await super.request(request);
+        if (request.method === "thread/turns/list" && request.params.limit === 1) {
+          emitNotification({
+            method: "turn/completed",
+            params: {
+              threadId: "thread-resume",
+              turn: codexTurnFixture({ id: "turn-live", status: "completed", items: [] }),
+            },
+          });
+          await flushCodexAdapterWork();
+        }
+        return result;
+      }
+    }
+    const transport = new CompletingTransport("runtime-live", false);
+    transport.firstTurnStatus = "inProgress";
+    const adapter = createAdapterWithTransport(transport, {
+      subscribeEvents,
+      onLiveSessionMutation: (mutation) => {
+        for (const event of mutation.transcriptEvents) {
+          if (event.type === "session_idle") completions.push(event.turnCompleted === true);
+        }
+      },
+    });
+
+    const resumed = await adapter.resumeSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "thread-resume",
+      sessionScope: { kind: "repository", title: "Saved title" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5" },
+    });
+
+    expect(resumed.firstTurnCompleted).toBe(false);
+    expect(completions).toContain(true);
+    expect(transport.calls.some((call) => call.method === "thread/name/set")).toBe(false);
+  });
+
+  test.each(["completed", "interrupted"] as const)(
+    "retries the saved title on a %s legacy thread",
+    async (status) => {
+      const transport = new RecordingTransport("runtime-live", false);
+      transport.historyMode = "legacy";
+      transport.firstTurnStatus = status;
+      const adapter = createAdapterWithTransport(transport);
+      const resumed = await adapter.resumeSession({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread-resume",
+        sessionScope: { kind: "repository", title: "Saved title" },
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+        systemPrompt: "Use the repo rules.",
+        model: { providerId: "openai", modelId: "gpt-5" },
+      });
+
+      expect(resumed.firstTurnCompleted).toBe(true);
+      expect(transport.calls.find((call) => call.method === "thread/name/set")).toEqual({
+        method: "thread/name/set",
+        params: { threadId: "thread-resume", name: "Saved title" },
+      });
+    },
+  );
 
   test("keeps the native title when a strict repository resume cannot apply the title", async () => {
     const transport = new NameFailingTransport("runtime-live", false);

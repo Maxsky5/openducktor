@@ -3,6 +3,7 @@ import {
   type WorkspaceSessionArchiveInput,
   type AgentSessionModelSelection,
   type AgentSessionControlStartInput,
+  type AgentSessionLiveRef,
   type WorkspaceSessionCreateInput,
   type WorkspaceSessionCreateResult,
   type WorkspaceSessionStartResult,
@@ -43,6 +44,8 @@ export type WorkspaceSessionServiceDependencies = WorkspaceSessionTargetDependen
   lifecycle: TaskSessionLifecycleCoordinator;
   operationGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
   sessionTitleGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
+  isCodexTitleSyncPending: (ref: AgentSessionLiveRef) => boolean;
+  markCodexTitleSyncPending: (ref: AgentSessionLiveRef) => void;
   store: WorkspaceSessionStorePort;
   settings: Pick<WorkspaceSettingsService, "getRepoConfig" | "listCustomAgentRoles">;
   runtime: Pick<RuntimeOrchestratorService, "runtimeEnsure">;
@@ -202,11 +205,19 @@ export const createWorkspaceSessionService = (
                   });
                 }),
               );
-              if (Exit.isSuccess(saved))
+              if (Exit.isSuccess(saved)) {
+                if (session.runtimeKind === "codex")
+                  dependencies.markCodexTitleSyncPending({
+                    repoPath: ref.repoPath,
+                    runtimeKind: session.runtimeKind,
+                    externalSessionId: runtimeSession.externalSessionId,
+                    workingDirectory: runtimeSession.workingDirectory,
+                  });
                 return {
                   session: saved.value,
                   runtimeSession,
                 } satisfies WorkspaceSessionStartResult;
+              }
               const released = yield* Effect.exit(
                 live.releaseSession({
                   repoPath: ref.repoPath,
@@ -268,16 +279,30 @@ export const createWorkspaceSessionService = (
                   }),
                 );
               }
-              const plannedRename = planRuntimeTitleRename(session, nextTitle);
-              // Save the new title before the runtime rename. Restore the saved title when
-              // the runtime rename fails, so the record and the runtime session stay in step.
-              // A session that the runtime does not hold yet keeps the saved title for the
-              // next attach.
+              const plannedRename =
+                planRuntimeTitleRename(session, nextTitle) ??
+                (session.runtimeKind === "codex" &&
+                session.externalSessionId !== null &&
+                nextTitle !== null
+                  ? { externalSessionId: session.externalSessionId, title: nextTitle }
+                  : null);
+              // Codex may write the native name before it reports a failed rename.
+              // Keep the saved title so the next attach or rename can try again.
               const saved = yield* Effect.either(
                 store.rename({ ...ref, manualTitle: input.manualTitle }),
               );
               if (saved._tag === "Left") return yield* Effect.fail(saved.left);
               if (plannedRename === null) return saved.right;
+              if (
+                session.runtimeKind === "codex" &&
+                dependencies.isCodexTitleSyncPending({
+                  repoPath: ref.repoPath,
+                  runtimeKind: session.runtimeKind,
+                  externalSessionId: plannedRename.externalSessionId,
+                  workingDirectory: session.executionTarget.workingDirectory,
+                })
+              )
+                return saved.right;
               const renamed = yield* Effect.either(
                 live.updateSessionTitle({
                   repoPath: ref.repoPath,
@@ -287,6 +312,13 @@ export const createWorkspaceSessionService = (
                 }),
               );
               if (renamed._tag === "Right") return saved.right;
+              if (session.runtimeKind === "codex") {
+                return yield* new HostOperationError({
+                  operation: "workspaceSession.rename",
+                  message: `Could not sync this Workspace Session title to Codex. The saved title remains. Reattach this chat or rename it to retry. ${renamed.left.message}`,
+                  cause: renamed.left,
+                });
+              }
               const restored = yield* Effect.either(
                 store.setPersistedTitle({ ...ref, manualTitle: session.manualTitle }),
               );

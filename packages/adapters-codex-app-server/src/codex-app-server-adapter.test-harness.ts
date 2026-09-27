@@ -343,6 +343,8 @@ export const codexThreadFixture = (
 export const codexThreadStartResultFixture = (
   threadId: string,
   method: "thread/start" | "thread/resume" | "thread/fork" = "thread/start",
+  firstTurnStatus?: "completed" | "inProgress" | "interrupted" | null,
+  historyMode: "paginated" | "legacy" = "paginated",
 ) => {
   const result = {
     approvalPolicy: "on-request",
@@ -363,13 +365,17 @@ export const codexThreadStartResultFixture = (
       writableRoots: ["/repo"],
     },
     serviceTier: null,
-    thread: codexThreadFixture({ id: threadId, status: { type: "active", activeFlags: [] } }),
+    thread: codexThreadFixture({
+      id: threadId,
+      status: { type: "active", activeFlags: [] },
+      historyMode,
+    }),
   };
   if (method === "thread/resume") {
     return {
       ...result,
       initialTurnsPage: null,
-      turnsBackwardsCursor: null,
+      turnsBackwardsCursor: firstTurnStatus && historyMode === "paginated" ? "first-turn" : null,
       itemsBackwardsCursor: null,
     };
   }
@@ -381,6 +387,8 @@ export const requestThreadId = (params: { threadId: string }): string => params.
 export class RecordingTransport implements CodexJsonRpcTransport {
   readonly calls: CodexJsonRpcRequest[] = [];
   readonly turnStartDeferred = createDeferred<CodexAppServerTurnStartResult | null>();
+  firstTurnStatus: "completed" | "inProgress" | "interrupted" | null = "completed";
+  historyMode: "paginated" | "legacy" = "paginated";
   private turnStartCount = 0;
 
   constructor(
@@ -436,7 +444,12 @@ export class RecordingTransport implements CodexJsonRpcTransport {
       case "thread/fork": {
         const threadId =
           method === "thread/resume" ? requestThreadId(params) : `${method}-${this.runtimeId}`;
-        const result = codexThreadStartResultFixture(threadId, method);
+        const result = codexThreadStartResultFixture(
+          threadId,
+          method,
+          method === "thread/resume" ? this.firstTurnStatus : undefined,
+          this.historyMode,
+        );
         return threadId === "thread-idle"
           ? { ...result, thread: codexThreadFixture({ id: threadId, status: { type: "idle" } }) }
           : result;
@@ -522,7 +535,19 @@ export class RecordingTransport implements CodexJsonRpcTransport {
         };
       case "thread/turns/list":
         return {
-          data: recordingTransportHistoryTurns(),
+          data:
+            this.firstTurnStatus === null
+              ? []
+              : params.limit === 1
+                ? recordingTransportHistoryTurns()
+                    .slice(0, 1)
+                    .map((turn) => ({
+                      ...turn,
+                      status: this.firstTurnStatus ?? "completed",
+                      completedAt: this.firstTurnStatus === "inProgress" ? null : turn.completedAt,
+                      durationMs: this.firstTurnStatus === "inProgress" ? null : turn.durationMs,
+                    }))
+                : recordingTransportHistoryTurns(),
           nextCursor: null,
           backwardsCursor: null,
         };
