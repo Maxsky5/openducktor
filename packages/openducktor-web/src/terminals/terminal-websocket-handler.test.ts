@@ -10,6 +10,7 @@ import {
 import {
   createTerminalService,
   type FilesystemPort,
+  type GitPort,
   type TerminalPtyPort,
   TerminalServiceError,
 } from "@openducktor/host";
@@ -619,6 +620,13 @@ describe("terminalWebSocketHandler", () => {
     const service = await Effect.runPromise(
       createTerminalService({
         filesystem: unusedFilesystem,
+        taskWorktrees: { getTaskWorktree: () => unusedDependency("getTaskWorktree") },
+        workspaceSessions: {
+          settings: { getRepoConfig: () => unusedDependency("getRepoConfig") },
+          store: { get: () => unusedDependency("getWorkspaceSession") },
+          // SAFETY: This test only attaches a missing terminal; it never resolves a launch target.
+          git: {} as GitPort,
+        },
         ptyPort: unusedPtyPort,
         resolveLaunchEnvironment: () =>
           Effect.succeed({ shell: "/bin/sh", args: [], env: { PATH: "/usr/bin" } }),

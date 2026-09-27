@@ -11,7 +11,7 @@ import {
   type TaskWorktreeQueryHost,
   taskWorktreeQueryOptions,
 } from "@/state/queries/build-runtime";
-import { terminalListQueryOptions } from "@/state/queries/terminals";
+import { terminalListByFilterQueryOptions } from "@/state/queries/terminals";
 import { useAgentSessionLists } from "@/state/queries/use-agent-session-lists";
 
 type TaskCleanupImpact = {
@@ -41,7 +41,7 @@ type TaskWorktreeImpactQuerySnapshot = {
 type TaskCleanupImpactReadPorts = {
   agentSessions?: AgentSessionReadPort;
   taskWorktrees?: TaskWorktreeQueryHost;
-  terminals?: NonNullable<Parameters<typeof terminalListQueryOptions>[0]["hostClient"]>;
+  terminals?: NonNullable<Parameters<typeof terminalListByFilterQueryOptions>[0]["hostClient"]>;
 };
 
 const EMPTY_CLEANUP_IMPACT: TaskCleanupImpact = {
@@ -211,14 +211,13 @@ export function useTaskCleanupImpact(
   const terminalQueries = useQueries(
     {
       queries: taskIds.map((taskId) => {
-        const input: Parameters<typeof terminalListQueryOptions>[0] = {
-          repoPath: queryRepoPath,
-          taskId,
+        const input: Parameters<typeof terminalListByFilterQueryOptions>[0] = {
+          filter: { kind: "task", repoPath: queryRepoPath, taskId },
         };
         if (readPorts.terminals) {
           input.hostClient = readPorts.terminals;
         }
-        return { ...terminalListQueryOptions(input), enabled: shouldLoadImpact };
+        return { ...terminalListByFilterQueryOptions(input), enabled: shouldLoadImpact };
       }),
     },
     queryClient,

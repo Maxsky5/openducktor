@@ -264,6 +264,7 @@ export const assembleNodeEffectHostCommandRouter = (
     createTerminalService({
       withProcessStartAdmission: workspaceAdmissionService.withProcessStartAdmission,
       filesystem,
+      taskWorktrees: taskWorktreeService,
       workspaceSessions: {
         settings: workspaceSettingsService,
         store: assets.workspaceSessionStore,

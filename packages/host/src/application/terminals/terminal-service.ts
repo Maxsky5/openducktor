@@ -1,6 +1,5 @@
 import {
   type TerminalCloseRequest,
-  type TerminalContext,
   type TerminalCreateRequest,
   type TerminalCreateResponse,
   type TerminalListFilter,
@@ -14,17 +13,9 @@ import {
   terminalPreparePathInputRequestSchema,
 } from "@openducktor/contracts";
 import { Effect, type Scope } from "effect";
-import { HostResourceError } from "../../effect/host-errors";
-import type { FilesystemPort } from "../../ports/filesystem-port";
-import type { GitPort } from "../../ports/git-port";
 import type { TerminalGrid, TerminalPtyPort } from "../../ports/terminal-pty-port";
-import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
 import { createTerminalAdmission } from "./terminal-admission";
-import {
-  isWorkspaceSessionTerminalContext,
-  type TerminalTaskScope,
-  type TerminalWorkspaceSessionScope,
-} from "./terminal-context";
+import { type TerminalTaskScope, type TerminalWorkspaceSessionScope } from "./terminal-context";
 import {
   createTerminalLaunchPolicy,
   type TerminalLaunchEnvironmentPort,
@@ -37,8 +28,7 @@ import {
 } from "./terminal-session-engine";
 import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler";
 import type { WithProcessStartAdmission } from "../workspaces/workspace-admission-service";
-import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-model";
-import { validateWorkspaceSessionTarget } from "../workspaces/workspace-session-target";
+import { createTerminalTargetResolver, type TerminalTargetServices } from "./terminal-target";
 
 const DEFAULT_GRID: TerminalGrid = { columns: 80, rows: 24 };
 
@@ -78,14 +68,8 @@ export type TerminalService = {
   dispose(): Effect.Effect<void, TerminalServiceError>;
 };
 
-type CreateTerminalServiceInput = {
+type CreateTerminalServiceInput = TerminalTargetServices & {
   withProcessStartAdmission?: WithProcessStartAdmission;
-  filesystem: FilesystemPort;
-  workspaceSessions?: {
-    settings: Pick<WorkspaceSettingsService, "getRepoConfig">;
-    store: Pick<WorkspaceSessionStorePort, "get">;
-    git: GitPort;
-  };
   ptyPort: TerminalPtyPort;
   resolveLaunchEnvironment: TerminalLaunchEnvironmentPort;
   now?: () => Date;
@@ -97,6 +81,7 @@ type CreateTerminalServiceInput = {
 export const createTerminalService = ({
   withProcessStartAdmission,
   filesystem,
+  taskWorktrees,
   workspaceSessions,
   ptyPort,
   resolveLaunchEnvironment,
@@ -120,163 +105,8 @@ export const createTerminalService = ({
       countLive: engine.countLive,
       countLiveForContext: engine.countLiveForContext,
     });
-    const canonicalizeRepositoryPath = (
-      repoPath: string,
-      operation: "create" | "list" | "close_by_task",
-    ): Effect.Effect<string, TerminalServiceError> =>
-      filesystem.canonicalize(repoPath).pipe(
-        Effect.mapError(
-          (cause) =>
-            new TerminalServiceError({
-              code: "working_directory_inaccessible",
-              operation,
-              message: `Cannot resolve terminal repository path: ${repoPath}`,
-              workingDir: repoPath,
-              cause,
-            }),
-        ),
-      );
-    const canonicalizeContext = (
-      context: TerminalContext,
-      operation: "create" | "list",
-    ): Effect.Effect<TerminalContext, TerminalServiceError> =>
-      "taskId" in context
-        ? canonicalizeRepositoryPath(context.repoPath, operation).pipe(
-            Effect.map((repoPath) => ({ repoPath, taskId: context.taskId })),
-          )
-        : Effect.succeed(context);
-    const resolveWorkspaceSession = (
-      context: Extract<TerminalContext, { kind: "workspace_session" }>,
-      workingDir: string,
-    ): Effect.Effect<{ context: TerminalContext; workingDir: string }, TerminalServiceError> =>
-      Effect.gen(function* () {
-        if (!workspaceSessions) {
-          return yield* new TerminalServiceError({
-            code: "workspace_session_unavailable",
-            operation: "create",
-            message: "Workspace Session terminal support is unavailable. Restart the host.",
-          });
-        }
-        const { settings, store, git } = workspaceSessions;
-        const config = yield* settings.getRepoConfig(context.workspaceId).pipe(
-          Effect.mapError(
-            (cause) =>
-              new TerminalServiceError({
-                code: "workspace_session_unavailable",
-                operation: "create",
-                message: `Cannot read Workspace ${context.workspaceId}: ${cause.message}`,
-                cause,
-              }),
-          ),
-        );
-        const repoPath = yield* git.canonicalizePath(config.repoPath).pipe(
-          Effect.mapError(
-            (cause) =>
-              new TerminalServiceError({
-                code: "workspace_session_unavailable",
-                operation: "create",
-                message: `Cannot resolve Workspace repository: ${cause.message}`,
-                cause,
-              }),
-          ),
-        );
-        const requestedRepoPath = yield* git.canonicalizePath(context.repoPath).pipe(
-          Effect.mapError(
-            (cause) =>
-              new TerminalServiceError({
-                code: "workspace_session_unavailable",
-                operation: "create",
-                message: `Cannot resolve requested repository: ${cause.message}`,
-                cause,
-              }),
-          ),
-        );
-        if (requestedRepoPath !== repoPath) {
-          return yield* new TerminalServiceError({
-            code: "workspace_session_unavailable",
-            operation: "create",
-            message: "Workspace repository changed. Reopen this chat and retry the terminal.",
-          });
-        }
-        const session = yield* store
-          .get({ workspaceId: context.workspaceId, sessionId: context.sessionId, repoPath })
-          .pipe(
-            Effect.mapError(
-              (cause) =>
-                new TerminalServiceError({
-                  code: "workspace_session_unavailable",
-                  operation: "create",
-                  message:
-                    cause instanceof HostResourceError
-                      ? `Workspace Session ${context.sessionId} no longer exists. Select an active chat.`
-                      : `Cannot read Workspace Session ${context.sessionId}: ${cause.message}`,
-                  cause,
-                }),
-            ),
-          );
-        if (session.archivedAt !== null) {
-          return yield* new TerminalServiceError({
-            code: "workspace_session_unavailable",
-            operation: "create",
-            message: "This chat is archived. Restore it before opening a terminal.",
-          });
-        }
-        const target = session.executionTarget;
-        if (target.kind === "local_worktree" && target.worktreeState === "removed") {
-          return yield* new TerminalServiceError({
-            code: "workspace_session_unavailable",
-            operation: "create",
-            message:
-              "This chat's worktree was removed. Restore the worktree before opening a terminal.",
-          });
-        }
-        yield* validateWorkspaceSessionTarget({ git }, repoPath, target).pipe(
-          Effect.mapError(
-            (cause) =>
-              new TerminalServiceError({
-                code: "workspace_session_unavailable",
-                operation: "create",
-                message: `Cannot use this chat's saved directory: ${cause.message}`,
-                cause,
-              }),
-          ),
-        );
-        const requestedWorkingDir = yield* git.canonicalizePath(workingDir).pipe(
-          Effect.mapError(
-            (cause) =>
-              new TerminalServiceError({
-                code: "invalid_working_directory",
-                operation: "create",
-                message: `Cannot resolve requested terminal directory: ${cause.message}`,
-                workingDir,
-                cause,
-              }),
-          ),
-        );
-        const savedWorkingDir = yield* git.canonicalizePath(target.workingDirectory).pipe(
-          Effect.mapError(
-            (cause) =>
-              new TerminalServiceError({
-                code: "workspace_session_unavailable",
-                operation: "create",
-                message: `Cannot resolve this chat's saved directory: ${cause.message}`,
-                cause,
-              }),
-          ),
-        );
-        if (requestedWorkingDir !== savedWorkingDir) {
-          return yield* new TerminalServiceError({
-            code: "invalid_working_directory",
-            operation: "create",
-            message: `Terminal directory does not match this chat's saved directory: ${target.workingDirectory}. Reopen the chat and retry.`,
-            workingDir,
-          });
-        }
-        return {
-          context: { ...context, repoPath },
-          workingDir: savedWorkingDir,
-        };
-      });
+    const target = createTerminalTargetResolver({ filesystem, taskWorktrees, workspaceSessions });
+    const canonicalizeRepositoryPath = target.canonicalizeRepositoryPath;
     const canonicalizeTaskScope = (
       scope: TerminalTaskScope,
     ): Effect.Effect<TerminalTaskScope, TerminalServiceError> =>
@@ -290,17 +120,10 @@ export const createTerminalService = ({
         Effect.gen(function* () {
           const input = terminalCreateRequestSchema.parse(rawInput);
           return yield* Effect.acquireUseRelease(
-            admission.beginCreation(
-              isWorkspaceSessionTerminalContext(input.context) ? input.context : undefined,
-            ),
+            admission.beginCreation("taskId" in input.context ? undefined : input.context),
             (reservation) =>
               Effect.gen(function* () {
-                const resolved = isWorkspaceSessionTerminalContext(input.context)
-                  ? yield* resolveWorkspaceSession(input.context, input.workingDir)
-                  : {
-                      context: yield* canonicalizeContext(input.context, "create"),
-                      workingDir: input.workingDir,
-                    };
+                const resolved = yield* target.resolve(input);
                 const { context, workingDir } = resolved;
                 const start = Effect.gen(function* () {
                   yield* reservation.bind(context);

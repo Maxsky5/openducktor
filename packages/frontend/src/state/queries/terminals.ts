@@ -38,15 +38,3 @@ export const terminalListByFilterQueryOptions = ({
     retry: false,
     staleTime: 0,
   });
-
-export const terminalListQueryOptions = ({
-  repoPath,
-  taskId,
-  hostClient = host,
-}: TerminalQueryInput & { hostClient?: Pick<HostClient, "terminalList"> }) =>
-  queryOptions({
-    queryKey: terminalQueryKeys.task({ repoPath, taskId }),
-    queryFn: () => hostClient.terminalList({ filter: { kind: "task", repoPath, taskId } }),
-    retry: false,
-    staleTime: 0,
-  });

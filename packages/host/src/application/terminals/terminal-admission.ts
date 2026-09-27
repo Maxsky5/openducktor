@@ -86,7 +86,8 @@ export const createTerminalAdmission = ({
           }),
         );
       }
-      if (cleanupPreparations > 0) {
+      // Task starts have no owner key until the repository path is resolved.
+      if (cleanupPreparations > 0 && !initialContext) {
         return Effect.fail(
           new TerminalServiceError({
             code: "close_failed",

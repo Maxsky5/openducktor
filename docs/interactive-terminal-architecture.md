@@ -10,13 +10,13 @@ The app does not store terminal sessions, tabs, or transcripts in settings or SQ
 - `packages/host` owns IDs, launch rules, limits, in-memory sessions, output replay, byte order, flow control, titles, and cleanup. PTY adapters implement `TerminalPtyPort`.
 - Electron uses the shared `node-pty` adapter over a dedicated preload IPC bridge.
 - The Node web runner uses the same `node-pty` adapter over one authenticated WebSocket. It checks origin and requires the `openducktor-terminal.v2` subprotocol.
-- `packages/frontend/src/features/terminals` owns the shared panel, collection hook, tabs, transport controller, xterm renderer, and input rules. Its transport controller shares one connection across the mounted terminal emulators. The Task Workflows page only supplies the task worktree and task context.
+- `packages/frontend/src/features/terminals` owns the shared panel, collection hook, tabs, transport controller, xterm renderer, and input rules. Its transport controller shares one connection across the mounted terminal emulators. The task and Workspace Session views supply their owner and requested start directory.
 
 Create, list, close, and path setup use host commands. Input, resize, attach, detach, ACK, output, lifecycle, and title use terminal frames. Electron and web share the host PTY adapter and use separate transports.
 
 ## Start a terminal
 
-`workingDir` is required. The host makes it canonical, checks that it is an accessible directory, and saves it as `initialWorkingDir`. Later `cd` commands do not change that field.
+`workingDir` is required. For a task or Workspace Session, the host reads the current target and checks that the requested directory matches it. The host starts in the saved target, checks that it is an accessible directory, and saves the canonical path as `initialWorkingDir`. For a terminal with no owner, the host starts in the requested directory. Later `cd` commands do not change `initialWorkingDir`.
 
 The host resolves one user environment during startup. On Unix, it uses a login-style `argv0` and interactive login command flags to run the account shell without a PTY. It uses `-ilc` for common shells and `-ic` for csh and tcsh because those shells reject `-ilc`. The host keeps the resulting `PATH` for the app lifetime. Dev servers, runtime sessions, tool discovery, Git, and terminals receive this same snapshot. Windows keeps its normalized inherited environment. A failed POSIX probe produces a typed startup diagnostic instead of silently using the GUI `PATH`, and new dev server and runtime starts fail before they create a child process.
 
@@ -25,6 +25,8 @@ The host selects the terminal shell, arguments, and clean child environment. The
 A terminal can have no owner, a task owner with `repoPath` and `taskId`, or a Workspace Session owner with `workspaceId` and `sessionId`. The host uses this context for lists, limits, and cleanup. It does not restrict file access inside the shell.
 
 For a Workspace Session terminal, the host reads the active session record before launch. It checks the saved repository root or registered worktree and starts the shell in that saved directory. The request must name the same repository and canonical working directory. A missing, archived, or removed session target fails before launch.
+
+For a task terminal, the host reads the current task worktree before launch. It rejects a missing worktree or a requested directory outside that worktree. The host starts the shell in the resolved worktree directory.
 
 The first title is the canonical start directory. The host then reads bounded OSC 0 and OSC 2 title codes without changing PTY output. It cleans and stores the latest title, then sends it in snapshots and title events.
 
@@ -52,7 +54,7 @@ If process-tree termination fails while the PTY remains live, the adapter restor
 
 The UI hides a tab while close is pending. It restores the tab when confirmation is needed or close fails.
 
-Task close, delete, reset, and merged-worktree cleanup take a terminal cleanup lease. They stop task terminals before dev servers, worktrees, branches, or task records. A terminal failure stops later cleanup. The lease blocks a new task terminal during cleanup.
+Task close, delete, reset, and merged-worktree cleanup take a terminal cleanup lease. They stop task terminals before dev servers, worktrees, branches, or task records. A terminal failure stops later cleanup. The lease blocks a new task terminal during cleanup. It does not block terminals owned by other sessions or the global scope.
 
 Workspace Session archive checks for an active runtime turn first and asks for Stop consent when needed. It stops an active turn, takes a lease for that workspace and session pair, waits for pending starts, and stops only that session's terminals before worktree removal. A terminal stop failure leaves the terminal owned by the host and prevents worktree removal. New terminals for that session fail during archive.
 

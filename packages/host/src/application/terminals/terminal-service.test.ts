@@ -21,6 +21,7 @@ import { HostResourceError, HostValidationError } from "../../effect/host-errors
 import { createGitPortTestDouble } from "../../test-support/service-test-doubles";
 import { createTerminalService } from "./terminal-service";
 import type { WithProcessStartAdmission } from "../workspaces/workspace-admission-service";
+import type { TaskWorktreeService } from "../tasks/worktrees/task-worktree-service";
 import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler";
 
 let directoryAvailable = true;
@@ -152,11 +153,17 @@ const makeService = async (
   filesystemPort: FilesystemPort = filesystem,
   withProcessStartAdmission?: WithProcessStartAdmission,
   workspaceSessions?: Parameters<typeof createTerminalService>[0]["workspaceSessions"],
+  taskWorktrees?: Pick<TaskWorktreeService, "getTaskWorktree">,
 ) => {
   const titleSettlement = makeTitleSettlementScheduler();
   const shellPath = await resolveFakeShellPath();
   const serviceInput: Parameters<typeof createTerminalService>[0] = {
     filesystem: filesystemPort,
+    taskWorktrees: taskWorktrees ?? {
+      getTaskWorktree: ({ repoPath }) =>
+        Effect.succeed({ workingDirectory: repoPath.replace(/^\/canonical/, "") }),
+    },
+    workspaceSessions: workspaceSessions ?? workspaceTerminalDependencies(new Map()),
     ptyPort: pty.port,
     resolveLaunchEnvironment: createTerminalLaunchEnvironment({
       processEnv: { PATH: "/usr/bin" },
@@ -171,7 +178,6 @@ const makeService = async (
   if (withProcessStartAdmission) {
     serviceInput.withProcessStartAdmission = withProcessStartAdmission;
   }
-  if (workspaceSessions) serviceInput.workspaceSessions = workspaceSessions;
   return {
     pty,
     settleTitles: titleSettlement.flush,
@@ -356,6 +362,40 @@ describe("TerminalService", () => {
     dependencies.git.isRegisteredWorktree = () => Effect.succeed(false);
     await expect(create("worktree", "/repo-worktree")).rejects.toThrow("registered worktree");
     expect(pty.startDirectories).toEqual([]);
+  });
+
+  test("uses the current task worktree and rejects a stale directory", async () => {
+    const pty = makePty();
+    let worktree: string | null = "/task-worktree";
+    const { service } = await makeService(
+      pty,
+      undefined,
+      { ...filesystem, canonicalize: (path) => Effect.succeed(path) },
+      undefined,
+      undefined,
+      {
+        getTaskWorktree: () =>
+          Effect.succeed(worktree === null ? null : { workingDirectory: worktree }),
+      },
+    );
+    const context = { repoPath: "/repo", taskId: "task-1" };
+
+    await expect(
+      Effect.runPromise(service.create({ workingDir: "/other", context })),
+    ).rejects.toThrow("does not match task task-1's worktree");
+    expect(pty.startDirectories).toEqual([]);
+
+    const created = await Effect.runPromise(
+      service.create({ workingDir: "/task-worktree", context }),
+    );
+    expect(created.summary.initialWorkingDir).toBe("/task-worktree");
+    expect(pty.startDirectories).toEqual(["/task-worktree"]);
+
+    worktree = null;
+    await expect(
+      Effect.runPromise(service.create({ workingDir: "/task-worktree", context })),
+    ).rejects.toThrow("Create or restore its worktree");
+    expect(pty.startDirectories).toEqual(["/task-worktree"]);
   });
 
   test("limits each chat owner and keeps a failed cleanup terminal for retry", async () => {
@@ -1677,5 +1717,74 @@ describe("TerminalService", () => {
       repoPath: "/canonical/repo",
       taskId: "task-1",
     });
+  });
+
+  test("task cleanup preparation lets other owners start terminals", async () => {
+    let releaseRepo = (): void => undefined;
+    let reportRepoRead = (): void => undefined;
+    const repoRead = new Promise<void>((resolve) => {
+      reportRepoRead = resolve;
+    });
+    const repoReleased = new Promise<void>((resolve) => {
+      releaseRepo = resolve;
+    });
+    const delayedFilesystem: FilesystemPort = {
+      ...filesystem,
+      canonicalize: (path) =>
+        Effect.promise(async () => {
+          if (path === "/repo") {
+            reportRepoRead();
+            await repoReleased;
+          }
+          return path;
+        }),
+    };
+    const records = new Map<string, WorkspaceSession>([
+      [
+        "chat",
+        workspaceSessionRecord("chat", {
+          kind: "local_worktree",
+          workingDirectory: "/chat-worktree",
+          branchName: "chat",
+          worktreeState: "present",
+        }),
+      ],
+    ]);
+    const { service } = await makeService(
+      makePty(),
+      undefined,
+      delayedFilesystem,
+      undefined,
+      workspaceTerminalDependencies(records),
+    );
+    const taskStart = Effect.runPromise(
+      service.create({ workingDir: "/repo", context: { repoPath: "/repo", taskId: "task" } }),
+    );
+    await repoRead;
+    const cleanup = Effect.runPromise(
+      Effect.scoped(service.acquireTaskCleanup({ repoPath: "/repo", taskIds: ["task"] })),
+    );
+    await Bun.sleep(0);
+
+    try {
+      const chat = await Effect.runPromise(
+        service.create({
+          workingDir: "/chat-worktree",
+          context: {
+            kind: "workspace_session",
+            workspaceId: "workspace-1",
+            sessionId: "chat",
+            repoPath: "/repo",
+          },
+        }),
+      );
+      const global = await Effect.runPromise(service.create({ workingDir: "/other", context: {} }));
+      expect(chat.summary.initialWorkingDir).toBe("/chat-worktree");
+      expect(global.summary.initialWorkingDir).toBe("/other");
+    } finally {
+      releaseRepo();
+    }
+    await taskStart;
+    await cleanup;
   });
 });

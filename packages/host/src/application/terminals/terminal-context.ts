@@ -7,6 +7,10 @@ export type TerminalTaskScope = {
 
 export type TerminalWorkspaceSessionScope = { workspaceId: string; sessionId: string };
 
+export const isTaskTerminalContext = (
+  context: TerminalContext,
+): context is Extract<TerminalContext, { taskId: string }> => "taskId" in context;
+
 export const isWorkspaceSessionTerminalContext = (
   context: TerminalContext,
 ): context is Extract<TerminalContext, { kind: "workspace_session" }> =>
