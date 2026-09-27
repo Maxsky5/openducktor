@@ -107,15 +107,13 @@ export const gitProviderRepositorySchema = z.union([
 ]);
 export type GitProviderRepository = z.infer<typeof gitProviderRepositorySchema>;
 
-export const gitTargetBranchSchema = z
-  .object({
-    remote: z.preprocess(
-      (value) => (value === null ? undefined : value),
-      z.string().trim().min(1).optional(),
-    ),
-    branch: z.string().trim().min(1).default("main"),
-  })
-  .strict();
+export const gitTargetBranchSchema = z.object({
+  remote: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    z.string().trim().min(1).optional(),
+  ),
+  branch: z.string().trim().min(1).default("main"),
+});
 export type GitTargetBranch = z.infer<typeof gitTargetBranchSchema>;
 
 export const gitComparisonTargetSchema = z.union([

@@ -5,8 +5,7 @@ import {
   persistedGlobalConfigV2Schema,
   type PersistedGlobalConfigV3,
   persistedGlobalConfigV3Schema,
-  repoConfigSchema,
-  workspaceIdSchema,
+  persistedGlobalConfigV4Schema,
 } from "@openducktor/contracts";
 import { z, type JSONType } from "zod";
 import { HostValidationError } from "../effect/host-errors";
@@ -18,10 +17,6 @@ const isPersistedConfigObject = (value: JSONType | undefined): value is Persiste
   persistedConfigObjectSchema.safeParse(value).success;
 
 export type LoadedGlobalConfig = GlobalConfig;
-
-const persistedGlobalConfigV4Schema = globalConfigSchema
-  .safeExtend({ workspaces: z.record(workspaceIdSchema, repoConfigSchema.strict()).default({}) })
-  .strict();
 
 export const createDefaultGlobalConfig = (): LoadedGlobalConfig =>
   globalConfigSchema.parse({ version: 4 });

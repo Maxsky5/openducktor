@@ -146,6 +146,26 @@ describe("global config", () => {
     );
   });
 
+  test.each([2, 3] as const)(
+    "rejects an unknown target branch setting in version %i",
+    (version) => {
+      const parse = version === 2 ? parsePersistedGlobalConfigV2 : parsePersistedGlobalConfigV3;
+      expect(() =>
+        parse({
+          version,
+          workspaces: {
+            repo: {
+              workspaceId: "repo",
+              workspaceName: "Repo",
+              repoPath: "/repo",
+              defaultTargetBranch: { branch: "main", extra: true },
+            },
+          },
+        }),
+      ).toThrow("workspaces.repo.defaultTargetBranch.extra: Unknown setting.");
+    },
+  );
+
   test("migrates one legacy repository Git provider without losing values", () => {
     const config = parsePersistedGlobalConfig({
       version: 4,

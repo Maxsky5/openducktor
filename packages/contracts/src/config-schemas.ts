@@ -393,6 +393,8 @@ export const workspaceIdSchema = z
 
 export const workspaceNameSchema = trimmedRequiredString("Workspace name");
 
+const DEFAULT_REPO_TARGET_BRANCH = { remote: "origin", branch: "main" };
+
 export const repoConfigSchema = z.object({
   workspaceId: workspaceIdSchema,
   workspaceName: workspaceNameSchema,
@@ -402,10 +404,7 @@ export const repoConfigSchema = z.object({
   defaultModel: nullableToOptional(agentModelDefaultSchema),
   worktreeBasePath: nullableToOptional(z.string().min(1)),
   branchPrefix: z.string().min(1).default(DEFAULT_BRANCH_PREFIX),
-  defaultTargetBranch: gitTargetBranchSchema.default({
-    remote: "origin",
-    branch: "main",
-  }),
+  defaultTargetBranch: gitTargetBranchSchema.default(DEFAULT_REPO_TARGET_BRANCH),
   git: repoGitConfigSchema.default({}),
   hooks: repoHooksSchema.default({ preStart: [], postComplete: [] }),
   devServers: z
@@ -437,6 +436,12 @@ export const repoConfigSchema = z.object({
   removal: workspaceRemovalRecordSchema.optional(),
 });
 export type RepoConfig = z.infer<typeof repoConfigSchema>;
+
+const persistedRepoConfigSchema = repoConfigSchema
+  .safeExtend({
+    defaultTargetBranch: gitTargetBranchSchema.strict().default(DEFAULT_REPO_TARGET_BRANCH),
+  })
+  .strict();
 
 export const settingsRepoConfigSchema = repoConfigSchema.omit({
   agentStudioState: true,
@@ -702,7 +707,7 @@ const globalConfigSharedFields = {
 };
 
 const persistedWorkspacesSchema = z
-  .record(workspaceIdSchema, repoConfigSchema.strict())
+  .record(workspaceIdSchema, persistedRepoConfigSchema)
   .default({});
 
 export const persistedGlobalConfigV2Schema = z.strictObject({
@@ -726,6 +731,9 @@ export const globalConfigSchema = z.object({
   ...globalConfigSharedFields,
   agentRuntimes: agentRuntimesSchema,
 });
+export const persistedGlobalConfigV4Schema = globalConfigSchema
+  .safeExtend({ workspaces: persistedWorkspacesSchema })
+  .strict();
 type ParsedGlobalConfig = z.infer<typeof globalConfigSchema>;
 export type GlobalConfig = ParsedGlobalConfig;
 

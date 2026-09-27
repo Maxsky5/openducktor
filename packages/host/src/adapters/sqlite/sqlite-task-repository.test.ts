@@ -378,6 +378,34 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     expect(task.description).toBe("");
   });
 
+  test("reads stored task target branches with extra keys", async () => {
+    const { databasePath, repoPath, store } = await createRepositoryHarness();
+    const task = await Effect.runPromise(
+      store.createTask({
+        repoPath,
+        task: { title: "Task", issueType: "task", priority: 2, aiReviewEnabled: true },
+      }),
+    );
+    const database = new Database(databasePath);
+    try {
+      database
+        .query("UPDATE tasks SET target_branch_json = ? WHERE id = ?")
+        .run(JSON.stringify({ remote: "origin", branch: "main", extra: true }), task.id);
+    } finally {
+      database.close();
+    }
+
+    const targetBranch = { remote: "origin", branch: "main" };
+    expect(await Effect.runPromise(store.listTasks({ repoPath }))).toContainEqual(
+      expect.objectContaining({ id: task.id, targetBranch }),
+    );
+    expect(
+      await Effect.runPromise(store.getTaskMetadata({ repoPath, taskId: task.id })),
+    ).toMatchObject({
+      targetBranch,
+    });
+  });
+
   test("wraps raw SQLite execution failures as operation errors", async () => {
     const { databasePath, repoPath, store } = await createRepositoryHarness();
     await mkdir(path.dirname(databasePath), { recursive: true });
