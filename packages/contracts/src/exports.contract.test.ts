@@ -305,6 +305,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "failureKindSchema",
   "gitCommitAllRequestSchema",
   "gitCommitAllResultSchema",
+  "gitComparisonTargetSchema",
   "gitConflictAbortRequestSchema",
   "gitConflictAbortResultSchema",
   "gitConflictOperationSchema",

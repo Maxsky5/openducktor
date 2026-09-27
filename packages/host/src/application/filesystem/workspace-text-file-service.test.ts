@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
 import { createFilesystemAdapter } from "../../adapters/filesystem/filesystem-adapter";
+import { HostOperationError } from "../../effect/host-errors";
 import { FilesystemFileOperationError } from "../../ports/filesystem-port";
 import { WorkspaceFileAccessError } from "./workspace-file-access";
 import {
@@ -25,6 +26,7 @@ const createGitPort = (
 ): Parameters<typeof createWorkspaceTextFileService>[1] =>
   ({
     isGitRepository: () => Effect.succeed(true),
+    getCurrentBranch: () => Effect.succeed({ name: "main", detached: false }),
     listFiles: (_rootPath, relativePath, options?: { caseInsensitive?: boolean }) => {
       requestedPaths?.push(relativePath);
       return Effect.succeed(
@@ -67,10 +69,11 @@ describe("createWorkspaceTextFileService", () => {
     const filePath = path.join(rootPath, "file.txt");
     await writeFile(filePath, "before");
     const requestedPaths: Array<string | undefined> = [];
-    const service = createWorkspaceTextFileService(
-      createFilesystemAdapter(),
-      createGitPort(["file.txt"], requestedPaths),
-    );
+    const gitPort = {
+      ...createGitPort(["file.txt"], requestedPaths),
+      getCurrentBranch: () => Effect.die("Unexpected branch read"),
+    };
+    const service = createWorkspaceTextFileService(createFilesystemAdapter(), gitPort);
     const loaded = await Effect.runPromise(
       service.readTextFile({ rootPath, relativePath: "file.txt" }),
     );
@@ -255,6 +258,69 @@ describe("createWorkspaceTextFileService", () => {
 
     expect(failure.code).toBe("stale_revision");
     expect(await readFile(filePath, "utf8")).toBe("external");
+  });
+
+  test("rejects a save when the branch changes but the file revision stays the same", async () => {
+    const rootPath = await createRoot();
+    const filePath = path.join(rootPath, "file.txt");
+    await writeFile(filePath, "same contents");
+    let branch = "main";
+    const gitPort = {
+      ...createGitPort(["file.txt"]),
+      getCurrentBranch: () => Effect.succeed({ name: branch, detached: false }),
+    };
+    const service = createWorkspaceTextFileService(createFilesystemAdapter(), gitPort);
+    const loaded = await Effect.runPromise(
+      service.readTextFile({ rootPath, relativePath: "file.txt" }),
+    );
+    if (loaded.kind !== "text") throw new Error("Expected text.");
+
+    branch = "feature";
+    const failure = await writeFailure(
+      service.writeTextFile({
+        rootPath,
+        relativePath: "file.txt",
+        contents: "draft",
+        revision: loaded.revision,
+        expectedBranch: "branch:main",
+      }),
+    );
+
+    expect(failure.code).toBe("stale_revision");
+    expect(failure.message).toContain("branch changed");
+    expect(await readFile(filePath, "utf8")).toBe("same contents");
+  });
+
+  test("keeps the file when the host cannot check its branch", async () => {
+    const rootPath = await createRoot();
+    const filePath = path.join(rootPath, "file.txt");
+    await writeFile(filePath, "before");
+    const gitPort = {
+      ...createGitPort(["file.txt"]),
+      getCurrentBranch: () =>
+        Effect.fail(
+          new HostOperationError({ operation: "git.currentBranch", message: "Git is unavailable" }),
+        ),
+    };
+    const service = createWorkspaceTextFileService(createFilesystemAdapter(), gitPort);
+    const loaded = await Effect.runPromise(
+      service.readTextFile({ rootPath, relativePath: "file.txt" }),
+    );
+    if (loaded.kind !== "text") throw new Error("Expected text.");
+
+    const failure = await writeFailure(
+      service.writeTextFile({
+        rootPath,
+        relativePath: "file.txt",
+        contents: "draft",
+        revision: loaded.revision,
+        expectedBranch: "branch:main",
+      }),
+    );
+
+    expect(failure.code).toBe("io_failure");
+    expect(failure.message).toContain("Git is unavailable");
+    expect(await readFile(filePath, "utf8")).toBe("before");
   });
 
   test("rejects same-content regular-file and symbolic-link swaps at final validation", async () => {

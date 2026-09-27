@@ -208,6 +208,69 @@ test("passes the exact session identity through transient navigation state", asy
   );
 });
 
+test.each(["missing", "failed"])(
+  "checks a %s notification target before asking to discard edits",
+  async (state) => {
+    const beforeNavigate = mock(async () => true);
+    const selectWorkspace = mock(async () => {});
+    const navigate = mock(() => {});
+    const reportStale = mock(() => {});
+    const reportFailure = mock(() => {});
+    const loadTasks = async () => {
+      if (state === "failed") throw new Error("Task read failed");
+      return [];
+    };
+
+    const { openNotificationTarget } = await import("./notification-navigation-logic");
+    await openNotificationTarget(
+      { type: "kanban_task", repoPath: "/repo", taskId: "missing" },
+      {
+        activeWorkspaceId: "old",
+        workspaces: [{ workspaceId: "new", repoPath: "/repo" }],
+        beforeNavigate,
+        selectWorkspace,
+        loadTasks,
+        loadWorkspaceSessions: async () => [],
+        loadTaskSessions: async () => [],
+        navigate,
+        reportStale,
+        openSettings: () => {},
+      },
+      reportFailure,
+    );
+
+    expect(beforeNavigate).not.toHaveBeenCalled();
+    expect(selectWorkspace).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+    if (state === "missing") expect(reportStale).toHaveBeenCalledTimes(1);
+    else expect(reportFailure).toHaveBeenCalledTimes(1);
+  },
+);
+
+test("a deleted chat notification cannot clear a dirty preview", async () => {
+  const beforeNavigate = mock(async () => true);
+  const selectWorkspace = mock(async () => {});
+  const reportStale = mock(() => {});
+  await navigateToNotificationTarget(
+    { type: "agent_session", repoPath: "/repo", session: target.session },
+    {
+      activeWorkspaceId: "old",
+      workspaces: [{ workspaceId: "new", repoPath: "/repo" }],
+      beforeNavigate,
+      selectWorkspace,
+      loadTasks: async () => [],
+      loadWorkspaceSessions: async () => [],
+      loadTaskSessions: async () => [],
+      navigate: () => {},
+      reportStale,
+      openSettings: () => {},
+    },
+  );
+  expect(reportStale).toHaveBeenCalledWith("The exact Workspace Session is no longer available.");
+  expect(beforeNavigate).not.toHaveBeenCalled();
+  expect(selectWorkspace).not.toHaveBeenCalled();
+});
+
 test.each(["workspace", "tasks", "sessions"])(
   "reports %s read failures without rejecting the click",
   async (stage) => {

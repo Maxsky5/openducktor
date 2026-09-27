@@ -29,6 +29,7 @@ const TARGET_BRANCH_LABEL_ID = "agent-studio-git-target-branch-label";
 type GitInfoHeaderProps = Pick<
   AgentStudioGitPanelModel,
   | "contextMode"
+  | "comparisonUnavailableReason"
   | "pullRequest"
   | "branch"
   | "targetBranch"
@@ -311,19 +312,33 @@ function GitBranchContextRow({
   onUpdateTargetBranch,
 }: GitBranchContextRowProps): ReactElement {
   const { hasTargetAhead, isRepositoryMode } = branchState;
+  if (isRepositoryMode) {
+    return (
+      <div className="my-2 min-w-0 px-3" data-testid="agent-studio-git-branch-context-row">
+        <div
+          className="flex min-w-0 items-center gap-2 py-1.5"
+          data-testid="agent-studio-git-current-branch-display-row"
+        >
+          <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
+          <span className="shrink-0 text-xs text-muted-foreground">Repository branch</span>
+          <span
+            className="min-w-0 truncate font-mono text-xs text-foreground"
+            data-testid="agent-studio-git-current-branch"
+          >
+            {currentBranchLabel}
+          </span>
+        </div>
+      </div>
+    );
+  }
   return (
     <div
-      className={cn(
-        "my-2 grid gap-2 px-3",
-        isRepositoryMode
-          ? "sm:grid-cols-[minmax(0,1fr)]"
-          : "sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center",
-      )}
+      className="my-2 grid gap-2 px-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center"
       data-testid="agent-studio-git-branch-context-row"
     >
       <div className="rounded-lg border border-border bg-card px-3 py-2">
         <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-          {isRepositoryMode ? "Repository branch" : "Current branch"}
+          Current branch
         </p>
         <div
           className="mt-1 flex h-7 min-w-0 items-center gap-1.5"
@@ -339,32 +354,28 @@ function GitBranchContextRow({
         </div>
       </div>
 
-      {isRepositoryMode ? null : (
-        <>
-          <div className="relative flex items-center justify-center" aria-hidden="true">
-            <span className="inline-flex size-7 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground">
-              <ArrowRight className="size-3.5" />
-            </span>
-            {hasTargetAhead ? (
-              <span
-                className="pointer-events-none absolute -top-4 left-1/2 -translate-x-1/2 text-[13px] leading-none font-bold tabular-nums text-emerald-600 dark:text-emerald-400"
-                data-testid="agent-studio-git-target-ahead-count"
-              >
-                {targetAheadCount}
-              </span>
-            ) : null}
-          </div>
+      <div className="relative flex items-center justify-center" aria-hidden="true">
+        <span className="inline-flex size-7 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground">
+          <ArrowRight className="size-3.5" />
+        </span>
+        {hasTargetAhead ? (
+          <span
+            className="pointer-events-none absolute -top-4 left-1/2 -translate-x-1/2 text-[13px] leading-none font-bold tabular-nums text-emerald-600 dark:text-emerald-400"
+            data-testid="agent-studio-git-target-ahead-count"
+          >
+            {targetAheadCount}
+          </span>
+        ) : null}
+      </div>
 
-          <GitTargetBranchPanel
-            key={canEditTargetBranch ? "editable" : "readonly"}
-            canEditTargetBranch={canEditTargetBranch}
-            targetBranchLabel={targetBranchLabel}
-            targetBranchOptions={targetBranchOptions}
-            targetBranchSelectionValue={targetBranchSelectionValue}
-            onUpdateTargetBranch={onUpdateTargetBranch}
-          />
-        </>
-      )}
+      <GitTargetBranchPanel
+        key={canEditTargetBranch ? "editable" : "readonly"}
+        canEditTargetBranch={canEditTargetBranch}
+        targetBranchLabel={targetBranchLabel}
+        targetBranchOptions={targetBranchOptions}
+        targetBranchSelectionValue={targetBranchSelectionValue}
+        onUpdateTargetBranch={onUpdateTargetBranch}
+      />
     </div>
   );
 }
@@ -551,9 +562,14 @@ function GitActionRow({ actionState, onDetectPullRequest, ...syncProps }: GitAct
 type GitDiffScopeTabsProps = {
   diffScope: DiffScope;
   onScopeChange: (scope: DiffScope) => void;
+  comparisonUnavailableReason?: string | null;
 };
 
-function GitDiffScopeTabs({ diffScope, onScopeChange }: GitDiffScopeTabsProps): ReactElement {
+function GitDiffScopeTabs({
+  diffScope,
+  onScopeChange,
+  comparisonUnavailableReason,
+}: GitDiffScopeTabsProps): ReactElement {
   return (
     <div className="flex flex-col gap-1">
       <Tabs
@@ -576,6 +592,10 @@ function GitDiffScopeTabs({ diffScope, onScopeChange }: GitDiffScopeTabsProps): 
             <TabsTrigger
               key={option.scope}
               value={option.scope}
+              disabled={option.scope === "target" && Boolean(comparisonUnavailableReason)}
+              title={
+                option.scope === "target" ? (comparisonUnavailableReason ?? undefined) : undefined
+              }
               className={cn(
                 segmentedControlTriggerClassName({
                   size: "sm",
@@ -847,6 +867,7 @@ const getGitInfoHeaderState = (props: GitInfoHeaderStateInput) => {
 
 export const GitInfoHeader = memo(function GitInfoHeader({
   contextMode = "worktree",
+  comparisonUnavailableReason,
   pullRequest,
   branch,
   targetBranch,
@@ -957,7 +978,19 @@ export const GitInfoHeader = memo(function GitInfoHeader({
         </div>
       ) : null}
 
-      <GitDiffScopeTabs diffScope={diffScope} onScopeChange={handleScopeChange} />
+      {comparisonUnavailableReason ? (
+        <p
+          role="status"
+          className="border-y border-border bg-muted px-3 py-2 text-xs text-muted-foreground"
+        >
+          {comparisonUnavailableReason}
+        </p>
+      ) : null}
+      <GitDiffScopeTabs
+        diffScope={diffScope}
+        onScopeChange={handleScopeChange}
+        comparisonUnavailableReason={comparisonUnavailableReason ?? null}
+      />
       <GitInfoHeaderErrors pushError={pushError ?? null} rebaseError={rebaseError ?? null} />
     </div>
   );

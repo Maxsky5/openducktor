@@ -50,6 +50,10 @@ const createRecordingGitService = () => {
           }),
       });
     },
+    getComparisonTarget(input) {
+      calls.push({ method: "getComparisonTarget", input });
+      return Effect.succeed({ kind: "available", reference: "origin/main" });
+    },
     getStatus(input) {
       return Effect.tryPromise({
         try: async () => {
@@ -354,6 +358,13 @@ describe("createGitCommandHandlers", () => {
       detached: false,
       revision: "abc123",
     });
+    await expect(
+      router.invoke("git_comparison_target_get", {
+        repoPath: "/repo",
+        workingDir: "/worktree",
+        target: { remote: "origin", branch: "main" },
+      }),
+    ).resolves.toEqual({ kind: "available", reference: "origin/main" });
     await expect(router.invoke("git_get_status", { repoPath: "/repo" })).resolves.toEqual([
       { path: "src/main.ts", status: "modified", staged: false },
     ]);
@@ -498,6 +509,14 @@ describe("createGitCommandHandlers", () => {
     expect(calls).toEqual([
       { method: "getBranches", input: { repoPath: "/repo" } },
       { method: "getCurrentBranch", input: { repoPath: "/repo" } },
+      {
+        method: "getComparisonTarget",
+        input: {
+          repoPath: "/repo",
+          workingDir: "/worktree",
+          target: { remote: "origin", branch: "main" },
+        },
+      },
       { method: "getStatus", input: { repoPath: "/repo" } },
       { method: "getDiff", input: { repoPath: "/repo", targetBranch: "origin/main" } },
       {

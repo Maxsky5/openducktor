@@ -62,6 +62,7 @@ export type DiffDataState = {
   isLoading: boolean;
   error: string | null;
   refresh: GitDiffRefresh;
+  refreshAllScopes?: () => Promise<void>;
   setDiffScope: (scope: DiffScope) => void;
 };
 

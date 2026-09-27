@@ -11,6 +11,7 @@ import type {
 
 export type AgentStudioGitPanelModel = DiffDataState & {
   contextMode?: "repository" | "worktree";
+  comparisonUnavailableReason?: string | null;
   commentOwner?: { workspaceId: string; taskId: string } | null;
   pullRequest?: PullRequest | null;
   openInTargetPath?: string | null;
@@ -48,9 +49,9 @@ export type AgentStudioGitPanelModel = DiffDataState & {
   cancelForcePush?: () => void;
   confirmPullRebase?: () => Promise<void>;
   cancelPullRebase?: () => void;
-  rebaseOntoTarget?: () => Promise<void>;
+  rebaseOntoTarget?: (() => Promise<void>) | undefined;
   abortGitConflict?: () => Promise<void>;
-  askBuilderToResolveGitConflict?: () => Promise<void>;
+  askBuilderToResolveGitConflict?: (() => Promise<void>) | undefined;
   pullFromUpstream?: () => Promise<void>;
   onDetectPullRequest?: () => Promise<void> | void;
   openDirectoryInTool?: (toolId: SystemOpenInToolId) => Promise<void>;

@@ -24,8 +24,10 @@ export type TaskExecutionFilePreviewAction =
   | { type: "keep_editing" }
   | { type: "discard" };
 
-export const createTaskExecutionFilePreviewState = (): TaskExecutionFilePreviewState => ({
-  selectedFile: null,
+export const createTaskExecutionFilePreviewState = (
+  selectedFile: TaskExecutionSelectedFile | null = null,
+): TaskExecutionFilePreviewState => ({
+  selectedFile,
   previewSessionKey: 0,
   preservePreviousSnapshot: false,
   leavePolicy: "allow",

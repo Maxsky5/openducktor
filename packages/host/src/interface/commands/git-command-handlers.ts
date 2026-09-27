@@ -4,6 +4,7 @@ import {
   parseGitAbortConflictInput,
   parseGitAheadBehindInput,
   parseGitCommitAllInput,
+  parseGitComparisonTargetInput,
   parseGitCreateWorktreeInput,
   parseGitDiffInput,
   parseGitPushBranchInput,
@@ -20,6 +21,8 @@ export const createGitCommandHandlers = (gitService: GitService) =>
     git_canonicalize_path: (args) => gitService.canonicalizePath(parseGitScopeInput(args)),
     git_abort_conflict: (args) => gitService.abortConflict(parseGitAbortConflictInput(args)),
     git_commit_all: (args) => gitService.commitAll(parseGitCommitAllInput(args)),
+    git_comparison_target_get: (args) =>
+      gitService.getComparisonTarget(parseGitComparisonTargetInput(args)),
     git_commits_ahead_behind: (args) =>
       gitService.commitsAheadBehind(parseGitAheadBehindInput(args)),
     git_create_worktree: (args) => gitService.createWorktree(parseGitCreateWorktreeInput(args)),

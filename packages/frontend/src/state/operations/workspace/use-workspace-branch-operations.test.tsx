@@ -3,6 +3,7 @@ import type { GitBranch, GitCurrentBranch } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { filesystemQueryKeys } from "../../queries/filesystem";
 import { gitQueryKeys } from "../../queries/git";
 import { useWorkspaceBranchOperations } from "./use-workspace-branch-operations";
 import { createDeferred, createWorkspaceHostClient, flush } from "./workspace-hook-test-fixtures";
@@ -85,6 +86,43 @@ const createBranchHarness = (initialArgs: BranchHarnessArgs) => {
 };
 
 describe("use-workspace-branch-operations", () => {
+  test("switching the root branch stales only its Git and file reads", async () => {
+    workspaceHost.gitGetCurrentBranch = mock(async () => ({ name: "main", detached: false }));
+    workspaceHost.gitGetBranches = mock(async () => [
+      { name: "main", isCurrent: false, isRemote: false },
+      { name: "feature", isCurrent: true, isRemote: false },
+    ]);
+    workspaceHost.gitSwitchBranch = mock(async () => ({ name: "feature", detached: false }));
+    const harness = createBranchHarness({ activeRepo: "/repo-a" });
+    try {
+      await harness.mount();
+      await harness.run((value) => value.refreshBranches());
+      const client = harness.getQueryClient();
+      const rootGit = gitQueryKeys.comparisonTarget(
+        "/repo-a",
+        "/repo-a",
+        { branch: "@{upstream}" },
+        "main",
+      );
+      const worktreeGit = gitQueryKeys.comparisonTarget(
+        "/repo-a",
+        "/worktree",
+        { branch: "main" },
+        "",
+      );
+      const rootTree = filesystemQueryKeys.tree("/repo-a");
+      for (const key of [rootGit, worktreeGit, rootTree]) client.setQueryData(key, {});
+
+      await harness.run((value) => value.switchBranch("feature"));
+
+      expect(client.getQueryState(rootGit)?.isInvalidated).toBe(true);
+      expect(client.getQueryState(rootTree)?.isInvalidated).toBe(true);
+      expect(client.getQueryState(worktreeGit)?.isInvalidated).toBe(false);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("shows loading only while an uncached first load is pending", async () => {
     const currentBranchDeferred = createDeferred<{ name: string; detached: boolean }>();
     const branchesDeferred = createDeferred<GitBranch[]>();
@@ -876,6 +914,7 @@ describe("use-workspace-branch-operations", () => {
   test("restores the prior branch snapshot and reports the error when switching fails", async () => {
     const switchError = new Error("branch checkout failed");
     const toastError = spyOn(toast, "error").mockImplementation(() => "toast-id");
+    const onSwitched = mock(() => {});
 
     workspaceHost.gitGetCurrentBranch = mock(async () => ({
       name: "main",
@@ -909,7 +948,7 @@ describe("use-workspace-branch-operations", () => {
       });
 
       await harness.run(async (value) => {
-        await value.switchBranch("feature");
+        await value.switchBranch("feature", onSwitched);
       });
 
       expect(harness.getLatest().activeBranch).toEqual({
@@ -918,6 +957,7 @@ describe("use-workspace-branch-operations", () => {
         revision: "abc123",
       });
       expect(harness.getLatest().isSwitchingBranch).toBe(false);
+      expect(onSwitched).not.toHaveBeenCalled();
       expect(toastError).toHaveBeenCalledWith("Failed to switch branch", {
         description: "branch checkout failed",
       });
@@ -930,6 +970,7 @@ describe("use-workspace-branch-operations", () => {
   test("keeps the switched branch and rejects when branch list refresh fails after checkout", async () => {
     const branchListError = new Error("branch list unavailable");
     const toastError = spyOn(toast, "error").mockImplementation(() => "toast-id");
+    const onSwitched = mock(() => {});
 
     workspaceHost.gitGetCurrentBranch = mock(async () => ({
       name: "main",
@@ -974,7 +1015,7 @@ describe("use-workspace-branch-operations", () => {
       const caughtErrors = new Array<Error>();
       await harness.run(async (value) => {
         try {
-          await value.switchBranch("feature");
+          await value.switchBranch("feature", onSwitched);
         } catch (cause) {
           if (!(cause instanceof Error)) {
             throw new Error("Expected branch list refresh to reject with Error.", { cause });
@@ -988,6 +1029,7 @@ describe("use-workspace-branch-operations", () => {
         detached: false,
         revision: "def456",
       });
+      expect(onSwitched).toHaveBeenCalledTimes(1);
       expect(harness.getLatest().branches).toEqual(initialBranches);
       expect(caughtErrors).toEqual([branchListError]);
       expect(toastError).toHaveBeenCalledWith(

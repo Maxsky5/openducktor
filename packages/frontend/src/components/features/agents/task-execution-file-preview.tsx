@@ -51,6 +51,7 @@ export type TaskExecutionSelectedFilePreviewModel = {
   previewSessionKey: number;
   preservePreviousSnapshot: boolean;
   hasPendingDiscard: boolean;
+  isApplyingTransition: boolean;
   onClose: () => void;
   onLeavePolicyChange(policy: TaskExecutionFilePreviewLeavePolicy): void;
   onKeepEditing: () => void;
@@ -226,8 +227,7 @@ function FileConflictReviewDialog({
         <DialogHeader>
           <DialogTitle>Review latest file</DialogTitle>
           <DialogDescription>
-            This file changed outside OpenDucktor. Review the latest contents below. Your draft
-            stays unchanged.
+            Review the latest contents below. Your draft stays unchanged.
           </DialogDescription>
         </DialogHeader>
         <section aria-label="Latest file contents">
@@ -331,12 +331,12 @@ function FilePreviewHeader({
 
 function FileSaveErrorBanner({
   message,
-  hasStaleConflict,
+  canReview,
   isReviewingConflict,
   onReview,
 }: {
   message: string | null;
-  hasStaleConflict: boolean;
+  canReview: boolean;
   isReviewingConflict: boolean;
   onReview: () => void;
 }): ReactElement | null {
@@ -347,7 +347,7 @@ function FileSaveErrorBanner({
       role="alert"
     >
       <span className="min-w-0 flex-1">{message}</span>
-      {hasStaleConflict ? (
+      {canReview ? (
         <Button
           type="button"
           variant="outline"
@@ -367,11 +367,13 @@ function FileSaveErrorBanner({
 
 function FileDiscardDialog({
   open,
+  isApplyingTransition,
   onKeepEditing,
   onDiscard,
   onReturnFocus,
 }: {
   open: boolean;
+  isApplyingTransition: boolean;
   onKeepEditing: () => void;
   onDiscard: () => void;
   onReturnFocus: () => void;
@@ -387,7 +389,10 @@ function FileDiscardDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && keepEditing()}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => !nextOpen && !isApplyingTransition && keepEditing()}
+    >
       <DialogContent
         closeButton={null}
         onCloseAutoFocus={(event) => {
@@ -404,11 +409,21 @@ function FileDiscardDialog({
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={keepEditing}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isApplyingTransition}
+            onClick={keepEditing}
+          >
             Keep editing
           </Button>
-          <Button type="button" variant="destructive" onClick={discard}>
-            Discard
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={isApplyingTransition}
+            onClick={discard}
+          >
+            {isApplyingTransition ? "Working..." : "Discard"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -483,15 +498,20 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     previewSessionKey,
     preservePreviousSnapshot,
     hasPendingDiscard,
+    isApplyingTransition,
     onClose,
     onLeavePolicyChange,
     onKeepEditing,
     onDiscard,
   },
   onFileSaved,
+  branch = null,
+  requireBranch = false,
 }: {
   model: TaskExecutionSelectedFilePreviewModel;
   onFileSaved(): void;
+  branch?: string | null;
+  requireBranch?: boolean;
 }): ReactElement | null {
   const [committedSnapshot, setCommittedSnapshot] = useState<CommittedFilePreviewSnapshot | null>(
     null,
@@ -528,6 +548,8 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   const editor = useTaskExecutionFileEditor({
     selectedFile,
     readyResult: readyTextResult,
+    branch,
+    requireBranch,
     onFileSaved,
     onLeavePolicyChange,
   });
@@ -726,13 +748,14 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
       />
       <FileSaveErrorBanner
         message={editor.saveError}
-        hasStaleConflict={editor.hasStaleConflict}
+        canReview={editor.canReviewConflict}
         isReviewingConflict={editor.isReviewingConflict}
         onReview={() => void editor.reviewLatestVersion()}
       />
       <div className="min-h-0 flex-1 overflow-hidden">{body}</div>
       <FileDiscardDialog
         open={hasPendingDiscard}
+        isApplyingTransition={isApplyingTransition}
         onKeepEditing={onKeepEditing}
         onDiscard={onDiscard}
         onReturnFocus={() => attachedEditorRef.current?.focus({ preventScroll: true })}

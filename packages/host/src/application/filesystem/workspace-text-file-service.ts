@@ -220,7 +220,7 @@ const resolveAvailableWorkspaceFile = (
 
 export const createWorkspaceTextFileService = (
   filesystem: FilesystemPort,
-  gitPort: Pick<GitPort, "isGitRepository" | "listFiles">,
+  gitPort: Pick<GitPort, "isGitRepository" | "listFiles" | "getCurrentBranch">,
 ): WorkspaceTextFileService => ({
   readTextFile(input) {
     return Effect.gen(function* () {
@@ -357,6 +357,34 @@ export const createWorkspaceTextFileService = (
       yield* readSnapshotAsText(current, canonicalInput).pipe(
         Effect.mapError((cause) => unsupportedWrite(cause.message, canonicalInput)),
       );
+      // A checkout can keep the same file bytes, so the revision alone cannot guard the draft.
+      if (input.expectedBranch) {
+        const currentBranch = yield* gitPort
+          .getCurrentBranch(canonicalRoot)
+          .pipe(
+            Effect.mapError((cause) =>
+              writeFailure(
+                "io_failure",
+                `Could not check the branch: ${cause.message}`,
+                canonicalInput,
+                cause,
+              ),
+            ),
+          );
+        const matches = currentBranch.detached
+          ? currentBranch.revision != null &&
+            input.expectedBranch === `detached:${currentBranch.revision}`
+          : currentBranch.name != null && input.expectedBranch === `branch:${currentBranch.name}`;
+        if (!matches) {
+          return yield* Effect.fail(
+            writeFailure(
+              "stale_revision",
+              "The branch changed after this file was loaded. Review the latest file before saving.",
+              canonicalInput,
+            ),
+          );
+        }
+      }
       const saved = yield* filesystem
         .replaceFileBytes({
           canonicalRootPath: canonicalRoot,

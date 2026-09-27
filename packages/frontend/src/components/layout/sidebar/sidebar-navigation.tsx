@@ -1,6 +1,6 @@
 import { Bot, Columns3, MessagesSquare } from "lucide-react";
 import { type MouseEvent, type ReactElement, useState } from "react";
-import { NavLink, useLocation } from "react-router";
+import { NavLink, useLocation, useNavigate } from "react-router";
 import { sidebarNavLinkClassName } from "./sidebar-navigation-styles";
 
 const NAV_ITEMS = [
@@ -24,6 +24,7 @@ type SidebarNavigationState = {
 type SidebarNavigationProps = {
   hasActiveWorkspace: boolean;
   compact?: boolean;
+  onBeforeNavigate?: (apply: () => void, cancel?: () => void) => void;
 };
 
 type ShouldActivateSidebarNavigationArgs = {
@@ -54,8 +55,10 @@ const shouldActivateSidebarNavigation = ({
 export function SidebarNavigation({
   hasActiveWorkspace,
   compact = false,
+  onBeforeNavigate,
 }: SidebarNavigationProps): ReactElement {
   const location = useLocation();
+  const navigate = useNavigate();
 
   const currentPathname = location.pathname;
   const currentLocationKey = location.key;
@@ -93,6 +96,17 @@ export function SidebarNavigation({
         activatedNavigation: { route: linkTarget, sourceLocationKey: currentLocationKey },
         committedLocationKey: currentLocationKey,
       });
+      if (onBeforeNavigate) {
+        event.preventDefault();
+        onBeforeNavigate(
+          () => navigate(linkTarget),
+          () =>
+            setNavigationState({
+              activatedNavigation: null,
+              committedLocationKey: currentLocationKey,
+            }),
+        );
+      }
     }
   };
 

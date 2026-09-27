@@ -1,4 +1,9 @@
-import type { GitConflictOperation, GitDiffScope, GlobalConfig } from "@openducktor/contracts";
+import type {
+  GitConflictOperation,
+  GitDiffScope,
+  GitTargetBranch,
+  GlobalConfig,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostDependencyError, HostValidationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
@@ -16,6 +21,7 @@ export type GitScopeInput = {
 export type GitAheadBehindInput = GitScopeInput & {
   targetBranch: string;
 };
+export type GitComparisonTargetInput = GitScopeInput & { target: GitTargetBranch };
 export type GitSwitchBranchInput = {
   branch: string;
   create: boolean;

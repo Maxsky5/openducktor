@@ -1,6 +1,5 @@
 import type { AgentRole } from "@openducktor/core";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { z } from "zod";
+import { useCallback, useMemo, useState } from "react";
 import type {
   TaskExecutionFileExplorerPanelModel,
   TaskExecutionPanelModel,
@@ -12,7 +11,7 @@ import type { AgentStudioDevServerPanelModel } from "@/components/features/agent
 import type { AgentStudioGitPanelModel } from "@/components/features/agents/agent-studio-git-panel";
 import type { TaskExecutionCiChecksPanelModel } from "@/components/features/agents/task-execution-ci-checks-panel";
 import type { TaskExecutionDocumentPanelModel } from "@/components/features/agents/task-execution-document-panel";
-import { toRightPanelStorageKey } from "../agents-page-selection";
+import { useRightPanelOpen } from "@/components/features/agents/use-right-panel-open";
 
 type UseAgentStudioRightPanelInput = {
   role: AgentRole;
@@ -32,73 +31,12 @@ type UseAgentStudioRightPanelState = {
   pullRequestReviewUnavailableReason: string | null;
 };
 
-const DEFAULT_OPEN_BY_ROLE = {
-  spec: true,
-  planner: true,
-  build: true,
-  qa: true,
-} satisfies Record<AgentRole, boolean>;
-
-const openByRoleSchema = z.object({
-  spec: z.boolean(),
-  planner: z.boolean(),
-  build: z.boolean(),
-  qa: z.boolean(),
-});
-const persistedRightPanelPayloadSchema = z.record(z.string(), z.json());
-type PersistedRightPanelPayload = z.infer<typeof persistedRightPanelPayloadSchema>;
-
-const RIGHT_PANEL_ROLES: AgentRole[] = ["spec", "planner", "build", "qa"];
 const DEFAULT_ACTIVE_TAB_BY_ROLE = {
   spec: "document",
   planner: "document",
   build: "git",
   qa: "document",
 } satisfies Record<AgentRole, TaskExecutionPanelTabId>;
-
-const cloneDefaultOpenByRole = (): Record<AgentRole, boolean> =>
-  openByRoleSchema.parse(DEFAULT_OPEN_BY_ROLE);
-
-const readPersistedRightPanelPayload = (): PersistedRightPanelPayload | null => {
-  if (globalThis.localStorage === undefined) {
-    return null;
-  }
-
-  const raw = globalThis.localStorage.getItem(toRightPanelStorageKey());
-  if (!raw) {
-    return null;
-  }
-
-  const parsed = persistedRightPanelPayloadSchema.safeParse(JSON.parse(raw));
-  return parsed.success ? parsed.data : null;
-};
-
-const readPersistedOpenByRole = (): Record<AgentRole, boolean> => {
-  if (globalThis.localStorage === undefined) {
-    return cloneDefaultOpenByRole();
-  }
-
-  try {
-    const parsed = readPersistedRightPanelPayload();
-    const next = cloneDefaultOpenByRole();
-    if (parsed) {
-      for (const role of RIGHT_PANEL_ROLES) {
-        const value = parsed[role];
-        const valueResult = z.boolean().safeParse(value);
-        if (valueResult.success) {
-          next[role] = valueResult.data;
-        }
-      }
-    }
-    return next;
-  } catch (error) {
-    console.error("[agent-studio-right-panel] Failed to parse persisted panel state.", {
-      raw: globalThis.localStorage.getItem(toRightPanelStorageKey()),
-      error,
-    });
-    return cloneDefaultOpenByRole();
-  }
-};
 
 const buildTaskExecutionTabs = ({
   hasDocumentPanel,
@@ -186,28 +124,7 @@ export function useAgentStudioRightPanel({
   pullRequestReviewUnavailableReason,
   hasTaskContext = true,
 }: UseAgentStudioRightPanelInput): UseAgentStudioRightPanelState {
-  const [isOpenByRole, setIsOpenByRole] = useState<Record<AgentRole, boolean>>(() => {
-    if (globalThis.localStorage === undefined) {
-      return cloneDefaultOpenByRole();
-    }
-
-    return readPersistedOpenByRole();
-  });
-
-  useEffect(() => {
-    if (globalThis.localStorage === undefined) {
-      return;
-    }
-
-    try {
-      globalThis.localStorage.setItem(toRightPanelStorageKey(), JSON.stringify(isOpenByRole));
-    } catch (error) {
-      console.error("[agent-studio-right-panel] Failed to persist panel state.", {
-        nextState: isOpenByRole,
-        error,
-      });
-    }
-  }, [isOpenByRole]);
+  const { isOpen, toggle } = useRightPanelOpen();
 
   const [requestedTabByRole, setRequestedTabByRole] = useState<
     Record<AgentRole, TaskExecutionPanelTabId>
@@ -230,14 +147,7 @@ export function useAgentStudioRightPanel({
     requestedTab: requestedTabByRole[role],
     tabs,
   });
-  const isPanelOpen = activeTabId ? isOpenByRole[role] : false;
-
-  const handleTogglePanel = useCallback(() => {
-    setIsOpenByRole((current) => ({
-      ...current,
-      [role]: !current[role],
-    }));
-  }, [role]);
+  const isPanelOpen = activeTabId ? isOpen : false;
 
   const handleActiveTabChange = useCallback(
     (tabId: TaskExecutionPanelTabId) => {
@@ -257,9 +167,9 @@ export function useAgentStudioRightPanel({
     return {
       kind: "task_execution",
       isOpen: isPanelOpen,
-      onToggle: handleTogglePanel,
+      onToggle: toggle,
     };
-  }, [activeTabId, handleTogglePanel, isPanelOpen]);
+  }, [activeTabId, isPanelOpen, toggle]);
 
   return {
     activeTabId,

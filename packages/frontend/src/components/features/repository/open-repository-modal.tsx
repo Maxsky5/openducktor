@@ -18,12 +18,18 @@ type OpenRepositoryModalProps = {
   open: boolean;
   canClose: boolean;
   onOpenChange: (open: boolean) => void;
+  requestTransition: (
+    apply: () => Promise<boolean>,
+    cancel?: () => void,
+    options?: { waitForSuccess?: boolean },
+  ) => void;
 };
 
 export function OpenRepositoryModal({
   open,
   canClose,
   onOpenChange,
+  requestTransition,
 }: OpenRepositoryModalProps): ReactElement {
   const {
     workspaces,
@@ -35,8 +41,32 @@ export function OpenRepositoryModal({
     isSwitchingWorkspace,
   } = useWorkspaceState();
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
+  const [isChangingWorkspace, setIsChangingWorkspace] = useState(false);
   const [selectionError, setSelectionError] = useState<string | null>(null);
-  const interactionLocked = isSwitchingWorkspace || isCreatingWorkspace;
+  const interactionLocked = isSwitchingWorkspace || isCreatingWorkspace || isChangingWorkspace;
+  const runWorkspaceChange = async (change: () => Promise<void>): Promise<boolean> => {
+    setIsChangingWorkspace(true);
+    try {
+      return await new Promise<boolean>((resolve, reject) => {
+        requestTransition(
+          async () => {
+            try {
+              await change();
+              resolve(true);
+              return true;
+            } catch (cause) {
+              reject(cause);
+              return false;
+            }
+          },
+          () => resolve(false),
+          { waitForSuccess: true },
+        );
+      });
+    } finally {
+      setIsChangingWorkspace(false);
+    }
+  };
   const configuredWorkspaces = [
     ...workspaces,
     ...closedWorkspaces,
@@ -49,7 +79,8 @@ export function OpenRepositoryModal({
   ): Promise<void> => {
     setSelectionError(null);
     try {
-      await reopenWorkspace({ workspaceId, expectedRepoPath });
+      if (!(await runWorkspaceChange(() => reopenWorkspace({ workspaceId, expectedRepoPath }))))
+        return;
       onOpenChange(false);
     } catch (cause) {
       setSelectionError(errorMessage(cause));
@@ -87,6 +118,7 @@ export function OpenRepositoryModal({
           <WorkspaceCreationForm
             workspaces={configuredWorkspaces}
             addWorkspace={addWorkspace}
+            runWorkspaceChange={runWorkspaceChange}
             resolveRepoPath={resolveWorkspacePath}
             onReopenClosedWorkspace={async (workspace) => {
               await reopenWorkspace({

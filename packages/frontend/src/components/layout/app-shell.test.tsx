@@ -11,6 +11,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { type ReactElement, useState } from "react";
 import { MemoryRouter, Navigate, Route, Routes, useLocation } from "react-router";
 import { ThemeProvider } from "@/components/layout/theme-provider";
+import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
 import { createQueryClient } from "@/lib/query-client";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import {
@@ -364,15 +365,17 @@ function AppShellTestEnvironment({
                               <WorkspaceActivityContext.Provider
                                 value={createWorkspaceActivityObserverStub()}
                               >
-                                <Routes>
-                                  <Route element={<AppShell />}>
-                                    <Route path="/kanban" element={<main>Kanban</main>} />
-                                    <Route
-                                      path="/onboarding"
-                                      element={<Navigate to="/kanban" replace />}
-                                    />
-                                  </Route>
-                                </Routes>
+                                <WorkspacePreviewTransitionGuardProvider>
+                                  <Routes>
+                                    <Route element={<AppShell />}>
+                                      <Route path="/kanban" element={<main>Kanban</main>} />
+                                      <Route
+                                        path="/onboarding"
+                                        element={<Navigate to="/kanban" replace />}
+                                      />
+                                    </Route>
+                                  </Routes>
+                                </WorkspacePreviewTransitionGuardProvider>
                               </WorkspaceActivityContext.Provider>
                             </NotificationContext.Provider>
                           </AgentSessionsContext.Provider>

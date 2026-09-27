@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { AgentStudioDevServerPanelModel } from "@/components/features/agents/agent-studio-dev-server-panel";
 import type { AgentStudioGitPanelModel } from "@/components/features/agents/agent-studio-git-panel";
 import type { DiffScopeState } from "@/features/agent-studio-git/contracts";
+import { RIGHT_PANEL_OPEN_STORAGE_KEY } from "@/components/features/agents/use-right-panel-open";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
@@ -233,7 +234,7 @@ describe("useAgentStudioRightPanel", () => {
     await harness.unmount();
   });
 
-  test("persists open state per role when switching roles", async () => {
+  test("uses one open state across roles", async () => {
     const harness = createHookHarness(createHookArgs());
 
     await harness.mount();
@@ -248,7 +249,7 @@ describe("useAgentStudioRightPanel", () => {
         role: "planner",
       }),
     );
-    expect(harness.getLatest().isPanelOpen).toBe(true);
+    expect(harness.getLatest().isPanelOpen).toBe(false);
 
     await harness.update(
       createHookArgs({
@@ -310,7 +311,7 @@ describe("useAgentStudioRightPanel", () => {
     await harness.unmount();
   });
 
-  test("uses git tab state for build role when available", async () => {
+  test("keeps the build tab when the role changes", async () => {
     const harness = createHookHarness(
       createHookArgs({
         role: "build",
@@ -334,7 +335,7 @@ describe("useAgentStudioRightPanel", () => {
       }),
     );
     expect(harness.getLatest().activeTabId).toBe("document");
-    expect(harness.getLatest().isPanelOpen).toBe(true);
+    expect(harness.getLatest().isPanelOpen).toBe(false);
 
     await harness.update(
       createHookArgs({
@@ -348,7 +349,7 @@ describe("useAgentStudioRightPanel", () => {
     await harness.unmount();
   });
 
-  test("persists build panel state globally and restores across sessions", async () => {
+  test("restores the shared panel state across sessions", async () => {
     const harness = createHookHarness(
       createHookArgs({
         role: "build",
@@ -366,10 +367,7 @@ describe("useAgentStudioRightPanel", () => {
 
     await harness.unmount();
 
-    const persistedRaw = globalThis.localStorage.getItem(toRightPanelStorageKey());
-    expect(persistedRaw).not.toBeNull();
-    const persisted = JSON.parse(persistedRaw ?? "{}");
-    expect(persisted.build).toBe(false);
+    expect(globalThis.localStorage.getItem(RIGHT_PANEL_OPEN_STORAGE_KEY)).toBe("false");
 
     const secondHarness = createHookHarness(
       createHookArgs({
@@ -383,10 +381,10 @@ describe("useAgentStudioRightPanel", () => {
     await secondHarness.unmount();
   });
 
-  test("discards the stored preferred open-in tool and preserves role booleans", async () => {
+  test("starts closed when an old role setting is closed", async () => {
     globalThis.localStorage.setItem(
       toRightPanelStorageKey(),
-      JSON.stringify({ openInToolId: "zed", build: true }),
+      JSON.stringify({ openInToolId: "zed", build: false }),
     );
 
     const harness = createHookHarness(
@@ -397,13 +395,11 @@ describe("useAgentStudioRightPanel", () => {
     );
 
     await harness.mount();
-    await harness.run((state) => {
-      state.rightPanelToggleModel?.onToggle();
-    });
-
-    const persisted = JSON.parse(globalThis.localStorage.getItem(toRightPanelStorageKey()) ?? "{}");
-    expect(persisted).not.toHaveProperty("openInToolId");
-    expect(persisted.build).toBe(false);
+    expect(harness.getLatest().isPanelOpen).toBe(false);
+    expect(globalThis.localStorage.getItem(RIGHT_PANEL_OPEN_STORAGE_KEY)).toBe("false");
+    expect(globalThis.localStorage.getItem(toRightPanelStorageKey())).toBe(
+      JSON.stringify({ openInToolId: "zed", build: false }),
+    );
 
     await harness.unmount();
   });
@@ -425,9 +421,7 @@ describe("useAgentStudioRightPanel", () => {
       expect(harness.getLatest().isPanelOpen).toBe(true);
       expect(errorCalls.length).toBeGreaterThan(0);
       expect(
-        errorCalls.some((call) =>
-          String(call[0] ?? "").includes("Failed to parse persisted panel state"),
-        ),
+        errorCalls.some((call) => String(call[0] ?? "").includes("Failed to read panel state")),
       ).toBe(true);
 
       await harness.unmount();

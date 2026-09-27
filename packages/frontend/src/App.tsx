@@ -1,8 +1,20 @@
-import { type ComponentType, lazy, type ReactElement, type ReactNode, Suspense } from "react";
-import { BrowserRouter, HashRouter, Navigate, Route, Routes } from "react-router";
+import { lazy, type ReactElement, Suspense } from "react";
+import {
+  createBrowserRouter,
+  createHashRouter,
+  createRoutesFromElements,
+  Navigate,
+  Outlet,
+  Route,
+  RouterProvider,
+} from "react-router";
 import { AppShell } from "@/components/layout/app-shell";
 import { ApplicationOverlays } from "@/components/layout/application-overlays";
 import { ThemeProvider } from "@/components/layout/theme-provider";
+import {
+  WorkspacePreviewRouteGuard,
+  WorkspacePreviewTransitionGuardProvider,
+} from "@/components/layout/workspace-preview-transition-guard";
 import { Toaster } from "@/components/ui/sonner";
 import { CanonicalRouteRedirect } from "@/lib/canonical-route-redirect";
 import { QueryProvider } from "@/lib/query-provider";
@@ -20,13 +32,6 @@ export type AppRouterMode = "browser" | "hash";
 type AppProps = {
   routerMode?: AppRouterMode;
 };
-
-type RouterComponent = ComponentType<{ children?: ReactNode; useTransitions?: boolean }>;
-
-const ROUTERS = {
-  browser: BrowserRouter,
-  hash: HashRouter,
-} satisfies Record<AppRouterMode, RouterComponent>;
 
 function RouteFallback(): ReactElement {
   return (
@@ -56,46 +61,48 @@ function withRouteFallback(element: ReactElement, fallback?: ReactElement): Reac
   return <Suspense fallback={fallback ?? <RouteFallback />}>{element}</Suspense>;
 }
 
-export function App({ routerMode = "browser" }: AppProps): ReactElement {
-  const Router = ROUTERS[routerMode];
-
+function AppProviders(): ReactElement {
   return (
-    <Router useTransitions={false}>
-      <QueryProvider>
-        <ThemeProvider>
-          <AppStateProvider>
+    <QueryProvider>
+      <ThemeProvider>
+        <AppStateProvider>
+          <WorkspacePreviewTransitionGuardProvider>
             <ApplicationOverlays>
-              <Routes>
-                <Route element={<AppShell />}>
-                  <Route path="/" element={<Navigate to="/kanban" replace />} />
-                  <Route path="/onboarding" element={<Navigate to="/kanban" replace />} />
-                  <Route
-                    path="/kanban"
-                    element={withRouteFallback(<KanbanPage />, <KanbanRouteFallback />)}
-                  />
-                  <Route path="/workflows" element={<AgentsPage />} />
-                  <Route path="/chats" element={<WorkspaceSessionsPage />} />
-                  <Route path="/agents" element={<CanonicalRouteRedirect to="/workflows" />} />
-                  <Route
-                    path="/workspace-sessions"
-                    element={<CanonicalRouteRedirect to="/chats" />}
-                  />
-                  <Route
-                    path="/planner"
-                    element={<Navigate to="/workflows?agent=planner" replace />}
-                  />
-                  <Route
-                    path="/builder"
-                    element={<Navigate to="/workflows?agent=build" replace />}
-                  />
-                  <Route path="*" element={withRouteFallback(<NotFoundPage />)} />
-                </Route>
-              </Routes>
+              <WorkspacePreviewRouteGuard />
+              <Outlet />
               <Toaster />
             </ApplicationOverlays>
-          </AppStateProvider>
-        </ThemeProvider>
-      </QueryProvider>
-    </Router>
+          </WorkspacePreviewTransitionGuardProvider>
+        </AppStateProvider>
+      </ThemeProvider>
+    </QueryProvider>
   );
+}
+
+const routes = createRoutesFromElements(
+  <Route element={<AppProviders />}>
+    <Route element={<AppShell />}>
+      <Route path="/" element={<Navigate to="/kanban" replace />} />
+      <Route path="/onboarding" element={<Navigate to="/kanban" replace />} />
+      <Route path="/kanban" element={withRouteFallback(<KanbanPage />, <KanbanRouteFallback />)} />
+      <Route path="/workflows" element={<AgentsPage />} />
+      <Route path="/chats" element={<WorkspaceSessionsPage />} />
+      <Route path="/agents" element={<CanonicalRouteRedirect to="/workflows" />} />
+      <Route path="/workspace-sessions" element={<CanonicalRouteRedirect to="/chats" />} />
+      <Route path="/planner" element={<Navigate to="/workflows?agent=planner" replace />} />
+      <Route path="/builder" element={<Navigate to="/workflows?agent=build" replace />} />
+      <Route path="*" element={withRouteFallback(<NotFoundPage />)} />
+    </Route>
+  </Route>,
+);
+
+const routers: Partial<Record<AppRouterMode, ReturnType<typeof createBrowserRouter>>> = {};
+
+function routerForMode(mode: AppRouterMode): ReturnType<typeof createBrowserRouter> {
+  if (mode === "browser") return (routers.browser ??= createBrowserRouter(routes));
+  return (routers.hash ??= createHashRouter(routes));
+}
+
+export function App({ routerMode = "browser" }: AppProps): ReactElement {
+  return <RouterProvider router={routerForMode(routerMode)} useTransitions={false} />;
 }

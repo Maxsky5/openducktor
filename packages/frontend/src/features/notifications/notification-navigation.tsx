@@ -3,6 +3,7 @@ import { type ReactElement, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useSettingsModal } from "@/components/features/settings/settings-modal";
+import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { useNotificationContext } from "@/state/notifications/notification-context";
 import { workspaceSessionListQueryOptions } from "@/state/queries/workspace-sessions";
@@ -23,39 +24,67 @@ export function NotificationNavigationRegistrar(): null {
   const { openSettings } = useSettingsModal();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { run: guardWorkspaceChange } = useWorkspacePreviewTransitionGuard();
   const { workspaces, activeWorkspace, selectWorkspace } = useWorkspaceState();
   const { registerNavigator } = useNotificationContext();
 
   useEffect(() => {
     return registerNavigator(async (target) => {
-      await openNotificationTarget(
-        target,
-        {
-          activeWorkspaceId: activeWorkspace?.workspaceId ?? null,
-          workspaces,
-          selectWorkspace,
-          loadTasks: async (repoPath) => {
-            const taskOptions = unfilteredRepoTaskDataQueryOptions(repoPath);
-            return (await queryClient.fetchQuery({ ...taskOptions, staleTime: 0 })).tasks;
-          },
-          loadTaskSessions: (repoPath, taskId) =>
-            loadAgentSessionListFromQuery(queryClient, repoPath, taskId, { forceFresh: true }),
-          loadWorkspaceSessions: (workspaceId) =>
-            queryClient.fetchQuery(workspaceSessionListQueryOptions(workspaceId)),
-          navigate,
-          reportStale: staleTarget,
-          openSettings: () =>
-            openSettings({ deepLink: { kind: "global", section: "notifications" } }),
+      let beforeNavigate: ((selectWorkspace: () => Promise<void>) => Promise<boolean>) | undefined;
+      if (target.type !== "notification_settings" && location.pathname === "/chats") {
+        const targetWorkspace = workspaces.find((entry) => entry.repoPath === target.repoPath);
+        const changesContext =
+          targetWorkspace &&
+          (targetWorkspace.workspaceId !== activeWorkspace?.workspaceId || "taskId" in target);
+        if (changesContext)
+          beforeNavigate = (selectWorkspace) =>
+            new Promise<boolean>((resolve, reject) => {
+              guardWorkspaceChange(
+                async () => {
+                  try {
+                    await selectWorkspace();
+                    resolve(true);
+                    return true;
+                  } catch (cause) {
+                    reject(cause);
+                    return false;
+                  }
+                },
+                () => resolve(false),
+                { waitForSuccess: true },
+              );
+            });
+      }
+      const dependencies: Parameters<typeof openNotificationTarget>[1] = {
+        activeWorkspaceId: activeWorkspace?.workspaceId ?? null,
+        workspaces,
+        selectWorkspace,
+        loadTasks: async (repoPath) => {
+          const taskOptions = unfilteredRepoTaskDataQueryOptions(repoPath);
+          return (await queryClient.fetchQuery({ ...taskOptions, staleTime: 0 })).tasks;
         },
-        (message) =>
-          toast.error("Could not open notification", {
-            description: message,
-            action: { label: "Reload", onClick: () => window.location.reload() },
-          }),
+        loadTaskSessions: (repoPath, taskId) =>
+          loadAgentSessionListFromQuery(queryClient, repoPath, taskId, { forceFresh: true }),
+        loadWorkspaceSessions: (workspaceId) =>
+          queryClient.fetchQuery(workspaceSessionListQueryOptions(workspaceId)),
+        navigate,
+        reportStale: staleTarget,
+        openSettings: () =>
+          openSettings({ deepLink: { kind: "global", section: "notifications" } }),
+      };
+      if (beforeNavigate) dependencies.beforeNavigate = beforeNavigate;
+      await openNotificationTarget(target, dependencies, (message) =>
+        toast.error("Could not open notification", {
+          description: message,
+          action: { label: "Reload", onClick: () => window.location.reload() },
+        }),
       );
     });
   }, [
     activeWorkspace?.workspaceId,
+    guardWorkspaceChange,
+    location.pathname,
     navigate,
     openSettings,
     queryClient,

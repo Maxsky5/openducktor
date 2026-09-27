@@ -190,6 +190,7 @@ function getGitInfoHeaderProps(
 ): ComponentProps<typeof GitInfoHeader> {
   const props: ComponentProps<typeof GitInfoHeader> = {
     contextMode: model.contextMode ?? "worktree",
+    comparisonUnavailableReason: model.comparisonUnavailableReason ?? null,
     pullRequest: model.pullRequest ?? null,
     branch: view.displayedScopeState.branch,
     targetBranch: model.targetBranch,
@@ -478,7 +479,9 @@ function useGitConflictPanel(model: AgentStudioGitPanelModel) {
             isHandlingConflict: isHandlingGitConflict ?? false,
             conflictAction: gitConflictAction,
             onAbort: () => void abortGitConflict?.(),
-            onAskBuilder: () => void askBuilderToResolveGitConflict?.(),
+            onAskBuilder: askBuilderToResolveGitConflict
+              ? () => void askBuilderToResolveGitConflict()
+              : undefined,
           })
         : null,
     [
@@ -497,10 +500,17 @@ function useGitConflictPanel(model: AgentStudioGitPanelModel) {
             isHandlingConflict: isHandlingGitConflict ?? false,
             conflictAction: gitConflictAction,
             onAbort: () => void abortGitConflict?.(),
-            onAskBuilder: closeAndAskBuilder,
+            onAskBuilder: askBuilderToResolveGitConflict ? closeAndAskBuilder : undefined,
           })
         : null,
-    [active, closeAndAskBuilder, abortGitConflict, gitConflictAction, isHandlingGitConflict],
+    [
+      active,
+      closeAndAskBuilder,
+      abortGitConflict,
+      askBuilderToResolveGitConflict,
+      gitConflictAction,
+      isHandlingGitConflict,
+    ],
   );
 
   useEffect(() => {

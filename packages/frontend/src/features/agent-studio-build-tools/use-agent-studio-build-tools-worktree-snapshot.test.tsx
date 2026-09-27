@@ -32,32 +32,36 @@ type SnapshotDependencies = Parameters<
 type UseDiffData = NonNullable<SnapshotDependencies["useDiffData"]>;
 type UseDevServerPanel = NonNullable<SnapshotDependencies["useDevServerPanel"]>;
 
-const useAgentStudioDiffDataMock = mock((args: Parameters<UseDiffData>[0]): DiffDataState => ({
-  branch: "feature/task-24",
-  worktreePath: args.worktreePath,
-  targetBranch: "origin/main",
-  diffScope: "uncommitted",
-  gitConflict: null,
-  scopeStatesByScope: {
-    target: createEmptyScopeState(),
-    uncommitted: createEmptyScopeState(),
-  },
-  loadedScopesByScope: { target: false, uncommitted: false },
-  commitsAheadBehind: null,
-  upstreamAheadBehind: null,
-  upstreamStatus: "tracking",
-  fileDiffs: [],
-  fileStatuses: [],
-  statusSnapshotKey: null,
-  hashVersion: null,
-  statusHash: null,
-  diffHash: null,
-  uncommittedFileCount: 0,
-  isLoading: Boolean(args.isWorktreeResolutionResolving),
-  error: args.worktreeResolutionError,
-  refresh: refreshDiffMock,
-  setDiffScope: setDiffScopeMock,
-}));
+const useAgentStudioDiffDataMock = mock(
+  (args: Parameters<UseDiffData>[0]): ReturnType<UseDiffData> => ({
+    branch: "feature/task-24",
+    worktreePath: args.worktreePath,
+    targetBranch: "origin/main",
+    diffScope: "uncommitted",
+    gitConflict: null,
+    scopeStatesByScope: {
+      target: createEmptyScopeState(),
+      uncommitted: createEmptyScopeState(),
+    },
+    loadedScopesByScope: { target: false, uncommitted: false },
+    commitsAheadBehind: null,
+    upstreamAheadBehind: null,
+    upstreamStatus: "tracking",
+    fileDiffs: [],
+    fileStatuses: [],
+    statusSnapshotKey: null,
+    hashVersion: null,
+    statusHash: null,
+    diffHash: null,
+    uncommittedFileCount: 0,
+    isLoading: Boolean(args.isWorktreeResolutionResolving),
+    error: args.worktreeResolutionError,
+    refresh: refreshDiffMock,
+    refreshAllScopes: async () => {},
+    refreshInactiveScope: async () => {},
+    setDiffScope: setDiffScopeMock,
+  }),
+);
 const useAgentStudioDevServerPanelMock = mock(
   (args: Parameters<UseDevServerPanel>[0]): ReturnType<UseDevServerPanel> => ({
     mode: "empty",

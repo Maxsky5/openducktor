@@ -16,10 +16,10 @@ import {
 import { BrowserTabs, BrowserTabsBar } from "@/components/ui/browser-tabs";
 import { cn } from "@/lib/utils";
 import {
-  agentStudioPanelToggleButtonClassName,
   TaskExecutionPanelToggleButton,
   type TaskExecutionPanelToggleModel,
 } from "./task-execution-panel";
+import { sharedToolsPanelToggleButtonClassName } from "./shared-tools-panel";
 
 export type AgentStudioTaskTabStatus = "working" | "idle" | "waiting_input";
 
@@ -142,7 +142,7 @@ export function AgentStudioTaskTabs({
                 aria-label={
                   terminalPanelToggleModel.isVisible ? "Hide terminals" : "Show terminals"
                 }
-                className={cn(agentStudioPanelToggleButtonClassName, "shrink-0")}
+                className={cn(sharedToolsPanelToggleButtonClassName, "shrink-0")}
                 disabled={terminalPanelToggleModel.disabled}
                 onClick={terminalPanelToggleModel.onToggle}
               >

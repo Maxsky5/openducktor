@@ -38,12 +38,14 @@ const MODIFIED_CLICK_CASES = [
 
 type RenderSidebarRoutingScenarioOptions = {
   initialRoute: RoutePath;
+  onBeforeNavigate?: (apply: () => void, cancel?: () => void) => void;
   onSidebarClickCapture?: (event: MouseEvent<HTMLDivElement>) => void;
   suspendedRoute?: RoutePath;
 };
 
 function renderSidebarRoutingScenario({
   initialRoute,
+  onBeforeNavigate,
   onSidebarClickCapture,
   suspendedRoute,
 }: RenderSidebarRoutingScenarioOptions): void {
@@ -64,7 +66,7 @@ function renderSidebarRoutingScenario({
   render(
     <MemoryRouter initialEntries={[initialRoute]} useTransitions>
       <div onClickCapture={onSidebarClickCapture}>
-        <SidebarNavigation hasActiveWorkspace />
+        <SidebarNavigation hasActiveWorkspace {...(onBeforeNavigate ? { onBeforeNavigate } : {})} />
       </div>
       <BackButton />
       <CurrentRouteProbe />
@@ -79,6 +81,20 @@ function renderSidebarRoutingScenario({
 }
 
 describe("SidebarNavigation", () => {
+  test("clears the link highlight when the guard cancels at once", () => {
+    renderSidebarRoutingScenario({
+      initialRoute: "/kanban",
+      onBeforeNavigate: (_apply, cancel) => cancel?.(),
+    });
+
+    fireEvent.click(screen.getByRole("link", { name: "Workflows" }));
+
+    expect(screen.getByLabelText("Current route").textContent).toBe("/kanban");
+    expect(screen.getByRole("link", { name: "Workflows" }).className).not.toContain(
+      "bg-sidebar-accent",
+    );
+  });
+
   test("renders text labels in default mode", () => {
     const html = renderToStaticMarkup(
       createElement(

@@ -1309,6 +1309,7 @@ describe("AgentStudioGitPanel", () => {
           model: baseModel({
             isGitActionsLocked: true,
             gitActionsLockReason: "Git actions are disabled while the Builder session is working.",
+            askBuilderToResolveGitConflict: async () => {},
             gitConflict: {
               operation: "rebase",
               currentBranch: "feature/task-11",
@@ -1471,6 +1472,58 @@ describe("AgentStudioGitPanel", () => {
     });
   });
 
+  test("keeps abort available without Builder actions in a workspace conflict", async () => {
+    const abort = mock(async () => {});
+    let renderer: RenderResult | null = null;
+    await act(async () => {
+      renderer = render(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            abortGitConflict: abort,
+            gitConflict: {
+              operation: "pull_rebase",
+              currentBranch: "feature/workspace",
+              targetBranch: "tracked upstream branch",
+              conflictedFiles: ["AGENTS.md"],
+              output: "CONFLICT (content): Merge conflict in AGENTS.md",
+              workingDir: "/tmp/worktree",
+            },
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    expect(countByTestId(root, "agent-studio-git-ask-builder-conflict-strip-button")).toBe(0);
+    expect(
+      Boolean(findByTestId(root, "agent-studio-git-abort-conflict-strip-button").props.disabled),
+    ).toBe(false);
+    await act(async () => {
+      findByTestId(root, "agent-studio-git-abort-conflict-strip-button").props.onClick();
+      findByTestId(root, "agent-studio-git-view-conflict-details-button").props.onClick();
+      await flush();
+    });
+
+    const dialog = findByTestId(root, "agent-studio-git-conflict-modal");
+    expect(countByTestId(root, "agent-studio-git-ask-builder-conflict-button")).toBe(0);
+    expect(getNodeText(dialog)).not.toContain("Builder");
+    expect(getNodeText(dialog)).toContain("Abort the git operation.");
+    expect(
+      Boolean(findByTestId(root, "agent-studio-git-abort-conflict-button").props.disabled),
+    ).toBe(false);
+    await act(async () => {
+      findByTestId(root, "agent-studio-git-abort-conflict-button").props.onClick();
+      await flush();
+    });
+    expect(abort).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
   test("auto-opens the conflict modal only when the controller emits a fresh conflict-open signal", async () => {
     let renderer: RenderResult | null = null;
     await act(async () => {
@@ -1530,6 +1583,7 @@ describe("AgentStudioGitPanel", () => {
     });
 
     const abortPendingModel = baseModel({
+      askBuilderToResolveGitConflict: async () => {},
       isHandlingGitConflict: true,
       gitConflictAction: "abort",
       gitConflictAutoOpenNonce: 1,
@@ -1581,6 +1635,7 @@ describe("AgentStudioGitPanel", () => {
     });
 
     const askBuilderPendingModel = baseModel({
+      askBuilderToResolveGitConflict: async () => {},
       isHandlingGitConflict: true,
       gitConflictAction: "ask_builder",
       gitConflictAutoOpenNonce: 1,
@@ -1650,6 +1705,10 @@ describe("AgentStudioGitPanel", () => {
 
     const root = getRoot(renderer);
     expect(findByTestId(root, "agent-studio-git-conflict-modal")).toBeTruthy();
+    expect(findByTestId(root, "agent-studio-git-ask-builder-conflict-strip-button")).toBeTruthy();
+    expect(getNodeText(findByTestId(root, "agent-studio-git-conflict-modal"))).toContain(
+      "send the conflict to Builder",
+    );
 
     await act(async () => {
       findByTestId(root, "agent-studio-git-ask-builder-conflict-button").props.onClick();
