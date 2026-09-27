@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { errorMessage } from "@/lib/errors";
+import { cn } from "@/lib/utils";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { FolderPickerDialog } from "./folder-picker-dialog";
 import { OpenRepositoryChoices } from "./open-repository-choices";
@@ -207,7 +208,10 @@ function OpenRepositoryModalSession({
       }}
     >
       <DialogContent
-        className="grid max-h-[92vh] max-w-6xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-0"
+        className={cn(
+          "grid max-h-[92vh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-0",
+          showCreationFlow || closedWorkspaces.length > 0 ? "max-w-6xl" : "max-w-2xl",
+        )}
         {...(canClose && !interactionLocked ? {} : { closeButton: null })}
         onEscapeKeyDown={(event) => {
           if (!canClose || interactionLocked) event.preventDefault();
@@ -224,7 +228,9 @@ function OpenRepositoryModalSession({
           <DialogDescription>
             {showCreationFlow
               ? "Choose a Git folder, review workspace details, and set model defaults."
-              : "Start a new workspace or reopen one you closed earlier."}
+              : closedWorkspaces.length > 0
+                ? "Start a new workspace or reopen one you closed earlier."
+                : "Choose a local Git repository to start a workspace."}
           </DialogDescription>
         </DialogHeader>
 

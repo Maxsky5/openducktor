@@ -19,7 +19,7 @@ export function OpenRepositoryChoices({
   onReopen,
 }: OpenRepositoryChoicesProps): ReactElement {
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
+    <div className={closedWorkspaces.length > 0 ? "grid gap-5 lg:grid-cols-2" : "grid"}>
       <section className="flex flex-col items-start rounded-xl border border-border bg-card p-5 sm:p-6">
         <div className="mb-5 flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
           <FolderOpen className="size-6" aria-hidden="true" />
@@ -33,15 +33,15 @@ export function OpenRepositoryChoices({
         </Button>
       </section>
 
-      <section className="rounded-xl border border-border bg-card p-5 sm:p-6">
-        <div className="mb-5 flex size-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-          <RotateCcw className="size-6" aria-hidden="true" />
-        </div>
-        <h3 className="text-base font-semibold text-foreground">Reopen a workspace</h3>
-        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-          Pick up work in a workspace you closed.
-        </p>
-        {closedWorkspaces.length > 0 ? (
+      {closedWorkspaces.length > 0 ? (
+        <section className="rounded-xl border border-border bg-card p-5 sm:p-6">
+          <div className="mb-5 flex size-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+            <RotateCcw className="size-6" aria-hidden="true" />
+          </div>
+          <h3 className="text-base font-semibold text-foreground">Reopen a workspace</h3>
+          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+            Pick up work in a workspace you closed.
+          </p>
           <div className="mt-5 grid gap-2">
             {closedWorkspaces.map((workspace) => (
               <Button
@@ -63,17 +63,18 @@ export function OpenRepositoryChoices({
               </Button>
             ))}
           </div>
-        ) : (
-          <p className="mt-5 rounded-lg border border-dashed border-border px-4 py-5 text-sm text-muted-foreground">
-            No closed workspaces yet.
-          </p>
-        )}
-        {error ? (
-          <p className="mt-3 text-sm text-destructive" role="alert">
-            {error}
-          </p>
-        ) : null}
-      </section>
+          {error ? (
+            <p className="mt-3 text-sm text-destructive" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+      {closedWorkspaces.length === 0 && error ? (
+        <p className="text-sm text-destructive" role="alert">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

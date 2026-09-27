@@ -192,6 +192,13 @@ const chooseRepository = async () => {
 };
 
 describe("OpenRepositoryModal", () => {
+  test("shows only the new-workspace choice when no workspaces are closed", () => {
+    renderModal();
+
+    expect(screen.getByRole("heading", { name: "Open a new workspace" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Reopen a workspace" })).toBeNull();
+  });
+
   test.each(["add", "closed row", "closed folder"] as const)(
     "keeps the dirty draft when %s fails",
     async (path) => {
