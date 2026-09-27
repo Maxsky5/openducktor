@@ -45,6 +45,7 @@ export type WorkspaceSessionServiceDependencies = WorkspaceSessionTargetDependen
   operationGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
   sessionTitleGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
   isCodexTitleSyncPending: (ref: AgentSessionLiveRef) => boolean;
+  markCodexTitleSyncPending: (ref: AgentSessionLiveRef) => void;
   store: WorkspaceSessionStorePort;
   settings: Pick<WorkspaceSettingsService, "getRepoConfig" | "listCustomAgentRoles">;
   runtime: Pick<RuntimeOrchestratorService, "runtimeEnsure">;
@@ -204,11 +205,19 @@ export const createWorkspaceSessionService = (
                   });
                 }),
               );
-              if (Exit.isSuccess(saved))
+              if (Exit.isSuccess(saved)) {
+                if (session.runtimeKind === "codex")
+                  dependencies.markCodexTitleSyncPending({
+                    repoPath: ref.repoPath,
+                    runtimeKind: session.runtimeKind,
+                    externalSessionId: runtimeSession.externalSessionId,
+                    workingDirectory: runtimeSession.workingDirectory,
+                  });
                 return {
                   session: saved.value,
                   runtimeSession,
                 } satisfies WorkspaceSessionStartResult;
+              }
               const released = yield* Effect.exit(
                 live.releaseSession({
                   repoPath: ref.repoPath,

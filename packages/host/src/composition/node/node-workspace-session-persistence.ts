@@ -83,5 +83,6 @@ export const createNodeWorkspaceSessionPersistence = ({
     operationGate,
     sessionTitleGate,
     isCodexTitleSyncPending: persistence.isCodexTitleSyncPending,
+    markCodexTitleSyncPending: persistence.markCodexTitleSyncPending,
   };
 };

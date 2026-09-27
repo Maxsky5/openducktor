@@ -102,6 +102,7 @@ export const createPersistenceHarness = async (
     titleNotAttached: false,
     failPublish: false,
     failActivity: false,
+    firstTurnCompleted: true,
     publishAcceptedMessageDuringSend: false,
     registered: true,
     beforeControl: Effect.void,
@@ -224,6 +225,7 @@ export const createPersistenceHarness = async (
                   workingDirectory: input.workingDirectory,
                   startedAt: "2026-09-07T10:00:00Z",
                   status: "idle",
+                  firstTurnCompleted: state.firstTurnCompleted,
                 };
               }),
             ),
@@ -319,6 +321,7 @@ export const createPersistenceHarness = async (
       operationGate,
       sessionTitleGate,
       isCodexTitleSyncPending: persistence.isCodexTitleSyncPending,
+      markCodexTitleSyncPending: persistence.markCodexTitleSyncPending,
       store,
       settings: {
         getRepoConfig: () => Effect.succeed(config),

@@ -42,7 +42,12 @@ class MatchingPreviewTransport extends RecordingTransport {
   async request(request: Parameters<RecordingTransport["request"]>[0]) {
     if (request.method === "thread/resume") {
       this.calls.push(request);
-      const result = codexThreadStartResultFixture(request.params.threadId, "thread/resume");
+      const result = codexThreadStartResultFixture(
+        request.params.threadId,
+        "thread/resume",
+        this.firstTurnStatus,
+        this.historyMode,
+      );
       return {
         ...result,
         thread: { ...result.thread, preview: "Saved title", name: this.nativeName },
@@ -67,7 +72,12 @@ class NameWriteThenFailTransport extends RecordingTransport {
   async request(request: Parameters<RecordingTransport["request"]>[0]) {
     if (request.method === "thread/resume") {
       this.calls.push(request);
-      const result = codexThreadStartResultFixture(request.params.threadId, "thread/resume");
+      const result = codexThreadStartResultFixture(
+        request.params.threadId,
+        "thread/resume",
+        this.firstTurnStatus,
+        this.historyMode,
+      );
       return { ...result, thread: { ...result.thread, name: this.nativeName } };
     }
     const result = await super.request(request);
@@ -250,6 +260,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
 
   test("starts a named repository session while its rollout is unreadable", async () => {
     const transport = new NameFailingTransport("runtime-live", false);
+    transport.firstTurnStatus = null;
     const adapter = createAdapterWithTransport(transport);
     const started = await adapter.startSession({
       repoPath: "/repo",
@@ -459,6 +470,61 @@ describe("CodexAppServerAdapter repository sessions", () => {
       params: { threadId: "thread-resume", name: "Fairnest" },
     });
   });
+
+  test.each([
+    { name: "no first turn", status: null, historyMode: "paginated" as const },
+    {
+      name: "a running first turn",
+      status: "inProgress" as const,
+      historyMode: "paginated" as const,
+    },
+    { name: "an empty legacy thread", status: null, historyMode: "legacy" as const },
+  ])("reattaches with $name without writing its title", async ({ status, historyMode }) => {
+    const transport = new NameFailingTransport("runtime-live", false);
+    transport.firstTurnStatus = status;
+    transport.historyMode = historyMode;
+    const adapter = createAdapterWithTransport(transport);
+
+    const resumed = await adapter.resumeSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "thread-resume",
+      sessionScope: { kind: "repository", title: "Saved title" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5" },
+    });
+
+    expect(resumed.firstTurnCompleted).toBe(false);
+    expect(transport.calls.some((call) => call.method === "thread/name/set")).toBe(false);
+  });
+
+  test.each(["completed", "interrupted"] as const)(
+    "retries the saved title on a %s legacy thread",
+    async (status) => {
+      const transport = new RecordingTransport("runtime-live", false);
+      transport.historyMode = "legacy";
+      transport.firstTurnStatus = status;
+      const adapter = createAdapterWithTransport(transport);
+      const resumed = await adapter.resumeSession({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread-resume",
+        sessionScope: { kind: "repository", title: "Saved title" },
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+        systemPrompt: "Use the repo rules.",
+        model: { providerId: "openai", modelId: "gpt-5" },
+      });
+
+      expect(resumed.firstTurnCompleted).toBe(true);
+      expect(transport.calls.find((call) => call.method === "thread/name/set")).toEqual({
+        method: "thread/name/set",
+        params: { threadId: "thread-resume", name: "Saved title" },
+      });
+    },
+  );
 
   test("keeps the native title when a strict repository resume cannot apply the title", async () => {
     const transport = new NameFailingTransport("runtime-live", false);

@@ -112,13 +112,17 @@ describe("host-owned Workspace Session lifecycle", () => {
       startPoint: undefined as string | undefined,
     };
     const store = createSqliteWorkspaceSessionStore(database.contextProvider);
+    const pendingCodexTitles = new Set<string>();
     const failure = (message: string) =>
       Effect.fail(new HostOperationError({ operation: "test", message }));
     const dependencies: WorkspaceSessionServiceDependencies = {
       lifecycle: createTaskSessionLifecycleCoordinator(),
       operationGate: createWorkspaceSessionOperationGate(),
       sessionTitleGate: createWorkspaceSessionOperationGate(),
-      isCodexTitleSyncPending: () => false,
+      isCodexTitleSyncPending: (ref) => pendingCodexTitles.has(ref.externalSessionId),
+      markCodexTitleSyncPending: (ref) => {
+        pendingCodexTitles.add(ref.externalSessionId);
+      },
       store: {
         ...store,
         archive: (request) =>
@@ -318,6 +322,23 @@ describe("host-owned Workspace Session lifecycle", () => {
       registered,
     };
   };
+
+  test("keeps a fresh Codex manual rename until the first turn ends", async () => {
+    const h = setup();
+    const draft = await Effect.runPromise(
+      h.service.create({
+        ...input(),
+        runtimeKind: "codex",
+        selectedModel: { ...input().selectedModel!, runtimeKind: "codex" },
+      }),
+    );
+    const ref = { workspaceId: "fairnest", sessionId: draft.session.id };
+    await Effect.runPromise(h.service.start(ref));
+
+    const renamed = await Effect.runPromise(h.service.rename({ ...ref, manualTitle: "New title" }));
+    expect(renamed.manualTitle).toBe("New title");
+    expect(h.titles).toEqual([]);
+  });
 
   test.each(["default target", "checkout"] as const)(
     "protects the %s branch when the stored worktree is missing",

@@ -30,6 +30,10 @@ import type { WorkspaceSettingsService } from "./workspace-settings-model";
 import type { AgentSessionOperationPolicy } from "../agent-sessions/agent-session-operation-policy";
 import type { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
 import {
+  syncCodexTitleAfterTurn,
+  type CodexTitleSyncState,
+} from "./workspace-session-codex-title-sync";
+import {
   validateWorkspaceSessionTarget,
   type WorkspaceSessionTargetDependencies,
 } from "./workspace-session-target";
@@ -88,10 +92,11 @@ export const createWorkspaceSessionRuntimePersistence = ({
 }): AgentSessionPersistencePort &
   AgentSessionOperationPolicy & {
     isCodexTitleSyncPending: (ref: AgentSessionLiveRef) => boolean;
+    markCodexTitleSyncPending: (ref: AgentSessionLiveRef) => void;
   } => {
   const pendingFinalMessages = new Map<string, { messageId: string; occurredAt: number }>();
   const sendsInFlight = new Set<string>();
-  const codexTitleSync = new Map<string, "pending" | "queued" | "handled">();
+  const codexTitleSync: CodexTitleSyncState = new Map();
   const saveCodexMessage = (
     runtimeRef: AgentSessionLiveRef,
     known: { ref: WorkspaceSessionStoreRef; session: WorkspaceSession },
@@ -103,7 +108,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
         const key = agentSessionRefKey(runtimeRef);
         const state = codexTitleSync.get(key);
         const titleAdded = runtimeTitle(known.session) === null && input.generatedTitle !== null;
-        if (state === undefined || (state === "queued" && titleAdded))
+        if (state === undefined || (state !== "pending" && titleAdded))
           codexTitleSync.set(key, "pending");
       }
       yield* publishUpdated(known.ref.workspaceId, saved);
@@ -337,50 +342,6 @@ export const createWorkspaceSessionRuntimePersistence = ({
       }
       pendingFinalMessages.delete(key);
     });
-  const syncCodexTitleAfterTurn = (runtimeRef: AgentSessionLiveRef) =>
-    Effect.gen(function* () {
-      const key = agentSessionRefKey(runtimeRef);
-      if (codexTitleSync.get(key) !== "pending") return;
-      codexTitleSync.set(key, "queued");
-      yield* Effect.forkDaemon(
-        Effect.gen(function* () {
-          const known = yield* find(runtimeRef);
-          if (!known) return;
-          yield* sessionTitleGate.run(
-            known.ref,
-            Effect.gen(function* () {
-              const current = yield* findActive(runtimeRef);
-              if (!current || codexTitleSync.get(key) !== "queued") return;
-              const title = runtimeTitle(current.session);
-              if (title === null) {
-                codexTitleSync.delete(key);
-                return;
-              }
-              codexTitleSync.set(key, "handled");
-              const result = yield* updateRuntimeSessionTitle({ ...runtimeRef, title });
-              if (result.status === "not_attached")
-                return yield* new HostOperationError({
-                  operation: "workspaceSession.codex-title.sync",
-                  message: "Codex no longer holds this chat.",
-                });
-            }),
-          );
-        }).pipe(
-          Effect.catchAll((failure) =>
-            reportRenameFailure(
-              runtimeRef,
-              `Could not sync this Workspace Session title to Codex. The message was accepted and the saved title remains. Reattach this chat or rename it to retry. ${failure.message}`,
-              "workspaceSession.title.sync",
-            ),
-          ),
-          Effect.ensuring(
-            Effect.sync(() => {
-              if (codexTitleSync.get(key) === "queued") codexTitleSync.set(key, "handled");
-            }),
-          ),
-        ),
-      );
-    });
   const validateRef = (runtimeRef: AgentSessionLiveRef) =>
     Effect.gen(function* () {
       yield* findActive(runtimeRef);
@@ -394,6 +355,9 @@ export const createWorkspaceSessionRuntimePersistence = ({
       return yield* known ? operationGate.run(known.ref, effect) : effect;
     });
   return {
+    markCodexTitleSyncPending: (ref) => {
+      codexTitleSync.set(agentSessionRefKey(ref), "pending");
+    },
     isCodexTitleSyncPending: (ref) => {
       const state = codexTitleSync.get(agentSessionRefKey(ref));
       return state === "pending" || state === "queued";
@@ -419,7 +383,14 @@ export const createWorkspaceSessionRuntimePersistence = ({
       prepare(input).pipe(
         Effect.map((prepared) => ({
           input: prepared,
-          save: () => Effect.void,
+          save: (summary) =>
+            Effect.sync(() => {
+              if (prepared.runtimeKind !== "codex") return;
+              if (summary.firstTurnCompleted === false)
+                codexTitleSync.set(agentSessionRefKey(prepared), "pending");
+              else if (summary.firstTurnCompleted === true)
+                codexTitleSync.set(agentSessionRefKey(prepared), "handled");
+            }),
         })),
       ),
     prepareSend: prepare,
@@ -492,7 +463,14 @@ export const createWorkspaceSessionRuntimePersistence = ({
             event.turnCompleted === true &&
             event.sessionRef.runtimeKind === "codex"
           )
-            yield* syncCodexTitleAfterTurn(event.sessionRef);
+            yield* syncCodexTitleAfterTurn(event.sessionRef, {
+              state: codexTitleSync,
+              find,
+              findActive,
+              gate: sessionTitleGate,
+              updateTitle: updateRuntimeSessionTitle,
+              reportFailure: reportRenameFailure,
+            });
         }
       }),
   };

@@ -382,6 +382,7 @@ export const assembleNodeEffectHostCommandRouter = (
       operationGate: workspaceSessions.operationGate,
       sessionTitleGate: workspaceSessions.sessionTitleGate,
       isCodexTitleSyncPending: workspaceSessions.isCodexTitleSyncPending,
+      markCodexTitleSyncPending: workspaceSessions.markCodexTitleSyncPending,
       store: assets.workspaceSessionStore,
       settings: workspaceSettingsService,
       runtime: runtimeOrchestratorWithEffectiveRegistry,

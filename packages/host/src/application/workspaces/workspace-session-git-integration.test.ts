@@ -144,6 +144,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       operationGate: createWorkspaceSessionOperationGate(),
       sessionTitleGate: createWorkspaceSessionOperationGate(),
       isCodexTitleSyncPending: () => false,
+      markCodexTitleSyncPending: () => {},
       ...targetDependencies,
       store,
       settings: {

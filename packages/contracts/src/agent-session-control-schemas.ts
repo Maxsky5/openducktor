@@ -208,6 +208,7 @@ export const agentSessionControlSummarySchema = z
     title: z.string().optional(),
     startedAt: isoTimestampSchema,
     status: z.enum(["starting", "running", "idle", "error", "stopped"]),
+    firstTurnCompleted: z.boolean().optional(),
   })
   .strict();
 export type AgentSessionControlSummary = z.infer<typeof agentSessionControlSummarySchema>;

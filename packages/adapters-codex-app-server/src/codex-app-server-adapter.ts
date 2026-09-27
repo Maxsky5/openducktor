@@ -531,19 +531,47 @@ export class CodexAppServerAdapter
       excludeTurns: true,
       model: toTransportModelSelection(model).model,
     };
+    const checkFirstTurn =
+      sessionPolicy.kind === "repository" &&
+      (!current || this.freshTitleState.get(current) === "pending");
     if (input.systemPrompt) {
       threadResumeInput.developerInstructions = input.systemPrompt;
     }
     const response = await client.threadResume(threadResumeInput);
+    let firstTurnCompleted = true;
+    if (checkFirstTurn) {
+      if (
+        response.thread.historyMode === "paginated" &&
+        response.turnsBackwardsCursor === undefined
+      )
+        throw new Error("Codex did not report turn history. Reattach this chat to retry.");
+      if (response.thread.historyMode !== "legacy" && response.turnsBackwardsCursor === null) {
+        firstTurnCompleted = false;
+      } else {
+        const firstTurn = await client.threadTurnsList({
+          threadId: input.externalSessionId,
+          cursor: null,
+          limit: 1,
+          sortDirection: "asc",
+          itemsView: "notLoaded",
+        });
+        if (!firstTurn.data[0] && response.turnsBackwardsCursor)
+          throw new Error("Codex did not return the first turn. Reattach this chat to retry.");
+        firstTurnCompleted =
+          firstTurn.data[0] !== undefined && firstTurn.data[0].status !== "inProgress";
+      }
+    }
     this.clearThreadInventory(runtimeId);
     const session = sessionStateFromThreadResume(input, runtimeId, model, response);
     const repositoryTitle = sessionPolicy.kind === "repository" ? sessionPolicy.title : undefined;
     this.localSessions.remember(session);
-    if (current && this.freshTitleState.get(current) === "pending")
+    if (sessionPolicy.kind === "repository" && !firstTurnCompleted)
       this.freshTitleState.set(session, "pending");
     await this.applyRepositoryTitle(input, session, repositoryTitle);
 
-    return session.summary;
+    return sessionPolicy.kind === "repository"
+      ? { ...session.summary, firstTurnCompleted }
+      : session.summary;
   }
 
   async continueInterruptedTurn(

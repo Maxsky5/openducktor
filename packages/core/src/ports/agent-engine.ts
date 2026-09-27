@@ -238,6 +238,7 @@ export type AgentSessionSummary = {
   sessionAssociation: AgentSessionAssociation;
   startedAt: string;
   status: "starting" | "running" | "idle" | "error" | "stopped";
+  firstTurnCompleted?: boolean;
 };
 
 /**
