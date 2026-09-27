@@ -111,6 +111,27 @@ const {
   session,
   shell,
 } = electron;
+// Electron requires privileged schemes before app.ready, before any startup awaits.
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL,
+    privileges: {
+      secure: true,
+      standard: true,
+      stream: true,
+      supportFetchAPI: true,
+    },
+  },
+  {
+    scheme: ELECTRON_TASK_ASSET_PROTOCOL,
+    privileges: {
+      secure: true,
+      standard: true,
+      stream: true,
+      supportFetchAPI: true,
+    },
+  },
+]);
 const APPLICATION_NAME = "OpenDucktor";
 const currentVersion = resolveElectronAppVersion({
   isPackaged: app.isPackaged,
@@ -234,29 +255,6 @@ const mapStartupPreparationError = (
         cause,
       });
 
-const registerPrivilegedProtocolSchemes = (): void => {
-  protocol.registerSchemesAsPrivileged([
-    {
-      scheme: ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL,
-      privileges: {
-        secure: true,
-        standard: true,
-        stream: true,
-        supportFetchAPI: true,
-      },
-    },
-    {
-      scheme: ELECTRON_TASK_ASSET_PROTOCOL,
-      privileges: {
-        secure: true,
-        standard: true,
-        stream: true,
-        supportFetchAPI: true,
-      },
-    },
-  ]);
-};
-
 const createElectronHostCommandRouter = (runtimeDistribution: HostRuntimeDistribution) =>
   createElectronEffectHostCommandRouter({
     azureDevOpsFetch: (input, init) =>
@@ -337,15 +335,6 @@ const prepareElectronPreReadyRuntimeEffect = (): Effect.Effect<
         mapStartupPreparationError(
           cause,
           "electron.main.disable-keychain-storage",
-          errorMessage(cause),
-        ),
-    });
-    yield* Effect.try({
-      try: registerPrivilegedProtocolSchemes,
-      catch: (cause) =>
-        mapStartupPreparationError(
-          cause,
-          "electron.main.register-privileged-protocols",
           errorMessage(cause),
         ),
     });
