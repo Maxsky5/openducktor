@@ -1,4 +1,7 @@
-import { localAttachmentUnavailableDetailsSchema } from "@openducktor/contracts";
+import {
+  LOCAL_ATTACHMENT_UNAVAILABLE_MESSAGE,
+  localAttachmentUnavailableDetailsSchema,
+} from "@openducktor/contracts";
 import { pathToFileURL } from "node:url";
 import { Cause, Chunk, Effect, Exit, Option } from "effect";
 import { z } from "zod";
@@ -89,7 +92,7 @@ export const resolveElectronLocalAttachmentPreview = async (
     ) {
       return {
         ok: false,
-        message: "Attachment is no longer available locally. Add it again to use it.",
+        message: LOCAL_ATTACHMENT_UNAVAILABLE_MESSAGE,
       };
     }
     return { ok: false, message: errorMessage(cause) };
