@@ -19,13 +19,11 @@ describe("agents-page-constants", () => {
     expect(isRole("unknown")).toBe(false);
   });
 
-  test("includes task instruction in kickoff prompts", () => {
+  test("routes the concise Builder kickoff through the agents page", () => {
     const prompt = kickoffPromptForLaunchAction("build", "build_implementation_start", "task-123");
     expect(prompt).toContain("taskId task-123");
-    expect(prompt).toContain("odt_build_blocked");
-    expect(prompt).toContain("Conventional Commit");
-    expect(prompt).toContain("Choose implementation details, work order, and verification");
-    expect(prompt).toContain("required outcomes and design contracts");
+    expect(prompt).toContain("odt_build_completed");
+    expect(prompt).not.toContain("worktree");
   });
 
   test("inlines task id payload in kickoff prompts", () => {

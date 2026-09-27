@@ -255,8 +255,14 @@ describe("buildAgentSystemPrompt", () => {
     expectPromptToContainAll(prompt, [
       "Choose implementation details, work order, and verification methods",
       "preserve required outcomes, architecture boundaries, and contracts",
+      "Choose the simplest change that meets the current requirements",
+      "Add abstractions, options, dependencies, alternate paths, and test seams only for a current requirement or shown risk",
       "Fix scope-aligned issues at the source",
+      "Treat feedback from subagents, PR reviewers, and bots as proposals",
+      "ask the user to choose whether to expand this task, create a separate task, or decline it",
       "Run checks required by repo guidance",
+      "Review the full diff and affected paths as if the user asked what you would improve or refactor",
+      "Fix any material in-scope issue you would then recommend",
       "Repeat or broaden checks only when changes, failures, or unresolved risks justify it",
       "meaningful Conventional Commit before calling odt_build_completed",
       "odt_build_blocked with a specific reason",
@@ -271,8 +277,12 @@ describe("buildAgentSystemPrompt", () => {
 
     expectPromptToContainAll(prompt, [
       "Inspect the implementation and its wiring directly",
+      "Check whether each new abstraction, option, dependency, alternate path, or test seam serves a current requirement or shown risk",
+      "Name the extra code, its cost, and a simpler viable path",
+      "Do not reject on line count or style alone",
       "Choose checks based on the changed behavior and risk",
       "Do not reject valid work for a different implementation order or method",
+      "material excess complexity",
       "severity, location, impact, and a concrete correction",
       "Call exactly one of odt_qa_approved or odt_qa_rejected per review pass",
       "read-only mode",
@@ -310,15 +320,15 @@ describe("buildAgentSystemPrompt", () => {
     ["system.shared.task_context", 3, 4, "build"],
     ["system.role.spec.base", 5, 6, "spec"],
     ["system.role.planner.base", 6, 7, "planner"],
-    ["system.role.build.base", 3, 4, "build"],
-    ["system.role.qa.base", 3, 4, "qa"],
+    ["system.role.build.base", 4, 5, "build"],
+    ["system.role.qa.base", 4, 5, "qa"],
     ["kickoff.spec_initial", 4, 5, "spec"],
     ["kickoff.planner_initial", 4, 5, "planner"],
-    ["kickoff.build_implementation_start", 3, 4, "build"],
-    ["kickoff.build_after_qa_rejected", 3, 4, "build"],
-    ["kickoff.build_after_human_request_changes", 4, 5, "build"],
+    ["kickoff.build_implementation_start", 4, 5, "build"],
+    ["kickoff.build_after_qa_rejected", 4, 5, "build"],
+    ["kickoff.build_after_human_request_changes", 5, 6, "build"],
     ["kickoff.build_pull_request_generation", 8, 9, "build"],
-    ["kickoff.qa_review", 2, 3, "qa"],
+    ["kickoff.qa_review", 3, 4, "qa"],
   ] as const)(
     "keeps prior overrides and reports the new version for %s",
     (id, previous, current, role) => {
@@ -395,7 +405,7 @@ describe("buildAgentSystemPrompt", () => {
 });
 
 describe("kickoff and permission prompts", () => {
-  test("build kickoff delegates execution within the approved outcomes and contracts", () => {
+  test("build kickoff requests implementation without naming a worktree", () => {
     const prompt = buildAgentKickoffPrompt({
       role: "build",
       templateId: "kickoff.build_implementation_start",
@@ -403,15 +413,15 @@ describe("kickoff and permission prompts", () => {
     });
 
     expectPromptToContainAll(prompt, [
-      "Choose implementation details, work order, and verification",
-      "required outcomes and design contracts",
-      "Conventional Commit before odt_build_completed",
+      "Implement this task",
+      "submit the completed change with odt_build_completed",
       "taskId task-1",
     ]);
-    expect(prompt).not.toContain("dependency order");
+    expect(prompt).not.toContain("worktree");
+    expect(prompt).not.toContain("Choose implementation details");
   });
 
-  test("QA rework kickoff validates findings while preserving design contracts", () => {
+  test("QA rework kickoff directs finding triage and resubmission", () => {
     const prompt = buildAgentKickoffPrompt({
       role: "build",
       templateId: "kickoff.build_after_qa_rejected",
@@ -419,9 +429,10 @@ describe("kickoff and permission prompts", () => {
     });
 
     expectPromptToContainAll(prompt, [
-      "Validate each rejection finding against the current implementation",
-      "preserve required outcomes and design contracts",
-      "Conventional Commit before odt_build_completed",
+      "latest QA rejection",
+      "Check each finding against the current code",
+      "Fix valid in-scope issues and explain why you decline any other finding",
+      "Submit the completed change with odt_build_completed",
       "Use taskId task-1 for every task-bound odt_* tool call",
     ]);
   });
@@ -439,9 +450,10 @@ describe("kickoff and permission prompts", () => {
     });
 
     expectPromptToContainAll(prompt, [
-      "Review the requested changes below plus the current spec, plan, and affected code before editing.",
+      "Address the requested changes for this task.",
       "Requested changes from human review:",
       "Update the task summary and rerun the desktop tests.",
+      "Submit the completed change with odt_build_completed.",
       "Use taskId task-1 for every task-bound odt_* tool call.",
     ]);
   });
@@ -476,9 +488,9 @@ describe("kickoff and permission prompts", () => {
     });
 
     expectPromptToContainAll(qaPrompt, [
-      "required outcomes and design contracts",
-      "Choose checks based on risk",
-      "Call exactly one of odt_qa_approved or odt_qa_rejected with taskId task-1",
+      "Review this task's implementation",
+      "submit one QA report with exactly one of odt_qa_approved or odt_qa_rejected",
+      "taskId task-1",
     ]);
   });
 
