@@ -101,7 +101,10 @@ export const createWorkspaceSessionRuntimePersistence = ({
       const saved = yield* storeEffect(store.recordAcceptedMessage(input));
       if (known.session.generatedTitle === null) {
         const key = agentSessionRefKey(runtimeRef);
-        if (!codexTitleSync.has(key)) codexTitleSync.set(key, "pending");
+        const state = codexTitleSync.get(key);
+        const titleAdded = runtimeTitle(known.session) === null && input.generatedTitle !== null;
+        if (state === undefined || (state === "queued" && titleAdded))
+          codexTitleSync.set(key, "pending");
       }
       yield* publishUpdated(known.ref.workspaceId, saved);
     });
@@ -235,12 +238,10 @@ export const createWorkspaceSessionRuntimePersistence = ({
       const { input, runtimeRename } = plan;
       if (runtimeRef.runtimeKind === "codex")
         return yield* saveCodexMessage(runtimeRef, known, input);
-      // Rename the runtime session before the durable write, so a failed rename never
-      // stores a title that the runtime session does not show.
+      // Rename before saving so a failed native rename leaves the saved title alone.
       if (runtimeRename !== null) {
         const renamed = yield* Effect.either(renameRuntimeTitle(runtimeRename));
         if (renamed._tag === "Left") {
-          // Keep the accepted-message activity, but leave the title on its prior value.
           const recorded = yield* Effect.either(
             storeEffect(store.recordAcceptedMessage({ ...input, generatedTitle: null })),
           );
@@ -301,8 +302,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
       const plan = yield* planAcceptedMessage(known, runtimeRef, message, false);
       if (runtimeRef.runtimeKind === "codex")
         return yield* saveCodexMessage(runtimeRef, known, plan.input);
-      // A manual rename can hold the title gate while it waits for live publication.
-      // Save observed activity without a title and defer its native rename to avoid deadlock.
+      // Defer observed renames because a manual rename can hold the gate during live publication.
       const renamePending = plan.runtimeRename !== null || sessionTitleGate.isActive(known.ref);
       const saved = yield* storeEffect(
         store.recordAcceptedMessage(
@@ -349,12 +349,14 @@ export const createWorkspaceSessionRuntimePersistence = ({
           yield* sessionTitleGate.run(
             known.ref,
             Effect.gen(function* () {
-              if (codexTitleSync.get(key) !== "queued") return;
-              codexTitleSync.set(key, "handled");
               const current = yield* findActive(runtimeRef);
-              if (!current) return;
+              if (!current || codexTitleSync.get(key) !== "queued") return;
               const title = runtimeTitle(current.session);
-              if (title === null) return;
+              if (title === null) {
+                codexTitleSync.delete(key);
+                return;
+              }
+              codexTitleSync.set(key, "handled");
               const result = yield* updateRuntimeSessionTitle({ ...runtimeRef, title });
               if (result.status === "not_attached")
                 return yield* new HostOperationError({

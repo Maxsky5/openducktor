@@ -1,6 +1,10 @@
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { AgentSessionLiveRef, WorkspaceSession } from "@openducktor/contracts";
+import type {
+  AgentSessionLiveRef,
+  AgentSessionTranscriptEvent,
+  WorkspaceSession,
+} from "@openducktor/contracts";
 import { repoConfigSchema } from "@openducktor/contracts";
 import { Deferred, Effect } from "effect";
 import {
@@ -17,6 +21,17 @@ import {
   waitFor,
 } from "./test-support/workspace-session-runtime-persistence-harness";
 import { createWorkspaceSessionService } from "./workspace-session-service";
+
+const titlelessMessage = (ref: AgentSessionLiveRef): AgentSessionTranscriptEvent => ({
+  type: "user_message",
+  sessionRef: ref,
+  externalSessionId: ref.externalSessionId,
+  timestamp: "2026-09-07T10:00:00Z",
+  messageId: "user-titleless",
+  message: "Context",
+  parts: [{ kind: "text", text: "Context", synthetic: true }],
+  state: "read",
+});
 
 describe("Workspace Session persistence through the shared command module", () => {
   let database: SqliteTaskStoreTestHarness;
@@ -129,6 +144,78 @@ describe("Workspace Session persistence through the shared command module", () =
       timestamp: "2026-09-07T10:02:00Z",
     });
     expect(h.titleAttempts).toEqual(["First accepted prompt"]);
+  });
+
+  test("syncs a later Codex title after a titleless completed turn", async () => {
+    const h = await createPersistenceHarness(database, "codex");
+    await h.emit(titlelessMessage(h.ref));
+    await h.emit({
+      type: "session_idle",
+      turnCompleted: true,
+      sessionRef: h.ref,
+      externalSessionId: h.ref.externalSessionId,
+      timestamp: "2026-09-07T10:01:00Z",
+    });
+    await waitFor(() => !h.persistence.isCodexTitleSyncPending(h.ref));
+    expect((await h.get()).generatedTitle).toBeNull();
+    expect(h.titleAttempts).toEqual([]);
+
+    await h.send("Name this chat");
+    await h.emit({
+      type: "session_idle",
+      turnCompleted: true,
+      sessionRef: h.ref,
+      externalSessionId: h.ref.externalSessionId,
+      timestamp: "2026-09-07T10:02:00Z",
+    });
+    await waitFor(() => h.titleAttempts.length === 1);
+    expect(h.titleAttempts).toEqual(["First accepted prompt"]);
+    expect(h.state.nativeTitle).toBe("First accepted prompt");
+  });
+
+  test("waits for the later turn when its title arrives during a queued sync", async () => {
+    const h = await createPersistenceHarness(database, "codex");
+    await h.emit(titlelessMessage(h.ref));
+    const entered = await Effect.runPromise(Deferred.make<void>());
+    const release = await Effect.runPromise(Deferred.make<void>());
+    const holdingGate = Effect.runPromise(
+      h.sessionTitleGate.run(
+        h.storeRef,
+        Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Deferred.await(release))),
+      ),
+    );
+    await Effect.runPromise(Deferred.await(entered));
+    await h.emit({
+      type: "session_idle",
+      turnCompleted: true,
+      sessionRef: h.ref,
+      externalSessionId: h.ref.externalSessionId,
+      timestamp: "2026-09-07T10:01:00Z",
+    });
+    await h.emit({
+      type: "user_message",
+      sessionRef: h.ref,
+      externalSessionId: h.ref.externalSessionId,
+      timestamp: "2026-09-07T10:01:30Z",
+      messageId: "user-titled",
+      message: "Later title",
+      parts: [{ kind: "text", text: "Later title" }],
+      state: "read",
+    });
+    await Effect.runPromise(Deferred.succeed(release, undefined));
+    await holdingGate;
+    await Effect.runPromise(h.sessionTitleGate.run(h.storeRef, Effect.void));
+    expect(h.titleAttempts).toEqual([]);
+
+    await h.emit({
+      type: "session_idle",
+      turnCompleted: true,
+      sessionRef: h.ref,
+      externalSessionId: h.ref.externalSessionId,
+      timestamp: "2026-09-07T10:02:00Z",
+    });
+    await waitFor(() => h.titleAttempts.length === 1);
+    expect(h.titleAttempts).toEqual(["Later title"]);
   });
 
   test("syncs the latest manual Codex title after the first turn", async () => {
