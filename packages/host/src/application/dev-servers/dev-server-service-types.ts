@@ -59,6 +59,11 @@ export type DevServerService = {
 };
 
 export type DisposableDevServerService = DevServerService & {
+  forgetWorkspaceSession(
+    input: DevServerCommandInput & {
+      owner: Extract<DevServerOwner, { kind: "workspace_session" }>;
+    },
+  ): Effect.Effect<void>;
   stopAll(): Effect.Effect<DevServerStopAllResult, DevServerServiceError>;
 };
 

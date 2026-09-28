@@ -2,6 +2,7 @@ import {
   type DevServerCommandInput,
   type DevServerScriptState,
   devServerGroupStateSchema,
+  formatDevServerOwnerKey,
   type RepoConfig,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -18,7 +19,6 @@ import {
   devServerExitMessage,
 } from "../../ports/dev-server-process-port";
 import {
-  listRunningScripts,
   markScriptProcessHandleMissing,
   stopScriptProcessHandle,
   stopStartedScriptsAfterStartFailure,
@@ -44,6 +44,7 @@ import {
   syncRuntimeTerminalBufferByteCounts,
 } from "./dev-server-state";
 import { createDevServerRuntimeResolver } from "./dev-server-runtime-resolver";
+import { stopAllDevServers } from "./dev-server-shutdown";
 
 export type {
   CreateDevServerServiceInput,
@@ -326,8 +327,16 @@ export const createDevServerService = ({
     });
   const startCore = (input: DevServerCommandInput) =>
     Effect.gen(function* () {
+      const knownRepoConfig =
+        input.owner.kind === "task"
+          ? yield* workspaceSettingsService.getRepoConfigByRepoPath(input.repoPath)
+          : undefined;
       const start = Effect.gen(function* () {
-        const { repoConfig, runtime, workingDirectory } = yield* resolveRuntime(input, true);
+        const { repoConfig, runtime, workingDirectory } = yield* resolveRuntime(
+          input,
+          true,
+          knownRepoConfig,
+        );
         if (repoConfig.devServers.length === 0) {
           return yield* new HostValidationError({
             field: "devServers",
@@ -412,7 +421,9 @@ export const createDevServerService = ({
           details: input,
         });
       });
-      return yield* withProcessStartAdmission?.(input.repoPath, start) ?? start;
+      return yield* (
+        withProcessStartAdmission?.(knownRepoConfig?.repoPath ?? input.repoPath, start) ?? start
+      );
     });
   const stopCore = (input: DevServerCommandInput) =>
     Effect.gen(function* () {
@@ -458,37 +469,13 @@ export const createDevServerService = ({
   };
   const disposableService: DisposableDevServerService = {
     ...service,
-    stopAll() {
-      return Effect.gen(function* () {
-        const errors: string[] = [];
-        const stoppedScripts: ReturnType<typeof listRunningScripts> = [];
-        const runtimes = [...groups.values()].flatMap((repoGroups) => [...repoGroups.values()]);
-        const results = yield* Effect.forEach(
-          runtimes,
-          (runtime) =>
-            Effect.gen(function* () {
-              const runningScripts = listRunningScripts(runtime);
-              const stopErrors = yield* stopRuntime(runtime);
-              publishSnapshot(runtime);
-              return { runningScripts, stopErrors };
-            }),
-          { concurrency: "unbounded" },
-        );
-        for (const result of results) {
-          stoppedScripts.push(...result.runningScripts);
-          errors.push(...result.stopErrors);
-        }
-        if (errors.length > 0) {
-          return yield* Effect.fail(
-            new HostOperationError({
-              operation: "dev_server.stop_all",
-              message: errors.join("\n"),
-            }),
-          );
-        }
-        return { stoppedScripts };
-      });
-    },
+    forgetWorkspaceSession: ({ repoPath, owner }) =>
+      Effect.sync(() => {
+        const repoGroups = groups.get(repoPath);
+        repoGroups?.delete(formatDevServerOwnerKey(owner));
+        if (repoGroups?.size === 0) groups.delete(repoPath);
+      }),
+    stopAll: () => stopAllDevServers(groups, stopRuntime, publishSnapshot),
   };
   return disposableService;
 };

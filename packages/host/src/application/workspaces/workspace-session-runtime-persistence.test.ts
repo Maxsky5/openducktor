@@ -517,6 +517,7 @@ describe("Workspace Session persistence through the shared command module", () =
     });
     const workspace = createWorkspaceSessionService({
       devServerService: {
+        forgetWorkspaceSession: () => Effect.void,
         stopWorkspaceSession: (input) =>
           Effect.succeed({
             ...input,

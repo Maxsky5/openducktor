@@ -73,6 +73,7 @@ describe("host-owned Workspace Session lifecycle", () => {
   const setup = () => {
     const calls: string[] = [];
     const starts: AgentSessionControlStartInput[] = [];
+    const forgottenDevServerSessions: string[] = [];
     const titles: string[] = [];
     const paths = new Set<string>();
     const branches = new Set<string>();
@@ -125,6 +126,10 @@ describe("host-owned Workspace Session lifecycle", () => {
             scripts: [],
             revision: 0,
             updatedAt: "2026-09-27T00:00:00.000Z",
+          }),
+        forgetWorkspaceSession: (input) =>
+          Effect.sync(() => {
+            forgottenDevServerSessions.push(input.owner.sessionId);
           }),
       },
       terminalService: {
@@ -328,6 +333,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       dependencies,
       calls,
       starts,
+      forgottenDevServerSessions,
       titles,
       state,
       roles,
@@ -944,6 +950,7 @@ describe("host-owned Workspace Session lifecycle", () => {
     const service = createWorkspaceSessionService({
       ...h.dependencies,
       devServerService: {
+        forgetWorkspaceSession: h.dependencies.devServerService.forgetWorkspaceSession,
         stopWorkspaceSession: (input) =>
           Effect.suspend(() => {
             h.calls.push(
@@ -982,8 +989,10 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect((await Effect.runPromise(service.get(ref))).archivedAt).toBeNull();
     expect(h.paths.has(session.executionTarget.workingDirectory)).toBe(true);
     expect(h.calls).toEqual([`stop-dev:${session.id}`]);
+    expect(h.forgottenDevServerSessions).toEqual([]);
     failStop = false;
     await Effect.runPromise(service.archive(archiveInput));
+    expect(h.forgottenDevServerSessions).toEqual([session.id]);
     expect(h.calls.indexOf(`stop-dev:${session.id}`)).toBeLessThan(
       h.calls.indexOf("remove-worktree"),
     );
@@ -1786,6 +1795,7 @@ describe("host-owned Workspace Session lifecycle", () => {
         ),
       ).rejects.toThrow();
       expect(await Effect.runPromise(h.service.get(ref))).toEqual(session);
+      expect(h.forgottenDevServerSessions).toEqual([]);
       h.state[failure] = false;
       const archived = await Effect.runPromise(
         h.service.archive({
@@ -1799,6 +1809,7 @@ describe("host-owned Workspace Session lifecycle", () => {
         }),
       );
       expect(archived.archivedAt).not.toBeNull();
+      expect(h.forgottenDevServerSessions).toEqual([session.id]);
       expect(archived.executionTarget).toMatchObject({
         kind: "local_worktree",
         worktreeState: "removed",

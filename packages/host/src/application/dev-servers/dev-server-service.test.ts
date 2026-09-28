@@ -24,6 +24,7 @@ import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-
 import { createDevServerService as createEffectDevServerService } from "./dev-server-service";
 import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
 import { createWorkspaceSessionOperationGate } from "../workspaces/workspace-session-operation-gate";
+import { createWorkspaceAdmissionService } from "../workspaces/workspace-admission-service";
 
 const createDevServerService = (input: Parameters<typeof createEffectDevServerService>[0]) =>
   createEffectDevServerService(input);
@@ -983,6 +984,40 @@ describe("createDevServerService", () => {
     });
     expect(stoppedPids).toEqual([400, 401]);
   });
+
+  test("blocks a task dev server start through a repository alias during workspace removal", async () => {
+    const { processPort, starts } = createProcessPort();
+    const admission = createWorkspaceAdmissionService({
+      workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
+        getWorkspaceCatalog: () =>
+          Effect.succeed({
+            openWorkspaces: [],
+            closedWorkspaces: [],
+            incompleteRemovals: [],
+          }),
+      }),
+    });
+    await Effect.runPromise(
+      admission.reserveWorkspace({
+        operation: "remove",
+        repoPath: "/canonical/repo",
+        workspaceId: "repo",
+      }),
+    );
+    const service = createDevServerService({
+      processPort,
+      taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task" }),
+      workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
+      withProcessStartAdmission: admission.withProcessStartAdmission,
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+      ),
+    ).rejects.toThrow("A workspace remove operation is already in progress");
+    expect(starts).toHaveLength(0);
+  });
   test("begins stopping every dev server process concurrently during host shutdown", async () => {
     let nextPid = 800;
     const stopCalls: number[] = [];
@@ -1143,6 +1178,38 @@ describe("createDevServerService", () => {
       (await Effect.runPromise(service.inspectWorkspaceActivity({ repoPath: "/repo" })))
         .activeOwners,
     ).toEqual([]);
+  });
+
+  test("forgets only the archived Workspace Session group after its scripts stop", async () => {
+    const config = repoConfig({ workspaceId: "ws-1", repoPath: "/repo" });
+    const sessions = new Map([
+      ["first", workspaceSession("first", { kind: "local_repo_root", workingDirectory: "/repo" })],
+      [
+        "second",
+        workspaceSession("second", { kind: "local_repo_root", workingDirectory: "/repo" }),
+      ],
+    ]);
+    const { processPort } = createProcessPort();
+    const service = createDevServerService({
+      processPort,
+      workspaceSettingsService: createWorkspaceSettingsService(config),
+      workspaceSessions: createSessionServiceInput(sessions, config),
+    });
+    const first = { kind: "workspace_session" as const, workspaceId: "ws-1", sessionId: "first" };
+    const second = { kind: "workspace_session" as const, workspaceId: "ws-1", sessionId: "second" };
+    await Effect.runPromise(service.start({ repoPath: "/repo", owner: first }));
+    await Effect.runPromise(service.start({ repoPath: "/repo", owner: second }));
+    await Effect.runPromise(service.stopWorkspaceSession({ repoPath: "/repo", owner: first }));
+
+    await Effect.runPromise(service.forgetWorkspaceSession({ repoPath: "/repo", owner: first }));
+
+    expect(
+      (await Effect.runPromise(service.getState({ repoPath: "/repo", owner: first }))).revision,
+    ).toBe(0);
+    expect(
+      (await Effect.runPromise(service.getState({ repoPath: "/repo", owner: second }))).scripts[0]
+        ?.status,
+    ).toBe("running");
   });
 
   test("rejects missing, archived, removed, and invalid Workspace Session targets before spawn", async () => {

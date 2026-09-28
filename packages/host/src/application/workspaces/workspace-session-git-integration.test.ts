@@ -141,6 +141,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     const store = createSqliteWorkspaceSessionStore(database.contextProvider);
     const dependencies: WorkspaceSessionServiceDependencies = {
       devServerService: {
+        forgetWorkspaceSession: () => Effect.void,
         stopWorkspaceSession: (input) =>
           Effect.succeed({
             ...input,

@@ -19,7 +19,7 @@ import {
 } from "../../effect/host-errors";
 import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
 import type { TerminalService } from "../terminals/terminal-service";
-import type { DevServerService } from "../dev-servers/dev-server-service-types";
+import type { DisposableDevServerService } from "../dev-servers/dev-server-service-types";
 import {
   planRuntimeTitleRename,
   runtimeTitle,
@@ -30,7 +30,11 @@ import type { RuntimeOrchestratorService } from "../runtimes/runtime-orchestrato
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 import type { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
 import { acquireWorkspaceSessionTerminalCleanup } from "./workspace-session-terminal-cleanup";
-import { stopWorkspaceSessionDevServers } from "./workspace-session-dev-server-cleanup";
+import {
+  forgetWorkspaceSessionDevServers,
+  stopWorkspaceSessionDevServers,
+} from "./workspace-session-dev-server-cleanup";
+import { createWorkspaceSessionRecordReader } from "./workspace-session-record-reader";
 import {
   validateWorkspaceSessionTarget,
   withWorkspaceSessionTarget,
@@ -52,7 +56,10 @@ export type WorkspaceSessionServiceDependencies = WorkspaceSessionTargetDependen
   markCodexTitleSyncPending: (ref: AgentSessionLiveRef) => void;
   store: WorkspaceSessionStorePort;
   terminalService: Pick<TerminalService, "acquireWorkspaceSessionCleanup">;
-  devServerService: Pick<DevServerService, "stopWorkspaceSession">;
+  devServerService: Pick<
+    DisposableDevServerService,
+    "stopWorkspaceSession" | "forgetWorkspaceSession"
+  >;
   settings: Pick<WorkspaceSettingsService, "getRepoConfig" | "listCustomAgentRoles">;
   runtime: Pick<RuntimeOrchestratorService, "runtimeEnsure">;
   live: Pick<
@@ -65,19 +72,7 @@ export const createWorkspaceSessionService = (
   dependencies: WorkspaceSessionServiceDependencies,
 ) => {
   const { store, settings, live, runtime, git, operationGate, sessionTitleGate } = dependencies;
-  const scopeFor = (workspaceId: string) =>
-    Effect.gen(function* () {
-      const config = yield* settings.getRepoConfig(workspaceId);
-      const repoPath = yield* git.canonicalizePath(config.repoPath);
-      return { workspaceId, repoPath };
-    });
-  const recordFor = (input: WorkspaceSessionRefInput) =>
-    Effect.gen(function* () {
-      const scope = yield* scopeFor(input.workspaceId);
-      const ref = { ...scope, sessionId: input.sessionId };
-      const session = yield* store.get(ref);
-      return { ref, session };
-    });
+  const { scopeFor, recordFor } = createWorkspaceSessionRecordReader({ settings, git, store });
   return {
     listActive: (workspaceId: string) =>
       scopeFor(workspaceId).pipe(Effect.flatMap(store.listActive)),
@@ -447,7 +442,7 @@ export const createWorkspaceSessionService = (
                         worktreePath,
                       )
                     : target;
-                return yield* store
+                const archived = yield* store
                   .archive({ ...ref, executionTarget, archivedAt: yield* Clock.currentTimeMillis })
                   .pipe(
                     Effect.mapError(
@@ -460,6 +455,8 @@ export const createWorkspaceSessionService = (
                         }),
                     ),
                   );
+                yield* forgetWorkspaceSessionDevServers(dependencies.devServerService, ref);
+                return archived;
               }),
             );
           }),

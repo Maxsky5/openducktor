@@ -68,13 +68,14 @@ export const createDevServerRuntimeResolver = ({
       return runtime;
     });
 
-  return (input: DevServerCommandInput, validateTarget = false) =>
+  return (input: DevServerCommandInput, validateTarget = false, knownRepoConfig?: RepoConfig) =>
     Effect.gen(function* () {
       const { repoPath, owner } = input;
       let repoConfig: RepoConfig;
       let workingDirectory: string | null;
       if (owner.kind === "task") {
-        repoConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+        repoConfig =
+          knownRepoConfig ?? (yield* workspaceSettingsService.getRepoConfigByRepoPath(repoPath));
         const worktree = taskWorktreeService
           ? yield* taskWorktreeService.getTaskWorktree({ repoPath, taskId: owner.taskId })
           : null;

@@ -318,6 +318,7 @@ export const createPersistenceHarness = async (
   const workspaceService = () =>
     createWorkspaceSessionService({
       devServerService: {
+        forgetWorkspaceSession: () => Effect.void,
         stopWorkspaceSession: (input) =>
           Effect.succeed({
             ...input,
