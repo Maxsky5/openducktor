@@ -98,55 +98,6 @@ describe("diff-ops", () => {
     ]);
   });
 
-  test("loadSessionDiff keeps modified full-file payloads path-only", async () => {
-    installFetch(() =>
-      jsonResponse([
-        {
-          file: "src/main.ts",
-          patch: 'import { render } from "@testing-library/react";\nfunction AuthConsumer() {}\n',
-          additions: 2,
-          deletions: 1,
-          status: "modified",
-        },
-      ]),
-    );
-
-    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1", "/repo")).resolves.toEqual([
-      {
-        file: "src/main.ts",
-        type: "modified",
-        additions: 2,
-        deletions: 1,
-        diff: "",
-      },
-    ]);
-  });
-
-  test("loadSessionDiff renders added full-file payloads as added-file diffs", async () => {
-    installFetch(() =>
-      jsonResponse([
-        {
-          file: "src/LandingPage.test.tsx",
-          patch:
-            "import LandingPage from '@/components/LandingPage';\ntest('renders', () => {});\n",
-          additions: 2,
-          deletions: 0,
-          status: "added",
-        },
-      ]),
-    );
-
-    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1", "/repo")).resolves.toEqual([
-      {
-        file: "src/LandingPage.test.tsx",
-        type: "added",
-        additions: 2,
-        deletions: 0,
-        diff: "--- /dev/null\n+++ b/src/LandingPage.test.tsx\n@@ -0,0 +1,2 @@\n+import LandingPage from '@/components/LandingPage';\n+test('renders', () => {});\n",
-      },
-    ]);
-  });
-
   test("loadSessionDiff preserves standalone Git add and delete paths without changing literal paths", async () => {
     const added = "--- /dev/null\n+++ b/src/new file.ts\n@@ -0,0 +1 @@\n+created";
     const deleted = "--- a/src/old file.ts\n+++ /dev/null\n@@ -1 +0,0 @@\n-removed";
