@@ -237,7 +237,8 @@ const hasPatchMarkers = (rawDiff: string): boolean => {
   return (
     (GIT_DIFF_HEADER.test(diff) && GIT_PATCH_BODY.test(diff)) ||
     APPLY_PATCH_FILE_HEADER.test(diff) ||
-    /^@@/m.test(diff) ||
+    diff.split("\n").some((line) => UNIFIED_HUNK_HEADER.test(line)) ||
+    (UNIFIED_MULTI_FILE_HEADER.test(diff) && /^@@$/m.test(diff)) ||
     (CLASSIC_DIFF_HEADER.test(diff) && /^={3,}$/m.test(diff))
   );
 };

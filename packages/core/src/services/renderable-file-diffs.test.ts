@@ -435,6 +435,17 @@ function AuthConsumer() {}
     ).toBe("--- a/src/old.ts\n+++ /dev/null\n@@ -1,2 +0,0 @@\n-old\n-content\n");
   });
 
+  test("keeps lines starting with @@ in added and deleted full-file text", () => {
+    const content = "first line\n@@decorator\nlast line\n";
+
+    expect(selectRenderableFileDiff(content, "src/new.md", { changeType: "added" })).toBe(
+      "--- /dev/null\n+++ b/src/new.md\n@@ -0,0 +1,3 @@\n+first line\n+@@decorator\n+last line\n",
+    );
+    expect(selectRenderableFileDiff(content, "src/old.md", { changeType: "deleted" })).toBe(
+      "--- a/src/old.md\n+++ /dev/null\n@@ -1,3 +0,0 @@\n-first line\n-@@decorator\n-last line\n",
+    );
+  });
+
   test("keeps header-looking lines in added and deleted full-file text", () => {
     const added = "--- heading\nbody\n";
     const deleted = "Index: entries\nbody\n";
