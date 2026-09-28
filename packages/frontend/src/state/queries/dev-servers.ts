@@ -7,8 +7,10 @@ const DEV_SERVER_STATE_STALE_TIME_MS = 5_000;
 export const devServerQueryKeys = {
   all: ["dev-servers"] as const,
   repo: (repoPath: string) => [...devServerQueryKeys.all, "state", repoPath] as const,
+  owner: (repoPath: string, owner: DevServerOwner) =>
+    [...devServerQueryKeys.repo(repoPath), owner] as const,
   state: (repoPath: string, owner: DevServerOwner, transportEpoch: string) =>
-    [...devServerQueryKeys.repo(repoPath), owner, transportEpoch] as const,
+    [...devServerQueryKeys.owner(repoPath, owner), transportEpoch] as const,
 };
 
 export const devServerGroupStateQueryOptions = (

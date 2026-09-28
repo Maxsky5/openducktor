@@ -95,6 +95,7 @@ export function useAgentStudioDevServerPanel({
     useAgentStudioDevServerStateQuery({
       repoPath,
       owner,
+      enabled: subscriptionEnabled && subscriptionError === null,
       queryEnabled,
       liveState,
       transportEpoch,
@@ -285,8 +286,6 @@ const createDevServerPanelModel = ({
     isDevServerPanelExpanded(effectiveState?.scripts ?? [], isStartPending || isRestartPending) ||
     (effectiveState === null && error === null && isLoading && keepDockOpen);
   const mode = pickPanelMode({
-    isAwaitingSubscription,
-    isAwaitingFreshState,
     effectiveState,
     isExpanded,
     subscriptionEnabled,
@@ -328,15 +327,11 @@ const getLayoutMemory = (queryClient: QueryClient): DevServerLayoutMemory => {
 };
 
 const pickPanelMode = ({
-  isAwaitingSubscription,
-  isAwaitingFreshState,
   effectiveState,
   isExpanded,
   subscriptionEnabled,
   hasError,
 }: {
-  isAwaitingSubscription: boolean;
-  isAwaitingFreshState: boolean;
   effectiveState: DevServerGroupState | null;
   isExpanded: boolean;
   subscriptionEnabled: boolean;
@@ -344,7 +339,6 @@ const pickPanelMode = ({
 }): AgentStudioDevServerPanelMode => {
   if (!subscriptionEnabled) return "disabled";
   if (hasError && !effectiveState) return "error";
-  if (isAwaitingSubscription || isAwaitingFreshState) return "loading";
   if (!effectiveState) return "loading";
   if (effectiveState.scripts.length === 0) return "empty";
   if (!effectiveState.workingDirectory) return "disabled";

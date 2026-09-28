@@ -1150,7 +1150,7 @@ describe("useAgentStudioDevServerPanel", () => {
     }
   });
 
-  test("does not reuse cached dev-server state across subscription sessions", async () => {
+  test("shows cached dev-server state while a reopened subscription loads fresh state", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
     type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
@@ -1247,8 +1247,8 @@ describe("useAgentStudioDevServerPanel", () => {
       );
 
       await waitFor(() => {
-        expect(getLatest().scripts).toHaveLength(0);
-        expect(getLatest().mode).toBe("loading");
+        expect(getLatest().scripts[0]?.status).toBe("running");
+        expect(getLatest().mode).toBe("active");
         expect(getLatest().isLoading).toBe(true);
       });
 
@@ -2105,8 +2105,9 @@ describe("useAgentStudioDevServerPanel", () => {
       };
       harness.update(currentArgs);
 
-      expect(harness.getLatest().scripts).toEqual([]);
-      expect(harness.getLatest().mode).toBe("loading");
+      expect(harness.getLatest().scripts[0]?.pid).toBe(2221);
+      expect(harness.getLatest().mode).toBe("active");
+      expect(harness.getLatest().isExpanded).toBe(true);
       expect(harness.getLatest().isLoading).toBe(true);
 
       await waitFor(() => {
@@ -2123,6 +2124,70 @@ describe("useAgentStudioDevServerPanel", () => {
     } finally {
       harness.unmount();
       queryClient.clear();
+    }
+  });
+
+  test("keeps each running Workspace Session panel visible on repeat switches", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    const firstOwner: DevServerOwner = {
+      kind: "workspace_session",
+      workspaceId: "workspace-1",
+      sessionId: "session-1",
+    };
+    const secondOwner: DevServerOwner = {
+      kind: "workspace_session",
+      workspaceId: "workspace-1",
+      sessionId: "session-2",
+    };
+    const firstState = buildState({
+      repoPath: "/repo",
+      owner: firstOwner,
+      workingDirectory: "/repo",
+      scripts: [buildScript({ status: "running", pid: 1111 })],
+    });
+    const secondState = buildState({
+      repoPath: "/repo",
+      owner: secondOwner,
+      workingDirectory: "/repo",
+      scripts: [buildScript({ status: "running", pid: 2222 })],
+    });
+    devServerGetState = async (_repoPath, owner) =>
+      owner.kind === "workspace_session" && owner.sessionId === "session-1"
+        ? firstState
+        : secondState;
+    let latest: ReturnType<typeof useAgentStudioDevServerPanel> | null = null;
+    const Panel = ({ owner }: { owner: DevServerOwner }) => {
+      latest = useAgentStudioDevServerPanel({ repoPath: "/repo", owner, enabled: true });
+      return null;
+    };
+    const getLatest = () => {
+      if (!latest) throw new Error("Panel state not ready");
+      return latest;
+    };
+    const show = (owner: DevServerOwner) => (
+      <QueryProvider useIsolatedClient>
+        <Panel
+          key={owner.kind === "workspace_session" ? owner.sessionId : owner.taskId}
+          owner={owner}
+        />
+      </QueryProvider>
+    );
+    const view = render(show(firstOwner));
+
+    try {
+      await waitFor(() => expect(getLatest().scripts[0]?.pid).toBe(1111));
+      view.rerender(show(secondOwner));
+      await waitFor(() => expect(getLatest().scripts[0]?.pid).toBe(2222));
+
+      view.rerender(show(firstOwner));
+      expect(getLatest().mode).toBe("active");
+      expect(getLatest().scripts[0]?.pid).toBe(1111);
+
+      view.rerender(show(secondOwner));
+      expect(getLatest().mode).toBe("active");
+      expect(getLatest().scripts[0]?.pid).toBe(2222);
+    } finally {
+      view.unmount();
     }
   });
 
