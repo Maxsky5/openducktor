@@ -1,15 +1,7 @@
 import { AgentChatImageSessionContext } from "./agent-chat-image-session-context";
 import type { AgentSessionTodoItem } from "@openducktor/core";
 import { AlertTriangle, Info, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
-import {
-  memo,
-  type ReactElement,
-  type RefObject,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-} from "react";
+import { memo, type ReactElement, type RefObject, useEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { AgentChatInterruptedTurnResume } from "./agent-chat-interrupted-turn-resume";
@@ -27,7 +19,6 @@ import {
   type AgentChatRenderedTurn,
   useAgentChatRenderedTranscript,
 } from "./use-agent-chat-rendered-transcript";
-import { useAgentChatRowMotion } from "./use-agent-chat-row-motion";
 
 type AgentChatTranscriptProps = {
   emptyState: AgentChatThreadModel["emptyState"];
@@ -42,7 +33,6 @@ type AgentChatTranscriptProps = {
   messagesContainerRef: AgentChatThreadModel["messagesContainerRef"];
   messagesContentRef: RefObject<HTMLDivElement | null>;
   renderedTurns: AgentChatRenderedTurn[];
-  resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
   transcriptNotice: AgentChatThreadModel["transcript"]["notice"];
   runtimePresentation: AgentChatThreadModel["runtimePresentation"];
 };
@@ -150,7 +140,6 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   messagesContainerRef,
   messagesContentRef,
   renderedTurns,
-  resolveRowRef,
   transcriptNotice,
   runtimePresentation,
 }: AgentChatTranscriptProps): ReactElement {
@@ -201,7 +190,6 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
               runtimePresentation={runtimePresentation}
               subagentPendingApprovalCountBySessionKey={subagentPendingApprovalCountBySessionKey}
               subagentPendingQuestionCountBySessionKey={subagentPendingQuestionCountBySessionKey}
-              resolveRowRef={resolveRowRef}
             />
           ))}
         </div>
@@ -384,12 +372,6 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     syncBottomAfterComposerLayoutRef,
   });
 
-  const rowRefByKeyRef = useRef<Map<string, (element: HTMLDivElement | null) => void> | null>(null);
-  if (rowRefByKeyRef.current === null) {
-    rowRefByKeyRef.current = new Map();
-  }
-  const rowRefByKey = rowRefByKeyRef.current;
-  const { registerRowElement } = useAgentChatRowMotion();
   const hasVisibleTodo = getActionableSessionTodo(getVisibleSessionTodos(todos)) !== null;
   const hasWaitingInput = pendingQuestionRequests.length > 0 || pendingApprovalRequests.length > 0;
   const runtimeStatusMessage = isSessionWorking && session ? session.runtimeStatusMessage : null;
@@ -403,19 +385,6 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     hasInterruptedTurnResume: interruptedTurnResume !== undefined,
   });
 
-  const resolveRowRef = useCallback(
-    (rowKey: string) => {
-      const cached = rowRefByKey.get(rowKey);
-      if (cached) {
-        return cached;
-      }
-
-      const motionRef = registerRowElement(rowKey);
-      rowRefByKey.set(rowKey, motionRef);
-      return motionRef;
-    },
-    [registerRowElement, rowRefByKey],
-  );
   const bottomStackRef = useRef<HTMLDivElement | null>(null);
   const bottomStackHeightRef = useRef<number | null>(null);
 
@@ -478,7 +447,6 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
           messagesContainerRef={messagesContainerRef}
           messagesContentRef={messagesContentRef}
           renderedTurns={renderedTurns}
-          resolveRowRef={resolveRowRef}
           transcriptNotice={renderedTranscriptNotice}
         />
 

@@ -15,7 +15,6 @@ const createSessionIdentity = (): AgentSessionIdentity => ({
   runtimeKind: "opencode",
   workingDirectory: "/repo",
 });
-const resolveRowRef = () => () => {};
 const createSubagentSessionKey = (): string =>
   agentSessionIdentityKey({
     ...createSessionIdentity(),
@@ -50,7 +49,6 @@ const baseProps = (overrides: Partial<AgentChatTurnGroupProps> = {}): AgentChatT
   },
   subagentPendingApprovalCountBySessionKey: {},
   subagentPendingQuestionCountBySessionKey: {},
-  resolveRowRef,
   ...overrides,
 });
 
@@ -68,7 +66,6 @@ const baseMotionRowProps = (
   },
   subagentPendingApprovalCount: 0,
   subagentPendingQuestionCount: 0,
-  resolveRowRef,
   ...overrides,
 });
 

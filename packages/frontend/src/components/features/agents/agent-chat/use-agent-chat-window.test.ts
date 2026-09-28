@@ -2398,4 +2398,65 @@ describe("useAgentChatWindow", () => {
   test("exports the expected row-window budget", () => {
     expect(AGENT_CHAT_ROW_WINDOW_SIZE).toBe(40);
   });
+
+  // Native scroll events across 10,000 rows need more than the suite's one-second limit.
+  test("navigates 10,000 rows in both directions within the mounted row budget", async () => {
+    const rows = createSingleTurnRows(10_000);
+    const harness = await mountHarness(
+      {
+        rows,
+        turnAnchors: buildAgentChatTurnAnchors(rows),
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+      },
+      { attachDom: true },
+    );
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    const recordVisibleRows = (seen: Set<string>) => {
+      const result = harness.getLatestResult();
+      expect(result.visibleRows.length).toBeLessThanOrEqual(MAX_MOUNTED_ROW_COUNT);
+      for (const row of result.visibleRows) {
+        seen.add(row.key);
+      }
+      return result;
+    };
+
+    const seenUp = new Set<string>();
+    let result = recordVisibleRows(seenUp);
+    expect(result.visibleRows.at(-1)?.key).toBe(rows.at(-1)?.key);
+    while (result.windowStart > 0) {
+      const previousStart = result.windowStart;
+      await act(async () => {
+        container.scrollTop = 0;
+        await dispatchWheelUp(container);
+        await dispatchScroll(container);
+      });
+      await animationFrameDriver.flushFrames();
+      result = recordVisibleRows(seenUp);
+      expect(result.windowStart).toBeLessThan(previousStart);
+    }
+    expect(result.visibleRows[0]?.key).toBe(rows[0]?.key);
+    expect(seenUp.size).toBe(rows.length);
+
+    const seenDown = new Set<string>();
+    result = recordVisibleRows(seenDown);
+    while (result.visibleRows.at(-1)?.key !== rows.at(-1)?.key) {
+      const previousEnd = result.windowStart + result.visibleRows.length;
+      await act(async () => {
+        container.scrollTop = getMaxScrollTop(container);
+        await dispatchPointerDown(container);
+        await dispatchScroll(container);
+      });
+      await animationFrameDriver.flushFrames();
+      result = recordVisibleRows(seenDown);
+      expect(result.windowStart + result.visibleRows.length).toBeGreaterThan(previousEnd);
+    }
+    expect(seenDown.size).toBe(rows.length);
+
+    await harness.unmount();
+  }, 30_000);
 });

@@ -21,10 +21,9 @@ const AgentChatThreadMotionRow = memo(function AgentChatThreadMotionRow({
   runtimePresentation,
   subagentPendingApprovalCount,
   subagentPendingQuestionCount,
-  resolveRowRef,
 }: AgentChatThreadMotionRowProps): ReactElement {
   return (
-    <div ref={resolveRowRef(row.key)} data-row-key={row.key} className="agent-chat-row-motion">
+    <div data-row-key={row.key} className="agent-chat-row-motion">
       <AgentChatThreadRow
         row={row}
         modelCatalog={modelCatalog}
@@ -47,7 +46,6 @@ export const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   runtimePresentation,
   subagentPendingApprovalCountBySessionKey,
   subagentPendingQuestionCountBySessionKey,
-  resolveRowRef,
 }: AgentChatTurnGroupProps): ReactElement {
   return (
     <div>
@@ -73,7 +71,6 @@ export const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
             subagentPendingQuestionCountBySessionKey,
             transcriptTarget,
           )}
-          resolveRowRef={resolveRowRef}
         />
       ))}
     </div>

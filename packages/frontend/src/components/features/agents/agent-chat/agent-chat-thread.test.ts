@@ -377,7 +377,7 @@ describe("AgentChatThread", () => {
     expect(html).not.toContain("Recheck");
   });
 
-  test("renders transcript rows without untracked vertical gap spacing", () => {
+  test("keeps the row marker and motion class without untracked vertical gap spacing", () => {
     render(
       createElement(AgentChatThread, {
         model: {
@@ -396,6 +396,7 @@ describe("AgentChatThread", () => {
       throw new Error("Expected transcript row wrapper");
     }
 
+    expect(row.getAttribute("data-row-key")).toContain("loaded-1");
     expect(row.parentElement.className).not.toContain("space-y-");
   });
 
