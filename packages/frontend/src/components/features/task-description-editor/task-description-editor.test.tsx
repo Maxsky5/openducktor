@@ -653,19 +653,27 @@ describe("TaskDescriptionEditor", () => {
     const onUpload = mock((file: File) =>
       file === firstFile ? firstUpload.promise : secondUpload.promise,
     );
-    const view = render(
-      <TaskDescriptionEditor
-        {...createProps()}
-        markdown="Before"
-        onChange={onChange}
-        onUpload={onUpload}
-      />,
-    );
+    const props = { ...createProps(), markdown: "Before", onChange, onUpload };
+    const view = render(<TaskDescriptionEditor {...props} />);
     await waitFor(() => expect(view.getByRole("button", { name: "Insert image" })).toBeTruthy());
     const input = view.getByLabelText("Task description images");
 
     fireEvent.change(input, { target: { files: [firstFile, secondFile] } });
     await waitFor(() => expect(onUpload).toHaveBeenCalledTimes(2));
+    view.rerender(
+      <TaskDescriptionEditor
+        {...props}
+        uploads={[
+          { id: "first", fileName: firstFile.name, status: "uploading" },
+          { id: "second", fileName: secondFile.name, status: "uploading" },
+        ]}
+      />,
+    );
+    await waitFor(() =>
+      expect(requireElement(view.container, ".tiptap").getAttribute("contenteditable")).toBe(
+        "false",
+      ),
+    );
     secondUpload.resolve({
       assetId: secondAssetId,
       scope: "description",

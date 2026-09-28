@@ -182,6 +182,47 @@ describe("TaskCreateModal", () => {
     }
   });
 
+  test("keeps the description save lock clear during an image upload", async () => {
+    controllerMock.isSubmitting = false;
+    controllerMock.isSavingDocument = null;
+    controllerMock.isRecoveryBlocked = false;
+    controllerMock.isFormDisabled = true;
+    controllerMock.isEditingDocument = false;
+    controllerMock.editSection = "details";
+    controllerMock.activeDocumentSection = null;
+    controllerMock.descriptionAssetUploads = [
+      { id: "upload-1", fileName: "draft.png", status: "uploading" },
+    ];
+    const formSpy = spyOn(taskDetailsFormModule, "TaskDetailsForm").mockImplementation(() =>
+      createElement("div", { "data-testid": "task-details-form" }),
+    );
+    testSpies.push(formSpy);
+
+    try {
+      const rendered = render(
+        createElement(TaskCreateModal, {
+          open: true,
+          onOpenChange: () => {},
+          tasks: [],
+          task: null,
+        }),
+      );
+      try {
+        const form = await screen.findByTestId("task-details-form");
+        expect(form.closest("fieldset")?.disabled).toBe(true);
+        expect(formSpy.mock.calls[0]?.[0].disabled).toBe(false);
+      } finally {
+        await act(async () => rendered.unmount());
+      }
+    } finally {
+      controllerMock.isFormDisabled = false;
+      controllerMock.isEditingDocument = true;
+      controllerMock.editSection = "spec";
+      controllerMock.activeDocumentSection = "spec";
+      controllerMock.descriptionAssetUploads = [];
+    }
+  });
+
   test("locks mutation controls but keeps Close available after partial state", async () => {
     controllerMock.isRecoveryBlocked = true;
     controllerMock.isFormDisabled = true;
