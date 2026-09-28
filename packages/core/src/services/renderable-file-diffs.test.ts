@@ -163,6 +163,29 @@ describe("renderable file diffs", () => {
     expect(selectRenderableFileDiff(rename + binary, "missing")).toBeNull();
   });
 
+  test("uses rename paths when unified headers could have Git prefixes", () => {
+    const hunk = "@@ -1 +1 @@\n-old\n+new\n";
+    const noPrefix =
+      "diff --git a/foo b/bar\n" +
+      "similarity index 90%\nrename from a/foo\nrename to b/bar\n" +
+      "--- a/foo\n+++ b/bar\n" +
+      hunk;
+    const prefixed =
+      "diff --git a/foo b/bar\n" +
+      "similarity index 90%\nrename from foo\nrename to bar\n" +
+      "--- a/foo\n+++ b/bar\n" +
+      hunk;
+
+    expect(selectRenderableFileDiff(noPrefix, "a/foo")).toBe(noPrefix);
+    expect(selectRenderableFileDiff(noPrefix, "b/bar")).toBe(noPrefix);
+    expect(selectRenderableFileDiff(noPrefix, "foo")).toBeNull();
+    expect(selectRenderableFileDiff(noPrefix, "bar")).toBeNull();
+    expect(selectRenderableFileDiff(prefixed, "foo")).toBe(prefixed);
+    expect(selectRenderableFileDiff(prefixed, "bar")).toBe(prefixed);
+    expect(selectRenderableFileDiff(prefixed, "a/foo")).toBeNull();
+    expect(selectRenderableFileDiff(prefixed, "b/bar")).toBeNull();
+  });
+
   test("keeps directory prefixes in copy metadata paths", () => {
     const copy =
       "diff --git a/a/foo b/bar b/a/foo b/bar\n" +

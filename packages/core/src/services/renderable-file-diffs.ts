@@ -523,6 +523,9 @@ const fileDiffCandidateMatch = (
     }
   }
 
+  if (hasGitPathMetadata) {
+    return gitPathMetadataMatch;
+  }
   if (hasUnifiedHeader) {
     const gitPath = standaloneGitPath(lines, changeType);
     const gitMatch = gitPath ? diffPathsMatch(gitPath, filePath, true) : null;
@@ -531,9 +534,6 @@ const fileDiffCandidateMatch = (
       unifiedMatch,
       gitMatch && { exact: false, matchedLength: gitMatch.matchedLength },
     );
-  }
-  if (hasGitPathMetadata) {
-    return gitPathMetadataMatch;
   }
   return otherHeaderMatch;
 };
