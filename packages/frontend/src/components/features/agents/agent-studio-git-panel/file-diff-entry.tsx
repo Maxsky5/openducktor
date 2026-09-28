@@ -16,7 +16,11 @@ import type { DiffScope } from "@/features/agent-studio-git";
 import { cn } from "@/lib/utils";
 import type { InlineCommentDraft } from "@/state/use-inline-comment-draft-store";
 import { FILE_STATUS_COLOR, FILE_STATUS_ICON } from "./constants";
-import { useFileDiffCommentAnnotations } from "./use-file-diff-comment-annotations";
+import {
+  type FileDiffAnnotationAction,
+  type FileDiffAnnotationState,
+  useFileDiffCommentAnnotations,
+} from "./use-file-diff-comment-annotations";
 
 const areFileDiffsEqual = (left: FileDiff, right: FileDiff): boolean =>
   left.file === right.file &&
@@ -34,6 +38,12 @@ type FileDiffEntryProps = {
   diffScope: DiffScope;
   ownerKey: string | null;
   fileComments: InlineCommentDraft[];
+  annotationState: FileDiffAnnotationState;
+  onAnnotationAction: (
+    filePath: string,
+    diffText: string,
+    action: FileDiffAnnotationAction,
+  ) => void;
   viewState: {
     isConflicted: boolean;
     reserveConflictSlot: boolean;
@@ -191,6 +201,8 @@ function FileDiffEntryBody({
   diffScope,
   ownerKey,
   fileComments,
+  annotationState,
+  dispatchAnnotation,
   diffStyle,
   shouldRender,
   isExpanded,
@@ -203,6 +215,8 @@ function FileDiffEntryBody({
   diffScope: DiffScope;
   ownerKey: string | null;
   fileComments: InlineCommentDraft[];
+  annotationState: FileDiffAnnotationState;
+  dispatchAnnotation: (action: FileDiffAnnotationAction) => void;
   diffStyle: PierreDiffStyle;
   shouldRender: boolean;
   isExpanded: boolean;
@@ -217,7 +231,14 @@ function FileDiffEntryBody({
     handleLineSelectionEnd,
     lineAnnotations,
     renderAnnotation,
-  } = useFileDiffCommentAnnotations({ ownerKey, diff, diffScope, fileComments });
+  } = useFileDiffCommentAnnotations({
+    ownerKey,
+    diff,
+    diffScope,
+    fileComments,
+    annotationState,
+    dispatchAnnotation,
+  });
 
   if (!shouldRender) {
     return null;
@@ -267,6 +288,8 @@ function FileDiffEntry({
   diffScope,
   ownerKey,
   fileComments,
+  annotationState,
+  onAnnotationAction,
   viewState,
   onToggle,
   diffStyle,
@@ -295,6 +318,10 @@ function FileDiffEntry({
   );
   const shouldRenderPersistedDiffBody = hasDiffContent && hasMountedDiffBody;
   const shouldRenderDiffBody = isExpanded || shouldRenderPersistedDiffBody;
+  const dispatchAnnotation = useCallback(
+    (action: FileDiffAnnotationAction) => onAnnotationAction(diff.file, diff.diff, action),
+    [diff.file, diff.diff, onAnnotationAction],
+  );
 
   return (
     <div className="min-w-0 max-w-full">
@@ -318,6 +345,8 @@ function FileDiffEntry({
         diffScope={diffScope}
         ownerKey={ownerKey}
         fileComments={fileComments}
+        annotationState={annotationState}
+        dispatchAnnotation={dispatchAnnotation}
         diffStyle={diffStyle}
         shouldRender={shouldRenderDiffBody}
         isExpanded={isExpanded}
@@ -346,5 +375,7 @@ export const FileDiffEntryWithMemo = memo(
     previous.onRequestHunkReset === next.onRequestHunkReset &&
     previous.onToggle === next.onToggle &&
     previous.fileComments === next.fileComments &&
+    previous.annotationState === next.annotationState &&
+    previous.onAnnotationAction === next.onAnnotationAction &&
     areFileDiffsEqual(previous.diff, next.diff),
 );

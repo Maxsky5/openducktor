@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { act, type ReactElement, useState } from "react";
+import { act, type ReactElement, useMemo, useState } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { toInlineCommentDraftStorageKey } from "@/state/inline-comment-draft-storage";
 import {
@@ -347,7 +347,110 @@ function OwnerSwitchFileDiffListHarness(): ReactElement {
   );
 }
 
+function LargeFileDiffListHarness(): ReactElement {
+  const [fileCount, setFileCount] = useState(1_000);
+  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set(["src/file-000.ts"]));
+  const fileDiffs = useMemo(
+    () =>
+      Array.from({ length: fileCount }, (_, index) => ({
+        file: `src/file-${String(index).padStart(3, "0")}.ts`,
+        type: "modified",
+        additions: 1,
+        deletions: 1,
+        diff: "@@ -1 +1 @@\n-old\n+new\n",
+      })),
+    [fileCount],
+  );
+
+  return (
+    <TooltipProvider>
+      <button type="button" onClick={() => setFileCount(20)}>
+        Shorten list
+      </button>
+      <div className="h-[400px]">
+        <FileDiffList
+          fileDiffs={fileDiffs}
+          diffScope="uncommitted"
+          ownerKey={OWNER_KEY}
+          conflictedFiles={new Set()}
+          diffStyle="unified"
+          setDiffStyle={() => {}}
+          expandedFiles={expandedFiles}
+          onToggleFile={(filePath) => {
+            setExpandedFiles((previous) => {
+              const next = new Set(previous);
+              if (next.has(filePath)) next.delete(filePath);
+              else next.add(filePath);
+              return next;
+            });
+          }}
+          preloadLimit={0}
+          canResetFiles={false}
+          isResetDisabled={false}
+          resetDisabledReason={null}
+        />
+      </div>
+    </TooltipProvider>
+  );
+}
+
 describe("FileDiffList", () => {
+  test("mounts a bounded row range and reaches the last file", () => {
+    render(<LargeFileDiffListHarness />);
+    const list = screen.getByRole("list");
+    expect(screen.getByText("1000 changed files")).toBeDefined();
+    expect(screen.getAllByTestId("agent-studio-git-file-toggle-button").length).toBeLessThan(30);
+
+    fireEvent.scroll(list, { target: { scrollTop: 39_600 } });
+    expect(screen.getByRole("button", { name: "Toggle diff for src/file-999.ts" })).toBeDefined();
+    expect(screen.getAllByTestId("agent-studio-git-file-toggle-button").length).toBeLessThan(30);
+  });
+
+  test("keeps unfinished comment text after a virtual row leaves the viewport", () => {
+    render(<LargeFileDiffListHarness />);
+    const list = screen.getByRole("list");
+    fireEvent.click(screen.getByTestId("pierre-diff-select-lines"));
+    fireEvent.change(screen.getByPlaceholderText("Add a comment for the Builder"), {
+      target: { value: "Keep this draft" },
+    });
+
+    fireEvent.scroll(list, { target: { scrollTop: 39_600 } });
+    expect(screen.queryByRole("button", { name: "Toggle diff for src/file-000.ts" })).toBeNull();
+    fireEvent.scroll(list, { target: { scrollTop: 0 } });
+
+    expect(screen.getByDisplayValue("Keep this draft")).toBeDefined();
+  });
+
+  test("keeps an unfinished comment edit after a virtual row leaves the viewport", () => {
+    render(<LargeFileDiffListHarness />);
+    const list = screen.getByRole("list");
+    fireEvent.click(screen.getByTestId("pierre-diff-select-lines"));
+    fireEvent.change(screen.getByPlaceholderText("Add a comment for the Builder"), {
+      target: { value: "Saved comment" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Comment" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByDisplayValue("Saved comment"), {
+      target: { value: "Unfinished edit" },
+    });
+
+    fireEvent.scroll(list, { target: { scrollTop: 39_600 } });
+    fireEvent.scroll(list, { target: { scrollTop: 0 } });
+
+    expect(screen.getByDisplayValue("Unfinished edit")).toBeDefined();
+  });
+
+  test("shows the remaining files when a list shrinks near the end", () => {
+    render(<LargeFileDiffListHarness />);
+    const list = screen.getByRole("list");
+    fireEvent.scroll(list, { target: { scrollTop: 39_600 } });
+    fireEvent.click(screen.getByRole("button", { name: "Shorten list" }));
+
+    expect(screen.getByText("20 changed files")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Toggle diff for src/file-019.ts" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Toggle diff for src/file-999.ts" })).toBeNull();
+  });
+
   test("uses the whole root file row as a toggle while reset stays separate", () => {
     for (const canResetFiles of [false, true]) {
       const requestFileReset = mock((_filePath: string) => {});

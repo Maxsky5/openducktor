@@ -237,9 +237,9 @@ function AgentStudioGitDiff({
     [model.commentOwner],
   );
 
-  return (
-    <ScrollArea className="min-h-0 flex-1">
-      {view.hasFiles ? (
+  if (view.hasFiles) {
+    return (
+      <div className="min-h-0 flex-1 overflow-hidden">
         <FileDiffList
           fileDiffs={view.displayedFileDiffs}
           diffScope={view.diffScope}
@@ -256,14 +256,18 @@ function AgentStudioGitDiff({
           onRequestFileReset={model.requestFileReset}
           onRequestHunkReset={model.requestHunkReset}
         />
-      ) : (
-        <EmptyDiffState
-          isLoading={view.displayedIsInitialLoading}
-          contextMode={model.contextMode ?? "worktree"}
-          diffScope={view.diffScope}
-          upstreamStatus={view.displayedScopeState.upstreamStatus}
-        />
-      )}
+      </div>
+    );
+  }
+
+  return (
+    <ScrollArea className="min-h-0 flex-1">
+      <EmptyDiffState
+        isLoading={view.displayedIsInitialLoading}
+        contextMode={model.contextMode ?? "worktree"}
+        diffScope={view.diffScope}
+        upstreamStatus={view.displayedScopeState.upstreamStatus}
+      />
     </ScrollArea>
   );
 }
