@@ -563,7 +563,7 @@ describe("local host SSE subscriptions", () => {
       mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })),
     );
     const failure = new Error("run listener failed");
-    let unsubscribeLater: () => void = () => {};
+    let unsubscribeLater: () => void;
     const first = mock(() => {
       unsubscribeLater();
       throw failure;
@@ -682,7 +682,7 @@ describe("local host SSE subscriptions", () => {
       mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })),
     );
     const failure = new Error("reconnect listener failed");
-    let unsubscribeLater: () => void = () => {};
+    let unsubscribeLater: () => void;
     const first = mock(() => {
       unsubscribeLater();
       throw failure;
