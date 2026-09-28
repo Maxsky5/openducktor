@@ -330,11 +330,15 @@ const subscribeSseChannelEffect = (
         if (event.type !== expectedName) {
           throw new Error("OpenDucktor host event arrived on the wrong stream event name.");
         }
-        for (const registration of listeners.values()) {
-          if (registration.channel === hostEvent.channel && registration.eventName === event.type) {
-            registration.listener(hostEvent);
-          }
-        }
+        dispatchBrowserSseListeners(
+          [...listeners.values()]
+            .filter(
+              (registration) =>
+                registration.channel === hostEvent.channel && registration.eventName === event.type,
+            )
+            .map((registration) => registration.listener),
+          hostEvent,
+        );
       };
       const handleOpen: EventListener = () => {
         transportEpoch = `${HOST_EVENT_STREAM_PATH}:${nextSseTransportEpoch}`;
@@ -346,13 +350,12 @@ const subscribeSseChannelEffect = (
           return;
         }
         hasReportedConnectionError = false;
-        for (const registration of listeners.values()) {
-          if (registration.receivesControlEvents) {
-            registration.listener(
-              browserLiveControlEvent(BROWSER_LIVE_RECONNECTED_EVENT_KIND, transportEpoch),
-            );
-          }
-        }
+        dispatchBrowserSseListeners(
+          [...listeners.values()]
+            .filter((registration) => registration.receivesControlEvents)
+            .map((registration) => registration.listener),
+          browserLiveControlEvent(BROWSER_LIVE_RECONNECTED_EVENT_KIND, transportEpoch),
+        );
       };
       const handleError: EventListener = () => {
         if (hasReportedConnectionError) {

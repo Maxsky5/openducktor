@@ -557,6 +557,40 @@ describe("local host SSE subscriptions", () => {
     expect(FakeEventSource.instances[0]?.closed).toBe(true);
   });
 
+  test("delivers data once to a listener removed by a failing earlier listener", async () => {
+    const { subscribeLocalHostRunEvents } = await loadLocalHostTransport();
+    globalThis.fetch = createFetchFixture(
+      mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })),
+    );
+    const failure = new Error("run listener failed");
+    let unsubscribeLater: () => void = () => {};
+    const first = mock(() => {
+      unsubscribeLater();
+      throw failure;
+    });
+    const later = mock(() => {});
+    const unsubscribeFirst = await subscribeLocalHostRunEvents(first);
+    unsubscribeLater = await subscribeLocalHostRunEvents(later);
+    const eventSource = await waitForEventSourceInstance();
+    eventSource.emit("open", "");
+    const data = JSON.stringify({ channel: "openducktor://run-event", payload: { type: "run" } });
+
+    let thrown: unknown;
+    try {
+      eventSource.emit("message", data);
+    } catch (cause) {
+      thrown = cause;
+    }
+    expect(thrown).toBe(failure);
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(later).toHaveBeenCalledTimes(1);
+    expect(later).toHaveBeenCalledWith({ type: "run" });
+
+    expect(() => eventSource.emit("message", data)).toThrow("run listener failed");
+    expect(later).toHaveBeenCalledTimes(1);
+    unsubscribeFirst();
+  });
+
   test("routes named live events only to observed repositories and removes unused listeners", async () => {
     const { observeLocalHostAgentSessions } = await loadLocalHostTransport();
     globalThis.fetch = createFetchFixture(mock(async () => new Response("null", { status: 200 })));
@@ -640,6 +674,45 @@ describe("local host SSE subscriptions", () => {
     });
 
     unsubscribe();
+  });
+
+  test("delivers reconnect once to a listener removed by a failing earlier listener", async () => {
+    const { subscribeLocalHostDevServerEvents } = await loadLocalHostTransport();
+    globalThis.fetch = createFetchFixture(
+      mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })),
+    );
+    const failure = new Error("reconnect listener failed");
+    let unsubscribeLater: () => void = () => {};
+    const first = mock(() => {
+      unsubscribeLater();
+      throw failure;
+    });
+    const later = mock(() => {});
+    const firstSubscription = subscribeLocalHostDevServerEvents(first);
+    const eventSource = await waitForEventSourceInstance();
+    eventSource.emit("open", "");
+    const { unsubscribe: unsubscribeFirst } = await firstSubscription;
+    const laterSubscription = await subscribeLocalHostDevServerEvents(later);
+    unsubscribeLater = laterSubscription.unsubscribe;
+
+    let thrown: unknown;
+    try {
+      eventSource.emit("open", "");
+    } catch (cause) {
+      thrown = cause;
+    }
+    expect(thrown).toBe(failure);
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(later).toHaveBeenCalledTimes(1);
+    expect(later).toHaveBeenCalledWith({
+      __openducktorBrowserLive: true,
+      kind: "reconnected",
+      transportEpoch: "events:1",
+    });
+
+    expect(() => eventSource.emit("open", "")).toThrow("reconnect listener failed");
+    expect(later).toHaveBeenCalledTimes(1);
+    unsubscribeFirst();
   });
 
   test("refreshes live-session state on the shared connection without losing ordered deltas", async () => {
