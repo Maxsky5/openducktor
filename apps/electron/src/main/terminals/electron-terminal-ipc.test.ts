@@ -6,6 +6,7 @@ import {
 } from "@openducktor/contracts";
 import { type TerminalService, TerminalServiceError } from "@openducktor/host";
 import { Effect } from "effect";
+import { runElectronEffect } from "../../effect/electron-boundary";
 import {
   createElectronTerminalIpcController,
   type ElectronTerminalIpcHandler,
@@ -49,6 +50,7 @@ describe("Electron terminal IPC", () => {
           if (channel === "openducktor:terminal:send") sendHandler = handler;
         },
       },
+      reportLifecycleFailure: () => undefined,
       terminalService: {
         attach: () => Effect.void,
         detach: () => Effect.void,
@@ -103,6 +105,208 @@ describe("Electron terminal IPC", () => {
       "attach:electron:7:client-a:terminal-1",
       "detach:electron:7:client-a:terminal-1",
     ]);
+  });
+
+  test("tries every renderer client and retries failed cleanup on later teardown", async () => {
+    const attempts: string[] = [];
+    let failCleanup = true;
+    const terminalService: TerminalService = {
+      attach: () => Effect.void,
+      detach: (terminalId, attachmentId) =>
+        Effect.suspend(() => {
+          attempts.push(attachmentId);
+          if (!attachmentId.includes(":client-c:") && failCleanup) {
+            return Effect.fail(
+              new TerminalServiceError({
+                code: "close_failed",
+                operation: "detach",
+                message: "Injected detach failure",
+                terminalId,
+              }),
+            );
+          }
+          return Effect.void;
+        }),
+    };
+    const controller = createElectronTerminalIpcController(terminalService);
+    const sender = { id: 7, isDestroyed: () => false, send: () => undefined };
+    const frame = encodeTerminalProtocolFrame({
+      message: {
+        version: TERMINAL_PROTOCOL_VERSION,
+        type: "attach",
+        terminalId: "terminal-1",
+        lastConsumedSequence: null,
+      },
+      payload: new Uint8Array(),
+    });
+    await Effect.runPromise(controller.handleFrame(sender, "client-a", frame));
+    await Effect.runPromise(controller.handleFrame(sender, "client-b", frame));
+    await Effect.runPromise(controller.handleFrame(sender, "client-c", frame));
+
+    await expect(runElectronEffect(controller.detachSender(sender.id))).rejects.toMatchObject({
+      errors: [{ message: "Injected detach failure" }, { message: "Injected detach failure" }],
+      message: expect.stringContaining("client-a: Injected detach failure"),
+    });
+    expect(attempts).toEqual([
+      "electron:7:client-a:terminal-1",
+      "electron:7:client-b:terminal-1",
+      "electron:7:client-c:terminal-1",
+    ]);
+
+    failCleanup = false;
+    await Effect.runPromise(controller.detachSender(sender.id));
+    expect(attempts).toEqual([
+      "electron:7:client-a:terminal-1",
+      "electron:7:client-b:terminal-1",
+      "electron:7:client-c:terminal-1",
+      "electron:7:client-a:terminal-1",
+      "electron:7:client-b:terminal-1",
+    ]);
+  });
+
+  test("reports lifecycle detach failures and retries on destruction", async () => {
+    let navigate = (_details: { isMainFrame: boolean; isSameDocument: boolean }): void => undefined;
+    let destroy = (): void => undefined;
+    const attempts: string[] = [];
+    const reported: unknown[] = [];
+    let failDetach = true;
+    let markReported = (): void => undefined;
+    const failureReported = new Promise<void>((resolve) => {
+      markReported = resolve;
+    });
+    let markRetried = (): void => undefined;
+    const detachRetried = new Promise<void>((resolve) => {
+      markRetried = resolve;
+    });
+    const sender = {
+      id: 7,
+      isDestroyed: () => false,
+      send: () => undefined,
+      on: (_event: "did-start-navigation", listener: typeof navigate) => {
+        navigate = listener;
+      },
+      once: (_event: "destroyed", listener: typeof destroy) => {
+        destroy = listener;
+      },
+    };
+    let sendHandler: ElectronTerminalIpcHandler | undefined;
+    registerElectronTerminalIpc({
+      ipcMain: {
+        handle(channel, handler) {
+          if (channel === "openducktor:terminal:send") sendHandler = handler;
+        },
+      },
+      reportLifecycleFailure: (_senderId, cause) => {
+        reported.push(cause);
+        markReported();
+      },
+      terminalService: {
+        attach: () => Effect.void,
+        detach: (terminalId, attachmentId) =>
+          Effect.suspend(() => {
+            attempts.push(attachmentId);
+            if (failDetach) {
+              return Effect.fail(
+                new TerminalServiceError({
+                  code: "close_failed",
+                  operation: "detach",
+                  message: "Injected lifecycle detach failure",
+                  terminalId,
+                }),
+              );
+            }
+            markRetried();
+            return Effect.void;
+          }),
+      },
+    });
+    if (!sendHandler) throw new Error("Expected terminal send handler registration.");
+    await sendHandler(
+      { sender },
+      {
+        clientId: "client-a",
+        frame: encodeTerminalProtocolFrame({
+          message: {
+            version: TERMINAL_PROTOCOL_VERSION,
+            type: "attach",
+            terminalId: "terminal-1",
+            lastConsumedSequence: null,
+          },
+          payload: new Uint8Array(),
+        }),
+      },
+    );
+
+    navigate({ isMainFrame: true, isSameDocument: false });
+    await failureReported;
+    expect(reported).toHaveLength(1);
+    expect(reported[0]).toMatchObject({ message: "Injected lifecycle detach failure" });
+
+    failDetach = false;
+    destroy();
+    await detachRetried;
+    expect(attempts).toEqual(["electron:7:client-a:terminal-1", "electron:7:client-a:terminal-1"]);
+  });
+
+  test("keeps a failed client available across concurrent sender and client teardown", async () => {
+    const attempts: string[] = [];
+    let startDetach = (): void => undefined;
+    const detachStarted = new Promise<void>((resolve) => {
+      startDetach = resolve;
+    });
+    let releaseDetach = (): void => undefined;
+    const blockedDetach = new Promise<void>((resolve) => {
+      releaseDetach = resolve;
+    });
+    let failFirst = true;
+    const controller = createElectronTerminalIpcController({
+      attach: () => Effect.void,
+      detach: (terminalId, attachmentId) =>
+        Effect.gen(function* () {
+          attempts.push(attachmentId);
+          if (attachmentId.includes(":client-a:") && failFirst) {
+            failFirst = false;
+            startDetach();
+            yield* Effect.promise(() => blockedDetach);
+            return yield* Effect.fail(
+              new TerminalServiceError({
+                code: "close_failed",
+                operation: "detach",
+                message: "Injected concurrent detach failure",
+                terminalId,
+              }),
+            );
+          }
+        }),
+    });
+    const sender = { id: 7, isDestroyed: () => false, send: () => undefined };
+    const frame = encodeTerminalProtocolFrame({
+      message: {
+        version: TERMINAL_PROTOCOL_VERSION,
+        type: "attach",
+        terminalId: "terminal-1",
+        lastConsumedSequence: null,
+      },
+      payload: new Uint8Array(),
+    });
+    await Effect.runPromise(controller.handleFrame(sender, "client-a", frame));
+    await Effect.runPromise(controller.handleFrame(sender, "client-b", frame));
+
+    const navigating = Effect.runPromise(controller.detachSender(sender.id));
+    await detachStarted;
+    const disconnecting = Effect.runPromise(controller.detachClient(sender.id, "client-a"));
+    const destroying = Effect.runPromise(controller.detachSender(sender.id));
+    releaseDetach();
+    const results = await Promise.allSettled([navigating, disconnecting, destroying]);
+
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+    expect([...attempts].sort()).toEqual([
+      "electron:7:client-a:terminal-1",
+      "electron:7:client-a:terminal-1",
+      "electron:7:client-b:terminal-1",
+    ]);
+    await Effect.runPromise(controller.detachSender(sender.id));
+    expect(attempts).toHaveLength(3);
   });
 
   test("keeps live attachments during same-document main-frame navigation", async () => {

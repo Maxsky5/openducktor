@@ -122,4 +122,50 @@ describe("TerminalClientSession", () => {
       "terminal-2:test-client:terminal-2",
     ]);
   });
+
+  test("retries an attachment after a protocol detach fails", async () => {
+    const detachAttempts: string[] = [];
+    let failDetach = true;
+    const session = createTerminalClientSession({
+      clientId: "test-client",
+      terminalService: createTerminalClientService({
+        attach: () => Effect.void,
+        detach: (terminalId, attachmentId) =>
+          Effect.suspend(() => {
+            detachAttempts.push(attachmentId);
+            return failDetach
+              ? Effect.fail(
+                  new TerminalServiceError({
+                    code: "close_failed",
+                    operation: "detach",
+                    message: "Injected detach failure",
+                    terminalId,
+                  }),
+                )
+              : Effect.void;
+          }),
+      }),
+      send: () => undefined,
+    });
+    const handle = (type: "attach" | "detach") =>
+      Effect.runPromise(
+        session.handle(
+          type === "attach"
+            ? {
+                version: TERMINAL_PROTOCOL_VERSION,
+                type,
+                terminalId: "terminal-1",
+                lastConsumedSequence: null,
+              }
+            : { version: TERMINAL_PROTOCOL_VERSION, type, terminalId: "terminal-1" },
+          new Uint8Array(),
+        ),
+      );
+
+    await handle("attach");
+    await handle("detach");
+    failDetach = false;
+    await Effect.runPromise(session.close());
+    expect(detachAttempts).toEqual(["test-client:terminal-1", "test-client:terminal-1"]);
+  });
 });

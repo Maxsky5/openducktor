@@ -73,8 +73,9 @@ export const createTerminalClientSession = ({
       if (message.type === "ack") {
         return terminalService.acknowledge(message.terminalId, id, message.sequenceEnd);
       }
-      attachedTerminalIds.delete(message.terminalId);
-      return terminalService.detach(message.terminalId, id);
+      return terminalService
+        .detach(message.terminalId, id)
+        .pipe(Effect.tap(() => Effect.sync(() => attachedTerminalIds.delete(message.terminalId))));
     })();
     return operation.pipe(
       Effect.catchTag("TerminalServiceError", (error) => sendFailure(error, message)),
@@ -84,17 +85,18 @@ export const createTerminalClientSession = ({
     operations.withPermits(1)(
       Effect.gen(function* () {
         const terminalIds = [...attachedTerminalIds];
-        attachedTerminalIds.clear();
-        const results = yield* Effect.forEach(
-          terminalIds,
-          (terminalId) =>
-            Effect.either(terminalService.detach(terminalId, attachmentId(terminalId))),
-          { concurrency: 1 },
-        );
-        const failure = results.find(
-          (result) => result._tag === "Left" && result.left.code !== "terminal_not_found",
-        );
-        if (failure?._tag === "Left") return yield* Effect.fail(failure.left);
+        let firstFailure: TerminalServiceError | undefined;
+        for (const terminalId of terminalIds) {
+          const result = yield* Effect.either(
+            terminalService.detach(terminalId, attachmentId(terminalId)),
+          );
+          if (result._tag === "Left" && result.left.code !== "terminal_not_found") {
+            firstFailure ??= result.left;
+            continue;
+          }
+          attachedTerminalIds.delete(terminalId);
+        }
+        if (firstFailure) return yield* Effect.fail(firstFailure);
       }),
     );
 

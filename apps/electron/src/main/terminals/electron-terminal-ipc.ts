@@ -10,9 +10,14 @@ import {
   type TerminalService,
   type TerminalServiceError,
 } from "@openducktor/host";
-import { Effect } from "effect";
+import { Effect, Exit } from "effect";
 import { runElectronEffect } from "../../effect/electron-boundary";
-import { ElectronValidationError, jsonIssues } from "../../effect/electron-errors";
+import {
+  causeToElectronBoundaryError,
+  ElectronValidationError,
+  jsonIssues,
+} from "../../effect/electron-errors";
+import { runElectronMainTask } from "../electron-main-task-owner";
 import {
   ELECTRON_TERMINAL_DISCONNECT_CHANNEL,
   ELECTRON_TERMINAL_EVENT_CHANNEL,
@@ -62,6 +67,7 @@ type ElectronTerminalIpcMain = {
 
 type RegisterElectronTerminalIpcInput = {
   ipcMain: ElectronTerminalIpcMain;
+  reportLifecycleFailure(senderId: number, cause: unknown): void;
   terminalService: TerminalService;
 };
 
@@ -156,14 +162,36 @@ export const createElectronTerminalIpcController = (terminalService: TerminalSer
       const client = senderClients.get(clientId);
       if (!client) return;
       yield* client.close();
-      senderClients.delete(clientId);
-      if (senderClients.size === 0) clientsBySender.delete(senderId);
+      if (senderClients.get(clientId) === client) senderClients.delete(clientId);
+      if (senderClients.size === 0 && clientsBySender.get(senderId) === senderClients) {
+        clientsBySender.delete(senderId);
+      }
     });
-  const detachSender = (senderId: number): Effect.Effect<void, TerminalServiceError> =>
+  const detachSender = (senderId: number): Effect.Effect<void, Error> =>
     Effect.gen(function* () {
-      const clients = [...(clientsBySender.get(senderId)?.values() ?? [])];
-      clientsBySender.delete(senderId);
-      yield* Effect.forEach(clients, (client) => client.close(), { concurrency: 1 });
+      const senderClients = clientsBySender.get(senderId);
+      if (!senderClients) return;
+      const failures: { clientId: string; cause: Error }[] = [];
+      for (const [clientId, client] of Array.from(senderClients)) {
+        const result = yield* Effect.exit(client.close());
+        if (Exit.isFailure(result)) {
+          failures.push({ clientId, cause: causeToElectronBoundaryError(result.cause) });
+        } else if (senderClients.get(clientId) === client) {
+          senderClients.delete(clientId);
+        }
+      }
+      if (senderClients.size === 0 && clientsBySender.get(senderId) === senderClients) {
+        clientsBySender.delete(senderId);
+      }
+      if (failures.length === 1) return yield* Effect.fail(failures[0]!.cause);
+      if (failures.length > 1) {
+        return yield* Effect.fail(
+          new AggregateError(
+            failures.map(({ cause }) => cause),
+            `Failed to detach ${failures.length} terminal clients: ${failures.map(({ clientId, cause }) => `${clientId}: ${cause.message}`).join("; ")}`,
+          ),
+        );
+      }
     });
 
   return { detachClient, detachSender, handleFrame };
@@ -171,6 +199,7 @@ export const createElectronTerminalIpcController = (terminalService: TerminalSer
 
 export const registerElectronTerminalIpc = ({
   ipcMain,
+  reportLifecycleFailure,
   terminalService,
 }: RegisterElectronTerminalIpcInput): void => {
   const terminalIpc = createElectronTerminalIpcController(terminalService);
@@ -179,7 +208,10 @@ export const registerElectronTerminalIpc = ({
     if (boundTerminalSenders.has(sender)) return;
     boundTerminalSenders.add(sender);
     const detach = () => {
-      void runElectronEffect(terminalIpc.detachSender(sender.id));
+      runElectronMainTask(
+        () => runElectronEffect(terminalIpc.detachSender(sender.id)),
+        (cause) => reportLifecycleFailure(sender.id, cause),
+      );
     };
     sender.once("destroyed", detach);
     sender.on("did-start-navigation", (details) => {

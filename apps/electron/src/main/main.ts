@@ -710,7 +710,15 @@ const registerIpcHandlers = (
       ),
     taskEventStream: hostCommandRouter.taskEventStream,
   });
-  registerElectronTerminalIpc({ ipcMain, terminalService: hostCommandRouter.terminalService });
+  registerElectronTerminalIpc({
+    ipcMain,
+    reportLifecycleFailure: (senderId, cause) =>
+      reportElectronNonFatalFailure(
+        `OpenDucktor terminal cleanup failed for renderer '${senderId}'.`,
+        cause,
+      ),
+    terminalService: hostCommandRouter.terminalService,
+  });
   registerElectronHostInvokeHandler(ipcMain, {
     isHostShutdownStarted: shutdownController.isHostShutdownStarted,
     invoke: async (command, args) => {
