@@ -4,6 +4,7 @@ import { Button } from "./button";
 import { DialogClose, DialogContent, DialogDescription, DialogTitle } from "./dialog";
 
 type DiagramSize = { width: number; height: number };
+const controlClassName = "size-8 text-muted-foreground hover:text-foreground";
 
 function readDiagramSize(svg: string): DiagramSize | null {
   const document = new DOMParser().parseFromString(svg, "image/svg+xml");
@@ -62,6 +63,8 @@ export function MarkdownMermaidDialog({ svg }: { svg: string }) {
       : 0;
   const width = diagramSize ? diagramSize.width * fitScale * zoom : 0;
   const height = diagramSize ? diagramSize.height * fitScale * zoom : 0;
+  const hasPreviewError = imageError || !diagramSize;
+  const canShowImage = !hasPreviewError && imageUrl !== null && fitScale > 0;
 
   const fit = () => {
     setZoom(1);
@@ -87,6 +90,10 @@ export function MarkdownMermaidDialog({ svg }: { svg: string }) {
     viewport.scrollTop = drag.top - (event.clientY - drag.y);
   };
 
+  const stopDrag = () => {
+    dragRef.current = null;
+  };
+
   return (
     <DialogContent
       closeButton={null}
@@ -108,7 +115,7 @@ export function MarkdownMermaidDialog({ svg }: { svg: string }) {
             type="button"
             variant="ghost"
             size="icon"
-            className="size-8 text-muted-foreground hover:text-foreground"
+            className={controlClassName}
             aria-label="Zoom out"
             title="Zoom out"
             disabled={zoom <= 0.25}
@@ -120,7 +127,7 @@ export function MarkdownMermaidDialog({ svg }: { svg: string }) {
             type="button"
             variant="ghost"
             size="icon"
-            className="size-8 text-muted-foreground hover:text-foreground"
+            className={controlClassName}
             aria-label="Zoom in"
             title="Zoom in"
             disabled={zoom >= 8}
@@ -132,7 +139,7 @@ export function MarkdownMermaidDialog({ svg }: { svg: string }) {
             type="button"
             variant="ghost"
             size="icon"
-            className="size-8 text-muted-foreground hover:text-foreground"
+            className={controlClassName}
             aria-label="Fit diagram"
             title="Fit diagram"
             onClick={fit}
@@ -145,7 +152,7 @@ export function MarkdownMermaidDialog({ svg }: { svg: string }) {
               type="button"
               variant="ghost"
               size="icon"
-              className="size-8 text-muted-foreground hover:text-foreground"
+              className={controlClassName}
               aria-label="Close diagram preview"
               title="Close diagram preview"
             >
@@ -162,18 +169,15 @@ export function MarkdownMermaidDialog({ svg }: { svg: string }) {
         className="min-h-0 flex-1 overflow-auto bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         onPointerDown={startDrag}
         onPointerMove={moveDrag}
-        onPointerUp={() => {
-          dragRef.current = null;
-        }}
-        onPointerCancel={() => {
-          dragRef.current = null;
-        }}
+        onPointerUp={stopDrag}
+        onPointerCancel={stopDrag}
       >
-        {imageError || !diagramSize ? (
+        {hasPreviewError && (
           <p className="p-4 text-sm text-destructive" role="alert">
             The diagram preview could not load. Close it and try the diagram again.
           </p>
-        ) : imageUrl && fitScale > 0 ? (
+        )}
+        {canShowImage && (
           <div
             className="flex items-center justify-center"
             style={{
@@ -189,7 +193,7 @@ export function MarkdownMermaidDialog({ svg }: { svg: string }) {
               onError={() => setImageError(true)}
             />
           </div>
-        ) : null}
+        )}
       </div>
     </DialogContent>
   );
