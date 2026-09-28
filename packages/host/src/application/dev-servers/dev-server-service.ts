@@ -292,7 +292,7 @@ export const createDevServerService = ({
         }
         if (!handle) {
           const message = markScriptProcessHandleMissing({
-            pid: script.pid ?? 0,
+            pid: script.pid,
             runtime,
             scriptId: script.scriptId,
             updateScriptState,
