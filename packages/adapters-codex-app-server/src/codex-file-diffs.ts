@@ -101,21 +101,23 @@ const unifiedDiffHeaderPath = (
     return null;
   }
   const rawPath = line.slice(prefix.length).split("\t", 1)[0] ?? "";
-  const isQuoted = rawPath.startsWith('"') || rawPath.endsWith('"');
-  const path = isQuoted
-    ? rawPath.startsWith('"') && rawPath.endsWith('"')
-      ? decodeGitQuotedPath(rawPath)
-      : null
-    : rawPath;
-  if (path === null || (isQuoted && path.length === 0)) {
+  const startsWithQuote = rawPath.startsWith('"');
+  const endsWithQuote = rawPath.endsWith('"');
+  const path = startsWithQuote && endsWithQuote ? decodeGitQuotedPath(rawPath) : rawPath;
+  const filePath = path?.replace(/^(?:a|b)\//, "");
+  if (
+    startsWithQuote !== endsWithQuote ||
+    filePath === undefined ||
+    (startsWithQuote && filePath.length === 0)
+  ) {
     throw new CodexFileDiffParseError(
       `unified diff entry ${index} has a malformed ${prefix.trim()} file header.`,
     );
   }
-  if (!path.trim() || path === "/dev/null") {
+  if (!path?.trim() || path === "/dev/null") {
     return null;
   }
-  return path.replace(/^(?:a|b)\//, "");
+  return filePath;
 };
 
 export const fileDiffsFromUnifiedDiff = (unifiedDiff: string): FileDiff[] =>
