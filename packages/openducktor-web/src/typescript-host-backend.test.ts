@@ -1,4 +1,5 @@
 import { liveSessionStreamEventName } from "./host-event-stream-name";
+import { get, type IncomingMessage } from "node:http";
 import { describe, expect, mock, test } from "bun:test";
 import { TERMINAL_PROTOCOL_SUBPROTOCOL, type HostEventEnvelope } from "@openducktor/contracts";
 import {
@@ -16,6 +17,7 @@ import {
 import { Effect } from "effect";
 import { WorkspaceTextFileWriteError } from "../../host/src/application/filesystem/workspace-text-file-service";
 import { HostOperationError } from "../../host/src/effect/host-errors";
+import { createTaskEventStream } from "../../host/src/events/task-event-stream";
 import type { HostCommandHandlerError } from "../../host/src/interface/router/host-command-router";
 import type { WebLogger } from "./logger";
 import { startNodeFetchServer, type NodeFetchServer } from "./node-fetch-server";
@@ -28,6 +30,7 @@ import {
   waitForBackend,
 } from "./launcher-support";
 import { createTaskEventLeaseManager, type TaskEventLeaseManager } from "./task-event-leases";
+import { writeTaskFrameSseEvent } from "./task-event-http-server";
 import {
   allowedOriginsForFrontendOrigin,
   BufferedHostEventBus,
@@ -918,6 +921,91 @@ describe("TypeScript web host backend", () => {
     }
   });
 
+  // A real HTTP stream must return its headers before a quiet resumed workspace publishes a task.
+  test("opens a quiet resumed task stream and releases its lease after cancellation", async () => {
+    const cursor = { epoch: "fc49d1f9-708c-4198-b56b-f1437b2bbcea", sequence: 0 };
+    const taskEventStream = createTaskEventStream({
+      epochFactory: () => cursor.epoch,
+      reporter: { report: () => {} },
+    });
+    const manager = createTaskEventLeaseManager({
+      encodeFrame: writeTaskFrameSseEvent,
+      reportDeliveryFailure: () => {},
+      taskEventStream,
+    });
+    const requestAborted = Promise.withResolvers<void>();
+    const server = await startNodeFetchServer({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: (request) => {
+        if (request.url.includes("/stream?")) {
+          request.signal.addEventListener("abort", () => requestAborted.resolve(), { once: true });
+        }
+        return handleTestRequest(request, { taskEventLeaseManager: manager });
+      },
+      onError: (cause) => {
+        throw cause;
+      },
+    });
+    const baseUrl = `http://127.0.0.1:${server.port}/task-events/subscriptions`;
+
+    try {
+      const create = await Bun.fetch(baseUrl, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-openducktor-app-token": APP_TOKEN,
+        },
+        body: JSON.stringify({ cursor }),
+      });
+      expect(create.status).toBe(201);
+      const created = await create.json();
+      const { stream, firstChunk } = await new Promise<{
+        stream: IncomingMessage;
+        firstChunk: string;
+      }>((resolve, reject) => {
+        const request = get(
+          `${baseUrl}/${created.subscriptionId}/stream?token=${created.streamToken}`,
+          { headers: { cookie: `${APP_SESSION_COOKIE_NAME}=${APP_TOKEN}` } },
+          (response) => {
+            response.once("data", (chunk: Buffer) =>
+              resolve({ stream: response, firstChunk: chunk.toString() }),
+            );
+            response.once("error", reject);
+          },
+        );
+        request.setTimeout(500, () =>
+          request.destroy(
+            new Error("Task stream did not return HTTP headers while no task changed."),
+          ),
+        );
+        request.once("error", reject);
+      });
+      expect(stream.statusCode).toBe(200);
+      expect(stream.headers["content-type"]).toContain("text/event-stream");
+      expect(firstChunk).toBe(": openducktor-ready\n\n");
+      const lease = manager.get(created.subscriptionId);
+      expect(lease?.pendingFrames).toEqual([]);
+
+      stream.destroy();
+      await requestAborted.promise;
+      expect(lease?.connection).toBeNull();
+
+      const remove = await Bun.fetch(`${baseUrl}/${created.subscriptionId}`, {
+        method: "DELETE",
+        headers: {
+          "x-openducktor-app-token": APP_TOKEN,
+          "x-openducktor-task-stream-token": created.streamToken,
+        },
+      });
+      expect(remove.status).toBe(204);
+      expect(manager.get(created.subscriptionId)).toBeUndefined();
+    } finally {
+      manager.dispose();
+      await server.stop(true);
+    }
+  }, 3_000);
+
   test("uses task leases instead of generic event replay and ignores Last-Event-ID", async () => {
     type TaskEventSinkHolder = {
       sink?: (frame: TaskEventStreamFrame) => void;
@@ -978,6 +1066,7 @@ describe("TypeScript web host backend", () => {
       reason: "buffer_gap",
     };
     sink(frame);
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe(": openducktor-ready\n\n");
     const sse = new TextDecoder().decode((await reader.read()).value);
     expect(sse).toContain("event: task-frame");
     expect(sse).toContain(JSON.stringify(frame));
@@ -995,6 +1084,9 @@ describe("TypeScript web host backend", () => {
     expect(reconnect.status).toBe(200);
     const reconnectReader = reconnect.body?.getReader();
     if (!reconnectReader) throw new Error("Expected task event stream reconnection.");
+    expect(new TextDecoder().decode((await reconnectReader.read()).value)).toBe(
+      ": openducktor-ready\n\n",
+    );
     expect(new TextDecoder().decode((await reconnectReader.read()).value)).toContain(
       JSON.stringify(frame),
     );
