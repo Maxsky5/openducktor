@@ -49,7 +49,7 @@ test("fits an isolated diagram, zooms it, and reports image load errors", async 
     const scrollTo = mock(() => {});
     viewport.scrollTo = scrollTo;
     fireEvent.click(view.getByRole("button", { name: "Zoom in" }));
-    fireEvent.click(view.getByRole("button", { name: "Fit" }));
+    fireEvent.click(view.getByRole("button", { name: "Fit diagram" }));
     expect(image.style.width).toBe("800px");
     expect(scrollTo).toHaveBeenCalledWith(0, 0);
 

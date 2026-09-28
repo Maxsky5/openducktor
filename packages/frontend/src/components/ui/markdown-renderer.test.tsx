@@ -557,6 +557,7 @@ describe("rich task description rendering", () => {
           timeout: 3000,
         },
       );
+      expect(view.queryByText("Open preview")).toBeNull();
       const chosenTrigger = view.getAllByRole("button", { name: "Open diagram preview" })[1]!;
       chosenTrigger.focus();
       fireEvent.click(chosenTrigger);
@@ -575,6 +576,11 @@ describe("rich task description rendering", () => {
       expect(document.activeElement).toBe(chosenTrigger);
       expect(revokeUrl).toHaveBeenCalledWith("blob:chosen-diagram");
       expect(view.getAllByRole("button", { name: "Open diagram preview" })).toHaveLength(2);
+      fireEvent.click(chosenTrigger);
+      fireEvent.click(view.getByRole("button", { name: "Close diagram preview" }));
+      await waitFor(() =>
+        expect(view.queryByRole("dialog", { name: "Diagram preview" })).toBeNull(),
+      );
     } finally {
       globalThis.ResizeObserver = originalObserver;
       renderSpy.mockRestore();

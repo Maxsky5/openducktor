@@ -1,7 +1,7 @@
-import { Maximize2, Minus, Plus } from "lucide-react";
+import { Minimize2, Minus, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { Button } from "./button";
-import { DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./dialog";
+import { DialogClose, DialogContent, DialogDescription, DialogTitle } from "./dialog";
 
 type DiagramSize = { width: number; height: number };
 
@@ -88,44 +88,78 @@ export function MarkdownMermaidDialog({ svg }: { svg: string }) {
   };
 
   return (
-    <DialogContent className="my-0 h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] gap-3 bg-background">
-      <DialogHeader>
-        <DialogTitle>Diagram preview</DialogTitle>
-        <DialogDescription className="sr-only">
-          Zoom in or out, then scroll or drag to inspect the diagram.
-        </DialogDescription>
-      </DialogHeader>
-      <div className="flex gap-2" role="group" aria-label="Diagram zoom controls">
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          aria-label="Zoom out"
-          disabled={zoom <= 0.25}
-          onClick={() => setZoom((value) => Math.max(0.25, value / 1.5))}
+    <DialogContent
+      closeButton={null}
+      className="my-0 h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] gap-0 bg-background p-0 outline-none"
+    >
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-2.5">
+        <div className="min-w-0">
+          <DialogTitle>Diagram preview</DialogTitle>
+          <DialogDescription className="sr-only">
+            Zoom in or out, then scroll or drag to inspect the diagram.
+          </DialogDescription>
+        </div>
+        <div
+          className="flex shrink-0 items-center gap-1"
+          role="group"
+          aria-label="Diagram controls"
         >
-          <Minus aria-hidden="true" />
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          aria-label="Zoom in"
-          disabled={zoom >= 8}
-          onClick={() => setZoom((value) => Math.min(8, value * 1.5))}
-        >
-          <Plus aria-hidden="true" />
-        </Button>
-        <Button type="button" variant="outline" size="sm" onClick={fit}>
-          <Maximize2 aria-hidden="true" /> Fit
-        </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8 text-muted-foreground hover:text-foreground"
+            aria-label="Zoom out"
+            title="Zoom out"
+            disabled={zoom <= 0.25}
+            onClick={() => setZoom((value) => Math.max(0.25, value / 1.5))}
+          >
+            <Minus className="size-4" aria-hidden="true" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8 text-muted-foreground hover:text-foreground"
+            aria-label="Zoom in"
+            title="Zoom in"
+            disabled={zoom >= 8}
+            onClick={() => setZoom((value) => Math.min(8, value * 1.5))}
+          >
+            <Plus className="size-4" aria-hidden="true" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8 text-muted-foreground hover:text-foreground"
+            aria-label="Fit diagram"
+            title="Fit diagram"
+            onClick={fit}
+          >
+            <Minimize2 className="size-4" aria-hidden="true" />
+          </Button>
+          <span className="mx-1 h-5 w-px bg-border" aria-hidden="true" />
+          <DialogClose asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-8 text-muted-foreground hover:text-foreground"
+              aria-label="Close diagram preview"
+              title="Close diagram preview"
+            >
+              <X className="size-4" aria-hidden="true" />
+            </Button>
+          </DialogClose>
+        </div>
       </div>
       <div
         ref={setViewport}
         tabIndex={0}
         role="region"
         aria-label="Diagram preview viewport"
-        className="min-h-0 flex-1 overflow-auto rounded-md border border-border bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="min-h-0 flex-1 overflow-auto bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         onPointerDown={startDrag}
         onPointerMove={moveDrag}
         onPointerUp={() => {

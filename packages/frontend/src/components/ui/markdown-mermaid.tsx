@@ -88,7 +88,7 @@ export function MarkdownMermaid({
       <section
         aria-busy={!preview}
         aria-label="Mermaid diagram"
-        className="my-3 h-80 overflow-hidden rounded-md border border-border bg-card sm:h-96"
+        className="my-3 h-80 overflow-hidden rounded-md border border-border bg-white sm:h-96"
       >
         <div className="flex h-full items-center justify-center overflow-auto p-3">
           {expandable && preview?.status === "ready" ? (
@@ -96,13 +96,14 @@ export function MarkdownMermaid({
               <button
                 type="button"
                 aria-label="Open diagram preview"
-                className="relative flex size-full cursor-zoom-in items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="group relative flex size-full cursor-zoom-in items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 onClick={() => setOpenSvg(preview.svg)}
               >
                 {diagram}
-                <span className="absolute top-2 right-2 flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground shadow-sm">
-                  <Expand className="size-3" aria-hidden="true" /> Open preview
-                </span>
+                <Expand
+                  className="pointer-events-none absolute top-3 right-3 size-4 text-slate-500 group-hover:text-slate-900 group-focus-visible:text-slate-900"
+                  aria-hidden="true"
+                />
               </button>
             </DialogTrigger>
           ) : (
