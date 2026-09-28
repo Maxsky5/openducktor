@@ -103,8 +103,8 @@ const unifiedDiffHeaderPath = (
   const rawPath = line.slice(prefix.length).split("\t", 1)[0] ?? "";
   const startsWithQuote = rawPath.startsWith('"');
   const endsWithQuote = rawPath.endsWith('"');
-  const path = startsWithQuote && endsWithQuote ? decodeGitQuotedPath(rawPath) : rawPath;
-  const filePath = path?.replace(/^(?:a|b)\//, "");
+  const decodedPath = decodeGitQuotedPath(rawPath);
+  const filePath = decodedPath?.replace(/^(?:a|b)\//, "");
   if (
     startsWithQuote !== endsWithQuote ||
     filePath === undefined ||
@@ -114,7 +114,7 @@ const unifiedDiffHeaderPath = (
       `unified diff entry ${index} has a malformed ${prefix.trim()} file header.`,
     );
   }
-  if (!path?.trim() || path === "/dev/null") {
+  if (!decodedPath?.trim() || decodedPath === "/dev/null") {
     return null;
   }
   return filePath;
@@ -130,7 +130,12 @@ export const fileDiffsFromUnifiedDiff = (unifiedDiff: string): FileDiff[] =>
         `unified diff entry ${index} is missing a non-null file header.`,
       );
     }
-    const type = previousPath === null ? "added" : nextPath === null ? "deleted" : "modified";
+    let type: FileDiff["type"] = "modified";
+    if (previousPath === null) {
+      type = "added";
+    } else if (nextPath === null) {
+      type = "deleted";
+    }
     const diff = normalizeRenderableFileDiffCandidate(candidate, file);
     if (!diff) {
       throw new CodexFileDiffParseError(
