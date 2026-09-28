@@ -252,13 +252,14 @@ function TaskCreateModalSectionContent({
       </Suspense>
     );
   }
-  // The editor reads upload state itself and must still insert a finished upload.
-  const descriptionLocked =
-    controller.isSubmitting || controller.isSavingDocument !== null || controller.isRecoveryBlocked;
   return (
     <TaskDetailsForm
       mode={controller.mode}
-      disabled={descriptionLocked}
+      disabled={
+        controller.isSubmitting ||
+        controller.isSavingDocument !== null ||
+        controller.isRecoveryBlocked
+      }
       state={controller.state}
       priorityOptions={controller.priorityComboboxOptions}
       knownLabels={controller.knownLabels}
