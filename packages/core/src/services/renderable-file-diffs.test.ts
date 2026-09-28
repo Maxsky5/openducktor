@@ -91,6 +91,19 @@ describe("renderable file diffs", () => {
     expect(selectRenderableFileDiff(plain + quoted, "src/quote file.ts")).toBe(plain);
   });
 
+  test("keeps a Git-quoted backslash distinct from a path separator", () => {
+    const slash =
+      "diff --git a/src/foo/bar.ts b/src/foo/bar.ts\n" +
+      "--- a/src/foo/bar.ts\n+++ b/src/foo/bar.ts\n@@ -1 +1 @@\n-old\n+slash\n";
+    const backslash =
+      'diff --git "a/src/foo\\\\bar.ts" "b/src/foo\\\\bar.ts"\n' +
+      '--- "a/src/foo\\\\bar.ts"\n+++ "b/src/foo\\\\bar.ts"\n@@ -1 +1 @@\n-old\n+backslash\n';
+
+    expect(selectRenderableFileDiff(slash + backslash, "src/foo/bar.ts")).toBe(slash);
+    expect(selectRenderableFileDiff(slash + backslash, "src/foo\\bar.ts")).toBe(backslash);
+    expect(selectRenderableFileDiff(slash, "C:\\repo\\src\\foo\\bar.ts")).toBe(slash);
+  });
+
   test("decodes UTF-8 octal escapes in Git-quoted file paths", () => {
     const diff =
       'diff --git "a/src/\\302\\265 file.ts" "b/src/\\302\\265 file.ts"\n' +

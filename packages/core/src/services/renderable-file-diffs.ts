@@ -279,8 +279,13 @@ export const splitFileDiffCandidates = (rawDiff: string): string[] => {
   return [diff];
 };
 
-const normalizeDiffFilePath = (filePath: string): string =>
-  filePath.replaceAll("\\", "/").replace(/^\.\//, "");
+const WINDOWS_ABSOLUTE_PATH = /^[A-Za-z]:[\\/]/;
+
+const normalizeDiffFilePath = (filePath: string): string => {
+  // A Git-quoted backslash can be part of a POSIX file name.
+  const path = WINDOWS_ABSOLUTE_PATH.test(filePath) ? filePath.replaceAll("\\", "/") : filePath;
+  return path.replace(/^\.\//, "");
+};
 
 const GIT_QUOTED_PATH = /^"(?:\\.|[^"\\])*"$/;
 const GIT_ESCAPE_BYTES = new Map([
@@ -352,7 +357,7 @@ const normalizeHeaderFilePath = (filePath: string, hasDiffPrefix: boolean): stri
 };
 
 const isAbsoluteDiffPath = (filePath: string): boolean =>
-  filePath.startsWith("/") || /^[A-Za-z]:\//.test(filePath);
+  filePath.startsWith("/") || WINDOWS_ABSOLUTE_PATH.test(filePath);
 
 type DiffPathMatch = { exact: boolean; matchedLength: number };
 
