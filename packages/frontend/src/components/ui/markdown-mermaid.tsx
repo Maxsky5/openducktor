@@ -101,7 +101,7 @@ export function MarkdownMermaid({
               >
                 {diagram}
                 <Expand
-                  className="pointer-events-none absolute top-3 right-3 size-4 text-slate-500 group-hover:text-slate-900 group-focus-visible:text-slate-900"
+                  className="pointer-events-none absolute top-3 right-3 size-4 text-muted-foreground group-hover:text-foreground group-focus-visible:text-foreground dark:text-background/70 dark:group-hover:text-background dark:group-focus-visible:text-background"
                   aria-hidden="true"
                 />
               </button>
