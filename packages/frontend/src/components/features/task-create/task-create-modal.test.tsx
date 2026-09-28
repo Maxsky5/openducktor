@@ -36,6 +36,7 @@ const controllerMock: ReturnType<
   isBusy: false,
   isFormDisabled: false,
   isRecoveryBlocked: false,
+  isSaveOrRecoveryLocked: false,
   hasExternalTaskConflict: false,
   step: "details",
   setStep: (_step: "type" | "details") => {},
@@ -186,6 +187,7 @@ describe("TaskCreateModal", () => {
     controllerMock.isSubmitting = false;
     controllerMock.isSavingDocument = null;
     controllerMock.isRecoveryBlocked = false;
+    controllerMock.isSaveOrRecoveryLocked = false;
     controllerMock.isFormDisabled = true;
     controllerMock.isEditingDocument = false;
     controllerMock.editSection = "details";
@@ -225,6 +227,7 @@ describe("TaskCreateModal", () => {
 
   test("locks mutation controls but keeps Close available after partial state", async () => {
     controllerMock.isRecoveryBlocked = true;
+    controllerMock.isSaveOrRecoveryLocked = true;
     controllerMock.isFormDisabled = true;
     controllerMock.isEditingDocument = false;
     controllerMock.editSection = "details";
@@ -260,6 +263,7 @@ describe("TaskCreateModal", () => {
       await act(async () => rendered.unmount());
     } finally {
       controllerMock.isRecoveryBlocked = false;
+      controllerMock.isSaveOrRecoveryLocked = false;
       controllerMock.isFormDisabled = false;
       controllerMock.isEditingDocument = true;
       controllerMock.editSection = "spec";
