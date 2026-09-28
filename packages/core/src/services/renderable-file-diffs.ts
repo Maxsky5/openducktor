@@ -202,7 +202,7 @@ const splitUnifiedFileDiffCandidates = (diff: string): string[] => {
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index] ?? "";
     if (oldLinesLeft > 0 || newLinesLeft > 0) {
-      if (line.startsWith(" ")) {
+      if (line === "" || line.startsWith(" ")) {
         oldLinesLeft--;
         newLinesLeft--;
       } else if (line.startsWith("-")) {

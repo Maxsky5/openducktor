@@ -47,6 +47,15 @@ describe("renderable file diffs", () => {
     expect(countRenderableFileDiffLines(first)).toEqual({ additions: 1, deletions: 1 });
   });
 
+  test("selects the next file after a blank hunk context line", () => {
+    const first =
+      "--- src/first file.ts\n+++ src/first file.ts\n@@ -1,3 +1,3 @@\n first\n\n-old\n+new\n";
+    const second = "--- src/second file.ts\n+++ src/second file.ts\n@@ -1 +1 @@\n-old\n+new\n";
+
+    expect(splitFileDiffCandidates(first + second)).toEqual([first.trimEnd(), second.trimEnd()]);
+    expect(selectRenderableFileDiff(first + second, "src/second file.ts")).toBe(second);
+  });
+
   test("matches quoted Git and unified headers with spaces", () => {
     const diff =
       'diff --git "a/src/my file.ts" "b/src/my file.ts"\n' +
