@@ -47,6 +47,21 @@ describe("renderable file diffs", () => {
     expect(countRenderableFileDiffLines(first)).toEqual({ additions: 1, deletions: 1 });
   });
 
+  test("keeps header-looking edits inside bare hunks", () => {
+    const bare = "--- src/main.ts\n+++ src/main.ts\n@@\n--- a/other.ts\n+++ b/other.ts\n";
+    const custom =
+      "*** Begin Patch\n*** Update File: src/main.ts\n@@\n--- a/other.ts\n+++ b/other.ts\n" +
+      "*** Update File: src/second.ts\n@@\n-old\n+new\n*** End Patch";
+
+    expect(selectRenderableFileDiff(bare, "src/main.ts")).toBe(bare);
+    expect(selectRenderableFileDiff(custom, "src/main.ts")).toBe(
+      "--- a/src/main.ts\n+++ b/src/main.ts\n@@\n--- a/other.ts\n+++ b/other.ts\n",
+    );
+    expect(selectRenderableFileDiff(custom, "src/second.ts")).toBe(
+      "--- a/src/second.ts\n+++ b/src/second.ts\n@@\n-old\n+new\n",
+    );
+  });
+
   test("selects the next file after a blank hunk context line", () => {
     const first =
       "--- src/first file.ts\n+++ src/first file.ts\n@@ -1,3 +1,3 @@\n first\n\n-old\n+new\n";
@@ -256,7 +271,12 @@ describe("renderable file diffs", () => {
     const first = "--- a/src/file.ts\n+++ b/src/file.ts\n@@ -1 +1 @@\n-old\n+first\n";
     const second = "--- a/src/file.ts\n+++ b/src/file.ts\n@@ -1 +1 @@\n-old\n+second\n";
 
-    expect(selectRenderableFileDiff(first + second, "/repo/src/file.ts")).toBeNull();
+    expect(selectRenderableFileDiff(first, "/repo/src/file.ts", { changeType: "modified" })).toBe(
+      first,
+    );
+    expect(
+      selectRenderableFileDiff(first + second, "/repo/src/file.ts", { changeType: "modified" }),
+    ).toBeNull();
   });
 
   test("normalizes classic diff sections for the current file", () => {

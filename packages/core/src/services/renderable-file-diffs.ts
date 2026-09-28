@@ -191,6 +191,7 @@ const splitUnifiedFileDiffCandidates = (diff: string): string[] => {
   let candidateStart = 0;
   let oldLinesLeft = 0;
   let newLinesLeft = 0;
+  let bareHunk = false;
 
   const addCandidate = (end: number): void => {
     const candidate = trimNewlines(lines.slice(candidateStart, end).join("\n"));
@@ -201,6 +202,9 @@ const splitUnifiedFileDiffCandidates = (diff: string): string[] => {
 
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index] ?? "";
+    if (bareHunk) {
+      continue;
+    }
     if (oldLinesLeft > 0 || newLinesLeft > 0) {
       if (line === "" || line.startsWith(" ")) {
         oldLinesLeft--;
@@ -226,6 +230,9 @@ const splitUnifiedFileDiffCandidates = (diff: string): string[] => {
     if (hunk) {
       oldLinesLeft = Number(hunk[1] ?? 1);
       newLinesLeft = Number(hunk[2] ?? 1);
+    } else if (line.startsWith("@@")) {
+      // A bare hunk has no counts to tell its edits from the next file header.
+      bareHunk = true;
     }
   }
 
@@ -258,15 +265,15 @@ export const splitFileDiffCandidates = (rawDiff: string): string[] => {
     return splitSections(diff, /(?=^Index: )/m);
   }
 
-  if (UNIFIED_MULTI_FILE_HEADER.test(diff)) {
-    return splitUnifiedFileDiffCandidates(diff);
-  }
-
   if (APPLY_PATCH_FILE_HEADER.test(diff)) {
     const patchBody = diff
       .replace(/^\*\*\* Begin Patch\s*\n?/m, "")
       .replace(/\n?\*\*\* End Patch\s*$/m, "");
     return splitSections(patchBody, /(?=^\*\*\* (?:Add|Update|Delete) File: )/m);
+  }
+
+  if (UNIFIED_MULTI_FILE_HEADER.test(diff)) {
+    return splitUnifiedFileDiffCandidates(diff);
   }
 
   return [diff];
