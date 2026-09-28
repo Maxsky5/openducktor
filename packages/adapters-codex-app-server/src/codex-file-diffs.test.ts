@@ -38,7 +38,7 @@ describe("Codex file diffs", () => {
   });
 
   test("rejects a malformed Git-quoted header even when the other header is valid", () => {
-    for (const malformedPath of ['"a/src/bad\\q.ts"', '"a/src/missing.ts']) {
+    for (const malformedPath of ['"a/src/bad\\q.ts"', '"a/src/missing.ts', '""']) {
       const diff = `--- ${malformedPath}\n+++ b/src/good.ts\n@@ -1 +1 @@\n-old\n+new`;
       expect(() => fileDiffsFromUnifiedDiff(diff)).toThrow(CodexFileDiffParseError);
     }

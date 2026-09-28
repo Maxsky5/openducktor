@@ -107,7 +107,7 @@ const unifiedDiffHeaderPath = (
       ? decodeGitQuotedPath(rawPath)
       : null
     : rawPath;
-  if (path === null) {
+  if (path === null || (isQuoted && path.length === 0)) {
     throw new CodexFileDiffParseError(
       `unified diff entry ${index} has a malformed ${prefix.trim()} file header.`,
     );
