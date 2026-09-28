@@ -106,92 +106,6 @@ describe("Codex file diffs", () => {
     ).toThrow("Malformed Codex file change: entry 0 has empty file path.");
   });
 
-  test("preserves standalone Git-style and literal add and delete paths", () => {
-    expect(
-      toFileDiffs([
-        {
-          path: "src/new.ts",
-          kind: { type: "add" },
-          diff: "--- /dev/null\r\n+++ b/src/new.ts\r\n@@\r\n+new",
-        },
-        {
-          path: "src/old.ts",
-          kind: { type: "delete" },
-          diff: "--- a/src/old.ts\r\n+++ /dev/null\r\n@@\r\n-old",
-        },
-        {
-          path: "b/src/literal.ts",
-          kind: { type: "add" },
-          diff: "--- /dev/null\r\n+++ b/src/literal.ts\r\n@@\r\n+literal",
-        },
-        {
-          path: "a/src/literal.ts",
-          kind: { type: "delete" },
-          diff: "--- a/src/literal.ts\r\n+++ /dev/null\r\n@@\r\n-literal",
-        },
-      ]),
-    ).toEqual([
-      {
-        file: "src/new.ts",
-        type: "added",
-        additions: 1,
-        deletions: 0,
-        diff: "--- /dev/null\n+++ b/src/new.ts\n@@\n+new\n",
-      },
-      {
-        file: "src/old.ts",
-        type: "deleted",
-        additions: 0,
-        deletions: 1,
-        diff: "--- a/src/old.ts\n+++ /dev/null\n@@\n-old\n",
-      },
-      {
-        file: "b/src/literal.ts",
-        type: "added",
-        additions: 1,
-        deletions: 0,
-        diff: "--- /dev/null\n+++ b/src/literal.ts\n@@\n+literal\n",
-      },
-      {
-        file: "a/src/literal.ts",
-        type: "deleted",
-        additions: 0,
-        deletions: 1,
-        diff: "--- a/src/literal.ts\n+++ /dev/null\n@@\n-literal\n",
-      },
-    ]);
-  });
-
-  test("preserves quoted standalone Git add and delete paths without merging literal directories", () => {
-    const added = '--- /dev/null\n+++ "b/src/new file.ts"\n@@\n+new';
-    const deleted = '--- "a/src/old file.ts"\n+++ /dev/null\n@@\n-old';
-    const literal = '--- /dev/null\n+++ "b/src/literal file.ts"\n@@\n+literal';
-
-    expect(
-      toFileDiffs([
-        { path: "src/new file.ts", kind: { type: "add" }, diff: added },
-        { path: "src/old file.ts", kind: { type: "delete" }, diff: deleted },
-        { path: "b/src/literal file.ts", kind: { type: "add" }, diff: literal },
-      ]),
-    ).toEqual([
-      { file: "src/new file.ts", type: "added", additions: 1, deletions: 0, diff: `${added}\n` },
-      {
-        file: "src/old file.ts",
-        type: "deleted",
-        additions: 0,
-        deletions: 1,
-        diff: `${deleted}\n`,
-      },
-      {
-        file: "b/src/literal file.ts",
-        type: "added",
-        additions: 1,
-        deletions: 0,
-        diff: `${literal}\n`,
-      },
-    ]);
-  });
-
   test("keeps modified Codex full-file text metadata-only instead of failing the tool", () => {
     expect(
       toFileDiffs([
@@ -269,6 +183,21 @@ describe("Codex file diffs", () => {
         deletions: 1,
         diff: "--- a/src/old.ts\n+++ /dev/null\n@@ -1,1 +0,0 @@\n-removed\n",
       },
+    ]);
+  });
+
+  test("keeps patch text in Codex added and deleted file content", () => {
+    const content =
+      "intro\ndiff --git a/other.ts b/other.ts\nindex 111..222 100644\n--- a/other.ts\n+++ b/other.ts\n@@ -1 +1 @@\n-old\n+new\n";
+
+    expect(
+      toFileDiffs([
+        { path: "docs/new guide.md", kind: { type: "add" }, diff: content },
+        { path: "docs/old guide.md", kind: { type: "delete" }, diff: content },
+      ]).map(({ diff }) => diff),
+    ).toEqual([
+      "--- /dev/null\n+++ b/docs/new guide.md\n@@ -0,0 +1,8 @@\n+intro\n+diff --git a/other.ts b/other.ts\n+index 111..222 100644\n+--- a/other.ts\n++++ b/other.ts\n+@@ -1 +1 @@\n+-old\n++new\n",
+      "--- a/docs/old guide.md\n+++ /dev/null\n@@ -1,8 +0,0 @@\n-intro\n-diff --git a/other.ts b/other.ts\n-index 111..222 100644\n---- a/other.ts\n-+++ b/other.ts\n-@@ -1 +1 @@\n--old\n-+new\n",
     ]);
   });
 

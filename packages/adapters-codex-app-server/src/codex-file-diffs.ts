@@ -49,7 +49,10 @@ const selectCodexRenderableDiff = (
   const fileCandidates =
     sourceFile === displayedFile ? [displayedFile] : [sourceFile, displayedFile];
   for (const fileCandidate of fileCandidates) {
-    const renderableDiff = selectRenderableFileDiff(diff, fileCandidate, { changeType: type });
+    const renderableDiff = selectRenderableFileDiff(diff, fileCandidate, {
+      changeType: type,
+      fullFileContent: type === "added" || type === "deleted",
+    });
     if (renderableDiff) {
       return renderableDiff;
     }
