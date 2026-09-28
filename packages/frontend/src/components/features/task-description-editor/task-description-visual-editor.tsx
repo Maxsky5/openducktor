@@ -42,6 +42,7 @@ const VisualImage = TaskDescriptionImage.extend({
 
 type TaskDescriptionVisualEditorProps = {
   body: string;
+  disabled: boolean;
   frontMatter: string;
   onChange(markdown: string): void;
   onUpload(file: File): Promise<TaskAssetStageResult>;
@@ -52,22 +53,9 @@ type TaskDescriptionVisualEditorProps = {
   mermaidPreviews: MermaidPreviews;
 };
 
-const applyMathEdit = (editor: Editor, edit: TaskDescriptionMathEdit, latex: string): boolean => {
-  const chain = editor.chain().focus();
-  if (edit.kind === "inline") {
-    if (edit.position === undefined) {
-      return chain.insertInlineMath({ latex }).run();
-    }
-    return chain.updateInlineMath({ latex, pos: edit.position }).run();
-  }
-  if (edit.position === undefined) {
-    return chain.insertBlockMath({ latex }).run();
-  }
-  return chain.updateBlockMath({ latex, pos: edit.position }).run();
-};
-
 export default function TaskDescriptionVisualEditor({
   body,
+  disabled,
   frontMatter,
   onChange,
   onUpload,
@@ -77,20 +65,25 @@ export default function TaskDescriptionVisualEditor({
   previews,
   mermaidPreviews,
 }: TaskDescriptionVisualEditorProps) {
+  const uploading = uploads.some((upload) => upload.status === "uploading");
+  const canEdit = !disabled && !uploading;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadFilesRef = useRef<(files: File[]) => void>(() => {});
+  const disabledRef = useRef(disabled);
+  const canEditRef = useRef(canEdit);
   const hydratedBody = useRef(body);
   const [linkHref, setLinkHref] = useState<string | null>(null);
   const [mathEdit, setMathEdit] = useState<TaskDescriptionMathEdit | null>(null);
-  const openMathEditor = useCallback((edit: TaskDescriptionMathEdit) => setMathEdit(edit), []);
-  const uploading = uploads.some((upload) => upload.status === "uploading");
+  const openMathEditor = useCallback((edit: TaskDescriptionMathEdit) => {
+    if (canEditRef.current) setMathEdit(edit);
+  }, []);
   const imageContext = useMemo(
     () => ({ previews, renderContext, issueImageContext }),
     [previews, renderContext, issueImageContext],
   );
 
   const editor = useEditor({
-    editable: !uploading,
+    editable: canEdit,
     extensions: createTaskDescriptionMarkdownExtensions({
       codeBlock: MermaidCodeBlock,
       image: VisualImage,
@@ -123,6 +116,7 @@ export default function TaskDescriptionVisualEditor({
     },
     onUpdate: ({ editor: updatedEditor }) => {
       const nextBody = updatedEditor.getMarkdown();
+      if (nextBody === hydratedBody.current) return;
       hydratedBody.current = nextBody;
       onChange(`${frontMatter}${nextBody}`);
     },
@@ -137,18 +131,23 @@ export default function TaskDescriptionVisualEditor({
   }, [body, editor]);
 
   useEffect(() => {
-    if (!editor || editor.isDestroyed || editor.isEditable === !uploading) {
+    disabledRef.current = disabled;
+    canEditRef.current = canEdit;
+  }, [canEdit, disabled]);
+
+  useEffect(() => {
+    if (!editor || editor.isDestroyed || editor.isEditable === canEdit) {
       return;
     }
-    editor.setEditable(!uploading);
-  }, [editor, uploading]);
+    editor.setEditable(canEdit);
+  }, [canEdit, editor]);
 
   const uploadFiles = useCallback(
     (files: File[]): void => {
-      if (!editor || uploading) return;
+      if (!editor || !canEdit || files.length === 0) return;
       const insertAt = editor.state.selection.from;
       void Promise.allSettled(files.map((file) => onUpload(file))).then((results) => {
-        if (editor.isDestroyed) return;
+        if (editor.isDestroyed || disabledRef.current) return;
         const images = results.flatMap((result, index) => {
           const file = files[index];
           if (result.status === "rejected" || !file) return [];
@@ -168,12 +167,23 @@ export default function TaskDescriptionVisualEditor({
         }
       });
     },
-    [editor, onUpload, uploading],
+    [canEdit, editor, onUpload],
   );
 
   useEffect(() => {
     uploadFilesRef.current = uploadFiles;
   }, [uploadFiles]);
+
+  const uploadImages = (files: FileList, preventDefault: () => void): void => {
+    if (!canEdit) {
+      preventDefault();
+      return;
+    }
+    const images = Array.from(files).filter((file) => file.type.startsWith("image/"));
+    if (images.length === 0) return;
+    preventDefault();
+    uploadFilesRef.current(images);
+  };
 
   const toolbar = useEditorState({
     editor,
@@ -217,62 +227,52 @@ export default function TaskDescriptionVisualEditor({
 
   return (
     <div className="overflow-hidden rounded-md border border-input bg-card focus-within:ring-2 focus-within:ring-ring/40">
-      <div className="flex flex-wrap gap-0.5 border-b border-border bg-muted/30 p-1.5">
-        <TaskDescriptionFormattingToolbar
-          editor={editor}
-          state={toolbar}
-          onEditLink={() => {
-            const href = editor.getAttributes("link").href;
-            const hrefResult = z.string().safeParse(href);
-            setLinkHref(hrefResult.success ? hrefResult.data : "");
-          }}
-          onEditMath={(kind) => setMathEdit({ kind, latex: "" })}
-        />
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="size-8"
-          aria-label={uploading ? "Uploading image" : "Insert image"}
-          title={uploading ? "Uploading image" : "Insert image"}
-          disabled={uploading}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <ImagePlus className={cn("size-4", uploading && "animate-pulse")} />
-        </Button>
-        <input
-          ref={fileInputRef}
-          aria-label="Task description images"
-          type="file"
-          className="sr-only"
-          accept="image/png,image/jpeg,image/webp,image/gif"
-          multiple
-          onChange={(event) => {
-            uploadFilesRef.current(Array.from(event.currentTarget.files ?? []));
-            event.currentTarget.value = "";
-          }}
-        />
-      </div>
+      <fieldset disabled={!canEdit} className="min-w-0 border-0 p-0">
+        <div className="flex flex-wrap gap-0.5 border-b border-border bg-muted/30 p-1.5">
+          <TaskDescriptionFormattingToolbar
+            editor={editor}
+            state={toolbar}
+            onEditLink={() => {
+              if (!canEditRef.current) return;
+              const href = editor.getAttributes("link").href;
+              const hrefResult = z.string().safeParse(href);
+              setLinkHref(hrefResult.success ? hrefResult.data : "");
+            }}
+            onEditMath={(kind) => openMathEditor({ kind, latex: "" })}
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8"
+            aria-label={uploading ? "Uploading image" : "Insert image"}
+            title={uploading ? "Uploading image" : "Insert image"}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <ImagePlus className={cn("size-4", uploading && "animate-pulse")} />
+          </Button>
+          <input
+            ref={fileInputRef}
+            aria-label="Task description images"
+            type="file"
+            className="sr-only"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            multiple
+            onChange={(event) => {
+              uploadFilesRef.current(Array.from(event.currentTarget.files ?? []));
+              event.currentTarget.value = "";
+            }}
+          />
+        </div>
+      </fieldset>
       <TaskDescriptionImageContext.Provider value={imageContext}>
         <MermaidPreviewProvider previews={mermaidPreviews}>
           <EditorContent
             editor={editor}
-            onDrop={(event) => {
-              const files = Array.from(event.dataTransfer.files).filter((file) =>
-                file.type.startsWith("image/"),
-              );
-              if (files.length === 0) return;
-              event.preventDefault();
-              uploadFilesRef.current(files);
-            }}
-            onPaste={(event) => {
-              const files = Array.from(event.clipboardData.files).filter((file) =>
-                file.type.startsWith("image/"),
-              );
-              if (files.length === 0) return;
-              event.preventDefault();
-              uploadFilesRef.current(files);
-            }}
+            onDrop={(event) => uploadImages(event.dataTransfer.files, () => event.preventDefault())}
+            onPaste={(event) =>
+              uploadImages(event.clipboardData.files, () => event.preventDefault())
+            }
           />
         </MermaidPreviewProvider>
       </TaskDescriptionImageContext.Provider>
@@ -280,12 +280,15 @@ export default function TaskDescriptionVisualEditor({
         <TaskDescriptionLinkDialog
           key={linkHref || "new"}
           href={linkHref}
+          disabled={!canEdit}
           onCancel={() => setLinkHref(null)}
           onRemove={() => {
+            if (!canEditRef.current) return;
             editor.chain().focus().extendMarkRange("link").unsetLink().run();
             setLinkHref(null);
           }}
           onSubmit={(href) => {
+            if (!canEditRef.current) return false;
             const applied = editor.chain().focus().extendMarkRange("link").setLink({ href }).run();
             if (applied) {
               setLinkHref(null);
@@ -298,8 +301,10 @@ export default function TaskDescriptionVisualEditor({
         <TaskDescriptionMathDialog
           key={`${mathEdit.kind}:${mathEdit.position ?? "new"}`}
           edit={mathEdit}
+          disabled={!canEdit}
           onCancel={() => setMathEdit(null)}
           onSubmit={(latex) => {
+            if (!canEditRef.current) return false;
             const applied = applyMathEdit(editor, mathEdit, latex);
             if (applied) {
               setMathEdit(null);
@@ -310,4 +315,18 @@ export default function TaskDescriptionVisualEditor({
       ) : null}
     </div>
   );
+}
+
+function applyMathEdit(editor: Editor, edit: TaskDescriptionMathEdit, latex: string): boolean {
+  const chain = editor.chain().focus();
+  if (edit.kind === "inline") {
+    if (edit.position === undefined) {
+      return chain.insertInlineMath({ latex }).run();
+    }
+    return chain.updateInlineMath({ latex, pos: edit.position }).run();
+  }
+  if (edit.position === undefined) {
+    return chain.insertBlockMath({ latex }).run();
+  }
+  return chain.updateBlockMath({ latex, pos: edit.position }).run();
 }

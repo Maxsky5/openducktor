@@ -24,6 +24,7 @@ describe("TaskDescriptionMathDialog", () => {
     const onSubmit = mock((_latex: string) => true);
     const view = render(
       <TaskDescriptionMathDialog
+        disabled={false}
         edit={{ kind: "inline", latex: "x" }}
         onCancel={onCancel}
         onSubmit={onSubmit}
@@ -40,6 +41,7 @@ describe("TaskDescriptionMathDialog", () => {
     const onSubmit = mock((_latex: string) => true);
     const view = render(
       <TaskDescriptionMathDialog
+        disabled={false}
         edit={{ kind: "inline", latex: "x" }}
         onCancel={() => {}}
         onSubmit={onSubmit}
@@ -55,6 +57,7 @@ describe("TaskDescriptionMathDialog", () => {
     const onSubmit = mock((_latex: string) => true);
     const view = render(
       <TaskDescriptionMathDialog
+        disabled={false}
         edit={{ kind: "inline", latex: "x" }}
         onCancel={() => {}}
         onSubmit={onSubmit}
@@ -73,6 +76,7 @@ describe("TaskDescriptionMathDialog", () => {
     const onSubmit = mock((_latex: string) => true);
     const view = render(
       <TaskDescriptionMathDialog
+        disabled={false}
         edit={{ kind: "block", latex: "x^2" }}
         onCancel={() => {}}
         onSubmit={onSubmit}
@@ -91,6 +95,7 @@ describe("TaskDescriptionMathDialog", () => {
     const onCancel = mock(() => {});
     const view = render(
       <TaskDescriptionMathDialog
+        disabled={false}
         edit={{ kind: "inline", latex: "x" }}
         onCancel={onCancel}
         onSubmit={() => true}

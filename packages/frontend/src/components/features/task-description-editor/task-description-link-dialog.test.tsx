@@ -23,6 +23,7 @@ describe("TaskDescriptionLinkDialog", () => {
     const onSubmit = mock((_href: string) => true);
     const view = render(
       <TaskDescriptionLinkDialog
+        disabled={false}
         href=""
         onCancel={() => {}}
         onRemove={() => {}}
@@ -44,6 +45,7 @@ describe("TaskDescriptionLinkDialog", () => {
       const onSubmit = mock((_href: string) => true);
       const view = render(
         <TaskDescriptionLinkDialog
+          disabled={false}
           href=""
           onCancel={() => {}}
           onRemove={() => {}}
@@ -65,6 +67,7 @@ describe("TaskDescriptionLinkDialog", () => {
     const onSubmit = mock((_href: string) => true);
     const view = render(
       <TaskDescriptionLinkDialog
+        disabled={false}
         href=""
         onCancel={() => {}}
         onRemove={() => {}}
@@ -84,6 +87,7 @@ describe("TaskDescriptionLinkDialog", () => {
     const onRemove = mock(() => {});
     const view = render(
       <TaskDescriptionLinkDialog
+        disabled={false}
         href="https://example.com/old"
         onCancel={() => {}}
         onRemove={onRemove}
@@ -113,6 +117,7 @@ describe("TaskDescriptionLinkDialog", () => {
     const onSubmit = mock((_href: string) => true);
     const view = render(
       <TaskDescriptionLinkDialog
+        disabled={false}
         href="https://example.com/old"
         onCancel={onCancel}
         onRemove={onRemove}
@@ -131,6 +136,7 @@ describe("TaskDescriptionLinkDialog", () => {
     const onSubmit = mock((_href: string) => true);
     const view = render(
       <TaskDescriptionLinkDialog
+        disabled={false}
         href="https://example.com/docs"
         onCancel={() => {}}
         onRemove={() => {}}
@@ -147,6 +153,7 @@ describe("TaskDescriptionLinkDialog", () => {
     const onCancel = mock(() => {});
     const view = render(
       <TaskDescriptionLinkDialog
+        disabled={false}
         href=""
         onCancel={onCancel}
         onRemove={() => {}}

@@ -37,33 +37,6 @@ export type TaskDescriptionToolbarState = {
   canRedo: boolean;
 };
 
-const ToolbarButton = ({
-  active = false,
-  disabled = false,
-  label,
-  onClick,
-  children,
-}: {
-  active?: boolean;
-  disabled?: boolean;
-  label: string;
-  onClick(): void;
-  children: ReactElement;
-}) => (
-  <Button
-    type="button"
-    variant={active ? "secondary" : "ghost"}
-    size="icon"
-    className="size-8"
-    aria-label={label}
-    title={label}
-    disabled={disabled}
-    onClick={onClick}
-  >
-    {children}
-  </Button>
-);
-
 export function TaskDescriptionFormattingToolbar({
   editor,
   state,
@@ -202,5 +175,34 @@ export function TaskDescriptionFormattingToolbar({
         <Network className="size-4" />
       </ToolbarButton>
     </>
+  );
+}
+
+function ToolbarButton({
+  active = false,
+  disabled = false,
+  label,
+  onClick,
+  children,
+}: {
+  active?: boolean;
+  disabled?: boolean;
+  label: string;
+  onClick(): void;
+  children: ReactElement;
+}): ReactElement {
+  return (
+    <Button
+      type="button"
+      variant={active ? "secondary" : "ghost"}
+      size="icon"
+      className="size-8"
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {children}
+    </Button>
   );
 }

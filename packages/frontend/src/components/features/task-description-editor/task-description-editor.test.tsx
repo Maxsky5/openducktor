@@ -1,5 +1,5 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
-import { fireEvent, render, waitFor as testingLibraryWaitFor } from "@testing-library/react";
+import { act, fireEvent, render, waitFor as testingLibraryWaitFor } from "@testing-library/react";
 import { useState } from "react";
 import { hasMarkdownMath } from "@/components/ui/markdown-math-detection";
 import TaskDescriptionEditor from "./task-description-editor";
@@ -44,7 +44,11 @@ const requireButton = (element: HTMLElement): HTMLButtonElement => {
   return element;
 };
 
+const isDisabled = (button: HTMLButtonElement): boolean =>
+  button.disabled || button.closest("fieldset[disabled]") !== null;
+
 const createProps = () => ({
+  disabled: false,
   workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
   taskId: "task-1",
   onUpload: async () => ({
@@ -72,6 +76,82 @@ const createDeferred = <T,>() => {
 };
 
 describe("TaskDescriptionEditor", () => {
+  test("locks Visual input and image paths until the form unlocks", async () => {
+    const onChange = mock((_value: string) => {});
+    const onUpload = mock(createProps().onUpload);
+    const props = { ...createProps(), markdown: "Draft", onChange, onUpload };
+    const view = render(<TaskDescriptionEditor {...props} />);
+    const content = await waitFor(() => requireElement(view.container, ".tiptap"));
+    expect(content.getAttribute("contenteditable")).toBe("true");
+    onChange.mockClear();
+
+    view.rerender(<TaskDescriptionEditor {...props} disabled />);
+    await waitFor(() => expect(content.getAttribute("contenteditable")).toBe("false"));
+    expect(isDisabled(requireButton(view.getByRole("button", { name: "Bold" })))).toBe(true);
+    expect(isDisabled(requireButton(view.getByRole("button", { name: "Insert image" })))).toBe(
+      true,
+    );
+    const image = new File([new Uint8Array([1])], "draft.png", { type: "image/png" });
+    const input = requireInput(view.getByLabelText("Task description images"));
+    fireEvent.change(input, { target: { files: [image] } });
+    fireEvent.paste(content, { clipboardData: { files: [image] } });
+    fireEvent.drop(content, { dataTransfer: { files: [image] } });
+    expect(onUpload).not.toHaveBeenCalled();
+    expect(onChange.mock.calls).toEqual([]);
+
+    view.rerender(<TaskDescriptionEditor {...props} />);
+    await waitFor(() => expect(content.getAttribute("contenteditable")).toBe("true"));
+    expect(isDisabled(requireButton(view.getByRole("button", { name: "Bold" })))).toBe(false);
+  });
+
+  test.each([
+    ["Inline math", "LaTeX formula", "x^2", "Insert formula"],
+    ["Link", "Link destination", "https://example.com", "Insert link"],
+  ])("locks an open %s dialog and keeps its draft", async (button, field, draft, save) => {
+    const onChange = mock((_value: string) => {});
+    const props = { ...createProps(), markdown: "Draft", onChange };
+    const view = render(<TaskDescriptionEditor {...props} />);
+    fireEvent.click(await waitFor(() => view.getByRole("button", { name: button })));
+    const input = requireInput(view.getByRole("textbox", { name: field }));
+    fireEvent.change(input, { target: { value: draft } });
+    onChange.mockClear();
+
+    view.rerender(<TaskDescriptionEditor {...props} disabled />);
+    expect(input.disabled).toBe(true);
+    expect(requireButton(view.getByRole("button", { name: save })).disabled).toBe(true);
+    fireEvent.submit(requireForm(input));
+    expect(onChange).not.toHaveBeenCalled();
+
+    view.rerender(<TaskDescriptionEditor {...props} />);
+    expect(input.disabled).toBe(false);
+    expect(input.value).toBe(draft);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  test("does not insert an image that finishes uploading after the form locks", async () => {
+    const pendingUpload =
+      createDeferred<Awaited<ReturnType<ReturnType<typeof createProps>["onUpload"]>>>();
+    const onUpload = mock(() => pendingUpload.promise);
+    const onChange = mock((_value: string) => {});
+    const props = { ...createProps(), markdown: "Draft", onChange, onUpload };
+    const view = render(<TaskDescriptionEditor {...props} />);
+    await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
+    onChange.mockClear();
+    const image = new File([new Uint8Array([1])], "draft.png", { type: "image/png" });
+    fireEvent.change(view.getByLabelText("Task description images"), {
+      target: { files: [image] },
+    });
+    expect(onUpload).toHaveBeenCalledWith(image);
+
+    view.rerender(<TaskDescriptionEditor {...props} disabled />);
+    await act(async () => {
+      pendingUpload.resolve(await createProps().onUpload());
+      await pendingUpload.promise;
+    });
+    expect(onChange).not.toHaveBeenCalled();
+    expect(view.container.textContent).toContain("Draft");
+  });
+
   test("shows one stable Visual editor surface while the first rich bundle loads", () => {
     const view = render(
       <TaskDescriptionEditor {...createProps()} markdown="Body" onChange={() => {}} />,
@@ -573,19 +653,27 @@ describe("TaskDescriptionEditor", () => {
     const onUpload = mock((file: File) =>
       file === firstFile ? firstUpload.promise : secondUpload.promise,
     );
-    const view = render(
-      <TaskDescriptionEditor
-        {...createProps()}
-        markdown="Before"
-        onChange={onChange}
-        onUpload={onUpload}
-      />,
-    );
+    const props = { ...createProps(), markdown: "Before", onChange, onUpload };
+    const view = render(<TaskDescriptionEditor {...props} />);
     await waitFor(() => expect(view.getByRole("button", { name: "Insert image" })).toBeTruthy());
     const input = view.getByLabelText("Task description images");
 
     fireEvent.change(input, { target: { files: [firstFile, secondFile] } });
     await waitFor(() => expect(onUpload).toHaveBeenCalledTimes(2));
+    view.rerender(
+      <TaskDescriptionEditor
+        {...props}
+        uploads={[
+          { id: "first", fileName: firstFile.name, status: "uploading" },
+          { id: "second", fileName: secondFile.name, status: "uploading" },
+        ]}
+      />,
+    );
+    await waitFor(() =>
+      expect(requireElement(view.container, ".tiptap").getAttribute("contenteditable")).toBe(
+        "false",
+      ),
+    );
     secondUpload.resolve({
       assetId: secondAssetId,
       scope: "description",

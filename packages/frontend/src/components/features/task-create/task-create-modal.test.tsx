@@ -36,6 +36,7 @@ const controllerMock: ReturnType<
   isBusy: false,
   isFormDisabled: false,
   isRecoveryBlocked: false,
+  isSaveOrRecoveryLocked: false,
   hasExternalTaskConflict: false,
   step: "details",
   setStep: (_step: "type" | "details") => {},
@@ -165,6 +166,7 @@ describe("TaskCreateModal", () => {
       );
       try {
         expect(await screen.findByTestId("task-details-form")).toBeTruthy();
+        expect(formSpy.mock.calls[0]?.[0].disabled).toBe(false);
         expect(formSpy.mock.calls[0]?.[0].issueImageContext).toEqual({
           repoPath: "/workspace/repo",
           sourceId: "132",
@@ -181,12 +183,61 @@ describe("TaskCreateModal", () => {
     }
   });
 
-  test("locks mutation controls but keeps Close available after partial state", async () => {
-    controllerMock.isRecoveryBlocked = true;
+  test("keeps the description save lock clear during an image upload", async () => {
+    controllerMock.isSubmitting = false;
+    controllerMock.isSavingDocument = null;
+    controllerMock.isRecoveryBlocked = false;
+    controllerMock.isSaveOrRecoveryLocked = false;
     controllerMock.isFormDisabled = true;
     controllerMock.isEditingDocument = false;
+    controllerMock.editSection = "details";
+    controllerMock.activeDocumentSection = null;
+    controllerMock.descriptionAssetUploads = [
+      { id: "upload-1", fileName: "draft.png", status: "uploading" },
+    ];
+    const formSpy = spyOn(taskDetailsFormModule, "TaskDetailsForm").mockImplementation(() =>
+      createElement("div", { "data-testid": "task-details-form" }),
+    );
+    testSpies.push(formSpy);
+
+    try {
+      const rendered = render(
+        createElement(TaskCreateModal, {
+          open: true,
+          onOpenChange: () => {},
+          tasks: [],
+          task: null,
+        }),
+      );
+      try {
+        const form = await screen.findByTestId("task-details-form");
+        expect(form.closest("fieldset")?.disabled).toBe(true);
+        expect(formSpy.mock.calls[0]?.[0].disabled).toBe(false);
+      } finally {
+        await act(async () => rendered.unmount());
+      }
+    } finally {
+      controllerMock.isFormDisabled = false;
+      controllerMock.isEditingDocument = true;
+      controllerMock.editSection = "spec";
+      controllerMock.activeDocumentSection = "spec";
+      controllerMock.descriptionAssetUploads = [];
+    }
+  });
+
+  test("locks mutation controls but keeps Close available after partial state", async () => {
+    controllerMock.isRecoveryBlocked = true;
+    controllerMock.isSaveOrRecoveryLocked = true;
+    controllerMock.isFormDisabled = true;
+    controllerMock.isEditingDocument = false;
+    controllerMock.editSection = "details";
+    controllerMock.activeDocumentSection = null;
     controllerMock.footerError =
       "Refresh before continuing. Task: created-task · Phase: compensate_create · Durable state: created_partial";
+    const formSpy = spyOn(taskDetailsFormModule, "TaskDetailsForm").mockImplementation(() =>
+      createElement("div", { "data-testid": "task-details-form" }),
+    );
+    testSpies.push(formSpy);
     const task = createTaskCardFixture({ id: "TASK-123" });
 
     try {
@@ -207,11 +258,16 @@ describe("TaskCreateModal", () => {
       expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save Changes" }).disabled).toBe(
         true,
       );
+      expect(await screen.findByTestId("task-details-form")).toBeTruthy();
+      expect(formSpy.mock.calls[0]?.[0].disabled).toBe(true);
       await act(async () => rendered.unmount());
     } finally {
       controllerMock.isRecoveryBlocked = false;
+      controllerMock.isSaveOrRecoveryLocked = false;
       controllerMock.isFormDisabled = false;
       controllerMock.isEditingDocument = true;
+      controllerMock.editSection = "spec";
+      controllerMock.activeDocumentSection = "spec";
       controllerMock.footerError = null;
     }
   });

@@ -16,6 +16,7 @@ const TaskDescriptionVisualEditor = lazy(loadTaskDescriptionVisualEditor);
 
 type TaskDescriptionEditorProps = {
   markdown: string;
+  disabled: boolean;
   workspaceId: string | null;
   taskId: string | null;
   issueImageContext?: IssueImageContext | undefined;
@@ -97,6 +98,7 @@ function descriptionEditorMode(
 
 function TaskDescriptionEditorSession({
   markdown,
+  disabled,
   workspaceId,
   taskId,
   issueImageContext,
@@ -148,6 +150,7 @@ function TaskDescriptionEditorSession({
       <Suspense fallback={<TaskDescriptionEditorLoading />}>
         <TaskDescriptionVisualEditor
           body={visualBody}
+          disabled={disabled}
           frontMatter={preservedPrefix}
           onChange={(nextMarkdown) => {
             markVisualChange(nextMarkdown);

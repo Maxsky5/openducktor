@@ -393,9 +393,11 @@ function selectTaskCreateModalView({
     isSpecDirty,
     isPlanDirty,
   });
-  const isBusy = modalState.isSubmitting || modalState.isSavingDocument !== null || isUploading;
+  const isSaving = modalState.isSubmitting || modalState.isSavingDocument !== null;
+  const isBusy = isSaving || isUploading;
   const isRecoveryBlocked = taskAssetFailureRequiresLock(modalState.taskAssetFailure);
-  const isFormDisabled = isBusy || isRecoveryBlocked;
+  const isSaveOrRecoveryLocked = isSaving || isRecoveryBlocked;
+  const isFormDisabled = isSaveOrRecoveryLocked || isUploading;
   const isTypeStepVisible = mode === "create" && modalState.step === "type";
   const isEditingDocument = mode === "edit" && activeDocumentSection !== null;
   let footerError = modalState.error;
@@ -415,6 +417,7 @@ function selectTaskCreateModalView({
     hasUnsavedActiveDocument,
     isBusy,
     isRecoveryBlocked,
+    isSaveOrRecoveryLocked,
     isFormDisabled,
     isTypeStepVisible,
     isEditingDocument,
@@ -508,6 +511,7 @@ export function useTaskCreateModalController({
     hasUnsavedActiveDocument,
     isBusy,
     isRecoveryBlocked,
+    isSaveOrRecoveryLocked,
     isFormDisabled,
     isTypeStepVisible,
     isEditingDocument,
@@ -637,6 +641,7 @@ export function useTaskCreateModalController({
     isBusy,
     isFormDisabled,
     isRecoveryBlocked,
+    isSaveOrRecoveryLocked,
     hasExternalTaskConflict,
     isTypeStepVisible,
     isEditingDocument,
