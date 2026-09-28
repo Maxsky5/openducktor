@@ -105,7 +105,7 @@ export const createTaskDescriptionComponents = ({
   ...components,
   code: ({ className, children, ...props }) => {
     if (className === "language-mermaid") {
-      return <MarkdownMermaid source={String(children).replace(/\n$/, "")} />;
+      return <MarkdownMermaid source={String(children).replace(/\n$/, "")} expandable />;
     }
     const CodeComponent = components.code;
     if (CodeComponent) {
@@ -160,7 +160,9 @@ export const createTaskDescriptionComponents = ({
       isValidElement<{ className?: string; children?: unknown }>(child) &&
       child.props.className === "language-mermaid"
     ) {
-      return <MarkdownMermaid source={String(child.props.children).replace(/\n$/, "")} />;
+      return (
+        <MarkdownMermaid source={String(child.props.children).replace(/\n$/, "")} expandable />
+      );
     }
     if (components.pre) {
       return createElement(components.pre, { ...props, className }, children);

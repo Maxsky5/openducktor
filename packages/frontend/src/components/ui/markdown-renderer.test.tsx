@@ -11,6 +11,7 @@ import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { MarkdownMermaid } from "./markdown-mermaid";
 import { MERMAID_RENDER_CONFIG } from "./markdown-mermaid-render";
+import { MarkdownPreviewModal } from "./markdown-preview-modal";
 import { MarkdownRenderer } from "./markdown-renderer";
 
 const renderMarkdownLink = (href: string, label: string) => {
@@ -524,6 +525,106 @@ describe("rich task description rendering", () => {
     expect(view.container.querySelector("script")).toBeNull();
   }, 4000);
 
+  test("opens only the chosen rendered Mermaid diagram and closes without losing Markdown", async () => {
+    const renderModule = await import("./markdown-mermaid-render");
+    const renderSpy = spyOn(renderModule, "renderMermaidSvg").mockImplementation(
+      async (_id, source) =>
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200"><text>${source.includes("C --> D") ? "Second diagram" : "First diagram"}</text></svg>`,
+    );
+    const createUrl = spyOn(URL, "createObjectURL").mockReturnValue("blob:chosen-diagram");
+    const revokeUrl = spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    const originalObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class {
+      constructor(private readonly callback: ResizeObserverCallback) {}
+      observe() {
+        this.callback([], this);
+      }
+      unobserve() {}
+      disconnect() {}
+    };
+
+    try {
+      const view = render(
+        <MarkdownRenderer
+          markdown={
+            "Before\n\n```mermaid\ngraph TD\n  A --> B\n```\n\n```mermaid\ngraph TD\n  C --> D\n```\n\nAfter"
+          }
+        />,
+      );
+      await waitFor(
+        () => expect(view.getAllByRole("button", { name: "Open diagram preview" })).toHaveLength(2),
+        {
+          timeout: 3000,
+        },
+      );
+      const chosenTrigger = view.getAllByRole("button", { name: "Open diagram preview" })[1]!;
+      chosenTrigger.focus();
+      fireEvent.click(chosenTrigger);
+      expect(view.getByRole("dialog", { name: "Diagram preview" })).toBeTruthy();
+      expect(view.getByText("Before")).toBeTruthy();
+      expect(view.getByText("After")).toBeTruthy();
+      expect(createUrl).toHaveBeenCalledTimes(1);
+      const resource = createUrl.mock.calls[0]?.[0];
+      if (!(resource instanceof Blob)) throw new Error("The diagram resource is missing.");
+      expect(await resource.text()).toContain("Second diagram");
+      expect(await resource.text()).not.toContain("First diagram");
+      fireEvent.keyDown(document, { key: "Escape" });
+      await waitFor(() =>
+        expect(view.queryByRole("dialog", { name: "Diagram preview" })).toBeNull(),
+      );
+      expect(document.activeElement).toBe(chosenTrigger);
+      expect(revokeUrl).toHaveBeenCalledWith("blob:chosen-diagram");
+      expect(view.getAllByRole("button", { name: "Open diagram preview" })).toHaveLength(2);
+    } finally {
+      globalThis.ResizeObserver = originalObserver;
+      renderSpy.mockRestore();
+      createUrl.mockRestore();
+      revokeUrl.mockRestore();
+    }
+  }, 4000);
+
+  test("closes a diagram preview inside a document preview without closing the document", async () => {
+    const renderModule = await import("./markdown-mermaid-render");
+    const renderSpy = spyOn(renderModule, "renderMermaidSvg").mockResolvedValue(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200"><text>Diagram</text></svg>',
+    );
+    const createUrl = spyOn(URL, "createObjectURL").mockReturnValue("blob:diagram");
+    const revokeUrl = spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    const originalObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class {
+      constructor(private readonly callback: ResizeObserverCallback) {}
+      observe() {
+        this.callback([], this);
+      }
+      unobserve() {}
+      disconnect() {}
+    };
+
+    try {
+      const view = render(
+        <MarkdownPreviewModal
+          open
+          onOpenChange={() => {}}
+          title="Document"
+          markdown={"Before\n\n```mermaid\ngraph TD\n  A --> B\n```"}
+        />,
+      );
+      fireEvent.click(await view.findByRole("button", { name: "Open diagram preview" }));
+      expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(2);
+      fireEvent.keyDown(document, { key: "Escape" });
+      await waitFor(() =>
+        expect(view.queryByRole("dialog", { name: "Diagram preview" })).toBeNull(),
+      );
+      expect(view.getByRole("dialog", { name: "Document" })).toBeTruthy();
+      expect(view.getByText("Before")).toBeTruthy();
+    } finally {
+      globalThis.ResizeObserver = originalObserver;
+      renderSpy.mockRestore();
+      createUrl.mockRestore();
+      revokeUrl.mockRestore();
+    }
+  }, 4000);
+
   test("keeps a diagram fence as code and never mounts the diagram renderer on the lightweight path", async () => {
     const renderModule = await import("./markdown-mermaid-render");
     const renderSpy = spyOn(renderModule, "renderMermaidSvg").mockImplementation(
@@ -674,6 +775,7 @@ describe("rich task description rendering", () => {
     expect(view.queryByText("Mermaid source")).toBeNull();
     expect(view.queryByText("this is not a diagram")).toBeNull();
     expect(view.getByText(/Edit the Mermaid source/)).toBeTruthy();
+    expect(view.queryByRole("button", { name: "Open diagram preview" })).toBeNull();
   }, 4000);
 
   test.each([
