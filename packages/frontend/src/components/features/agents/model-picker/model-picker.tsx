@@ -538,35 +538,62 @@ const ModelPickerList = ({
   listRef: RefObject<ListImperativeAPI | null>;
   onRowsRendered: (range: { startIndex: number; stopIndex: number }) => void;
 }): ReactElement | null => {
-  if (items.length >= VIRTUALIZATION_MIN_MODEL_COUNT) {
+  const isVirtualized = items.length >= VIRTUALIZATION_MIN_MODEL_COUNT;
+  const [rowHeight, setRowHeight] = useState(MODEL_ROW_HEIGHT_PX);
+  const rowHeightProbeRef = useRef<HTMLSpanElement | null>(null);
+  useLayoutEffect(() => {
+    const probe = rowHeightProbeRef.current;
+    if (!probe) {
+      return;
+    }
+    const updateRowHeight = (): void => {
+      const measuredHeight = probe.getBoundingClientRect().height;
+      if (measuredHeight > 0) {
+        setRowHeight(measuredHeight);
+      }
+    };
+    updateRowHeight();
+    const observer = new ResizeObserver(updateRowHeight);
+    observer.observe(probe);
+    return () => observer.disconnect();
+  }, [isVirtualized]);
+
+  if (isVirtualized) {
     return (
-      <List
-        key={`${activeView}:${searchQuery}`}
-        tagName="ul"
-        aria-label="Models"
-        className="min-h-0 overflow-x-hidden"
-        style={{
-          height: Math.min(items.length * MODEL_ROW_HEIGHT_PX + 4, MODEL_LIST_MAX_HEIGHT_PX),
-        }}
-        defaultHeight={MODEL_LIST_MAX_HEIGHT_PX}
-        listRef={listRef}
-        rowComponent={VirtualModelRow}
-        rowCount={items.length}
-        rowHeight={MODEL_ROW_HEIGHT_PX}
-        rowKey={modelRowKey}
-        rowProps={{
-          items,
-          value,
-          favoriteState,
-          getModelDisabledReason,
-          registerButton,
-          onFocus,
-          onBlur,
-          onNavigate,
-          onSelect,
-        }}
-        onRowsRendered={(_visibleRows, allRows) => onRowsRendered(allRows)}
-      />
+      <>
+        <span
+          ref={rowHeightProbeRef}
+          aria-hidden="true"
+          className="pointer-events-none absolute h-[3.25rem] w-0"
+        />
+        <List
+          key={`${activeView}:${searchQuery}`}
+          tagName="ul"
+          aria-label="Models"
+          className="min-h-0 overflow-x-hidden"
+          style={{
+            height: Math.min(items.length * rowHeight + 4, MODEL_LIST_MAX_HEIGHT_PX),
+          }}
+          defaultHeight={MODEL_LIST_MAX_HEIGHT_PX}
+          listRef={listRef}
+          rowComponent={VirtualModelRow}
+          rowCount={items.length}
+          rowHeight={rowHeight}
+          rowKey={modelRowKey}
+          rowProps={{
+            items,
+            value,
+            favoriteState,
+            getModelDisabledReason,
+            registerButton,
+            onFocus,
+            onBlur,
+            onNavigate,
+            onSelect,
+          }}
+          onRowsRendered={(_visibleRows, allRows) => onRowsRendered(allRows)}
+        />
+      </>
     );
   }
 
@@ -646,6 +673,60 @@ const ModelPickerRail = ({
   </div>
 );
 
+type PendingModelFocusArgs = {
+  items: ModelPickerItem[];
+  getModelDisabledReason: ModelPickerProps["getModelDisabledReason"];
+  pendingFocusKey: RefObject<string | null>;
+  focusedModelKey: RefObject<string | null>;
+  modelButtonRefs: RefObject<Array<HTMLButtonElement | null>>;
+  listRef: RefObject<ListImperativeAPI | null>;
+  searchInputRef: RefObject<HTMLInputElement | null>;
+  renderedRows?: { startIndex: number; stopIndex: number };
+};
+
+const recoverPendingModelFocus = ({
+  items,
+  getModelDisabledReason,
+  pendingFocusKey,
+  focusedModelKey,
+  modelButtonRefs,
+  listRef,
+  searchInputRef,
+  renderedRows,
+}: PendingModelFocusArgs): boolean => {
+  const key = pendingFocusKey.current;
+  if (key === null) {
+    return false;
+  }
+  const index = items.findIndex((item) => modelPickerValueKey(item.value) === key);
+  if (index < 0 || getModelDisabledReason?.(items[index]!)) {
+    pendingFocusKey.current = null;
+    focusedModelKey.current = null;
+    searchInputRef.current?.focus();
+    return true;
+  }
+  if (renderedRows && (index < renderedRows.startIndex || index > renderedRows.stopIndex)) {
+    if (!listRef.current) {
+      throw new Error("Model list is unavailable for keyboard navigation.");
+    }
+    listRef.current.scrollToRow({ index, align: "auto" });
+    return true;
+  }
+  const button = modelButtonRefs.current[index];
+  if (button?.isConnected && !button.disabled) {
+    pendingFocusKey.current = null;
+    button.focus();
+    return true;
+  }
+  if (!renderedRows) {
+    if (!listRef.current) {
+      throw new Error("Model list is unavailable for keyboard navigation.");
+    }
+    listRef.current.scrollToRow({ index, align: "auto" });
+  }
+  return true;
+};
+
 export function ModelPicker({
   runtimes,
   value,
@@ -667,7 +748,7 @@ export function ModelPicker({
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const modelButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const listRef = useRef<ListImperativeAPI | null>(null);
-  const pendingFocusIndex = useRef<number | null>(null);
+  const pendingFocusKey = useRef<string | null>(null);
   const focusedModelKey = useRef<string | null>(null);
   const lockedRuntimeKind =
     selectionPolicy.kind === "runtime_locked" ? selectionPolicy.runtimeKind : null;
@@ -683,6 +764,20 @@ export function ModelPicker({
     [activeView, favoriteState.favorites, lockedRuntimeKind, runtimes, searchQuery],
   );
   useLayoutEffect(() => {
+    if (
+      open &&
+      recoverPendingModelFocus({
+        items,
+        getModelDisabledReason,
+        pendingFocusKey,
+        focusedModelKey,
+        modelButtonRefs,
+        listRef,
+        searchInputRef,
+      })
+    ) {
+      return;
+    }
     const focusedKey = focusedModelKey.current;
     if (!open || focusedKey === null || document.activeElement !== document.body) {
       return;
@@ -695,7 +790,7 @@ export function ModelPicker({
     }
     focusedModelKey.current = null;
     searchInputRef.current?.focus();
-  }, [items, open]);
+  }, [getModelDisabledReason, items, open]);
   const { triggerRuntime, triggerModelLabel, triggerAriaLabel, visibleResources, emptyMessage } =
     resolveModelPickerPresentation({
       runtimes,
@@ -715,13 +810,14 @@ export function ModelPicker({
   const focusModel = (index: number): void => {
     const button = modelButtonRefs.current[index];
     if (button) {
+      pendingFocusKey.current = null;
       button.focus();
       return;
     }
     if (!listRef.current) {
       throw new Error("Model list is unavailable for keyboard navigation.");
     }
-    pendingFocusIndex.current = index;
+    pendingFocusKey.current = modelPickerValueKey(items[index]!.value);
     listRef.current.scrollToRow({ index, align: "auto" });
   };
 
@@ -759,7 +855,7 @@ export function ModelPicker({
       return;
     }
     onValueChange(item.value);
-    pendingFocusIndex.current = null;
+    pendingFocusKey.current = null;
     focusedModelKey.current = null;
     setSearchQuery("");
     setOpen(false);
@@ -786,7 +882,7 @@ export function ModelPicker({
       );
     }
     if (!nextOpen) {
-      pendingFocusIndex.current = null;
+      pendingFocusKey.current = null;
       focusedModelKey.current = null;
     }
     setOpen(nextOpen);
@@ -794,14 +890,19 @@ export function ModelPicker({
   };
 
   const onRowsRendered = (allRows: { startIndex: number; stopIndex: number }): void => {
-    const pendingIndex = pendingFocusIndex.current;
-    if (pendingIndex !== null) {
-      const target = modelButtonRefs.current[pendingIndex];
-      if (target) {
-        pendingFocusIndex.current = null;
-        target.focus();
-        return;
-      }
+    if (
+      recoverPendingModelFocus({
+        items,
+        getModelDisabledReason,
+        pendingFocusKey,
+        focusedModelKey,
+        modelButtonRefs,
+        listRef,
+        searchInputRef,
+        renderedRows: allRows,
+      })
+    ) {
+      return;
     }
     const focusedKey = focusedModelKey.current;
     if (focusedKey === null || document.activeElement !== document.body) {

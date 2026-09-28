@@ -626,6 +626,100 @@ describe("ModelPicker", () => {
     });
   });
 
+  test("keeps the pending keyboard target when the catalog reorders before scroll", async () => {
+    const favorites = favoriteState();
+    const onValueChange = mock(() => {});
+    const renderPicker = (runtimes: ModelPickerRuntime[]) => (
+      <ModelPicker
+        runtimes={runtimes}
+        value={null}
+        favoriteState={favorites}
+        selectionPolicy={{ kind: "editable" }}
+        onValueChange={onValueChange}
+      />
+    );
+    const reordered = makeLargeRuntimes();
+    const resource = reordered[0]!.resource;
+    if (resource.status !== "ready") {
+      throw new Error("The test catalog must be ready.");
+    }
+    const models = resource.catalog.models;
+    [models[78], models[79]] = [models[79]!, models[78]!];
+    const { rerender } = render(renderPicker(makeLargeRuntimes()));
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Select model, Select a model" }));
+    });
+    const list = screen.getByRole("list", { name: "Models" });
+    let requestedTop = 0;
+    Object.defineProperty(list, "scrollTo", {
+      value: ({ top }: { top: number }) => {
+        requestedTop = top;
+      },
+    });
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Search models" }), {
+      key: "ArrowDown",
+    });
+    fireEvent.keyDown(screen.getByRole("button", { name: "Select Model 0 model" }), {
+      key: "End",
+    });
+    expect(requestedTop).toBeGreaterThan(0);
+
+    await act(async () => {
+      rerender(renderPicker(reordered));
+      list.scrollTop = requestedTop;
+      fireEvent.scroll(list);
+    });
+
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("Select Model 79 model");
+    fireEvent.click(document.activeElement!);
+    expect(onValueChange).toHaveBeenCalledWith({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "model-79",
+    });
+  });
+
+  test.each([
+    { change: "leaves the catalog", count: 79, disableTarget: false },
+    { change: "becomes disabled", count: 80, disableTarget: true },
+  ])(
+    "returns focus to search when the pending keyboard target $change",
+    async ({ count, disableTarget }) => {
+      const favorites = favoriteState();
+      const renderPicker = (modelCount: number, disableModel79 = false) => (
+        <ModelPicker
+          runtimes={makeLargeRuntimes(modelCount)}
+          value={null}
+          favoriteState={favorites}
+          selectionPolicy={{ kind: "editable" }}
+          getModelDisabledReason={(item) =>
+            disableModel79 && item.model.modelId === "model-79" ? "Unavailable" : null
+          }
+          onValueChange={() => {}}
+        />
+      );
+      const { rerender } = render(renderPicker(80));
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Select model, Select a model" }));
+      });
+      const list = screen.getByRole("list", { name: "Models" });
+      Object.defineProperty(list, "scrollTo", { value: () => {} });
+      const search = screen.getByRole("textbox", { name: "Search models" });
+      fireEvent.keyDown(search, { key: "ArrowDown" });
+      fireEvent.keyDown(screen.getByRole("button", { name: "Select Model 0 model" }), {
+        key: "End",
+      });
+
+      await act(async () => {
+        rerender(renderPicker(count, disableTarget));
+      });
+
+      expect(document.activeElement).toBe(search);
+    },
+  );
+
   test.each(["Select Model 0 model", "Add Model 0 to favorites"])(
     "returns focus to search when pointer scrolling unmounts %s",
     async (focusedAction) => {
