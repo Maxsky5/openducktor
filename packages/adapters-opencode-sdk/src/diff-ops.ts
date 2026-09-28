@@ -141,6 +141,10 @@ function toRenderableFileDiff(entry: FileDiff): FileDiff {
     type: entry.type,
     additions: entry.additions,
     deletions: entry.deletions,
-    diff: selectRenderableFileDiff(entry.diff, entry.file, { changeType: entry.type }) ?? "",
+    diff:
+      selectRenderableFileDiff(entry.diff, entry.file, {
+        changeType: entry.type,
+        windowsPaths: process.platform === "win32",
+      }) ?? "",
   };
 }

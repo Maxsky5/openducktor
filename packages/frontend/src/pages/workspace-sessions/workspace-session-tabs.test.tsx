@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { act, type ReactNode, useEffect, useState } from "react";
 import { Link, MemoryRouter, useLocation, useNavigate } from "react-router";
 import { QueryProvider } from "@/lib/query-provider";
+import { BrowserTabsRoot } from "@/components/ui/browser-tabs";
 import { RIGHT_PANEL_OPEN_STORAGE_KEY } from "@/components/features/agents/use-right-panel-open";
 import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
 import { ThemeProvider } from "@/components/layout/theme-provider";
@@ -33,6 +34,7 @@ import * as sessionImport from "./workspace-session-import-dialog";
 import * as chatCreate from "./workspace-session-create-dialog";
 import * as workspaceChat from "./workspace-session-chat";
 import * as sessionContent from "./workspace-session-content";
+import { WorkspaceSessionTabs } from "./workspace-session-tabs";
 
 const testWorkspaceIds = new Set<string>();
 const sessionTabs = (view: ReturnType<typeof render>) =>
@@ -866,17 +868,43 @@ test("workspace tabs use full-size status icons and the animated running indicat
 });
 
 test("drag preview keeps the normal tab status dot and button styling", async () => {
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceSessionListActive: async () => [sessionRecord("First")],
-        workspaceGetSettingsSnapshot: () => new Promise(() => {}),
-      },
+  const store = createAgentSessionsStore("/repo");
+  store.replaceSession(
+    createAgentSessionFixture({
+      runtimeKind: "opencode",
+      externalSessionId: "native-First",
+      workingDirectory: "/repo",
+      sessionAssociation: { kind: "repository" },
+      status: "running",
+      pendingApprovals: [],
+      pendingQuestions: [],
     }),
   );
-  const view = renderTabs("First");
+  const view = render(
+    <AgentSessionReadModelStateContext
+      value={{
+        sessionReadModelLoadState: { kind: "ready", workspaceRepoPath: "/repo" },
+        getSessionFault: () => null,
+        workspaceSessionRecordsError: null,
+        reloadSessionReadModel: () => {},
+      }}
+    >
+      <AgentSessionsContext value={store}>
+        <BrowserTabsRoot value="First" onValueChange={() => {}}>
+          <WorkspaceSessionTabs
+            sessions={[sessionRecord("First")]}
+            selectedId="First"
+            archivingId={null}
+            pending={false}
+            onReorder={() => {}}
+            onArchive={() => {}}
+          />
+        </BrowserTabsRoot>
+      </AgentSessionsContext>
+    </AgentSessionReadModelStateContext>,
+  );
   try {
-    const tab = await view.findByRole("tab", { name: /First/ }, { timeout: 800 });
+    const tab = view.getByRole("tab", { name: /First/ });
     fireEvent.pointerDown(tab, {
       button: 0,
       isPrimary: true,
@@ -907,7 +935,6 @@ test("drag preview keeps the normal tab status dot and button styling", async ()
     view.unmount();
     // dnd-kit's AbstractPointerSensor removes its document click blocker after 50 ms.
     await new Promise((resolve) => setTimeout(resolve, 50));
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 

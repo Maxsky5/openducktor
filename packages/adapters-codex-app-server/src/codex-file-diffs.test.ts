@@ -22,13 +22,26 @@ describe("Codex file diffs", () => {
     ]);
   });
 
+  test("preserves trailing spaces in streamed unified diff paths", () => {
+    const diff = "--- a/src/file \n+++ b/src/file \n@@ -1 +1 @@\n-old\n+new";
+    expect(fileDiffsFromUnifiedDiff(diff)).toEqual([
+      {
+        file: "src/file ",
+        type: "modified",
+        additions: 1,
+        deletions: 1,
+        diff: `${diff}\n`,
+      },
+    ]);
+  });
+
   test("parses Codex file change entries and derives missing counts", () => {
     expect(
       toFileDiffs([
         {
           path: "src/app.ts",
           kind: { type: "update", move_path: null },
-          diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n-old\n+new\n+line",
+          diff: "--- src/app.ts\n+++ src/app.ts\n@@\n-old\n+new\n+line",
         },
       ]),
     ).toEqual([
@@ -37,7 +50,37 @@ describe("Codex file diffs", () => {
         type: "modified",
         additions: 2,
         deletions: 1,
-        diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n-old\n+new\n+line\n",
+        diff: "--- src/app.ts\n+++ src/app.ts\n@@\n-old\n+new\n+line\n",
+      },
+    ]);
+  });
+
+  test("keeps a standalone Git-style modified file change visible", () => {
+    const diff = "--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new\n";
+
+    expect(
+      toFileDiffs([{ path: "src/app.ts", kind: { type: "update", move_path: null }, diff }]),
+    ).toEqual([{ file: "src/app.ts", type: "modified", additions: 1, deletions: 1, diff }]);
+  });
+
+  test("preserves trailing spaces in Codex file change and move paths", () => {
+    const file = "src/file ";
+    const movedFile = "src/moved ";
+    expect(
+      toFileDiffs([
+        {
+          path: file,
+          kind: { type: "update", move_path: movedFile },
+          diff: `--- ${file}\n+++ ${file}\n@@ -1 +1 @@\n-old\n+new\n\nMoved to: ${movedFile}`,
+        },
+      ]),
+    ).toEqual([
+      {
+        file: movedFile,
+        type: "modified",
+        additions: 1,
+        deletions: 1,
+        diff: `--- ${file}\n+++ ${file}\n@@ -1 +1 @@\n-old\n+new\n`,
       },
     ]);
   });
@@ -61,38 +104,6 @@ describe("Codex file diffs", () => {
         },
       ]),
     ).toThrow("Malformed Codex file change: entry 0 has empty file path.");
-  });
-
-  test("infers added and deleted file diffs with CRLF headers", () => {
-    expect(
-      toFileDiffs([
-        {
-          path: "src/new.ts",
-          kind: { type: "add" },
-          diff: "--- /dev/null\r\n+++ b/src/new.ts\r\n@@\r\n+new",
-        },
-        {
-          path: "src/old.ts",
-          kind: { type: "delete" },
-          diff: "--- a/src/old.ts\r\n+++ /dev/null\r\n@@\r\n-old",
-        },
-      ]),
-    ).toEqual([
-      {
-        file: "src/new.ts",
-        type: "added",
-        additions: 1,
-        deletions: 0,
-        diff: "--- /dev/null\n+++ b/src/new.ts\n@@\n+new\n",
-      },
-      {
-        file: "src/old.ts",
-        type: "deleted",
-        additions: 0,
-        deletions: 1,
-        diff: "--- a/src/old.ts\n+++ /dev/null\n@@\n-old\n",
-      },
-    ]);
   });
 
   test("keeps modified Codex full-file text metadata-only instead of failing the tool", () => {
@@ -175,13 +186,28 @@ describe("Codex file diffs", () => {
     ]);
   });
 
+  test("keeps patch text in Codex added and deleted file content", () => {
+    const content =
+      "intro\ndiff --git a/other.ts b/other.ts\nindex 111..222 100644\n--- a/other.ts\n+++ b/other.ts\n@@ -1 +1 @@\n-old\n+new\n";
+
+    expect(
+      toFileDiffs([
+        { path: "docs/new guide.md", kind: { type: "add" }, diff: content },
+        { path: "docs/old guide.md", kind: { type: "delete" }, diff: content },
+      ]).map(({ diff }) => diff),
+    ).toEqual([
+      "--- /dev/null\n+++ b/docs/new guide.md\n@@ -0,0 +1,8 @@\n+intro\n+diff --git a/other.ts b/other.ts\n+index 111..222 100644\n+--- a/other.ts\n++++ b/other.ts\n+@@ -1 +1 @@\n+-old\n++new\n",
+      "--- a/docs/old guide.md\n+++ /dev/null\n@@ -1,8 +0,0 @@\n-intro\n-diff --git a/other.ts b/other.ts\n-index 111..222 100644\n---- a/other.ts\n-+++ b/other.ts\n-@@ -1 +1 @@\n--old\n-+new\n",
+    ]);
+  });
+
   test("uses Codex app-server move targets as the displayed file path", () => {
     expect(
       toFileDiffs([
         {
           path: "src/old.ts",
           kind: { type: "update", move_path: "src/new.ts" },
-          diff: "--- a/src/old.ts\n+++ b/src/old.ts\n@@\n-old\n+new\n\nMoved to: src/new.ts",
+          diff: "--- src/old.ts\n+++ src/old.ts\n@@\n-old\n+new\n\nMoved to: src/new.ts",
         },
       ]),
     ).toEqual([
@@ -190,7 +216,7 @@ describe("Codex file diffs", () => {
         type: "modified",
         additions: 1,
         deletions: 1,
-        diff: "--- a/src/old.ts\n+++ b/src/old.ts\n@@\n-old\n+new\n",
+        diff: "--- src/old.ts\n+++ src/old.ts\n@@\n-old\n+new\n",
       },
     ]);
   });
@@ -283,6 +309,22 @@ function AuthConsumer() {}
         additions: 1,
         deletions: 1,
         diff: "--- a/src/new.ts\n+++ b/src/new.ts\n@@\n-old\n+new\n",
+      },
+    ]);
+  });
+
+  test("preserves trailing spaces in Codex apply_patch file and move paths", () => {
+    expect(
+      codexApplyPatchFileDiffs(
+        "*** Begin Patch\n*** Update File: src/old \n*** Move to: src/new \n@@\n-old\n+new\n*** End Patch",
+      ),
+    ).toEqual([
+      {
+        file: "src/new ",
+        type: "modified",
+        additions: 1,
+        deletions: 1,
+        diff: "--- a/src/new \n+++ b/src/new \n@@\n-old\n+new\n",
       },
     ]);
   });

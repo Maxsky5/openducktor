@@ -102,7 +102,8 @@ describe("TaskDescriptionEditor", () => {
     view.rerender(<TaskDescriptionEditor {...props} />);
     await waitFor(() => expect(content.getAttribute("contenteditable")).toBe("true"));
     expect(isDisabled(requireButton(view.getByRole("button", { name: "Bold" })))).toBe(false);
-  });
+    // This test mounts Tiptap and checks three full editor renders.
+  }, 5_000);
 
   test.each([
     ["Inline math", "LaTeX formula", "x^2", "Insert formula"],

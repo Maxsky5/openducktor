@@ -234,20 +234,24 @@ const normalizeToolMetadataFileDiff = (input: {
   diffFile?: string | undefined;
   type: FileDiff["type"];
   patch: string | null;
+  fullFileContent?: boolean;
   additions: number | undefined;
   deletions: number | undefined;
 }): FileDiff | null => {
-  const file = input.file?.trim();
-  if (!file || input.patch === null) {
+  const file = input.file;
+  const patch = input.patch;
+  if (!file?.trim() || patch === null) {
     return null;
   }
 
-  const diffFile = input.diffFile?.trim();
-  const fileCandidates = diffFile && diffFile !== file ? [diffFile, file] : [file];
+  const diffFile = input.diffFile;
+  const fileCandidates = diffFile?.trim() && diffFile !== file ? [diffFile, file] : [file];
   let diff = "";
   for (const fileCandidate of fileCandidates) {
-    const renderableDiff = selectRenderableFileDiff(input.patch, fileCandidate, {
+    const renderableDiff = selectRenderableFileDiff(patch, fileCandidate, {
       changeType: input.type,
+      fullFileContent: input.fullFileContent === true,
+      windowsPaths: process.platform === "win32",
     });
     if (renderableDiff) {
       diff = renderableDiff;
@@ -334,6 +338,7 @@ const fileDiffFromWriteMetadata = (
     file,
     type,
     patch: readStringProp(inputRecord, ["content"]) ?? null,
+    fullFileContent: true,
     additions: readNumberProp(metadata, ["additions"]),
     deletions: readNumberProp(metadata, ["deletions"]),
   });

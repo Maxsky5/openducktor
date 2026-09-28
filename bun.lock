@@ -64,6 +64,9 @@
         "@openducktor/path-support": "workspace:*",
         "zod": "^4.6.5",
       },
+      "devDependencies": {
+        "@types/node": "^26.6.1",
+      },
     },
     "packages/adapters-opencode-sdk": {
       "name": "@openducktor/adapters-opencode-sdk",
