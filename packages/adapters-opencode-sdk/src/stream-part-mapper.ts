@@ -234,6 +234,7 @@ const normalizeToolMetadataFileDiff = (input: {
   diffFile?: string | undefined;
   type: FileDiff["type"];
   patch: string | null;
+  fullFileContent?: boolean;
   additions: number | undefined;
   deletions: number | undefined;
 }): FileDiff | null => {
@@ -249,6 +250,7 @@ const normalizeToolMetadataFileDiff = (input: {
   for (const fileCandidate of fileCandidates) {
     const renderableDiff = selectRenderableFileDiff(patch, fileCandidate, {
       changeType: input.type,
+      fullFileContent: input.fullFileContent === true,
     });
     if (renderableDiff) {
       diff = renderableDiff;
@@ -335,6 +337,7 @@ const fileDiffFromWriteMetadata = (
     file,
     type,
     patch: readStringProp(inputRecord, ["content"]) ?? null,
+    fullFileContent: true,
     additions: readNumberProp(metadata, ["additions"]),
     deletions: readNumberProp(metadata, ["deletions"]),
   });

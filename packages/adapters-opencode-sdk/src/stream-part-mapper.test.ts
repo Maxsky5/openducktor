@@ -632,6 +632,39 @@ describe("stream-part-mapper", () => {
     });
   });
 
+  test("keeps a patch example in new-file write content", () => {
+    const content =
+      "# Patch example\n" +
+      "diff --git a/src/app.ts b/src/app.ts\n" +
+      "index 1111111..2222222 100644\n" +
+      "--- a/src/app.ts\n+++ b/src/app.ts\n" +
+      "@@ -1 +1 @@\n-old\n+new\n";
+    const part = createToolPart({
+      id: "tool-write-patch-example",
+      tool: "write",
+      status: "completed",
+      input: { filePath: "/repo/docs/patch.md", content },
+      output: "Wrote file successfully.",
+      metadata: { filepath: "/repo/docs/patch.md", exists: false },
+    });
+
+    expect(mapPartToAgentStreamPart(part)).toMatchObject({
+      fileDiffs: [
+        {
+          file: "/repo/docs/patch.md",
+          type: "added",
+          additions: 8,
+          deletions: 0,
+          diff:
+            "--- /dev/null\n+++ b/repo/docs/patch.md\n@@ -0,0 +1,8 @@\n" +
+            "+# Patch example\n+diff --git a/src/app.ts b/src/app.ts\n" +
+            "+index 1111111..2222222 100644\n+--- a/src/app.ts\n++++ b/src/app.ts\n" +
+            "+@@ -1 +1 @@\n+-old\n++new\n",
+        },
+      ],
+    });
+  });
+
   test("maps apply_patch files metadata to canonical file changes", () => {
     const part = createToolPart({
       id: "tool-patch-1",

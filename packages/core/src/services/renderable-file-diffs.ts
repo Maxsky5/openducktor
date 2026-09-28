@@ -5,6 +5,7 @@ export type FileDiffLineCounts = {
 
 export type SelectRenderableFileDiffOptions = {
   changeType?: string | null;
+  fullFileContent?: boolean;
 };
 
 const GIT_DIFF_HEADER = /^diff --git /m;
@@ -26,7 +27,7 @@ export const selectRenderableFileDiff = (
     return null;
   }
   const fullFileDiffMode = fullFileDiffModeFromChangeType(options.changeType);
-  if (fullFileDiffMode && !hasPatchMarkers(rawDiff)) {
+  if (fullFileDiffMode && (options.fullFileContent || !hasPatchMarkers(rawDiff))) {
     return fullFileContentDiff(rawDiff, filePath, fullFileDiffMode);
   }
 
