@@ -29,6 +29,7 @@ export type DevServerPanelAction =
       update: (current: DevServerGroupState | null) => DevServerGroupState | null;
     }
   | { type: "actionStarted" }
+  | { type: "retryStarted" }
   | { type: "actionFailed"; error: string }
   | { type: "subscriptionFailed"; error: string }
   | { type: "eventsSynced" }
@@ -43,6 +44,7 @@ export const useDevServerSubscription = ({
   scopeKey,
   repoPath,
   requestTerminalRehydrate,
+  retryCount,
   subscriptionEnabled,
   syncStateFromEvent,
   transportEpochRef,
@@ -53,6 +55,7 @@ export const useDevServerSubscription = ({
   scopeKey: string | null;
   repoPath: string | null;
   requestTerminalRehydrate: () => void;
+  retryCount: number;
   subscriptionEnabled: boolean;
   syncStateFromEvent: (event: DevServerEvent) => void;
   transportEpochRef: RefObject<string | null>;
@@ -123,6 +126,7 @@ export const useDevServerSubscription = ({
     scopeKey,
     repoPath,
     requestTerminalRehydrate,
+    retryCount,
     subscriptionEnabled,
     syncStateFromEvent,
     transportEpochRef,
@@ -279,6 +283,8 @@ export const devServerPanelReducer = (
       return { ...state, liveState: action.update(state.liveState) };
     case "actionStarted":
       return { ...state, actionError: null };
+    case "retryStarted":
+      return { ...state, actionError: null, subscriptionError: null };
     case "actionFailed":
       return { ...state, actionError: action.error };
     case "subscriptionFailed":

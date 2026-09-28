@@ -267,10 +267,12 @@ const devServerModel: AgentStudioDevServerPanelModel = {
   } satisfies AgentStudioDevServerTerminalBuffer,
   error: null,
   isStartPending: false,
+  isRetryPending: false,
   isStopPending: false,
   isRestartPending: false,
   onSelectScript: () => {},
   onStart: () => {},
+  onRetry: () => {},
   onStop: () => {},
   onRestart: () => {},
 };

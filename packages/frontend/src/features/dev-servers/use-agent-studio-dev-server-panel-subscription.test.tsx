@@ -100,6 +100,92 @@ afterEach(() => {
 });
 
 describe("useAgentStudioDevServerPanel subscriptions", () => {
+  test("retries a failed state read for the selected Workspace Session", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    const owner: DevServerOwner = {
+      kind: "workspace_session",
+      workspaceId: "workspace-1",
+      sessionId: "session-1",
+    };
+    const readOwners: DevServerOwner[] = [];
+    devServerGetState = async (_repoPath, requestedOwner) => {
+      readOwners.push(requestedOwner);
+      if (readOwners.length === 1) throw new Error("State read failed.");
+      return buildState({ owner });
+    };
+
+    const harness = renderDevServerPanelHook(useAgentStudioDevServerPanel, {
+      repoPath: "/repo",
+      owner,
+      enabled: true,
+    });
+
+    try {
+      await waitFor(() => {
+        expect(harness.getLatest().mode).toBe("error");
+      });
+      expect(harness.getLatest().error).toBe("State read failed.");
+      expect(readOwners).toEqual([owner]);
+
+      act(() => harness.getLatest().onRetry());
+
+      await waitFor(() => {
+        expect(harness.getLatest().mode).toBe("stopped");
+      });
+      expect(harness.getLatest().error).toBeNull();
+      expect(readOwners).toEqual([owner, owner]);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  test("retries a failed event subscription before reading state", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    let subscribeCount = 0;
+    let readCount = 0;
+    devServerGetState = async () => {
+      readCount += 1;
+      return buildState();
+    };
+    subscribeDevServerEventsMock = async (listener) => {
+      subscribeCount += 1;
+      if (subscribeCount === 1) throw new Error("Event subscription failed.");
+      devServerEventListener = listener;
+      return {
+        transportEpoch: "test:1",
+        unsubscribe: () => {
+          devServerEventListener = null;
+        },
+      };
+    };
+
+    const harness = renderDevServerPanelHook(useAgentStudioDevServerPanel, {
+      repoPath: "/repo",
+      owner: { kind: "task", taskId: "task-7" },
+      enabled: true,
+    });
+
+    try {
+      await waitFor(() => {
+        expect(harness.getLatest().mode).toBe("error");
+      });
+      expect(harness.getLatest().error).toBe("Event subscription failed.");
+      expect(readCount).toBe(0);
+
+      act(() => harness.getLatest().onRetry());
+
+      await waitFor(() => {
+        expect(harness.getLatest().mode).toBe("stopped");
+      });
+      expect(harness.getLatest().error).toBeNull();
+      expect(subscribeCount).toBe(2);
+      expect(readCount).toBe(1);
+      expect(devServerEventListener).not.toBeNull();
+    } finally {
+      harness.unmount();
+    }
+  });
+
   test("subscribes to dev-server events while enabled so startup events are not missed", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];

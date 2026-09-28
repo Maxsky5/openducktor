@@ -130,10 +130,12 @@ const devServerModel: AgentStudioDevServerPanelModel = {
   selectedScriptTerminalBuffer: null,
   error: null,
   isStartPending: false,
+  isRetryPending: false,
   isStopPending: false,
   isRestartPending: false,
   onSelectScript: () => {},
   onStart: () => {},
+  onRetry: () => {},
   onStop: () => {},
   onRestart: () => {},
 };

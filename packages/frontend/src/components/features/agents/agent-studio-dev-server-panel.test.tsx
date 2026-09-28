@@ -39,10 +39,12 @@ const baseModel = (
   selectedScriptTerminalBuffer: null,
   error: null,
   isStartPending: false,
+  isRetryPending: false,
   isStopPending: false,
   isRestartPending: false,
   onSelectScript: () => {},
   onStart: () => {},
+  onRetry: () => {},
   onStop: () => {},
   onRestart: () => {},
   ...overrides,
@@ -143,6 +145,28 @@ const failedScript: DevServerScriptState = {
 };
 
 describe("AgentStudioDevServerPanel", () => {
+  test("uses the compact action to retry after a state error", () => {
+    let retryCalls = 0;
+    const view = render(
+      <AgentStudioDevServerPanel
+        model={baseModel({
+          mode: "error",
+          error: "State read failed.",
+          onRetry: () => retryCalls++,
+        })}
+      />,
+    );
+
+    try {
+      expect(screen.getByText("State read failed.")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Retry dev server state" }));
+      expect(retryCalls).toBe(1);
+      expect(screen.queryByRole("button", { name: "Start dev servers" })).toBeNull();
+    } finally {
+      view.unmount();
+    }
+  });
+
   test.each([
     ["stopped", {}],
     ["empty", { mode: "empty", disabledReason: DEV_SERVER_EMPTY_REASON, workingDirectory: null }],

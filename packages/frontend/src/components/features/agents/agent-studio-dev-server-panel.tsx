@@ -44,10 +44,12 @@ export type AgentStudioDevServerPanelModel = {
   selectedScriptTerminalBuffer: AgentStudioDevServerTerminalBuffer | null;
   error: string | null;
   isStartPending: boolean;
+  isRetryPending: boolean;
   isStopPending: boolean;
   isRestartPending: boolean;
   onSelectScript: (scriptId: string) => void;
   onStart: () => void;
+  onRetry: () => void;
   onStop: () => void;
   onRestart: () => void;
 };
@@ -178,8 +180,10 @@ function CompactDevServerPanel({
   disabledReasonId,
   isActionPending,
   isStartPending,
+  isRetryPending,
   mode,
   onStart,
+  onRetry,
   panelError,
 }: {
   compactAction: ReactElement | undefined;
@@ -187,26 +191,29 @@ function CompactDevServerPanel({
   disabledReasonId: string;
   isActionPending: boolean;
   isStartPending: boolean;
+  isRetryPending: boolean;
   mode: AgentStudioDevServerPanelMode;
   onStart: () => void;
+  onRetry: () => void;
   panelError: string | null;
 }): ReactElement {
   const isEmpty = mode === "empty";
   const isDisabled = mode === "disabled";
   const isLoading = mode === "loading";
-  const startDisabled = isEmpty || isDisabled || isLoading || mode === "error" || isActionPending;
-  const startLabel = getStartLabel(isStartPending);
+  const isError = mode === "error";
+  const startDisabled = isEmpty || isDisabled || isLoading || isRetryPending || isActionPending;
+  const startLabel = isError ? "Retry dev server state" : getStartLabel(isStartPending);
   const startButton = (
     <Button
       type="button"
       size="sm"
       className={cn("w-full justify-center rounded-lg", isLoading && "disabled:opacity-100")}
       disabled={startDisabled}
-      aria-busy={isLoading}
-      onClick={onStart}
+      aria-busy={isLoading || isRetryPending}
+      onClick={isError ? onRetry : onStart}
       data-testid="agent-studio-dev-server-start-button"
     >
-      <Play className="size-4" />
+      {isError ? <RefreshCw className="size-4" /> : <Play className="size-4" />}
       {startLabel}
     </Button>
   );
@@ -411,8 +418,10 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
         disabledReasonId={disabledReasonId}
         isActionPending={isActionPending}
         isStartPending={model.isStartPending}
+        isRetryPending={model.isRetryPending}
         mode={model.mode}
         onStart={model.onStart}
+        onRetry={model.onRetry}
         panelError={panelError}
       />
     );

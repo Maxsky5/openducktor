@@ -65,6 +65,7 @@ export function useAgentStudioDevServerPanel({
     subscribedScopeKey: null,
     transportEpoch: null,
   });
+  const [retryCount, retrySubscription] = useReducer((count: number) => count + 1, 0);
   const { liveState, actionError, subscriptionError, subscribedScopeKey, transportEpoch } =
     localState;
   const transportEpochRef = useRef(transportEpoch);
@@ -98,6 +99,7 @@ export function useAgentStudioDevServerPanel({
       liveState,
       transportEpoch,
     });
+  const { refetch: refetchState } = stateQuery;
 
   const { effectiveSelectedScriptId, onSelectScript, resetSelectedScript, selectedScriptIdRef } =
     useAgentStudioDevServerPanelSelection({
@@ -167,10 +169,20 @@ export function useAgentStudioDevServerPanel({
     scopeKey,
     repoPath,
     requestTerminalRehydrate,
+    retryCount,
     subscriptionEnabled,
     syncStateFromEvent,
     transportEpochRef,
   });
+
+  const onRetry = useCallback((): void => {
+    dispatchLocalState({ type: "retryStarted" });
+    if (subscriptionError !== null || !queryEnabled) {
+      retrySubscription();
+      return;
+    }
+    void refetchState();
+  }, [queryEnabled, refetchState, subscriptionError]);
 
   const model = createDevServerPanelModel({
     activeScope,
@@ -184,6 +196,7 @@ export function useAgentStudioDevServerPanel({
     isActiveMutationScope,
     isAwaitingFreshState,
     onSelectScript,
+    onRetry,
     owner,
     queryEnabled,
     repoPath,
@@ -215,6 +228,7 @@ const createDevServerPanelModel = ({
   isActiveMutationScope,
   isAwaitingFreshState,
   onSelectScript,
+  onRetry,
   owner,
   queryEnabled,
   repoPath,
@@ -236,6 +250,7 @@ const createDevServerPanelModel = ({
   isActiveMutationScope: ReturnType<typeof useDevServerMutations>["isActiveMutationScope"];
   isAwaitingFreshState: boolean;
   onSelectScript: (scriptId: string) => void;
+  onRetry: () => void;
   owner: DevServerOwner | null;
   queryEnabled: boolean;
   repoPath: string | null;
@@ -292,10 +307,12 @@ const createDevServerPanelModel = ({
     selectedScriptTerminalBuffer,
     error,
     isStartPending,
+    isRetryPending: stateQuery.isFetching && mode === "error",
     isStopPending,
     isRestartPending,
     onSelectScript,
     onStart: devServerAction(activeScope, dispatchLocalState, startMutation.mutate),
+    onRetry,
     onStop: devServerAction(activeScope, dispatchLocalState, stopMutation.mutate),
     onRestart: devServerAction(activeScope, dispatchLocalState, restartMutation.mutate),
   };
