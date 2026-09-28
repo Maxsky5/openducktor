@@ -697,6 +697,8 @@ describe("CodexAppServerAdapter lifecycle", () => {
     const { adapter, transports } = createHarness({
       subscribeEvents: runtimeStream.subscribeEvents,
     });
+    const diff =
+      'diff --git "a/src/my\\040file.ts" "b/src/my\\040file.ts"\n--- "a/src/my\\040file.ts"\n+++ "b/src/my\\040file.ts"\n@@ -1 +1 @@\n-old\n+new';
 
     await adapter.startSession({
       repoPath: "/repo",
@@ -712,7 +714,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       params: {
         threadId: "thread/start-runtime-live",
         turnId: "turn-1",
-        diff: "diff --git a/src/app.ts b/src/app.ts\n--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new",
+        diff,
       },
     });
     await flushCodexAdapterWork();
@@ -727,11 +729,11 @@ describe("CodexAppServerAdapter lifecycle", () => {
       }),
     ).resolves.toEqual([
       {
-        file: "src/app.ts",
+        file: "src/my file.ts",
         type: "modified",
         additions: 1,
         deletions: 1,
-        diff: "diff --git a/src/app.ts b/src/app.ts\n--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new\n",
+        diff: `${diff}\n`,
       },
     ]);
 

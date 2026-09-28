@@ -302,7 +302,7 @@ const GIT_ESCAPE_BYTES = new Map([
   ["\\", 92],
 ]);
 
-const decodeGitQuotedPath = (filePath: string): string | null => {
+export const decodeGitQuotedPath = (filePath: string): string | null => {
   if (!filePath.startsWith('"') || !filePath.endsWith('"')) {
     return filePath;
   }

@@ -22,6 +22,44 @@ describe("Codex file diffs", () => {
     ]);
   });
 
+  test("decodes Git-quoted streamed unified diff paths without changing the patch", () => {
+    const diff =
+      'diff --git "a/src/my\\040file.ts" "b/src/my\\040file.ts"\n--- "a/src/my\\040file.ts"\n+++ "b/src/my\\040file.ts"\n@@ -1 +1 @@\n-old\n+new';
+
+    expect(fileDiffsFromUnifiedDiff(diff)).toEqual([
+      {
+        file: "src/my file.ts",
+        type: "modified",
+        additions: 1,
+        deletions: 1,
+        diff: `${diff}\n`,
+      },
+    ]);
+  });
+
+  test("rejects a malformed Git-quoted header even when the other header is valid", () => {
+    for (const malformedPath of ['"a/src/bad\\q.ts"', '"a/src/missing.ts']) {
+      const diff = `--- ${malformedPath}\n+++ b/src/good.ts\n@@ -1 +1 @@\n-old\n+new`;
+      expect(() => fileDiffsFromUnifiedDiff(diff)).toThrow(CodexFileDiffParseError);
+    }
+  });
+
+  test("keeps added and deleted headers and rejects missing or null-only headers", () => {
+    const added = "--- /dev/null\n+++ b/src/new.ts\n@@ -0,0 +1 @@\n+new";
+    const deleted = "--- a/src/old.ts\n+++ /dev/null\n@@ -1 +0,0 @@\n-old";
+
+    expect(fileDiffsFromUnifiedDiff(added)).toEqual([
+      { file: "src/new.ts", type: "added", additions: 1, deletions: 0, diff: `${added}\n` },
+    ]);
+    expect(fileDiffsFromUnifiedDiff(deleted)).toEqual([
+      { file: "src/old.ts", type: "deleted", additions: 0, deletions: 1, diff: `${deleted}\n` },
+    ]);
+    expect(() => fileDiffsFromUnifiedDiff("--- /dev/null\n+++ /dev/null\n@@ -0,0 +0,0 @@")).toThrow(
+      CodexFileDiffParseError,
+    );
+    expect(() => fileDiffsFromUnifiedDiff("@@ -0,0 +1 @@\n+new")).toThrow(CodexFileDiffParseError);
+  });
+
   test("preserves trailing spaces in streamed unified diff paths", () => {
     const diff = "--- a/src/file \n+++ b/src/file \n@@ -1 +1 @@\n-old\n+new";
     expect(fileDiffsFromUnifiedDiff(diff)).toEqual([

@@ -7,6 +7,7 @@ import type {
 } from "@openducktor/contracts";
 import {
   countRenderableFileDiffLines,
+  decodeGitQuotedPath,
   normalizeRenderableFileDiffCandidate,
   selectRenderableFileDiff,
   splitFileDiffCandidates,
@@ -90,22 +91,37 @@ const parseFileDiffEntry = (entry: CodexAppServerFileUpdateChange, index: number
 export const toFileDiffs = (changes: CodexAppServerFileUpdateChange[]): FileDiff[] =>
   changes.map(parseFileDiffEntry);
 
-const unifiedDiffHeaderPath = (candidate: string, prefix: "--- " | "+++ "): string | null => {
+const unifiedDiffHeaderPath = (
+  candidate: string,
+  prefix: "--- " | "+++ ",
+  index: number,
+): string | null => {
   const line = candidate.split("\n").find((candidateLine) => candidateLine.startsWith(prefix));
   if (!line) {
     return null;
   }
-  const path = line.slice(prefix.length).split("\t", 1)[0];
-  if (!path?.trim() || path === "/dev/null") {
+  const rawPath = line.slice(prefix.length).split("\t", 1)[0] ?? "";
+  const isQuoted = rawPath.startsWith('"') || rawPath.endsWith('"');
+  const path = isQuoted
+    ? rawPath.startsWith('"') && rawPath.endsWith('"')
+      ? decodeGitQuotedPath(rawPath)
+      : null
+    : rawPath;
+  if (path === null) {
+    throw new CodexFileDiffParseError(
+      `unified diff entry ${index} has a malformed ${prefix.trim()} file header.`,
+    );
+  }
+  if (!path.trim() || path === "/dev/null") {
     return null;
   }
-  return path.replace(/^"|"$/g, "").replace(/^(?:a|b)\//, "");
+  return path.replace(/^(?:a|b)\//, "");
 };
 
 export const fileDiffsFromUnifiedDiff = (unifiedDiff: string): FileDiff[] =>
   splitFileDiffCandidates(unifiedDiff).map((candidate, index) => {
-    const previousPath = unifiedDiffHeaderPath(candidate, "--- ");
-    const nextPath = unifiedDiffHeaderPath(candidate, "+++ ");
+    const previousPath = unifiedDiffHeaderPath(candidate, "--- ", index);
+    const nextPath = unifiedDiffHeaderPath(candidate, "+++ ", index);
     const file = nextPath ?? previousPath;
     if (!file) {
       throw new CodexFileDiffParseError(
