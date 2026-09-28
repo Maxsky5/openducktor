@@ -1,5 +1,4 @@
 import type { DevServerGroupState, DevServerScriptState } from "@openducktor/contracts";
-import type { RepoSettingsInput } from "@/types/state-slices";
 
 export const createDeferred = <T>() => {
   let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
@@ -52,26 +51,10 @@ export const buildScript = (
 
 export const buildState = (overrides: Partial<DevServerGroupState> = {}): DevServerGroupState => ({
   repoPath: "/repo",
-  taskId: "task-7",
-  worktreePath: "/tmp/worktree/task-7",
+  owner: { kind: "task", taskId: "task-7" },
+  workingDirectory: "/tmp/worktree/task-7",
   scripts: [buildScript()],
+  revision: 0,
   updatedAt: "2026-03-19T15:30:00.000Z",
   ...overrides,
 });
-
-export const repoSettings: RepoSettingsInput = {
-  worktreeBasePath: "",
-  branchPrefix: "",
-  defaultModel: null,
-  defaultTargetBranch: { remote: "origin", branch: "main" },
-  preStartHooks: [],
-  postCompleteHooks: [],
-  devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
-  worktreeCopyPaths: [],
-  agentDefaults: {
-    spec: null,
-    planner: null,
-    build: null,
-    qa: null,
-  },
-};

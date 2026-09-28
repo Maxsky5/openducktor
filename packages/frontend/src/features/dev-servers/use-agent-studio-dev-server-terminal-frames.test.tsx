@@ -20,13 +20,13 @@ const chunk = (sequence: number, scriptId = "frontend"): DevServerTerminalChunk 
 const event = (sequence: number, scriptId = "frontend"): DevServerEvent => ({
   type: "terminal_chunk",
   repoPath: "/repo",
-  taskId: "task-7",
+  owner: { kind: "task", taskId: "task-7" },
   terminalChunk: chunk(sequence, scriptId),
 });
 const createHarness = () =>
   renderDevServerPanelHook(useAgentStudioDevServerTerminalBuffers, {
     repoPath: "/repo",
-    taskId: "task-7",
+    owner: { kind: "task", taskId: "task-7" },
   });
 
 const frames = new Map<number, FrameRequestCallback>();
@@ -138,7 +138,7 @@ describe("dev server terminal frame batching", () => {
       const newRunEvent = (sequence: number): DevServerEvent => ({
         type: "terminal_chunk",
         repoPath: "/repo",
-        taskId: "task-7",
+        owner: { kind: "task", taskId: "task-7" },
         terminalChunk: {
           ...chunk(sequence),
           data: `${sequence},`,
@@ -227,14 +227,14 @@ describe("dev server terminal frame batching", () => {
         harness.getLatest().applyTerminalBuffersFromEvent(event(2), "frontend");
       });
       const oldScope = harness.getLatest();
-      harness.update({ repoPath: "/repo", taskId: "task-8" });
+      harness.update({ repoPath: "/repo", owner: { kind: "task", taskId: "task-8" } });
       expect(frames.size).toBe(0);
       act(() => {
         oldScope.applyTerminalBuffersFromEvent(event(3), "frontend");
       });
       expect(frames.size).toBe(0);
       expect(harness.getLatest().selectedScriptTerminalBuffer).toBeNull();
-      harness.update({ repoPath: "/repo", taskId: "task-7" });
+      harness.update({ repoPath: "/repo", owner: { kind: "task", taskId: "task-7" } });
       act(() => {
         harness.getLatest().applyTerminalBuffersFromEvent(event(4), "frontend");
       });
@@ -313,8 +313,9 @@ test.each(["delayed prefix", "host tail", "host tail without ring overflow"])(
           harness.getLatest().applyTerminalBuffersFromEvent(
             {
               type: "script_status_changed",
+              revision: 1,
               repoPath: "/repo",
-              taskId: "task-7",
+              owner: { kind: "task", taskId: "task-7" },
               updatedAt: "2026-03-25T10:00:00.000Z",
               script,
             },

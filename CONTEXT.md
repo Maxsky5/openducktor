@@ -545,7 +545,7 @@ The **Task Workflows Page** action that opens the current repository or **Build 
 _Avoid_: Runtime, Tool Call, File Reference
 
 **Dev Server**:
-A development server process used during implementation work. **Dev Server** scripts are configured at the **Repository** level, but **Dev Server** execution happens at task/worktree level inside the task's **Build Worktree**.
+A development server process used during implementation work. The **Repository** holds **Dev Server** scripts. A task runs its own group in its **Build Worktree**. A **Workspace Session** runs its own group in its saved repository root or worktree directory.
 _Avoid_: Runtime, Agent Session
 
 **Dev Server Script**:

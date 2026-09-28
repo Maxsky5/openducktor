@@ -27,7 +27,13 @@ const repoConfig: RepoConfig = {
 
 const createRuntime = (): DevServerGroupRuntime => ({
   processes: new Map(),
-  state: buildGroupState(repoConfig, "task-1", "/worktrees/task-1", "2026-05-24T00:00:00.000Z"),
+  unresolvedStops: new Set(),
+  state: buildGroupState(
+    repoConfig,
+    { kind: "task", taskId: "task-1" },
+    "/worktrees/task-1",
+    "2026-05-24T00:00:00.000Z",
+  ),
   terminalBufferedBytesByScriptId: new Map(),
   terminalNextSequenceByScriptId: new Map(),
   terminalRunGeneration: 0,
@@ -64,12 +70,15 @@ describe("dev-server runtime script helpers", () => {
       updateScriptState,
     });
 
-    expect(message).toBe("Dev server process handle missing for pid 401.");
+    expect(message).toBe(
+      "Dev server process handle missing for pid 401. Stop this server before removing its workspace.",
+    );
     expect(script).toMatchObject({
       status: "failed",
       pid: null,
       startedAt: null,
-      lastError: "Dev server process handle missing for pid 401.",
+      lastError:
+        "Dev server process handle missing for pid 401. Stop this server before removing its workspace.",
     });
   });
 
@@ -132,7 +141,7 @@ describe("dev-server runtime script helpers", () => {
         pid: 401,
         repoPath: "/canonical/repo",
         scriptId: "web",
-        taskId: "task-1",
+        owner: { kind: "task", taskId: "task-1" },
       },
     ]);
   });

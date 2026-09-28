@@ -169,13 +169,14 @@ const createWorktreeFiles = (calls: string[] = []): WorktreeFilePort =>
 const createDevServerService = (calls: string[] = []): DevServerService =>
   createDevServerServiceTestDouble({
     stop: (input) => {
-      const { repoPath, taskId } = input;
-      calls.push(`stop-dev:${taskId}`);
+      const { repoPath, owner } = input;
+      calls.push(`stop-dev:${owner.kind === "task" ? owner.taskId : owner.sessionId}`);
       return Effect.succeed({
         repoPath,
-        taskId,
-        worktreePath: null,
+        owner,
+        workingDirectory: null,
         scripts: [],
+        revision: 0,
         updatedAt: "2026-05-10T11:30:00.000Z",
       });
     },

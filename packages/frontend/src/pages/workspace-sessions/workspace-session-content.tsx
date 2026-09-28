@@ -205,58 +205,13 @@ export function WorkspaceSessionContent({
     isSwitchingBranch,
     activeBranch,
   });
-  const onSelectionChange = useCallback(
-    (selectedFile: TaskExecutionSelectedFile | null) => onPanelStateChange({ selectedFile }),
-    [onPanelStateChange],
-  );
-  const { preview, onDiscard } = useWorkspaceSessionPreview(
-    panelState.selectedFile,
-    onSelectionChange,
-    isWorktree,
-  );
-  const canLeaveRef = useRef(true);
-  // Discard can finish a file switch too; only a close may release a removed chat.
-  const closingRef = useRef(false);
-  // A new file starts clean, but its editor does not report that on load.
-  const selectedFileKey = preview.model.selectedFile
-    ? taskExecutionSelectedFileKey(preview.model.selectedFile)
-    : null;
-  const selectedFileKeyRef = useRef(selectedFileKey);
-  useLayoutEffect(() => {
-    if (selectedFileKeyRef.current === selectedFileKey) return;
-    selectedFileKeyRef.current = selectedFileKey;
-    canLeaveRef.current = true;
-    closingRef.current = false;
-  }, [selectedFileKey]);
-  const reportLeavePolicy = preview.model.onLeavePolicyChange;
-  const closeFile = preview.model.onClose;
-  const keepDraft = preview.model.onKeepEditing;
-  const onLeavePolicyChange = useCallback(
-    (policy: TaskExecutionFilePreviewLeavePolicy) => {
-      reportLeavePolicy(policy);
-      canLeaveRef.current = policy === "allow";
-      if (canLeaveRef.current) {
-        closingRef.current = false;
-        onSafeToLeave?.();
-      }
-    },
-    [onSafeToLeave, reportLeavePolicy],
-  );
-  const closePreview = useCallback(() => {
-    closingRef.current = !canLeaveRef.current;
-    closeFile();
-    if (canLeaveRef.current) onSafeToLeave?.();
-  }, [closeFile, onSafeToLeave]);
-  const keepEditing = useCallback(() => {
-    closingRef.current = false;
-    keepDraft();
-  }, [keepDraft]);
-  const discardDraft = useCallback(() => {
-    const closing = closingRef.current;
-    closingRef.current = false;
-    onDiscard();
-    if (closing) onSafeToLeave?.();
-  }, [onDiscard, onSafeToLeave]);
+  const { preview, onLeavePolicyChange, closePreview, keepEditing, discardDraft } =
+    useWorkspaceSessionFilePreview({
+      selectedFile: panelState.selectedFile,
+      onPanelStateChange,
+      isWorktree,
+      onSafeToLeave,
+    });
   const refreshRef = useRef<((scope: "git" | "all") => Promise<void>) | null>(null);
   const [isNarrow, setIsNarrow] = useState(false);
   useEffect(() => {
@@ -371,6 +326,8 @@ export function WorkspaceSessionContent({
   const toolsContent = (
     <WorkspaceSessionToolsPanel
       repoPath={workspace.repoPath}
+      workspaceId={workspace.workspaceId}
+      sessionId={record.id}
       workingDirectory={workingDirectory}
       contextMode={record.executionTarget.kind === "local_repo_root" ? "repository" : "worktree"}
       branchKey={branchKey}
@@ -402,6 +359,74 @@ export function WorkspaceSessionContent({
       />
     </TabsContent>
   );
+}
+
+function useWorkspaceSessionFilePreview({
+  selectedFile,
+  onPanelStateChange,
+  isWorktree,
+  onSafeToLeave,
+}: {
+  selectedFile: TaskExecutionSelectedFile | null;
+  onPanelStateChange: (
+    update: Partial<Pick<WorkspaceSessionPanelState, "activeTabId" | "selectedFile">>,
+  ) => void;
+  isWorktree: boolean;
+  onSafeToLeave: (() => void) | undefined;
+}) {
+  const onSelectionChange = useCallback(
+    (nextFile: TaskExecutionSelectedFile | null) => onPanelStateChange({ selectedFile: nextFile }),
+    [onPanelStateChange],
+  );
+  const { preview, onDiscard } = useWorkspaceSessionPreview(
+    selectedFile,
+    onSelectionChange,
+    isWorktree,
+  );
+  const canLeaveRef = useRef(true);
+  // Discard can finish a file switch too; only a close may release a removed chat.
+  const closingRef = useRef(false);
+  // A new file starts clean, but its editor does not report that on load.
+  const selectedFileKey = preview.model.selectedFile
+    ? taskExecutionSelectedFileKey(preview.model.selectedFile)
+    : null;
+  const selectedFileKeyRef = useRef(selectedFileKey);
+  useLayoutEffect(() => {
+    if (selectedFileKeyRef.current === selectedFileKey) return;
+    selectedFileKeyRef.current = selectedFileKey;
+    canLeaveRef.current = true;
+    closingRef.current = false;
+  }, [selectedFileKey]);
+  const reportLeavePolicy = preview.model.onLeavePolicyChange;
+  const closeFile = preview.model.onClose;
+  const keepDraft = preview.model.onKeepEditing;
+  const onLeavePolicyChange = useCallback(
+    (policy: TaskExecutionFilePreviewLeavePolicy) => {
+      reportLeavePolicy(policy);
+      canLeaveRef.current = policy === "allow";
+      if (canLeaveRef.current) {
+        closingRef.current = false;
+        onSafeToLeave?.();
+      }
+    },
+    [onSafeToLeave, reportLeavePolicy],
+  );
+  const closePreview = useCallback(() => {
+    closingRef.current = !canLeaveRef.current;
+    closeFile();
+    if (canLeaveRef.current) onSafeToLeave?.();
+  }, [closeFile, onSafeToLeave]);
+  const keepEditing = useCallback(() => {
+    closingRef.current = false;
+    keepDraft();
+  }, [keepDraft]);
+  const discardDraft = useCallback(() => {
+    const closing = closingRef.current;
+    closingRef.current = false;
+    onDiscard();
+    if (closing) onSafeToLeave?.();
+  }, [onDiscard, onSafeToLeave]);
+  return { preview, onLeavePolicyChange, closePreview, keepEditing, discardDraft };
 }
 
 function RepositoryFilePreview({

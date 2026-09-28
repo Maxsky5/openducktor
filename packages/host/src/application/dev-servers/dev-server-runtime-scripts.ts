@@ -29,7 +29,7 @@ const stoppedScriptFromState = (
     pid,
     repoPath: runtime.state.repoPath,
     scriptId: script.scriptId,
-    taskId: runtime.state.taskId,
+    owner: runtime.state.owner,
   };
 };
 
@@ -39,18 +39,19 @@ export const markScriptProcessHandleMissing = ({
   scriptId,
   updateScriptState,
 }: {
-  pid: number;
+  pid: number | null;
   runtime: DevServerGroupRuntime;
   scriptId: string;
   updateScriptState: UpdateScriptState;
 }): string => {
-  const message = `Dev server process handle missing for pid ${pid}.`;
+  const message = `Dev server process handle missing${pid === null ? "" : ` for pid ${pid}`}. Stop this server before removing its workspace.`;
   updateScriptState(runtime, scriptId, (state) => {
     state.status = "failed";
     state.pid = null;
     state.startedAt = null;
     state.lastError = message;
   });
+  runtime.unresolvedStops.add(scriptId);
   return message;
 };
 
@@ -68,11 +69,13 @@ export const stopScriptProcessHandle = ({
   Effect.gen(function* () {
     const stopResult = yield* Effect.either(handle.stop());
     if (stopResult._tag === "Right") {
-      if (runtime.processes.get(scriptId) === handle) {
+      const isCurrentHandle = runtime.processes.get(scriptId) === handle;
+      if (isCurrentHandle) {
+        runtime.unresolvedStops.delete(scriptId);
         runtime.processes.delete(scriptId);
       }
       const script = runtime.state.scripts.find((candidate) => candidate.scriptId === scriptId);
-      if (script?.pid === handle.pid) {
+      if (script && isCurrentHandle) {
         updateScriptState(runtime, scriptId, (state) => {
           state.status = "stopped";
           state.pid = null;

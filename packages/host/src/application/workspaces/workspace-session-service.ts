@@ -19,6 +19,7 @@ import {
 } from "../../effect/host-errors";
 import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
 import type { TerminalService } from "../terminals/terminal-service";
+import type { DevServerService } from "../dev-servers/dev-server-service-types";
 import {
   planRuntimeTitleRename,
   runtimeTitle,
@@ -29,6 +30,7 @@ import type { RuntimeOrchestratorService } from "../runtimes/runtime-orchestrato
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 import type { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
 import { acquireWorkspaceSessionTerminalCleanup } from "./workspace-session-terminal-cleanup";
+import { stopWorkspaceSessionDevServers } from "./workspace-session-dev-server-cleanup";
 import {
   validateWorkspaceSessionTarget,
   withWorkspaceSessionTarget,
@@ -50,6 +52,7 @@ export type WorkspaceSessionServiceDependencies = WorkspaceSessionTargetDependen
   markCodexTitleSyncPending: (ref: AgentSessionLiveRef) => void;
   store: WorkspaceSessionStorePort;
   terminalService: Pick<TerminalService, "acquireWorkspaceSessionCleanup">;
+  devServerService: Pick<DevServerService, "stopWorkspaceSession">;
   settings: Pick<WorkspaceSettingsService, "getRepoConfig" | "listCustomAgentRoles">;
   runtime: Pick<RuntimeOrchestratorService, "runtimeEnsure">;
   live: Pick<
@@ -420,6 +423,7 @@ export const createWorkspaceSessionService = (
                 yield* live.stopSession(runtimeRef);
               }
             }
+            yield* stopWorkspaceSessionDevServers(dependencies.devServerService, ref);
             yield* acquireWorkspaceSessionTerminalCleanup(dependencies.terminalService, input);
             return yield* Effect.uninterruptible(
               Effect.gen(function* () {

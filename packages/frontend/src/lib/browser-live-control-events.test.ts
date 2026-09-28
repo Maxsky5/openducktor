@@ -29,7 +29,7 @@ describe("browser-live-control-events", () => {
       isBrowserLiveControlEvent({
         type: "terminal_chunk",
         repoPath: "/repo",
-        taskId: "task-1",
+        owner: { kind: "task", taskId: "task-1" },
         terminalChunk: {
           scriptId: "dev",
           runIdentity: {

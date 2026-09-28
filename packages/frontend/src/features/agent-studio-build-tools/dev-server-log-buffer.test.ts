@@ -52,9 +52,10 @@ const buildScript = (overrides: Partial<DevServerScriptState> = {}): DevServerSc
 
 const buildState = (overrides: Partial<DevServerGroupState> = {}): DevServerGroupState => ({
   repoPath: "/repo",
-  taskId: "task-7",
-  worktreePath: "/tmp/worktree/task-7",
+  owner: { kind: "task", taskId: "task-7" },
+  workingDirectory: "/tmp/worktree/task-7",
   scripts: [buildScript()],
+  revision: 0,
   updatedAt: "2026-03-25T10:00:00.000Z",
   ...overrides,
 });

@@ -988,12 +988,12 @@ describe("createElectronHostCommandRouter", () => {
     await expect(
       router.invoke("dev_server_get_state", {
         repoPath: "/repo",
-        taskId: "task-1",
+        owner: { kind: "task", taskId: "task-1" },
       }),
     ).resolves.toMatchObject({
       repoPath: "/repo",
-      taskId: "task-1",
-      worktreePath: "/home/dev/.openducktor/worktrees/repo/task-1",
+      owner: { kind: "task", taskId: "task-1" },
+      workingDirectory: "/home/dev/.openducktor/worktrees/repo/task-1",
       scripts: [
         {
           scriptId: "web",
@@ -1014,7 +1014,7 @@ describe("createElectronHostCommandRouter", () => {
     await expect(
       router.invoke("dev_server_start", {
         repoPath: "/repo",
-        taskId: "task-1",
+        owner: { kind: "task", taskId: "task-1" },
       }),
     ).resolves.toMatchObject({
       scripts: [
@@ -1028,7 +1028,7 @@ describe("createElectronHostCommandRouter", () => {
     await expect(
       router.invoke("dev_server_stop", {
         repoPath: "/repo",
-        taskId: "task-1",
+        owner: { kind: "task", taskId: "task-1" },
       }),
     ).resolves.toMatchObject({
       scripts: [
@@ -1074,11 +1074,14 @@ describe("createElectronHostCommandRouter", () => {
     });
 
     await expect(
-      router.invoke("dev_server_start", { repoPath: "/repo", taskId: "task-1" }),
+      router.invoke("dev_server_start", {
+        repoPath: "/repo",
+        owner: { kind: "task", taskId: "task-1" },
+      }),
     ).rejects.toThrow(diagnostic.message);
     const state = await router.invoke("dev_server_get_state", {
       repoPath: "/repo",
-      taskId: "task-1",
+      owner: { kind: "task", taskId: "task-1" },
     });
 
     expect(state.scripts[0]).toMatchObject({ status: "failed", lastError: diagnostic.message });
@@ -1121,7 +1124,10 @@ describe("createElectronHostCommandRouter", () => {
     });
 
     await expect(
-      router.invoke("dev_server_start", { repoPath: "/repo", taskId: "task-1" }),
+      router.invoke("dev_server_start", {
+        repoPath: "/repo",
+        owner: { kind: "task", taskId: "task-1" },
+      }),
     ).rejects.toThrow(diagnostic.message);
     expect(startCalls).toBe(0);
   });

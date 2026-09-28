@@ -14,7 +14,7 @@ describe("useAgentStudioDevServerTerminalBuffers", () => {
   test("ignores state and events outside the active task scope", () => {
     const harness = renderDevServerPanelHook(useAgentStudioDevServerTerminalBuffers, {
       repoPath: "/repo",
-      taskId: "task-7",
+      owner: { kind: "task", taskId: "task-7" },
     });
 
     try {
@@ -22,7 +22,7 @@ describe("useAgentStudioDevServerTerminalBuffers", () => {
         harness.getLatest().replaceTerminalBuffersFromState(
           buildState({
             repoPath: "/repo",
-            taskId: "task-7",
+            owner: { kind: "task", taskId: "task-7" },
             scripts: [
               buildScript({
                 status: "running",
@@ -53,7 +53,7 @@ describe("useAgentStudioDevServerTerminalBuffers", () => {
         harness.getLatest().replaceTerminalBuffersFromState(
           buildState({
             repoPath: "/repo",
-            taskId: "task-8",
+            owner: { kind: "task", taskId: "task-8" },
             scripts: [
               buildScript({
                 status: "running",
@@ -78,7 +78,7 @@ describe("useAgentStudioDevServerTerminalBuffers", () => {
           {
             type: "terminal_chunk",
             repoPath: "/repo",
-            taskId: "task-8",
+            owner: { kind: "task", taskId: "task-8" },
             terminalChunk: {
               scriptId: "frontend",
               runIdentity: {
@@ -119,11 +119,11 @@ describe("useAgentStudioDevServerTerminalBuffers", () => {
     function HookHarness() {
       const [scope, setCurrentScope] = useState<Scope>({
         repoPath: "/repo",
-        taskId: "task-7",
+        owner: { kind: "task", taskId: "task-7" },
       });
       setScope = setCurrentScope;
       const result = useAgentStudioDevServerTerminalBuffers(scope);
-      if (scope?.taskId === "task-8") {
+      if (scope?.owner.kind === "task" && scope.owner.taskId === "task-8") {
         throw suspendedTask;
       }
       latest = result;
@@ -140,7 +140,7 @@ describe("useAgentStudioDevServerTerminalBuffers", () => {
       act(() => {
         getLatest().replaceTerminalBuffersFromState(
           buildState({
-            taskId: "task-7",
+            owner: { kind: "task", taskId: "task-7" },
             scripts: [
               buildScript({
                 status: "running",
@@ -170,7 +170,7 @@ describe("useAgentStudioDevServerTerminalBuffers", () => {
 
       act(() => {
         startTransition(() => {
-          setScope?.({ repoPath: "/repo", taskId: "task-8" });
+          setScope?.({ repoPath: "/repo", owner: { kind: "task", taskId: "task-8" } });
         });
       });
 
@@ -179,7 +179,7 @@ describe("useAgentStudioDevServerTerminalBuffers", () => {
           {
             type: "terminal_chunk",
             repoPath: "/repo",
-            taskId: "task-7",
+            owner: { kind: "task", taskId: "task-7" },
             terminalChunk: {
               scriptId: "frontend",
               runIdentity: {

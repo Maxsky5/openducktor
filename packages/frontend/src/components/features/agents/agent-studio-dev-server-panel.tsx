@@ -1,4 +1,4 @@
-import type { DevServerScriptState } from "@openducktor/contracts";
+import type { DevServerOwner, DevServerScriptState } from "@openducktor/contracts";
 import { Check, Copy, Play, RefreshCw, Square } from "lucide-react";
 import {
   cloneElement,
@@ -20,12 +20,15 @@ import {
 } from "@/features/terminals/terminal-tab-styles";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
-import {
-  createDevServerTaskScope,
-  formatDevServerTaskScopeKey,
-} from "@/types/dev-server-task-scope";
+import { createDevServerScope, formatDevServerScopeKey } from "@/types/dev-server-scope";
 
-export type AgentStudioDevServerPanelMode = "loading" | "empty" | "disabled" | "stopped" | "active";
+export type AgentStudioDevServerPanelMode =
+  | "loading"
+  | "error"
+  | "empty"
+  | "disabled"
+  | "stopped"
+  | "active";
 
 export type AgentStudioDevServerPanelModel = {
   mode: AgentStudioDevServerPanelMode;
@@ -33,8 +36,8 @@ export type AgentStudioDevServerPanelModel = {
   isLoading: boolean;
   disabledReason: string | null;
   repoPath: string | null;
-  taskId: string | null;
-  worktreePath: string | null;
+  owner: DevServerOwner | null;
+  workingDirectory: string | null;
   scripts: DevServerScriptState[];
   selectedScriptId: string | null;
   selectedScript: DevServerScriptState | null;
@@ -52,7 +55,7 @@ export type AgentStudioDevServerPanelModel = {
 export const DEV_SERVER_DISABLED_REASON =
   "Create or resume a Builder worktree before starting repository dev servers.";
 export const DEV_SERVER_EMPTY_REASON =
-  "Configure one or more builder dev server commands in repository settings to stream them here.";
+  "Add dev server scripts in repository settings to run them here.";
 
 const statusIndicatorClassName = (status: DevServerScriptState["status"]): string => {
   if (status === "running") {
@@ -70,11 +73,7 @@ const statusIndicatorClassName = (status: DevServerScriptState["status"]): strin
   return "bg-[var(--dev-server-terminal-dot-stopped)]";
 };
 
-const getStartLabel = (isLoading: boolean, isStartPending: boolean): string => {
-  if (isLoading) {
-    return "Loading dev servers…";
-  }
-
+const getStartLabel = (isStartPending: boolean): string => {
   if (isStartPending) {
     return "Starting dev servers…";
   }
@@ -99,27 +98,36 @@ const getDisplayedScriptCommand = (script: DevServerScriptState): string =>
 
 const getHeaderSummary = (
   mode: AgentStudioDevServerPanelMode,
-  worktreePath: string | null,
+  workingDirectory: string | null,
+  owner: DevServerOwner | null,
 ): string => {
   if (mode === "empty") {
     return DEV_SERVER_EMPTY_REASON;
   }
 
   if (mode === "disabled") {
-    return DEV_SERVER_DISABLED_REASON;
+    return owner?.kind === "workspace_session"
+      ? "This Workspace Session directory is unavailable. Restore its worktree or reload the session."
+      : DEV_SERVER_DISABLED_REASON;
   }
 
   if (mode === "loading") {
-    return "Loading builder dev server state…";
+    return "Loading dev server state…";
+  }
+
+  if (mode === "error") {
+    return "Could not load dev server state.";
   }
 
   if (mode === "stopped") {
-    return "Start the configured builder dev servers for this task worktree.";
+    return owner?.kind === "workspace_session"
+      ? "Start the configured dev servers for this Workspace Session."
+      : "Start the configured dev servers for this task worktree.";
   }
 
-  return worktreePath
-    ? `Running in ${worktreePath}`
-    : "Builder dev server terminals stream here while the task worktree is active.";
+  return workingDirectory
+    ? `Running in ${workingDirectory}`
+    : "Dev server output appears here when the group starts.";
 };
 
 function CompactStartButton({
@@ -186,14 +194,15 @@ function CompactDevServerPanel({
   const isEmpty = mode === "empty";
   const isDisabled = mode === "disabled";
   const isLoading = mode === "loading";
-  const startDisabled = isEmpty || isDisabled || isLoading || isActionPending;
-  const startLabel = getStartLabel(isLoading, isStartPending);
+  const startDisabled = isEmpty || isDisabled || isLoading || mode === "error" || isActionPending;
+  const startLabel = getStartLabel(isStartPending);
   const startButton = (
     <Button
       type="button"
       size="sm"
-      className="w-full justify-center rounded-lg"
+      className={cn("w-full justify-center rounded-lg", isLoading && "disabled:opacity-100")}
       disabled={startDisabled}
+      aria-busy={isLoading}
       onClick={onStart}
       data-testid="agent-studio-dev-server-start-button"
     >
@@ -227,18 +236,18 @@ function CompactDevServerPanel({
   );
 }
 
-function DevServerWorktreePathHeader({
+function DevServerWorkingDirectoryHeader({
   headerSummary,
-  isWorktreePathCopied,
-  onCopyWorktreePath,
-  worktreePath,
+  isWorkingDirectoryCopied,
+  onCopyWorkingDirectory,
+  workingDirectory,
 }: {
   headerSummary: string;
-  isWorktreePathCopied: boolean;
-  onCopyWorktreePath: () => void;
-  worktreePath: string | null;
+  isWorkingDirectoryCopied: boolean;
+  onCopyWorkingDirectory: () => void;
+  workingDirectory: string | null;
 }): ReactElement {
-  if (worktreePath === null) {
+  if (workingDirectory === null) {
     return (
       <p
         className="mt-3 text-xs text-muted-foreground"
@@ -259,11 +268,11 @@ function DevServerWorktreePathHeader({
         variant="ghost"
         size="icon"
         className="size-6 shrink-0 text-muted-foreground hover:bg-muted hover:text-foreground"
-        onClick={onCopyWorktreePath}
+        onClick={onCopyWorkingDirectory}
         data-testid="agent-studio-dev-server-copy-worktree-path"
         aria-label="Copy working directory"
       >
-        {isWorktreePathCopied ? (
+        {isWorkingDirectoryCopied ? (
           <Check className="size-3.5 text-emerald-500 dark:text-emerald-400" />
         ) : (
           <Copy className="size-3.5" />
@@ -357,8 +366,8 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
   const hasExpandedActions = model.isExpanded;
   const selectedTabsValue = model.selectedScriptId ?? model.scripts[0]?.scriptId ?? "__none__";
   const selectedScriptContent = selectedScript ?? model.scripts[0] ?? null;
-  const terminalScopeKey = formatDevServerTaskScopeKey(
-    createDevServerTaskScope(model.repoPath, model.taskId),
+  const terminalScopeKey = formatDevServerScopeKey(
+    createDevServerScope(model.repoPath, model.owner),
   );
   const selectedScriptTerminalBuffer = useMemo(() => {
     if (model.selectedScriptTerminalBuffer !== null) {
@@ -378,23 +387,21 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
   const selectedScriptTerminalChunkCount = selectedScriptTerminalBuffer?.entries.length ?? 0;
   const panelError = model.error ?? rendererError;
   const disabledReasonId = useId();
-  const { copied: copiedWorktreePath, copyToClipboard: copyWorktreePath } = useCopyToClipboard({
-    getSuccessDescription: (value) => value,
-    errorLogContext: "AgentStudioDevServerPanel",
-  });
+  const { copied: copiedWorkingDirectory, copyToClipboard: copyWorkingDirectory } =
+    useCopyToClipboard({
+      getSuccessDescription: (value) => value,
+      errorLogContext: "AgentStudioDevServerPanel",
+    });
 
-  const headerSummary = useMemo(
-    () => getHeaderSummary(model.mode, model.worktreePath),
-    [model.mode, model.worktreePath],
-  );
+  const headerSummary = getHeaderSummary(model.mode, model.workingDirectory, model.owner);
 
-  const handleCopyWorktreePath = useCallback(() => {
-    if (!model.worktreePath) {
+  const handleCopyWorkingDirectory = useCallback(() => {
+    if (!model.workingDirectory) {
       return;
     }
 
-    void copyWorktreePath(model.worktreePath);
-  }, [copyWorktreePath, model.worktreePath]);
+    void copyWorkingDirectory(model.workingDirectory);
+  }, [copyWorkingDirectory, model.workingDirectory]);
 
   if (!hasExpandedActions) {
     return (
@@ -415,42 +422,16 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
     <div
       className="flex h-full min-h-0 flex-col overflow-hidden bg-card"
       data-testid="agent-studio-dev-server-expanded-panel"
+      aria-busy={model.isLoading}
     >
       <div className="border-b border-border px-3 pt-3 pb-1">
-        <div className="grid grid-cols-2 gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="destructive"
-            className="h-7 w-full justify-center gap-2 rounded-md px-3 text-sm"
-            disabled={isActionPending}
-            onClick={model.onStop}
-            data-testid="agent-studio-dev-server-stop-button"
-          >
-            <Square className="size-3.5 fill-current" />
-            {model.isStopPending ? "Stopping…" : "Stop"}
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-7 w-full justify-center gap-2 rounded-md px-3 text-sm"
-            disabled={isActionPending}
-            onClick={model.onRestart}
-            data-testid="agent-studio-dev-server-restart-button"
-          >
-            <RefreshCw
-              className={cn("size-4", model.isRestartPending ? "animate-spin" : undefined)}
-            />
-            {model.isRestartPending ? "Restarting…" : "Restart"}
-          </Button>
-        </div>
+        <DevServerExpandedActions model={model} />
 
-        <DevServerWorktreePathHeader
+        <DevServerWorkingDirectoryHeader
           headerSummary={headerSummary}
-          isWorktreePathCopied={copiedWorktreePath}
-          onCopyWorktreePath={handleCopyWorktreePath}
-          worktreePath={model.worktreePath}
+          isWorkingDirectoryCopied={copiedWorkingDirectory}
+          onCopyWorkingDirectory={handleCopyWorkingDirectory}
+          workingDirectory={model.workingDirectory}
         />
       </div>
 
@@ -504,3 +485,44 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
     </div>
   );
 });
+
+function DevServerExpandedActions({
+  model,
+}: {
+  model: AgentStudioDevServerPanelModel;
+}): ReactElement {
+  const disabled =
+    model.isLoading || model.isStartPending || model.isStopPending || model.isRestartPending;
+  const className = cn(
+    "h-7 w-full justify-center gap-2 rounded-md px-3 text-sm",
+    model.isLoading && "disabled:opacity-100",
+  );
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      <Button
+        type="button"
+        size="sm"
+        variant="destructive"
+        className={className}
+        disabled={disabled}
+        onClick={model.onStop}
+        data-testid="agent-studio-dev-server-stop-button"
+      >
+        <Square className="size-3.5 fill-current" />
+        {model.isStopPending ? "Stopping…" : "Stop"}
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className={className}
+        disabled={disabled}
+        onClick={model.onRestart}
+        data-testid="agent-studio-dev-server-restart-button"
+      >
+        <RefreshCw className={cn("size-4", model.isRestartPending ? "animate-spin" : undefined)} />
+        {model.isRestartPending ? "Restarting…" : "Restart"}
+      </Button>
+    </div>
+  );
+}

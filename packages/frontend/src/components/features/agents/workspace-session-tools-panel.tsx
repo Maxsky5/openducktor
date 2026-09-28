@@ -1,4 +1,4 @@
-import type { GitComparisonTarget, GitTargetBranch } from "@openducktor/contracts";
+import type { DevServerOwner, GitComparisonTarget, GitTargetBranch } from "@openducktor/contracts";
 import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderTree, GitBranch } from "lucide-react";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
@@ -9,6 +9,7 @@ import { AgentStudioGitPanel } from "./agent-studio-git-panel/agent-studio-git-p
 import { OpenInMenu } from "./agent-studio-git-panel/open-in-menu";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel/types";
 import { SharedToolsPanel } from "./shared-tools-panel";
+import { useAgentStudioDevServerPanel } from "@/features/dev-servers/use-agent-studio-dev-server-panel";
 import { type DiffDataState, useAgentStudioDiffData } from "@/features/agent-studio-git";
 import { useAgentStudioGitActions } from "@/pages/agents/use-agent-studio-git-actions";
 import { errorMessage } from "@/lib/errors";
@@ -27,6 +28,8 @@ const missingWorkingDirectoryReason = "The selected working directory is unavail
 
 export function WorkspaceSessionToolsPanel({
   repoPath,
+  workspaceId,
+  sessionId,
   workingDirectory,
   contextMode,
   branchKey,
@@ -42,6 +45,8 @@ export function WorkspaceSessionToolsPanel({
   onRefreshReady,
 }: {
   repoPath: string;
+  workspaceId: string;
+  sessionId: string;
   workingDirectory: string | null;
   contextMode: "repository" | "worktree";
   branchKey: string;
@@ -56,6 +61,15 @@ export function WorkspaceSessionToolsPanel({
   onSelectFile: (file: TaskExecutionSelectedFile) => false | void;
   onRefreshReady: (refresh: ((scope: "git" | "all") => Promise<void>) | null) => void;
 }) {
+  const devServerOwner = useMemo<DevServerOwner>(
+    () => ({ kind: "workspace_session", workspaceId, sessionId }),
+    [workspaceId, sessionId],
+  );
+  const devServerModel = useAgentStudioDevServerPanel({
+    repoPath,
+    owner: devServerOwner,
+    enabled: true,
+  });
   const { resolvedTarget, unavailableReason, isReady, refetchComparison } =
     useWorkspaceSessionComparison({
       repoPath,
@@ -178,6 +192,7 @@ export function WorkspaceSessionToolsPanel({
         headerActions: (
           <WorkspaceOpenInAction contextMode={contextMode} workingDirectory={workingDirectory} />
         ),
+        devServerModel,
       }}
     />
   );

@@ -4,6 +4,7 @@ import {
   type BuildSessionBootstrap,
   buildSessionBootstrapSchema,
   type DevServerGroupState,
+  type DevServerOwner,
   devServerGroupStateSchema,
   type FailureKind,
   type PullRequest,
@@ -255,33 +256,33 @@ const buildStart = async (
 const devServerGetState = async (
   invokeFn: InvokeFn,
   repoPath: string,
-  taskId: string,
+  owner: DevServerOwner,
 ): Promise<DevServerGroupState> => {
-  return invokeFn("dev_server_get_state", { repoPath, taskId }, devServerGroupStateSchema);
+  return invokeFn("dev_server_get_state", { repoPath, owner }, devServerGroupStateSchema);
 };
 
 const devServerStart = async (
   invokeFn: InvokeFn,
   repoPath: string,
-  taskId: string,
+  owner: DevServerOwner,
 ): Promise<DevServerGroupState> => {
-  return invokeFn("dev_server_start", { repoPath, taskId }, devServerGroupStateSchema);
+  return invokeFn("dev_server_start", { repoPath, owner }, devServerGroupStateSchema);
 };
 
 const devServerStop = async (
   invokeFn: InvokeFn,
   repoPath: string,
-  taskId: string,
+  owner: DevServerOwner,
 ): Promise<DevServerGroupState> => {
-  return invokeFn("dev_server_stop", { repoPath, taskId }, devServerGroupStateSchema);
+  return invokeFn("dev_server_stop", { repoPath, owner }, devServerGroupStateSchema);
 };
 
 const devServerRestart = async (
   invokeFn: InvokeFn,
   repoPath: string,
-  taskId: string,
+  owner: DevServerOwner,
 ): Promise<DevServerGroupState> => {
-  return invokeFn("dev_server_restart", { repoPath, taskId }, devServerGroupStateSchema);
+  return invokeFn("dev_server_restart", { repoPath, owner }, devServerGroupStateSchema);
 };
 
 const buildBlocked = async (
@@ -500,20 +501,20 @@ export class HostAgentClient {
     return buildStart(this.invokeFn, repoPath, taskId, runtimeKind);
   }
 
-  async devServerGetState(repoPath: string, taskId: string): Promise<DevServerGroupState> {
-    return devServerGetState(this.invokeFn, repoPath, taskId);
+  async devServerGetState(repoPath: string, owner: DevServerOwner): Promise<DevServerGroupState> {
+    return devServerGetState(this.invokeFn, repoPath, owner);
   }
 
-  async devServerStart(repoPath: string, taskId: string): Promise<DevServerGroupState> {
-    return devServerStart(this.invokeFn, repoPath, taskId);
+  async devServerStart(repoPath: string, owner: DevServerOwner): Promise<DevServerGroupState> {
+    return devServerStart(this.invokeFn, repoPath, owner);
   }
 
-  async devServerStop(repoPath: string, taskId: string): Promise<DevServerGroupState> {
-    return devServerStop(this.invokeFn, repoPath, taskId);
+  async devServerStop(repoPath: string, owner: DevServerOwner): Promise<DevServerGroupState> {
+    return devServerStop(this.invokeFn, repoPath, owner);
   }
 
-  async devServerRestart(repoPath: string, taskId: string): Promise<DevServerGroupState> {
-    return devServerRestart(this.invokeFn, repoPath, taskId);
+  async devServerRestart(repoPath: string, owner: DevServerOwner): Promise<DevServerGroupState> {
+    return devServerRestart(this.invokeFn, repoPath, owner);
   }
 
   async buildBlocked(repoPath: string, taskId: string, reason: string): Promise<TaskCard> {

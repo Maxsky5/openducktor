@@ -67,6 +67,7 @@ export const createDevServerServiceTestDouble = <Overrides extends Partial<DevSe
   restart: unexpectedEffectCall("dev server service", "restart"),
   start: unexpectedEffectCall("dev server service", "start"),
   stop: unexpectedEffectCall("dev server service", "stop"),
+  stopWorkspaceSession: unexpectedEffectCall("dev server service", "stopWorkspaceSession"),
   ...overrides,
 });
 

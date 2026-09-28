@@ -514,9 +514,10 @@ describe("local host SSE subscriptions", () => {
       type: "snapshot",
       state: {
         repoPath: "/repo",
-        taskId: "task-1",
-        worktreePath: null,
+        owner: { kind: "task", taskId: "task-1" },
+        workingDirectory: null,
         scripts: [],
+        revision: 0,
         updatedAt: "2026-03-19T15:30:00.000Z",
       },
     });
@@ -531,9 +532,10 @@ describe("local host SSE subscriptions", () => {
       type: "snapshot",
       state: {
         repoPath: "/repo",
-        taskId: "task-1",
-        worktreePath: null,
+        owner: { kind: "task", taskId: "task-1" },
+        workingDirectory: null,
         scripts: [],
+        revision: 0,
         updatedAt: "2026-03-19T15:30:00.000Z",
       },
     });

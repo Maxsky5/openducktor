@@ -20,7 +20,14 @@ export type WorkspaceSessionTargetDependencies = {
 };
 
 export const validateWorkspaceSessionTarget = (
-  { git }: Pick<WorkspaceSessionTargetDependencies, "git">,
+  {
+    git,
+  }: {
+    git: Pick<
+      GitPort,
+      "canonicalizePath" | "isGitRepository" | "shareGitCommonDirectory" | "isRegisteredWorktree"
+    >;
+  },
   repoPath: string,
   target: WorkspaceSessionExecutionTarget,
 ) =>

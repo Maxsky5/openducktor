@@ -5,7 +5,7 @@ import { selectDefaultDevServerTab } from "./use-agent-studio-dev-server-panel-h
 type SelectedScriptMemory = Map<string, string>;
 
 type UseAgentStudioDevServerPanelSelectionArgs = {
-  taskMemoryKey: string | null;
+  scopeKey: string | null;
   scripts: DevServerScriptState[];
   syncSelectedScriptTerminalBuffer: (scriptId: string | null) => void;
 };
@@ -18,7 +18,7 @@ type UseAgentStudioDevServerPanelSelectionResult = {
 };
 
 export const useAgentStudioDevServerPanelSelection = ({
-  taskMemoryKey,
+  scopeKey,
   scripts,
   syncSelectedScriptTerminalBuffer,
 }: UseAgentStudioDevServerPanelSelectionArgs): UseAgentStudioDevServerPanelSelectionResult => {
@@ -30,7 +30,7 @@ export const useAgentStudioDevServerPanelSelection = ({
   const selectedScriptIdRef = useRef<string | null>(null);
   const [selectedScriptId, setSelectedScriptId] = useState<string | null>(null);
 
-  const rememberedScriptId = taskMemoryKey ? (selectionMemory.get(taskMemoryKey) ?? null) : null;
+  const rememberedScriptId = scopeKey ? (selectionMemory.get(scopeKey) ?? null) : null;
 
   const effectiveSelectedScriptId = useMemo(() => {
     return selectDefaultDevServerTab(scripts, selectedScriptId ?? rememberedScriptId);
@@ -40,31 +40,31 @@ export const useAgentStudioDevServerPanelSelection = ({
     selectedScriptIdRef.current = effectiveSelectedScriptId;
     syncSelectedScriptTerminalBuffer(effectiveSelectedScriptId);
 
-    if (!taskMemoryKey) {
+    if (!scopeKey) {
       return;
     }
 
     if (effectiveSelectedScriptId) {
-      selectionMemory.set(taskMemoryKey, effectiveSelectedScriptId);
+      selectionMemory.set(scopeKey, effectiveSelectedScriptId);
     } else {
-      selectionMemory.delete(taskMemoryKey);
+      selectionMemory.delete(scopeKey);
     }
 
     setSelectedScriptId((current) =>
       current === effectiveSelectedScriptId ? current : effectiveSelectedScriptId,
     );
-  }, [effectiveSelectedScriptId, selectionMemory, syncSelectedScriptTerminalBuffer, taskMemoryKey]);
+  }, [effectiveSelectedScriptId, selectionMemory, syncSelectedScriptTerminalBuffer, scopeKey]);
 
   const onSelectScript = useCallback(
     (scriptId: string): void => {
-      if (!taskMemoryKey) {
+      if (!scopeKey) {
         return;
       }
 
-      selectionMemory.set(taskMemoryKey, scriptId);
+      selectionMemory.set(scopeKey, scriptId);
       setSelectedScriptId(scriptId);
     },
-    [selectionMemory, taskMemoryKey],
+    [selectionMemory, scopeKey],
   );
 
   const resetSelectedScript = useCallback((): void => {

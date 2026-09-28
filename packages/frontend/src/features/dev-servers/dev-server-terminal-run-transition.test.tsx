@@ -43,7 +43,7 @@ test.each(["first chunk", "starting status", "starting status with delayed rende
       });
     const harness = renderDevServerPanelHook(useAgentStudioDevServerTerminalBuffers, {
       repoPath: "/repo",
-      taskId: "task-7",
+      owner: { kind: "task", taskId: "task-7" },
     });
     let screen = "";
     const writes: string[] = [];
@@ -96,7 +96,7 @@ test.each(["first chunk", "starting status", "starting status with delayed rende
           {
             type: "terminal_chunk",
             repoPath: "/repo",
-            taskId: "task-7",
+            owner: { kind: "task", taskId: "task-7" },
             terminalChunk: chunk(2, sequence),
           },
           "frontend",
@@ -125,8 +125,9 @@ test.each(["first chunk", "starting status", "starting status with delayed rende
           harness.getLatest().applyTerminalBuffersFromEvent(
             {
               type: "script_status_changed",
+              revision: 1,
               repoPath: "/repo",
-              taskId: "task-7",
+              owner: { kind: "task", taskId: "task-7" },
               updatedAt: "2026-03-25T10:00:00.000Z",
               script: buildScript({ status: "starting", runIdentity: chunk(2, 0).runIdentity }),
             },

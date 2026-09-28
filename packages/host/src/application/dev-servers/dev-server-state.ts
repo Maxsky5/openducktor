@@ -1,6 +1,7 @@
 import {
   type DevServerEvent,
   type DevServerGroupState,
+  type DevServerOwner,
   type DevServerScriptState,
   type DevServerTerminalChunk,
   devServerEventSchema,
@@ -13,6 +14,7 @@ import type { DevServerWorkspaceActivity } from "./dev-server-service-types";
 
 export type DevServerGroupRuntime = {
   processes: Map<string, DevServerProcessHandle>;
+  unresolvedStops: Set<string>;
   state: DevServerGroupState;
   terminalBufferedBytesByScriptId: Map<string, number>;
   terminalNextSequenceByScriptId: Map<string, number>;
@@ -57,12 +59,13 @@ export const inspectDevServerWorkspaceActivity = (
 ): DevServerWorkspaceActivity => {
   const repoGroups = groups.get(repoPath);
   if (!repoGroups) {
-    return { activeTaskIds: [] };
+    return { activeOwners: [] };
   }
-  const activeTaskIds: string[] = [];
-  for (const [taskId, runtime] of repoGroups) {
+  const activeOwners: DevServerOwner[] = [];
+  for (const runtime of repoGroups.values()) {
     const isActive =
       runtime.processes.size > 0 ||
+      runtime.unresolvedStops.size > 0 ||
       runtime.state.scripts.some(
         (script) =>
           scriptHasLiveProcess(script) ||
@@ -71,31 +74,33 @@ export const inspectDevServerWorkspaceActivity = (
           script.status === "stopping",
       );
     if (isActive) {
-      activeTaskIds.push(taskId);
+      activeOwners.push(runtime.state.owner);
     }
   }
-  return { activeTaskIds };
+  return { activeOwners };
 };
 
 export const buildGroupState = (
   repoConfig: RepoConfig,
-  taskId: string,
-  worktreePath: string | null,
+  owner: DevServerOwner,
+  workingDirectory: string | null,
   updatedAt: string,
 ): DevServerGroupState =>
   devServerGroupStateSchema.parse({
     repoPath: repoConfig.repoPath,
-    taskId,
-    worktreePath,
+    owner,
+    workingDirectory,
     scripts: repoConfig.devServers.map(scriptStateFromConfig),
+    revision: 0,
     updatedAt,
   });
 
 export const syncGroupState = (
   state: DevServerGroupState,
   repoConfig: RepoConfig,
-  taskId: string,
-  worktreePath: string | null,
+  owner: DevServerOwner,
+  workingDirectory: string | null,
+  unresolvedStops: ReadonlySet<string>,
 ): void => {
   const existing = new Map(state.scripts.map((script) => [script.scriptId, script]));
   const nextScripts = repoConfig.devServers.map((script) => {
@@ -111,12 +116,17 @@ export const syncGroupState = (
       name: script.name,
     };
   });
-  nextScripts.push(...Array.from(existing.values()).filter(scriptHasLiveProcess));
+  nextScripts.push(
+    ...Array.from(existing.values()).filter(
+      (script) => scriptHasLiveProcess(script) || unresolvedStops.has(script.scriptId),
+    ),
+  );
 
   state.repoPath = repoConfig.repoPath;
-  state.taskId = taskId;
-  state.worktreePath = worktreePath;
+  state.owner = owner;
+  state.workingDirectory = workingDirectory;
   state.scripts = nextScripts;
+  state.revision += 1;
   state.updatedAt = nowIso();
 };
 
@@ -218,7 +228,7 @@ export const startTerminalRun = (
     runId: JSON.stringify([
       hostInstanceId,
       runtime.state.repoPath,
-      runtime.state.taskId,
+      runtime.state.owner,
       script.scriptId,
       runtime.terminalRunGeneration,
     ]),

@@ -604,7 +604,10 @@ describe("createTaskService task mutations and reset", () => {
       { type: "list", input: { repoPath: "/repo" } },
       { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
       { type: "listBranches", workingDir: "/repo" },
-      { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
+      {
+        type: "stopDevServers",
+        input: { repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } },
+      },
       {
         type: "delete",
         input: { repoPath: "/repo", taskId: "task-1", deleteSubtasks: false },
@@ -871,8 +874,14 @@ describe("createTaskService task mutations and reset", () => {
           ],
         },
       },
-      { type: "stopDevServers", input: { repoPath: "/repo", taskId: "epic-1" } },
-      { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
+      {
+        type: "stopDevServers",
+        input: { repoPath: "/repo", owner: { kind: "task", taskId: "epic-1" } },
+      },
+      {
+        type: "stopDevServers",
+        input: { repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } },
+      },
       {
         type: "removeWorktree",
         repoPath: "/repo",
@@ -1035,7 +1044,10 @@ describe("createTaskService task mutations and reset", () => {
           taskSessions: [{ taskId: "task-1", sessions: [session] }],
         },
       },
-      { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
+      {
+        type: "stopDevServers",
+        input: { repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } },
+      },
       {
         type: "removeWorktree",
         repoPath: "/repo",
@@ -1122,7 +1134,10 @@ describe("createTaskService task mutations and reset", () => {
           taskSessions: [{ taskId: "task-1", sessions: [session] }],
         },
       },
-      { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
+      {
+        type: "stopDevServers",
+        input: { repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } },
+      },
       {
         type: "removeWorktree",
         repoPath: "/repo",
@@ -1564,7 +1579,10 @@ describe("createTaskService task mutations and reset", () => {
           taskSessions: [{ taskId: "task-1", sessions: currentSessions }],
         },
       },
-      { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
+      {
+        type: "stopDevServers",
+        input: { repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } },
+      },
       {
         type: "removeWorktree",
         repoPath: "/repo",
@@ -1846,7 +1864,10 @@ describe("createTaskService task mutations and reset", () => {
           taskSessions: [{ taskId: "task-1", sessions: currentSessions }],
         },
       },
-      { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
+      {
+        type: "stopDevServers",
+        input: { repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } },
+      },
       {
         type: "removeWorktree",
         repoPath: "/repo",

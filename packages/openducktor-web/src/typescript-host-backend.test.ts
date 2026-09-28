@@ -1054,9 +1054,10 @@ describe("TypeScript web host backend", () => {
           type: "snapshot",
           state: {
             repoPath: "/repo",
-            taskId: "task-1",
-            worktreePath: null,
+            owner: { kind: "task", taskId: "task-1" },
+            workingDirectory: null,
             scripts: [],
+            revision: 0,
             updatedAt: "2026-03-19T15:30:00.000Z",
           },
         },
@@ -1154,7 +1155,7 @@ describe("TypeScript web host backend", () => {
         payload: {
           type: "terminal_chunk",
           repoPath: "/repo",
-          taskId: "task-1",
+          owner: { kind: "task", taskId: "task-1" },
           terminalChunk: {
             scriptId: "web",
             runIdentity: {
