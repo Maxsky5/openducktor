@@ -6,6 +6,7 @@ export type FileDiffLineCounts = {
 export type SelectRenderableFileDiffOptions = {
   changeType?: string | null;
   fullFileContent?: boolean;
+  windowsPaths?: boolean;
 };
 
 const GIT_DIFF_HEADER = /^diff --git /m;
@@ -34,8 +35,9 @@ export const selectRenderableFileDiff = (
   let matchingCandidate: string | null = null;
   let strongestMatch: DiffPathMatch | null = null;
   let ambiguousMatch = false;
+  const requestedPath = options.windowsPaths ? filePath.replaceAll("\\", "/") : filePath;
   for (const candidate of candidates) {
-    const match = fileDiffCandidateMatch(candidate, filePath, options.changeType);
+    const match = fileDiffCandidateMatch(candidate, requestedPath, options.changeType);
     if (!match) {
       continue;
     }

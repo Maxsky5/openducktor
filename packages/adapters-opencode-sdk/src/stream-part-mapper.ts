@@ -251,6 +251,7 @@ const normalizeToolMetadataFileDiff = (input: {
     const renderableDiff = selectRenderableFileDiff(patch, fileCandidate, {
       changeType: input.type,
       fullFileContent: input.fullFileContent === true,
+      windowsPaths: process.platform === "win32",
     });
     if (renderableDiff) {
       diff = renderableDiff;

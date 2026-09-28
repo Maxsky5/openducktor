@@ -1,3 +1,4 @@
+import process from "node:process";
 import type {
   CodexAppServerFileUpdateChange,
   CodexAppServerJsonValue,
@@ -52,6 +53,7 @@ const selectCodexRenderableDiff = (
     const renderableDiff = selectRenderableFileDiff(diff, fileCandidate, {
       changeType: type,
       fullFileContent: type === "added" || type === "deleted",
+      windowsPaths: process.platform === "win32",
     });
     if (renderableDiff) {
       return renderableDiff;
@@ -175,7 +177,11 @@ const finishApplyPatchEntry = (entry: ApplyPatchFileEntry): FileDiff | null => {
 
   const rawDiff = [`*** ${entry.operation} File: ${entry.file}`, ...entry.lines].join("\n");
   const type = APPLY_PATCH_FILE_TYPES[entry.operation];
-  const diff = selectRenderableFileDiff(rawDiff, entry.file, { changeType: type }) ?? "";
+  const diff =
+    selectRenderableFileDiff(rawDiff, entry.file, {
+      changeType: type,
+      windowsPaths: process.platform === "win32",
+    }) ?? "";
   const counts = countRenderableFileDiffLines(diff);
   return {
     file: entry.file,

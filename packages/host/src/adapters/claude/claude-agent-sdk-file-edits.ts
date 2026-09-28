@@ -256,7 +256,10 @@ const normalizeClaudeFileDiff = ({
   if (!file?.trim() || !patch) {
     return null;
   }
-  const diff = selectRenderableFileDiff(patch, file, { changeType: type });
+  const diff = selectRenderableFileDiff(patch, file, {
+    changeType: type,
+    windowsPaths: process.platform === "win32",
+  });
   if (!diff) {
     return null;
   }

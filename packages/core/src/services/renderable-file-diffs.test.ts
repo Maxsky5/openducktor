@@ -102,6 +102,9 @@ describe("renderable file diffs", () => {
     expect(selectRenderableFileDiff(slash + backslash, "src/foo/bar.ts")).toBe(slash);
     expect(selectRenderableFileDiff(slash + backslash, "src/foo\\bar.ts")).toBe(backslash);
     expect(selectRenderableFileDiff(slash, "C:\\repo\\src\\foo\\bar.ts")).toBe(slash);
+    expect(
+      selectRenderableFileDiff(slash + backslash, "src\\foo\\bar.ts", { windowsPaths: true }),
+    ).toBe(slash);
   });
 
   test("decodes UTF-8 octal escapes in Git-quoted file paths", () => {
