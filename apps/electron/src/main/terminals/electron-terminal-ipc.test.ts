@@ -304,10 +304,14 @@ describe("Electron terminal IPC", () => {
       return reference;
     })();
 
-    // Leave the sender's creation turn before collecting its weak reference.
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    Bun.gc(true);
-    expect(senderRef.deref()).toBeUndefined();
+    // Collect on a fresh event-loop stack, after the sender's creation turn.
+    const senderCollected = await new Promise<boolean>((resolve) => {
+      setTimeout(() => {
+        Bun.gc(true);
+        resolve(senderRef.deref() === undefined);
+      }, 0);
+    });
+    expect(senderCollected).toBe(true);
     expect(await failureReported).toMatchObject({
       senderId: 7,
       cause: { message: "Injected destruction detach failure" },
