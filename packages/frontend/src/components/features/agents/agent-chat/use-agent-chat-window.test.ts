@@ -2399,7 +2399,7 @@ describe("useAgentChatWindow", () => {
     expect(AGENT_CHAT_ROW_WINDOW_SIZE).toBe(40);
   });
 
-  test("navigates 10,000 rows in both directions within the mounted row budget", async () => {
+  test("navigates 10,000 rows in both directions within the row-window budget", async () => {
     const rows = createSingleTurnRows(10_000);
     const harness = await mountHarness(
       {

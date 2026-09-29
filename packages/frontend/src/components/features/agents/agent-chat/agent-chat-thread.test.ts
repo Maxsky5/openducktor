@@ -1018,7 +1018,7 @@ describe("AgentChatThread", () => {
       expect(rendered.queryByText("Turn 18 reply 18")).not.toBeNull();
       const immediateRowCount = rendered.container.querySelectorAll("[data-row-key]").length;
       expect(immediateRowCount).toBeGreaterThan(0);
-      expect(immediateRowCount).toBeLessThan(largeMessages.length);
+      expect(immediateRowCount).toBeLessThanOrEqual(AGENT_CHAT_ROW_WINDOW_SIZE * 3);
       expect(rendered.queryByText("Turn 1 request")).toBeNull();
 
       rendered.unmount();
