@@ -2399,7 +2399,6 @@ describe("useAgentChatWindow", () => {
     expect(AGENT_CHAT_ROW_WINDOW_SIZE).toBe(40);
   });
 
-  // Native scroll events across 10,000 rows need more than the suite's one-second limit.
   test("navigates 10,000 rows in both directions within the mounted row budget", async () => {
     const rows = createSingleTurnRows(10_000);
     const harness = await mountHarness(
@@ -2458,5 +2457,5 @@ describe("useAgentChatWindow", () => {
     expect(seenDown.size).toBe(rows.length);
 
     await harness.unmount();
-  }, 30_000);
+  });
 });
