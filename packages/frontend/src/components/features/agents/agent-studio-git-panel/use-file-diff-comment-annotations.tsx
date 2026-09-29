@@ -26,7 +26,6 @@ export type FileDiffAnnotationState = {
 };
 
 export type FileDiffAnnotationAction =
-  | { type: "reset" }
   | { type: "selectionCleared" }
   | { type: "selectionChanged"; selection: PierreDiffSelection | null }
   | { type: "newCommentTextChanged"; text: string }
@@ -47,8 +46,6 @@ export const fileDiffAnnotationReducer = (
   action: FileDiffAnnotationAction,
 ): FileDiffAnnotationState => {
   switch (action.type) {
-    case "reset":
-      return EMPTY_FILE_DIFF_ANNOTATION_STATE;
     case "selectionCleared":
       return { ...state, selectedLines: null, pendingSelection: null, newCommentText: "" };
     case "selectionChanged":

@@ -103,6 +103,56 @@ function DiffStyleToggleButton({
 }
 
 type FileEditorState = { diffText: string; state: FileDiffAnnotationState };
+type FileAnnotationDispatch = (
+  filePath: string,
+  diffText: string,
+  action: FileDiffAnnotationAction,
+) => void;
+type FileEditorStates = {
+  editorStateByFile: Map<string, FileEditorState>;
+  onAnnotationAction: FileAnnotationDispatch;
+};
+
+function useFileEditorStates(
+  ownerKey: string | null,
+  diffScope: DiffScope,
+  fileDiffs: FileDiff[],
+): FileEditorStates {
+  const [editorStateByFile, setEditorStateByFile] = useState<Map<string, FileEditorState>>(
+    () => new Map(),
+  );
+  const onAnnotationAction = useCallback<FileAnnotationDispatch>((filePath, diffText, action) => {
+    setEditorStateByFile((current) => {
+      const entry = current.get(filePath);
+      const state = entry?.diffText === diffText ? entry.state : EMPTY_FILE_DIFF_ANNOTATION_STATE;
+      const next = new Map(current);
+      next.set(filePath, { diffText, state: fileDiffAnnotationReducer(state, action) });
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    setEditorStateByFile((current) => (current.size === 0 ? current : new Map()));
+  }, [ownerKey, diffScope]);
+
+  useEffect(() => {
+    setEditorStateByFile((current) => {
+      if (current.size === 0) {
+        return current;
+      }
+      const currentDiffs = new Map(fileDiffs.map((diff) => [diff.file, diff.diff]));
+      const next = new Map(current);
+      for (const [filePath, entry] of current) {
+        if (currentDiffs.get(filePath) !== entry.diffText) {
+          next.delete(filePath);
+        }
+      }
+      return next.size === current.size ? current : next;
+    });
+  }, [fileDiffs]);
+
+  return { editorStateByFile, onAnnotationAction };
+}
 
 type MeasurementState = {
   fileDiffs: FileDiff[];
@@ -159,11 +209,7 @@ type FileDiffRowProps = Omit<FileDiffListProps, "preloadLimit" | "setDiffStyle">
   inlineCommentsByFile: Map<string, InlineCommentDraft[]>;
   reserveConflictSlot: boolean;
   editorStateByFile: Map<string, FileEditorState>;
-  onAnnotationAction: (
-    filePath: string,
-    diffText: string,
-    action: FileDiffAnnotationAction,
-  ) => void;
+  onAnnotationAction: FileAnnotationDispatch;
 };
 
 function FileDiffRow({
@@ -262,38 +308,11 @@ export const FileDiffList = memo(function FileDiffList({
     [diffScope, inlineCommentDrafts],
   );
   const reserveConflictSlot = conflictedFiles.size > 0;
-  const [editorStateByFile, setEditorStateByFile] = useState<Map<string, FileEditorState>>(
-    () => new Map(),
+  const { editorStateByFile, onAnnotationAction } = useFileEditorStates(
+    ownerKey,
+    diffScope,
+    fileDiffs,
   );
-  const onAnnotationAction = useCallback(
-    (filePath: string, diffText: string, action: FileDiffAnnotationAction) => {
-      setEditorStateByFile((current) => {
-        const entry = current.get(filePath);
-        const state = entry?.diffText === diffText ? entry.state : EMPTY_FILE_DIFF_ANNOTATION_STATE;
-        const next = new Map(current);
-        next.set(filePath, { diffText, state: fileDiffAnnotationReducer(state, action) });
-        return next;
-      });
-    },
-    [],
-  );
-
-  useEffect(() => {
-    setEditorStateByFile(new Map());
-  }, [ownerKey, diffScope]);
-
-  useEffect(() => {
-    const currentDiffs = new Map(fileDiffs.map((diff) => [diff.file, diff.diff]));
-    setEditorStateByFile((current) => {
-      const next = new Map(current);
-      for (const [filePath, entry] of current) {
-        if (currentDiffs.get(filePath) !== entry.diffText) {
-          next.delete(filePath);
-        }
-      }
-      return next.size === current.size ? current : next;
-    });
-  }, [fileDiffs]);
 
   const listRef = useListRef(null);
   const visibleFileRef = useRef<{ filePath: string; index: number } | null>(null);
