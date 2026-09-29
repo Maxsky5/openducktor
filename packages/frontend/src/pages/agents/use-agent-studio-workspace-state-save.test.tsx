@@ -108,6 +108,56 @@ describe("useAgentStudioWorkspaceStateSave", () => {
     await harness.unmount();
   });
 
+  test("saves closed tabs after a pending tab edit and active selection change", async () => {
+    const loadedState: WorkspaceAgentStudioState = {
+      openTaskIds: ["task-1", "task-2"],
+      activeTask: { taskId: "task-1", role: "planner" },
+    };
+    const nextState: WorkspaceAgentStudioState = {
+      openTaskIds: ["task-1"],
+      activeTask: { taskId: "task-1", role: "build" },
+    };
+    const savedActiveState = { ...loadedState, activeTask: nextState.activeTask };
+    const workspaceApplyAgentStudioStateAction = mock(
+      async (_workspaceId: string, action: WorkspaceAgentStudioStateAction) => {
+        if (action.type === "set_active_task") {
+          return createRepoConfig(savedActiveState);
+        }
+        if (action.type === "sync_snapshot") {
+          return createRepoConfig(nextState);
+        }
+        throw new Error(`Unexpected action: ${action.type}`);
+      },
+    );
+    const hostClient = { workspaceApplyAgentStudioStateAction };
+    const harness = createHookHarness({
+      workspaceId: "repo-a",
+      loadedState,
+      state: nextState,
+      hasPendingTabChange: true,
+      enabled: true,
+      hostClient,
+    });
+
+    await harness.mount();
+    await harness.waitFor(() => workspaceApplyAgentStudioStateAction.mock.calls.length === 1);
+    await harness.update({
+      workspaceId: "repo-a",
+      loadedState: savedActiveState,
+      state: nextState,
+      hasPendingTabChange: false,
+      enabled: true,
+      hostClient,
+    });
+    await harness.waitFor(() => workspaceApplyAgentStudioStateAction.mock.calls.length === 2);
+
+    expect(workspaceApplyAgentStudioStateAction.mock.calls.map((call) => call[1].type)).toEqual([
+      "set_active_task",
+      "sync_snapshot",
+    ]);
+    await harness.unmount();
+  });
+
   test("saves a change back to the loaded snapshot after an older save", async () => {
     const loadedState = { openTaskIds: ["task-1"] };
     const pendingState = { openTaskIds: ["task-1", "task-2"] };

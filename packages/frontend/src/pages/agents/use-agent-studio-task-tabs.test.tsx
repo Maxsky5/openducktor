@@ -7,6 +7,7 @@ import {
 } from "./agent-studio-test-utils";
 import type { AgentStudioSelectionState } from "./shell/agent-studio-selection-state";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
+import { useTaskTabState } from "./use-agent-studio-task-tabs-state";
 
 enableReactActEnvironment();
 
@@ -37,6 +38,39 @@ const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioTaskTabs, initialProps);
 
 describe("useAgentStudioTaskTabs", () => {
+  test("shows a background tab during a pending local close", async () => {
+    const loadedState: WorkspaceAgentStudioState = {
+      openTaskIds: ["task-1", "task-2"],
+      activeTask: { taskId: "task-1" },
+    };
+    const allTasks = [createTask("task-1"), createTask("task-2"), createTask("task-3")];
+    const args = {
+      activeWorkspaceId: "repo-a",
+      loadedAgentStudioState: loadedState,
+      agentStudioStateLoadKey: "1:1",
+      agentStudioState: loadedState,
+      taskId: "task-1",
+      selectedTask: allTasks[0] ?? null,
+      tasks: allTasks,
+      tasksAreCurrent: true,
+    };
+    const harness = createSharedHookHarness(useTaskTabState, args);
+
+    await harness.mount();
+    await harness.run((result) =>
+      result.setTabState({ openTaskIds: ["task-1"], activeTaskId: "task-1" }),
+    );
+    const backgroundState = { ...loadedState, openTaskIds: ["task-1", "task-2", "task-3"] };
+    await harness.update({
+      ...args,
+      loadedAgentStudioState: backgroundState,
+      agentStudioState: backgroundState,
+    });
+
+    expect(harness.getLatest().openTaskIds).toEqual(["task-1", "task-3"]);
+    await harness.unmount();
+  });
+
   test("restores order and active task from workspace state", async () => {
     const state: WorkspaceAgentStudioState = {
       openTaskIds: ["task-2", "task-1"],

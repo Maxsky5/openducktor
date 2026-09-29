@@ -10,11 +10,13 @@ export type TaskTabState = {
 export type TabChangeListener = (
   baseOpenTaskIds: string[],
   nextState: TaskTabState,
+  onSaved: () => void,
 ) => Promise<void> | void;
 
 type PendingTabChange = TaskTabState & {
   workspaceId: string;
   loadKey: string;
+  loadedOpenTaskIds: string[];
 };
 
 export function useTaskTabState({
@@ -75,13 +77,21 @@ export function useTaskTabState({
       };
     }
 
-    const baseState = (hasPendingTabChange ? pendingTabChange : null) ?? {
+    const pendingState = hasPendingTabChange ? pendingTabChange : null;
+    const baseState = pendingState ?? {
       openTaskIds: agentStudioState.openTaskIds,
       activeTaskId: agentStudioState.activeTask?.taskId ?? null,
     };
-    const taskIds = tasksAreCurrent
-      ? pruneAgentStudioTaskIds(baseState.openTaskIds, tasks)
-      : baseState.openTaskIds;
+    let openIds = baseState.openTaskIds;
+    if (pendingState) {
+      const loadedIds = new Set(pendingState.loadedOpenTaskIds);
+      const pendingIds = new Set(pendingState.openTaskIds);
+      openIds = [
+        ...pendingState.openTaskIds,
+        ...agentStudioState.openTaskIds.filter((id) => !loadedIds.has(id) && !pendingIds.has(id)),
+      ];
+    }
+    const taskIds = tasksAreCurrent ? pruneAgentStudioTaskIds(openIds, tasks) : openIds;
     const openTaskIds = hasValidRouteTask ? ensureActiveTaskTab(taskIds, taskId) : taskIds;
 
     return {
@@ -111,15 +121,13 @@ export function useTaskTabState({
       const change = {
         workspaceId: activeWorkspaceId,
         loadKey: agentStudioStateLoadKey,
+        loadedOpenTaskIds: loadedAgentStudioState.openTaskIds,
         ...nextState,
       };
       setPendingTabChange(change);
-      const saved = onTabChange?.(baseOpenTaskIds, nextState);
-      if (saved) {
-        void saved.then(() => {
-          setPendingTabChange((current) => (current === change ? null : current));
-        });
-      }
+      void onTabChange?.(baseOpenTaskIds, nextState, () => {
+        setPendingTabChange((current) => (current === change ? null : current));
+      });
     },
     [
       activeWorkspaceId,

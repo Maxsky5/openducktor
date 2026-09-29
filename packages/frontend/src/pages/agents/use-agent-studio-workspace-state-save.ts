@@ -38,7 +38,11 @@ export function useAgentStudioWorkspaceStateSave({
   hostClient?: AgentStudioStateHost;
 }) {
   const queryClient = useQueryClient();
-  const lastSaveRef = useRef<{ workspaceId: string; key: string } | null>(null);
+  const lastSaveRef = useRef<{
+    workspaceId: string;
+    key: string;
+    actionType: WorkspaceAgentStudioStateAction["type"];
+  } | null>(null);
   const [failure, setFailure] = useState<SaveFailure | null>(null);
   const loadedKey = loadedState ? toStateKey(loadedState) : null;
   const nextKey = toStateKey(state);
@@ -73,7 +77,11 @@ export function useAgentStudioWorkspaceStateSave({
       return;
     }
     const lastSave = lastSaveRef.current;
-    if (lastSave?.workspaceId === workspaceId && lastSave.key === nextKey) {
+    if (
+      lastSave?.workspaceId === workspaceId &&
+      lastSave.key === nextKey &&
+      (hasPendingTabChange || lastSave.actionType === "sync_snapshot")
+    ) {
       return;
     }
     if (loadedKey === nextKey && lastSave?.workspaceId !== workspaceId) {
@@ -95,7 +103,7 @@ export function useAgentStudioWorkspaceStateSave({
         };
 
     const request = { workspaceId, key: nextKey, action };
-    lastSaveRef.current = { workspaceId, key: nextKey };
+    lastSaveRef.current = { workspaceId, key: nextKey, actionType: action.type };
     save(request);
   }, [enabled, hasPendingTabChange, loadedKey, loadedState, nextKey, save, state, workspaceId]);
 
@@ -107,6 +115,7 @@ export function useAgentStudioWorkspaceStateSave({
     lastSaveRef.current = {
       workspaceId: failure.request.workspaceId,
       key: failure.request.key,
+      actionType: failure.request.action.type,
     };
     save(failure.request);
   }, [failure, save, saveFailedForCurrentState]);

@@ -512,7 +512,8 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
     await harness.waitFor(
       (result) => result.tabChange.saveError?.message === "Could not save tabs",
     );
-    expect(harness.getLatest().tabs.openTaskIds).toEqual(["task-1", "task-2"]);
+    expect(harness.getLatest().tabs.openTaskIds).toEqual(["task-1"]);
+    expect(harness.getLatest().tabs.hasPendingTabChange).toBe(true);
 
     await harness.run((result) => result.tabChange.retry());
     await harness.waitFor((result) => result.tabChange.saveError === null);

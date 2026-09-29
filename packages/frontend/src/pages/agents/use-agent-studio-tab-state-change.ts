@@ -9,6 +9,7 @@ type AgentStudioStateHost = Pick<typeof host, "workspaceApplyAgentStudioStateAct
 type FailedChange = {
   workspaceId: string;
   action: WorkspaceAgentStudioStateAction;
+  onSaved: () => void;
   error: Error;
 };
 
@@ -24,7 +25,11 @@ export function useAgentStudioTabStateChange({
   const latestActions = useRef(new Map<string, WorkspaceAgentStudioStateAction>());
 
   const submit = useCallback(
-    (targetWorkspaceId: string, action: WorkspaceAgentStudioStateAction): Promise<void> => {
+    (
+      targetWorkspaceId: string,
+      action: WorkspaceAgentStudioStateAction,
+      onSaved: () => void,
+    ): Promise<void> => {
       return applyWorkspaceAgentStudioStateAction({
         queryClient,
         workspaceId: targetWorkspaceId,
@@ -33,6 +38,7 @@ export function useAgentStudioTabStateChange({
       }).then(
         () => {
           if (latestActions.current.get(targetWorkspaceId) === action) {
+            onSaved();
             setFailures((current) =>
               current.filter((failure) => failure.workspaceId !== targetWorkspaceId),
             );
@@ -47,6 +53,7 @@ export function useAgentStudioTabStateChange({
             {
               workspaceId: targetWorkspaceId,
               action,
+              onSaved,
               error: cause instanceof Error ? cause : new Error(String(cause)),
             },
           ]);
@@ -57,7 +64,11 @@ export function useAgentStudioTabStateChange({
   );
 
   const onTabChange = useCallback(
-    (baseOpenTaskIds: string[], nextState: TaskTabState): Promise<void> | undefined => {
+    (
+      baseOpenTaskIds: string[],
+      nextState: TaskTabState,
+      onSaved: () => void = () => {},
+    ): Promise<void> | undefined => {
       if (!workspaceId) {
         return;
       }
@@ -69,7 +80,7 @@ export function useAgentStudioTabStateChange({
       };
       latestActions.current.set(workspaceId, action);
       setFailures((current) => current.filter((failure) => failure.workspaceId !== workspaceId));
-      return submit(workspaceId, action);
+      return submit(workspaceId, action, onSaved);
     },
     [submit, workspaceId],
   );
@@ -77,7 +88,7 @@ export function useAgentStudioTabStateChange({
   const retry = useCallback((): void => {
     const failure = failures.find((entry) => entry.workspaceId === workspaceId);
     if (failure) {
-      void submit(failure.workspaceId, failure.action);
+      void submit(failure.workspaceId, failure.action, failure.onSaved);
     }
   }, [failures, submit, workspaceId]);
 
