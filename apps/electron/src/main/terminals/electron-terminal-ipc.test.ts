@@ -227,6 +227,110 @@ describe("Electron terminal IPC", () => {
     expect(attempts).toEqual(["electron:7:client-a:terminal-1", "electron:7:client-a:terminal-1"]);
   });
 
+  test("releases a destroyed sender after failed cleanup and keeps cleanup available", async () => {
+    const attempts: string[] = [];
+    const delivered: Uint8Array[] = [];
+    let sink: Parameters<TerminalService["attach"]>[0]["sink"] | undefined;
+    const emitOutput = (): void => {
+      if (!sink) throw new Error("Expected terminal attachment sink.");
+      sink(
+        {
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "protocol_error",
+          terminalId: "terminal-1",
+          failure: { code: "output_overflow", message: "Terminal output failed." },
+        },
+        new Uint8Array(),
+      );
+    };
+    let failDetach = true;
+    let reportFailure = (_failure: { senderId: number; cause: unknown }): void => undefined;
+    const failureReported = new Promise<{ senderId: number; cause: unknown }>((resolve) => {
+      reportFailure = resolve;
+    });
+    let sendHandler: ElectronTerminalIpcHandler | undefined;
+    let disconnectHandler: ElectronTerminalIpcHandler | undefined;
+    registerElectronTerminalIpc({
+      ipcMain: {
+        handle(channel, handler) {
+          if (channel === "openducktor:terminal:send") sendHandler = handler;
+          if (channel === "openducktor:terminal:disconnect") disconnectHandler = handler;
+        },
+      },
+      reportLifecycleFailure: (senderId, cause) => reportFailure({ senderId, cause }),
+      terminalService: {
+        attach: (input) =>
+          Effect.sync(() => {
+            sink = input.sink;
+          }),
+        detach: (terminalId, attachmentId) =>
+          Effect.suspend(() => {
+            attempts.push(attachmentId);
+            return failDetach
+              ? Effect.fail(
+                  new TerminalServiceError({
+                    code: "close_failed",
+                    operation: "detach",
+                    message: "Injected destruction detach failure",
+                    terminalId,
+                  }),
+                )
+              : Effect.void;
+          }),
+      },
+    });
+    if (!sendHandler || !disconnectHandler) {
+      throw new Error("Expected terminal send and disconnect handler registration.");
+    }
+    const send = sendHandler;
+    const senderRef = await (async () => {
+      let destroy = (): void => undefined;
+      let destroyed = false;
+      const sender = {
+        id: 7,
+        isDestroyed: () => destroyed,
+        send: (_channel: string, envelope: { frame: Uint8Array }) => delivered.push(envelope.frame),
+        on: () => undefined,
+        once: (_event: "destroyed", listener: () => void) => {
+          destroy = listener;
+        },
+      };
+      const reference = new WeakRef(sender);
+      await send({ sender }, { clientId: "client-a", frame: makeAttachFrame() });
+      emitOutput();
+      destroyed = true;
+      destroy();
+      await failureReported;
+      return reference;
+    })();
+
+    // Leave the sender's creation turn before collecting its weak reference.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    Bun.gc(true);
+    expect(senderRef.deref()).toBeUndefined();
+    expect(await failureReported).toMatchObject({
+      senderId: 7,
+      cause: { message: "Injected destruction detach failure" },
+    });
+    emitOutput();
+    expect(delivered).toHaveLength(1);
+
+    failDetach = false;
+    await disconnectHandler(
+      {
+        sender: {
+          id: 7,
+          isDestroyed: () => true,
+          send: () => undefined,
+          on: () => undefined,
+          once: () => undefined,
+        },
+      },
+      "client-a",
+    );
+    expect(attempts).toEqual(["electron:7:client-a:terminal-1", "electron:7:client-a:terminal-1"]);
+  });
+
   test("keeps a failed client available across concurrent sender and client teardown", async () => {
     const attempts: string[] = [];
     let startDetach = (): void => undefined;

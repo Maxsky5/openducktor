@@ -48,6 +48,11 @@ export type ElectronTerminalSender = {
   send(channel: string, envelope: ElectronTerminalEventEnvelope): void;
 };
 
+type ElectronTerminalSenderState = {
+  sender: ElectronTerminalSender | null;
+  clients: Map<string, TerminalClientSession>;
+};
+
 type ElectronTerminalLifecycleSender = ElectronTerminalSender & {
   on(
     event: "did-start-navigation",
@@ -103,26 +108,33 @@ export const shouldDetachTerminalSenderForNavigation = (details: {
 }): boolean => details.isMainFrame && !details.isSameDocument;
 
 export const createElectronTerminalIpcController = (terminalService: TerminalService) => {
-  const clientsBySender = new Map<number, Map<string, TerminalClientSession>>();
+  const sendersById = new Map<number, ElectronTerminalSenderState>();
   const getClient = (sender: ElectronTerminalSender, clientId: string): TerminalClientSession => {
-    const senderClients =
-      clientsBySender.get(sender.id) ?? new Map<string, TerminalClientSession>();
-    const existing = senderClients.get(clientId);
+    const state = sendersById.get(sender.id) ?? {
+      sender,
+      clients: new Map<string, TerminalClientSession>(),
+    };
+    const existing = state.clients.get(clientId);
     if (existing) return existing;
     const client = createTerminalClientSession({
       clientId: `electron:${sender.id}:${clientId}`,
       terminalService,
       send: (message, payload) => {
-        if (sender.isDestroyed()) return;
-        sender.send(ELECTRON_TERMINAL_EVENT_CHANNEL, {
+        const activeSender = state.sender;
+        if (!activeSender || activeSender.isDestroyed()) return;
+        activeSender.send(ELECTRON_TERMINAL_EVENT_CHANNEL, {
           clientId,
           frame: encodeTerminalProtocolFrame({ message, payload }),
         });
       },
     });
-    senderClients.set(clientId, client);
-    clientsBySender.set(sender.id, senderClients);
+    state.clients.set(clientId, client);
+    sendersById.set(sender.id, state);
     return client;
+  };
+  const releaseSender = (senderId: number): void => {
+    const state = sendersById.get(senderId);
+    if (state) state.sender = null;
   };
   const handleFrame = (
     sender: ElectronTerminalSender,
@@ -157,31 +169,31 @@ export const createElectronTerminalIpcController = (terminalService: TerminalSer
     clientId: string,
   ): Effect.Effect<void, TerminalServiceError> =>
     Effect.gen(function* () {
-      const senderClients = clientsBySender.get(senderId);
-      if (!senderClients) return;
-      const client = senderClients.get(clientId);
+      const state = sendersById.get(senderId);
+      if (!state) return;
+      const client = state.clients.get(clientId);
       if (!client) return;
       yield* client.close();
-      if (senderClients.get(clientId) === client) senderClients.delete(clientId);
-      if (senderClients.size === 0 && clientsBySender.get(senderId) === senderClients) {
-        clientsBySender.delete(senderId);
+      if (state.clients.get(clientId) === client) state.clients.delete(clientId);
+      if (state.clients.size === 0 && sendersById.get(senderId) === state) {
+        sendersById.delete(senderId);
       }
     });
   const detachSender = (senderId: number): Effect.Effect<void, Error> =>
     Effect.gen(function* () {
-      const senderClients = clientsBySender.get(senderId);
-      if (!senderClients) return;
+      const state = sendersById.get(senderId);
+      if (!state) return;
       const failures: { clientId: string; cause: Error }[] = [];
-      for (const [clientId, client] of Array.from(senderClients)) {
+      for (const [clientId, client] of Array.from(state.clients)) {
         const result = yield* Effect.exit(client.close());
         if (Exit.isFailure(result)) {
           failures.push({ clientId, cause: causeToElectronBoundaryError(result.cause) });
-        } else if (senderClients.get(clientId) === client) {
-          senderClients.delete(clientId);
+        } else if (state.clients.get(clientId) === client) {
+          state.clients.delete(clientId);
         }
       }
-      if (senderClients.size === 0 && clientsBySender.get(senderId) === senderClients) {
-        clientsBySender.delete(senderId);
+      if (state.clients.size === 0 && sendersById.get(senderId) === state) {
+        sendersById.delete(senderId);
       }
       if (failures.length === 1) return yield* Effect.fail(failures[0]!.cause);
       if (failures.length > 1) {
@@ -195,7 +207,7 @@ export const createElectronTerminalIpcController = (terminalService: TerminalSer
       }
     });
 
-  return { detachClient, detachSender, handleFrame };
+  return { detachClient, detachSender, handleFrame, releaseSender };
 };
 
 export const registerElectronTerminalIpc = ({
@@ -208,13 +220,17 @@ export const registerElectronTerminalIpc = ({
   const bindTerminalSenderCleanup = (sender: ElectronTerminalLifecycleSender): void => {
     if (boundTerminalSenders.has(sender)) return;
     boundTerminalSenders.add(sender);
+    const senderId = sender.id;
     const detach = () => {
       runElectronMainTask(
-        () => runElectronEffect(terminalIpc.detachSender(sender.id)),
-        (cause) => reportLifecycleFailure(sender.id, cause),
+        () => runElectronEffect(terminalIpc.detachSender(senderId)),
+        (cause) => reportLifecycleFailure(senderId, cause),
       );
     };
-    sender.once("destroyed", detach);
+    sender.once("destroyed", () => {
+      terminalIpc.releaseSender(senderId);
+      detach();
+    });
     sender.on("did-start-navigation", (details) => {
       if (shouldDetachTerminalSenderForNavigation(details)) detach();
     });
