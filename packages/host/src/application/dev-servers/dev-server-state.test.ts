@@ -32,7 +32,13 @@ const updatedRepoConfig: RepoConfig = {
 
 const createRuntime = (): DevServerGroupRuntime => ({
   processes: new Map(),
-  state: buildGroupState(repoConfig, "task-1", "/worktrees/task-1", "2026-05-24T00:00:00.000Z"),
+  unresolvedStops: new Set(),
+  state: buildGroupState(
+    repoConfig,
+    { kind: "task", taskId: "task-1" },
+    "/worktrees/task-1",
+    "2026-05-24T00:00:00.000Z",
+  ),
   terminalBufferedBytesByScriptId: new Map(),
   terminalNextSequenceByScriptId: new Map(),
   terminalRunGeneration: 0,
@@ -68,7 +74,13 @@ describe("dev-server state helpers", () => {
     firstScript.startedCommand = "bun run dev";
     startTerminalRun(runtime, firstScript, "host-1");
 
-    syncGroupState(runtime.state, updatedRepoConfig, "task-1", "/worktrees/task-1");
+    syncGroupState(
+      runtime.state,
+      updatedRepoConfig,
+      runtime.state.owner,
+      "/worktrees/task-1",
+      runtime.unresolvedStops,
+    );
 
     expect(runtime.state.scripts[0]).toMatchObject({
       command: "bun run dev:next",
@@ -80,7 +92,13 @@ describe("dev-server state helpers", () => {
   test("leaves the started command unset for scripts without a run", () => {
     const runtime = createRuntime();
 
-    syncGroupState(runtime.state, updatedRepoConfig, "task-1", "/worktrees/task-1");
+    syncGroupState(
+      runtime.state,
+      updatedRepoConfig,
+      runtime.state.owner,
+      "/worktrees/task-1",
+      runtime.unresolvedStops,
+    );
 
     expect(runtime.state.scripts[0]).toMatchObject({
       command: "bun run dev:next",
@@ -98,9 +116,21 @@ describe("dev-server state helpers", () => {
     startTerminalRun(runtime, firstScript, "host-1");
     const firstRunId = firstScript.runIdentity?.runId;
 
-    syncGroupState(runtime.state, { ...repoConfig, devServers: [] }, "task-1", "/worktrees/task-1");
+    syncGroupState(
+      runtime.state,
+      { ...repoConfig, devServers: [] },
+      runtime.state.owner,
+      "/worktrees/task-1",
+      runtime.unresolvedStops,
+    );
     syncRuntimeTerminalBufferByteCounts(runtime);
-    syncGroupState(runtime.state, repoConfig, "task-1", "/worktrees/task-1");
+    syncGroupState(
+      runtime.state,
+      repoConfig,
+      runtime.state.owner,
+      "/worktrees/task-1",
+      runtime.unresolvedStops,
+    );
     const readdedScript = runtime.state.scripts[0];
     if (!readdedScript) {
       throw new Error("Expected re-added web script.");

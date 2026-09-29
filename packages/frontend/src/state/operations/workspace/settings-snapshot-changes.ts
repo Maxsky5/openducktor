@@ -6,14 +6,16 @@ export type SettingsSnapshotChanges = {
   customAgentRolesChanged: boolean;
   kanbanDoneVisibleDaysChanged: boolean;
   changedGitProviderRepoPaths: string[];
+  changedDevServerRepoPaths: string[];
 };
 
 const isSameJsonValue = <Value>(left: Value, right: Value): boolean =>
   JSON.stringify(left) === JSON.stringify(right);
 
-const changedGitProviderRepoPaths = (
+const changedRepoPaths = (
   previous: SettingsSnapshot["workspaces"] | undefined,
   next: SettingsSnapshot["workspaces"],
+  setting: "git" | "devServers",
 ): string[] => {
   if (previous === undefined) {
     return Object.values(next).map((workspace) => workspace.repoPath);
@@ -26,7 +28,7 @@ const changedGitProviderRepoPaths = (
       repoPaths.add(nextWorkspace.repoPath);
       continue;
     }
-    if (!isSameJsonValue(previousWorkspace.git, nextWorkspace.git)) {
+    if (!isSameJsonValue(previousWorkspace[setting], nextWorkspace[setting])) {
       repoPaths.add(nextWorkspace.repoPath);
     }
     if (previousWorkspace.repoPath !== nextWorkspace.repoPath) {
@@ -49,5 +51,6 @@ export const diffSettingsSnapshots = (
     previous === undefined || !isSameJsonValue(previous.customAgentRoles, next.customAgentRoles),
   kanbanDoneVisibleDaysChanged:
     previous !== undefined && previous.kanban.doneVisibleDays !== next.kanban.doneVisibleDays,
-  changedGitProviderRepoPaths: changedGitProviderRepoPaths(previous?.workspaces, next.workspaces),
+  changedGitProviderRepoPaths: changedRepoPaths(previous?.workspaces, next.workspaces, "git"),
+  changedDevServerRepoPaths: changedRepoPaths(previous?.workspaces, next.workspaces, "devServers"),
 });

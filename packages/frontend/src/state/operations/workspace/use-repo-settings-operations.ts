@@ -21,6 +21,7 @@ import type {
   WorkspaceModelDefaultsDraft,
 } from "@/types/state-slices";
 import { checksQueryKeys } from "../../queries/checks";
+import { devServerQueryKeys } from "../../queries/dev-servers";
 import { repositoryGitProviderContextQueryKeys } from "../../queries/git-provider-context";
 import { runtimeQueryKeys } from "../../queries/runtime";
 import { getProductionTaskViewSync } from "../../queries/task-view-sync";
@@ -148,6 +149,9 @@ export function useRepoSettingsOperations({
       await queryClient.invalidateQueries({
         queryKey: workspaceQueryKeys.repoConfig(workspaceId),
       });
+      await queryClient.invalidateQueries({
+        queryKey: devServerQueryKeys.repo(workspace.repoPath),
+      });
       queryClient.removeQueries({
         queryKey: settingsSnapshotQueryKey,
         exact: true,
@@ -238,6 +242,11 @@ export function useRepoSettingsOperations({
           queryKey: REPO_CONFIG_QUERY_KEY_PREFIX,
         });
       }
+      await Promise.all(
+        changes.changedDevServerRepoPaths.map((repoPath) =>
+          queryClient.invalidateQueries({ queryKey: devServerQueryKeys.repo(repoPath) }),
+        ),
+      );
       queryClient.setQueryData(workspaceQueryKeys.list(), workspaces);
       applyWorkspaceRecords(workspaces);
       const savedActiveWorkspace = workspaces.find((workspace) => workspace.isActive);

@@ -18,9 +18,10 @@ import {
   canApplyDevServerScriptStateToStore,
 } from "@/features/agent-studio-build-tools/dev-server-run-ownership";
 import {
-  type DevServerTaskScope,
-  formatDevServerTaskScopeKey,
-} from "@/types/dev-server-task-scope";
+  type DevServerScope,
+  formatDevServerScopeKey,
+  isSameDevServerOwner,
+} from "@/types/dev-server-scope";
 
 type PendingMutationReplaySync = {
   baselineByScriptId: Map<string, number | null>;
@@ -76,19 +77,16 @@ type UseAgentStudioDevServerTerminalBuffersResult = {
 
 const isDevServerStateInScope = (
   state: DevServerGroupState,
-  scope: DevServerTaskScope | null,
+  scope: DevServerScope | null,
 ): boolean => {
   if (!scope) {
     return false;
   }
 
-  return state.repoPath === scope.repoPath && state.taskId === scope.taskId;
+  return state.repoPath === scope.repoPath && isSameDevServerOwner(state.owner, scope.owner);
 };
 
-const isDevServerEventInScope = (
-  event: DevServerEvent,
-  scope: DevServerTaskScope | null,
-): boolean => {
+const isDevServerEventInScope = (event: DevServerEvent, scope: DevServerScope | null): boolean => {
   if (!scope) {
     return false;
   }
@@ -97,13 +95,13 @@ const isDevServerEventInScope = (
     return isDevServerStateInScope(event.state, scope);
   }
 
-  return event.repoPath === scope.repoPath && event.taskId === scope.taskId;
+  return event.repoPath === scope.repoPath && isSameDevServerOwner(event.owner, scope.owner);
 };
 
 export const useAgentStudioDevServerTerminalBuffers = (
-  scope: DevServerTaskScope | null,
+  scope: DevServerScope | null,
 ): UseAgentStudioDevServerTerminalBuffersResult => {
-  const requestedScopeKey = formatDevServerTaskScopeKey(scope);
+  const requestedScopeKey = formatDevServerScopeKey(scope);
   const [terminalBufferOwner, setTerminalBufferOwner] = useState<DevServerTerminalBufferOwner>(() =>
     createDevServerTerminalBufferOwner(requestedScopeKey),
   );

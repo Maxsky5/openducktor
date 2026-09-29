@@ -64,9 +64,10 @@ describe("dev-server-run-ownership", () => {
     const foreignScript = scriptState("backend", foreignIdentity);
     const foreignGroup: DevServerGroupState = {
       repoPath: "/repo",
-      taskId: "task-7",
-      worktreePath: "/worktree",
+      owner: { kind: "task", taskId: "task-7" },
+      workingDirectory: "/worktree",
       scripts: [foreignScript],
+      revision: 0,
       updatedAt: "2026-07-10T10:00:00.000Z",
     };
 

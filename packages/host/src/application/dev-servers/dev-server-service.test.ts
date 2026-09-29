@@ -1,7 +1,17 @@
-import type { HostEventEnvelope, RepoConfig, TaskWorktreeSummary } from "@openducktor/contracts";
+import {
+  devServerOwnerSchema,
+  type HostEventEnvelope,
+  type RepoConfig,
+  type TaskWorktreeSummary,
+  type WorkspaceSession,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import { z } from "zod";
-import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
+import {
+  HostOperationError,
+  HostValidationError,
+  toHostOperationError,
+} from "../../effect/host-errors";
 import type { HostEventBusPort } from "../../events/host-event-bus";
 import type {
   DevServerProcessHandle,
@@ -13,6 +23,8 @@ import type { TaskWorktreeService } from "../tasks/worktrees/task-worktree-servi
 import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-service";
 import { createDevServerService as createEffectDevServerService } from "./dev-server-service";
 import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
+import { createWorkspaceSessionOperationGate } from "../workspaces/workspace-session-operation-gate";
+import { createWorkspaceAdmissionService } from "../workspaces/workspace-admission-service";
 
 const createDevServerService = (input: Parameters<typeof createEffectDevServerService>[0]) =>
   createEffectDevServerService(input);
@@ -75,6 +87,50 @@ const createTaskWorktreeService = (worktree: TaskWorktreeSummary | null): TaskWo
   getTaskWorktree() {
     return Effect.succeed(worktree);
   },
+});
+const workspaceSession = (
+  id: string,
+  executionTarget: WorkspaceSession["executionTarget"],
+  archivedAt: number | null = null,
+): WorkspaceSession => ({
+  id,
+  runtimeKind: "codex",
+  externalSessionId: null,
+  executionTarget,
+  roleSnapshot: null,
+  selectedModel: null,
+  generatedTitle: null,
+  manualTitle: null,
+  createdAt: 1,
+  updatedAt: 1,
+  archivedAt,
+});
+const createSessionServiceInput = (
+  sessions: Map<string, WorkspaceSession>,
+  config: RepoConfig,
+  isValidDirectory: (path: string) => boolean = () => true,
+) => ({
+  store: {
+    get: (ref: { sessionId: string }) => {
+      const session = sessions.get(ref.sessionId);
+      return session
+        ? Effect.succeed(session)
+        : Effect.fail(
+            new HostValidationError({
+              field: "sessionId",
+              message: `Workspace Session ${ref.sessionId} was not found. Reload the Workspace.`,
+            }),
+          );
+    },
+  },
+  settings: { getRepoConfig: () => Effect.succeed(config) },
+  git: {
+    canonicalizePath: (path: string) => Effect.succeed(path),
+    isGitRepository: (path: string) => Effect.succeed(isValidDirectory(path)),
+    shareGitCommonDirectory: () => Effect.succeed(true),
+    isRegisteredWorktree: () => Effect.succeed(true),
+  },
+  operationGate: createWorkspaceSessionOperationGate(),
 });
 const createEventBus = () => {
   const events: HostEventEnvelope[] = [];
@@ -147,10 +203,10 @@ const devServerStartFailureSchema = z.object({
         pid: z.number(),
         repoPath: z.string(),
         scriptId: z.string(),
-        taskId: z.string(),
+        owner: devServerOwnerSchema,
       }),
     ),
-    taskId: z.string(),
+    owner: devServerOwnerSchema,
   }),
 });
 
@@ -158,7 +214,7 @@ const expectStartFailure = async (
   service: TestDevServerService,
 ): Promise<z.output<typeof devServerStartFailureSchema>> => {
   const startResult = await Effect.runPromise(
-    Effect.either(service.start({ repoPath: "/repo", taskId: "task-1" })),
+    Effect.either(service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } })),
   );
   if (startResult._tag === "Right") {
     throw new Error("Expected dev server start to fail.");
@@ -177,13 +233,13 @@ describe("createDevServerService", () => {
       Effect.runPromise(
         service.getState({
           repoPath: "/repo",
-          taskId: "task-1",
+          owner: { kind: "task", taskId: "task-1" },
         }),
       ),
     ).resolves.toMatchObject({
       repoPath: "/canonical/repo",
-      taskId: "task-1",
-      worktreePath: null,
+      owner: { kind: "task", taskId: "task-1" },
+      workingDirectory: null,
       scripts: [
         {
           scriptId: "web",
@@ -210,11 +266,11 @@ describe("createDevServerService", () => {
       Effect.runPromise(
         service.getState({
           repoPath: "/repo",
-          taskId: "task-1",
+          owner: { kind: "task", taskId: "task-1" },
         }),
       ),
     ).resolves.toMatchObject({
-      worktreePath: "/worktrees/task-1",
+      workingDirectory: "/worktrees/task-1",
     });
   });
   test("starts configured scripts in the deterministic task worktree", async () => {
@@ -230,11 +286,11 @@ describe("createDevServerService", () => {
       Effect.runPromise(
         service.start({
           repoPath: "/repo",
-          taskId: "task-1",
+          owner: { kind: "task", taskId: "task-1" },
         }),
       ),
     ).resolves.toMatchObject({
-      worktreePath: "/worktrees/task-1",
+      workingDirectory: "/worktrees/task-1",
       scripts: [
         {
           scriptId: "web",
@@ -301,7 +357,9 @@ describe("createDevServerService", () => {
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
     });
 
-    const state = await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+    const state = await Effect.runPromise(
+      service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+    );
     const chunks = state.scripts[0]?.bufferedTerminalChunks ?? [];
 
     expect(chunks).toHaveLength(2_000);
@@ -328,7 +386,9 @@ describe("createDevServerService", () => {
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
     });
 
-    const state = await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+    const state = await Effect.runPromise(
+      service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+    );
     const chunks = state.scripts[0]?.bufferedTerminalChunks ?? [];
 
     expect(chunks.map((chunk) => chunk.sequence)).toEqual([2, 3]);
@@ -355,7 +415,9 @@ describe("createDevServerService", () => {
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
     });
 
-    const state = await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+    const state = await Effect.runPromise(
+      service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+    );
     const terminalChunkPayloadSchema = z.object({
       type: z.literal("terminal_chunk"),
       terminalChunk: z.object({ data: z.string(), sequence: z.number() }),
@@ -382,9 +444,13 @@ describe("createDevServerService", () => {
       taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
     });
-    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+    await Effect.runPromise(
+      service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+    );
     await expect(
-      Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" })),
+      Effect.runPromise(
+        service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+      ),
     ).rejects.toThrow(
       "Dev servers are already running for task task-1. Stop or restart them instead.",
     );
@@ -392,11 +458,15 @@ describe("createDevServerService", () => {
   test("keeps the started command when repository settings change during the run", async () => {
     const { config, service, starts } = createServiceWithMutableConfig();
 
-    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+    await Effect.runPromise(
+      service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+    );
     config.devServers = [{ id: "web", name: "Web", command: "bun run dev:next" }];
 
     await expect(
-      Effect.runPromise(service.getState({ repoPath: "/repo", taskId: "task-1" })),
+      Effect.runPromise(
+        service.getState({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+      ),
     ).resolves.toMatchObject({
       scripts: [
         {
@@ -408,11 +478,15 @@ describe("createDevServerService", () => {
       ],
     });
 
-    await Effect.runPromise(service.restart({ repoPath: "/repo", taskId: "task-1" }));
+    await Effect.runPromise(
+      service.restart({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+    );
 
     expect(starts.map((start) => start.command)).toEqual(["bun run dev", "bun run dev:next"]);
     await expect(
-      Effect.runPromise(service.getState({ repoPath: "/repo", taskId: "task-1" })),
+      Effect.runPromise(
+        service.getState({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+      ),
     ).resolves.toMatchObject({
       scripts: [
         {
@@ -427,12 +501,16 @@ describe("createDevServerService", () => {
   test("keeps the started command after a failure when repository settings change", async () => {
     const { config, service, starts } = createServiceWithMutableConfig();
 
-    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+    await Effect.runPromise(
+      service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+    );
     config.devServers = [{ id: "web", name: "Web", command: "bun run dev:next" }];
     starts[0]?.onExit({ pid: 400, exitCode: 7, signal: null, error: null });
 
     await expect(
-      Effect.runPromise(service.getState({ repoPath: "/repo", taskId: "task-1" })),
+      Effect.runPromise(
+        service.getState({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+      ),
     ).resolves.toMatchObject({
       scripts: [
         {
@@ -448,9 +526,13 @@ describe("createDevServerService", () => {
   test("reports the started command when stopping scripts after repository settings change", async () => {
     const { config, service } = createServiceWithMutableConfig();
 
-    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+    await Effect.runPromise(
+      service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+    );
     config.devServers = [{ id: "web", name: "Web", command: "bun run dev:next" }];
-    await Effect.runPromise(service.getState({ repoPath: "/repo", taskId: "task-1" }));
+    await Effect.runPromise(
+      service.getState({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+    );
 
     await expect(Effect.runPromise(service.stopAll())).resolves.toEqual({
       stoppedScripts: [
@@ -460,7 +542,7 @@ describe("createDevServerService", () => {
           pid: 400,
           repoPath: "/canonical/repo",
           scriptId: "web",
-          taskId: "task-1",
+          owner: { kind: "task", taskId: "task-1" },
         },
       ],
     });
@@ -473,7 +555,9 @@ describe("createDevServerService", () => {
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
     });
     await expect(
-      Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" })),
+      Effect.runPromise(
+        service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+      ),
     ).rejects.toThrow(
       "Builder continuation cannot start until a task worktree exists for task task-1. Start Builder first.",
     );
@@ -486,7 +570,9 @@ describe("createDevServerService", () => {
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig({ devServers: [] })),
     });
     await expect(
-      Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" })),
+      Effect.runPromise(
+        service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+      ),
     ).rejects.toThrow(
       "No builder dev server scripts are configured for /canonical/repo. Add them in repository settings first.",
     );
@@ -543,15 +629,17 @@ describe("createDevServerService", () => {
           pid: 501,
           repoPath: "/canonical/repo",
           scriptId: "web",
-          taskId: "task-1",
+          owner: { kind: "task", taskId: "task-1" },
         },
       ],
-      taskId: "task-1",
+      owner: { kind: "task", taskId: "task-1" },
     });
     expect(starts).toEqual(["bun run dev", "exit 42"]);
     expect(stoppedPids).toEqual([501]);
     await expect(
-      Effect.runPromise(service.getState({ repoPath: "/repo", taskId: "task-1" })),
+      Effect.runPromise(
+        service.getState({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+      ),
     ).resolves.toMatchObject({
       scripts: [
         { scriptId: "web", status: "stopped", pid: null },
@@ -610,10 +698,12 @@ describe("createDevServerService", () => {
       ],
       repoPath: "/repo",
       stoppedScripts: [],
-      taskId: "task-1",
+      owner: { kind: "task", taskId: "task-1" },
     });
     await expect(
-      Effect.runPromise(service.getState({ repoPath: "/repo", taskId: "task-1" })),
+      Effect.runPromise(
+        service.getState({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+      ),
     ).resolves.toMatchObject({
       scripts: [
         {
@@ -660,10 +750,12 @@ describe("createDevServerService", () => {
       ],
       repoPath: "/repo",
       stoppedScripts: [],
-      taskId: "task-1",
+      owner: { kind: "task", taskId: "task-1" },
     });
     await expect(
-      Effect.runPromise(service.getState({ repoPath: "/repo", taskId: "task-1" })),
+      Effect.runPromise(
+        service.getState({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+      ),
     ).resolves.toMatchObject({
       scripts: [
         {
@@ -683,9 +775,13 @@ describe("createDevServerService", () => {
       taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
     });
-    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+    await Effect.runPromise(
+      service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+    );
     await expect(
-      Effect.runPromise(service.stop({ repoPath: "/repo", taskId: "task-1" })),
+      Effect.runPromise(
+        service.stop({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+      ),
     ).resolves.toMatchObject({
       scripts: [{ scriptId: "web", status: "stopped", pid: null }],
     });
@@ -714,8 +810,12 @@ describe("createDevServerService", () => {
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
     });
 
-    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
-    const state = await Effect.runPromise(service.stop({ repoPath: "/repo", taskId: "task-1" }));
+    await Effect.runPromise(
+      service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+    );
+    const state = await Effect.runPromise(
+      service.stop({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+    );
 
     expect(stoppedPids).toEqual([412]);
     expect(state.scripts[0]?.bufferedTerminalChunks.map((chunk) => chunk.data)).toEqual([
@@ -748,14 +848,20 @@ describe("createDevServerService", () => {
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
     });
 
-    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
-    await Effect.runPromise(service.stop({ repoPath: "/repo", taskId: "task-1" }));
-    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+    await Effect.runPromise(
+      service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+    );
+    await Effect.runPromise(
+      service.stop({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+    );
+    await Effect.runPromise(
+      service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+    );
     starts[0]?.onOutput({ data: "LATE-OLD\n" });
     starts[0]?.onExit({ pid: 700, exitCode: 9, signal: null, error: null });
 
     const state = await Effect.runPromise(
-      service.getState({ repoPath: "/repo", taskId: "task-1" }),
+      service.getState({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
     );
     expect(
       state.scripts[0]?.bufferedTerminalChunks.some((chunk) => chunk.data.includes("LATE-OLD")),
@@ -771,7 +877,9 @@ describe("createDevServerService", () => {
         taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
         workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
       });
-      return Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+      return Effect.runPromise(
+        service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+      );
     };
 
     const firstState = await createStartedService();
@@ -804,31 +912,39 @@ describe("createDevServerService", () => {
     });
 
     await expect(
-      Effect.runPromise(service.start({ repoPath: "/repo::task-b", taskId: "task-c" })),
+      Effect.runPromise(
+        service.start({ repoPath: "/repo::task-b", owner: { kind: "task", taskId: "task-c" } }),
+      ),
     ).resolves.toMatchObject({
       repoPath: "/repo::task-b",
-      taskId: "task-c",
+      owner: { kind: "task", taskId: "task-c" },
       scripts: [{ scriptId: "web", pid: 400, command: "left-command" }],
     });
     await expect(
-      Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-b::task-c" })),
+      Effect.runPromise(
+        service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-b::task-c" } }),
+      ),
     ).resolves.toMatchObject({
       repoPath: "/repo",
-      taskId: "task-b::task-c",
+      owner: { kind: "task", taskId: "task-b::task-c" },
       scripts: [{ scriptId: "web", pid: 401, command: "right-command" }],
     });
     await expect(
-      Effect.runPromise(service.getState({ repoPath: "/repo::task-b", taskId: "task-c" })),
+      Effect.runPromise(
+        service.getState({ repoPath: "/repo::task-b", owner: { kind: "task", taskId: "task-c" } }),
+      ),
     ).resolves.toMatchObject({
       repoPath: "/repo::task-b",
-      taskId: "task-c",
+      owner: { kind: "task", taskId: "task-c" },
       scripts: [{ scriptId: "web", pid: 400, command: "left-command" }],
     });
     await expect(
-      Effect.runPromise(service.getState({ repoPath: "/repo", taskId: "task-b::task-c" })),
+      Effect.runPromise(
+        service.getState({ repoPath: "/repo", owner: { kind: "task", taskId: "task-b::task-c" } }),
+      ),
     ).resolves.toMatchObject({
       repoPath: "/repo",
-      taskId: "task-b::task-c",
+      owner: { kind: "task", taskId: "task-b::task-c" },
       scripts: [{ scriptId: "web", pid: 401, command: "right-command" }],
     });
     expect(starts.map((start) => start.command)).toEqual(["left-command", "right-command"]);
@@ -840,8 +956,12 @@ describe("createDevServerService", () => {
       taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task" }),
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
     });
-    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
-    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-2" }));
+    await Effect.runPromise(
+      service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+    );
+    await Effect.runPromise(
+      service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-2" } }),
+    );
     await expect(Effect.runPromise(service.stopAll())).resolves.toEqual({
       stoppedScripts: [
         {
@@ -850,7 +970,7 @@ describe("createDevServerService", () => {
           pid: 400,
           repoPath: "/canonical/repo",
           scriptId: "web",
-          taskId: "task-1",
+          owner: { kind: "task", taskId: "task-1" },
         },
         {
           command: "bun run dev",
@@ -858,11 +978,45 @@ describe("createDevServerService", () => {
           pid: 401,
           repoPath: "/canonical/repo",
           scriptId: "web",
-          taskId: "task-2",
+          owner: { kind: "task", taskId: "task-2" },
         },
       ],
     });
     expect(stoppedPids).toEqual([400, 401]);
+  });
+
+  test("blocks a task dev server start through a repository alias during workspace removal", async () => {
+    const { processPort, starts } = createProcessPort();
+    const admission = createWorkspaceAdmissionService({
+      workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
+        getWorkspaceCatalog: () =>
+          Effect.succeed({
+            openWorkspaces: [],
+            closedWorkspaces: [],
+            incompleteRemovals: [],
+          }),
+      }),
+    });
+    await Effect.runPromise(
+      admission.reserveWorkspace({
+        operation: "remove",
+        repoPath: "/canonical/repo",
+        workspaceId: "repo",
+      }),
+    );
+    const service = createDevServerService({
+      processPort,
+      taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task" }),
+      workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
+      withProcessStartAdmission: admission.withProcessStartAdmission,
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+      ),
+    ).rejects.toThrow("A workspace remove operation is already in progress");
+    expect(starts).toHaveLength(0);
   });
   test("begins stopping every dev server process concurrently during host shutdown", async () => {
     let nextPid = 800;
@@ -905,8 +1059,12 @@ describe("createDevServerService", () => {
         }),
       ),
     });
-    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
-    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-2" }));
+    await Effect.runPromise(
+      service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
+    );
+    await Effect.runPromise(
+      service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-2" } }),
+    );
 
     const stopping = Effect.runPromise(service.stopAll());
     let assertionFailure: unknown;
@@ -926,5 +1084,256 @@ describe("createDevServerService", () => {
     if (assertionFailure) {
       throw assertionFailure;
     }
+  });
+  test("isolates Workspace Sessions that share a root and runs worktree scripts in the saved directory", async () => {
+    const config = repoConfig({ workspaceId: "ws-1", repoPath: "/repo" });
+    const sessions = new Map([
+      [
+        "root-1",
+        workspaceSession("root-1", { kind: "local_repo_root", workingDirectory: "/repo" }),
+      ],
+      [
+        "root-2",
+        workspaceSession("root-2", { kind: "local_repo_root", workingDirectory: "/repo" }),
+      ],
+      [
+        "worktree",
+        workspaceSession("worktree", {
+          kind: "local_worktree",
+          workingDirectory: "/worktrees/worktree",
+          branchName: "session",
+          worktreeState: "present",
+        }),
+      ],
+    ]);
+    const { processPort, starts, stoppedPids } = createProcessPort();
+    const service = createDevServerService({
+      processPort,
+      workspaceSettingsService: createWorkspaceSettingsService(config),
+      workspaceSessions: createSessionServiceInput(sessions, config),
+    });
+    const owner = (sessionId: string) => ({
+      kind: "workspace_session" as const,
+      workspaceId: "ws-1",
+      sessionId,
+    });
+    const first = await Effect.runPromise(
+      service.start({ repoPath: "/repo", owner: owner("root-1") }),
+    );
+    const second = await Effect.runPromise(
+      service.start({ repoPath: "/repo", owner: owner("root-2") }),
+    );
+    const third = await Effect.runPromise(
+      service.start({ repoPath: "/repo", owner: owner("worktree") }),
+    );
+    expect(starts.map((start) => start.cwd)).toEqual(["/repo", "/repo", "/worktrees/worktree"]);
+    expect(first.workingDirectory).toBe("/repo");
+    expect(third.workingDirectory).toBe("/worktrees/worktree");
+    expect(first.scripts[0]?.runIdentity?.runId).not.toBe(second.scripts[0]?.runIdentity?.runId);
+    await Effect.runPromise(
+      service.stop({
+        repoPath: "/repo",
+        owner: { sessionId: "root-1", workspaceId: "ws-1", kind: "workspace_session" },
+      }),
+    );
+    expect(stoppedPids).toHaveLength(1);
+    expect(
+      (await Effect.runPromise(service.getState({ repoPath: "/repo", owner: owner("root-2") })))
+        .scripts[0]?.status,
+    ).toBe("running");
+    expect(
+      (await Effect.runPromise(service.inspectWorkspaceActivity({ repoPath: "/repo" })))
+        .activeOwners,
+    ).toEqual([owner("root-2"), owner("worktree")]);
+    await Effect.runPromise(service.stopAll());
+  });
+
+  test("keeps a removed script controllable until its Workspace Session stops it", async () => {
+    const config = repoConfig({ workspaceId: "ws-1", repoPath: "/repo" });
+    const owner = { kind: "workspace_session" as const, workspaceId: "ws-1", sessionId: "root" };
+    const sessions = new Map([
+      ["root", workspaceSession("root", { kind: "local_repo_root", workingDirectory: "/repo" })],
+    ]);
+    const { processPort, stoppedPids } = createProcessPort();
+    const service = createDevServerService({
+      processPort,
+      workspaceSettingsService: createWorkspaceSettingsService(config),
+      workspaceSessions: createSessionServiceInput(sessions, config),
+    });
+    await Effect.runPromise(service.start({ repoPath: "/repo", owner }));
+    config.devServers = [];
+
+    const running = await Effect.runPromise(service.getState({ repoPath: "/repo", owner }));
+    expect(running.scripts[0]?.status).toBe("running");
+    expect(running.scripts[0]?.name).toBe("Web");
+    expect(
+      (await Effect.runPromise(service.inspectWorkspaceActivity({ repoPath: "/repo" })))
+        .activeOwners,
+    ).toEqual([owner]);
+
+    const stopped = await Effect.runPromise(service.stop({ repoPath: "/repo", owner }));
+    expect(stoppedPids).toHaveLength(1);
+    expect(stopped.scripts).toEqual([]);
+    expect(
+      (await Effect.runPromise(service.inspectWorkspaceActivity({ repoPath: "/repo" })))
+        .activeOwners,
+    ).toEqual([]);
+  });
+
+  test("forgets only the archived Workspace Session group after its scripts stop", async () => {
+    const config = repoConfig({ workspaceId: "ws-1", repoPath: "/repo" });
+    const sessions = new Map([
+      ["first", workspaceSession("first", { kind: "local_repo_root", workingDirectory: "/repo" })],
+      [
+        "second",
+        workspaceSession("second", { kind: "local_repo_root", workingDirectory: "/repo" }),
+      ],
+    ]);
+    const { processPort } = createProcessPort();
+    const service = createDevServerService({
+      processPort,
+      workspaceSettingsService: createWorkspaceSettingsService(config),
+      workspaceSessions: createSessionServiceInput(sessions, config),
+    });
+    const first = { kind: "workspace_session" as const, workspaceId: "ws-1", sessionId: "first" };
+    const second = { kind: "workspace_session" as const, workspaceId: "ws-1", sessionId: "second" };
+    const firstRun = await Effect.runPromise(service.start({ repoPath: "/repo", owner: first }));
+    await Effect.runPromise(service.start({ repoPath: "/repo", owner: second }));
+    const stopped = await Effect.runPromise(
+      service.stopWorkspaceSession({ repoPath: "/repo", owner: first }),
+    );
+
+    sessions.set(
+      "first",
+      workspaceSession("first", { kind: "local_repo_root", workingDirectory: "/repo" }, 2),
+    );
+    await Effect.runPromise(service.forgetWorkspaceSession({ repoPath: "/repo", owner: first }));
+    sessions.set(
+      "first",
+      workspaceSession("first", { kind: "local_repo_root", workingDirectory: "/repo" }),
+    );
+
+    const restored = await Effect.runPromise(service.getState({ repoPath: "/repo", owner: first }));
+    expect(restored.revision).toBeGreaterThan(stopped.revision);
+    const nextRun = await Effect.runPromise(service.start({ repoPath: "/repo", owner: first }));
+    expect(nextRun.scripts[0]?.runIdentity?.runOrder.generation).toBeGreaterThan(
+      firstRun.scripts[0]?.runIdentity?.runOrder.generation ?? 0,
+    );
+    expect(nextRun.scripts[0]?.runIdentity?.runId).not.toBe(
+      firstRun.scripts[0]?.runIdentity?.runId,
+    );
+    expect(
+      (await Effect.runPromise(service.getState({ repoPath: "/repo", owner: second }))).scripts[0]
+        ?.status,
+    ).toBe("running");
+  });
+
+  test("rejects missing, archived, removed, and invalid Workspace Session targets before spawn", async () => {
+    const config = repoConfig({ workspaceId: "ws-1", repoPath: "/repo" });
+    const sessions = new Map([
+      [
+        "archived",
+        workspaceSession("archived", { kind: "local_repo_root", workingDirectory: "/repo" }, 2),
+      ],
+      [
+        "removed",
+        workspaceSession("removed", {
+          kind: "local_worktree",
+          workingDirectory: "/worktrees/removed",
+          branchName: "removed",
+          worktreeState: "removed",
+        }),
+      ],
+      [
+        "invalid",
+        workspaceSession("invalid", { kind: "local_repo_root", workingDirectory: "/missing" }),
+      ],
+    ]);
+    const { processPort, starts } = createProcessPort();
+    const service = createDevServerService({
+      processPort,
+      workspaceSettingsService: createWorkspaceSettingsService(config),
+      workspaceSessions: createSessionServiceInput(sessions, config, (path) => path !== "/missing"),
+    });
+    for (const [sessionId, reason] of [
+      ["missing", "not found"],
+      ["archived", "archived"],
+      ["removed", "removed"],
+      ["invalid", "/missing"],
+    ] as const) {
+      await expect(
+        Effect.runPromise(
+          service.start({
+            repoPath: "/repo",
+            owner: { kind: "workspace_session", workspaceId: "ws-1", sessionId },
+          }),
+        ),
+      ).rejects.toThrow(reason);
+    }
+    await expect(
+      Effect.runPromise(
+        service.start({
+          repoPath: "/other",
+          owner: { kind: "workspace_session", workspaceId: "ws-1", sessionId: "invalid" },
+        }),
+      ),
+    ).rejects.toThrow("belongs to /repo");
+    expect(starts).toHaveLength(0);
+  });
+
+  test("reports missing repository scripts for a Workspace Session before spawn", async () => {
+    const config = repoConfig({ workspaceId: "ws-1", repoPath: "/repo", devServers: [] });
+    const sessions = new Map([
+      ["root", workspaceSession("root", { kind: "local_repo_root", workingDirectory: "/repo" })],
+    ]);
+    const { processPort, starts } = createProcessPort();
+    const service = createDevServerService({
+      processPort,
+      workspaceSettingsService: createWorkspaceSettingsService(config),
+      workspaceSessions: createSessionServiceInput(sessions, config),
+    });
+    await expect(
+      Effect.runPromise(
+        service.start({
+          repoPath: "/repo",
+          owner: { kind: "workspace_session", workspaceId: "ws-1", sessionId: "root" },
+        }),
+      ),
+    ).rejects.toThrow("No dev server scripts are configured");
+    expect(starts).toHaveLength(0);
+  });
+
+  test("retains a failed Workspace Session stop as a workspace blocker", async () => {
+    const config = repoConfig({ workspaceId: "ws-1", repoPath: "/repo" });
+    const sessions = new Map([
+      ["root", workspaceSession("root", { kind: "local_repo_root", workingDirectory: "/repo" })],
+    ]);
+    const owner = { kind: "workspace_session" as const, workspaceId: "ws-1", sessionId: "root" };
+    const processPort: DevServerProcessPort = {
+      start: () =>
+        Effect.succeed({
+          pid: 501,
+          stop: () =>
+            Effect.fail(
+              new HostOperationError({ operation: "test.stop", message: "permission denied" }),
+            ),
+        }),
+    };
+    const service = createDevServerService({
+      processPort,
+      workspaceSettingsService: createWorkspaceSettingsService(config),
+      workspaceSessions: createSessionServiceInput(sessions, config),
+    });
+    await Effect.runPromise(service.start({ repoPath: "/repo", owner }));
+    await expect(Effect.runPromise(service.stop({ repoPath: "/repo", owner }))).rejects.toThrow(
+      "permission denied",
+    );
+    expect(
+      (await Effect.runPromise(service.getState({ repoPath: "/repo", owner }))).scripts[0],
+    ).toMatchObject({ status: "failed", lastError: "permission denied" });
+    expect(
+      (await Effect.runPromise(service.inspectWorkspaceActivity({ repoPath: "/repo" })))
+        .activeOwners,
+    ).toEqual([owner]);
   });
 });

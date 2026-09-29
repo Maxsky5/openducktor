@@ -2041,7 +2041,10 @@ describe("createTaskService build and review", () => {
         type: "acquireTerminalCleanup",
         input: { repoPath: "/repo", taskIds: ["task-1"] },
       },
-      { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
+      {
+        type: "stopDevServers",
+        input: { repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } },
+      },
       { type: "transition", input: { repoPath: "/repo", taskId: "task-1", status: "closed" } },
       { type: "releaseTerminalCleanup" },
     ]);

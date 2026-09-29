@@ -2,19 +2,12 @@ import { describe, expect, test } from "bun:test";
 import type { DevServerEvent } from "@openducktor/contracts";
 import {
   applyDevServerEventToState,
-  buildTaskMemoryKey,
   isDevServerPanelExpanded,
   selectDefaultDevServerTab,
 } from "./use-agent-studio-dev-server-panel-helpers";
 import { buildScript, buildState } from "./use-agent-studio-dev-server-panel-test-fixtures";
 
 describe("useAgentStudioDevServerPanel helpers", () => {
-  test("builds task memory keys without delimiter collisions", () => {
-    expect(buildTaskMemoryKey("/repo::task-b", "task-c")).not.toBe(
-      buildTaskMemoryKey("/repo", "task-b::task-c"),
-    );
-  });
-
   test("applies terminal chunk events without cloning buffered replay into query state", () => {
     const initialChunks = Array.from({ length: 2_000 }, (_, index) => ({
       scriptId: "frontend",
@@ -32,7 +25,7 @@ describe("useAgentStudioDevServerPanel helpers", () => {
     const event: DevServerEvent = {
       type: "terminal_chunk",
       repoPath: "/repo",
-      taskId: "task-7",
+      owner: { kind: "task", taskId: "task-7" },
       terminalChunk: {
         scriptId: "frontend",
         runIdentity: {
@@ -49,7 +42,7 @@ describe("useAgentStudioDevServerPanel helpers", () => {
 
     expect(nextState?.scripts).toBe(state.scripts);
     expect(nextState?.scripts[0]?.bufferedTerminalChunks).toBe(initialChunks);
-    expect(nextState?.updatedAt).toBe("2026-03-19T15:31:00.000Z");
+    expect(nextState?.updatedAt).toBe(state.updatedAt);
   });
 
   test("selects the remembered tab when it still exists", () => {
@@ -77,5 +70,27 @@ describe("useAgentStudioDevServerPanel helpers", () => {
     expect(isDevServerPanelExpanded([buildScript()], true)).toBe(true);
     expect(isDevServerPanelExpanded([buildScript({ status: "failed" })], false)).toBe(true);
     expect(isDevServerPanelExpanded([buildScript()], false)).toBe(false);
+  });
+  test("ignores an older snapshot and a status event from another Workspace Session", () => {
+    const owner = { kind: "workspace_session" as const, workspaceId: "ws", sessionId: "one" };
+    const current = buildState({
+      owner,
+      revision: 3,
+      scripts: [buildScript({ status: "running", pid: 401 })],
+    });
+    const oldSnapshot = buildState({ owner, revision: 2, scripts: [buildScript()] });
+    expect(applyDevServerEventToState(current, { type: "snapshot", state: oldSnapshot })).toBe(
+      current,
+    );
+    expect(
+      applyDevServerEventToState(current, {
+        type: "script_status_changed",
+        repoPath: "/repo",
+        owner: { kind: "workspace_session", workspaceId: "ws", sessionId: "two" },
+        script: buildScript({ status: "stopped" }),
+        revision: 4,
+        updatedAt: "2026-03-19T15:31:00.000Z",
+      }),
+    ).toBe(current);
   });
 });

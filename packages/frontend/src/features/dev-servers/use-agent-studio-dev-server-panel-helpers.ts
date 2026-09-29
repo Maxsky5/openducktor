@@ -5,16 +5,9 @@ import type {
 } from "@openducktor/contracts";
 import { trimDevServerTerminalChunks } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 import { isBrowserLiveControlEvent } from "@/lib/browser-live-control-events";
-import {
-  createDevServerTaskScope,
-  formatDevServerTaskScopeKey,
-} from "@/types/dev-server-task-scope";
+import { isSameDevServerOwner } from "@/types/dev-server-scope";
 
 export type { BrowserLiveControlEvent as DevServerSubscriptionControlEvent } from "@/types";
-
-export const buildTaskMemoryKey = (repoPath: string, taskId: string): string => {
-  return formatDevServerTaskScopeKey(createDevServerTaskScope(repoPath, taskId));
-};
 
 const replaceScript = (
   scripts: DevServerScriptState[],
@@ -35,29 +28,32 @@ export const applyDevServerEventToState = (
   event: DevServerEvent,
 ): DevServerGroupState | null => {
   if (event.type === "snapshot") {
+    if (state && event.state.revision < state.revision) return state;
     return {
       ...event.state,
       scripts: event.state.scripts.map(trimBufferedTerminalReplay),
     };
   }
 
-  if (!state || state.repoPath !== event.repoPath || state.taskId !== event.taskId) {
+  if (
+    !state ||
+    state.repoPath !== event.repoPath ||
+    !isSameDevServerOwner(state.owner, event.owner)
+  ) {
     return state;
   }
 
   if (event.type === "script_status_changed") {
+    if (event.revision <= state.revision) return state;
     return {
       ...state,
+      revision: event.revision,
       updatedAt: event.updatedAt,
       scripts: replaceScript(state.scripts, trimBufferedTerminalReplay(event.script)),
     };
   }
 
-  return {
-    ...state,
-    updatedAt: event.terminalChunk.timestamp,
-    scripts: state.scripts,
-  };
+  return state;
 };
 
 const toStartedAtMs = (script: DevServerScriptState): number => {

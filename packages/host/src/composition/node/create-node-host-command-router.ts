@@ -275,16 +275,19 @@ export const assembleNodeEffectHostCommandRouter = (
       resolveLaunchEnvironment: createTerminalLaunchEnvironment({ processEnv }),
     }),
   );
-  const devServerServiceInput: Parameters<typeof createDevServerService>[0] = {
+  const devServerService = createDevServerService({
     withProcessStartAdmission: workspaceAdmissionService.withProcessStartAdmission,
     processPort: devServerProcesses,
     taskWorktreeService,
+    workspaceSessions: {
+      store: assets.workspaceSessionStore,
+      settings: workspaceSettingsService,
+      git,
+      operationGate: workspaceSessions.operationGate,
+    },
     workspaceSettingsService,
-  };
-  if (eventBus) {
-    devServerServiceInput.eventBus = eventBus;
-  }
-  const devServerService = createDevServerService(devServerServiceInput);
+    eventBus,
+  });
   const workspaceLifecycleService = createWorkspaceLifecycleService({
     activity: createWorkspaceActivityInspector({
       agentSessionLiveStateService,
@@ -385,6 +388,7 @@ export const assembleNodeEffectHostCommandRouter = (
   });
   const { workspaceSessionService, workspaceSessionImports, unsubscribeImportCatalogs } =
     createNodeWorkspaceSessionServices({
+      devServerService,
       terminalService,
       lifecycle: taskSessionLifecycleCoordinator,
       operationGate: workspaceSessions.operationGate,

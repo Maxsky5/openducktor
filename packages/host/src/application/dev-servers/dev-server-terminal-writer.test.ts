@@ -10,10 +10,12 @@ const activeRunIdentity: DevServerRunIdentity = {
 
 const createRuntime = (runIdentity: DevServerRunIdentity | null): DevServerGroupRuntime => ({
   processes: new Map(),
+  unresolvedStops: new Set(),
   state: {
     repoPath: "/repo",
-    taskId: "task-1",
-    worktreePath: "/worktrees/task-1",
+    owner: { kind: "task", taskId: "task-1" },
+    workingDirectory: "/worktrees/task-1",
+    revision: 0,
     scripts: [
       {
         scriptId: "web",
@@ -56,7 +58,7 @@ describe("createDevServerTerminalWriter", () => {
     expect(published[0]).toMatchObject({
       type: "terminal_chunk",
       repoPath: "/repo",
-      taskId: "task-1",
+      owner: { kind: "task", taskId: "task-1" },
       terminalChunk: {
         scriptId: "web",
         runIdentity: activeRunIdentity,

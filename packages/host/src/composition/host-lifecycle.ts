@@ -145,7 +145,7 @@ export const createStopDevServersStep = (
         yield* writeHostLifecycleLog(
           logger,
           "info",
-          `Stopped dev server ${script.name} (${script.scriptId}) for task ${script.taskId} with pid ${script.pid}`,
+          `Stopped dev server ${script.name} (${script.scriptId}) for ${script.owner.kind === "task" ? `task ${script.owner.taskId}` : `Workspace Session ${script.owner.sessionId}`} with pid ${script.pid}`,
         );
       }
     });

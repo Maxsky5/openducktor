@@ -8,6 +8,7 @@ import { createTaskStoreTestDouble } from "../../../test-support/task-store-test
 import type {
   AgentSessionRecord,
   CommitsAheadBehind,
+  DevServerCommandInput,
   GitBranch,
   GitCurrentBranch,
   RepoConfig,
@@ -26,7 +27,6 @@ import type { TaskActivityGuardPort as RealTaskActivityGuardPort } from "../../.
 import type { TaskStorePort as RealTaskStorePort } from "../../../ports/task-repository-ports";
 import type { WorktreeFilePort } from "../../../ports/worktree-file-port";
 import type { DevServerService } from "../../dev-servers/dev-server-service";
-import type { DevServerTaskInput } from "../../dev-servers/dev-server-service-types";
 import { createRuntimeDefinitionsService } from "../../runtimes/runtime-definitions-service";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import {
@@ -726,17 +726,21 @@ const createDirectMergeDevServerService = (calls: unknown[]): DevServerService =
     start() {
       return Effect.dieMessage("unexpected dev server start");
     },
-    stop(input: DevServerTaskInput) {
+    stop(input: DevServerCommandInput) {
       return Effect.sync(() => {
         calls.push({ type: "stopDevServers", input });
         return {
           repoPath: "/repo",
-          taskId: "task-1",
-          worktreePath: null,
+          owner: { kind: "task", taskId: "task-1" },
+          workingDirectory: null,
           scripts: [],
+          revision: 0,
           updatedAt: "2026-05-10T11:30:00.000Z",
         };
       });
+    },
+    stopWorkspaceSession() {
+      return Effect.dieMessage("unexpected Workspace Session dev server stop");
     },
   }) satisfies DevServerService;
 const createDirectMergeTaskWorktreeService = (

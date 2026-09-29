@@ -331,7 +331,7 @@ export const runTaskRuntimeCleanup = ({
     );
 
     for (const taskId of taskIds) {
-      yield* devServerService.stop({ repoPath, taskId });
+      yield* devServerService.stop({ repoPath, owner: { kind: "task", taskId } });
     }
     progress.completedSteps.push("stopped task dev servers");
   });

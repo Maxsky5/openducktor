@@ -356,7 +356,10 @@ describe("task worktree cleanup", () => {
 
     expect(calls).toEqual([
       { type: "acquireTerminalCleanup", repoPath: "/repo", taskIds: ["task-1"] },
-      { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
+      {
+        type: "stopDevServers",
+        input: { repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } },
+      },
       { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
       {
         type: "removeWorktree",

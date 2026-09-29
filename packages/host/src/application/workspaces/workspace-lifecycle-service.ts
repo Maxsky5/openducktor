@@ -153,10 +153,10 @@ export const createWorkspaceActivityInspector = ({
             ),
           ),
         );
-      for (const taskId of devServerActivity.activeTaskIds) {
+      for (const owner of devServerActivity.activeOwners) {
         blockers.push({
           kind: "dev-server",
-          label: `dev server for task ${taskId} is running`,
+          label: `dev server for ${owner.kind === "task" ? `task ${owner.taskId}` : `Workspace Session ${owner.sessionId}`} is active; stop its servers first`,
         });
       }
 
@@ -295,9 +295,7 @@ export const createWorkspaceLifecycleService = ({
     repoConfig: RepoConfig,
   ) =>
     Effect.gen(function* () {
-      if (!repoConfig.removal) {
-        yield* assertNoBlockingActivity(repoConfig.repoPath);
-      }
+      yield* assertNoBlockingActivity(repoConfig.repoPath);
       const startedRecord = yield* workspaceSettingsService.beginWorkspaceRemoval({
         workspaceId: input.workspaceId,
         expectedRepoPath: input.expectedRepoPath,

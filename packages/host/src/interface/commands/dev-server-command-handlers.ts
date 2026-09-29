@@ -1,32 +1,28 @@
-import type {
-  DevServerService,
-  DevServerTaskInput,
-} from "../../application/dev-servers/dev-server-service";
+import { type DevServerCommandInput, devServerCommandInputSchema } from "@openducktor/contracts";
+import { HostValidationError } from "../../effect/host-errors";
+import type { DevServerService } from "../../application/dev-servers/dev-server-service";
 import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
-import {
-  commandInputRecordSchema,
-  commandInputStringSchema,
-  type HostCommandArgs,
-  requireRecord,
-  requireString,
-} from "./command-inputs";
+import { commandInputRecordSchema, type HostCommandArgs, requireRecord } from "./command-inputs";
 
-const parseDevServerTaskInput = (args: HostCommandArgs, label: string): DevServerTaskInput => {
+const parseInput = (args: HostCommandArgs, label: string): DevServerCommandInput => {
   const record = requireRecord(commandInputRecordSchema.safeParse(args), label);
-  return {
-    repoPath: requireString(commandInputStringSchema.safeParse(record.repoPath), "repoPath"),
-    taskId: requireString(commandInputStringSchema.safeParse(record.taskId), "taskId"),
-  };
+  const parsed = devServerCommandInputSchema.safeParse(record);
+  if (!parsed.success) {
+    throw new HostValidationError({
+      field: "owner",
+      message: `${label} requires a repository path and a task or Workspace Session owner.`,
+      cause: parsed.error,
+    });
+  }
+  return parsed.data;
 };
 
 export const createDevServerCommandHandlers = (devServerService: DevServerService) =>
   ({
     dev_server_get_state: (args) =>
-      devServerService.getState(parseDevServerTaskInput(args, "dev_server_get_state input")),
+      devServerService.getState(parseInput(args, "dev_server_get_state input")),
     dev_server_restart: (args) =>
-      devServerService.restart(parseDevServerTaskInput(args, "dev_server_restart input")),
-    dev_server_start: (args) =>
-      devServerService.start(parseDevServerTaskInput(args, "dev_server_start input")),
-    dev_server_stop: (args) =>
-      devServerService.stop(parseDevServerTaskInput(args, "dev_server_stop input")),
+      devServerService.restart(parseInput(args, "dev_server_restart input")),
+    dev_server_start: (args) => devServerService.start(parseInput(args, "dev_server_start input")),
+    dev_server_stop: (args) => devServerService.stop(parseInput(args, "dev_server_stop input")),
   }) satisfies HostCommandHandlerDefinitions;

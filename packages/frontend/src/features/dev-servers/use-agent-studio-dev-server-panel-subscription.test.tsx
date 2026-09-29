@@ -1,7 +1,7 @@
 import { devServerGroupStateSchema } from "@openducktor/contracts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
-import type { DevServerGroupState } from "@openducktor/contracts";
+import type { DevServerGroupState, DevServerOwner } from "@openducktor/contracts";
 import { act, waitFor } from "@testing-library/react";
 import { createQueryClient } from "@/lib/query-client";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
@@ -12,7 +12,6 @@ import {
   buildScript,
   buildState,
   createDeferred,
-  repoSettings,
 } from "./use-agent-studio-dev-server-panel-test-fixtures";
 import { renderDevServerPanelHook } from "./use-agent-studio-dev-server-panel-test-harness";
 
@@ -25,14 +24,22 @@ if (globalThis.document === undefined) {
   GlobalRegistrator.register();
 }
 
-let devServerGetState = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
-  buildState();
-let devServerStart = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
-  buildState();
-let devServerStop = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
-  buildState();
-let devServerRestart = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
-  buildState();
+let devServerGetState = async (
+  _repoPath: string,
+  _owner: DevServerOwner,
+): Promise<DevServerGroupState> => buildState();
+let devServerStart = async (
+  _repoPath: string,
+  _owner: DevServerOwner,
+): Promise<DevServerGroupState> => buildState();
+let devServerStop = async (
+  _repoPath: string,
+  _owner: DevServerOwner,
+): Promise<DevServerGroupState> => buildState();
+let devServerRestart = async (
+  _repoPath: string,
+  _owner: DevServerOwner,
+): Promise<DevServerGroupState> => buildState();
 let devServerEventListener: DevServerEventListener | null = null;
 let subscriptionTransportEpoch = "test:0";
 let subscribeDevServerEventsMock = async (
@@ -48,14 +55,20 @@ let subscribeDevServerEventsMock = async (
 };
 
 beforeEach(() => {
-  devServerGetState = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
+  devServerGetState = async (
+    _repoPath: string,
+    _owner: DevServerOwner,
+  ): Promise<DevServerGroupState> => buildState();
+  devServerStart = async (
+    _repoPath: string,
+    _owner: DevServerOwner,
+  ): Promise<DevServerGroupState> => buildState();
+  devServerStop = async (_repoPath: string, _owner: DevServerOwner): Promise<DevServerGroupState> =>
     buildState();
-  devServerStart = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
-    buildState();
-  devServerStop = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
-    buildState();
-  devServerRestart = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
-    buildState();
+  devServerRestart = async (
+    _repoPath: string,
+    _owner: DevServerOwner,
+  ): Promise<DevServerGroupState> => buildState();
   devServerEventListener = null;
   subscriptionTransportEpoch = "test:0";
   subscribeDevServerEventsMock = async (listener: DevServerEventListener) => {
@@ -87,6 +100,92 @@ afterEach(() => {
 });
 
 describe("useAgentStudioDevServerPanel subscriptions", () => {
+  test("retries a failed state read for the selected Workspace Session", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    const owner: DevServerOwner = {
+      kind: "workspace_session",
+      workspaceId: "workspace-1",
+      sessionId: "session-1",
+    };
+    const readOwners: DevServerOwner[] = [];
+    devServerGetState = async (_repoPath, requestedOwner) => {
+      readOwners.push(requestedOwner);
+      if (readOwners.length === 1) throw new Error("State read failed.");
+      return buildState({ owner });
+    };
+
+    const harness = renderDevServerPanelHook(useAgentStudioDevServerPanel, {
+      repoPath: "/repo",
+      owner,
+      enabled: true,
+    });
+
+    try {
+      await waitFor(() => {
+        expect(harness.getLatest().mode).toBe("error");
+      });
+      expect(harness.getLatest().error).toBe("State read failed.");
+      expect(readOwners).toEqual([owner]);
+
+      act(() => harness.getLatest().onRetry());
+
+      await waitFor(() => {
+        expect(harness.getLatest().mode).toBe("stopped");
+      });
+      expect(harness.getLatest().error).toBeNull();
+      expect(readOwners).toEqual([owner, owner]);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  test("retries a failed event subscription before reading state", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    let subscribeCount = 0;
+    let readCount = 0;
+    devServerGetState = async () => {
+      readCount += 1;
+      return buildState();
+    };
+    subscribeDevServerEventsMock = async (listener) => {
+      subscribeCount += 1;
+      if (subscribeCount === 1) throw new Error("Event subscription failed.");
+      devServerEventListener = listener;
+      return {
+        transportEpoch: "test:1",
+        unsubscribe: () => {
+          devServerEventListener = null;
+        },
+      };
+    };
+
+    const harness = renderDevServerPanelHook(useAgentStudioDevServerPanel, {
+      repoPath: "/repo",
+      owner: { kind: "task", taskId: "task-7" },
+      enabled: true,
+    });
+
+    try {
+      await waitFor(() => {
+        expect(harness.getLatest().mode).toBe("error");
+      });
+      expect(harness.getLatest().error).toBe("Event subscription failed.");
+      expect(readCount).toBe(0);
+
+      act(() => harness.getLatest().onRetry());
+
+      await waitFor(() => {
+        expect(harness.getLatest().mode).toBe("stopped");
+      });
+      expect(harness.getLatest().error).toBeNull();
+      expect(subscribeCount).toBe(2);
+      expect(readCount).toBe(1);
+      expect(devServerEventListener).not.toBeNull();
+    } finally {
+      harness.unmount();
+    }
+  });
+
   test("subscribes to dev-server events while enabled so startup events are not missed", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
@@ -94,8 +193,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
 
     const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
       repoPath: "/repo",
-      taskId: "task-7",
-      repoSettings,
+      owner: { kind: "task", taskId: "task-7" },
       enabled: true,
     });
 
@@ -155,8 +253,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
 
     const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
       repoPath: "/repo",
-      taskId: "task-7",
-      repoSettings,
+      owner: { kind: "task", taskId: "task-7" },
       enabled: true,
     });
 
@@ -231,8 +328,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
 
     const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
       repoPath: "/repo",
-      taskId: "task-7",
-      repoSettings,
+      owner: { kind: "task", taskId: "task-7" },
       enabled: true,
     });
 
@@ -318,8 +414,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
     };
     const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
       repoPath: "/repo",
-      taskId: "task-7",
-      repoSettings,
+      owner: { kind: "task", taskId: "task-7" },
       enabled: true,
     });
 
@@ -348,7 +443,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
         devServerEventListener?.({
           type: "terminal_chunk",
           repoPath: "/repo",
-          taskId: "task-7",
+          owner: { kind: "task", taskId: "task-7" },
           terminalChunk: {
             scriptId: "frontend",
             runIdentity: {
@@ -363,7 +458,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
         devServerEventListener?.({
           type: "terminal_chunk",
           repoPath: "/repo",
-          taskId: "task-7",
+          owner: { kind: "task", taskId: "task-7" },
           terminalChunk: {
             scriptId: "frontend",
             runIdentity: {
@@ -422,8 +517,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
 
     const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
       repoPath: "/repo",
-      taskId: "task-7",
-      repoSettings,
+      owner: { kind: "task", taskId: "task-7" },
       enabled: true,
     });
 
@@ -431,7 +525,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       devServerEventListener?.({
         type: "terminal_chunk",
         repoPath: "/repo",
-        taskId: "task-7",
+        owner: { kind: "task", taskId: "task-7" },
         terminalChunk: {
           scriptId: "frontend",
           runIdentity: {
@@ -446,7 +540,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       devServerEventListener?.({
         type: "terminal_chunk",
         repoPath: "/repo",
-        taskId: "task-7",
+        owner: { kind: "task", taskId: "task-7" },
         terminalChunk: {
           scriptId: "frontend",
           runIdentity: {
@@ -518,8 +612,9 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       act(() => {
         devServerEventListener?.({
           type: "script_status_changed",
+          revision: 1,
           repoPath: "/repo",
-          taskId: "task-7",
+          owner: { kind: "task", taskId: "task-7" },
           updatedAt: "2026-03-19T15:30:03.000Z",
           script: staleStartingScript,
         });
@@ -529,8 +624,9 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       act(() => {
         devServerEventListener?.({
           type: "script_status_changed",
+          revision: 1,
           repoPath: "/repo",
-          taskId: "task-7",
+          owner: { kind: "task", taskId: "task-7" },
           updatedAt: "2026-03-19T15:30:03.500Z",
           script: staleForeignStartingScript,
         });
@@ -579,14 +675,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
 
     const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
       repoPath: "/repo",
-      taskId: "task-7",
-      repoSettings: {
-        ...repoSettings,
-        devServers: [
-          ...repoSettings.devServers,
-          { id: "backend", name: "Backend", command: "bun run api" },
-        ],
-      },
+      owner: { kind: "task", taskId: "task-7" },
       enabled: true,
     });
 
@@ -599,8 +688,9 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       act(() => {
         devServerEventListener?.({
           type: "script_status_changed",
+          revision: 1,
           repoPath: "/repo",
-          taskId: "task-7",
+          owner: { kind: "task", taskId: "task-7" },
           updatedAt: "2026-03-19T15:31:00.000Z",
           script: buildScript({
             scriptId: "backend",
@@ -616,7 +706,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
         devServerEventListener?.({
           type: "terminal_chunk",
           repoPath: "/repo",
-          taskId: "task-7",
+          owner: { kind: "task", taskId: "task-7" },
           terminalChunk: {
             scriptId: "backend",
             runIdentity: {
@@ -650,14 +740,14 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
 
     devServerGetState = async (_repoPath, taskId) =>
       buildState({
-        taskId,
+        owner: taskId,
         scripts: [
           buildScript({
             status: "running",
             pid: 4242,
             startedAt: "2026-03-19T15:30:00.000Z",
             bufferedTerminalChunks:
-              taskId === "task-7"
+              taskId.kind === "task" && taskId.taskId === "task-7"
                 ? [
                     {
                       scriptId: "frontend",
@@ -677,8 +767,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
 
     const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
       repoPath: "/repo",
-      taskId: "task-7",
-      repoSettings,
+      owner: { kind: "task", taskId: "task-7" },
       enabled: true,
     });
 
@@ -692,8 +781,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       act(() => {
         harness.update({
           repoPath: "/repo",
-          taskId: "task-8",
-          repoSettings,
+          owner: { kind: "task", taskId: "task-8" },
           enabled: true,
         });
       });
@@ -711,8 +799,8 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
 
     devServerGetState = async (_repoPath, taskId) =>
       buildState({
-        taskId,
-        worktreePath: `/tmp/worktree/${taskId}`,
+        owner: taskId,
+        workingDirectory: `/tmp/worktree/${taskId.kind === "task" ? taskId.taskId : taskId.sessionId}`,
         scripts: [
           buildScript({
             status: "running",
@@ -726,14 +814,13 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
 
     const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
       repoPath: "/repo",
-      taskId: "task-7",
-      repoSettings,
+      owner: { kind: "task", taskId: "task-7" },
       enabled: true,
     });
 
     try {
       await waitFor(() => {
-        expect(harness.getLatest().worktreePath).toBe("/tmp/worktree/task-7");
+        expect(harness.getLatest().workingDirectory).toBe("/tmp/worktree/task-7");
       });
 
       await act(async () => {
@@ -743,21 +830,20 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       act(() => {
         harness.update({
           repoPath: "/repo",
-          taskId: "task-8",
-          repoSettings,
+          owner: { kind: "task", taskId: "task-8" },
           enabled: true,
         });
       });
 
       await waitFor(() => {
-        expect(harness.getLatest().worktreePath).toBe("/tmp/worktree/task-8");
+        expect(harness.getLatest().workingDirectory).toBe("/tmp/worktree/task-8");
       });
 
       await act(async () => {
         restartDeferred.resolve(
           buildState({
-            taskId: "task-7",
-            worktreePath: "/tmp/worktree/task-7",
+            owner: { kind: "task", taskId: "task-7" },
+            workingDirectory: "/tmp/worktree/task-7",
             updatedAt: "2026-03-19T15:31:00.000Z",
             scripts: [
               buildScript({
@@ -783,7 +869,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       });
 
       await waitFor(() => {
-        expect(harness.getLatest().worktreePath).toBe("/tmp/worktree/task-8");
+        expect(harness.getLatest().workingDirectory).toBe("/tmp/worktree/task-8");
       });
       expect(harness.getLatest().selectedScriptTerminalBuffer?.entries).toEqual([]);
     } finally {
@@ -798,12 +884,12 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
 
     devServerGetState = async (_repoPath, taskId) =>
       buildState({
-        taskId,
-        worktreePath: `/tmp/worktree/${taskId}`,
+        owner: taskId,
+        workingDirectory: `/tmp/worktree/${taskId.kind === "task" ? taskId.taskId : taskId.sessionId}`,
         scripts: [
           buildScript({
             status: "running",
-            pid: taskId === "task-7" ? 4242 : 5252,
+            pid: taskId.kind === "task" && taskId.taskId === "task-7" ? 4242 : 5252,
             startedAt: "2026-03-19T15:30:00.000Z",
           }),
         ],
@@ -813,14 +899,13 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
 
     const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
       repoPath: "/repo",
-      taskId: "task-7",
-      repoSettings,
+      owner: { kind: "task", taskId: "task-7" },
       enabled: true,
     });
 
     try {
       await waitFor(() => {
-        expect(harness.getLatest().worktreePath).toBe("/tmp/worktree/task-7");
+        expect(harness.getLatest().workingDirectory).toBe("/tmp/worktree/task-7");
       });
 
       act(() => {
@@ -834,14 +919,13 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       act(() => {
         harness.update({
           repoPath: "/repo",
-          taskId: "task-8",
-          repoSettings,
+          owner: { kind: "task", taskId: "task-8" },
           enabled: true,
         });
       });
 
       await waitFor(() => {
-        expect(harness.getLatest().worktreePath).toBe("/tmp/worktree/task-8");
+        expect(harness.getLatest().workingDirectory).toBe("/tmp/worktree/task-8");
       });
       expect(harness.getLatest().isStopPending).toBe(false);
       expect(harness.getLatest().isStartPending).toBe(false);
@@ -849,8 +933,8 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
 
       stopDeferred.resolve(
         buildState({
-          taskId: "task-7",
-          worktreePath: "/tmp/worktree/task-7",
+          owner: { kind: "task", taskId: "task-7" },
+          workingDirectory: "/tmp/worktree/task-7",
         }),
       );
     } finally {
@@ -865,8 +949,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
 
     const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
       repoPath: null,
-      taskId: "task-7",
-      repoSettings,
+      owner: { kind: "task", taskId: "task-7" },
       enabled: true,
     });
 
@@ -875,9 +958,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
         harness.getLatest().onStart();
       });
 
-      expect(harness.getLatest().error).toBe(
-        "Builder dev servers require an active repository and task.",
-      );
+      expect(harness.getLatest().error).toBe("Dev servers require an active repository and owner.");
     } finally {
       harness.unmount();
     }
@@ -892,8 +973,8 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       [
         "task-7",
         buildState({
-          taskId: "task-7",
-          worktreePath: "/tmp/worktree/task-7",
+          owner: { kind: "task", taskId: "task-7" },
+          workingDirectory: "/tmp/worktree/task-7",
           scripts: [
             buildScript({
               status: "running",
@@ -918,8 +999,8 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       [
         "task-8",
         buildState({
-          taskId: "task-8",
-          worktreePath: "/tmp/worktree/task-8",
+          owner: { kind: "task", taskId: "task-8" },
+          workingDirectory: "/tmp/worktree/task-8",
           scripts: [
             buildScript({
               status: "running",
@@ -931,7 +1012,9 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       ],
     ]);
     devServerGetState = async (_repoPath, taskId) => {
-      const state = taskStateByTaskId.get(taskId);
+      const state = taskStateByTaskId.get(
+        taskId.kind === "task" ? taskId.taskId : taskId.sessionId,
+      );
       if (!state) {
         throw new Error(`Missing test state for ${taskId}.`);
       }
@@ -941,8 +1024,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
 
     const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
       repoPath: "/repo",
-      taskId: "task-7",
-      repoSettings,
+      owner: { kind: "task", taskId: "task-7" },
       enabled: true,
     });
 
@@ -956,21 +1038,20 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       act(() => {
         harness.update({
           repoPath: "/repo",
-          taskId: "task-8",
-          repoSettings,
+          owner: { kind: "task", taskId: "task-8" },
           enabled: true,
         });
       });
 
       await waitFor(() => {
-        expect(harness.getLatest().worktreePath).toBe("/tmp/worktree/task-8");
+        expect(harness.getLatest().workingDirectory).toBe("/tmp/worktree/task-8");
       });
 
       taskStateByTaskId.set(
         "task-7",
         buildState({
-          taskId: "task-7",
-          worktreePath: "/tmp/worktree/task-7",
+          owner: { kind: "task", taskId: "task-7" },
+          workingDirectory: "/tmp/worktree/task-7",
           updatedAt: "2026-03-19T15:31:00.000Z",
           scripts: [
             buildScript({
@@ -997,8 +1078,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       act(() => {
         harness.update({
           repoPath: "/repo",
-          taskId: "task-7",
-          repoSettings,
+          owner: { kind: "task", taskId: "task-7" },
           enabled: true,
         });
       });
@@ -1073,8 +1153,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
 
     const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
       repoPath: "/repo",
-      taskId: "task-7",
-      repoSettings,
+      owner: { kind: "task", taskId: "task-7" },
       enabled: true,
     });
 
@@ -1171,8 +1250,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       useAgentStudioDevServerPanel,
       {
         repoPath: "/repo",
-        taskId: "task-7",
-        repoSettings,
+        owner: { kind: "task", taskId: "task-7" },
         enabled: true,
       },
       { queryClient },
@@ -1195,8 +1273,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       useAgentStudioDevServerPanel,
       {
         repoPath: "/repo",
-        taskId: "task-7",
-        repoSettings,
+        owner: { kind: "task", taskId: "task-7" },
         enabled: true,
       },
       { queryClient },
@@ -1218,7 +1295,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
         retiredHostListener?.({
           type: "terminal_chunk",
           repoPath: "/repo",
-          taskId: "task-7",
+          owner: { kind: "task", taskId: "task-7" },
           terminalChunk: {
             scriptId: "frontend",
             runIdentity: {
@@ -1299,8 +1376,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       useAgentStudioDevServerPanel,
       {
         repoPath: "/repo",
-        taskId: "task-7",
-        repoSettings,
+        owner: { kind: "task", taskId: "task-7" },
         enabled: true,
       },
       { queryClient },
@@ -1372,7 +1448,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
 
       await waitFor(() => {
         const staleQuery = queryClient.getQueryCache().find({
-          queryKey: devServerQueryKeys.state("/repo", "task-7", "test:0"),
+          queryKey: devServerQueryKeys.state("/repo", { kind: "task", taskId: "task-7" }, "test:0"),
           exact: true,
         });
         const hasSettledStaleMutation = queryClient
@@ -1402,4 +1478,67 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       harness.unmount();
     }
   }, 2_500);
+  test("keeps live state and replay with the selected Workspace Session in a shared directory", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    const ownerOne = { kind: "workspace_session" as const, workspaceId: "ws", sessionId: "one" };
+    const ownerTwo = { kind: "workspace_session" as const, workspaceId: "ws", sessionId: "two" };
+    const stateFor = (owner: DevServerOwner): DevServerGroupState => {
+      const name = owner.kind === "workspace_session" ? owner.sessionId : owner.taskId;
+      return buildState({
+        owner,
+        workingDirectory: "/repo",
+        scripts: [
+          buildScript({
+            status: "running",
+            pid: name === "one" ? 401 : 402,
+            bufferedTerminalChunks: [
+              {
+                scriptId: "frontend",
+                runIdentity: {
+                  runId: `${name}:1`,
+                  runOrder: { hostInstanceId: "host-1", generation: 1 },
+                },
+                sequence: 0,
+                data: `${name} log`,
+                timestamp: "2026-09-27T00:00:00.000Z",
+              },
+            ],
+          }),
+        ],
+      });
+    };
+    devServerGetState = async (_repoPath, owner) => stateFor(owner);
+    const harness = renderDevServerPanelHook(useAgentStudioDevServerPanel, {
+      repoPath: "/repo",
+      owner: ownerOne,
+      enabled: true,
+    });
+    try {
+      await waitFor(() =>
+        expect(harness.getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe("one log"),
+      );
+      harness.update({ repoPath: "/repo", owner: ownerTwo, enabled: true });
+      await waitFor(() =>
+        expect(harness.getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe("two log"),
+      );
+      act(() =>
+        devServerEventListener?.({
+          type: "script_status_changed",
+          repoPath: "/repo",
+          owner: ownerOne,
+          script: buildScript({ status: "failed", lastError: "foreign" }),
+          revision: 99,
+          updatedAt: "2026-09-27T00:01:00.000Z",
+        }),
+      );
+      expect(harness.getLatest().scripts[0]?.status).toBe("running");
+      expect(harness.getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe("two log");
+      harness.update({ repoPath: "/repo", owner: ownerOne, enabled: true });
+      await waitFor(() =>
+        expect(harness.getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe("one log"),
+      );
+    } finally {
+      harness.unmount();
+    }
+  });
 });

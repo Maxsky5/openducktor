@@ -84,11 +84,33 @@ export const devServerScriptStateSchema = z
   });
 export type DevServerScriptState = z.infer<typeof devServerScriptStateSchema>;
 
+export const devServerOwnerSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("task"), taskId: z.string().min(1) }),
+  z.object({
+    kind: z.literal("workspace_session"),
+    workspaceId: z.string().min(1),
+    sessionId: z.string().min(1),
+  }),
+]);
+export type DevServerOwner = z.infer<typeof devServerOwnerSchema>;
+
+export const formatDevServerOwnerKey = (owner: DevServerOwner): string =>
+  owner.kind === "task"
+    ? JSON.stringify(["task", owner.taskId])
+    : JSON.stringify(["workspace_session", owner.workspaceId, owner.sessionId]);
+
+export const devServerCommandInputSchema = z.object({
+  repoPath: z.string().min(1),
+  owner: devServerOwnerSchema,
+});
+export type DevServerCommandInput = z.infer<typeof devServerCommandInputSchema>;
+
 export const devServerGroupStateSchema = z.object({
   repoPath: z.string().min(1),
-  taskId: z.string().min(1),
-  worktreePath: z.string().nullable(),
+  owner: devServerOwnerSchema,
+  workingDirectory: z.string().nullable(),
   scripts: z.array(devServerScriptStateSchema).default([]),
+  revision: z.number().int().nonnegative(),
   updatedAt: z.string(),
 });
 export type DevServerGroupState = z.infer<typeof devServerGroupStateSchema>;
@@ -101,14 +123,15 @@ export const devServerEventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("script_status_changed"),
     repoPath: z.string().min(1),
-    taskId: z.string().min(1),
+    owner: devServerOwnerSchema,
     script: devServerScriptStateSchema,
+    revision: z.number().int().nonnegative(),
     updatedAt: z.string(),
   }),
   z.object({
     type: z.literal("terminal_chunk"),
     repoPath: z.string().min(1),
-    taskId: z.string().min(1),
+    owner: devServerOwnerSchema,
     terminalChunk: devServerTerminalChunkSchema,
   }),
 ]);

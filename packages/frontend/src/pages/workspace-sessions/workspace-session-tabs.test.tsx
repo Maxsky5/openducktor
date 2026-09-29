@@ -7,6 +7,7 @@ import { Link, MemoryRouter, useLocation, useNavigate } from "react-router";
 import { QueryProvider } from "@/lib/query-provider";
 import { BrowserTabsRoot } from "@/components/ui/browser-tabs";
 import { RIGHT_PANEL_OPEN_STORAGE_KEY } from "@/components/features/agents/use-right-panel-open";
+import { SettingsModalProvider } from "@/components/features/settings/settings-modal";
 import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
@@ -473,8 +474,10 @@ function renderTabs(
                   }}
                 >
                   <WorkspacePreviewTransitionGuardProvider>
-                    <WorkspaceSessions workspace={workspace} />
-                    {previewControls}
+                    <SettingsModalProvider>
+                      <WorkspaceSessions workspace={workspace} />
+                      {previewControls}
+                    </SettingsModalProvider>
                   </WorkspacePreviewTransitionGuardProvider>
                 </WorkspaceBranchStateContext.Provider>
               </AgentSessionsContext>
@@ -903,16 +906,22 @@ test("drag preview keeps the normal tab status dot and button styling", async ()
       </AgentSessionsContext>
     </AgentSessionReadModelStateContext>,
   );
+  const usesPointerSensor = globalThis.PointerEvent !== undefined;
   try {
     const tab = view.getByRole("tab", { name: /First/ });
-    fireEvent.pointerDown(tab, {
-      button: 0,
-      isPrimary: true,
-      pointerId: 1,
-      clientX: 10,
-      clientY: 10,
-    });
-    fireEvent.pointerMove(document, { pointerId: 1, clientX: 30, clientY: 10 });
+    if (usesPointerSensor) {
+      fireEvent.pointerDown(tab, {
+        button: 0,
+        isPrimary: true,
+        pointerId: 1,
+        clientX: 10,
+        clientY: 10,
+      });
+      fireEvent.pointerMove(document, { pointerId: 1, clientX: 30, clientY: 10 });
+    } else {
+      fireEvent.mouseDown(tab, { button: 0, clientX: 10, clientY: 10 });
+      fireEvent.mouseMove(document, { clientX: 30, clientY: 10 });
+    }
     await waitFor(() => expect(view.getAllByLabelText("running")).toHaveLength(2), {
       timeout: 800,
     });
@@ -929,9 +938,11 @@ test("drag preview keeps the normal tab status dot and button styling", async ()
     expect(tabs[1]?.parentElement?.className).toBe(
       tabs[0]?.parentElement?.className.replace(" opacity-0", ""),
     );
-    fireEvent.pointerUp(document, { pointerId: 1 });
+    if (usesPointerSensor) fireEvent.pointerUp(document, { pointerId: 1 });
+    else fireEvent.mouseUp(document);
   } finally {
-    fireEvent.pointerCancel(document, { pointerId: 1 });
+    if (usesPointerSensor) fireEvent.pointerCancel(document, { pointerId: 1 });
+    else fireEvent.mouseUp(document);
     view.unmount();
     // dnd-kit's AbstractPointerSensor removes its document click blocker after 50 ms.
     await new Promise((resolve) => setTimeout(resolve, 50));

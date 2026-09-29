@@ -1,4 +1,8 @@
-import type { DevServerGroupState } from "@openducktor/contracts";
+import type {
+  DevServerCommandInput,
+  DevServerGroupState,
+  DevServerOwner,
+} from "@openducktor/contracts";
 import type { Effect } from "effect";
 import type {
   HostDependencyErrorAggregate,
@@ -20,6 +24,11 @@ import type {
   WorkspaceSettingsService,
 } from "../workspaces/workspace-settings-service";
 import type { WithProcessStartAdmission } from "../workspaces/workspace-admission-service";
+import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
+import type { GitPort } from "../../ports/git-port";
+import type { GitPortError } from "../../ports/git-port";
+import type { TaskStoreError } from "../../ports/task-repository-ports";
+import type { createWorkspaceSessionOperationGate } from "../workspaces/workspace-session-operation-gate";
 
 export type DevServerServiceError =
   | DevServerProcessStartExitError
@@ -28,28 +37,33 @@ export type DevServerServiceError =
   | HostOperationErrorAggregate
   | HostValidationErrorAggregate
   | TaskWorktreeServiceError
+  | TaskStoreError
+  | GitPortError
   | WorkspaceSettingsError;
 
-export type DevServerTaskInput = {
-  repoPath: string;
-  taskId: string;
-};
-
 export type DevServerWorkspaceActivity = {
-  activeTaskIds: string[];
+  activeOwners: DevServerOwner[];
 };
 
 export type DevServerService = {
-  getState(input: DevServerTaskInput): Effect.Effect<DevServerGroupState, DevServerServiceError>;
+  getState(input: DevServerCommandInput): Effect.Effect<DevServerGroupState, DevServerServiceError>;
   inspectWorkspaceActivity(input: {
     repoPath: string;
   }): Effect.Effect<DevServerWorkspaceActivity, DevServerServiceError>;
-  restart(input: DevServerTaskInput): Effect.Effect<DevServerGroupState, DevServerServiceError>;
-  start(input: DevServerTaskInput): Effect.Effect<DevServerGroupState, DevServerServiceError>;
-  stop(input: DevServerTaskInput): Effect.Effect<DevServerGroupState, DevServerServiceError>;
+  restart(input: DevServerCommandInput): Effect.Effect<DevServerGroupState, DevServerServiceError>;
+  start(input: DevServerCommandInput): Effect.Effect<DevServerGroupState, DevServerServiceError>;
+  stop(input: DevServerCommandInput): Effect.Effect<DevServerGroupState, DevServerServiceError>;
+  stopWorkspaceSession(
+    input: DevServerCommandInput,
+  ): Effect.Effect<DevServerGroupState, DevServerServiceError>;
 };
 
 export type DisposableDevServerService = DevServerService & {
+  forgetWorkspaceSession(
+    input: DevServerCommandInput & {
+      owner: Extract<DevServerOwner, { kind: "workspace_session" }>;
+    },
+  ): Effect.Effect<void>;
   stopAll(): Effect.Effect<DevServerStopAllResult, DevServerServiceError>;
 };
 
@@ -59,7 +73,7 @@ export type StoppedDevServerScript = {
   pid: number;
   repoPath: string;
   scriptId: string;
-  taskId: string;
+  owner: DevServerOwner;
 };
 
 export type FailedDevServerScriptStart = {
@@ -75,8 +89,17 @@ export type DevServerStopAllResult = {
 
 export type CreateDevServerServiceInput = {
   withProcessStartAdmission?: WithProcessStartAdmission;
-  eventBus?: HostEventBusPort;
+  eventBus?: HostEventBusPort | undefined;
   processPort?: DevServerProcessPort;
   taskWorktreeService?: TaskWorktreeService;
+  workspaceSessions?: {
+    store: Pick<WorkspaceSessionStorePort, "get">;
+    settings: Pick<WorkspaceSettingsService, "getRepoConfig">;
+    git: Pick<
+      GitPort,
+      "canonicalizePath" | "isGitRepository" | "shareGitCommonDirectory" | "isRegisteredWorktree"
+    >;
+    operationGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
+  };
   workspaceSettingsService: WorkspaceSettingsService;
 };

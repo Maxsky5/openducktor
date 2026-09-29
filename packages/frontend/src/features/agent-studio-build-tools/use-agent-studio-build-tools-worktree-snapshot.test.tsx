@@ -69,18 +69,20 @@ const useAgentStudioDevServerPanelMock = mock(
     isLoading: false,
     disabledReason: null,
     repoPath: args.repoPath,
-    taskId: args.taskId,
-    worktreePath: null,
+    owner: args.owner,
+    workingDirectory: null,
     scripts: [],
     selectedScriptId: null,
     selectedScript: null,
     selectedScriptTerminalBuffer: null,
     error: null,
     isStartPending: false,
+    isRetryPending: false,
     isStopPending: false,
     isRestartPending: false,
     onSelectScript: () => {},
     onStart: () => {},
+    onRetry: () => {},
     onStop: () => {},
     onRestart: () => {},
   }),
@@ -230,7 +232,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       expect(taskWorktreeGetMock).not.toHaveBeenCalled();
       expect(useAgentStudioDevServerPanelMock.mock.calls.at(-1)?.[0]).toMatchObject({
         repoPath: null,
-        taskId: null,
+        owner: null,
         enabled: false,
       });
     } finally {
@@ -494,7 +496,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       expect(harness.getLatest().openInTarget.path).toBe("/repo/.worktrees/task-24");
       expect(useAgentStudioDevServerPanelMock.mock.calls.at(-1)?.[0]).toMatchObject({
         repoPath: "/repo",
-        taskId: "task-24",
+        owner: { kind: "task", taskId: "task-24" },
         enabled: true,
       });
     } finally {
@@ -703,7 +705,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       expect(harness.getLatest().context.taskId).toBe("task-24");
       expect(useAgentStudioDevServerPanelMock.mock.calls.at(-1)?.[0]).toMatchObject({
         repoPath: "/repo",
-        taskId: null,
+        owner: null,
         enabled: false,
       });
     } finally {

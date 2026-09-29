@@ -31,18 +31,20 @@ const baseModel = (
   isLoading: false,
   disabledReason: null,
   repoPath: "/repo",
-  taskId: "task-7",
-  worktreePath: "/tmp/worktree/task-7",
+  owner: { kind: "task", taskId: "task-7" },
+  workingDirectory: "/tmp/worktree/task-7",
   scripts: [],
   selectedScriptId: null,
   selectedScript: null,
   selectedScriptTerminalBuffer: null,
   error: null,
   isStartPending: false,
+  isRetryPending: false,
   isStopPending: false,
   isRestartPending: false,
   onSelectScript: () => {},
   onStart: () => {},
+  onRetry: () => {},
   onStop: () => {},
   onRestart: () => {},
   ...overrides,
@@ -143,12 +145,34 @@ const failedScript: DevServerScriptState = {
 };
 
 describe("AgentStudioDevServerPanel", () => {
+  test("uses the compact action to retry after a state error", () => {
+    let retryCalls = 0;
+    const view = render(
+      <AgentStudioDevServerPanel
+        model={baseModel({
+          mode: "error",
+          error: "State read failed.",
+          onRetry: () => retryCalls++,
+        })}
+      />,
+    );
+
+    try {
+      expect(screen.getByText("State read failed.")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Retry dev server state" }));
+      expect(retryCalls).toBe(1);
+      expect(screen.queryByRole("button", { name: "Start dev servers" })).toBeNull();
+    } finally {
+      view.unmount();
+    }
+  });
+
   test.each([
     ["stopped", {}],
-    ["empty", { mode: "empty", disabledReason: DEV_SERVER_EMPTY_REASON, worktreePath: null }],
+    ["empty", { mode: "empty", disabledReason: DEV_SERVER_EMPTY_REASON, workingDirectory: null }],
     [
       "disabled",
-      { mode: "disabled", disabledReason: DEV_SERVER_DISABLED_REASON, worktreePath: null },
+      { mode: "disabled", disabledReason: DEV_SERVER_DISABLED_REASON, workingDirectory: null },
     ],
     ["loading", { mode: "loading", isLoading: true }],
     ["start pending", { isStartPending: true }],
@@ -186,13 +210,20 @@ describe("AgentStudioDevServerPanel", () => {
     expect(html).not.toContain("Configure dev server commands");
   });
 
-  test("renders compact start row while stopped", () => {
-    const view = render(<AgentStudioDevServerPanel model={baseModel()} />);
+  test.each([
+    ["task", { kind: "task", taskId: "task-7" }],
+    [
+      "Workspace Session",
+      { kind: "workspace_session", workspaceId: "workspace-1", sessionId: "session-1" },
+    ],
+  ] as const)("renders only the compact start row for a %s", (_label, owner) => {
+    const view = render(<AgentStudioDevServerPanel model={baseModel({ owner })} />);
 
     try {
-      expect(screen.getByTestId("agent-studio-dev-server-start-button").textContent).toContain(
+      expect(screen.getByTestId("agent-studio-dev-server-compact-panel").textContent?.trim()).toBe(
         "Start dev servers",
       );
+      expect(screen.queryByRole("button", { name: "Copy working directory" })).toBeNull();
       expect(screen.queryByTestId("agent-studio-dev-server-compact-message")).toBeNull();
       expect(screen.queryByTestId("agent-studio-dev-server-disabled-start-trigger")).toBeNull();
       expect(
@@ -210,7 +241,7 @@ describe("AgentStudioDevServerPanel", () => {
         model={baseModel({
           mode: "disabled",
           disabledReason: DEV_SERVER_DISABLED_REASON,
-          worktreePath: null,
+          workingDirectory: null,
         })}
       />,
     );
@@ -226,6 +257,7 @@ describe("AgentStudioDevServerPanel", () => {
       expect(button.getAttribute("class")).toContain("opacity-50");
       expect(screen.queryByTestId("agent-studio-dev-server-disabled-start-trigger")).toBeNull();
       expect(screen.queryByTestId("agent-studio-dev-server-compact-message")).toBeNull();
+      expect(screen.queryByTestId("agent-studio-dev-server-header-summary")).toBeNull();
       expect(document.getElementById(disabledReasonId ?? "")?.textContent).toContain(
         DEV_SERVER_DISABLED_REASON,
       );
@@ -240,7 +272,7 @@ describe("AgentStudioDevServerPanel", () => {
         model={baseModel({
           mode: "empty",
           disabledReason: DEV_SERVER_EMPTY_REASON,
-          worktreePath: null,
+          workingDirectory: null,
         })}
       />,
     );
@@ -259,6 +291,7 @@ describe("AgentStudioDevServerPanel", () => {
       expect(button.getAttribute("class")).toContain("opacity-50");
       expect(screen.queryByTestId("agent-studio-dev-server-disabled-start-trigger")).toBeNull();
       expect(screen.queryByTestId("agent-studio-dev-server-compact-message")).toBeNull();
+      expect(screen.queryByTestId("agent-studio-dev-server-header-summary")).toBeNull();
       expect(document.getElementById(disabledReasonId ?? "")?.textContent).toContain(
         DEV_SERVER_EMPTY_REASON,
       );
@@ -287,6 +320,10 @@ describe("AgentStudioDevServerPanel", () => {
     expect(html).toContain("bun run dev");
     expect(html).toContain("Copy working directory");
     expect(html).toContain("/tmp/worktree/task-7");
+    const markup = document.createElement("div");
+    markup.innerHTML = html;
+    const summary = markup.querySelector('[data-testid="agent-studio-dev-server-header-summary"]');
+    expect(summary?.parentElement?.textContent?.trim()).toBe("Running in /tmp/worktree/task-7");
     expect(html).toContain("inline-flex max-w-full items-center gap-1.5");
     expect(html).toContain("bg-[var(--dev-server-terminal-panel)]");
     expect(html).toContain("data-[state=active]:border-t-selected-accent");

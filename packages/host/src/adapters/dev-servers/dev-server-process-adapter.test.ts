@@ -329,6 +329,46 @@ setInterval(() => {}, 1000);
     }
   });
 
+  test.skipIf(process.platform === "win32")("retries after an interrupted stop", async () => {
+    const root = await mkdtemp(join(tmpdir(), "odt-dev-server-stop-retry-"));
+    const scriptPath = join(root, "server.mjs");
+    await writeFile(
+      scriptPath,
+      'process.on("SIGTERM", () => {}); process.stdout.write("ready"); setInterval(() => {}, 1000);',
+    );
+    const port = createEffectDevServerProcessAdapter({
+      startGracePeriodMs: 20,
+      stopTimeoutMs: 500,
+    });
+    const command = `exec ${quoteShellCommandArgForTest(process.execPath)} ${quoteShellCommandArgForTest(scriptPath)}`;
+    const output: string[] = [];
+    let pid: number | null = null;
+
+    try {
+      const handle = await Effect.runPromise(
+        port.start({
+          command,
+          cwd: root,
+          onExit: () => {},
+          onOutput: (chunk) => output.push(chunk.data),
+        }),
+      );
+      pid = handle.pid;
+      await waitFor(() => output.join("").includes("ready"), 1_000);
+
+      await expect(
+        Effect.runPromise(handle.stop().pipe(Effect.timeout("50 millis"))),
+      ).rejects.toThrow("timed out");
+      expect(processIsAlive(handle.pid)).toBe(true);
+
+      await Effect.runPromise(handle.stop());
+      await waitFor(() => !processIsAlive(handle.pid), 1_000);
+    } finally {
+      if (pid !== null && processIsAlive(pid)) process.kill(pid, "SIGKILL");
+      await removeTempRoot(root);
+    }
+  });
+
   test("rejects and reports process exits that happen during the start grace period", async () => {
     const exits: unknown[] = [];
     const port = createDevServerProcessAdapter({

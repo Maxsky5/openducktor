@@ -210,7 +210,6 @@ export const createDevServerProcessAdapter = ({
         if (released) {
           return;
         }
-        released = true;
         yield* terminateProcessTree({
           pid,
           label: `dev server command "${command}"`,
@@ -218,6 +217,7 @@ export const createDevServerProcessAdapter = ({
           waitForExit: processTracker.waitForClose,
           stopTimeoutMs,
         }).pipe(Effect.mapError((cause) => toHostOperationError(cause, "devServerProcess.stop")));
+        released = true;
       });
       yield* Scope.addFinalizer(runtimeScope, stopProcess.pipe(Effect.ignore));
 

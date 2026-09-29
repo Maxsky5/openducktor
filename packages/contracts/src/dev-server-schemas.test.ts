@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  devServerCommandInputSchema,
   devServerEventSchema,
   devServerGroupStateSchema,
   devServerScriptStateSchema,
@@ -10,7 +11,7 @@ describe("dev-server-schemas", () => {
     const parsed = devServerEventSchema.parse({
       type: "terminal_chunk",
       repoPath: "/repo",
-      taskId: "task-7",
+      owner: { kind: "task", taskId: "task-7" },
       terminalChunk: {
         scriptId: "frontend",
         runIdentity: {
@@ -37,8 +38,9 @@ describe("dev-server-schemas", () => {
     expect(() =>
       devServerGroupStateSchema.parse({
         repoPath: "/repo",
-        taskId: "task-7",
-        worktreePath: "/tmp/worktree/task-7",
+        owner: { kind: "task", taskId: "task-7" },
+        workingDirectory: "/tmp/worktree/task-7",
+        revision: 0,
         scripts: [
           {
             scriptId: "frontend",
@@ -119,8 +121,9 @@ describe("dev-server-schemas", () => {
   test("requires stopped scripts to state null ownership explicitly", () => {
     const parsed = devServerGroupStateSchema.parse({
       repoPath: "/repo",
-      taskId: "task-7",
-      worktreePath: "/tmp/worktree/task-7",
+      owner: { kind: "task", taskId: "task-7" },
+      workingDirectory: "/tmp/worktree/task-7",
+      revision: 0,
       scripts: [
         {
           scriptId: "frontend",
@@ -161,6 +164,18 @@ describe("dev-server-schemas", () => {
       throw new Error("Expected a script without startedCommand to be rejected.");
     }
     expect(parsed.error.issues[0]?.path).toEqual(["startedCommand"]);
+  });
+
+  test("requires a tagged owner on every dev server command", () => {
+    expect(
+      devServerCommandInputSchema.safeParse({ repoPath: "/repo", taskId: "task-7" }).success,
+    ).toBe(false);
+    expect(
+      devServerCommandInputSchema.parse({
+        repoPath: "/repo",
+        owner: { kind: "workspace_session", workspaceId: "ws", sessionId: "session" },
+      }).owner,
+    ).toEqual({ kind: "workspace_session", workspaceId: "ws", sessionId: "session" });
   });
 
   test("rejects a run that does not state the started command", () => {

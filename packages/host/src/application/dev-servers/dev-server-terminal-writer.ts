@@ -49,7 +49,7 @@ export const createDevServerTerminalWriter = (
     publish({
       type: "terminal_chunk",
       repoPath: runtime.state.repoPath,
-      taskId: runtime.state.taskId,
+      owner: runtime.state.owner,
       terminalChunk,
     });
   };

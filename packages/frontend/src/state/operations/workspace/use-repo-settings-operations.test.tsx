@@ -5,10 +5,15 @@ import {
   type RepositoryGitProviderContext,
   type SettingsSnapshot,
   type SettingsSnapshotSaveInput,
+  type DevServerOwner,
 } from "@openducktor/contracts";
 import { type QueryClient, QueryObserver, useQueryClient } from "@tanstack/react-query";
 import type { PropsWithChildren, ReactElement } from "react";
 import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
+import {
+  buildScript,
+  buildState,
+} from "@/features/dev-servers/use-agent-studio-dev-server-panel-test-fixtures";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createDeferred,
@@ -20,6 +25,7 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { checksQueryKeys } from "../../queries/checks";
+import { devServerGroupStateQueryOptions } from "../../queries/dev-servers";
 import { repositoryGitProviderContextQueryKeys } from "../../queries/git-provider-context";
 import { runtimeQueryKeys } from "../../queries/runtime";
 import { repoTaskDataQueryOptions, type RepoTaskData, taskQueryKeys } from "../../queries/tasks";
@@ -559,6 +565,47 @@ describe("use-repo-settings-operations", () => {
       await harness.unmount();
       host.workspaceSaveRepoSettings = original.workspaceSaveRepoSettings;
       host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
+    }
+  });
+
+  test("saveRepoSettings refreshes a mounted dev-server group", async () => {
+    const owner: DevServerOwner = { kind: "task", taskId: "task-a" };
+    const options = devServerGroupStateQueryOptions("/repo-a", owner, "epoch-a");
+    const original = {
+      save: host.workspaceSaveRepoSettings,
+      getState: host.devServerGetState,
+    };
+    host.workspaceSaveRepoSettings = mock(async () => createWorkspaceRecord());
+    host.devServerGetState = mock(async () =>
+      buildState({ repoPath: "/repo-a", owner, scripts: [buildScript()] }),
+    );
+    const harness = createHookHarness({
+      activeWorkspace: createWorkspaceRecord(),
+      applyWorkspaceRecords: mock(() => {}),
+      applyWorkspaceRecord: mock(() => {}),
+    });
+    let unsubscribe = () => {};
+
+    try {
+      await harness.mount();
+      const queryClient = harness.getQueryClient();
+      queryClient.setQueryData(
+        options.queryKey,
+        buildState({ repoPath: "/repo-a", owner, scripts: [] }),
+      );
+      const observer = new QueryObserver(queryClient, options);
+      unsubscribe = observer.subscribe(() => {});
+      expect(observer.getCurrentResult().data?.scripts).toEqual([]);
+
+      await harness.run((operations) => operations.saveRepoSettings(inputFixture));
+
+      expect(observer.getCurrentResult().data?.scripts).toEqual([buildScript()]);
+      expect(host.devServerGetState).toHaveBeenCalledWith("/repo-a", owner);
+    } finally {
+      unsubscribe();
+      await harness.unmount();
+      host.workspaceSaveRepoSettings = original.save;
+      host.devServerGetState = original.getState;
     }
   });
 
@@ -1208,6 +1255,74 @@ describe("use-repo-settings-operations", () => {
       expect(run.resetQueries).not.toHaveBeenCalled();
     } finally {
       await run.cleanup();
+    }
+  });
+
+  test("adding the first script refreshes only the changed repository's mounted group", async () => {
+    const owner: DevServerOwner = {
+      kind: "workspace_session",
+      workspaceId: "repo-a",
+      sessionId: "session-a",
+    };
+    const previousRepoA = createRepoSettingsConfigFixture("repo-a", "/repo-a");
+    const repoB = createRepoSettingsConfigFixture("repo-b", "/repo-b");
+    const previousSnapshot = createSettingsSnapshotFixture({
+      workspaces: { "repo-a": previousRepoA, "repo-b": repoB },
+    });
+    const normalizedSnapshot = createSettingsSnapshotFixture({
+      workspaces: {
+        "repo-a": {
+          ...previousRepoA,
+          devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
+        },
+        "repo-b": repoB,
+      },
+    });
+    const original = {
+      getState: host.devServerGetState,
+      save: host.workspaceSaveSettingsSnapshot,
+      getSnapshot: host.workspaceGetSettingsSnapshot,
+    };
+    host.devServerGetState = mock(async (repoPath, stateOwner) =>
+      buildState({ repoPath, owner: stateOwner, scripts: [buildScript()] }),
+    );
+    host.workspaceSaveSettingsSnapshot = mock(async () => [createWorkspaceRecord()]);
+    host.workspaceGetSettingsSnapshot = mock(async () => normalizedSnapshot);
+    const harness = createHookHarness({
+      activeWorkspace: createWorkspaceRecord(),
+      applyWorkspaceRecords: mock(() => {}),
+      applyWorkspaceRecord: mock(() => {}),
+    });
+    const repoAOptions = devServerGroupStateQueryOptions("/repo-a", owner, "epoch-a");
+    const repoBOptions = devServerGroupStateQueryOptions("/repo-b", owner, "epoch-b");
+    const emptyState = (repoPath: string) => buildState({ repoPath, owner, scripts: [] });
+    let unsubscribeA = () => {};
+    let unsubscribeB = () => {};
+
+    try {
+      await harness.mount();
+      const queryClient = harness.getQueryClient();
+      queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), previousSnapshot);
+      queryClient.setQueryData(repoAOptions.queryKey, emptyState("/repo-a"));
+      queryClient.setQueryData(repoBOptions.queryKey, emptyState("/repo-b"));
+      const repoAObserver = new QueryObserver(queryClient, repoAOptions);
+      const repoBObserver = new QueryObserver(queryClient, repoBOptions);
+      unsubscribeA = repoAObserver.subscribe(() => {});
+      unsubscribeB = repoBObserver.subscribe(() => {});
+      expect(repoAObserver.getCurrentResult().data?.scripts).toEqual([]);
+      await harness.run((operations) => operations.saveSettingsSnapshot(normalizedSnapshot));
+
+      expect(repoAObserver.getCurrentResult().data?.scripts).toEqual([buildScript()]);
+      expect(repoBObserver.getCurrentResult().data?.scripts).toEqual([]);
+      expect(host.devServerGetState).toHaveBeenCalledTimes(1);
+      expect(host.devServerGetState).toHaveBeenCalledWith("/repo-a", owner);
+    } finally {
+      unsubscribeA();
+      unsubscribeB();
+      await harness.unmount();
+      host.devServerGetState = original.getState;
+      host.workspaceSaveSettingsSnapshot = original.save;
+      host.workspaceGetSettingsSnapshot = original.getSnapshot;
     }
   });
 
