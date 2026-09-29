@@ -312,7 +312,7 @@ export function TaskCreateModal({
             disabled={controller.isFormDisabled}
             className="flex min-h-0 flex-1 flex-col border-0 p-0"
           >
-            <DialogBody>
+            <DialogBody className="flex min-h-0 flex-col">
               <div
                 className={cn(
                   "min-h-0 flex-1 overflow-y-auto space-y-4 px-5 py-4 transition-opacity",

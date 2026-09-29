@@ -75,7 +75,7 @@ export function WorkspaceSessionHistoryDialog({
           onChange={(event) => setFilter(event.target.value)}
           className="mt-4 shrink-0"
         />
-        <DialogBody className="mt-4 flex max-h-96 flex-col gap-2">
+        <DialogBody className="mt-4 flex max-h-96 flex-col gap-2 overflow-y-auto p-1">
           {(archived.isPending || archived.isFetching) && (
             <p role="status">Loading archived sessions…</p>
           )}

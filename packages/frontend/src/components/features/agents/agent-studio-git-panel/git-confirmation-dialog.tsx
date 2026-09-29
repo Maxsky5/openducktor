@@ -66,7 +66,9 @@ export const GitConfirmationDialog = memo(function GitConfirmationDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="px-6 pb-6 sm:px-8 sm:pb-8">{children}</DialogBody>
+        <DialogBody className="min-h-0 overflow-y-auto px-6 pb-6 sm:px-8 sm:pb-8">
+          {children}
+        </DialogBody>
 
         <DialogFooter className="mt-0 flex flex-col-reverse gap-3 border-t border-border bg-muted/20 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8 sm:py-5">
           <Button

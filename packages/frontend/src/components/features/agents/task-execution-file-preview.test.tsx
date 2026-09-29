@@ -1069,9 +1069,9 @@ describe("TaskExecutionSelectedFilePreview", () => {
     await waitFor(() =>
       expect(screen.queryByRole("dialog", { name: "Review latest file" })).toBeNull(),
     );
-    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save file" }).disabled).toBe(
-      true,
-    );
+    expect(
+      (await screen.findByRole<HTMLButtonElement>("button", { name: "Save file" })).disabled,
+    ).toBe(true);
     expect(writeTextFileMock).toHaveBeenCalledTimes(0);
   });
 

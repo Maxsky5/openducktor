@@ -42,12 +42,14 @@ import { useMountedRef } from "./use-mounted-ref";
 import { WorkspaceSessionWorktreeFields } from "./workspace-session-worktree-fields";
 
 type WorkspaceSessionCreateDialogProps = {
+  open?: boolean;
   workspace: ActiveWorkspace;
   onClose: () => void;
   onCreated: (session: WorkspaceSession) => void;
 };
 
 export function WorkspaceSessionCreateDialog({
+  open = true,
   workspace,
   onClose,
   onCreated,
@@ -109,7 +111,7 @@ export function WorkspaceSessionCreateDialog({
   };
   return (
     <Dialog
-      open
+      open={open}
       onOpenChange={(open) => {
         if (!open && !create.isPending) onClose();
       }}
@@ -251,7 +253,7 @@ export function WorkspaceSessionCreateDialog({
                 </p>
               )}
             </DialogBody>
-            <DialogFooter className="mt-0 justify-between border-t border-border bg-muted/30 px-6 py-4 sm:justify-between">
+            <DialogFooter className="mt-0 justify-between border-t border-border bg-muted px-6 py-4 sm:justify-between">
               <Button type="button" variant="outline" onClick={onClose}>
                 Cancel
               </Button>

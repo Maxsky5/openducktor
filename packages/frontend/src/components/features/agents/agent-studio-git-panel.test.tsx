@@ -1717,7 +1717,11 @@ describe("AgentStudioGitPanel", () => {
     });
 
     expect(askBuilder).toHaveBeenCalledTimes(1);
-    expect(countByTestId(getRoot(renderer), "agent-studio-git-conflict-modal")).toBe(0);
+    expect(
+      getRoot(renderer).element.querySelector(
+        '[data-testid="agent-studio-git-conflict-modal"][data-state="open"]',
+      ),
+    ).toBeNull();
 
     await act(async () => {
       ensureRenderer(renderer).unmount();

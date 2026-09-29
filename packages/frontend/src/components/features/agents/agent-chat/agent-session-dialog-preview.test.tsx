@@ -264,7 +264,7 @@ test("nested conflict and discard dialogs keep focus and the draft in the conver
     fireEvent.click(review);
     await screen.findByRole("dialog", { name: "Review latest file" });
     fireEvent.click(screen.getByRole("button", { name: "Use latest as baseline" }));
-    fireEvent.click(screen.getByRole("button", { name: "Close file preview" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Close file preview" }));
     const discard = await screen.findByRole("dialog", { name: "Discard unsaved changes?" });
     expect(discard.contains(document.activeElement)).toBe(true);
     await h.frames.flushTimers();
@@ -273,11 +273,13 @@ test("nested conflict and discard dialogs keep focus and the draft in the conver
       expect(screen.queryByRole("dialog", { name: "Discard unsaved changes?" })).toBeNull(),
     );
     expect(screen.getByDisplayValue("Local draft")).toBeTruthy();
-    expect(document.activeElement === screen.getByLabelText("Code editor")).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Close file preview" }));
+    await waitFor(() =>
+      expect(document.activeElement === screen.getByLabelText("Code editor")).toBe(true),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Close file preview" }));
     fireEvent.click(await screen.findByRole("button", { name: "Discard" }));
     expect(screen.getByRole("link", { name: "Open file" }) === link).toBe(true);
-    expect(document.activeElement === link).toBe(true);
+    await waitFor(() => expect(document.activeElement === link).toBe(true));
   } finally {
     h.dispose();
   }

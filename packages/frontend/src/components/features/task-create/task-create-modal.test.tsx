@@ -130,6 +130,10 @@ describe("TaskCreateModal", () => {
     expect(screen.getByText("Markdown")).toBeTruthy();
     expect(screen.getByText("Preview")).toBeTruthy();
     expect(screen.getByText("Save Spec")).toBeTruthy();
+    const dialog = screen.getByRole("dialog", { name: "Edit Task" });
+    const scrollRegion = dialog.querySelector("fieldset .overflow-y-auto");
+    expect(scrollRegion?.parentElement?.classList.contains("min-h-0")).toBe(true);
+    expect(scrollRegion?.parentElement?.classList.contains("flex")).toBe(true);
 
     await act(async () => {
       rendered.unmount();

@@ -190,7 +190,7 @@ export function TaskApprovalModalPanel({
         </div>
       ) : null}
 
-      <DialogBody>
+      <DialogBody className="min-h-0 overflow-y-auto">
         {model.stage === "approval" ? (
           <TaskApprovalApprovalStage model={model} sectionLabelClass={sectionLabelClass} />
         ) : null}
@@ -622,94 +622,103 @@ function TaskApprovalCompletionStage({
 }
 
 function TaskApprovalModalFooter({ model }: { model: TaskApprovalModalModel }): ReactElement {
-  const isCompletionStage = model.stage === "complete_direct_merge";
-  const footerClassName = cn(
-    "mt-0 border-t border-border/80 bg-muted/20 px-6 py-4 sm:px-8",
-    isCompletionStage
-      ? "flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-      : "flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between",
-  );
-
   if (model.stage === "complete_direct_merge") {
-    const completionContextError = getDirectMergeCompletionContextError(model);
-    const completionActionDisabled = model.isSubmitting || completionContextError !== null;
-    const finishLaterDisabled = model.isSubmitting;
-    const publishTargetBranchName = model.publishTarget?.branch ?? "";
-    let completionButtonLabel = "Mark Task Done";
-    if (model.isSubmitting && model.publishTarget) {
-      completionButtonLabel = `Publishing ${publishTargetBranchName}`;
-    } else if (model.isSubmitting) {
-      completionButtonLabel = "Completing Direct Merge";
-    } else if (model.publishTarget) {
-      completionButtonLabel = `Push ${publishTargetBranchName} And Mark Done`;
-    }
-    const completionStageDescription = model.publishTarget
-      ? "Finish later to keep the task in Human Review while the local merge stays ready to publish."
-      : "Finish later to keep the task in Human Review until you are ready to close it and clean up the builder workspace.";
-
-    return (
-      <DialogFooter className={footerClassName}>
-        <p className="text-sm text-muted-foreground">{completionStageDescription}</p>
-
-        <div className="flex items-center justify-end gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            disabled={finishLaterDisabled}
-            onClick={model.onSkipDirectMergeCompletion}
-          >
-            Finish Later
-          </Button>
-          <Button
-            type="button"
-            disabled={completionActionDisabled}
-            onClick={model.onCompleteDirectMerge}
-          >
-            {model.isSubmitting ? <LoaderCircle className="size-4 animate-spin" /> : null}
-            {completionButtonLabel}
-          </Button>
-        </div>
-      </DialogFooter>
-    );
+    return <DirectMergeCompletionFooter model={model} />;
   }
-
   if (model.stage === "missing_builder_worktree") {
-    return (
-      <DialogFooter className="mt-0 flex-col-reverse gap-3 border-t border-border/80 bg-muted/20 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+    return <MissingBuilderWorktreeFooter model={model} />;
+  }
+  return <ApprovalActionsFooter model={model} />;
+}
+
+function DirectMergeCompletionFooter({
+  model,
+}: {
+  model: TaskApprovalCompletionModalModel;
+}): ReactElement {
+  const completionContextError = getDirectMergeCompletionContextError(model);
+  const completionActionDisabled = model.isSubmitting || completionContextError !== null;
+  const publishTargetBranchName = model.publishTarget?.branch ?? "";
+  let completionButtonLabel = "Mark Task Done";
+  if (model.isSubmitting && model.publishTarget) {
+    completionButtonLabel = `Publishing ${publishTargetBranchName}`;
+  } else if (model.isSubmitting) {
+    completionButtonLabel = "Completing Direct Merge";
+  } else if (model.publishTarget) {
+    completionButtonLabel = `Push ${publishTargetBranchName} And Mark Done`;
+  }
+  const completionStageDescription = model.publishTarget
+    ? "Finish later to keep the task in Human Review while the local merge stays ready to publish."
+    : "Finish later to keep the task in Human Review until you are ready to close it and clean up the builder workspace.";
+
+  return (
+    <DialogFooter className="mt-0 flex-col gap-3 border-t border-border/80 bg-muted/20 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+      <p className="text-sm text-muted-foreground">{completionStageDescription}</p>
+
+      <div className="flex items-center justify-end gap-2">
         <Button
           type="button"
           variant="outline"
           disabled={model.isSubmitting}
-          onClick={() => model.onOpenChange(false)}
+          onClick={model.onSkipDirectMergeCompletion}
         >
-          Cancel
+          Finish Later
         </Button>
-        <div className="flex items-center justify-end gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            disabled={model.isSubmitting}
-            onClick={model.onResetMissingBuilderWorktree}
-          >
-            Reset Implementation
-          </Button>
-          <Button
-            type="button"
-            disabled={model.isSubmitting}
-            onClick={model.onCompleteMissingBuilderWorktree}
-          >
-            {model.isSubmitting ? <LoaderCircle className="size-4 animate-spin" /> : null}
-            {model.isSubmitting ? "Completing Task" : "Complete Task"}
-          </Button>
-        </div>
-      </DialogFooter>
-    );
-  }
+        <Button
+          type="button"
+          disabled={completionActionDisabled}
+          onClick={model.onCompleteDirectMerge}
+        >
+          {model.isSubmitting ? <LoaderCircle className="size-4 animate-spin" /> : null}
+          {completionButtonLabel}
+        </Button>
+      </div>
+    </DialogFooter>
+  );
+}
 
+function MissingBuilderWorktreeFooter({
+  model,
+}: {
+  model: TaskApprovalMissingBuilderWorktreeModalModel;
+}): ReactElement {
+  return (
+    <DialogFooter className="mt-0 flex-col-reverse gap-3 border-t border-border/80 bg-muted/20 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+      <Button
+        type="button"
+        variant="outline"
+        disabled={model.isSubmitting}
+        onClick={() => model.onOpenChange(false)}
+      >
+        Cancel
+      </Button>
+      <div className="flex items-center justify-end gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          disabled={model.isSubmitting}
+          onClick={model.onResetMissingBuilderWorktree}
+        >
+          Reset Implementation
+        </Button>
+        <Button
+          type="button"
+          disabled={model.isSubmitting}
+          onClick={model.onCompleteMissingBuilderWorktree}
+        >
+          {model.isSubmitting ? <LoaderCircle className="size-4 animate-spin" /> : null}
+          {model.isSubmitting ? "Completing Task" : "Complete Task"}
+        </Button>
+      </div>
+    </DialogFooter>
+  );
+}
+
+function ApprovalActionsFooter({ model }: { model: TaskApprovalApprovalModalModel }): ReactElement {
   const { confirmDisabled, confirmLabel } = getApprovalSubmitValidation(model);
 
   return (
-    <DialogFooter className={footerClassName}>
+    <DialogFooter className="mt-0 flex-col-reverse gap-3 border-t border-border/80 bg-muted/20 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
       <Button
         type="button"
         variant="outline"

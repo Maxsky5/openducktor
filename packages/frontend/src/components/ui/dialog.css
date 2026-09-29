@@ -1,0 +1,112 @@
+:root {
+  --resize-dur: 300ms;
+  --resize-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --modal-open-dur: 250ms;
+  --modal-close-dur: 150ms;
+  --modal-scale: 0.96;
+  --modal-scale-close: 0.96;
+  --modal-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Radix keeps the overlay and content mounted until their exit animations end. */
+[data-slot="dialog-overlay"][data-state="open"] {
+  animation: dialog-fade-in var(--modal-open-dur) var(--modal-ease) both;
+}
+
+[data-slot="dialog-overlay"][data-state="closed"] {
+  animation: dialog-fade-out var(--modal-close-dur) var(--modal-ease) both;
+}
+
+.t-modal[data-state="open"] {
+  animation: dialog-scale-in var(--modal-open-dur) var(--modal-ease) both;
+}
+
+.t-modal[data-state="closed"] {
+  animation: dialog-scale-out var(--modal-close-dur) var(--modal-ease) both;
+}
+
+/* Radix tracks each portal child. Keep the positioner until its content closes. */
+[data-slot="dialog-positioner"][data-state="closed"] {
+  animation: dialog-positioner-exit var(--modal-close-dur) linear both;
+}
+
+@keyframes dialog-positioner-exit {
+  from,
+  to {
+    visibility: visible;
+  }
+}
+
+@keyframes dialog-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dialog-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes dialog-scale-in {
+  from {
+    transform: scale(var(--modal-scale));
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes dialog-scale-out {
+  from {
+    transform: scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: scale(var(--modal-scale-close));
+    opacity: 0;
+  }
+}
+
+.t-resize {
+  transition:
+    width var(--resize-dur) var(--resize-ease),
+    height var(--resize-dur) var(--resize-ease);
+  will-change: width, height;
+}
+
+/* Keep centered dialogs in place when the positioner needs to scroll. */
+[data-slot="dialog-positioner"] {
+  scrollbar-gutter: stable both-edges;
+}
+
+.t-resize:is(.overflow-auto, .overflow-y-auto, .overflow-scroll, .overflow-y-scroll),
+.t-resize :is(.overflow-auto, .overflow-y-auto, .overflow-scroll, .overflow-y-scroll) {
+  scrollbar-gutter: stable;
+}
+
+/* Hide only scrollbars that the final dialog layout will not need. */
+[data-dialog-scrollbar-hidden]::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-resize {
+    transition: none !important;
+  }
+
+  [data-slot="dialog-overlay"],
+  .t-modal,
+  [data-slot="dialog-positioner"] {
+    animation: none !important;
+  }
+}

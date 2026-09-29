@@ -1,5 +1,6 @@
 import { expect, spyOn, test } from "bun:test";
 import { fireEvent, render } from "@testing-library/react";
+import { useState } from "react";
 import { MemoryRouter, useLocation } from "react-router";
 import * as taskCreate from "@/components/features/task-create/task-create-modal";
 import * as chatCreate from "@/pages/workspace-sessions/workspace-session-create-dialog";
@@ -14,6 +15,42 @@ function RoutePath() {
       {location.pathname}
       {location.search}
     </output>
+  );
+}
+
+function ChatCreationProbe(props: Parameters<typeof chatCreate.WorkspaceSessionCreateDialog>[0]) {
+  const [name, setName] = useState("");
+  return (
+    <div role="dialog" aria-label="Chat creation" data-state={props.open ? "open" : "closed"}>
+      <input
+        aria-label="Chat name"
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+      />
+      <button type="button" onClick={props.onClose}>
+        Cancel chat
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          props.onCreated({
+            id: "created-session",
+            runtimeKind: "codex",
+            externalSessionId: null,
+            executionTarget: { kind: "local_repo_root", workingDirectory: "/repo" },
+            roleSnapshot: null,
+            selectedModel: null,
+            generatedTitle: null,
+            manualTitle: "New session",
+            createdAt: 1000,
+            updatedAt: 1000,
+            archivedAt: null,
+          })
+        }
+      >
+        Finish creation
+      </button>
+    </div>
   );
 }
 
@@ -68,38 +105,17 @@ test.each([false, true])(
       humanRequestChangesTask: async () => {},
     };
     const modal = spyOn(taskCreate, "TaskCreateModal").mockImplementation((props) => {
-      expect(props.open).toBe(true);
       expect(props.tasks).toBe(tasks.tasks);
-      return <div role="dialog" aria-label="Task creation" />;
-    });
-    const chatModal = spyOn(chatCreate, "WorkspaceSessionCreateDialog").mockImplementation(
-      (props) => (
-        <div role="dialog" aria-label="Chat creation">
-          <button type="button" onClick={props.onClose}>
-            Cancel chat
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-              props.onCreated({
-                id: "created-session",
-                runtimeKind: "codex",
-                externalSessionId: null,
-                executionTarget: { kind: "local_repo_root", workingDirectory: "/repo" },
-                roleSnapshot: null,
-                selectedModel: null,
-                generatedTitle: null,
-                manualTitle: "New session",
-                createdAt: 1000,
-                updatedAt: 1000,
-                archivedAt: null,
-              })
-            }
-          >
-            Finish creation
+      return (
+        <div role="dialog" aria-label="Task creation" data-state={props.open ? "open" : "closed"}>
+          <button type="button" onClick={() => props.onOpenChange(false)}>
+            Cancel task
           </button>
         </div>
-      ),
+      );
+    });
+    const chatModal = spyOn(chatCreate, "WorkspaceSessionCreateDialog").mockImplementation(
+      (props) => <ChatCreationProbe {...props} />,
     );
     const view = render(
       <MemoryRouter initialEntries={["/workflows?task=example"]}>
@@ -123,15 +139,29 @@ test.each([false, true])(
       if (!compact) expect(newTask.className).toContain("text-sm");
       fireEvent.click(newTask);
       expect(view.queryByRole("dialog", { name: "Task creation" }) !== null).toBe(true);
+      fireEvent.click(view.getByRole("button", { name: "Cancel task" }));
+      expect(view.getByRole("dialog", { name: "Task creation" }).getAttribute("data-state")).toBe(
+        "closed",
+      );
       fireEvent.click(view.getByRole("button", { name: "New chat" }));
       expect(view.getByRole("dialog", { name: "Chat creation" })).toBeTruthy();
       expect(view.getByLabelText("Current route").textContent).toBe("/workflows?task=example");
+      fireEvent.change(view.getByRole("textbox", { name: "Chat name" }), {
+        target: { value: "Cancelled choice" },
+      });
       fireEvent.click(view.getByRole("button", { name: "Cancel chat" }));
-      expect(view.queryByRole("dialog", { name: "Chat creation" })).toBeNull();
+      expect(view.getByRole("dialog", { name: "Chat creation" }).getAttribute("data-state")).toBe(
+        "closed",
+      );
       expect(view.getByLabelText("Current route").textContent).toBe("/workflows?task=example");
       fireEvent.click(view.getByRole("button", { name: "New chat" }));
+      const chatName = view.getByRole("textbox", { name: "Chat name" });
+      if (!(chatName instanceof HTMLInputElement)) throw new Error("Chat name is not an input");
+      expect(chatName.value).toBe("");
       fireEvent.click(view.getByRole("button", { name: "Finish creation" }));
-      expect(view.queryByRole("dialog", { name: "Chat creation" })).toBeNull();
+      expect(view.getByRole("dialog", { name: "Chat creation" }).getAttribute("data-state")).toBe(
+        "closed",
+      );
       expect(view.getByLabelText("Current route").textContent).toBe(
         "/chats?session=created-session",
       );
