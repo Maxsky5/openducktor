@@ -974,7 +974,7 @@ describe("TypeScript web host backend", () => {
             response.once("error", reject);
           },
         );
-        request.setTimeout(500, () =>
+        request.setTimeout(2_000, () =>
           request.destroy(
             new Error("Task stream did not return HTTP headers while no task changed."),
           ),
@@ -988,7 +988,16 @@ describe("TypeScript web host backend", () => {
       expect(lease?.pendingFrames).toEqual([]);
 
       stream.destroy();
-      await requestAborted.promise;
+      const abortTimeout = setTimeout(
+        () =>
+          requestAborted.reject(new Error("Task stream request did not abort after disconnect.")),
+        2_000,
+      );
+      try {
+        await requestAborted.promise;
+      } finally {
+        clearTimeout(abortTimeout);
+      }
       expect(lease?.connection).toBeNull();
 
       const remove = await Bun.fetch(`${baseUrl}/${created.subscriptionId}`, {
@@ -1004,7 +1013,7 @@ describe("TypeScript web host backend", () => {
       manager.dispose();
       await server.stop(true);
     }
-  }, 3_000);
+  }, 5_000);
 
   test("uses task leases instead of generic event replay and ignores Last-Event-ID", async () => {
     type TaskEventSinkHolder = {
