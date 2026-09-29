@@ -960,17 +960,23 @@ describe("TypeScript web host backend", () => {
       });
       expect(create.status).toBe(201);
       const created = await create.json();
-      const { stream, firstChunk } = await new Promise<{
+      const { stream, readyComment } = await new Promise<{
         stream: IncomingMessage;
-        firstChunk: string;
+        readyComment: string;
       }>((resolve, reject) => {
         const request = get(
           `${baseUrl}/${created.subscriptionId}/stream?token=${created.streamToken}`,
           { headers: { cookie: `${APP_SESSION_COOKIE_NAME}=${APP_TOKEN}` } },
           (response) => {
-            response.once("data", (chunk: Buffer) =>
-              resolve({ stream: response, firstChunk: chunk.toString() }),
-            );
+            let readyComment = "";
+            const onData = (chunk: Buffer): void => {
+              readyComment += chunk.toString();
+              if (!readyComment.includes("\n\n")) return;
+              response.off("data", onData);
+              resolve({ stream: response, readyComment });
+            };
+            response.on("data", onData);
+            response.once("end", () => reject(new Error("Task stream ended before readiness.")));
             response.once("error", reject);
           },
         );
@@ -983,7 +989,7 @@ describe("TypeScript web host backend", () => {
       });
       expect(stream.statusCode).toBe(200);
       expect(stream.headers["content-type"]).toContain("text/event-stream");
-      expect(firstChunk).toBe(": openducktor-ready\n\n");
+      expect(readyComment).toBe(": openducktor-ready\n\n");
       const lease = manager.get(created.subscriptionId);
       expect(lease?.pendingFrames).toEqual([]);
 
