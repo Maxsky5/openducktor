@@ -4,6 +4,10 @@
   "ignore": {
     "overrides": [
       {
+        "files": ["src/components/ui/dialog-resize.ts"],
+        "rules": ["react-doctor/no-layout-property-animation"]
+      },
+      {
         "files": ["src/components/features/agents/agent-chat/agent-chat-composer-editor.tsx"],
         "rules": ["react-doctor/prefer-tag-over-role", "jsx-a11y/prefer-tag-over-role"]
       },

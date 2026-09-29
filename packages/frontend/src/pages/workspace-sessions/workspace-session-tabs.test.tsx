@@ -238,7 +238,7 @@ test.each([true, false])(
 test("New chat opens and closes over the selected session without changing its URL", async () => {
   const createDialog = spyOn(chatCreate, "WorkspaceSessionCreateDialog").mockImplementation(
     (props) => (
-      <div role="dialog" aria-label="Chat creation">
+      <div role="dialog" aria-label="Chat creation" data-state={props.open ? "open" : "closed"}>
         <button type="button" onClick={props.onClose}>
           Cancel chat
         </button>
@@ -260,7 +260,9 @@ test("New chat opens and closes over the selected session without changing its U
     expect(view.getByRole("dialog", { name: "Chat creation" })).toBeTruthy();
     expect(view.getByTestId("session-url").textContent).toBe(route);
     fireEvent.click(view.getByRole("button", { name: "Cancel chat" }));
-    expect(view.queryByRole("dialog", { name: "Chat creation" })).toBeNull();
+    expect(view.getByRole("dialog", { name: "Chat creation" }).getAttribute("data-state")).toBe(
+      "closed",
+    );
     expect(view.getByTestId("session-url").textContent).toBe(route);
   } finally {
     view.unmount();

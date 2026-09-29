@@ -11,6 +11,7 @@ import {
 } from "react";
 import { useLocation, useNavigationType, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
+import { useDialogPresence } from "@/components/ui/dialog";
 import type { TerminalPanelModel } from "@/features/terminals";
 import { BrowserTabsBar, BrowserTabsRoot } from "@/components/ui/browser-tabs";
 import { SharedToolsPanelToggleButton } from "@/components/features/agents/shared-tools-panel";
@@ -465,6 +466,7 @@ function WorkspaceSessionDialogs({
   onCreateClose: () => void;
   onCreated: (record: WorkspaceSession) => void;
 }): ReactElement {
+  const createMounted = useDialogPresence(createOpen);
   return (
     <>
       {importOpen && (
@@ -494,8 +496,9 @@ function WorkspaceSessionDialogs({
           onClose={onArchiveClose}
         />
       )}
-      {createOpen && (
+      {createMounted && (
         <WorkspaceSessionCreateDialog
+          open={createOpen}
           workspace={workspace}
           onClose={onCreateClose}
           onCreated={onCreated}

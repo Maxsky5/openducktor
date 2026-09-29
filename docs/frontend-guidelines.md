@@ -22,7 +22,7 @@ Read [the TanStack Query cache strategy](tanstack-query-cache-strategy.md) befor
 
 ## Components and themes
 
-The app uses shadcn semantic tokens with Tailwind CSS v4. Tokens are in `packages/frontend/src/styles.css`.
+The app uses shadcn semantic tokens with Tailwind CSS v4. Theme tokens are in `packages/frontend/src/styles.css`. Dialog motion rules are in `packages/frontend/src/components/ui/dialog.css`.
 
 - Use a component from `packages/frontend/src/components/ui` when one exists.
 - Use semantic tokens for structural UI.
@@ -30,19 +30,20 @@ The app uses shadcn semantic tokens with Tailwind CSS v4. Tokens are in `package
 - Keep base shadcn components free of feature-specific hardcoded colors.
 - Make each new UI element work in light and dark themes.
 - Do not use hardcoded gray colors or gradient backgrounds for structural UI.
+- Keep `Dialog` mounted while it closes. If a parent mounts the dialog on demand, use `useDialogPresence(open)` in that parent and pass `open` to the dialog.
 
-| Purpose | Use |
-|---|---|
-| Page background | `bg-background` |
-| Card or surface | `bg-card` |
-| Main text | `text-foreground` |
-| Secondary text | `text-muted-foreground` |
-| Layout border | `border-border` |
-| Input border | `border-input` |
-| Subtle surface | `bg-muted` |
-| Interactive accent | `bg-primary`, `text-primary-foreground` |
-| Destructive action | `bg-destructive`, `text-destructive-foreground` |
-| Sidebar | `bg-sidebar`, `text-sidebar-foreground`, `border-sidebar-border` |
+| Purpose            | Use                                                              |
+| ------------------ | ---------------------------------------------------------------- |
+| Page background    | `bg-background`                                                  |
+| Card or surface    | `bg-card`                                                        |
+| Main text          | `text-foreground`                                                |
+| Secondary text     | `text-muted-foreground`                                          |
+| Layout border      | `border-border`                                                  |
+| Input border       | `border-input`                                                   |
+| Subtle surface     | `bg-muted`                                                       |
+| Interactive accent | `bg-primary`, `text-primary-foreground`                          |
+| Destructive action | `bg-destructive`, `text-destructive-foreground`                  |
+| Sidebar            | `bg-sidebar`, `text-sidebar-foreground`, `border-sidebar-border` |
 
 ## Hardcoded color exceptions
 

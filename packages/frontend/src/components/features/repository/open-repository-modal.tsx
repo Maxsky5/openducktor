@@ -9,6 +9,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  useDialogPresence,
 } from "@/components/ui/dialog";
 import { errorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
@@ -246,7 +247,7 @@ function OpenRepositoryModalSession({
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="px-6 py-5">
+        <DialogBody className="min-h-0 overflow-y-auto px-6 py-5">
           {showCreationFlow ? (
             <WorkspaceCreationFields controller={creation} modelSurface={models} />
           ) : (
@@ -290,5 +291,12 @@ function OpenRepositoryModalSession({
 }
 
 export function OpenRepositoryModal(props: OpenRepositoryModalProps): ReactElement | null {
-  return props.open ? <OpenRepositoryModalSession {...props} /> : null;
+  const mounted = useDialogPresence(props.open);
+  const [sessionKey, setSessionKey] = useState(0);
+  const wasOpen = useRef(props.open);
+  useLayoutEffect(() => {
+    if (props.open && !wasOpen.current) setSessionKey((key) => key + 1);
+    wasOpen.current = props.open;
+  }, [props.open]);
+  return mounted ? <OpenRepositoryModalSession key={sessionKey} {...props} /> : null;
 }

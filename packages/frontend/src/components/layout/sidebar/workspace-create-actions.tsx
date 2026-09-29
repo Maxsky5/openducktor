@@ -3,21 +3,30 @@ import { type ReactElement, useState } from "react";
 import { useNavigate } from "react-router";
 import { TaskCreateModal } from "@/components/features/task-create/task-create-modal";
 import { Button } from "@/components/ui/button";
+import { useDialogPresence } from "@/components/ui/dialog";
 import { WorkspaceSessionCreateDialog } from "@/pages/workspace-sessions/workspace-session-create-dialog";
 import { useActiveWorkspace, useTasksState } from "@/state/app-state-provider";
 
 type WorkspaceCreateActionsProps = { compact?: boolean };
 
-function WorkspaceTaskCreateModal({ onOpenChange }: { onOpenChange: (open: boolean) => void }) {
+function WorkspaceTaskCreateModal({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const { tasks } = useTasksState();
-  return <TaskCreateModal open onOpenChange={onOpenChange} tasks={tasks} />;
+  return <TaskCreateModal open={open} onOpenChange={onOpenChange} tasks={tasks} />;
 }
 
 export default function WorkspaceCreateActions({
   compact = false,
 }: WorkspaceCreateActionsProps): ReactElement {
   const [taskOpen, setTaskOpen] = useState(false);
+  const taskMounted = useDialogPresence(taskOpen);
   const [chatOpen, setChatOpen] = useState(false);
+  const chatMounted = useDialogPresence(chatOpen);
   const workspace = useActiveWorkspace();
   const navigate = useNavigate();
   const buttonSize = compact ? "icon" : "default";
@@ -52,12 +61,17 @@ export default function WorkspaceCreateActions({
           {!compact && "New chat"}
         </Button>
       </div>
-      {taskOpen && workspace && (
-        <WorkspaceTaskCreateModal key={workspace.workspaceId} onOpenChange={setTaskOpen} />
+      {taskMounted && workspace && (
+        <WorkspaceTaskCreateModal
+          key={workspace.workspaceId}
+          open={taskOpen}
+          onOpenChange={setTaskOpen}
+        />
       )}
-      {chatOpen && workspace && (
+      {chatMounted && workspace && (
         <WorkspaceSessionCreateDialog
           key={`chat-${workspace.workspaceId}`}
+          open={chatOpen}
           workspace={workspace}
           onClose={() => setChatOpen(false)}
           onCreated={(session) => {

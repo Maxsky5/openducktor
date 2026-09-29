@@ -68,13 +68,18 @@ test.each([false, true])(
       humanRequestChangesTask: async () => {},
     };
     const modal = spyOn(taskCreate, "TaskCreateModal").mockImplementation((props) => {
-      expect(props.open).toBe(true);
       expect(props.tasks).toBe(tasks.tasks);
-      return <div role="dialog" aria-label="Task creation" />;
+      return (
+        <div role="dialog" aria-label="Task creation" data-state={props.open ? "open" : "closed"}>
+          <button type="button" onClick={() => props.onOpenChange(false)}>
+            Cancel task
+          </button>
+        </div>
+      );
     });
     const chatModal = spyOn(chatCreate, "WorkspaceSessionCreateDialog").mockImplementation(
       (props) => (
-        <div role="dialog" aria-label="Chat creation">
+        <div role="dialog" aria-label="Chat creation" data-state={props.open ? "open" : "closed"}>
           <button type="button" onClick={props.onClose}>
             Cancel chat
           </button>
@@ -123,15 +128,23 @@ test.each([false, true])(
       if (!compact) expect(newTask.className).toContain("text-sm");
       fireEvent.click(newTask);
       expect(view.queryByRole("dialog", { name: "Task creation" }) !== null).toBe(true);
+      fireEvent.click(view.getByRole("button", { name: "Cancel task" }));
+      expect(view.getByRole("dialog", { name: "Task creation" }).getAttribute("data-state")).toBe(
+        "closed",
+      );
       fireEvent.click(view.getByRole("button", { name: "New chat" }));
       expect(view.getByRole("dialog", { name: "Chat creation" })).toBeTruthy();
       expect(view.getByLabelText("Current route").textContent).toBe("/workflows?task=example");
       fireEvent.click(view.getByRole("button", { name: "Cancel chat" }));
-      expect(view.queryByRole("dialog", { name: "Chat creation" })).toBeNull();
+      expect(view.getByRole("dialog", { name: "Chat creation" }).getAttribute("data-state")).toBe(
+        "closed",
+      );
       expect(view.getByLabelText("Current route").textContent).toBe("/workflows?task=example");
       fireEvent.click(view.getByRole("button", { name: "New chat" }));
       fireEvent.click(view.getByRole("button", { name: "Finish creation" }));
-      expect(view.queryByRole("dialog", { name: "Chat creation" })).toBeNull();
+      expect(view.getByRole("dialog", { name: "Chat creation" }).getAttribute("data-state")).toBe(
+        "closed",
+      );
       expect(view.getByLabelText("Current route").textContent).toBe(
         "/chats?session=created-session",
       );

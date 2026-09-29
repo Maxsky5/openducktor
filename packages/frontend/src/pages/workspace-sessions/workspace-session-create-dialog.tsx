@@ -42,12 +42,14 @@ import { useMountedRef } from "./use-mounted-ref";
 import { WorkspaceSessionWorktreeFields } from "./workspace-session-worktree-fields";
 
 type WorkspaceSessionCreateDialogProps = {
+  open?: boolean;
   workspace: ActiveWorkspace;
   onClose: () => void;
   onCreated: (session: WorkspaceSession) => void;
 };
 
 export function WorkspaceSessionCreateDialog({
+  open = true,
   workspace,
   onClose,
   onCreated,
@@ -109,7 +111,7 @@ export function WorkspaceSessionCreateDialog({
   };
   return (
     <Dialog
-      open
+      open={open}
       onOpenChange={(open) => {
         if (!open && !create.isPending) onClose();
       }}

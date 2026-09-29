@@ -292,6 +292,17 @@ describe("OpenRepositoryModal", () => {
     await waitFor(() => expect(addWorkspace).toHaveBeenCalledTimes(1));
   });
 
+  test("keeps model defaults in a scrollable body", async () => {
+    renderModal();
+    await chooseRepository();
+    fireEvent.click(screen.getByRole("button", { name: "Continue to models" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Open a repository" });
+    const roleDefaults = screen.getByText("Role defaults");
+    const body = Array.from(dialog.children).find((child) => child.contains(roleDefaults));
+    expect(body?.classList.contains("overflow-y-auto")).toBe(true);
+  });
+
   test("reserves workspace IDs used by closed and incomplete-removal workspaces", async () => {
     const closed = {
       ...record({ workspaceId: "repo", workspaceName: "Closed", repoPath: "/closed" }),
