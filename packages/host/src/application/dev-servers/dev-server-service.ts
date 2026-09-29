@@ -43,7 +43,10 @@ import {
   syncGroupState,
   syncRuntimeTerminalBufferByteCounts,
 } from "./dev-server-state";
-import { createDevServerRuntimeResolver } from "./dev-server-runtime-resolver";
+import {
+  createDevServerRuntimeResolver,
+  type RetiredDevServerOrder,
+} from "./dev-server-runtime-resolver";
 import { stopAllDevServers } from "./dev-server-shutdown";
 
 export type {
@@ -64,9 +67,14 @@ export const createDevServerService = ({
 }: CreateDevServerServiceInput): DisposableDevServerService => {
   const hostInstanceId = globalThis.crypto.randomUUID();
   const groups = new Map<string, Map<string, DevServerGroupRuntime>>();
+  const retiredOrder: RetiredDevServerOrder = {
+    revision: null,
+    runGeneration: 0,
+  };
   const { publish, publishSnapshot, terminalWriter } = createDevServerEventPublisher(eventBus);
   const resolveRuntime = createDevServerRuntimeResolver({
     groups,
+    retiredOrder,
     taskWorktreeService,
     workspaceSessions,
     workspaceSettingsService,
@@ -472,7 +480,17 @@ export const createDevServerService = ({
     forgetWorkspaceSession: ({ repoPath, owner }) =>
       Effect.sync(() => {
         const repoGroups = groups.get(repoPath);
-        repoGroups?.delete(formatDevServerOwnerKey(owner));
+        const ownerKey = formatDevServerOwnerKey(owner);
+        const runtime = repoGroups?.get(ownerKey);
+        if (runtime) {
+          // A restored session must outrank state and runs cached before its archive.
+          retiredOrder.revision = Math.max(retiredOrder.revision ?? 0, runtime.state.revision);
+          retiredOrder.runGeneration = Math.max(
+            retiredOrder.runGeneration,
+            runtime.terminalRunGeneration,
+          );
+          repoGroups?.delete(ownerKey);
+        }
         if (repoGroups?.size === 0) groups.delete(repoPath);
       }),
     stopAll: () => stopAllDevServers(groups, stopRuntime, publishSnapshot),

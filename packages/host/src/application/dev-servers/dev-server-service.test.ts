@@ -1197,15 +1197,31 @@ describe("createDevServerService", () => {
     });
     const first = { kind: "workspace_session" as const, workspaceId: "ws-1", sessionId: "first" };
     const second = { kind: "workspace_session" as const, workspaceId: "ws-1", sessionId: "second" };
-    await Effect.runPromise(service.start({ repoPath: "/repo", owner: first }));
+    const firstRun = await Effect.runPromise(service.start({ repoPath: "/repo", owner: first }));
     await Effect.runPromise(service.start({ repoPath: "/repo", owner: second }));
-    await Effect.runPromise(service.stopWorkspaceSession({ repoPath: "/repo", owner: first }));
+    const stopped = await Effect.runPromise(
+      service.stopWorkspaceSession({ repoPath: "/repo", owner: first }),
+    );
 
+    sessions.set(
+      "first",
+      workspaceSession("first", { kind: "local_repo_root", workingDirectory: "/repo" }, 2),
+    );
     await Effect.runPromise(service.forgetWorkspaceSession({ repoPath: "/repo", owner: first }));
+    sessions.set(
+      "first",
+      workspaceSession("first", { kind: "local_repo_root", workingDirectory: "/repo" }),
+    );
 
-    expect(
-      (await Effect.runPromise(service.getState({ repoPath: "/repo", owner: first }))).revision,
-    ).toBe(0);
+    const restored = await Effect.runPromise(service.getState({ repoPath: "/repo", owner: first }));
+    expect(restored.revision).toBeGreaterThan(stopped.revision);
+    const nextRun = await Effect.runPromise(service.start({ repoPath: "/repo", owner: first }));
+    expect(nextRun.scripts[0]?.runIdentity?.runOrder.generation).toBeGreaterThan(
+      firstRun.scripts[0]?.runIdentity?.runOrder.generation ?? 0,
+    );
+    expect(nextRun.scripts[0]?.runIdentity?.runId).not.toBe(
+      firstRun.scripts[0]?.runIdentity?.runId,
+    );
     expect(
       (await Effect.runPromise(service.getState({ repoPath: "/repo", owner: second }))).scripts[0]
         ?.status,
