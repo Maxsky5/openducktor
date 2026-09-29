@@ -1023,10 +1023,7 @@ describe("TypeScript web host backend", () => {
     const subscribeCalls: unknown[] = [];
     const acknowledged: unknown[] = [];
     const taskEventLeaseManager = createTaskEventLeaseManager({
-      encodeFrame: (frame) =>
-        new TextEncoder().encode(
-          `id: ${frame.cursor.epoch}:${frame.cursor.sequence}\nevent: task-frame\ndata: ${JSON.stringify(frame)}\n\n`,
-        ),
+      encodeFrame: writeTaskFrameSseEvent,
       reportDeliveryFailure: () => {},
       taskEventStream: {
         acknowledge: (input) => acknowledged.push(input),
