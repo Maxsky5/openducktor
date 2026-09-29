@@ -394,6 +394,130 @@ function LargeFileDiffListHarness(): ReactElement {
   );
 }
 
+function ResizingFileDiffListHarness(): ReactElement {
+  const [diffStyle, setDiffStyle] = useState<"unified" | "split">("unified");
+  const [revision, setRevision] = useState(0);
+  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set(["src/file-005.ts"]));
+  const fileDiffs = useMemo(
+    () =>
+      Array.from({ length: 20 }, (_, index) => ({
+        file: `src/file-${String(index).padStart(3, "0")}.ts`,
+        type: "modified" as const,
+        additions: 1,
+        deletions: 1,
+        diff: `@@ -1 +1 @@\n-old\n+new${index === 10 ? revision : ""}\n`,
+      })),
+    [revision],
+  );
+
+  return (
+    <TooltipProvider>
+      <button type="button" onClick={() => setRevision((current) => current + 1)}>
+        Refresh another file
+      </button>
+      <div className="h-[400px]">
+        <FileDiffList
+          fileDiffs={fileDiffs}
+          diffScope="uncommitted"
+          ownerKey={OWNER_KEY}
+          conflictedFiles={new Set()}
+          diffStyle={diffStyle}
+          setDiffStyle={setDiffStyle}
+          expandedFiles={expandedFiles}
+          onToggleFile={(filePath) => {
+            setExpandedFiles((previous) => {
+              const next = new Set(previous);
+              if (next.has(filePath)) next.delete(filePath);
+              else next.add(filePath);
+              return next;
+            });
+          }}
+          preloadLimit={0}
+          canResetFiles={false}
+          isResetDisabled={false}
+          resetDisabledReason={null}
+        />
+      </div>
+    </TooltipProvider>
+  );
+}
+
+function installMeasuredRows() {
+  const previousResizeObserver = globalThis.ResizeObserver;
+  const observers: Array<{
+    callback: ResizeObserverCallback;
+    elements: Set<Element>;
+    observer: ResizeObserver;
+  }> = [];
+  const previousGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+  let currentWidth = 600;
+  let currentExpandedRowHeight = 800;
+  HTMLElement.prototype.getBoundingClientRect = function () {
+    if (this.getAttribute("role") === "list") return new DOMRect(0, 0, currentWidth, 400);
+    if (this.getAttribute("role") === "listitem") {
+      const rowStart = Number(/translateY\((\d+)px\)/.exec(this.style.transform)?.[1] ?? 0);
+      const height = this.getAttribute("aria-posinset") === "6" ? currentExpandedRowHeight : 40;
+      return new DOMRect(0, rowStart - (this.parentElement?.scrollTop ?? 0), currentWidth, height);
+    }
+    return previousGetBoundingClientRect.call(this);
+  };
+  globalThis.ResizeObserver = class implements ResizeObserver {
+    private readonly controller: (typeof observers)[number];
+
+    constructor(callback: ResizeObserverCallback) {
+      this.controller = { callback, elements: new Set(), observer: this };
+      observers.push(this.controller);
+    }
+
+    observe(element: Element): void {
+      this.controller.elements.add(element);
+    }
+
+    unobserve(element: Element): void {
+      this.controller.elements.delete(element);
+    }
+
+    disconnect(): void {
+      this.controller.elements.clear();
+    }
+  };
+
+  return {
+    resize: (width: number, expandedRowHeight: number) => {
+      currentWidth = width;
+      currentExpandedRowHeight = expandedRowHeight;
+      for (let pass = 0; pass < 3; pass++) {
+        act(() => {
+          for (const observer of observers) {
+            const entries = Array.from(observer.elements, (element) => {
+              const isList = element.getAttribute("role") === "list";
+              const height = element.getAttribute("aria-posinset") === "6" ? expandedRowHeight : 40;
+              const boxSize = { blockSize: height, inlineSize: width };
+              return {
+                target: element,
+                contentRect: new DOMRect(0, 0, width, isList ? 400 : height),
+                borderBoxSize: [boxSize],
+                contentBoxSize: [boxSize],
+                devicePixelContentBoxSize: [boxSize],
+              } satisfies ResizeObserverEntry;
+            });
+            observer.callback(entries, observer.observer);
+          }
+        });
+        for (const observer of observers) {
+          for (const element of observer.elements) {
+            if (element.getAttribute("role") === "list") fireEvent.scroll(element);
+          }
+        }
+      }
+    },
+    restore: () => {
+      globalThis.ResizeObserver = previousResizeObserver;
+      HTMLElement.prototype.getBoundingClientRect = previousGetBoundingClientRect;
+    },
+  };
+}
+
 describe("FileDiffList", () => {
   test("mounts a bounded row range and reaches the last file", () => {
     render(<LargeFileDiffListHarness />);
@@ -449,6 +573,54 @@ describe("FileDiffList", () => {
     expect(screen.getByText("20 changed files")).toBeDefined();
     expect(screen.getByRole("button", { name: "Toggle diff for src/file-019.ts" })).toBeDefined();
     expect(screen.queryByRole("button", { name: "Toggle diff for src/file-999.ts" })).toBeNull();
+  });
+
+  test("keeps the reading offset when style and width change inside an expanded diff", () => {
+    const measurements = installMeasuredRows();
+    try {
+      render(<ResizingFileDiffListHarness />);
+      const list = screen.getByRole("list");
+      Object.defineProperty(list, "scrollTo", {
+        value: ({ top }: ScrollToOptions) => {
+          list.scrollTop = top ?? 0;
+        },
+      });
+      measurements.resize(600, 800);
+      fireEvent.scroll(list, { target: { scrollTop: 500 } });
+
+      fireEvent.click(screen.getByRole("button", { name: "Side-by-side" }));
+      measurements.resize(600, 900);
+      expect(list.scrollTop).toBe(500);
+
+      measurements.resize(400, 1_000);
+      expect(list.scrollTop).toBe(500);
+
+      fireEvent.click(screen.getByRole("button", { name: "Refresh another file" }));
+      measurements.resize(400, 1_000);
+      expect(list.scrollTop).toBe(500);
+    } finally {
+      measurements.restore();
+    }
+  });
+
+  test("moves later rows after an inline comment form changes an expanded row's height", () => {
+    const measurements = installMeasuredRows();
+    try {
+      render(<ResizingFileDiffListHarness />);
+      measurements.resize(600, 800);
+      const nextFile = screen.getByRole("button", { name: "Toggle diff for src/file-006.ts" });
+      expect(nextFile.closest('[role="listitem"]')?.getAttribute("style")).toContain("1000px");
+
+      fireEvent.click(screen.getByTestId("pierre-diff-select-lines"));
+      expect(screen.getByTestId("agent-studio-git-new-comment-form")).toBeDefined();
+      measurements.resize(600, 1_000);
+      expect(nextFile.closest('[role="listitem"]')?.getAttribute("style")).toContain("1200px");
+
+      fireEvent.scroll(screen.getByRole("list"), { target: { scrollTop: 1_360 } });
+      expect(screen.getByRole("button", { name: "Toggle diff for src/file-019.ts" })).toBeDefined();
+    } finally {
+      measurements.restore();
+    }
   });
 
   test("uses the whole root file row as a toggle while reset stays separate", () => {

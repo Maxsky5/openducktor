@@ -162,6 +162,17 @@ type MeasurementState = {
   version: number;
 };
 
+type VisibleFileAnchor = { filePath: string; index: number; offset: number };
+
+function getRenderedFileRow(list: HTMLElement, index: number): HTMLElement | undefined {
+  for (const child of list.children) {
+    if (child instanceof HTMLElement && child.getAttribute("aria-posinset") === String(index + 1)) {
+      return child;
+    }
+  }
+  return undefined;
+}
+
 function useFileListMeasurementVersion(
   fileDiffs: FileDiff[],
   diffScope: DiffScope,
@@ -315,7 +326,8 @@ export const FileDiffList = memo(function FileDiffList({
   );
 
   const listRef = useListRef(null);
-  const visibleFileRef = useRef<{ filePath: string; index: number } | null>(null);
+  const visibleFileRef = useRef<VisibleFileAnchor | null>(null);
+  const pendingAnchorRef = useRef<VisibleFileAnchor | null>(null);
   const [listWidth, setListWidth] = useState(0);
   const measurementVersion = useFileListMeasurementVersion(
     fileDiffs,
@@ -326,28 +338,64 @@ export const FileDiffList = memo(function FileDiffList({
   const rowHeight = useDynamicRowHeight({ defaultRowHeight: 40, key: measurementVersion });
   const restoredMeasurementVersionRef = useRef(measurementVersion);
 
+  const captureVisibleOffset = useCallback(() => {
+    const list = listRef.current?.element;
+    const anchor = visibleFileRef.current;
+    if (!list || !anchor) return;
+    const row = getRenderedFileRow(list, anchor.index);
+    if (!row) return;
+    anchor.offset = Math.max(0, list.getBoundingClientRect().top - row.getBoundingClientRect().top);
+  }, [listRef]);
+
   useLayoutEffect(() => {
-    if (restoredMeasurementVersionRef.current === measurementVersion) {
+    if (restoredMeasurementVersionRef.current !== measurementVersion) {
+      restoredMeasurementVersionRef.current = measurementVersion;
+      pendingAnchorRef.current = visibleFileRef.current && { ...visibleFileRef.current };
+    }
+    const anchor = pendingAnchorRef.current;
+    const list = listRef.current?.element;
+    if (!anchor || !list) return;
+    if (fileDiffs.length === 0) {
+      pendingAnchorRef.current = null;
       return;
     }
-    restoredMeasurementVersionRef.current = measurementVersion;
-    const anchor = visibleFileRef.current;
-    if (anchor && fileDiffs.length > 0) {
-      const matchingIndex = fileDiffs.findIndex((diff) => diff.file === anchor.filePath);
-      const index =
-        matchingIndex >= 0 ? matchingIndex : Math.min(anchor.index, fileDiffs.length - 1);
-      listRef.current?.scrollToRow({ index, align: "start" });
+
+    const matchingIndex = fileDiffs.findIndex((diff) => diff.file === anchor.filePath);
+    const index = matchingIndex >= 0 ? matchingIndex : Math.min(anchor.index, fileDiffs.length - 1);
+    const row = getRenderedFileRow(list, index);
+    if (!row) {
+      let rowStart = 0;
+      for (let rowIndex = 0; rowIndex < index; rowIndex++) {
+        rowStart += rowHeight.getRowHeight(rowIndex) ?? 40;
+      }
+      list.scrollTop = rowStart;
+      return;
     }
-  }, [fileDiffs, listRef, measurementVersion]);
+
+    const listTop = list.getBoundingClientRect().top;
+    const rowRect = row.getBoundingClientRect();
+    if (rowRect.height === 0) return;
+    if (Math.abs((rowHeight.getRowHeight(index) ?? 40) - rowRect.height) > 1) {
+      rowHeight.setRowHeight(index, rowRect.height);
+      return;
+    }
+
+    const rowStart = list.scrollTop + rowRect.top - listTop;
+    const offset =
+      matchingIndex >= 0 ? Math.min(anchor.offset, Math.max(0, rowRect.height - 1)) : 0;
+    list.scrollTop = rowStart + offset;
+    pendingAnchorRef.current = null;
+  }, [fileDiffs, listRef, measurementVersion, rowHeight]);
 
   const onRowsRendered = useCallback(
     ({ startIndex }: { startIndex: number }) => {
       const filePath = fileDiffs[startIndex]?.file;
       if (filePath) {
-        visibleFileRef.current = { filePath, index: startIndex };
+        visibleFileRef.current = { filePath, index: startIndex, offset: 0 };
+        captureVisibleOffset();
       }
     },
-    [fileDiffs],
+    [captureVisibleOffset, fileDiffs],
   );
   const onResize = useCallback(({ width }: { width: number }) => {
     if (width > 0) {
@@ -422,6 +470,7 @@ export const FileDiffList = memo(function FileDiffList({
         overscanCount={3}
         onRowsRendered={onRowsRendered}
         onResize={onResize}
+        onScroll={captureVisibleOffset}
       />
     </div>
   );
