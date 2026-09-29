@@ -1049,6 +1049,33 @@ describe("HostClient", () => {
     ]);
   });
 
+  test("workspaceApplyAgentStudioStateAction sends a typed tab action", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "workspace_apply_agent_studio_state_action") {
+        return {
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
+          agentStudioState: { openTaskIds: ["task-1"] },
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const result = await client.workspaceApplyAgentStudioStateAction("repo", {
+      type: "ensure_tab",
+      taskId: "task-1",
+    });
+
+    expect(result.agentStudioState.openTaskIds).toEqual(["task-1"]);
+    expect(calls).toEqual([
+      {
+        command: "workspace_apply_agent_studio_state_action",
+        args: { workspaceId: "repo", action: { type: "ensure_tab", taskId: "task-1" } },
+      },
+    ]);
+  });
+
   test("workspaceSaveSettingsSnapshot uses atomic snapshot IPC route", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "workspace_save_settings_snapshot") {

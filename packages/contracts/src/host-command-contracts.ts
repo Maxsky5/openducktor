@@ -121,6 +121,7 @@ export const HOST_COMMAND_NAMES = [
   "terminal_list",
   "terminal_prepare_path_input",
   "workspace_add",
+  "workspace_apply_agent_studio_state_action",
   "workspace_cancel_azure_devops_sign_in",
   "workspace_catalog_get",
   "workspace_close",

@@ -466,6 +466,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "workspaceAbbreviationSchema",
   "workspaceAbbreviationValueSchema",
   "workspaceAgentStudioActiveTaskSchema",
+  "workspaceAgentStudioStateActionSchema",
   "workspaceAgentStudioStateSchema",
   "workspaceCatalogSchema",
   "incompleteWorkspaceRemovalSchema",

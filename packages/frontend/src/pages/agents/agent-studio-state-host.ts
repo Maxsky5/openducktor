@@ -1,13 +1,9 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import { host } from "@/state/operations/host";
-import { repoConfigQueryOptions, workspaceQueryKeys } from "@/state/queries/workspace";
-import { addTaskToAgentStudioState } from "./agent-studio-workspace-state";
+import { applyWorkspaceAgentStudioStateAction } from "./agent-studio-state-writer";
 
-type AgentStudioStateHost = Pick<
-  typeof host,
-  "workspaceGetRepoConfig" | "workspaceReplaceAgentStudioState"
->;
+type AgentStudioStateHost = Pick<typeof host, "workspaceApplyAgentStudioStateAction">;
 
 export const addTaskToWorkspaceAgentStudioState = async ({
   queryClient,
@@ -22,19 +18,14 @@ export const addTaskToWorkspaceAgentStudioState = async ({
   tasks: readonly TaskCard[];
   hostClient?: AgentStudioStateHost;
 }): Promise<void> => {
-  const repoConfig = await queryClient.fetchQuery({
-    ...repoConfigQueryOptions(workspaceId, hostClient),
-    staleTime: 0,
-  });
-  const state = addTaskToAgentStudioState({
-    state: repoConfig.agentStudioState,
-    taskId,
-    tasks,
-  });
-  if (state === repoConfig.agentStudioState) {
+  const task = tasks.find((entry) => entry.id === taskId);
+  if (!task || task.status === "closed") {
     return;
   }
-
-  const updatedRepoConfig = await hostClient.workspaceReplaceAgentStudioState(workspaceId, state);
-  queryClient.setQueryData(workspaceQueryKeys.repoConfig(workspaceId), updatedRepoConfig);
+  await applyWorkspaceAgentStudioStateAction({
+    queryClient,
+    workspaceId,
+    action: { type: "ensure_tab", taskId },
+    hostClient,
+  });
 };

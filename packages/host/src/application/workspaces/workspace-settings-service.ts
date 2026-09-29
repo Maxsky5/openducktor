@@ -9,7 +9,10 @@ import { configValidationMessage } from "../../config/config-validation-message"
 import { parseConfig } from "../../config/parse-config";
 import { HostValidationError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
-import { buildAgentStudioStateUpdate } from "./workspace-agent-studio-state";
+import {
+  applyAgentStudioStateAction,
+  buildAgentStudioStateUpdate,
+} from "./workspace-agent-studio-state";
 import { createCustomAgentRoleOperations } from "./custom-agent-role-operations";
 import {
   openWorkspaceRecordsInEffectiveOrder,
@@ -218,6 +221,33 @@ const createUnserializedWorkspaceSettingsService = (
           }),
       });
 
+      yield* settingsConfig.writeConfig(update.config);
+      return update.repoConfig;
+    });
+  },
+  applyAgentStudioStateAction(workspaceId, action) {
+    return Effect.gen(function* () {
+      const config = yield* loadGlobalConfig(settingsConfig);
+      const current = yield* Effect.try({
+        try: () => requireConfiguredWorkspace(config, workspaceId),
+        catch: (cause) =>
+          new HostValidationError({
+            message: configValidationMessage(cause, action),
+            cause,
+          }),
+      });
+      const state = applyAgentStudioStateAction(current.agentStudioState, action);
+      if (state === current.agentStudioState) {
+        return current;
+      }
+      const update = yield* Effect.try({
+        try: () => buildAgentStudioStateUpdate(config, workspaceId, state),
+        catch: (cause) =>
+          new HostValidationError({
+            message: configValidationMessage(cause, action),
+            cause,
+          }),
+      });
       yield* settingsConfig.writeConfig(update.config);
       return update.repoConfig;
     });

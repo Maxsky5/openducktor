@@ -1,15 +1,18 @@
-import type { RepoConfig, WorkspaceAgentStudioState } from "@openducktor/contracts";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import type {
+  WorkspaceAgentStudioState,
+  WorkspaceAgentStudioStateAction,
+} from "@openducktor/contracts";
+import { useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { host } from "@/state/operations/host";
-import { workspaceQueryKeys } from "@/state/queries/workspace";
+import { applyWorkspaceAgentStudioStateAction } from "./agent-studio-state-writer";
 
-type AgentStudioStateHost = Pick<typeof host, "workspaceReplaceAgentStudioState">;
+type AgentStudioStateHost = Pick<typeof host, "workspaceApplyAgentStudioStateAction">;
 
 type SaveRequest = {
   workspaceId: string;
-  state: WorkspaceAgentStudioState;
   key: string;
+  action: WorkspaceAgentStudioStateAction;
 };
 
 type SaveFailure = {
@@ -24,44 +27,43 @@ export function useAgentStudioWorkspaceStateSave({
   loadedState,
   state,
   enabled,
+  hasPendingTabChange = false,
   hostClient = host,
 }: {
   workspaceId: string | null;
   loadedState: WorkspaceAgentStudioState | null;
   state: WorkspaceAgentStudioState;
   enabled: boolean;
+  hasPendingTabChange?: boolean;
   hostClient?: AgentStudioStateHost;
 }) {
   const queryClient = useQueryClient();
-  const lastSaveRef = useRef<{ workspaceId: string; key: string } | null>(null);
+  const lastSaveRef = useRef<{
+    workspaceId: string;
+    key: string;
+    actionType: WorkspaceAgentStudioStateAction["type"];
+  } | null>(null);
   const [failure, setFailure] = useState<SaveFailure | null>(null);
   const loadedKey = loadedState ? toStateKey(loadedState) : null;
   const nextKey = toStateKey(state);
-  const latestWantedRef = useRef({ workspaceId, key: nextKey });
-  useLayoutEffect(() => {
-    latestWantedRef.current = { workspaceId, key: nextKey };
-  }, [nextKey, workspaceId]);
-  const { mutate } = useMutation({
-    mutationFn: (request: SaveRequest) =>
-      hostClient.workspaceReplaceAgentStudioState(request.workspaceId, request.state),
-    scope: { id: `agent-studio-workspace-state:${workspaceId ?? "inactive"}` },
-    onSuccess: (repoConfig, request) => {
-      const latestWanted = latestWantedRef.current;
-      if (latestWanted.workspaceId === request.workspaceId && latestWanted.key === request.key) {
-        queryClient.setQueryData<RepoConfig>(
-          workspaceQueryKeys.repoConfig(request.workspaceId),
-          repoConfig,
-        );
-      }
-      setFailure((current) => (current?.request === request ? null : current));
+  const save = useCallback(
+    (request: SaveRequest): void => {
+      void applyWorkspaceAgentStudioStateAction({
+        queryClient,
+        workspaceId: request.workspaceId,
+        action: request.action,
+        hostClient,
+      }).then(
+        () => setFailure((current) => (current?.request === request ? null : current)),
+        (cause: unknown) =>
+          setFailure({
+            request,
+            error: cause instanceof Error ? cause : new Error(String(cause)),
+          }),
+      );
     },
-    onError: (cause, request) => {
-      setFailure({
-        request,
-        error: cause instanceof Error ? cause : new Error(String(cause)),
-      });
-    },
-  });
+    [hostClient, queryClient],
+  );
   const saveFailedForCurrentState = Boolean(
     failure &&
     failure.request.workspaceId === workspaceId &&
@@ -75,17 +77,35 @@ export function useAgentStudioWorkspaceStateSave({
       return;
     }
     const lastSave = lastSaveRef.current;
-    if (lastSave?.workspaceId === workspaceId && lastSave.key === nextKey) {
+    if (
+      lastSave?.workspaceId === workspaceId &&
+      lastSave.key === nextKey &&
+      (hasPendingTabChange || lastSave.actionType === "sync_snapshot")
+    ) {
       return;
     }
     if (loadedKey === nextKey && lastSave?.workspaceId !== workspaceId) {
       return;
     }
 
-    const request = { workspaceId, state, key: nextKey };
-    lastSaveRef.current = { workspaceId, key: nextKey };
-    mutate(request);
-  }, [enabled, loadedKey, loadedState, mutate, nextKey, state, workspaceId]);
+    const sameActiveTask =
+      JSON.stringify(loadedState.activeTask ?? null) === JSON.stringify(state.activeTask ?? null);
+    if (hasPendingTabChange && sameActiveTask) {
+      return;
+    }
+    const action: WorkspaceAgentStudioStateAction = hasPendingTabChange
+      ? { type: "set_active_task", activeTask: state.activeTask ?? null }
+      : {
+          type: "sync_snapshot",
+          baseOpenTaskIds: loadedState.openTaskIds,
+          openTaskIds: state.openTaskIds,
+          activeTask: state.activeTask ?? null,
+        };
+
+    const request = { workspaceId, key: nextKey, action };
+    lastSaveRef.current = { workspaceId, key: nextKey, actionType: action.type };
+    save(request);
+  }, [enabled, hasPendingTabChange, loadedKey, loadedState, nextKey, save, state, workspaceId]);
 
   const retrySave = useCallback((): void => {
     if (!saveFailedForCurrentState || !failure) {
@@ -95,9 +115,10 @@ export function useAgentStudioWorkspaceStateSave({
     lastSaveRef.current = {
       workspaceId: failure.request.workspaceId,
       key: failure.request.key,
+      actionType: failure.request.action.type,
     };
-    mutate(failure.request);
-  }, [failure, mutate, saveFailedForCurrentState]);
+    save(failure.request);
+  }, [failure, save, saveFailedForCurrentState]);
 
   return { saveError, retrySave };
 }

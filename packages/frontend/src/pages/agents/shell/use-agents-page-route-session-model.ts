@@ -13,6 +13,7 @@ import { useAgentStudioQuerySync } from "../query-sync/use-agent-studio-query-sy
 import { useAgentStudioSelectionController } from "../use-agent-studio-selection-controller";
 import { useAgentStudioWorkspaceStateSave } from "../use-agent-studio-workspace-state-save";
 import { useAgentStudioWorkspaceStateLoad } from "../use-agent-studio-workspace-state-load";
+import { useAgentStudioTabStateChange } from "../use-agent-studio-tab-state-change";
 import {
   type UseTaskExecutionFilePreviewControllerResult,
   useTaskExecutionFilePreviewController,
@@ -126,6 +127,11 @@ export function useAgentsPageRouteSessionModel({
       requestContextTransition: taskExecutionFilePreview.requestContextTransition,
     });
   const selectAgentStudioSelection: SelectAgentStudioSelection = applyAgentStudioSelection;
+  const {
+    onTabChange,
+    saveError: tabSaveError,
+    retry: retryTabSave,
+  } = useAgentStudioTabStateChange({ workspaceId: activeWorkspaceId });
 
   const selection = useAgentStudioSelectionController({
     activeWorkspaceId,
@@ -146,6 +152,7 @@ export function useAgentsPageRouteSessionModel({
     repoSettings,
     isLoadingRepoSettings,
     selectAgentStudioSelection,
+    onTabChange,
   });
 
   const stateSnapshot = useMemo(
@@ -168,6 +175,7 @@ export function useAgentsPageRouteSessionModel({
       workspaceId: activeWorkspaceId,
       loadedState: loadedAgentStudioState,
       state: stateSnapshot,
+      hasPendingTabChange: selection.hasPendingTabChange,
       enabled:
         canSaveAgentStudioState &&
         isWorkspaceStateLoaded &&
@@ -181,11 +189,16 @@ export function useAgentsPageRouteSessionModel({
     if (stateSaveError) {
       retryAgentStudioStateSave();
     }
+    if (tabSaveError) {
+      retryTabSave();
+    }
   }, [
     navigationPersistenceError,
     retryAgentStudioStateLoad,
     retryAgentStudioStateSave,
     stateSaveError,
+    tabSaveError,
+    retryTabSave,
   ]);
 
   useEffect(() => {
@@ -197,7 +210,7 @@ export function useAgentsPageRouteSessionModel({
   }, [scheduleQueryUpdate, selection.queryUpdate]);
 
   return {
-    navigationPersistenceError: navigationPersistenceError ?? stateSaveError,
+    navigationPersistenceError: navigationPersistenceError ?? tabSaveError ?? stateSaveError,
     retryNavigationPersistence,
     scheduleQueryUpdate,
     selection,

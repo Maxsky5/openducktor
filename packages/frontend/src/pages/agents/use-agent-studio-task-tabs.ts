@@ -11,7 +11,7 @@ import {
 } from "./shell/agent-studio-selection-state";
 import { useTaskTabActions } from "./use-agent-studio-task-tabs-actions";
 import { useTaskTabSelection } from "./use-agent-studio-task-tabs-selection";
-import { useTaskTabState } from "./use-agent-studio-task-tabs-state";
+import { type TabChangeListener, useTaskTabState } from "./use-agent-studio-task-tabs-state";
 
 export function useAgentStudioTaskTabs(args: {
   activeWorkspaceId: string | null;
@@ -27,6 +27,7 @@ export function useAgentStudioTaskTabs(args: {
   latestSessionByTaskId: Map<string, AgentSessionSummary>;
   activeSessionByTaskId?: Map<string, AgentSessionSummary>;
   selectAgentStudioSelection: SelectAgentStudioSelection;
+  onTabChange?: TabChangeListener | undefined;
 }) {
   const {
     activeWorkspaceId,
@@ -42,6 +43,7 @@ export function useAgentStudioTaskTabs(args: {
     latestSessionByTaskId,
     activeSessionByTaskId,
     selectAgentStudioSelection,
+    onTabChange,
   } = args;
 
   const taskIdForTabs = selectedTask?.status === "closed" ? "" : taskId;
@@ -56,17 +58,23 @@ export function useAgentStudioTaskTabs(args: {
   const clearTaskSelection = useCallback((): void => {
     selectAgentStudioSelection(emptyAgentStudioSelectionState());
   }, [selectAgentStudioSelection]);
-  const { openTaskIds, persistedActiveTaskId, loadedStateWorkspaceId, setTabState } =
-    useTaskTabState({
-      activeWorkspaceId,
-      loadedAgentStudioState,
-      agentStudioStateLoadKey,
-      agentStudioState,
-      taskId: taskIdForTabs,
-      selectedTask,
-      tasks,
-      tasksAreCurrent,
-    });
+  const {
+    openTaskIds,
+    persistedActiveTaskId,
+    loadedStateWorkspaceId,
+    hasPendingTabChange,
+    setTabState,
+  } = useTaskTabState({
+    activeWorkspaceId,
+    loadedAgentStudioState,
+    agentStudioStateLoadKey,
+    agentStudioState,
+    taskId: taskIdForTabs,
+    selectedTask,
+    tasks,
+    tasksAreCurrent,
+    onTabChange,
+  });
 
   const { tabTaskIds, activeTaskTabId, handleSelectTab } = useTaskTabSelection({
     activeWorkspaceId,
@@ -115,6 +123,7 @@ export function useAgentStudioTaskTabs(args: {
     handleCloseTab,
     handleReorderTab,
     loadedStateWorkspaceId,
+    hasPendingTabChange,
   } satisfies {
     tabTaskIds: string[];
     activeTaskTabId: string;
@@ -129,5 +138,6 @@ export function useAgentStudioTaskTabs(args: {
       position: "before" | "after",
     ) => void;
     loadedStateWorkspaceId: string | null;
+    hasPendingTabChange: boolean;
   };
 }

@@ -16,25 +16,6 @@ export const pruneAgentStudioTaskIds = (
   });
 };
 
-export const addTaskToAgentStudioState = ({
-  state,
-  taskId,
-  tasks,
-}: {
-  state: WorkspaceAgentStudioState;
-  taskId: string;
-  tasks: readonly TaskCard[];
-}): WorkspaceAgentStudioState => {
-  const task = tasks.find((entry) => entry.id === taskId);
-  if (!task || task.status === "closed" || state.openTaskIds.includes(taskId)) {
-    return state;
-  }
-  return {
-    ...state,
-    openTaskIds: [...state.openTaskIds, taskId],
-  };
-};
-
 export const buildAgentStudioReadState = ({
   state,
   tasks,

@@ -18,6 +18,7 @@ import {
   type WorkspaceCatalog,
   type WorkspacePathResolution,
   type WorkspaceRecord,
+  type WorkspaceAgentStudioStateAction,
   type WorkspaceRemovalPhase,
   type WorkspaceRemovalRecord,
   type WorkspaceRepoConfigInput,
@@ -93,6 +94,10 @@ export type WorkspaceSettingsService = {
   replaceAgentStudioState(
     workspaceId: string,
     state: RepoConfig["agentStudioState"],
+  ): Effect.Effect<RepoConfig, WorkspaceSettingsError>;
+  applyAgentStudioStateAction(
+    workspaceId: string,
+    action: WorkspaceAgentStudioStateAction,
   ): Effect.Effect<RepoConfig, WorkspaceSettingsError>;
   updateRepoConfig(
     workspaceId: string,
