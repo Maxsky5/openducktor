@@ -198,6 +198,7 @@ export const assembleNodeEffectHostCommandRouter = (
     toolDiscovery,
     settingsConfig,
     codexAppServer: effectiveCodexTransportRegistry,
+    onBackgroundFailure,
     liveSessionLifecycle: agentSessionLiveStateService,
     prepareLiveSessionAdapter: createCodexLiveSessionAdapterPreparer({
       prepareImageGenerations: defaultPorts.imageWorkers.prepareHistory,

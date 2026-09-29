@@ -17,9 +17,10 @@ import type {
 type ResponseEffect = Effect.Effect<CodexAppServerRequestResult, CodexAppServerTransportError>;
 type ScheduleTimeout = (callback: () => void, timeoutMs: number) => () => void;
 
-const scheduleTimeout: ScheduleTimeout = (callback, timeoutMs) => {
-  const timeout = setTimeout(callback, timeoutMs);
-  return () => clearTimeout(timeout);
+type PendingResponse = {
+  markWriteStarted(): void;
+  release(options?: { keepRequestId?: boolean }): void;
+  response: ResponseEffect;
 };
 
 type PendingResponseInput = {
@@ -28,7 +29,7 @@ type PendingResponseInput = {
   runtimeId: string;
   requestTimeoutMs: number;
   pending: Map<number, PendingCodexAppServerRequest>;
-  rememberCancelledSentRequest(id: number): void;
+  keepLateRequestId(id: number): void;
   scheduleTimeout?: ScheduleTimeout;
 };
 
@@ -38,9 +39,9 @@ export const acquirePendingResponse = ({
   runtimeId,
   requestTimeoutMs,
   pending,
-  rememberCancelledSentRequest,
+  keepLateRequestId,
   scheduleTimeout: scheduleRequestTimeout = scheduleTimeout,
-}: PendingResponseInput) =>
+}: PendingResponseInput): Effect.Effect<PendingResponse> =>
   Effect.sync(() => {
     let cancelTimeout: (() => void) | undefined;
     let released = false;
@@ -49,15 +50,15 @@ export const acquirePendingResponse = ({
     let resumeEffect: ((effect: ResponseEffect) => void) | null = null;
     let settledEffect: ResponseEffect | null = null;
 
-    const release = (options: { preserveLateResponse?: boolean } = {}): void => {
+    const release: PendingResponse["release"] = (options = {}) => {
       if (released) {
         return;
       }
       released = true;
       cancelTimeout?.();
       pending.delete(id);
-      if (options.preserveLateResponse && writeStarted && !finished) {
-        rememberCancelledSentRequest(id);
+      if (options.keepRequestId && writeStarted && !finished) {
+        keepLateRequestId(id);
       }
     };
 
@@ -75,6 +76,7 @@ export const acquirePendingResponse = ({
     };
 
     cancelTimeout = scheduleRequestTimeout(() => {
+      release({ keepRequestId: true });
       finish(
         Effect.fail(
           new HostOperationError({
@@ -117,10 +119,15 @@ export const acquirePendingResponse = ({
     );
 
     return {
-      markWriteStarted() {
+      markWriteStarted(): void {
         writeStarted = true;
       },
       release,
       response,
     };
   });
+
+const scheduleTimeout: ScheduleTimeout = (callback, timeoutMs) => {
+  const timeout = setTimeout(callback, timeoutMs);
+  return () => clearTimeout(timeout);
+};
