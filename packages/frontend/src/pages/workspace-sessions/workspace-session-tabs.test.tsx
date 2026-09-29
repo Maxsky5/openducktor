@@ -235,15 +235,25 @@ test.each([true, false])(
   5_000,
 );
 
-test("New chat opens and closes over the selected session without changing its URL", async () => {
+function ChatCreationProbe(props: Parameters<typeof chatCreate.WorkspaceSessionCreateDialog>[0]) {
+  const [name, setName] = useState("");
+  return (
+    <div role="dialog" aria-label="Chat creation" data-state={props.open ? "open" : "closed"}>
+      <input
+        aria-label="Chat name"
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+      />
+      <button type="button" onClick={props.onClose}>
+        Cancel chat
+      </button>
+    </div>
+  );
+}
+
+test("New chat starts a fresh attempt when reopened before its exit ends", async () => {
   const createDialog = spyOn(chatCreate, "WorkspaceSessionCreateDialog").mockImplementation(
-    (props) => (
-      <div role="dialog" aria-label="Chat creation" data-state={props.open ? "open" : "closed"}>
-        <button type="button" onClick={props.onClose}>
-          Cancel chat
-        </button>
-      </div>
-    ),
+    (props) => <ChatCreationProbe {...props} />,
   );
   configureShellBridge(
     createShellBridgeFixture({
@@ -259,10 +269,18 @@ test("New chat opens and closes over the selected session without changing its U
     fireEvent.click(await view.findByRole("button", { name: "New chat" }, { timeout: 800 }));
     expect(view.getByRole("dialog", { name: "Chat creation" })).toBeTruthy();
     expect(view.getByTestId("session-url").textContent).toBe(route);
+    fireEvent.change(view.getByRole("textbox", { name: "Chat name" }), {
+      target: { value: "Cancelled choice" },
+    });
     fireEvent.click(view.getByRole("button", { name: "Cancel chat" }));
     expect(view.getByRole("dialog", { name: "Chat creation" }).getAttribute("data-state")).toBe(
       "closed",
     );
+    expect(view.getByTestId("session-url").textContent).toBe(route);
+    fireEvent.click(view.getByRole("button", { name: "New chat" }));
+    const chatName = view.getByRole("textbox", { name: "Chat name" });
+    if (!(chatName instanceof HTMLInputElement)) throw new Error("Chat name is not an input");
+    expect(chatName.value).toBe("");
     expect(view.getByTestId("session-url").textContent).toBe(route);
   } finally {
     view.unmount();

@@ -253,7 +253,7 @@ export function WorkspaceSessionCreateDialog({
                 </p>
               )}
             </DialogBody>
-            <DialogFooter className="mt-0 justify-between border-t border-border bg-muted/30 px-6 py-4 sm:justify-between">
+            <DialogFooter className="mt-0 justify-between border-t border-border bg-muted px-6 py-4 sm:justify-between">
               <Button type="button" variant="outline" onClick={onClose}>
                 Cancel
               </Button>

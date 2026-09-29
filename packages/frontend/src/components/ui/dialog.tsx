@@ -18,13 +18,13 @@ function Dialog({
   return (
     <DialogOpenContext.Provider value={isOpen}>
       <DialogPrimitive.Root
+        {...props}
         data-slot="dialog"
         open={isOpen}
         onOpenChange={(nextOpen) => {
           if (open === undefined) setInternalOpen(nextOpen);
           onOpenChange?.(nextOpen);
         }}
-        {...props}
       />
     </DialogOpenContext.Provider>
   );
@@ -90,7 +90,7 @@ function DialogContent({
   );
   const renderedCloseButton =
     closeButton === undefined ? (
-      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+      <DialogPrimitive.Close className="absolute right-4 top-4 z-20 rounded-sm p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
         <X className="size-4" />
         <span className="sr-only">Close</span>
       </DialogPrimitive.Close>
@@ -132,11 +132,24 @@ function DialogBody({ className, ...props }: React.ComponentProps<"div">) {
 }
 
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
-  return <div className={cn("shrink-0 flex flex-col gap-1.5", className)} {...props} />;
+  return (
+    <div
+      className={cn("sticky top-0 z-10 flex shrink-0 flex-col gap-1.5 bg-popover", className)}
+      {...props}
+    />
+  );
 }
 
 function DialogFooter({ className, ...props }: React.ComponentProps<"div">) {
-  return <div className={cn("shrink-0 mt-6 flex justify-end gap-2", className)} {...props} />;
+  return (
+    <div
+      className={cn(
+        "sticky bottom-0 z-10 mt-6 flex shrink-0 justify-end gap-2 bg-popover",
+        className,
+      )}
+      {...props}
+    />
+  );
 }
 
 function DialogTitle(props: React.ComponentProps<typeof DialogPrimitive.Title>) {

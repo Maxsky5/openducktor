@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Dialog, DialogBody, DialogContent, DialogTitle } from "./dialog";
 
 const originalResizeObserver = globalThis.ResizeObserver;
@@ -205,7 +205,10 @@ describe("DialogContent", () => {
       <Dialog open>
         <DialogContent>
           <DialogTitle>Resize test</DialogTitle>
-          <DialogBody>{content}</DialogBody>
+          <DialogBody>
+            {content}
+            <img alt="" data-testid="late-image" />
+          </DialogBody>
         </DialogContent>
       </Dialog>
     );
@@ -256,6 +259,22 @@ describe("DialogContent", () => {
       timeout: 300,
     });
     expect(cancellations).toBe(2);
+
+    naturalHeight = 350;
+    fireEvent.load(view.getByTestId("late-image"));
+    await waitFor(() => expect(animate).toHaveBeenCalledTimes(4), {
+      timeout: 300,
+    });
+    expect(animate.mock.calls[3]?.[0]).toEqual([
+      { width: "400px", height: "280px", maxWidth: "none", maxHeight: "none" },
+      { width: "400px", height: "350px", maxWidth: "none", maxHeight: "none" },
+    ]);
+
+    naturalHeight = 360;
+    fireEvent(window, new Event("resize"));
+    await waitFor(() => expect(animate).toHaveBeenCalledTimes(5), {
+      timeout: 300,
+    });
   });
 
   test("skips resize motion when reduced motion is requested", () => {

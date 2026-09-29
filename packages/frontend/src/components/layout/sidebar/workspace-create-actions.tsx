@@ -26,6 +26,7 @@ export default function WorkspaceCreateActions({
   const [taskOpen, setTaskOpen] = useState(false);
   const taskMounted = useDialogPresence(taskOpen);
   const [chatOpen, setChatOpen] = useState(false);
+  const [chatAttempt, setChatAttempt] = useState(0);
   const chatMounted = useDialogPresence(chatOpen);
   const workspace = useActiveWorkspace();
   const navigate = useNavigate();
@@ -55,7 +56,10 @@ export default function WorkspaceCreateActions({
           aria-label="New chat"
           title="New chat"
           disabled={!workspace}
-          onClick={() => setChatOpen(true)}
+          onClick={() => {
+            setChatAttempt((attempt) => attempt + 1);
+            setChatOpen(true);
+          }}
         >
           <MessageCirclePlus />
           {!compact && "New chat"}
@@ -70,7 +74,7 @@ export default function WorkspaceCreateActions({
       )}
       {chatMounted && workspace && (
         <WorkspaceSessionCreateDialog
-          key={`chat-${workspace.workspaceId}`}
+          key={`chat-${workspace.workspaceId}-${chatAttempt}`}
           open={chatOpen}
           workspace={workspace}
           onClose={() => setChatOpen(false)}

@@ -40,7 +40,7 @@ export const MediaPreviewDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       {trigger}
       <DialogContent className="my-0 max-w-[min(96vw,72rem)] gap-4 border-border bg-background">
-        <DialogHeader>
+        <DialogHeader className="bg-background">
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>

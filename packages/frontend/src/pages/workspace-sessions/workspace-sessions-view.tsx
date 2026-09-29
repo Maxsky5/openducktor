@@ -67,6 +67,7 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
   const [historyOpen, setHistoryOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [createAttempt, setCreateAttempt] = useState(0);
   const mounted = useMountedRef();
   const requestedSelected = useWorkspaceSessionSelection({
     workspaceId: workspace.workspaceId,
@@ -104,6 +105,7 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
     });
   const archivingId = archive.isPending ? (archive.variables?.sessionId ?? null) : null;
   const setCreating = (open: boolean) => {
+    if (open) setCreateAttempt((attempt) => attempt + 1);
     setCreateOpen(open);
     if (!open && creating) updateNavigation({ creating: false });
   };
@@ -192,6 +194,7 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
           archive.reset();
         }}
         createOpen={createOpen || creating}
+        createAttempt={createAttempt}
         onCreateClose={() => setCreating(false)}
         onCreated={(record) => {
           if (mounted.current) {
@@ -444,6 +447,7 @@ function WorkspaceSessionDialogs({
   onArchive,
   onArchiveClose,
   createOpen,
+  createAttempt,
   onCreateClose,
   onCreated,
 }: {
@@ -463,6 +467,7 @@ function WorkspaceSessionDialogs({
   ) => void;
   onArchiveClose: () => void;
   createOpen: boolean;
+  createAttempt: number;
   onCreateClose: () => void;
   onCreated: (record: WorkspaceSession) => void;
 }): ReactElement {
@@ -498,6 +503,7 @@ function WorkspaceSessionDialogs({
       )}
       {createMounted && (
         <WorkspaceSessionCreateDialog
+          key={`${workspace.workspaceId}-${createAttempt}`}
           open={createOpen}
           workspace={workspace}
           onClose={onCreateClose}

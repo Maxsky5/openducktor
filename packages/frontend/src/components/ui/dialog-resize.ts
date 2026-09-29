@@ -23,7 +23,7 @@ export function observeDialogResize(element: HTMLDivElement): () => void {
       }
     }
   };
-  const mutationObserver = new MutationObserver(() => {
+  const retargetAnimation = () => {
     if (!animation) return;
 
     // Read the visible size before removing the old animation, then measure the new content.
@@ -41,7 +41,11 @@ export function observeDialogResize(element: HTMLDivElement): () => void {
       clearHiddenScrollbars();
       observer.observe(element, { box: "border-box" });
     }
-  });
+  };
+  const mutationObserver = new MutationObserver(retargetAnimation);
+  element.addEventListener("load", retargetAnimation, true);
+  window.addEventListener("resize", retargetAnimation);
+  document.fonts?.addEventListener("loadingdone", retargetAnimation);
 
   function animateResize(
     from: { width: number; height: number },
@@ -126,6 +130,9 @@ export function observeDialogResize(element: HTMLDivElement): () => void {
   return () => {
     observer.disconnect();
     mutationObserver.disconnect();
+    element.removeEventListener("load", retargetAnimation, true);
+    window.removeEventListener("resize", retargetAnimation);
+    document.fonts?.removeEventListener("loadingdone", retargetAnimation);
     element.removeAttribute("data-dialog-resizing");
     clearHiddenScrollbars();
     const activeAnimation = animation;
