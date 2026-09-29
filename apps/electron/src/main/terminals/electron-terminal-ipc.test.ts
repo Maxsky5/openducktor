@@ -14,6 +14,17 @@ import {
   shouldDetachTerminalSenderForNavigation,
 } from "./electron-terminal-ipc";
 
+const makeAttachFrame = (): Uint8Array =>
+  encodeTerminalProtocolFrame({
+    message: {
+      version: TERMINAL_PROTOCOL_VERSION,
+      type: "attach",
+      terminalId: "terminal-1",
+      lastConsumedSequence: null,
+    },
+    payload: new Uint8Array(),
+  });
+
 describe("Electron terminal IPC", () => {
   test("decodes frames and scopes attachments to the sender", async () => {
     const calls: string[] = [];
@@ -25,15 +36,7 @@ describe("Electron terminal IPC", () => {
     };
     const controller = createElectronTerminalIpcController(terminalService);
     const sender = { id: 7, isDestroyed: () => false, send: () => undefined };
-    const frame = encodeTerminalProtocolFrame({
-      message: {
-        version: TERMINAL_PROTOCOL_VERSION,
-        type: "attach",
-        terminalId: "terminal-1",
-        lastConsumedSequence: null,
-      },
-      payload: new Uint8Array(),
-    });
+    const frame = makeAttachFrame();
     await Effect.runPromise(controller.handleFrame(sender, "client-a", frame));
     await Effect.runPromise(controller.detachSender(sender.id));
     expect(calls).toEqual([
@@ -88,15 +91,7 @@ describe("Electron terminal IPC", () => {
     };
     const controller = createElectronTerminalIpcController(terminalService);
     const sender = { id: 7, isDestroyed: () => false, send: () => undefined };
-    const frame = encodeTerminalProtocolFrame({
-      message: {
-        version: TERMINAL_PROTOCOL_VERSION,
-        type: "attach",
-        terminalId: "terminal-1",
-        lastConsumedSequence: null,
-      },
-      payload: new Uint8Array(),
-    });
+    const frame = makeAttachFrame();
 
     await Effect.runPromise(controller.handleFrame(sender, "client-a", frame));
     await Effect.runPromise(controller.detachClient(sender.id, "client-a"));
@@ -130,15 +125,7 @@ describe("Electron terminal IPC", () => {
     };
     const controller = createElectronTerminalIpcController(terminalService);
     const sender = { id: 7, isDestroyed: () => false, send: () => undefined };
-    const frame = encodeTerminalProtocolFrame({
-      message: {
-        version: TERMINAL_PROTOCOL_VERSION,
-        type: "attach",
-        terminalId: "terminal-1",
-        lastConsumedSequence: null,
-      },
-      payload: new Uint8Array(),
-    });
+    const frame = makeAttachFrame();
     await Effect.runPromise(controller.handleFrame(sender, "client-a", frame));
     await Effect.runPromise(controller.handleFrame(sender, "client-b", frame));
     await Effect.runPromise(controller.handleFrame(sender, "client-c", frame));
@@ -225,15 +212,7 @@ describe("Electron terminal IPC", () => {
       { sender },
       {
         clientId: "client-a",
-        frame: encodeTerminalProtocolFrame({
-          message: {
-            version: TERMINAL_PROTOCOL_VERSION,
-            type: "attach",
-            terminalId: "terminal-1",
-            lastConsumedSequence: null,
-          },
-          payload: new Uint8Array(),
-        }),
+        frame: makeAttachFrame(),
       },
     );
 
@@ -280,15 +259,7 @@ describe("Electron terminal IPC", () => {
         }),
     });
     const sender = { id: 7, isDestroyed: () => false, send: () => undefined };
-    const frame = encodeTerminalProtocolFrame({
-      message: {
-        version: TERMINAL_PROTOCOL_VERSION,
-        type: "attach",
-        terminalId: "terminal-1",
-        lastConsumedSequence: null,
-      },
-      payload: new Uint8Array(),
-    });
+    const frame = makeAttachFrame();
     await Effect.runPromise(controller.handleFrame(sender, "client-a", frame));
     await Effect.runPromise(controller.handleFrame(sender, "client-b", frame));
 

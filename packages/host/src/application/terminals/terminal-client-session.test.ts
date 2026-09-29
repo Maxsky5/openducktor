@@ -147,23 +147,23 @@ describe("TerminalClientSession", () => {
       }),
       send: () => undefined,
     });
-    const handle = (type: "attach" | "detach") =>
-      Effect.runPromise(
-        session.handle(
-          type === "attach"
-            ? {
-                version: TERMINAL_PROTOCOL_VERSION,
-                type,
-                terminalId: "terminal-1",
-                lastConsumedSequence: null,
-              }
-            : { version: TERMINAL_PROTOCOL_VERSION, type, terminalId: "terminal-1" },
-          new Uint8Array(),
-        ),
-      );
-
-    await handle("attach");
-    await handle("detach");
+    await Effect.runPromise(
+      session.handle(
+        {
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "attach",
+          terminalId: "terminal-1",
+          lastConsumedSequence: null,
+        },
+        new Uint8Array(),
+      ),
+    );
+    await Effect.runPromise(
+      session.handle(
+        { version: TERMINAL_PROTOCOL_VERSION, type: "detach", terminalId: "terminal-1" },
+        new Uint8Array(),
+      ),
+    );
     failDetach = false;
     await Effect.runPromise(session.close());
     expect(detachAttempts).toEqual(["test-client:terminal-1", "test-client:terminal-1"]);

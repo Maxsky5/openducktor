@@ -185,10 +185,11 @@ export const createElectronTerminalIpcController = (terminalService: TerminalSer
       }
       if (failures.length === 1) return yield* Effect.fail(failures[0]!.cause);
       if (failures.length > 1) {
+        const details = failures.map(({ clientId, cause }) => `${clientId}: ${cause.message}`);
         return yield* Effect.fail(
           new AggregateError(
             failures.map(({ cause }) => cause),
-            `Failed to detach ${failures.length} terminal clients: ${failures.map(({ clientId, cause }) => `${clientId}: ${cause.message}`).join("; ")}`,
+            `Failed to detach ${failures.length} terminal clients: ${details.join("; ")}`,
           ),
         );
       }
