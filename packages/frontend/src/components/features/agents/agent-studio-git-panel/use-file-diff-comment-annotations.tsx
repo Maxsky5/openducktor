@@ -1,6 +1,6 @@
 import type { FileDiff } from "@openducktor/contracts";
 import type { DiffLineAnnotation, SelectedLineRange } from "@pierre/diffs";
-import { type ReactElement, useCallback, useEffect, useMemo, useReducer } from "react";
+import { type ReactElement, useCallback, useMemo } from "react";
 import { z } from "zod";
 import type { PierreDiffSelection } from "@/components/features/agents/pierre-diff-viewer";
 import type { DiffScope } from "@/features/agent-studio-git";
@@ -17,32 +17,37 @@ const gitDiffCommentAnnotationMetadataSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("comment"), commentId: z.string() }),
 ]);
 
-type FileDiffAnnotationState = {
+export type FileDiffAnnotationState = {
   selectedLines: SelectedLineRange | null;
   pendingSelection: PierreDiffSelection | null;
   editingCommentId: string | null;
+  newCommentText: string;
+  editingText: string;
 };
 
-type FileDiffAnnotationAction =
-  | { type: "reset" }
+export type FileDiffAnnotationAction =
   | { type: "selectionCleared" }
   | { type: "selectionChanged"; selection: PierreDiffSelection | null }
-  | { type: "editingStarted"; commentId: string }
+  | { type: "newCommentTextChanged"; text: string }
+  | { type: "editingStarted"; commentId: string; text: string }
+  | { type: "editingTextChanged"; text: string }
   | { type: "editingCanceled" };
 
-const fileDiffAnnotationReducer = (
+export const EMPTY_FILE_DIFF_ANNOTATION_STATE: FileDiffAnnotationState = {
+  selectedLines: null,
+  pendingSelection: null,
+  editingCommentId: null,
+  newCommentText: "",
+  editingText: "",
+};
+
+export const fileDiffAnnotationReducer = (
   state: FileDiffAnnotationState,
   action: FileDiffAnnotationAction,
 ): FileDiffAnnotationState => {
   switch (action.type) {
-    case "reset":
-      return {
-        selectedLines: null,
-        pendingSelection: null,
-        editingCommentId: null,
-      };
     case "selectionCleared":
-      return { ...state, selectedLines: null, pendingSelection: null };
+      return { ...state, selectedLines: null, pendingSelection: null, newCommentText: "" };
     case "selectionChanged":
       return {
         ...state,
@@ -51,12 +56,16 @@ const fileDiffAnnotationReducer = (
       };
     case "editingStarted":
       return {
-        selectedLines: null,
-        pendingSelection: null,
+        ...EMPTY_FILE_DIFF_ANNOTATION_STATE,
         editingCommentId: action.commentId,
+        editingText: action.text,
       };
     case "editingCanceled":
-      return { ...state, editingCommentId: null };
+      return { ...state, editingCommentId: null, editingText: "" };
+    case "newCommentTextChanged":
+      return { ...state, newCommentText: action.text };
+    case "editingTextChanged":
+      return { ...state, editingText: action.text };
   }
 };
 
@@ -71,6 +80,8 @@ type UseFileDiffCommentAnnotationsArgs = {
   diff: FileDiff;
   diffScope: DiffScope;
   fileComments: InlineCommentDraft[];
+  annotationState: FileDiffAnnotationState;
+  dispatchAnnotation: (action: FileDiffAnnotationAction) => void;
 };
 
 type FileDiffCommentAnnotations = {
@@ -86,36 +97,34 @@ export function useFileDiffCommentAnnotations({
   diff,
   diffScope,
   fileComments,
+  annotationState,
+  dispatchAnnotation,
 }: UseFileDiffCommentAnnotationsArgs): FileDiffCommentAnnotations {
   const { addComment, updateComment, removeComment } = useOwnerScopedCommentActions(ownerKey);
-  const [annotationState, dispatchAnnotation] = useReducer(fileDiffAnnotationReducer, {
-    selectedLines: null,
-    pendingSelection: null,
-    editingCommentId: null,
-  });
-  const { selectedLines, pendingSelection, editingCommentId } = annotationState;
-  const annotationResetKey = `${ownerKey ?? ""}:${diffScope}:${diff.diff}`;
-
-  useEffect(() => {
-    void annotationResetKey;
-    dispatchAnnotation({ type: "reset" });
-  }, [annotationResetKey]);
+  const { selectedLines, pendingSelection, editingCommentId, newCommentText, editingText } =
+    annotationState;
 
   const clearPendingSelection = useCallback(() => {
     dispatchAnnotation({ type: "selectionCleared" });
-  }, []);
+  }, [dispatchAnnotation]);
 
-  const handleLineSelectionEnd = useCallback((selection: PierreDiffSelection | null) => {
-    dispatchAnnotation({ type: "selectionChanged", selection });
-  }, []);
+  const handleLineSelectionEnd = useCallback(
+    (selection: PierreDiffSelection | null) => {
+      dispatchAnnotation({ type: "selectionChanged", selection });
+    },
+    [dispatchAnnotation],
+  );
 
-  const handleStartEditing = useCallback((comment: InlineCommentDraft) => {
-    dispatchAnnotation({ type: "editingStarted", commentId: comment.id });
-  }, []);
+  const handleStartEditing = useCallback(
+    (comment: InlineCommentDraft) => {
+      dispatchAnnotation({ type: "editingStarted", commentId: comment.id, text: comment.text });
+    },
+    [dispatchAnnotation],
+  );
 
   const handleCancelEditing = useCallback(() => {
     dispatchAnnotation({ type: "editingCanceled" });
-  }, []);
+  }, [dispatchAnnotation]);
 
   const commentsById = useMemo(
     () => new Map(fileComments.map((comment) => [comment.id, comment])),
@@ -158,7 +167,7 @@ export function useFileDiffCommentAnnotations({
       updateComment(commentId, normalizedText);
       dispatchAnnotation({ type: "editingCanceled" });
     },
-    [updateComment],
+    [dispatchAnnotation, updateComment],
   );
 
   const lineAnnotations = useMemo<DiffLineAnnotation<GitDiffCommentAnnotationMetadata>[]>(() => {
@@ -201,7 +210,12 @@ export function useFileDiffCommentAnnotations({
 
         return (
           <DiffAnnotationShell>
-            <NewCommentForm onCancel={clearPendingSelection} onSave={handleSaveNewComment} />
+            <NewCommentForm
+              value={newCommentText}
+              onChange={(text) => dispatchAnnotation({ type: "newCommentTextChanged", text })}
+              onCancel={clearPendingSelection}
+              onSave={handleSaveNewComment}
+            />
           </DiffAnnotationShell>
         );
       }
@@ -216,6 +230,8 @@ export function useFileDiffCommentAnnotations({
           <DraftCommentCard
             comment={comment}
             isEditing={activeEditingCommentId === comment.id}
+            editingText={editingText}
+            onEditingTextChange={(text) => dispatchAnnotation({ type: "editingTextChanged", text })}
             onStartEditing={handleStartEditing}
             onCancelEditing={handleCancelEditing}
             onSaveEditing={handleSaveEditing}
@@ -226,6 +242,7 @@ export function useFileDiffCommentAnnotations({
     },
     [
       clearPendingSelection,
+      dispatchAnnotation,
       commentsById,
       activeEditingCommentId,
       handleCancelEditing,
@@ -233,6 +250,8 @@ export function useFileDiffCommentAnnotations({
       handleSaveNewComment,
       handleStartEditing,
       pendingSelection,
+      newCommentText,
+      editingText,
       removeComment,
     ],
   );

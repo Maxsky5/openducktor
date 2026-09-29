@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { act, type ReactElement, useState } from "react";
+import { act, type ReactElement, useMemo, useState } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { toInlineCommentDraftStorageKey } from "@/state/inline-comment-draft-storage";
 import {
@@ -347,7 +347,450 @@ function OwnerSwitchFileDiffListHarness(): ReactElement {
   );
 }
 
+function LargeFileDiffListHarness(): ReactElement {
+  const [fileCount, setFileCount] = useState(1_000);
+  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set(["src/file-000.ts"]));
+  const fileDiffs = useMemo(
+    () =>
+      Array.from({ length: fileCount }, (_, index) => ({
+        file: `src/file-${String(index).padStart(3, "0")}.ts`,
+        type: "modified",
+        additions: 1,
+        deletions: 1,
+        diff: "@@ -1 +1 @@\n-old\n+new\n",
+      })),
+    [fileCount],
+  );
+
+  return (
+    <TooltipProvider>
+      <button type="button" onClick={() => setFileCount(20)}>
+        Shorten list
+      </button>
+      <div className="h-[400px]">
+        <FileDiffList
+          fileDiffs={fileDiffs}
+          diffScope="uncommitted"
+          ownerKey={OWNER_KEY}
+          conflictedFiles={new Set()}
+          diffStyle="unified"
+          setDiffStyle={() => {}}
+          expandedFiles={expandedFiles}
+          onToggleFile={(filePath) => {
+            setExpandedFiles((previous) => {
+              const next = new Set(previous);
+              if (next.has(filePath)) next.delete(filePath);
+              else next.add(filePath);
+              return next;
+            });
+          }}
+          preloadLimit={0}
+          canResetFiles={false}
+          isResetDisabled={false}
+          resetDisabledReason={null}
+        />
+      </div>
+    </TooltipProvider>
+  );
+}
+
+function ResizingFileDiffListHarness({ fileCount = 20 } = {}): ReactElement {
+  const [diffStyle, setDiffStyle] = useState<"unified" | "split">("unified");
+  const [revision, setRevision] = useState(0);
+  const [taskChanged, setTaskChanged] = useState(false);
+  const [ownerKey, setOwnerKey] = useState(OWNER_KEY);
+  const [fileOrderChange, setFileOrderChange] = useState<"none" | "remove" | "move">("none");
+  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set(["src/file-005.ts"]));
+  const pathPrefix = taskChanged ? "other/" : "src/";
+  const fileDiffs = useMemo(() => {
+    const files = Array.from({ length: fileCount }, (_, index) => ({
+      file: `${pathPrefix}file-${String(index).padStart(3, "0")}.ts`,
+      type: "modified" as const,
+      additions: 1,
+      deletions: 1,
+      diff: `@@ -1 +1 @@\n-old\n+new${index === 10 ? revision : ""}\n`,
+    }));
+    if (fileOrderChange === "remove") return files.filter((_, index) => index !== 5);
+    if (fileOrderChange === "move") return [...files.slice(0, 5), ...files.slice(6), files[5]!];
+    return files;
+  }, [fileCount, fileOrderChange, pathPrefix, revision]);
+
+  return (
+    <TooltipProvider>
+      <button type="button" onClick={() => setRevision((current) => current + 1)}>
+        Refresh another file
+      </button>
+      <button type="button" onClick={() => setFileOrderChange("remove")}>
+        Remove expanded file
+      </button>
+      <button type="button" onClick={() => setFileOrderChange("move")}>
+        Move expanded file to end
+      </button>
+      <button type="button" onClick={() => setOwnerKey(OTHER_OWNER_KEY)}>
+        Switch list owner
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          setTaskChanged(true);
+          setExpandedFiles(new Set(["other/file-005.ts"]));
+        }}
+      >
+        Switch task files
+      </button>
+      <div className="h-[400px]">
+        <FileDiffList
+          fileDiffs={fileDiffs}
+          diffScope="uncommitted"
+          ownerKey={ownerKey}
+          conflictedFiles={new Set()}
+          diffStyle={diffStyle}
+          setDiffStyle={setDiffStyle}
+          expandedFiles={expandedFiles}
+          onToggleFile={(filePath) => {
+            setExpandedFiles((previous) => {
+              const next = new Set(previous);
+              if (next.has(filePath)) next.delete(filePath);
+              else next.add(filePath);
+              return next;
+            });
+          }}
+          preloadLimit={0}
+          canResetFiles={false}
+          isResetDisabled={false}
+          resetDisabledReason={null}
+        />
+      </div>
+    </TooltipProvider>
+  );
+}
+
+function installMeasuredRows() {
+  const previousResizeObserver = globalThis.ResizeObserver;
+  const observers: Array<{
+    callback: ResizeObserverCallback;
+    elements: Set<Element>;
+    observer: ResizeObserver;
+  }> = [];
+  const previousGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+  const previousOffsetHeight = Object.getOwnPropertyDescriptor(
+    HTMLElement.prototype,
+    "offsetHeight",
+  );
+  let currentWidth = 600;
+  let currentExpandedRowHeight = 800;
+  const rowHeight = (element: Element): number =>
+    element
+      .querySelector('[data-testid="agent-studio-git-file-toggle-button"]')
+      ?.getAttribute("aria-expanded") === "true"
+      ? currentExpandedRowHeight
+      : 40;
+  Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
+    configurable: true,
+    get: function (this: HTMLElement) {
+      if (this.getAttribute("role") === "listitem") {
+        return rowHeight(this);
+      }
+      return previousOffsetHeight?.get?.call(this) ?? 0;
+    },
+  });
+  HTMLElement.prototype.getBoundingClientRect = function () {
+    if (this.getAttribute("role") === "list") return new DOMRect(0, 0, currentWidth, 400);
+    if (this.getAttribute("role") === "listitem") {
+      const rowStart = Number(/translateY\((\d+)px\)/.exec(this.style.transform)?.[1] ?? 0);
+      const height = rowHeight(this);
+      return new DOMRect(0, rowStart - (this.parentElement?.scrollTop ?? 0), currentWidth, height);
+    }
+    return previousGetBoundingClientRect.call(this);
+  };
+  globalThis.ResizeObserver = class implements ResizeObserver {
+    private readonly controller: (typeof observers)[number];
+
+    constructor(callback: ResizeObserverCallback) {
+      this.controller = { callback, elements: new Set(), observer: this };
+      observers.push(this.controller);
+    }
+
+    observe(element: Element): void {
+      this.controller.elements.add(element);
+    }
+
+    unobserve(element: Element): void {
+      this.controller.elements.delete(element);
+    }
+
+    disconnect(): void {
+      this.controller.elements.clear();
+    }
+  };
+
+  return {
+    resize: (width: number, expandedRowHeight: number, passes = 3) => {
+      currentWidth = width;
+      currentExpandedRowHeight = expandedRowHeight;
+      for (let pass = 0; pass < passes; pass++) {
+        act(() => {
+          for (const observer of observers) {
+            const entries = Array.from(observer.elements, (element) => {
+              const isList = element.getAttribute("role") === "list";
+              const height = rowHeight(element);
+              const boxSize = { blockSize: height, inlineSize: width };
+              return {
+                target: element,
+                contentRect: new DOMRect(0, 0, width, isList ? 400 : height),
+                borderBoxSize: [boxSize],
+                contentBoxSize: [boxSize],
+                devicePixelContentBoxSize: [boxSize],
+              } satisfies ResizeObserverEntry;
+            });
+            observer.callback(entries, observer.observer);
+          }
+        });
+        for (const observer of observers) {
+          for (const element of observer.elements) {
+            if (element.getAttribute("role") === "list") fireEvent.scroll(element);
+          }
+        }
+      }
+    },
+    restore: () => {
+      globalThis.ResizeObserver = previousResizeObserver;
+      HTMLElement.prototype.getBoundingClientRect = previousGetBoundingClientRect;
+      if (previousOffsetHeight) {
+        Object.defineProperty(HTMLElement.prototype, "offsetHeight", previousOffsetHeight);
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, "offsetHeight");
+      }
+    },
+  };
+}
+
 describe("FileDiffList", () => {
+  test.each(["Remove expanded file", "Move expanded file to end"])(
+    "keeps the visible file and scroll direction after %s offscreen",
+    (action) => {
+      const measurements = installMeasuredRows();
+      try {
+        render(<ResizingFileDiffListHarness fileCount={100} />);
+        measurements.resize(600, 800);
+        const list = screen.getByRole("list");
+        const fileTop = (file: string): number =>
+          screen
+            .getByRole("button", { name: `Toggle diff for src/${file}.ts` })
+            .closest('[role="listitem"]')!
+            .getBoundingClientRect().top;
+
+        fireEvent.scroll(list, { target: { scrollTop: 1_960 } });
+        expect(fileTop("file-030")).toBe(0);
+        fireEvent.click(screen.getByRole("button", { name: action }));
+        fireEvent.scroll(list);
+        expect(fileTop("file-030")).toBe(0);
+        expect(list.scrollTop).toBe(1_160);
+
+        fireEvent.scroll(list, { target: { scrollTop: 1_120 } });
+        expect(fileTop("file-029")).toBe(0);
+        fireEvent.scroll(list, { target: { scrollTop: 1_080 } });
+        expect(fileTop("file-028")).toBe(0);
+
+        if (action === "Move expanded file to end") {
+          fireEvent.scroll(list, { target: { scrollTop: 3_960 } });
+          expect(fileTop("file-005")).toBe(0);
+        }
+      } finally {
+        measurements.restore();
+      }
+    },
+  );
+
+  test("mounts a bounded row range and reaches the last file", () => {
+    render(<LargeFileDiffListHarness />);
+    const list = screen.getByRole("list");
+    expect(screen.getByText("1000 changed files")).toBeDefined();
+    expect(screen.getAllByTestId("agent-studio-git-file-toggle-button").length).toBeLessThan(30);
+
+    fireEvent.scroll(list, { target: { scrollTop: 39_600 } });
+    expect(screen.getByRole("button", { name: "Toggle diff for src/file-999.ts" })).toBeDefined();
+    expect(screen.getAllByTestId("agent-studio-git-file-toggle-button").length).toBeLessThan(30);
+  });
+
+  test("keeps unfinished comment text after a virtual row leaves the viewport", () => {
+    render(<LargeFileDiffListHarness />);
+    const list = screen.getByRole("list");
+    fireEvent.click(screen.getByTestId("pierre-diff-select-lines"));
+    fireEvent.change(screen.getByPlaceholderText("Add a comment for the Builder"), {
+      target: { value: "Keep this draft" },
+    });
+
+    fireEvent.scroll(list, { target: { scrollTop: 39_600 } });
+    expect(screen.queryByRole("button", { name: "Toggle diff for src/file-000.ts" })).toBeNull();
+    fireEvent.scroll(list, { target: { scrollTop: 0 } });
+
+    expect(screen.getByDisplayValue("Keep this draft")).toBeDefined();
+  });
+
+  test("keeps an unfinished comment edit after a virtual row leaves the viewport", () => {
+    render(<LargeFileDiffListHarness />);
+    const list = screen.getByRole("list");
+    fireEvent.click(screen.getByTestId("pierre-diff-select-lines"));
+    fireEvent.change(screen.getByPlaceholderText("Add a comment for the Builder"), {
+      target: { value: "Saved comment" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Comment" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByDisplayValue("Saved comment"), {
+      target: { value: "Unfinished edit" },
+    });
+
+    fireEvent.scroll(list, { target: { scrollTop: 39_600 } });
+    fireEvent.scroll(list, { target: { scrollTop: 0 } });
+
+    expect(screen.getByDisplayValue("Unfinished edit")).toBeDefined();
+  });
+
+  test("shows the remaining files when a list shrinks near the end", () => {
+    render(<LargeFileDiffListHarness />);
+    const list = screen.getByRole("list");
+    fireEvent.scroll(list, { target: { scrollTop: 39_600 } });
+    fireEvent.click(screen.getByRole("button", { name: "Shorten list" }));
+
+    expect(screen.getByText("20 changed files")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Toggle diff for src/file-019.ts" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Toggle diff for src/file-999.ts" })).toBeNull();
+  });
+
+  test("keeps the reading offset when style and width change inside an expanded diff", () => {
+    const measurements = installMeasuredRows();
+    try {
+      render(<ResizingFileDiffListHarness />);
+      const list = screen.getByRole("list");
+      Object.defineProperty(list, "scrollTo", {
+        value: ({ top }: ScrollToOptions) => {
+          list.scrollTop = top ?? 0;
+        },
+      });
+      measurements.resize(600, 800);
+      fireEvent.scroll(list, { target: { scrollTop: 500 } });
+
+      fireEvent.click(screen.getByRole("button", { name: "Side-by-side" }));
+      measurements.resize(600, 900);
+      expect(list.scrollTop).toBe(500);
+
+      measurements.resize(400, 1_000);
+      expect(list.scrollTop).toBe(500);
+
+      fireEvent.click(screen.getByRole("button", { name: "Refresh another file" }));
+      measurements.resize(400, 1_000);
+      expect(list.scrollTop).toBe(500);
+    } finally {
+      measurements.restore();
+    }
+  });
+
+  test("moves later rows after an inline comment form changes an expanded row's height", () => {
+    const measurements = installMeasuredRows();
+    try {
+      render(<ResizingFileDiffListHarness />);
+      measurements.resize(600, 800);
+      const nextFile = screen.getByRole("button", { name: "Toggle diff for src/file-006.ts" });
+      expect(nextFile.closest('[role="listitem"]')?.getAttribute("style")).toContain("1000px");
+
+      fireEvent.click(screen.getByTestId("pierre-diff-select-lines"));
+      expect(screen.getByTestId("agent-studio-git-new-comment-form")).toBeDefined();
+      measurements.resize(600, 1_000);
+      expect(nextFile.closest('[role="listitem"]')?.getAttribute("style")).toContain("1200px");
+
+      fireEvent.scroll(screen.getByRole("list"), { target: { scrollTop: 1_360 } });
+      expect(screen.getByRole("button", { name: "Toggle diff for src/file-019.ts" })).toBeDefined();
+    } finally {
+      measurements.restore();
+    }
+  });
+
+  test("keeps adjacent rows separate during a panel resize", () => {
+    const measurements = installMeasuredRows();
+    try {
+      render(<ResizingFileDiffListHarness />);
+      measurements.resize(600, 800);
+
+      const expandedRow = screen
+        .getByRole("button", { name: "Toggle diff for src/file-005.ts" })
+        .closest('[role="listitem"]');
+      const nextRow = screen
+        .getByRole("button", { name: "Toggle diff for src/file-006.ts" })
+        .closest('[role="listitem"]');
+      expect(expandedRow).not.toBeNull();
+      expect(nextRow).not.toBeNull();
+      expect(nextRow!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+        expandedRow!.getBoundingClientRect().bottom,
+      );
+
+      for (const { width, height } of [
+        { width: 550, height: 850 },
+        { width: 500, height: 875 },
+        { width: 450, height: 900 },
+        { width: 400, height: 950 },
+      ]) {
+        measurements.resize(width, height, 1);
+        expect(nextRow!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+          expandedRow!.getBoundingClientRect().bottom,
+        );
+      }
+
+      measurements.resize(400, 1_000, 0);
+      fireEvent.click(screen.getByRole("button", { name: "Side-by-side" }));
+      expect(nextRow!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+        expandedRow!.getBoundingClientRect().bottom,
+      );
+    } finally {
+      measurements.restore();
+    }
+  });
+
+  test("measures expanded rows before showing another task's file list", () => {
+    const measurements = installMeasuredRows();
+    try {
+      render(<ResizingFileDiffListHarness />);
+      measurements.resize(600, 800);
+
+      measurements.resize(600, 1_000, 0);
+      fireEvent.click(screen.getByRole("button", { name: "Switch task files" }));
+      const expandedRow = screen
+        .getByRole("button", { name: "Toggle diff for other/file-005.ts" })
+        .closest('[role="listitem"]');
+      const nextRow = screen
+        .getByRole("button", { name: "Toggle diff for other/file-006.ts" })
+        .closest('[role="listitem"]');
+      expect(expandedRow).not.toBeNull();
+      expect(nextRow).not.toBeNull();
+      expect(nextRow!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+        expandedRow!.getBoundingClientRect().bottom,
+      );
+    } finally {
+      measurements.restore();
+    }
+  });
+
+  test("remeasures unchanged rows before displaying another owner's diffs", () => {
+    const measurements = installMeasuredRows();
+    try {
+      render(<ResizingFileDiffListHarness />);
+      measurements.resize(600, 800);
+
+      fireEvent.click(screen.getByRole("button", { name: "Switch list owner" }));
+      const expandedRow = screen
+        .getByRole("button", { name: "Toggle diff for src/file-005.ts" })
+        .closest('[role="listitem"]')!;
+      const nextRow = screen
+        .getByRole("button", { name: "Toggle diff for src/file-006.ts" })
+        .closest('[role="listitem"]')!;
+      expect(nextRow.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+        expandedRow.getBoundingClientRect().bottom,
+      );
+    } finally {
+      measurements.restore();
+    }
+  });
+
   test("uses the whole root file row as a toggle while reset stays separate", () => {
     for (const canResetFiles of [false, true]) {
       const requestFileReset = mock((_filePath: string) => {});

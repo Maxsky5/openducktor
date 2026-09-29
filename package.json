@@ -69,7 +69,7 @@
     "path-to-regexp": "^8.4.0",
     "rollup": "^4.59.0",
     "tmp": "^0.2.7",
-    "undici": "^7.28.0"
+    "undici": "^7.29.1"
   },
   "engines": {
     "node": ">=22.6.0"
