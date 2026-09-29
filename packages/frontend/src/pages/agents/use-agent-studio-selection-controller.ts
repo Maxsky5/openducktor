@@ -21,6 +21,7 @@ import type {
   SelectAgentStudioSelection,
 } from "./shell/agent-studio-selection-state";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
+import type { TabChangeListener } from "./use-agent-studio-task-tabs-state";
 
 type UseAgentStudioSelectionControllerArgs = {
   activeWorkspaceId: string | null;
@@ -41,6 +42,7 @@ type UseAgentStudioSelectionControllerArgs = {
   repoSettings: RepoSettingsInput | null;
   isLoadingRepoSettings: boolean;
   selectAgentStudioSelection: SelectAgentStudioSelection;
+  onTabChange?: TabChangeListener | undefined;
 };
 
 export type AgentStudioSelectedView = {
@@ -62,6 +64,7 @@ export type AgentStudioSelectionControllerResult = {
   isLoadingTasks: boolean;
   activeTaskTabId: string;
   loadedStateWorkspaceId: string | null;
+  hasPendingTabChange: boolean;
   tabTaskIds: string[];
   availableTabTasks: TaskCard[];
   taskTabs: ReturnType<typeof useAgentStudioTaskTabs>["taskTabs"];
@@ -95,6 +98,7 @@ export function useAgentStudioSelectionController({
   repoSettings,
   isLoadingRepoSettings,
   selectAgentStudioSelection,
+  onTabChange,
 }: UseAgentStudioSelectionControllerArgs): AgentStudioSelectionControllerResult {
   const { sessionReadModelLoadState } = useAgentSessionReadModelState();
   const sessionsByTaskId = useMemo(() => groupSessionsByTaskId(sessions), [sessions]);
@@ -166,6 +170,7 @@ export function useAgentStudioSelectionController({
     handleCloseTab,
     handleReorderTab,
     loadedStateWorkspaceId,
+    hasPendingTabChange,
   } = useAgentStudioTaskTabs({
     activeWorkspaceId,
     loadedAgentStudioState,
@@ -180,6 +185,7 @@ export function useAgentStudioSelectionController({
     latestSessionByTaskId,
     activeSessionByTaskId,
     selectAgentStudioSelection,
+    onTabChange,
   });
 
   const navigationState = useMemo(() => {
@@ -266,6 +272,7 @@ export function useAgentStudioSelectionController({
       isLoadingTasks,
       activeTaskTabId,
       loadedStateWorkspaceId,
+      hasPendingTabChange,
       tabTaskIds,
       availableTabTasks,
       taskTabs,
@@ -292,6 +299,7 @@ export function useAgentStudioSelectionController({
       isLoadingTasks,
       navigationState,
       loadedStateWorkspaceId,
+      hasPendingTabChange,
       selectedSessionViewWithContextError,
       sessions,
       taskTabs,

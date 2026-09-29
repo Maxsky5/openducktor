@@ -136,6 +136,7 @@ type SelectionState = {
   };
   activeTaskTabId: string;
   loadedStateWorkspaceId: string | null;
+  hasPendingTabChange: boolean;
   taskTabs: [];
   tabTaskIds: string[];
   availableTabTasks: (typeof task)[];
@@ -353,6 +354,7 @@ let selectionState: SelectionState = {
   },
   activeTaskTabId: "task-1",
   loadedStateWorkspaceId: "workspace-repo",
+  hasPendingTabChange: false,
   taskTabs: [],
   tabTaskIds: ["task-1"],
   availableTabTasks: [task],
@@ -818,6 +820,7 @@ beforeEach(async () => {
     },
     activeTaskTabId: "task-1",
     loadedStateWorkspaceId: "workspace-repo",
+    hasPendingTabChange: false,
     taskTabs: [],
     tabTaskIds: ["task-1"],
     availableTabTasks: [task],

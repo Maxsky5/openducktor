@@ -206,6 +206,8 @@ Files: `pages/agents/agent-studio-task-tabs-storage.ts`, `pages/agents/agent-stu
 
 Storage owns repository-scoped localStorage. List helpers own ensure, reorder, fallback, and close. `agents-page-session-tabs.ts` owns workflow and session display. Storage and list helpers do not own runtime or session state.
 
+`agent-studio-state-writer.ts` orders Agent Studio state actions for one workspace in the frontend. The host applies each action to the latest config under serialized writes. Task starts and local tab changes use this path. `use-agent-studio-workspace-state-save.ts` syncs the selected task, session, and task list cleanup through the same path.
+
 ## Selected runtime data
 
 Files: `hooks/use-session-runtime-data.ts`, `support/session-runtime-data-refs.ts`, `types/selected-session-runtime-data.ts`, `state/queries/agent-session-todos.ts`, `state/queries/runtime-catalog.ts`, and `pages/agents/selected-session/use-agent-studio-selected-session-view.ts`.

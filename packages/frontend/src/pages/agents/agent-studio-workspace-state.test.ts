@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-  addTaskToAgentStudioState,
   createAgentStudioStateSnapshot,
   pruneAgentStudioTaskIds,
   buildAgentStudioReadState,
@@ -18,17 +17,6 @@ describe("agent-studio-workspace-state", () => {
         [createTask("task-1"), createTask("task-2"), createTask("closed", "closed")],
       ),
     ).toEqual(["task-2", "task-1"]);
-  });
-
-  test("adds only a known open task", () => {
-    const state = { openTaskIds: ["task-1"] };
-    const tasks = [createTask("task-1"), createTask("task-2"), createTask("closed", "closed")];
-
-    expect(addTaskToAgentStudioState({ state, taskId: "task-2", tasks })).toEqual({
-      openTaskIds: ["task-1", "task-2"],
-    });
-    expect(addTaskToAgentStudioState({ state, taskId: "missing", tasks })).toBe(state);
-    expect(addTaskToAgentStudioState({ state, taskId: "closed", tasks })).toBe(state);
   });
 
   test("drops stale active tasks and sessions from the read state", () => {

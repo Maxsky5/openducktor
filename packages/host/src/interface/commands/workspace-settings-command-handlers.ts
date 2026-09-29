@@ -9,6 +9,7 @@ import {
   workspaceRepoConfigInputSchema,
   workspaceRepoSettingsInputSchema,
   workspaceAgentStudioStateSchema,
+  workspaceAgentStudioStateActionSchema,
   type WorkspaceRepoConfigInput,
   type WorkspaceRepoSettingsInput,
 } from "@openducktor/contracts";
@@ -134,6 +135,7 @@ export const createWorkspaceSettingsCommandHandlers = (
     | "deleteCustomAgentRole"
     | "reorderWorkspaces"
     | "replaceAgentStudioState"
+    | "applyAgentStudioStateAction"
     | "saveRepoSettings"
     | "saveSettingsSnapshot"
     | "selectWorkspace"
@@ -226,6 +228,13 @@ export const createWorkspaceSettingsCommandHandlers = (
         parseAgentStudioStateInput(
           requireObjectArgs("workspace_replace_agent_studio_state", args, "state"),
         ),
+      );
+    },
+    workspace_apply_agent_studio_state_action: (args) => {
+      const record = requireObjectArgs("workspace_apply_agent_studio_state_action", args, "action");
+      return workspaceSettingsService.applyAgentStudioStateAction(
+        requireString(commandInputStringSchema.safeParse(record.workspaceId), "workspaceId"),
+        requireParsedInput(workspaceAgentStudioStateActionSchema, record, "action"),
       );
     },
     workspace_get_repo_config: (args) =>

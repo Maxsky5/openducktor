@@ -1,5 +1,5 @@
 import type { TaskCard, WorkspaceAgentStudioState } from "@openducktor/contracts";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ensureActiveTaskTab } from "./agent-studio-task-tabs-list";
 import { pruneAgentStudioTaskIds } from "./agent-studio-workspace-state";
 
@@ -7,8 +7,12 @@ export type TaskTabState = {
   openTaskIds: string[];
   activeTaskId: string | null;
 };
+export type TabChangeListener = (
+  baseOpenTaskIds: string[],
+  nextState: TaskTabState,
+) => Promise<void> | void;
 
-type TaskTabDraft = TaskTabState & {
+type PendingTabChange = TaskTabState & {
   workspaceId: string;
   loadKey: string;
 };
@@ -22,6 +26,7 @@ export function useTaskTabState({
   selectedTask,
   tasks,
   tasksAreCurrent,
+  onTabChange,
 }: {
   activeWorkspaceId: string | null;
   loadedAgentStudioState: WorkspaceAgentStudioState | null;
@@ -31,19 +36,34 @@ export function useTaskTabState({
   selectedTask: TaskCard | null;
   tasks: TaskCard[];
   tasksAreCurrent: boolean;
+  onTabChange?: TabChangeListener | undefined;
 }) {
-  const [draft, setDraft] = useState<TaskTabDraft | null>(null);
+  const [pendingTabChange, setPendingTabChange] = useState<PendingTabChange | null>(null);
   const hasLoadedState = Boolean(
     activeWorkspaceId &&
     loadedAgentStudioState &&
     agentStudioStateLoadKey !== null &&
     agentStudioState,
   );
-  const useDraft = Boolean(
+  const hasPendingTabChange = Boolean(
     hasLoadedState &&
-    draft?.workspaceId === activeWorkspaceId &&
-    draft.loadKey === agentStudioStateLoadKey,
+    pendingTabChange?.workspaceId === activeWorkspaceId &&
+    pendingTabChange.loadKey === agentStudioStateLoadKey,
   );
+  useEffect(() => {
+    if (!hasPendingTabChange || !pendingTabChange || !loadedAgentStudioState) {
+      return;
+    }
+    const savedTaskIds = loadedAgentStudioState.openTaskIds;
+    if (
+      savedTaskIds.length !== pendingTabChange.openTaskIds.length ||
+      !savedTaskIds.every((taskId, index) => taskId === pendingTabChange.openTaskIds[index]) ||
+      (loadedAgentStudioState.activeTask?.taskId ?? null) !== pendingTabChange.activeTaskId
+    ) {
+      return;
+    }
+    setPendingTabChange((current) => (current === pendingTabChange ? null : current));
+  }, [hasPendingTabChange, loadedAgentStudioState, pendingTabChange]);
 
   const state = useMemo<TaskTabState>(() => {
     const hasValidRouteTask = Boolean(taskId && selectedTask && selectedTask.status !== "closed");
@@ -55,13 +75,10 @@ export function useTaskTabState({
       };
     }
 
-    const baseState =
-      useDraft && draft
-        ? draft
-        : {
-            openTaskIds: agentStudioState.openTaskIds,
-            activeTaskId: agentStudioState.activeTask?.taskId ?? null,
-          };
+    const baseState = (hasPendingTabChange ? pendingTabChange : null) ?? {
+      openTaskIds: agentStudioState.openTaskIds,
+      activeTaskId: agentStudioState.activeTask?.taskId ?? null,
+    };
     const taskIds = tasksAreCurrent
       ? pruneAgentStudioTaskIds(baseState.openTaskIds, tasks)
       : baseState.openTaskIds;
@@ -73,13 +90,13 @@ export function useTaskTabState({
     };
   }, [
     agentStudioState,
-    draft,
+    hasPendingTabChange,
+    pendingTabChange,
     tasksAreCurrent,
     hasLoadedState,
     selectedTask,
     taskId,
     tasks,
-    useDraft,
   ]);
 
   const setTabState = useCallback(
@@ -87,19 +104,38 @@ export function useTaskTabState({
       if (!activeWorkspaceId || !loadedAgentStudioState || agentStudioStateLoadKey === null) {
         return;
       }
-      setDraft({
+      const baseOpenTaskIds =
+        hasPendingTabChange && pendingTabChange
+          ? pendingTabChange.openTaskIds
+          : loadedAgentStudioState.openTaskIds;
+      const change = {
         workspaceId: activeWorkspaceId,
         loadKey: agentStudioStateLoadKey,
         ...nextState,
-      });
+      };
+      setPendingTabChange(change);
+      const saved = onTabChange?.(baseOpenTaskIds, nextState);
+      if (saved) {
+        void saved.then(() => {
+          setPendingTabChange((current) => (current === change ? null : current));
+        });
+      }
     },
-    [activeWorkspaceId, loadedAgentStudioState, agentStudioStateLoadKey],
+    [
+      activeWorkspaceId,
+      loadedAgentStudioState,
+      agentStudioStateLoadKey,
+      hasPendingTabChange,
+      pendingTabChange,
+      onTabChange,
+    ],
   );
 
   return {
     openTaskIds: state.openTaskIds,
     persistedActiveTaskId: state.activeTaskId,
     loadedStateWorkspaceId: hasLoadedState ? activeWorkspaceId : null,
+    hasPendingTabChange,
     setTabState,
   };
 }

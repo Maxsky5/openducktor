@@ -34,6 +34,8 @@ export const withSerializedConfigWrites = (
     reorderWorkspaces: (workspaceOrder) => serialize(service.reorderWorkspaces(workspaceOrder)),
     replaceAgentStudioState: (workspaceId, state) =>
       serialize(service.replaceAgentStudioState(workspaceId, state)),
+    applyAgentStudioStateAction: (workspaceId, action) =>
+      serialize(service.applyAgentStudioStateAction(workspaceId, action)),
     updateRepoConfig: (workspaceId, update) =>
       serialize(service.updateRepoConfig(workspaceId, update)),
     saveRepoSettings: (workspaceId, settings) =>

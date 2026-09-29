@@ -1,5 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { RepoConfig, WorkspaceAgentStudioState } from "@openducktor/contracts";
+import type {
+  RepoConfig,
+  WorkspaceAgentStudioState,
+  WorkspaceAgentStudioStateAction,
+} from "@openducktor/contracts";
 import { createQueryClient } from "@/lib/query-client";
 import { repoConfigQueryOptions } from "@/state/queries/workspace";
 import {
@@ -19,10 +23,12 @@ import type { AgentStudioQueryUpdate } from "./query-sync/agent-studio-navigatio
 import { toAgentStudioSessionSelection } from "./shell/agent-studio-selection-state";
 import { useAgentStudioSelectionState } from "./shell/use-agent-studio-selection-state";
 import { buildAgentStudioStateLoad } from "./agent-studio-workspace-state-load-model";
+import { addTaskToWorkspaceAgentStudioState } from "./agent-studio-state-host";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 import { useTaskTabState } from "./use-agent-studio-task-tabs-state";
 import { useAgentStudioWorkspaceStateLoad } from "./use-agent-studio-workspace-state-load";
 import { useAgentStudioWorkspaceStateSave } from "./use-agent-studio-workspace-state-save";
+import { useAgentStudioTabStateChange } from "./use-agent-studio-tab-state-change";
 
 enableReactActEnvironment();
 
@@ -125,9 +131,9 @@ const useWorkspaceRestoreWithSelection = (
 
 type WorkspaceStateHost = {
   workspaceGetRepoConfig: (workspaceId: string) => Promise<RepoConfig>;
-  workspaceReplaceAgentStudioState: (
+  workspaceApplyAgentStudioStateAction: (
     workspaceId: string,
-    state: WorkspaceAgentStudioState,
+    action: WorkspaceAgentStudioStateAction,
   ) => Promise<RepoConfig>;
 };
 
@@ -137,6 +143,10 @@ type PersistenceHookArgs = Omit<LoadHookArgs, "hostClient"> & {
 
 const useWorkspaceStatePersistence = (args: PersistenceHookArgs) => {
   const load = useAgentStudioWorkspaceStateLoad(args);
+  const tabChange = useAgentStudioTabStateChange({
+    workspaceId: args.activeWorkspaceId,
+    hostClient: args.hostClient,
+  });
   const tabs = useTaskTabState({
     activeWorkspaceId: args.activeWorkspaceId,
     loadedAgentStudioState: load.loadedAgentStudioState,
@@ -146,6 +156,7 @@ const useWorkspaceStatePersistence = (args: PersistenceHookArgs) => {
     selectedTask: args.tasks[0] ?? null,
     tasks: args.tasks,
     tasksAreCurrent: args.tasksAreCurrent,
+    onTabChange: tabChange.onTabChange,
   });
   const state: WorkspaceAgentStudioState = tabs.persistedActiveTaskId
     ? {
@@ -157,10 +168,11 @@ const useWorkspaceStatePersistence = (args: PersistenceHookArgs) => {
     workspaceId: args.activeWorkspaceId,
     loadedState: load.loadedAgentStudioState,
     state,
+    hasPendingTabChange: tabs.hasPendingTabChange,
     enabled: load.canSave,
     hostClient: args.hostClient,
   });
-  return { load, tabs };
+  return { load, tabs, tabChange };
 };
 
 describe("useAgentStudioWorkspaceStateLoad", () => {
@@ -255,16 +267,16 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
     };
     const nextState: WorkspaceAgentStudioState = {
       openTaskIds: ["task-1", "task-2"],
-      activeTask: { taskId: "task-2" },
+      activeTask: { taskId: "task-1" },
     };
     const firstSave = createDeferred<RepoConfig>();
     const workspaceGetRepoConfig = mock(async () => createRepoConfig(savedState));
-    const workspaceReplaceAgentStudioState = mock(
-      async (_workspaceId: string, state: WorkspaceAgentStudioState) => {
-        if (state.openTaskIds.length === 2) {
-          return firstSave.promise;
+    const workspaceApplyAgentStudioStateAction = mock(
+      async (_workspaceId: string, action: WorkspaceAgentStudioStateAction) => {
+        if (action.type !== "change_tabs") {
+          throw new Error(`Unexpected action: ${action.type}`);
         }
-        return createRepoConfig(state);
+        return firstSave.promise;
       },
     );
     const queryClient = createQueryClient();
@@ -276,7 +288,7 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
       tasksAreCurrent: true,
       sessions: [],
       sessionReadModelLoadState: readyAgentSessionReadModelLoadState("/repo-a"),
-      hostClient: { workspaceGetRepoConfig, workspaceReplaceAgentStudioState },
+      hostClient: { workspaceGetRepoConfig, workspaceApplyAgentStudioStateAction },
     };
     const harness = createSharedHookHarness(useWorkspaceStatePersistence, hookArgs, {
       queryClient,
@@ -291,7 +303,7 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
         activeTaskId: nextState.activeTask?.taskId ?? null,
       }),
     );
-    await harness.waitFor(() => workspaceReplaceAgentStudioState.mock.calls.length === 1);
+    await harness.waitFor(() => workspaceApplyAgentStudioStateAction.mock.calls.length === 1);
 
     await harness.run(() => {
       queryClient.setQueryData(
@@ -312,7 +324,200 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
         queryClient.getQueryData<RepoConfig>(queryKey)?.agentStudioState.openTaskIds.length === 2,
     );
 
-    expect(workspaceReplaceAgentStudioState).toHaveBeenCalledTimes(1);
+    expect(workspaceApplyAgentStudioStateAction).toHaveBeenCalledTimes(1);
+    await harness.unmount();
+  });
+
+  test("saves a background-start tab alongside a pending local tab change", async () => {
+    const savedState: WorkspaceAgentStudioState = {
+      openTaskIds: ["task-1"],
+      activeTask: { taskId: "task-1" },
+    };
+    const localState: WorkspaceAgentStudioState = {
+      openTaskIds: ["task-1", "task-2"],
+      activeTask: { taskId: "task-1" },
+    };
+    const firstSave = createDeferred<void>();
+    const workspaceApplyAgentStudioStateAction = mock(
+      async (_workspaceId: string, action: WorkspaceAgentStudioStateAction) => {
+        if (action.type === "change_tabs") {
+          await firstSave.promise;
+          return createRepoConfig(localState);
+        }
+        if (action.type === "ensure_tab") {
+          return createRepoConfig({ ...localState, openTaskIds: ["task-1", "task-2", "task-3"] });
+        }
+        throw new Error(`Unexpected action: ${action.type}`);
+      },
+    );
+    const hostClient = {
+      workspaceGetRepoConfig: async () => createRepoConfig(savedState),
+      workspaceApplyAgentStudioStateAction,
+    };
+    const queryClient = createQueryClient();
+    const queryKey = repoConfigQueryOptions("repo-a").queryKey;
+    const allTasks = [...tasks, createTaskCardFixture({ id: "task-3" })];
+    const harness = createSharedHookHarness(
+      useWorkspaceStatePersistence,
+      {
+        activeWorkspaceId: "repo-a",
+        tasks: allTasks,
+        isLoadingTasks: false,
+        tasksAreCurrent: true,
+        sessions: [],
+        sessionReadModelLoadState: readyAgentSessionReadModelLoadState("/repo-a"),
+        hostClient,
+      },
+      { queryClient },
+    );
+
+    await harness.mount();
+    await harness.waitFor((result) => result.load.agentStudioStateLoadKey !== null);
+    await harness.run((result) =>
+      result.tabs.setTabState({ openTaskIds: localState.openTaskIds, activeTaskId: "task-1" }),
+    );
+    await harness.waitFor(() => workspaceApplyAgentStudioStateAction.mock.calls.length === 1);
+
+    const started = addTaskToWorkspaceAgentStudioState({
+      queryClient,
+      workspaceId: "repo-a",
+      taskId: "task-3",
+      tasks: allTasks,
+      hostClient,
+    });
+    expect(workspaceApplyAgentStudioStateAction).toHaveBeenCalledTimes(1);
+    expect(harness.getLatest().tabs.openTaskIds).toEqual(["task-1", "task-2"]);
+
+    await harness.run(async () => {
+      firstSave.resolve();
+      await firstSave.promise;
+    });
+    await started;
+    expect(workspaceApplyAgentStudioStateAction.mock.calls.map((call) => call[1].type)).toEqual([
+      "change_tabs",
+      "ensure_tab",
+    ]);
+    await harness.waitFor(
+      () =>
+        queryClient.getQueryData<RepoConfig>(queryKey)?.agentStudioState.openTaskIds.length === 3,
+    );
+    await harness.unmount();
+  });
+
+  test("reopens a task started while its tab close is still saving", async () => {
+    let savedState: WorkspaceAgentStudioState = {
+      openTaskIds: ["task-1", "task-2"],
+      activeTask: { taskId: "task-1" },
+    };
+    const closeSave = createDeferred<void>();
+    const hostClient = {
+      workspaceGetRepoConfig: async () => createRepoConfig(savedState),
+      workspaceApplyAgentStudioStateAction: mock(
+        async (_workspaceId: string, action: WorkspaceAgentStudioStateAction) => {
+          if (action.type === "change_tabs") {
+            await closeSave.promise;
+            savedState = { openTaskIds: ["task-1"], activeTask: { taskId: "task-1" } };
+          } else if (action.type === "ensure_tab") {
+            savedState = { ...savedState, openTaskIds: [...savedState.openTaskIds, action.taskId] };
+          }
+          return createRepoConfig(savedState);
+        },
+      ),
+    };
+    const queryClient = createQueryClient();
+    const harness = createSharedHookHarness(
+      useWorkspaceStatePersistence,
+      {
+        activeWorkspaceId: "repo-a",
+        tasks,
+        isLoadingTasks: false,
+        tasksAreCurrent: true,
+        sessions: [],
+        sessionReadModelLoadState: readyAgentSessionReadModelLoadState("/repo-a"),
+        hostClient,
+      },
+      { queryClient },
+    );
+
+    await harness.mount();
+    await harness.waitFor((result) => result.load.agentStudioStateLoadKey !== null);
+    await harness.run((result) =>
+      result.tabs.setTabState({ openTaskIds: ["task-1"], activeTaskId: "task-1" }),
+    );
+    await harness.waitFor(
+      () => hostClient.workspaceApplyAgentStudioStateAction.mock.calls.length === 1,
+    );
+
+    const started = addTaskToWorkspaceAgentStudioState({
+      queryClient,
+      workspaceId: "repo-a",
+      taskId: "task-2",
+      tasks,
+      hostClient,
+    });
+    await harness.run(async () => {
+      closeSave.resolve();
+      await closeSave.promise;
+    });
+    await started;
+
+    await harness.waitFor(() => savedState.openTaskIds.includes("task-2"));
+    expect(
+      hostClient.workspaceApplyAgentStudioStateAction.mock.calls.map((call) => call[1].type),
+    ).toEqual(["change_tabs", "ensure_tab"]);
+    expect(harness.getLatest().tabs.openTaskIds).toContain("task-2");
+    await harness.unmount();
+  });
+
+  test("shows a failed tab change and saves it after retry", async () => {
+    const savedState: WorkspaceAgentStudioState = {
+      openTaskIds: ["task-1", "task-2"],
+      activeTask: { taskId: "task-1" },
+    };
+    const closedState: WorkspaceAgentStudioState = {
+      openTaskIds: ["task-1"],
+      activeTask: { taskId: "task-1" },
+    };
+    let attempts = 0;
+    const hostClient = {
+      workspaceGetRepoConfig: async () => createRepoConfig(savedState),
+      workspaceApplyAgentStudioStateAction: mock(async () => {
+        attempts += 1;
+        if (attempts === 1) {
+          throw new Error("Could not save tabs");
+        }
+        return createRepoConfig(closedState);
+      }),
+    };
+    const queryClient = createQueryClient();
+    const harness = createSharedHookHarness(
+      useWorkspaceStatePersistence,
+      {
+        activeWorkspaceId: "repo-a",
+        tasks,
+        isLoadingTasks: false,
+        tasksAreCurrent: true,
+        sessions: [],
+        sessionReadModelLoadState: readyAgentSessionReadModelLoadState("/repo-a"),
+        hostClient,
+      },
+      { queryClient },
+    );
+
+    await harness.mount();
+    await harness.waitFor((result) => result.load.agentStudioStateLoadKey !== null);
+    await harness.run((result) =>
+      result.tabs.setTabState({ openTaskIds: ["task-1"], activeTaskId: "task-1" }),
+    );
+    await harness.waitFor(
+      (result) => result.tabChange.saveError?.message === "Could not save tabs",
+    );
+    expect(harness.getLatest().tabs.openTaskIds).toEqual(["task-1", "task-2"]);
+
+    await harness.run((result) => result.tabChange.retry());
+    await harness.waitFor((result) => result.tabChange.saveError === null);
+    await harness.waitFor((result) => result.load.loadedAgentStudioState?.openTaskIds.length === 1);
+    expect(hostClient.workspaceApplyAgentStudioStateAction).toHaveBeenCalledTimes(2);
     await harness.unmount();
   });
 

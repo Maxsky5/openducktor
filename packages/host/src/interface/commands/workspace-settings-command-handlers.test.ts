@@ -127,6 +127,25 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             }),
         });
       },
+      applyAgentStudioStateAction(_workspaceId, action) {
+        calls.push("applyAgentStudioStateAction");
+        return Effect.succeed({
+          workspaceId: "repo",
+          workspaceName: "repo",
+          repoPath: "/repo",
+          branchPrefix: "odt",
+          defaultTargetBranch: { remote: "origin", branch: "main" },
+          git: {},
+          hooks: { preStart: [], postComplete: [] },
+          devServers: [],
+          worktreeCopyPaths: [],
+          promptOverrides: {},
+          agentDefaults: {},
+          agentStudioState: {
+            openTaskIds: action.type === "ensure_tab" ? [action.taskId] : [],
+          },
+        });
+      },
       getRepoConfig() {
         return Effect.tryPromise({
           try: async () => {
@@ -432,6 +451,12 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
       },
     });
     await expect(
+      router.invoke("workspace_apply_agent_studio_state_action", {
+        workspaceId: "repo",
+        action: { type: "ensure_tab", taskId: "task-2" },
+      }),
+    ).resolves.toMatchObject({ agentStudioState: { openTaskIds: ["task-2"] } });
+    await expect(
       router.invoke("workspace_get_repo_config", { workspaceId: "repo" }),
     ).resolves.toMatchObject({ workspaceId: "repo" });
     await expect(
@@ -501,6 +526,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
       "selectWorkspace",
       "reorderWorkspaces",
       "replaceAgentStudioState",
+      "applyAgentStudioStateAction",
       "getRepoConfig",
       "updateRepoConfig",
       "saveRepoSettings",

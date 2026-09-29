@@ -145,12 +145,12 @@ describe("useAgentStudioTaskTabs", () => {
     await harness.unmount();
   });
 
-  test("keeps a local tab draft when the same workspace snapshot reloads", async () => {
+  test("keeps a pending tab change until saved, then shows a background-start tab", async () => {
     const loadedState: WorkspaceAgentStudioState = {
       openTaskIds: ["task-1"],
       activeTask: { taskId: "task-1" },
     };
-    const allTasks = [createTask("task-1"), createTask("task-2")];
+    const allTasks = [createTask("task-1"), createTask("task-2"), createTask("task-3")];
     const harness = createHookHarness(
       withDefaults({
         loadedAgentStudioState: loadedState,
@@ -179,6 +179,38 @@ describe("useAgentStudioTaskTabs", () => {
 
     expect(harness.getLatest().tabTaskIds).toEqual(["task-1", "task-2"]);
     expect(harness.getLatest().activeTaskTabId).toBe("task-2");
+
+    const savedLocalState: WorkspaceAgentStudioState = {
+      openTaskIds: ["task-1", "task-2"],
+      activeTask: { taskId: "task-2" },
+    };
+    await harness.update(
+      withDefaults({
+        loadedAgentStudioState: savedLocalState,
+        agentStudioStateLoadKey: "1:1",
+        agentStudioState: savedLocalState,
+        taskId: "",
+        selectedTask: null,
+        tasks: allTasks,
+      }),
+    );
+
+    const backgroundStartState: WorkspaceAgentStudioState = {
+      ...savedLocalState,
+      openTaskIds: [...savedLocalState.openTaskIds, "task-3"],
+    };
+    await harness.update(
+      withDefaults({
+        loadedAgentStudioState: backgroundStartState,
+        agentStudioStateLoadKey: "1:1",
+        agentStudioState: backgroundStartState,
+        taskId: "",
+        selectedTask: null,
+        tasks: allTasks,
+      }),
+    );
+
+    expect(harness.getLatest().tabTaskIds).toEqual(["task-1", "task-2", "task-3"]);
     await harness.unmount();
   });
 

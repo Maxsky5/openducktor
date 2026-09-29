@@ -1302,6 +1302,82 @@ describe("createWorkspaceSettingsService", () => {
       repoConfig("other", "/repos/other"),
     );
   });
+  test("opens a started task after an earlier tab close finishes saving", async () => {
+    let releaseClose!: () => void;
+    let closeWriteStarted!: () => void;
+    const closeGate = new Promise<void>((resolve) => {
+      releaseClose = resolve;
+    });
+    const closeStarted = new Promise<void>((resolve) => {
+      closeWriteStarted = resolve;
+    });
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        workspaces: {
+          repo: {
+            ...repoConfig("repo", "/repos/repo"),
+            agentStudioState: {
+              openTaskIds: ["task-1", "task-2"],
+              activeTask: { taskId: "task-1" },
+            },
+          },
+        },
+      }),
+      beforeWrite: async (config) => {
+        if (config.workspaces.repo?.agentStudioState.openTaskIds.length === 1) {
+          closeWriteStarted();
+          await closeGate;
+        }
+      },
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    const closing = Effect.runPromise(
+      service.applyAgentStudioStateAction("repo", {
+        type: "change_tabs",
+        baseOpenTaskIds: ["task-1", "task-2"],
+        openTaskIds: ["task-1"],
+        activeTaskId: "task-1",
+      }),
+    );
+    await closeStarted;
+    const starting = Effect.runPromise(
+      service.applyAgentStudioStateAction("repo", { type: "ensure_tab", taskId: "task-2" }),
+    );
+    releaseClose();
+    await Promise.all([closing, starting]);
+
+    expect(settingsConfig.writtenConfigs.at(-1)?.workspaces.repo?.agentStudioState).toEqual({
+      openTaskIds: ["task-1", "task-2"],
+      activeTask: { taskId: "task-1" },
+    });
+  });
+  test("keeps a new task tab when a local tab change uses an older base", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({ workspaces: { repo: repoConfig("repo", "/repos/repo") } }),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    await Effect.runPromise(
+      service.applyAgentStudioStateAction("repo", { type: "ensure_tab", taskId: "task-1" }),
+    );
+    await Effect.runPromise(
+      service.applyAgentStudioStateAction("repo", { type: "ensure_tab", taskId: "task-3" }),
+    );
+    const updated = await Effect.runPromise(
+      service.applyAgentStudioStateAction("repo", {
+        type: "change_tabs",
+        baseOpenTaskIds: ["task-1"],
+        openTaskIds: ["task-1", "task-2"],
+        activeTaskId: "task-2",
+      }),
+    );
+
+    expect(updated.agentStudioState).toEqual({
+      openTaskIds: ["task-1", "task-2", "task-3"],
+      activeTask: { taskId: "task-2" },
+    });
+  });
   test("preserves the latest Agent Studio state during a stale settings snapshot save", async () => {
     const settingsConfig = createFakeSettingsConfig({
       config: globalConfig({

@@ -1,5 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { RepoConfig, WorkspaceAgentStudioState } from "@openducktor/contracts";
+import type {
+  RepoConfig,
+  WorkspaceAgentStudioState,
+  WorkspaceAgentStudioStateAction,
+} from "@openducktor/contracts";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { createQueryClient } from "@/lib/query-client";
@@ -30,6 +34,24 @@ const createRepoConfig = (agentStudioState: WorkspaceAgentStudioState): RepoConf
   agentStudioState,
 });
 
+const asApplyHost = (
+  replace: (workspaceId: string, state: WorkspaceAgentStudioState) => Promise<RepoConfig>,
+) => ({
+  workspaceApplyAgentStudioStateAction: (
+    workspaceId: string,
+    action: WorkspaceAgentStudioStateAction,
+  ): Promise<RepoConfig> => {
+    if (action.type !== "sync_snapshot") {
+      throw new Error(`Unexpected action: ${action.type}`);
+    }
+    const state: WorkspaceAgentStudioState = { openTaskIds: action.openTaskIds };
+    if (action.activeTask) {
+      state.activeTask = action.activeTask;
+    }
+    return replace(workspaceId, state);
+  },
+});
+
 const wrapper = ({ children }: PropsWithChildren): ReactElement =>
   createElement(QueryProvider, { useIsolatedClient: true }, children);
 
@@ -45,7 +67,7 @@ describe("useAgentStudioWorkspaceStateSave", () => {
       loadedState: state,
       state,
       enabled: true,
-      hostClient: { workspaceReplaceAgentStudioState },
+      hostClient: asApplyHost(workspaceReplaceAgentStudioState),
     });
 
     await harness.mount();
@@ -63,7 +85,7 @@ describe("useAgentStudioWorkspaceStateSave", () => {
     const workspaceReplaceAgentStudioState = mock(
       async (_workspaceId: string, state: WorkspaceAgentStudioState) => createRepoConfig(state),
     );
-    const hostClient = { workspaceReplaceAgentStudioState };
+    const hostClient = asApplyHost(workspaceReplaceAgentStudioState);
     const harness = createHookHarness({
       workspaceId: "repo-a",
       loadedState,
@@ -92,13 +114,13 @@ describe("useAgentStudioWorkspaceStateSave", () => {
     const pendingSave = createDeferred<RepoConfig>();
     const workspaceReplaceAgentStudioState = mock(
       async (_workspaceId: string, state: WorkspaceAgentStudioState) => {
-        if (state === pendingState) {
+        if (state.openTaskIds.at(-1) === "task-2") {
           return pendingSave.promise;
         }
         return createRepoConfig(state);
       },
     );
-    const hostClient = { workspaceReplaceAgentStudioState };
+    const hostClient = asApplyHost(workspaceReplaceAgentStudioState);
     const harness = createHookHarness({
       workspaceId: "repo-a",
       loadedState,
@@ -126,7 +148,7 @@ describe("useAgentStudioWorkspaceStateSave", () => {
     await harness.unmount();
   });
 
-  test("does not publish an older save while a newer snapshot waits", async () => {
+  test("publishes an ordered save while a newer snapshot waits", async () => {
     const loadedState = { openTaskIds: ["task-1"] };
     const pendingState = { openTaskIds: ["task-1", "task-2"] };
     const nextState = { openTaskIds: ["task-1", "task-3"] };
@@ -134,9 +156,9 @@ describe("useAgentStudioWorkspaceStateSave", () => {
     const nextSave = createDeferred<RepoConfig>();
     const workspaceReplaceAgentStudioState = mock(
       async (_workspaceId: string, state: WorkspaceAgentStudioState) =>
-        state === pendingState ? pendingSave.promise : nextSave.promise,
+        state.openTaskIds.at(-1) === "task-2" ? pendingSave.promise : nextSave.promise,
     );
-    const hostClient = { workspaceReplaceAgentStudioState };
+    const hostClient = asApplyHost(workspaceReplaceAgentStudioState);
     const queryClient = createQueryClient();
     const queryKey = workspaceQueryKeys.repoConfig("repo-a");
     queryClient.setQueryData(queryKey, createRepoConfig(loadedState));
@@ -167,7 +189,7 @@ describe("useAgentStudioWorkspaceStateSave", () => {
     });
     await harness.waitFor(() => workspaceReplaceAgentStudioState.mock.calls.length === 2);
 
-    expect(queryClient.getQueryData<RepoConfig>(queryKey)?.agentStudioState).toEqual(loadedState);
+    expect(queryClient.getQueryData<RepoConfig>(queryKey)?.agentStudioState).toEqual(pendingState);
 
     await harness.run(async () => {
       nextSave.resolve(createRepoConfig(nextState));
@@ -191,7 +213,7 @@ describe("useAgentStudioWorkspaceStateSave", () => {
       }
       return createRepoConfig(nextState);
     });
-    const hostClient = { workspaceReplaceAgentStudioState };
+    const hostClient = asApplyHost(workspaceReplaceAgentStudioState);
     const harness = createHookHarness({
       workspaceId: "repo-a",
       loadedState,
@@ -224,7 +246,7 @@ describe("useAgentStudioWorkspaceStateSave", () => {
       }
       return nextSave.promise;
     });
-    const hostClient = { workspaceReplaceAgentStudioState };
+    const hostClient = asApplyHost(workspaceReplaceAgentStudioState);
     const harness = createHookHarness({
       workspaceId: "repo-a",
       loadedState,
@@ -265,7 +287,7 @@ describe("useAgentStudioWorkspaceStateSave", () => {
         return createRepoConfig(state);
       },
     );
-    const hostClient = { workspaceReplaceAgentStudioState };
+    const hostClient = asApplyHost(workspaceReplaceAgentStudioState);
     const harness = createHookHarness({
       workspaceId: "repo-a",
       loadedState: workspaceAState,
@@ -306,7 +328,7 @@ describe("useAgentStudioWorkspaceStateSave", () => {
     const workspaceANextState = { openTaskIds: ["task-a", "task-a-2"] };
     const workspaceBState = { openTaskIds: ["task-b"] };
     const workspaceReplaceAgentStudioState = mock(async () => workspaceASave.promise);
-    const hostClient = { workspaceReplaceAgentStudioState };
+    const hostClient = asApplyHost(workspaceReplaceAgentStudioState);
     const harness = createHookHarness({
       workspaceId: "repo-a",
       loadedState: workspaceAState,

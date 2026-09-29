@@ -3,6 +3,7 @@ import {
   DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RepoConfig,
+  type WorkspaceAgentStudioStateAction,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
@@ -307,30 +308,36 @@ describe("resolveBuildContinuationLaunchAction", () => {
 
 describe("useKanbanSessionStartFlow", () => {
   const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
-  const originalWorkspaceReplaceAgentStudioState = host.workspaceReplaceAgentStudioState;
+  const originalWorkspaceApplyAgentStudioStateAction = host.workspaceApplyAgentStudioStateAction;
   const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
   let repoConfig = createRepoConfigFixture();
-  const replaceAgentStudioState = mock(
-    async (
-      _workspaceId: string,
-      agentStudioState: RepoConfig["agentStudioState"],
-    ): Promise<RepoConfig> => {
-      repoConfig = { ...repoConfig, agentStudioState };
+  const applyAgentStudioStateAction = mock(
+    async (_workspaceId: string, action: WorkspaceAgentStudioStateAction): Promise<RepoConfig> => {
+      if (action.type !== "ensure_tab") {
+        throw new Error(`Unexpected Agent Studio action: ${action.type}`);
+      }
+      repoConfig = {
+        ...repoConfig,
+        agentStudioState: {
+          ...repoConfig.agentStudioState,
+          openTaskIds: [action.taskId],
+        },
+      };
       return repoConfig;
     },
   );
 
   beforeEach(() => {
     repoConfig = createRepoConfigFixture();
-    replaceAgentStudioState.mockClear();
+    applyAgentStudioStateAction.mockClear();
     host.workspaceGetRepoConfig = async () => repoConfig;
-    host.workspaceReplaceAgentStudioState = replaceAgentStudioState;
+    host.workspaceApplyAgentStudioStateAction = applyAgentStudioStateAction;
     host.workspaceGetSettingsSnapshot = async () => createSettingsSnapshotFixture();
   });
 
   afterEach(() => {
     host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
-    host.workspaceReplaceAgentStudioState = originalWorkspaceReplaceAgentStudioState;
+    host.workspaceApplyAgentStudioStateAction = originalWorkspaceApplyAgentStudioStateAction;
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
   });
 
@@ -703,8 +710,9 @@ describe("useKanbanSessionStartFlow", () => {
         await Promise.resolve();
       });
 
-      expect(replaceAgentStudioState).toHaveBeenCalledWith("workspace-1", {
-        openTaskIds: ["TASK-1"],
+      expect(applyAgentStudioStateAction).toHaveBeenCalledWith("workspace-1", {
+        type: "ensure_tab",
+        taskId: "TASK-1",
       });
       expect(navigate).not.toHaveBeenCalled();
       expect(toastSuccess).not.toHaveBeenCalled();
@@ -722,7 +730,8 @@ describe("useKanbanSessionStartFlow", () => {
         await Promise.resolve();
         await Promise.resolve();
       });
-      expect(replaceAgentStudioState).toHaveBeenCalledTimes(1);
+      expect(applyAgentStudioStateAction).toHaveBeenCalledTimes(2);
+      expect(repoConfig.agentStudioState.openTaskIds).toEqual(["TASK-1"]);
     } finally {
       toastSuccessSpy.mockRestore();
       await harness.unmount();
@@ -752,7 +761,7 @@ describe("useKanbanSessionStartFlow", () => {
         await Promise.resolve();
       });
 
-      expect(replaceAgentStudioState).not.toHaveBeenCalled();
+      expect(applyAgentStudioStateAction).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }
