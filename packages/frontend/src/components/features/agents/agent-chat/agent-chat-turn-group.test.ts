@@ -3,9 +3,9 @@ import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { buildMessage, presentRegularToolCall } from "./agent-chat-test-fixtures";
 import {
-  type AgentChatThreadMotionRowProps,
+  type AgentChatTurnRowProps,
   type AgentChatTurnGroupProps,
-  areAgentChatThreadMotionRowPropsEqual,
+  areAgentChatTurnRowPropsEqual,
   areAgentChatTurnGroupPropsEqual,
   isAgentChatTurnRowStreamingAssistant,
 } from "./agent-chat-turn-group-comparator";
@@ -52,9 +52,9 @@ const baseProps = (overrides: Partial<AgentChatTurnGroupProps> = {}): AgentChatT
   ...overrides,
 });
 
-const baseMotionRowProps = (
-  overrides: Partial<AgentChatThreadMotionRowProps> = {},
-): AgentChatThreadMotionRowProps => ({
+const baseTurnRowProps = (
+  overrides: Partial<AgentChatTurnRowProps> = {},
+): AgentChatTurnRowProps => ({
   row: { kind: "message", key: "parent-session:assistant-1", message: createMessage() },
   isStreamingAssistantMessage: false,
   sessionAgentColors: { build: "text-sky-700" },
@@ -383,13 +383,13 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
     ).toBe(false);
   });
 
-  test("motion row comparator accepts rebuilt equal colors and identities", () => {
-    const props = baseMotionRowProps();
+  test("turn row comparator accepts rebuilt equal colors and identities", () => {
+    const props = baseTurnRowProps();
 
     expect(
-      areAgentChatThreadMotionRowPropsEqual(
+      areAgentChatTurnRowPropsEqual(
         props,
-        baseMotionRowProps({
+        baseTurnRowProps({
           ...props,
           sessionAgentColors: { build: "text-sky-700" },
           sessionIdentity: createSessionIdentity(),
@@ -398,13 +398,13 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
     ).toBe(true);
   });
 
-  test("motion row comparator rejects changed color values", () => {
-    const props = baseMotionRowProps();
+  test("turn row comparator rejects changed color values", () => {
+    const props = baseTurnRowProps();
 
     expect(
-      areAgentChatThreadMotionRowPropsEqual(
+      areAgentChatTurnRowPropsEqual(
         props,
-        baseMotionRowProps({ ...props, sessionAgentColors: { build: "text-rose-700" } }),
+        baseTurnRowProps({ ...props, sessionAgentColors: { build: "text-rose-700" } }),
       ),
     ).toBe(false);
   });

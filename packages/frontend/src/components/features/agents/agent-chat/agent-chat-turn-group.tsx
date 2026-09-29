@@ -1,9 +1,9 @@
 import { memo, type ReactElement } from "react";
 import { AgentChatThreadRow } from "./agent-chat-thread-row";
 import {
-  type AgentChatThreadMotionRowProps,
+  type AgentChatTurnRowProps,
   type AgentChatTurnGroupProps,
-  areAgentChatThreadMotionRowPropsEqual,
+  areAgentChatTurnRowPropsEqual,
   areAgentChatTurnGroupPropsEqual,
   isAgentChatTurnRowStreamingAssistant,
   readSubagentPendingApprovalCount,
@@ -12,7 +12,7 @@ import {
 
 export type { AgentChatTurnGroupProps } from "./agent-chat-turn-group-comparator";
 
-const AgentChatThreadMotionRow = memo(function AgentChatThreadMotionRow({
+const AgentChatTurnRow = memo(function AgentChatTurnRow({
   row,
   modelCatalog = null,
   isStreamingAssistantMessage,
@@ -21,7 +21,7 @@ const AgentChatThreadMotionRow = memo(function AgentChatThreadMotionRow({
   runtimePresentation,
   subagentPendingApprovalCount,
   subagentPendingQuestionCount,
-}: AgentChatThreadMotionRowProps): ReactElement {
+}: AgentChatTurnRowProps): ReactElement {
   return (
     <div data-row-key={row.key} className="agent-chat-row-motion">
       <AgentChatThreadRow
@@ -36,7 +36,7 @@ const AgentChatThreadMotionRow = memo(function AgentChatThreadMotionRow({
       />
     </div>
   );
-}, areAgentChatThreadMotionRowPropsEqual);
+}, areAgentChatTurnRowPropsEqual);
 
 export const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   turn,
@@ -50,7 +50,7 @@ export const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   return (
     <div>
       {turn.rows.map((row) => (
-        <AgentChatThreadMotionRow
+        <AgentChatTurnRow
           key={row.key}
           row={row}
           modelCatalog={modelCatalog}

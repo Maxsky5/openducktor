@@ -5,7 +5,7 @@ import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-ta
 import { getSubagentMessageSessionKey } from "./subagent-session-key";
 import type { AgentChatRenderedTurn } from "./use-agent-chat-rendered-transcript";
 
-export type AgentChatThreadMotionRowProps = {
+export type AgentChatTurnRowProps = {
   row: AgentChatTranscriptRow;
   modelCatalog?: AgentChatThreadModel["modelCatalog"];
   isStreamingAssistantMessage: boolean;
@@ -191,9 +191,9 @@ const areTurnSubagentPendingCountsEquivalent = ({
   return true;
 };
 
-export const areAgentChatThreadMotionRowPropsEqual = (
-  previousProps: AgentChatThreadMotionRowProps,
-  nextProps: AgentChatThreadMotionRowProps,
+export const areAgentChatTurnRowPropsEqual = (
+  previousProps: AgentChatTurnRowProps,
+  nextProps: AgentChatTurnRowProps,
 ): boolean => {
   return (
     areAgentSessionTranscriptTargetsEqual(
