@@ -10,7 +10,13 @@ import {
   useRef,
   useState,
 } from "react";
-import { List, type RowComponentProps, useDynamicRowHeight, useListRef } from "react-window";
+import {
+  type DynamicRowHeight,
+  List,
+  type RowComponentProps,
+  useDynamicRowHeight,
+  useListRef,
+} from "react-window";
 import type { PierreDiffStyle } from "@/components/features/agents/pierre-diff-viewer";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { DiffScope } from "@/features/agent-studio-git";
@@ -156,6 +162,7 @@ function useFileEditorStates(
 
 type FileOrderState = {
   fileDiffs: FileDiff[];
+  measurementKey: string;
   version: number;
 };
 
@@ -170,21 +177,44 @@ function getRenderedFileRow(list: HTMLElement, index: number): HTMLElement | und
   return undefined;
 }
 
-function useFileOrderVersion(fileDiffs: FileDiff[]): number {
+function remapFileRowHeights(
+  rowHeight: DynamicRowHeight,
+  previousFileDiffs: FileDiff[],
+  fileDiffs: FileDiff[],
+): void {
+  const heightByFile = new Map(
+    previousFileDiffs.map((diff, index) => [diff.file, rowHeight.getRowHeight(index) ?? 40]),
+  );
+  for (const [index, diff] of fileDiffs.entries()) {
+    const height = heightByFile.get(diff.file) ?? 40;
+    if (rowHeight.getRowHeight(index) !== height) rowHeight.setRowHeight(index, height);
+  }
+}
+
+function useFileRowHeights(fileDiffs: FileDiff[], measurementKey: string) {
+  // Keep heights through width and content changes; mounted rows remeasure before paint.
+  const rowHeight = useDynamicRowHeight({ defaultRowHeight: 40 });
   const [fileOrder, setFileOrder] = useState<FileOrderState>(() => ({
     fileDiffs,
+    measurementKey,
     version: 0,
   }));
-  if (fileOrder.fileDiffs !== fileDiffs) {
+  if (fileOrder.fileDiffs !== fileDiffs || fileOrder.measurementKey !== measurementKey) {
     const filesChanged =
       fileOrder.fileDiffs.length !== fileDiffs.length ||
       fileDiffs.some((diff, index) => fileOrder.fileDiffs[index]?.file !== diff.file);
+    const measurementOwnerChanged = fileOrder.measurementKey !== measurementKey;
+    if (filesChanged || measurementOwnerChanged) {
+      // Move known heights with their files before the new order reaches the DOM.
+      remapFileRowHeights(rowHeight, measurementOwnerChanged ? [] : fileOrder.fileDiffs, fileDiffs);
+    }
     setFileOrder({
       fileDiffs,
+      measurementKey,
       version: fileOrder.version + (filesChanged ? 1 : 0),
     });
   }
-  return fileOrder.version;
+  return { rowHeight, fileOrderVersion: fileOrder.version };
 }
 
 type FileDiffRowProps = Omit<FileDiffListProps, "preloadLimit" | "setDiffStyle"> & {
@@ -193,6 +223,7 @@ type FileDiffRowProps = Omit<FileDiffListProps, "preloadLimit" | "setDiffStyle">
   editorStateByFile: Map<string, FileEditorState>;
   onAnnotationAction: FileAnnotationDispatch;
   onMeasureRow: (index: number, height: number) => void;
+  measurementKey: string;
 };
 
 function FileDiffRow({
@@ -216,15 +247,21 @@ function FileDiffRow({
   editorStateByFile,
   onAnnotationAction,
   onMeasureRow,
+  measurementKey,
 }: RowComponentProps<FileDiffRowProps>): ReactElement {
   const rowRef = useRef<HTMLDivElement>(null);
-  const lastMeasurementRef = useRef<{ index: number; height: number } | null>(null);
+  const lastMeasurementRef = useRef<{ index: number; height: number; key: string } | null>(null);
   useLayoutEffect(() => {
     // Match the border-box height that react-window receives from ResizeObserver.
     const height = rowRef.current?.offsetHeight ?? 0;
     const previous = lastMeasurementRef.current;
-    if (height > 0 && (previous?.index !== index || Math.abs(previous.height - height) > 1)) {
-      lastMeasurementRef.current = { index, height };
+    if (
+      height > 0 &&
+      (previous?.index !== index ||
+        previous.key !== measurementKey ||
+        Math.abs(previous.height - height) > 1)
+    ) {
+      lastMeasurementRef.current = { index, height, key: measurementKey };
       onMeasureRow(index, height);
     }
   });
@@ -312,9 +349,8 @@ export const FileDiffList = memo(function FileDiffList({
   const listRef = useListRef(null);
   const visibleFileRef = useRef<VisibleFileAnchor | null>(null);
   const pendingAnchorRef = useRef<VisibleFileAnchor | null>(null);
-  const fileOrderVersion = useFileOrderVersion(fileDiffs);
-  // Keep measured heights through width and content changes; visible rows remeasure before paint.
-  const rowHeight = useDynamicRowHeight({ defaultRowHeight: 40 });
+  const measurementKey = JSON.stringify([ownerKey, diffScope]);
+  const { rowHeight, fileOrderVersion } = useFileRowHeights(fileDiffs, measurementKey);
   const restoredFileOrderVersionRef = useRef(fileOrderVersion);
 
   const captureVisibleOffset = useCallback(() => {
@@ -394,6 +430,7 @@ export const FileDiffList = memo(function FileDiffList({
     editorStateByFile,
     onAnnotationAction,
     onMeasureRow: rowHeight.setRowHeight,
+    measurementKey,
   };
 
   return (
