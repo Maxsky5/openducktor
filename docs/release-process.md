@@ -35,8 +35,6 @@ It signs and notarizes macOS files, packages the MCP sidecar, creates updater me
 
 The package build checks that the selected platform and architecture match the host before it removes old output. It compiles the MCP sidecar for that target. It starts the packaged executable. It completes MCP initialization against a local test bridge. It also checks the packaged Claude file search module.
 
-Windows and Linux files are experimental. Do not call them stable release channels.
-
 ## Publish MCP
 
 `Publish MCP Package` checks that `packages/openducktor-mcp/package.json` matches the tag. It checks the npm tag, verifies the package, and publishes `@openducktor/mcp` to npmjs.
@@ -56,6 +54,10 @@ Windows and Linux files are experimental. Do not call them stable release channe
 The workflow rejects a draft or prerelease. It downloads the signed arm64 and x64 DMG files, calculates SHA-256 values, writes `Casks/openducktor.rb`, then commits and pushes the cask to the tap.
 
 This workflow starts after the draft becomes public so Homebrew never points to a private or untested release.
+
+## Update the website
+
+The website header shows the latest public stable release. The `Marketing website` workflow starts when a stable release becomes public, builds `main`, and publishes the new version of the header. A beta does not change the website.
 
 ## Release notes
 
@@ -104,7 +106,7 @@ Stable releases use one version. Beta releases use:
 2. Enter the version and select `stable` or `beta`.
 3. Wait for `Prepare Release` to create the commit, tag, draft, and downstream runs.
 4. Wait for desktop, MCP, and web workflows to finish.
-5. Open the draft. Check notes and every expected desktop file. Mark Windows and Linux as experimental.
+5. Open the draft. Check notes and every expected desktop file.
 6. Publish the draft.
 7. For a stable release, wait for the Homebrew workflow to update `Casks/openducktor.rb`.
 
@@ -131,7 +133,7 @@ The full cask name grants trust only to this cask. A user who already installed 
 
 ## Desktop file policy
 
-OpenDucktor supports macOS first. Stable builds use the `latest` updater channel. A beta uses its first prerelease name, so `0.4.0-beta.1` uses `beta`.
+Stable builds use the `latest` updater channel. A beta uses its first prerelease name, so `0.4.0-beta.1` uses `beta`.
 
 Each desktop release needs:
 

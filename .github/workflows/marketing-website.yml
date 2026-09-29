@@ -1,0 +1,145 @@
+name: Marketing website
+
+# CI checks the format, lint, types, and unit tests of every workspace. This workflow builds the
+# site for its target, checks it in Chromium, and publishes it to Cloudflare.
+on:
+  push:
+    branches: [main]
+    # The site build reads the product theme and mark, the lockfile, and this workflow.
+    paths: &marketing-paths
+      - 'apps/marketing-website/**'
+      - 'packages/frontend/src/styles.css'
+      - 'packages/frontend/src/assets/openducktor-mark.svg'
+      - '.github/workflows/marketing-website.yml'
+      - 'package.json'
+      - 'bun.lock'
+  pull_request:
+    branches: [main]
+    paths: *marketing-paths
+  # The header shows the latest stable release, so a new stable release publishes the site again.
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  BUN_VERSION: 1.4.2
+
+# A newer run for the same pull request or for main cancels the older one, so an older build
+# never replaces a newer site.
+concurrency:
+  group: marketing-${{ github.event.pull_request.number || 'main' }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.event_name != 'release' || !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      MARKETING_BUILD_TARGET: ${{ github.event_name == 'pull_request' && 'preview' || 'production' }}
+      MARKETING_SITE_ORIGIN: ${{ vars.MARKETING_SITE_ORIGIN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # A release event checks out its tag. The site of a release is the site of main.
+          ref: ${{ github.event_name == 'release' && 'main' || '' }}
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.0.2
+        with:
+          node-version: 24
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: bun install --frozen-lockfile
+      - name: Build the static site
+        run: bun run --filter @openducktor/marketing-website build
+        env:
+          # The header shows the latest published release, which the build reads from GitHub.
+          GITHUB_TOKEN: ${{ github.token }}
+      # A dry run needs no Cloudflare credentials. It checks both Worker configurations and the
+      # asset size limit of Cloudflare on the built files.
+      - name: Check the Cloudflare Workers upload
+        run: bun run --filter @openducktor/marketing-website worker:check
+      - name: Check the built site in Chromium
+        working-directory: apps/marketing-website
+        run: |
+          bunx playwright install --with-deps chromium
+          bun run test:browser
+      - name: Upload the browser test report
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: marketing-browser-report
+          path: |
+            apps/marketing-website/playwright-report/
+            apps/marketing-website/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: marketing-site
+          path: apps/marketing-website/dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  deploy:
+    needs: build
+    # A fork gets no preview: its workflow cannot receive the Cloudflare token. Production comes
+    # only from main, or from a release, whose build checks out main.
+    if: >-
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+      || github.event_name == 'release' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The pull request shows the URL of this environment as its deployment link.
+    environment:
+      name: ${{ github.event_name == 'pull_request' && 'marketing-preview' || 'marketing-production' }}
+      url: ${{ steps.publish.outputs.url }}
+    steps:
+      # This job runs no build step. It installs the locked Wrangler without install scripts and
+      # uploads the built files of the artifact.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'release' && 'main' || '' }}
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.0.2
+        with:
+          node-version: 24
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: marketing-site
+          path: apps/marketing-website/dist
+      - name: Publish to Cloudflare
+        id: publish
+        working-directory: apps/marketing-website
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WRANGLER_SEND_METRICS: 'false'
+          WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler.jsonl
+          PULL: ${{ github.event.pull_request.number }}
+          ORIGIN: ${{ vars.MARKETING_SITE_ORIGIN }}
+        run: |
+          if [ -n "$PULL" ]; then
+            # A version upload does not apply the workers.dev and preview URL settings of the
+            # configuration. Without preview URLs, Cloudflare gives the version no address.
+            ./node_modules/.bin/wrangler triggers deploy --config wrangler.preview.json
+            ./node_modules/.bin/wrangler versions upload --config wrangler.preview.json --preview-alias "pr-$PULL"
+            url=$(jq -er 'select(.type == "version-upload") | .preview_alias_url' "$WRANGLER_OUTPUT_FILE_PATH") || {
+              echo "::error::Cloudflare gave no preview URL. Make sure that the account has a workers.dev subdomain."
+              exit 1
+            }
+            echo "Preview of PR #$PULL: $url" >> "$GITHUB_STEP_SUMMARY"
+          else
+            ./node_modules/.bin/wrangler deploy --config wrangler.json
+            url="$ORIGIN"
+            echo "Published production from $GITHUB_SHA: $url" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"

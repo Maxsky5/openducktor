@@ -40,22 +40,15 @@ Run these commands from `apps/marketing-website`:
 | Build production | `MARKETING_BUILD_TARGET=production MARKETING_SITE_ORIGIN=<origin> bun run build` | The workflow for `main` |
 | Serve the build in the local Workers runtime | `bun run worker:dev` | You |
 | Check the upload of both Workers without credentials | `bun run worker:check` | The workflow, or you |
-| Publish a PR preview | `wrangler versions upload --preview-alias pr-<number> --config wrangler.preview.json` | The workflow |
-| Publish production | `wrangler deploy --config wrangler.json` | The workflow, or you for the first bootstrap |
+| Apply the address settings of the preview Worker | `wrangler triggers deploy --config wrangler.preview.json` | The workflow for a PR |
+| Publish a PR preview | `wrangler versions upload --preview-alias pr-<number> --config wrangler.preview.json` | The workflow for a PR |
+| Publish production | `wrangler deploy --config wrangler.json` | The workflow for `main` |
 
 ## Cloudflare setup before first publication
 
-1. Add the zone of the production origin to the Cloudflare account. Set the GitHub repository variable `MARKETING_SITE_ORIGIN` to that HTTPS origin.
-2. Create the two Workers, `openducktor-marketing` and `openducktor-marketing-preview`, then deploy each configuration once so that no dashboard script stays in place:
-
-   ```sh
-   MARKETING_BUILD_TARGET=preview bun run build
-   bunx wrangler deploy --config wrangler.preview.json
-   MARKETING_BUILD_TARGET=production MARKETING_SITE_ORIGIN=<origin> bun run build
-   bunx wrangler deploy --config wrangler.json
-   ```
-
-3. Attach the custom domain to `openducktor-marketing`. Keep its workers.dev address and preview URLs disabled. Keep preview URLs enabled on `openducktor-marketing-preview`.
+1. Add the zone of the production origin to the Cloudflare account. Set the GitHub repository variable `MARKETING_SITE_ORIGIN` to that HTTPS origin. Do not use an environment variable, because the `build` job has no environment.
+2. Create the two Workers, `openducktor-marketing` and `openducktor-marketing-preview`, in the Cloudflare dashboard. Each publication applies the workers.dev and preview URL settings of its Wrangler configuration.
+3. Attach the custom domain to `openducktor-marketing`.
 4. Create one account API token for each Worker, scoped to that Worker only, with the Workers `Editor` role. See [Workers roles and permissions](https://developers.cloudflare.com/workers/authorization/workers/).
 5. Create the GitHub environments `marketing-preview` and `marketing-production`. Each one needs a `CLOUDFLARE_ACCOUNT_ID` variable and a `CLOUDFLARE_API_TOKEN` secret with the token of its Worker. Let `marketing-production` deploy from `main` and from the `v*` release tags only. `marketing-preview` deploys from pull request branches, so it cannot have a branch rule.
 
@@ -63,7 +56,7 @@ Run these commands from `apps/marketing-website`:
 
 The `Marketing website` workflow starts when a change touches the site, when a stable release becomes public, or by hand. Its `build` job has no secrets: it builds the site for its target, runs the Wrangler dry run and the Chromium tests, and uploads `dist/`. Its `deploy` job receives the Cloudflare token of one environment. It installs the locked dependencies without scripts, downloads `dist/`, and runs Wrangler. It runs no build step.
 
-A pull request from this repository publishes the alias `pr-<number>` of the preview Worker, and the workflow summary shows its URL. A pull request from a fork builds and runs the tests, but it gets no preview, because GitHub gives no secrets to its workflow. A push to `main` and a stable release publish production. A newer run for the same pull request or for `main` cancels the older one, so an older build does not replace a newer site.
+A pull request from this repository first applies the address settings of `wrangler.preview.json`, because a version upload does not apply them. Then it publishes the alias `pr-<number>` of the preview Worker. The pull request shows the alias URL as its `marketing-preview` deployment. The job fails when Cloudflare gives no preview URL. A pull request from a fork builds and runs the tests, but it gets no preview, because GitHub gives no secrets to its workflow. A push to `main` and a stable release publish production. A newer run for the same pull request or for `main` cancels the older one, so an older build does not replace a newer site.
 
 A pull request can change this workflow and its Wrangler configuration, so a collaborator with write access could read the preview token. That token can change only the preview Worker, so production stays safe.
 
@@ -77,6 +70,7 @@ Preview URLs are public. Do not include private content in a PR build. Closing a
 | Missing Cloudflare variable or token | Configure the GitHub environment and run the failed job again. |
 | Wrangler refuses the token | Give the token the Workers `Editor` role on its Worker. |
 | The site does not answer on its domain | Attach the domain to `openducktor-marketing` in Cloudflare. |
+| Cloudflare gave no preview URL | Register a workers.dev subdomain for the Cloudflare account, then run the failed job again. |
 
 ## Verification
 
