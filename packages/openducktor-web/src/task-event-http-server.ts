@@ -13,6 +13,7 @@ export type WebRequestBody = Record<string, JSONType>;
 
 export const TASK_EVENT_STREAM_TOKEN_HEADER = "x-openducktor-task-stream-token";
 const TASK_EVENT_SUBSCRIPTIONS_PATH = "/task-events/subscriptions";
+const TASK_SSE_READY_COMMENT = new TextEncoder().encode(": openducktor-ready\n\n");
 
 type RequestTimeoutController = {
   timeout(request: Request, seconds: number): void;
@@ -97,8 +98,14 @@ const createTaskEventSseResponse = (
   leaseManager: TaskEventLeaseManager,
   subscriptionId: string,
   corsHeaders: HeadersInit,
+  signal: AbortSignal,
 ): Response => {
   let generation = 0;
+  const detach = (): void => {
+    signal.removeEventListener("abort", detach);
+    const lease = leaseManager.get(subscriptionId);
+    if (lease) leaseManager.detach(lease, generation);
+  };
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
       const lease = leaseManager.get(subscriptionId);
@@ -106,12 +113,12 @@ const createTaskEventSseResponse = (
         controller.error(new Error("Task event stream lease was released before connection."));
         return;
       }
+      controller.enqueue(TASK_SSE_READY_COMMENT);
       generation = leaseManager.attach(lease, controller);
+      signal.addEventListener("abort", detach, { once: true });
+      if (signal.aborted) detach();
     },
-    cancel() {
-      const lease = leaseManager.get(subscriptionId);
-      if (lease) leaseManager.detach(lease, generation);
-    },
+    cancel: detach,
   });
   return new Response(body, {
     headers: {
@@ -228,7 +235,12 @@ export const routeTaskEventHttpRequest = ({
         );
       }
       requestTimeouts?.timeout(requestTimeoutSource ?? request, 0);
-      return createTaskEventSseResponse(taskEventLeaseManager, lease.subscriptionId, corsHeaders);
+      return createTaskEventSseResponse(
+        taskEventLeaseManager,
+        lease.subscriptionId,
+        corsHeaders,
+        request.signal,
+      );
     }
 
     if (operation === "ack" && request.method === "POST") {
