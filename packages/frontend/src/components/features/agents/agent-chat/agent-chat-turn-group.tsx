@@ -1,9 +1,9 @@
 import { memo, type ReactElement } from "react";
 import { AgentChatThreadRow } from "./agent-chat-thread-row";
 import {
-  type AgentChatThreadMotionRowProps,
+  type AgentChatTurnRowProps,
   type AgentChatTurnGroupProps,
-  areAgentChatThreadMotionRowPropsEqual,
+  areAgentChatTurnRowPropsEqual,
   areAgentChatTurnGroupPropsEqual,
   isAgentChatTurnRowStreamingAssistant,
   readSubagentPendingApprovalCount,
@@ -12,7 +12,7 @@ import {
 
 export type { AgentChatTurnGroupProps } from "./agent-chat-turn-group-comparator";
 
-const AgentChatThreadMotionRow = memo(function AgentChatThreadMotionRow({
+const AgentChatTurnRow = memo(function AgentChatTurnRow({
   row,
   modelCatalog = null,
   isStreamingAssistantMessage,
@@ -21,10 +21,9 @@ const AgentChatThreadMotionRow = memo(function AgentChatThreadMotionRow({
   runtimePresentation,
   subagentPendingApprovalCount,
   subagentPendingQuestionCount,
-  resolveRowRef,
-}: AgentChatThreadMotionRowProps): ReactElement {
+}: AgentChatTurnRowProps): ReactElement {
   return (
-    <div ref={resolveRowRef(row.key)} data-row-key={row.key} className="agent-chat-row-motion">
+    <div data-row-key={row.key} className="agent-chat-row-motion">
       <AgentChatThreadRow
         row={row}
         modelCatalog={modelCatalog}
@@ -37,7 +36,7 @@ const AgentChatThreadMotionRow = memo(function AgentChatThreadMotionRow({
       />
     </div>
   );
-}, areAgentChatThreadMotionRowPropsEqual);
+}, areAgentChatTurnRowPropsEqual);
 
 export const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   turn,
@@ -47,12 +46,11 @@ export const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   runtimePresentation,
   subagentPendingApprovalCountBySessionKey,
   subagentPendingQuestionCountBySessionKey,
-  resolveRowRef,
 }: AgentChatTurnGroupProps): ReactElement {
   return (
     <div>
       {turn.rows.map((row) => (
-        <AgentChatThreadMotionRow
+        <AgentChatTurnRow
           key={row.key}
           row={row}
           modelCatalog={modelCatalog}
@@ -73,7 +71,6 @@ export const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
             subagentPendingQuestionCountBySessionKey,
             transcriptTarget,
           )}
-          resolveRowRef={resolveRowRef}
         />
       ))}
     </div>
