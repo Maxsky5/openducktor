@@ -324,17 +324,25 @@ const subscribeSseChannelEffect = (
       const ready = new Promise<void>((resolve) => {
         resolveReady = resolve;
       });
+      const snapshotControlListeners = (): BrowserSseListener[] =>
+        [...listeners.values()]
+          .filter((registration) => registration.receivesControlEvents)
+          .map((registration) => registration.listener);
       const handleMessage: EventListener = (event) => {
         const hostEvent = parseHostEvent(readEventSourceData(event, event.type));
         const expectedName = hostEventStreamEventName(hostEvent);
         if (event.type !== expectedName) {
           throw new Error("OpenDucktor host event arrived on the wrong stream event name.");
         }
-        for (const registration of listeners.values()) {
-          if (registration.channel === hostEvent.channel && registration.eventName === event.type) {
-            registration.listener(hostEvent);
-          }
-        }
+        dispatchBrowserSseListeners(
+          [...listeners.values()]
+            .filter(
+              (registration) =>
+                registration.channel === hostEvent.channel && registration.eventName === event.type,
+            )
+            .map((registration) => registration.listener),
+          hostEvent,
+        );
       };
       const handleOpen: EventListener = () => {
         transportEpoch = `${HOST_EVENT_STREAM_PATH}:${nextSseTransportEpoch}`;
@@ -346,13 +354,10 @@ const subscribeSseChannelEffect = (
           return;
         }
         hasReportedConnectionError = false;
-        for (const registration of listeners.values()) {
-          if (registration.receivesControlEvents) {
-            registration.listener(
-              browserLiveControlEvent(BROWSER_LIVE_RECONNECTED_EVENT_KIND, transportEpoch),
-            );
-          }
-        }
+        dispatchBrowserSseListeners(
+          snapshotControlListeners(),
+          browserLiveControlEvent(BROWSER_LIVE_RECONNECTED_EVENT_KIND, transportEpoch),
+        );
       };
       const handleError: EventListener = () => {
         if (hasReportedConnectionError) {
@@ -364,21 +369,14 @@ const subscribeSseChannelEffect = (
             `EventSource ${HOST_EVENT_STREAM_PATH} reported an error after opening.`,
           );
           try {
-            dispatchBrowserSseListeners(
-              [...listeners.values()]
-                .filter((registration) => registration.receivesControlEvents)
-                .map((registration) => registration.listener),
-              warningPayload,
-            );
+            dispatchBrowserSseListeners(snapshotControlListeners(), warningPayload);
           } finally {
             hasReportedConnectionError = true;
           }
           return;
         }
         dispatchBrowserSseListeners(
-          [...listeners.values()]
-            .filter((registration) => registration.receivesControlEvents)
-            .map((registration) => registration.listener),
+          snapshotControlListeners(),
           browserLiveControlEvent(
             BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
             `EventSource ${HOST_EVENT_STREAM_PATH} reported an error before opening.`,
