@@ -397,23 +397,34 @@ function LargeFileDiffListHarness(): ReactElement {
 function ResizingFileDiffListHarness(): ReactElement {
   const [diffStyle, setDiffStyle] = useState<"unified" | "split">("unified");
   const [revision, setRevision] = useState(0);
+  const [taskChanged, setTaskChanged] = useState(false);
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set(["src/file-005.ts"]));
+  const pathPrefix = taskChanged ? "other/" : "src/";
   const fileDiffs = useMemo(
     () =>
       Array.from({ length: 20 }, (_, index) => ({
-        file: `src/file-${String(index).padStart(3, "0")}.ts`,
+        file: `${pathPrefix}file-${String(index).padStart(3, "0")}.ts`,
         type: "modified" as const,
         additions: 1,
         deletions: 1,
         diff: `@@ -1 +1 @@\n-old\n+new${index === 10 ? revision : ""}\n`,
       })),
-    [revision],
+    [pathPrefix, revision],
   );
 
   return (
     <TooltipProvider>
       <button type="button" onClick={() => setRevision((current) => current + 1)}>
         Refresh another file
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          setTaskChanged(true);
+          setExpandedFiles(new Set(["other/file-005.ts"]));
+        }}
+      >
+        Switch task files
       </button>
       <div className="h-[400px]">
         <FileDiffList
@@ -450,8 +461,21 @@ function installMeasuredRows() {
     observer: ResizeObserver;
   }> = [];
   const previousGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+  const previousOffsetHeight = Object.getOwnPropertyDescriptor(
+    HTMLElement.prototype,
+    "offsetHeight",
+  );
   let currentWidth = 600;
   let currentExpandedRowHeight = 800;
+  Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
+    configurable: true,
+    get: function (this: HTMLElement) {
+      if (this.getAttribute("role") === "listitem") {
+        return this.getAttribute("aria-posinset") === "6" ? currentExpandedRowHeight : 40;
+      }
+      return previousOffsetHeight?.get?.call(this) ?? 0;
+    },
+  });
   HTMLElement.prototype.getBoundingClientRect = function () {
     if (this.getAttribute("role") === "list") return new DOMRect(0, 0, currentWidth, 400);
     if (this.getAttribute("role") === "listitem") {
@@ -483,10 +507,10 @@ function installMeasuredRows() {
   };
 
   return {
-    resize: (width: number, expandedRowHeight: number) => {
+    resize: (width: number, expandedRowHeight: number, passes = 3) => {
       currentWidth = width;
       currentExpandedRowHeight = expandedRowHeight;
-      for (let pass = 0; pass < 3; pass++) {
+      for (let pass = 0; pass < passes; pass++) {
         act(() => {
           for (const observer of observers) {
             const entries = Array.from(observer.elements, (element) => {
@@ -514,6 +538,11 @@ function installMeasuredRows() {
     restore: () => {
       globalThis.ResizeObserver = previousResizeObserver;
       HTMLElement.prototype.getBoundingClientRect = previousGetBoundingClientRect;
+      if (previousOffsetHeight) {
+        Object.defineProperty(HTMLElement.prototype, "offsetHeight", previousOffsetHeight);
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, "offsetHeight");
+      }
     },
   };
 }
@@ -618,6 +647,70 @@ describe("FileDiffList", () => {
 
       fireEvent.scroll(screen.getByRole("list"), { target: { scrollTop: 1_360 } });
       expect(screen.getByRole("button", { name: "Toggle diff for src/file-019.ts" })).toBeDefined();
+    } finally {
+      measurements.restore();
+    }
+  });
+
+  test("keeps adjacent rows separate during a panel resize", () => {
+    const measurements = installMeasuredRows();
+    try {
+      render(<ResizingFileDiffListHarness />);
+      measurements.resize(600, 800);
+
+      const expandedRow = screen
+        .getByRole("button", { name: "Toggle diff for src/file-005.ts" })
+        .closest('[role="listitem"]');
+      const nextRow = screen
+        .getByRole("button", { name: "Toggle diff for src/file-006.ts" })
+        .closest('[role="listitem"]');
+      expect(expandedRow).not.toBeNull();
+      expect(nextRow).not.toBeNull();
+      expect(nextRow!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+        expandedRow!.getBoundingClientRect().bottom,
+      );
+
+      for (const { width, height } of [
+        { width: 550, height: 850 },
+        { width: 500, height: 875 },
+        { width: 450, height: 900 },
+        { width: 400, height: 950 },
+      ]) {
+        measurements.resize(width, height, 1);
+        expect(nextRow!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+          expandedRow!.getBoundingClientRect().bottom,
+        );
+      }
+
+      measurements.resize(400, 1_000, 0);
+      fireEvent.click(screen.getByRole("button", { name: "Side-by-side" }));
+      expect(nextRow!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+        expandedRow!.getBoundingClientRect().bottom,
+      );
+    } finally {
+      measurements.restore();
+    }
+  });
+
+  test("measures expanded rows before showing another task's file list", () => {
+    const measurements = installMeasuredRows();
+    try {
+      render(<ResizingFileDiffListHarness />);
+      measurements.resize(600, 800);
+
+      measurements.resize(600, 1_000, 0);
+      fireEvent.click(screen.getByRole("button", { name: "Switch task files" }));
+      const expandedRow = screen
+        .getByRole("button", { name: "Toggle diff for other/file-005.ts" })
+        .closest('[role="listitem"]');
+      const nextRow = screen
+        .getByRole("button", { name: "Toggle diff for other/file-006.ts" })
+        .closest('[role="listitem"]');
+      expect(expandedRow).not.toBeNull();
+      expect(nextRow).not.toBeNull();
+      expect(nextRow!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+        expandedRow!.getBoundingClientRect().bottom,
+      );
     } finally {
       measurements.restore();
     }

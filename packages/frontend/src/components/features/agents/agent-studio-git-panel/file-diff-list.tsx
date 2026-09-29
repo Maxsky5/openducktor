@@ -154,11 +154,8 @@ function useFileEditorStates(
   return { editorStateByFile, onAnnotationAction };
 }
 
-type MeasurementState = {
+type FileOrderState = {
   fileDiffs: FileDiff[];
-  diffScope: DiffScope;
-  diffStyle: PierreDiffStyle;
-  width: number;
   version: number;
 };
 
@@ -173,47 +170,21 @@ function getRenderedFileRow(list: HTMLElement, index: number): HTMLElement | und
   return undefined;
 }
 
-function useFileListMeasurementVersion(
-  fileDiffs: FileDiff[],
-  diffScope: DiffScope,
-  diffStyle: PierreDiffStyle,
-  width: number,
-): number {
-  const [measurement, setMeasurement] = useState<MeasurementState>(() => ({
+function useFileOrderVersion(fileDiffs: FileDiff[]): number {
+  const [fileOrder, setFileOrder] = useState<FileOrderState>(() => ({
     fileDiffs,
-    diffScope,
-    diffStyle,
-    width,
     version: 0,
   }));
-  if (
-    measurement.fileDiffs !== fileDiffs ||
-    measurement.diffScope !== diffScope ||
-    measurement.diffStyle !== diffStyle ||
-    measurement.width !== width
-  ) {
+  if (fileOrder.fileDiffs !== fileDiffs) {
     const filesChanged =
-      measurement.fileDiffs.length !== fileDiffs.length ||
-      fileDiffs.some((diff, index) => {
-        const previous = measurement.fileDiffs[index];
-        return (
-          previous?.file !== diff.file || previous.type !== diff.type || previous.diff !== diff.diff
-        );
-      });
-    const needsNewMeasurements =
-      filesChanged ||
-      measurement.diffScope !== diffScope ||
-      measurement.diffStyle !== diffStyle ||
-      measurement.width !== width;
-    setMeasurement({
+      fileOrder.fileDiffs.length !== fileDiffs.length ||
+      fileDiffs.some((diff, index) => fileOrder.fileDiffs[index]?.file !== diff.file);
+    setFileOrder({
       fileDiffs,
-      diffScope,
-      diffStyle,
-      width,
-      version: measurement.version + (needsNewMeasurements ? 1 : 0),
+      version: fileOrder.version + (filesChanged ? 1 : 0),
     });
   }
-  return measurement.version;
+  return fileOrder.version;
 }
 
 type FileDiffRowProps = Omit<FileDiffListProps, "preloadLimit" | "setDiffStyle"> & {
@@ -221,6 +192,7 @@ type FileDiffRowProps = Omit<FileDiffListProps, "preloadLimit" | "setDiffStyle">
   reserveConflictSlot: boolean;
   editorStateByFile: Map<string, FileEditorState>;
   onAnnotationAction: FileAnnotationDispatch;
+  onMeasureRow: (index: number, height: number) => void;
 };
 
 function FileDiffRow({
@@ -243,14 +215,26 @@ function FileDiffRow({
   reserveConflictSlot,
   editorStateByFile,
   onAnnotationAction,
+  onMeasureRow,
 }: RowComponentProps<FileDiffRowProps>): ReactElement {
+  const rowRef = useRef<HTMLDivElement>(null);
+  const lastMeasurementRef = useRef<{ index: number; height: number } | null>(null);
+  useLayoutEffect(() => {
+    // Match the border-box height that react-window receives from ResizeObserver.
+    const height = rowRef.current?.offsetHeight ?? 0;
+    const previous = lastMeasurementRef.current;
+    if (height > 0 && (previous?.index !== index || Math.abs(previous.height - height) > 1)) {
+      lastMeasurementRef.current = { index, height };
+      onMeasureRow(index, height);
+    }
+  });
   const diff = fileDiffs[index];
   if (!diff) {
     throw new RangeError(`Missing file diff at row ${index}`);
   }
   const editor = editorStateByFile.get(diff.file);
   return (
-    <div style={style} {...ariaAttributes} className="border-b border-border/50">
+    <div ref={rowRef} style={style} {...ariaAttributes} className="border-b border-border/50">
       <FileDiffEntryWithMemo
         diff={diff}
         diffScope={diffScope}
@@ -328,15 +312,10 @@ export const FileDiffList = memo(function FileDiffList({
   const listRef = useListRef(null);
   const visibleFileRef = useRef<VisibleFileAnchor | null>(null);
   const pendingAnchorRef = useRef<VisibleFileAnchor | null>(null);
-  const [listWidth, setListWidth] = useState(0);
-  const measurementVersion = useFileListMeasurementVersion(
-    fileDiffs,
-    diffScope,
-    diffStyle,
-    listWidth,
-  );
-  const rowHeight = useDynamicRowHeight({ defaultRowHeight: 40, key: measurementVersion });
-  const restoredMeasurementVersionRef = useRef(measurementVersion);
+  const fileOrderVersion = useFileOrderVersion(fileDiffs);
+  // Keep measured heights through width and content changes; visible rows remeasure before paint.
+  const rowHeight = useDynamicRowHeight({ defaultRowHeight: 40 });
+  const restoredFileOrderVersionRef = useRef(fileOrderVersion);
 
   const captureVisibleOffset = useCallback(() => {
     const list = listRef.current?.element;
@@ -348,8 +327,8 @@ export const FileDiffList = memo(function FileDiffList({
   }, [listRef]);
 
   useLayoutEffect(() => {
-    if (restoredMeasurementVersionRef.current !== measurementVersion) {
-      restoredMeasurementVersionRef.current = measurementVersion;
+    if (restoredFileOrderVersionRef.current !== fileOrderVersion) {
+      restoredFileOrderVersionRef.current = fileOrderVersion;
       pendingAnchorRef.current = visibleFileRef.current && { ...visibleFileRef.current };
     }
     const anchor = pendingAnchorRef.current;
@@ -385,7 +364,7 @@ export const FileDiffList = memo(function FileDiffList({
       matchingIndex >= 0 ? Math.min(anchor.offset, Math.max(0, rowRect.height - 1)) : 0;
     list.scrollTop = rowStart + offset;
     pendingAnchorRef.current = null;
-  }, [fileDiffs, listRef, measurementVersion, rowHeight]);
+  }, [fileDiffs, fileOrderVersion, listRef, rowHeight]);
 
   const onRowsRendered = useCallback(
     ({ startIndex }: { startIndex: number }) => {
@@ -397,11 +376,6 @@ export const FileDiffList = memo(function FileDiffList({
     },
     [captureVisibleOffset, fileDiffs],
   );
-  const onResize = useCallback(({ width }: { width: number }) => {
-    if (width > 0) {
-      setListWidth(width);
-    }
-  }, []);
   const rowProps: FileDiffRowProps = {
     fileDiffs,
     diffScope,
@@ -419,6 +393,7 @@ export const FileDiffList = memo(function FileDiffList({
     reserveConflictSlot,
     editorStateByFile,
     onAnnotationAction,
+    onMeasureRow: rowHeight.setRowHeight,
   };
 
   return (
@@ -469,7 +444,6 @@ export const FileDiffList = memo(function FileDiffList({
         rowProps={rowProps}
         overscanCount={3}
         onRowsRendered={onRowsRendered}
-        onResize={onResize}
         onScroll={captureVisibleOffset}
       />
     </div>
