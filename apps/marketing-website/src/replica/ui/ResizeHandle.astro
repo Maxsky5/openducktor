@@ -1,0 +1,14 @@
+---
+// ResizableHandle withHandle of components/ui/resizable-handle.tsx. A vertical handle sits between
+// two columns, and a horizontal handle sits between two rows.
+import { EllipsisVertical } from "@lucide/astro";
+import type { HTMLAttributes } from "astro/types";
+import "./ResizeHandle.css";
+
+type Props = HTMLAttributes<"div"> & { orientation: "vertical" | "horizontal" };
+const { orientation, class: className, ...attributes } = Astro.props;
+---
+
+<div class:list={["ui-handle", className]} data-orientation={orientation} {...attributes}>
+  <span class="ui-handle-grip"><EllipsisVertical class="i14" /></span>
+</div>

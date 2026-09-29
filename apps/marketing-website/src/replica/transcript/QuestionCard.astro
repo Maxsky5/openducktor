@@ -1,0 +1,96 @@
+---
+// A pending request_user_input from agent-session-question-card.tsx. A single-choice answer
+// moves to the next question, and the last answer opens the Summary tab. On the last question,
+// Confirm Answers replaces Next. The scene answers it.
+import {
+  ChevronRight,
+  Circle,
+  CircleCheck,
+  CircleDotDashed,
+  ListChecks,
+  LoaderCircle,
+  MessageSquarePlus,
+  Sparkles,
+} from "@lucide/astro";
+import { flag } from "../flag";
+import Button from "../ui/Button.astro";
+import RequestCard from "./RequestCard.astro";
+import "./QuestionCard.css";
+
+interface Props {
+  questions: {
+    header: string;
+    question: string;
+    options: { label: string; description: string }[];
+    answer: string;
+  }[];
+}
+const { questions } = Astro.props;
+---
+
+<RequestCard kind="question" title="Input needed" icon={CircleDotDashed}>
+  <small slot="meta" data-answered-count>0/{questions.length} answered</small>
+  <div class="st-q-tabs">
+    {
+      questions.map((question, index) => (
+        <span class="st-q-tab" data-active={flag(index === 0)} data-q-tab={index}>
+          <Circle class="i14 open" />
+          <CircleCheck class="i14 check" />
+          {question.header}
+        </span>
+      ))
+    }
+    <span class="st-q-tab" data-q-tab="summary"><ListChecks class="i14" />Summary</span>
+  </div>
+  {
+    questions.map((question, index) => (
+      <div class="st-q-page" hidden={index > 0} data-q-page={index}>
+        <p>
+          <span class="st-q-label">{question.header}</span>{" "}
+          <span class="st-q-text">{question.question}</span>
+        </p>
+        <div class="st-q-options">
+          {question.options.map((option) => (
+            <span class="st-option" data-option={option.label}>
+              <Circle class="i14 unpicked" />
+              <CircleCheck class="i14 picked" />
+              <span>
+                <strong>{option.label}</strong>
+                <small>{option.description}</small>
+              </span>
+            </span>
+          ))}
+        </div>
+        <span class="st-q-tab other">
+          <MessageSquarePlus class="i14" />
+          Other answer
+        </span>
+      </div>
+    ))
+  }
+  <div class="st-q-summary" hidden data-q-page="summary">
+    {
+      questions.map((question) => (
+        <div>
+          <p>
+            <CircleCheck class="i12" />
+            {question.header}
+          </p>
+          <p>{question.answer}</p>
+        </div>
+      ))
+    }
+  </div>
+  <div class="st-q-foot">
+    <p data-q-status>Answer all questions to confirm.</p>
+    <span>
+      <Button variant="outline" size="sm" data-q-reset>Reset</Button>
+      <Button size="sm" data-q-next>Next<ChevronRight class="i14" /></Button>
+      <Button size="sm" class="st-q-confirm" data-disabled hidden data-q-confirm
+        ><span class="when-idle"><Sparkles class="i14" />Confirm Answers</span><span
+          class="when-submitting"><LoaderCircle class="i14 spin" />Submitting…</span
+        ></Button
+      >
+    </span>
+  </div>
+</RequestCard>

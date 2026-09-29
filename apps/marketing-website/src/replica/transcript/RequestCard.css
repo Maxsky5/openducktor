@@ -1,0 +1,51 @@
+@layer replica {
+  /* A request of a session above the composer: the question card and the approval card. */
+  .request {
+    border: calc(1 * var(--u)) solid var(--input);
+    border-radius: calc(16 * var(--u));
+    background: var(--card);
+    box-shadow: var(--shadow-sm);
+  }
+  .request[data-kind="approval"] {
+    border-color: var(--warning-border);
+    background: var(--warning-surface);
+  }
+  .request-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: calc(8 * var(--u));
+    padding: calc(6 * var(--u)) calc(12 * var(--u));
+    border-bottom: calc(1 * var(--u)) solid var(--input);
+  }
+  .request[data-kind="approval"] .request-head {
+    border-bottom-color: var(--warning-border);
+  }
+  .request-head > span {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    font-size: calc(13 * var(--u));
+    font-weight: 600;
+  }
+  .request-head > span .lucide {
+    color: var(--muted-foreground);
+  }
+  .request[data-kind="approval"] .request-head > span .lucide {
+    color: var(--warning-muted);
+  }
+  /* The question count uses the foreground color. The approval header stays muted. */
+  .request-head small {
+    color: var(--muted-foreground);
+    font-size: calc(11 * var(--u));
+    font-weight: 500;
+  }
+  .request[data-kind="question"] .request-head small {
+    color: var(--foreground);
+  }
+  .request-body {
+    display: grid;
+    gap: calc(8 * var(--u));
+    padding: calc(10 * var(--u));
+  }
+}

@@ -1,0 +1,80 @@
+@layer site {
+  .faq-section {
+    display: grid;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    gap: 80px;
+  }
+  .faq-heading {
+    align-content: start;
+  }
+  /* The eyebrow of the questions is small and in the accent ink. */
+  .faq-heading .eyebrow {
+    max-width: none;
+    color: var(--accent-ink);
+    font-size: 0.75rem;
+    line-height: normal;
+    text-wrap: wrap;
+  }
+  .faq-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--accent-ink);
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+  .faq-answers {
+    border-top: 1px solid var(--line);
+  }
+  .faq-answers details {
+    border-bottom: 1px solid var(--line);
+  }
+  .faq-answers summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 22px 0;
+    cursor: pointer;
+    list-style: none;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+  .faq-answers summary::-webkit-details-marker {
+    display: none;
+  }
+  .faq-answers summary span {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    flex: 0 0 auto;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    color: var(--accent-ink);
+    font-size: 1.125rem;
+    line-height: 1;
+    transition: transform 200ms;
+  }
+  .faq-answers details[open] summary span {
+    transform: rotate(45deg);
+  }
+  .faq-answers p {
+    max-width: 640px;
+    padding: 0 48px 24px 0;
+    color: var(--body-ink);
+    font-size: 0.9375rem;
+    line-height: 1.7;
+  }
+  @media (width <= 1023px) {
+    .faq-section {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 40px;
+    }
+  }
+  @media (width <= 767px) {
+    .faq-answers p {
+      padding-right: 0;
+    }
+  }
+}

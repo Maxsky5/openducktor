@@ -1,0 +1,22 @@
+@layer product {
+  /* SegmentedControlItem: inline-flex flex-1 items-center justify-center px-3 font-medium, with
+     text-muted-foreground, or bg-selected-control text-selected-control-foreground shadow-sm when
+     active. */
+  .ui-segment {
+    display: inline-flex;
+    flex: 1;
+    align-items: center;
+    justify-content: center;
+    padding: 0 calc(12 * var(--u));
+    color: var(--muted-foreground);
+    font-weight: 500;
+  }
+  .ui-segment[data-active] {
+    background: var(--selected-control);
+    color: var(--selected-control-foreground);
+    box-shadow: var(--shadow-sm);
+  }
+  .ui-segment[data-disabled] {
+    opacity: 0.5;
+  }
+}

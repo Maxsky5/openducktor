@@ -1,0 +1,29 @@
+---
+// A pending runtime approval from agent-session-approval-card.tsx, with the Codex command copy of
+// packages/adapters-codex-app-server/src/codex-app-server-requests.ts.
+import { ShieldAlert } from "@lucide/astro";
+import Button from "../ui/Button.astro";
+import RequestCard from "./RequestCard.astro";
+import "./ApprovalCard.css";
+
+interface Props {
+  summary: string;
+  command: string;
+}
+const { summary, command } = Astro.props;
+---
+
+<RequestCard kind="approval" title="Approval required" icon={ShieldAlert}>
+  <small slot="meta">Action required</small>
+  <div class="st-approval-text">
+    <strong>Bash approval requested</strong>
+    <p>{summary}</p>
+    <p>Command: {command}</p>
+    <p>Action: Bash</p>
+  </div>
+  <div class="st-approval-actions">
+    <Button size="sm" data-approve="once">Approve once</Button>
+    <Button size="sm" variant="outline" data-approve="session">Approve for session</Button>
+    <Button size="sm" variant="destructive">Reject</Button>
+  </div>
+</RequestCard>

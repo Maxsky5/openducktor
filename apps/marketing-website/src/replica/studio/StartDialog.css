@@ -1,0 +1,103 @@
+@layer replica {
+  /* Dialogs over the window: components/ui/dialog.tsx and session-start-modal.tsx. */
+  .st-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 25;
+    display: grid;
+    place-items: center;
+    background: rgb(0 0 0 / 0.45);
+    backdrop-filter: blur(calc(4 * var(--u)));
+  }
+  .st-dialog {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: calc(672 * var(--u));
+    padding: calc(24 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(16 * var(--u));
+    background: var(--popover);
+    color: var(--popover-foreground);
+    box-shadow:
+      0 calc(20 * var(--u)) calc(25 * var(--u)) calc(-5 * var(--u)) rgb(0 0 0 / 0.1),
+      0 calc(8 * var(--u)) calc(10 * var(--u)) calc(-6 * var(--u)) rgb(0 0 0 / 0.1);
+  }
+  .st-dialog-close {
+    position: absolute;
+    top: calc(16 * var(--u));
+    right: calc(16 * var(--u));
+    display: grid;
+    place-items: center;
+    padding: calc(4 * var(--u));
+    color: var(--muted-foreground);
+  }
+  .st-dialog-head {
+    display: grid;
+    gap: calc(6 * var(--u));
+  }
+  .st-dialog-head b {
+    font-size: calc(18 * var(--u));
+    font-weight: 600;
+    line-height: calc(28 * var(--u));
+  }
+  .st-dialog-head p {
+    color: var(--muted-foreground);
+    font-size: calc(14 * var(--u));
+    line-height: calc(20 * var(--u));
+  }
+  .st-dialog-body {
+    display: grid;
+    gap: calc(20 * var(--u));
+    padding: calc(8 * var(--u)) 0 calc(16 * var(--u));
+  }
+  .st-field {
+    display: grid;
+    gap: calc(6 * var(--u));
+  }
+  .st-field > b {
+    font-size: calc(14 * var(--u));
+    font-weight: 500;
+    line-height: calc(20 * var(--u));
+  }
+  .st-field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: calc(16 * var(--u));
+  }
+  /* The existing session: the latest one has a muted text-xs note. */
+  .st-latest {
+    color: var(--muted-foreground);
+    font-size: calc(12 * var(--u));
+  }
+  .st-switch-row {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    font-size: calc(14 * var(--u));
+    font-weight: 500;
+  }
+  .st-switch-row .ui-switch {
+    box-shadow: none;
+  }
+  .st-dialog-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: calc(20 * var(--u));
+    border-top: calc(1 * var(--u)) solid var(--border);
+  }
+  /* A narrow stage shows a smaller dialog with one field in each row. */
+  @container stage (width <= 699px) {
+    .st-dialog {
+      width: calc(408 * var(--u));
+      padding: calc(20 * var(--u));
+    }
+    .st-field-row {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .st-modes > .ui-segment {
+      font-size: calc(13 * var(--u));
+    }
+  }
+}

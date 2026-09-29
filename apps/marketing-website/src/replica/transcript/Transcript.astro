@@ -1,0 +1,86 @@
+---
+// The transcript of one or more sessions. One session shows. The others wait hidden for the scene
+// that switches the session of the window. Each turn wraps its rows, so a row id is unique in its
+// turn. The wrappers take no box, so the rows lay out as one list.
+import { SESSIONS, type SessionId, TURNS } from "../../sample/transcripts";
+import AgentText from "./AgentText.astro";
+import Answers from "./Answers.astro";
+import PatchCard from "./PatchCard.astro";
+import ToolRow from "./ToolRow.astro";
+import UserMessage from "./UserMessage.astro";
+import WorkflowCard from "./WorkflowCard.astro";
+import "./Transcript.css";
+
+interface Props {
+  /** The sessions in the window, and the turns of each one that the transcript holds. */
+  sessions: readonly { id: SessionId; turns: number }[];
+  shown: SessionId;
+}
+const { sessions, shown } = Astro.props;
+const parts = (text: string): string[] => text.split("`");
+---
+
+{
+  sessions.map((session) => (
+    <div class="st-session" data-session={session.id} hidden={session.id !== shown}>
+      {SESSIONS[session.id].slice(0, session.turns).map((turn) => (
+        <div class="st-turn" data-turn={turn}>
+          {TURNS[turn].map((row) => {
+            switch (row.kind) {
+              case "user":
+                return (
+                  <UserMessage time={row.time} row={row.id}>
+                    {row.text}
+                  </UserMessage>
+                );
+              case "tool":
+                return (
+                  <ToolRow
+                    kind={row.tool}
+                    name={row.name}
+                    args={row.args}
+                    duration={row.duration}
+                    time={row.time}
+                    row={row.id}
+                  >
+                    {"answers" in row && row.answers && <Answers items={row.answers} />}
+                  </ToolRow>
+                );
+              case "workflow":
+                return (
+                  <WorkflowCard
+                    name={row.name}
+                    duration={row.duration}
+                    time={row.time}
+                    row={row.id}
+                  />
+                );
+              case "patch":
+                return (
+                  <PatchCard
+                    path={row.path}
+                    kind={row.change}
+                    add={row.add}
+                    del={row.del}
+                    row={row.id}
+                  />
+                );
+              case "agent":
+                return (
+                  <AgentText signature={row.signature} row={row.id}>
+                    {row.paragraphs.map((paragraph) => (
+                      <p>
+                        {parts(paragraph).map((part, index) =>
+                          index % 2 === 1 ? <code>{part}</code> : part,
+                        )}
+                      </p>
+                    ))}
+                  </AgentText>
+                );
+            }
+          })}
+        </div>
+      ))}
+    </div>
+  ))
+}

@@ -1,0 +1,50 @@
+@layer views {
+  /*
+   * Autopilot scene: the Kanban board with the Collapsed display for empty columns. On wide
+   * stages all lanes fit, so the board does not scroll. The board is tall enough for two cards
+   * in one lane. The notifications show over the lanes at the right, which hold one card.
+   */
+  .auto-stage {
+    --design-width: 1328;
+  }
+  .auto-board {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    height: calc(576 * var(--u));
+    overflow: hidden;
+    border: calc(1 * var(--u)) solid var(--input);
+    border-radius: calc(14 * var(--u));
+    background: var(--card);
+    box-shadow: var(--shadow-window);
+  }
+  /* The static frame shows Human Review, the last camera position, when the lanes do not fit.
+     The track is 1324 design pixels wide, and Human Review ends 28 pixels before its end. */
+  .auto-board .board-track {
+    transform: translateX(min(0px, calc(100cqw - 1298 * var(--u))));
+  }
+  /* Tablet stages: the product scale, and the board scrolls with the task. The notifications can
+     show over the lane of the task, so the board has space for two cards above a notification. */
+  @container stage (width <= 1099px) {
+    .auto-stage {
+      --design-width: 760;
+    }
+    .auto-board {
+      height: calc(688 * var(--u));
+    }
+  }
+  /* Narrow stages: one lane at a time, and the board head keeps its title and New task. */
+  @container stage (width <= 480px) {
+    .auto-stage {
+      --design-width: 400;
+    }
+    .auto-board {
+      height: calc(664 * var(--u));
+    }
+    .auto-board .toast-stack {
+      right: calc(16 * var(--u));
+      bottom: calc(16 * var(--u));
+      width: calc(100% - 32 * var(--u));
+    }
+  }
+}

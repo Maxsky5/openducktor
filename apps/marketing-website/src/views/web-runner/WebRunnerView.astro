@@ -1,0 +1,41 @@
+---
+// The browser version terminal. It types the command once, then prints the start log of the web
+// runner. The markup holds the last frame: the whole log.
+import { commands, nodeVersion } from "../../content/site";
+import { START_LOG } from "../../sample/web-runner";
+import InstallMethod from "../../ui/InstallMethod.astro";
+import "./WebRunnerView.css";
+---
+
+<InstallMethod
+  id="browser"
+  class="install-browser"
+  title="macOS, Windows, and Linux"
+  label="Browser version"
+  prompt="~ %"
+  command={commands.browser}
+  note={`Needs Node.js ${nodeVersion} or later. By default, it accepts connections only from this computer.`}
+  stage
+  data-install
+>
+  {
+    START_LOG.map((line) => (
+      <p class="t-line t-out t-log" data-wait={line.wait}>
+        <span class="t-stamp" set:text={`${line.stamp}  `} />
+        <span>
+          {line.message.map((piece) => (
+            <span class={piece.tone} set:text={piece.text} />
+          ))}
+        </span>
+      </p>
+    ))
+  }
+  {/* The runner keeps running, so the cursor waits under the log with no new prompt. */}
+  <p class="t-line t-out" data-wait="0.15" aria-hidden="true">
+    <span class="t-caret"></span>
+  </p>
+</InstallMethod>
+<script>
+  import { mountWebRunner } from "./scene";
+  mountWebRunner();
+</script>

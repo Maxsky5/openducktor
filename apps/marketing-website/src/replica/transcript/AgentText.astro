@@ -1,0 +1,21 @@
+---
+// An assistant message. The final message of a turn ends with the runtime, model, and effort.
+import "./AgentText.css";
+interface Props {
+  signature?: string;
+  row?: string;
+}
+const { signature, row } = Astro.props;
+---
+
+<div class="st-agent" data-row={row}>
+  <div class="st-agent-body" data-text><slot /></div>
+  {
+    signature && (
+      <div class="st-sig" data-sig>
+        <i />
+        {signature}
+      </div>
+    )
+  }
+</div>

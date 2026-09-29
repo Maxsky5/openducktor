@@ -1,0 +1,50 @@
+@layer product {
+  /* The separator: w-2, or h-3 when horizontal. A line with bg-input crosses its middle. */
+  .ui-handle {
+    position: relative;
+    display: flex;
+    flex: 0 0 calc(8 * var(--u));
+    align-items: center;
+    justify-content: center;
+  }
+  .ui-handle::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: calc(1 * var(--u));
+    height: 100%;
+    background: var(--input);
+  }
+  .ui-handle[data-orientation="horizontal"] {
+    flex-basis: calc(12 * var(--u));
+  }
+  .ui-handle[data-orientation="horizontal"]::before {
+    top: 50%;
+    left: 0;
+    width: 100%;
+    height: calc(1 * var(--u));
+  }
+  /* The grip: h-8 w-4 rounded-md border bg-card text-muted-foreground shadow-sm, or h-4 w-8 with
+     the icon turned when horizontal. */
+  .ui-handle-grip {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(16 * var(--u));
+    height: calc(32 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(10 * var(--u));
+    background: var(--card);
+    color: var(--muted-foreground);
+    box-shadow: var(--shadow-sm);
+  }
+  .ui-handle[data-orientation="horizontal"] > .ui-handle-grip {
+    width: calc(32 * var(--u));
+    height: calc(16 * var(--u));
+  }
+  .ui-handle[data-orientation="horizontal"] .lucide {
+    transform: rotate(90deg);
+  }
+}

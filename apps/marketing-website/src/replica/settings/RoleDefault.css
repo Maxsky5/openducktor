@@ -1,0 +1,73 @@
+@layer replica {
+  /* Cards: rounded-md border bg-card p-3. */
+  .set-card {
+    display: grid;
+    gap: calc(8 * var(--u));
+    padding: calc(12 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(10 * var(--u));
+    background: var(--card);
+  }
+  .role-list {
+    display: grid;
+    gap: calc(12 * var(--u));
+  }
+  .role-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .role-head p {
+    color: var(--muted-foreground);
+    font-size: calc(12 * var(--u));
+    font-weight: 600;
+    letter-spacing: 0.025em;
+    line-height: calc(16 * var(--u));
+    text-transform: uppercase;
+  }
+  .role-fields {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: calc(12 * var(--u));
+  }
+  /* Fields: Label text-xs, then a combobox trigger h-9. */
+  .set-field {
+    position: relative;
+    display: grid;
+    gap: calc(4 * var(--u));
+    min-width: 0;
+  }
+  .set-label {
+    font-size: calc(12 * var(--u));
+    font-weight: 500;
+    line-height: calc(16 * var(--u));
+  }
+  /* A runtime without agent profiles shows a muted placeholder. */
+  .set-placeholder {
+    color: var(--muted-foreground);
+  }
+  .rt-swap {
+    display: flex;
+  }
+  .rt-swap > svg {
+    display: none;
+  }
+  .rt-swap[data-runtime="opencode"] > .opencode-logo,
+  .rt-swap[data-runtime="codex"] > .codex-logo,
+  .rt-swap[data-runtime="claude"] > .claude-logo {
+    display: block;
+  }
+  /* Agent profile accent: the build agent of OpenCode is blue. */
+  .profile-dot {
+    width: calc(8 * var(--u));
+    height: calc(8 * var(--u));
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background: var(--blue-500);
+  }
+  @container stage (width <= 560px) {
+    .role-fields {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+}

@@ -1,0 +1,59 @@
+@layer replica {
+  .diag-section {
+    display: grid;
+    gap: calc(8 * var(--u));
+    padding: calc(12 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(12 * var(--u));
+    background: color-mix(in oklch, var(--muted) 80%, transparent);
+  }
+  .diag-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: calc(8 * var(--u));
+  }
+  .diag-head p {
+    min-width: 0;
+    color: var(--muted-foreground);
+    font-size: calc(12 * var(--u));
+    font-weight: 600;
+    letter-spacing: 0.025em;
+    line-height: calc(16 * var(--u));
+    text-transform: uppercase;
+  }
+  /* Badge: rounded-full border-transparent px-2.5 py-0.5 text-xs font-medium. */
+  .diag-badge {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    overflow: hidden;
+    padding: calc(2 * var(--u)) calc(10 * var(--u));
+    border: calc(1 * var(--u)) solid transparent;
+    border-radius: 999px;
+    font-size: calc(12 * var(--u));
+    font-weight: 500;
+    line-height: calc(16 * var(--u));
+    white-space: nowrap;
+  }
+  .diag-badge[data-tone="success"] {
+    background: var(--success-surface);
+    color: var(--success-surface-foreground);
+  }
+  .diag-badge[data-tone="warning"] {
+    background: var(--warning-surface);
+    color: var(--warning-surface-foreground);
+  }
+  .diag-badge[data-tone="secondary"] {
+    background: var(--secondary);
+    color: var(--secondary-foreground);
+  }
+  /* The rows: space-y-1 text-xs. A label is font-medium text-muted-foreground. */
+  .diag-body {
+    display: grid;
+    gap: calc(4 * var(--u));
+    overflow: hidden;
+    font-size: calc(12 * var(--u));
+    line-height: calc(16 * var(--u));
+  }
+}

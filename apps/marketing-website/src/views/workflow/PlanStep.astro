@@ -1,0 +1,33 @@
+---
+// Plan chapter, final frame: the Planner saved the implementation plan. The scene starts on the
+// Spec session, where the Spec chapter ends, opens the start dialog, and plays the Planner session.
+import DocumentPanel from "../../replica/studio/DocumentPanel.astro";
+import PlanDocument from "./documents/PlanDocument.astro";
+import SpecDocument from "./documents/SpecDocument.astro";
+import Transcript from "../../replica/transcript/Transcript.astro";
+import StartDialog from "../../replica/studio/StartDialog.astro";
+import { DOCUMENTS, FRAMES, PLANNER_SESSION } from "../../sample/studio";
+import StudioWindow from "../../replica/studio/StudioWindow.astro";
+import type { PlanTemplate } from "./plan";
+---
+
+<StudioWindow frame={FRAMES.plan}>
+  <Transcript
+    sessions={[
+      { id: "spec", turns: 1 },
+      { id: "planner", turns: 1 },
+    ]}
+    shown="planner"
+  />
+  <DocumentPanel slot="panel" labels={DOCUMENTS.plan}>
+    <PlanDocument />
+  </DocumentPanel>
+</StudioWindow>
+<template data-tpl={"spec-document" satisfies PlanTemplate}><div><SpecDocument /></div></template>
+<template data-tpl={"planner-dialog" satisfies PlanTemplate}
+  ><StartDialog
+    role="Planner"
+    description="Start a fresh session for Planner."
+    session={PLANNER_SESSION}
+  /></template
+>

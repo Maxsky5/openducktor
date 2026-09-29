@@ -1,0 +1,214 @@
+@layer replica {
+  /* Dev servers: compact until a script starts, then a vertical split under the task tools. */
+  .dev {
+    /* The xterm palette. Bold text with a color uses the bright color. */
+    --ansi-green: #4e9a06;
+    --ansi-green-bright: #8ae234;
+    --ansi-cyan: #06989a;
+    --ansi-cyan-bright: #34e2e2;
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .dev[data-dev="expanded"] {
+    flex-basis: 40%;
+  }
+  .dev[data-dev="compact"] > :not(.dev-compact),
+  .dev[data-dev="expanded"] > .dev-compact {
+    display: none;
+  }
+  .dev-compact {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    padding: calc(12 * var(--u));
+    border-top: calc(1 * var(--u)) solid var(--border);
+    background: color-mix(in oklch, var(--card) 70%, transparent);
+  }
+  .dev-start {
+    flex: 1;
+    gap: calc(8 * var(--u));
+    border: 0;
+    border-radius: calc(12 * var(--u));
+    line-height: calc(16 * var(--u));
+  }
+  /* The settings of the dev servers. */
+  .dev-settings {
+    flex: 0 0 auto;
+    width: calc(32 * var(--u));
+    padding: 0;
+    box-shadow: none;
+  }
+  /* The handle of the vertical split. */
+  .dev-split {
+    background: var(--card);
+  }
+  .dev-expanded {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--card);
+  }
+  .dev-head {
+    padding: calc(12 * var(--u)) calc(12 * var(--u)) calc(4 * var(--u));
+    border-bottom: calc(1 * var(--u)) solid var(--border);
+  }
+  .dev-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: calc(8 * var(--u));
+  }
+  .dev-action {
+    gap: calc(8 * var(--u));
+    height: calc(28 * var(--u));
+    font-size: calc(14 * var(--u));
+    box-shadow: none;
+  }
+  .dev-stop .lucide {
+    fill: currentColor;
+  }
+  .dev-where {
+    display: flex;
+    align-items: center;
+    gap: calc(6 * var(--u));
+    color: var(--muted-foreground);
+    font-size: calc(12 * var(--u));
+    line-height: calc(16 * var(--u));
+  }
+  .dev-where p {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .dev-where span {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: calc(24 * var(--u));
+    height: calc(24 * var(--u));
+  }
+  .dev-terminals {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--dev-server-terminal-surface);
+    color: var(--dev-server-terminal-foreground);
+  }
+  .dev-tabs {
+    display: flex;
+    flex: 0 0 auto;
+    border-bottom: calc(1 * var(--u)) solid var(--dev-server-terminal-border);
+  }
+  .dev-tab {
+    display: flex;
+    align-items: center;
+    gap: calc(6 * var(--u));
+    height: calc(32 * var(--u));
+    max-width: calc(320 * var(--u));
+    padding: calc(4 * var(--u)) calc(12 * var(--u));
+    border-top: calc(4 * var(--u)) solid transparent;
+    border-right: calc(1 * var(--u)) solid var(--dev-server-terminal-border);
+    background: var(--dev-server-terminal-tab-inactive);
+    color: var(--dev-server-terminal-muted);
+    font-family: var(--mono);
+    font-size: calc(11 * var(--u));
+    font-weight: 500;
+    line-height: calc(16 * var(--u));
+  }
+  .dev-tab[data-active] {
+    border-top-color: var(--selected-accent);
+    background: var(--dev-server-terminal-tab-active);
+    color: var(--dev-server-terminal-foreground);
+  }
+  .dev-prompt {
+    margin-right: calc(8 * var(--u));
+    color: var(--dev-server-terminal-subtle);
+  }
+  .dev-dot {
+    width: calc(8 * var(--u));
+    height: calc(8 * var(--u));
+    margin-left: calc(8 * var(--u));
+    border-radius: 50%;
+    background: var(--dev-server-terminal-dot-stopped);
+    transition: background-color 200ms ease;
+  }
+  .dev-dot[data-status="starting"] {
+    background: var(--amber-400);
+  }
+  .dev-dot[data-status="running"] {
+    background: var(--emerald-400);
+  }
+  .dev-content {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--dev-server-terminal-panel);
+  }
+  .dev-command {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    padding: calc(8 * var(--u)) calc(12 * var(--u));
+    border-bottom: calc(1 * var(--u)) solid var(--dev-server-terminal-border);
+    background: var(--dev-server-terminal-panel-header);
+    color: var(--dev-server-terminal-foreground);
+    font-family: var(--mono);
+    font-size: calc(12 * var(--u));
+    line-height: calc(16 * var(--u));
+  }
+  .dev-command span:first-child {
+    color: var(--dev-server-terminal-subtle);
+  }
+  /*
+   * xterm output. The terminal shows whole rows from the top. When the output has more rows than
+   * the terminal, the oldest rows go out at the top.
+   */
+  .dev-output {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    font-family: Menlo, Monaco, "Courier New", monospace;
+    font-size: calc(12 * var(--u));
+    line-height: calc(18 * var(--u));
+    white-space: pre;
+  }
+  .dev-rows {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    max-height: round(down, 100%, calc(18 * var(--u)));
+    overflow: hidden;
+  }
+  .dev-line {
+    flex: 0 0 auto;
+    min-height: calc(18 * var(--u));
+  }
+  .dev-line .dim {
+    opacity: 0.5;
+  }
+  .dev-line .bold {
+    font-weight: 700;
+  }
+  .dev-line .green {
+    color: var(--ansi-green);
+  }
+  .dev-line .cyan {
+    color: var(--ansi-cyan);
+  }
+  .dev-line .green.bold {
+    color: var(--ansi-green-bright);
+  }
+  .dev-line .cyan.bold {
+    color: var(--ansi-cyan-bright);
+  }
+}

@@ -1,0 +1,144 @@
+@layer replica {
+  /*
+   * Agent Studio replica. Values copy the classes in
+   * packages/frontend/src/components/features/agents at 1:1 in design pixels.
+   */
+  .studio {
+    height: calc(780 * var(--u));
+  }
+  /* Body: chat column, resize handle, right panel. */
+  .st-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+  }
+  .st-body > .st-chat {
+    flex: 0 0 63%;
+  }
+  .st-handle {
+    background: var(--card);
+  }
+  .st-panel {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+    background: var(--card);
+  }
+  /* Bottom stack: pending questions and approvals dock above the composer. */
+  .st-stack {
+    display: grid;
+    flex: 0 0 auto;
+    gap: calc(8 * var(--u));
+    padding: calc(12 * var(--u)) calc(16 * var(--u)) 0;
+  }
+  .st-stack:empty {
+    display: none;
+  }
+  /* The panel body shows the panel of the active tab. */
+  .st-panel-body:not([data-active-panel="document"]) > [data-panel="document"],
+  .st-panel-body:not([data-active-panel="git"]) > [data-panel="git"],
+  .st-panel-body:not([data-active-panel="ci_checks"]) > [data-panel="ci_checks"] {
+    display: none;
+  }
+  .st-panel-body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .st-panel-body > [data-panel] {
+    flex: 1;
+    min-height: 0;
+  }
+  /* A resized split: the review chapter gives the diff more room. */
+  .studio[data-panel-size="wide"] .st-body > .st-chat {
+    flex-basis: 54%;
+  }
+  /*
+   * Narrow stages show one column at a time, as a phone-width window would. The scene
+   * switches data-focus between the chat and the panel when the panel changes.
+   */
+  @container stage (width <= 699px) {
+    .studio {
+      --design-width: 440;
+      height: calc(820 * var(--u));
+    }
+    .studio .rail,
+    .studio .sb-collapsed,
+    .studio .st-tab:not([data-active]),
+    .studio .st-tabs-add,
+    .studio .st-tabs-tools,
+    .studio .st-attach,
+    .studio .st-chip.effort,
+    .studio .st-context small,
+    .studio .st-handle {
+      display: none;
+    }
+    .studio .app-body {
+      padding-top: calc(34 * var(--u));
+      background: var(--studio-chrome);
+    }
+    .studio .st-tab {
+      max-width: none;
+      flex: 1;
+    }
+    .studio .st-tab-title {
+      max-width: none;
+    }
+    .studio .st-body {
+      position: relative;
+    }
+    /* Opacity only: the scene measures cursor targets, and a CSS transform would move them. */
+    .studio .st-chat,
+    .studio .st-panel {
+      position: absolute;
+      inset: 0;
+      transition: opacity 250ms ease;
+    }
+    .studio[data-focus="chat"] .st-panel,
+    .studio[data-focus="panel"] .st-chat {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .studio .st-track {
+      padding: calc(12 * var(--u)) calc(12 * var(--u)) calc(6 * var(--u));
+    }
+    .studio .st-agent-body {
+      padding-right: 0;
+    }
+    .studio .st-stack {
+      padding: calc(10 * var(--u)) calc(12 * var(--u)) 0;
+    }
+    .studio .st-composer {
+      padding: calc(10 * var(--u)) calc(12 * var(--u)) calc(12 * var(--u));
+    }
+    .studio .st-context {
+      margin-right: calc(4 * var(--u));
+    }
+    .studio .st-context i {
+      width: calc(40 * var(--u));
+    }
+  }
+  /* A small tablet stage shows the one-column layout at the scale of the app. */
+  @container stage (521px <= width <= 699px) {
+    .studio {
+      --design-width: 620;
+      height: calc(700 * var(--u));
+    }
+  }
+  /* A tablet stage shows the chat next to the panel, without the workspace rail and the sidebar. */
+  @container stage (700px <= width <= 1100px) {
+    .studio {
+      --design-width: 960;
+    }
+    .studio .rail,
+    .studio .sb-collapsed {
+      display: none;
+    }
+    .studio .app-body {
+      padding-top: calc(34 * var(--u));
+      background: var(--studio-chrome);
+    }
+  }
+}

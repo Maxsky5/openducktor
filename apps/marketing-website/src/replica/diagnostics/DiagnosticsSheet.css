@@ -1,0 +1,80 @@
+@layer replica {
+  /*
+   * The Diagnostics sheet. Values copy packages/frontend/src/components/ui/sheet.tsx and
+   * features/diagnostics at 1:1 in design pixels.
+   */
+  /* SheetContent, side right: sm:max-w-2xl, bg-popover, and a scroll area. */
+  .diag-sheet {
+    width: min(100%, calc(672 * var(--u)));
+    overflow: hidden;
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(16 * var(--u));
+    background: var(--popover);
+    color: var(--popover-foreground);
+    box-shadow: var(--shadow-sheet);
+  }
+  /* flex flex-col gap-4 p-6. The close button scrolls with the content. */
+  .diag-content {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: calc(16 * var(--u));
+    padding: calc(24 * var(--u));
+  }
+  .diag-close {
+    position: absolute;
+    top: calc(16 * var(--u));
+    right: calc(16 * var(--u));
+    display: grid;
+    padding: calc(4 * var(--u));
+    border-radius: calc(8 * var(--u));
+    color: var(--muted-foreground);
+  }
+  /* SheetHeader: pr-8, and a row with the title, the description, and Refresh Checks. */
+  .diag-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: calc(12 * var(--u));
+    padding-right: calc(32 * var(--u));
+  }
+  .diag-heading {
+    display: grid;
+    gap: calc(4 * var(--u));
+    min-width: 0;
+  }
+  .diag-heading strong {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    font-size: calc(20 * var(--u));
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    line-height: calc(28 * var(--u));
+  }
+  .diag-heading .diag-shield {
+    color: var(--selected-accent);
+  }
+  .diag-heading p {
+    color: var(--muted-foreground);
+    font-size: calc(14 * var(--u));
+    line-height: calc(20 * var(--u));
+  }
+  .diag-heading b {
+    font-weight: 600;
+  }
+  .diag-refresh {
+    flex: 0 0 auto;
+    gap: calc(8 * var(--u));
+    box-shadow: none;
+  }
+  /* Refresh Checks is disabled, and its icon spins, while the checks load. */
+  .diag-refresh[data-loading] .lucide {
+    animation: spin 1s linear infinite;
+  }
+  /* DiagnosticsSection: space-y-2 rounded-lg border bg-muted/80 p-3. */
+  .diag-sections {
+    display: grid;
+    gap: calc(12 * var(--u));
+  }
+}

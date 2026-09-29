@@ -1,0 +1,31 @@
+---
+// One file of the Git panel diff in the unified style of @pierre/diffs. Each line keeps its
+// number in data-line, so a scene can hover it and insert a review comment under it.
+import { Plus } from "@lucide/astro";
+import { tokenize } from "./highlight";
+import "./DiffView.css";
+
+interface Props {
+  lines: string[];
+  kind: "add" | "ctx";
+}
+const { lines, kind } = Astro.props;
+---
+
+<div class="st-diff">
+  {
+    lines.map((line, index) => (
+      <div class:list={["st-line", kind]} data-line={index + 1}>
+        <span>{index + 1}</span>
+        <code>
+          {tokenize(line).map((token) =>
+            token.tone ? <span class={token.tone}>{token.text}</span> : token.text,
+          )}
+        </code>
+        <span class="st-plus" data-comment-add>
+          <Plus class="i12" />
+        </span>
+      </div>
+    ))
+  }
+</div>

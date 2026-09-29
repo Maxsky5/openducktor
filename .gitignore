@@ -26,3 +26,8 @@ packages/openducktor-mcp/tsconfig.tsbuildinfo
 .code-review-graph/
 .pixel/
 .wayfinder/
+apps/marketing-website/.astro/
+apps/marketing-website/.wrangler/
+apps/marketing-website/public/
+apps/marketing-website/test-results/
+apps/marketing-website/playwright-report/

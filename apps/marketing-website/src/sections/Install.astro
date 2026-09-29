@@ -1,0 +1,68 @@
+---
+import { AppWindow, Check, MonitorDown } from "@lucide/astro";
+import { desktopInstalls, links } from "../content/site";
+import IconBadge from "../ui/IconBadge.astro";
+import SectionHead from "../ui/SectionHead.astro";
+import WebRunnerView from "../views/web-runner/WebRunnerView.astro";
+import InstallMethod from "../ui/InstallMethod.astro";
+import ArrowLink from "../ui/ArrowLink.astro";
+import "./Install.css";
+---
+
+<section id="install" class="section install" aria-labelledby="install-title">
+  <div class="wrap">
+    <div class="install-head">
+      <SectionHead eyebrow="Install" id="install-title">
+        <Fragment slot="title">Install the desktop app, or run it in your browser.</Fragment>
+        <p>
+          OpenDucktor runs the coding agent that you already use. Install and sign in to OpenCode,
+          Codex, or Claude Code before the first start. Then open a local Git repository in
+          OpenDucktor.
+        </p>
+      </SectionHead>
+      <div class="needs-box">
+        <h3 class="install-label" id="install-needs">You need</h3>
+        <ul class="needs" aria-labelledby="install-needs">
+          <li><Check size={16} /><span>Git</span></li>
+          <li><Check size={16} /><span>OpenCode, Codex, or Claude Code</span></li>
+          <li>
+            <Check size={16} /><span>GitHub CLI (<code>gh</code>) for pull requests on GitHub</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+    <div class="install-modes">
+      <div class="install-mode">
+        <div class="install-mode-head">
+          <IconBadge><MonitorDown size={20} /></IconBadge>
+          <h3 id="install-desktop">Desktop app</h3>
+          <p>
+            For macOS, Windows, and Linux. The app checks GitHub for new releases and asks before it
+            installs one.
+          </p>
+        </div>
+        <div class="install-methods">
+          {desktopInstalls.map((method) => <InstallMethod {...method} />)}
+        </div>
+        <p class="install-links">
+          <ArrowLink href={links.latest}>Download from GitHub Releases</ArrowLink>
+          <ArrowLink href={links.installation}>Installation guide</ArrowLink>
+        </p>
+      </div>
+      <div class="install-mode">
+        <div class="install-mode-head">
+          <IconBadge><AppWindow size={20} /></IconBadge>
+          <h3 id="install-web">Browser version</h3>
+          <p>
+            The same app in your browser. The command starts the OpenDucktor host and the web app on
+            your computer. Then you open the Local address.
+          </p>
+        </div>
+        <WebRunnerView />
+        <p class="install-links">
+          <ArrowLink href={links.webRunner}>Browser version guide</ArrowLink>
+        </p>
+      </div>
+    </div>
+  </div>
+</section>

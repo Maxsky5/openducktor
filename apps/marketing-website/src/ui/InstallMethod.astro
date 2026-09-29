@@ -1,0 +1,44 @@
+---
+// One way to install OpenDucktor: a terminal with the command, and a note under it. The slot
+// holds more terminal lines, such as the output of the command.
+import type { HTMLAttributes } from "astro/types";
+import Terminal from "./Terminal.astro";
+import "./InstallMethod.css";
+
+type Props = Omit<HTMLAttributes<"article">, "id"> & {
+  /** A unique name of the method. The terminal title gets the id install-{id}. */
+  id: string;
+  title: string;
+  /** The name of the command in the label of the copy button. The title is the default. */
+  label?: string;
+  prompt: string;
+  command: string;
+  note: string;
+  /** The terminal screen is the stage of a scene. */
+  stage?: boolean;
+};
+const {
+  id,
+  title,
+  label = title,
+  prompt,
+  command,
+  note,
+  stage = false,
+  class: className,
+  ...attributes
+} = Astro.props;
+const titleId = `install-${id}`;
+---
+
+<article class:list={["install-method", className]} aria-labelledby={titleId} {...attributes}>
+  <Terminal
+    title={title}
+    titleId={titleId}
+    label={label}
+    prompt={prompt}
+    command={command}
+    stage={stage}><slot /></Terminal
+  >
+  <p class="install-note">{note}</p>
+</article>

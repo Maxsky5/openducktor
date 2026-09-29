@@ -1,0 +1,34 @@
+@layer product {
+  /* The fills of agent-runtime-icon.tsx. A logo in the copied UI has size-4 by default. */
+  .replica .runtime-logo {
+    width: calc(16 * var(--u));
+    height: calc(16 * var(--u));
+  }
+  .codex-logo {
+    color: #0d0d0d;
+  }
+  :where(:root[data-theme="dark"]) .codex-logo {
+    color: #fff;
+  }
+  .claude-logo {
+    color: #d97757;
+  }
+  .opencode-logo {
+    color: #131010;
+  }
+  :where(:root[data-theme="dark"]) .opencode-logo {
+    color: #f1ecec;
+  }
+  .opencode-center {
+    fill: #5a5858;
+  }
+  :where(:root[data-theme="dark"]) .opencode-center {
+    fill: #b7b1b1;
+  }
+  .opencode-outline {
+    fill: #fff;
+  }
+  :where(:root[data-theme="dark"]) .opencode-outline {
+    fill: #211e1e;
+  }
+}

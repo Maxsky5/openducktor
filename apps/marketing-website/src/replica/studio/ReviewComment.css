@@ -1,0 +1,61 @@
+@layer replica {
+  /* Inline review comment under a diff line: file-diff-comments.tsx. */
+  .st-comment {
+    padding: calc(8 * var(--u)) calc(16 * var(--u));
+    font-family: "Space Grotesk Variable", "Space Grotesk", sans-serif;
+    white-space: normal;
+  }
+  .st-comment > div {
+    padding: calc(12 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(12 * var(--u));
+    background: var(--card);
+  }
+  .st-badge {
+    display: inline-flex;
+    padding: calc(2 * var(--u)) calc(10 * var(--u));
+    border-radius: 999px;
+    background: var(--warning-surface);
+    color: var(--warning-surface-foreground);
+    font-size: calc(12 * var(--u));
+    font-weight: 500;
+    line-height: calc(16 * var(--u));
+  }
+  .st-textarea {
+    min-height: calc(96 * var(--u));
+    margin-top: calc(12 * var(--u));
+    padding: calc(8 * var(--u)) calc(12 * var(--u));
+    border: calc(1 * var(--u)) solid var(--input);
+    border-radius: calc(10 * var(--u));
+    box-shadow: var(--shadow-xs);
+    color: var(--foreground);
+    font-size: calc(14 * var(--u));
+    line-height: calc(20 * var(--u));
+  }
+  .st-textarea:empty::before {
+    content: attr(data-placeholder);
+    color: var(--muted-foreground);
+  }
+  /* The buttons of the form. A saved comment puts its buttons at the end. */
+  .st-comment-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: calc(8 * var(--u));
+    margin-top: calc(12 * var(--u));
+  }
+  .st-comment-actions[data-saved] {
+    justify-content: flex-end;
+  }
+  .st-comment p {
+    margin-top: calc(12 * var(--u));
+    color: var(--foreground);
+    font-size: calc(12 * var(--u));
+    line-height: calc(20 * var(--u));
+    white-space: pre-wrap;
+  }
+  /* The caret of a comment that the scene types. */
+  .st-textarea::after {
+    height: calc(16 * var(--u));
+  }
+}

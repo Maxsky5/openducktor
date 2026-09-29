@@ -1,0 +1,162 @@
+---
+// The Settings dialog on the global prompt overrides of the QA role. Sources: settings-modal.tsx,
+// settings-modal-sidebars.tsx, settings-prompt-overrides-section.tsx,
+// settings-modal-prompt-components.tsx, and settings-modal-footer.tsx in
+// packages/frontend/src/components/features/settings. The markup holds the last frame of the
+// error: the new line uses {{task.type}}, which is not a placeholder of OpenDucktor.
+import {
+  Bell,
+  ChevronDown,
+  CircleAlert,
+  Columns3,
+  Cpu,
+  FolderGit2,
+  MessageSquare,
+  MessageSquarePlus,
+  MessageSquareText,
+  Palette,
+  SlidersHorizontal,
+  Workflow,
+  X,
+} from "@lucide/astro";
+import Pointer from "../../replica/shell/Pointer.astro";
+import Button from "../../replica/ui/Button.astro";
+import Segment from "../../replica/ui/Segment.astro";
+import Segmented from "../../replica/ui/Segmented.astro";
+import Switch from "../../replica/ui/Switch.astro";
+import {
+  ADDED_LINE,
+  QA_BASE_AFTER,
+  QA_BASE_BEFORE,
+  QA_KICKOFF,
+  unsupported,
+} from "../../sample/prompts";
+import "./PromptsView.css";
+import SettingsPane from "../../replica/settings/SettingsPane.astro";
+import Scene from "../Scene.astro";
+import { flag } from "../../replica/flag";
+
+const sections = [
+  { label: "General", Icon: SlidersHorizontal },
+  { label: "Appearance", Icon: Palette },
+  { label: "Git", Icon: FolderGit2 },
+  { label: "Agent Runtimes", Icon: Cpu },
+  { label: "Repositories", Icon: FolderGit2 },
+  { label: "System Prompts", Icon: MessageSquareText, active: true },
+  { label: "Reusable Prompts", Icon: MessageSquarePlus },
+  { label: "Custom Agent Roles", Icon: MessageSquareText },
+  { label: "Chat", Icon: MessageSquare },
+  { label: "Notifications", Icon: Bell },
+  { label: "Kanban", Icon: Columns3 },
+  { label: "Autopilot", Icon: Workflow },
+];
+const tabs = ["Shared", "Spec", "Planner", "Builder", "QA"];
+---
+
+<Scene
+  name="prompts"
+  alt="The Settings dialog on the global prompt overrides of the QA role. The visitor turns on the override of the QA Role Base prompt and adds a line with the placeholder {{task.type}}. OpenDucktor shows that the placeholder is not supported and disables Save. The visitor changes it to {{task.issueType}} and saves the settings."
+>
+  <SettingsPane class="prompts-dialog" data-prompts data-invalid>
+    <div class="pd-header">
+      <strong>Settings</strong>
+      <p>Configure global defaults, repository settings, and prompt overrides.</p>
+      <span class="pd-close"><X class="i16" /></span>
+    </div>
+    <div class="pd-body">
+      <div class="pd-nav">
+        {
+          sections.map(({ label, Icon, active }) => (
+            <span class="pd-nav-item" data-active={flag(active)}>
+              <span class="pd-nav-label">
+                <Icon class="i16" />
+                <span>{label}</span>
+              </span>
+              {active && <CircleAlert class="i14 pd-alert" data-alert />}
+            </span>
+          ))
+        }
+      </div>
+      <div class="pd-content">
+        <div class="pd-heading">
+          <strong>Global Prompt Overrides</strong>
+          <p>
+            Global overrides apply to every repository unless a repository-specific enabled override
+            exists for the same prompt.
+          </p>
+        </div>
+        <Segmented size="sm">
+          {
+            tabs.map((tab) => (
+              <Segment class="pd-tab" active={tab === "QA"}>
+                <span>{tab}</span>
+                {tab === "QA" && <CircleAlert class="i14" data-alert />}
+              </Segment>
+            ))
+          }
+        </Segmented>
+        <p class="pd-banner" data-banner>1 prompt placeholder error in this tab.</p>
+        <div class="pd-cards">
+          <div class="pd-card">
+            <div class="pd-card-head">
+              <div>
+                <strong>QA Role Base</strong>
+                <p>
+                  Reviews required outcomes, design contracts, correctness, and maintainability with
+                  checks based on risk.
+                </p>
+              </div>
+              <span class="pd-enable">
+                <Switch checked data-switch />Enable override
+              </span>
+            </div>
+            <div class="pd-inherited" hidden data-inherited>
+              <p>Inherited prompt in use: Builtin prompt</p>
+              <ChevronDown class="i14" />
+            </div>
+            <div class="pd-editor">
+              <span class="pd-label">Override prompt</span>
+              <div class="pd-textarea" data-textarea>
+                <pre>{QA_BASE_BEFORE}<span data-part="lead">{ADDED_LINE.lead}</span><span data-part="key">{ADDED_LINE.wrongKey}</span><span data-part="close">{ADDED_LINE.close}</span><span data-part="tail">{ADDED_LINE.tail}</span><i class="pd-caret" data-caret />{QA_BASE_AFTER}</pre>
+              </div>
+              <p class="pd-error" data-error>{unsupported(ADDED_LINE.wrongKey)}</p>
+            </div>
+            <div class="pd-actions">
+              <Button variant="ghost" size="sm" data-clear>Clear override</Button>
+            </div>
+          </div>
+          <div class="pd-card">
+            <div class="pd-card-head">
+              <div>
+                <strong>QA Kickoff</strong>
+                <p>Starts review of required outcomes, contracts, and material risks.</p>
+              </div>
+              <span class="pd-enable"><Switch />Enable override</span>
+            </div>
+            <div class="pd-inherited">
+              <p>Inherited prompt in use: Builtin prompt</p>
+              <ChevronDown class="i14" />
+            </div>
+            <div class="pd-editor">
+              <span class="pd-label">Override prompt</span>
+              <div class="pd-textarea"><pre>{QA_KICKOFF}</pre></div>
+            </div>
+            <div class="pd-actions">
+              <Button variant="ghost" size="sm" data-disabled>Clear override</Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="pd-footer">
+      <Button variant="secondary" data-cancel>Cancel</Button>
+      <span class="pd-message"><span data-message>1 prompt placeholder error.</span></span>
+      <Button class="pd-save" data-disabled data-save>Save Settings</Button>
+    </div>
+    <Pointer />
+  </SettingsPane>
+</Scene>
+<script>
+  import { mountPrompts } from "./scene";
+  mountPrompts();
+</script>

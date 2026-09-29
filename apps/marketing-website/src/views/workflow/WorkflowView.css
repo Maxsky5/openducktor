@@ -1,0 +1,136 @@
+@layer views {
+  /* Chapter player. Without JavaScript the panels stack under their own headings. */
+  .chapters {
+    display: grid;
+    gap: 20px;
+    margin-top: clamp(40px, 5vw, 64px);
+  }
+  .chapter-tabs {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .chapter-tab {
+    /* The part of the step that has played. The chapter player sets it while the step plays. */
+    --progress: 0;
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-content: start;
+    align-items: baseline;
+    column-gap: 10px;
+    row-gap: 8px;
+    padding: 22px 4px 4px;
+    border: 0;
+    background: none;
+    color: var(--faint-ink);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: color 0.25s ease;
+  }
+  .chapter-tab:hover,
+  .chapter-tab[aria-selected="true"] {
+    color: var(--body-ink);
+  }
+  .chapter-tab:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 4px;
+    border-radius: 4px;
+  }
+  .chapter-bar {
+    position: absolute;
+    inset: 0 0 auto;
+    height: 3px;
+    overflow: hidden;
+    border-radius: 3px;
+    background: var(--line);
+  }
+  .chapter-bar i {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    transform: scaleX(var(--progress));
+    transform-origin: left;
+  }
+  .chapter-tab[data-state="done"] .chapter-bar i {
+    transform: scaleX(1);
+    opacity: 0.45;
+  }
+  .chapter-tab[aria-selected="true"] .chapter-bar i {
+    transform: scaleX(var(--progress));
+  }
+  .chapters:not([data-motion="running"]) [aria-selected="true"] .chapter-bar i {
+    transform: scaleX(1);
+  }
+  .chapter-index {
+    font-family: var(--mono-font);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .chapter-tab strong {
+    color: var(--body-ink);
+    font-size: 1.0625rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    transition: color 0.25s ease;
+  }
+  .chapter-tab:hover strong,
+  .chapter-tab[aria-selected="true"] strong {
+    color: var(--ink);
+  }
+  .chapter-text {
+    grid-column: 1 / -1;
+    font-size: 0.875rem;
+    line-height: 1.55;
+    text-wrap: pretty;
+  }
+  .chapter-panel {
+    display: grid;
+    gap: 16px;
+  }
+  .chapter-panel:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 6px;
+    border-radius: 12px;
+  }
+  .chapter-heading {
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  .chapter-copy {
+    max-width: 62ch;
+    color: var(--body-ink);
+    line-height: 1.6;
+  }
+  .chapters[data-tabs] .chapter-heading,
+  .chapters[data-tabs] .chapter-copy {
+    display: none;
+  }
+  .chapters:not([data-tabs]) .chapter-panel + .chapter-panel {
+    margin-top: 48px;
+  }
+  @media (width <= 1023px) {
+    /* Five steps fit on one line. With large text, the steps wrap to more lines. */
+    .chapter-tabs {
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 3.25em), 1fr));
+      gap: 6px;
+    }
+    .chapter-tab {
+      grid-template-columns: minmax(0, 1fr);
+      row-gap: 2px;
+      padding-top: 16px;
+    }
+    .chapter-tab strong {
+      font-size: 0.9375rem;
+    }
+    .chapter-text {
+      display: none;
+    }
+    .chapters[data-tabs] .chapter-copy {
+      display: block;
+      min-height: calc(3 * 1.6em);
+    }
+  }
+}

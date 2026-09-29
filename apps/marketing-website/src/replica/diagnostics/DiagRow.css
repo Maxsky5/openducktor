@@ -1,0 +1,18 @@
+@layer replica {
+  .diag-row .diag-label {
+    color: var(--muted-foreground);
+    font-weight: 500;
+  }
+  .diag-row .mono {
+    font-size: calc(11 * var(--u));
+  }
+  .diag-row .muted {
+    color: var(--muted-foreground);
+  }
+  .diag-row .strong {
+    font-weight: 500;
+  }
+  .diag-row .break-all {
+    word-break: break-all;
+  }
+}

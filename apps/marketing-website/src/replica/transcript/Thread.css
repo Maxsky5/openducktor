@@ -1,0 +1,18 @@
+@layer replica {
+  /* Transcript. The newest rows stay at the bottom, as the product follows the stream. */
+  .st-transcript {
+    position: relative;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: flex-end;
+    min-height: 0;
+    overflow: hidden;
+  }
+  /* The track fills a short transcript from the top and overflows at the top when it is long. */
+  .st-track {
+    display: flow-root;
+    flex: 1 0 auto;
+    padding: calc(16 * var(--u)) calc(16 * var(--u)) calc(8 * var(--u));
+  }
+}

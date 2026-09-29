@@ -1,0 +1,51 @@
+---
+// An inline review comment under a diff line, from file-diff-comments.tsx. Without `text` it is the
+// form of a new comment, which a scene types into. With `text` it is the saved comment, which
+// waits for the next message. The Trash2 icon of the product is Trash in Lucide 1.
+import { Check, Pencil, Trash } from "@lucide/astro";
+import Button from "../ui/Button.astro";
+import "./ReviewComment.css";
+
+interface Props {
+  text?: string;
+}
+const { text } = Astro.props;
+---
+
+<div class="st-comment" data-comment>
+  <div>
+    <span class="st-badge">Pending</span>
+    {
+      text === undefined ? (
+        <>
+          <div
+            class="st-textarea typed"
+            data-placeholder="Add a comment for the Builder"
+            data-comment-text
+          />
+          <div class="st-comment-actions">
+            <Button variant="outline" size="sm">
+              Cancel
+            </Button>
+            <Button size="sm" data-disabled data-comment-save>
+              <Check />
+              Comment
+            </Button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p>{text}</p>
+          <div class="st-comment-actions" data-saved>
+            <Button variant="outline" size="icon">
+              <Pencil />
+            </Button>
+            <Button variant="destructive" size="icon">
+              <Trash />
+            </Button>
+          </div>
+        </>
+      )
+    }
+  </div>
+</div>

@@ -1,0 +1,10 @@
+---
+// A heading of a Markdown document in the Document panel. It has the look of the product heading,
+// but it is not a heading of the page.
+interface Props {
+  level: 1 | 2 | 3;
+}
+const { level } = Astro.props;
+---
+
+<div class={`doc-h${level}`}><slot /></div>

@@ -10,7 +10,7 @@ Thanks for contributing. This project is public, but it is still early and the c
 
 ## Current Product Constraints
 
-- OpenDucktor is macOS-first, with Windows and Linux Electron builds treated as experimental.
+- OpenDucktor supports macOS, Windows, and Linux desktop builds.
 - The workspace-scoped SQLite task store is the V1 source of truth for tasks.
 - OpenCode, Codex, and Claude Code are the supported local agent runtimes.
 - Runtime integrations may use proprietary services when their executable, authentication, and
@@ -59,6 +59,8 @@ Notes:
 - Azure DevOps Services sign-in uses the OpenDucktor Microsoft Entra public client registration. Register it for accounts in any organizational directory and personal Microsoft accounts, enable public client flows, and add the Azure DevOps delegated `user_impersonation` permission. Development builds can override its public client ID with `OPENDUCKTOR_AZURE_DEVOPS_CLIENT_ID`.
 
 ## Main Development Commands
+
+For the public Astro website, see [the marketing website guide](apps/marketing-website/README.md). Its build and type checks run through the workspace commands. Root formatting also checks Astro templates with the website's Prettier plugin.
 
 The development commands need no port, channel, or config-directory environment variable. The OS assigns unused ports, and each command prints its resolved URL and development instance ID. Development hosts publish `runtime/dev-instances/<instanceId>/mcp-bridge.json`; packaged and installed production hosts publish `runtime/mcp-bridge.json`.
 

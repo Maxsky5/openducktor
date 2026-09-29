@@ -1,0 +1,26 @@
+@layer replica {
+  .board-viewport {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .board-track {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: calc(16 * var(--u));
+    width: max-content;
+    padding: 0 calc(24 * var(--u)) calc(24 * var(--u));
+  }
+  /* Scene support. A slot holds the landing space of a flying card, so the lane hides its empty
+     state. */
+  .card-slot {
+    flex: 0 0 auto;
+  }
+  @container stage (width <= 480px) {
+    .board-track {
+      padding: 0 calc(20 * var(--u)) calc(20 * var(--u));
+    }
+  }
+}

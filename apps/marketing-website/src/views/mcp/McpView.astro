@@ -1,0 +1,86 @@
+---
+// An MCP client creates a task, and the Kanban board of the desktop app shows it. The client
+// is a neutral log, not a real product. The board is the replica of the Kanban page.
+import { ArrowLeft, ArrowRight, FileBraces, LoaderCircle, Plug } from "@lucide/astro";
+import Board from "../../replica/board/Board.astro";
+import BoardHead from "../../replica/board/BoardHead.astro";
+import type { BoardData } from "../../replica/board/model";
+import AppWindow from "../../replica/shell/AppWindow.astro";
+import { ARGUMENTS, jsonTokens, NEW_TASK, PROMPT, RESULT, SERVER_ENTRY } from "../../sample/mcp";
+import "./McpView.css";
+import Replica from "../../replica/Replica.astro";
+import Scene from "../Scene.astro";
+
+const entry = jsonTokens(SERVER_ENTRY);
+const call = jsonTokens(ARGUMENTS);
+// The log cuts the task summary after its first fields.
+const summary = jsonTokens(RESULT);
+const result = [...summary.slice(0, -2), { kind: "punct", text: ", …" }, ...summary.slice(-2)];
+const idText = JSON.stringify(RESULT.task.id);
+// The board of the desktop app, cropped to its first two lanes. The new task tops the Backlog.
+const board: BoardData = {
+  open: [
+    { name: "new", task: NEW_TASK.id, action: "Start Builder" },
+    { task: "b8t1", action: "Start Builder" },
+    { task: "q7d1", action: "Start Spec" },
+    { task: "m2q7", action: "Start Spec" },
+    { task: "w5j3", action: "Start Spec" },
+  ],
+  spec_ready: [{ task: "h5w3", action: "Start Planner" }],
+};
+---
+
+<Scene
+  name="mcp"
+  alt="An MCP client that uses the openducktor server with the default workspace fieldnotes. The visitor asks it to file a bug about tags that drop when a note moves. The client calls odt_create_task, and the result holds the new task fieldnotes-h4t8. At the same time, the task shows at the top of the Backlog lane on the OpenDucktor board."
+>
+  <Replica class="mcp-scene">
+    <div class="mcp-client" data-mcp-client>
+      <div class="mcp-head">
+        <span><Plug class="i14" />MCP client</span>
+        <code>stdio</code>
+      </div>
+      <div class="mcp-config">
+        <span class="mcp-file"><FileBraces class="i12" />mcp.json</span>
+        <p class="mcp-json">
+          {entry.slice(1, -1).map((token) => <span class={token.kind}>{token.text}</span>)}
+        </p>
+      </div>
+      <div class="mcp-log">
+        <p class="mcp-ask">
+          <span class="mcp-mark">›</span><span class="typed" data-prompt>{PROMPT}</span>
+        </p>
+        <div class="mcp-step" data-call>
+          <p class="mcp-line" data-call-line>
+            <ArrowRight class="i12 mcp-dir" /><LoaderCircle class="i12 spin mcp-spin" /><b
+              >odt_create_task</b
+            ><span>openducktor</span>
+          </p>
+          <p class="mcp-json" data-args>
+            {call.map((token) => <span class={token.kind}>{token.text}</span>)}
+          </p>
+        </div>
+        <div class="mcp-step" data-result>
+          <p class="mcp-line"><ArrowLeft class="i12 mcp-dir" /><b>result</b><span>41 ms</span></p>
+          <p class="mcp-json">
+            {
+              result.map((token) => (
+                <span class={token.kind} data-hit={token.text === idText ? "" : undefined}>
+                  {token.text}
+                </span>
+              ))
+            }
+          </p>
+        </div>
+      </div>
+    </div>
+    <AppWindow chrome={{ sidebar: "none" }} nested class="mcp-board">
+      <BoardHead compact />
+      <Board board={board} lanes={["open", "spec_ready"]} />
+    </AppWindow>
+  </Replica>
+</Scene>
+<script>
+  import { mountMcp } from "./scene";
+  mountMcp();
+</script>

@@ -1,0 +1,21 @@
+@layer state {
+  [hidden] {
+    display: none;
+  }
+  /* A part of a product view that a scene grows or shrinks shows only its visible height. */
+  .replica [data-resizing] {
+    overflow: hidden;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation: none;
+      transition: none;
+    }
+  }
+  [data-motion="paused"] .replica *,
+  .scene[data-motion="paused"] * {
+    animation-play-state: paused;
+  }
+}

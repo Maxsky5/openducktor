@@ -1,0 +1,62 @@
+@layer replica {
+  /* A Sonner toast as the desktop app configures it. */
+  .toast {
+    position: relative;
+    display: grid;
+    gap: calc(6 * var(--u));
+    padding: calc(16 * var(--u));
+    padding-right: calc(44 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(8 * var(--u));
+    background: color-mix(in oklch, var(--card) 95%, transparent);
+    color: var(--foreground);
+    box-shadow:
+      0 calc(20 * var(--u)) calc(25 * var(--u)) calc(-5 * var(--u))
+        color-mix(in oklch, var(--foreground) 10%, transparent),
+      0 calc(8 * var(--u)) calc(10 * var(--u)) calc(-6 * var(--u))
+        color-mix(in oklch, var(--foreground) 10%, transparent);
+    backdrop-filter: blur(calc(8 * var(--u)));
+    line-height: 1.43;
+  }
+  .toast strong {
+    display: block;
+    font-size: calc(14 * var(--u));
+    font-weight: 600;
+  }
+  .toast p {
+    font-size: calc(12 * var(--u));
+    line-height: 1.33;
+    color: var(--muted-foreground);
+  }
+  .toast-open {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: calc(8 * var(--u));
+    width: calc(100% + 28 * var(--u));
+    height: calc(36 * var(--u));
+    margin-top: calc(6 * var(--u));
+    border-radius: calc(6 * var(--u));
+    background: var(--primary);
+    color: var(--primary-foreground);
+    font-size: calc(12 * var(--u));
+    font-weight: 500;
+  }
+  .toast-close {
+    position: absolute;
+    top: calc(12 * var(--u));
+    right: calc(12 * var(--u));
+    display: grid;
+    place-items: center;
+    width: calc(24 * var(--u));
+    height: calc(24 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(6 * var(--u));
+    background: var(--card);
+    color: var(--muted-foreground);
+  }
+  .toast-close .lucide {
+    width: calc(14 * var(--u));
+    height: calc(14 * var(--u));
+  }
+}

@@ -1,0 +1,36 @@
+---
+// The OpenDucktor brand link. The mark is a rubber duck, as in rubber duck debugging, on a violet
+// tile. It wears a night vision visor. When motion is allowed, a light scans the visor now and
+// then, and the duck bobs on the water when the visitor points at the link.
+import { BILL, BODY, HEAD, VISOR, VISOR_LIGHT } from "./duck";
+import "./Brand.css";
+
+interface Props {
+  href: string;
+  /** The accessible name, when the link text does not say where the link goes. */
+  label?: string;
+}
+const { href, label } = Astro.props;
+---
+
+<a class="brand" href={href} aria-label={label} data-brand
+  ><svg class="duck-mark" viewBox="0 0 64 64" aria-hidden="true" data-duck>
+    <rect class="duck-tile" width="64" height="64" rx="15"></rect>
+    <g class="duck-water" fill="none" stroke-linecap="round">
+      <path d="M10 54.5q5.5-3 11 0t11 0t11 0t11 0"></path>
+    </g>
+    <g class="duck-bob" data-duck-bob>
+      <g transform="translate(8.5 8) scale(0.74)">
+        <path d={BODY}></path>
+        <circle cx={HEAD.cx} cy={HEAD.cy} r={HEAD.r}></circle>
+        <path d={BILL}></path>
+        <path class="duck-visor" d={VISOR}></path>
+        <path class="duck-light" d={VISOR_LIGHT}></path>
+      </g>
+    </g>
+  </svg>OpenDucktor</a
+>
+<script>
+  import { bindBrandMarks } from "./brand";
+  bindBrandMarks(document);
+</script>

@@ -1,0 +1,32 @@
+@layer product {
+  /* SegmentedControlRoot: items-center bg-muted p-1. Every copied control has w-full. */
+  .ui-segmented {
+    display: flex;
+    align-items: center;
+    padding: calc(4 * var(--u));
+    background: var(--muted);
+  }
+  /* Size sm: h-9 gap-1. Its items have the size sm: h-7 rounded-sm text-xs. */
+  .ui-segmented[data-size="sm"] {
+    gap: calc(4 * var(--u));
+    height: calc(36 * var(--u));
+  }
+  .ui-segmented[data-size="sm"] > .ui-segment {
+    height: calc(28 * var(--u));
+    border-radius: calc(8 * var(--u));
+    font-size: calc(12 * var(--u));
+  }
+  /* Size lg: min-h-11 gap-2 rounded-xl bg-muted/70. Its items have the size lg: h-9 rounded-lg
+     text-sm. */
+  .ui-segmented[data-size="lg"] {
+    gap: calc(8 * var(--u));
+    min-height: calc(44 * var(--u));
+    border-radius: calc(16 * var(--u));
+    background: color-mix(in oklch, var(--muted) 70%, transparent);
+  }
+  .ui-segmented[data-size="lg"] > .ui-segment {
+    height: calc(36 * var(--u));
+    border-radius: calc(12 * var(--u));
+    font-size: calc(14 * var(--u));
+  }
+}

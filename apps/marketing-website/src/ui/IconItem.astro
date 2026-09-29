@@ -1,0 +1,17 @@
+---
+// An item of an IconList: the icon badge, a name, and a short text in the slot. The icon slot holds
+// the icon of the badge.
+import IconBadge from "./IconBadge.astro";
+import "./IconItem.css";
+
+interface Props {
+  title: string;
+}
+const { title } = Astro.props;
+---
+
+<li class="icon-item">
+  <IconBadge><slot name="icon" /></IconBadge>
+  <strong>{title}</strong>
+  <span><slot /></span>
+</li>

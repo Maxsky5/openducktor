@@ -1,0 +1,13 @@
+---
+// Switch of components/ui/switch.tsx. A checked switch has `data-checked`, and a scene can set it.
+import type { HTMLAttributes } from "astro/types";
+import { flag } from "../flag";
+import "./Switch.css";
+
+type Props = HTMLAttributes<"span"> & { checked?: boolean };
+const { checked = false, class: className, ...attributes } = Astro.props;
+---
+
+<span class:list={["ui-switch", className]} data-checked={flag(checked)} {...attributes}
+  ><span class="ui-switch-thumb"></span></span
+>

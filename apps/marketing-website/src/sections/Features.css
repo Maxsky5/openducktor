@@ -1,0 +1,17 @@
+@layer site {
+  /*
+   * Features: a grid of tiles. Each tile explains one tool and plays one product scene. A page where
+   * agents work uses the full width. The smaller tools share a row.
+   */
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 20px;
+    margin-top: clamp(40px, 5vw, 64px);
+  }
+  @media (width <= 767px) {
+    .features-grid {
+      gap: 16px;
+    }
+  }
+}

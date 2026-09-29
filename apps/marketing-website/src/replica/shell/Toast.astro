@@ -1,0 +1,16 @@
+---
+// A Sonner toast of the desktop app, as the notification center shows an in-app notification.
+import { ArrowUpRight, X } from "@lucide/astro";
+import type { Notification } from "../vocabulary";
+import "./Toast.css";
+
+type Props = Notification;
+const { title, body } = Astro.props;
+---
+
+<div class="toast">
+  <span class="toast-close"><X /></span>
+  <strong>{title}</strong>
+  <p>{body}</p>
+  <span class="toast-open">Open<ArrowUpRight class="i14" /></span>
+</div>

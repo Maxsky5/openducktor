@@ -1,0 +1,227 @@
+@layer replica {
+  /* Sidebar */
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    width: calc(248 * var(--u));
+    flex: 0 0 calc(248 * var(--u));
+    background: var(--sidebar);
+    border-right: calc(1 * var(--u)) solid var(--sidebar-border);
+    color: var(--sidebar-foreground);
+  }
+  .sb-main {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: calc(12 * var(--u));
+    min-height: 0;
+    padding: calc(16 * var(--u));
+  }
+  .sb-brand {
+    display: flex;
+    align-items: center;
+    gap: calc(12 * var(--u));
+    color: var(--sidebar-foreground);
+  }
+  .sb-brand .mark {
+    width: calc(40 * var(--u));
+    height: calc(40 * var(--u));
+    flex: 0 0 auto;
+    background: url("/openducktor-mark.svg") center / contain no-repeat;
+  }
+  .sb-brand strong {
+    display: block;
+    font-size: calc(18 * var(--u));
+    font-weight: 600;
+    letter-spacing: calc(-0.45 * var(--u));
+    line-height: 1.5;
+  }
+  .sb-brand small {
+    display: block;
+    font-size: calc(12 * var(--u));
+    line-height: 1.33;
+    color: var(--sidebar-muted-foreground);
+  }
+  .sb-collapse {
+    align-self: flex-start;
+    margin: calc(8 * var(--u)) 0 0 auto;
+    color: var(--sidebar-muted-foreground);
+  }
+  .sb-block {
+    display: grid;
+    gap: calc(8 * var(--u));
+  }
+  .sb-label {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    padding: 0 calc(4 * var(--u));
+    font-size: calc(11 * var(--u));
+    font-weight: 600;
+    letter-spacing: calc(0.275 * var(--u));
+    line-height: 1.45;
+    text-transform: uppercase;
+    color: var(--sidebar-muted-foreground);
+  }
+  .sb-workspace {
+    padding: 0 calc(4 * var(--u));
+    font-size: calc(16 * var(--u));
+    font-weight: 600;
+    line-height: 1.25;
+    color: var(--sidebar-foreground);
+  }
+  /* The branch of the workspace. */
+  .sb-branch {
+    border-radius: calc(8 * var(--u));
+    box-shadow: var(--shadow-sm);
+    color: var(--foreground);
+  }
+  .sb-branch .ui-combobox-chevron {
+    width: calc(14 * var(--u));
+    height: calc(14 * var(--u));
+  }
+  .sb-diagnostics {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    padding: calc(10 * var(--u)) calc(10 * var(--u)) calc(10 * var(--u)) calc(12 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(10 * var(--u));
+    background: var(--card);
+  }
+  .sb-diagnostics strong {
+    display: flex;
+    align-items: center;
+    gap: calc(6 * var(--u));
+    font-size: calc(14 * var(--u));
+    font-weight: 500;
+    color: var(--foreground);
+  }
+  .sb-diagnostics strong .lucide {
+    color: var(--success-accent);
+  }
+  .sb-diagnostics small {
+    display: block;
+    font-size: calc(12 * var(--u));
+    font-weight: 500;
+    color: var(--success-muted);
+  }
+  .sb-diagnostics > span {
+    display: grid;
+    place-items: center;
+    width: calc(32 * var(--u));
+    height: calc(32 * var(--u));
+    margin-left: auto;
+    border: calc(1 * var(--u)) solid var(--input);
+    border-radius: calc(8 * var(--u));
+    box-shadow: var(--shadow-sm);
+    color: var(--foreground);
+  }
+  .sb-nav {
+    display: grid;
+    gap: calc(4 * var(--u));
+  }
+  .sb-nav span,
+  .sb-create span {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    height: calc(36 * var(--u));
+    padding: 0 calc(12 * var(--u));
+    border-radius: calc(10 * var(--u));
+    font-size: calc(14 * var(--u));
+    font-weight: 500;
+    color: var(--sidebar-foreground);
+  }
+  .sb-nav span[aria-current="true"] {
+    background: var(--sidebar-accent);
+    color: var(--sidebar-accent-foreground);
+    box-shadow: var(--shadow-sm);
+  }
+  .sb-create {
+    display: grid;
+    gap: calc(4 * var(--u));
+    padding-top: calc(12 * var(--u));
+    border-top: calc(1 * var(--u)) solid var(--sidebar-border);
+  }
+  .sb-activity {
+    display: grid;
+    gap: calc(8 * var(--u));
+    padding: calc(12 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(10 * var(--u));
+    background: var(--muted);
+    font-size: calc(12 * var(--u));
+  }
+  .sb-activity .sb-label {
+    padding: 0;
+    color: var(--foreground);
+  }
+  .sb-activity .lucide {
+    color: var(--info-accent);
+  }
+  .sb-row {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    padding: calc(8 * var(--u)) calc(10 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(8 * var(--u));
+    background: var(--card);
+    color: var(--muted-foreground);
+  }
+  .sb-row > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sb-row b {
+    margin-left: auto;
+    padding: calc(2 * var(--u)) calc(8 * var(--u));
+    border-radius: 999px;
+    background: var(--muted);
+    font-weight: 600;
+    color: var(--muted-foreground);
+  }
+  .sb-row .sb-chevron {
+    display: none;
+    color: var(--muted-foreground);
+  }
+  .sb-row[data-active] .sb-chevron {
+    display: block;
+    margin-left: calc(-2 * var(--u));
+  }
+  .sb-row[data-active] b {
+    background: var(--info-surface);
+    color: var(--info-muted);
+  }
+  .sb-row.alert .lucide {
+    color: var(--muted-foreground);
+  }
+  .sb-row.alert[data-active] .lucide:first-child {
+    color: var(--warning-accent);
+  }
+  .sb-row.alert[data-active] b {
+    background: var(--warning-surface);
+    color: var(--warning-muted);
+  }
+  .sb-footer {
+    padding: calc(12 * var(--u));
+    border-top: calc(1 * var(--u)) solid var(--sidebar-border);
+  }
+  .sb-settings {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    height: calc(36 * var(--u));
+    padding: 0 calc(14 * var(--u));
+    border: calc(1 * var(--u)) solid var(--input);
+    border-radius: calc(8 * var(--u));
+    background: var(--card);
+    box-shadow: var(--shadow-sm);
+    font-size: calc(14 * var(--u));
+    font-weight: 500;
+    color: var(--foreground);
+  }
+}

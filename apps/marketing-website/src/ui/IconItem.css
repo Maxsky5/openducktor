@@ -1,0 +1,25 @@
+@layer site {
+  .icon-item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: 14px;
+    row-gap: 4px;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .icon-item > strong {
+    font-size: 1rem;
+    font-weight: 600;
+  }
+  .icon-item > span:last-child {
+    grid-column: 2;
+    color: var(--body-ink);
+    font-size: 0.9375rem;
+    line-height: 1.55;
+  }
+  .icon-item code {
+    font-size: 0.875em;
+    overflow-wrap: anywhere;
+  }
+}

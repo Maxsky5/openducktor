@@ -1,0 +1,24 @@
+---
+// A workflow tool call such as set_spec, from agent-chat-workflow-tool-message.tsx.
+import { Wrench } from "@lucide/astro";
+import RowTime from "./RowTime.astro";
+import "./WorkflowCard.css";
+
+interface Props {
+  name: string;
+  duration: string;
+  time: string;
+  row?: string;
+}
+const { name, duration, time, row } = Astro.props;
+---
+
+<div class="st-card" data-row={row}>
+  <div class="st-card-head">
+    <Wrench class="i14" /><b>{name}</b><span class="st-pill">Running</span><RowTime
+      duration={duration}
+      time={time}
+    />
+  </div>
+  <div class="st-card-io"><span>Input</span><span class="st-output">Output</span></div>
+</div>

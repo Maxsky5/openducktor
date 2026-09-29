@@ -1,0 +1,12 @@
+@layer replica {
+  /* The Sonner toaster of the desktop app: the notifications stack at the bottom right. */
+  .toast-stack {
+    position: absolute;
+    right: calc(24 * var(--u));
+    bottom: calc(24 * var(--u));
+    z-index: 20;
+    display: grid;
+    gap: calc(12 * var(--u));
+    width: calc(356 * var(--u));
+  }
+}

@@ -1,0 +1,22 @@
+---
+import { ArrowUpRight } from "@lucide/astro";
+import { links } from "../content/site";
+import Brand from "../ui/Brand.astro";
+import "./Footer.css";
+---
+
+<footer class="site-footer">
+  <div class="wrap footer-row">
+    <div class="footer-about">
+      <Brand href="#top" />
+      <p>Open source under Apache 2.0. Runs on your computer.</p>
+    </div>
+    <nav aria-label="Footer navigation">
+      <a href={links.github}>GitHub<ArrowUpRight size={14} /></a><a href={links.releases}
+        >Releases<ArrowUpRight size={14} /></a
+      ><a href={links.issues}>Issues<ArrowUpRight size={14} /></a><a href={links.license}
+        >License<ArrowUpRight size={14} /></a
+      >
+    </nav>
+  </div>
+</footer>

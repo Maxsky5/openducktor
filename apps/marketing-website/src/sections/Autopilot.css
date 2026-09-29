@@ -1,0 +1,39 @@
+@layer site {
+  /* Autopilot: the heading and the copy side by side, above the full-width board. */
+  .autopilot-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: end;
+    gap: 32px clamp(40px, 6vw, 96px);
+    margin-bottom: clamp(40px, 5vw, 64px);
+  }
+  /* The copy and the note have one width, so the rule above the note ends with the copy. */
+  .autopilot-copy {
+    display: grid;
+    gap: 24px;
+    max-width: 40rem;
+  }
+  .autopilot-copy > p {
+    max-width: none;
+  }
+  .autopilot-copy > p:first-child {
+    color: var(--body-ink);
+    font-size: 1.0625rem;
+    line-height: 1.6;
+    text-wrap: pretty;
+  }
+  .split-note {
+    max-width: 62ch;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+    color: var(--faint-ink);
+    font-size: 0.9375rem;
+    line-height: 1.55;
+  }
+  @media (width <= 1023px) {
+    .autopilot-head {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 40px;
+    }
+  }
+}

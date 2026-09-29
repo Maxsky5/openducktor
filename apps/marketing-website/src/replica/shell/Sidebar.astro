@@ -1,0 +1,81 @@
+---
+// The app sidebar of components/layout/sidebar: the brand, the workspace and its branch, the
+// diagnostics, the pages, the create actions, and the agent activity.
+import {
+  Activity,
+  ArrowUpRight,
+  ChevronRight,
+  CircleAlert,
+  MessageCirclePlus,
+  PanelLeftClose,
+  Plus,
+  Settings,
+  ShieldCheck,
+} from "@lucide/astro";
+import type { ActivityCounts } from "../board/model";
+import { APP_PAGES } from "./pages";
+import { release } from "../../content/release";
+import { WORKSPACE } from "../../sample/workspace";
+import { flag } from "../flag";
+import Combobox from "../ui/Combobox.astro";
+import type { AppPage } from "../vocabulary";
+import "./Sidebar.css";
+
+interface Props {
+  page: AppPage;
+  activity: ActivityCounts;
+}
+const { page, activity } = Astro.props;
+const { sessions, waiting } = activity;
+---
+
+<div class="sidebar">
+  <div class="sb-main">
+    <div class="sb-brand">
+      <span class="mark"></span>
+      <div><strong>OpenDucktor</strong><small>{release.version}</small></div>
+      <PanelLeftClose class="sb-collapse" />
+    </div>
+    <div class="sb-block">
+      <span class="sb-label">Workspace</span>
+      <span class="sb-workspace">{WORKSPACE}</span>
+    </div>
+    <div class="sb-block">
+      <span class="sb-label">Branch</span>
+      <Combobox branch class="sb-branch"><span>main</span></Combobox>
+    </div>
+    <div class="sb-diagnostics">
+      <div>
+        <strong><ShieldCheck class="i14" />Diagnostics</strong><small>Healthy</small>
+      </div>
+      <span><ArrowUpRight class="i14" /></span>
+    </div>
+    <div class="sb-nav">
+      {
+        APP_PAGES.map(({ id, label, Icon }) => (
+          <span aria-current={id === page ? "true" : undefined}>
+            <Icon />
+            {label}
+          </span>
+        ))
+      }
+    </div>
+    <div class="sb-create">
+      <span><Plus />New task</span><span><MessageCirclePlus />New chat</span>
+    </div>
+    <div class="sb-activity">
+      <span class="sb-label"><Activity class="i14" />Agent Activity</span>
+      <div class="sb-row" data-active={flag(sessions > 0)} data-activity-row="sessions">
+        <Activity class="i14" /><span>Active sessions</span><b data-count="sessions">{sessions}</b
+        ><ChevronRight class="i14 sb-chevron" />
+      </div>
+      <div class="sb-row alert" data-active={flag(waiting > 0)} data-activity-row="waiting">
+        <CircleAlert class="i14" /><span>Needs your input</span><b data-count="waiting">{waiting}</b
+        ><ChevronRight class="i14 sb-chevron" />
+      </div>
+    </div>
+  </div>
+  <div class="sb-footer">
+    <span class="sb-settings"><Settings />Settings</span>
+  </div>
+</div>

@@ -1,0 +1,13 @@
+---
+// The two ways to start: download the desktop app, or copy the command of the browser version.
+import { Download } from "@lucide/astro";
+import { commands, links } from "../content/site";
+import ButtonLink from "./ButtonLink.astro";
+import Command from "./Command.astro";
+import "./DownloadActions.css";
+---
+
+<div class="download-actions">
+  <ButtonLink href={links.latest}><Download size={18} />Download</ButtonLink>
+  <Command label="browser version" command={commands.browser} />
+</div>

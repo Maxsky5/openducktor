@@ -2,7 +2,7 @@
 
 Use this document to find the owner of a rule and trace a user action across packages.
 
-OpenDucktor supports OpenCode, Codex, and Claude runtimes. OpenCode is the default. `packages/frontend` is the shared UI. Electron and `packages/openducktor-web` provide the shells. `packages/host` serves both shells. Windows and Linux desktop builds remain experimental.
+OpenDucktor supports OpenCode, Codex, and Claude runtimes. OpenCode is the default. `packages/frontend` is the shared UI. Electron and `packages/openducktor-web` provide the shells. `packages/host` serves both shells. The desktop app runs on macOS, Windows, and Linux.
 
 ## Layer ownership
 

@@ -1,0 +1,62 @@
+---
+// The composer of agent-chat-composer.tsx: the draft, the runtime and model, the effort, the
+// context meter, and the send and stop buttons. The running ray circles the box while an agent
+// works. The slot holds more draft content, and the menu slot opens above the draft.
+import { BrainCog, ChevronDown, Paperclip, SendHorizontal, Square } from "@lucide/astro";
+import RuntimeIcon from "../ui/RuntimeIcon.astro";
+import { compactTokens } from "../format";
+import Ray from "../ui/Ray.astro";
+import { modelName } from "../../sample/models";
+import { contextUse, type Session } from "../../sample/sessions";
+import "./Composer.css";
+
+interface Props {
+  session: Session;
+  /** The send button counts the review comments that the next message sends. */
+  commentCount?: boolean;
+}
+const { session, commentCount = false } = Astro.props;
+const context = contextUse(session);
+---
+
+<div class="st-composer">
+  <div class="st-box" data-activity="idle" data-composer>
+    <Ray class="st-ray" />
+    <div class="st-box-inner">
+      <div class="st-draft">
+        <slot name="menu" />
+        <div class="st-editor" data-editor>
+          <span class="when-ready">@ for files; / for commands; $ for skills</span>
+          <slot />
+        </div>
+      </div>
+      <div class="st-controls">
+        <span>
+          <span class="st-attach"><Paperclip class="i14" /></span>
+          <span class="st-chip">
+            <RuntimeIcon kind={session.runtime} /><span data-model>{modelName(session)}</span
+            ><ChevronDown class="i14" />
+          </span>
+          <span class="st-chip effort">
+            <BrainCog class="i14" /><span data-effort>{session.effort}</span><ChevronDown
+              class="i14"
+            />
+          </span>
+        </span>
+        <span>
+          <span class="st-context" style={`--used: ${context.percent}%`} data-meter>
+            <i></i><b data-context>{context.percent.toFixed(1)}%</b><small data-tokens
+              >{compactTokens(context.tokens)}</small
+            >
+          </span>
+          <span class="st-stop"><Square class="i12" /></span>
+          <span class="st-send" data-send
+            ><SendHorizontal class="i14" />{
+              commentCount && <b class="st-send-badge" data-send-badge />
+            }</span
+          >
+        </span>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,66 @@
+@layer replica {
+  /* Collapsed sidebar: w-14 p-2, sections split by sidebar borders. */
+  .sb-collapsed {
+    display: flex;
+    flex: 0 0 calc(56 * var(--u));
+    flex-direction: column;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    width: calc(56 * var(--u));
+    padding: 0 calc(8 * var(--u)) calc(8 * var(--u));
+    border-right: calc(1 * var(--u)) solid var(--sidebar-border);
+    background: var(--sidebar);
+    color: var(--sidebar-muted-foreground);
+  }
+  .sbc-title {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: calc(40 * var(--u));
+    flex: 0 0 auto;
+  }
+  .sbc-title .sbc-icon {
+    transform: translateX(calc(8 * var(--u)));
+  }
+  .sbc-group {
+    display: grid;
+    justify-items: center;
+    gap: calc(4 * var(--u));
+    width: 100%;
+    padding-top: calc(8 * var(--u));
+    border-top: calc(1 * var(--u)) solid var(--sidebar-border);
+  }
+  .sbc-group.create {
+    margin-top: calc(8 * var(--u));
+    padding-top: calc(12 * var(--u));
+  }
+  .sbc-group.foot {
+    margin-top: auto;
+  }
+  .sbc-icon {
+    display: grid;
+    place-items: center;
+    width: calc(32 * var(--u));
+    height: calc(32 * var(--u));
+    border-radius: calc(10 * var(--u));
+  }
+  .sbc-icon.outline {
+    border: calc(1 * var(--u)) solid var(--input);
+    background: var(--card);
+    box-shadow: var(--shadow-sm);
+    color: var(--success-accent);
+  }
+  .sbc-nav {
+    display: grid;
+    place-items: center;
+    width: calc(36 * var(--u));
+    height: calc(36 * var(--u));
+    border-radius: calc(12 * var(--u));
+    color: var(--sidebar-foreground);
+  }
+  .sbc-nav[aria-current="true"] {
+    background: var(--sidebar-accent);
+    color: var(--sidebar-accent-foreground);
+    box-shadow: var(--shadow-sm);
+  }
+}

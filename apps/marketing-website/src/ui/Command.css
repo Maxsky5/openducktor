@@ -1,0 +1,46 @@
+@layer site {
+  .command {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    min-height: 48px;
+    padding: 5px 5px 5px 16px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--page);
+  }
+  .command:focus-within {
+    border-color: var(--accent);
+  }
+  .command pre {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-size: 0.8125rem;
+    line-height: 1.6;
+  }
+  .command pre::before {
+    content: "$ ";
+    color: var(--faint-ink);
+  }
+  /* A failed copy shows its status under the command. */
+  .command .copy-status[data-visible] {
+    position: absolute;
+    z-index: 2;
+    top: calc(100% + 4px);
+    right: 0;
+    width: max-content;
+    max-width: min(340px, 90vw);
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--page);
+    color: var(--ink);
+    box-shadow: 0 7px 18px hsl(var(--shadow-tint) / 0.1);
+    font-size: 0.75rem;
+  }
+}

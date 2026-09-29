@@ -1,0 +1,20 @@
+@layer views {
+  /* The Diagnostics sheet at the scale of the stage. The crop keeps the top of the sheet. */
+  .diag-sheet {
+    --design-width: 672;
+    height: calc(760 * var(--u));
+  }
+  /* Narrow stages show the sheet at the width of a phone or a small window. */
+  @container stage (width <= 600px) {
+    .diag-sheet {
+      --design-width: 520;
+      height: calc(820 * var(--u));
+    }
+  }
+  @container stage (width <= 440px) {
+    .diag-sheet {
+      --design-width: 400;
+      height: calc(880 * var(--u));
+    }
+  }
+}

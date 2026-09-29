@@ -1,0 +1,51 @@
+---
+// The session tabs over a chat: agent-studio-task-tabs.tsx for the tasks of Agent Studio, and
+// workspace-session-tabs.tsx for the workspace chats. A mark shows the activity of each session.
+// The scripts switch the marks of the active tab.
+import { Archive, Circle, CircleAlert, Plus, X } from "@lucide/astro";
+import type { AstroComponent } from "@lucide/astro";
+import { flag } from "../flag";
+import type { Activity } from "../vocabulary";
+import "./SessionTabs.css";
+
+type SessionTab = {
+  title: string;
+  activity: Activity;
+  active?: boolean;
+};
+
+interface Props {
+  tabs: readonly SessionTab[];
+  /** Task tabs close. Chat tabs go to the archive. */
+  close: "close" | "archive";
+  /** The icons of the tool buttons at the right of the tabs. */
+  tools: readonly AstroComponent[];
+}
+const { tabs, close, tools } = Astro.props;
+---
+
+<div class="st-tabs">
+  {
+    tabs.map((tab) => (
+      <span class="st-tab" data-active={flag(tab.active)}>
+        <span class="st-tab-status" data-activity={tab.activity} data-tab-status={flag(tab.active)}>
+          <span class="run-dot" data-mark="working" />
+          <CircleAlert class="i14 wait-mark" data-mark="waiting" />
+          <Circle class="i14 idle-mark" data-mark="idle" />
+        </span>
+        <span class="st-tab-title">{tab.title}</span>
+        <span class="st-tab-close">{close === "close" ? <X class="i14" /> : <Archive />}</span>
+      </span>
+    ))
+  }
+  <span class="st-tabs-add"><Plus class="i20" /></span>
+  <span class="st-tabs-tools">
+    {
+      tools.map((Tool) => (
+        <span>
+          <Tool />
+        </span>
+      ))
+    }
+  </span>
+</div>

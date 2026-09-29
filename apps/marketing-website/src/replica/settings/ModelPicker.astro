@@ -1,0 +1,63 @@
+---
+// The model picker popover of model-picker.tsx: a rail with Favorites and one button for each
+// runtime, a search field, and the models of the selected runtime. Each runtime list is in the
+// markup. `data-view` shows one list, as the rail does in the product.
+import { FileText, Image, Star } from "@lucide/astro";
+import RuntimeIcon from "../ui/RuntimeIcon.astro";
+import { CATALOGS, modelKey, RUNTIMES, type RuntimeKind } from "../../sample/models";
+import "./ModelPicker.css";
+import { flag } from "../flag";
+
+interface Props {
+  view: RuntimeKind;
+  selected: string;
+}
+const { view, selected } = Astro.props;
+---
+
+<div class="mp" data-picker data-view={view}>
+  <div class="mp-rail">
+    <span class="mp-rail-button" data-rail="favorites"><Star /></span>
+    {
+      RUNTIMES.map((kind) => (
+        <span class="mp-rail-button" data-rail={kind}>
+          <RuntimeIcon kind={kind} />
+        </span>
+      ))
+    }
+  </div>
+  <div class="mp-main">
+    <div class="mp-search"><span class="mp-input">Search models...</span></div>
+    {
+      RUNTIMES.map((kind) => (
+        <ul class="mp-list" data-list={kind}>
+          {CATALOGS[kind].map((model) => (
+            <li
+              class="mp-row"
+              data-selected={flag(selected === modelKey({ runtime: kind, model: model.id }))}
+              data-model={modelKey({ runtime: kind, model: model.id })}
+            >
+              <span class="mp-pick" data-model-pick>
+                <RuntimeIcon kind={kind} />
+                <span class="mp-name">
+                  <b>{model.name}</b>
+                  <small>
+                    {model.provider} · {model.id}
+                  </small>
+                </span>
+                <span class="mp-meta">
+                  {model.capabilities.includes("image") && <Image class="i14" />}
+                  {model.capabilities.includes("pdf") && <FileText class="i14" />}
+                  {model.context && <span>{model.context} context</span>}
+                </span>
+              </span>
+              <span class="mp-star">
+                <Star />
+              </span>
+            </li>
+          ))}
+        </ul>
+      ))
+    }
+  </div>
+</div>

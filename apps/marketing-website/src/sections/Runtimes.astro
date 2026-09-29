@@ -1,0 +1,54 @@
+---
+import RuntimeIcon from "../replica/ui/RuntimeIcon.astro";
+import IconItem from "../ui/IconItem.astro";
+import IconList from "../ui/IconList.astro";
+import ProductFigure from "../ui/ProductFigure.astro";
+import SectionHead from "../ui/SectionHead.astro";
+import RuntimesView from "../views/runtimes/RuntimesView.astro";
+import Split from "./Split.astro";
+
+const runtimes = [
+  {
+    kind: "opencode" as const,
+    name: "OpenCode",
+    text: "Choose an agent profile, and a model from the providers that you set up in OpenCode.",
+  },
+  {
+    kind: "codex" as const,
+    name: "Codex",
+    text: "Choose the sandbox mode: read-only, workspace-write, or full access. Each role can use another mode.",
+  },
+  {
+    kind: "claude" as const,
+    name: "Claude Code",
+    text: "OpenDucktor uses your Claude Code installation and its sign-in, with a subscription or an API key.",
+  },
+];
+---
+
+<section id="runtimes" class="section runtimes" aria-labelledby="runtimes-title">
+  <Split>
+    <Fragment slot="copy">
+      <SectionHead eyebrow="Runtimes" id="runtimes-title">
+        <Fragment slot="title">Use the coding agent that you already have.</Fragment>
+        <p>
+          OpenDucktor includes no model. It starts OpenCode, Codex, or Claude Code on your computer.
+          In each repository, you choose a runtime and a model for each role.
+        </p>
+      </SectionHead>
+      <IconList>
+        {
+          runtimes.map((runtime) => (
+            <IconItem title={runtime.name}>
+              <RuntimeIcon slot="icon" kind={runtime.kind} />
+              {runtime.text}
+            </IconItem>
+          ))
+        }
+      </IconList>
+    </Fragment>
+    <ProductFigure caption={["Settings", "Repositories", "Agents"]}>
+      <RuntimesView />
+    </ProductFigure>
+  </Split>
+</section>

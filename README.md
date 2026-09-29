@@ -69,7 +69,7 @@ See the [installation guide](docs/installation.md) for requirements, more instal
 
 ## User Prerequisites
 
-OpenDucktor is macOS-first. Windows and Linux support is experimental.
+OpenDucktor runs on macOS, Windows, and Linux.
 
 - `git`
 - `opencode`, `codex`, or `claude`
@@ -113,8 +113,7 @@ That keeps the workflow task-centric and auditable: agents act through a control
 
 ## Current Scope
 
-- Platform support today: macOS is the primary supported desktop target.
-- Windows and Linux: experimental Electron desktop builds. Feedback is welcome, but these builds are not stable yet.
+- Platform support today: macOS, Windows, and Linux desktop builds.
 - Supported runtimes today: OpenCode (`opencode`), Codex (`codex`), and Claude Code (`claude`)
   - OpenCode remains the default runtime.
   - More runtimes may be added through the runtime descriptor and adapter model.

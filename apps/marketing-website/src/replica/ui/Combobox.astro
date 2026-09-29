@@ -1,0 +1,19 @@
+---
+// The trigger of components/ui/combobox.tsx and of the model picker: the value, then
+// ChevronsUpDown. With `branch`, it is the trigger of BranchSelector in branch-selector.tsx, with
+// the branch icon before the value.
+import { ChevronsUpDown, GitBranch } from "@lucide/astro";
+import type { HTMLAttributes } from "astro/types";
+import "./Combobox.css";
+
+type Props = HTMLAttributes<"span"> & { branch?: boolean };
+const { branch = false, class: className, ...attributes } = Astro.props;
+---
+
+<span class:list={["ui-combobox", className]} {...attributes}>
+  <span class="ui-combobox-value">
+    {branch && <GitBranch class="i14 ui-combobox-icon" />}
+    <slot />
+  </span>
+  <ChevronsUpDown class="ui-combobox-chevron" />
+</span>

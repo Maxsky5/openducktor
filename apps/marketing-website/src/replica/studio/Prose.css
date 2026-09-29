@@ -1,0 +1,65 @@
+@layer replica {
+  /* Markdown documents, as the product prose classes render them. */
+  .doc {
+    color: var(--foreground);
+    font-size: calc(14 * var(--u));
+    line-height: calc(22.75 * var(--u));
+  }
+  /* A long file name in a heading breaks at the edge of the panel. */
+  .doc-h1,
+  .doc-h2,
+  .doc-h3 {
+    overflow-wrap: anywhere;
+  }
+  .doc-h1 {
+    margin: 0 0 calc(28 * var(--u));
+    font-size: calc(31.5 * var(--u));
+    font-weight: 600;
+    line-height: calc(35 * var(--u));
+  }
+  .doc-h2 {
+    margin: calc(42 * var(--u)) 0 calc(21 * var(--u));
+    font-size: calc(21 * var(--u));
+    font-weight: 600;
+    line-height: calc(28 * var(--u));
+  }
+  .doc-h3 {
+    margin: calc(28 * var(--u)) 0 calc(10.5 * var(--u));
+    font-size: calc(17.5 * var(--u));
+    font-weight: 600;
+    line-height: calc(28 * var(--u));
+  }
+  .doc-h2 + *,
+  .doc-h3 + * {
+    margin-top: 0;
+  }
+  .doc p {
+    margin: calc(8 * var(--u)) 0;
+  }
+  .doc ul {
+    margin: calc(8 * var(--u)) 0;
+    padding-left: calc(22.75 * var(--u));
+    list-style: disc;
+  }
+  .doc li {
+    margin: calc(2 * var(--u)) 0;
+    padding-left: calc(5.25 * var(--u));
+  }
+  .doc li::marker {
+    color: var(--gray-300);
+  }
+  .doc code {
+    padding: 0 calc(4 * var(--u));
+    border-radius: calc(10 * var(--u));
+    color: var(--rose-600);
+    font-family: var(--mono);
+    font-size: calc(12 * var(--u));
+    font-weight: 500;
+  }
+  :where(:root[data-theme="dark"]) .doc code {
+    color: var(--rose-400);
+  }
+  .doc > :first-child {
+    margin-top: 0;
+  }
+}

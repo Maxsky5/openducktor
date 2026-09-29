@@ -1,0 +1,17 @@
+---
+// The duration and the time of a transcript row. A running row shows a spinner instead of the
+// duration.
+import { LoaderCircle } from "@lucide/astro";
+import "./RowTime.css";
+
+interface Props {
+  duration: string;
+  time: string;
+}
+const { duration, time } = Astro.props;
+---
+
+<span class="st-time"
+  ><LoaderCircle class="i12 spin" /><span class="st-duration">{duration}</span><span>{time}</span
+  ></span
+>

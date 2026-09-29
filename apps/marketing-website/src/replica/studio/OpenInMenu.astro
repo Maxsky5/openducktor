@@ -1,0 +1,74 @@
+---
+// The Open In group of the task tools, and the menu of the other tools. Sources: open-in-menu.tsx
+// and open-in-tool-metadata.tsx in agent-studio-git-panel. Without an app icon, the product shows
+// a fallback icon in a muted box. With `appIcon`, the default tool shows its app icon, as the task
+// panel of Agent Studio does. The menu stays closed in the final frame.
+import {
+  AppWindowMac,
+  ChevronDown,
+  FolderOpen,
+  LoaderCircle,
+  SquareTerminal,
+  Terminal,
+} from "@lucide/astro";
+import { OPEN_IN_TOOLS, type OpenInTool, WORKTREE_PATH } from "../../sample/worktree";
+import Button from "../ui/Button.astro";
+import "./OpenInMenu.css";
+
+interface Props {
+  /** The tool of the default button: the tool that opened the worktree last. */
+  tool: OpenInTool;
+  /** The group has the menu of the other tools, which a scene opens. */
+  menu?: boolean;
+  /** The default tool shows its app icon in place of the fallback icon. */
+  appIcon?: boolean;
+}
+const { tool, menu = false, appIcon = false } = Astro.props;
+const icons = { folder: FolderOpen, terminal: Terminal, app: AppWindowMac };
+const appIcons = { folder: FolderOpen, terminal: SquareTerminal, app: AppWindowMac };
+const Icon = icons[tool.icon];
+const AppIcon = appIcons[tool.icon];
+---
+
+<span class="oi" data-menu={menu ? "" : undefined} data-app-icon={appIcon ? "" : undefined}>
+  <Button variant="outline" size="sm" class="oi-default"
+    >{
+      appIcon ? (
+        <span class="oi-app">
+          <AppIcon class="i12" />
+        </span>
+      ) : (
+        <span class="oi-icon">
+          <Icon class="i14" />
+        </span>
+      )
+    }{tool.label}</Button
+  >
+  <Button variant="outline" size="sm" class="oi-trigger" data-oi-trigger
+    ><ChevronDown class={appIcon ? "i14" : "i12"} /></Button
+  >
+  {
+    menu && (
+      <span class="oi-menu" hidden data-oi-menu>
+        <span class="oi-menu-head">
+          <b>Other tools for task worktree</b>
+          <small>{WORKTREE_PATH}</small>
+        </span>
+        <span class="oi-list">
+          {OPEN_IN_TOOLS.map((item) => {
+            const ItemIcon = icons[item.icon];
+            return (
+              <span class="oi-item" data-oi-item={item.label}>
+                <span class="oi-icon">
+                  <ItemIcon class="i14" />
+                </span>
+                <span class="oi-label">{item.label}</span>
+                <LoaderCircle class="i14 spin oi-spin" />
+              </span>
+            );
+          })}
+        </span>
+      </span>
+    )
+  }
+</span>

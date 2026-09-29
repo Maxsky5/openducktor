@@ -108,6 +108,9 @@ jobs:
         run: bun run ${{ matrix.testScript }}
 
       - name: Build workspaces
+        env:
+          # The website header reads the latest release from the GitHub API.
+          GITHUB_TOKEN: ${{ github.token }}
         run: bun run build
 
       - name: Install Electron runtime for worker checks

@@ -1,0 +1,17 @@
+@layer site {
+  .product-figure {
+    display: grid;
+    gap: 14px;
+  }
+  .visual-caption {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    color: var(--faint-ink);
+    font-family: var(--mono-font);
+    font-size: 0.75rem;
+  }
+  .visual-caption span {
+    opacity: 0.6;
+  }
+}

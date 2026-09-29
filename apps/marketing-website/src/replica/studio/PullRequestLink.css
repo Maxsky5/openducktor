@@ -1,0 +1,34 @@
+@layer replica {
+  .st-pr {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(6 * var(--u));
+    padding: calc(4 * var(--u)) calc(10 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: 999px;
+    background: var(--card);
+    color: var(--muted-foreground);
+    font-size: calc(11 * var(--u));
+    font-weight: 600;
+  }
+  /* The pull request badge of task-pull-request-link.tsx. */
+  .st-pr .when-open {
+    color: var(--emerald-600);
+  }
+  :where(:root[data-theme="dark"]) .st-pr .when-open {
+    color: var(--emerald-400);
+  }
+  .st-pr .when-merged {
+    display: none;
+    color: var(--violet-600);
+  }
+  :where(:root[data-theme="dark"]) .st-pr .when-merged {
+    color: var(--violet-400);
+  }
+  .st-pr[data-merged] .when-open {
+    display: none;
+  }
+  .st-pr[data-merged] .when-merged {
+    display: block;
+  }
+}

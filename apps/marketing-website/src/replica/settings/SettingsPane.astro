@@ -1,0 +1,11 @@
+---
+// The content pane of a settings section, cropped from the Settings dialog of settings-modal.tsx.
+import type { HTMLAttributes } from "astro/types";
+import Replica from "../Replica.astro";
+import "./SettingsPane.css";
+
+type Props = HTMLAttributes<"div">;
+const { class: className, ...attributes } = Astro.props;
+---
+
+<Replica class:list={["set-pane", className]} {...attributes}><slot /></Replica>

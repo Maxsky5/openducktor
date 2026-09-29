@@ -1,0 +1,77 @@
+@layer replica {
+  .board-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: calc(12 * var(--u));
+    height: calc(72 * var(--u));
+    flex: 0 0 auto;
+    padding: 0 calc(24 * var(--u));
+  }
+  .board-title {
+    font-size: calc(18 * var(--u));
+    font-weight: 600;
+    letter-spacing: calc(-0.2 * var(--u));
+  }
+  .board-actions {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+  }
+  .board-button {
+    gap: calc(8 * var(--u));
+    height: calc(36 * var(--u));
+    padding: 0 calc(14 * var(--u));
+    border-radius: calc(8 * var(--u));
+    font-size: calc(13 * var(--u));
+    font-weight: 600;
+  }
+  .board-button[data-variant="default"] {
+    border-color: var(--primary);
+  }
+  /* The task card view control. The first view is active. */
+  .view-toggle {
+    display: flex;
+    gap: calc(2 * var(--u));
+    padding: calc(3 * var(--u));
+    border-radius: calc(10 * var(--u));
+    background: var(--muted);
+  }
+  .view-toggle span {
+    display: grid;
+    place-items: center;
+    width: calc(32 * var(--u));
+    height: calc(30 * var(--u));
+    border-radius: calc(7 * var(--u));
+    color: var(--muted-foreground);
+  }
+  .view-toggle span[data-active] {
+    background: var(--card);
+    color: var(--foreground);
+    box-shadow: var(--shadow-sm);
+  }
+  /* A narrow stage keeps the title and New task in a lower header. */
+  @container stage (width <= 480px) {
+    .board-head {
+      height: calc(56 * var(--u));
+      padding: 0 calc(20 * var(--u));
+    }
+    .view-toggle,
+    .board-refresh {
+      display: none;
+    }
+  }
+  .board-head[data-compact] {
+    height: calc(48 * var(--u));
+    padding: 0 calc(16 * var(--u)) 0 calc(80 * var(--u));
+  }
+  .board-head[data-compact] .board-title {
+    font-size: calc(16 * var(--u));
+    line-height: 1.2;
+    letter-spacing: -0.025em;
+  }
+  .board-head[data-compact] .view-toggle,
+  .board-head[data-compact] .board-refresh {
+    display: none;
+  }
+}

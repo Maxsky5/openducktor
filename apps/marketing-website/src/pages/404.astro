@@ -1,0 +1,10 @@
+---
+import SiteLayout from "../layouts/SiteLayout.astro";
+import { description } from "../content/site";
+import Header from "../sections/Header.astro";
+import Missing from "../sections/Missing.astro";
+---
+
+<SiteLayout title="Page not found | OpenDucktor" description={description} indexable={false}
+  ><Header /><Missing /></SiteLayout
+>

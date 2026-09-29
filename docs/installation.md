@@ -54,7 +54,7 @@ Homebrew installs the signed and notarized macOS app from GitHub Releases.
 2. Download the latest desktop file for your system and processor.
 3. Install the app, launch it, and open the local repository you want to work on.
 
-Windows and Linux desktop builds are experimental. To report a problem, include your system, logs, and the action that failed.
+To report a problem, include your system, logs, and the action that failed.
 
 ## Browser runner
 

@@ -1,0 +1,14 @@
+@layer views {
+  /* The browser version terminal fills its column, as a terminal window does. The cursor waits
+     under the log. */
+  .install-browser {
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+  .install-browser .terminal {
+    display: flex;
+    flex-direction: column;
+  }
+  .install-browser .terminal-screen {
+    flex: 1;
+  }
+}

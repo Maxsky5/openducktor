@@ -1,0 +1,32 @@
+@layer site {
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--accent-ink);
+    font-size: 0.75rem;
+    font-weight: 650;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .section-head {
+    display: grid;
+    gap: 18px;
+    max-width: 760px;
+  }
+  .section-head h2 {
+    font-size: clamp(2.125rem, 4vw, 3.5rem);
+    font-weight: 600;
+    line-height: 1.04;
+    letter-spacing: -0.04em;
+    text-wrap: balance;
+  }
+  /* The paragraphs of the head, the eyebrow too. */
+  .section-head p {
+    max-width: 62ch;
+    color: var(--body-ink);
+    font-size: 1.0625rem;
+    line-height: 1.6;
+    text-wrap: pretty;
+  }
+}

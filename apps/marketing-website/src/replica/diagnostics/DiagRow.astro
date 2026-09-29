@@ -1,0 +1,14 @@
+---
+// DiagnosticsKeyValueRow of diagnostics-key-value-row.tsx.
+import type { DiagRowData } from "./model";
+import "./DiagRow.css";
+
+type Props = DiagRowData;
+const { label, value, mono, muted, strong, breakAll } = Astro.props;
+---
+
+<p class="diag-row">
+  <span class="diag-label">{label}:</span>{" "}<span
+    class:list={[{ mono, muted, strong, "break-all": breakAll }]}>{value}</span
+  >
+</p>

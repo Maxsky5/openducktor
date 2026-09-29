@@ -1,0 +1,29 @@
+@layer replica {
+  .cursor {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 30;
+    width: calc(22 * var(--u));
+    height: calc(22 * var(--u));
+    pointer-events: none;
+    opacity: 0;
+    filter: drop-shadow(0 calc(2 * var(--u)) calc(3 * var(--u)) rgb(0 0 0 / 0.3));
+  }
+  .cursor path {
+    fill: #0f172a;
+    stroke: #fff;
+    stroke-width: 1.5;
+  }
+  .click-ring {
+    position: absolute;
+    z-index: 29;
+    width: calc(36 * var(--u));
+    height: calc(36 * var(--u));
+    margin: calc(-18 * var(--u)) 0 0 calc(-18 * var(--u));
+    border: calc(2 * var(--u)) solid var(--primary);
+    border-radius: 50%;
+    pointer-events: none;
+    opacity: 0;
+  }
+}

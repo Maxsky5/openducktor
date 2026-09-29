@@ -1,0 +1,140 @@
+---
+// A workspace chat: the tabs of workspace-session-tabs.tsx, the header of
+// workspace-session-header.tsx, and the agent chat surface with its composer, slash menu, and
+// task tools. Sources: packages/frontend/src/pages/workspace-sessions and
+// packages/frontend/src/components/features/agents/agent-chat.
+import {
+  ChevronRight,
+  EllipsisVertical,
+  GitBranch,
+  Import,
+  PanelRightOpen,
+  RotateCcwClock,
+  SquareTerminal,
+  Terminal,
+} from "@lucide/astro";
+import AppWindow from "../../replica/shell/AppWindow.astro";
+import Pointer from "../../replica/shell/Pointer.astro";
+import SessionTabs from "../../replica/shell/SessionTabs.astro";
+import AgentText from "../../replica/transcript/AgentText.astro";
+import ToolRow from "../../replica/transcript/ToolRow.astro";
+import UserMessage from "../../replica/transcript/UserMessage.astro";
+import TaskResult from "../../replica/transcript/TaskResult.astro";
+import Thread from "../../replica/transcript/Thread.astro";
+import ChatColumn from "../../replica/studio/ChatColumn.astro";
+import Composer from "../../replica/studio/Composer.astro";
+import {
+  CHAT,
+  CHAT_SESSION,
+  COMMANDS,
+  CREATED_TASKS,
+  EXISTING,
+  MESSAGE,
+  SEARCH,
+} from "../../sample/chat";
+import { signature } from "../../sample/sessions";
+import "./ChatView.css";
+import Scene from "../Scene.astro";
+import { flag } from "../../replica/flag";
+
+const tabs = [
+  { title: CHAT.title, activity: "idle", active: true },
+  { title: "Why do tags drop on sync?", activity: "idle" },
+] as const;
+---
+
+<Scene
+  name="chat"
+  alt="A workspace chat with the Product planner role on Claude Code. The visitor types /tasks- and picks the reusable prompt /tasks-from-request, then adds the request Export notebooks to Markdown and PDF. The agent searches the tasks for export and finds the Markdown export task. Then it creates the two tasks that are missing: a PDF export and an Export item in the notebook menu."
+>
+  <AppWindow
+    chrome={{ sidebar: "collapsed", page: "chats", busyWorkspace: false }}
+    class="chat-window"
+    data-runtime={CHAT_SESSION.runtime}
+  >
+    <SessionTabs
+      tabs={tabs}
+      close="archive"
+      tools={[Import, RotateCcwClock, SquareTerminal, PanelRightOpen]}
+    />
+    <div class="ch-head">
+      <div class="ch-head-row">
+        <div class="ch-title">{CHAT.title}</div>
+        <span class="ch-more"><EllipsisVertical /></span>
+      </div>
+      <p class="ch-sub">
+        <GitBranch class="i12" /><span>{CHAT.directory}</span><span>· {CHAT.role}</span>
+      </p>
+    </div>
+    <ChatColumn class="ch-column">
+      <Thread>
+        <UserMessage time="10:24:12 AM" row="message">{MESSAGE}</UserMessage>
+        <ToolRow
+          kind="tool"
+          name="search_tasks"
+          args={SEARCH.done}
+          duration="212ms"
+          time="10:24:15 AM"
+          row="search"
+        />
+        <AgentText row="plan">
+          <p>
+            <code>{EXISTING}</code> already covers the Markdown export. I will create the two tasks that
+            are missing.
+          </p>
+        </AgentText>
+        {
+          CREATED_TASKS.map((task) => (
+            <ToolRow
+              kind="tool"
+              name="create_task"
+              args={task.title}
+              duration="64ms"
+              time={task.time}
+              row={`create-${task.id}`}
+            >
+              <TaskResult task={task} />
+            </ToolRow>
+          ))
+        }
+        <AgentText signature={signature(CHAT_SESSION)} row="final">
+          <p>
+            The two new tasks are in Backlog. Do <code>{EXISTING}</code> first, because the PDF export
+            and the menu use it.
+          </p>
+        </AgentText>
+      </Thread>
+      <Composer session={CHAT_SESSION}>
+        <div class="ch-slash" slot="menu" data-slash>
+          {
+            COMMANDS.map((command, index) => (
+              <span class="ch-command" data-active={flag(index === 0)}>
+                <span class="ch-command-icon">
+                  <Terminal class="i14" />
+                </span>
+                <span class="ch-command-text">
+                  <span class="ch-command-name">
+                    <span>/{command.trigger}</span>
+                    <small>custom</small>
+                  </span>
+                  <span class="ch-command-desc">{command.description}</span>
+                </span>
+                <ChevronRight class="ch-command-chevron" />
+              </span>
+            ))
+          }
+        </div>
+        <span class="ch-draft"
+          ><span class="ch-chip" hidden data-chip>/{COMMANDS[0]?.trigger}</span><span
+            class="typed"
+            data-typed></span></span
+        >
+      </Composer>
+    </ChatColumn>
+    <Pointer slot="overlay" />
+  </AppWindow>
+</Scene>
+<script>
+  import { mountChat } from "./scene";
+  mountChat();
+</script>

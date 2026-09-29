@@ -1,0 +1,47 @@
+@layer site {
+  /* The duck parade floats above the closing actions. The water hides the bottom of the ducks. */
+  .duck-parade {
+    --duck-lead: var(--brand);
+    --duck-kid: #9d80ff;
+    justify-self: end;
+    width: min(100%, 420px);
+  }
+  :where(:root[data-theme="dark"]) .duck-parade {
+    --duck-lead: #a28aff;
+    --duck-kid: #6d55c9;
+  }
+  /* The ducks swim in from the left edge of the parade, and the water ends at its edges. */
+  .duck-parade svg {
+    display: block;
+    width: 100%;
+    overflow: hidden;
+  }
+  .parade-lead {
+    fill: var(--duck-lead);
+  }
+  /* The visor is the color of the water around the ducks, and its light is the page color. */
+  .parade-visor {
+    fill: none;
+    stroke: var(--page-alt);
+    stroke-width: 6;
+    stroke-linecap: round;
+  }
+  .parade-light {
+    fill: none;
+    stroke: var(--duck-lead);
+    stroke-width: 2.4;
+    stroke-linecap: round;
+  }
+  .parade-kid {
+    fill: var(--duck-kid);
+  }
+  .parade-water {
+    fill: var(--page-alt);
+  }
+  .parade-wave {
+    fill: none;
+    stroke: color-mix(in srgb, var(--duck-lead) 45%, var(--page-alt));
+    stroke-width: 2;
+    stroke-linecap: round;
+  }
+}

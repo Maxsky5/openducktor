@@ -1,0 +1,11 @@
+---
+// A kickoff or user message: agent-chat-message-card.tsx draws it with the runtime accent.
+import "./UserMessage.css";
+interface Props {
+  time: string;
+  row?: string;
+}
+const { time, row } = Astro.props;
+---
+
+<div class="st-user" data-row={row}><p><slot /></p><time>{time}</time></div>

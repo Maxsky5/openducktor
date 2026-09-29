@@ -1,0 +1,72 @@
+---
+// The workflow chapter player: one tab and one Agent Studio view for each step. Without
+// JavaScript the panels stack under their own headings.
+import BuildStep from "./BuildStep.astro";
+import { CHAPTERS, type ChapterId } from "./chapters";
+import PlanStep from "./PlanStep.astro";
+import QaStep from "./QaStep.astro";
+import ReviewStep from "./ReviewStep.astro";
+import SpecStep from "./SpecStep.astro";
+import "./WorkflowView.css";
+
+const number = (index: number): string => String(index + 1).padStart(2, "0");
+const STEPS = {
+  spec: SpecStep,
+  plan: PlanStep,
+  build: BuildStep,
+  qa: QaStep,
+  review: ReviewStep,
+} satisfies Record<ChapterId, typeof SpecStep>;
+const panels = CHAPTERS.map((chapter) => ({ ...chapter, Step: STEPS[chapter.id] }));
+---
+
+<div class="wrap-wide chapters" data-chapters="workflow">
+  <div class="chapter-tabs" role="tablist" aria-label="Workflow steps" hidden>
+    {
+      CHAPTERS.map((chapter, index) => (
+        <button
+          class="chapter-tab"
+          type="button"
+          role="tab"
+          id={`workflow-tab-${chapter.id}`}
+          aria-controls={`workflow-panel-${chapter.id}`}
+          aria-label={`${number(index)} ${chapter.label}`}
+          aria-describedby={`workflow-text-${chapter.id}`}
+          aria-selected={index === 0 ? "true" : "false"}
+          tabindex={index === 0 ? 0 : -1}
+          data-chapter={chapter.id}
+        >
+          <span class="chapter-bar" aria-hidden="true">
+            <i />
+          </span>
+          <span class="chapter-index">{number(index)}</span>
+          <strong>{chapter.label}</strong>
+          <span class="chapter-text" id={`workflow-text-${chapter.id}`}>
+            {chapter.text}
+          </span>
+        </button>
+      ))
+    }
+  </div>
+  {
+    panels.map(({ Step, ...chapter }) => (
+      <div
+        class="chapter-panel"
+        id={`workflow-panel-${chapter.id}`}
+        data-chapter-panel={chapter.id}
+      >
+        <h3 class="chapter-heading">{chapter.label}</h3>
+        <p class="chapter-copy" data-chapter-copy>
+          {chapter.text}
+        </p>
+        <div class="stage" data-stage role="img" aria-label={chapter.alt}>
+          <Step />
+        </div>
+      </div>
+    ))
+  }
+</div>
+<script>
+  import { mountWorkflow } from "./scene";
+  mountWorkflow();
+</script>

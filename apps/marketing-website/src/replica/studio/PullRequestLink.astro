@@ -1,0 +1,19 @@
+---
+// The pull request of the task in the task panel toolbar: task-pull-request-link.tsx. The icon
+// shows whether the pull request is open or merged, and a scene flips it with `data-merged`.
+import { ExternalLink, GitMerge, GitPullRequest } from "@lucide/astro";
+import "./PullRequestLink.css";
+import { flag } from "../flag";
+
+interface Props {
+  number: number;
+  merged?: boolean;
+}
+const { number, merged = false } = Astro.props;
+---
+
+<span class="st-pr" data-merged={flag(merged)} data-pr
+  ><GitPullRequest class="i14 when-open" /><GitMerge class="i14 when-merged" /><span
+    >PR #{number}</span
+  ><ExternalLink class="i12" /></span
+>

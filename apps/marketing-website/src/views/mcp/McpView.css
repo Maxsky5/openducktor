@@ -1,0 +1,185 @@
+@layer views {
+  /* MCP: a neutral MCP client above the Kanban board. The client is not a real product. */
+  .mcp-scene {
+    --design-width: 504;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: calc(12 * var(--u));
+    min-height: calc(600 * var(--u));
+  }
+  .mcp-client {
+    --key: oklch(0.8 0.09 236);
+    --string: oklch(0.83 0.12 152);
+    --number: oklch(0.83 0.13 75);
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+    border: calc(1 * var(--u)) solid var(--dev-server-terminal-border);
+    border-radius: calc(14 * var(--u));
+    background: var(--dev-server-terminal-panel);
+    color: var(--dev-server-terminal-foreground);
+    box-shadow:
+      0 calc(24 * var(--u)) calc(48 * var(--u)) calc(-24 * var(--u)) rgb(15 23 42 / 0.45),
+      0 calc(2 * var(--u)) calc(6 * var(--u)) rgb(15 23 42 / 0.12);
+  }
+  .mcp-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: calc(32 * var(--u));
+    padding: 0 calc(14 * var(--u));
+    border-bottom: calc(1 * var(--u)) solid var(--dev-server-terminal-border);
+    background: var(--dev-server-terminal-panel-header);
+    font-size: calc(13 * var(--u));
+    font-weight: 500;
+  }
+  .mcp-head > span {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+  }
+  .mcp-head code,
+  .mcp-file,
+  .mcp-line span {
+    color: var(--dev-server-terminal-muted);
+  }
+  .mcp-head code,
+  .mcp-config,
+  .mcp-log {
+    font-family: var(--mono);
+    font-size: calc(11.5 * var(--u));
+    line-height: calc(18 * var(--u));
+  }
+  .mcp-config {
+    padding: calc(8 * var(--u)) calc(14 * var(--u));
+    border-bottom: calc(1 * var(--u)) solid var(--dev-server-terminal-border);
+    background: var(--dev-server-terminal-panel-header);
+  }
+  .mcp-file {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(6 * var(--u));
+    margin-bottom: calc(2 * var(--u));
+    font-size: calc(11 * var(--u));
+  }
+  /* Lines break only after a comma or a colon, never inside a key or a value. */
+  .mcp-json {
+    white-space: pre-wrap;
+  }
+  .mcp-json span:not(.punct) {
+    white-space: nowrap;
+  }
+  .mcp-json .key {
+    color: var(--key);
+  }
+  .mcp-json .string {
+    color: var(--string);
+  }
+  .mcp-json .number {
+    color: var(--number);
+  }
+  .mcp-json .punct {
+    color: var(--dev-server-terminal-muted);
+  }
+  .mcp-log {
+    display: grid;
+    align-content: start;
+    gap: calc(8 * var(--u));
+    padding: calc(10 * var(--u)) calc(14 * var(--u)) calc(12 * var(--u));
+  }
+  .mcp-ask {
+    display: flex;
+    gap: calc(8 * var(--u));
+    min-height: calc(18 * var(--u));
+  }
+  .mcp-mark {
+    color: oklch(0.78 0.14 293);
+    font-weight: 600;
+  }
+  /* The block caret of the terminal. */
+  .mcp-ask .typed::after {
+    width: calc(7 * var(--u));
+    height: calc(15 * var(--u));
+    background: var(--dev-server-terminal-foreground);
+  }
+  .mcp-step {
+    display: grid;
+    gap: calc(2 * var(--u));
+  }
+  .mcp-step .mcp-json {
+    padding-left: calc(18 * var(--u));
+  }
+  .mcp-line {
+    display: flex;
+    align-items: center;
+    gap: calc(6 * var(--u));
+  }
+  .mcp-line b {
+    font-weight: 500;
+  }
+  .mcp-line .lucide {
+    color: var(--dev-server-terminal-muted);
+  }
+  .mcp-line .mcp-spin,
+  .mcp-line[data-running] .mcp-dir {
+    display: none;
+  }
+  .mcp-line[data-running] .mcp-spin {
+    display: block;
+    animation-duration: 0.9s;
+  }
+  /* The task id of the result and of the new card light up together. */
+  .mcp-scene [data-lit] {
+    border-radius: calc(3 * var(--u));
+    animation: mcp-hit 2.2s ease-out;
+  }
+  @keyframes mcp-hit {
+    0%,
+    45% {
+      background: color-mix(in srgb, var(--brand) 50%, transparent);
+    }
+    100% {
+      background: transparent;
+    }
+  }
+  .mcp-board [data-lit] {
+    animation-name: mcp-hit-card;
+  }
+  @keyframes mcp-hit-card {
+    0%,
+    45% {
+      background: color-mix(in srgb, var(--brand) 16%, transparent);
+    }
+    100% {
+      background: transparent;
+    }
+  }
+  .mcp-board {
+    position: relative;
+    min-height: 0;
+  }
+  .mcp-board .traffic {
+    top: calc(18 * var(--u));
+  }
+  .mcp-board .board-track {
+    padding: 0 calc(16 * var(--u)) calc(16 * var(--u));
+  }
+  /* Narrow stages keep the same layout with a smaller design width. */
+  @container stage (width <= 440px) {
+    .mcp-scene {
+      --design-width: 400;
+      min-height: calc(640 * var(--u));
+    }
+  }
+  /* Wide stages, such as a full-width tile on a tablet, put the client next to the board. */
+  @container stage (width >= 640px) {
+    .mcp-scene {
+      --design-width: 800;
+      grid-template-columns: calc(360 * var(--u)) minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr);
+      gap: calc(16 * var(--u));
+      min-height: calc(420 * var(--u));
+    }
+  }
+}

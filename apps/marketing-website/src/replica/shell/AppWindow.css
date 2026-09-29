@@ -1,0 +1,63 @@
+@layer replica {
+  /* Window. The desktop app draws macOS window controls over the workspace rail. */
+  .app-window {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: calc(1 * var(--u)) solid var(--input);
+    border-radius: calc(14 * var(--u));
+    background: var(--card);
+    box-shadow: var(--shadow-window);
+  }
+  .traffic {
+    position: absolute;
+    top: calc(13 * var(--u));
+    left: calc(14 * var(--u));
+    z-index: 5;
+    display: flex;
+    gap: calc(8 * var(--u));
+  }
+  .traffic i {
+    width: calc(12 * var(--u));
+    height: calc(12 * var(--u));
+    border-radius: 50%;
+    background: #ff5f57;
+    box-shadow: inset 0 0 0 calc(0.5 * var(--u)) rgb(0 0 0 / 0.12);
+  }
+  .traffic i:nth-child(2) {
+    background: #febc2e;
+  }
+  .traffic i:nth-child(3) {
+    background: #28c840;
+  }
+  .app-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+  }
+  .app-main {
+    flex: 1;
+    min-width: 0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    background: var(--card);
+    overflow: hidden;
+  }
+  /* The board window drops its sidebar on a tablet stage, and its rail on a phone stage. Then the
+     body keeps a title bar for the window controls. */
+  @container stage (width <= 959px) {
+    .app-window[data-sidebar="full"] .sidebar {
+      display: none;
+    }
+  }
+  @container stage (width <= 480px) {
+    .app-window[data-sidebar="full"] .rail {
+      display: none;
+    }
+    .app-window[data-sidebar="full"] > .app-body {
+      padding-top: calc(34 * var(--u));
+      background: var(--card);
+    }
+  }
+}

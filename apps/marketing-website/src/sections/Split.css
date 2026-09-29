@@ -1,0 +1,19 @@
+@layer site {
+  /* Split sections: copy on one side, a product view on the other. */
+  .split {
+    display: grid;
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+    align-items: center;
+    gap: clamp(40px, 6vw, 96px);
+  }
+  .split-copy {
+    display: grid;
+    gap: 36px;
+  }
+  @media (width <= 1023px) {
+    .split {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 40px;
+    }
+  }
+}

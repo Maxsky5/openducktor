@@ -1,0 +1,22 @@
+@layer replica {
+  .st-approval-text {
+    display: grid;
+    gap: calc(4 * var(--u));
+  }
+  .st-approval-text strong {
+    font-size: calc(14 * var(--u));
+    font-weight: 500;
+  }
+  .st-approval-text p {
+    font-size: calc(12 * var(--u));
+  }
+  .st-approval-text p:last-child {
+    color: var(--muted-foreground);
+  }
+  .st-approval-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: calc(8 * var(--u));
+    padding-top: calc(4 * var(--u));
+  }
+}

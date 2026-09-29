@@ -1,0 +1,124 @@
+---
+// The Git tab of agent-studio-git-panel: branch context, sync actions, diff scope, and files.
+// The Branch changes scope has no reset button: the product resets only uncommitted files.
+// Without files it shows empty-diff-state.tsx. A scene flips data-git when the first file lands.
+import {
+  ArrowDown,
+  ArrowRight,
+  ArrowUp,
+  ChevronDown,
+  ChevronRight,
+  FilePlus,
+  FileText,
+  FolderGit2,
+  GitBranch,
+  Link2,
+  MessageSquare,
+  Pencil,
+  RefreshCw,
+  SquareSplitHorizontal,
+  Target,
+  TextAlignJustify,
+} from "@lucide/astro";
+import { byPath, type GitFile, TASK_BRANCH } from "../../sample/studio";
+import { filesLabel } from "../format";
+import Segment from "../ui/Segment.astro";
+import Segmented from "../ui/Segmented.astro";
+import "./GitPanel.css";
+
+interface Props {
+  files: GitFile[];
+  ahead: number;
+}
+const { files, ahead } = Astro.props;
+const totalAdd = files.reduce((sum, file) => sum + file.add, 0);
+const totalDel = files.reduce((sum, file) => sum + file.del, 0);
+---
+
+<div class="st-git" data-panel="git" data-git={files.length > 0 ? "filled" : "empty"}>
+  <div class="st-branches">
+    <div class="st-branch">
+      <small>Current branch</small>
+      <span><GitBranch class="i14" /><code>{TASK_BRANCH}</code></span>
+    </div>
+    <span class="st-arrow">
+      <span><ArrowRight class="i14" /></span>
+      <b data-ahead hidden={ahead === 0}>{ahead}</b>
+    </span>
+    <div class="st-branch">
+      <small>Target branch</small>
+      <span><Target class="i14" /><code>origin/main</code><Pencil class="i14" /></span>
+    </div>
+  </div>
+  <div class="st-git-actions">
+    <span class="st-sync">
+      <span><RefreshCw class="i14" /></span>
+      <span><Target class="i14" /></span>
+      <span><ArrowDown class="i14" /></span>
+      <span><ArrowUp class="i14" /><b data-push hidden={ahead === 0}>{ahead}</b></span>
+    </span>
+    <span class="st-detect" data-detect><Link2 />Detect PR</span>
+  </div>
+  <Segmented size="sm">
+    <Segment>Uncommitted changes</Segment>
+    <Segment active>Branch changes</Segment>
+  </Segmented>
+  <div class="st-git-empty">
+    <span><FolderGit2 class="i20" /></span>
+    <b>No changes detected</b>
+    <small>File modifications will appear here once the agent starts editing.</small>
+  </div>
+  <div class="st-files-head">
+    <span data-file-count>{filesLabel(files.length)}</span>
+    <span class="st-diff-style"
+      ><span><SquareSplitHorizontal class="i12" /></span><span data-active
+        ><TextAlignJustify class="i12" /></span
+      ></span
+    >
+    <span class="st-totals"
+      ><span class="add-ink" data-total-add>+{totalAdd}</span><span
+        class="del-ink"
+        hidden={totalDel === 0}
+        data-total-del>-{totalDel}</span
+      ></span
+    >
+  </div>
+  <div class="st-files" data-files>
+    {
+      byPath(files).map((file) => {
+        const slash = file.path.lastIndexOf("/");
+        return (
+          <div class="st-file-item" data-file={file.path}>
+            <div class="st-file">
+              {file.open ? <ChevronDown class="i12" /> : <ChevronRight class="i12" />}
+              {file.type === "added" ? (
+                <FilePlus class="i14 add-ink" />
+              ) : (
+                <FileText class="i14 mod-ink" />
+              )}
+              <span class="st-file-name">
+                <b>{file.path.slice(slash + 1)}</b>
+                <small>{file.path.slice(0, slash)}</small>
+              </span>
+              <span class="st-file-stats">
+                <span class="st-note-pill" hidden={!file.comments} data-note-pill>
+                  <MessageSquare class="i12" />
+                  <span data-note-count>{file.comments ?? 0}</span>
+                </span>
+                <span class="st-stats">
+                  <span class="add-ink" data-add>
+                    +{file.add}
+                  </span>
+                  <span class="del-ink" hidden={file.del === 0} data-del>
+                    -{file.del}
+                  </span>
+                </span>
+              </span>
+            </div>
+            {file.open && <slot name="diff" />}
+          </div>
+        );
+      })
+    }
+  </div>
+</div>

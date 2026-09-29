@@ -1,0 +1,139 @@
+@layer site {
+  /* Hero */
+  .hero {
+    position: relative;
+    padding-block: clamp(28px, 3.5vw, 48px) var(--section-space);
+  }
+  .hero-copy {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 520px);
+    grid-template-areas:
+      "title title"
+      "lede cta";
+    align-items: start;
+    column-gap: clamp(32px, 6vw, 96px);
+    row-gap: 28px;
+  }
+  .hero h1 {
+    grid-area: title;
+    font-size: clamp(2.5rem, 5vw, 4.25rem);
+    font-weight: 600;
+    line-height: 1.02;
+    letter-spacing: -0.045em;
+  }
+  .hero h1 .line {
+    display: block;
+  }
+  .hero h1 .quiet {
+    color: var(--display-quiet-ink);
+  }
+  .hero-intro {
+    grid-area: lede;
+    display: grid;
+    gap: 18px;
+    padding-top: 6px;
+  }
+  .lede {
+    max-width: 34em;
+    color: var(--body-ink);
+    font-size: 1.1875rem;
+    line-height: 1.55;
+    text-wrap: pretty;
+  }
+  .hero-cta {
+    grid-area: cta;
+    display: grid;
+    gap: 14px;
+  }
+  /* The mark stays next to the first line when the text wraps. */
+  .hero-source {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 8px;
+    color: var(--ink);
+    font-size: 0.9375rem;
+    font-weight: 550;
+    line-height: 1.5;
+  }
+  .hero-source > svg {
+    margin-top: calc((1.5em - 16px) / 2);
+  }
+  .hero-source a {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .hero-note {
+    color: var(--faint-ink);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+  }
+  /* Each terminal install is a link to its terminal in the install section. */
+  .hero-installs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    color: var(--faint-ink);
+    font-size: 0.8125rem;
+  }
+  .hero-installs ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    list-style: none;
+  }
+  .hero-installs a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--page);
+    color: var(--ink);
+    font-weight: 550;
+  }
+  .hero-installs a:hover {
+    border-color: var(--accent);
+    color: var(--accent-ink);
+  }
+  .hero-visual {
+    position: relative;
+    margin-top: clamp(48px, 6vw, 80px);
+  }
+  .hero-visual::before {
+    content: "";
+    position: absolute;
+    inset: 12% 0 -8%;
+    z-index: -1;
+    background:
+      radial-gradient(
+        60% 55% at 50% 40%,
+        color-mix(in srgb, var(--accent) 9%, transparent),
+        transparent 70%
+      ),
+      linear-gradient(to bottom, transparent, var(--page-alt) 40%, transparent);
+    pointer-events: none;
+  }
+  @media (width <= 1023px) {
+    .hero-copy {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas:
+        "title"
+        "lede"
+        "cta";
+    }
+    .hero-cta {
+      max-width: 560px;
+    }
+  }
+  @media (width <= 767px) {
+    .hero h1 {
+      font-size: clamp(2.375rem, 11vw, 3.5rem);
+    }
+    .lede {
+      font-size: 1rem;
+    }
+  }
+}

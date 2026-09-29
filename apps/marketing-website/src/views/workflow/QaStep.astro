@@ -1,0 +1,51 @@
+---
+// QA chapter, final frame: the Builder reused its session to fix the QA rejection. The scene
+// starts where the Build chapter ends. You start a fresh QA session, it saves the QA report, and
+// the start dialog of the fix opens in reuse mode.
+import DocumentPanel from "../../replica/studio/DocumentPanel.astro";
+import GitPanel from "../../replica/studio/GitPanel.astro";
+import QaReport from "./documents/QaReport.astro";
+import StartDialog from "../../replica/studio/StartDialog.astro";
+import {
+  BUILDER_FIX_SESSION,
+  DOCUMENTS,
+  FIXED_FILES,
+  FRAMES,
+  QA_SESSION,
+} from "../../sample/studio";
+import StudioWindow from "../../replica/studio/StudioWindow.astro";
+import Transcript from "../../replica/transcript/Transcript.astro";
+import type { QaTemplate } from "./qa";
+---
+
+<StudioWindow frame={FRAMES.qa}>
+  <Transcript
+    sessions={[
+      { id: "qa", turns: 1 },
+      { id: "build", turns: 2 },
+    ]}
+    shown="build"
+  />
+  <DocumentPanel slot="panel" labels={DOCUMENTS.qa}>
+    <QaReport />
+  </DocumentPanel>
+  <GitPanel slot="panel" files={FIXED_FILES} ahead={2} />
+</StudioWindow>
+<template data-tpl={"qa-dialog" satisfies QaTemplate}
+  ><StartDialog
+    role="QA"
+    description="Choose how to start fresh or reuse an existing session for QA Review."
+    session={QA_SESSION}
+    modes={["fresh", "reuse"]}
+  /></template
+>
+<template data-tpl={"fix-dialog" satisfies QaTemplate}
+  ><StartDialog
+    role="Builder"
+    description="Choose how to start fresh or reuse an existing session for Fix QA Rejection."
+    session={BUILDER_FIX_SESSION}
+    modes={["fresh", "reuse"]}
+    mode="reuse"
+    existing="Builder #1"
+  /></template
+>

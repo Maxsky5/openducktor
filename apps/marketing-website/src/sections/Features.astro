@@ -1,0 +1,68 @@
+---
+import { links } from "../content/site";
+import FeatureTile from "../ui/FeatureTile.astro";
+import SectionHead from "../ui/SectionHead.astro";
+import ChatView from "../views/chat/ChatView.astro";
+import McpView from "../views/mcp/McpView.astro";
+import PromptsView from "../views/prompts/PromptsView.astro";
+import WorktreeView from "../views/worktree/WorktreeView.astro";
+import "./Features.css";
+---
+
+<section id="features" class="section features" aria-labelledby="features-title">
+  <div class="wrap-wide">
+    <SectionHead eyebrow="Features" id="features-title">
+      <Fragment slot="title"
+        >Plan in a chat, control every prompt, and test in the worktree.</Fragment
+      >
+      <p>
+        These tools use the same local task store as the board. A task that an agent creates in a
+        chat or through MCP shows on the board at once.
+      </p>
+    </SectionHead>
+    <div class="features-grid">
+      <FeatureTile
+        id="feature-chat"
+        label="Chats"
+        title="Plan a feature in a chat, and get tasks on the board."
+        size="full"
+      >
+        A chat works outside a task. Give it a custom role and a reusable prompt. The agent can
+        search your tasks and create new ones.
+        <ChatView slot="view" />
+      </FeatureTile>
+      <FeatureTile
+        id="feature-mcp"
+        label="MCP"
+        title="Use your tasks from any MCP client."
+        size="half"
+      >
+        Add <a class="text-link" href={links.mcp}><code>@openducktor/mcp</code></a> to another agent.
+        It can search, read, create, and update your tasks. It sends each call to the running app, so
+        the board shows a new task at once.
+        <McpView slot="view" />
+      </FeatureTile>
+      <FeatureTile
+        id="feature-prompts"
+        label="Prompts"
+        title="Read and replace every built-in prompt."
+        size="half"
+      >
+        The settings show each built-in prompt that OpenDucktor sends to an agent. Replace a prompt
+        for all repositories or for one repository. OpenDucktor checks the placeholders of each
+        active override, and it does not save until they are valid.
+        <PromptsView slot="view" />
+      </FeatureTile>
+      <FeatureTile
+        id="feature-worktree"
+        label="Worktrees"
+        title="Try each change in its own worktree."
+        size="full"
+      >
+        The Builder works in a Git worktree for the task. Start the dev servers of the repository in
+        that worktree, read their logs, and open the worktree in your editor.
+        <WorktreeView slot="view" />
+      </FeatureTile>
+    </div>
+  </div>
+</section>

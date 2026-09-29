@@ -1,0 +1,22 @@
+@layer replica {
+  .st-time {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    margin-left: auto;
+    color: var(--muted-foreground);
+    font-size: calc(11 * var(--u));
+    font-variant-numeric: tabular-nums;
+  }
+  .st-time .spin {
+    display: none;
+  }
+  /* A running row shows a spinner in place of its duration. */
+  [data-running] > .st-time .spin {
+    display: block;
+  }
+  [data-running] > .st-time .st-duration {
+    display: none;
+  }
+}

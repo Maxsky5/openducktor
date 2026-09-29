@@ -1,0 +1,38 @@
+---
+// The window of the desktop app: the macOS window controls, the workspace rail, the sidebar, and
+// the page in the slot. The desktop app draws the window controls over the workspace rail. A
+// window without a sidebar shows no workspace rail either, as a cropped window does.
+import type { HTMLAttributes } from "astro/types";
+import type { ActivityCounts } from "../board/model";
+import Replica from "../Replica.astro";
+import type { AppPage } from "../vocabulary";
+import Rail from "./Rail.astro";
+import Sidebar from "./Sidebar.astro";
+import SidebarCollapsed from "./SidebarCollapsed.astro";
+import "./AppWindow.css";
+
+/** The sidebar of the window. The second workspace of the rail can have a running session. */
+type Chrome =
+  | { sidebar: "full"; page: AppPage; activity: ActivityCounts; busyWorkspace: boolean }
+  | { sidebar: "collapsed"; page: AppPage; busyWorkspace: boolean }
+  | { sidebar: "none" };
+
+type Props = HTMLAttributes<"div"> & {
+  chrome: Chrome;
+  /** The window sits in the root of another replica, so it is not a replica root. */
+  nested?: boolean;
+};
+const { chrome, nested = false, class: className, ...attributes } = Astro.props;
+const Root = nested ? "div" : Replica;
+---
+
+<Root class:list={["app-window", className]} data-sidebar={chrome.sidebar} {...attributes}>
+  <span class="traffic" aria-hidden="true"><i></i><i></i><i></i></span>
+  <div class="app-body">
+    {chrome.sidebar !== "none" && <Rail busy={chrome.busyWorkspace} />}
+    {chrome.sidebar === "full" && <Sidebar page={chrome.page} activity={chrome.activity} />}
+    {chrome.sidebar === "collapsed" && <SidebarCollapsed page={chrome.page} />}
+    <div class="app-main"><slot /></div>
+  </div>
+  <slot name="overlay" />
+</Root>

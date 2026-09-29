@@ -1,0 +1,67 @@
+@layer replica {
+  .st-card[data-running] .st-card-head .spin {
+    display: block;
+  }
+  .st-card[data-running] .st-card-head .st-duration {
+    display: none;
+  }
+  /* Workflow tool card: set_spec, set_plan, build_completed, qa_rejected, qa_approved. */
+  .st-card {
+    margin: calc(8 * var(--u)) 0;
+    padding: calc(8 * var(--u)) calc(12 * var(--u));
+    border: calc(1 * var(--u)) solid var(--success-border);
+    border-radius: calc(10 * var(--u));
+    background: var(--success-surface);
+    color: var(--success-surface-foreground);
+    font-size: calc(14 * var(--u));
+  }
+  .st-card[data-running] {
+    border-color: var(--info-border);
+    background: var(--info-surface);
+    color: var(--info-surface-foreground);
+  }
+  .st-card-head {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+  }
+  .st-card-head b {
+    font-size: calc(11 * var(--u));
+    font-weight: 600;
+  }
+  .st-pill {
+    display: none;
+    padding: calc(2 * var(--u)) calc(6 * var(--u));
+    border: calc(1 * var(--u)) solid currentColor;
+    border-radius: 999px;
+    font-size: calc(10 * var(--u));
+    font-weight: 600;
+    letter-spacing: 0.025em;
+    text-transform: uppercase;
+  }
+  .st-card[data-running] .st-pill {
+    display: block;
+  }
+  .st-card-head .st-time {
+    color: color-mix(in oklch, currentColor 75%, transparent);
+  }
+  .st-card-io {
+    display: grid;
+    gap: calc(6 * var(--u));
+    margin-top: calc(8 * var(--u));
+  }
+  .st-card-io span {
+    display: flex;
+    align-items: center;
+    gap: calc(6 * var(--u));
+    padding: calc(4 * var(--u)) calc(8 * var(--u));
+    border: calc(1 * var(--u)) solid color-mix(in oklch, currentColor 20%, transparent);
+    border-radius: calc(4 * var(--u));
+    background: var(--card);
+    font-size: calc(12 * var(--u));
+    font-weight: 500;
+  }
+  .st-card[data-running] .st-output {
+    display: none;
+  }
+}

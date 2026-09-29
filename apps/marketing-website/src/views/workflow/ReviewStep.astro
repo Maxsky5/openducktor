@@ -1,0 +1,70 @@
+---
+// Review chapter, final frame: the pull request merged and the task closed. The scene starts in
+// Human Review on the Builder session. You comment on a diff line and send the comment, the
+// Builder fixes it, and the same session publishes the pull request.
+import ChecksPanel from "../../replica/studio/ChecksPanel.astro";
+import DiffView from "../../replica/studio/DiffView.astro";
+import GitPanel from "../../replica/studio/GitPanel.astro";
+import PullRequestLink from "../../replica/studio/PullRequestLink.astro";
+import ReviewComment from "../../replica/studio/ReviewComment.astro";
+import StartDialog from "../../replica/studio/StartDialog.astro";
+import {
+  BUILDER_FIX_SESSION,
+  CI_CHECKS,
+  FIXED_HOOK_LINES,
+  FRAMES,
+  HOOK_PATH,
+  PR_TITLE,
+  REVIEW_COMMENT,
+  REVIEWED_FILES,
+  REVIEWED_HOOK_LINES,
+} from "../../sample/studio";
+import StudioWindow from "../../replica/studio/StudioWindow.astro";
+import Transcript from "../../replica/transcript/Transcript.astro";
+import Toast from "../../replica/shell/Toast.astro";
+import { workflowNotification } from "../../replica/vocabulary";
+import { TASKS } from "../../sample/tasks";
+import ToastStack from "../../replica/shell/ToastStack.astro";
+import type { ReviewTemplate } from "./review";
+
+const files = REVIEWED_FILES.map((file) =>
+  file.path === HOOK_PATH ? { ...file, open: true } : file,
+);
+---
+
+<StudioWindow frame={FRAMES.review}>
+  <Transcript sessions={[{ id: "build", turns: 4 }]} shown="build" />
+  <PullRequestLink slot="pr" number={42} merged />
+  <GitPanel slot="panel" files={files} ahead={3}>
+    <DiffView slot="diff" lines={REVIEWED_HOOK_LINES} kind="add" />
+  </GitPanel>
+  <ChecksPanel
+    slot="panel"
+    title={PR_TITLE}
+    updated="10:26:35 AM"
+    checks={CI_CHECKS}
+    state="passing"
+  />
+  <ToastStack slot="overlay" />
+</StudioWindow>
+<template data-tpl={"old-diff" satisfies ReviewTemplate}
+  ><DiffView lines={FIXED_HOOK_LINES} kind="add" /></template
+>
+<template data-tpl={"comment-form" satisfies ReviewTemplate}><ReviewComment /></template>
+<template data-tpl={"comment-card" satisfies ReviewTemplate}
+  ><ReviewComment text={REVIEW_COMMENT} /></template
+>
+<template data-tpl={"pr-dialog" satisfies ReviewTemplate}
+  ><StartDialog
+    role="Builder"
+    description="Choose how to reuse an existing session or fork an existing session for Generate Pull Request."
+    session={BUILDER_FIX_SESSION}
+    modes={["reuse", "fork"]}
+    mode="reuse"
+    existing="Builder #1"
+    target="origin/main"
+  /></template
+>
+<template data-tpl={"toast-closed" satisfies ReviewTemplate}
+  ><Toast {...workflowNotification("closed", TASKS.k3x9.title)} /></template
+>

@@ -1,0 +1,33 @@
+---
+// The Document tab of task-execution-document-panel.tsx. The markup holds the saved document, and a
+// scene shows the empty state with data-document="empty". An empty document has no copy button.
+import { Copy, Expand } from "@lucide/astro";
+import type { DocumentLabels } from "../../sample/studio";
+import Button from "../ui/Button.astro";
+import "./DocumentPanel.css";
+
+interface Props {
+  labels: DocumentLabels;
+}
+const { labels } = Astro.props;
+---
+
+<div class="st-document" data-panel="document" data-document="filled">
+  <div class="st-doc-head">
+    <div>
+      <div class="st-doc-title" data-doc-title>{labels.title}</div>
+      <Button variant="ghost" size="icon" class="st-doc-button"><Expand class="i14" /></Button>
+    </div>
+    <div>
+      <p data-doc-description>{labels.description}</p>
+      <time data-updated>{labels.updated}</time>
+    </div>
+  </div>
+  <div class="st-doc-body">
+    <p class="st-doc-empty" data-doc-empty>{labels.empty}</p>
+    <Button variant="outline" size="icon" class="st-doc-button st-doc-copy"
+      ><Copy class="i14" /></Button
+    >
+    <div class="st-doc-scroll" data-doc><slot /></div>
+  </div>
+</div>

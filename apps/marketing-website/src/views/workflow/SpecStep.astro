@@ -1,0 +1,51 @@
+---
+// Spec chapter, final frame: the Spec session saved the specification. The question card is a
+// template: the scene docks it above the composer and answers it.
+import DocumentPanel from "../../replica/studio/DocumentPanel.astro";
+import QuestionCard from "../../replica/transcript/QuestionCard.astro";
+import SpecDocument from "./documents/SpecDocument.astro";
+import Transcript from "../../replica/transcript/Transcript.astro";
+import { DOCUMENTS, FRAMES } from "../../sample/studio";
+import StudioWindow from "../../replica/studio/StudioWindow.astro";
+import type { SpecTemplate } from "./spec";
+
+const questions = [
+  {
+    header: "Shortcut",
+    question: "Which shortcut opens search?",
+    options: [
+      {
+        label: "Cmd+K / Ctrl+K",
+        description: "Common in editors and chat apps. Free in Fieldnotes.",
+      },
+      {
+        label: "Cmd+/ / Ctrl+/",
+        description: "Free, but some keyboard layouts need Shift for /.",
+      },
+    ],
+    answer: "Cmd+K / Ctrl+K",
+  },
+  {
+    header: "Text fields",
+    question: "Should the shortcut work while typing in a text field?",
+    options: [
+      {
+        label: "No, ignore it in text fields",
+        description: "The note editor keeps Cmd+K for links.",
+      },
+      { label: "Yes, everywhere", description: "Search opens even while you type a note." },
+    ],
+    answer: "No, ignore it in text fields",
+  },
+];
+---
+
+<StudioWindow frame={FRAMES.spec}>
+  <Transcript sessions={[{ id: "spec", turns: 1 }]} shown="spec" />
+  <DocumentPanel slot="panel" labels={DOCUMENTS.spec}>
+    <SpecDocument />
+  </DocumentPanel>
+</StudioWindow>
+<template data-tpl={"question" satisfies SpecTemplate}
+  ><QuestionCard questions={questions} /></template
+>
