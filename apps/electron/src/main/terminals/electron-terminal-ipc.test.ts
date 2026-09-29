@@ -384,6 +384,63 @@ describe("Electron terminal IPC", () => {
     expect(attempts).toHaveLength(3);
   });
 
+  test.each(["sender", "client"] as const)(
+    "rejects an attach queued during %s teardown and allows a fresh client to attach",
+    async (teardown) => {
+      const attachments = new Set<string>();
+      const sent: Uint8Array[] = [];
+      let startDetach = (): void => undefined;
+      const detachStarted = new Promise<void>((resolve) => {
+        startDetach = resolve;
+      });
+      let releaseDetach = (): void => undefined;
+      const blockedDetach = new Promise<void>((resolve) => {
+        releaseDetach = resolve;
+      });
+      const controller = createElectronTerminalIpcController({
+        attach: ({ attachmentId }) => Effect.sync(() => attachments.add(attachmentId)),
+        detach: (_terminalId, attachmentId) =>
+          Effect.gen(function* () {
+            startDetach();
+            yield* Effect.promise(() => blockedDetach);
+            attachments.delete(attachmentId);
+          }),
+      });
+      const sender = {
+        id: 7,
+        isDestroyed: () => false,
+        send: (_channel: string, envelope: { frame: Uint8Array }) => sent.push(envelope.frame),
+      };
+      const frame = makeAttachFrame();
+      await Effect.runPromise(controller.handleFrame(sender, "client-a", frame));
+
+      const closing = Effect.runPromise(
+        teardown === "sender"
+          ? controller.detachSender(sender.id)
+          : controller.detachClient(sender.id, "client-a"),
+      );
+      await detachStarted;
+      const queuedAttach = Effect.runPromise(controller.handleFrame(sender, "client-a", frame));
+      releaseDetach();
+      await Promise.all([closing, queuedAttach]);
+      await Effect.runPromise(controller.detachSender(sender.id));
+
+      expect([...attachments]).toEqual([]);
+      expect(sent.map((encoded) => decodeTerminalProtocolFrame(encoded).message)).toMatchObject([
+        {
+          type: "protocol_error",
+          terminalId: "terminal-1",
+          failure: { code: "protocol_error", message: expect.stringContaining("closed") },
+        },
+      ]);
+
+      await Effect.runPromise(controller.handleFrame(sender, "client-a", frame));
+      expect([...attachments]).toEqual(["electron:7:client-a:terminal-1"]);
+      await Effect.runPromise(controller.detachSender(sender.id));
+      expect([...attachments]).toEqual([]);
+    },
+  );
+
   test("keeps live attachments during same-document main-frame navigation", async () => {
     const attachments = new Set<string>();
     const terminalService: TerminalService = {

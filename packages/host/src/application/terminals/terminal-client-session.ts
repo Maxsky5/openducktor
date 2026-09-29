@@ -5,7 +5,7 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { TerminalService } from "./terminal-service";
-import { type TerminalServiceError, terminalServiceErrorToFailure } from "./terminal-service-error";
+import { TerminalServiceError, terminalServiceErrorToFailure } from "./terminal-service-error";
 
 export type TerminalClientSession = {
   handle(message: TerminalClientMessage, payload: Uint8Array): Effect.Effect<void>;
@@ -23,6 +23,7 @@ export const createTerminalClientSession = ({
 }): TerminalClientSession => {
   const attachedTerminalIds = new Set<string>();
   const operations = Effect.unsafeMakeSemaphore(1);
+  let closed = false;
   const attachmentId = (terminalId: string): string => `${clientId}:${terminalId}`;
   const sendFailure = (
     error: TerminalServiceError,
@@ -51,6 +52,18 @@ export const createTerminalClientSession = ({
     message: TerminalClientMessage,
     payload: Uint8Array,
   ): Effect.Effect<void> => {
+    if (closed) {
+      return sendFailure(
+        new TerminalServiceError({
+          code: "protocol_error",
+          operation: message.type === "input" ? "write" : message.type,
+          message:
+            "Terminal client connection is closed. Reconnect before sending terminal frames.",
+          terminalId: message.terminalId,
+        }),
+        message,
+      );
+    }
     const id = attachmentId(message.terminalId);
     const operation = (() => {
       if (message.type === "attach") {
@@ -84,6 +97,7 @@ export const createTerminalClientSession = ({
   const close = (): Effect.Effect<void, TerminalServiceError> =>
     operations.withPermits(1)(
       Effect.gen(function* () {
+        closed = true;
         const terminalIds = [...attachedTerminalIds];
         let firstFailure: TerminalServiceError | undefined;
         for (const terminalId of terminalIds) {
@@ -101,7 +115,8 @@ export const createTerminalClientSession = ({
     );
 
   return {
-    handle: (message, payload) => operations.withPermits(1)(handleMessage(message, payload)),
+    handle: (message, payload) =>
+      operations.withPermits(1)(Effect.suspend(() => handleMessage(message, payload))),
     close,
   };
 };
