@@ -1,0 +1,28 @@
+---
+// A file edit card of agent-chat-file-edit-card.tsx: A for a new file, M for a changed file.
+import { FilePlus, FileText } from "@lucide/astro";
+import "./PatchCard.css";
+
+interface Props {
+  path: string;
+  kind: "A" | "M";
+  add: number;
+  del?: number;
+  row?: string;
+}
+const { path, kind, add, del = 0, row } = Astro.props;
+const slash = path.lastIndexOf("/");
+const folder = path.slice(0, slash + 1);
+const file = path.slice(slash + 1);
+---
+
+<div class="st-patch" data-row={row}>
+  <div class="st-patch-head">
+    {kind === "A" ? <FilePlus class="i14 add-ink" /> : <FileText class="i14 mod-ink" />}
+    <span class="st-path"><span>{folder}</span><b>{file}</b></span>
+    <span class="st-kind">{kind}</span>
+    <span class="st-stats"
+      ><span class="add-ink">+{add}</span>{del > 0 && <span class="del-ink">-{del}</span>}</span
+    >
+  </div>
+</div>

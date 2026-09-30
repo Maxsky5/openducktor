@@ -1,0 +1,19 @@
+---
+// DiagnosticsSection of diagnostics-panel-sections.tsx: the title, the status badge, and the body.
+import type { HTMLAttributes } from "astro/types";
+import DiagBody from "./DiagBody.astro";
+import type { DiagState } from "./model";
+import "./DiagSection.css";
+
+type Props = HTMLAttributes<"div"> & { title: string; state: DiagState };
+const { title, state, ...attributes } = Astro.props;
+---
+
+<div class="diag-section" {...attributes}>
+  <div class="diag-head">
+    <p>{title}</p><span class="diag-badge" data-tone={state.tone} data-diag-badge
+      >{state.badge}</span
+    >
+  </div>
+  <div class="diag-body" data-diag-body><DiagBody state={state} /></div>
+</div>

@@ -1,0 +1,24 @@
+---
+// A product view with a caption that says where the view is in the app.
+import "./ProductFigure.css";
+
+interface Props {
+  /** The path of the view in the app, one part for each level, such as Settings and Agents. */
+  caption: string[];
+}
+const { caption } = Astro.props;
+---
+
+<figure class="product-figure">
+  <figcaption class="visual-caption">
+    {
+      caption.map((part, index) => (
+        <>
+          {index > 0 && <span>/</span>}
+          {part}
+        </>
+      ))
+    }
+  </figcaption>
+  <slot />
+</figure>

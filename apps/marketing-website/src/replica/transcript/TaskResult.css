@@ -1,0 +1,100 @@
+@layer replica {
+  /* Task result card: TaskResultCard of agent-chat-task-tool.tsx. */
+  .ch-task {
+    max-width: calc(672 * var(--u));
+    margin: calc(8 * var(--u)) 0 calc(12 * var(--u));
+    overflow: hidden;
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(12 * var(--u));
+    background: color-mix(in oklch, var(--card) 70%, transparent);
+    box-shadow: var(--shadow-sm);
+  }
+  .ch-task-head {
+    display: grid;
+    gap: calc(6 * var(--u));
+    padding: calc(16 * var(--u)) calc(16 * var(--u)) 0;
+  }
+  .ch-task-title {
+    font-size: calc(16 * var(--u));
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    line-height: calc(24 * var(--u));
+  }
+  .ch-task-id {
+    display: flex;
+    align-items: center;
+    gap: calc(6 * var(--u));
+    color: var(--muted-foreground);
+  }
+  .ch-task-id > span:first-child {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(6 * var(--u));
+  }
+  .ch-task-id code {
+    font-family: var(--mono);
+    font-size: calc(12 * var(--u));
+    line-height: calc(16 * var(--u));
+  }
+  .ch-open {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(4 * var(--u));
+    padding: 0 calc(6 * var(--u));
+    font-size: calc(11 * var(--u));
+    line-height: calc(16 * var(--u));
+  }
+  .ch-task-body {
+    display: flex;
+    flex-direction: column;
+    gap: calc(12 * var(--u));
+    padding: calc(16 * var(--u));
+  }
+  .ch-status {
+    display: inline-flex;
+    align-items: center;
+    padding: calc(2 * var(--u)) calc(10 * var(--u));
+    border: calc(1 * var(--u)) solid var(--input);
+    border-radius: 999px;
+    background: var(--muted);
+    font-size: calc(12 * var(--u));
+    font-weight: 500;
+    line-height: calc(16 * var(--u));
+  }
+  .ch-task-text {
+    margin: calc(4 * var(--u)) 0;
+    color: var(--muted-foreground);
+    font-size: calc(13 * var(--u));
+    line-height: 1.625;
+  }
+  .ch-task-text code {
+    padding: 0 calc(4 * var(--u));
+    color: var(--rose-600);
+    font-family: var(--mono);
+    font-size: calc(11 * var(--u));
+    font-weight: 500;
+  }
+  :where(:root[data-theme="dark"]) .ch-task-text code {
+    color: var(--rose-400);
+  }
+  .ch-labels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: calc(6 * var(--u));
+  }
+  .ch-label {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(6 * var(--u));
+    height: calc(24 * var(--u));
+    padding: 0 calc(10 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: 999px;
+    background: var(--muted);
+    font-size: calc(11 * var(--u));
+    font-weight: 500;
+  }
+  .ch-label .lucide {
+    color: var(--muted-foreground);
+  }
+}

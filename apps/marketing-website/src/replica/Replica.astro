@@ -1,0 +1,14 @@
+---
+// The root of a product replica. It carries the theme tokens of the desktop app and the design
+// pixel of the replica. The scene that holds a replica describes it in words, so the replica is
+// hidden from assistive technology.
+import type { HTMLAttributes } from "astro/types";
+import "virtual:openducktor/product-theme.css";
+import "./palette.css";
+import "./replica.css";
+
+type Props = HTMLAttributes<"div">;
+const { class: className, ...attributes } = Astro.props;
+---
+
+<div class:list={["replica", className]} aria-hidden="true" data-root {...attributes}><slot /></div>

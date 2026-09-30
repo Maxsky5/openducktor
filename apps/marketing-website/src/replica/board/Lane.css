@@ -1,0 +1,238 @@
+@layer replica {
+  /* The status colors of task-status-presentation.ts. Each lane status sets its hue below. */
+  .lane {
+    --lane-border: color-mix(in oklch, var(--lane-200) 90%, transparent);
+    --lane-surface: color-mix(in oklch, var(--lane-50) 55%, transparent);
+    --lane-head: color-mix(in oklch, var(--lane-50) 75%, transparent);
+    --lane-count-border: var(--lane-300);
+    --lane-count-ink: var(--lane-700);
+    --lane-empty-border: var(--lane-300);
+    --lane-empty-ink: var(--lane-700);
+    display: flex;
+    flex-direction: column;
+    width: calc(328 * var(--u));
+    flex: 0 0 auto;
+    min-height: calc(384 * var(--u));
+    overflow: hidden;
+    border: calc(1 * var(--u)) solid var(--lane-border);
+    border-radius: calc(16 * var(--u));
+    background: var(--lane-surface);
+    box-shadow: var(--shadow-sm);
+  }
+  :where(:root[data-theme="dark"]) .lane {
+    --lane-border: color-mix(in oklch, var(--lane-800) 60%, transparent);
+    --lane-surface: color-mix(in oklch, var(--lane-950) 30%, transparent);
+    --lane-head: color-mix(in oklch, var(--lane-950) 40%, transparent);
+    --lane-count-border: var(--lane-700);
+    --lane-count-ink: var(--lane-300);
+    --lane-empty-border: var(--lane-800);
+    --lane-empty-ink: var(--lane-300);
+  }
+  /* The Backlog lane has one set of classes for both themes in task-status-presentation.ts. */
+  .lane[data-lane="open"] {
+    --lane-border: color-mix(in oklch, var(--border) 90%, transparent);
+    --lane-surface: color-mix(in oklch, var(--muted) 60%, transparent);
+    --lane-head: color-mix(in oklch, var(--muted) 80%, transparent);
+    --lane-count-border: var(--input);
+    --lane-count-ink: var(--foreground);
+    --lane-empty-border: var(--input);
+    --lane-empty-ink: var(--muted-foreground);
+    --lane-500: color-mix(in oklch, var(--muted-foreground) 45%, transparent);
+  }
+  .lane[data-lane="spec_ready"] {
+    --lane-50: var(--violet-50);
+    --lane-200: var(--violet-200);
+    --lane-300: var(--violet-300);
+    --lane-500: var(--violet-500);
+    --lane-700: var(--violet-700);
+    --lane-800: var(--violet-800);
+    --lane-950: var(--violet-950);
+  }
+  .lane[data-lane="ready_for_dev"] {
+    --lane-50: var(--sky-50);
+    --lane-200: var(--sky-200);
+    --lane-300: var(--sky-300);
+    --lane-500: var(--sky-500);
+    --lane-700: var(--sky-700);
+    --lane-800: var(--sky-800);
+    --lane-950: var(--sky-950);
+  }
+  .lane[data-lane="in_progress"] {
+    --lane-50: var(--amber-50);
+    --lane-200: var(--amber-200);
+    --lane-300: var(--amber-300);
+    --lane-500: var(--amber-500);
+    --lane-700: var(--amber-700);
+    --lane-800: var(--amber-800);
+    --lane-950: var(--amber-950);
+  }
+  .lane[data-lane="blocked"] {
+    --lane-50: var(--rose-50);
+    --lane-200: var(--rose-200);
+    --lane-300: var(--rose-300);
+    --lane-500: var(--rose-500);
+    --lane-700: var(--rose-700);
+    --lane-800: var(--rose-800);
+    --lane-950: var(--rose-950);
+  }
+  .lane[data-lane="ai_review"] {
+    --lane-50: var(--indigo-50);
+    --lane-200: var(--indigo-200);
+    --lane-300: var(--indigo-300);
+    --lane-500: var(--indigo-500);
+    --lane-700: var(--indigo-700);
+    --lane-800: var(--indigo-800);
+    --lane-950: var(--indigo-950);
+  }
+  .lane[data-lane="human_review"] {
+    --lane-50: var(--cyan-50);
+    --lane-200: var(--cyan-200);
+    --lane-300: var(--cyan-300);
+    --lane-500: var(--cyan-500);
+    --lane-700: var(--cyan-700);
+    --lane-800: var(--cyan-800);
+    --lane-950: var(--cyan-950);
+  }
+  .lane[data-lane="closed"] {
+    --lane-50: var(--emerald-50);
+    --lane-200: var(--emerald-200);
+    --lane-300: var(--emerald-300);
+    --lane-500: var(--emerald-500);
+    --lane-700: var(--emerald-700);
+    --lane-800: var(--emerald-800);
+    --lane-950: var(--emerald-950);
+  }
+  .lane-head {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: calc(72 * var(--u));
+    flex: 0 0 auto;
+    padding: calc(16 * var(--u)) calc(16 * var(--u)) calc(12 * var(--u));
+    border-bottom: calc(1 * var(--u)) solid color-mix(in oklch, var(--border) 80%, transparent);
+    background: var(--lane-head);
+  }
+  .lane-accent {
+    display: block;
+    width: calc(56 * var(--u));
+    height: calc(6 * var(--u));
+    border-radius: 999px;
+    background: var(--lane-500);
+  }
+  .lane[data-lane="open"] .lane-accent {
+    background: transparent;
+  }
+  .lane-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: calc(8 * var(--u));
+  }
+  .lane-name {
+    overflow: hidden;
+    font-size: calc(14 * var(--u));
+    font-weight: 600;
+    letter-spacing: calc(0.35 * var(--u));
+    text-transform: uppercase;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .lane-count {
+    display: inline-flex;
+    align-items: center;
+    height: calc(24 * var(--u));
+    padding: 0 calc(8 * var(--u));
+    border: calc(1 * var(--u)) solid var(--lane-count-border);
+    border-radius: 999px;
+    background: var(--card);
+    color: var(--lane-count-ink);
+    font-size: calc(11 * var(--u));
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .lane-body {
+    display: flex;
+    flex-direction: column;
+    gap: calc(12 * var(--u));
+    padding: calc(12 * var(--u));
+  }
+  .lane-rail {
+    display: none;
+  }
+  /* LaneEmptyState: min-h-28 rounded-xl border-dashed px-4, bg-card/80, and a 16px Inbox icon. */
+  .lane-empty {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: calc(4 * var(--u));
+    min-height: calc(112 * var(--u));
+    padding: 0 calc(16 * var(--u));
+    border: calc(1 * var(--u)) dashed var(--lane-empty-border);
+    border-radius: calc(16 * var(--u));
+    background: color-mix(in oklch, var(--card) 80%, transparent);
+    color: var(--lane-empty-ink);
+    text-align: center;
+    animation: lane-empty-in 0.3s ease-out;
+  }
+  .lane-body:not(:has(> .card, > .card-slot)) > .lane-empty {
+    display: flex;
+  }
+  .lane-empty .lucide {
+    width: calc(16 * var(--u));
+    height: calc(16 * var(--u));
+    opacity: 0.7;
+  }
+  .lane-empty p {
+    font-size: calc(12 * var(--u));
+    font-weight: 500;
+    line-height: calc(16 * var(--u));
+  }
+  @keyframes lane-empty-in {
+    from {
+      opacity: 0;
+    }
+  }
+  /* A collapsed lane is an empty lane at 36px. The same element expands when a task arrives. */
+  .lane[data-collapsed] {
+    width: calc(36 * var(--u));
+  }
+  .lane[data-collapsed] .lane-head {
+    align-items: center;
+    padding: calc(16 * var(--u)) calc(6 * var(--u)) calc(12 * var(--u));
+  }
+  .lane[data-collapsed] .lane-accent {
+    width: calc(16 * var(--u));
+    background: var(--lane-500);
+  }
+  .lane[data-collapsed] .lane-title,
+  .lane[data-collapsed] .lane-body {
+    display: none;
+  }
+  .lane-dot {
+    display: none;
+    place-items: center;
+    width: calc(20 * var(--u));
+    height: calc(20 * var(--u));
+    margin-bottom: calc(2 * var(--u));
+    border-radius: 50%;
+    background: var(--lane-500);
+    box-shadow: 0 0 0 calc(2 * var(--u)) var(--background);
+    color: var(--background);
+    font-size: calc(10 * var(--u));
+    font-weight: 600;
+  }
+  .lane[data-collapsed] .lane-dot {
+    display: grid;
+  }
+  .lane[data-collapsed] .lane-rail {
+    display: block;
+    width: calc(4 * var(--u));
+    height: calc(276 * var(--u));
+    margin: calc(20 * var(--u)) auto 0;
+    border-radius: 999px;
+    background: var(--lane-500);
+    opacity: 0.25;
+  }
+}

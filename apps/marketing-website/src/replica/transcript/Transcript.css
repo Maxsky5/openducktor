@@ -1,0 +1,7 @@
+@layer replica {
+  /* A session and its turns group the rows for the scenes. They take no box. */
+  .st-session,
+  .st-turn {
+    display: contents;
+  }
+}

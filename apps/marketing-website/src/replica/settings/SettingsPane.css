@@ -1,0 +1,43 @@
+@layer replica {
+  /*
+   * Settings replicas. Values copy packages/frontend/src/components/features/settings and
+   * components/ui at 1:1 in design pixels.
+   */
+  /* The content pane of a settings section, cropped from the Settings dialog. */
+  .set-pane {
+    --design-width: 760;
+    height: calc(620 * var(--u));
+    overflow: hidden;
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(16 * var(--u));
+    background: var(--popover);
+    color: var(--popover-foreground);
+    box-shadow: var(--shadow-sheet);
+  }
+  .set-content {
+    display: grid;
+    gap: calc(16 * var(--u));
+    padding: calc(16 * var(--u));
+  }
+  .set-heading {
+    display: grid;
+    gap: calc(8 * var(--u));
+  }
+  .set-title {
+    font-size: calc(14 * var(--u));
+    font-weight: 600;
+    line-height: calc(20 * var(--u));
+  }
+  .set-heading p {
+    color: var(--muted-foreground);
+    font-size: calc(12 * var(--u));
+    line-height: calc(16 * var(--u));
+  }
+  /* Narrow stages: the form stacks its fields, as below the md breakpoint. */
+  @container stage (width <= 560px) {
+    .set-pane {
+      --design-width: 420;
+      height: calc(700 * var(--u));
+    }
+  }
+}

@@ -1,0 +1,39 @@
+---
+// The Diagnostics sheet of the repository. The markup holds the last frame: every check passed.
+// The templates hold the states of the sections while the checks load and the runtimes start.
+import DiagBody from "../../replica/diagnostics/DiagBody.astro";
+import DiagnosticsSheet from "../../replica/diagnostics/DiagnosticsSheet.astro";
+import DiagSection from "../../replica/diagnostics/DiagSection.astro";
+import { WORKSPACE } from "../../sample/workspace";
+import { LOADING, SECTIONS } from "./diagnostics";
+import Scene from "../Scene.astro";
+import "./LocalView.css";
+---
+
+<Scene
+  name="local"
+  alt="The Diagnostics panel of the fieldnotes repository. The checks find Git, OpenCode, Codex, and Claude Code on the computer. OpenDucktor starts the three runtimes in the repository folder. OpenCode and Codex connect to the OpenDucktor MCP server, which has 14 tools. The task store is ready, and its SQLite database is in the home folder of the user."
+>
+  <DiagnosticsSheet repository={WORKSPACE}>
+    {
+      SECTIONS.map((section) => (
+        <DiagSection title={section.title} state={section.state} {...section.hooks} />
+      ))
+    }
+  </DiagnosticsSheet>
+  <Fragment slot="templates">
+    {
+      Object.entries(LOADING).map(([name, state]) => (
+        <template data-tpl={name}>
+          <div data-badge={state.badge} data-tone={state.tone}>
+            <DiagBody state={state} />
+          </div>
+        </template>
+      ))
+    }
+  </Fragment>
+</Scene>
+<script>
+  import { mountLocal } from "./scene";
+  mountLocal();
+</script>

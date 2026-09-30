@@ -1,0 +1,61 @@
+@layer replica {
+  /* Workspace rail. On macOS the window controls sit on the sidebar surface in a 40 pixel title
+     bar, and the rail starts under it. See app-shell.tsx and the Electron styles in styles.css. */
+  .rail {
+    display: flex;
+    flex-direction: column;
+    width: calc(56 * var(--u));
+    flex: 0 0 calc(56 * var(--u));
+    padding-top: calc(40 * var(--u));
+    background: linear-gradient(var(--sidebar) calc(40 * var(--u)), var(--workspace-rail) 0);
+    color: var(--foreground);
+  }
+  .rail-row {
+    display: flex;
+    justify-content: center;
+    padding: calc(8 * var(--u));
+  }
+  .rail-row[data-selected] {
+    background: var(--sidebar);
+  }
+  .rail .tile {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: calc(40 * var(--u));
+    height: calc(40 * var(--u));
+    border-radius: calc(12 * var(--u));
+    background: var(--workspace-rail-tile);
+    box-shadow: var(--shadow-sm);
+    font-size: calc(12 * var(--u));
+    font-weight: 600;
+    color: var(--foreground);
+  }
+  .rail .tile[data-selected] {
+    background: var(--sidebar-accent);
+    color: var(--sidebar-accent-foreground);
+  }
+  /* A badge straddles the top edge of the tile: two thirds sit over the tile. */
+  .tile-badge {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: calc(10 * var(--u));
+    height: calc(10 * var(--u));
+    border-radius: 50%;
+    background: var(--status-running);
+    transform: translateY(-33.333%);
+  }
+  .rail-add {
+    display: grid;
+    place-items: center;
+    align-self: center;
+    width: calc(40 * var(--u));
+    height: calc(40 * var(--u));
+    margin-top: calc(4 * var(--u));
+  }
+  .rail-add .lucide {
+    width: calc(20 * var(--u));
+    height: calc(20 * var(--u));
+  }
+}

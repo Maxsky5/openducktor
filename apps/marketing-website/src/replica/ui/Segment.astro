@@ -1,0 +1,17 @@
+---
+// SegmentedControlItem of components/ui/segmented-control.tsx, in a Segmented control. The active
+// item has `data-active`, and a disabled item has `data-disabled`.
+import type { HTMLAttributes } from "astro/types";
+import { flag } from "../flag";
+import "./Segment.css";
+
+type Props = HTMLAttributes<"span"> & { active?: boolean; disabled?: boolean };
+const { active = false, disabled = false, class: className, ...attributes } = Astro.props;
+---
+
+<span
+  class:list={["ui-segment", className]}
+  data-active={flag(active)}
+  data-disabled={flag(disabled)}
+  {...attributes}><slot /></span
+>

@@ -1,0 +1,23 @@
+---
+// The frame of a pending request of a session, above the composer. agent-session-question-card.tsx
+// and agent-session-approval-card.tsx share it: the header names the request, the meta slot holds
+// its status, and the slot holds its body.
+import type { AstroComponent } from "@lucide/astro";
+import type { HTMLAttributes } from "astro/types";
+import "./RequestCard.css";
+
+type Props = HTMLAttributes<"div"> & {
+  kind: "question" | "approval";
+  title: string;
+  icon: AstroComponent;
+};
+const { kind, title, icon: Icon, ...attributes } = Astro.props;
+---
+
+<div class="request" data-kind={kind} {...attributes}>
+  <div class="request-head">
+    <span><Icon />{title}</span>
+    <slot name="meta" />
+  </div>
+  <div class="request-body"><slot /></div>
+</div>

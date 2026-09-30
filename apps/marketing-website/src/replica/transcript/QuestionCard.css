@@ -1,0 +1,160 @@
+@layer replica {
+  .st-q-tabs {
+    display: flex;
+    gap: calc(4 * var(--u));
+  }
+  .st-q-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(4 * var(--u));
+    height: calc(28 * var(--u));
+    padding: 0 calc(8 * var(--u));
+    border: calc(1 * var(--u)) solid var(--input);
+    border-radius: calc(10 * var(--u));
+    background: var(--card);
+    font-size: calc(11 * var(--u));
+    font-weight: 500;
+  }
+  .st-q-tab[data-active] {
+    border-color: var(--selected-control);
+    background: var(--selected-control);
+    color: var(--selected-control-foreground);
+  }
+  .st-q-tab .check {
+    display: none;
+  }
+  .st-q-tab[data-answered] .check {
+    display: block;
+  }
+  .st-q-label {
+    color: var(--muted-foreground);
+    font-size: calc(11 * var(--u));
+    font-weight: 600;
+    letter-spacing: 0.025em;
+    text-transform: uppercase;
+  }
+  .st-q-text {
+    font-size: calc(13 * var(--u));
+    font-weight: 500;
+  }
+  .st-q-page {
+    display: grid;
+    justify-items: start;
+    gap: calc(8 * var(--u));
+  }
+  .st-q-page > * {
+    justify-self: stretch;
+  }
+  .st-q-page > .st-q-tab.other {
+    justify-self: start;
+    height: calc(24 * var(--u));
+    border-color: var(--input);
+    font-size: calc(11 * var(--u));
+  }
+  .st-q-tab[data-answered] .open {
+    display: none;
+  }
+  .st-option > .lucide {
+    margin-top: calc(2 * var(--u));
+    color: var(--muted-foreground);
+  }
+  .st-q-options {
+    display: grid;
+    gap: calc(4 * var(--u));
+  }
+  .st-option {
+    display: flex;
+    align-items: flex-start;
+    gap: calc(6 * var(--u));
+    min-height: calc(40 * var(--u));
+    padding: calc(4 * var(--u)) calc(8 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(10 * var(--u));
+    background: var(--card);
+  }
+  .st-option[data-selected] {
+    border-color: var(--muted-foreground);
+    background: var(--secondary);
+  }
+  .st-option .picked {
+    display: none;
+  }
+  .st-option[data-selected] .picked {
+    display: block;
+  }
+  .st-option[data-selected] .unpicked {
+    display: none;
+  }
+  .st-option[data-selected] > .lucide {
+    color: var(--foreground);
+  }
+  .st-option strong {
+    display: block;
+    font-size: calc(12 * var(--u));
+    font-weight: 500;
+    line-height: calc(16 * var(--u));
+  }
+  .st-option small {
+    display: block;
+    color: var(--muted-foreground);
+    font-size: calc(10 * var(--u));
+    line-height: calc(16 * var(--u));
+  }
+  .st-q-summary {
+    display: grid;
+    gap: calc(6 * var(--u));
+    padding: calc(6 * var(--u));
+    border: calc(1 * var(--u)) solid var(--input);
+    border-radius: calc(12 * var(--u));
+    background: var(--card);
+  }
+  .st-q-summary > div {
+    padding: calc(4 * var(--u)) calc(8 * var(--u));
+  }
+  .st-q-summary p:first-child {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(6 * var(--u));
+    color: var(--muted-foreground);
+    font-size: calc(11 * var(--u));
+    font-weight: 600;
+    letter-spacing: 0.025em;
+    text-transform: uppercase;
+  }
+  .st-q-summary p:first-child .lucide {
+    color: var(--success-accent);
+  }
+  .st-q-summary p:last-child {
+    margin-top: calc(2 * var(--u));
+    font-size: calc(12 * var(--u));
+  }
+  .st-q-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: calc(8 * var(--u));
+    padding-top: calc(6 * var(--u));
+    border-top: calc(1 * var(--u)) solid var(--input);
+  }
+  .st-q-foot p {
+    color: var(--muted-foreground);
+    font-size: calc(11 * var(--u));
+  }
+  .st-q-foot > span {
+    display: flex;
+    gap: calc(8 * var(--u));
+  }
+  /* The buttons of the footer are lower. */
+  .st-q-foot .ui-button {
+    height: calc(28 * var(--u));
+    padding: 0 calc(10 * var(--u));
+  }
+  /* Confirm Answers shows Submitting… while the answers submit. */
+  .st-q-confirm > span {
+    display: contents;
+  }
+  .st-q-confirm:not([data-submitting]) > .when-submitting,
+  .st-q-confirm[data-submitting] > .when-idle {
+    display: none;
+  }
+}

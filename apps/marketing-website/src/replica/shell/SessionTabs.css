@@ -1,0 +1,130 @@
+@layer replica {
+  /* Task tabs bar */
+  .st-tabs {
+    display: flex;
+    align-items: flex-end;
+    gap: calc(4 * var(--u));
+    height: calc(38 * var(--u));
+    flex: 0 0 auto;
+    padding: 0 calc(8 * var(--u));
+    background: var(--studio-chrome);
+    color: var(--studio-chrome-foreground);
+  }
+  .st-tab {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: calc(4 * var(--u));
+    height: calc(32 * var(--u));
+    max-width: calc(304 * var(--u));
+    padding: 0 calc(4 * var(--u)) 0 calc(8 * var(--u));
+    border-radius: calc(10 * var(--u)) calc(10 * var(--u)) 0 0;
+    background: var(--secondary);
+    color: var(--secondary-foreground);
+    font-size: calc(14 * var(--u));
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .st-tab[data-active] {
+    background: var(--card);
+    color: var(--foreground);
+  }
+  .st-tab[data-active]::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    bottom: calc(-1 * var(--u));
+    left: 0;
+    height: calc(1 * var(--u));
+    background: var(--card);
+  }
+  .st-tab-status {
+    display: grid;
+    place-items: center;
+    width: calc(20 * var(--u));
+    height: calc(20 * var(--u));
+    flex: 0 0 auto;
+  }
+  .st-tab-title {
+    max-width: calc(208 * var(--u));
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .st-tab-close {
+    display: grid;
+    place-items: center;
+    margin-right: calc(4 * var(--u));
+    padding: calc(4 * var(--u));
+    border-radius: calc(10 * var(--u));
+    color: var(--muted-foreground);
+    opacity: 0.6;
+  }
+  .st-tab[data-active] .st-tab-close {
+    opacity: 1;
+  }
+  .st-tabs-add {
+    display: grid;
+    place-items: center;
+    width: calc(32 * var(--u));
+    height: calc(32 * var(--u));
+  }
+  .st-tabs-tools {
+    display: flex;
+    align-items: center;
+    gap: calc(4 * var(--u));
+    height: calc(32 * var(--u));
+    margin-left: auto;
+  }
+  .st-tabs-tools span {
+    display: grid;
+    place-items: center;
+    width: calc(32 * var(--u));
+    height: calc(32 * var(--u));
+  }
+  /* Session status marks: working, waiting for input, idle. */
+  .run-dot {
+    position: relative;
+    display: block;
+    width: calc(12 * var(--u));
+    height: calc(12 * var(--u));
+    margin: calc(1 * var(--u));
+    border-radius: 50%;
+    background: var(--status-running);
+  }
+  .run-dot::before,
+  .run-dot::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: var(--status-running);
+    animation: run-pulse 1350ms ease-out infinite;
+  }
+  .run-dot::after {
+    animation-delay: 675ms;
+  }
+  @keyframes run-pulse {
+    from {
+      opacity: 0.55;
+      transform: scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: scale(2.4);
+    }
+  }
+  .wait-mark {
+    color: var(--warning-accent);
+  }
+  .idle-mark {
+    fill: var(--input);
+    color: var(--input);
+  }
+  /* The status shows the mark of the activity of its session. */
+  .st-tab-status:not([data-activity="working"]) > [data-mark="working"],
+  .st-tab-status:not([data-activity="waiting"]) > [data-mark="waiting"],
+  .st-tab-status:not([data-activity="idle"]) > [data-mark="idle"] {
+    display: none;
+  }
+}

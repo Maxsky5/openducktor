@@ -1,0 +1,98 @@
+---
+// The header of the Agent Studio chat column: the task title and id, the session history, the quick
+// action, and the workflow rail with one step for each role. Sources: agent-studio-header.tsx and
+// agent-studio-header-workflow-rail.tsx. The History icon of the product is RotateCcwClock in
+// Lucide 1.
+import {
+  Bot,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Circle,
+  CircleDashed,
+  Copy,
+  ExternalLink,
+  LoaderCircle,
+  RotateCcwClock,
+  ShieldCheck,
+  Sparkles,
+  TriangleAlert,
+  Wrench,
+  Zap,
+} from "@lucide/astro";
+import type { StudioFrame } from "../../sample/studio";
+import { flag } from "../flag";
+import Button from "../ui/Button.astro";
+import "./StudioHeader.css";
+
+interface Props {
+  title: string;
+  /** The full id of the task, such as fieldnotes-k3x9. */
+  task: string;
+  frame: StudioFrame;
+}
+const { title, task, frame } = Astro.props;
+const roles = [
+  { id: "spec", label: "Spec", Icon: Sparkles },
+  { id: "planner", label: "Planner", Icon: Bot },
+  { id: "build", label: "Builder", Icon: Wrench },
+  { id: "qa", label: "QA", Icon: ShieldCheck },
+];
+---
+
+<div class="st-header">
+  <div class="st-head-row">
+    <div class="st-head-title">
+      <div class="st-task-title">{title}</div>
+      <div class="st-head-id">
+        <code>{task}</code><span class="st-copy"><Copy class="i12" /></span>
+        <span class="st-open"><ExternalLink class="i12" />Open</span>
+      </div>
+    </div>
+    <div class="st-head-actions">
+      <Button variant="outline" size="icon" class="st-history"><RotateCcwClock /></Button>
+      <span class="st-split" data-disabled={flag(frame.actionDisabled)} data-split>
+        <Button variant="accent" size="sm" class="st-split-main" data-quick-action
+          ><Zap /><span data-action>{frame.action}</span></Button
+        >
+        <Button variant="accent" size="sm" class="st-split-menu"><ChevronDown /></Button>
+      </span>
+    </div>
+  </div>
+  <div class="st-rail">
+    <div class="st-rail-steps">
+      {
+        roles.map(({ id, label, Icon }, index) => {
+          const next = roles[index + 1];
+          return (
+            <span class="st-rail-item">
+              <span
+                class="st-step"
+                data-step={id}
+                data-tone={frame.tones[index]}
+                aria-pressed={id === frame.selected ? "true" : "false"}
+              >
+                <Icon class="st-step-icon" />
+                {label}
+                <span class="st-step-state">
+                  <Check class="i14 done" />
+                  <LoaderCircle class="i14 spin working" />
+                  <CircleDashed class="i14 waiting" />
+                  <TriangleAlert class="i14 alert" />
+                  <Circle class="i12 available" />
+                </span>
+              </span>
+              {next && (
+                <ChevronRight
+                  class="st-link"
+                  data-link={next.id}
+                  data-tone={frame.tones[index + 1]}
+                />
+              )}
+            </span>
+          );
+        })
+      }
+    </div>
+  </div>
+</div>

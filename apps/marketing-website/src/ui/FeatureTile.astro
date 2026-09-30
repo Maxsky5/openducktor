@@ -1,0 +1,23 @@
+---
+// A tile of the features grid: the label, the title, and the text of a tool, then its product view
+// in the view slot. A full tile spans the grid, and two half tiles share a row.
+import "./FeatureTile.css";
+
+interface Props {
+  /** The id of the title, which names the tile. */
+  id: string;
+  label: string;
+  title: string;
+  size: "full" | "half";
+}
+const { id, label, title, size } = Astro.props;
+---
+
+<article class:list={["feature-tile", size]} aria-labelledby={id}>
+  <div class="feature-copy">
+    <p class="feature-label">{label}</p>
+    <h3 id={id}>{title}</h3>
+    <p><slot /></p>
+  </div>
+  <div class="feature-visual"><slot name="view" /></div>
+</article>

@@ -1,0 +1,39 @@
+---
+// The toolbar of the task panel in shared-tools-panel.tsx: one tab for each panel, then the pull
+// request and the Open In group, which the slot holds. The Document and CI Checks tabs show only
+// when the role or the task has them.
+import { FileText, FolderTree, GitBranch, ListChecks } from "@lucide/astro";
+import type { StudioFrame } from "../../sample/studio";
+import "./PanelBar.css";
+import { flag } from "../flag";
+
+interface Props {
+  frame: StudioFrame;
+}
+const { frame } = Astro.props;
+const tabs = [
+  { id: "document", Icon: FileText, shown: frame.documentTab },
+  { id: "git", Icon: GitBranch, shown: true },
+  { id: "file_explorer", Icon: FolderTree, shown: true },
+  { id: "ci_checks", Icon: ListChecks, shown: frame.checksTab },
+];
+---
+
+<div class="st-pbar">
+  <span class="st-ptabs">
+    {
+      tabs.map(({ id, Icon, shown }, index) => (
+        <span class="st-ptab-item" hidden={!shown} data-ptab-item={id}>
+          {index > 0 && <span class="st-psep" />}
+          <span class="st-ptab" data-active={flag(id === frame.panel)} data-ptab={id}>
+            <span>
+              <Icon class="i20" />
+            </span>
+            {id === "ci_checks" && <i data-checks="passing" data-ci />}
+          </span>
+        </span>
+      ))
+    }
+  </span>
+  <span class="st-pbar-end"><slot /></span>
+</div>

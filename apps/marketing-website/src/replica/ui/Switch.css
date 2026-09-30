@@ -1,0 +1,32 @@
+@layer product {
+  /* Switch: h-5 w-9 rounded-full border-2 border-transparent shadow-xs transition-colors, with
+     bg-input, or bg-switch-checked when checked. */
+  .ui-switch {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    width: calc(36 * var(--u));
+    height: calc(20 * var(--u));
+    border: calc(2 * var(--u)) solid transparent;
+    border-radius: 999px;
+    background: var(--input);
+    box-shadow: var(--shadow-xs);
+    transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .ui-switch[data-checked] {
+    background: var(--switch-checked);
+  }
+  /* The thumb: size-4 rounded-full bg-switch-thumb shadow-lg transition-transform. */
+  .ui-switch-thumb {
+    display: block;
+    width: calc(16 * var(--u));
+    height: calc(16 * var(--u));
+    border-radius: 50%;
+    background: var(--switch-thumb);
+    box-shadow: var(--shadow-lg);
+    transition: transform 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .ui-switch[data-checked] > .ui-switch-thumb {
+    transform: translateX(calc(16 * var(--u)));
+  }
+}

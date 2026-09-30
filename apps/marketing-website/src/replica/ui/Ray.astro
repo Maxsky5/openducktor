@@ -1,0 +1,12 @@
+---
+// The running border ray of the desktop styles, on a task card or the composer. The ray circles
+// the box of its parent. The parent shows it while an agent works, and sets its stroke and speed.
+import "./Ray.css";
+
+interface Props {
+  class: string;
+}
+const { class: className } = Astro.props;
+---
+
+<svg class:list={["ui-ray", className]} aria-hidden="true"><rect pathLength="100"></rect></svg>

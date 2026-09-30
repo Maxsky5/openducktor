@@ -1,0 +1,25 @@
+---
+// A product view that plays a scene. The stage holds the copied UI, which is hidden from assistive
+// technology, and `alt` says what the scene shows. The templates slot holds the markup that the
+// scene clones.
+interface Props {
+  /** The name of the scene, which its script mounts. */
+  name: string;
+  /** What the scene shows, in a sentence or two for assistive technology. */
+  alt: string;
+  /** The class of the stage, for a view that sizes its stage. */
+  class?: string;
+}
+const { name, alt, class: className } = Astro.props;
+---
+
+<div class="scene" data-scene={name}>
+  <div class:list={["stage", className]} data-stage role="img" aria-label={alt}><slot /></div>
+  {
+    Astro.slots.has("templates") && (
+      <div hidden>
+        <slot name="templates" />
+      </div>
+    )
+  }
+</div>

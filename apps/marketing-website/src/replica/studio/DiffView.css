@@ -1,0 +1,110 @@
+@layer replica {
+  /* Diff: unified view with Pierre colors. */
+  .st-diff {
+    /* The colors of @pierre/diffs and of the GitHub syntax themes. */
+    --diff-add: #18a46c;
+    --diff-number: #595959;
+    --syntax-keyword: #cf222e;
+    --syntax-string: #0a3069;
+    --syntax-function: #8250df;
+    --syntax-constant: #0550ae;
+    --syntax-comment: #6e7781;
+    margin: 0 calc(12 * var(--u)) calc(8 * var(--u));
+    overflow: hidden;
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(8 * var(--u));
+    background: var(--card);
+    font-family: var(--mono);
+    font-size: calc(12 * var(--u));
+    line-height: 1.5;
+  }
+  :where(:root[data-theme="dark"]) .st-diff {
+    --diff-add: #07c480;
+    --diff-number: #8f9aab;
+    --syntax-keyword: #ff7b72;
+    --syntax-string: #a5d6ff;
+    --syntax-function: #d2a8ff;
+    --syntax-constant: #79c0ff;
+    --syntax-comment: #8b949e;
+  }
+  .st-line {
+    position: relative;
+    display: grid;
+    grid-template-columns: calc(40 * var(--u)) minmax(0, 1fr);
+    white-space: pre;
+  }
+  .st-line > span:first-child {
+    padding-right: calc(10 * var(--u));
+    color: var(--diff-number);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .st-line > code {
+    overflow: hidden;
+    padding-left: calc(12 * var(--u));
+    font: inherit;
+    text-overflow: ellipsis;
+  }
+  .st-line.add {
+    background: color-mix(in lab, var(--card) 88%, var(--diff-add));
+  }
+  .st-line.add > span:first-child {
+    background: color-mix(in lab, var(--card) 91%, var(--diff-add));
+    color: var(--diff-add);
+  }
+  .st-line.add::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(40 * var(--u));
+    width: calc(4 * var(--u));
+    background: var(--diff-add);
+  }
+  .st-plus {
+    position: absolute;
+    top: 0;
+    left: calc(26 * var(--u));
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    width: calc(18 * var(--u));
+    height: calc(18 * var(--u));
+    border-radius: calc(4 * var(--u));
+    background: #009fff;
+    color: #fff;
+    opacity: 0;
+  }
+  .st-line[data-hover] .st-plus {
+    opacity: 1;
+  }
+  .tk-k {
+    color: var(--syntax-keyword);
+  }
+  .tk-s {
+    color: var(--syntax-string);
+  }
+  .tk-f {
+    color: var(--syntax-function);
+  }
+  .tk-c {
+    color: var(--syntax-constant);
+  }
+  .tk-m {
+    color: var(--syntax-comment);
+  }
+  /* A diff line that the agent just changed. */
+  .st-line[data-flash]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: color-mix(in oklch, var(--diff-add) 32%, transparent);
+    pointer-events: none;
+    animation: line-flash 1.6s ease-out forwards;
+  }
+  @keyframes line-flash {
+    to {
+      opacity: 0;
+    }
+  }
+}

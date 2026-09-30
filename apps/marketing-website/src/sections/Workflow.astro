@@ -1,0 +1,17 @@
+---
+import SectionHead from "../ui/SectionHead.astro";
+import WorkflowView from "../views/workflow/WorkflowView.astro";
+---
+
+<section id="workflow" class="section workflow" aria-labelledby="workflow-title">
+  <SectionHead eyebrow="Workflow" id="workflow-title" class="wrap">
+    <Fragment slot="title"
+      >From a <span class="nobreak">one-line</span> request to a merged pull request.</Fragment
+    >
+    <p>
+      Each step has its own agent role and saves its work with the task. You start each step, or let
+      Autopilot start it. You answer questions, approve commands, and review the diff.
+    </p>
+  </SectionHead>
+  <WorkflowView />
+</section>

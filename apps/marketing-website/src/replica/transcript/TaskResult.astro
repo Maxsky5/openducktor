@@ -1,0 +1,43 @@
+---
+// The task card under a create_task tool row: TaskResultCard of agent-chat-task-tool.tsx.
+import { Copy, SquareArrowOutUpRight, Tag } from "@lucide/astro";
+import TaskBadges from "../board/TaskBadges.astro";
+import { taskId } from "../../sample/workspace";
+import type { ChatTask } from "../../sample/chat";
+import "./TaskResult.css";
+
+interface Props {
+  task: ChatTask;
+}
+const { task } = Astro.props;
+// The description preview renders inline code spans, as the compact Markdown renderer does.
+const parts = task.description.split("`");
+---
+
+<div class="ch-task" data-task={task.id}>
+  <div class="ch-task-head">
+    <div class="ch-task-title">{task.title}</div>
+    <div class="ch-task-id">
+      <span><code>{taskId(task.id)}</code><Copy class="i12" /></span>
+      <span class="ch-open"><SquareArrowOutUpRight class="i12" />Open</span>
+    </div>
+  </div>
+  <div class="ch-task-body">
+    <TaskBadges kind={task.kind} priority={task.priority}
+      ><span class="ch-status">Backlog</span></TaskBadges
+    >
+    <p class="ch-task-text">
+      {parts.map((part, index) => (index % 2 === 1 ? <code>{part}</code> : part))}
+    </p>
+    <div class="ch-labels">
+      {
+        task.labels.map((name) => (
+          <span class="ch-label">
+            <Tag class="i12" />
+            {name}
+          </span>
+        ))
+      }
+    </div>
+  </div>
+</div>

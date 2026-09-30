@@ -1,0 +1,40 @@
+---
+import Pointer from "../../replica/shell/Pointer.astro";
+import { modelKey, ROLE_DEFAULTS, SPEC_AFTER } from "../../sample/models";
+import RoleDefault from "../../replica/settings/RoleDefault.astro";
+import SettingsPane from "../../replica/settings/SettingsPane.astro";
+import Scene from "../Scene.astro";
+---
+
+<Scene
+  name="runtimes"
+  alt="The per-role agent defaults of a repository. You open the model picker of the Spec role, look at the OpenCode and Codex models, and choose Lyra 3 in the Claude runtime. The Planner and the Builder use Codex, and QA uses OpenCode."
+>
+  <SettingsPane data-pane>
+    <div class="set-content">
+      <div class="set-heading">
+        <div class="set-title">Agent Defaults (Per Role)</div>
+        <p>Defaults are applied when starting sessions in this repository.</p>
+      </div>
+      <div class="role-list">
+        {
+          ROLE_DEFAULTS.map((item) => (
+            <RoleDefault
+              {...item}
+              picker={
+                item.role === "spec"
+                  ? { view: SPEC_AFTER.runtime, selected: modelKey(SPEC_AFTER) }
+                  : undefined
+              }
+            />
+          ))
+        }
+      </div>
+    </div>
+    <Pointer />
+  </SettingsPane>
+</Scene>
+<script>
+  import { mountRuntimes } from "./scene";
+  mountRuntimes();
+</script>

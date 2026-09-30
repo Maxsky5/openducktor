@@ -1,0 +1,39 @@
+@layer site {
+  /* Footer */
+  .site-footer {
+    border-top: 1px solid var(--line);
+  }
+  /* The links go to the start of a new line when the row wraps. */
+  .footer-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px 24px;
+    padding-block: 28px;
+  }
+  .footer-about {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 24px;
+  }
+  .footer-row p,
+  .footer-row nav {
+    color: var(--body-ink);
+    font-size: 0.8125rem;
+  }
+  .footer-row nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 22px;
+  }
+  .footer-row nav a {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .footer-row nav a:hover {
+    color: var(--accent-ink);
+  }
+}

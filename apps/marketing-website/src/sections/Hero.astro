@@ -1,0 +1,53 @@
+---
+import { ArrowUpRight } from "@lucide/astro";
+import { claim, desktopInstalls, links, nodeVersion } from "../content/site";
+import DownloadActions from "../ui/DownloadActions.astro";
+import GithubMark from "../ui/GithubMark.astro";
+import HeroView from "../views/hero/HeroView.astro";
+import "./Hero.css";
+---
+
+<section class="hero" aria-labelledby="hero-title">
+  <div class="wrap hero-copy">
+    <h1 id="hero-title">
+      <span class="line">{claim[0]}</span>{" "}
+      <span class="line quiet">{claim[1]}.</span>
+    </h1>
+    <div class="hero-intro">
+      <p class="lede">
+        OpenDucktor orchestrates your coding agents: OpenCode, Codex, and Claude Code. They write
+        the spec and the plan, build each task in its own Git worktree, and pass a QA review before
+        yours.
+      </p>
+      <p class="hero-source">
+        <GithubMark size={16} /><span
+          >Free and open source under the Apache License 2.0.{" "}<a
+            class="text-link"
+            href={links.github}>Read the code on GitHub<ArrowUpRight size={14} /></a
+          ></span
+        >
+      </p>
+    </div>
+    <div class="hero-cta">
+      <DownloadActions />
+      <p class="hero-note">
+        For macOS, Windows, and Linux. The browser version needs Node.js {nodeVersion} or later.
+      </p>
+      <div class="hero-installs">
+        <span id="hero-installs-title">Install from a terminal</span>
+        <ul aria-labelledby="hero-installs-title">
+          {
+            desktopInstalls.map((method) => (
+              <li>
+                <a href={`#install-${method.id}`}>{method.title}</a>
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="hero-visual">
+    <HeroView />
+  </div>
+</section>

@@ -1,0 +1,56 @@
+---
+// One role card of settings-repository-agents-section.tsx: the role label, Clear, and the
+// Runtime and Model, Agent Profile, and Effort fields. Only OpenCode supports agent profiles.
+// The trigger holds the three runtime logos and `data-runtime` shows one, so a scene can
+// change the runtime without new markup.
+import RuntimeIcon from "../ui/RuntimeIcon.astro";
+import ModelPicker from "./ModelPicker.astro";
+import { modelName, RUNTIMES, type RoleDefault, type RuntimeKind } from "../../sample/models";
+import { flag } from "../flag";
+import Button from "../ui/Button.astro";
+import Combobox from "../ui/Combobox.astro";
+import "./RoleDefault.css";
+
+type Props = RoleDefault & { picker?: { view: RuntimeKind; selected: string } | undefined };
+const { role, label, runtime, model, profile, variant, picker } = Astro.props;
+---
+
+<div class="set-card role-card" data-role={role}>
+  <div class="role-head">
+    <p>{label}</p>
+    <Button variant="ghost" size="sm">Clear</Button>
+  </div>
+  <div class="role-fields">
+    <div class="set-field">
+      <span class="set-label">Runtime and Model</span>
+      <Combobox data-model-trigger>
+        <span class="rt-swap" data-runtime={runtime} data-runtime-logos>
+          {RUNTIMES.map((kind) => <RuntimeIcon kind={kind} />)}
+        </span>
+        <span data-model-name>{modelName({ runtime, model })}</span>
+      </Combobox>
+      {picker && <ModelPicker {...picker} />}
+    </div>
+    <div class="set-field">
+      <span class="set-label">Agent Profile</span>
+      <Combobox data-disabled={flag(!profile)}>
+        {
+          profile ? (
+            <>
+              <i class="profile-dot" />
+              <span>{profile}</span>
+            </>
+          ) : (
+            <span class="set-placeholder">Not supported by runtime</span>
+          )
+        }
+      </Combobox>
+    </div>
+    <div class="set-field">
+      <span class="set-label">Effort</span>
+      <Combobox>
+        <span>{variant}</span>
+      </Combobox>
+    </div>
+  </div>
+</div>

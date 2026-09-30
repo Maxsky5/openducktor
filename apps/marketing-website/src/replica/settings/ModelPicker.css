@@ -1,0 +1,163 @@
+@layer replica {
+  /* Model picker popover: w-[min(42rem,...)], a 3.5rem rail, and the search and model list. */
+  .mp {
+    position: absolute;
+    top: calc(100% + 4 * var(--u));
+    left: 0;
+    z-index: 20;
+    display: grid;
+    grid-template-columns: calc(56 * var(--u)) minmax(0, 1fr);
+    width: calc(672 * var(--u));
+    overflow: hidden;
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(10 * var(--u));
+    background: var(--popover);
+    box-shadow:
+      0 calc(10 * var(--u)) calc(15 * var(--u)) calc(-3 * var(--u)) rgb(15 23 42 / 0.12),
+      0 calc(4 * var(--u)) calc(6 * var(--u)) calc(-4 * var(--u)) rgb(15 23 42 / 0.1);
+    transform-origin: top left;
+  }
+  .mp-rail {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: calc(4 * var(--u));
+    padding: calc(8 * var(--u));
+    border-right: calc(1 * var(--u)) solid var(--border);
+    background: color-mix(in oklch, var(--muted) 40%, transparent);
+  }
+  .mp-rail-button {
+    display: grid;
+    place-items: center;
+    width: calc(36 * var(--u));
+    height: calc(36 * var(--u));
+    border-radius: calc(10 * var(--u));
+    transition:
+      background-color 0.2s,
+      box-shadow 0.2s;
+  }
+  .mp[data-view="opencode"] [data-rail="opencode"],
+  .mp[data-view="codex"] [data-rail="codex"],
+  .mp[data-view="claude"] [data-rail="claude"] {
+    background: var(--secondary);
+    box-shadow: 0 0 0 calc(1 * var(--u)) var(--ring);
+  }
+  .mp-main {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .mp-search {
+    padding: calc(8 * var(--u));
+    border-bottom: calc(1 * var(--u)) solid var(--border);
+  }
+  /* The picker moves the focus to the search field when it opens. */
+  .mp-input {
+    display: flex;
+    align-items: center;
+    height: calc(36 * var(--u));
+    padding: 0 calc(12 * var(--u));
+    border: calc(1 * var(--u)) solid var(--ring);
+    border-radius: calc(10 * var(--u));
+    box-shadow: 0 0 0 calc(3 * var(--u)) color-mix(in oklch, var(--ring) 50%, transparent);
+    color: var(--muted-foreground);
+    font-size: calc(14 * var(--u));
+  }
+  .mp-list {
+    display: grid;
+    gap: calc(4 * var(--u));
+    margin: 0;
+    padding: calc(4 * var(--u));
+    list-style: none;
+  }
+  .mp[data-view="opencode"] .mp-list:not([data-list="opencode"]),
+  .mp[data-view="codex"] .mp-list:not([data-list="codex"]),
+  .mp[data-view="claude"] .mp-list:not([data-list="claude"]) {
+    display: none;
+  }
+  .mp-row {
+    display: flex;
+    align-items: center;
+    gap: calc(4 * var(--u));
+    min-width: 0;
+    border-radius: calc(10 * var(--u));
+  }
+  /* bg-accent. The product accent is the muted color, and the site uses --accent for its brand. */
+  .mp-row[data-selected] {
+    background: var(--muted);
+    color: var(--accent-foreground);
+  }
+  .mp-pick {
+    position: relative;
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    min-width: 0;
+    min-height: calc(48 * var(--u));
+    padding: calc(8 * var(--u)) calc(12 * var(--u));
+  }
+  .mp-row[data-selected] .mp-pick::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: calc(4 * var(--u));
+    height: calc(24 * var(--u));
+    border-radius: 0 999px 999px 0;
+    background: var(--primary);
+    transform: translateY(-50%);
+  }
+  .mp-name {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .mp-name b,
+  .mp-name small {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .mp-name b {
+    font-weight: 500;
+  }
+  .mp-name small {
+    color: var(--muted-foreground);
+    font-size: calc(12 * var(--u));
+    line-height: calc(16 * var(--u));
+  }
+  .mp-row[data-selected] .mp-name small,
+  .mp-row[data-selected] .mp-meta {
+    color: var(--accent-foreground);
+  }
+  .mp-meta {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: calc(4 * var(--u));
+    margin-left: auto;
+    color: var(--muted-foreground);
+    font-size: calc(12 * var(--u));
+  }
+  .mp-meta span {
+    margin-left: calc(4 * var(--u));
+  }
+  .mp-star {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: calc(28 * var(--u));
+    height: calc(28 * var(--u));
+    margin-right: calc(4 * var(--u));
+  }
+  @container stage (width <= 560px) {
+    .mp {
+      width: calc(100cqw - 48 * var(--u));
+    }
+    .mp-meta span {
+      display: none;
+    }
+  }
+}

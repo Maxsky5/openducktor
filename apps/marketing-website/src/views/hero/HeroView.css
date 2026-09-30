@@ -1,0 +1,31 @@
+@layer views {
+  .hero-window {
+    height: calc(700 * var(--u));
+  }
+  /* A tablet stage keeps the scale of the product, and the window has no sidebar there. The board
+     shows the lanes that fit. */
+  @container stage (481px <= width <= 959px) {
+    .hero-window {
+      --u: clamp(0.8px, calc(100cqw / 760), 1px);
+      height: calc(600 * var(--u));
+    }
+  }
+  /* Narrow stages crop the hero board to one lane and drop the app chrome. */
+  @container stage (width <= 480px) {
+    .hero-window {
+      --design-width: 440;
+      height: calc(720 * var(--u));
+    }
+    .hero-window .lane {
+      width: calc(360 * var(--u));
+    }
+    .hero-window .lane[data-collapsed] {
+      width: calc(36 * var(--u));
+    }
+    .hero-window .toast-stack {
+      right: calc(16 * var(--u));
+      bottom: calc(16 * var(--u));
+      width: calc(340 * var(--u));
+    }
+  }
+}

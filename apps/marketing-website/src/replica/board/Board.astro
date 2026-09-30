@@ -1,0 +1,33 @@
+---
+// The lanes of the Kanban board. The track can be wider than the viewport, so a scene can move it.
+// An empty lane is collapsed, as with the Collapsed display for empty columns.
+import Lane from "./Lane.astro";
+import type { BoardData } from "./model";
+import TaskCard from "./TaskCard.astro";
+import { LANES, type LaneId } from "../vocabulary";
+import "./Board.css";
+
+interface Props {
+  board: BoardData;
+  /** The lanes that the view shows. A cropped board shows the first lanes only. */
+  lanes?: readonly LaneId[];
+}
+const { board, lanes = LANES } = Astro.props;
+---
+
+<div class="board-viewport">
+  <div class="board-track" data-board-track>
+    {
+      lanes.map((status) => {
+        const cards = board[status] ?? [];
+        return (
+          <Lane status={status} count={cards.length} collapsed={cards.length === 0}>
+            {cards.map((card) => (
+              <TaskCard {...card} />
+            ))}
+          </Lane>
+        );
+      })
+    }
+  </div>
+</div>

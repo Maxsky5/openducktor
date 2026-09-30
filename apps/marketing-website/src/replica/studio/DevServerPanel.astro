@@ -1,0 +1,77 @@
+---
+// The builder dev servers under the task tools of Agent Studio. Sources: shared-tools-panel.tsx and
+// agent-studio-dev-server-panel.tsx in packages/frontend/src/components/features/agents. The panel
+// is compact until a script starts. Then the tools and the terminals share a vertical split.
+import { Copy, Play, RefreshCw, Settings, Square } from "@lucide/astro";
+import { type DevServer, WORKTREE_PATH } from "../../sample/worktree";
+import { flag } from "../flag";
+import Button from "../ui/Button.astro";
+import ResizeHandle from "../ui/ResizeHandle.astro";
+import "./DevServerPanel.css";
+
+interface Props {
+  servers: DevServer[];
+  active: string;
+}
+const { servers, active } = Astro.props;
+---
+
+<div class="dev" data-dev="expanded">
+  <div class="dev-compact">
+    <Button size="sm" class="dev-start" data-start
+      ><Play /><span data-start-label>Start dev servers</span></Button
+    >
+    <Button variant="outline" size="sm" class="dev-settings"><Settings /></Button>
+  </div>
+  <ResizeHandle orientation="horizontal" class="dev-split" />
+  <div class="dev-expanded">
+    <div class="dev-head">
+      <div class="dev-actions">
+        <Button size="sm" variant="destructive" class="dev-action dev-stop" data-dev-action
+          ><Square class="i14" />Stop</Button
+        >
+        <Button size="sm" variant="outline" class="dev-action" data-dev-action
+          ><RefreshCw />Restart</Button
+        >
+      </div>
+      <div class="dev-where">
+        <p>Running in {WORKTREE_PATH}</p>
+        <span><Copy class="i14" /></span>
+      </div>
+    </div>
+    <div class="dev-terminals">
+      <div class="dev-tabs">
+        {
+          servers.map((server) => (
+            <span class="dev-tab" data-active={flag(server.id === active)} data-tab={server.id}>
+              <span class="dev-prompt">&gt;_</span>
+              <span class="dev-name">{server.name}</span>
+              <i class="dev-dot" data-dot data-status="running" />
+            </span>
+          ))
+        }
+      </div>
+      {
+        servers.map((server) => (
+          <div class="dev-content" data-content={server.id} hidden={server.id !== active}>
+            <div class="dev-command">
+              <span>$</span>
+              <span>{server.command}</span>
+            </div>
+            <div class="dev-output">
+              <div class="dev-rows">
+                {server.lines.map((line) => (
+                  <p class="dev-line" data-dev-line>
+                    {line.map((part) => (
+                      <span class={part.tone}>{part.text}</span>
+                    ))}
+                  </p>
+                ))}
+              </div>
+            </div>
+          </div>
+        ))
+      }
+    </div>
+  </div>
+</div>

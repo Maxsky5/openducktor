@@ -1,0 +1,133 @@
+@layer product {
+  /*
+   * Product replicas. Values copy the OpenDucktor desktop classes at 1:1 in design pixels.
+   * `--u` is one design pixel. A replica scales with its stage width, so its layout stays
+   * identical at every size. Registering `--u` as a length makes nested elements inherit
+   * the computed value instead of resolving `cqw` against another container.
+   */
+  @property --u {
+    syntax: "<length>";
+    inherits: true;
+    initial-value: 1px;
+  }
+  /* The stage of a product view. The views adapt the copied UI to its width. */
+  .stage {
+    container: stage / inline-size;
+    position: relative;
+  }
+  /* A stage wider than the design width gives the extra room to the layout, not to the scale. */
+  .replica {
+    /* The width of the product view that the stage shows at full size. A view can change it. */
+    --design-width: 1440;
+    --u: min(1.05px, calc(100cqw / var(--design-width)));
+    position: relative;
+    font-family: "Space Grotesk Variable", "Space Grotesk", sans-serif;
+    font-size: calc(14 * var(--u));
+    line-height: 1.43;
+    color: var(--foreground);
+    text-align: left;
+    letter-spacing: 0;
+    user-select: none;
+    -webkit-font-smoothing: antialiased;
+    --mono: "IBM Plex Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-sm: 0 1px 3px 0 rgb(15 23 42 / 0.1), 0 1px 2px -1px rgb(15 23 42 / 0.1);
+    --shadow-md: 0 4px 6px -1px rgb(15 23 42 / 0.1), 0 2px 4px -2px rgb(15 23 42 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    /* A product window, and a sheet or a pane of the settings, over the page. In the dark theme, a
+       thin light ring takes the place of the contact shadow. */
+    --shadow-window:
+      0 calc(40 * var(--u)) calc(90 * var(--u)) calc(-30 * var(--u)) rgb(24 33 58 / 0.32),
+      0 calc(2 * var(--u)) calc(6 * var(--u)) rgb(24 33 58 / 0.06),
+      0 0 0 calc(1 * var(--u)) transparent;
+    --shadow-sheet:
+      0 calc(30 * var(--u)) calc(70 * var(--u)) calc(-30 * var(--u)) rgb(24 33 58 / 0.3),
+      0 calc(2 * var(--u)) calc(6 * var(--u)) rgb(24 33 58 / 0.06),
+      0 0 0 calc(1 * var(--u)) transparent;
+  }
+  :where(:root[data-theme="dark"]) .replica {
+    --shadow-window:
+      0 calc(40 * var(--u)) calc(90 * var(--u)) calc(-30 * var(--u)) rgb(0 0 0 / 0.7),
+      0 calc(2 * var(--u)) calc(6 * var(--u)) transparent,
+      0 0 0 calc(1 * var(--u)) rgb(255 255 255 / 0.04);
+    --shadow-sheet:
+      0 calc(30 * var(--u)) calc(70 * var(--u)) calc(-30 * var(--u)) rgb(0 0 0 / 0.7),
+      0 calc(2 * var(--u)) calc(6 * var(--u)) transparent,
+      0 0 0 calc(1 * var(--u)) rgb(255 255 255 / 0.04);
+  }
+  /* The accent of the runtime of the sessions in a window, as agent-chat-message-card.tsx uses it. */
+  [data-runtime="codex"] {
+    --runtime-accent: var(--odt-runtime-accent-codex);
+  }
+  [data-runtime="claude"] {
+    --runtime-accent: var(--odt-runtime-accent-claude);
+  }
+  .replica svg {
+    stroke-width: 2;
+  }
+  .replica .lucide {
+    width: calc(16 * var(--u));
+    height: calc(16 * var(--u));
+  }
+  .replica .i12 {
+    width: calc(12 * var(--u));
+    height: calc(12 * var(--u));
+  }
+  .replica .i14 {
+    width: calc(14 * var(--u));
+    height: calc(14 * var(--u));
+  }
+  .replica .i16 {
+    width: calc(16 * var(--u));
+    height: calc(16 * var(--u));
+  }
+  .replica .i20 {
+    width: calc(20 * var(--u));
+    height: calc(20 * var(--u));
+  }
+  .replica .mono {
+    font-family: var(--mono);
+  }
+  /* animate-spin. */
+  .replica .spin {
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  .st-stats {
+    display: flex;
+    gap: calc(6 * var(--u));
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: calc(10 * var(--u));
+    font-variant-numeric: tabular-nums;
+  }
+  .add-ink {
+    color: var(--green-400);
+  }
+  .del-ink {
+    color: var(--red-400);
+  }
+  .mod-ink {
+    color: var(--blue-400);
+  }
+  /* The caret of text that a scene types. The text has the class `typed`, and the scene sets
+     `data-typing` on it. A component sets the height of its caret. */
+  .replica .typed[data-typing]::after {
+    content: "";
+    display: inline-block;
+    width: calc(1.5 * var(--u));
+    margin-left: calc(1 * var(--u));
+    background: var(--foreground);
+    vertical-align: text-bottom;
+    animation: caret 1s steps(1) infinite;
+  }
+  @keyframes caret {
+    50% {
+      opacity: 0;
+    }
+  }
+}

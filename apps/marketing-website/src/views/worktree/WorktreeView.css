@@ -1,0 +1,31 @@
+@layer views {
+  /* Worktree: the task tools of Agent Studio with the builder dev servers and the Open In menu. */
+  .worktree-studio {
+    height: auto;
+    min-height: calc(640 * var(--u));
+  }
+  .worktree-studio .st-panel-body {
+    flex: 1 1 0;
+  }
+  /* A narrow stage stacks the branches, so the panel needs more height to show the files. */
+  @container stage (width <= 459px) {
+    .worktree-studio {
+      min-height: calc(760 * var(--u));
+    }
+  }
+  /* A wide stage shows the Builder session next to the task tools. */
+  @container stage (width >= 700px) {
+    .worktree-studio {
+      min-height: calc(760 * var(--u));
+    }
+  }
+  /* The worktree view keeps both branches in one row from 460px. */
+  @container stage (width >= 460px) {
+    .worktree-studio .st-branches {
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    }
+    .worktree-studio .st-arrow {
+      display: grid;
+    }
+  }
+}

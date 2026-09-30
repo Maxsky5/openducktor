@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>OpenDucktor</title>
+  <rect width="64" height="64" rx="15" fill="#5100ff"/>
+  <g transform="translate(8.5 8) scale(0.74)" fill="#fff">
+    <path d="M3.5 23.5C8.5 29 15 32.5 24 32.5H42C53 32.5 59.5 39 59.5 45.5C59.5 51.5 53.5 56 45 56H19.5C11 56 5.5 50.5 5 42.5C4.6 36 3.2 29.5 3.5 23.5Z"/>
+    <circle cx="37.5" cy="20.5" r="12.5"/>
+    <path d="M47.5 18.25H56.25A3.9 3.9 0 0 1 56.25 26.05H46.5Z"/>
+    <path d="M29.8 17.8H46.2" stroke="#5100ff" stroke-width="6" stroke-linecap="round"/>
+    <path d="M40.2 17.8H43.4" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>
+  </g>
+</svg>

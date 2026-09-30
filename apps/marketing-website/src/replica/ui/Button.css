@@ -1,0 +1,61 @@
+@layer product {
+  /* Button of components/ui/button.tsx, in the sizes and looks of the copied views. */
+  .ui-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: calc(6 * var(--u));
+    border-radius: calc(10 * var(--u));
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  /* Size default: h-9 px-4 text-sm. */
+  .ui-button[data-size="default"] {
+    height: calc(36 * var(--u));
+    padding: 0 calc(16 * var(--u));
+    font-size: calc(14 * var(--u));
+  }
+  /* Size sm: h-8 px-3 text-xs. */
+  .ui-button[data-size="sm"] {
+    height: calc(32 * var(--u));
+    padding: 0 calc(12 * var(--u));
+    font-size: calc(12 * var(--u));
+  }
+  /* Size icon: size-9. */
+  .ui-button[data-size="icon"] {
+    width: calc(36 * var(--u));
+    height: calc(36 * var(--u));
+    padding: 0;
+    font-size: calc(12 * var(--u));
+  }
+  /* A filled button has a clear border, so it keeps the size of an outline button. */
+  .ui-button[data-variant="default"] {
+    border: calc(1 * var(--u)) solid transparent;
+    background: var(--primary);
+    color: var(--primary-foreground);
+    box-shadow: var(--shadow-sm);
+  }
+  .ui-button[data-variant="outline"] {
+    border: calc(1 * var(--u)) solid var(--input);
+    background: var(--card);
+    color: var(--foreground);
+    box-shadow: var(--shadow-sm);
+  }
+  .ui-button[data-variant="destructive"] {
+    border: calc(1 * var(--u)) solid transparent;
+    background: var(--destructive);
+    color: var(--destructive-foreground);
+    box-shadow: var(--shadow-sm);
+  }
+  .ui-button[data-variant="secondary"] {
+    background: color-mix(in oklch, var(--secondary) 70%, transparent);
+    color: var(--secondary-foreground);
+  }
+  .ui-button[data-variant="accent"] {
+    background: var(--sidebar-accent);
+    color: var(--sidebar-accent-foreground);
+  }
+  .ui-button[data-disabled] {
+    opacity: 0.5;
+  }
+}

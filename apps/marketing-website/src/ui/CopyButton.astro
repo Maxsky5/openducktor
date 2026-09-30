@@ -1,0 +1,35 @@
+---
+// The copy button of a command block. copy-command.ts copies the command of the block, and it
+// shows the result with data-copy-state. The labelled button of a terminal also says Copy and
+// Copied.
+import { Check, Copy } from "@lucide/astro";
+import "./CopyButton.css";
+
+interface Props {
+  /** The name of the command in the label of the button. */
+  label: string;
+  labelled?: boolean;
+}
+const { label, labelled = false } = Astro.props;
+const size = labelled ? 14 : 17;
+---
+
+<button
+  type="button"
+  class="copy-button"
+  hidden
+  aria-label={`Copy command: ${label}`}
+  title="Copy command"
+  data-labelled={labelled ? "" : undefined}
+>
+  <Copy class="copy-icon" size={size} />
+  <Check class="check-icon" size={size} />
+  {
+    labelled && (
+      <>
+        <span class="copy-idle">Copy</span>
+        <span class="copy-done">Copied</span>
+      </>
+    )
+  }
+</button>

@@ -62,9 +62,7 @@ describe("useTaskResetOperations", () => {
 
     try {
       await setup.harness.mount();
-      await expect(
-        setup.harness.run(({ operations }) => operations.resetTaskImplementation("A")),
-      ).resolves.toBeUndefined();
+      await setup.harness.run(({ operations }) => operations.resetTaskImplementation("A"));
 
       expect(setup.taskResetImplementation).toHaveBeenCalledWith("/repo", "A");
       expect(setup.error).toHaveBeenCalledWith(
@@ -88,9 +86,7 @@ describe("useTaskResetOperations", () => {
 
     try {
       await setup.harness.mount();
-      await expect(
-        setup.harness.run(({ operations }) => operations.resetTask("A")),
-      ).resolves.toBeUndefined();
+      await setup.harness.run(({ operations }) => operations.resetTask("A"));
 
       expect(setup.taskReset).toHaveBeenCalledWith("/repo", "A");
       expect(setup.error).toHaveBeenCalledWith("Task reset, but metadata refresh failed", {

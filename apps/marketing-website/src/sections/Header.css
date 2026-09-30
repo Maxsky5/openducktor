@@ -1,0 +1,143 @@
+@layer site {
+  /* Header */
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    border-bottom: 1px solid transparent;
+    background: color-mix(in srgb, var(--page) 82%, transparent);
+    backdrop-filter: saturate(1.4) blur(14px);
+    transition: border-color 200ms;
+  }
+  .site-header[data-scrolled] {
+    border-bottom-color: var(--line);
+  }
+  /* With large text, the actions wrap to a second line instead of a horizontal scroll. */
+  .header-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 28px;
+    min-height: var(--header-height);
+    padding-block: 13px;
+  }
+  /* The version of the latest release sits next to the name and opens its release notes. */
+  .brand-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .release {
+    padding: 3px 8px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--body-ink);
+    font-family: var(--mono-font);
+    font-size: 0.75rem;
+    line-height: 1.4;
+  }
+  .release:hover {
+    border-color: color-mix(in srgb, var(--body-ink) 45%, var(--line));
+    color: var(--ink);
+  }
+  .site-nav {
+    display: flex;
+    gap: 4px;
+  }
+  .site-nav a {
+    padding: 8px 12px;
+    border-radius: 8px;
+    color: var(--body-ink);
+    font-size: 0.875rem;
+    font-weight: 550;
+  }
+  .site-nav a:hover {
+    background: var(--soft);
+    color: var(--ink);
+  }
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+  }
+  .icon-button,
+  .github-link {
+    display: inline-grid;
+    place-items: center;
+    height: 38px;
+    min-width: 38px;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--page);
+    color: var(--ink);
+  }
+  .github-link {
+    display: inline-flex;
+    justify-content: center;
+    gap: 8px;
+    padding: 0 12px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+  .icon-button:hover,
+  .github-link:hover {
+    background: var(--soft);
+    border-color: color-mix(in srgb, var(--body-ink) 50%, var(--line));
+  }
+  .sun,
+  .play-icon {
+    display: none;
+  }
+  [data-theme="dark"] .sun {
+    display: block;
+  }
+  [data-theme="dark"] .moon {
+    display: none;
+  }
+  .motion-toggle[aria-pressed="true"] .play-icon {
+    display: block;
+  }
+  .motion-toggle[aria-pressed="true"] .pause-icon {
+    display: none;
+  }
+  @media (width <= 1023px) {
+    .site-nav {
+      display: none;
+    }
+  }
+  @media (width <= 767px) {
+    .header-row {
+      gap: 12px;
+    }
+    .github-link span {
+      display: none;
+    }
+    .github-link {
+      padding: 0;
+      width: 38px;
+    }
+  }
+  @media (width <= 479px) {
+    /* The footer links to the releases on a phone. */
+    .header-download,
+    .release {
+      display: none;
+    }
+  }
+  /* The brand and three header buttons fit on one line at 320px. */
+  @media (width <= 359px) {
+    .header-actions {
+      gap: 4px;
+    }
+    .icon-button,
+    .github-link {
+      height: 36px;
+      min-width: 36px;
+    }
+    .github-link {
+      width: 36px;
+    }
+  }
+}

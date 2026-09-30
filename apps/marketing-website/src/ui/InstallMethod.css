@@ -1,0 +1,13 @@
+@layer site {
+  .install-method {
+    display: grid;
+    align-content: start;
+    gap: 10px;
+    min-width: 0;
+  }
+  .install-note {
+    color: var(--body-ink);
+    font-size: 0.875rem;
+    line-height: 1.55;
+  }
+}

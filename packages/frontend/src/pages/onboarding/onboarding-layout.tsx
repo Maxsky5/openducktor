@@ -1,12 +1,6 @@
 import { Bell, Check, Cpu, FolderGit2, Route } from "lucide-react";
-import {
-  type CSSProperties,
-  type ReactElement,
-  type ReactNode,
-  useLayoutEffect,
-  useRef,
-} from "react";
-import openducktorMarkUrl from "@/assets/openducktor-mark.svg";
+import { type ReactElement, type ReactNode, useLayoutEffect, useRef } from "react";
+import { OpenDucktorMark } from "@/components/layout/openducktor-mark";
 import { ThemePicker } from "@/components/layout/theme-picker";
 import { getAppVersion } from "@/lib/app-version";
 import { cn } from "@/lib/utils";
@@ -37,17 +31,6 @@ const ONBOARDING_STAGES = [
     icon: FolderGit2,
   },
 ] as const;
-
-const OPENDUCKTOR_MARK_MASK_STYLE: CSSProperties = {
-  WebkitMaskImage: `url(${openducktorMarkUrl})`,
-  maskImage: `url(${openducktorMarkUrl})`,
-  WebkitMaskPosition: "center",
-  maskPosition: "center",
-  WebkitMaskRepeat: "no-repeat",
-  maskRepeat: "no-repeat",
-  WebkitMaskSize: "contain",
-  maskSize: "contain",
-};
 
 type OnboardingLayoutProps = {
   stage: OnboardingStage;
@@ -81,11 +64,7 @@ export function OnboardingLayout({ stage, children }: OnboardingLayoutProps): Re
       <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1120px] flex-col px-4 py-5 sm:px-6 sm:py-7 lg:px-8">
         <header className="electron-titlebar-safe-area -mt-5 flex items-center justify-between gap-4 pt-5 pb-5 sm:-mt-7 sm:pt-7">
           <div className="flex items-center gap-3">
-            <span
-              className="block size-9 shrink-0 bg-foreground"
-              style={OPENDUCKTOR_MARK_MASK_STYLE}
-              aria-hidden="true"
-            />
+            <OpenDucktorMark className="size-9" />
             <div className="flex flex-col">
               <span className="text-base font-semibold tracking-tight">OpenDucktor</span>
               {APP_VERSION ? (

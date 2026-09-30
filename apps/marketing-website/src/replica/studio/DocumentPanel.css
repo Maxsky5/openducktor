@@ -1,0 +1,64 @@
+@layer replica {
+  /* Document panel */
+  .st-doc-head {
+    display: grid;
+    flex: 0 0 auto;
+    gap: calc(8 * var(--u));
+    padding: calc(12 * var(--u)) calc(16 * var(--u));
+    border-bottom: calc(1 * var(--u)) solid var(--border);
+  }
+  .st-doc-head > div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: calc(8 * var(--u));
+  }
+  .st-doc-title {
+    font-size: calc(18 * var(--u));
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    line-height: 1;
+  }
+  /* Expand and copy: small icon buttons. */
+  .st-doc-button {
+    width: calc(28 * var(--u));
+    height: calc(28 * var(--u));
+    color: var(--foreground);
+  }
+  .st-doc-head p {
+    color: var(--muted-foreground);
+    font-size: calc(14 * var(--u));
+  }
+  .st-doc-head time {
+    color: var(--muted-foreground);
+    font-size: calc(12 * var(--u));
+    white-space: nowrap;
+  }
+  .st-doc-body {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    padding: calc(16 * var(--u));
+  }
+  .st-doc-copy {
+    position: absolute;
+    top: calc(8 * var(--u));
+    right: calc(8 * var(--u));
+    z-index: 1;
+  }
+  .st-doc-empty {
+    color: var(--muted-foreground);
+    font-size: calc(14 * var(--u));
+  }
+  /* Document panel states. */
+  .st-document {
+    display: flex;
+    flex-direction: column;
+  }
+  .st-document[data-document="empty"] .st-doc-copy,
+  .st-document[data-document="empty"] .st-doc-scroll,
+  .st-document[data-document="filled"] .st-doc-empty {
+    display: none;
+  }
+}

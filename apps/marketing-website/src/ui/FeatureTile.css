@@ -1,0 +1,94 @@
+@layer site {
+  /* A tile of the features grid: the copy of one tool, then its product view. */
+  .feature-tile {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    gap: 32px;
+    min-width: 0;
+    padding: 32px;
+    border: 1px solid var(--line);
+    border-radius: 24px;
+    background: var(--page-alt);
+  }
+  .feature-tile.full {
+    grid-column: 1 / -1;
+  }
+  .feature-tile.half {
+    grid-column: span 6;
+  }
+  .feature-copy {
+    display: grid;
+    align-content: start;
+    gap: 12px;
+    max-width: 58ch;
+  }
+  .feature-label {
+    color: var(--accent-ink);
+    font-family: var(--mono-font);
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+  .feature-tile h3 {
+    font-size: clamp(1.25rem, 1.8vw, 1.5rem);
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: -0.025em;
+    text-wrap: balance;
+  }
+  .feature-copy p {
+    color: var(--body-ink);
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    text-wrap: pretty;
+  }
+  .feature-copy code {
+    font-size: 0.875em;
+  }
+  /* A scene fills the height of its tile, so the tiles of one row end at the same line. */
+  .feature-visual,
+  .feature-visual .scene,
+  .feature-visual .stage {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+  }
+  /* The content of a scene never sets its height: the minimum height and the tile do. */
+  .feature-visual .replica {
+    flex: 1;
+    contain: size;
+  }
+  /* A full-width tile puts the copy in two columns, so the scene starts higher on the screen. */
+  @media (width >= 1024px) {
+    .feature-tile.full .feature-copy {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      grid-template-areas:
+        "label label"
+        "title text";
+      column-gap: 48px;
+      max-width: none;
+    }
+    .feature-tile.full .feature-label {
+      grid-area: label;
+    }
+    .feature-tile.full h3 {
+      grid-area: title;
+    }
+    .feature-tile.full .feature-copy > p:last-child {
+      grid-area: text;
+      max-width: 58ch;
+    }
+  }
+  @media (width <= 1023px) {
+    .feature-tile.half {
+      grid-column: 1 / -1;
+    }
+  }
+  @media (width <= 767px) {
+    .feature-tile {
+      gap: 24px;
+      padding: 24px 16px 16px;
+      border-radius: 20px;
+    }
+  }
+}

@@ -1,0 +1,24 @@
+---
+import { links } from "../content/site";
+import DownloadActions from "../ui/DownloadActions.astro";
+import DuckParade from "../ui/DuckParade.astro";
+import ArrowLink from "../ui/ArrowLink.astro";
+import "./Closing.css";
+---
+
+<section class="closing" aria-labelledby="closing-title">
+  <div class="wrap closing-row">
+    <div class="closing-copy">
+      <h2 id="closing-title">Start with one small task.</h2>
+      <p>
+        Install OpenDucktor, open a Git repository, and create a task. The agent works in its own
+        worktree, and OpenDucktor does not merge until you approve.
+      </p>
+    </div>
+    <div class="closing-actions">
+      <DuckParade />
+      <DownloadActions />
+      <ArrowLink class="closing-link" href={links.github}>Read the source on GitHub</ArrowLink>
+    </div>
+  </div>
+</section>

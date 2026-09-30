@@ -1,0 +1,26 @@
+---
+// The kind and the priority of a task, as the task cards show them. The slot holds more badges,
+// such as the QA verdict or the pull request.
+import { Bug, Sparkles, SquareCheck, type AstroComponent } from "@lucide/astro";
+import Badge from "./Badge.astro";
+import type { Priority, TaskKind } from "../vocabulary";
+import "./TaskBadges.css";
+
+interface Props {
+  kind: TaskKind;
+  priority: Priority;
+}
+const { kind, priority } = Astro.props;
+const kinds = {
+  task: { label: "Task", Icon: SquareCheck },
+  feature: { label: "Feature", Icon: Sparkles },
+  bug: { label: "Bug", Icon: Bug },
+} as const satisfies Record<TaskKind, { label: string; Icon: AstroComponent }>;
+const { label, Icon } = kinds[kind];
+---
+
+<div class="badges" data-badges>
+  <Badge tone={kind === "task" ? undefined : kind}><Icon class="i12" />{label}</Badge><Badge
+    tone={`p${priority}`}><i></i>P{priority}</Badge
+  ><slot />
+</div>

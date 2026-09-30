@@ -1,0 +1,61 @@
+@layer replica {
+  /* The footer of a card: the button of the next step, or the session, and the menu. */
+  .card-actions {
+    display: flex;
+    gap: calc(6 * var(--u));
+    margin-top: calc(8 * var(--u));
+    padding-top: calc(10 * var(--u));
+    border-top: calc(1 * var(--u)) solid var(--border);
+  }
+  .card-action {
+    flex: 1;
+    min-width: 0;
+    gap: calc(8 * var(--u));
+    height: calc(36 * var(--u));
+    border-radius: calc(8 * var(--u));
+    font-weight: 600;
+  }
+  .card-action[data-variant="default"] {
+    border-color: var(--primary);
+  }
+  .card-action .lucide {
+    width: calc(14 * var(--u));
+    height: calc(14 * var(--u));
+  }
+  /* A running session has the colors of the session chip. */
+  .card-session {
+    gap: calc(6 * var(--u));
+    padding: calc(4 * var(--u)) calc(8 * var(--u));
+    border-color: var(--info-border);
+    background: var(--info-surface);
+    color: var(--info-muted);
+    font-size: calc(11 * var(--u));
+    box-shadow: none;
+  }
+  .card-session .lucide {
+    width: calc(12 * var(--u));
+    height: calc(12 * var(--u));
+  }
+  .card-session em {
+    font-size: calc(10 * var(--u));
+    font-style: normal;
+    font-weight: 500;
+    color: var(--status-running);
+  }
+  .card-session[data-waiting] {
+    border-color: var(--warning-border);
+    background: var(--warning-surface);
+    color: var(--warning-muted);
+  }
+  .card-session[data-waiting] em {
+    color: var(--warning-surface-foreground);
+  }
+  /* The menu of the other actions. */
+  .card-menu {
+    flex: 0 0 auto;
+    width: calc(36 * var(--u));
+    height: calc(36 * var(--u));
+    padding: 0;
+    border-radius: calc(8 * var(--u));
+  }
+}

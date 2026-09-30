@@ -1,0 +1,62 @@
+---
+// The Kanban board with the Autopilot rules on. The markup holds the last frame.
+import Board from "../../replica/board/Board.astro";
+import BoardHead from "../../replica/board/BoardHead.astro";
+import CardActions from "../../replica/board/CardActions.astro";
+import type { BoardData } from "../../replica/board/model";
+import Badge from "../../replica/board/Badge.astro";
+import PrBadge from "../../replica/board/PrBadge.astro";
+import Replica from "../../replica/Replica.astro";
+import Pointer from "../../replica/shell/Pointer.astro";
+import Toast from "../../replica/shell/Toast.astro";
+import { type AutopilotTemplate, CARD_ACTIONS, TOASTS } from "./templates";
+import "./AutopilotView.css";
+import Scene from "../Scene.astro";
+import ToastStack from "../../replica/shell/ToastStack.astro";
+
+const board: BoardData = {
+  open: [{ name: "print", task: "e3k8", action: "Start Spec" }],
+  in_progress: [
+    { name: "tags", task: "g2s6", session: { role: "Builder", status: "Waiting input" } },
+  ],
+  human_review: [{ name: "import", task: "c7v2", action: "Approve Task", pr: 58 }],
+};
+---
+
+<Scene
+  name="autopilot"
+  alt="The Kanban board with the Autopilot rules on. The spec of a task is ready, and Autopilot starts the Planner. Then it starts the Builder and QA. A notification shows each new agent session. QA rejects the first build, and Autopilot resumes the Builder with the QA report. QA approves the fix, and the Builder opens pull request 58. The task waits in Human Review for your approval. The Builder of another task stops to ask you a question."
+>
+  <Replica class="auto-stage">
+    <div class="auto-board">
+      <BoardHead />
+      <Board board={board} />
+      <ToastStack />
+    </div>
+    <Pointer />
+  </Replica>
+  <Fragment slot="templates">
+    {
+      Object.entries(CARD_ACTIONS).map(([name, actions]) => (
+        <template data-tpl={name}>
+          <CardActions {...actions} />
+        </template>
+      ))
+    }
+    <template data-tpl={"rejected" satisfies AutopilotTemplate}
+      ><Badge tone="rejected" data-qa-badge>QA Rejected</Badge></template
+    >
+    <template data-tpl={"pr" satisfies AutopilotTemplate}><PrBadge number={58} /></template>
+    {
+      Object.entries(TOASTS).map(([name, toast]) => (
+        <template data-tpl={name}>
+          <Toast {...toast} />
+        </template>
+      ))
+    }
+  </Fragment>
+</Scene>
+<script>
+  import { mountAutopilot } from "./scene";
+  mountAutopilot();
+</script>

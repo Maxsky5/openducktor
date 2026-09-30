@@ -1069,11 +1069,9 @@ describe("use-workspace-selection-operations", () => {
         throw new Error("Workspace refresh failed");
       });
 
-      await expect(
-        harness.run((value) =>
-          value.closeWorkspace({ workspaceId: "repo", expectedRepoPath: "/repo" }),
-        ),
-      ).resolves.toBeUndefined();
+      await harness.run((value) =>
+        value.closeWorkspace({ workspaceId: "repo", expectedRepoPath: "/repo" }),
+      );
       expect(harness.getLatest().closedWorkspaces).toEqual([workspace("/repo")]);
     } finally {
       await harness.unmount();

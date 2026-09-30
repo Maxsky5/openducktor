@@ -1,0 +1,28 @@
+@layer product {
+  /* The ray covers the border of its parent. A dash of the path runs around the box. */
+  .ui-ray {
+    position: absolute;
+    inset: calc(-1 * var(--u));
+    width: calc(100% + 2 * var(--u));
+    height: calc(100% + 2 * var(--u));
+    overflow: visible;
+    pointer-events: none;
+  }
+  .ui-ray rect {
+    x: calc(1 * var(--u));
+    y: calc(1 * var(--u));
+    width: calc(100% - 2 * var(--u));
+    height: calc(100% - 2 * var(--u));
+    fill: none;
+    stroke-linecap: round;
+    animation: ray-run linear infinite;
+  }
+  @keyframes ray-run {
+    from {
+      stroke-dashoffset: 0;
+    }
+    to {
+      stroke-dashoffset: -100;
+    }
+  }
+}

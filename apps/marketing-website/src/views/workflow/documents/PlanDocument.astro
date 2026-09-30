@@ -1,0 +1,47 @@
+---
+import DocHeading from "../../../replica/studio/DocHeading.astro";
+import Prose from "../../../replica/studio/Prose.astro";
+---
+
+<Prose>
+  <DocHeading level={1}>Implementation plan</DocHeading>
+  <DocHeading level={2}>Approach</DocHeading>
+  <p>
+    Add one keyboard hook that the app shell mounts once. It opens the existing search dialog, so
+    search itself does not change.
+  </p>
+  <DocHeading level={2}>Design</DocHeading>
+  <DocHeading level={3}><code>src/search/use-search-shortcut.ts</code></DocHeading>
+  <p>
+    New hook. It listens for <code>keydown</code> on <code>window</code>, matches{" "}
+    <code>metaKey</code> on macOS and <code>ctrlKey</code> elsewhere, and ignores{" "}
+    <code>Shift</code>. It returns early for text fields, <code>[contenteditable]</code>, and open
+    modal dialogs.
+  </p>
+  <DocHeading level={3}><code>src/app/app-shell.tsx</code></DocHeading>
+  <p>Mounts the hook once and passes <code>openSearch</code>.</p>
+  <DocHeading level={3}><code>src/search/search-dialog.tsx</code></DocHeading>
+  <p>Stores the focused element when the dialog opens and restores it when it closes.</p>
+  <DocHeading level={2}>Requirement coverage</DocHeading>
+  <ul>
+    <li>Open search: the hook calls <code>openSearch</code> unless a modal dialog is open.</li>
+    <li>Text fields: the hook checks the event target.</li>
+    <li>Close: the dialog restores focus.</li>
+  </ul>
+  <DocHeading level={2}>Tests</DocHeading>
+  <ul>
+    <li>
+      <code>use-search-shortcut.test.ts</code>: the shortcut opens search, and does nothing with{
+        " "
+      }
+      <code>Shift</code>, in a text field, or over a modal dialog.
+    </li>
+  </ul>
+  <DocHeading level={2}>Risks and constraints</DocHeading>
+  <ul>
+    <li>
+      <code>src/app/keymap.ts</code> binds <code>Cmd+Shift+K</code>, so the hook ignores{" "}
+      <code>Shift</code>.
+    </li>
+  </ul>
+</Prose>

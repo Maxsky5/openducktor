@@ -1,0 +1,65 @@
+---
+import { readBuildConfig } from "../../config/build";
+import { tagline } from "../content/site";
+import { MOTION_QUERY } from "../motion/preference";
+import { LAYERS } from "../styles/layers";
+import { headTags, type PageHead } from "./head";
+import "@fontsource-variable/space-grotesk";
+import spaceGrotesk from "@fontsource-variable/space-grotesk/files/space-grotesk-latin-wght-normal.woff2?url";
+import plexMono from "@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2?url";
+import "../styles/tokens.css";
+import "../styles/base.css";
+import "../styles/state.css";
+type Props = PageHead;
+// Astro.site holds the site origin of the build. A build without an origin has no absolute URLs.
+const { title, description, robots, canonical, image } = headTags(
+  Astro.props,
+  Astro.url.pathname,
+  readBuildConfig().target,
+  Astro.site,
+);
+const imageAlt = `OpenDucktor. ${tagline}.`;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <style is:inline set:html={`@layer ${LAYERS.join(", ")};`}></style>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <script is:inline define:vars={{ query: MOTION_QUERY }}>
+      // The page plays motion from its first paint, before the scene scripts load.
+      if (matchMedia(query).matches) document.documentElement.dataset.motion = "running";
+    </script>
+    <link rel="preload" href={spaceGrotesk} as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href={plexMono} as="font" type="font/woff2" crossorigin />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    {robots && <meta name="robots" content={robots} />}
+    {canonical && <link rel="canonical" href={canonical} />}
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="OpenDucktor" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    {canonical && <meta property="og:url" content={canonical} />}
+    {image && <meta property="og:image" content={image} />}
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={imageAlt} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    {image && <meta name="twitter:image" content={image} />}
+    <meta name="twitter:image:alt" content={imageAlt} />
+  </head>
+  <body id="top">
+    <a class="skip-link" href="#main">Skip to content</a>
+    <slot />
+    <script>
+      import { bindCopyCommands } from "../ui/copy-command";
+      bindCopyCommands(document);
+    </script>
+  </body>
+</html>

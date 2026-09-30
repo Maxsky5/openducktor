@@ -1,0 +1,252 @@
+@layer replica {
+  /* Header */
+  .st-header {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    gap: calc(6 * var(--u));
+    padding: calc(12 * var(--u));
+    border-bottom: calc(1 * var(--u)) solid var(--border);
+    background: var(--card);
+  }
+  .st-head-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: calc(8 * var(--u));
+  }
+  .st-head-title {
+    min-width: 0;
+    flex: 1;
+  }
+  .st-task-title {
+    overflow: hidden;
+    font-size: calc(18 * var(--u));
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    line-height: calc(24 * var(--u));
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .st-head-id {
+    display: flex;
+    align-items: center;
+    gap: calc(6 * var(--u));
+    color: var(--muted-foreground);
+  }
+  .st-head-id code {
+    font-family: var(--mono);
+    font-size: calc(12 * var(--u));
+    line-height: calc(16 * var(--u));
+  }
+  .st-copy {
+    display: grid;
+    place-items: center;
+    width: calc(16 * var(--u));
+    height: calc(16 * var(--u));
+  }
+  .st-open {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(4 * var(--u));
+    height: calc(24 * var(--u));
+    padding: 0 calc(6 * var(--u));
+    border-radius: calc(10 * var(--u));
+    color: var(--foreground);
+    font-size: calc(11 * var(--u));
+  }
+  .st-head-actions {
+    display: flex;
+    flex-shrink: 0;
+    align-items: stretch;
+    gap: calc(8 * var(--u));
+  }
+  /* The quick action: two accent buttons in one group. */
+  .st-split {
+    display: flex;
+    height: calc(36 * var(--u));
+    border-radius: calc(10 * var(--u));
+    box-shadow: var(--shadow-sm);
+    transition: opacity 200ms;
+  }
+  .st-split[data-disabled] {
+    opacity: 0.5;
+  }
+  .st-split > .ui-button {
+    height: calc(36 * var(--u));
+  }
+  .st-split-main {
+    justify-content: flex-start;
+    gap: calc(8 * var(--u));
+    max-width: calc(192 * var(--u));
+    border-radius: calc(10 * var(--u)) 0 0 calc(10 * var(--u));
+  }
+  .st-split-main .lucide {
+    color: var(--amber-400);
+  }
+  :where(:root[data-theme="dark"]) .st-split-main .lucide {
+    color: var(--amber-500);
+  }
+  .st-split-menu {
+    padding: 0 calc(8 * var(--u));
+    border-left: calc(1 * var(--u)) solid
+      color-mix(in oklch, var(--sidebar-border) 70%, transparent);
+    border-radius: 0 calc(10 * var(--u)) calc(10 * var(--u)) 0;
+  }
+  .st-split-menu .lucide {
+    opacity: 0.8;
+  }
+  /* Workflow rail */
+  .st-rail {
+    display: flex;
+    justify-content: center;
+    padding: calc(2 * var(--u)) 0;
+  }
+  .st-rail-steps {
+    display: flex;
+    align-items: center;
+    gap: calc(4 * var(--u));
+  }
+  .st-rail-item {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+  }
+  .st-step {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    height: calc(36 * var(--u));
+    padding: 0 calc(16 * var(--u));
+    border: calc(1 * var(--u)) solid var(--input);
+    border-radius: calc(12 * var(--u));
+    background: var(--card);
+    color: var(--foreground);
+    font-size: calc(14 * var(--u));
+    font-weight: 500;
+    white-space: nowrap;
+    --ring: color-mix(in oklch, var(--muted-foreground) 50%, transparent);
+  }
+  .st-step[data-tone="in_progress"] {
+    border-color: var(--info-border);
+    background: var(--info-surface);
+    color: var(--info-muted);
+    box-shadow: var(--shadow-sm);
+    --ring: var(--info-ring);
+  }
+  .st-step[data-tone="done"] {
+    border-color: var(--success-border);
+    background: var(--success-surface);
+    color: var(--success-muted);
+    box-shadow: var(--shadow-sm);
+    --ring: var(--success-ring);
+  }
+  .st-step[data-tone="waiting_input"] {
+    border-color: var(--warning-border);
+    background: var(--warning-surface);
+    color: var(--warning-muted);
+    box-shadow: var(--shadow-sm);
+    --ring: var(--warning-ring);
+  }
+  .st-step[data-tone="rejected"] {
+    border-color: var(--rejected-border);
+    background: var(--rejected-surface);
+    color: var(--rejected-muted);
+    box-shadow: var(--shadow-sm);
+    --ring: var(--rejected-ring);
+  }
+  .st-step[data-tone="blocked"] {
+    border-color: var(--border);
+    background: var(--muted);
+    color: var(--muted-foreground);
+    --ring: var(--warning-ring);
+  }
+  .st-step[aria-pressed="true"] {
+    box-shadow:
+      0 0 0 calc(2 * var(--u)) var(--card),
+      0 0 0 calc(4 * var(--u)) var(--ring);
+  }
+  .st-step-state {
+    display: grid;
+    place-items: center;
+  }
+  .st-step-state > * {
+    display: none;
+  }
+  .st-step[data-tone="done"] .st-step-state .done,
+  .st-step[data-tone="in_progress"] .st-step-state .working,
+  .st-step[data-tone="waiting_input"] .st-step-state .waiting,
+  .st-step[data-tone="rejected"] .st-step-state .alert,
+  .st-step[data-tone="available"] .st-step-state .available {
+    display: block;
+  }
+  .st-step-state .done {
+    color: var(--success-accent);
+  }
+  .st-link {
+    color: color-mix(in oklch, var(--muted-foreground) 40%, transparent);
+  }
+  .st-link[data-tone="done"] {
+    color: var(--success-ring);
+  }
+  .st-link[data-tone="in_progress"] {
+    color: var(--info-ring);
+  }
+  .st-link[data-tone="waiting_input"] {
+    color: var(--warning-ring);
+  }
+  .st-link[data-tone="rejected"] {
+    color: var(--rejected-ring);
+  }
+  .st-link[data-tone="blocked"] {
+    color: color-mix(in oklch, var(--muted-foreground) 20%, transparent);
+  }
+  .st-step-icon {
+    width: calc(16 * var(--u));
+    height: calc(16 * var(--u));
+  }
+  /* A narrow stage puts the actions under the title and makes the workflow rail smaller. */
+  @container stage (width <= 699px) {
+    .st-history,
+    .st-step-icon {
+      display: none;
+    }
+    .st-header {
+      gap: calc(10 * var(--u));
+    }
+    .st-head-row {
+      flex-direction: column;
+      gap: calc(10 * var(--u));
+    }
+    .st-head-title,
+    .st-head-actions {
+      width: 100%;
+    }
+    .st-split {
+      flex: 1;
+    }
+    .st-split-main {
+      flex: 1;
+      max-width: none;
+    }
+    .st-rail {
+      justify-content: flex-start;
+    }
+    .st-rail-steps {
+      gap: calc(2 * var(--u));
+    }
+    .st-rail-item {
+      gap: calc(2 * var(--u));
+    }
+    .st-step {
+      gap: calc(4 * var(--u));
+      height: calc(32 * var(--u));
+      padding: 0 calc(8 * var(--u));
+      font-size: calc(13 * var(--u));
+    }
+    .st-link {
+      width: calc(12 * var(--u));
+      height: calc(12 * var(--u));
+    }
+  }
+}

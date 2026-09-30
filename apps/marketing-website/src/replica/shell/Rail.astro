@@ -1,0 +1,28 @@
+---
+// The workspace rail of components/layout/workspace-rail.tsx. The selected row takes the sidebar
+// surface, so it joins the sidebar next to it.
+import { Plus } from "@lucide/astro";
+import { RAIL_TILES } from "../../sample/workspace";
+import "./Rail.css";
+import { flag } from "../flag";
+
+interface Props {
+  /** The second workspace has a running session. */
+  busy: boolean;
+}
+const { busy } = Astro.props;
+---
+
+<div class="rail">
+  {
+    RAIL_TILES.map((label, index) => (
+      <span class="rail-row" data-selected={flag(index === 0)}>
+        <span class="tile" data-selected={flag(index === 0)}>
+          {label}
+          {busy && index === 1 && <i class="tile-badge" />}
+        </span>
+      </span>
+    ))
+  }
+  <span class="rail-add"><Plus /></span>
+</div>

@@ -1,0 +1,29 @@
+---
+import { ArrowUpRight } from "@lucide/astro";
+import { FAQS } from "../content/faq";
+import { links } from "../content/site";
+import SectionHead from "../ui/SectionHead.astro";
+import "./Faq.css";
+---
+
+<section id="faq" class="section faq-section wrap" aria-labelledby="faq-title">
+  <SectionHead eyebrow="Questions" id="faq-title" class="faq-heading">
+    <Fragment slot="title">Before you install.</Fragment>
+    <a class="faq-link" href={links.issues}
+      >More questions? Ask on GitHub <ArrowUpRight size={16} /></a
+    >
+  </SectionHead>
+  <div class="faq-answers">
+    {
+      FAQS.map((faq) => (
+        <details>
+          <summary>
+            {faq.question}
+            <span aria-hidden="true">+</span>
+          </summary>
+          <p>{faq.answer}</p>
+        </details>
+      ))
+    }
+  </div>
+</section>

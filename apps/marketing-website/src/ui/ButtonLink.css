@@ -1,0 +1,36 @@
+@layer site {
+  .button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 48px;
+    padding: 0 20px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: var(--accent);
+    color: var(--button-ink);
+    box-shadow:
+      0 1px 0 rgb(255 255 255 / 0.18) inset,
+      0 8px 20px -10px color-mix(in srgb, var(--accent) 80%, transparent);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    white-space: nowrap;
+    transition:
+      background 160ms,
+      transform 160ms,
+      box-shadow 160ms;
+  }
+  .button:hover {
+    background: color-mix(in srgb, var(--accent), var(--ink) 14%);
+    transform: translateY(-1px);
+  }
+  .button:active {
+    transform: translateY(1px);
+  }
+  .button.small {
+    min-height: 38px;
+    padding: 0 14px;
+    font-size: 0.8125rem;
+  }
+}

@@ -1,0 +1,215 @@
+@layer views {
+  /*
+   * Workspace chat: a new chat with a custom role on Claude Code. The design widths follow the
+   * Agent Studio replica, so both pages show at the same scale.
+   */
+  .chat-window {
+    --design-width: 740;
+    min-height: calc(600 * var(--u));
+  }
+  .ch-column {
+    flex: 1;
+    min-height: 0;
+  }
+  .ch-head {
+    flex: 0 0 auto;
+    padding: calc(8 * var(--u)) calc(16 * var(--u));
+    border-bottom: calc(1 * var(--u)) solid var(--border);
+  }
+  .ch-head-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: calc(12 * var(--u));
+  }
+  .ch-title {
+    min-width: 0;
+    overflow: hidden;
+    font-size: calc(14 * var(--u));
+    font-weight: 500;
+    line-height: calc(20 * var(--u));
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ch-more {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: calc(28 * var(--u));
+    height: calc(28 * var(--u));
+    border-radius: calc(10 * var(--u));
+  }
+  .ch-sub {
+    display: flex;
+    align-items: center;
+    gap: calc(4 * var(--u));
+    overflow: hidden;
+    color: var(--muted-foreground);
+    font-size: calc(12 * var(--u));
+    line-height: calc(16 * var(--u));
+    white-space: nowrap;
+  }
+  .ch-sub span:first-of-type {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .ch-sub span:last-child {
+    flex-shrink: 0;
+  }
+  .ch-draft {
+    position: relative;
+    z-index: 1;
+    display: block;
+    min-height: calc(24 * var(--u));
+    color: var(--foreground);
+    white-space: pre-wrap;
+  }
+  .ch-draft .typed::after {
+    height: calc(18 * var(--u));
+  }
+  /* A slash command in the draft: the secondary badge with the yellow chip classes. */
+  .ch-chip {
+    display: inline-flex;
+    align-items: center;
+    height: calc(24 * var(--u));
+    margin: 0 calc(8 * var(--u)) 0 calc(2 * var(--u));
+    padding: 0 calc(10 * var(--u));
+    border-radius: 999px;
+    background: var(--yellow-300);
+    color: var(--secondary-foreground);
+    font-size: calc(12 * var(--u));
+    font-weight: 500;
+    line-height: calc(16 * var(--u));
+    vertical-align: middle;
+  }
+  :where(:root[data-theme="dark"]) .ch-chip {
+    background: var(--yellow-600);
+  }
+  /* Slash menu: agent-chat-composer-slash-menu.tsx. It opens above the editor. */
+  .ch-slash {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    z-index: 20;
+    display: none;
+    flex-direction: column;
+    margin-bottom: calc(8 * var(--u));
+    overflow: hidden;
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(12 * var(--u));
+    background: var(--popover);
+    box-shadow:
+      0 calc(10 * var(--u)) calc(15 * var(--u)) calc(-3 * var(--u)) rgb(15 23 42 / 0.1),
+      0 calc(4 * var(--u)) calc(6 * var(--u)) calc(-4 * var(--u)) rgb(15 23 42 / 0.1);
+  }
+  .ch-slash[data-open] {
+    display: flex;
+  }
+  .ch-command {
+    display: flex;
+    gap: calc(12 * var(--u));
+    padding: calc(8 * var(--u)) calc(12 * var(--u));
+  }
+  .ch-command[data-active] {
+    background: var(--selected-surface);
+  }
+  .ch-command-icon {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: calc(28 * var(--u));
+    height: calc(28 * var(--u));
+    margin-top: calc(2 * var(--u));
+    border-radius: 50%;
+    background: var(--muted);
+    color: var(--muted-foreground);
+  }
+  .ch-command-text {
+    display: grid;
+    flex: 1;
+    min-width: 0;
+  }
+  .ch-command-name {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    font-size: calc(14 * var(--u));
+    font-weight: 500;
+    line-height: calc(20 * var(--u));
+  }
+  .ch-command-name small {
+    padding: calc(2 * var(--u)) calc(8 * var(--u));
+    border-radius: 999px;
+    background: var(--muted);
+    color: var(--muted-foreground);
+    font-size: calc(10 * var(--u));
+    font-weight: 400;
+    letter-spacing: 0.025em;
+    line-height: calc(15 * var(--u));
+    text-transform: uppercase;
+  }
+  .ch-command-desc {
+    color: var(--muted-foreground);
+    font-size: calc(12 * var(--u));
+    line-height: calc(16 * var(--u));
+  }
+  .ch-command-chevron {
+    margin-top: calc(2 * var(--u));
+    color: var(--muted-foreground);
+  }
+  @container stage (width >= 700px) {
+    .chat-window {
+      --design-width: 960;
+      min-height: calc(640 * var(--u));
+    }
+  }
+  @container stage (width >= 1101px) {
+    .chat-window {
+      --design-width: 1440;
+      min-height: calc(760 * var(--u));
+    }
+  }
+  /* Narrow stages drop the app chrome and the other chat tab, as the Agent Studio replica does. */
+  @container stage (width <= 500px) {
+    .chat-window {
+      --design-width: 440;
+      min-height: calc(660 * var(--u));
+    }
+    .chat-window .rail,
+    .chat-window .sb-collapsed,
+    .chat-window .st-tab:not([data-active]),
+    .chat-window .st-tabs-tools > :not(:last-child),
+    .chat-window .st-attach,
+    .chat-window .st-chip.effort,
+    .chat-window .st-context small {
+      display: none;
+    }
+    .chat-window .app-body {
+      padding-top: calc(34 * var(--u));
+      background: var(--studio-chrome);
+    }
+    .chat-window .st-tab {
+      flex: 1;
+      max-width: none;
+    }
+    .chat-window .st-tab-title {
+      max-width: none;
+    }
+    .chat-window .st-track {
+      padding: calc(12 * var(--u)) calc(12 * var(--u)) calc(6 * var(--u));
+    }
+    .chat-window .st-agent-body {
+      padding-right: 0;
+    }
+    .chat-window .st-composer {
+      padding: calc(10 * var(--u)) calc(12 * var(--u)) calc(12 * var(--u));
+    }
+    .chat-window .st-context {
+      margin-right: calc(4 * var(--u));
+    }
+    .chat-window .st-context i {
+      width: calc(40 * var(--u));
+    }
+  }
+}

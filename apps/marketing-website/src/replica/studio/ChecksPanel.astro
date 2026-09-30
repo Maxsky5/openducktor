@@ -1,0 +1,58 @@
+---
+// The CI Checks tab of task-execution-ci-checks-content.tsx for the linked pull request.
+// `state` sets the aggregate status; the scene flips `data-checks` when the checks finish.
+import {
+  ChevronDown,
+  ChevronRight,
+  CircleCheck,
+  Clock,
+  ExternalLink,
+  RefreshCw,
+} from "@lucide/astro";
+import "./ChecksPanel.css";
+
+interface Props {
+  title: string;
+  updated: string;
+  checks: string[];
+  state: "passing" | "pending";
+}
+const { title, updated, checks, state } = Astro.props;
+---
+
+<div class="st-checks" data-panel="ci_checks" data-checks={state}>
+  <div class="st-checks-head">
+    <b>{title}</b>
+    <small>Updated <span data-checks-updated>{updated}</span><RefreshCw class="i14" /></small>
+  </div>
+  <div class="st-checks-list">
+    <div class="st-checks-sum">
+      <ChevronDown /><CircleCheck class="tone" /><b>Checks</b>
+      <span class="tone"
+        ><span class="when-done">{checks.length} passing</span><span class="when-pending"
+          >{checks.length} pending</span
+        ></span
+      >
+      <span class="st-checks-badge" data-checks-badge
+        ><span class="when-done">Passing</span><span class="when-pending">Pending</span></span
+      >
+    </div>
+    {
+      checks.map((name) => (
+        <div class="st-check">
+          <ChevronRight class="i14" />
+          <CircleCheck class="when-done tone" />
+          <Clock class="when-pending tone" />
+          <b>{name}</b>
+          <small class="tone">
+            <span class="when-done">success</span>
+            <span class="when-pending">in progress</span>
+          </small>
+          <span>
+            <ExternalLink class="i14" />
+          </span>
+        </div>
+      ))
+    }
+  </div>
+</div>

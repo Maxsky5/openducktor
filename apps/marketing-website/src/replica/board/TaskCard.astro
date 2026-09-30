@@ -1,0 +1,41 @@
+---
+// A task card of kanban-task-card.tsx: the title, the id, the badges, and the card actions. A card
+// with an active session shows the running ray, and a session that waits for input glows.
+import { Copy, ExternalLink } from "@lucide/astro";
+import type { ComponentProps } from "astro/types";
+import CardActions from "./CardActions.astro";
+import type { CardData } from "./model";
+import PrBadge from "./PrBadge.astro";
+import TaskBadges from "./TaskBadges.astro";
+import Ray from "../ui/Ray.astro";
+import { TASKS } from "../../sample/tasks";
+import { taskId } from "../../sample/workspace";
+import "./TaskCard.css";
+
+type Props = CardData;
+const { task, name, action, session, pr } = Astro.props;
+const { title, kind, priority } = TASKS[task];
+const running = session && session.status !== "Waiting input";
+const waiting = session?.status === "Waiting input";
+const actionProps: ComponentProps<typeof CardActions> = {};
+if (action) actionProps.action = action;
+if (session) actionProps.session = session;
+---
+
+<div
+  class="card"
+  data-activity={running ? "working" : waiting ? "waiting" : "idle"}
+  data-card={name ?? ""}
+>
+  <Ray class="card-ray" />
+  <div class="card-content">
+    <p class="card-title">{title}</p>
+    <div class="card-id">
+      <span><code data-task-id>{taskId(task)}</code><Copy class="i12" /></span><span
+        class="card-open"><ExternalLink class="i12" />Open</span
+      >
+    </div>
+    <TaskBadges kind={kind} priority={priority}>{pr && <PrBadge number={pr} />}</TaskBadges>
+    <CardActions {...actionProps} />
+  </div>
+</div>

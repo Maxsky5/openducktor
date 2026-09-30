@@ -1,0 +1,37 @@
+---
+// A terminal window with one command and a copy button. The slot holds the output lines. A scene
+// types the command into `data-typed` and keeps the rest in `data-rest`, so the line keeps its
+// size.
+import CopyButton from "./CopyButton.astro";
+import "./Terminal.css";
+
+interface Props {
+  /** The visible title of the terminal. */
+  title: string;
+  /** The id of the title, so a container can name itself with it. */
+  titleId: string;
+  /** The name of the command in the label of the copy button. The title is the default. */
+  label?: string;
+  prompt: string;
+  command: string;
+  /** The screen is the stage of a scene, which puts its markup back when motion stops. */
+  stage?: boolean;
+}
+const { title, titleId, label = title, prompt, command, stage = false } = Astro.props;
+---
+
+<div class="terminal" data-command={command}>
+  <div class="terminal-bar">
+    <span class="terminal-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+    <h4 class="terminal-title" id={titleId}>{title}</h4>
+    <CopyButton label={label} labelled />
+  </div>
+  <div class="terminal-screen" data-stage={stage ? "" : undefined}>
+    <p class="t-line t-input" data-input>
+      <span class="t-prompt" aria-hidden="true" set:text={prompt} />
+      <code><span class="t-typed" data-typed set:text={command} /><span data-rest></span></code>
+    </p>
+    <slot />
+  </div>
+  <p class="copy-status visually-hidden" role="status" aria-live="polite"></p>
+</div>

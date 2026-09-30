@@ -1,0 +1,21 @@
+---
+import SiteLayout from "../layouts/SiteLayout.astro";
+import { description, title } from "../content/site";
+import Header from "../sections/Header.astro";
+import Hero from "../sections/Hero.astro";
+import Workflow from "../sections/Workflow.astro";
+import Runtimes from "../sections/Runtimes.astro";
+import Autopilot from "../sections/Autopilot.astro";
+import Features from "../sections/Features.astro";
+import Local from "../sections/Local.astro";
+import Install from "../sections/Install.astro";
+import Faq from "../sections/Faq.astro";
+import Closing from "../sections/Closing.astro";
+import Footer from "../sections/Footer.astro";
+---
+
+<SiteLayout title={title} description={description} indexable
+  ><Header /><main id="main" tabindex="-1">
+    <Hero /><Workflow /><Runtimes /><Autopilot /><Features /><Local /><Install /><Faq /><Closing />
+  </main><Footer /></SiteLayout
+>

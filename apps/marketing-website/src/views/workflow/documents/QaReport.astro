@@ -1,0 +1,24 @@
+---
+import DocHeading from "../../../replica/studio/DocHeading.astro";
+import Prose from "../../../replica/studio/Prose.astro";
+---
+
+<Prose>
+  <DocHeading level={1}>QA report</DocHeading>
+  <DocHeading level={2}>Verdict</DocHeading>
+  <p>Rejected. One requirement fails.</p>
+  <DocHeading level={2}>Findings</DocHeading>
+  <DocHeading level={3}>The shortcut opens search over another dialog</DocHeading>
+  <ul>
+    <li>Spec: “The shortcut does nothing while another dialog is open.”</li>
+    <li>With the settings dialog open, <code>Cmd+K</code> opens search on top of it.</li>
+    <li><code>use-search-shortcut.ts</code> checks text fields but not open dialogs.</li>
+    <li>No test covers this case, although the plan lists it.</li>
+  </ul>
+  <DocHeading level={2}>Checks</DocHeading>
+  <ul>
+    <li><code>bun test src/search</code>: 5 tests pass.</li>
+    <li><code>settings-dialog.tsx</code> sets <code>aria-modal="true"</code>.</li>
+    <li>Text fields and <code>Shift</code> match the spec.</li>
+  </ul>
+</Prose>

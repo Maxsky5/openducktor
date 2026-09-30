@@ -1,0 +1,42 @@
+---
+// Build chapter, final frame: the Builder committed the change and the Git panel lists the branch
+// changes. The scene starts on the Planner session, opens the start dialog, and asks for the
+// commit approval. The Builder role has no document, so the Document tab goes away.
+import ApprovalCard from "../../replica/transcript/ApprovalCard.astro";
+import DocumentPanel from "../../replica/studio/DocumentPanel.astro";
+import GitPanel from "../../replica/studio/GitPanel.astro";
+import PlanDocument from "./documents/PlanDocument.astro";
+import Transcript from "../../replica/transcript/Transcript.astro";
+import StartDialog from "../../replica/studio/StartDialog.astro";
+import { BUILD_FILES, BUILDER_SESSION, DOCUMENTS, FRAMES } from "../../sample/studio";
+import StudioWindow from "../../replica/studio/StudioWindow.astro";
+import type { BuildTemplate } from "./build";
+---
+
+<StudioWindow frame={FRAMES.build}>
+  <Transcript
+    sessions={[
+      { id: "planner", turns: 1 },
+      { id: "build", turns: 1 },
+    ]}
+    shown="build"
+  />
+  <DocumentPanel slot="panel" labels={DOCUMENTS.plan}>
+    <PlanDocument />
+  </DocumentPanel>
+  <GitPanel slot="panel" files={BUILD_FILES} ahead={1} />
+</StudioWindow>
+<template data-tpl={"builder-dialog" satisfies BuildTemplate}
+  ><StartDialog
+    role="Builder"
+    description="Start a fresh session for Start Implementation."
+    session={BUILDER_SESSION}
+    target="origin/main"
+  /></template
+>
+<template data-tpl={"approval" satisfies BuildTemplate}
+  ><ApprovalCard
+    summary="Commit the search shortcut change to the task branch."
+    command='git commit -m "feat(search): open search with Cmd+K"'
+  /></template
+>

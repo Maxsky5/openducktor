@@ -1,0 +1,150 @@
+@layer site {
+  .terminal {
+    --terminal-bg: #0f1624;
+    --terminal-bar: #151e2f;
+    --terminal-line: #243049;
+    --terminal-ink: #d7deea;
+    --terminal-dim: #7d8aa1;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--terminal-line);
+    border-radius: 12px;
+    background: var(--terminal-bg);
+    color: var(--terminal-ink);
+    /* The shadow ends above the note under the terminal, so the note keeps its contrast. */
+    box-shadow: 0 16px 40px -28px hsl(var(--shadow-tint) / 0.6);
+  }
+  :where(:root[data-theme="dark"]) .terminal {
+    --terminal-bg: #090e17;
+    --terminal-bar: #0e1522;
+  }
+  .terminal-bar {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 14px;
+    min-height: 46px;
+    padding: 0 8px 0 14px;
+    border-bottom: 1px solid var(--terminal-line);
+    background: var(--terminal-bar);
+  }
+  .terminal-dots {
+    display: flex;
+    gap: 7px;
+  }
+  .terminal-dots i {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: #3a465c;
+  }
+  .terminal-title {
+    color: var(--terminal-ink);
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+  /* A failed copy shows its status at the bottom of the terminal. */
+  .terminal .copy-status[data-visible] {
+    padding: 10px 20px 14px;
+    border-top: 1px solid var(--terminal-line);
+    color: #f5b3b3;
+    font-size: 0.8125rem;
+  }
+  .terminal-screen {
+    display: grid;
+    align-content: start;
+    gap: 2px;
+    padding: 18px 20px 22px;
+    font-family: var(--mono-font);
+    font-size: 0.75rem;
+    line-height: 1.65;
+  }
+  /* A long line breaks at the edge of the terminal, as in a real terminal. */
+  .t-line {
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .t-input code {
+    color: #f4f7fb;
+  }
+  .t-prompt {
+    margin-right: 1ch;
+    color: #8b97ad;
+  }
+  .t-out {
+    color: var(--terminal-ink);
+  }
+  /* On a narrow screen, the message of a log line goes under its time. */
+  .t-log {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .t-stamp {
+    color: var(--terminal-dim);
+  }
+  .t-level {
+    color: #7aa2f7;
+  }
+  .t-ready {
+    color: #9ece6a;
+    font-weight: 700;
+  }
+  .t-success {
+    color: #9ece6a;
+  }
+  .t-arrow {
+    color: #c099ff;
+    font-weight: 700;
+  }
+  .t-label {
+    color: #7aa2f7;
+  }
+  .t-link {
+    color: #7dcfff;
+    font-weight: 700;
+  }
+  .t-caret {
+    display: inline-block;
+    width: 0.6em;
+    height: 1.15em;
+    vertical-align: text-bottom;
+    background: #c3cbd8;
+  }
+  /* The cursor blinks only while the page plays motion. The pause control stops it. */
+  :root[data-motion="running"] .t-caret {
+    animation: caret-blink 1.1s steps(1) infinite;
+  }
+  /* The install scene hides text that is not shown yet, but keeps its place. */
+  [data-pending] {
+    visibility: hidden;
+  }
+  /* The cursor covers the next character, so the typed text does not move. */
+  .t-input[data-typing] .t-typed::after {
+    content: "";
+    display: inline-block;
+    width: 0.6em;
+    height: 1.15em;
+    margin-right: -0.6em;
+    vertical-align: text-bottom;
+    background: #c3cbd8;
+  }
+  @keyframes caret-blink {
+    50% {
+      opacity: 0;
+    }
+  }
+  @media (width <= 767px) {
+    .terminal-screen {
+      padding-inline: 16px;
+    }
+  }
+  @media (width <= 479px) {
+    /* The terminal title and the copy button keep one line. */
+    .terminal-dots {
+      display: none;
+    }
+    .terminal-bar {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+  }
+}

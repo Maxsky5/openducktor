@@ -1,0 +1,31 @@
+---
+// A regular tool row of agent-chat-regular-tool-summary.tsx, with the icon of agent-chat-tool-icon.tsx.
+import { FileText, Search, Terminal, Wrench } from "@lucide/astro";
+import RowTime from "./RowTime.astro";
+import "./ToolRow.css";
+
+interface Props {
+  kind: "read" | "search" | "bash" | "tool";
+  name: string;
+  args?: string;
+  duration: string;
+  time: string;
+  row?: string;
+}
+const { kind, name, args, duration, time, row } = Astro.props;
+const icons = { read: FileText, search: Search, bash: Terminal, tool: Wrench };
+const Icon = icons[kind];
+---
+
+<div class="st-tool-wrap" data-row={row}>
+  <div class="st-tool" data-tool>
+    <Icon class="i14" /><b>{name}</b>{
+      args && (
+        <span class="st-tool-args" data-tool-args>
+          {args}
+        </span>
+      )
+    }<RowTime duration={duration} time={time} />
+  </div>
+  <slot />
+</div>

@@ -1,0 +1,212 @@
+@layer replica {
+  /* Composer */
+  .st-composer {
+    flex: 0 0 auto;
+    padding: calc(12 * var(--u)) calc(16 * var(--u)) calc(16 * var(--u));
+  }
+  .st-stack:not(:empty) + .st-composer {
+    padding-top: calc(12 * var(--u));
+  }
+  .st-box {
+    position: relative;
+    border: calc(1 * var(--u)) solid var(--input);
+    border-left: 0;
+    background: var(--card);
+    box-shadow: var(--shadow-md);
+  }
+  .st-box-inner {
+    border-left: calc(4 * var(--u)) solid var(--runtime-accent);
+  }
+  .st-box[data-activity="waiting"] {
+    border: calc(1 * var(--u)) solid var(--warning-border);
+    box-shadow:
+      0 0 0 calc(1 * var(--u)) color-mix(in srgb, var(--warning-border) 72%, transparent),
+      0 0 calc(18 * var(--u)) color-mix(in srgb, var(--warning-ring) 30%, transparent);
+  }
+  .st-box[data-activity="waiting"] .st-box-inner {
+    border-left-color: transparent;
+    border-left-width: 0;
+  }
+  /* The draft: a menu of the slot opens above the editor. The placeholder sits under the text, as
+     in agent-chat-composer-editor.tsx, and it hides when the draft has text. */
+  .st-draft {
+    position: relative;
+  }
+  .st-editor {
+    position: relative;
+    min-height: calc(44 * var(--u));
+    padding: calc(10 * var(--u)) calc(12 * var(--u));
+    color: var(--muted-foreground);
+    font-size: calc(15 * var(--u));
+    line-height: calc(24 * var(--u));
+  }
+  .st-editor .when-ready {
+    position: absolute;
+    top: calc(10 * var(--u));
+    left: calc(12 * var(--u));
+  }
+  .st-editor[data-draft] .when-ready {
+    display: none;
+  }
+  .st-editor .when-waiting,
+  .st-box[data-activity="waiting"] .st-editor .when-ready {
+    display: none;
+  }
+  .st-box[data-activity="waiting"] .st-editor .when-waiting {
+    display: inline;
+  }
+  .st-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: calc(8 * var(--u));
+    padding: calc(8 * var(--u)) calc(10 * var(--u));
+    border-top: calc(1 * var(--u)) solid color-mix(in oklch, var(--border) 80%, transparent);
+  }
+  .st-controls > span {
+    display: flex;
+    align-items: center;
+    gap: calc(6 * var(--u));
+  }
+  .st-controls > span:last-child {
+    gap: calc(8 * var(--u));
+  }
+  .st-attach {
+    display: grid;
+    place-items: center;
+    width: calc(28 * var(--u));
+    height: calc(28 * var(--u));
+    border: calc(1 * var(--u)) solid var(--input);
+    border-radius: 50%;
+    color: var(--muted-foreground);
+  }
+  .st-chip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    height: calc(28 * var(--u));
+    padding: 0 calc(8 * var(--u));
+    border: calc(1 * var(--u)) solid var(--input);
+    border-radius: 999px;
+    background: var(--card);
+    font-size: calc(12 * var(--u));
+    white-space: nowrap;
+  }
+  .st-chip .runtime-logo {
+    width: calc(16 * var(--u));
+    height: calc(16 * var(--u));
+  }
+  .st-chip > .lucide:last-child {
+    color: var(--muted-foreground);
+  }
+  .st-chip.effort {
+    padding-left: calc(28 * var(--u));
+  }
+  .st-chip.effort > .lucide:first-child {
+    position: absolute;
+    left: calc(8 * var(--u));
+  }
+  .st-context {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    margin-right: calc(12 * var(--u));
+    padding: calc(4 * var(--u)) calc(10 * var(--u));
+    border: calc(1 * var(--u)) solid var(--input);
+    border-radius: 999px;
+    background: var(--card);
+  }
+  .st-context i {
+    position: relative;
+    width: calc(64 * var(--u));
+    height: calc(6 * var(--u));
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--secondary);
+  }
+  .st-context i::after {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: var(--used);
+    border-radius: inherit;
+    background: var(--success-accent);
+  }
+  .st-context b {
+    color: var(--success-muted);
+    font-size: calc(11 * var(--u));
+    font-weight: 500;
+  }
+  .st-context small {
+    color: var(--muted-foreground);
+    font-size: calc(11 * var(--u));
+  }
+  /* Send is disabled until the draft has text or pending review comments. */
+  .st-send {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: calc(32 * var(--u));
+    height: calc(32 * var(--u));
+    border-radius: 50%;
+    background: var(--primary);
+    color: var(--primary-foreground);
+    opacity: 0.5;
+    transition: opacity 200ms;
+  }
+  .st-send[data-ready] {
+    opacity: 1;
+  }
+  .st-send-badge {
+    position: absolute;
+    top: calc(-8 * var(--u));
+    right: calc(-8 * var(--u));
+    display: grid;
+    place-items: center;
+    min-width: calc(20 * var(--u));
+    min-height: calc(20 * var(--u));
+    padding: 0 calc(4 * var(--u));
+    border-radius: 999px;
+    background: var(--amber-300);
+    color: #0a0a0a;
+    font-size: calc(10 * var(--u));
+    font-weight: 600;
+    line-height: 1;
+  }
+  .st-send-badge:empty {
+    display: none;
+  }
+  .st-stop {
+    display: none;
+    place-items: center;
+    width: calc(32 * var(--u));
+    height: calc(32 * var(--u));
+    border-radius: 50%;
+    background: var(--red-500);
+    color: #fff;
+    box-shadow: var(--shadow-sm);
+  }
+  :where(:root[data-theme="dark"]) .st-stop {
+    background: var(--red-600);
+  }
+  .st-stop .lucide {
+    fill: currentColor;
+  }
+  .st-box[data-activity="working"] .st-stop {
+    display: grid;
+  }
+  /* The running border ray of the composer, in the accent of the runtime. */
+  .st-ray {
+    z-index: 1;
+  }
+  .st-ray rect {
+    stroke: var(--runtime-accent);
+    stroke-width: calc(2.6 * var(--u));
+    stroke-dasharray: 12 88;
+    animation-duration: 3s;
+  }
+  .st-box:not([data-activity="working"]) > .st-ray {
+    display: none;
+  }
+}

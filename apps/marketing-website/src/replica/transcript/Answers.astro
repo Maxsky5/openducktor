@@ -1,0 +1,24 @@
+---
+// The "Questions and answers" details under an answered request_user_input row.
+import type { Answer } from "../../sample/transcripts";
+import "./Answers.css";
+
+interface Props {
+  items: readonly Answer[];
+}
+const { items } = Astro.props;
+---
+
+<div class="st-answers" data-answers>
+  <span>Questions and answers</span>
+  <dl>
+    {
+      items.map((item) => (
+        <div>
+          <dt>{item.prompt}</dt>
+          <dd>{item.answer}</dd>
+        </div>
+      ))
+    }
+  </dl>
+</div>

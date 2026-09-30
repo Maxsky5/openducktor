@@ -1,0 +1,170 @@
+@layer site {
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.25rem;
+    font-weight: 650;
+    letter-spacing: -0.04em;
+  }
+  /* The duck mark keeps the brand violet of the app icon in both themes. */
+  .duck-mark {
+    width: 30px;
+    height: 30px;
+    flex-shrink: 0;
+  }
+  .duck-tile {
+    fill: var(--brand);
+  }
+  .duck-bob {
+    fill: #fff;
+  }
+  .duck-water {
+    stroke: #fff;
+    stroke-width: 2.5;
+    opacity: 0;
+  }
+  /* The night vision visor. Its light scans the visor now and then while the page plays motion. */
+  .duck-visor {
+    fill: none;
+    stroke: var(--brand);
+    stroke-width: 6;
+    stroke-linecap: round;
+  }
+  .duck-light {
+    fill: none;
+    stroke: #fff;
+    stroke-width: 2.4;
+    stroke-linecap: round;
+  }
+  /* The duck turns around the point where it floats on the water. */
+  .duck-bob,
+  .duck-water {
+    transform-box: view-box;
+    transform-origin: 32px 50px;
+  }
+  /* The duck hops once when the page opens, and it bobs when the visitor points at its link. A hop
+     or a bob that starts plays to its end. The pause control stops the light. */
+  :root[data-motion="running"] .duck-light {
+    animation: duck-scan 5s 1.4s ease-in-out infinite;
+  }
+  :root[data-motion] .duck-mark[data-play="hop"] .duck-bob {
+    animation: duck-hop 1.51s 0.4s both;
+  }
+  :root[data-motion] .duck-mark[data-play="hop"] .duck-water {
+    animation: duck-wave 0.95s 0.4s both;
+  }
+  :root[data-motion] .duck-mark[data-play="bob"] .duck-bob {
+    animation: duck-bob 0.96s both;
+  }
+  :root[data-motion] .duck-mark[data-play="bob"] .duck-water {
+    animation: duck-wave 0.95s both;
+  }
+  @keyframes duck-hop {
+    0% {
+      transform: none;
+      animation-timing-function: cubic-bezier(0.3333, 1, 0.6667, 1);
+    }
+    /* The duck lands with the bounce.out ease of GSAP. Each arc of the bounce is a parabola, which
+       a quadratic ease draws exactly: in on the way down, out on the way up. */
+    13.25% {
+      transform: translate(0, -5px) rotate(-6deg);
+      animation-timing-function: cubic-bezier(0.3333, 0, 0.6667, 0.3333);
+    }
+    21.67% {
+      transform: none;
+      animation-timing-function: cubic-bezier(0.3333, 0.6667, 0.6667, 1);
+    }
+    25.89% {
+      transform: translate(0, -1.25px) rotate(-1.5deg);
+      animation-timing-function: cubic-bezier(0.3333, 0, 0.6667, 0.3333);
+    }
+    30.1% {
+      transform: none;
+      animation-timing-function: cubic-bezier(0.3333, 0.6667, 0.6667, 1);
+    }
+    32.21% {
+      transform: translate(0, -0.3125px) rotate(-0.375deg);
+      animation-timing-function: cubic-bezier(0.3333, 0, 0.6667, 0.3333);
+    }
+    34.32% {
+      transform: none;
+      animation-timing-function: cubic-bezier(0.3333, 0.6667, 0.6667, 1);
+    }
+    35.37% {
+      transform: translate(0, -0.0781px) rotate(-0.0938deg);
+      animation-timing-function: cubic-bezier(0.3333, 0, 0.6667, 0.3333);
+    }
+    36.42% {
+      transform: none;
+      animation-timing-function: cubic-bezier(0.3333, 1, 0.6667, 1);
+    }
+    48.34% {
+      transform: translate(0, 1.5px) rotate(-10deg);
+      animation-timing-function: cubic-bezier(0.37, 0, 0.63, 1);
+    }
+    65.56% {
+      transform: translate(0, -1px) rotate(7deg);
+      animation-timing-function: cubic-bezier(0.37, 0, 0.63, 1);
+    }
+    80.13% {
+      transform: translate(0, 0.5px) rotate(-3deg);
+      animation-timing-function: cubic-bezier(0.61, 1, 0.88, 1);
+    }
+    100% {
+      transform: none;
+    }
+  }
+  @keyframes duck-bob {
+    0% {
+      transform: none;
+      animation-timing-function: cubic-bezier(0.3333, 1, 0.6667, 1);
+    }
+    18.75% {
+      transform: translate(0, 1.5px) rotate(-10deg);
+      animation-timing-function: cubic-bezier(0.37, 0, 0.63, 1);
+    }
+    45.83% {
+      transform: translate(0, -1px) rotate(7deg);
+      animation-timing-function: cubic-bezier(0.37, 0, 0.63, 1);
+    }
+    68.75% {
+      transform: translate(0, 0.5px) rotate(-3deg);
+      animation-timing-function: cubic-bezier(0.61, 1, 0.88, 1);
+    }
+    100% {
+      transform: none;
+    }
+  }
+  /* A small wave passes under the duck. */
+  @keyframes duck-wave {
+    0% {
+      opacity: 0;
+      transform: translateX(-3px);
+      animation-timing-function: cubic-bezier(0.37, 0, 0.63, 1);
+    }
+    31.58%,
+    36.84% {
+      opacity: 0.6;
+      transform: none;
+      animation-timing-function: cubic-bezier(0.12, 0, 0.39, 0);
+    }
+    100% {
+      opacity: 0;
+      transform: translateX(3px);
+    }
+  }
+  @keyframes duck-scan {
+    0%,
+    40%,
+    100% {
+      transform: none;
+    }
+    12% {
+      transform: translateX(-8px);
+    }
+    24% {
+      transform: translateX(1px);
+    }
+  }
+}

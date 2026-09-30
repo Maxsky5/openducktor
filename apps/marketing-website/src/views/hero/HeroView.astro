@@ -1,0 +1,76 @@
+---
+// The lanes keep the order of the product. Backlog sorts by priority, then puts the newest task
+// first. The other lanes put waiting sessions first, then running sessions, then older activity.
+import AppWindow from "../../replica/shell/AppWindow.astro";
+import Board from "../../replica/board/Board.astro";
+import BoardHead from "../../replica/board/BoardHead.astro";
+import CardActions from "../../replica/board/CardActions.astro";
+import { type BoardData, boardActivity } from "../../replica/board/model";
+import Pointer from "../../replica/shell/Pointer.astro";
+import PrBadge from "../../replica/board/PrBadge.astro";
+import TaskCard from "../../replica/board/TaskCard.astro";
+import Toast from "../../replica/shell/Toast.astro";
+import { CARD_ACTIONS, type HeroTemplate, TOASTS } from "./templates";
+import "./HeroView.css";
+import Scene from "../Scene.astro";
+import ToastStack from "../../replica/shell/ToastStack.astro";
+
+const board: BoardData = {
+  open: [
+    { name: "sync", task: "b8t1", action: "Start Builder" },
+    { name: "export", task: "m2q7", action: "Start Spec" },
+  ],
+  spec_ready: [{ name: "titles", task: "h5w3", action: "Start Planner" }],
+  in_progress: [
+    { name: "empty", task: "p6d4", session: { role: "Builder", status: "Waiting input" } },
+    { name: "shortcut", task: "k3x9", session: { role: "Builder", status: "Running" } },
+  ],
+  ai_review: [{ name: "focus", task: "r9c2", session: { role: "QA", status: "Running" } }],
+  human_review: [{ name: "typing", task: "t4n8", action: "Approve Task", pr: 41 }],
+};
+---
+
+<Scene
+  name="hero"
+  class="wrap-wide"
+  alt="The OpenDucktor Kanban board. Agents plan, build, and review tasks in separate lanes. A task in Human Review has a pull request. Another task waits for your answer."
+>
+  <AppWindow
+    chrome={{
+      sidebar: "full",
+      page: "kanban",
+      activity: boardActivity(board),
+      busyWorkspace: true,
+    }}
+    class="hero-window"
+  >
+    <BoardHead />
+    <Board board={board} />
+    <ToastStack />
+    <Pointer slot="overlay" />
+  </AppWindow>
+  <Fragment slot="templates">
+    {
+      Object.entries(CARD_ACTIONS).map(([name, actions]) => (
+        <template data-tpl={name}>
+          <CardActions {...actions} />
+        </template>
+      ))
+    }
+    <template data-tpl={"merged" satisfies HeroTemplate}><PrBadge number={41} merged /></template>
+    <template data-tpl={"new-task" satisfies HeroTemplate}
+      ><TaskCard name="pin" task="w1j5" action="Start Spec" /></template
+    >
+    {
+      Object.entries(TOASTS).map(([name, toast]) => (
+        <template data-tpl={name}>
+          <Toast {...toast} />
+        </template>
+      ))
+    }
+  </Fragment>
+</Scene>
+<script>
+  import { mountHero } from "./scene";
+  mountHero();
+</script>

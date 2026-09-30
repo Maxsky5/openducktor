@@ -1,0 +1,94 @@
+@layer replica {
+  /* Task card */
+  .card {
+    position: relative;
+    isolation: isolate;
+    min-width: 0;
+    border: calc(1 * var(--u)) solid color-mix(in oklch, var(--border) 90%, transparent);
+    border-radius: calc(12 * var(--u));
+    background: color-mix(in oklch, var(--card) 95%, transparent);
+    box-shadow: var(--shadow-sm);
+  }
+  .card-content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: calc(4 * var(--u));
+    padding: calc(14 * var(--u));
+  }
+  .card-title {
+    display: -webkit-box;
+    margin-bottom: calc(4 * var(--u));
+    overflow: hidden;
+    font-size: calc(14 * var(--u));
+    font-weight: 600;
+    line-height: 1.25;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+  .card-id {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: calc(4 * var(--u));
+    font-size: calc(11 * var(--u));
+    color: var(--muted-foreground);
+  }
+  .card-id > span {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(4 * var(--u));
+  }
+  .card-id code {
+    font-family: var(--mono);
+    font-size: calc(12 * var(--u));
+  }
+  .card-open {
+    padding: calc(2 * var(--u)) calc(6 * var(--u));
+  }
+  /* Active sessions: border ray and waiting glow, as in the desktop styles. */
+  .card[data-activity="working"] {
+    border-color: rgb(14 165 233 / 0.58);
+    box-shadow: 0 0 calc(9 * var(--u)) rgb(14 165 233 / 0.22);
+  }
+  .card[data-activity="waiting"] {
+    border-color: var(--warning-border);
+    box-shadow:
+      0 0 0 calc(1 * var(--u)) color-mix(in srgb, var(--warning-border) 72%, transparent),
+      0 0 calc(18 * var(--u)) color-mix(in srgb, var(--warning-ring) 30%, transparent);
+  }
+  .card-ray {
+    z-index: 0;
+  }
+  .card-ray rect {
+    rx: calc(12 * var(--u));
+    stroke: var(--status-running);
+    stroke-width: calc(4 * var(--u));
+    stroke-dasharray: 16 84;
+    animation-duration: 2s;
+  }
+  .card:not([data-activity="working"]) > .card-ray {
+    display: none;
+  }
+  .card[data-flying] {
+    pointer-events: none;
+  }
+  .card[data-fresh] {
+    animation: card-fresh 1.8s ease-out;
+  }
+  /* The brand violet mixed in sRGB: the translucent oklch --primary leaves orange dots on
+     rounded corners. */
+  @keyframes card-fresh {
+    from {
+      box-shadow:
+        0 0 0 calc(3 * var(--u)) color-mix(in srgb, var(--brand) 45%, transparent),
+        var(--shadow-sm);
+    }
+    to {
+      box-shadow:
+        0 0 0 0 transparent,
+        var(--shadow-sm);
+    }
+  }
+}

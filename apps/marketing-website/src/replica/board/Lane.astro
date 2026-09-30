@@ -1,0 +1,32 @@
+---
+// KanbanColumn of kanban-column.tsx. An open lane without a card shows LaneEmptyState.
+import { Inbox } from "@lucide/astro";
+import { LANE_TITLES, type LaneId } from "../vocabulary";
+import { laneCountLabel } from "../format";
+import "./Lane.css";
+import { flag } from "../flag";
+
+interface Props {
+  status: LaneId;
+  count: number;
+  collapsed?: boolean;
+}
+const { status, count, collapsed = false } = Astro.props;
+---
+
+<div class="lane" data-collapsed={flag(collapsed)} data-lane={status}>
+  <div class="lane-head">
+    <span class="lane-accent"></span>
+    <div class="lane-title" data-lane-title>
+      <span class="lane-name">{LANE_TITLES[status]}</span><span class="lane-count" data-lane-count
+        >{laneCountLabel(count)}</span
+      >
+    </div>
+    <span class="lane-dot" data-lane-dot>{count}</span>
+  </div>
+  <div class="lane-body" data-lane-body>
+    <div class="lane-empty"><Inbox /><p>No tasks in this lane.</p></div>
+    <slot />
+  </div>
+  <span class="lane-rail" data-lane-rail></span>
+</div>

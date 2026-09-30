@@ -1,0 +1,33 @@
+@layer replica {
+  .st-user {
+    margin-bottom: calc(16 * var(--u));
+    padding: calc(12 * var(--u)) calc(16 * var(--u));
+    border-left: calc(4 * var(--u)) solid var(--runtime-accent);
+    background: var(--card);
+    box-shadow: var(--shadow-md);
+    font-size: calc(14 * var(--u));
+  }
+  .st-agent + .st-user,
+  .st-turn + .st-turn > .st-user:first-child {
+    margin-top: calc(16 * var(--u));
+  }
+  .st-user p {
+    line-height: calc(24 * var(--u));
+    white-space: pre-wrap;
+  }
+  .st-user time {
+    display: block;
+    margin-top: calc(4 * var(--u));
+    color: var(--muted-foreground);
+    font-size: calc(11 * var(--u));
+    font-weight: 500;
+    text-align: right;
+  }
+  .st-user code {
+    padding: 0 calc(4 * var(--u));
+    border-radius: calc(6 * var(--u));
+    background: var(--secondary);
+    font-family: var(--mono);
+    font-size: calc(12.5 * var(--u));
+  }
+}

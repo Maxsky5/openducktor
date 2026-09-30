@@ -1,0 +1,302 @@
+@layer views {
+  /*
+   * Prompts: the Settings dialog on the global prompt overrides. Sources: settings-modal.tsx and
+   * settings-modal-prompt-components.tsx. Margins replace the grid gaps of the product, so a row
+   * that grows or shrinks moves its neighbors without a jump.
+   */
+  .prompts-dialog {
+    --design-width: 480;
+    --shadow-lg:
+      0 calc(10 * var(--u)) calc(15 * var(--u)) calc(-3 * var(--u)) rgb(0 0 0 / 0.1),
+      0 calc(4 * var(--u)) calc(6 * var(--u)) calc(-4 * var(--u)) rgb(0 0 0 / 0.1);
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    min-height: calc(680 * var(--u));
+  }
+  .prompts-dialog:not([data-invalid]) [data-alert],
+  .prompts-dialog:not([data-invalid]) [data-message] {
+    display: none;
+  }
+  .pd-header {
+    position: relative;
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    gap: calc(6 * var(--u));
+    padding: calc(24 * var(--u)) calc(24 * var(--u)) calc(16 * var(--u));
+    border-bottom: calc(1 * var(--u)) solid var(--border);
+  }
+  .pd-header strong {
+    font-size: calc(18 * var(--u));
+    font-weight: 600;
+    line-height: calc(28 * var(--u));
+  }
+  .pd-header p {
+    color: var(--muted-foreground);
+    font-size: calc(14 * var(--u));
+    line-height: calc(20 * var(--u));
+  }
+  .pd-close {
+    position: absolute;
+    top: calc(16 * var(--u));
+    right: calc(16 * var(--u));
+    display: grid;
+    padding: calc(4 * var(--u));
+    border-radius: calc(8 * var(--u));
+    color: var(--muted-foreground);
+  }
+  .pd-body {
+    display: grid;
+    flex: 1 1 0;
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+  }
+  .pd-nav {
+    display: none;
+  }
+  .pd-nav-item {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: space-between;
+    height: calc(36 * var(--u));
+    padding: 0 calc(16 * var(--u));
+    border-radius: calc(10 * var(--u));
+    font-size: calc(14 * var(--u));
+    font-weight: 500;
+  }
+  .pd-nav-item[data-active] {
+    background: var(--sidebar-accent);
+    color: var(--sidebar-accent-foreground);
+  }
+  .pd-nav-label {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    min-width: 0;
+  }
+  .pd-nav-label span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pd-alert {
+    margin-left: calc(8 * var(--u));
+    color: var(--destructive-muted);
+  }
+  .pd-content {
+    min-height: 0;
+    overflow: hidden;
+    padding: calc(16 * var(--u));
+  }
+  .pd-content > * + * {
+    margin-top: calc(16 * var(--u));
+  }
+  .pd-cards > * + *,
+  .pd-card > * + * {
+    margin-top: calc(12 * var(--u));
+  }
+  .pd-editor > * + * {
+    margin-top: calc(8 * var(--u));
+  }
+  .pd-heading {
+    display: grid;
+    gap: calc(8 * var(--u));
+  }
+  .pd-heading strong,
+  .pd-card-head strong {
+    font-size: calc(14 * var(--u));
+    font-weight: 600;
+    line-height: calc(20 * var(--u));
+  }
+  .pd-heading p,
+  .pd-card-head p {
+    color: var(--muted-foreground);
+    font-size: calc(12 * var(--u));
+    line-height: calc(16 * var(--u));
+    text-wrap: pretty;
+  }
+  /* The role tabs: the label and the error icon. */
+  .pd-tab {
+    gap: calc(6 * var(--u));
+    line-height: calc(16 * var(--u));
+  }
+  .pd-banner {
+    padding: calc(12 * var(--u));
+    border: calc(1 * var(--u)) solid color-mix(in oklch, var(--destructive) 40%, transparent);
+    border-radius: calc(10 * var(--u));
+    background: color-mix(in oklch, var(--destructive) 10%, transparent);
+    color: var(--destructive);
+    font-size: calc(12 * var(--u));
+    line-height: calc(16 * var(--u));
+  }
+  .pd-card {
+    padding: calc(16 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(12 * var(--u));
+    background: var(--card);
+  }
+  .pd-card-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: calc(12 * var(--u));
+  }
+  .pd-card-head > div {
+    display: grid;
+    gap: calc(4 * var(--u));
+    min-width: 0;
+  }
+  .pd-enable {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    font-size: calc(12 * var(--u));
+    font-weight: 500;
+    line-height: calc(16 * var(--u));
+    white-space: nowrap;
+  }
+  .pd-inherited {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: calc(8 * var(--u));
+    padding: calc(8 * var(--u)) calc(12 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(10 * var(--u));
+    background: color-mix(in oklch, var(--muted) 60%, transparent);
+  }
+  .pd-inherited p {
+    font-size: calc(12 * var(--u));
+    font-weight: 500;
+    line-height: calc(16 * var(--u));
+  }
+  .pd-inherited .lucide {
+    color: var(--muted-foreground);
+  }
+  .pd-label {
+    display: block;
+    font-size: calc(12 * var(--u));
+    font-weight: 500;
+    line-height: calc(16 * var(--u));
+  }
+  /* Textarea with seven rows of font-mono text-xs. The scene scrolls it to keep the caret in view. */
+  .pd-textarea {
+    position: relative;
+    height: calc(130 * var(--u));
+    overflow: hidden;
+    padding: calc(8 * var(--u)) calc(12 * var(--u));
+    border: calc(1 * var(--u)) solid var(--input);
+    border-radius: calc(10 * var(--u));
+    background: var(--card);
+    box-shadow: var(--shadow-sm);
+  }
+  .pd-textarea[data-focus] {
+    box-shadow:
+      0 0 0 calc(2 * var(--u)) color-mix(in oklch, var(--ring) 40%, transparent),
+      var(--shadow-sm);
+  }
+  .pd-textarea pre {
+    margin: 0;
+    color: var(--foreground);
+    font-family:
+      ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+      monospace;
+    font-size: calc(12 * var(--u));
+    line-height: calc(16 * var(--u));
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+  }
+  .pd-textarea [data-selected] {
+    background: var(--selected-surface);
+  }
+  .pd-caret {
+    display: inline-block;
+    width: 0;
+    height: calc(16 * var(--u));
+    margin-right: calc(-1.5 * var(--u));
+    border-left: calc(1.5 * var(--u)) solid var(--foreground);
+    vertical-align: top;
+    visibility: hidden;
+  }
+  .pd-textarea[data-focus] .pd-caret {
+    visibility: visible;
+    animation: caret 1.06s steps(1) infinite;
+  }
+  .pd-textarea[data-typing] .pd-caret {
+    animation: none;
+  }
+  .pd-textarea[data-selecting] .pd-caret {
+    visibility: hidden;
+  }
+  .pd-error {
+    color: var(--destructive-muted);
+    font-size: calc(12 * var(--u));
+    line-height: calc(16 * var(--u));
+  }
+  .pd-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: calc(8 * var(--u));
+  }
+  .pd-save {
+    border: 0;
+  }
+  /* Save Settings is disabled while a prompt has an error. */
+  .prompts-dialog[data-invalid] .pd-save {
+    opacity: 0.5;
+  }
+  .pd-footer {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    padding: calc(16 * var(--u)) calc(24 * var(--u));
+    border-top: calc(1 * var(--u)) solid var(--border);
+  }
+  /* The product puts no space before the message. The replica adds 12 design pixels. */
+  .pd-message {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    min-width: 0;
+    padding: 0 calc(12 * var(--u));
+    color: var(--destructive-muted);
+    font-size: calc(14 * var(--u));
+    line-height: calc(20 * var(--u));
+  }
+  /* A phone shows the card header in one column, as the product does below 640px. */
+  @container stage (width <= 439px) {
+    .prompts-dialog {
+      --design-width: 400;
+      min-height: calc(724 * var(--u));
+    }
+    .pd-card-head {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .pd-tab {
+      padding: 0 calc(8 * var(--u));
+    }
+  }
+  /* A wide stage shows the sections of the dialog at the size of the app. */
+  @container stage (width >= 620px) {
+    .prompts-dialog {
+      --design-width: 760;
+      min-height: calc(660 * var(--u));
+    }
+    .pd-body {
+      grid-template-columns: calc(220 * var(--u)) minmax(0, 1fr);
+    }
+    .pd-nav {
+      display: flex;
+      flex-direction: column;
+      gap: calc(4 * var(--u));
+      min-height: 0;
+      overflow: hidden;
+      padding: calc(12 * var(--u));
+      border-right: calc(1 * var(--u)) solid var(--border);
+      background: color-mix(in oklch, var(--muted) 50%, transparent);
+    }
+  }
+}

@@ -1,0 +1,14 @@
+---
+// A link to another page, with an arrow after its text. It shows its underline while the visitor
+// points at it.
+import { ArrowUpRight } from "@lucide/astro";
+import "./ArrowLink.css";
+
+interface Props {
+  href: string;
+  class?: string;
+}
+const { href, class: className } = Astro.props;
+---
+
+<a class:list={["arrow-link", className]} href={href}><slot /><ArrowUpRight size={14} /></a>

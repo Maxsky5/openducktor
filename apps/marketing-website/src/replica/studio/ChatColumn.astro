@@ -1,0 +1,13 @@
+---
+// The chat column of the agent chat surface: the transcript, the docked requests, and the
+// composer of a session. Agent Studio puts it next to the task panel, and a workspace chat fills
+// its window with it.
+import "./ChatColumn.css";
+
+interface Props {
+  class?: string;
+}
+const { class: className } = Astro.props;
+---
+
+<div class:list={["st-chat", className]} data-chat><slot /></div>

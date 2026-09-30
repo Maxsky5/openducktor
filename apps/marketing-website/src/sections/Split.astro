@@ -1,0 +1,10 @@
+---
+// A section layout: the copy on one side and a product view on the other. On a narrow screen, the
+// view goes under the copy.
+import "./Split.css";
+---
+
+<div class="wrap split">
+  <div class="split-copy"><slot name="copy" /></div>
+  <slot />
+</div>

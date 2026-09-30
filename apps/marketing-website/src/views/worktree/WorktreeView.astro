@@ -1,0 +1,31 @@
+---
+// Agent Studio after the Builder session: the Builder transcript, the Git tab, the builder dev
+// servers, and the Open In menu. On a phone, the view shows only the task tools. The scene starts
+// the dev servers of the repository in the task worktree, reads the api log, and opens the
+// worktree in another app.
+import GitPanel from "../../replica/studio/GitPanel.astro";
+import { BUILD_FILES, FRAMES } from "../../sample/studio";
+import StudioWindow from "../../replica/studio/StudioWindow.astro";
+import Transcript from "../../replica/transcript/Transcript.astro";
+import DevServerPanel from "../../replica/studio/DevServerPanel.astro";
+import OpenInMenu from "../../replica/studio/OpenInMenu.astro";
+import { DEV_SERVERS, OPEN_IN_CHOICE, OPEN_IN_DEFAULT } from "../../sample/worktree";
+import Scene from "../Scene.astro";
+import "./WorktreeView.css";
+---
+
+<Scene
+  name="worktree"
+  alt={`Agent Studio after the Builder session, with the four changed files of the task branch in the Git tab. The visitor starts the dev servers of the repository. The web and api terminals stream their logs from the task worktree. Then the visitor opens the worktree in ${OPEN_IN_CHOICE}.`}
+>
+  <StudioWindow class="worktree-studio" frame={{ ...FRAMES.build, focus: "panel" }}>
+    <Transcript sessions={[{ id: "build", turns: 1 }]} shown="build" />
+    <GitPanel slot="panel" files={BUILD_FILES} ahead={1} />
+    <OpenInMenu slot="openin" tool={OPEN_IN_DEFAULT} menu />
+    <DevServerPanel slot="devserver" servers={DEV_SERVERS} active="api" />
+  </StudioWindow>
+</Scene>
+<script>
+  import { mountWorktree } from "./scene";
+  mountWorktree();
+</script>

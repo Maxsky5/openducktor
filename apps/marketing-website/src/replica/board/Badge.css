@@ -1,0 +1,97 @@
+@layer replica {
+  /* A badge of a task card. The tone gives the colors of a task kind, a priority, a QA verdict, or
+     a pull request. */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(6 * var(--u));
+    height: calc(24 * var(--u));
+    padding: 0 calc(10 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: 999px;
+    background: var(--muted);
+    color: var(--foreground);
+    font-size: calc(11 * var(--u));
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .badge .lucide {
+    width: calc(12 * var(--u));
+    height: calc(12 * var(--u));
+  }
+  .badge i {
+    width: calc(6 * var(--u));
+    height: calc(6 * var(--u));
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .badge[data-tone="bug"] {
+    border-color: var(--rose-200);
+    background: var(--rose-50);
+    color: var(--rose-700);
+  }
+  :where(:root[data-theme="dark"]) .badge[data-tone="bug"] {
+    border-color: var(--rose-800);
+    background: color-mix(in oklch, var(--rose-950) 50%, transparent);
+    color: var(--rose-300);
+  }
+  .badge[data-tone="feature"],
+  .badge[data-tone="p3"] {
+    border-color: var(--sky-200);
+    background: var(--sky-50);
+    color: var(--sky-700);
+  }
+  :where(:root[data-theme="dark"]) .badge[data-tone="feature"],
+  :where(:root[data-theme="dark"]) .badge[data-tone="p3"] {
+    border-color: var(--sky-800);
+    background: color-mix(in oklch, var(--sky-950) 50%, transparent);
+    color: var(--sky-300);
+  }
+  .badge[data-tone="p1"] {
+    border-color: var(--orange-200);
+    background: var(--orange-50);
+    color: var(--orange-700);
+  }
+  :where(:root[data-theme="dark"]) .badge[data-tone="p1"] {
+    border-color: var(--orange-800);
+    background: color-mix(in oklch, var(--orange-950) 50%, transparent);
+    color: var(--orange-300);
+  }
+  .badge[data-tone="p2"] {
+    border-color: var(--amber-200);
+    background: var(--amber-50);
+    color: var(--amber-700);
+  }
+  :where(:root[data-theme="dark"]) .badge[data-tone="p2"] {
+    border-color: var(--amber-800);
+    background: color-mix(in oklch, var(--amber-950) 50%, transparent);
+    color: var(--amber-300);
+  }
+  .badge[data-tone="p1"] i {
+    background: var(--orange-500);
+  }
+  .badge[data-tone="p2"] i {
+    background: var(--amber-500);
+  }
+  .badge[data-tone="p3"] i {
+    background: var(--sky-500);
+  }
+  .badge[data-tone="rejected"] {
+    border-color: var(--rejected-border);
+    background: var(--rejected-surface);
+    color: var(--rejected-muted);
+  }
+  .badge[data-tone="pr"] {
+    border-color: var(--border);
+    background: var(--card);
+    color: var(--muted-foreground);
+  }
+  .badge[data-tone="pr"] .lucide:first-child {
+    width: calc(14 * var(--u));
+    height: calc(14 * var(--u));
+    color: var(--emerald-600);
+  }
+  .badge[data-tone="pr"][data-merged] .lucide:first-child {
+    color: var(--violet-600);
+  }
+}

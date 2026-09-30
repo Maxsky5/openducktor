@@ -1,0 +1,65 @@
+@layer site {
+  /* An icon button on the page. */
+  .copy-button {
+    display: grid;
+    place-items: center;
+    flex: 0 0 36px;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--soft);
+  }
+  .copy-button:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .copy-button[data-copy-state="copied"] {
+    border-color: var(--success-line);
+    color: var(--success-ink);
+    background: var(--success-soft);
+  }
+  /* A labelled button in the bar of a terminal, so the visitor finds it at once. */
+  .copy-button[data-labelled] {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    width: auto;
+    height: auto;
+    min-height: 32px;
+    padding: 0 11px;
+    border-color: var(--terminal-line);
+    border-radius: 7px;
+    background: #1b2539;
+    color: var(--terminal-ink);
+    font-size: 0.8125rem;
+    font-weight: 550;
+  }
+  .copy-button[data-labelled]:hover {
+    border-color: #3a4966;
+    background: #222e45;
+    color: var(--terminal-ink);
+  }
+  .copy-button[data-labelled][data-copy-state="copied"] {
+    border-color: var(--terminal-line);
+    background: #1b2539;
+    color: #8fd694;
+  }
+  /* A copied button under the pointer keeps its hover look. */
+  .copy-button[data-labelled][data-copy-state="copied"]:hover {
+    border-color: #3a4966;
+    background: #222e45;
+  }
+  /* The icon, and the label, change when the command is copied. */
+  .copy-button .check-icon,
+  .copy-button .copy-done,
+  .copy-button[data-copy-state="copied"] .copy-icon,
+  .copy-button[data-copy-state="copied"] .copy-idle {
+    display: none;
+  }
+  .copy-button[data-copy-state="copied"] .check-icon,
+  .copy-button[data-copy-state="copied"] .copy-done {
+    display: block;
+  }
+}

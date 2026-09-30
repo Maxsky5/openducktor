@@ -1,0 +1,121 @@
+@layer site {
+  /* Install */
+  .install-head {
+    display: grid;
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+    align-items: end;
+    gap: 40px clamp(40px, 6vw, 96px);
+  }
+  .install-label {
+    color: var(--ink);
+    font-size: 0.9375rem;
+    font-weight: 600;
+  }
+  .needs-box {
+    display: grid;
+    gap: 14px;
+    padding: 22px 24px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--page-alt);
+  }
+  .needs {
+    display: grid;
+    gap: 10px;
+    list-style: none;
+    color: var(--ink);
+    font-size: 0.9375rem;
+  }
+  .needs li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .needs svg {
+    flex: 0 0 auto;
+    color: var(--accent);
+  }
+  .needs code {
+    font-size: 0.875em;
+  }
+  /* The desktop app and the browser version, side by side. Their headings, their terminals, and
+     their links start on the same lines. */
+  .install-modes {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: clamp(40px, 5vw, 64px);
+    border-top: 1px solid var(--line);
+  }
+  .install-mode {
+    display: grid;
+    grid-row: span 3;
+    grid-template-rows: subgrid;
+    align-content: start;
+    row-gap: 28px;
+    min-width: 0;
+    padding-top: clamp(28px, 3vw, 40px);
+  }
+  .install-mode:first-child {
+    padding-right: clamp(28px, 4vw, 56px);
+  }
+  .install-mode + .install-mode {
+    padding-left: clamp(28px, 4vw, 56px);
+    border-left: 1px solid var(--line);
+  }
+  .install-mode-head {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-content: start;
+    column-gap: 16px;
+    row-gap: 6px;
+  }
+  .install-mode-head h3 {
+    font-size: 1.375rem;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+  }
+  .install-mode-head p {
+    grid-column: 2;
+    max-width: 52ch;
+    color: var(--body-ink);
+    font-size: 0.9375rem;
+    line-height: 1.55;
+    text-wrap: pretty;
+  }
+  .install-methods {
+    display: grid;
+    align-content: start;
+    gap: 20px;
+  }
+  .install-links {
+    display: flex;
+    flex-wrap: wrap;
+    align-content: start;
+    gap: 8px 24px;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+  @media (width <= 1023px) {
+    .install-head {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 40px;
+    }
+    .install-modes {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .install-mode {
+      grid-row: auto;
+      grid-template-rows: none;
+    }
+    .install-mode:first-child {
+      padding-right: 0;
+    }
+    .install-mode + .install-mode {
+      margin-top: 40px;
+      padding-left: 0;
+      border-top: 1px solid var(--line);
+      border-left: 0;
+    }
+  }
+}

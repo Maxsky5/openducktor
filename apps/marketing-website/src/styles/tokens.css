@@ -1,0 +1,60 @@
+@layer base {
+  :root {
+    font-family: "Space Grotesk Variable", "Space Grotesk", sans-serif;
+    font-synthesis: none;
+    /* The space above and below the content of each section. Two sections are two spaces apart. */
+    --section-space: clamp(44px, 5.5vw, 72px);
+    --page: #fafbfe;
+    --page-alt: #f3f6fb;
+    --ink: #192337;
+    --body-ink: #54627a;
+    /* Small text needs 4.5:1 on each page surface. The display ink is only for large text, which needs 3:1. */
+    --faint-ink: #5f6c82;
+    --display-quiet-ink: #7a879c;
+    --line: #dce3ee;
+    --soft: #eef2f8;
+    /* The brand violet of the mark and of the app, the same in both themes. */
+    --brand: #5100ff;
+    --accent: #5100ef;
+    --accent-ink: #4400c9;
+    --button-ink: #fff;
+    /* A tile that sits on the page, such as an icon badge. */
+    --surface: #fff;
+    /* The copied state of a copy button. */
+    --success-line: oklch(0.748 0.15 164.295);
+    --success-ink: oklch(0.448 0.119 151.328);
+    --success-soft: oklch(0.962 0.044 166.961);
+    --mono-font: "IBM Plex Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    --shadow-tint: 222 47% 16%;
+    --header-height: 64px;
+    /* The page starts light on every system. The theme switch changes the scroll bars and the
+       form controls with the page colors. */
+    color-scheme: light;
+    scroll-behavior: smooth;
+    scroll-padding-top: calc(var(--header-height) + 24px);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d1421;
+    --page-alt: #111a2a;
+    --ink: #eef2f8;
+    --body-ink: #acb8c9;
+    --faint-ink: #8391a7;
+    --display-quiet-ink: #8391a7;
+    --line: #29354a;
+    --soft: #172133;
+    --accent: #a28aff;
+    --accent-ink: #b9a6ff;
+    --button-ink: #130831;
+    --surface: oklch(0.208 0.042 265.755);
+    --success-line: oklch(0.5 0.13 153);
+    --success-ink: oklch(0.72 0.14 162);
+    --success-soft: oklch(0.3 0.08 157 / 0.55);
+    --shadow-tint: 222 60% 3%;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :root {
+      scroll-behavior: auto;
+    }
+  }
+}

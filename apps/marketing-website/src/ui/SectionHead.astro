@@ -1,0 +1,18 @@
+---
+// The heading of a page section: a short label, the title, and the lead paragraphs.
+import "./SectionHead.css";
+
+interface Props {
+  eyebrow: string;
+  /** The id of the title, so the section can name itself with aria-labelledby. */
+  id: string;
+  class?: string;
+}
+const { eyebrow, id, class: className } = Astro.props;
+---
+
+<div class:list={["section-head", className]}>
+  <p class="eyebrow">{eyebrow}</p>
+  <h2 id={id}><slot name="title" /></h2>
+  <slot />
+</div>

@@ -1,0 +1,14 @@
+---
+// The body of a Diagnostics section: its rows, or the text while its check loads.
+import DiagRow from "./DiagRow.astro";
+import type { DiagState } from "./model";
+import "./DiagBody.css";
+
+interface Props {
+  state: DiagState;
+}
+const { state } = Astro.props;
+---
+
+{state.empty && <p class="diag-empty">{state.empty}</p>}
+{state.rows?.map((row) => <DiagRow {...row} />)}

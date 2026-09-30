@@ -1,0 +1,71 @@
+---
+// Agent Studio for one task: the task tabs, then the chat column and the task execution panel.
+// The chat column holds the header with the workflow rail, the session transcript, and the
+// composer. The panel starts under the tabs, as in pages/agents/shell/agents-page-layout.tsx.
+// Sources: agent-studio-task-tabs.tsx, agent-studio-header.tsx, agent-chat-composer.tsx, and
+// task-execution-panel.tsx in packages/frontend/src/components/features/agents.
+import { PanelRightClose, SquareTerminal } from "@lucide/astro";
+import AppWindow from "../shell/AppWindow.astro";
+import Pointer from "../shell/Pointer.astro";
+import SessionTabs from "../shell/SessionTabs.astro";
+import Thread from "../transcript/Thread.astro";
+import ChatColumn from "./ChatColumn.astro";
+import Composer from "./Composer.astro";
+import OpenInMenu from "./OpenInMenu.astro";
+import PanelBar from "./PanelBar.astro";
+import StudioHeader from "./StudioHeader.astro";
+import ResizeHandle from "../ui/ResizeHandle.astro";
+import type { StudioFrame } from "../../sample/studio";
+import { TASKS } from "../../sample/tasks";
+import { OPEN_IN_TERMINAL } from "../../sample/worktree";
+import { taskId } from "../../sample/workspace";
+import { WAITING } from "../vocabulary";
+import "./StudioWindow.css";
+
+interface Props {
+  /** The window state of the frame that the markup holds. */
+  frame: StudioFrame;
+  class?: string;
+}
+const { frame, class: className } = Astro.props;
+
+/** The task of the story, and the tasks of the other open tabs. */
+const tabs = [
+  { title: TASKS.k3x9.title, activity: "idle", active: true },
+  { title: TASKS.b8t1.title, activity: "working" },
+  { title: TASKS.h5w3.title, activity: "idle" },
+] as const;
+---
+
+<AppWindow
+  chrome={{ sidebar: "collapsed", page: "workflows", busyWorkspace: true }}
+  class:list={["studio", className]}
+  data-studio
+  data-runtime={frame.session.runtime}
+  data-focus={frame.focus}
+  data-panel-size={frame.panelSize}
+>
+  <SessionTabs tabs={tabs} close="close" tools={[SquareTerminal, PanelRightClose]} />
+  <div class="st-body">
+    <ChatColumn>
+      <StudioHeader title={TASKS.k3x9.title} task={taskId("k3x9")} frame={frame} />
+      <Thread><slot /></Thread>
+      <div class="st-stack" data-stack></div>
+      <Composer session={frame.session} commentCount>
+        <span class="when-waiting" data-waiting>{WAITING.question}</span>
+      </Composer>
+    </ChatColumn>
+    <ResizeHandle orientation="vertical" class="st-handle" />
+    <div class="st-panel">
+      <PanelBar frame={frame}>
+        <slot name="pr" />
+        <slot name="openin"><OpenInMenu tool={OPEN_IN_TERMINAL} appIcon /></slot>
+      </PanelBar>
+      <div class="st-panel-body" data-panel-body data-active-panel={frame.panel}>
+        <slot name="panel" />
+      </div>
+      <slot name="devserver" />
+    </div>
+  </div>
+  <Fragment slot="overlay"><slot name="overlay" /><Pointer /></Fragment>
+</AppWindow>

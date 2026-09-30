@@ -1,0 +1,125 @@
+@layer replica {
+  /* Open In: open-in-menu.tsx and open-in-tool-metadata.tsx in agent-studio-git-panel. */
+  .oi {
+    position: relative;
+    display: flex;
+    height: calc(28 * var(--u));
+    font-size: calc(11 * var(--u));
+    font-weight: 500;
+  }
+  /* The default tool and the menu trigger: two outline buttons in one group. */
+  .oi > .ui-button {
+    height: calc(28 * var(--u));
+    font-size: calc(11 * var(--u));
+    box-shadow: none;
+  }
+  .oi-default {
+    gap: calc(6 * var(--u));
+    padding: 0 calc(8 * var(--u));
+    border-radius: calc(10 * var(--u)) 0 0 calc(10 * var(--u));
+  }
+  /* The group of the Agent Studio task panel: the app icon, regular text, and a shadow. */
+  .oi[data-app-icon] > .ui-button {
+    box-shadow: var(--shadow-sm);
+    font-weight: 400;
+  }
+  .oi[data-app-icon] > .oi-default {
+    padding: 0 calc(8 * var(--u)) 0 calc(4 * var(--u));
+  }
+  .oi-app {
+    display: grid;
+    place-items: center;
+    width: calc(20 * var(--u));
+    height: calc(20 * var(--u));
+    border-radius: calc(6 * var(--u));
+    background: #1f2937;
+    color: #f8fafc;
+  }
+  .oi-trigger {
+    padding: 0 calc(6 * var(--u));
+    border-left: 0;
+    border-radius: 0 calc(10 * var(--u)) calc(10 * var(--u)) 0;
+  }
+  .oi-icon {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: calc(24 * var(--u));
+    height: calc(24 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(10 * var(--u));
+    background: var(--muted);
+    color: var(--muted-foreground);
+  }
+  .oi-menu {
+    position: absolute;
+    top: calc(100% + 6 * var(--u));
+    right: 0;
+    z-index: 30;
+    display: block;
+    width: calc(320 * var(--u));
+    overflow: hidden;
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(12 * var(--u));
+    background: var(--popover);
+    box-shadow:
+      0 calc(10 * var(--u)) calc(15 * var(--u)) calc(-3 * var(--u)) rgb(15 23 42 / 0.1),
+      0 calc(4 * var(--u)) calc(6 * var(--u)) calc(-4 * var(--u)) rgb(15 23 42 / 0.1);
+    font-weight: 400;
+  }
+  .oi-menu-head {
+    display: grid;
+    gap: calc(4 * var(--u));
+    padding: calc(8 * var(--u)) calc(12 * var(--u));
+    border-bottom: calc(1 * var(--u)) solid var(--border);
+  }
+  .oi-menu-head b {
+    font-size: calc(12 * var(--u));
+    font-weight: 500;
+    line-height: calc(16 * var(--u));
+  }
+  .oi-menu-head small {
+    overflow: hidden;
+    color: var(--muted-foreground);
+    font-size: calc(11 * var(--u));
+    line-height: calc(16 * var(--u));
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .oi-list {
+    display: grid;
+    gap: calc(4 * var(--u));
+    padding: calc(4 * var(--u));
+  }
+  .oi-item {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    padding: calc(8 * var(--u));
+    border-radius: calc(10 * var(--u));
+    font-size: calc(14 * var(--u));
+    font-weight: 500;
+    line-height: calc(20 * var(--u));
+  }
+  .oi-label {
+    flex: 1;
+    min-width: 0;
+  }
+  .oi-spin {
+    display: none;
+  }
+  /* While the app opens, every item is disabled and the chosen one shows a spinner. */
+  .oi-menu[data-busy] .oi-item {
+    opacity: 0.5;
+  }
+  .oi-item[data-opening] .oi-spin {
+    display: block;
+    animation-duration: 0.9s;
+  }
+  /* A narrow panel bar keeps the Open In group only when a scene opens its menu. */
+  @container stage (width <= 699px) {
+    .oi:not([data-menu]) {
+      display: none;
+    }
+  }
+}

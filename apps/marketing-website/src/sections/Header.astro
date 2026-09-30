@@ -1,0 +1,71 @@
+---
+import { Download, Moon, Pause, Play, Sun } from "@lucide/astro";
+import { release } from "../content/release";
+import { links } from "../content/site";
+import Brand from "../ui/Brand.astro";
+import ButtonLink from "../ui/ButtonLink.astro";
+import GithubMark from "../ui/GithubMark.astro";
+import "./Header.css";
+
+// On the home page a section link stays in the page. Another page, such as the 404 page, links
+// to the sections of the home page.
+const sections = Astro.url.pathname === "/" ? "" : "/";
+---
+
+<header class="site-header" data-site-header>
+  <div class="wrap header-row">
+    <div class="brand-row">
+      <Brand href="/#top" label="OpenDucktor home" />
+      <a
+        class="release"
+        href={release.notes}
+        aria-label={`Release notes of version ${release.version}`}>v{release.version}</a
+      >
+    </div>
+    <nav class="site-nav" aria-label="Main navigation">
+      <a href={`${sections}#workflow`}>Workflow</a><a href={`${sections}#features`}>Features</a><a
+        href={`${sections}#local`}>Local</a
+      ><a href={`${sections}#install`}>Install</a><a href={`${sections}#faq`}>FAQ</a>
+    </nav>
+    <div class="header-actions">
+      <a class="github-link" aria-label="GitHub repository" href={links.github}
+        ><GithubMark size={17} /><span>GitHub</span></a
+      >
+      <button
+        class="icon-button motion-toggle"
+        type="button"
+        hidden
+        aria-label="Pause animations"
+        aria-pressed="false"
+        data-motion-toggle
+        ><Pause class="pause-icon" size={17} /><Play class="play-icon" size={17} /></button
+      >
+      <button
+        class="icon-button theme-toggle"
+        type="button"
+        hidden
+        aria-label="Use dark theme"
+        aria-pressed="false"
+        data-theme-toggle><Moon class="moon" size={17} /><Sun class="sun" size={17} /></button
+      >
+      <ButtonLink href={links.latest} size="small" class="header-download"
+        ><Download size={16} />Download</ButtonLink
+      >
+    </div>
+  </div>
+</header>
+<script>
+  import { must } from "../motion/dom";
+  import { bindMotionControl } from "../motion/preference";
+  import { bindThemeToggle } from "../ui/theme";
+
+  const header = must(document, "[data-site-header]");
+  bindThemeToggle(must(header, "[data-theme-toggle]", HTMLButtonElement));
+  bindMotionControl(must(header, "[data-motion-toggle]", HTMLButtonElement));
+  // A line shows under the header once the page scrolls.
+  const mark = (): void => {
+    header.toggleAttribute("data-scrolled", window.scrollY > 8);
+  };
+  mark();
+  window.addEventListener("scroll", mark, { passive: true });
+</script>

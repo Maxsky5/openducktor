@@ -1,0 +1,67 @@
+---
+// The footer of a task card in kanban-task-card.tsx: the button of the next step of the task, or
+// its running session, and the menu of the other actions.
+import {
+  ChevronDown,
+  CircleCheckBig,
+  CirclePlay,
+  ScrollText,
+  ShieldCheck,
+  Sparkles,
+  SquareArrowOutUpRight,
+  Undo2,
+  Wrench,
+  type AstroComponent,
+} from "@lucide/astro";
+import type { CardActionsData } from "./model";
+import { flag } from "../flag";
+import Button from "../ui/Button.astro";
+import { type CardAction, PRIMARY_ACTIONS } from "../vocabulary";
+import "./CardActions.css";
+
+type Props = CardActionsData;
+const { action, session } = Astro.props;
+const icons = {
+  "Start Spec": Sparkles,
+  "Open Spec": SquareArrowOutUpRight,
+  "Start Planner": ScrollText,
+  "Start Builder": Wrench,
+  "Address QA Feedbacks": Wrench,
+  "Request QA Review": ShieldCheck,
+  "Approve Task": CircleCheckBig,
+  "Request Changes": Undo2,
+  "Open Builder": SquareArrowOutUpRight,
+} as const satisfies Record<CardAction, AstroComponent>;
+/** The button of the next step, when the card has no session. */
+const next = action && { label: action, Icon: icons[action], primary: PRIMARY_ACTIONS.has(action) };
+---
+
+<div class="card-actions" data-card-actions>
+  {
+    session ? (
+      <Button
+        variant="outline"
+        size="sm"
+        class="card-action card-session"
+        data-waiting={flag(session.status === "Waiting input")}
+        data-card-action
+      >
+        <CirclePlay />
+        {session.role}
+        <em>{session.status}</em>
+      </Button>
+    ) : (
+      next && (
+        <Button
+          variant={next.primary ? "default" : "outline"}
+          size="sm"
+          class="card-action"
+          data-card-action
+        >
+          <next.Icon />
+          {next.label}
+        </Button>
+      )
+    )
+  }<Button variant="outline" size="sm" class="card-menu"><ChevronDown /></Button>
+</div>

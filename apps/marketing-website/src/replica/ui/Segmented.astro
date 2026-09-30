@@ -1,0 +1,11 @@
+---
+// SegmentedControlRoot of components/ui/segmented-control.tsx. Its items are Segment elements in
+// the slot. The size of the root also sets the size of its items, as the product pairs them.
+import type { HTMLAttributes } from "astro/types";
+import "./Segmented.css";
+
+type Props = HTMLAttributes<"div"> & { size: "sm" | "lg" };
+const { size, class: className, ...attributes } = Astro.props;
+---
+
+<div class:list={["ui-segmented", className]} data-size={size} {...attributes}><slot /></div>

@@ -1,0 +1,12 @@
+@layer site {
+  .arrow-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--accent-ink);
+  }
+  .arrow-link:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}

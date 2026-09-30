@@ -1,0 +1,33 @@
+@layer replica {
+  .st-agent {
+    padding: calc(4 * var(--u)) calc(4 * var(--u)) calc(12 * var(--u));
+    font-size: calc(14 * var(--u));
+  }
+  .st-agent-body {
+    display: grid;
+    gap: calc(8 * var(--u));
+    padding-right: calc(36 * var(--u));
+    line-height: calc(24 * var(--u));
+  }
+  .st-agent code {
+    padding: 0 calc(4 * var(--u));
+    border-radius: calc(6 * var(--u));
+    background: var(--secondary);
+    font-family: var(--mono);
+    font-size: calc(12.5 * var(--u));
+  }
+  .st-sig {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    margin-top: calc(8 * var(--u));
+    color: var(--muted-foreground);
+    font-size: calc(12 * var(--u));
+  }
+  .st-sig i {
+    width: calc(6 * var(--u));
+    height: calc(6 * var(--u));
+    border-radius: 50%;
+    background: var(--runtime-accent);
+  }
+}

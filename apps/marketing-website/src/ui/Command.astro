@@ -1,0 +1,18 @@
+---
+// A shell command with a copy button. Without JavaScript, the visitor selects the text.
+import CopyButton from "./CopyButton.astro";
+import "./Command.css";
+
+interface Props {
+  command: string;
+  /** The name of the command in the label of the copy button. */
+  label: string;
+}
+const { command, label } = Astro.props;
+---
+
+<div class="command" data-command={command}>
+  <pre><code>{command}</code></pre>
+  <CopyButton label={label} />
+  <p class="copy-status visually-hidden" role="status" aria-live="polite"></p>
+</div>

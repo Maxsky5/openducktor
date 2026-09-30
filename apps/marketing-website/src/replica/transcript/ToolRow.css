@@ -1,0 +1,26 @@
+@layer replica {
+  .st-tool {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    min-height: calc(24 * var(--u));
+    padding: calc(2 * var(--u)) calc(4 * var(--u));
+    font-size: calc(12 * var(--u));
+  }
+  .st-tool > .lucide {
+    color: var(--muted-foreground);
+  }
+  .st-tool b {
+    flex-shrink: 0;
+    font-weight: 500;
+  }
+  .st-tool-args {
+    overflow: hidden;
+    color: var(--muted-foreground);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .st-tool-wrap {
+    padding: calc(1 * var(--u)) 0;
+  }
+}

@@ -1,0 +1,63 @@
+@layer replica {
+  /* Right panel toolbar: shared-tools-panel.tsx. */
+  .st-pbar {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    height: calc(45 * var(--u));
+    padding: calc(4 * var(--u)) calc(8 * var(--u)) calc(4 * var(--u)) 0;
+    border-bottom: calc(1 * var(--u)) solid var(--border);
+  }
+  .st-ptabs,
+  .st-ptab-item {
+    display: inline-flex;
+    align-items: center;
+  }
+  .st-ptab {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: calc(36 * var(--u));
+    height: calc(36 * var(--u));
+    color: color-mix(in oklch, var(--muted-foreground) 60%, transparent);
+  }
+  .st-ptab > span {
+    display: grid;
+    place-items: center;
+    width: calc(32 * var(--u));
+    height: calc(32 * var(--u));
+    border-radius: calc(8 * var(--u));
+  }
+  .st-ptab[data-active] {
+    color: var(--foreground);
+  }
+  /* CI dot: sky while checks run, emerald when they pass. */
+  .st-ptab i {
+    position: absolute;
+    top: calc(4 * var(--u));
+    right: calc(4 * var(--u));
+    width: calc(6 * var(--u));
+    height: calc(6 * var(--u));
+    border-radius: 50%;
+    background: var(--sky-500);
+    box-shadow: 0 0 0 calc(1 * var(--u)) var(--card);
+  }
+  .st-ptab i[data-checks="passing"] {
+    background: var(--emerald-500);
+  }
+  .st-psep {
+    width: calc(1 * var(--u));
+    height: calc(20 * var(--u));
+    background: var(--border);
+  }
+  .st-pbar-end {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    margin-left: auto;
+  }
+  .st-ptab-item[hidden] + .st-ptab-item .st-psep {
+    display: none;
+  }
+}

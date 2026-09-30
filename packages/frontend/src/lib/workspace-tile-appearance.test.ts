@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   WORKSPACE_TILE_PALETTE,
   deriveWorkspaceInitials,
+  noColorTileClasses,
   normalizeHexInput,
   tileColorFaceStyle,
   tileForegroundColor,
@@ -138,6 +139,18 @@ describe("tileColorFaceStyle", () => {
 
   test("carries no active marker, so a color sample never reads as an active tile", () => {
     expect(tileColorFaceStyle("#3b82f6")).not.toHaveProperty("outlineColor");
+  });
+});
+
+describe("noColorTileClasses", () => {
+  test("marks the selected tile with the sidebar accent of the active navigation item", () => {
+    expect(noColorTileClasses(true)).toBe(
+      "bg-sidebar-accent text-sidebar-accent-foreground hover:bg-sidebar-accent",
+    );
+  });
+
+  test("keeps every other tile on the neutral tile surface", () => {
+    expect(noColorTileClasses(false)).toBe("bg-workspace-rail-tile hover:bg-workspace-rail-tile");
   });
 });
 

@@ -1,0 +1,115 @@
+@layer replica {
+  /* CI Checks panel: task-execution-ci-checks-content.tsx. The scene flips data-checks. */
+  .st-checks {
+    display: flex;
+    flex-direction: column;
+  }
+  .st-checks-head {
+    display: grid;
+    gap: calc(4 * var(--u));
+    padding: calc(10 * var(--u)) calc(16 * var(--u));
+    border-bottom: calc(1 * var(--u)) solid var(--border);
+  }
+  .st-checks-head b {
+    overflow: hidden;
+    font-size: calc(14 * var(--u));
+    font-weight: 500;
+    line-height: calc(20 * var(--u));
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .st-checks-head small {
+    display: flex;
+    align-items: center;
+    gap: calc(6 * var(--u));
+    color: var(--muted-foreground);
+    font-size: calc(11 * var(--u));
+  }
+  .st-checks-list {
+    border-bottom: calc(1 * var(--u)) solid var(--border);
+  }
+  .st-checks-sum {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    padding: calc(10 * var(--u)) calc(16 * var(--u));
+  }
+  .st-checks-sum > .lucide:first-child {
+    width: calc(14 * var(--u));
+    height: calc(14 * var(--u));
+    color: var(--muted-foreground);
+  }
+  .st-checks-sum b {
+    font-size: calc(14 * var(--u));
+    font-weight: 600;
+  }
+  .st-checks-sum > span.tone {
+    font-size: calc(12 * var(--u));
+    font-weight: 500;
+  }
+  .st-checks-badge {
+    margin-left: auto;
+    padding: calc(2 * var(--u)) calc(10 * var(--u));
+    border-radius: 999px;
+    font-size: calc(12 * var(--u));
+    font-weight: 500;
+  }
+  [data-checks="passing"] .st-checks-badge {
+    background: var(--success-surface);
+    color: var(--success-surface-foreground);
+  }
+  [data-checks="pending"] .st-checks-badge {
+    background: var(--info-surface);
+    color: var(--info-surface-foreground);
+  }
+  [data-checks="passing"] .tone {
+    color: var(--success-muted);
+  }
+  [data-checks="pending"] .tone {
+    color: var(--info-muted);
+  }
+  [data-checks="passing"] .when-pending,
+  [data-checks="pending"] .when-done {
+    display: none;
+  }
+  .st-check {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    padding: calc(8 * var(--u)) calc(16 * var(--u));
+    border-top: calc(1 * var(--u)) solid var(--border);
+    background: color-mix(in oklch, var(--card) 40%, transparent);
+  }
+  .st-check > .lucide {
+    color: var(--muted-foreground);
+  }
+  .st-check > .lucide.tone {
+    width: calc(16 * var(--u));
+    height: calc(16 * var(--u));
+  }
+  [data-checks="passing"] .st-check > .lucide.tone {
+    color: var(--success-muted);
+  }
+  [data-checks="pending"] .st-check > .lucide.tone {
+    color: var(--info-muted);
+  }
+  .st-check b {
+    overflow: hidden;
+    font-size: calc(14 * var(--u));
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .st-check small {
+    font-size: calc(12 * var(--u));
+    font-weight: 500;
+    text-transform: capitalize;
+  }
+  .st-check > span:last-child {
+    display: grid;
+    place-items: center;
+    width: calc(24 * var(--u));
+    height: calc(24 * var(--u));
+  }
+}

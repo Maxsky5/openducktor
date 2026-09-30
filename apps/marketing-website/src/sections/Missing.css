@@ -1,0 +1,9 @@
+@layer site {
+  .missing {
+    min-height: 70dvh;
+    padding-block: 100px;
+  }
+  .missing p {
+    margin-block: 25px;
+  }
+}

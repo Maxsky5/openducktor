@@ -1,0 +1,49 @@
+---
+import { Database, Download, FolderGit2, Scale } from "@lucide/astro";
+import { links } from "../content/site";
+import IconItem from "../ui/IconItem.astro";
+import IconList from "../ui/IconList.astro";
+import ProductFigure from "../ui/ProductFigure.astro";
+import SectionHead from "../ui/SectionHead.astro";
+import LocalView from "../views/local/LocalView.astro";
+import Split from "./Split.astro";
+---
+
+<section id="local" class="section local" aria-labelledby="local-title">
+  <Split>
+    <Fragment slot="copy">
+      <SectionHead eyebrow="Local" id="local-title">
+        <Fragment slot="title">No account, no telemetry.</Fragment>
+        <p>
+          OpenDucktor runs on your computer. It starts the coding agents that you installed, in your
+          own repositories. Your coding agent sends prompts and code to the model provider that you
+          set up.
+        </p>
+      </SectionHead>
+      <IconList>
+        <IconItem title="A SQLite file for each repository"
+          ><Database slot="icon" size={20} />Tasks, specs, plans, and QA reports stay in <code
+            >~/.openducktor/task-stores</code
+          >.</IconItem
+        >
+        <IconItem title="Worktrees on your disk"
+          ><FolderGit2 slot="icon" size={20} />The Builder works in <code
+            >~/.openducktor/worktrees</code
+          >, or in another folder that you set for the repository.</IconItem
+        >
+        <IconItem title="Updates when you choose"
+          ><Download slot="icon" size={20} />The app checks GitHub for a new release every 12 hours.
+          It downloads and installs a release only when you tell it to.</IconItem
+        >
+        <IconItem title="Code that you can read"
+          ><Scale slot="icon" size={20} />The source is on <a class="text-link" href={links.github}
+            >GitHub</a
+          > under the Apache License 2.0. Read it, change it, or build the app yourself.</IconItem
+        >
+      </IconList>
+    </Fragment>
+    <ProductFigure caption={["Sidebar", "Diagnostics"]}>
+      <LocalView />
+    </ProductFigure>
+  </Split>
+</section>

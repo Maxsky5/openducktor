@@ -1,0 +1,104 @@
+---
+// The session start modal of session-start-modal.tsx. Session Mode shows only when the launch
+// action allows more than one mode. Reuse and fork are disabled when no session exists yet.
+// Reuse mode keeps the model of the existing session. The target branch shows for the
+// implementation start and the pull request launch actions.
+import { X } from "@lucide/astro";
+import RuntimeIcon from "../ui/RuntimeIcon.astro";
+import { modelName } from "../../sample/models";
+import type { Session } from "../../sample/sessions";
+import { flag } from "../flag";
+import Button from "../ui/Button.astro";
+import Combobox from "../ui/Combobox.astro";
+import Segment from "../ui/Segment.astro";
+import Segmented from "../ui/Segmented.astro";
+import Switch from "../ui/Switch.astro";
+import "./StartDialog.css";
+
+type Mode = "fresh" | "reuse" | "fork";
+
+interface Props {
+  role: "Planner" | "Builder" | "QA";
+  description: string;
+  session: Session;
+  modes?: Mode[];
+  mode?: Mode;
+  existing?: string;
+  target?: string;
+}
+const { role, description, session, modes = [], mode = "fresh", existing, target } = Astro.props;
+const modeLabels = { fresh: "Start fresh", reuse: "Reuse existing", fork: "Fork existing" };
+const readOnly = mode === "reuse";
+---
+
+<div class="st-overlay">
+  <div class="st-dialog" data-dialog-box>
+    <span class="st-dialog-close"><X /></span>
+    <div class="st-dialog-head">
+      <b>Start {role} Session</b>
+      <p>{description}</p>
+    </div>
+    <div class="st-dialog-body">
+      {
+        modes.length > 1 && (
+          <div class="st-field">
+            <b>Session Mode</b>
+            <Segmented size="lg" class="st-modes">
+              {modes.map((item) => (
+                <Segment
+                  active={item === mode}
+                  disabled={item !== "fresh" && !existing}
+                  data-mode={item}
+                >
+                  {modeLabels[item]}
+                </Segment>
+              ))}
+            </Segmented>
+          </div>
+        )
+      }
+      {
+        existing && (
+          <div class="st-field">
+            <b>Existing Session</b>
+            <Combobox>
+              <span>{existing}</span>
+              <small class="st-latest">Latest</small>
+            </Combobox>
+          </div>
+        )
+      }
+      {
+        target && (
+          <div class="st-field">
+            <b>Target branch</b>
+            <Combobox branch>
+              <span>{target}</span>
+            </Combobox>
+          </div>
+        )
+      }
+      <div class="st-field-row">
+        <div class="st-field">
+          <b>Runtime and model</b>
+          <Combobox data-disabled={flag(readOnly)}>
+            <RuntimeIcon kind={session.runtime} /><span>{modelName(session)}</span>
+          </Combobox>
+        </div>
+        <div class="st-field">
+          <b>Effort</b>
+          <Combobox data-disabled={flag(readOnly)}>
+            <span>{session.effort}</span>
+          </Combobox>
+        </div>
+      </div>
+      <div class="st-switch-row">
+        <Switch />Customize kickoff prompt
+      </div>
+    </div>
+    <div class="st-dialog-foot">
+      <Button variant="outline">Cancel</Button>
+      <Button data-start>Start session</Button>
+    </div>
+  </div>
+</div>

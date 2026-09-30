@@ -1,0 +1,6 @@
+@layer replica {
+  /* The text of a section while its check loads. */
+  .diag-empty {
+    color: var(--muted-foreground);
+  }
+}

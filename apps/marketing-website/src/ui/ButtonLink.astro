@@ -1,0 +1,13 @@
+---
+// The call to action of the site, as a link.
+import "./ButtonLink.css";
+
+interface Props {
+  href: string;
+  size?: "small";
+  class?: string;
+}
+const { href, size, class: className } = Astro.props;
+---
+
+<a class:list={["button", { small: size === "small" }, className]} href={href}><slot /></a>

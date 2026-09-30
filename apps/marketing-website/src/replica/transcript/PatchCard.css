@@ -1,0 +1,39 @@
+@layer replica {
+  /* apply_patch file cards */
+  .st-patch {
+    margin: calc(6 * var(--u)) 0 calc(6 * var(--u)) calc(4 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(12 * var(--u));
+    background: var(--card);
+    font-size: calc(12 * var(--u));
+  }
+  .st-patch-head {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    padding: calc(8 * var(--u)) calc(12 * var(--u));
+  }
+  .st-patch-head > .lucide:first-child {
+    color: var(--muted-foreground);
+  }
+  .st-path {
+    overflow: hidden;
+    font-family: var(--mono);
+    font-size: calc(11 * var(--u));
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .st-path span {
+    color: var(--muted-foreground);
+  }
+  .st-path b {
+    font-weight: 600;
+  }
+  .st-kind {
+    padding: 0 calc(6 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: 999px;
+    font-family: var(--mono);
+    font-size: calc(10 * var(--u));
+  }
+}

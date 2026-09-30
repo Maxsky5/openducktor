@@ -1,0 +1,49 @@
+---
+// The OpenDucktor duck leads three ducklings, the coding agents that it runs. When motion is
+// allowed, they swim in when the section comes into view, then float, and a light scans the
+// visor of the lead duck.
+// The markup is the last frame: the four ducks float in a row.
+import { BILL, BODY, DUCKLING_HEAD, HEAD, VISOR, VISOR_LIGHT } from "./duck";
+import "./DuckParade.css";
+
+const ducklings = [
+  { x: 270, y: 49 },
+  { x: 222, y: 49 },
+  { x: 174, y: 49 },
+];
+// A wave with a period of 24, wider than the view, so it can move by one period and loop.
+const WAVE = `M-24 73 ${Array.from({ length: 22 }, () => "q6 -3.5 12 0t12 0").join("")}`;
+---
+
+<div class="duck-parade" data-parade aria-hidden="true">
+  <svg viewBox="0 0 420 92">
+    <g class="parade-train" data-parade-train>
+      {
+        ducklings.map(({ x, y }) => (
+          <g transform={`translate(${x} ${y}) scale(0.5)`}>
+            <g class="parade-duck parade-kid" data-parade-duck>
+              <path d={BODY} />
+              <path d={DUCKLING_HEAD} fill-rule="evenodd" />
+              <path d={BILL} />
+            </g>
+          </g>
+        ))
+      }
+      <g transform="translate(334 22)">
+        <g class="parade-duck parade-lead" data-parade-duck>
+          <path d={BODY}></path>
+          <circle cx={HEAD.cx} cy={HEAD.cy} r={HEAD.r}></circle>
+          <path d={BILL}></path>
+          <path class="parade-visor" d={VISOR}></path>
+          <path class="parade-light" d={VISOR_LIGHT} data-parade-light></path>
+        </g>
+      </g>
+    </g>
+    <path class="parade-water" d="M0 73H420V92H0Z"></path>
+    <path class="parade-wave" d={WAVE} data-parade-wave></path>
+  </svg>
+</div>
+<script>
+  import { mountParade } from "./parade";
+  mountParade();
+</script>

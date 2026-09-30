@@ -1,0 +1,29 @@
+@layer replica {
+  /* Questions and answers under an answered question tool. */
+  .st-answers {
+    margin: calc(4 * var(--u)) 0 calc(4 * var(--u)) calc(20 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(4 * var(--u));
+    background: color-mix(in oklch, var(--muted) 90%, transparent);
+  }
+  .st-answers > span {
+    display: block;
+    padding: calc(4 * var(--u)) calc(8 * var(--u));
+    font-size: calc(11 * var(--u));
+    font-weight: 500;
+  }
+  .st-answers dl {
+    display: grid;
+    gap: calc(8 * var(--u));
+    margin: 0;
+    padding: calc(8 * var(--u));
+    border-top: calc(1 * var(--u)) solid var(--border);
+    font-size: calc(12 * var(--u));
+  }
+  .st-answers dt {
+    font-weight: 500;
+  }
+  .st-answers dd {
+    margin: calc(2 * var(--u)) 0 0;
+  }
+}

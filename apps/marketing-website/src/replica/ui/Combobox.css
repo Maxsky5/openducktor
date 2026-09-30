@@ -1,0 +1,37 @@
+@layer product {
+  /* The trigger: h-9 px-3 border-input bg-card shadow-xs text-sm, with the chevron at the end. */
+  .ui-combobox {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    height: calc(36 * var(--u));
+    min-width: 0;
+    padding: 0 calc(12 * var(--u));
+    border: calc(1 * var(--u)) solid var(--input);
+    border-radius: calc(10 * var(--u));
+    background: var(--card);
+    box-shadow: var(--shadow-xs);
+    font-size: calc(14 * var(--u));
+  }
+  .ui-combobox[data-disabled] {
+    opacity: 0.5;
+  }
+  /* The value: its label truncates. */
+  .ui-combobox-value {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .ui-combobox-value > :last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .ui-combobox-icon,
+  .ui-combobox-chevron {
+    color: var(--muted-foreground);
+  }
+}

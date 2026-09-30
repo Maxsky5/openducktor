@@ -1,0 +1,14 @@
+---
+// A badge of a task card in kanban-task-card.tsx: a pill with an icon or a dot, in the colors of
+// its tone.
+import type { HTMLAttributes } from "astro/types";
+import "./Badge.css";
+
+type Props = HTMLAttributes<"span"> & {
+  /** A badge without a tone has the muted colors, as the Task kind has. */
+  tone?: "bug" | "feature" | "p1" | "p2" | "p3" | "rejected" | "pr" | undefined;
+};
+const { tone, ...attributes } = Astro.props;
+---
+
+<span class="badge" data-tone={tone} {...attributes}><slot /></span>

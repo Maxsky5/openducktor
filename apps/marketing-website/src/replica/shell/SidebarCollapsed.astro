@@ -1,0 +1,32 @@
+---
+// The collapsed app sidebar: page links, create actions, and Settings. Sources:
+// sidebar-navigation.tsx and workspace-create-actions.tsx in packages/frontend/src/components/layout/sidebar.
+import { MessageCirclePlus, PanelLeftOpen, Plus, Settings, ShieldCheck } from "@lucide/astro";
+import { APP_PAGES } from "./pages";
+import type { AppPage } from "../vocabulary";
+import "./SidebarCollapsed.css";
+
+interface Props {
+  page: AppPage;
+}
+const { page } = Astro.props;
+---
+
+<div class="sb-collapsed">
+  <div class="sbc-title"><span class="sbc-icon"><PanelLeftOpen /></span></div>
+  <div class="sbc-group"><span class="sbc-icon outline"><ShieldCheck /></span></div>
+  <div class="sbc-group">
+    {
+      APP_PAGES.map(({ id, Icon }) => (
+        <span class="sbc-nav" aria-current={id === page ? "true" : undefined}>
+          <Icon />
+        </span>
+      ))
+    }
+  </div>
+  <div class="sbc-group create">
+    <span class="sbc-icon"><Plus /></span>
+    <span class="sbc-icon"><MessageCirclePlus /></span>
+  </div>
+  <div class="sbc-group foot"><span class="sbc-icon"><Settings /></span></div>
+</div>

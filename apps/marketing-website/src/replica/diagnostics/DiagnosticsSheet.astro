@@ -1,0 +1,31 @@
+---
+// The Diagnostics sheet of diagnostics-panel.tsx: the title, Refresh Checks, and the sections in
+// the slot. Refresh Checks is disabled and its icon spins while the checks load.
+import { RefreshCcw, ShieldCheck, X } from "@lucide/astro";
+import type { HTMLAttributes } from "astro/types";
+import Replica from "../Replica.astro";
+import Button from "../ui/Button.astro";
+import "./DiagnosticsSheet.css";
+
+type Props = HTMLAttributes<"div"> & {
+  /** The repository that the checks read. */
+  repository: string;
+};
+const { repository, class: className, ...attributes } = Astro.props;
+---
+
+<Replica class:list={["diag-sheet", className]} {...attributes}>
+  <div class="diag-content">
+    <div class="diag-header">
+      <div class="diag-heading">
+        <strong><ShieldCheck class="diag-shield" />Diagnostics</strong>
+        <p>Setup and runtime diagnostics for <b>{repository}</b>.</p>
+      </div>
+      <Button variant="outline" size="sm" class="diag-refresh" data-refresh
+        ><RefreshCcw class="i14" />Refresh Checks</Button
+      >
+    </div>
+    <div class="diag-sections"><slot /></div>
+    <span class="diag-close"><X /></span>
+  </div>
+</Replica>

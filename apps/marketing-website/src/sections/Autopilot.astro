@@ -1,0 +1,31 @@
+---
+import ProductFigure from "../ui/ProductFigure.astro";
+import SectionHead from "../ui/SectionHead.astro";
+import AutopilotView from "../views/autopilot/AutopilotView.astro";
+import "./Autopilot.css";
+---
+
+<section id="autopilot" class="section autopilot" aria-labelledby="autopilot-title">
+  <div class="wrap-wide">
+    <div class="autopilot-head">
+      <SectionHead eyebrow="Autopilot" id="autopilot-title">
+        <Fragment slot="title">When a step ends, Autopilot starts the next agent.</Fragment>
+      </SectionHead>
+      <div class="autopilot-copy">
+        <p>
+          Autopilot has one rule for each task event, and you turn on the rules that you want. When
+          the spec is ready, the Planner starts. When the plan is ready, the Builder starts. When
+          the build is done, QA starts. When QA rejects the build, the Builder gets the QA report.
+          When QA approves, the Builder opens a pull request. Only you can approve a task.
+        </p>
+        <p class="split-note">
+          Autopilot reacts only to the events that it sees while the app is open. An agent can still
+          stop to ask you a question or to get approval for a command.
+        </p>
+      </div>
+    </div>
+    <ProductFigure caption={["Kanban Board", "Autopilot rules on"]}>
+      <AutopilotView />
+    </ProductFigure>
+  </div>
+</section>
