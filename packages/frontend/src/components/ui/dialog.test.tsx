@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Dialog, DialogBody, DialogContent, DialogTitle } from "./dialog";
 
@@ -45,6 +46,26 @@ afterEach(() => {
 });
 
 describe("DialogContent", () => {
+  test("releases opening animation styles and retains closing styles until removal", () => {
+    // Use a separate document so the real CSS cannot affect parallel component tests.
+    const styleDocument = document.implementation.createHTMLDocument();
+    const style = styleDocument.createElement("style");
+    style.textContent = readFileSync(new URL("./dialog.css", import.meta.url), "utf8");
+    styleDocument.head.append(style);
+    const surface = styleDocument.createElement("div");
+    surface.className = "t-modal";
+    styleDocument.body.append(surface);
+
+    surface.dataset.state = "open";
+    const openingAnimation = getComputedStyle(surface).animation;
+    expect(openingAnimation).not.toBe("");
+    expect(openingAnimation).not.toBe("none");
+    expect(openingAnimation).not.toMatch(/\b(?:both|forwards)\b/);
+
+    surface.dataset.state = "closed";
+    expect(getComputedStyle(surface).animation).toMatch(/\b(?:both|forwards)\b/);
+  });
+
   test("keeps the closing surface mounted and reuses it when reopened", () => {
     const nativeGetComputedStyle = globalThis.getComputedStyle;
     const computedStyle = spyOn(globalThis, "getComputedStyle").mockImplementation((element) => {
