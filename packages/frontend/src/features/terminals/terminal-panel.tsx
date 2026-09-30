@@ -28,13 +28,7 @@ import { terminalTabLabel } from "./terminal-presentation-state";
 import { TerminalTabStrip } from "./terminal-tab-strip";
 import type { TerminalPanelModel, TerminalTab } from "./use-terminals";
 
-export function TerminalPanel({
-  model,
-  headerLeading,
-}: {
-  model: TerminalPanelModel;
-  headerLeading?: ReactNode;
-}): ReactElement {
+export function TerminalPanel({ model, headerLeading }: Props): ReactElement {
   const {
     closeCandidate,
     closeError,
@@ -154,15 +148,7 @@ export function TerminalPanel({
   );
 }
 
-function Header({
-  model,
-  headerLeading,
-  onCloseTab,
-}: {
-  model: TerminalPanelModel;
-  headerLeading: ReactNode;
-  onCloseTab: (tab: TerminalTab) => void;
-}): ReactElement {
+function Header({ model, headerLeading, onCloseTab }: HeaderProps): ReactElement {
   return (
     <div className="flex h-8 shrink-0 items-center gap-2 border-b border-[var(--dev-server-terminal-border)] bg-[var(--dev-server-terminal-surface)]">
       {headerLeading}
@@ -453,3 +439,12 @@ function isEmpty(model: TerminalPanelModel): boolean {
     model.discoveryError === null
   );
 }
+
+type Props = {
+  model: TerminalPanelModel;
+  headerLeading?: ReactNode;
+};
+
+type HeaderProps = Props & {
+  onCloseTab: (tab: TerminalTab) => void;
+};
