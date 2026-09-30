@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { TERMINAL_PROTOCOL_VERSION, type TerminalServerMessage } from "@openducktor/contracts";
+import {
+  TERMINAL_PROTOCOL_VERSION,
+  type TerminalClientMessage,
+  type TerminalServerMessage,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createTerminalClientSession } from "./terminal-client-session";
 import type { TerminalService } from "./terminal-service";
@@ -121,5 +125,112 @@ describe("TerminalClientSession", () => {
       "terminal-1:test-client:terminal-1",
       "terminal-2:test-client:terminal-2",
     ]);
+  });
+
+  test("rejects frames after a failed close and keeps unfinished cleanup available", async () => {
+    const operations: string[] = [];
+    const sent: TerminalServerMessage[] = [];
+    let failDetach = true;
+    const session = createTerminalClientSession({
+      clientId: "test-client",
+      terminalService: createTerminalClientService({
+        attach: () => Effect.sync(() => operations.push("attach")),
+        write: () => Effect.sync(() => operations.push("write")),
+        resize: () => Effect.sync(() => operations.push("resize")),
+        acknowledge: () => Effect.sync(() => operations.push("ack")),
+        detach: (terminalId) =>
+          Effect.suspend(() => {
+            operations.push("detach");
+            return failDetach
+              ? Effect.fail(
+                  new TerminalServiceError({
+                    code: "output_overflow",
+                    operation: "detach",
+                    message: "Injected output resume failure",
+                    terminalId,
+                  }),
+                )
+              : Effect.void;
+          }),
+      }),
+      send: (message) => sent.push(message),
+    });
+    const base = { version: TERMINAL_PROTOCOL_VERSION, terminalId: "terminal-1" };
+    const attach: TerminalClientMessage = { ...base, type: "attach", lastConsumedSequence: null };
+    await Effect.runPromise(session.handle(attach, new Uint8Array()));
+    await expect(Effect.runPromise(session.close())).rejects.toMatchObject({
+      message: expect.stringContaining("Injected output resume failure"),
+    });
+
+    const frames: TerminalClientMessage[] = [
+      attach,
+      { ...base, type: "input" },
+      { ...base, type: "resize", columns: 80, rows: 24 },
+      { ...base, type: "ack", sequenceEnd: 0 },
+      { ...base, type: "detach" },
+    ];
+    for (const frame of frames) {
+      await Effect.runPromise(session.handle(frame, new Uint8Array()));
+    }
+    expect(operations).toEqual(["attach", "detach"]);
+    expect(sent).toHaveLength(5);
+    for (const message of sent) {
+      expect(message).toMatchObject({
+        type: "protocol_error",
+        terminalId: "terminal-1",
+        failure: { code: "protocol_error", message: expect.stringContaining("closed") },
+      });
+    }
+
+    failDetach = false;
+    await Effect.runPromise(session.close());
+    await Effect.runPromise(session.close());
+    expect(operations).toEqual(["attach", "detach", "detach"]);
+  });
+
+  test("retries an attachment after a protocol detach fails", async () => {
+    const detachAttempts: string[] = [];
+    let failDetach = true;
+    const session = createTerminalClientSession({
+      clientId: "test-client",
+      terminalService: createTerminalClientService({
+        attach: () => Effect.void,
+        detach: (terminalId, attachmentId) =>
+          Effect.suspend(() => {
+            detachAttempts.push(attachmentId);
+            return failDetach
+              ? Effect.fail(
+                  new TerminalServiceError({
+                    code: "close_failed",
+                    operation: "detach",
+                    message: "Injected detach failure",
+                    terminalId,
+                  }),
+                )
+              : Effect.void;
+          }),
+      }),
+      send: () => undefined,
+    });
+    await Effect.runPromise(
+      session.handle(
+        {
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "attach",
+          terminalId: "terminal-1",
+          lastConsumedSequence: null,
+        },
+        new Uint8Array(),
+      ),
+    );
+    await Effect.runPromise(
+      session.handle(
+        { version: TERMINAL_PROTOCOL_VERSION, type: "detach", terminalId: "terminal-1" },
+        new Uint8Array(),
+      ),
+    );
+    failDetach = false;
+    await Effect.runPromise(session.close());
+    expect(detachAttempts).toEqual(["test-client:terminal-1", "test-client:terminal-1"]);
   });
 });

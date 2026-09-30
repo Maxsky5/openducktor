@@ -5,7 +5,7 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { TerminalService } from "./terminal-service";
-import { type TerminalServiceError, terminalServiceErrorToFailure } from "./terminal-service-error";
+import { TerminalServiceError, terminalServiceErrorToFailure } from "./terminal-service-error";
 
 export type TerminalClientSession = {
   handle(message: TerminalClientMessage, payload: Uint8Array): Effect.Effect<void>;
@@ -23,6 +23,7 @@ export const createTerminalClientSession = ({
 }): TerminalClientSession => {
   const attachedTerminalIds = new Set<string>();
   const operations = Effect.unsafeMakeSemaphore(1);
+  let closed = false;
   const attachmentId = (terminalId: string): string => `${clientId}:${terminalId}`;
   const sendFailure = (
     error: TerminalServiceError,
@@ -51,6 +52,18 @@ export const createTerminalClientSession = ({
     message: TerminalClientMessage,
     payload: Uint8Array,
   ): Effect.Effect<void> => {
+    if (closed) {
+      return sendFailure(
+        new TerminalServiceError({
+          code: "protocol_error",
+          operation: message.type === "input" ? "write" : message.type,
+          message:
+            "Terminal client connection is closed. Reconnect before sending terminal frames.",
+          terminalId: message.terminalId,
+        }),
+        message,
+      );
+    }
     const id = attachmentId(message.terminalId);
     const operation = (() => {
       if (message.type === "attach") {
@@ -73,8 +86,9 @@ export const createTerminalClientSession = ({
       if (message.type === "ack") {
         return terminalService.acknowledge(message.terminalId, id, message.sequenceEnd);
       }
-      attachedTerminalIds.delete(message.terminalId);
-      return terminalService.detach(message.terminalId, id);
+      return terminalService
+        .detach(message.terminalId, id)
+        .pipe(Effect.tap(() => Effect.sync(() => attachedTerminalIds.delete(message.terminalId))));
     })();
     return operation.pipe(
       Effect.catchTag("TerminalServiceError", (error) => sendFailure(error, message)),
@@ -83,23 +97,26 @@ export const createTerminalClientSession = ({
   const close = (): Effect.Effect<void, TerminalServiceError> =>
     operations.withPermits(1)(
       Effect.gen(function* () {
+        closed = true;
         const terminalIds = [...attachedTerminalIds];
-        attachedTerminalIds.clear();
-        const results = yield* Effect.forEach(
-          terminalIds,
-          (terminalId) =>
-            Effect.either(terminalService.detach(terminalId, attachmentId(terminalId))),
-          { concurrency: 1 },
-        );
-        const failure = results.find(
-          (result) => result._tag === "Left" && result.left.code !== "terminal_not_found",
-        );
-        if (failure?._tag === "Left") return yield* Effect.fail(failure.left);
+        let firstFailure: TerminalServiceError | undefined;
+        for (const terminalId of terminalIds) {
+          const result = yield* Effect.either(
+            terminalService.detach(terminalId, attachmentId(terminalId)),
+          );
+          if (result._tag === "Left" && result.left.code !== "terminal_not_found") {
+            firstFailure ??= result.left;
+            continue;
+          }
+          attachedTerminalIds.delete(terminalId);
+        }
+        if (firstFailure) return yield* Effect.fail(firstFailure);
       }),
     );
 
   return {
-    handle: (message, payload) => operations.withPermits(1)(handleMessage(message, payload)),
+    handle: (message, payload) =>
+      operations.withPermits(1)(Effect.suspend(() => handleMessage(message, payload))),
     close,
   };
 };
