@@ -49,7 +49,7 @@ export type CreateCodexWorkspaceRuntimeStarterInput = {
   codexAppServer: CodexAppServerTransportRegistry;
   liveSessionLifecycle: RuntimeLiveSessionLifecyclePort;
   prepareLiveSessionAdapter: CodexLiveSessionAdapterPreparer;
-  onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
+  onRuntimeFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   runtimeDistribution: HostRuntimeDistribution;
   resolveMcpBridgeConnection?: CodexMcpBridgeConnectionResolver;
   processEnv?: NodeJS.ProcessEnv;
@@ -68,7 +68,7 @@ const DEFAULT_STOP_TIMEOUT_MS = 3_000;
 /**
  * Own each Codex child, transport, and live adapter through one cleanup path.
  * Share cleanup across fatal errors, child close, and stop calls so each resource closes once.
- * Share the stop result so callers and the background reporter see the same cleanup error.
+ * Share the stop result so callers and the runtime reporter see the same cleanup error.
  */
 export const createCodexWorkspaceRuntimeStarter = ({
   toolDiscovery,
@@ -76,7 +76,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
   codexAppServer,
   liveSessionLifecycle,
   prepareLiveSessionAdapter,
-  onBackgroundFailure,
+  onRuntimeFailure,
   resolveMcpBridgeConnection,
   runtimeDistribution,
   processEnv = process.env,
@@ -292,7 +292,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
                   : toHostOperationError(error, "codexWorkspaceRuntime.transportFailed", {
                       runtimeId: nextRuntimeId,
                     });
-              yield* onBackgroundFailure(failure);
+              yield* onRuntimeFailure(failure);
             }).pipe(
               Effect.ensuring(
                 Scope.close(runtimeScope, Exit.succeed(undefined)).pipe(Effect.ignore),

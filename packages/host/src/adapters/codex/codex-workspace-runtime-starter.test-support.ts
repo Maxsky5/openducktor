@@ -23,7 +23,7 @@ type Defaults = Pick<
   | "settingsConfig"
   | "liveSessionLifecycle"
   | "prepareLiveSessionAdapter"
-  | "onBackgroundFailure"
+  | "onRuntimeFailure"
 >;
 type StarterInput = Omit<CreateCodexWorkspaceRuntimeStarterInput, keyof Defaults> &
   Partial<Defaults> & { systemCommands?: SystemCommandPort };
@@ -55,7 +55,7 @@ export const createStarter = (input: StarterInput): RuntimeWorkspaceStarterPort 
   }
   const tools = toolDiscovery ?? createToolDiscoveryAdapter(discovery);
   const options: CreateCodexWorkspaceRuntimeStarterInput = {
-    onBackgroundFailure: () => Effect.void,
+    onRuntimeFailure: () => Effect.void,
     runtimeDistribution: distribution,
     toolDiscovery: tools,
     settingsConfig: settingsConfig ?? createDiscoveredRuntimeSettingsConfig("codex", tools),
