@@ -317,6 +317,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
         codexAppServer,
         nextRuntimeId,
         pid,
+        platform,
         processTreeTerminator,
         stopTimeoutMs,
         transport,

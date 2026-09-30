@@ -29,11 +29,18 @@ describe("Codex runtime lifecycle", () => {
       const root = await mkdtemp(join(tmpdir(), "odt-codex-replacement-"));
       const runtimePidPath = join(root, "runtime.pid");
       const fatalMessagePath = join(root, "fatal.json");
+      const childPidPath = join(root, "child.pid");
+      const childPids: number[] = [];
       const failures: HostOperationErrorAggregate[] = [];
       const handles: RuntimeWorkspaceHandle[] = [];
       let starts = 0;
       const codexAppServer = createTransportRegistry();
-      const codexBinary = await writeCodex(root, { runtimePidPath, fatalMessagePath });
+      const options: Parameters<typeof writeCodex>[1] = {
+        runtimePidPath,
+        fatalMessagePath,
+      };
+      if (process.platform !== "win32") options.childPidPath = childPidPath;
+      const codexBinary = await writeCodex(root, options);
       const starter = createStarter({
         codexAppServer,
         toolDiscovery: stubTools({ codex: codexBinary }),
@@ -70,6 +77,11 @@ describe("Codex runtime lifecycle", () => {
       try {
         const first = await Effect.runPromise(registry.ensureWorkspaceRuntime(input));
         const pid = Number(await readFile(runtimePidPath, "utf8"));
+        if (process.platform !== "win32") {
+          const childPid = Number(await readFile(childPidPath, "utf8"));
+          childPids.push(childPid);
+          expect(processIsAlive(childPid)).toBe(true);
+        }
         if (line === null) {
           process.kill(pid, "SIGTERM");
         } else {
@@ -78,9 +90,15 @@ describe("Codex runtime lifecycle", () => {
         await waitFor(() => failures.length === 1);
         expect(handles[0]?.isAlive()).toBe(false);
         expect(processIsAlive(pid)).toBe(false);
+        for (const childPid of childPids) expect(processIsAlive(childPid)).toBe(false);
         expect(failures[0]?.message).toContain(message);
         await rm(fatalMessagePath, { force: true });
         const replacement = await Effect.runPromise(registry.ensureWorkspaceRuntime(input));
+        if (process.platform !== "win32") {
+          const childPid = Number(await readFile(childPidPath, "utf8"));
+          childPids.push(childPid);
+          expect(processIsAlive(childPid)).toBe(true);
+        }
         expect(starts).toBe(2);
         expect(replacement.runtimeId).not.toBe(first.runtimeId);
         expect(handles[1]?.isAlive()).toBe(true);
@@ -105,10 +123,14 @@ describe("Codex runtime lifecycle", () => {
           true,
         );
         await expect(Effect.runPromise(registry.listRuntimes())).resolves.toEqual([]);
+        for (const childPid of childPids) expect(processIsAlive(childPid)).toBe(false);
         expect(failures).toHaveLength(1);
       } finally {
         await Effect.runPromise(registry.stopAllRuntimes().pipe(Effect.ignore));
         for (const handle of handles) await Effect.runPromise(handle.stop().pipe(Effect.ignore));
+        for (const childPid of childPids) {
+          if (processIsAlive(childPid)) process.kill(childPid, "SIGKILL");
+        }
         await removeTestDirectory(root);
       }
     },

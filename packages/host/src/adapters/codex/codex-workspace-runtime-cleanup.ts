@@ -3,7 +3,9 @@ import type { Readable, Writable } from "node:stream";
 import { Effect } from "effect";
 import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
 import {
+  type ProcessTreePlatform,
   type ProcessTreeTerminator,
+  processTreeIsAlive,
   waitForChildProcessClose,
 } from "../../infrastructure/process/process-tree";
 import type { CodexAppServerTransportRegistry } from "./codex-app-server-transport-registry";
@@ -21,6 +23,7 @@ export const cleanupCodexRuntime = ({
   codexAppServer,
   nextRuntimeId,
   pid,
+  platform,
   processTreeTerminator,
   stopTimeoutMs,
   transport,
@@ -30,6 +33,7 @@ export const cleanupCodexRuntime = ({
   codexAppServer: CodexAppServerTransportRegistry;
   nextRuntimeId: string;
   pid: number;
+  platform: ProcessTreePlatform;
   processTreeTerminator: ProcessTreeTerminator;
   stopTimeoutMs: number;
   transport: CodexRuntimeTransport;
@@ -43,11 +47,12 @@ export const cleanupCodexRuntime = ({
       errors.push(`pending requests: ${pendingRequestExit.cause}`);
     }
 
+    // A closed parent can leave its process group running.
     const processExit = yield* Effect.either(
       processTreeTerminator({
         pid,
         label: `Codex app-server runtime ${nextRuntimeId}`,
-        isClosed: closed,
+        isClosed: () => closed() && !processTreeIsAlive(pid, platform),
         waitForExit: (timeoutMs) => waitForChildProcessClose(child, closed, timeoutMs),
         stopTimeoutMs,
       }).pipe(
