@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionLiveEnvelope, AgentSessionLiveSnapshot } from "@openducktor/contracts";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   type AgentSessionCollection,
   emptyAgentSessionCollection,
@@ -18,6 +19,7 @@ import {
   applyAgentSessionLiveDelta,
   buildAgentSessionLiveCollection,
   projectSessionSnapshotActivity,
+  rebuildProjectedPendingInput,
 } from "./agent-session-live-projection";
 
 const repoPath = "/repo";
@@ -179,6 +181,253 @@ describe("projectSessionSnapshotActivity", () => {
 });
 
 describe("agent session live projection", () => {
+  test.each([100, 1_000])("keeps other sessions after one update among %i roots", (count) => {
+    const current = new Map(
+      Array.from({ length: count }, (_, index) => {
+        const session = createAgentSessionFixture({
+          ...identity(`root-${index}`),
+          title: `Session root-${index}`,
+        });
+        return [agentSessionIdentityKey(session), session] as const;
+      }),
+    );
+
+    const next = delta(current, {
+      type: "session_upsert",
+      session: snapshot("root-0", { title: "Renamed root" }),
+    });
+
+    expect(getAgentSession(next, identity("root-0"))?.title).toBe("Renamed root");
+    expect(getAgentSession(next, identity("root-0"))?.pendingApprovals).toBe(
+      getAgentSession(current, identity("root-0"))?.pendingApprovals,
+    );
+    expect(getAgentSession(next, identity("root-0"))?.pendingQuestions).toBe(
+      getAgentSession(current, identity("root-0"))?.pendingQuestions,
+    );
+    for (let index = 1; index < count; index += 1) {
+      const sessionIdentity = identity(`root-${index}`);
+      const before = getAgentSession(current, sessionIdentity);
+      const after = getAgentSession(next, sessionIdentity);
+      expect(after).toBe(before);
+    }
+    expect(rebuildProjectedPendingInput(next)).toBe(next);
+    expect(
+      delta(next, {
+        type: "session_upsert",
+        session: snapshot("root-0", { title: "Renamed root" }),
+      }),
+    ).toBe(next);
+  });
+
+  test("keeps the parent and request arrays when a child repeats input", () => {
+    const child = snapshot("child", {
+      parentExternalSessionId: "root",
+      pendingApprovals: [
+        { requestId: "approval", requestType: "command_execution", title: "Run command" },
+      ],
+      pendingQuestions: [{ requestId: "question", questions: [] }],
+    });
+    const current = build({ snapshots: [snapshot("root"), child] });
+    const parent = getAgentSession(current, identity("root"));
+
+    const next = delta(current, { type: "session_upsert", session: child });
+    const nextParent = getAgentSession(next, identity("root"));
+
+    expect(nextParent).toBe(parent);
+    expect(nextParent?.pendingApprovals).toBe(parent?.pendingApprovals);
+    expect(nextParent?.pendingQuestions).toBe(parent?.pendingQuestions);
+
+    const changed = delta(next, {
+      type: "session_upsert",
+      session: snapshot("child", {
+        parentExternalSessionId: "root",
+        pendingApprovals: [
+          { requestId: "approval", requestType: "command_execution", title: "Run another command" },
+        ],
+        pendingQuestions: [{ requestId: "question", questions: [] }],
+      }),
+    });
+    expect(getAgentSession(changed, identity("root"))?.pendingApprovals[0]?.title).toBe(
+      "Run another command",
+    );
+    expect(getAgentSession(changed, identity("root"))?.pendingQuestions).toBe(
+      parent?.pendingQuestions,
+    );
+  });
+
+  test.each(["approval", "question"] as const)(
+    "moves a child's %s to its new parent and keeps unchanged arrays",
+    (kind) => {
+      const child = snapshot("child", {
+        parentExternalSessionId: "old-parent",
+        pendingApprovals:
+          kind === "approval"
+            ? [{ requestId: "approval", requestType: "command_execution", title: "Run command" }]
+            : [],
+        pendingQuestions: kind === "question" ? [{ requestId: "question", questions: [] }] : [],
+      });
+      const current = build({
+        snapshots: [snapshot("old-parent"), snapshot("new-parent"), snapshot("other"), child],
+      });
+      const oldParent = getAgentSession(current, identity("old-parent"));
+      const newParent = getAgentSession(current, identity("new-parent"));
+      const owner = getAgentSession(current, identity("child"));
+      if (!oldParent || !newParent || !owner) {
+        throw new Error("Expected the child and both parents.");
+      }
+      const requests = kind === "approval" ? "pendingApprovals" : "pendingQuestions";
+      const unchanged = kind === "approval" ? "pendingQuestions" : "pendingApprovals";
+      const moved = { ...child, parentExternalSessionId: "new-parent" };
+
+      const next = delta(current, { type: "session_upsert", session: moved });
+      const nextOldParent = getAgentSession(next, identity("old-parent"));
+      const nextNewParent = getAgentSession(next, identity("new-parent"));
+      const nextOwner = getAgentSession(next, identity("child"));
+
+      expect(nextOldParent?.[requests]).toEqual([]);
+      expect(nextNewParent?.[requests]).toEqual([
+        expect.objectContaining({
+          ...child[requests][0],
+          source: {
+            kind: "subagent",
+            parentExternalSessionId: "new-parent",
+            childExternalSessionId: "child",
+          },
+          responseSession: target("child"),
+        }),
+      ]);
+      expect(nextOldParent?.[unchanged]).toBe(oldParent[unchanged]);
+      expect(nextNewParent?.[unchanged]).toBe(newParent[unchanged]);
+      expect(nextOwner?.pendingApprovals).toBe(owner.pendingApprovals);
+      expect(nextOwner?.pendingQuestions).toBe(owner.pendingQuestions);
+      expect(getAgentSession(next, identity("other"))).toBe(
+        getAgentSession(current, identity("other")),
+      );
+      expect(oldParent[requests]).toEqual([
+        expect.objectContaining({
+          requestId: kind,
+          source: {
+            kind: "subagent",
+            parentExternalSessionId: "old-parent",
+            childExternalSessionId: "child",
+          },
+        }),
+      ]);
+      expect(newParent[requests]).toEqual([]);
+      expect(delta(next, { type: "session_upsert", session: moved })).toBe(next);
+    },
+  );
+
+  test.each([
+    {
+      name: "key order",
+      before: { name: "Bash", input: { first: 1, second: 2 } },
+      after: { name: "Bash", input: { second: 2, first: 1 } },
+      keepsParent: true,
+    },
+    {
+      name: "changed value",
+      before: { name: "Bash", input: { first: 1, second: 2 } },
+      after: { name: "Bash", input: { first: 1, second: 3 } },
+      keepsParent: false,
+    },
+    {
+      name: "added undefined key",
+      before: { name: "Bash" },
+      after: { name: "Bash", title: undefined },
+      keepsParent: false,
+    },
+    {
+      name: "removed undefined key",
+      before: { name: "Bash", title: undefined },
+      after: { name: "Bash" },
+      keepsParent: false,
+    },
+  ])("compares request fields after $name", ({ before, after, keepsParent }) => {
+    const root = createAgentSessionFixture({ ...identity("root") });
+    const directOwner = createAgentSessionFixture({
+      ...identity("child"),
+      liveParentExternalSessionId: "root",
+      pendingApprovals: [
+        {
+          requestId: "approval",
+          requestType: "command_execution",
+          title: "Run command",
+          tool: before,
+        },
+      ],
+    });
+    const initial = rebuildProjectedPendingInput(
+      new Map([
+        [agentSessionIdentityKey(root), root],
+        [agentSessionIdentityKey(directOwner), directOwner],
+      ]),
+    );
+    const child = getAgentSession(initial, identity("child"));
+    const parent = getAgentSession(initial, identity("root"));
+    if (!child || !parent) {
+      throw new Error("Expected the child and its parent.");
+    }
+    const updated = replaceAgentSession(initial, {
+      ...child,
+      pendingApprovals: [
+        {
+          title: "Run command",
+          tool: after,
+          requestType: "command_execution",
+          requestId: "approval",
+        },
+      ],
+    });
+
+    const rebuilt = rebuildProjectedPendingInput(updated);
+    const nextParent = getAgentSession(rebuilt, identity("root"));
+
+    expect(rebuilt === updated).toBe(keepsParent);
+    expect(nextParent === parent).toBe(keepsParent);
+    expect(nextParent?.pendingApprovals === parent.pendingApprovals).toBe(keepsParent);
+    expect(nextParent?.pendingQuestions).toBe(parent.pendingQuestions);
+    expect(nextParent?.pendingApprovals[0]?.tool).toStrictEqual(after);
+    expect(parent.pendingApprovals[0]?.tool).toStrictEqual(before);
+    expect(rebuildProjectedPendingInput(rebuilt)).toBe(rebuilt);
+  });
+
+  test("routes requests once through a parent cycle", () => {
+    const first = createAgentSessionFixture({
+      ...identity("first"),
+      sessionAssociation: { kind: "unbound" },
+      liveParentExternalSessionId: "second",
+      pendingApprovals: [
+        { requestId: "approval", requestType: "command_execution", title: "Run command" },
+      ],
+    });
+    const second = createAgentSessionFixture({
+      ...identity("second"),
+      sessionAssociation: { kind: "unbound" },
+      liveParentExternalSessionId: "first",
+      pendingQuestions: [{ requestId: "question", questions: [] }],
+    });
+    const current = new Map([
+      [agentSessionIdentityKey(first), first],
+      [agentSessionIdentityKey(second), second],
+    ]);
+
+    const next = rebuildProjectedPendingInput(current);
+
+    expect(getAgentSession(next, identity("first"))?.pendingApprovals).toEqual(
+      first.pendingApprovals,
+    );
+    expect(getAgentSession(next, identity("first"))?.pendingQuestions).toEqual([
+      expect.objectContaining({ requestId: "question", responseSession: target("second") }),
+    ]);
+    expect(getAgentSession(next, identity("second"))?.pendingApprovals).toEqual([
+      expect.objectContaining({ requestId: "approval", responseSession: target("first") }),
+    ]);
+    expect(getAgentSession(next, identity("second"))?.pendingQuestions).toEqual(
+      second.pendingQuestions,
+    );
+  });
+
   test.each(["snapshot", "delta"] as const)(
     "does not admit an unregistered root session from a %s",
     (delivery) => {
