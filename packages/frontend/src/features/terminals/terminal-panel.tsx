@@ -267,6 +267,60 @@ function useTerminalClose(model: TerminalPanelModel) {
   };
 }
 
+function TerminalPanelHeader({
+  model,
+  headerLeading,
+  showsEmptyTerminalState,
+  onCloseTab,
+}: {
+  model: TerminalPanelModel;
+  headerLeading: ReactNode;
+  showsEmptyTerminalState: boolean;
+  onCloseTab: (tab: TerminalTab) => void;
+}): ReactElement {
+  return (
+    <div className="flex h-8 shrink-0 items-center gap-2 border-b border-[var(--dev-server-terminal-border)] bg-[var(--dev-server-terminal-surface)]">
+      {headerLeading}
+      <div className="min-w-0 flex-1">
+        {model.tabs.length > 0 ? (
+          <TerminalTabStrip
+            tabs={model.tabs}
+            onSelectTab={model.onSelectTab}
+            onReorderTab={model.onReorderTab}
+            onCloseTab={onCloseTab}
+          />
+        ) : null}
+        {showsEmptyTerminalState ? (
+          <p className="px-1 text-xs text-muted-foreground">No terminals.</p>
+        ) : null}
+      </div>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              aria-label="New terminal"
+              className="size-8 text-(--dev-server-terminal-foreground) shadow-none hover:bg-(--dev-server-terminal-tab-inactive) hover:text-(--dev-server-terminal-foreground)"
+              onClick={model.onCreate}
+              disabled={
+                model.isLoading ||
+                model.discoveryError !== null ||
+                model.isCreating ||
+                model.tabs.length >= 8
+              }
+            >
+              <Plus />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top">New terminal</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    </div>
+  );
+}
+
 export function TerminalPanel({
   model,
   headerLeading,
@@ -306,47 +360,39 @@ export function TerminalPanel({
   const hasCurrentScopeMountedTabs = model.mountedTabs.some(
     (mountedTab) => mountedTab.scopeKey === model.scopeKey,
   );
-  const showsEmptyTerminalState = model.tabs.length === 0 && !hasCurrentScopeMountedTabs;
+  const showsEmptyTerminalState =
+    model.tabs.length === 0 &&
+    !hasCurrentScopeMountedTabs &&
+    !model.isLoading &&
+    model.discoveryError === null;
   return (
     <Tabs
       {...(model.activeTabId ? { value: model.activeTabId } : {})}
       onValueChange={model.onSelectTab}
       className="flex h-full min-h-0 flex-col gap-0 overflow-hidden bg-[var(--dev-server-terminal-panel)] text-[var(--dev-server-terminal-foreground)]"
     >
-      <div className="flex h-8 shrink-0 items-center gap-2 border-b border-[var(--dev-server-terminal-border)] bg-[var(--dev-server-terminal-surface)]">
-        {headerLeading}
-        <div className="min-w-0 flex-1">
-          {model.tabs.length > 0 ? (
-            <TerminalTabStrip
-              tabs={model.tabs}
-              onSelectTab={model.onSelectTab}
-              onReorderTab={model.onReorderTab}
-              onCloseTab={(tab) => void closeTab(tab)}
-            />
-          ) : null}
-          {showsEmptyTerminalState ? (
-            <p className="px-1 text-xs text-muted-foreground">No terminals.</p>
-          ) : null}
+      <TerminalPanelHeader
+        model={model}
+        headerLeading={headerLeading}
+        showsEmptyTerminalState={showsEmptyTerminalState}
+        onCloseTab={(tab) => void closeTab(tab)}
+      />
+      {model.discoveryError !== null ? (
+        <div className="flex shrink-0 items-center gap-3 bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
+          <p role="alert" className="min-w-0 flex-1 break-words">
+            Terminal discovery failed: {model.discoveryError}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={model.onRetryDiscovery}
+            disabled={model.isLoading}
+          >
+            Retry terminal discovery
+          </Button>
         </div>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                aria-label="New terminal"
-                className="size-8 text-(--dev-server-terminal-foreground) shadow-none hover:bg-(--dev-server-terminal-tab-inactive) hover:text-(--dev-server-terminal-foreground)"
-                onClick={model.onCreate}
-                disabled={model.isLoading || model.isCreating || model.tabs.length >= 8}
-              >
-                <Plus />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">New terminal</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
+      ) : null}
       {model.mountedTabs.length > 0 ? (
         <div className="flex min-h-0 flex-1 flex-col">
           <MountedTerminals model={model} onRetryCreate={retryTerminalCreation} />
@@ -358,7 +404,10 @@ export function TerminalPanel({
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground">
-          Create a terminal.
+          {showsEmptyTerminalState ? "Create a terminal." : null}
+          {model.isLoading && model.discoveryError === null ? (
+            <p role="status">Loading terminals...</p>
+          ) : null}
         </div>
       )}
       {model.transportError ? (

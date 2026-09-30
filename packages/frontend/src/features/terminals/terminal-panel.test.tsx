@@ -58,6 +58,7 @@ const model: TerminalPanelModel = {
   isVisible: true,
   isLoading: false,
   isCreating: false,
+  discoveryError: null,
   transportError: null,
   platform: "darwin",
   platformError: null,
@@ -67,6 +68,7 @@ const model: TerminalPanelModel = {
   onHide: () => undefined,
   onSelectTab: () => undefined,
   onCreate: () => undefined,
+  onRetryDiscovery: () => undefined,
   onRetryCreate: () => undefined,
   onReorderTab: () => undefined,
   onTitleChange: () => undefined,
@@ -76,6 +78,68 @@ const model: TerminalPanelModel = {
 };
 
 describe("TerminalPanel", () => {
+  test("shows discovery failure instead of an empty list and offers an explicit retry", () => {
+    const onRetryDiscovery = mock(() => undefined);
+    const view = render(
+      <TerminalPanel
+        model={{
+          ...model,
+          ...tabsModel([]),
+          activeTabId: null,
+          discoveryError: "Host discovery unavailable.",
+          onRetryDiscovery,
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("alert").textContent).toContain("Host discovery unavailable.");
+    expect(screen.queryByText("No terminals.")).toBeNull();
+    expect(screen.queryByText("Create a terminal.")).toBeNull();
+    expect(screen.getByRole("button", { name: "New terminal" }).hasAttribute("disabled")).toBe(
+      true,
+    );
+    const retryButton = screen.getByRole("button", { name: "Retry terminal discovery" });
+    fireEvent.click(retryButton);
+    expect(onRetryDiscovery).toHaveBeenCalledTimes(1);
+
+    view.rerender(
+      <TerminalPanel model={{ ...model, ...tabsModel([]), activeTabId: null, isLoading: true }} />,
+    );
+    expect(screen.getByRole("status").textContent).toContain("Loading terminals");
+    expect(screen.queryByText("No terminals.")).toBeNull();
+    expect(screen.queryByText("Create a terminal.")).toBeNull();
+  });
+
+  test("keeps the terminal viewport mounted beside discovery failure during refresh", () => {
+    const summary: TerminalSummary = {
+      terminalId: "existing-terminal",
+      label: "Existing shell",
+      context: {},
+      initialWorkingDir: "/repo",
+      createdAt: "2026-07-19T00:00:00.000Z",
+      lifecycle: "running",
+      exit: null,
+    };
+    const panelModel = {
+      ...model,
+      ...tabsModel([readyTab(summary)]),
+      activeTabId: "tab:existing-terminal",
+    };
+    const view = render(<TerminalPanel model={panelModel} />);
+    const viewport = screen.getByRole("tabpanel");
+    view.rerender(
+      <TerminalPanel
+        model={{ ...panelModel, discoveryError: "Refresh failed.", isLoading: true }}
+      />,
+    );
+    expect(screen.getByRole("tabpanel")).toBe(viewport);
+    expect(screen.getByRole("tab", { name: "Existing shell, Running" })).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("Refresh failed.");
+    expect(
+      screen.getByRole("button", { name: "Retry terminal discovery" }).hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
   test.each([
     { notice: "exit code", attention: null, expected: "Exited with code 1." },
     {

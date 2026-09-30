@@ -74,6 +74,7 @@ export type TerminalPanelModel = {
   isVisible: boolean;
   isLoading: boolean;
   isCreating: boolean;
+  discoveryError: string | null;
   transportError: string | null;
   platform: AppPlatform | undefined;
   platformError: string | null;
@@ -83,6 +84,7 @@ export type TerminalPanelModel = {
   onHide: () => void;
   onSelectTab: (tabId: string) => void;
   onCreate: () => void;
+  onRetryDiscovery: () => void;
   onRetryCreate: (scopeKey: string, tabId: string) => void;
   onReorderTab: (draggedTabId: string, targetTabId: string, position: "before" | "after") => void;
   onTitleChange: (scopeKey: string, terminalId: string, title: string) => void;
@@ -232,7 +234,13 @@ export const useTerminals = (
     dispatch({ type: "visibilitySet", scopeKey, value: transition.visible, isExplicit: true });
     if (transition.requestFocus) {
       dispatch({ type: "focusRequested", scopeKey });
-      if (visibleState.tabs.length === 0 && !terminalQuery.isLoading && !isScopeLoading) {
+      if (
+        visibleState.tabs.length === 0 &&
+        terminalQuery.isSuccess &&
+        terminalQuery.data.terminals.length === 0 &&
+        !terminalQuery.isFetching &&
+        !isScopeLoading
+      ) {
         void createTerminal();
       }
     }
@@ -240,7 +248,9 @@ export const useTerminals = (
     createTerminal,
     isScopeLoading,
     scopeKey,
-    terminalQuery.isLoading,
+    terminalQuery.data,
+    terminalQuery.isFetching,
+    terminalQuery.isSuccess,
     isVisible,
     visibleState.tabs.length,
   ]);
@@ -268,6 +278,10 @@ export const useTerminals = (
     [scopeKey],
   );
   const startCreate = useCallback((): void => void createTerminal(), [createTerminal]);
+  const { refetch: refetchTerminals } = terminalQuery;
+  const retryDiscovery = useCallback((): void => {
+    if (scopeKey) void refetchTerminals();
+  }, [refetchTerminals, scopeKey]);
   const retryCreate = useCallback(
     (ownerScopeKey: string, tabId: string): void => {
       if (ownerScopeKey !== scopeKey) return;
@@ -342,8 +356,9 @@ export const useTerminals = (
     },
     [],
   );
-  const isLoading = terminalQuery.isLoading || isScopeLoading;
+  const isLoading = terminalQuery.isFetching || isScopeLoading;
   const isCreating = visibleTabs.some((tab) => tab.requestState === "creating");
+  const discoveryError = terminalQuery.isError ? terminalQuery.error.message : null;
 
   return useMemo(
     () => ({
@@ -355,6 +370,7 @@ export const useTerminals = (
       isVisible,
       isLoading,
       isCreating,
+      discoveryError,
       transportError,
       platform: platformQuery.data,
       platformError: platformQuery.isError ? platformQuery.error.message : null,
@@ -364,6 +380,7 @@ export const useTerminals = (
       onHide: hidePanel,
       onSelectTab: selectTab,
       onCreate: startCreate,
+      onRetryDiscovery: retryDiscovery,
       onRetryCreate: retryCreate,
       onReorderTab: reorderTab,
       onTitleChange: changeTitle,
@@ -376,6 +393,7 @@ export const useTerminals = (
       changeTitle,
       closeTerminal,
       controller,
+      discoveryError,
       focusRequest,
       forgetTerminal,
       hidePanel,
@@ -388,6 +406,7 @@ export const useTerminals = (
       platformQuery.isError,
       reorderTab,
       retryCreate,
+      retryDiscovery,
       selectTab,
       scope,
       scopeKey,
