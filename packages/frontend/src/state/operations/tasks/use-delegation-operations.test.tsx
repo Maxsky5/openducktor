@@ -93,9 +93,7 @@ describe("useDelegationOperations", () => {
 
     try {
       await harness.mount();
-      await expect(
-        harness.run((operations) => operations.delegateTask("task-1")),
-      ).resolves.toBeUndefined();
+      await harness.run((operations) => operations.delegateTask("task-1"));
 
       expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith({
         repoPath: "/repo",
@@ -143,9 +141,7 @@ describe("useDelegationOperations", () => {
 
     try {
       await harness.mount();
-      await expect(
-        harness.run((operations) => operations.delegateTask("task-1")),
-      ).resolves.toBeUndefined();
+      await harness.run((operations) => operations.delegateTask("task-1"));
 
       expect(loadRepoRuntimeCatalog).not.toHaveBeenCalled();
       expect(buildStart).toHaveBeenCalledWith("/repo", "task-1", "opencode");

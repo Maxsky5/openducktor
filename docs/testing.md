@@ -53,6 +53,7 @@ Use [withViteTestServer](../packages/openducktor-web/src/vite-test-server.ts) fo
 
 - Use an explicit `waitFor(...)` or test-harness timeout for async Query, portal, or render work.
 - Keep each explicit wait below the Bun test timeout.
+- Await a hook harness call or another `act()` flow directly. Do not wrap it in `expect(...).resolves`, because Bun can then delay the end of `act()` by hundreds of milliseconds.
 - Run flake checks in sequence.
 
 ## Browser validation
