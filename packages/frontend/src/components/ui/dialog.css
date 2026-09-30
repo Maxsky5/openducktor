@@ -18,7 +18,8 @@
 }
 
 .t-modal[data-state="open"] {
-  animation: dialog-scale-in var(--modal-open-dur) var(--modal-ease) both;
+  /* Release the transform after opening so fixed popovers escape the scroll boundary. */
+  animation: dialog-scale-in var(--modal-open-dur) var(--modal-ease) backwards;
 }
 
 .t-modal[data-state="closed"] {
