@@ -27,7 +27,7 @@ describe("task occurrence projector", () => {
     const projector = createTaskOccurrenceProjector({ repoPath: "/repo", repositoryLabel: "Repo" });
     const update = event("review", "human_review", previousStatus);
     update.statusChanges[0]!.sourceRole = sourceRole;
-    expect(projector.projectChange(update)).toMatchObject([
+    expect(projector.projectChange(update).occurrences).toMatchObject([
       {
         role: sourceRole,
         navigationTarget: {
@@ -51,7 +51,7 @@ describe("task occurrence projector", () => {
       repositoryLabel: "Repo",
     });
 
-    expect(projector.projectChange(event(`event-${status}`, status))).toMatchObject([
+    expect(projector.projectChange(event(`event-${status}`, status)).occurrences).toMatchObject([
       {
         kind,
         occurrenceId: `${kind}:/repo:task-1:event-${status}:0`,
@@ -71,7 +71,7 @@ describe("task occurrence projector", () => {
       repositoryLabel: "Repo",
     });
 
-    expect(projector.projectChange(event("event-closed", "closed"))).toMatchObject([
+    expect(projector.projectChange(event("event-closed", "closed")).occurrences).toMatchObject([
       {
         kind: "workflow.closed",
         navigationTarget: { type: "kanban_task", repoPath: "/repo", taskId: "task-1" },
@@ -84,8 +84,10 @@ describe("task occurrence projector", () => {
       repoPath: "/repo",
       repositoryLabel: "Repo",
     });
-    expect(projector.projectChange(event("event-same", "blocked", "blocked"))).toEqual([]);
-    expect(projector.projectChange(event("event-open", "open"))).toEqual([]);
+    expect(projector.projectChange(event("event-same", "blocked", "blocked")).occurrences).toEqual(
+      [],
+    );
+    expect(projector.projectChange(event("event-open", "open")).occurrences).toEqual([]);
 
     const newTaskProjector = createTaskOccurrenceProjector({
       repoPath: "/repo",
@@ -95,7 +97,7 @@ describe("task occurrence projector", () => {
       newTaskProjector.projectChange({
         ...event("event-metadata", "spec_ready"),
         statusChanges: [],
-      }),
+      }).occurrences,
     ).toEqual([]);
   });
 });
@@ -108,12 +110,20 @@ test("keeps repeated destinations within one mutation distinct and suppresses re
     { previousStatus: "blocked", task: { id: "task-1", title: "Task", status: "in_progress" } },
     { previousStatus: "in_progress", task: { id: "task-1", title: "Task", status: "blocked" } },
   ];
-  const occurrences = projector.projectChange(update);
+  const { accepted, occurrences } = projector.projectChange(update);
+  expect(accepted).toBe(true);
   expect(occurrences.map((entry) => entry.kind)).toEqual([
     "workflow.blocked",
     "workflow.in_progress",
     "workflow.blocked",
   ]);
   expect(new Set(occurrences.map((entry) => entry.occurrenceId)).size).toBe(3);
-  expect(projector.projectChange(update)).toEqual([]);
+  expect(projector.projectChange(update)).toEqual({ accepted: false, occurrences: [] });
+});
+
+test("accepts a silent event once so callers can skip its repeated ownership work", () => {
+  const projector = createTaskOccurrenceProjector({ repoPath: "/repo", repositoryLabel: "Repo" });
+  const update = { ...event("metadata", "open"), statusChanges: [] };
+  expect(projector.projectChange(update)).toEqual({ accepted: true, occurrences: [] });
+  expect(projector.projectChange(update)).toEqual({ accepted: false, occurrences: [] });
 });

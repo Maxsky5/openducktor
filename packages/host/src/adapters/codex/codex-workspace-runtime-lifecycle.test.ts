@@ -154,6 +154,11 @@ describe("Codex runtime lifecycle", () => {
       const cleanupGate = new Promise<void>((resolve) => {
         allowCleanup = resolve;
       });
+      let allowReporting = (): void => {};
+      const reportingGate = new Promise<void>((resolve) => {
+        allowReporting = resolve;
+      });
+      let reportingStarted = false;
       let releaseCount = 0;
       let cleanupCount = 0;
       const failures: HostOperationErrorAggregate[] = [];
@@ -165,7 +170,9 @@ describe("Codex runtime lifecycle", () => {
           toolDiscovery: stubTools({ codex: codexBinary }),
           runtimeId: () => "runtime-fatal",
           onRuntimeFailure: (failure) =>
-            Effect.sync(() => {
+            Effect.gen(function* () {
+              reportingStarted = true;
+              yield* Effect.promise(() => reportingGate);
               failures.push(failure);
             }),
           resolveMcpBridgeConnection: () =>
@@ -224,6 +231,11 @@ describe("Codex runtime lifecycle", () => {
         await new Promise<void>((resolve) => setImmediate(resolve));
         expect(stopSettled).toBe(false);
         allowCleanup();
+        await waitFor(() => reportingStarted);
+        expect(processIsAlive(pid)).toBe(false);
+        expect(stopSettled).toBe(false);
+        expect(failures).toEqual([]);
+        allowReporting();
         const [firstResult, secondResult] = await Promise.all([firstStop, secondStop]);
         await waitFor(() => failures.length === 1);
         const reportedFailure = failures[0];
@@ -257,6 +269,7 @@ describe("Codex runtime lifecycle", () => {
         ).rejects.toThrow("Codex app-server transport not found");
       } finally {
         allowCleanup();
+        allowReporting();
         if (handle) await Effect.runPromise(handle.stop().pipe(Effect.ignore));
         await removeTestDirectory(root);
       }

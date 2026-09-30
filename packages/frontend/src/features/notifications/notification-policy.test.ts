@@ -36,7 +36,6 @@ const createHarness = (target: "in_app" | "os" | "both", enabled = true) => {
   const sound = mock(async () => {});
   const onFailure = mock(() => {});
   const policy = createNotificationPolicy({
-    loadSettings: async () => settings,
     inApp: { deliver: inApp },
     os: { deliver: os },
     sound: { play: sound },
@@ -215,29 +214,12 @@ test("reserves each delivery before overlapping dispatches run", async () => {
   expect(harness.sound).toHaveBeenCalledTimes(1);
 });
 
-test("reports settings failure and recovery without replacing preferences", async () => {
-  let fail = true;
-  const onFailure = mock(() => {});
-  const onSettingsRecovered = mock(() => {});
-  const deliver = mock(async () => {});
-  const policy = createNotificationPolicy({
-    loadSettings: async () => {
-      if (fail) throw new Error("Config read failed");
-      return createDefaultNotificationSettings();
-    },
-    inApp: { deliver },
-    os: { deliver },
-    sound: { play: async () => {} },
-    onFailure,
-    onSettingsRecovered,
-  });
-  expect(await policy.loadSettingsCandidate(occurrence)).toBeNull();
-  expect(onFailure).toHaveBeenCalledWith(expect.objectContaining({ channel: "settings" }));
-  expect(onSettingsRecovered).not.toHaveBeenCalled();
-  expect(deliver).not.toHaveBeenCalled();
-  fail = false;
-  expect(await policy.loadSettingsCandidate(occurrence)).toEqual(
-    createDefaultNotificationSettings(),
-  );
-  expect(onSettingsRecovered).toHaveBeenCalledTimes(1);
+test("rejects absent selected preferences instead of using defaults", async () => {
+  const harness = createHarness("both");
+  // The transport must supply a concrete preference snapshot.
+  await expect(
+    // @ts-expect-error Invalid transport input exercises runtime validation.
+    harness.policy.dispatch(occurrence, { phase: "local" }, undefined),
+  ).rejects.toThrow();
+  expect(harness.inApp).not.toHaveBeenCalled();
 });

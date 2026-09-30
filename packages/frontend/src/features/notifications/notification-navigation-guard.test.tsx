@@ -118,12 +118,6 @@ test("notification workspace selection keeps the draft on cancel and failure", a
       publishSessionError: async () => true,
       reportFailure: () => {},
     },
-    taskStreamSink: {
-      onChange: async () => {},
-      onSnapshot: async () => {},
-      onSnapshotFailed: () => {},
-      onFailure: () => {},
-    },
   } satisfies NotificationContextValue;
 
   const queryClient = new QueryClient();

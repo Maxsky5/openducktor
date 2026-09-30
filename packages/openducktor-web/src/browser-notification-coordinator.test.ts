@@ -406,7 +406,12 @@ describe("browser notification coordinator", () => {
         const onFailure = mock(() => {});
         const runtime = createNotificationRuntime({
           bridge,
-          loadSettings: async () => config,
+          publishAction: async (occurrence) => ({
+            occurrence,
+            settings: config,
+            preferenceRevision: 1,
+          }),
+          subscribeStream: async () => () => {},
           navigate: async () => {},
           onFailure,
           onCoordinationRecovered: () => {},

@@ -1,4 +1,8 @@
+import { createNotificationFrameRelay } from "./notification-frame-relay";
 import {
+  notificationStreamFrameSchema,
+  notificationStreamSubscribeSchema,
+  type NotificationCursor,
   type AgentSessionLiveEnvelope,
   type AgentSessionLiveRefreshInput,
   type HostErrorResponse,
@@ -78,6 +82,8 @@ type BrowserSseChannel = {
   handleOpen: EventListener;
   handleError: EventListener;
   handleStreamWarning: EventListener;
+  handleNotification: EventListener;
+  notifications: ReturnType<typeof createNotificationFrameRelay>;
 };
 
 type BrowserSseSubscription = {
@@ -279,34 +285,37 @@ const dispatchBrowserSseListeners = <Payload>(
 };
 
 const closeSseChannelIfUnused = (channel: BrowserSseChannel): void => {
-  if (channel.listeners.size > 0) {
+  if (channel.listeners.size > 0 || channel.notifications.hasListeners()) {
     return;
   }
   channel.eventSource.removeEventListener("message", channel.handleMessage);
   channel.eventSource.removeEventListener("open", channel.handleOpen);
   channel.eventSource.removeEventListener("error", channel.handleError);
   channel.eventSource.removeEventListener("stream-warning", channel.handleStreamWarning);
+  channel.eventSource.removeEventListener("notification-frame", channel.handleNotification);
   channel.eventSource.close();
   if (sseChannel === channel) {
     sseChannel = null;
   }
 };
 
-const subscribeSseChannelEffect = (
-  eventChannel: HostEventChannel,
-  listener: BrowserSseListener,
-  receivesControlEvents = false,
-  onReplayGap?: (message: string) => void,
-  eventName = "message",
-): Effect.Effect<BrowserSseSubscription, WebError> =>
+const getSseChannelEffect = (
+  notificationCursor: NotificationCursor | null = null,
+): Effect.Effect<BrowserSseChannel, WebError> =>
   Effect.gen(function* () {
     const baseUrl = (yield* getBrowserBackendUrlEffect()).replace(/\/$/, "");
     let channel = sseChannel;
 
     if (!channel) {
+      const url = new URL(`${baseUrl}/${HOST_EVENT_STREAM_PATH}`);
+      url.searchParams.set("notifications", "1");
+      if (notificationCursor)
+        url.searchParams.set("notificationCursor", JSON.stringify(notificationCursor));
       const eventSource = yield* Effect.try({
         try: () =>
-          new EventSource(`${baseUrl}/${HOST_EVENT_STREAM_PATH}`, { withCredentials: true }),
+          new EventSource(url.href, {
+            withCredentials: true,
+          }),
         catch: (cause) =>
           new WebDependencyError({
             dependency: "event-source",
@@ -317,6 +326,18 @@ const subscribeSseChannelEffect = (
           }),
       });
       const listeners = new Map<number, BrowserSseListenerRegistration>();
+      const notifications = createNotificationFrameRelay();
+      const handleNotification: EventListener = (event) => {
+        try {
+          notifications.accept(
+            notificationStreamFrameSchema.parse(
+              JSON.parse(readEventSourceData(event, "notification-frame")),
+            ),
+          );
+        } catch (cause) {
+          notifications.fail(cause);
+        }
+      };
       let hasOpened = false;
       let hasReportedConnectionError = false;
       let transportEpoch: string | null = null;
@@ -360,6 +381,12 @@ const subscribeSseChannelEffect = (
         );
       };
       const handleError: EventListener = () => {
+        if (!hasReportedConnectionError)
+          notifications.fail(
+            new Error(
+              "Notification connection failed. The stream will reconnect when the host is available.",
+            ),
+          );
         if (hasReportedConnectionError) {
           return;
         }
@@ -401,6 +428,7 @@ const subscribeSseChannelEffect = (
         dispatchBrowserSseListeners([...replayGapListeners, ...controlListeners], warning);
       };
 
+      eventSource.addEventListener("notification-frame", handleNotification);
       eventSource.addEventListener("message", handleMessage);
       eventSource.addEventListener("open", handleOpen);
       eventSource.addEventListener("error", handleError);
@@ -414,10 +442,24 @@ const subscribeSseChannelEffect = (
         handleOpen,
         handleError,
         handleStreamWarning,
+        handleNotification,
+        notifications,
       };
       sseChannel = channel;
     }
 
+    return channel;
+  });
+
+const subscribeSseChannelEffect = (
+  eventChannel: HostEventChannel,
+  listener: BrowserSseListener,
+  receivesControlEvents = false,
+  onReplayGap?: (message: string) => void,
+  eventName = "message",
+): Effect.Effect<BrowserSseSubscription, WebError> =>
+  Effect.gen(function* () {
+    const channel = yield* getSseChannelEffect();
     const listenerId = nextSseListenerId;
     nextSseListenerId += 1;
     const registration: BrowserSseListenerRegistration = {
@@ -699,3 +741,18 @@ export const buildTaskAssetUrl = (
   );
   return `${baseUrl}/task-assets/${segments.join("/")}`;
 };
+
+export const subscribeLocalHostNotificationStream: import("@openducktor/frontend/lib/shell-bridge").HostBridge["subscribeNotificationStream"] =
+  (input, onFrame, onFailure) =>
+    runWebBoundary(
+      Effect.gen(function* () {
+        const parsed = notificationStreamSubscribeSchema.parse(input);
+        yield* ensureLocalHostSessionDedupedEffect();
+        const channel = yield* getSseChannelEffect(parsed.cursor);
+        const stop = channel.notifications.subscribe(parsed, onFrame, onFailure);
+        return () => {
+          stop();
+          closeSseChannelIfUnused(channel);
+        };
+      }),
+    );

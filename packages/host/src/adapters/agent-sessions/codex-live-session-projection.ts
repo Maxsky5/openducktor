@@ -1,3 +1,4 @@
+import { baselineLiveSessionChanges } from "../../application/agent-sessions/baseline-live-session-changes";
 import type { CodexLiveSessionMutation } from "@openducktor/adapters-codex-app-server";
 import {
   type AgentSessionLiveRef,
@@ -32,6 +33,7 @@ type ParsedMutation = Pick<
   CodexLiveSessionMutation,
   "catalogInvalidated" | "fault" | "faultRef"
 > & {
+  readonly provenance: "baseline" | "live";
   readonly snapshots: AgentSessionLiveSnapshot[];
   readonly snapshotMode: "full" | "delta";
   readonly removedRefs: AgentSessionLiveRef[];
@@ -109,7 +111,11 @@ export const createCodexLiveSessionProjection = ({
               } satisfies AgentSessionLiveAdapterChange;
               changes.push(parsed.faultRef ? { ...fault, ref: parsed.faultRef } : fault);
             }
-            return { value: undefined, changes };
+            return {
+              value: undefined,
+              changes:
+                parsed.provenance === "baseline" ? baselineLiveSessionChanges(changes) : changes,
+            };
           }),
         ),
       ),
@@ -194,6 +200,7 @@ export const createCodexLiveSessionProjection = ({
         ? yield* parseMutationRef(mutation.faultRef, "faultRef")
         : undefined;
       const parsed: ParsedMutation = {
+        provenance: mutation.provenance ?? "live",
         snapshots,
         snapshotMode: mutation.snapshotMode,
         removedRefs,

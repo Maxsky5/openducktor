@@ -1,3 +1,4 @@
+import { createElectronNotificationStreamApi } from "./electron-notification-stream-ipc";
 import {
   appPlatformSchema,
   appUpdateCommandResultSchema,
@@ -172,6 +173,7 @@ const electronApi: OpenDucktorElectronApi = {
   },
   terminals,
   taskStream,
+  notificationStream: createElectronNotificationStreamApi(ipcRenderer),
   editorClipboard: {
     readText(type) {
       return ipcRenderer.invoke(ELECTRON_EDITOR_CLIPBOARD_READ_CHANNEL, type);

@@ -14,7 +14,7 @@ import {
   type TaskAssetReadService,
   TerminalServiceError,
 } from "@openducktor/host";
-import { Effect } from "effect";
+import { Stream, Effect } from "effect";
 import { WorkspaceTextFileWriteError } from "../../host/src/application/filesystem/workspace-text-file-service";
 import { HostOperationError } from "../../host/src/effect/host-errors";
 import { createTaskEventStream } from "../../host/src/events/task-event-stream";
@@ -137,6 +137,12 @@ const unexpectedTerminalOperation = (operation: string): Effect.Effect<never> =>
 const createTestNodeHostCommandRouter = (): EffectNodeHostCommandRouter => ({
   ...createTestHostCommandRouter(),
   taskAssetReadService: missingTaskAssetReadService,
+  notificationStream: {
+    publishOccurrence: () => {},
+    publishHealth: () => {},
+    dispose: () => Effect.void,
+    subscribe: () => Stream.empty,
+  },
   taskEventStream: {
     acknowledge: () => {},
     publish: () => {},

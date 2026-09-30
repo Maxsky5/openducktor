@@ -1,3 +1,8 @@
+import {
+  selectedNotificationSchema,
+  type NotificationOccurrence,
+  type SelectedNotification,
+} from "@openducktor/contracts";
 import type { PlannerTools } from "@openducktor/core";
 
 export {
@@ -29,7 +34,9 @@ type PublicMethods<Client> = {
   ]: Client[Key];
 };
 
-type HostClientApi = PublicMethods<HostWorkspaceClient> &
+type HostClientApi = {
+  notificationPublishAction(occurrence: NotificationOccurrence): Promise<SelectedNotification>;
+} & PublicMethods<HostWorkspaceClient> &
   PublicMethods<HostWorkspaceSessionClient> &
   PublicMethods<HostFilesystemClient> &
   PublicMethods<HostPullRequestReviewClient> &
@@ -56,6 +63,8 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
   const agentRuntimeQueryClient = new HostAgentRuntimeQueryClient(invokeFn);
   const gitClient = new HostGitClient(invokeFn);
   const hostClient = {
+    notificationPublishAction: (occurrence: NotificationOccurrence) =>
+      invokeFn("notification_publish_action", occurrence, selectedNotificationSchema),
     workspaceSessionExternalList:
       workspaceSessionClient.workspaceSessionExternalList.bind(workspaceSessionClient),
     workspaceSessionExternalRelease:

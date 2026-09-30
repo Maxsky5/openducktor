@@ -49,6 +49,10 @@ export class BufferedHostEventStream {
 
   constructor(private readonly capacity: number) {}
 
+  currentEventId(): number {
+    return this.nextId;
+  }
+
   emit(envelope: HostEventEnvelope, reportDeliveryFailure: (cause: unknown) => void): void {
     this.nextId += 1;
     const event = {

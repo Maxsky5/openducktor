@@ -161,12 +161,6 @@ const notificationContextValue = {
     publishSessionError: publishSessionErrorMock,
     reportFailure: reportSessionNotificationFailureMock,
   },
-  taskStreamSink: {
-    onChange: async () => {},
-    onSnapshot: async () => {},
-    onSnapshotFailed: () => {},
-    onFailure: () => {},
-  },
 } satisfies NotificationContextValue;
 
 type PendingMergedPullRequestFixture = {

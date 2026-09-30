@@ -22,12 +22,16 @@ export type NodeTaskEventServices = {
 
 export const createNodeTaskEventServices = ({
   baseTaskService,
+  acceptNotificationInput,
   lifecycleLogger,
   onBackgroundFailure,
   taskEventPublicationReporter,
   workspaceSettingsService,
 }: {
   baseTaskService: TaskServiceWithMutationProgress;
+  acceptNotificationInput?:
+    | ((event: import("@openducktor/contracts").ExternalTaskSyncEvent) => void)
+    | undefined;
   lifecycleLogger: HostLifecycleLogger;
   onBackgroundFailure(failure: HostOperationErrorAggregate): Effect.Effect<void, never>;
   taskEventPublicationReporter: TaskEventPublicationReporter;
@@ -49,6 +53,7 @@ export const createNodeTaskEventServices = ({
     },
   });
   const taskSyncService = createTaskSyncService({
+    acceptNotificationInput,
     logger: lifecycleLogger,
     onBackgroundFailure,
     publicationReporter: taskEventPublicationReporter,

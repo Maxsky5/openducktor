@@ -54,7 +54,12 @@ test.each([
     const settings = { ...createDefaultNotificationSettings(), volumePercent: 50 };
     const runtime = createNotificationRuntime({
       bridge,
-      loadSettings: async () => settings,
+      publishAction: async (occurrence) => ({
+        occurrence,
+        settings: settings,
+        preferenceRevision: 1,
+      }),
+      subscribeStream: async () => () => {},
       navigate: async () => {},
       onFailure: () => {},
       onCoordinationRecovered: () => {},
@@ -73,12 +78,6 @@ test.each([
         publishSessionStarted: () => {},
         publishSessionError: async () => false,
         reportFailure: () => {},
-      },
-      taskStreamSink: {
-        onChange: async () => {},
-        onSnapshot: async () => {},
-        onSnapshotFailed: () => {},
-        onFailure: () => {},
       },
     };
     const wrapper = ({ children }: PropsWithChildren) =>

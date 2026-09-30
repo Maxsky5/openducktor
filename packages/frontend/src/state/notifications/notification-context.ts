@@ -8,7 +8,6 @@ import type {
 import { createContext, useContext } from "react";
 import type { NotificationDispatchFailure } from "@/features/notifications/notification-policy";
 import type { SessionStartNotificationPublisher } from "@/features/session-start/session-start-orchestration";
-import type { TaskStreamNotificationSink } from "@/state/tasks/task-stream-controller";
 
 export type NotificationNavigator = (target: NotificationNavigationTarget) => Promise<void>;
 
@@ -21,7 +20,6 @@ export type NotificationContextValue = {
   testOs(settings: NotificationSettings): Promise<NotificationDeliveryResult>;
   registerNavigator(navigator: NotificationNavigator): () => void;
   sessionStartNotifications: SessionStartNotificationPublisher;
-  taskStreamSink: TaskStreamNotificationSink;
 };
 
 export const NotificationContext = createContext<NotificationContextValue | null>(null);

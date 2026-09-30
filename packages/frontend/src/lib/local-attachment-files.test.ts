@@ -22,6 +22,7 @@ const createTestShellBridge = (overrides: Partial<ShellBridge> = {}): ShellBridg
     unsubscribe: () => {},
   }),
   observeAgentSessionLive: async () => () => {},
+  subscribeNotificationStream: async () => () => {},
   subscribeTaskStream: async () => ({
     subscriptionId: "test-subscription",
     acknowledge: async () => {},

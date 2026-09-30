@@ -1,4 +1,4 @@
-import type { ExternalTaskSyncEvent, TaskEventCursor } from "@openducktor/contracts";
+import type { TaskEventCursor } from "@openducktor/contracts";
 import type { TaskStreamFrame, TaskStreamSubscription } from "@/lib/shell-bridge";
 import type { AgentSessionViewSync } from "@/state/queries/agent-session-view-sync";
 import type { TaskViewSync } from "@/state/queries/task-view-sync";
@@ -23,13 +23,6 @@ export type TaskStreamController = {
   stop(): Promise<void>;
 };
 
-export type TaskStreamNotificationSink = {
-  onChange(event: ExternalTaskSyncEvent): Promise<void>;
-  onSnapshot(): Promise<void>;
-  onSnapshotFailed(cause: unknown): void;
-  onFailure(cause: unknown): void;
-};
-
 const cursorsEqual = (left: TaskEventCursor | null, right: TaskEventCursor | null): boolean =>
   left !== null && right !== null && left.epoch === right.epoch && left.sequence === right.sequence;
 
@@ -38,7 +31,6 @@ export const createTaskStreamController = ({
   taskViewSync,
   agentSessionViewSync,
   getActiveRepoPath,
-  notificationSink,
   onDegraded,
   onSnapshotFinished,
   onSnapshotStarted,
@@ -47,7 +39,6 @@ export const createTaskStreamController = ({
   taskViewSync: TaskViewSync;
   agentSessionViewSync: AgentSessionViewSync;
   getActiveRepoPath: () => string | null;
-  notificationSink?: TaskStreamNotificationSink;
   onDegraded: (cause: unknown) => void;
   onSnapshotFinished?: (repoPath: string | null, succeeded: boolean) => void;
   onSnapshotStarted?: (repoPath: string | null) => void;
@@ -71,7 +62,6 @@ export const createTaskStreamController = ({
   let awaitingReplayCursor: TaskEventCursor | null = null;
   let pendingSnapshot: Extract<TaskStreamFrame, { type: "snapshot_required" }> | null = null;
   const pendingChanges = new Map<string, Extract<TaskStreamFrame, { type: "change" }>>();
-  let notificationWork = Promise.resolve();
 
   const compareCursor = (left: TaskEventCursor, right: TaskEventCursor): number => {
     if (left.epoch !== right.epoch) {
@@ -92,25 +82,6 @@ export const createTaskStreamController = ({
     } catch {
       // Reporting must not leave a controller-owned promise rejected.
     }
-  };
-
-  const runNotificationSink = async (operation: () => Promise<void>): Promise<void> => {
-    if (!notificationSink) {
-      return;
-    }
-    try {
-      await operation();
-    } catch (cause) {
-      try {
-        notificationSink.onFailure(cause);
-      } catch {
-        // Notification reporting must not block task-stream acknowledgement.
-      }
-    }
-  };
-
-  const enqueueNotificationSink = (operation: () => Promise<void>): void => {
-    notificationWork = notificationWork.then(() => runNotificationSink(operation));
   };
 
   const close = (owner: OwnedSubscription): Promise<void> => {
@@ -167,7 +138,6 @@ export const createTaskStreamController = ({
       taskViewSync.reconcileExternalEvent(frame.event, getActiveRepoPath()),
       agentSessionViewSync.reconcileExternalEvent(frame.event),
     ]);
-    enqueueNotificationSink(() => notificationSink?.onChange(frame.event) ?? Promise.resolve());
     if (!isActive(owner, frameGeneration)) return false;
     processedCursor = frame.cursor;
     return acknowledge(owner, frame.cursor, frameGeneration);
@@ -184,7 +154,6 @@ export const createTaskStreamController = ({
     try {
       const taskIds = await taskViewSync.reconcileStreamSnapshot(activeRepoPath);
       await agentSessionViewSync.reconcileStreamSnapshot(activeRepoPath, taskIds);
-      enqueueNotificationSink(() => notificationSink?.onSnapshot() ?? Promise.resolve());
       succeeded = true;
     } finally {
       onSnapshotFinished?.(activeRepoPath, succeeded);
@@ -286,12 +255,7 @@ export const createTaskStreamController = ({
           (error) => {
             if (!isCurrentOwner(owner)) return;
             void startRecovery(error, acknowledgedCursor, true).then((recovered) => {
-              if (!recovered && !stopped) {
-                enqueueNotificationSink(() => {
-                  notificationSink?.onSnapshotFailed(error);
-                  return Promise.resolve();
-                });
-              }
+              if (!recovered && !stopped) reportDegraded(error);
             }, reportDegraded);
           },
         ),
@@ -406,12 +370,7 @@ export const createTaskStreamController = ({
                   acknowledgementFailed,
                 ))
               ) {
-                if (!stopped && !acknowledgementFailed) {
-                  enqueueNotificationSink(() => {
-                    notificationSink?.onSnapshotFailed(error);
-                    return Promise.resolve();
-                  });
-                }
+                if (!stopped && !acknowledgementFailed) reportDegraded(error);
                 return;
               }
             }

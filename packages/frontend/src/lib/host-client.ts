@@ -70,6 +70,8 @@ export const hostBridge: HostBridge = {
   subscribeDevServerEvents: (listener) => getShellBridge().subscribeDevServerEvents(listener),
   observeAgentSessionLive: (input, listener) =>
     getShellBridge().observeAgentSessionLive(input, listener),
+  subscribeNotificationStream: (input, onFrame, onFailure) =>
+    getShellBridge().subscribeNotificationStream(input, onFrame, onFailure),
   subscribeTaskStream: (input, onFrame, onTerminalFailure) =>
     getShellBridge().subscribeTaskStream(input, onFrame, onTerminalFailure),
 };

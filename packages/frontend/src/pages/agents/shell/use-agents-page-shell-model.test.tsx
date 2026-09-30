@@ -582,12 +582,6 @@ const notificationContextValue: NotificationContextValue = {
     publishSessionError: async () => true,
     reportFailure: () => {},
   },
-  taskStreamSink: {
-    onChange: async () => {},
-    onSnapshot: async () => {},
-    onSnapshotFailed: () => {},
-    onFailure: () => {},
-  },
 };
 
 const AppStateTestWrapper = ({ children }: PropsWithChildren): ReactElement => (

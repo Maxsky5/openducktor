@@ -25,83 +25,6 @@ type StaticFrontendOptions = {
   externalUrl?: string;
 };
 
-const contentTypeForPath = (filePath: string): string => {
-  switch (path.extname(filePath)) {
-    case ".css":
-      return "text/css; charset=utf-8";
-    case ".html":
-      return "text/html; charset=utf-8";
-    case ".js":
-    case ".mjs":
-      return "text/javascript; charset=utf-8";
-    case ".json":
-      return "application/json; charset=utf-8";
-    case ".map":
-      return "application/json; charset=utf-8";
-    case ".svg":
-      return "image/svg+xml";
-    case ".ico":
-      return "image/x-icon";
-    case ".png":
-      return "image/png";
-    case ".woff":
-      return "font/woff";
-    case ".woff2":
-      return "font/woff2";
-    default:
-      return "application/octet-stream";
-  }
-};
-
-// Vite emits eight-character content hashes under assets/. HTML always needs validation.
-const isHashedStaticAssetPath = (staticRoot: string, filePath: string): boolean =>
-  path.dirname(filePath) === path.join(staticRoot, "assets") &&
-  path.extname(filePath) !== ".html" &&
-  /-[A-Za-z0-9_-]{8}\.[^.]+$/.test(path.basename(filePath));
-
-const isNotModified = (request: Request, etag: string): boolean => {
-  const condition = request.headers.get("if-none-match");
-  if (condition === null) return false;
-  if (condition.trim() === "*") return true;
-  const currentTag = etag.replace(/^W\//, "");
-  return condition.split(",").some((tag) => tag.trim().replace(/^W\//, "") === currentTag);
-};
-
-const staticAssetResponse = async (
-  request: Request,
-  responsePath: string,
-  staticRoot: string,
-): Promise<Response> => {
-  const immutable = isHashedStaticAssetPath(staticRoot, responsePath);
-  const headers = new Headers({
-    "cache-control": immutable
-      ? "public, max-age=31536000, immutable"
-      : "public, max-age=0, must-revalidate",
-    "content-type": contentTypeForPath(responsePath),
-  });
-  let bytes: Buffer | null = null;
-  let etag: string;
-  let size: number;
-  if (immutable) {
-    // The filename's build hash identifies the content without reading the file.
-    const hash = createHash("sha256").update(path.basename(responsePath)).digest("hex");
-    etag = `W/"${hash}"`;
-    size = (await stat(responsePath)).size;
-  } else {
-    // Read mutable files once so the validator describes the bytes we return.
-    bytes = await readFile(responsePath);
-    etag = `"${createHash("sha256").update(bytes).digest("hex")}"`;
-    size = bytes.byteLength;
-  }
-  headers.set("etag", etag);
-  if (isNotModified(request, etag)) return new Response(null, { status: 304, headers });
-  headers.set("content-length", String(size));
-  if (request.method === "HEAD") return new Response(null, { headers });
-  const body =
-    bytes === null ? nodeReadableStream(createReadStream(responsePath)) : new Uint8Array(bytes);
-  return new Response(body, { headers });
-};
-
 export const startStaticFrontendServerEffect = (
   options: StaticFrontendOptions,
   runtimeConfigState: BrowserRuntimeConfigState,
@@ -185,3 +108,80 @@ export const startStaticFrontendServerEffect = (
       }).pipe(Effect.map((server) => ({ close: () => server.stop(true), port: server.port }))),
     );
   });
+
+const contentTypeForPath = (filePath: string): string => {
+  switch (path.extname(filePath)) {
+    case ".css":
+      return "text/css; charset=utf-8";
+    case ".html":
+      return "text/html; charset=utf-8";
+    case ".js":
+    case ".mjs":
+      return "text/javascript; charset=utf-8";
+    case ".json":
+      return "application/json; charset=utf-8";
+    case ".map":
+      return "application/json; charset=utf-8";
+    case ".svg":
+      return "image/svg+xml";
+    case ".ico":
+      return "image/x-icon";
+    case ".png":
+      return "image/png";
+    case ".woff":
+      return "font/woff";
+    case ".woff2":
+      return "font/woff2";
+    default:
+      return "application/octet-stream";
+  }
+};
+
+// Vite emits eight-character content hashes under assets/. HTML always needs validation.
+const isHashedStaticAssetPath = (staticRoot: string, filePath: string): boolean =>
+  path.dirname(filePath) === path.join(staticRoot, "assets") &&
+  path.extname(filePath) !== ".html" &&
+  /-[A-Za-z0-9_-]{8}\.[^.]+$/.test(path.basename(filePath));
+
+const isNotModified = (request: Request, etag: string): boolean => {
+  const condition = request.headers.get("if-none-match");
+  if (condition === null) return false;
+  if (condition.trim() === "*") return true;
+  const currentTag = etag.replace(/^W\//, "");
+  return condition.split(",").some((tag) => tag.trim().replace(/^W\//, "") === currentTag);
+};
+
+const staticAssetResponse = async (
+  request: Request,
+  responsePath: string,
+  staticRoot: string,
+): Promise<Response> => {
+  const immutable = isHashedStaticAssetPath(staticRoot, responsePath);
+  const headers = new Headers({
+    "cache-control": immutable
+      ? "public, max-age=31536000, immutable"
+      : "public, max-age=0, must-revalidate",
+    "content-type": contentTypeForPath(responsePath),
+  });
+  let bytes: Buffer | null = null;
+  let etag: string;
+  let size: number;
+  if (immutable) {
+    // The filename's build hash identifies the content without reading the file.
+    const hash = createHash("sha256").update(path.basename(responsePath)).digest("hex");
+    etag = `W/"${hash}"`;
+    size = (await stat(responsePath)).size;
+  } else {
+    // Read mutable files once so the validator describes the bytes we return.
+    bytes = await readFile(responsePath);
+    etag = `"${createHash("sha256").update(bytes).digest("hex")}"`;
+    size = bytes.byteLength;
+  }
+  headers.set("etag", etag);
+  if (isNotModified(request, etag)) return new Response(null, { status: 304, headers });
+  headers.set("content-length", String(size));
+  if (request.method === "HEAD") return new Response(null, { headers });
+  const body =
+    bytes === null ? nodeReadableStream(createReadStream(responsePath)) : new Uint8Array(bytes);
+  return new Response(body, { headers });
+};

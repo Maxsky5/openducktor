@@ -475,7 +475,7 @@ describe("local host SSE subscriptions", () => {
     );
 
     expect(FakeEventSource.instances).toHaveLength(1);
-    expect(FakeEventSource.instances[0]?.url).toBe("http://127.0.0.1:14327/events");
+    expect(FakeEventSource.instances[0]?.url).toBe("http://127.0.0.1:14327/events?notifications=1");
     expect(FakeEventSource.instances[0]?.options).toEqual({ withCredentials: true });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     FakeEventSource.instances[0]?.emit("open", "");
@@ -1546,4 +1546,61 @@ describe("local host SSE subscriptions", () => {
       "http://127.0.0.1:14327/task-assets/workspace-1/task-1/description/550e8400-e29b-41d4-a716-446655440000",
     );
   });
+});
+
+test("notification and host listeners share one physical stream and retain independent cleanup", async () => {
+  globalThis.fetch = createFetchFixture(async () => new Response("{}", { status: 200 }));
+  const transport = await loadLocalHostTransport();
+  const failures = mock(() => {});
+  const frames = mock(() => {});
+  const stopNotifications = await transport.subscribeLocalHostNotificationStream(
+    { cursor: null },
+    frames,
+    failures,
+  );
+  const stopRun = await transport.subscribeLocalHostRunEvents(() => {});
+  expect(FakeEventSource.instances).toHaveLength(1);
+  const source = FakeEventSource.instances[0]!;
+  const frame = {
+    type: "attached",
+    reason: "new",
+    cursor: { epoch: "11111111-1111-4111-8111-111111111111", sequence: 0 },
+    health: [],
+  };
+  source.emit("notification-frame", JSON.stringify(frame));
+  expect(frames).toHaveBeenCalledWith(frame);
+  source.emit("error", "");
+  expect(failures).toHaveBeenCalledTimes(1);
+  stopRun();
+  expect(source.closed).toBe(false);
+  const late = mock(() => {});
+  const stopLate = await transport.subscribeLocalHostNotificationStream(
+    { cursor: null },
+    late,
+    () => {},
+  );
+  expect(FakeEventSource.instances).toHaveLength(1);
+  expect(late).toHaveBeenCalledWith(frame);
+  stopNotifications();
+  expect(source.closed).toBe(false);
+  stopLate();
+  expect(source.closed).toBe(true);
+});
+
+test("a notification reconnect cursor is sent when it opens the shared connection", async () => {
+  const fetchMock = mock(async () => new Response("{}", { status: 200 }));
+  globalThis.fetch = createFetchFixture(fetchMock);
+  const transport = await loadLocalHostTransport();
+  const cursor = { epoch: "11111111-1111-4111-8111-111111111111", sequence: 42 };
+  const stop = await transport.subscribeLocalHostNotificationStream(
+    { cursor },
+    () => {},
+    () => {},
+  );
+  const url = new URL(FakeEventSource.instances[0]!.url);
+  expect(url.pathname).toBe("/events");
+  expect(url.searchParams.get("notifications")).toBe("1");
+  expect(JSON.parse(url.searchParams.get("notificationCursor")!)).toEqual(cursor);
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  stop();
 });

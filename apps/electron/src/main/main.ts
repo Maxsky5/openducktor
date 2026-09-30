@@ -1,3 +1,4 @@
+import { registerElectronNotificationStreamIpc } from "./electron-notification-stream-ipc";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -700,6 +701,15 @@ const registerIpcHandlers = (
   hostCommandRouter: EffectNodeHostCommandRouter,
   appUpdateService: ElectronAppUpdateService,
 ): void => {
+  registerElectronNotificationStreamIpc(
+    ipcMain,
+    hostCommandRouter.notificationStream,
+    ({ cause, subscriptionId }) =>
+      reportElectronNonFatalFailure(
+        `OpenDucktor notification delivery failed for subscription '${subscriptionId}'.`,
+        cause,
+      ),
+  );
   registerElectronEditorClipboardIpc({ clipboard, ipcMain });
   registerElectronTaskStreamIpc({
     ipcMain,

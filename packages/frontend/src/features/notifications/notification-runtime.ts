@@ -6,6 +6,10 @@ import {
   type NotificationNavigationTarget,
   type NotificationOccurrence,
   type NotificationSettings,
+  type SelectedNotification,
+  type NotificationStreamFrame,
+  type NotificationCursor,
+  type NotificationHealth,
 } from "@openducktor/contracts";
 import type { NotificationBridge } from "@/lib/shell-bridge";
 import {
@@ -25,9 +29,11 @@ type CoordinationFailurePhase = "publication" | "external_delivery";
 
 export const createNotificationRuntime = ({
   bridge,
-  loadSettings,
+  publishAction,
+  subscribeStream,
   navigate,
   onFailure,
+  onObservationHealth = () => {},
   onCoordinationRecovered,
   onOsShown = () => {},
   onSettingsRecovered = () => {},
@@ -36,9 +42,15 @@ export const createNotificationRuntime = ({
   sound,
 }: {
   bridge: NotificationBridge;
-  loadSettings(): Promise<NotificationSettings>;
+  publishAction(occurrence: NotificationOccurrence): Promise<SelectedNotification>;
+  subscribeStream(
+    input: { cursor: NotificationCursor | null },
+    onFrame: (frame: NotificationStreamFrame) => void,
+    onFailure: (cause: unknown) => void,
+  ): Promise<() => void>;
   navigate(target: NotificationNavigationTarget): Promise<void>;
   onFailure(failure: NotificationDispatchFailure): void;
+  onObservationHealth?: (health: NotificationHealth) => void;
   onCoordinationRecovered(): void;
   onOsShown?: () => void;
   onSettingsRecovered?: () => void;
@@ -48,13 +60,13 @@ export const createNotificationRuntime = ({
 }) => {
   const activeCoordinationFailures = new Set<CoordinationFailurePhase>();
   const localErrorPublications = new Set<string>();
+  const coordinatedOccurrences = new Set<string>();
   const os = createShellOsNotificationAdapter(bridge, onOsShown);
   const playSound = async (cue: NotificationCue, volumePercent: number): Promise<void> => {
     await sound.play(cue, volumePercent);
     onSoundPlayed();
   };
   const policy = createNotificationPolicy({
-    loadSettings,
     inApp,
     os,
     sound: { play: playSound },
@@ -115,6 +127,22 @@ export const createNotificationRuntime = ({
     if (errorMessage !== undefined) context.errorMessage = errorMessage;
     const localResult = await policy.dispatch(occurrence, context, suppliedSettings);
     const externalPlan = localResult.externalPlan;
+    if (!coordinatedOccurrences.has(occurrence.occurrenceId)) {
+      coordinatedOccurrences.add(occurrence.occurrenceId);
+      try {
+        const coordinated = await bridge.publishOccurrence(occurrence, suppliedSettings);
+        if (
+          JSON.stringify(coordinated) !== JSON.stringify({ occurrence, settings: suppliedSettings })
+        )
+          throw new Error(
+            "Notification coordination changed the host selection. Reload to reconnect.",
+          );
+      } catch (cause) {
+        reportCoordinationFailure("publication", occurrence, cause);
+        return localResult.inAppDelivered;
+      }
+      recoverCoordinationFailure("publication");
+    }
     if (!externalPlan) return localResult.inAppDelivered;
     let coordinationFailed = false;
     let coordinationCompleted = false;
@@ -154,10 +182,9 @@ export const createNotificationRuntime = ({
         ...prepareNotificationOccurrence(rawOccurrence),
         occurrenceId: await boundNotificationOccurrenceId(rawOccurrence.occurrenceId),
       });
-      const settings = await policy.loadSettingsCandidate(occurrence);
-      if (!settings) return false;
+
       if (localErrorMessage !== undefined) localErrorPublications.add(occurrence.occurrenceId);
-      const selected = await bridge.publishOccurrence(occurrence, settings);
+      const selected = await publishAction(occurrence);
       recoverCoordinationFailure("publication");
       return await dispatch(
         selected.occurrence,
@@ -179,14 +206,62 @@ export const createNotificationRuntime = ({
     },
     publishAndWait,
     subscribe(): () => void {
+      let disposed = false;
+      let stopStream: (() => void) | null = null;
+      let cursor: NotificationCursor | null = null;
+      const reportStreamFailure = (cause: unknown) =>
+        reportCoordinationFailure("publication", testOccurrence, cause);
+      void subscribeStream(
+        { cursor },
+        (frame) => {
+          if (disposed) return;
+          if (frame.type === "attached") {
+            cursor = frame.cursor;
+            if (frame.reason === "gap" || frame.reason === "epoch_changed")
+              reportStreamFailure(
+                new Error(
+                  "Notification replay is unavailable. Earlier alerts were not restored. Live notification delivery continues.",
+                ),
+              );
+            for (const health of frame.health) onObservationHealth(health);
+            return;
+          }
+          if (
+            cursor &&
+            cursor.epoch === frame.cursor.epoch &&
+            frame.cursor.sequence <= cursor.sequence
+          )
+            return;
+          cursor = frame.cursor;
+          if (frame.type === "health") {
+            onObservationHealth(frame.health);
+            return;
+          }
+          const { occurrence, settings } = frame.selected;
+          if (!localErrorPublications.has(occurrence.occurrenceId))
+            void dispatch(occurrence, settings).catch((cause) =>
+              reportCoordinationFailure("publication", occurrence, cause),
+            );
+        },
+        reportStreamFailure,
+      )
+        .then((stop) => {
+          if (disposed) stop();
+          else stopStream = stop;
+        })
+        .catch(reportStreamFailure);
       const stopOccurrences = bridge.subscribeOccurrences((occurrence, settings) => {
         if (localErrorPublications.has(occurrence.occurrenceId)) return;
-        void dispatch(occurrence, settings);
+        void dispatch(occurrence, settings).catch((cause) =>
+          reportCoordinationFailure("publication", occurrence, cause),
+        );
       });
       const stopClicks = bridge.subscribeClicks(({ navigationTarget }) => {
         void navigate(navigationTarget);
       });
       return () => {
+        disposed = true;
+        stopStream?.();
         stopOccurrences();
         stopClicks();
       };

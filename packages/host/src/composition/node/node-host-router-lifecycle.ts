@@ -1,3 +1,5 @@
+import type { WorkspaceSettingsError } from "../../application/workspaces/workspace-settings-service";
+import type { NotificationService } from "../../application/notifications/notification-service";
 import { Effect } from "effect";
 import type { GeneratedImageWorkers } from "../../adapters/attachments/generated-image-worker-client";
 import type { McpHostBridgeServer } from "../../adapters/mcp/mcp-host-bridge-server";
@@ -24,12 +26,19 @@ import {
 } from "../host-lifecycle";
 
 export type NodeHostRouterLifecycle = {
-  initialize: () => Effect.Effect<void, HostOperationErrorAggregate | TaskStoreError>;
+  initialize: () => Effect.Effect<
+    void,
+    HostOperationErrorAggregate | TaskStoreError | WorkspaceSettingsError
+  >;
   dispose: () => Effect.Effect<void, HostOperationErrorAggregate>;
 };
 
 export const createNodeHostRouterLifecycle = ({
   assets,
+  initializeAdmission,
+  shutdownWorkspaceImports,
+  unsubscribeImportCatalogs,
+  notifications,
   azureDevOpsConnection,
   devServerService,
   imageWorkers,
@@ -41,6 +50,10 @@ export const createNodeHostRouterLifecycle = ({
   taskSyncService,
   terminalService,
 }: {
+  initializeAdmission: () => Effect.Effect<void, WorkspaceSettingsError>;
+  shutdownWorkspaceImports: () => Effect.Effect<void, HostOperationErrorAggregate>;
+  unsubscribeImportCatalogs: (() => void) | undefined;
+  notifications: Pick<NotificationService, "initialize" | "dispose">;
   assets: { taskStoreConnectionShutdownStep: HostShutdownStep };
   azureDevOpsConnection?: Pick<AzureDevOpsConnectionPort, "shutdown"> | undefined;
   devServerService: DisposableDevServerService;
@@ -73,6 +86,7 @@ export const createNodeHostRouterLifecycle = ({
   return {
     initialize: () =>
       Effect.gen(function* () {
+        yield* initializeAdmission();
         if (!taskAssetStagingSwept) {
           yield* startupSweep();
           taskAssetStagingSwept = true;
@@ -89,12 +103,14 @@ export const createNodeHostRouterLifecycle = ({
             ),
           );
         }
+        yield* notifications.initialize();
         if (taskSyncService && pullRequestSyncLoop === null) {
           pullRequestSyncLoop = yield* taskSyncService.startPullRequestSyncLoop();
         }
       }),
     dispose: () =>
       Effect.gen(function* () {
+        unsubscribeImportCatalogs?.();
         const loggingFailures: HostOperationError[] = [];
         const startLogResult = yield* Effect.either(
           writeHostLifecycleLog(lifecycleLogger, "info", "Shutting down OpenDucktor host services"),
@@ -105,6 +121,8 @@ export const createNodeHostRouterLifecycle = ({
         const shutdownResult = yield* Effect.either(
           runShutdownSteps(
             [
+              { label: "notifications", run: notifications.dispose },
+              { label: "workspace session imports", run: shutdownWorkspaceImports },
               { label: "pull request sync loop", run: stopPullRequestSyncLoop },
               ...(azureDevOpsConnection
                 ? [{ label: "Azure DevOps sign-in", run: () => azureDevOpsConnection.shutdown() }]

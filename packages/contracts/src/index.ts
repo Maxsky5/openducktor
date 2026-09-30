@@ -91,3 +91,6 @@ export * from "./workspace-agent-studio-state-schemas";
 export * from "./workspace-session-schemas";
 export * from "./workspace-session-command-schemas";
 export * from "./workspace-lifecycle-schemas";
+
+export * from "./notification-stream-schemas";
+export * from "./browser-event-stream-schemas";

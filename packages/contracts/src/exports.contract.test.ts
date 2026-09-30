@@ -2,6 +2,13 @@ import { describe, expect, test } from "bun:test";
 import * as contracts from "./index";
 
 const EXPECTED_RUNTIME_EXPORTS = [
+  "browserEventCursorSchema",
+  "notificationCursorSchema",
+  "notificationStreamSubscribeSchema",
+  "notificationStreamFrameSchema",
+  "notificationHealthSchema",
+  "selectedNotificationSchema",
+  "notificationActionOccurrenceSchema",
   "AZURE_DEVOPS_PROVIDER_DESCRIPTOR",
   "azureAreaPathsInputSchema",
   "azureAreaPathsResultSchema",

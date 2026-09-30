@@ -1,3 +1,4 @@
+import { baselineLiveSessionChanges } from "../../application/agent-sessions/baseline-live-session-changes";
 import type {
   OpencodeRuntimeSnapshotFailure,
   OpencodeRuntimeSnapshotSource,
@@ -136,5 +137,5 @@ export const applyOpenCodeSessionSources = ({
     );
     changes.push(...saveSession(staged.session));
   }
-  return changes;
+  return baselineLiveSessionChanges(changes);
 };

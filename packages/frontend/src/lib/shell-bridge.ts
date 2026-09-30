@@ -11,6 +11,8 @@ import type {
   NotificationOsDeliveryRequest,
   NotificationSettings,
   TaskAssetRenderContext,
+  NotificationCursor,
+  NotificationStreamFrame,
   TaskEventCursor,
   TaskEventStreamFrame,
   TerminalFailure,
@@ -57,6 +59,11 @@ export type HostBridge = {
   observeAgentSessionLive: (
     input: AgentSessionLiveRefreshInput,
     listener: (envelope: AgentSessionLiveEnvelope) => void,
+  ) => Promise<() => void>;
+  subscribeNotificationStream: (
+    input: { cursor: NotificationCursor | null },
+    onFrame: (frame: NotificationStreamFrame) => void,
+    onFailure: (cause: unknown) => void,
   ) => Promise<() => void>;
   subscribeTaskStream: (
     input: { cursor: TaskEventCursor | null },
@@ -187,6 +194,7 @@ export const createUnavailableShellBridge = (): ShellBridge => ({
   subscribeAzureDevOpsConnectionUpdates: failUnavailable,
   subscribeDevServerEvents: failUnavailable,
   observeAgentSessionLive: failUnavailable,
+  subscribeNotificationStream: failUnavailable,
   subscribeTaskStream: failUnavailable,
   appUpdates: createDisabledAppUpdateBridge({
     status: "disabled",
