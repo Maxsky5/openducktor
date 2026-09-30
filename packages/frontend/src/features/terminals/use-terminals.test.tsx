@@ -1,105 +1,50 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { TerminalCreateRequest, TerminalSummary } from "@openducktor/contracts";
-import { act, render, waitFor } from "@testing-library/react";
+import { act, render, renderHook, waitFor } from "@testing-library/react";
 import { useLayoutEffect } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { useTerminals, type TerminalDependencies, type TerminalPanelModel } from "./use-terminals";
-
-const discoveredTerminal = (): TerminalSummary => ({
-  terminalId: "existing-terminal",
-  label: "Existing shell",
-  context: { repoPath: "/repo", taskId: "task-1" },
-  initialWorkingDir: "/repo",
-  createdAt: "2026-07-19T00:00:00.000Z",
-  lifecycle: "running",
-  exit: null,
-});
-
-const renderDiscovery = (terminalList: TerminalDependencies["hostClient"]["terminalList"]) => {
-  const unavailable = createUnavailableShellBridge();
-  const terminalCreate = mock(unavailable.client.terminalCreate);
-  const dependencies: TerminalDependencies = {
-    hostClient: {
-      ...unavailable.client,
-      systemGetPlatform: async () => "darwin",
-      terminalList,
-      terminalCreate,
-    },
-    terminalBridge: {
-      connect: async (_onFrame, onStateChange) => {
-        onStateChange("connected");
-        return { send: async () => undefined, close: () => undefined };
-      },
-    },
-  };
-  let latest: TerminalPanelModel | null = null;
-  const Harness = () => {
-    latest = useTerminals(
-      {
-        scope: {
-          key: "/repo:task-1",
-          context: { repoPath: "/repo", taskId: "task-1" },
-          workingDirectory: "/repo",
-          workingDirectoryError: "The working directory is unavailable.",
-        },
-        isScopeLoading: false,
-        mountedScopeKeys: ["/repo:task-1"],
-      },
-      dependencies,
-    );
-    return null;
-  };
-  const view = render(
-    <QueryProvider useIsolatedClient>
-      <Harness />
-    </QueryProvider>,
-  );
-  return {
-    ...view,
-    terminalCreate,
-    getModel: (): TerminalPanelModel => {
-      if (!latest) throw new Error("Terminal hook result is not ready.");
-      return latest;
-    },
-  };
-};
+import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
+import { useTerminals, type TerminalDependencies } from "./use-terminals";
 
 describe("useTerminals", () => {
-  test("exposes failed discovery without creating a terminal and retries existing terminals", async () => {
-    const terminal = discoveredTerminal();
+  test("blocks creation after failed discovery and retries the host list", async () => {
+    const terminal = existingTerminal();
     const result = { hostInstanceId: "host-1", terminals: [terminal] };
     const retry = Promise.withResolvers<typeof result>();
     const terminalList = mock(async () => result)
       .mockRejectedValueOnce(new Error("Terminal discovery unavailable."))
       .mockImplementationOnce(() => retry.promise);
-    const view = renderDiscovery(terminalList);
+    const view = renderModel(terminalList);
     try {
-      await waitFor(() => expect(view.getModel().isLoading).toBe(false), { timeout: 500 });
-      act(() => view.getModel().onToggle());
+      await waitFor(() => expect(view.result.current.isLoading).toBe(false), { timeout: 500 });
+      act(() => view.result.current.onToggle());
       expect(view.terminalCreate).not.toHaveBeenCalled();
-      expect(view.getModel().discoveryError).toBe("Terminal discovery unavailable.");
-      expect(view.getModel().tabs).toEqual([]);
-      expect(view.getModel().isVisible).toBe(true);
+      expect(view.result.current.discoveryError).toBe("Terminal discovery unavailable.");
+      expect(view.result.current.tabs).toEqual([]);
+      expect(view.result.current.isVisible).toBe(true);
       expect(terminalList).toHaveBeenCalledTimes(1);
 
-      act(() => view.getModel().onRetryDiscovery());
-      await waitFor(() => expect(view.getModel().isLoading).toBe(true), { timeout: 500 });
+      act(() => view.result.current.onRetryDiscovery());
+      await waitFor(() => expect(view.result.current.isLoading).toBe(true), { timeout: 500 });
       act(() => {
-        view.getModel().onHide();
+        view.result.current.onHide();
       });
-      act(() => view.getModel().onToggle());
+      act(() => view.result.current.onToggle());
       expect(view.terminalCreate).not.toHaveBeenCalled();
       await act(async () => {
         retry.resolve(result);
         await retry.promise;
       });
-      await waitFor(() => expect(view.getModel().tabs[0]?.terminalId).toBe(terminal.terminalId), {
-        timeout: 500,
-      });
-      expect(view.getModel().discoveryError).toBeNull();
-      expect(view.getModel().isLoading).toBe(false);
-      expect(view.getModel().tabs).toHaveLength(1);
+      await waitFor(
+        () => expect(view.result.current.tabs[0]?.terminalId).toBe(terminal.terminalId),
+        {
+          timeout: 500,
+        },
+      );
+      expect(view.result.current.discoveryError).toBeNull();
+      expect(view.result.current.isLoading).toBe(false);
+      expect(view.result.current.tabs).toHaveLength(1);
       expect(terminalList).toHaveBeenCalledTimes(2);
       expect(view.terminalCreate).not.toHaveBeenCalled();
     } finally {
@@ -107,45 +52,45 @@ describe("useTerminals", () => {
     }
   });
 
-  test.each([true, false])(
-    "preserves discovered tabs after refresh failure, existing tabs: %s",
-    async (hasTabs) => {
-      const terminalList = mock(async () => ({
-        hostInstanceId: "host-1",
-        terminals: hasTabs ? [discoveredTerminal()] : [],
-      }));
-      const view = renderDiscovery(terminalList);
-      try {
-        await waitFor(() => expect(view.getModel().isLoading).toBe(false), { timeout: 500 });
-        expect(view.getModel().tabs).toHaveLength(hasTabs ? 1 : 0);
-        const tabs = view.getModel().tabs;
-        const mountedTabs = view.getModel().mountedTabs;
-        const activeTabId = view.getModel().activeTabId;
-        const controller = view.getModel().controller;
-        terminalList.mockRejectedValueOnce(new Error("Terminal refresh unavailable."));
+  test.each([
+    { name: "existing tabs", hasTabs: true },
+    { name: "an empty list", hasTabs: false },
+  ])("keeps $name after a failed refresh", async ({ hasTabs }) => {
+    const terminalList = mock(async () => ({
+      hostInstanceId: "host-1",
+      terminals: hasTabs ? [existingTerminal()] : [],
+    }));
+    const view = renderModel(terminalList);
+    try {
+      await waitFor(() => expect(view.result.current.isLoading).toBe(false), { timeout: 500 });
+      expect(view.result.current.tabs).toHaveLength(hasTabs ? 1 : 0);
+      const tabs = view.result.current.tabs;
+      const mountedTabs = view.result.current.mountedTabs;
+      const activeTabId = view.result.current.activeTabId;
+      const controller = view.result.current.controller;
+      terminalList.mockRejectedValueOnce(new Error("Terminal refresh unavailable."));
 
-        act(() => view.getModel().onRetryDiscovery());
-        await waitFor(
-          () => expect(view.getModel().discoveryError).toBe("Terminal refresh unavailable."),
-          {
-            timeout: 500,
-          },
-        );
-        expect(view.getModel().isLoading).toBe(false);
-        expect(view.getModel().tabs).toEqual(tabs);
-        expect(view.getModel().mountedTabs).toEqual(mountedTabs);
-        expect(view.getModel().activeTabId).toBe(activeTabId);
-        expect(view.getModel().controller).toBe(controller);
-        act(() => view.getModel().onHide());
-        act(() => view.getModel().onToggle());
-        expect(view.getModel().isVisible).toBe(true);
-        expect(view.terminalCreate).not.toHaveBeenCalled();
-        expect(terminalList).toHaveBeenCalledTimes(2);
-      } finally {
-        view.unmount();
-      }
-    },
-  );
+      act(() => view.result.current.onRetryDiscovery());
+      await waitFor(
+        () => expect(view.result.current.discoveryError).toBe("Terminal refresh unavailable."),
+        {
+          timeout: 500,
+        },
+      );
+      expect(view.result.current.isLoading).toBe(false);
+      expect(view.result.current.tabs).toEqual(tabs);
+      expect(view.result.current.mountedTabs).toEqual(mountedTabs);
+      expect(view.result.current.activeTabId).toBe(activeTabId);
+      expect(view.result.current.controller).toBe(controller);
+      act(() => view.result.current.onHide());
+      act(() => view.result.current.onToggle());
+      expect(view.result.current.isVisible).toBe(true);
+      expect(view.terminalCreate).not.toHaveBeenCalled();
+      expect(terminalList).toHaveBeenCalledTimes(2);
+    } finally {
+      view.unmount();
+    }
+  });
 
   test("keeps Workspace Session tabs separate through switches and a renderer remount", async () => {
     const unavailable = createUnavailableShellBridge();
@@ -428,3 +373,52 @@ describe("useTerminals", () => {
     }
   });
 });
+
+function existingTerminal(): TerminalSummary {
+  return {
+    terminalId: "existing-terminal",
+    label: "Existing shell",
+    context: { repoPath: "/repo", taskId: "task-1" },
+    initialWorkingDir: "/repo",
+    createdAt: "2026-07-19T00:00:00.000Z",
+    lifecycle: "running",
+    exit: null,
+  };
+}
+
+function renderModel(terminalList: TerminalDependencies["hostClient"]["terminalList"]) {
+  const unavailable = createUnavailableShellBridge();
+  const terminalCreate = mock(unavailable.client.terminalCreate);
+  const dependencies: TerminalDependencies = {
+    hostClient: {
+      ...unavailable.client,
+      systemGetPlatform: async () => "darwin",
+      terminalList,
+      terminalCreate,
+    },
+    terminalBridge: {
+      connect: async (_onFrame, onStateChange) => {
+        onStateChange("connected");
+        return { send: async () => undefined, close: () => undefined };
+      },
+    },
+  };
+  const view = renderHook(
+    () =>
+      useTerminals(
+        {
+          scope: {
+            key: "/repo:task-1",
+            context: { repoPath: "/repo", taskId: "task-1" },
+            workingDirectory: "/repo",
+            workingDirectoryError: "The working directory is unavailable.",
+          },
+          isScopeLoading: false,
+          mountedScopeKeys: ["/repo:task-1"],
+        },
+        dependencies,
+      ),
+    { wrapper: IsolatedQueryWrapper },
+  );
+  return { ...view, terminalCreate };
+}

@@ -25,11 +25,6 @@ import { useTerminalTransport } from "./use-terminal-transport";
 
 export type { TerminalTab } from "./terminal-presentation-state";
 
-type MountedTerminalTab = {
-  scopeKey: string;
-  tab: TerminalTab;
-};
-
 export type TerminalDependencies = {
   hostClient: Pick<
     typeof host,
@@ -38,11 +33,6 @@ export type TerminalDependencies = {
   terminalBridge: ReturnType<typeof getShellBridge>["terminals"];
 };
 
-const defaultDependencies = (): TerminalDependencies => ({
-  hostClient: host,
-  terminalBridge: getShellBridge().terminals,
-});
-
 export type TerminalScope = {
   key: string;
   context: TerminalContext;
@@ -50,26 +40,11 @@ export type TerminalScope = {
   workingDirectoryError: string;
 };
 
-const terminalListFilterForContext = (context: TerminalContext | null): TerminalListFilter => {
-  if (context === null) return { kind: "all" };
-  if ("taskId" in context) {
-    return { kind: "task", repoPath: context.repoPath, taskId: context.taskId };
-  }
-  if ("kind" in context) {
-    return {
-      kind: "workspace_session",
-      workspaceId: context.workspaceId,
-      sessionId: context.sessionId,
-    };
-  }
-  return { kind: "unassociated" };
-};
-
 export type TerminalPanelModel = {
   scopeKey: string | null;
   isAvailable: boolean;
   tabs: TerminalTab[];
-  mountedTabs: MountedTerminalTab[];
+  mountedTabs: MountedTab[];
   activeTabId: string | null;
   isVisible: boolean;
   isLoading: boolean;
@@ -114,10 +89,7 @@ export const useTerminals = (
   );
   const abandonedCreationTabIds = useRef(new Set<string>());
   const { controller, transportError } = useTerminalTransport(dependencies.terminalBridge);
-  const listFilter = useMemo(
-    () => terminalListFilterForContext(scope?.context ?? null),
-    [scope?.context],
-  );
+  const listFilter = useMemo(() => filterForContext(scope?.context ?? null), [scope?.context]);
   const terminalOptions = terminalListByFilterQueryOptions({
     filter: scope === null ? null : listFilter,
     hostClient: dependencies.hostClient,
@@ -125,7 +97,7 @@ export const useTerminals = (
   const terminalQuery = useQuery<TerminalListResponse>(terminalOptions);
   const platformQuery = useQuery(platformQueryOptions(dependencies.hostClient));
 
-  // Activate the scope during render so consumers never commit the previous scope for one frame.
+  // Switch scopes during render so the next commit cannot show the old scope.
   if (presentation.activeScopeKey !== scopeKey) {
     dispatch({ type: "scopeActivated", scopeKey });
   }
@@ -234,6 +206,7 @@ export const useTerminals = (
     dispatch({ type: "visibilitySet", scopeKey, value: transition.visible, isExplicit: true });
     if (transition.requestFocus) {
       dispatch({ type: "focusRequested", scopeKey });
+      // Discovery can finish before the effect adds the host terminals to the tabs.
       if (
         visibleState.tabs.length === 0 &&
         terminalQuery.isSuccess &&
@@ -278,10 +251,10 @@ export const useTerminals = (
     [scopeKey],
   );
   const startCreate = useCallback((): void => void createTerminal(), [createTerminal]);
-  const { refetch: refetchTerminals } = terminalQuery;
+  const { refetch } = terminalQuery;
   const retryDiscovery = useCallback((): void => {
-    if (scopeKey) void refetchTerminals();
-  }, [refetchTerminals, scopeKey]);
+    if (scopeKey) void refetch();
+  }, [refetch, scopeKey]);
   const retryCreate = useCallback(
     (ownerScopeKey: string, tabId: string): void => {
       if (ownerScopeKey !== scopeKey) return;
@@ -417,4 +390,29 @@ export const useTerminals = (
       visibleTabs,
     ],
   );
+};
+
+type MountedTab = {
+  scopeKey: string;
+  tab: TerminalTab;
+};
+
+const defaultDependencies = (): TerminalDependencies => ({
+  hostClient: host,
+  terminalBridge: getShellBridge().terminals,
+});
+
+const filterForContext = (context: TerminalContext | null): TerminalListFilter => {
+  if (context === null) return { kind: "all" };
+  if ("taskId" in context) {
+    return { kind: "task", repoPath: context.repoPath, taskId: context.taskId };
+  }
+  if ("kind" in context) {
+    return {
+      kind: "workspace_session",
+      workspaceId: context.workspaceId,
+      sessionId: context.sessionId,
+    };
+  }
+  return { kind: "unassociated" };
 };

@@ -28,6 +28,184 @@ import { terminalTabLabel } from "./terminal-presentation-state";
 import { TerminalTabStrip } from "./terminal-tab-strip";
 import type { TerminalPanelModel, TerminalTab } from "./use-terminals";
 
+export function TerminalPanel({
+  model,
+  headerLeading,
+}: {
+  model: TerminalPanelModel;
+  headerLeading?: ReactNode;
+}): ReactElement {
+  const {
+    closeCandidate,
+    closeError,
+    isConfirmingClose,
+    closeTab,
+    confirmClose,
+    setPendingCloseCandidate,
+  } = useTerminalClose(model);
+  const currentScopeKey = useRef(model.scopeKey);
+  const retryCreateRef = useRef(model.onRetryCreate);
+  useLayoutEffect(() => {
+    currentScopeKey.current = model.scopeKey;
+    retryCreateRef.current = model.onRetryCreate;
+  }, [model.onRetryCreate, model.scopeKey]);
+  const retryTerminalCreation = useCallback((ownerScopeKey: string, tabId: string): void => {
+    if (ownerScopeKey !== currentScopeKey.current) return;
+    retryCreateRef.current(ownerScopeKey, tabId);
+  }, []);
+  useEffect(() => {
+    if (!model.platformError) return;
+    const toastId = "terminal:platform";
+    toast.error("Terminal shortcuts unavailable", {
+      id: toastId,
+      description: model.platformError,
+    });
+    return () => {
+      toast.dismiss(toastId);
+    };
+  }, [model.platformError]);
+  return (
+    <Tabs
+      {...(model.activeTabId ? { value: model.activeTabId } : {})}
+      onValueChange={model.onSelectTab}
+      className="flex h-full min-h-0 flex-col gap-0 overflow-hidden bg-[var(--dev-server-terminal-panel)] text-[var(--dev-server-terminal-foreground)]"
+    >
+      <Header
+        model={model}
+        headerLeading={headerLeading}
+        onCloseTab={(tab) => void closeTab(tab)}
+      />
+      {model.discoveryError !== null ? (
+        <div className="flex shrink-0 items-center gap-3 bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
+          <p role="alert" className="min-w-0 flex-1 break-words">
+            Terminal discovery failed: {model.discoveryError}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={model.onRetryDiscovery}
+            disabled={model.isLoading}
+          >
+            Retry terminal discovery
+          </Button>
+        </div>
+      ) : null}
+      {model.mountedTabs.length > 0 ? (
+        <div className="flex min-h-0 flex-1 flex-col">
+          <MountedTerminals model={model} onRetryCreate={retryTerminalCreation} />
+          {closeError ? (
+            <p className="border-t border-border px-3 py-1.5 text-xs text-destructive">
+              Close failed: {closeError}
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground">
+          {isEmpty(model) ? "Create a terminal." : null}
+          {model.isLoading && model.discoveryError === null ? (
+            <p role="status">Loading terminals...</p>
+          ) : null}
+        </div>
+      )}
+      {model.transportError ? (
+        <p className="bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
+          Terminal transport failed: {model.transportError}
+        </p>
+      ) : null}
+
+      <Dialog
+        open={closeCandidate !== null}
+        onOpenChange={(open) => !open && !isConfirmingClose && setPendingCloseCandidate(null)}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              Terminate and close {closeCandidate ? terminalTabLabel(closeCandidate) : "terminal"}?
+            </DialogTitle>
+            <DialogDescription>
+              This stops the running process tree. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-row justify-between border-t border-border pt-5 sm:justify-between">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPendingCloseCandidate(null)}
+              disabled={isConfirmingClose}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void confirmClose()}
+              disabled={isConfirmingClose}
+            >
+              {isConfirmingClose ? (
+                <Loader2 className="animate-spin" data-icon="inline-start" />
+              ) : null}
+              Terminate and close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Tabs>
+  );
+}
+
+function Header({
+  model,
+  headerLeading,
+  onCloseTab,
+}: {
+  model: TerminalPanelModel;
+  headerLeading: ReactNode;
+  onCloseTab: (tab: TerminalTab) => void;
+}): ReactElement {
+  return (
+    <div className="flex h-8 shrink-0 items-center gap-2 border-b border-[var(--dev-server-terminal-border)] bg-[var(--dev-server-terminal-surface)]">
+      {headerLeading}
+      <div className="min-w-0 flex-1">
+        {model.tabs.length > 0 ? (
+          <TerminalTabStrip
+            tabs={model.tabs}
+            onSelectTab={model.onSelectTab}
+            onReorderTab={model.onReorderTab}
+            onCloseTab={onCloseTab}
+          />
+        ) : null}
+        {isEmpty(model) ? (
+          <p className="px-1 text-xs text-muted-foreground">No terminals.</p>
+        ) : null}
+      </div>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              aria-label="New terminal"
+              className="size-8 text-(--dev-server-terminal-foreground) shadow-none hover:bg-(--dev-server-terminal-tab-inactive) hover:text-(--dev-server-terminal-foreground)"
+              onClick={model.onCreate}
+              disabled={
+                model.isLoading ||
+                model.discoveryError !== null ||
+                model.isCreating ||
+                model.tabs.length >= 8
+              }
+            >
+              <Plus />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top">New terminal</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    </div>
+  );
+}
+
 const LazyInteractiveTerminal = lazy(async () => {
   const module = await import("./interactive-terminal");
   return { default: module.InteractiveTerminal };
@@ -267,191 +445,11 @@ function useTerminalClose(model: TerminalPanelModel) {
   };
 }
 
-function TerminalPanelHeader({
-  model,
-  headerLeading,
-  showsEmptyTerminalState,
-  onCloseTab,
-}: {
-  model: TerminalPanelModel;
-  headerLeading: ReactNode;
-  showsEmptyTerminalState: boolean;
-  onCloseTab: (tab: TerminalTab) => void;
-}): ReactElement {
+function isEmpty(model: TerminalPanelModel): boolean {
   return (
-    <div className="flex h-8 shrink-0 items-center gap-2 border-b border-[var(--dev-server-terminal-border)] bg-[var(--dev-server-terminal-surface)]">
-      {headerLeading}
-      <div className="min-w-0 flex-1">
-        {model.tabs.length > 0 ? (
-          <TerminalTabStrip
-            tabs={model.tabs}
-            onSelectTab={model.onSelectTab}
-            onReorderTab={model.onReorderTab}
-            onCloseTab={onCloseTab}
-          />
-        ) : null}
-        {showsEmptyTerminalState ? (
-          <p className="px-1 text-xs text-muted-foreground">No terminals.</p>
-        ) : null}
-      </div>
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              aria-label="New terminal"
-              className="size-8 text-(--dev-server-terminal-foreground) shadow-none hover:bg-(--dev-server-terminal-tab-inactive) hover:text-(--dev-server-terminal-foreground)"
-              onClick={model.onCreate}
-              disabled={
-                model.isLoading ||
-                model.discoveryError !== null ||
-                model.isCreating ||
-                model.tabs.length >= 8
-              }
-            >
-              <Plus />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="top">New terminal</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    </div>
-  );
-}
-
-export function TerminalPanel({
-  model,
-  headerLeading,
-}: {
-  model: TerminalPanelModel;
-  headerLeading?: ReactNode;
-}): ReactElement {
-  const {
-    closeCandidate,
-    closeError,
-    isConfirmingClose,
-    closeTab,
-    confirmClose,
-    setPendingCloseCandidate,
-  } = useTerminalClose(model);
-  const currentScopeKey = useRef(model.scopeKey);
-  const retryCreateRef = useRef(model.onRetryCreate);
-  useLayoutEffect(() => {
-    currentScopeKey.current = model.scopeKey;
-    retryCreateRef.current = model.onRetryCreate;
-  }, [model.onRetryCreate, model.scopeKey]);
-  const retryTerminalCreation = useCallback((ownerScopeKey: string, tabId: string): void => {
-    if (ownerScopeKey !== currentScopeKey.current) return;
-    retryCreateRef.current(ownerScopeKey, tabId);
-  }, []);
-  useEffect(() => {
-    if (!model.platformError) return;
-    const toastId = "terminal:platform";
-    toast.error("Terminal shortcuts unavailable", {
-      id: toastId,
-      description: model.platformError,
-    });
-    return () => {
-      toast.dismiss(toastId);
-    };
-  }, [model.platformError]);
-  const hasCurrentScopeMountedTabs = model.mountedTabs.some(
-    (mountedTab) => mountedTab.scopeKey === model.scopeKey,
-  );
-  const showsEmptyTerminalState =
     model.tabs.length === 0 &&
-    !hasCurrentScopeMountedTabs &&
+    !model.mountedTabs.some((tab) => tab.scopeKey === model.scopeKey) &&
     !model.isLoading &&
-    model.discoveryError === null;
-  return (
-    <Tabs
-      {...(model.activeTabId ? { value: model.activeTabId } : {})}
-      onValueChange={model.onSelectTab}
-      className="flex h-full min-h-0 flex-col gap-0 overflow-hidden bg-[var(--dev-server-terminal-panel)] text-[var(--dev-server-terminal-foreground)]"
-    >
-      <TerminalPanelHeader
-        model={model}
-        headerLeading={headerLeading}
-        showsEmptyTerminalState={showsEmptyTerminalState}
-        onCloseTab={(tab) => void closeTab(tab)}
-      />
-      {model.discoveryError !== null ? (
-        <div className="flex shrink-0 items-center gap-3 bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
-          <p role="alert" className="min-w-0 flex-1 break-words">
-            Terminal discovery failed: {model.discoveryError}
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={model.onRetryDiscovery}
-            disabled={model.isLoading}
-          >
-            Retry terminal discovery
-          </Button>
-        </div>
-      ) : null}
-      {model.mountedTabs.length > 0 ? (
-        <div className="flex min-h-0 flex-1 flex-col">
-          <MountedTerminals model={model} onRetryCreate={retryTerminalCreation} />
-          {closeError ? (
-            <p className="border-t border-border px-3 py-1.5 text-xs text-destructive">
-              Close failed: {closeError}
-            </p>
-          ) : null}
-        </div>
-      ) : (
-        <div className="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground">
-          {showsEmptyTerminalState ? "Create a terminal." : null}
-          {model.isLoading && model.discoveryError === null ? (
-            <p role="status">Loading terminals...</p>
-          ) : null}
-        </div>
-      )}
-      {model.transportError ? (
-        <p className="bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
-          Terminal transport failed: {model.transportError}
-        </p>
-      ) : null}
-
-      <Dialog
-        open={closeCandidate !== null}
-        onOpenChange={(open) => !open && !isConfirmingClose && setPendingCloseCandidate(null)}
-      >
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>
-              Terminate and close {closeCandidate ? terminalTabLabel(closeCandidate) : "terminal"}?
-            </DialogTitle>
-            <DialogDescription>
-              This stops the running process tree. This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex-row justify-between border-t border-border pt-5 sm:justify-between">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setPendingCloseCandidate(null)}
-              disabled={isConfirmingClose}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={() => void confirmClose()}
-              disabled={isConfirmingClose}
-            >
-              {isConfirmingClose ? (
-                <Loader2 className="animate-spin" data-icon="inline-start" />
-              ) : null}
-              Terminate and close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </Tabs>
+    model.discoveryError === null
   );
 }
