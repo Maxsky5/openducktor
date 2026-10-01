@@ -1,6 +1,6 @@
 import type { ServerOptions as ViteServerOptions } from "vite";
 import { randomUUID } from "node:crypto";
-import { createReadStream, existsSync, realpathSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { OPENDUCKTOR_DEV_INSTANCE_ENV } from "@openducktor/contracts";
 import {
@@ -37,28 +37,23 @@ import {
   closeFrontendServerEffect,
   closeViteFrontendServer,
   type FrontendServer,
-  indexStaticAssetPaths,
   keepProcessAliveDuringEffect,
   readinessHostForBind,
-  resolveIndexedStaticAssetPath,
   stopLauncherServicesEffect,
   waitForBackendEffect,
 } from "./launcher-support";
 import {
-  allowedHostnamesFor,
   isIpLiteral,
   isLoopbackHost,
   isRemoteExternalOrigin,
-  isRequestHostAllowed,
   LOCALHOST,
   parseHostEffect,
   parseHttpOriginEffect,
   portOfHttpOrigin,
 } from "./http-origin";
 import { type WebLogger, writeWebLogEffect } from "./logger";
-import { startNodeFetchServer } from "./node-fetch-server";
-import { nodeReadableStream } from "./node-readable-stream";
 import { RUNTIME_CONFIG_PATH } from "./runtime-config";
+import { startStaticFrontendServerEffect } from "./static-frontend-server";
 import {
   startTypescriptHostBackendEffect,
   type TypescriptHostBackend,
@@ -295,34 +290,6 @@ export const runWebSignalShutdown = async ({
   boundary.exit(resolvedExitCode);
 };
 
-const contentTypeForPath = (filePath: string): string => {
-  switch (path.extname(filePath)) {
-    case ".css":
-      return "text/css; charset=utf-8";
-    case ".html":
-      return "text/html; charset=utf-8";
-    case ".js":
-    case ".mjs":
-      return "text/javascript; charset=utf-8";
-    case ".json":
-      return "application/json; charset=utf-8";
-    case ".map":
-      return "application/json; charset=utf-8";
-    case ".svg":
-      return "image/svg+xml";
-    case ".ico":
-      return "image/x-icon";
-    case ".png":
-      return "image/png";
-    case ".woff":
-      return "font/woff";
-    case ".woff2":
-      return "font/woff2";
-    default:
-      return "application/octet-stream";
-  }
-};
-
 const cleanupStartedFrontendServerEffect = (
   server: FrontendServer,
   logger: WebLogger,
@@ -491,91 +458,6 @@ const startViteServerEffect = (
           port: address.data.port,
         };
       }),
-    );
-  });
-
-const startStaticFrontendServerEffect = (
-  options: LauncherOptions,
-  runtimeConfigState: BrowserRuntimeConfigState,
-): Effect.Effect<StartedFrontendServer, WebDependencyError | WebResourceError> =>
-  Effect.gen(function* () {
-    const staticRoot = path.join(options.packageRoot, "dist/web-shell");
-    const indexPath = path.join(staticRoot, "index.html");
-    const assetPaths = yield* Effect.tryPromise({
-      try: () => indexStaticAssetPaths(staticRoot),
-      catch: (cause) =>
-        new WebResourceError({
-          resource: "web-shell-assets",
-          operation: "index",
-          message: errorMessage(cause),
-          cause,
-          details: { indexPath, staticRoot },
-        }),
-    });
-    if (!assetPaths.has(indexPath)) {
-      return yield* new WebResourceError({
-        resource: "web-shell-assets",
-        operation: "resolve",
-        message: `OpenDucktor web shell assets were not found at ${staticRoot}. Reinstall @openducktor/web or run the package build before starting.`,
-        details: { indexPath, staticRoot },
-      });
-    }
-
-    const allowedHostnames = allowedHostnamesFor({
-      bindHost: options.host?.trim() || LOCALHOST,
-      externalUrl: options.externalUrl?.trim() || undefined,
-    });
-
-    return yield* Effect.uninterruptible(
-      Effect.tryPromise({
-        try: () =>
-          startNodeFetchServer({
-            hostname: options.host?.trim() || LOCALHOST,
-            port: options.frontendPort,
-            onError: (cause) =>
-              console.error(`OpenDucktor web frontend request failed: ${errorMessage(cause)}`),
-            async fetch(request) {
-              if (!isRequestHostAllowed(request, allowedHostnames)) {
-                return new Response("Host not allowed.", { status: 403 });
-              }
-              const requestUrl = new URL(request.url);
-              if (requestUrl.pathname === RUNTIME_CONFIG_PATH) {
-                const runtimeConfig = await readBrowserRuntimeConfig(runtimeConfigState);
-                return new Response(runtimeConfig, {
-                  headers: {
-                    "cache-control": "no-store",
-                    "content-type": "application/json; charset=utf-8",
-                  },
-                });
-              }
-
-              const responsePath = resolveIndexedStaticAssetPath(
-                staticRoot,
-                indexPath,
-                assetPaths,
-                requestUrl.pathname,
-              );
-              if (!responsePath) {
-                return new Response("Not found", { status: 404 });
-              }
-
-              const file = nodeReadableStream(createReadStream(responsePath));
-              return new Response(file, {
-                headers: {
-                  "content-type": contentTypeForPath(responsePath),
-                },
-              });
-            },
-          }),
-        catch: (cause) =>
-          new WebDependencyError({
-            dependency: "node-server",
-            operation: "start-static-frontend",
-            message: errorMessage(cause),
-            cause,
-            details: { frontendPort: options.frontendPort },
-          }),
-      }).pipe(Effect.map((server) => ({ close: () => server.stop(true), port: server.port }))),
     );
   });
 
