@@ -25,11 +25,6 @@ import { useTerminalTransport } from "./use-terminal-transport";
 
 export type { TerminalTab } from "./terminal-presentation-state";
 
-type MountedTerminalTab = {
-  scopeKey: string;
-  tab: TerminalTab;
-};
-
 export type TerminalDependencies = {
   hostClient: Pick<
     typeof host,
@@ -38,11 +33,6 @@ export type TerminalDependencies = {
   terminalBridge: ReturnType<typeof getShellBridge>["terminals"];
 };
 
-const defaultDependencies = (): TerminalDependencies => ({
-  hostClient: host,
-  terminalBridge: getShellBridge().terminals,
-});
-
 export type TerminalScope = {
   key: string;
   context: TerminalContext;
@@ -50,30 +40,16 @@ export type TerminalScope = {
   workingDirectoryError: string;
 };
 
-const terminalListFilterForContext = (context: TerminalContext | null): TerminalListFilter => {
-  if (context === null) return { kind: "all" };
-  if ("taskId" in context) {
-    return { kind: "task", repoPath: context.repoPath, taskId: context.taskId };
-  }
-  if ("kind" in context) {
-    return {
-      kind: "workspace_session",
-      workspaceId: context.workspaceId,
-      sessionId: context.sessionId,
-    };
-  }
-  return { kind: "unassociated" };
-};
-
 export type TerminalPanelModel = {
   scopeKey: string | null;
   isAvailable: boolean;
   tabs: TerminalTab[];
-  mountedTabs: MountedTerminalTab[];
+  mountedTabs: MountedTab[];
   activeTabId: string | null;
   isVisible: boolean;
   isLoading: boolean;
   isCreating: boolean;
+  discoveryError: string | null;
   transportError: string | null;
   platform: AppPlatform | undefined;
   platformError: string | null;
@@ -83,6 +59,7 @@ export type TerminalPanelModel = {
   onHide: () => void;
   onSelectTab: (tabId: string) => void;
   onCreate: () => void;
+  onRetryDiscovery: () => void;
   onRetryCreate: (scopeKey: string, tabId: string) => void;
   onReorderTab: (draggedTabId: string, targetTabId: string, position: "before" | "after") => void;
   onTitleChange: (scopeKey: string, terminalId: string, title: string) => void;
@@ -111,11 +88,9 @@ export const useTerminals = (
     createTerminalPresentationState,
   );
   const abandonedCreationTabIds = useRef(new Set<string>());
+  const pendingOpen = useRef<string | null>(null);
   const { controller, transportError } = useTerminalTransport(dependencies.terminalBridge);
-  const listFilter = useMemo(
-    () => terminalListFilterForContext(scope?.context ?? null),
-    [scope?.context],
-  );
+  const listFilter = useMemo(() => filterForContext(scope?.context ?? null), [scope?.context]);
   const terminalOptions = terminalListByFilterQueryOptions({
     filter: scope === null ? null : listFilter,
     hostClient: dependencies.hostClient,
@@ -123,7 +98,7 @@ export const useTerminals = (
   const terminalQuery = useQuery<TerminalListResponse>(terminalOptions);
   const platformQuery = useQuery(platformQueryOptions(dependencies.hostClient));
 
-  // Activate the scope during render so consumers never commit the previous scope for one frame.
+  // Switch scopes during render so the next commit cannot show the old scope.
   if (presentation.activeScopeKey !== scopeKey) {
     dispatch({ type: "scopeActivated", scopeKey });
   }
@@ -226,24 +201,47 @@ export const useTerminals = (
     [dependencies.hostClient, listFilter, queryClient, scope, scopeKey],
   );
 
-  const togglePanel = useCallback((): void => {
-    if (!scopeKey) return;
-    const transition = toggleTerminalPanel(isVisible);
-    dispatch({ type: "visibilitySet", scopeKey, value: transition.visible, isExplicit: true });
-    if (transition.requestFocus) {
-      dispatch({ type: "focusRequested", scopeKey });
-      if (visibleState.tabs.length === 0 && !terminalQuery.isLoading && !isScopeLoading) {
-        void createTerminal();
-      }
+  useEffect(() => {
+    if (pendingOpen.current === null) return;
+    if (
+      pendingOpen.current !== scopeKey ||
+      !isVisible ||
+      terminalQuery.isError ||
+      visibleState.tabs.length > 0
+    ) {
+      pendingOpen.current = null;
+      return;
     }
+    if (isScopeLoading || terminalQuery.isFetching || !terminalQuery.isSuccess) return;
+
+    // Consume the open request once so later refreshes cannot recreate closed terminals.
+    pendingOpen.current = null;
+    // Discovery can finish before the effect adds the host terminals to the tabs.
+    if (terminalQuery.data.terminals.length === 0) void createTerminal();
   }, [
     createTerminal,
     isScopeLoading,
-    scopeKey,
-    terminalQuery.isLoading,
     isVisible,
+    scopeKey,
+    terminalQuery.data,
+    terminalQuery.isError,
+    terminalQuery.isFetching,
+    terminalQuery.isSuccess,
     visibleState.tabs.length,
   ]);
+
+  const togglePanel = useCallback((): void => {
+    if (!scopeKey) return;
+    const transition = toggleTerminalPanel(isVisible);
+    pendingOpen.current =
+      transition.visible && visibleState.tabs.length === 0 && !terminalQuery.isError
+        ? scopeKey
+        : null;
+    dispatch({ type: "visibilitySet", scopeKey, value: transition.visible, isExplicit: true });
+    if (transition.requestFocus) {
+      dispatch({ type: "focusRequested", scopeKey });
+    }
+  }, [isVisible, scopeKey, terminalQuery.isError, visibleState.tabs.length]);
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent): void => {
@@ -257,6 +255,7 @@ export const useTerminals = (
   }, [togglePanel]);
 
   const hidePanel = useCallback((): void => {
+    pendingOpen.current = null;
     if (scopeKey) dispatch({ type: "visibilitySet", scopeKey, value: false, isExplicit: true });
   }, [scopeKey]);
   const selectTab = useCallback(
@@ -268,6 +267,10 @@ export const useTerminals = (
     [scopeKey],
   );
   const startCreate = useCallback((): void => void createTerminal(), [createTerminal]);
+  const { refetch } = terminalQuery;
+  const retryDiscovery = useCallback((): void => {
+    if (scopeKey) void refetch();
+  }, [refetch, scopeKey]);
   const retryCreate = useCallback(
     (ownerScopeKey: string, tabId: string): void => {
       if (ownerScopeKey !== scopeKey) return;
@@ -342,8 +345,9 @@ export const useTerminals = (
     },
     [],
   );
-  const isLoading = terminalQuery.isLoading || isScopeLoading;
+  const isLoading = terminalQuery.isFetching || isScopeLoading;
   const isCreating = visibleTabs.some((tab) => tab.requestState === "creating");
+  const discoveryError = terminalQuery.isError ? terminalQuery.error.message : null;
 
   return useMemo(
     () => ({
@@ -355,6 +359,7 @@ export const useTerminals = (
       isVisible,
       isLoading,
       isCreating,
+      discoveryError,
       transportError,
       platform: platformQuery.data,
       platformError: platformQuery.isError ? platformQuery.error.message : null,
@@ -364,6 +369,7 @@ export const useTerminals = (
       onHide: hidePanel,
       onSelectTab: selectTab,
       onCreate: startCreate,
+      onRetryDiscovery: retryDiscovery,
       onRetryCreate: retryCreate,
       onReorderTab: reorderTab,
       onTitleChange: changeTitle,
@@ -376,6 +382,7 @@ export const useTerminals = (
       changeTitle,
       closeTerminal,
       controller,
+      discoveryError,
       focusRequest,
       forgetTerminal,
       hidePanel,
@@ -388,6 +395,7 @@ export const useTerminals = (
       platformQuery.isError,
       reorderTab,
       retryCreate,
+      retryDiscovery,
       selectTab,
       scope,
       scopeKey,
@@ -398,4 +406,29 @@ export const useTerminals = (
       visibleTabs,
     ],
   );
+};
+
+type MountedTab = {
+  scopeKey: string;
+  tab: TerminalTab;
+};
+
+const defaultDependencies = (): TerminalDependencies => ({
+  hostClient: host,
+  terminalBridge: getShellBridge().terminals,
+});
+
+const filterForContext = (context: TerminalContext | null): TerminalListFilter => {
+  if (context === null) return { kind: "all" };
+  if ("taskId" in context) {
+    return { kind: "task", repoPath: context.repoPath, taskId: context.taskId };
+  }
+  if ("kind" in context) {
+    return {
+      kind: "workspace_session",
+      workspaceId: context.workspaceId,
+      sessionId: context.sessionId,
+    };
+  }
+  return { kind: "unassociated" };
 };
