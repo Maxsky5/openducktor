@@ -4,6 +4,11 @@ import { useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useSettingsModal } from "@/components/features/settings/settings-modal";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
+import {
+  parseSessionsPageKind,
+  SESSIONS_PATH,
+  SESSIONS_QUERY_KEYS,
+} from "@/features/session-navigation/session-navigation-target";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { revealElement } from "@/lib/reveal-element";
 import { useNotificationContext } from "@/state/notifications/notification-context";
@@ -14,6 +19,7 @@ import {
   ATTENTION_ID_QUERY_KEY,
   ATTENTION_KIND_QUERY_KEY,
   findNotificationAttentionTarget,
+  notificationTargetReplacesContent,
   openNotificationTarget,
 } from "./notification-navigation-logic";
 
@@ -33,12 +39,21 @@ export function NotificationNavigationRegistrar(): null {
   useEffect(() => {
     return registerNavigator(async (target) => {
       let beforeNavigate: ((selectWorkspace: () => Promise<void>) => Promise<boolean>) | undefined;
-      if (target.type !== "notification_settings" && location.pathname === "/chats") {
+      // Session content can hold unsaved file edits that a new target would replace.
+      if (target.type !== "notification_settings" && location.pathname === SESSIONS_PATH) {
         const targetWorkspace = workspaces.find((entry) => entry.repoPath === target.repoPath);
-        const changesContext =
+        const visibleKind = parseSessionsPageKind(
+          new URLSearchParams(location.search).get(SESSIONS_QUERY_KEYS.kind),
+        );
+        if (
           targetWorkspace &&
-          (targetWorkspace.workspaceId !== activeWorkspace?.workspaceId || "taskId" in target);
-        if (changesContext)
+          notificationTargetReplacesContent(
+            target,
+            targetWorkspace.workspaceId,
+            activeWorkspace?.workspaceId ?? null,
+            visibleKind,
+          )
+        )
           beforeNavigate = (selectWorkspace) =>
             new Promise<boolean>((resolve, reject) => {
               guardWorkspaceChange(
@@ -86,6 +101,7 @@ export function NotificationNavigationRegistrar(): null {
     activeWorkspace?.workspaceId,
     guardWorkspaceChange,
     location.pathname,
+    location.search,
     navigate,
     openSettings,
     queryClient,
@@ -102,7 +118,7 @@ export function NotificationAttentionFocus(): ReactElement | null {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (location.pathname !== "/workflows" && location.pathname !== "/chats") return;
+    if (location.pathname !== SESSIONS_PATH) return;
     const search = new URLSearchParams(location.search);
     const kind = search.get(ATTENTION_KIND_QUERY_KEY);
     const id = search.get(ATTENTION_ID_QUERY_KEY);

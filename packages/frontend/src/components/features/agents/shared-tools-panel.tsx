@@ -76,7 +76,7 @@ export function SharedToolsPanel<Id extends string>({
 }
 
 export const sharedToolsPanelToggleButtonClassName =
-  "size-8 rounded-md border border-transparent bg-transparent text-studio-chrome-foreground hover:border-studio-chrome-foreground/30 hover:bg-studio-chrome-foreground/10";
+  "size-7 rounded-sm text-muted-foreground hover:bg-background hover:text-foreground aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-sm";
 export function SharedToolsPanelToggleButton({
   label,
   isOpen,
@@ -95,9 +95,14 @@ export function SharedToolsPanelToggleButton({
       className={sharedToolsPanelToggleButtonClassName}
       onClick={onToggle}
       aria-label={actionLabel}
+      aria-pressed={isOpen}
       title={actionLabel}
     >
-      {isOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}
+      {isOpen ? (
+        <PanelRightClose className="size-4" aria-hidden="true" />
+      ) : (
+        <PanelRightOpen className="size-4" aria-hidden="true" />
+      )}
     </Button>
   );
 }

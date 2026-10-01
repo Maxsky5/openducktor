@@ -1,4 +1,8 @@
-import { listCodexSessionMetadataPage, getCodexSessionMetadata } from "./codex-session-metadata";
+import {
+  listCodexSessionMetadataPage,
+  getCodexSessionMetadata,
+  readLatestCodexTurnTime,
+} from "./codex-session-metadata";
 import type { RuntimeSessionImportSource } from "@openducktor/core";
 import { codexSubAgentSourceMetadata } from "./codex-app-server-threads";
 import {
@@ -19,6 +23,7 @@ import {
   type AgentSessionLivePendingApprovalRequest,
   type AgentSessionLivePendingQuestionRequest,
   type AgentSessionLiveSnapshot,
+  type AgentSessionMetadata,
   type CodexAppServerThreadResumeParams,
   agentSessionLiveSnapshotSchema,
   isAgentSessionTranscriptEventType,
@@ -37,6 +42,7 @@ import type {
   AgentPendingQuestionRequest,
   AgentRuntimeCatalogRead,
   AgentSessionHistoryMessage,
+  AgentSessionMetadataPort,
   AgentSessionPort,
   AgentSessionRuntimeSnapshot,
   AgentSessionSummary,
@@ -53,6 +59,7 @@ import type {
   LoadAgentFileStatusInput,
   LoadAgentSessionDiffInput,
   LoadAgentSessionHistoryInput,
+  LoadAgentSessionMetadataInput,
   LoadAgentSessionTodosInput,
   PolicyBoundSessionRef,
   ReadSessionRuntimeSnapshotInput,
@@ -237,7 +244,11 @@ const toLivePendingQuestion = (
 };
 
 export class CodexAppServerAdapter
-  implements AgentCatalogPort, AgentSessionPort, AgentWorkspaceInspectionPort
+  implements
+    AgentCatalogPort,
+    AgentSessionMetadataPort,
+    AgentSessionPort,
+    AgentWorkspaceInspectionPort
 {
   private readonly runtimeClients: CodexRuntimeClientResolver;
   private readonly sessionEvents = new CodexSessionEventBus();
@@ -1067,8 +1078,8 @@ export class CodexAppServerAdapter
     return latestLiveTodos ?? historyTodos;
   }
 
-  async resolveSessionParent(input: SessionRef): Promise<string | null> {
-    const { client } = await this.runtimeClients.resolve(input, "read session parent");
+  /** Reads a thread without its turns and checks that it is the selected session. */
+  private async readScopedThread(client: CodexAppServerClient, input: SessionRef) {
     const { thread } = await client.threadRead({
       threadId: input.externalSessionId,
       includeTurns: false,
@@ -1079,6 +1090,23 @@ export class CodexAppServerAdapter
         "The native session does not match the selected session and working directory. Select the matching session.",
       );
     }
+    return thread;
+  }
+
+  async loadSessionMetadata(input: LoadAgentSessionMetadataInput): Promise<AgentSessionMetadata> {
+    const { client, runtimeId } = await this.runtimeClients.resolve(input, "read session metadata");
+    this.querySession(input, runtimeId);
+    await this.readScopedThread(client, input);
+    const { repoPath, runtimeKind, workingDirectory, externalSessionId } = input;
+    return {
+      ref: { repoPath, runtimeKind, workingDirectory, externalSessionId },
+      lastActivityAt: await readLatestCodexTurnTime(client, externalSessionId),
+    };
+  }
+
+  async resolveSessionParent(input: SessionRef): Promise<string | null> {
+    const { client } = await this.runtimeClients.resolve(input, "read session parent");
+    const thread = await this.readScopedThread(client, input);
     const sourceParent = codexSubAgentSourceMetadata(thread.source)?.parentThreadId;
     if (sourceParent && thread.parentThreadId && sourceParent !== thread.parentThreadId) {
       throw new AgentRuntimeQueryError(

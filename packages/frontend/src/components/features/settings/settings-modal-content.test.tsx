@@ -413,7 +413,7 @@ describe("settings modal content", () => {
     expect(html).not.toContain("Select a repository to edit repository scripts");
   });
 
-  test("renders general section with automatic Task workflows tab setting", () => {
+  test("renders general settings without the obsolete task-tab preference", () => {
     const controller = createMockController(createMockSnapshot());
 
     const html = renderToStaticMarkup(
@@ -434,8 +434,8 @@ describe("settings modal content", () => {
       }),
     );
 
-    expect(html).toContain("Open Task workflows tab for background sessions");
-    expect(html).toContain('aria-checked="true"');
+    expect(html).toContain("General Settings");
+    expect(html).not.toContain("Open a task tab for background sessions");
   });
 
   test("renders chat section with SettingsChatSection when section is chat", () => {
@@ -470,7 +470,7 @@ describe("settings modal content", () => {
 
   test("renders appearance section when section is appearance", () => {
     const snapshot = createMockSnapshot({
-      appearance: { horizontalScrollbarVisibility: "hide" },
+      appearance: { horizontalScrollbarVisibility: "hide", sidebarSessionGrouping: "task" },
     });
     const controller = createMockController(snapshot);
 

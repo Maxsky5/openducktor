@@ -7,7 +7,6 @@ import {
   resolvePreferredModelSelection,
 } from "@/features/model-selection/model-selection-state";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 
 const availableRuntimeKindFor = (
@@ -47,8 +46,8 @@ export type ChatComposerModelSelections = {
   isSelectedSessionModelSendable: boolean;
 };
 
+/** A saved session model that the next send must change before it sends. */
 export type ChatComposerSessionModelRepairCommand = {
-  key: string;
   session: AgentSessionIdentity;
   selection: AgentModelSelection;
 };
@@ -131,18 +130,7 @@ export const resolveSessionModelRepairCommand = ({
     return null;
   }
 
-  return {
-    key: [
-      agentSessionIdentityKey(sessionIdentity),
-      repairSelection.runtimeKind ?? "",
-      repairSelection.providerId,
-      repairSelection.modelId,
-      repairSelection.variant ?? "",
-      repairSelection.profileId ?? "",
-    ].join("\u001f"),
-    session: sessionIdentity,
-    selection: repairSelection,
-  };
+  return { session: sessionIdentity, selection: repairSelection };
 };
 
 type LoadedSessionSelection = {

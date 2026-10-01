@@ -1333,6 +1333,29 @@ describe("HostClient", () => {
     ]);
   });
 
+  test("workspaceUpdateSidebarSessionGrouping returns the saved appearance through its own route", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "workspace_update_sidebar_session_grouping") {
+        return {
+          theme: "light",
+          git: { defaultMergeMethod: "merge_commit" },
+          appearance: { horizontalScrollbarVisibility: "hide", sidebarSessionGrouping: "none" },
+          workspaces: {},
+          globalPromptOverrides: {},
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+    const snapshot = await client.workspaceUpdateSidebarSessionGrouping("none");
+    expect(snapshot.appearance).toEqual({
+      horizontalScrollbarVisibility: "hide",
+      sidebarSessionGrouping: "none",
+    });
+    expect(calls).toEqual([
+      { command: "workspace_update_sidebar_session_grouping", args: { grouping: "none" } },
+    ]);
+  });
+
   test("workspaceUpdateGlobalGitConfig uses dedicated IPC route", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "workspace_update_global_git_config") {

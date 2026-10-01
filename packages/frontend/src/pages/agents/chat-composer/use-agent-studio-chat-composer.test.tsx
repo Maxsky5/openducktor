@@ -763,7 +763,7 @@ describe("useAgentStudioChatComposer", () => {
 
   test("selects cached models during refresh and rejects a failed catalog", async () => {
     const loadedSession = createLoadedSession();
-    const updateAgentSessionModel = mock(() => {});
+    const updateAgentSessionModel = mock(async () => {});
     const harness = createHookHarness(
       createBaseProps({
         loadedSession,
@@ -863,7 +863,7 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("repairs a stale loaded-session model exactly once", async () => {
+  test("repairs a stale loaded-session model when the user sends, never when the session is viewed", async () => {
     const staleSelection = {
       runtimeKind: "opencode" as const,
       providerId: "missing",
@@ -887,7 +887,7 @@ describe("useAgentStudioChatComposer", () => {
       externalSessionId: "stale-session",
       selectedModel: repairedSelection,
     });
-    const updateAgentSessionModel = mock(() => {});
+    const updateAgentSessionModel = mock(async () => {});
     const baseOverrides = {
       repoSettings: createRepoSettings(repoDefaultSelection),
       sessionRuntimeData: createSessionRuntimeData({ modelCatalog: CATALOG }),
@@ -905,7 +905,11 @@ describe("useAgentStudioChatComposer", () => {
       await harness.waitFor((state) => state.selectedModelSelection?.modelId === "claude-sonnet");
 
       expect(harness.getLatest().selectedModelSelection).toEqual(repairedSelection);
-      expect(harness.getLatest().isSelectedSessionModelSendable).toBe(false);
+      expect(updateAgentSessionModel).not.toHaveBeenCalled();
+
+      await harness.run(async (state) => {
+        await expect(state.prepareSelectedSessionModelForSend()).resolves.toBe(true);
+      });
       expect(updateAgentSessionModel).toHaveBeenCalledTimes(1);
       expect(updateAgentSessionModel).toHaveBeenCalledWith(
         toAgentSessionIdentity(staleSession),
@@ -918,7 +922,9 @@ describe("useAgentStudioChatComposer", () => {
           loadedSession: repairedSession,
         }),
       );
-      await harness.waitFor((state) => state.isSelectedSessionModelSendable);
+      await harness.run(async (state) => {
+        await expect(state.prepareSelectedSessionModelForSend()).resolves.toBe(true);
+      });
 
       expect(updateAgentSessionModel).toHaveBeenCalledTimes(1);
     } finally {
@@ -1592,7 +1598,7 @@ describe("useAgentStudioChatComposer", () => {
   });
 
   test("updates loaded session model when catalog ids differ from provider model option values", async () => {
-    const updateAgentSessionModel = mock(() => {});
+    const updateAgentSessionModel = mock(async () => {});
     const loadedSession = createLoadedSession({
       selectedModel: {
         runtimeKind: "opencode",
@@ -1634,7 +1640,7 @@ describe("useAgentStudioChatComposer", () => {
   });
 
   test("routes selection updates to loaded sessions via callback", async () => {
-    const updateAgentSessionModel = mock(() => {});
+    const updateAgentSessionModel = mock(async () => {});
     const loadedSession = createLoadedSession();
 
     const harness = createHookHarness(
@@ -1665,7 +1671,7 @@ describe("useAgentStudioChatComposer", () => {
   });
 
   test("marks loaded session model unsendable when catalog cannot produce a replacement", async () => {
-    const updateAgentSessionModel = mock(() => {});
+    const updateAgentSessionModel = mock(async () => {});
     const loadedSession = createLoadedSession();
 
     const harness = createHookHarness(
@@ -1682,16 +1688,18 @@ describe("useAgentStudioChatComposer", () => {
       await harness.mount();
 
       expect(harness.getLatest().selectedModelSelection).toBeNull();
-      expect(harness.getLatest().isSelectedSessionModelSendable).toBe(false);
+      await harness.run(async (state) => {
+        await expect(state.prepareSelectedSessionModelForSend()).resolves.toBe(false);
+      });
       expect(updateAgentSessionModel).toHaveBeenCalledTimes(0);
     } finally {
       await harness.unmount();
     }
   });
 
-  test("normalizes loaded session model and repairs the durable session model", async () => {
+  test("normalizes loaded session model and repairs the durable session model on send", async () => {
     const updateAgentSessionModel = mock(
-      (..._args: Parameters<HookArgs["updateAgentSessionModel"]>) => {},
+      async (..._args: Parameters<HookArgs["updateAgentSessionModel"]>) => {},
     );
     const loadedSession = createLoadedSession({
       selectedModel: {
@@ -1722,7 +1730,11 @@ describe("useAgentStudioChatComposer", () => {
         variant: "default",
         profileId: "spec-agent",
       });
-      expect(harness.getLatest().isSelectedSessionModelSendable).toBe(false);
+      expect(updateAgentSessionModel).not.toHaveBeenCalled();
+
+      await harness.run(async (state) => {
+        await expect(state.prepareSelectedSessionModelForSend()).resolves.toBe(true);
+      });
       expect(updateAgentSessionModel).toHaveBeenCalledTimes(1);
       expect(updateAgentSessionModel).toHaveBeenCalledWith(toAgentSessionIdentity(loadedSession), {
         runtimeKind: "opencode",

@@ -285,7 +285,7 @@ export type AgentOperationsContextValue = {
   updateAgentSessionModel: (
     session: AgentSessionIdentity,
     selection: AgentModelSelection | null,
-  ) => void;
+  ) => Promise<void>;
   replyAgentApproval: (
     session: AgentSessionIdentity,
     request: AgentApprovalRequest,

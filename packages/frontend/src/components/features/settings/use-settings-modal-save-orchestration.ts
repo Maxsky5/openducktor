@@ -50,6 +50,7 @@ type UseSettingsModalSaveOrchestrationArgs = {
   loadSettingsSnapshot: () => Promise<SettingsSnapshot>;
   isAgentModelFavoritesMutationPending: boolean;
   isKanbanTaskCardViewMutationPending: boolean;
+  isSidebarSessionGroupingMutationPending: boolean;
   wasKanbanTaskCardViewEdited: boolean;
 };
 
@@ -82,6 +83,7 @@ export const useSettingsModalSaveOrchestration = ({
   loadSettingsSnapshot,
   isAgentModelFavoritesMutationPending,
   isKanbanTaskCardViewMutationPending,
+  isSidebarSessionGroupingMutationPending,
   wasKanbanTaskCardViewEdited,
 }: UseSettingsModalSaveOrchestrationArgs): SettingsModalSaveOrchestration => {
   const [isSaving, setIsSaving] = useState(false);
@@ -245,6 +247,13 @@ export const useSettingsModalSaveOrchestration = ({
       return false;
     }
 
+    if (!saveReadyGit && isSidebarSessionGroupingMutationPending) {
+      const reason = "Wait for the session grouping update to finish before saving settings.";
+      setSaveError(reason);
+      toast.error("Cannot save settings", { description: reason });
+      return false;
+    }
+
     saveInFlightRef.current = true;
     setIsSaving(true);
 
@@ -256,11 +265,18 @@ export const useSettingsModalSaveOrchestration = ({
         const taskCardView = wasKanbanTaskCardViewEdited
           ? snapshotDraft.kanban.taskCardView
           : latestSnapshot.kanban.taskCardView;
+        const sidebarSessionGrouping =
+          loadedSnapshot &&
+          snapshotDraft.appearance.sidebarSessionGrouping ===
+            loadedSnapshot.appearance.sidebarSessionGrouping
+            ? latestSnapshot.appearance.sidebarSessionGrouping
+            : snapshotDraft.appearance.sidebarSessionGrouping;
         const saveReadySnapshot = prepareSettingsSnapshotForSave(
           {
             ...snapshotDraft,
             agentModelFavorites: latestSnapshot.agentModelFavorites,
             kanban: { ...snapshotDraft.kanban, taskCardView },
+            appearance: { ...snapshotDraft.appearance, sidebarSessionGrouping },
           },
           { saveCustomAgentRoles: dirtySections.customAgentRoles },
         );
@@ -283,6 +299,7 @@ export const useSettingsModalSaveOrchestration = ({
     dirtySections,
     isAgentModelFavoritesMutationPending,
     isKanbanTaskCardViewMutationPending,
+    isSidebarSessionGroupingMutationPending,
     loadSettingsSnapshot,
     loadedSnapshot,
     onRuntimeAvailabilityError,

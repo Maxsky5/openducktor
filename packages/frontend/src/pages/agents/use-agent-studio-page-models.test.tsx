@@ -60,7 +60,6 @@ type SelectedSessionTestCore = Omit<
   AgentStudioSelectedSessionContextInput,
   "documents" | "selectedSession" | "sessionActions" | "roleLabelByRole"
 > & {
-  activeTabValue: string;
   selectedSessionIdentity: AgentStudioSelectedSessionContextInput["selectedSession"]["identity"];
   selectedSessionActivityState: AgentStudioSelectedSessionContextInput["selectedSession"]["activityState"];
   selectedSessionModel: AgentStudioSelectedSessionContextInput["selectedSession"]["selectedModel"];
@@ -71,7 +70,6 @@ type SelectedSessionTestCore = Omit<
 
 type HookArgsOverrides = {
   selectedSessionCore?: Partial<SelectedSessionTestCore>;
-  taskTabs?: Partial<HookArgs["taskTabs"]>;
   documents?: Partial<AgentStudioSelectedSessionContextInput["documents"]>;
   runtimeReadiness?: Partial<
     AgentStudioSelectedSessionContextInput["selectedSession"]["runtimeReadiness"]
@@ -186,7 +184,6 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
       : (loadedSession?.selectedModel ?? null);
 
   const selectedSessionCore: SelectedSessionTestCore = {
-    activeTabValue: "task-1",
     taskId: "task-1",
     role: "spec",
     selectedTask: createTask(),
@@ -201,15 +198,6 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     loadedSession,
   };
 
-  const taskTabs: HookArgs["taskTabs"] = {
-    taskTabs: [{ taskId: "task-1", taskTitle: "Task 1", status: "idle", isActive: true }],
-    availableTabTasks: [createTask()],
-    isLoadingTasks: false,
-    onCreateTab: () => {},
-    onCloseTab: () => {},
-    onReorderTab: () => {},
-    ...overrides.taskTabs,
-  };
   const documents = {
     specDoc: createDocumentState("spec"),
     planDoc: createDocumentState(""),
@@ -349,9 +337,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
   };
 
   return {
-    activeTabValue: selectedSessionCore.activeTabValue,
     selectedSession,
-    taskTabs,
     sessionActions,
     modelSelection,
     chatSettings,
@@ -396,7 +382,6 @@ describe("useAgentStudioPageModels", () => {
     const harness = createHookHarness(
       createHookArgs({
         selectedSessionCore: {
-          activeTabValue: "",
           taskId: "",
           selectedTask: null,
           sessionsForTask: [],
@@ -441,8 +426,6 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const state = harness.getLatest();
-    expect(state.activeTabValue).toBe("task-1");
-    expect(state.agentStudioTaskTabsModel.tabs).toHaveLength(1);
     expect(state.agentStudioHeaderModel.taskId).toBe("task-1");
     expect(state.agentChatModel.composer.contextUsage).toEqual({
       totalTokens: 12,

@@ -8,13 +8,6 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import { AGENT_ROLE_LABELS } from "@/types";
 import {
-  closeTaskTab,
-  ensureActiveTaskTab,
-  getAvailableTabTasks,
-  reorderTaskTabs,
-  resolveFallbackTaskId,
-} from "./agent-studio-task-tabs-list";
-import {
   type AgentSessionWorkflowSummary,
   buildLatestSessionByRoleMap,
   buildLatestSessionByTaskMap,
@@ -22,9 +15,7 @@ import {
   buildRoleEnabledMapForTask,
   buildSessionCreateOptions,
   buildSessionSelectorGroups,
-  buildTaskTabs,
   buildWorkflowStateByRole,
-  getTabStatusForTask,
 } from "./agents-page-session-tabs";
 
 const buildSession = (
@@ -89,101 +80,6 @@ describe("agents-page-session-tabs", () => {
     ]);
 
     expect(map.get("task-1")?.externalSessionId).toBe("second");
-  });
-
-  test("prioritizes waiting-input status over running", () => {
-    const status = getTabStatusForTask({
-      task: buildTask(),
-      session: buildSession({
-        status: "running",
-        pendingQuestions: [{ requestId: "q-1", questions: [] }],
-      }),
-    });
-
-    expect(status).toBe("waiting_input");
-  });
-
-  test("treats blocked tasks as waiting for input even without a live waiting session", () => {
-    expect(
-      getTabStatusForTask({
-        task: buildTask({ status: "blocked" }),
-        session: buildSession({
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
-          status: "stopped",
-        }),
-      }),
-    ).toBe("waiting_input");
-
-    expect(
-      getTabStatusForTask({
-        task: buildTask({ status: "blocked" }),
-        session: null,
-      }),
-    ).toBe("waiting_input");
-  });
-
-  test("appends active task tab only once", () => {
-    const tabIds = ensureActiveTaskTab(["task-1"], "task-2");
-    expect(tabIds).toEqual(["task-1", "task-2"]);
-    expect(ensureActiveTaskTab(tabIds, "task-2")).toEqual(["task-1", "task-2"]);
-  });
-
-  test("reorders tabs before or after the hovered tab without duplicates", () => {
-    expect(
-      reorderTaskTabs({
-        tabTaskIds: ["task-1", "task-2", "task-3", "task-4"],
-        draggedTaskId: "task-3",
-        targetTaskId: "task-1",
-        position: "before",
-      }),
-    ).toEqual(["task-3", "task-1", "task-2", "task-4"]);
-
-    expect(
-      reorderTaskTabs({
-        tabTaskIds: ["task-1", "task-2", "task-3", "task-4"],
-        draggedTaskId: "task-2",
-        targetTaskId: "task-4",
-        position: "after",
-      }),
-    ).toEqual(["task-1", "task-3", "task-4", "task-2"]);
-  });
-
-  test("treats invalid or self-reorder requests as no-ops", () => {
-    const tabTaskIds = ["task-1", "task-2", "task-3"];
-
-    expect(
-      reorderTaskTabs({
-        tabTaskIds,
-        draggedTaskId: "task-2",
-        targetTaskId: "task-2",
-        position: "before",
-      }),
-    ).toBe(tabTaskIds);
-
-    expect(
-      reorderTaskTabs({
-        tabTaskIds,
-        draggedTaskId: "task-9",
-        targetTaskId: "task-1",
-        position: "after",
-      }),
-    ).toBe(tabTaskIds);
-  });
-
-  test("prefers persisted active tab for fallback selection", () => {
-    expect(
-      resolveFallbackTaskId({
-        tabTaskIds: ["task-1", "task-2"],
-        persistedActiveTaskId: "task-2",
-      }),
-    ).toBe("task-2");
-
-    expect(
-      resolveFallbackTaskId({
-        tabTaskIds: ["task-1", "task-2"],
-        persistedActiveTaskId: "task-3",
-      }),
-    ).toBe("task-1");
   });
 
   test("builds role enablement from backend workflow payload", () => {
@@ -1079,133 +975,5 @@ describe("agents-page-session-tabs", () => {
     expect(plannerCompletedOptions.map((option) => option.id)).toEqual([
       "build:build_after_human_request_changes:message_first",
     ]);
-  });
-
-  test("filters available tasks by opened tab ids", () => {
-    const tasks = [
-      buildTask({ id: "task-1", title: "One" }),
-      buildTask({ id: "task-2", title: "Two" }),
-      buildTask({ id: "task-3", title: "Three" }),
-    ];
-
-    const available = getAvailableTabTasks(tasks, ["task-2"]);
-    expect(available.map((task) => task.id)).toEqual(["task-1", "task-3"]);
-  });
-
-  test("builds tabs with fallback title and active marker", () => {
-    const latestByTask = buildLatestSessionByTaskMap([
-      buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
-        status: "running",
-      }),
-      buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-2", role: "spec" },
-        status: "idle",
-        pendingApprovals: [
-          {
-            requestId: "p",
-            requestType: "permission_grant" as const,
-            title: `Approve permission: ${"bash"}`,
-            summary: `Approval request for ${"bash"}.`,
-            affectedPaths: [],
-            action: { name: "bash" },
-            mutation: "mutating" as const,
-            supportedReplyOutcomes: [
-              "approve_once" as const,
-              "approve_session" as const,
-              "reject" as const,
-            ],
-          },
-        ],
-      }),
-    ]);
-
-    const tabs = buildTaskTabs({
-      tabTaskIds: ["task-1", "task-2", "task-ghost"],
-      tasks: [buildTask({ id: "task-1", title: "One" }), buildTask({ id: "task-2", title: "Two" })],
-      latestSessionByTaskId: latestByTask,
-      activeTaskId: "task-2",
-    });
-
-    expect(tabs).toEqual([
-      {
-        taskId: "task-1",
-        taskTitle: "One",
-        status: "working",
-        isActive: false,
-      },
-      {
-        taskId: "task-2",
-        taskTitle: "Two",
-        status: "waiting_input",
-        isActive: true,
-      },
-      {
-        taskId: "task-ghost",
-        taskTitle: "task-ghost",
-        status: "idle",
-        isActive: false,
-      },
-    ]);
-  });
-
-  test("builds blocked task tabs with warning status even when the latest session is idle or absent", () => {
-    const latestByTask = buildLatestSessionByTaskMap([
-      buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
-        status: "idle",
-      }),
-    ]);
-
-    const tabs = buildTaskTabs({
-      tabTaskIds: ["task-1", "task-2"],
-      tasks: [
-        buildTask({ id: "task-1", title: "Blocked with session", status: "blocked" }),
-        buildTask({ id: "task-2", title: "Blocked without session", status: "blocked" }),
-      ],
-      latestSessionByTaskId: latestByTask,
-      activeTaskId: "task-1",
-    });
-
-    expect(tabs).toEqual([
-      {
-        taskId: "task-1",
-        taskTitle: "Blocked with session",
-        status: "waiting_input",
-        isActive: true,
-      },
-      {
-        taskId: "task-2",
-        taskTitle: "Blocked without session",
-        status: "waiting_input",
-        isActive: false,
-      },
-    ]);
-  });
-
-  test("closing active tab picks adjacent right tab", () => {
-    const result = closeTaskTab({
-      tabTaskIds: ["task-1", "task-2", "task-3"],
-      taskIdToClose: "task-2",
-      activeTaskId: "task-2",
-    });
-
-    expect(result).toEqual({
-      nextTabTaskIds: ["task-1", "task-3"],
-      nextActiveTaskId: "task-3",
-    });
-  });
-
-  test("closing last active tab falls back to previous tab", () => {
-    const result = closeTaskTab({
-      tabTaskIds: ["task-1", "task-2", "task-3"],
-      taskIdToClose: "task-3",
-      activeTaskId: "task-3",
-    });
-
-    expect(result).toEqual({
-      nextTabTaskIds: ["task-1", "task-2"],
-      nextActiveTaskId: "task-2",
-    });
   });
 });

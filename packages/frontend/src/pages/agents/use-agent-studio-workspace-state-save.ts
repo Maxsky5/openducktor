@@ -27,14 +27,12 @@ export function useAgentStudioWorkspaceStateSave({
   loadedState,
   state,
   enabled,
-  hasPendingTabChange = false,
   hostClient = host,
 }: {
   workspaceId: string | null;
   loadedState: WorkspaceAgentStudioState | null;
   state: WorkspaceAgentStudioState;
   enabled: boolean;
-  hasPendingTabChange?: boolean;
   hostClient?: AgentStudioStateHost;
 }) {
   const queryClient = useQueryClient();
@@ -80,7 +78,7 @@ export function useAgentStudioWorkspaceStateSave({
     if (
       lastSave?.workspaceId === workspaceId &&
       lastSave.key === nextKey &&
-      (hasPendingTabChange || lastSave.actionType === "sync_snapshot")
+      lastSave.actionType === "sync_snapshot"
     ) {
       return;
     }
@@ -88,24 +86,17 @@ export function useAgentStudioWorkspaceStateSave({
       return;
     }
 
-    const sameActiveTask =
-      JSON.stringify(loadedState.activeTask ?? null) === JSON.stringify(state.activeTask ?? null);
-    if (hasPendingTabChange && sameActiveTask) {
-      return;
-    }
-    const action: WorkspaceAgentStudioStateAction = hasPendingTabChange
-      ? { type: "set_active_task", activeTask: state.activeTask ?? null }
-      : {
-          type: "sync_snapshot",
-          baseOpenTaskIds: loadedState.openTaskIds,
-          openTaskIds: state.openTaskIds,
-          activeTask: state.activeTask ?? null,
-        };
+    const action: WorkspaceAgentStudioStateAction = {
+      type: "sync_snapshot",
+      baseOpenTaskIds: loadedState.openTaskIds,
+      openTaskIds: state.openTaskIds,
+      activeTask: state.activeTask ?? null,
+    };
 
     const request = { workspaceId, key: nextKey, action };
     lastSaveRef.current = { workspaceId, key: nextKey, actionType: action.type };
     save(request);
-  }, [enabled, hasPendingTabChange, loadedKey, loadedState, nextKey, save, state, workspaceId]);
+  }, [enabled, loadedKey, loadedState, nextKey, save, state, workspaceId]);
 
   const retrySave = useCallback((): void => {
     if (!saveFailedForCurrentState || !failure) {

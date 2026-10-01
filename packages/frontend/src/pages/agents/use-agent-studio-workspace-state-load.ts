@@ -1,6 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { host } from "@/state/operations/host";
 import { repoConfigQueryOptions } from "@/state/queries/workspace";
@@ -28,12 +28,6 @@ export function useAgentStudioWorkspaceStateLoad({
   sessionReadModelLoadState: AgentSessionReadModelLoadState;
   hostClient?: AgentStudioWorkspaceStateHost;
 }) {
-  const [visit, setVisit] = useState({ workspaceId: activeWorkspaceId, key: 0 });
-  let currentVisit = visit;
-  if (visit.workspaceId !== activeWorkspaceId) {
-    currentVisit = { workspaceId: activeWorkspaceId, key: visit.key + 1 };
-    setVisit(currentVisit);
-  }
   const queryOptions = repoConfigQueryOptions(
     activeWorkspaceId ?? INACTIVE_AGENT_STUDIO_WORKSPACE_ID,
     hostClient,
@@ -77,8 +71,6 @@ export function useAgentStudioWorkspaceStateLoad({
 
   return {
     ...loadModel,
-    agentStudioStateLoadKey:
-      loadModel.loadedAgentStudioState === null ? null : `${activeWorkspaceId}:${currentVisit.key}`,
     retry,
   };
 }

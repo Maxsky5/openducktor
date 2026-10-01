@@ -1,4 +1,3 @@
-import type { FileDiffMetadata } from "@pierre/diffs";
 import { useWorkerPool as usePierreWorkerPool } from "@pierre/diffs/react";
 
 type PierreWorkerPoolManager = NonNullable<ReturnType<typeof usePierreWorkerPool>>;
@@ -10,7 +9,7 @@ export type PierreDiffViewerWorkerPool = {
   highlightDiffAST: PierreWorkerPoolManager["highlightDiffAST"];
   highlightFileAST: PierreWorkerPoolManager["highlightFileAST"];
   isWorkingPool: PierreWorkerPoolManager["isWorkingPool"];
-  primeDiffHighlightCache: (diff: FileDiffMetadata) => void;
+  primeDiffHighlightCache: PierreWorkerPoolManager["primeDiffHighlightCache"];
   subscribeToStatChanges: (callback: () => void) => () => void;
 };
 

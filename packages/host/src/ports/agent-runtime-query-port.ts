@@ -2,6 +2,7 @@ import type { AgentSessionLiveRef, AgentRuntimeCatalog } from "@openducktor/cont
 import type {
   AgentCatalogPort,
   AgentSessionHistoryPort,
+  AgentSessionMetadataPort,
   AgentWorkspaceInspectionPort,
 } from "@openducktor/core";
 import type { Effect } from "effect";
@@ -9,6 +10,7 @@ import type { RuntimeQueryError } from "./runtime-query-error";
 
 export type NativeAgentRuntimeQueries = AgentCatalogPort &
   AgentSessionHistoryPort &
+  AgentSessionMetadataPort &
   AgentWorkspaceInspectionPort;
 
 type NativeQueryResponse<Method extends keyof NativeAgentRuntimeQueries> = Awaited<

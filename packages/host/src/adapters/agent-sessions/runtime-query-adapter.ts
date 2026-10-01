@@ -34,6 +34,8 @@ export const createRuntimeQueryAdapter = (
       read("load session todos", input, () => native.loadSessionTodos(input)),
     loadSessionDiff: (input) =>
       read("load session diff", input, () => native.loadSessionDiff(input)),
+    loadSessionMetadata: (input) =>
+      read("load session metadata", input, () => native.loadSessionMetadata(input)),
     loadFileStatus: (input) => read("load file status", input, () => native.loadFileStatus(input)),
   };
 };

@@ -1294,6 +1294,7 @@ describe("useSettingsModalController", () => {
           showThinkingMessages: true,
         },
         appearance: {
+          ...expectedSnapshot.appearance,
           horizontalScrollbarVisibility: "hide",
         },
         reusablePrompts: [],

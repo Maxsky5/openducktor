@@ -1,11 +1,12 @@
 import type { WorkspaceSession } from "@openducktor/contracts";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { History, Import, Plus, SquareTerminal } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import {
   type ReactElement,
+  type ReactNode,
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -13,19 +14,14 @@ import { useLocation, useNavigationType, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
 import { useDialogPresence } from "@/components/ui/dialog";
 import type { TerminalPanelModel } from "@/features/terminals";
-import { BrowserTabsBar, BrowserTabsRoot } from "@/components/ui/browser-tabs";
-import { SharedToolsPanelToggleButton } from "@/components/features/agents/shared-tools-panel";
-import { AgentChatTranscriptCacheProvider } from "@/components/features/agents/agent-chat/agent-chat-transcript-cache-provider";
 import { useRightPanelOpen } from "@/components/features/agents/use-right-panel-open";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
+import type { SessionNavigationTarget } from "@/features/session-navigation/session-navigation-target";
+import { usePublishVisibleSessionTarget } from "@/features/session-navigation/visible-session-target";
+import { workspaceSessionIdentity } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
 import { errorMessage } from "@/lib/errors";
-import { host } from "@/state/operations/host";
-import { invalidateRepoBranchesQuery } from "@/state/queries/git";
-import { terminalQueryKeys } from "@/state/queries/terminals";
-import {
-  updateWorkspaceSessionQueries,
-  workspaceSessionListQueryOptions,
-} from "@/state/queries/workspace-sessions";
+import { useArchiveWorkspaceSession } from "@/state/operations/use-archive-workspace-session";
+import { workspaceSessionListQueryOptions } from "@/state/queries/workspace-sessions";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   WorkspaceSessionContent,
@@ -34,24 +30,19 @@ import {
 } from "./workspace-session-content";
 import { WorkspaceSessionCreateDialog } from "./workspace-session-create-dialog";
 import { WorkspaceSessionEmptyState } from "./workspace-session-empty-state";
-import { WorkspaceSessionHistoryDialog } from "./workspace-session-history-dialog";
-import { WorkspaceSessionImportDialog } from "./workspace-session-import-dialog";
 import { WorkspaceSessionArchiveDialog } from "./workspace-session-archive-dialog";
-import { WorkspaceSessionTabs } from "./workspace-session-tabs";
+import { SessionViewControls } from "@/components/features/agents/session-view-controls";
 import { WorkspaceSessionTerminalLayout } from "./workspace-session-terminal-layout";
-import { TabsContent } from "@/components/ui/tabs";
 import { useWorkspaceSessionTerminals } from "./use-workspace-session-terminals";
 import { useMountedRef } from "./use-mounted-ref";
 import { useWorkspaceSessionNavigation } from "./use-workspace-session-navigation";
 import { useWorkspaceSessionSelection } from "./use-workspace-session-selection";
-import { useWorkspaceSessionTabOrder } from "./use-workspace-session-tab-order";
 import { useVisibleSessionId } from "./use-visible-session-id";
 
 type WorkspaceSessionsProps = { workspace: ActiveWorkspace };
 
 export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactElement {
   const { run: guardWorkspaceChange, cancelPending } = useWorkspacePreviewTransitionGuard();
-  const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
   const location = useLocation();
   const navigationType = useNavigationType();
@@ -62,50 +53,54 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
     setSearchParams: setParams,
   });
   const records = useQuery(workspaceSessionListQueryOptions(workspace.workspaceId));
-  const { sessions: orderedSessions, reorder } = useWorkspaceSessionTabOrder(
-    workspace.workspaceId,
-    records.data,
-  );
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
+  const sessions = records.data ?? [];
   const [createOpen, setCreateOpen] = useState(false);
   const [createAttempt, setCreateAttempt] = useState(0);
+  const archiveCloseAutoFocusRef = useRef<((event: Event) => void) | null>(null);
   const mounted = useMountedRef();
-  const requestedSelected = useWorkspaceSessionSelection({
+  const { selected: requestedSelected, missingSessionId } = useWorkspaceSessionSelection({
     workspaceId: workspace.workspaceId,
-    sessions: records.data === undefined ? undefined : orderedSessions,
+    sessions: records.data,
     requestedSessionId: sessionId,
   });
   const requestedSelectedId = requestedSelected?.id ?? null;
-  const { visibleSelectedId, selectTab, leaveRemovedChat, completeArchive } = useVisibleSessionId(
+  const { visibleSelectedId, leaveRemovedChat, completeArchive } = useVisibleSessionId(
     requestedSelectedId,
     guardWorkspaceChange,
     updateNavigation,
     cancelPending,
   );
-  const selected = useVisibleSessionRecord(orderedSessions, visibleSelectedId, requestedSelected);
+  const selected = useVisibleSessionRecord(sessions, visibleSelectedId, requestedSelected);
   const selectedId = selected?.id ?? null;
   const terminalModel = useWorkspaceSessionTerminals({
     workspace,
     selected,
-    sessions: orderedSessions,
+    sessions,
   });
   const { panelState, onPanelStateChange, togglePanel } = useSessionPanelState(selectedId);
   useEffect(() => {
-    if (records.data && sessionId !== requestedSelectedId)
+    if (records.data && missingSessionId === null && sessionId !== requestedSelectedId)
       updateNavigation({ sessionId: requestedSelectedId });
-  }, [records.data, requestedSelectedId, sessionId, updateNavigation]);
-  const { archive, archiveTarget, setArchiveTarget, beginArchive, handleTabArchive } =
-    useWorkspaceSessionArchive({
-      workspace,
-      queryClient,
-      mounted,
-      selectedId,
-      orderedSessions,
-      completeArchive,
-      guardWorkspaceChange,
-    });
-  const archivingId = archive.isPending ? (archive.variables?.sessionId ?? null) : null;
+  }, [missingSessionId, records.data, requestedSelectedId, sessionId, updateNavigation]);
+  const visibleTarget = useMemo<SessionNavigationTarget | null>(
+    () =>
+      selectedId === null
+        ? null
+        : { kind: "workspace_session", workspaceId: workspace.workspaceId, sessionId: selectedId },
+    [selectedId, workspace.workspaceId],
+  );
+  usePublishVisibleSessionTarget(
+    visibleTarget,
+    selected ? workspaceSessionIdentity(selected) : null,
+  );
+  const { archive, archiveTarget, setArchiveTarget, beginArchive } = useWorkspaceSessionArchive({
+    workspace,
+    mounted,
+    selectedId,
+    sessions,
+    completeArchive,
+    guardWorkspaceChange,
+  });
   const setCreating = (open: boolean) => {
     if (open) setCreateAttempt((attempt) => attempt + 1);
     setCreateOpen(open);
@@ -117,7 +112,8 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
         Loading chats…
       </p>
     );
-  if (records.isError)
+  // A failed refresh keeps the last records, so only a failed first read replaces the chats.
+  if (records.data === undefined)
     return (
       <div role="alert" className="space-y-3 p-6">
         <p className="text-destructive">Could not load chats: {errorMessage(records.error)}</p>
@@ -127,72 +123,45 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
       </div>
     );
   return (
-    <BrowserTabsRoot
-      value={selectedId ?? ""}
-      onValueChange={selectTab}
-      className="h-full min-h-0 min-w-0 gap-0 overflow-hidden"
-    >
-      <BrowserTabsBar
-        className="agent-studio-titlebar-safe-area electron-titlebar-safe-area bg-studio-chrome"
-        createAction={
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-8 shrink-0 rounded-md border-none border-transparent bg-transparent p-0 text-studio-chrome-foreground shadow-none hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-            aria-label="New chat"
-            title="New chat"
-            onClick={() => setCreating(true)}
-          >
-            <Plus className="size-5" />
-          </Button>
-        }
-        actions={
-          <WorkspaceSessionToolbarActions
-            hasSelectedSession={selected !== null}
-            terminalModel={terminalModel}
-            toolsOpen={panelState.isOpen}
-            onToggleTools={togglePanel}
-            onImport={() => setImportOpen(true)}
-            onHistory={() => setHistoryOpen(true)}
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+      <WorkspaceSessionReadModelNotice />
+      <WorkspaceSessionRecordsRefreshNotice
+        error={records.error}
+        onRetry={() => void records.refetch()}
+      />
+      {archiveTarget === null && <WorkspaceSessionArchiveError error={archive.error} />}
+      <WorkspaceSessionActiveContent
+        workspace={workspace}
+        selected={selected}
+        sessionIds={sessions.map((record) => record.id)}
+        missingSessionId={missingSessionId}
+        onDismissMissing={() => updateNavigation({ sessionId: null })}
+        terminalModel={terminalModel}
+        panelState={panelState}
+        onPanelStateChange={onPanelStateChange}
+        onSafeToLeave={leaveRemovedChat}
+        hasSessions={records.data.length > 0}
+        onCreate={() => setCreating(true)}
+        viewControls={
+          <SessionViewControls
+            terminal={terminalModel}
+            tools={{ label: "workspace tools", isOpen: panelState.isOpen, onToggle: togglePanel }}
           />
         }
-      >
-        <WorkspaceSessionTabs
-          sessions={orderedSessions}
-          selectedId={selectedId}
-          archivingId={archivingId}
-          pending={archive.isPending}
-          onReorder={reorder}
-          onArchive={handleTabArchive}
-        />
-      </BrowserTabsBar>
-      <WorkspaceSessionReadModelNotice />
-      {archiveTarget === null && <WorkspaceSessionArchiveError error={archive.error} />}
-      <AgentChatTranscriptCacheProvider key={workspace.workspaceId}>
-        <WorkspaceSessionActiveContent
-          workspace={workspace}
-          selected={selected}
-          sessionIds={orderedSessions.map((record) => record.id)}
-          terminalModel={terminalModel}
-          panelState={panelState}
-          onPanelStateChange={onPanelStateChange}
-          onSafeToLeave={leaveRemovedChat}
-          hasSessions={records.data.length > 0}
-          onCreate={() => setCreating(true)}
-        />
-      </AgentChatTranscriptCacheProvider>
+        onArchive={(onCloseAutoFocus) => {
+          if (!selected) return;
+          archiveCloseAutoFocusRef.current = onCloseAutoFocus;
+          archive.reset();
+          setArchiveTarget(selected);
+        }}
+        isArchiving={archive.isPending}
+      />
       <WorkspaceSessionDialogs
         workspace={workspace}
-        importOpen={importOpen}
-        onImportClose={() => setImportOpen(false)}
-        onImported={(record) => {
-          if (mounted.current) updateNavigation({ sessionId: record.id, creating: false });
-        }}
-        historyOpen={historyOpen}
-        onHistoryClose={() => setHistoryOpen(false)}
         archiveTarget={archiveTarget}
         archivePending={archive.isPending}
         archiveError={archive.error}
+        onArchiveCloseAutoFocus={(event) => archiveCloseAutoFocusRef.current?.(event)}
         onArchive={beginArchive}
         onArchiveClose={() => {
           setArchiveTarget(null);
@@ -208,68 +177,28 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
           }
         }}
       />
-    </BrowserTabsRoot>
+    </div>
   );
 }
 
-function WorkspaceSessionToolbarActions({
-  hasSelectedSession,
-  terminalModel,
-  toolsOpen,
-  onToggleTools,
-  onImport,
-  onHistory,
+/** A failed chat-list refresh shows beside the chats, which stay usable. */
+function WorkspaceSessionRecordsRefreshNotice({
+  error,
+  onRetry,
 }: {
-  hasSelectedSession: boolean;
-  terminalModel: TerminalPanelModel;
-  toolsOpen: boolean;
-  onToggleTools: () => void;
-  onImport: () => void;
-  onHistory: () => void;
-}): ReactElement {
+  error: Error | null;
+  onRetry: () => void;
+}): ReactElement | null {
+  if (!error) return null;
   return (
-    <>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="size-8 shrink-0 text-studio-chrome-foreground hover:bg-transparent"
-        aria-label="Import session"
-        title="Import session"
-        onClick={onImport}
-      >
-        <Import />
+    <div role="alert" className="flex items-center gap-3 border-b border-border p-3 text-sm">
+      <span className="flex-1 text-destructive">
+        Could not refresh chats: {errorMessage(error)}
+      </span>
+      <Button size="sm" variant="outline" onClick={onRetry}>
+        Retry
       </Button>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="size-8 shrink-0 text-studio-chrome-foreground hover:bg-transparent"
-        aria-label="Session history"
-        title="Archived chats"
-        onClick={onHistory}
-      >
-        <History />
-      </Button>
-      {hasSelectedSession ? (
-        <div className="flex shrink-0 items-center pl-0.5">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-8 text-studio-chrome-foreground hover:bg-transparent"
-            aria-label={terminalModel.isVisible ? "Hide terminal" : "Show terminal"}
-            title={terminalModel.isVisible ? "Hide terminal" : "Show terminal"}
-            disabled={!terminalModel.isAvailable}
-            onClick={terminalModel.onToggle}
-          >
-            <SquareTerminal />
-          </Button>
-          <SharedToolsPanelToggleButton
-            label="workspace tools"
-            isOpen={toolsOpen}
-            onToggle={onToggleTools}
-          />
-        </div>
-      ) : null}
-    </>
+    </div>
   );
 }
 
@@ -277,16 +206,23 @@ function WorkspaceSessionActiveContent({
   workspace,
   selected,
   sessionIds,
+  missingSessionId,
+  onDismissMissing,
   terminalModel,
   panelState,
   onPanelStateChange,
   onSafeToLeave,
   hasSessions,
   onCreate,
+  viewControls,
+  onArchive,
+  isArchiving,
 }: {
   workspace: ActiveWorkspace;
   selected: WorkspaceSession | null;
   sessionIds: readonly string[];
+  missingSessionId: string | null;
+  onDismissMissing: () => void;
   terminalModel: TerminalPanelModel;
   panelState: WorkspaceSessionPanelState;
   onPanelStateChange: (
@@ -296,24 +232,42 @@ function WorkspaceSessionActiveContent({
   onSafeToLeave: () => void;
   hasSessions: boolean;
   onCreate: () => void;
+  viewControls: ReactNode;
+  onArchive: (onCloseAutoFocus: (event: Event) => void) => void;
+  isArchiving: boolean;
 }): ReactElement {
+  // A removed chat stays visible until its draft can leave; then the request shows as unavailable.
+  if (!selected && missingSessionId !== null)
+    return (
+      <section
+        className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 bg-card p-6 text-center"
+        role="alert"
+      >
+        <h1 className="text-lg font-semibold">This chat is unavailable</h1>
+        <p className="max-w-sm text-sm text-muted-foreground">
+          The requested workspace session is archived, removed, or not in this workspace. Restore it
+          from Archived chats or choose another session.
+        </p>
+        <Button variant="outline" onClick={onDismissMissing}>
+          Close
+        </Button>
+      </section>
+    );
   if (!selected)
     return <WorkspaceSessionEmptyState hasSessions={hasSessions} onCreate={onCreate} />;
   return (
     <WorkspaceSessionTerminalLayout model={terminalModel}>
-      <TabsContent
-        value={selected.id}
-        className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-card"
-      >
-        <WorkspaceSessionContent
-          workspace={workspace}
-          record={selected}
-          sessionIds={sessionIds}
-          panelState={panelState}
-          onPanelStateChange={onPanelStateChange}
-          onSafeToLeave={onSafeToLeave}
-        />
-      </TabsContent>
+      <WorkspaceSessionContent
+        workspace={workspace}
+        record={selected}
+        sessionIds={sessionIds}
+        panelState={panelState}
+        onPanelStateChange={onPanelStateChange}
+        onSafeToLeave={onSafeToLeave}
+        viewControls={viewControls}
+        onArchive={onArchive}
+        isArchiving={isArchiving}
+      />
     </WorkspaceSessionTerminalLayout>
   );
 }
@@ -368,47 +322,24 @@ function WorkspaceSessionArchiveError({ error }: { error: Error | null }): React
 
 function useWorkspaceSessionArchive({
   workspace,
-  queryClient,
   mounted,
   selectedId,
-  orderedSessions,
+  sessions,
   completeArchive,
   guardWorkspaceChange,
 }: {
   workspace: ActiveWorkspace;
-  queryClient: ReturnType<typeof useQueryClient>;
   mounted: ReturnType<typeof useMountedRef>;
   selectedId: string | null;
-  orderedSessions: WorkspaceSession[];
+  sessions: WorkspaceSession[];
   completeArchive: ReturnType<typeof useVisibleSessionId>["completeArchive"];
   guardWorkspaceChange: ReturnType<typeof useWorkspacePreviewTransitionGuard>["run"];
 }) {
   const [archiveTarget, setArchiveTarget] = useState<WorkspaceSession | null>(null);
-  const archive = useMutation({
-    mutationFn: (input: {
-      sessionId: string;
-      confirmStop: boolean;
-      removeWorktree: boolean;
-      worktreeConfirmation?: { workingDirectory: string; branchName: string } | undefined;
-    }) => host.workspaceSessionArchive({ workspaceId: workspace.workspaceId, ...input }),
-    onSuccess: (record) => {
-      if (mounted.current && selectedId === record.id)
-        completeArchive(orderedSessions.find((entry) => entry.id !== record.id)?.id ?? null);
-      updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, record);
-      if (!mounted.current) return;
-      setArchiveTarget(null);
-    },
-    onSettled: (_record, _error, variables) => {
-      void invalidateRepoBranchesQuery(queryClient, workspace.repoPath);
-      if (variables) {
-        void queryClient.invalidateQueries({
-          queryKey: terminalQueryKeys.workspaceSession({
-            workspaceId: workspace.workspaceId,
-            sessionId: variables.sessionId,
-          }),
-        });
-      }
-    },
+  const archive = useArchiveWorkspaceSession((record) => {
+    if (mounted.current && selectedId === record.id)
+      completeArchive(sessions.find((entry) => entry.id !== record.id)?.id ?? null);
+    if (mounted.current) setArchiveTarget(null);
   });
   const beginArchive = (
     sessionId: string,
@@ -419,6 +350,8 @@ function useWorkspaceSessionArchive({
       archive.reset();
       try {
         await archive.mutateAsync({
+          workspaceId: workspace.workspaceId,
+          repoPath: workspace.repoPath,
           sessionId,
           confirmStop: true,
           removeWorktree,
@@ -432,27 +365,15 @@ function useWorkspaceSessionArchive({
     if (sessionId === selectedId) guardWorkspaceChange(apply, undefined, { waitForSuccess: true });
     else void apply();
   };
-  const handleTabArchive = (target: WorkspaceSession) => {
-    archive.reset();
-    if (target.executionTarget.kind === "local_worktree") {
-      setArchiveTarget(target);
-      return;
-    }
-    beginArchive(target.id, false);
-  };
-  return { archive, archiveTarget, setArchiveTarget, beginArchive, handleTabArchive };
+  return { archive, archiveTarget, setArchiveTarget, beginArchive };
 }
 
 function WorkspaceSessionDialogs({
   workspace,
-  importOpen,
-  onImportClose,
-  onImported,
-  historyOpen,
-  onHistoryClose,
   archiveTarget,
   archivePending,
   archiveError,
+  onArchiveCloseAutoFocus,
   onArchive,
   onArchiveClose,
   createOpen,
@@ -461,14 +382,10 @@ function WorkspaceSessionDialogs({
   onCreated,
 }: {
   workspace: ActiveWorkspace;
-  importOpen: boolean;
-  onImportClose: () => void;
-  onImported: (record: WorkspaceSession) => void;
-  historyOpen: boolean;
-  onHistoryClose: () => void;
   archiveTarget: WorkspaceSession | null;
   archivePending: boolean;
   archiveError: Error | null;
+  onArchiveCloseAutoFocus: (event: Event) => void;
   onArchive: (
     sessionId: string,
     removeWorktree: boolean,
@@ -481,31 +398,26 @@ function WorkspaceSessionDialogs({
   onCreated: (record: WorkspaceSession) => void;
 }): ReactElement {
   const createMounted = useDialogPresence(createOpen);
+  const archiveMounted = useDialogPresence(archiveTarget !== null);
+  const lastArchiveTarget = useRef(archiveTarget);
+  useLayoutEffect(() => {
+    if (archiveTarget) lastArchiveTarget.current = archiveTarget;
+  }, [archiveTarget]);
+  // The closing dialog still needs its record after selection moves to the next chat.
+  const closingTarget = archiveTarget ?? lastArchiveTarget.current;
   return (
     <>
-      {importOpen && (
-        <WorkspaceSessionImportDialog
-          workspaceId={workspace.workspaceId}
-          onClose={onImportClose}
-          onImported={onImported}
-        />
-      )}
-      {historyOpen && (
-        <WorkspaceSessionHistoryDialog
-          workspaceId={workspace.workspaceId}
-          repoPath={workspace.repoPath}
-          onClose={onHistoryClose}
-        />
-      )}
-      {archiveTarget && (
+      {archiveMounted && closingTarget && (
         <WorkspaceSessionArchiveDialog
-          key={archiveTarget.id}
+          key={closingTarget.id}
+          open={archiveTarget !== null}
+          onCloseAutoFocus={onArchiveCloseAutoFocus}
           workspaceId={workspace.workspaceId}
-          record={archiveTarget}
+          record={closingTarget}
           isArchiving={archivePending}
           error={archiveError}
           onArchive={(removeWorktree, confirmation) =>
-            onArchive(archiveTarget.id, removeWorktree, confirmation)
+            onArchive(closingTarget.id, removeWorktree, confirmation)
           }
           onClose={onArchiveClose}
         />

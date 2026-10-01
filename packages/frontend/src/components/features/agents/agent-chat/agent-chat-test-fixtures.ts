@@ -4,8 +4,8 @@ import type {
   AgentModelSelection,
   AgentSessionTodoItem,
 } from "@openducktor/core";
-import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
 import { createRef } from "react";
+import { AGENT_ROLE_ICONS } from "@/lib/agent-role-presentation";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import {
@@ -98,10 +98,10 @@ const baseSession: AgentSessionState = {
 };
 
 export const TEST_ROLE_OPTIONS: AgentRoleOption[] = [
-  { role: "spec", label: AGENT_ROLE_LABELS.spec, icon: Sparkles },
-  { role: "planner", label: AGENT_ROLE_LABELS.planner, icon: Bot },
-  { role: "build", label: AGENT_ROLE_LABELS.build, icon: Wrench },
-  { role: "qa", label: AGENT_ROLE_LABELS.qa, icon: ShieldCheck },
+  { role: "spec", label: AGENT_ROLE_LABELS.spec, icon: AGENT_ROLE_ICONS.spec },
+  { role: "planner", label: AGENT_ROLE_LABELS.planner, icon: AGENT_ROLE_ICONS.planner },
+  { role: "build", label: AGENT_ROLE_LABELS.build, icon: AGENT_ROLE_ICONS.build },
+  { role: "qa", label: AGENT_ROLE_LABELS.qa, icon: AGENT_ROLE_ICONS.qa },
 ];
 
 export const buildTask = (overrides: Partial<TaskCard> = {}): TaskCard => ({

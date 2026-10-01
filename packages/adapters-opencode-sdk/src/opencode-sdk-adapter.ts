@@ -1,7 +1,7 @@
 import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type AgentSessionControlUpdateTitleInput,
-  type AgentSessionScope,
+  type AgentSessionMetadata,
   type RuntimeDescriptor,
   type RuntimeKind,
 } from "@openducktor/contracts";
@@ -10,10 +10,12 @@ import type {
   AcceptedAgentUserMessage,
   BoundRuntimeRoute,
   AgentCatalogPort,
+  AgentSessionRef,
   AgentEvent,
   AgentFileSearchResult,
   AgentRuntimeCatalogRead,
   AgentSessionHistoryMessage,
+  AgentSessionMetadataPort,
   AgentSessionPort,
   AgentSessionRuntimePolicy,
   AgentSessionSummary,
@@ -27,6 +29,7 @@ import type {
   LoadAgentFileStatusInput,
   LoadAgentSessionDiffInput,
   LoadAgentSessionHistoryInput,
+  LoadAgentSessionMetadataInput,
   LoadAgentSessionTodosInput,
   PolicyBoundSessionRef,
   ReplyApprovalInput,
@@ -146,8 +149,17 @@ const assertOpenCodeRuntimePolicyBinding = (
   }
 };
 
+type SendActivityListener = (
+  externalSessionId: string,
+  event: Extract<AgentEvent, { type: "session_status" | "session_idle" }>,
+) => Promise<void>;
+
 export class OpencodeSdkAdapter
-  implements AgentCatalogPort, AgentSessionPort, AgentWorkspaceInspectionPort
+  implements
+    AgentCatalogPort,
+    AgentSessionMetadataPort,
+    AgentSessionPort,
+    AgentWorkspaceInspectionPort
 {
   private readonly resolveCreationSettings: OpencodeSdkAdapterOptions["resolveCreationSettings"];
   private readonly restorePermissions: SessionPermissionRestorer;
@@ -159,6 +171,7 @@ export class OpencodeSdkAdapter
   private readonly runtime: BoundRuntimeRoute;
   private readonly mcpBindings: OpencodeMcpDirectoryBindings | undefined;
   private readonly logEvent: OpencodeEventLogger | undefined;
+  private readonly onSendActivity: SendActivityListener | undefined;
 
   constructor(
     options: OpencodeSdkAdapterOptions,
@@ -166,6 +179,7 @@ export class OpencodeSdkAdapter
       sessions: Map<string, SessionRecord>;
       runtimeEventTransports: Map<string, RuntimeEventTransportRecord>;
       restorePermissions?: SessionPermissionRestorer;
+      onSendActivity?: SendActivityListener;
     },
   ) {
     this.resolveCreationSettings = options.resolveCreationSettings;
@@ -177,6 +191,7 @@ export class OpencodeSdkAdapter
     this.runtime = options.runtime;
     this.mcpBindings = options.mcpBindings;
     this.logEvent = options.logEvent;
+    this.onSendActivity = runtimeState?.onSendActivity;
   }
 
   private resolveRuntimeClientInput(input: OpencodeRuntimeResolutionInput, action: string) {
@@ -276,7 +291,6 @@ export class OpencodeSdkAdapter
       sessionInput,
       client,
       startedAt: this.now(),
-      startedMessage: `Started ${policy.scope.kind === "workflow" ? policy.scope.role : "repository"} session`,
       now: this.now,
       emit: this.emit.bind(this),
     };
@@ -340,7 +354,6 @@ export class OpencodeSdkAdapter
       sessionInput,
       client,
       startedAt,
-      startedMessage: `Resumed ${policy.scope.kind === "workflow" ? policy.scope.role : "repository"} session`,
       now: this.now,
       emit: this.emit.bind(this),
     };
@@ -571,7 +584,6 @@ export class OpencodeSdkAdapter
       sessionInput,
       client,
       startedAt,
-      emitStartedEvent: false,
       subscribeToEvents: false,
       now: this.now,
       emit: this.emit.bind(this),
@@ -721,7 +733,6 @@ export class OpencodeSdkAdapter
       sessionInput,
       client,
       startedAt: this.now(),
-      startedMessage: `Forked ${policy.scope.kind === "workflow" ? policy.scope.role : "repository"} session`,
       now: this.now,
       emit: this.emit.bind(this),
     };
@@ -765,6 +776,18 @@ export class OpencodeSdkAdapter
       ...runtime,
       externalSessionId: input.externalSessionId,
     });
+  }
+
+  async loadSessionMetadata(input: LoadAgentSessionMetadataInput): Promise<AgentSessionMetadata> {
+    const runtime = await this.resolveRuntimeClientInput(input, "read session metadata");
+    const retained = this.sessions.get(input.externalSessionId);
+    if (retained) this.assertRetainedQuerySession(input, runtime, retained);
+    const target = await this.readSession(input, runtime, "read session metadata");
+    const { repoPath, runtimeKind, workingDirectory, externalSessionId } = input;
+    return {
+      ref: { repoPath, runtimeKind, workingDirectory, externalSessionId },
+      lastActivityAt: target.time.updated,
+    };
   }
 
   async resolveSessionParent(input: SessionRef): Promise<string | null> {
@@ -844,6 +867,7 @@ export class OpencodeSdkAdapter
     });
     this.emit(input.externalSessionId, begunSend.runningEvent);
     try {
+      await this.onSendActivity?.(input.externalSessionId, begunSend.runningEvent);
       if (systemInvocation.kind !== "manual_session_compaction") {
         await this.ensureSessionMcpBinding(session);
       }
@@ -893,6 +917,14 @@ export class OpencodeSdkAdapter
       );
       if (idleEvent && this.sessions.get(input.externalSessionId) === session) {
         this.emit(input.externalSessionId, idleEvent);
+        try {
+          await this.onSendActivity?.(input.externalSessionId, idleEvent);
+        } catch (activityError) {
+          throw new AggregateError(
+            [error, activityError],
+            `OpenCode session '${input.externalSessionId}' failed to send and report its idle state. Reconnect the runtime before retrying.`,
+          );
+        }
       }
       options?.signal?.throwIfAborted();
       throw error;
@@ -1119,26 +1151,34 @@ export class OpencodeSdkAdapter
   }
 
   private async querySession(
-    input: SessionRef & { sessionScope?: AgentSessionScope | undefined },
+    input: AgentSessionRef,
     runtime: ResolvedOpencodeRuntimeClientInput,
   ): Promise<SessionRecord | undefined> {
     const session = this.sessions.get(input.externalSessionId);
     if (session) {
-      assertAgentRuntimeQuerySession(
-        { ...input, workingDirectory: runtime.workingDirectory },
-        opencodeSessionRef(session),
-        session.summary.sessionAssociation,
-      );
-      if (session.runtimeId !== runtime.runtimeId) {
-        throw new AgentRuntimeQueryError(
-          "runtime_unavailable",
-          "The session belongs to a replaced runtime. Reload the runtime data.",
-        );
-      }
+      this.assertRetainedQuerySession(input, runtime, session);
       return session;
     }
     await this.readSession(input, runtime, "read session identity");
     return undefined;
+  }
+
+  private assertRetainedQuerySession(
+    input: AgentSessionRef,
+    runtime: ResolvedOpencodeRuntimeClientInput,
+    session: SessionRecord,
+  ): void {
+    assertAgentRuntimeQuerySession(
+      { ...input, workingDirectory: runtime.workingDirectory },
+      opencodeSessionRef(session),
+      session.summary.sessionAssociation,
+    );
+    if (session.runtimeId !== runtime.runtimeId) {
+      throw new AgentRuntimeQueryError(
+        "runtime_unavailable",
+        "The session belongs to a replaced runtime. Reload the runtime data.",
+      );
+    }
   }
 
   private async readSession(

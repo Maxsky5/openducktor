@@ -144,6 +144,9 @@ export const toAgentSessionLiveEnvelope = (
       if (change.ref) {
         envelope.ref = change.ref;
       }
+      if (change.statusUnavailable) {
+        envelope.statusUnavailable = true;
+      }
       return envelope;
   }
 };

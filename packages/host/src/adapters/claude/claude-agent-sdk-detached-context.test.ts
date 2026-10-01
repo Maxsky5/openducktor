@@ -18,7 +18,7 @@ const initializationResponse = (): SDKControlInitializeResponse => ({
 });
 
 describe("loadClaudeDetachedSessionContextUsage", () => {
-  test("resumes an idle persisted session only to read its context usage", async () => {
+  test("resumes an idle persisted session only to read its context usage, without saving it", async () => {
     const close = mock(() => {});
     const initializationResult = mock(async () => initializationResponse());
     const getContextUsage = mock(async () => contextUsageResponse);
@@ -48,6 +48,7 @@ describe("loadClaudeDetachedSessionContextUsage", () => {
         },
         pathToClaudeCodeExecutable: "/usr/local/bin/claude",
         resume: "session-1",
+        persistSession: false,
       },
     });
     expect(createQuery.mock.calls[0]?.[0]).toMatchObject({

@@ -32,7 +32,7 @@ export const getQuickActionBlockedReason = ({
   onResolveGitConflictQuickAction,
 }: QuickActionBlockedReasonInput): string | null => {
   if (!agentStudioReady) {
-    return "The Task workflows page is not ready.";
+    return "The task session view is not ready.";
   }
 
   if (sessionStartBlockedReason) {

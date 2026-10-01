@@ -1,38 +1,25 @@
-import type { TaskCard, WorkspaceAgentStudioState } from "@openducktor/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { useMemo } from "react";
-import { isAgentSessionActivityActive } from "@/lib/agent-session-activity-state";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { useAgentSessionReadModelState } from "@/state/app-state-provider";
 import { useSelectedSessionContextLoad } from "@/state/operations/agent-orchestrator/history/use-selected-session-context-load";
 import { useSelectedSessionHistoryLoad } from "@/state/operations/agent-orchestrator/history/use-selected-session-history-load";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { resolveAgentStudioNavigationState } from "./agent-studio-navigation-state";
-import {
-  type AgentStudioRouteSessionResolution,
-  groupSessionsByTaskId,
-} from "./agents-page-selection";
+import { type AgentStudioRouteSessionResolution } from "./agents-page-selection";
 import {
   type AgentStudioSelectedSessionView,
   useAgentStudioSelectedSessionView,
 } from "./selected-session/use-agent-studio-selected-session-view";
-import type {
-  AgentStudioSelectionState,
-  SelectAgentStudioSelection,
-} from "./shell/agent-studio-selection-state";
-import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
-import type { TabChangeListener } from "./use-agent-studio-task-tabs-state";
+import type { AgentStudioSelectionState } from "./shell/agent-studio-selection-state";
 
 type UseAgentStudioSelectionControllerArgs = {
   activeWorkspaceId: string | null;
-  loadedAgentStudioState: WorkspaceAgentStudioState | null;
-  agentStudioStateLoadKey: string | null;
-  agentStudioState: WorkspaceAgentStudioState | null;
   workspaceRepoPath: string | null;
   isWorkspaceRestorePending: boolean;
   tasks: TaskCard[];
   isLoadingTasks: boolean;
-  tasksAreCurrent: boolean;
   sessions: AgentSessionSummary[];
   taskIdParam: string;
   sessionExternalIdParam: string | null;
@@ -41,8 +28,6 @@ type UseAgentStudioSelectionControllerArgs = {
   selectionState: AgentStudioSelectionState;
   repoSettings: RepoSettingsInput | null;
   isLoadingRepoSettings: boolean;
-  selectAgentStudioSelection: SelectAgentStudioSelection;
-  onTabChange?: TabChangeListener | undefined;
 };
 
 export type AgentStudioSelectedView = {
@@ -61,34 +46,15 @@ export type AgentStudioSelectionControllerResult = {
   sessionsForTask: AgentSessionSummary[];
   resolvedRouteSession: AgentSessionSummary | null;
   queryUpdate: ReturnType<typeof resolveAgentStudioNavigationState>["queryUpdate"];
-  isLoadingTasks: boolean;
-  activeTaskTabId: string;
-  loadedStateWorkspaceId: string | null;
-  hasPendingTabChange: boolean;
-  tabTaskIds: string[];
-  availableTabTasks: TaskCard[];
-  taskTabs: ReturnType<typeof useAgentStudioTaskTabs>["taskTabs"];
-  handleSelectTab: (nextTaskId: string) => void;
-  handleCreateTab: (nextTaskId: string) => void;
-  handleCloseTab: (taskIdToClose: string) => void;
-  handleReorderTab: (
-    draggedTaskId: string,
-    targetTaskId: string,
-    position: "before" | "after",
-  ) => void;
   view: AgentStudioSelectedView;
 };
 
 export function useAgentStudioSelectionController({
   activeWorkspaceId,
-  loadedAgentStudioState,
-  agentStudioStateLoadKey,
-  agentStudioState,
   workspaceRepoPath,
   isWorkspaceRestorePending,
   tasks,
   isLoadingTasks,
-  tasksAreCurrent,
   sessions,
   taskIdParam,
   sessionExternalIdParam,
@@ -97,13 +63,10 @@ export function useAgentStudioSelectionController({
   selectionState,
   repoSettings,
   isLoadingRepoSettings,
-  selectAgentStudioSelection,
-  onTabChange,
 }: UseAgentStudioSelectionControllerArgs): AgentStudioSelectionControllerResult {
   const { sessionReadModelLoadState } = useAgentSessionReadModelState();
-  const sessionsByTaskId = useMemo(() => groupSessionsByTaskId(sessions), [sessions]);
 
-  const navigationBase = useMemo(
+  const navigationState = useMemo(
     () =>
       resolveAgentStudioNavigationState({
         isWorkspaceRestorePending,
@@ -116,7 +79,6 @@ export function useAgentStudioSelectionController({
         hasExplicitRoleParam,
         roleFromQuery,
         selectionState,
-        activeTaskTabId: "",
       }),
     [
       hasExplicitRoleParam,
@@ -131,94 +93,6 @@ export function useAgentStudioSelectionController({
       tasks,
     ],
   );
-
-  const latestSessionByTaskId = useMemo(() => {
-    const latestByTask = new Map<string, AgentSessionSummary>();
-    for (const [taskKey, taskSessions] of sessionsByTaskId) {
-      const latestSession = taskSessions[0];
-      if (latestSession) {
-        latestByTask.set(taskKey, latestSession);
-      }
-    }
-    return latestByTask;
-  }, [sessionsByTaskId]);
-
-  const activeSessionByTaskId = useMemo(() => {
-    const activeByTask = new Map<string, AgentSessionSummary>();
-    for (const [taskKey, taskSessions] of sessionsByTaskId) {
-      let activeSession: AgentSessionSummary | null = null;
-      for (const session of taskSessions) {
-        if (isAgentSessionActivityActive(session.activityState)) {
-          activeSession = session;
-          break;
-        }
-      }
-      if (activeSession) {
-        activeByTask.set(taskKey, activeSession);
-      }
-    }
-    return activeByTask;
-  }, [sessionsByTaskId]);
-
-  const {
-    tabTaskIds,
-    activeTaskTabId,
-    availableTabTasks,
-    taskTabs,
-    handleSelectTab,
-    handleCreateTab,
-    handleCloseTab,
-    handleReorderTab,
-    loadedStateWorkspaceId,
-    hasPendingTabChange,
-  } = useAgentStudioTaskTabs({
-    activeWorkspaceId,
-    loadedAgentStudioState,
-    agentStudioStateLoadKey,
-    agentStudioState,
-    isWorkspaceRestorePending,
-    taskId: navigationBase.taskId,
-    routeTaskId: taskIdParam,
-    selectedTask: navigationBase.selectedTask,
-    tasks,
-    tasksAreCurrent,
-    latestSessionByTaskId,
-    activeSessionByTaskId,
-    selectAgentStudioSelection,
-    onTabChange,
-  });
-
-  const navigationState = useMemo(() => {
-    if (!activeTaskTabId || activeTaskTabId === navigationBase.taskId) {
-      return navigationBase;
-    }
-    return resolveAgentStudioNavigationState({
-      isWorkspaceRestorePending,
-      isLoadingTasks,
-      sessionReadModelLoadState,
-      tasks,
-      sessions,
-      taskIdParam,
-      sessionExternalIdParam,
-      hasExplicitRoleParam,
-      roleFromQuery,
-      selectionState,
-      activeTaskTabId,
-    });
-  }, [
-    activeTaskTabId,
-    hasExplicitRoleParam,
-    isLoadingTasks,
-    isWorkspaceRestorePending,
-    navigationBase,
-    roleFromQuery,
-    selectionState,
-    sessionExternalIdParam,
-    sessionReadModelLoadState,
-    sessions,
-    taskIdParam,
-    tasks,
-  ]);
 
   const selectedSessionView = useAgentStudioSelectedSessionView({
     workspaceRepoPath,
@@ -269,17 +143,6 @@ export function useAgentStudioSelectionController({
       sessionsForTask: navigationState.sessionsForTask,
       resolvedRouteSession: navigationState.resolvedRouteSession,
       queryUpdate: navigationState.queryUpdate,
-      isLoadingTasks,
-      activeTaskTabId,
-      loadedStateWorkspaceId,
-      hasPendingTabChange,
-      tabTaskIds,
-      availableTabTasks,
-      taskTabs,
-      handleSelectTab,
-      handleCreateTab,
-      handleCloseTab,
-      handleReorderTab,
       view: {
         taskId: navigationState.view.taskId,
         selectedTask: navigationState.view.selectedTask,
@@ -288,22 +151,6 @@ export function useAgentStudioSelectionController({
         ...selectedSessionViewWithContextError,
       },
     }),
-    [
-      activeTaskTabId,
-      availableTabTasks,
-      handleCloseTab,
-      handleCreateTab,
-      handleReorderTab,
-      handleSelectTab,
-      isActiveTaskReady,
-      isLoadingTasks,
-      navigationState,
-      loadedStateWorkspaceId,
-      hasPendingTabChange,
-      selectedSessionViewWithContextError,
-      sessions,
-      taskTabs,
-      tabTaskIds,
-    ],
+    [isActiveTaskReady, navigationState, selectedSessionViewWithContextError, sessions],
   );
 }

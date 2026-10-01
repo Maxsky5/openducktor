@@ -61,3 +61,4 @@ export {
 export type { SessionStartModalDecision } from "./use-session-start-modal-runner";
 export { useSessionStartModalRunner } from "./use-session-start-modal-runner";
 export { useSessionStartWorkflowRunner } from "./use-session-start-workflow-runner";
+export { useWorkspaceSessionStartGate } from "./use-workspace-session-start-gate";

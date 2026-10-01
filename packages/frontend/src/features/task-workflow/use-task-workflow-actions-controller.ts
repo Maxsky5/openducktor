@@ -1,17 +1,18 @@
 import type { TaskCard } from "@openducktor/contracts";
-import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import type { WorkflowPendingState } from "@/components/features/kanban/kanban-task-footer";
+import type { TaskCreateDestination } from "@/components/features/task-create/use-task-create-modal-controller";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import {
   createGitConflictActionsModel,
   useGitConflictResolution,
 } from "@/features/git-conflict-resolution";
+import { buildSessionNavigationHref } from "@/features/session-navigation/session-navigation-target";
 import { useSessionStartWorkflowRunner } from "@/features/session-start";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { gitProviderReadError as toGitProviderReadError } from "@/lib/git-provider-health";
-import { buildAgentStudioHref } from "@/pages/agents/query-sync/agent-studio-navigation";
 import { useAgentStudioRepoSettings } from "@/pages/agents/use-agent-studio-repo-settings";
 import type {
   TaskApprovalModalModel,
@@ -28,7 +29,6 @@ import {
   useWorkspaceState,
 } from "@/state/app-state-provider";
 import { useAgentModelFavorites } from "@/state/mutations/use-agent-model-favorites";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import {
   buildActiveTaskSessionContextByTaskId,
   buildTaskSessionsByTaskId,
@@ -39,8 +39,17 @@ export type TaskWorkflowTaskComposerModel = {
   open: boolean;
   task: TaskCard | null;
   tasks: TaskCard[];
+  destination: TaskCreateDestination | null;
   onOpenChange: (open: boolean) => void;
 };
+
+type TaskComposerState = {
+  open: boolean;
+  taskId: string | null;
+  destination: TaskCreateDestination | null;
+};
+
+const CLOSED_TASK_COMPOSER: TaskComposerState = { open: false, taskId: null, destination: null };
 
 export type TaskWorkflowActionsController = {
   actions: TaskWorkflowActions;
@@ -80,9 +89,6 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     humanRequestChangesTask,
     setTaskTargetBranch,
   } = useTasksState();
-  const settingsSnapshotQuery = useQuery(settingsSnapshotQueryOptions());
-  const openAgentStudioTabOnBackgroundSessionStart =
-    settingsSnapshotQuery.data?.general.openAgentStudioTabOnBackgroundSessionStart ?? null;
   const runSessionStartWorkflow = useSessionStartWorkflowRunner({
     workspaceId: activeWorkspaceId,
     startAgentSession,
@@ -107,7 +113,6 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     branches: branches ?? [],
     favoriteState,
     repoSettings,
-    openAgentStudioTabOnBackgroundSessionStart,
     tasks,
     sessions,
     navigate,
@@ -187,17 +192,22 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
         builderSessions,
         currentViewSession: null,
         onOpenSession: (session) => {
+          if (!activeWorkspaceId) {
+            throw new Error("No active workspace is selected.");
+          }
           navigate(
-            buildAgentStudioHref({
+            buildSessionNavigationHref({
+              kind: "task_session",
+              workspaceId: activeWorkspaceId,
               taskId,
-              sessionExternalId: session.externalSessionId,
               role: "build",
+              identity: toAgentSessionIdentity(session),
             }),
           );
         },
       });
     },
-    [handleResolveGitConflict, navigate, sessions, tasks],
+    [activeWorkspaceId, handleResolveGitConflict, navigate, sessions, tasks],
   );
 
   const { taskApprovalModal, taskGitConflictDialog, openTaskApproval } = useTaskApprovalFlow({
@@ -213,35 +223,41 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     onResolveGitConflict: handleResolveTaskGitConflict,
   });
 
-  const [composerState, setComposerState] = useState<{ open: boolean; taskId: string | null }>({
-    open: false,
-    taskId: null,
-  });
+  const [composerState, setComposerState] = useState<TaskComposerState>(CLOSED_TASK_COMPOSER);
   const composerTask =
     composerState.taskId === null
       ? null
       : (tasks.find((task) => task.id === composerState.taskId) ?? null);
   const composerOpen =
     composerState.open && (composerState.taskId === null || composerTask !== null);
+  const destinationWorkspaceId = activeWorkspace?.workspaceId ?? null;
+  const destinationWorkspaceName = activeWorkspace?.workspaceName ?? null;
+  // New task keeps the workspace that was active when it opened.
   const onCreateTask = useCallback((): void => {
-    setComposerState({ open: true, taskId: null });
-  }, []);
+    setComposerState({
+      open: true,
+      taskId: null,
+      destination:
+        destinationWorkspaceId && destinationWorkspaceName
+          ? { workspaceId: destinationWorkspaceId, workspaceName: destinationWorkspaceName }
+          : null,
+    });
+  }, [destinationWorkspaceId, destinationWorkspaceName]);
   const onEdit = useCallback((taskId: string): void => {
-    setComposerState({ open: true, taskId });
+    setComposerState({ open: true, taskId, destination: null });
   }, []);
   const onComposerOpenChange = useCallback((open: boolean): void => {
-    setComposerState((current) =>
-      open ? { ...current, open: true } : { open: false, taskId: null },
-    );
+    setComposerState((current) => (open ? { ...current, open: true } : CLOSED_TASK_COMPOSER));
   }, []);
   const composer = useMemo<TaskWorkflowTaskComposerModel>(
     () => ({
       open: composerOpen,
       task: composerTask,
       tasks,
+      destination: composerState.destination,
       onOpenChange: onComposerOpenChange,
     }),
-    [composerOpen, composerTask, onComposerOpenChange, tasks],
+    [composerOpen, composerState.destination, composerTask, onComposerOpenChange, tasks],
   );
 
   const taskSessionsByTaskId = useMemo(() => buildTaskSessionsByTaskId(sessions), [sessions]);

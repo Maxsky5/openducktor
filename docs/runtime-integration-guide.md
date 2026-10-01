@@ -75,7 +75,15 @@ Put shared data in `packages/contracts` only when it is an OpenDucktor concept. 
 
 Create and subscribe the live-session adapter before the runtime can send events. Use TanStack Query for stable frontend reads such as history and catalogs. Keep live transcript state in the live-session store.
 
+OpenCode creation, fork, and reattach prepare a conversation without starting agent work. Keep control summaries in sync with the known turn state. Prompt submission reports running activity while OpenCode starts the turn. Native turn events then confirm running or idle activity. Registration must not emit a synthetic `session_started` activity event.
+
+Restoring an idle Claude session must not publish new activity. Publish startup activity for a new session, a fork, or an interrupted turn that the runtime continues.
+
 Provide an `AgentRuntimeQueryAdapterPort` with each live-session adapter. Reuse the native controller that owns its session state. Route frontend reads through `HostClient`. Check that queries do not resume sessions or change live state. Test reads during live updates and runtime replacement.
+
+`loadSessionMetadata` reads the latest native activity time of one saved task session for the session list. It checks the native session's exact ID and working directory. It does not resume or attach the session. A missing session or a changed directory is a typed query error, not a null time. The host checks workflow ownership first and still allows the read after task cleanup removes the session's managed worktree.
+
+The time must not move when OpenDucktor only views or inspects a session. OpenCode reports the session update time. Codex reports the time of the latest turn, because a resume that applies thread settings also moves the thread update time. Claude reports the latest root conversation message time. Its SDK writes title and bookkeeping records on restore and shutdown, so the transcript write time is not an activity time. Read Claude timestamps through the supported SDK import into an in-memory store. Process root entries in batches, keep only the latest time, and omit subagent transcripts. Return a null time when conversation timestamps are absent. A Claude read such as the context usage read must not persist the resumed session.
 
 Before you map a feature, inspect official SDK types, protocol docs, or runtime source. Check startup, config, auth, models, sessions, activity, history, tools, approvals, questions, context, catalogs, and optional features. Keep a capability off when the public runtime contract lacks the needed data.
 
@@ -236,6 +244,10 @@ The persistence observer does not call the runtime inside the publication or loc
 Renderer attachment is atomic. Its first envelope has the current snapshot. Later changes use the same ordered channel. Separate snapshot and subscribe calls have a race.
 
 Map native completion, stream end, runtime failure, stop, and release as different events. Final release removes the session tree and rejects unresolved requests.
+
+When the adapter cannot read the current status of a session, it reports a session-scoped `fault` with `statusUnavailable`. If it keeps the last snapshot, it also sets `statusUnavailableReason` on that snapshot. Keep the reason through context, title, and other updates that do not read the status. Clear it with the next status read or live status event. That change makes the snapshot differ, so an unchanged successful read still publishes the recovery. Other session faults keep the live status.
+
+A status read can overlap other updates. When a live status event, a control result that sets the status, or another successful read confirms the status during the read, ignore the status of the read. When only context, title, or pending input changes during the read, apply only the status of the read and keep the newer data. A failed read does not confirm a status, so a successful read that overlaps it still clears the failure.
 
 Current context use is live state, not total result use. If a direct read races stream events, queued events set the baseline and an event processed during the read wins.
 

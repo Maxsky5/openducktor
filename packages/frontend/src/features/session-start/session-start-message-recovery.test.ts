@@ -163,10 +163,8 @@ test.each(["in_app", "both", "os", "disabled"] as const)(
         tasks: [createTaskCardFixture({ id: "task-1" })],
         workspaceId: "workspace-1",
         startInBackground: false,
-        openAgentStudioTabOnBackgroundSessionStart: false,
         roleLabels: { spec: "Spec", planner: "Planner", build: "Builder", qa: "QA" },
         runSessionStartWorkflow,
-        saveAgentStudioTab: async () => {},
         humanRequestChangesTask: async () => {},
         openSessionInAgentStudio: () => {},
       });

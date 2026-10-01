@@ -454,6 +454,8 @@ describe("useAgentStudioSessionStartFlow", () => {
     expect(updateCalls).toContainEqual({
       task: "task-1",
       session: "session-new",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktrees/session-new",
       agent: "spec",
     });
 
@@ -561,6 +563,8 @@ describe("useAgentStudioSessionStartFlow", () => {
     expect(updateCalls).toContainEqual({
       task: "task-1",
       session: "session-new",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktrees/session-new",
       agent: "planner",
     });
     expect(harness.getLatest().isStarting).toBe(false);
@@ -691,6 +695,8 @@ describe("useAgentStudioSessionStartFlow", () => {
     expect(updateCalls).toContainEqual({
       task: "task-1",
       session: "session-plan",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktrees/session-plan",
       agent: "planner",
     });
 
@@ -1068,6 +1074,8 @@ describe("useAgentStudioSessionStartFlow", () => {
     expect(updateCalls).toContainEqual({
       task: "task-1",
       session: "session-build-rework",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktrees/session-build-rework",
       agent: "build",
     });
 
@@ -1163,6 +1171,8 @@ describe("useAgentStudioSessionStartFlow", () => {
     expect(updateCalls).toContainEqual({
       task: "task-1",
       session: "session-existing",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktrees/session-existing",
       agent: "build",
     });
     await harness.waitFor(() => sendAgentMessage.mock.calls.length > 0);

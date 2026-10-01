@@ -43,6 +43,7 @@ test.each([false, true])(
     const view = render(
       <QueryProvider useIsolatedClient>
         <WorkspaceSessionArchiveDialog
+          open
           workspaceId="test"
           record={record()}
           isArchiving={false}
@@ -66,7 +67,9 @@ test.each([false, true])(
         "feature/chat",
       );
       expect(
-        view.getByText(/Archiving stops this chat's terminals and its running session/),
+        view.getByText(
+          /Archiving stops this chat's terminals, development servers, and its running session/,
+        ),
       ).toBeTruthy();
       fireEvent.click(submit);
       expect(requests).toEqual([true]);
@@ -94,6 +97,7 @@ test("turning removal off keeps Git resources and Cancel sends no archive reques
   const view = render(
     <QueryProvider useIsolatedClient>
       <WorkspaceSessionArchiveDialog
+        open
         workspaceId="test"
         record={record()}
         isArchiving={false}
@@ -108,7 +112,9 @@ test("turning removal off keeps Git resources and Cancel sends no archive reques
   try {
     await view.findByText(/This worktree has local changes/, {}, { timeout: 800 });
     expect(
-      view.getByText(/Archiving stops this chat's terminals and its running session/),
+      view.getByText(
+        /Archiving stops this chat's terminals, development servers, and its running session/,
+      ),
     ).toBeTruthy();
     fireEvent.click(view.getByRole("button", { name: "Cancel" }));
     expect(closed).toBe(1);
@@ -144,6 +150,7 @@ test("a missing detached worktree can be archived without removal", async () => 
   const view = render(
     <QueryProvider useIsolatedClient>
       <WorkspaceSessionArchiveDialog
+        open
         workspaceId="test"
         record={imported}
         isArchiving={false}
@@ -184,6 +191,7 @@ test("a failed check blocks removal but allows keeping the worktree", async () =
   const view = render(
     <QueryProvider useIsolatedClient>
       <WorkspaceSessionArchiveDialog
+        open
         workspaceId="test"
         record={record()}
         isArchiving={false}
@@ -232,7 +240,7 @@ test("archive locks the full form and keeps its error and removal choice visible
   };
   const view = render(
     <QueryProvider useIsolatedClient>
-      <WorkspaceSessionArchiveDialog {...props} isArchiving error={null} />
+      <WorkspaceSessionArchiveDialog open {...props} isArchiving error={null} />
     </QueryProvider>,
   );
   try {
@@ -248,6 +256,7 @@ test("archive locks the full form and keeps its error and removal choice visible
     view.rerender(
       <QueryProvider useIsolatedClient>
         <WorkspaceSessionArchiveDialog
+          open
           {...props}
           isArchiving={false}
           error={new Error("Branch removal failed")}

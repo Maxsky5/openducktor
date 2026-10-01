@@ -110,6 +110,9 @@ function renderClosedSession(
           {switchWorkspace ? <WorkspaceChange apply={switchWorkspace} /> : null}
           <Tabs value={currentRecord.id}>
             <WorkspaceSessionContent
+              viewControls={null}
+              onArchive={() => {}}
+              isArchiving={false}
               workspace={workspace}
               record={currentRecord}
               sessionIds={sessionIds}
@@ -615,6 +618,9 @@ test("the tools panel starts beside the chat header", () => {
         <WorkspacePreviewTransitionGuardProvider>
           <Tabs value={record.id}>
             <WorkspaceSessionContent
+              viewControls={null}
+              onArchive={() => {}}
+              isArchiving={false}
               workspace={workspace}
               record={record}
               sessionIds={[record.id]}

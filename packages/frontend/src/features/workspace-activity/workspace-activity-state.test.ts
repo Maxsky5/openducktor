@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   foldWorkspaceActivityBadges,
+  foldWorkspaceSessionLiveFacts,
   type WorkspaceActivitySession,
 } from "./workspace-activity-state";
 
@@ -15,6 +16,9 @@ const session = (
   stopRequestedAt: null,
   pendingApprovals: [],
   pendingQuestions: [],
+  lastActivityAt: null,
+  untimedStatusChange: false,
+  statusUnavailableReason: null,
   ...overrides,
 });
 
@@ -108,5 +112,64 @@ describe("foldWorkspaceActivityBadges", () => {
         session("b", { parentKey: "a", status: "running" }),
       ]),
     ).toEqual({ inputRequired: false, error: false, active: false });
+  });
+});
+
+describe("foldWorkspaceSessionLiveFacts", () => {
+  const facts = (sessions: WorkspaceActivitySession[], faults: [string, string][] = []) =>
+    foldWorkspaceSessionLiveFacts(
+      new Map(sessions.map((entry) => [entry.key, entry])),
+      new Map(faults.map(([key, message]) => [key, { message, statusUnavailable: false }])),
+    );
+
+  test("attributes subagent questions, permissions, time, and faults to the root", () => {
+    const result = facts(
+      [
+        session("root", { status: "running", lastActivityAt: 100 }),
+        session("child", {
+          parentKey: "root",
+          pendingQuestions: [{}],
+          lastActivityAt: 300,
+        }),
+        session("grandchild", { parentKey: "child", pendingApprovals: [{}] }),
+      ],
+      [["child", "child stream failed"]],
+    );
+
+    expect([...result.keys()]).toEqual(["root"]);
+    expect(result.get("root")).toEqual({
+      activityState: "waiting_input",
+      pendingQuestion: true,
+      pendingPermission: true,
+      lastActivityAt: 300,
+      fault: "child stream failed",
+      statusUnavailableReason: null,
+    });
+  });
+
+  test("reports no root for the members of a parent cycle", () => {
+    const result = facts([
+      session("a", { parentKey: "b", status: "running" }),
+      session("b", { parentKey: "a", pendingQuestions: [{}] }),
+    ]);
+
+    expect(result.size).toBe(0);
+  });
+
+  test("keeps separate roots and reports their own activity", () => {
+    const result = facts([
+      session("running", { status: "starting" }),
+      session("failed", { status: "error", lastActivityAt: 20 }),
+      session("idle"),
+    ]);
+
+    expect(result.get("running")?.activityState).toBe("starting");
+    expect(result.get("failed")).toMatchObject({ activityState: "error", lastActivityAt: 20 });
+    expect(result.get("idle")).toMatchObject({
+      activityState: "idle",
+      pendingQuestion: false,
+      pendingPermission: false,
+      fault: null,
+    });
   });
 });

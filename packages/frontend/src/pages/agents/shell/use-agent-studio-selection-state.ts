@@ -1,4 +1,3 @@
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentRole } from "@openducktor/core";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -6,6 +5,7 @@ import type { AgentStudioQueryUpdate } from "../query-sync/agent-studio-navigati
 import {
   type AgentStudioSelectionState,
   agentStudioSelectionQueryKey,
+  agentStudioSelectionRouteKey,
   buildAgentStudioSelectionQueryUpdateFromState,
   createAgentStudioRouteSelectionState,
   type SelectAgentStudioSelection,
@@ -68,12 +68,11 @@ export function useAgentStudioSelectionState({
       taskIdParam,
     ],
   );
-  const routeSelectionQueryKey = useMemo(() => {
-    const queryKey = agentStudioSelectionQueryKey(routeSelection);
-    return routeSelection.sessionIdentity
-      ? `${queryKey}${agentSessionIdentityKey(routeSelection.sessionIdentity)}`
-      : queryKey;
-  }, [routeSelection]);
+  const routeSelectionQueryKey = useMemo(
+    () => agentStudioSelectionRouteKey(routeSelection),
+    [routeSelection],
+  );
+  const routeHasSessionIdentity = routeSelection.sessionIdentity !== null;
   const [snapshot, setSnapshot] = useState<SelectionStateSnapshot>(() => ({
     workspaceId: activeWorkspaceId,
     routeQueryKey: routeSelectionQueryKey,
@@ -114,7 +113,10 @@ export function useAgentStudioSelectionState({
       return;
     }
     if (!workspaceChanged) {
-      const snapshotSelectionQueryKey = agentStudioSelectionQueryKey(currentSnapshot.selection);
+      // A route without an identity is less specific, so the same session keeps its identity.
+      const snapshotSelectionQueryKey = routeHasSessionIdentity
+        ? agentStudioSelectionRouteKey(currentSnapshot.selection)
+        : agentStudioSelectionQueryKey(currentSnapshot.selection);
       if (snapshotSelectionQueryKey === routeSelectionQueryKey) {
         setSnapshot({
           workspaceId: currentSnapshot.workspaceId,
@@ -150,6 +152,7 @@ export function useAgentStudioSelectionState({
     currentSnapshot,
     isWorkspaceRestorePending,
     requestContextTransition,
+    routeHasSessionIdentity,
     routeSelectionQueryKey,
     scheduleQueryUpdate,
   ]);

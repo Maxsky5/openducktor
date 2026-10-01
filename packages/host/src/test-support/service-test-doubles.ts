@@ -201,6 +201,10 @@ export const createWorkspaceSettingsServiceTestDouble = <
     "workspace settings service",
     "updateKanbanTaskCardView",
   ),
+  updateSidebarSessionGrouping: unexpectedEffectCall(
+    "workspace settings service",
+    "updateSidebarSessionGrouping",
+  ),
   updateGlobalGitConfig: unexpectedEffectCall(
     "workspace settings service",
     "updateGlobalGitConfig",

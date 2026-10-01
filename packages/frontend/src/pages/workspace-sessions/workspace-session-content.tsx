@@ -21,6 +21,7 @@ import {
   type WorkspaceSessionFilePreviewHandle,
 } from "./workspace-session-file-preview";
 import { useWorkspaceSessionBranch } from "./use-workspace-session-branch";
+import { RepositoryBranchSwitcher } from "@/components/features/repository/repository-branch-switcher";
 
 export type WorkspaceSessionPanelState = {
   isOpen: boolean;
@@ -35,6 +36,9 @@ export function WorkspaceSessionContent({
   panelState,
   onPanelStateChange: changePanel,
   onSafeToLeave,
+  viewControls,
+  onArchive,
+  isArchiving,
 }: {
   workspace: ActiveWorkspace;
   record: WorkspaceSession;
@@ -45,6 +49,9 @@ export function WorkspaceSessionContent({
     update: Partial<Pick<WorkspaceSessionPanelState, "activeTabId" | "selectedFile">>,
   ) => void;
   onSafeToLeave?: () => void;
+  viewControls: ReactNode;
+  onArchive: (onCloseAutoFocus: (event: Event) => void) => void;
+  isArchiving: boolean;
 }) {
   const onPanelStateChange = useCallback(
     (update: Partial<Pick<WorkspaceSessionPanelState, "activeTabId" | "selectedFile">>) =>
@@ -144,27 +151,32 @@ export function WorkspaceSessionContent({
     />
   );
   const mainContent = (
-    <div className="relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-      {previewContent}
-      <div
-        className="flex min-h-0 flex-1 flex-col overflow-hidden"
-        style={{ visibility: panelState.selectedFile ? "hidden" : undefined }}
-        inert={panelState.selectedFile !== null}
-      >
-        <WorkspaceSessionHeader
-          key={record.id}
-          workspaceId={workspace.workspaceId}
-          record={record}
-        />
-        <WorkspaceSessionChatPanes
-          workspace={workspace}
-          record={record}
-          sessionIds={sessionIds}
-          onToolRefresh={onToolRefresh}
-          onSelectFile={onSelectFile}
-          workingDirectory={workingDirectory}
-          branchKey={branchKey}
-        />
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+      <WorkspaceSessionHeader
+        key={record.id}
+        workspaceId={workspace.workspaceId}
+        record={record}
+        viewControls={viewControls}
+        onArchive={onArchive}
+        isArchiving={isArchiving}
+      />
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        {previewContent}
+        <div
+          className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden"
+          style={{ visibility: panelState.selectedFile ? "hidden" : undefined }}
+          inert={panelState.selectedFile !== null}
+        >
+          <WorkspaceSessionChatPanes
+            workspace={workspace}
+            record={record}
+            sessionIds={sessionIds}
+            onToolRefresh={onToolRefresh}
+            onSelectFile={onSelectFile}
+            workingDirectory={workingDirectory}
+            branchKey={branchKey}
+          />
+        </div>
       </div>
     </div>
   );
@@ -175,6 +187,7 @@ export function WorkspaceSessionContent({
       sessionId={record.id}
       workingDirectory={workingDirectory}
       contextMode={record.executionTarget.kind === "local_repo_root" ? "repository" : "worktree"}
+      repositoryBranchControl={<RepositoryBranchSwitcher layout="inline" />}
       branchKey={branchKey}
       branchReady={branchReady}
       target={target}
@@ -189,12 +202,14 @@ export function WorkspaceSessionContent({
     />
   );
   return (
-    <WorkspaceSessionPaneLayout
-      isOpen={panelState.isOpen}
-      isNarrow={isNarrow}
-      mainContent={mainContent}
-      toolsContent={toolsContent}
-    />
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-card">
+      <WorkspaceSessionPaneLayout
+        isOpen={panelState.isOpen}
+        isNarrow={isNarrow}
+        mainContent={mainContent}
+        toolsContent={toolsContent}
+      />
+    </div>
   );
 }
 

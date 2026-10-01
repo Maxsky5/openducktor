@@ -30,6 +30,7 @@ import { invalidEnabledRuntime } from "@/state/operations/runtime-executables/ru
 import type { RuntimeExecutableValidationState } from "@/state/queries/use-runtime-executable-validation";
 import { AGENT_MODEL_FAVORITES_MUTATION_KEY } from "@/state/mutations/agent-model-favorites";
 import { KANBAN_TASK_CARD_VIEW_MUTATION_KEY } from "@/state/mutations/kanban-task-card-view";
+import { SIDEBAR_SESSION_GROUPING_MUTATION_KEY } from "@/state/mutations/sidebar-session-grouping";
 import { useAgentModelFavorites } from "@/state/mutations/use-agent-model-favorites";
 import {
   validateCustomAgentRoleDrafts,
@@ -211,6 +212,8 @@ export const useSettingsModalController = ({
     useIsMutating({ mutationKey: AGENT_MODEL_FAVORITES_MUTATION_KEY }) > 0;
   const isKanbanTaskCardViewMutationPending =
     useIsMutating({ mutationKey: KANBAN_TASK_CARD_VIEW_MUTATION_KEY }) > 0;
+  const isSidebarSessionGroupingMutationPending =
+    useIsMutating({ mutationKey: SIDEBAR_SESSION_GROUPING_MUTATION_KEY }) > 0;
   const workspacePolicy = useWorkspacePolicy(
     activeWorkspace?.repoPath ?? null,
     workspaceSelectionPolicy,
@@ -507,6 +510,7 @@ export const useSettingsModalController = ({
     loadSettingsSnapshot,
     isAgentModelFavoritesMutationPending,
     isKanbanTaskCardViewMutationPending,
+    isSidebarSessionGroupingMutationPending,
     wasKanbanTaskCardViewEdited: taskCardViewEditState.wasEdited,
   });
   const draftActions = useMemo(

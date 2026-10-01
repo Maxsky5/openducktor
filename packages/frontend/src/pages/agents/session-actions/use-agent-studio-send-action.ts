@@ -36,7 +36,7 @@ type UseAgentStudioSendActionArgs = {
   selectedSessionModel: AgentSessionState["selectedModel"];
   sessionState: AgentStudioSendActionState;
   isSessionModelCatalogLoading: boolean;
-  isSelectedSessionModelSendable: boolean;
+  prepareSelectedSessionModelForSend: () => Promise<boolean>;
   agentStudioReady: boolean;
   canStartNewSession: boolean;
   reusablePrompts: ReusablePrompt[];
@@ -55,7 +55,7 @@ export function useAgentStudioSendAction({
   selectedSessionModel,
   sessionState,
   isSessionModelCatalogLoading,
-  isSelectedSessionModelSendable,
+  prepareSelectedSessionModelForSend,
   agentStudioReady,
   canStartNewSession,
   reusablePrompts,
@@ -102,9 +102,6 @@ export function useAgentStudioSendAction({
       if (isSessionModelCatalogLoading && selectedSessionModel === null) {
         return false;
       }
-      if (!isSelectedSessionModelSendable) {
-        return false;
-      }
 
       if (!taskId) return false;
       const activity = beginSendingActivity(activeComposerContextKey);
@@ -134,6 +131,8 @@ export function useAgentStudioSendAction({
             );
           }
         }
+        // A needed model change waits for this send, so viewing a session never resumes it.
+        if (!(await prepareSelectedSessionModelForSend())) return false;
         const targetSession = await resolveAgentStudioSendTargetSession({
           selectedSessionIdentity,
           canStartNewSession,
@@ -183,7 +182,7 @@ export function useAgentStudioSendAction({
       isSending,
       isStarting,
       isSessionModelCatalogLoading,
-      isSelectedSessionModelSendable,
+      prepareSelectedSessionModelForSend,
       role,
       selectedModelDescriptor,
       supportsAttachments,

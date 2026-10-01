@@ -101,11 +101,8 @@ export const createOrchestratorPublicOperations = ({
   stopAgentSession: (session): Promise<void> =>
     withErrorToast("Failed to stop agent session", () => sessionActions.stopAgentSession(session)),
   continueInterruptedTurn: sessionActions.continueInterruptedTurn,
-  updateAgentSessionModel: (session, selection): void => {
-    void withErrorToast("Failed to update session model", () =>
-      sessionActions.updateAgentSessionModel(session, selection),
-    ).catch(() => undefined);
-  },
+  // The caller reports a failure, because a send waits for this update and shows its own error.
+  updateAgentSessionModel: sessionActions.updateAgentSessionModel,
   replyAgentApproval: sessionActions.replyAgentApproval,
   answerAgentQuestion: sessionActions.answerAgentQuestion,
 });

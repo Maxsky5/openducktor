@@ -139,6 +139,8 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
       workspaceClient.workspaceUpdateAgentModelFavorites.bind(workspaceClient),
     workspaceUpdateKanbanTaskCardView:
       workspaceClient.workspaceUpdateKanbanTaskCardView.bind(workspaceClient),
+    workspaceUpdateSidebarSessionGrouping:
+      workspaceClient.workspaceUpdateSidebarSessionGrouping.bind(workspaceClient),
     workspaceUpdateGlobalGitConfig:
       workspaceClient.workspaceUpdateGlobalGitConfig.bind(workspaceClient),
     workspaceDetectGithubRepository:
@@ -282,6 +284,8 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
       agentRuntimeQueryClient.agentRuntimePreviewModels.bind(agentRuntimeQueryClient),
     agentRuntimeLoadSessionDiff:
       agentRuntimeQueryClient.agentRuntimeLoadSessionDiff.bind(agentRuntimeQueryClient),
+    agentRuntimeLoadSessionMetadata:
+      agentRuntimeQueryClient.agentRuntimeLoadSessionMetadata.bind(agentRuntimeQueryClient),
     agentRuntimeLoadSessionHistory:
       agentRuntimeQueryClient.agentRuntimeLoadSessionHistory.bind(agentRuntimeQueryClient),
     agentRuntimeLoadSessionTodos:

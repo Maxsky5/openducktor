@@ -54,6 +54,16 @@ describe("agent-session live contracts", () => {
     expect(agentSessionLiveSnapshotSchema.parse(populated)).toEqual(populated);
   });
 
+  test("keeps the reason of a failed status read on a snapshot", () => {
+    const stale = { ...snapshot, statusUnavailableReason: "Session status read failed." };
+
+    expect(agentSessionLiveSnapshotSchema.parse(stale)).toEqual(stale);
+    expect(
+      agentSessionLiveSnapshotSchema.safeParse({ ...snapshot, statusUnavailableReason: "" })
+        .success,
+    ).toBe(false);
+  });
+
   test("requires finite nonnegative context numbers and ISO timestamps", () => {
     for (const invalid of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
       expect(agentSessionContextUsageSchema.safeParse({ totalTokens: invalid }).success).toBe(
@@ -220,6 +230,14 @@ describe("agent-session live contracts", () => {
         operation: "agentSessionLive.observe",
         ref,
       },
+      {
+        type: "fault",
+        repoPath: ref.repoPath,
+        message: "Session status read failed",
+        operation: "opencode-live-session.refresh-session",
+        ref,
+        statusUnavailable: true,
+      },
     ] as const;
 
     for (const variant of variants) {
@@ -231,5 +249,13 @@ describe("agent-session live contracts", () => {
         }).success,
       ).toBe(false);
     }
+    expect(
+      agentSessionLiveEnvelopeSchema.safeParse({
+        type: "fault",
+        repoPath: ref.repoPath,
+        message: "Session status read failed",
+        statusUnavailable: false,
+      }).success,
+    ).toBe(false);
   });
 });

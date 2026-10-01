@@ -6,5 +6,6 @@ export const isKanbanTaskCreationDisabled = (
   activeWorkspace: ActiveWorkspace | null,
   taskStoreCheck: TaskStoreCheck | null,
 ): boolean => {
-  return !activeWorkspace || !isRepoStoreReady(taskStoreCheck);
+  // Opening a composer is local UI. A pending diagnostic must not block it.
+  return !activeWorkspace || (taskStoreCheck !== null && !isRepoStoreReady(taskStoreCheck));
 };

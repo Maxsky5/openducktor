@@ -28,6 +28,7 @@ describe("Workspace Session metadata UI", () => {
     const view = render(
       <QueryProvider useIsolatedClient>
         <WorkspaceSessionRenameDialog
+          open
           workspaceId="A"
           record={record()}
           onClose={() => {}}
@@ -73,7 +74,13 @@ describe("Workspace Session metadata UI", () => {
     );
     const view = render(
       <QueryProvider useIsolatedClient>
-        <WorkspaceSessionHeader workspaceId="A" record={record()} />
+        <WorkspaceSessionHeader
+          viewControls={null}
+          onArchive={() => {}}
+          isArchiving={false}
+          workspaceId="A"
+          record={record()}
+        />
       </QueryProvider>,
     );
     try {
@@ -116,7 +123,13 @@ describe("Workspace Session metadata UI", () => {
     );
     const view = render(
       <QueryProvider useIsolatedClient>
-        <WorkspaceSessionHeader workspaceId="A" record={record()} />
+        <WorkspaceSessionHeader
+          viewControls={null}
+          onArchive={() => {}}
+          isArchiving={false}
+          workspaceId="A"
+          record={record()}
+        />
       </QueryProvider>,
     );
     try {
@@ -305,7 +318,13 @@ describe("Workspace Session metadata UI", () => {
     );
     const view = render(
       <QueryProvider useIsolatedClient>
-        <WorkspaceSessionHeader workspaceId="A" record={record()} />
+        <WorkspaceSessionHeader
+          viewControls={null}
+          onArchive={() => {}}
+          isArchiving={false}
+          workspaceId="A"
+          record={record()}
+        />
       </QueryProvider>,
     );
     try {

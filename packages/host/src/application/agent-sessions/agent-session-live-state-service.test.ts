@@ -761,6 +761,41 @@ describe("createAgentSessionLiveStateService", () => {
     expect(events).toMatchObject([{ type: "session_upsert", session: updated }]);
   });
 
+  test("publishes a failed status read on its scoped fault", async () => {
+    const { events, service } = createHarness();
+    const ref = sessionRef("session-1");
+
+    await Effect.runPromise(
+      mutateRegisteredAdapter(
+        service,
+        Effect.succeed({
+          value: undefined,
+          changes: [
+            {
+              type: "fault" as const,
+              repoPath: "/repo",
+              operation: "opencode-live-session.refresh-session",
+              message: "Session status read failed.",
+              ref,
+              statusUnavailable: true as const,
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(events).toEqual([
+      {
+        type: "fault",
+        repoPath: "/repo",
+        operation: "opencode-live-session.refresh-session",
+        message: "Session status read failed.",
+        ref,
+        statusUnavailable: true,
+      },
+    ]);
+  });
+
   test("publishes a scoped adapter fault with its exact live-session ref", async () => {
     const { events, faultLogs, service } = createHarness();
     const ref = sessionRef("session-1");

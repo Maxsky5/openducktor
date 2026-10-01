@@ -134,7 +134,7 @@ test("notification workspace selection keeps the draft on cancel and failure", a
 
   const queryClient = new QueryClient();
   const view = render(
-    <MemoryRouter initialEntries={["/chats?session=first"]}>
+    <MemoryRouter initialEntries={["/sessions?workspace=first&kind=workspace&session=first"]}>
       <QueryClientProvider client={queryClient}>
         <WorkspaceStateContext.Provider value={workspaceState}>
           <NotificationContext.Provider value={notificationContext}>

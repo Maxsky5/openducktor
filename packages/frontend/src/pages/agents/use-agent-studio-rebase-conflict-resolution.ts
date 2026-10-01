@@ -10,7 +10,7 @@ import type {
   SessionStartLaunchRequest,
   SessionStartWorkflowResult,
 } from "@/features/session-start";
-import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { matchesAgentSessionIdentity, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
 import { resolveAgentStudioBuilderSessionsForTask } from "./agents-page-selection";
@@ -108,7 +108,7 @@ export function useAgentStudioRebaseConflictResolution({
           scheduleQueryUpdate(
             buildAgentStudioSelectionQueryUpdate({
               taskId: view.taskId,
-              sessionExternalId: session.externalSessionId,
+              session: toAgentSessionIdentity(session),
               role: builderSession?.role ?? defaultBuilderSession?.role ?? "build",
             }),
           );

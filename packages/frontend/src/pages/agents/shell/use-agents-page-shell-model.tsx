@@ -31,18 +31,14 @@ type AgentsPageShellModel = {
   navigationPersistenceError: Error | null;
   chatSettingsLoadError: Error | null;
   gitProviderContextLoadError: Error | null;
-  activeTabValue: string;
   onRetryNavigationPersistence: () => void;
   onRetryChatSettingsLoad: () => void;
   onRetryGitProviderContext: () => void;
-  onTabValueChange: (value: string) => void;
-  taskTabsModel: ReturnType<
-    typeof useAgentStudioOrchestrationController
-  >["agentStudioTaskTabsModel"];
   rightPanelToggleModel: ReturnType<
     typeof useAgentStudioOrchestrationController
   >["rightPanel"]["rightPanelToggleModel"];
   hasSelectedTask: boolean;
+  unavailableTaskId: string | null;
   chatHeaderModel: AgentStudioHeaderModel;
   chatModel: ReturnType<typeof useAgentStudioOrchestrationController>["agentChatModel"];
   taskExecutionSelectedFilePreviewModel: ReturnType<
@@ -159,12 +155,16 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     resolveGitConflict: buildTools.gitActions.askBuilderToResolveGitConflict,
     isPanelOpen: orchestration.rightPanel.isPanelOpen,
   });
+  const mountedTaskIds = useMemo(
+    () => (selection.view.taskId ? [selection.view.taskId] : []),
+    [selection.view.taskId],
+  );
   const terminalPanel = useAgentStudioTerminals({
     workspaceId: activeWorkspaceId,
     repoPath: workspaceRepoPath,
     taskId: selection.view.taskId || null,
     taskVersion: selection.view.selectedTask?.updatedAt ?? null,
-    mountedTaskIds: selection.tabTaskIds,
+    mountedTaskIds,
   });
 
   const { isRightPanelVisible, rightPanelBridge, selectedFileRefresh } =
@@ -219,14 +219,15 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     navigationPersistenceError,
     chatSettingsLoadError: orchestration.chatSettingsLoadError,
     gitProviderContextLoadError: gitProvider.error,
-    activeTabValue: orchestration.activeTabValue,
     onRetryNavigationPersistence: retryNavigationPersistence,
     onRetryChatSettingsLoad: orchestration.retryChatSettingsLoad,
     onRetryGitProviderContext: gitProvider.retry,
-    onTabValueChange: selection.handleSelectTab,
-    taskTabsModel: orchestration.agentStudioTaskTabsModel,
     rightPanelToggleModel: orchestration.rightPanel.rightPanelToggleModel,
     hasSelectedTask: Boolean(selection.view.taskId),
+    unavailableTaskId:
+      tasksAreCurrent && !isForegroundLoadingTasks && !selection.view.selectedTask
+        ? selection.view.taskId || null
+        : null,
     chatHeaderModel: agentStudioHeaderModel,
     chatModel: orchestration.agentChatModel,
     chatFileLinkOwner,

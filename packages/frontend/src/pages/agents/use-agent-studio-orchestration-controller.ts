@@ -8,7 +8,6 @@ import type {
 } from "@openducktor/contracts";
 import { useMemo } from "react";
 import type {
-  AgentStudioTaskTabsModel,
   SessionStartModalModel,
   TaskExecutionSelectedFile,
   TaskExecutionSelectedFilePreviewModel,
@@ -105,8 +104,6 @@ type UseAgentStudioOrchestrationControllerResult = {
   retryChatSettingsLoad: () => void;
   humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
   sessionStartModal: SessionStartModalModel | null;
-  activeTabValue: string;
-  agentStudioTaskTabsModel: AgentStudioTaskTabsModel;
   agentStudioHeaderModel: ReturnType<typeof useAgentStudioPageModels>["agentStudioHeaderModel"];
   /** The page shell adds this action to the header while the git actions report a conflict. */
   gitConflictQuickAction: AgentStudioSelectedSessionContext["workflow"]["gitConflictQuickAction"];
@@ -119,22 +116,6 @@ type UseAgentStudioOrchestrationControllerResult = {
   onSelectTaskExecutionFile: (file: TaskExecutionSelectedFile) => void;
   startSessionRequest: ReturnType<typeof useAgentStudioSessionActions>["startSessionRequest"];
 };
-
-type AgentStudioPageModelsViewContext = Pick<
-  AgentStudioOrchestrationSelectionContext["view"],
-  "taskId"
->;
-
-type AgentStudioPageModelsTabsContext = Pick<
-  AgentStudioOrchestrationSelectionContext,
-  | "activeTaskTabId"
-  | "taskTabs"
-  | "availableTabTasks"
-  | "isLoadingTasks"
-  | "handleCreateTab"
-  | "handleCloseTab"
-  | "handleReorderTab"
->;
 
 type AgentStudioPageModelsSessionActionsContext = Parameters<
   typeof useAgentStudioPageModels
@@ -180,9 +161,7 @@ type AgentStudioPageModelsModelSelectionContext = Pick<
 >;
 
 type BuildAgentStudioPageModelsArgsInput = {
-  view: AgentStudioPageModelsViewContext;
   selectedSession: AgentStudioSelectedSessionContext;
-  tabs: AgentStudioPageModelsTabsContext;
   sessionActions: AgentStudioPageModelsSessionActionsContext;
   modelSelection: AgentStudioPageModelsModelSelectionContext;
   chatSettings: ChatSettings;
@@ -191,16 +170,13 @@ type BuildAgentStudioPageModelsArgsInput = {
 };
 
 export const buildAgentStudioPageModelsArgs = ({
-  view,
   selectedSession,
-  tabs,
   sessionActions,
   modelSelection,
   chatSettings,
   runtimeDefinitions,
   composer,
 }: BuildAgentStudioPageModelsArgsInput): Parameters<typeof useAgentStudioPageModels>[0] => {
-  const { activeTaskTabId, handleCreateTab, handleCloseTab, handleReorderTab, ...taskTabs } = tabs;
   const {
     handleSelectAgentProfile,
     handleSelectVariant,
@@ -210,14 +186,7 @@ export const buildAgentStudioPageModelsArgs = ({
   } = modelSelection;
 
   return {
-    activeTabValue: activeTaskTabId || view.taskId || "__agent_studio_empty__",
     selectedSession,
-    taskTabs: {
-      ...taskTabs,
-      onCreateTab: handleCreateTab,
-      onCloseTab: handleCloseTab,
-      onReorderTab: handleReorderTab,
-    },
     sessionActions,
     chatSettings,
     runtimeDefinitions,
@@ -247,16 +216,7 @@ export function useAgentStudioOrchestrationController({
 }: UseAgentStudioOrchestrationControllerArgs): UseAgentStudioOrchestrationControllerResult {
   const { saveAgentModelFavorites } = useWorkspaceStateContext();
   const agentModelFavoriteState = useAgentModelFavorites({ saveAgentModelFavorites });
-  const {
-    view,
-    activeTaskTabId,
-    taskTabs,
-    availableTabTasks,
-    isLoadingTasks,
-    handleCreateTab,
-    handleCloseTab,
-    handleReorderTab,
-  } = selection;
+  const { view } = selection;
   const selectedSession = view.selectedSession;
   const agentStudioReady = selectedSession.runtimeReadiness.state === "ready";
   const {
@@ -287,7 +247,7 @@ export function useAgentStudioOrchestrationController({
     selectionForNewSession,
     newSessionCatalog,
     selectedModelSelection,
-    isSelectedSessionModelSendable,
+    prepareSelectedSessionModelForSend,
     selectedModelDescriptor,
     isSelectionCatalogLoading,
     supportsProfiles,
@@ -373,7 +333,7 @@ export function useAgentStudioOrchestrationController({
     supportsAttachments,
     sessionsForTask: view.sessionsForTask,
     selectedTask: view.selectedTask,
-    isSelectedSessionModelSendable,
+    prepareSelectedSessionModelForSend,
     agentStudioReady,
     isActiveTaskReady: view.isTaskReady,
     selectionForNewSession,
@@ -439,19 +399,7 @@ export function useAgentStudioOrchestrationController({
   );
 
   const pageModelsArgs = buildAgentStudioPageModelsArgs({
-    view: {
-      taskId: view.taskId,
-    },
     selectedSession: selectedSessionContext,
-    tabs: {
-      activeTaskTabId,
-      taskTabs,
-      availableTabTasks,
-      isLoadingTasks,
-      handleCreateTab,
-      handleCloseTab,
-      handleReorderTab,
-    },
     sessionActions: {
       openTaskDetails: actions.openTaskDetails,
       isStarting,
@@ -519,13 +467,8 @@ export function useAgentStudioOrchestrationController({
     composer,
   });
 
-  const {
-    activeTabValue,
-    agentStudioTaskTabsModel,
-    agentStudioHeaderModel,
-    taskExecutionDocumentPanelModel,
-    agentChatModel,
-  } = useAgentStudioPageModels(pageModelsArgs);
+  const { agentStudioHeaderModel, taskExecutionDocumentPanelModel, agentChatModel } =
+    useAgentStudioPageModels(pageModelsArgs);
 
   const {
     canShowPullRequestReview,
@@ -553,8 +496,6 @@ export function useAgentStudioOrchestrationController({
     retryChatSettingsLoad,
     humanReviewFeedbackModal,
     sessionStartModal,
-    activeTabValue,
-    agentStudioTaskTabsModel,
     agentStudioHeaderModel,
     gitConflictQuickAction: selectedSessionContext.workflow.gitConflictQuickAction,
     taskExecutionDocumentPanelModel,

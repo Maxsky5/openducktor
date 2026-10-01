@@ -1,5 +1,5 @@
 import type { AgentModelCatalog, AgentRole } from "@openducktor/core";
-import { findCatalogModel } from "@/lib/model-catalog-selection";
+import { agentModelInfoParts } from "@/lib/agent-model-presentation";
 import { isFinalAssistantChatMessage } from "@/state/operations/agent-orchestrator/support/messages";
 import { SYSTEM_PROMPT_PREFIX } from "@/state/operations/agent-orchestrator/support/session-prompt";
 import { AGENT_ROLE_LABELS } from "@/types";
@@ -78,43 +78,5 @@ export const getAssistantFooterData = (
     return { infoParts: [] } satisfies { infoParts: string[] };
   }
 
-  const assistantMeta = message.meta;
-  const parts: string[] = [];
-
-  const agentLabel = assistantMeta.profileId;
-  if (agentLabel !== undefined && agentLabel.trim().length > 0) {
-    parts.push(agentLabel.trim());
-  }
-
-  const providerLabel = assistantMeta.providerId;
-  const modelLabel = assistantMeta.modelId;
-  const catalogModel =
-    modelCatalog &&
-    providerLabel !== undefined &&
-    providerLabel.trim().length > 0 &&
-    modelLabel !== undefined &&
-    modelLabel.trim().length > 0
-      ? findCatalogModel(modelCatalog, {
-          providerId: providerLabel.trim(),
-          modelId: modelLabel.trim(),
-        })
-      : null;
-  const displayedModelLabel = catalogModel?.modelName ?? modelLabel;
-  const providerModelParts: string[] = [];
-  for (const value of [providerLabel, displayedModelLabel]) {
-    if (value !== undefined && value.trim().length > 0) {
-      providerModelParts.push(value.trim());
-    }
-  }
-  const providerModelLabel = providerModelParts.join("/");
-  if (providerModelLabel.length > 0) {
-    parts.push(providerModelLabel);
-  }
-
-  const variantLabel = assistantMeta.variant;
-  if (variantLabel !== undefined && variantLabel.trim().length > 0) {
-    parts.push(variantLabel.trim());
-  }
-
-  return { infoParts: parts } satisfies { infoParts: string[] };
+  return { infoParts: agentModelInfoParts(message.meta, modelCatalog) };
 };

@@ -86,6 +86,15 @@ const historyHarness = async (
                 calls.push(request);
                 return [];
               }),
+            loadSessionMetadata: (request) =>
+              Effect.sync(() => {
+                calls.push(request);
+                const { repoPath, runtimeKind, workingDirectory, externalSessionId } = request;
+                return {
+                  ref: { repoPath, runtimeKind, workingDirectory, externalSessionId },
+                  lastActivityAt: 1_790_000_000_000,
+                };
+              }),
           },
         },
       ),
@@ -153,6 +162,26 @@ for (const rootKind of ["default", "configured", "legacy"] as const) {
     expect(h.calls).toEqual([h.input]);
   });
 }
+
+test("reads owned session metadata after removal of its worktree", async () => {
+  const h = await historyHarness();
+  await rm(h.managedRoot, { recursive: true });
+  const { runtimePolicy: _runtimePolicy, ...metadataInput } = h.input;
+  const metadata = await Effect.runPromise(h.service.loadSessionMetadata(metadataInput));
+  expect(metadata.lastActivityAt).toBe(1_790_000_000_000);
+  expect(h.calls).toEqual([metadataInput]);
+
+  const failure = await Effect.runPromise(
+    Effect.flip(
+      h.service.loadSessionMetadata({
+        ...metadataInput,
+        sessionScope: { ...metadataInput.sessionScope, role: "qa" },
+      }),
+    ),
+  );
+  expect(failure.failure.code).toBe("scope_mismatch");
+  expect(h.calls).toHaveLength(1);
+});
 
 test("checks task, role, session, and directory ownership before reading removed-worktree history", async () => {
   const h = await historyHarness();

@@ -10,6 +10,7 @@ import {
   restoreNavigationFromWorkspaceState,
 } from "./agent-studio-navigation";
 import { useNavigationUrlSync } from "./use-navigation-url-sync";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 
 type UseAgentStudioQuerySyncArgs = {
   activeWorkspaceId: string | null;
@@ -147,6 +148,7 @@ export function useAgentStudioQuerySync({
   return {
     taskIdParam: navigation.taskId,
     sessionExternalIdParam: navigation.sessionExternalId,
+    sessionIdentityParam: navigation.sessionIdentity,
     hasExplicitRoleParam,
     roleFromQuery,
     isWorkspaceRestorePending,
@@ -157,6 +159,7 @@ export function useAgentStudioQuerySync({
   } satisfies {
     taskIdParam: string;
     sessionExternalIdParam: string | null;
+    sessionIdentityParam: AgentSessionIdentity | null;
     hasExplicitRoleParam: boolean;
     roleFromQuery: AgentRole;
     isWorkspaceRestorePending: boolean;

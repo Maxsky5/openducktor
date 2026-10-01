@@ -7,6 +7,7 @@ import type {
   LoadAgentFileStatusInput,
   LoadAgentSessionDiffInput,
   LoadAgentSessionHistoryInput,
+  LoadAgentSessionMetadataInput,
   LoadAgentSessionTodosInput,
   SearchAgentFilesInput,
 } from "@openducktor/core";
@@ -62,6 +63,15 @@ export class HostAgentRuntimeQueryClient {
 
   agentRuntimeLoadSessionDiff(input: LoadAgentSessionDiffInput) {
     const contract = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.loadSessionDiff;
+    return this.invokeFn(
+      contract.command,
+      { input: contract.inputSchema.parse(input) },
+      contract.responseSchema,
+    );
+  }
+
+  agentRuntimeLoadSessionMetadata(input: LoadAgentSessionMetadataInput) {
+    const contract = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.loadSessionMetadata;
     return this.invokeFn(
       contract.command,
       { input: contract.inputSchema.parse(input) },

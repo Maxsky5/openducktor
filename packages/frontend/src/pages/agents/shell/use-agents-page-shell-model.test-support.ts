@@ -1,6 +1,5 @@
 import type { AgentChatModel } from "@/components/features/agents/agent-chat";
 import type { AgentStudioHeaderModel } from "@/components/features/agents/agent-studio-header";
-import type { AgentStudioTaskTabsModel } from "@/components/features/agents/agent-studio-task-tabs";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 
 export const createAgentChatModelFixture = (): AgentChatModel => {
@@ -117,16 +116,6 @@ export const createAgentChatModelFixture = (): AgentChatModel => {
     },
   };
 };
-
-export const createAgentStudioTaskTabsModelFixture = (): AgentStudioTaskTabsModel => ({
-  tabs: [],
-  availableTabTasks: [],
-  isLoadingAvailableTabTasks: false,
-  onCreateTab: () => {},
-  onCloseTab: () => {},
-  onReorderTab: () => {},
-  agentStudioReady: true,
-});
 
 export const createAgentStudioHeaderModelFixture = (): AgentStudioHeaderModel => ({
   taskTitle: "Task 1",

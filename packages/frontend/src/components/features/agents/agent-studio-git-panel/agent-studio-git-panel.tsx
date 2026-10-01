@@ -220,6 +220,9 @@ function getGitInfoHeaderProps(
   if (model.onUpdateTargetBranch) {
     props.onUpdateTargetBranch = model.onUpdateTargetBranch;
   }
+  if (model.repositoryBranchControl) {
+    props.repositoryBranchControl = model.repositoryBranchControl;
+  }
   return props;
 }
 

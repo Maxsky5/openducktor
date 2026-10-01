@@ -51,15 +51,35 @@ export const createAgentSessionViewSync = ({
         )
       : [];
     await queryClient.cancelQueries({ queryKey: agentSessionQueryKeys.all, exact: false });
-    queryClient.removeQueries({ queryKey: agentSessionQueryKeys.all, exact: false });
+    // A view can observe the lists of an inactive workspace, such as the session sidebar in
+    // all-workspaces scope. Those lists refetch; every other list reloads when it is next read.
+    const observedInactiveLists = queryClient
+      .getQueryCache()
+      .findAll({ queryKey: agentSessionQueryKeys.all, exact: false, type: "active" })
+      .filter((query) => query.queryKey[1] === "list" && query.queryKey[2] !== activeRepoPath);
+    const observedInactiveListSet = new Set(observedInactiveLists);
+    queryClient.removeQueries({
+      queryKey: agentSessionQueryKeys.all,
+      exact: false,
+      predicate: (query) => !observedInactiveListSet.has(query),
+    });
+    const inactiveRefetches = Promise.all(
+      observedInactiveLists.map((query) =>
+        queryClient.refetchQueries({ queryKey: query.queryKey, exact: true }),
+      ),
+    );
     if (!activeRepoPath) {
+      await inactiveRefetches;
       return;
     }
     removeTaskSessions(activeRepoPath, removedTaskIds);
-    await loadAgentSessionListsFromQuery(queryClient, activeRepoPath, taskIds, {
-      forceFresh: true,
-      readPort,
-    });
+    await Promise.all([
+      inactiveRefetches,
+      loadAgentSessionListsFromQuery(queryClient, activeRepoPath, taskIds, {
+        forceFresh: true,
+        readPort,
+      }),
+    ]);
     await refreshLiveSessions(activeRepoPath);
   },
 });

@@ -343,8 +343,6 @@ const runRuntimeEventTransport = async (
       sessionInput: makeSessionInput(),
       client,
       startedAt: "2026-02-22T12:00:00.000Z",
-      startedMessage: "Started",
-      emitStartedEvent: false,
       now: () => "2026-02-22T12:00:00.000Z",
       emit: (_externalSessionId, event) => {
         emitted.push(event);

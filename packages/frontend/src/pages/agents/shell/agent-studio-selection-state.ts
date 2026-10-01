@@ -1,9 +1,10 @@
 import type { AgentRole } from "@openducktor/core";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import {
   AGENT_STUDIO_QUERY_KEYS,
   type AgentStudioQueryUpdate,
+  sessionQueryUpdate,
 } from "../query-sync/agent-studio-navigation";
 
 export type AgentStudioSelectionState = {
@@ -37,6 +38,14 @@ export const agentStudioSelectionQueryKey = (selection: AgentStudioSelectionStat
     selection.hasExplicitRoleSelection ? selection.role : "",
     selection.hasExplicitRoleSelection ? "role:explicit" : "role:derived",
   ].join("\u001f");
+
+/** The selection key with the session identity, so two sessions with one external ID differ. */
+export const agentStudioSelectionRouteKey = (selection: AgentStudioSelectionState): string => {
+  const queryKey = agentStudioSelectionQueryKey(selection);
+  return selection.sessionIdentity
+    ? `${queryKey}\u001f${agentSessionIdentityKey(selection.sessionIdentity)}`
+    : queryKey;
+};
 
 export const createAgentStudioRouteSelectionState = ({
   isWorkspaceRestorePending,
@@ -107,8 +116,10 @@ export const buildAgentStudioSelectionQueryUpdateFromState = (
 ) =>
   ({
     [AGENT_STUDIO_QUERY_KEYS.task]: selection.taskId || undefined,
-    [AGENT_STUDIO_QUERY_KEYS.session]:
-      agentStudioSelectionSessionExternalId(selection) ?? undefined,
+    ...sessionQueryUpdate(
+      agentStudioSelectionSessionExternalId(selection),
+      selection.sessionIdentity,
+    ),
     [AGENT_STUDIO_QUERY_KEYS.agent]: selection.hasExplicitRoleSelection
       ? selection.role
       : undefined,

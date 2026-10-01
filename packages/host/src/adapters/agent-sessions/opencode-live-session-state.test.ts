@@ -36,8 +36,40 @@ const createState = () => {
 type LiveState = ReturnType<typeof createState>;
 type SessionSources = Parameters<LiveState["applySessionSources"]>[1]["sources"];
 
+type SessionLocation = { externalSessionId: string; workingDirectory: string };
+
 const applySources = (state: LiveState, sources: SessionSources) =>
-  state.applySessionSources(REPO, { sources, failures: [] }, state.versions());
+  state.applySessionSources(REPO, { sources, failures: [] }, state.readStart());
+
+const statusFailure = (ref: SessionLocation) => ({
+  repoPath: REPO,
+  externalSessionId: ref.externalSessionId,
+  workingDirectory: ref.workingDirectory,
+  message: "status failed",
+});
+
+const failStatusRead = (state: LiveState, ref: SessionLocation) =>
+  state.applySessionSources(
+    REPO,
+    { sources: [], failures: [statusFailure(ref)] },
+    state.readStart(),
+  );
+
+const sourceFor = (
+  ref: SessionLocation,
+  overrides: Partial<SessionSources[number]> = {},
+): SessionSources[number] => ({
+  repoPath: REPO,
+  externalSessionId: ref.externalSessionId,
+  workingDirectory: ref.workingDirectory,
+  sessionAssociation: summary(ref.externalSessionId).sessionAssociation,
+  title: "OpenDucktor session",
+  startedAt: "2026-07-16T10:01:00.000Z",
+  runtimeActivity: "running",
+  pendingApprovals: [],
+  pendingQuestions: [],
+  ...overrides,
+});
 
 describe("OpenCode host live-session state", () => {
   test("starts empty and adds a session from an OpenDucktor control result", () => {
@@ -326,7 +358,7 @@ describe("OpenCode host live-session state", () => {
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
     });
     const parentRef = state.listSnapshots()[0]!.ref;
-    const readVersions = state.versions();
+    const readStart = state.readStart();
     state.applyEvent(parentRef, {
       type: "approval_required",
       externalSessionId: "parent",
@@ -340,7 +372,7 @@ describe("OpenCode host live-session state", () => {
       mutation: "mutating",
     });
 
-    expect(state.applySessionSources(REPO, { sources: [], failures: [] }, readVersions)).toEqual([
+    expect(state.applySessionSources(REPO, { sources: [], failures: [] }, readStart)).toEqual([
       { type: "session_removed", ref: parentRef, provenance: "baseline" },
     ]);
     const child = state.listSnapshots()[0]!;
@@ -366,34 +398,274 @@ describe("OpenCode host live-session state", () => {
     if (!parentRef) {
       throw new Error("Expected a live OpenDucktor parent.");
     }
+    const message = `Failed to refresh OpenCode session 'parent' in '${parentRef.workingDirectory}': status failed`;
 
-    expect(
-      state.applySessionSources(
-        REPO,
-        {
-          sources: [],
-          failures: [
-            {
-              repoPath: REPO,
-              externalSessionId: parentRef.externalSessionId,
-              workingDirectory: parentRef.workingDirectory,
-              message: "status failed",
-            },
-          ],
-        },
-        state.versions(),
-      ),
-    ).toEqual([
+    expect(failStatusRead(state, parentRef)).toEqual([
+      {
+        type: "session_upsert",
+        provenance: "baseline",
+        snapshot: expect.objectContaining({
+          ref: parentRef,
+          activity: "running",
+          statusUnavailableReason: message,
+        }),
+      },
       {
         type: "fault",
         repoPath: REPO,
         ref: parentRef,
         provenance: "baseline",
         operation: "opencode-live-session.refresh-session",
-        message: `Failed to refresh OpenCode session 'parent' in '${parentRef.workingDirectory}': status failed`,
+        message,
+        statusUnavailable: true,
       },
     ]);
     expect(state.listSnapshots()).toHaveLength(1);
+  });
+
+  test("keeps a failed status read through context and title updates", () => {
+    const state = createState();
+    state.applyControlSummary(REPO, summary("parent"));
+    const parentRef = state.listSnapshots()[0]?.ref;
+    if (!parentRef) {
+      throw new Error("Expected a live OpenDucktor parent.");
+    }
+    failStatusRead(state, parentRef);
+
+    expect(state.setContext("parent", { totalTokens: 84 })).toEqual([
+      {
+        type: "session_upsert",
+        snapshot: expect.objectContaining({ statusUnavailableReason: expect.any(String) }),
+      },
+    ]);
+    state.applyControlSummary(
+      REPO,
+      { ...summary("parent"), title: "Renamed" },
+      { keepActivity: true },
+    );
+    expect(state.listSnapshots()[0]).toMatchObject({
+      title: "Renamed",
+      statusUnavailableReason: expect.any(String),
+    });
+  });
+
+  test("reports recovery when an unchanged status read succeeds after a failure", () => {
+    const state = createState();
+    state.applyControlSummary(REPO, summary("parent"));
+    const parentRef = state.listSnapshots()[0]?.ref;
+    if (!parentRef) {
+      throw new Error("Expected a live OpenDucktor parent.");
+    }
+    const sameSource = sourceFor(parentRef);
+    expect(applySources(state, [sameSource])).toEqual([]);
+    failStatusRead(state, parentRef);
+
+    const recovered = applySources(state, [sameSource]);
+
+    expect(recovered).toEqual([
+      {
+        type: "session_upsert",
+        provenance: "baseline",
+        snapshot: expect.objectContaining({ activity: "running" }),
+      },
+    ]);
+    expect(
+      recovered[0]?.type === "session_upsert" ? recovered[0].snapshot : null,
+    ).not.toHaveProperty("statusUnavailableReason");
+  });
+
+  test("clears a failed status read when a live status event arrives", () => {
+    const state = createState();
+    state.applyControlSummary(REPO, summary("parent"));
+    const parentRef = state.listSnapshots()[0]?.ref;
+    if (!parentRef) {
+      throw new Error("Expected a live OpenDucktor parent.");
+    }
+    failStatusRead(state, parentRef);
+
+    state.applyEvent(parentRef, {
+      type: "session_idle",
+      externalSessionId: "parent",
+      timestamp: "2026-07-16T10:05:00.000Z",
+    });
+
+    expect(state.listSnapshots()[0]).toMatchObject({ activity: "idle" });
+    expect(state.listSnapshots()[0]).not.toHaveProperty("statusUnavailableReason");
+  });
+
+  test("marks a failed status read that overlaps a context update", () => {
+    const state = createState();
+    state.applyControlSummary(REPO, summary("parent"));
+    const parentRef = state.listSnapshots()[0]?.ref;
+    if (!parentRef) {
+      throw new Error("Expected a live OpenDucktor parent.");
+    }
+    const readStart = state.readStart();
+    state.setContext("parent", { totalTokens: 84 });
+
+    const changes = state.applySessionSources(
+      REPO,
+      { sources: [], failures: [statusFailure(parentRef)] },
+      readStart,
+    );
+
+    expect(changes.map((change) => change.type)).toEqual(["session_upsert", "fault"]);
+    expect(state.listSnapshots()[0]).toMatchObject({
+      activity: "running",
+      contextUsage: { totalTokens: 84 },
+      statusUnavailableReason: expect.any(String),
+    });
+  });
+
+  test("keeps workflow scope, context, and title when a recovery read sets only status", () => {
+    const state = createState();
+    state.applyControlSummary(REPO, {
+      ...summary("parent"),
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+    });
+    const parentRef = state.listSnapshots()[0]?.ref;
+    if (!parentRef) {
+      throw new Error("Expected a live OpenDucktor parent.");
+    }
+    failStatusRead(state, parentRef);
+    const readStart = state.readStart();
+    state.setContext("parent", { totalTokens: 84 });
+    state.applyControlSummary(
+      REPO,
+      {
+        ...summary("parent"),
+        title: "Renamed",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+      },
+      { keepActivity: true },
+    );
+
+    const changes = state.applySessionSources(
+      REPO,
+      { sources: [sourceFor(parentRef, { runtimeActivity: "idle" })], failures: [] },
+      readStart,
+    );
+
+    expect(changes).toEqual([
+      {
+        type: "session_upsert",
+        provenance: "baseline",
+        snapshot: expect.objectContaining({
+          activity: "idle",
+          title: "Renamed",
+          contextUsage: { totalTokens: 84 },
+        }),
+      },
+    ]);
+    expect(state.listSnapshots()[0]).not.toHaveProperty("statusUnavailableReason");
+
+    state.applyEvent(parentRef, {
+      type: "approval_required",
+      externalSessionId: "parent",
+      timestamp: "2026-07-16T10:06:00.000Z",
+      requestId: "write-1",
+      requestType: "file_change",
+      title: "Edit file",
+      action: { name: "write" },
+      mutation: "mutating",
+    });
+    const requestId = state.listSnapshots()[0]!.pendingApprovals[0]!.requestId;
+    const route = state.requirePendingRoute(parentRef, requestId, "approval");
+    expect(() => state.assertApprovalAllowed(route, "approve_once")).toThrow(
+      "The qa role cannot approve this OpenCode operation.",
+    );
+    expect(() => state.assertApprovalAllowed(route, "reject")).not.toThrow();
+  });
+
+  test("keeps pending input that a live event resolved during a status read", () => {
+    const state = createState();
+    state.applyControlSummary(REPO, summary("parent"));
+    const parentRef = state.listSnapshots()[0]?.ref;
+    if (!parentRef) {
+      throw new Error("Expected a live OpenDucktor parent.");
+    }
+    const approval = {
+      requestId: "native-approval-1",
+      requestType: "command_execution" as const,
+      title: "Run command",
+    };
+    state.applyEvent(parentRef, {
+      type: "approval_required",
+      externalSessionId: "parent",
+      timestamp: "2026-07-16T10:02:00.000Z",
+      ...approval,
+    });
+    const readStart = state.readStart();
+    state.applyEvent(parentRef, {
+      type: "approval_resolved",
+      externalSessionId: "parent",
+      timestamp: "2026-07-16T10:03:00.000Z",
+      requestId: approval.requestId,
+    });
+
+    state.applySessionSources(
+      REPO,
+      { sources: [sourceFor(parentRef, { pendingApprovals: [approval] })], failures: [] },
+      readStart,
+    );
+
+    expect(state.listSnapshots()[0]).toMatchObject({ activity: "running", pendingApprovals: [] });
+    expect(() => state.requirePendingRoute(parentRef, "opaque-1", "approval")).toThrow();
+  });
+
+  test("ignores a status read that overlaps a live status event that changes nothing", () => {
+    const state = createState();
+    state.applyControlSummary(REPO, summary("parent"));
+    const parentRef = state.listSnapshots()[0]?.ref;
+    if (!parentRef) {
+      throw new Error("Expected a live OpenDucktor parent.");
+    }
+    const readStart = state.readStart();
+    expect(
+      state.applyEvent(parentRef, {
+        type: "session_status",
+        externalSessionId: "parent",
+        timestamp: "2026-07-16T10:02:00.000Z",
+        status: { type: "busy", message: null },
+      }),
+    ).toEqual([]);
+
+    expect(
+      state.applySessionSources(
+        REPO,
+        { sources: [sourceFor(parentRef, { runtimeActivity: "idle" })], failures: [] },
+        readStart,
+      ),
+    ).toEqual([]);
+    expect(
+      state.applySessionSources(
+        REPO,
+        { sources: [], failures: [statusFailure(parentRef)] },
+        readStart,
+      ),
+    ).toEqual([expect.objectContaining({ type: "fault", statusUnavailable: true })]);
+    expect(state.listSnapshots()[0]).toMatchObject({ activity: "running" });
+    expect(state.listSnapshots()[0]).not.toHaveProperty("statusUnavailableReason");
+  });
+
+  test("ignores an older status read that completes after a newer read", () => {
+    const state = createState();
+    state.applyControlSummary(REPO, summary("parent"));
+    const parentRef = state.listSnapshots()[0]?.ref;
+    if (!parentRef) {
+      throw new Error("Expected a live OpenDucktor parent.");
+    }
+    const olderStart = state.readStart();
+    applySources(state, [sourceFor(parentRef, { runtimeActivity: "idle" })]);
+
+    expect(
+      state.applySessionSources(
+        REPO,
+        { sources: [sourceFor(parentRef, { runtimeActivity: "running" })], failures: [] },
+        olderStart,
+      ),
+    ).toEqual([]);
+    expect(state.listSnapshots()[0]).toMatchObject({ activity: "idle" });
   });
 
   test("keeps parent lineage from the runtime list", () => {

@@ -1,12 +1,15 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { ArrowLeft, Flag, Loader2, RotateCcw, Sparkles, WandSparkles } from "lucide-react";
-import { lazy, type ReactElement, Suspense } from "react";
+import { lazy, type ReactElement, Suspense, useRef } from "react";
 import { IssueTypeGrid } from "@/components/features/task-composer/issue-type-grid";
 import { TaskComposerStepper } from "@/components/features/task-composer/task-composer-stepper";
 import { TaskDetailsForm } from "@/components/features/task-composer/task-details-form";
 import { TaskEditSectionSwitcher } from "@/components/features/task-composer/task-edit-section-switcher";
 import { TaskCreateDiscardDialog } from "@/components/features/task-create/task-create-discard-dialog";
-import { useTaskCreateModalController } from "@/components/features/task-create/use-task-create-modal-controller";
+import {
+  type TaskCreateDestination,
+  useTaskCreateModalController,
+} from "@/components/features/task-create/use-task-create-modal-controller";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -29,6 +32,7 @@ type TaskCreateModalProps = {
   onOpenChange: (open: boolean) => void;
   tasks: TaskCard[];
   task?: TaskCard | null;
+  destination?: TaskCreateDestination | null;
 };
 
 type TaskCreateModalController = ReturnType<typeof useTaskCreateModalController>;
@@ -163,6 +167,7 @@ function TaskSubmitFooterActions({
         disabled={
           controller.isFormDisabled ||
           controller.hasExternalTaskConflict ||
+          controller.destinationError !== null ||
           !controller.state.title.trim()
         }
       >
@@ -280,22 +285,41 @@ function TaskCreateModalSectionContent({
   );
 }
 
+const createDescription = (destination: TaskCreateDestination | null): string =>
+  destination
+    ? `Create a task in ${destination.workspaceName} with the fields Planner and Builder rely on.`
+    : "Create a structured task with the fields Planner and Builder rely on.";
+
 export function TaskCreateModal({
   open,
   onOpenChange,
   tasks,
   task = null,
+  destination = null,
 }: TaskCreateModalProps): ReactElement {
+  const openerRef = useRef<HTMLElement | null>(null);
   const controller = useTaskCreateModalController({
     open,
     onOpenChange,
     tasks,
     task,
+    destination,
   });
   return (
     <>
       <Dialog open={open} onOpenChange={controller.onDialogOpenChange}>
-        <DialogContent className="grid max-h-[92vh] max-w-6xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-0">
+        <DialogContent
+          className="grid max-h-[92vh] max-w-6xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-0"
+          onOpenAutoFocus={() => {
+            openerRef.current =
+              document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            if (!document.activeElement?.closest('[role="dialog"][data-state="open"]'))
+              openerRef.current?.focus();
+          }}
+        >
           <DialogHeader className="border-b border-border px-5 py-4">
             <DialogTitle className="flex items-center gap-2 text-2xl">
               <Sparkles className="size-5 text-primary" />
@@ -303,7 +327,7 @@ export function TaskCreateModal({
             </DialogTitle>
             <DialogDescription>
               {controller.mode === "create"
-                ? "Create a structured task with the fields Planner and Builder rely on."
+                ? createDescription(controller.destination)
                 : `Update ${task?.id ?? "task"} metadata and long-form markdown documents.`}
             </DialogDescription>
           </DialogHeader>

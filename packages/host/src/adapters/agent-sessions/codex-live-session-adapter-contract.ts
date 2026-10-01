@@ -31,6 +31,7 @@ export type CodexSessionController = Pick<
   | "searchFiles"
   | "loadSessionHistory"
   | "loadSessionTodos"
+  | "loadSessionMetadata"
   | "loadFileStatus"
   | "resolveGeneratedImageSource"
   | "beginGeneratedImageBatch"

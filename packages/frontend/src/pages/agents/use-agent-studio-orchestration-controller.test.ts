@@ -22,9 +22,6 @@ import {
 
 type BuildArgs = Parameters<typeof buildAgentStudioPageModelsArgs>[0];
 
-const onCreateTab = () => {};
-const onCloseTab = () => {};
-const onReorderTab = () => {};
 const handleSelectAgentProfile = () => {};
 const handleSelectVariant = () => {};
 const createBaseArgs = (): BuildArgs => {
@@ -75,9 +72,6 @@ const createBaseArgs = (): BuildArgs => {
   };
 
   return {
-    view: {
-      taskId: "task-1",
-    },
     selectedSession: buildAgentStudioSelectedSessionContext({
       taskId: "task-1",
       role: "planner",
@@ -115,15 +109,6 @@ const createBaseArgs = (): BuildArgs => {
       sessionActions,
       roleLabelByRole: buildRoleLabelByRole(ROLE_OPTIONS),
     }),
-    tabs: {
-      activeTaskTabId: "task-1",
-      taskTabs: [],
-      availableTabTasks: [task],
-      isLoadingTasks: false,
-      handleCreateTab: onCreateTab,
-      handleCloseTab: onCloseTab,
-      handleReorderTab: onReorderTab,
-    },
     sessionActions,
     modelSelection: {
       selectedModelSelection: null,
@@ -208,14 +193,10 @@ describe("buildAgentStudioPageModelsArgs", () => {
     }
     const mapped = buildAgentStudioPageModelsArgs(baseArgs);
 
-    expect(mapped.activeTabValue).toBe("task-1");
     expect(mapped.selectedSession.role).toBe("planner");
     expect(mapped.selectedSession.selectedSession.transcriptState).toEqual({
       kind: "visible",
     });
-    expect(mapped.taskTabs.onCreateTab).toBe(onCreateTab);
-    expect(mapped.taskTabs.onCloseTab).toBe(onCloseTab);
-    expect(mapped.taskTabs.onReorderTab).toBe(onReorderTab);
     expect(mapped.selectedSession.documents.activeDocument?.document.markdown).toBe("# doc");
     expect(mapped.selectedSession.selectedSession.runtimeReadiness.state).toBe("ready");
     expect(mapped.modelSelection.onSelectAgent).toBe(handleSelectAgentProfile);
@@ -231,42 +212,6 @@ describe("buildAgentStudioPageModelsArgs", () => {
     ).toBe(`workspace-repo:task-1:planner:${agentSessionIdentityKey(sessionIdentity)}`);
   });
 
-  test("derives activeTabValue from tab id, task id, then empty sentinel", () => {
-    const baseArgs = createBaseArgs();
-    const withActiveTab = buildAgentStudioPageModelsArgs({
-      ...baseArgs,
-      tabs: {
-        ...baseArgs.tabs,
-        activeTaskTabId: "task-tab-2",
-      },
-    });
-    const withTaskFallback = buildAgentStudioPageModelsArgs({
-      ...baseArgs,
-      tabs: {
-        ...baseArgs.tabs,
-        activeTaskTabId: "",
-      },
-    });
-    const withEmptyFallback = buildAgentStudioPageModelsArgs({
-      ...baseArgs,
-      selectedSession: {
-        ...baseArgs.selectedSession,
-        taskId: "",
-      },
-      view: {
-        ...baseArgs.view,
-        taskId: "",
-      },
-      tabs: {
-        ...baseArgs.tabs,
-        activeTaskTabId: "",
-      },
-    });
-
-    expect(withActiveTab.activeTabValue).toBe("task-tab-2");
-    expect(withTaskFallback.activeTabValue).toBe("task-1");
-    expect(withEmptyFallback.activeTabValue).toBe("__agent_studio_empty__");
-  });
   test("forwards selected-session runtime state without recomputing it", () => {
     const baseArgs = createBaseArgs();
     const failed = buildAgentStudioPageModelsArgs({

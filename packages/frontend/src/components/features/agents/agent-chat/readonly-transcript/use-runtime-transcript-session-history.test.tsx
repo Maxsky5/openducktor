@@ -67,7 +67,7 @@ const operations = (
   sendAgentMessage: async () => undefined,
   stopAgentSession: async () => undefined,
   continueInterruptedTurn: async () => undefined,
-  updateAgentSessionModel: () => undefined,
+  updateAgentSessionModel: async () => undefined,
   replyAgentApproval: async () => undefined,
   answerAgentQuestion: async () => undefined,
 });

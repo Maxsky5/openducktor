@@ -1,6 +1,7 @@
 import type {
   AgentSessionContextUsage,
   AgentSessionControlUpdateTitleInput,
+  AgentSessionMetadata,
   FileDiff,
   FileStatus,
 } from "@openducktor/contracts";
@@ -19,6 +20,7 @@ import type {
   LoadAgentFileStatusInput,
   LoadAgentSessionDiffInput,
   LoadAgentSessionHistoryInput,
+  LoadAgentSessionMetadataInput,
   LoadAgentSessionTodosInput,
   ReplyApprovalInput,
   ReplyQuestionInput,
@@ -88,6 +90,9 @@ export type ClaudeAgentSdkService = {
   loadSessionTodos(
     input: LoadAgentSessionTodosInput,
   ): Effect.Effect<AgentSessionTodoItem[], ClaudeAgentSdkServiceError>;
+  loadSessionMetadata(
+    input: LoadAgentSessionMetadataInput,
+  ): Effect.Effect<AgentSessionMetadata, ClaudeAgentSdkServiceError>;
   loadSessionContextUsage(
     input: LoadAgentSessionHistoryInput,
   ): Effect.Effect<AgentSessionContextUsage | null, ClaudeAgentSdkServiceError>;

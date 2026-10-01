@@ -3,6 +3,8 @@
 @import "./components/ui/popover.css";
 @import "./components/ui/sheet.css";
 @import "./components/ui/tooltip.css";
+@import "./components/ui/icon-swap.css";
+@import "./components/layout/sidebar/session-navigation.css";
 @source "./";
 @custom-variant dark (&:where(.dark, .dark *));
 @plugin "@tailwindcss/typography";
@@ -71,13 +73,20 @@
   --success-border: oklch(0.748 0.15 164.295); /* ~emerald-300 */
   --success-muted: oklch(0.448 0.119 151.328); /* ~emerald-800 */
   --success-accent: oklch(0.596 0.145 163.225); /* ~emerald-500 */
+  --success-icon: color-mix(in oklch, var(--success-accent) 80%, var(--success-muted));
   --success-ring: oklch(0.692 0.138 162.345); /* ~emerald-400 */
 
   /* warning = amber */
   --warning-surface: oklch(0.962 0.059 95.617); /* ~amber-50 */
   --warning-surface-foreground: oklch(0.278 0.077 45.635); /* ~amber-900 */
   --warning-border: oklch(0.792 0.16 80.331); /* ~amber-300 */
-  --warning-muted: oklch(0.555 0.163 48.998); /* ~amber-700 */
+  --warning-surface-hover: color-mix(in oklch, var(--warning-surface) 88%, var(--warning-border));
+  --warning-surface-selected: color-mix(
+    in oklch,
+    var(--warning-surface) 70%,
+    var(--warning-border)
+  );
+  --warning-muted: oklch(0.473 0.137 46.201); /* ~amber-800 */
   --warning-accent: oklch(0.666 0.179 58.318); /* ~amber-500 */
   --warning-ring: oklch(0.746 0.16 66.29); /* ~amber-400 */
 
@@ -85,6 +94,8 @@
   --info-surface: oklch(0.951 0.026 236.824); /* ~sky-50 */
   --info-surface-foreground: oklch(0.283 0.066 243.157); /* ~sky-900 */
   --info-border: oklch(0.733 0.121 230.318); /* ~sky-300 */
+  --info-surface-hover: color-mix(in oklch, var(--info-surface) 88%, var(--info-border));
+  --info-surface-selected: color-mix(in oklch, var(--info-surface) 70%, var(--info-border));
   --info-muted: oklch(0.5 0.134 242.749); /* ~sky-700 */
   --info-accent: oklch(0.631 0.158 241.966); /* ~sky-500 */
   --info-ring: oklch(0.615 0.15 238.8); /* ~sky-400 */
@@ -120,6 +131,12 @@
   --sidebar-primary: oklch(0.5 0.31 277.49);
   --sidebar-primary-foreground: oklch(1 0 0);
   --sidebar-ring: oklch(0.5 0.31 277.49);
+
+  /* Read dots keep neutral and input attention distinct in both themes. */
+  --status-read: color-mix(in srgb, var(--sidebar-muted-foreground) 25%, var(--sidebar));
+  --status-unread: var(--foreground);
+  --status-input-read: color-mix(in oklch, var(--warning-accent) 30%, var(--warning-surface));
+  --status-input-unread: var(--warning-accent);
 
   /* agent studio chrome */
   --studio-chrome: oklch(0.446 0.043 257.281); /* ~slate-600 */
@@ -184,7 +201,7 @@
   --accent-foreground: oklch(0.968 0.007 247.896);
 
   --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.968 0.007 247.896);
+  --destructive-foreground: oklch(1 0 0);
   --destructive-surface: oklch(0.203 0.054 13.58 / 0.5); /* ~rose-950/50 */
   --destructive-surface-foreground: oklch(0.835 0.065 13.793); /* ~rose-200 */
   --destructive-border: oklch(0.396 0.141 13.233); /* ~rose-800 */
@@ -201,11 +218,18 @@
   --success-border: oklch(0.5 0.13 153); /* ~emerald-600 */
   --success-muted: oklch(0.72 0.14 162); /* ~emerald-300 */
   --success-accent: oklch(0.596 0.145 163.225); /* ~emerald-500 */
+  --success-icon: var(--success-muted);
   --success-ring: oklch(0.596 0.145 163.225); /* same as accent in dark */
 
   --warning-surface: oklch(0.216 0.052 56.043 / 0.6); /* ~amber-950/50 */
   --warning-surface-foreground: oklch(0.863 0.109 84.071); /* ~amber-200 */
   --warning-border: oklch(0.448 0.119 55); /* ~amber-700 */
+  --warning-surface-hover: color-mix(in oklch, var(--warning-surface) 88%, var(--warning-border));
+  --warning-surface-selected: color-mix(
+    in oklch,
+    var(--warning-surface) 70%,
+    var(--warning-border)
+  );
   --warning-muted: oklch(0.666 0.179 58.318); /* ~amber-400 */
   --warning-accent: oklch(0.666 0.179 58.318); /* ~amber-500 */
   --warning-ring: oklch(0.666 0.179 58.318); /* same as accent in dark */
@@ -213,6 +237,8 @@
   --info-surface: oklch(0.215 0.055 245 / 0.5); /* ~sky-950/50 */
   --info-surface-foreground: oklch(0.82 0.088 230.9); /* ~sky-200 */
   --info-border: oklch(0.42 0.12 244); /* ~sky-700 */
+  --info-surface-hover: color-mix(in oklch, var(--info-surface) 88%, var(--info-border));
+  --info-surface-selected: color-mix(in oklch, var(--info-surface) 70%, var(--info-border));
   --info-muted: oklch(0.615 0.15 238.8); /* ~sky-400 */
   --info-accent: oklch(0.631 0.158 241.966); /* ~sky-500 */
   --info-ring: oklch(0.631 0.158 241.966); /* same as accent in dark */
@@ -283,6 +309,10 @@
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-status-running: var(--status-running);
+  --color-status-read: var(--status-read);
+  --color-status-unread: var(--status-unread);
+  --color-status-input-read: var(--status-input-read);
+  --color-status-input-unread: var(--status-input-unread);
   --color-selected-surface: var(--selected-surface);
   --color-selected-accent: var(--selected-accent);
   --color-selected-control: var(--selected-control);
@@ -313,14 +343,19 @@
   --color-success-border: var(--success-border);
   --color-success-muted: var(--success-muted);
   --color-success-accent: var(--success-accent);
+  --color-success-icon: var(--success-icon);
   --color-success-ring: var(--success-ring);
   --color-warning-surface: var(--warning-surface);
+  --color-warning-surface-hover: var(--warning-surface-hover);
+  --color-warning-surface-selected: var(--warning-surface-selected);
   --color-warning-surface-foreground: var(--warning-surface-foreground);
   --color-warning-border: var(--warning-border);
   --color-warning-muted: var(--warning-muted);
   --color-warning-accent: var(--warning-accent);
   --color-warning-ring: var(--warning-ring);
   --color-info-surface: var(--info-surface);
+  --color-info-surface-hover: var(--info-surface-hover);
+  --color-info-surface-selected: var(--info-surface-selected);
   --color-info-surface-foreground: var(--info-surface-foreground);
   --color-info-border: var(--info-border);
   --color-info-muted: var(--info-muted);
@@ -435,22 +470,22 @@ body {
 .electron-platform-darwin .electron-sidebar-collapsed-title-row {
   height: var(--electron-titlebar-height);
   flex-shrink: 0;
-  width: calc(100% + 1rem);
-  margin-inline: -0.5rem;
-  padding-inline: 0.5rem;
+  width: calc(100% + 0.5rem);
+  margin-inline: -0.25rem;
+  padding-inline: 0.25rem;
 }
 
 .electron-platform-darwin .electron-sidebar-collapsed-toggle {
-  transform: translateX(0.5rem);
+  transform: translateX(0.25rem);
 }
 
 /* Combined workspace rail and sidebar width used by titlebar safe areas. */
 .app-shell[data-sidebar-state="open"] {
-  --electron-navigation-width: 19rem;
+  --electron-navigation-width: 21.5rem;
 }
 
 .app-shell[data-sidebar-state="collapsed"] {
-  --electron-navigation-width: 7rem;
+  --electron-navigation-width: 7.5rem;
 }
 
 :is(.electron-platform-win32, .electron-platform-linux) :is(.app-shell, .onboarding-shell) {

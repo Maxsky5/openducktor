@@ -123,10 +123,8 @@ describe("session-start notifications", () => {
           tasks: [baseInput.task],
           workspaceId: "workspace-1",
           startInBackground: true,
-          openAgentStudioTabOnBackgroundSessionStart: false,
           roleLabels: { spec: "Spec", planner: "Planner", build: "Builder", qa: "QA" },
           runSessionStartWorkflow,
-          saveAgentStudioTab: async () => {},
           humanRequestChangesTask: async () => {},
           openSessionInAgentStudio: () => {},
         });

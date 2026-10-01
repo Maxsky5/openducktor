@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-rou
 import { SidebarNavigation } from "./sidebar-navigation";
 import { sidebarNavLinkClassName } from "./sidebar-navigation-styles";
 
-type RoutePath = "/workflows" | "/kanban";
+type RoutePath = "/sessions" | "/kanban";
 
 const createSuspendedRoute = () =>
   lazy(() => new Promise<{ default: () => ReactElement }>(() => {}));
@@ -66,14 +66,14 @@ function renderSidebarRoutingScenario({
   render(
     <MemoryRouter initialEntries={[initialRoute]} useTransitions>
       <div onClickCapture={onSidebarClickCapture}>
-        <SidebarNavigation hasActiveWorkspace {...(onBeforeNavigate ? { onBeforeNavigate } : {})} />
+        <SidebarNavigation {...(onBeforeNavigate ? { onBeforeNavigate } : {})} />
       </div>
       <BackButton />
       <CurrentRouteProbe />
       <Suspense fallback={<div data-testid="route-loading" />}>
         <Routes>
           <Route path="/kanban" element={routeElement("/kanban")} />
-          <Route path="/workflows" element={routeElement("/workflows")} />
+          <Route path="/sessions" element={routeElement("/sessions")} />
         </Routes>
       </Suspense>
     </MemoryRouter>,
@@ -83,16 +83,24 @@ function renderSidebarRoutingScenario({
 describe("SidebarNavigation", () => {
   test("clears the link highlight when the guard cancels at once", () => {
     renderSidebarRoutingScenario({
-      initialRoute: "/kanban",
+      initialRoute: "/sessions",
       onBeforeNavigate: (_apply, cancel) => cancel?.(),
     });
 
-    fireEvent.click(screen.getByRole("link", { name: "Workflows" }));
+    fireEvent.click(screen.getByRole("link", { name: "Kanban" }));
 
-    expect(screen.getByLabelText("Current route").textContent).toBe("/kanban");
-    expect(screen.getByRole("link", { name: "Workflows" }).className).not.toContain(
+    expect(screen.getByLabelText("Current route").textContent).toBe("/sessions");
+    expect(screen.getByRole("link", { name: "Kanban" }).className).not.toContain(
       "bg-sidebar-accent",
     );
+  });
+
+  test("offers only the Kanban page link", () => {
+    renderSidebarRoutingScenario({ initialRoute: "/sessions" });
+
+    expect(screen.getAllByRole("link").map((link) => link.getAttribute("aria-label"))).toEqual([
+      "Kanban",
+    ]);
   });
 
   test("renders text labels in default mode", () => {
@@ -100,12 +108,11 @@ describe("SidebarNavigation", () => {
       createElement(
         MemoryRouter,
         { initialEntries: ["/kanban"] },
-        createElement(SidebarNavigation, { hasActiveWorkspace: true }),
+        createElement(SidebarNavigation, {}),
       ),
     );
 
     expect(html).toContain("Kanban");
-    expect(html).toContain("Workflows");
     expect(html).toContain("gap-2");
   });
 
@@ -114,27 +121,13 @@ describe("SidebarNavigation", () => {
       createElement(
         MemoryRouter,
         { initialEntries: ["/kanban"] },
-        createElement(SidebarNavigation, { hasActiveWorkspace: true, compact: true }),
+        createElement(SidebarNavigation, { compact: true }),
       ),
     );
 
     expect(html).toContain('aria-label="Kanban"');
-    expect(html).toContain('aria-label="Workflows"');
     expect(html).not.toContain("gap-2");
     expect(html).toContain("justify-center");
-  });
-
-  test("routes agents navigation to kanban when repository is missing", () => {
-    const html = renderToStaticMarkup(
-      createElement(
-        MemoryRouter,
-        { initialEntries: ["/kanban"] },
-        createElement(SidebarNavigation, { hasActiveWorkspace: false }),
-      ),
-    );
-
-    expect(html).toContain('href="/kanban"');
-    expect(html).toContain('aria-disabled="true"');
   });
 
   test("uses selected styles while navigation is activated", () => {
@@ -142,7 +135,6 @@ describe("SidebarNavigation", () => {
       compact: false,
       isActive: false,
       isActivated: true,
-      isDisabled: false,
     });
 
     expect(className).toContain("bg-sidebar-accent");
@@ -150,138 +142,94 @@ describe("SidebarNavigation", () => {
     expect(className).not.toContain("hover:bg-accent");
   });
 
-  test("keeps disabled links disabled-looking even when the router marks them active", () => {
-    const className = sidebarNavLinkClassName({
-      compact: false,
-      isActive: true,
-      isActivated: false,
-      isDisabled: true,
-    });
-
-    expect(className).toContain("cursor-not-allowed");
-    expect(className).toContain("opacity-50");
-    expect(className).not.toContain("bg-sidebar-accent");
-  });
-
-  test("shows Workflows as selected immediately while declarative routing to Workflows is still suspended", () => {
-    renderSidebarRoutingScenario({ initialRoute: "/kanban", suspendedRoute: "/workflows" });
-
-    fireEvent.click(screen.getByRole("link", { name: "Workflows" }));
-
-    expect(screen.getByLabelText("Current route").textContent).toBe("/kanban");
-    expect(screen.getByTestId("kanban-route")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Workflows" }).className).toContain(
-      "bg-sidebar-accent",
-    );
-  });
-
   test("shows Kanban as selected immediately while declarative routing to Kanban is still suspended", () => {
-    renderSidebarRoutingScenario({ initialRoute: "/workflows", suspendedRoute: "/kanban" });
+    renderSidebarRoutingScenario({ initialRoute: "/sessions", suspendedRoute: "/kanban" });
 
     fireEvent.click(screen.getByRole("link", { name: "Kanban" }));
 
-    expect(screen.getByLabelText("Current route").textContent).toBe("/workflows");
-    expect(screen.getByTestId("workflows-route")).toBeTruthy();
+    expect(screen.getByLabelText("Current route").textContent).toBe("/sessions");
+    expect(screen.getByTestId("sessions-route")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Kanban" }).className).toContain("bg-sidebar-accent");
   });
 
   for (const modifiedClickCase of MODIFIED_CLICK_CASES) {
     test(`does not show optimistic selection for ${modifiedClickCase.label} clicks handled by the browser`, () => {
-      renderSidebarRoutingScenario({ initialRoute: "/kanban", suspendedRoute: "/workflows" });
+      renderSidebarRoutingScenario({ initialRoute: "/sessions", suspendedRoute: "/kanban" });
 
-      fireEvent.click(screen.getByRole("link", { name: "Workflows" }), modifiedClickCase.eventInit);
+      fireEvent.click(screen.getByRole("link", { name: "Kanban" }), modifiedClickCase.eventInit);
 
-      expect(screen.getByLabelText("Current route").textContent).toBe("/kanban");
-      expect(screen.getByRole("link", { name: "Workflows" }).className).not.toContain(
+      expect(screen.getByLabelText("Current route").textContent).toBe("/sessions");
+      expect(screen.getByRole("link", { name: "Kanban" }).className).not.toContain(
         "bg-sidebar-accent",
       );
     });
   }
 
   test("does not show optimistic selection for non-left clicks handled by the browser", () => {
-    renderSidebarRoutingScenario({ initialRoute: "/kanban", suspendedRoute: "/workflows" });
+    renderSidebarRoutingScenario({ initialRoute: "/sessions", suspendedRoute: "/kanban" });
 
-    fireEvent.click(screen.getByRole("link", { name: "Workflows" }), { button: 1 });
+    fireEvent.click(screen.getByRole("link", { name: "Kanban" }), { button: 1 });
 
-    expect(screen.getByLabelText("Current route").textContent).toBe("/kanban");
-    expect(screen.getByRole("link", { name: "Workflows" }).className).not.toContain(
+    expect(screen.getByLabelText("Current route").textContent).toBe("/sessions");
+    expect(screen.getByRole("link", { name: "Kanban" }).className).not.toContain(
       "bg-sidebar-accent",
     );
   });
 
   test("does not show optimistic selection when another handler prevents navigation", () => {
     renderSidebarRoutingScenario({
-      initialRoute: "/kanban",
+      initialRoute: "/sessions",
       onSidebarClickCapture: (event) => event.preventDefault(),
-      suspendedRoute: "/workflows",
+      suspendedRoute: "/kanban",
     });
-
-    fireEvent.click(screen.getByRole("link", { name: "Workflows" }));
-
-    expect(screen.getByLabelText("Current route").textContent).toBe("/kanban");
-    expect(screen.getByRole("link", { name: "Workflows" }).className).not.toContain(
-      "bg-sidebar-accent",
-    );
-  });
-
-  test("clears optimistic selection when clicking the currently active route", () => {
-    renderSidebarRoutingScenario({ initialRoute: "/kanban", suspendedRoute: "/workflows" });
-
-    fireEvent.click(screen.getByRole("link", { name: "Workflows" }));
-    expect(screen.getByRole("link", { name: "Workflows" }).className).toContain(
-      "bg-sidebar-accent",
-    );
 
     fireEvent.click(screen.getByRole("link", { name: "Kanban" }));
 
-    expect(screen.getByRole("link", { name: "Kanban" }).className).toContain("bg-sidebar-accent");
-    expect(screen.getByRole("link", { name: "Workflows" }).className).not.toContain(
+    expect(screen.getByLabelText("Current route").textContent).toBe("/sessions");
+    expect(screen.getByRole("link", { name: "Kanban" }).className).not.toContain(
       "bg-sidebar-accent",
     );
   });
 
   test("keeps focus while optimistic selection waits on a suspended target route", () => {
-    renderSidebarRoutingScenario({ initialRoute: "/kanban", suspendedRoute: "/workflows" });
+    renderSidebarRoutingScenario({ initialRoute: "/sessions", suspendedRoute: "/kanban" });
 
-    const agentsLink = screen.getByRole("link", { name: "Workflows" });
-    agentsLink.focus();
-    fireEvent.click(agentsLink);
+    const kanbanLink = screen.getByRole("link", { name: "Kanban" });
+    kanbanLink.focus();
+    fireEvent.click(kanbanLink);
 
-    expect(screen.getByLabelText("Current route").textContent).toBe("/kanban");
-    expect(agentsLink.isConnected).toBe(true);
-    expect(document.activeElement).toBe(agentsLink);
-    expect(agentsLink.className).toContain("bg-sidebar-accent");
+    expect(screen.getByLabelText("Current route").textContent).toBe("/sessions");
+    expect(kanbanLink.isConnected).toBe(true);
+    expect(document.activeElement).toBe(kanbanLink);
+    expect(kanbanLink.className).toContain("bg-sidebar-accent");
   });
 
   test("keeps focus when route commit replaces optimistic selection with active selection", async () => {
-    renderSidebarRoutingScenario({ initialRoute: "/kanban" });
+    renderSidebarRoutingScenario({ initialRoute: "/sessions" });
 
-    const agentsLink = screen.getByRole("link", { name: "Workflows" });
-    agentsLink.focus();
-    fireEvent.click(agentsLink);
+    const kanbanLink = screen.getByRole("link", { name: "Kanban" });
+    kanbanLink.focus();
+    fireEvent.click(kanbanLink);
 
-    await waitFor(() =>
-      expect(screen.getByLabelText("Current route").textContent).toBe("/workflows"),
-    );
+    await waitFor(() => expect(screen.getByLabelText("Current route").textContent).toBe("/kanban"));
 
-    expect(agentsLink.isConnected).toBe(true);
-    expect(document.activeElement).toBe(agentsLink);
-    expect(agentsLink.className).toContain("bg-sidebar-accent");
+    expect(kanbanLink.isConnected).toBe(true);
+    expect(document.activeElement).toBe(kanbanLink);
+    expect(kanbanLink.className).toContain("bg-sidebar-accent");
   });
 
   test("does not revive stale optimistic selection after browser back restores the source entry", async () => {
-    renderSidebarRoutingScenario({ initialRoute: "/kanban" });
+    renderSidebarRoutingScenario({ initialRoute: "/sessions" });
 
-    fireEvent.click(screen.getByRole("link", { name: "Workflows" }));
-    await waitFor(() =>
-      expect(screen.getByLabelText("Current route").textContent).toBe("/workflows"),
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(screen.getByRole("link", { name: "Kanban" }));
     await waitFor(() => expect(screen.getByLabelText("Current route").textContent).toBe("/kanban"));
 
-    expect(screen.getByRole("link", { name: "Kanban" }).className).toContain("bg-sidebar-accent");
-    expect(screen.getByRole("link", { name: "Workflows" }).className).not.toContain(
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    await waitFor(() =>
+      expect(screen.getByLabelText("Current route").textContent).toBe("/sessions"),
+    );
+
+    expect(screen.getByRole("link", { name: "Kanban" }).className).not.toContain(
       "bg-sidebar-accent",
     );
   });

@@ -58,7 +58,7 @@ type UseAgentStudioSessionActionsArgs = {
   supportsAttachments: boolean;
   sessionsForTask: AgentSessionSummary[];
   selectedTask: TaskCard | null;
-  isSelectedSessionModelSendable: boolean;
+  prepareSelectedSessionModelForSend: () => Promise<boolean>;
   agentStudioReady: boolean;
   isActiveTaskReady: boolean;
   selectionForNewSession: AgentModelSelection | null;
@@ -123,7 +123,7 @@ export function useAgentStudioSessionActions({
   supportsAttachments,
   sessionsForTask,
   selectedTask,
-  isSelectedSessionModelSendable,
+  prepareSelectedSessionModelForSend,
   agentStudioReady,
   isActiveTaskReady,
   selectionForNewSession,
@@ -203,7 +203,7 @@ export function useAgentStudioSessionActions({
     selectedSessionModel: selectedSession.selectedModel,
     sessionState,
     isSessionModelCatalogLoading: selectedSession.runtimeData.isLoadingModelCatalog,
-    isSelectedSessionModelSendable,
+    prepareSelectedSessionModelForSend,
     agentStudioReady,
     canStartNewSession,
     reusablePrompts,

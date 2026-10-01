@@ -1,15 +1,12 @@
 import type { TaskCard } from "@openducktor/contracts";
-import {
-  ArrowUpRightFromSquare,
-  CircleCheckBig,
-  RotateCcw,
-  ScrollText,
-  ShieldCheck,
-  Sparkles,
-  Undo2,
-  Wrench,
-} from "lucide-react";
+import { ArrowUpRightFromSquare, CircleCheckBig, RotateCcw, Undo2 } from "lucide-react";
 import type { ReactElement } from "react";
+import {
+  BuilderRoleIcon,
+  PlannerRoleIcon,
+  QaRoleIcon,
+  SpecRoleIcon,
+} from "@/lib/agent-role-presentation";
 import { isQaRejectedTask } from "@/lib/task-qa";
 import type { TaskWorkflowAction } from "./kanban-task-workflow";
 
@@ -69,8 +66,8 @@ export const taskActionLabel = (
 };
 
 export const TASK_ACTION_ICON = {
-  set_spec: <Sparkles className="size-3.5" />,
-  set_plan: <ScrollText className="size-3.5" />,
+  set_spec: <SpecRoleIcon className="size-3.5" />,
+  set_plan: <PlannerRoleIcon className="size-3.5" />,
   open_spec: <ArrowUpRightFromSquare className="size-3.5" />,
   open_planner: <ArrowUpRightFromSquare className="size-3.5" />,
   open_builder: <ArrowUpRightFromSquare className="size-3.5" />,
@@ -78,8 +75,8 @@ export const TASK_ACTION_ICON = {
   reset_implementation: <RotateCcw className="size-3.5" />,
   reset_task: <RotateCcw className="size-3.5" />,
   close_task: <CircleCheckBig className="size-3.5" />,
-  build_start: <Wrench className="size-3.5" />,
-  qa_start: <ShieldCheck className="size-3.5" />,
+  build_start: <BuilderRoleIcon className="size-3.5" />,
+  qa_start: <QaRoleIcon className="size-3.5" />,
   human_approve: <CircleCheckBig className="size-3.5" />,
   human_request_changes: <Undo2 className="size-3.5" />,
 } satisfies Record<TaskWorkflowAction, ReactElement>;

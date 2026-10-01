@@ -137,6 +137,9 @@ describe("shared snapshot activity policy", () => {
               parentKey: null,
               status,
               executionEpisodeId: current.executionEpisodeId,
+              lastActivityAt: null,
+              untimedStatusChange: false,
+              statusUnavailableReason: null,
               runtimeStatusMessage: current.runtimeStatusMessage,
               stopRequestedAt: null,
               pendingApprovals: [],
@@ -348,34 +351,138 @@ describe("applyWorkspaceActivityEnvelope", () => {
     expect(apply(gapped, sessionSnapshot([])).unavailableReason).toBeNull();
   });
 
-  test("ignores a session-scoped fault without changing the ready projection", () => {
+  test("keeps a session-scoped fault on its session until the session updates", () => {
     const ready = apply(emptyWorkspaceActivityProjection(), sessionSnapshot([snapshot("a")]));
-    const faulted = applyWorkspaceActivityEnvelope(ready, {
+    const fault: AgentSessionLiveEnvelope = {
       type: "fault",
       repoPath,
       ref: snapshot("a").ref,
       message: "Codex thread reported a system error.",
       operation: "codex-live-session.process-event",
-    });
+    };
+    const faulted = applyWorkspaceActivityEnvelope(ready, fault);
 
-    expect(faulted).toBe(ready);
+    expect(faulted.sessions).toBe(ready.sessions);
     expect(faulted.hasSnapshot).toBe(true);
     expect(faulted.unavailableReason).toBeNull();
+    expect(faulted.faults.get(key("a"))).toEqual({
+      message: "Codex thread reported a system error. (during codex-live-session.process-event)",
+      statusUnavailable: false,
+    });
     expect(badges(faulted)).toEqual({ inputRequired: false, error: false, active: false });
+    expect(applyWorkspaceActivityEnvelope(faulted, fault)).toBe(faulted);
 
-    const unavailable = apply(ready, {
+    const updated = apply(faulted, { type: "session_upsert", session: snapshot("a") });
+    expect(updated.faults.size).toBe(0);
+    expect(apply(faulted, sessionSnapshot([snapshot("a")])).faults.size).toBe(0);
+  });
+
+  test("records when a session fault means that its status could not be read", () => {
+    const ready = apply(emptyWorkspaceActivityProjection(), sessionSnapshot([snapshot("a")]));
+    const faulted = apply(ready, {
       type: "fault",
       repoPath,
-      message: "stream closed",
+      ref: snapshot("a").ref,
+      message: "Status read failed.",
+      operation: "opencode-live-session.refresh-session",
+      statusUnavailable: true,
     });
+
+    expect(faulted.sessions).toBe(ready.sessions);
+    expect(faulted.faults.get(key("a"))?.statusUnavailable).toBe(true);
+    expect(apply(faulted, { type: "session_upsert", session: snapshot("a") }).faults.size).toBe(0);
+  });
+
+  test("records the time of each event that changes a session's activity", () => {
+    const ready = apply(emptyWorkspaceActivityProjection(), sessionSnapshot([snapshot("a")]));
+    const started = apply(ready, {
+      type: "transcript_event",
+      event: {
+        type: "session_started",
+        externalSessionId: "a",
+        timestamp: "2026-09-15T08:05:00.000Z",
+        sessionRef: snapshot("a").ref,
+        message: "Started",
+      },
+    });
+    expect(started.sessions.get(key("a"))?.lastActivityAt).toBe(
+      Date.parse("2026-09-15T08:05:00.000Z"),
+    );
+
+    const settled = apply(started, sessionErrorEvent("a"));
+    expect(settled.sessions.get(key("a"))?.lastActivityAt).toBe(
+      Date.parse("2026-09-15T08:05:00.000Z"),
+    );
+    const finished = apply(started, {
+      type: "transcript_event",
+      event: {
+        type: "session_idle",
+        externalSessionId: "a",
+        timestamp: "2026-09-15T08:09:00.000Z",
+        sessionRef: snapshot("a").ref,
+      },
+    });
+    expect(finished.sessions.get(key("a"))?.lastActivityAt).toBe(
+      Date.parse("2026-09-15T08:09:00.000Z"),
+    );
     expect(
-      applyWorkspaceActivityEnvelope(unavailable, {
-        type: "fault",
-        repoPath,
-        ref: snapshot("a").ref,
-        message: "session failed",
-      }),
-    ).toBe(unavailable);
+      apply(finished, sessionSnapshot([snapshot("a")])).sessions.get(key("a"))?.lastActivityAt,
+    ).toBe(Date.parse("2026-09-15T08:09:00.000Z"));
+  });
+
+  test("times a status change from the event that follows its snapshot", () => {
+    const ref = snapshot("a").ref;
+    const statusEvent = (
+      status: { type: "busy"; message: null } | { type: "idle" },
+      timestamp: string,
+    ): AgentSessionLiveEnvelope => ({
+      type: "transcript_event",
+      event: { type: "session_status", externalSessionId: "a", timestamp, sessionRef: ref, status },
+    });
+    const timeOf = (projection: WorkspaceActivityProjection) =>
+      projection.sessions.get(key("a"))?.lastActivityAt;
+    const ready = apply(emptyWorkspaceActivityProjection(), sessionSnapshot([snapshot("a")]));
+    const running = apply(ready, {
+      type: "session_upsert",
+      session: snapshot("a", { activity: "running" }),
+    });
+    expect(timeOf(running)).toBeNull();
+
+    const started = apply(
+      running,
+      statusEvent({ type: "busy", message: null }, "2026-09-15T12:00:00.000Z"),
+    );
+    expect(timeOf(started)).toBe(Date.parse("2026-09-15T12:00:00.000Z"));
+
+    const streamed = apply(
+      started,
+      {
+        type: "transcript_event",
+        event: {
+          type: "assistant_delta",
+          channel: "text",
+          messageId: "message-1",
+          delta: "Working",
+          externalSessionId: "a",
+          sessionRef: ref,
+          timestamp: "2026-09-15T12:01:00.000Z",
+        },
+      },
+      {
+        type: "session_upsert",
+        session: snapshot("a", { activity: "running", contextUsage: { totalTokens: 84 } }),
+      },
+      statusEvent({ type: "busy", message: null }, "2026-09-15T12:02:00.000Z"),
+    );
+    expect(timeOf(streamed)).toBe(Date.parse("2026-09-15T12:00:00.000Z"));
+
+    const settled = apply(
+      streamed,
+      { type: "session_upsert", session: snapshot("a") },
+      statusEvent({ type: "idle" }, "2026-09-15T12:05:00.000Z"),
+    );
+    expect(timeOf(settled)).toBe(Date.parse("2026-09-15T12:05:00.000Z"));
+    expect(settled.sessions.get(key("a"))?.untimedStatusChange).toBe(false);
   });
 
   test("returns the same reference when an envelope changes no badge input", () => {

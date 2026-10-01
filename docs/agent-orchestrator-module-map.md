@@ -1,6 +1,6 @@
 # Agent orchestrator module map
 
-Use this map before you change `packages/frontend/src/state/operations/agent-orchestrator` or a Task Workflows session flow.
+Use this map before you change `packages/frontend/src/state/operations/agent-orchestrator`, a task session flow, or session navigation.
 
 The host owns live session truth for task and workspace sessions. SQLite owns their durable records. The renderer holds one projection of those sources. History loads only for the selected session.
 
@@ -29,7 +29,7 @@ Files: `types/agent-session-activity.ts`, `lib/agent-session-activity-state.ts`,
 
 Owns `waiting_input`, `starting`, `running`, `idle`, `stopped`, and `error`.
 
-Pending questions or approvals take priority over raw starting, running, or idle status. Tabs, Kanban, sidebars, actions, and transcripts use this shared rule. Summaries contain `activityState` and pending counts. Full pending payloads remain on `AgentSessionState`.
+Pending questions or approvals take priority over raw starting, running, or idle status. Session navigation, Kanban, actions, and transcripts use this shared rule. Summaries contain `activityState` and pending counts. Full pending payloads remain on `AgentSessionState`.
 
 ## Host live projection
 
@@ -100,6 +100,8 @@ Owns the host runtime status of each kind and the mapping to ready, checking, or
 
 The host starts each enabled kind at host startup. One shared runtime of each kind serves every workspace. The frontend never starts, ensures, or polls a runtime.
 
+Task-store checks keep their repository query keys and cached readiness across workspace switches. Opening the task composer is local UI, so a pending check does not disable New task. A confirmed task-store failure still blocks it.
+
 The status owner subscribes to `openducktor://runtime-changed` before it reads the `runtime_status` baseline. It merges runtime and MCP bridge events into one Query snapshot by host instance and revision, so a late baseline cannot restore stale state. A reconnect reads one new baseline. A stream or read failure marks the status as not current.
 
 `HostRuntimeStatusContext` is the only frontend runtime status context. Session actions and selected-session reads require the exact kind of that session to be `ready` and current. A runtime ID change or loss of ready state invalidates runtime-dependent Query data of that kind in every workspace.
@@ -148,7 +150,7 @@ Owns transcript event routing, per-session batching, todo event forwarding, acti
 Rules:
 
 - Live activity, pending input, context, and removal arrive as live-state messages. Only `agent-session-live-projection.ts` applies them to the Agent Studio session store. It also applies activity carried by a transcript event before transcript buffering. Transcript assembly cannot change activity.
-- `projectObservedSessionActivity` in `session-read-model/agent-session-live-projection.ts` states the observed status rule. `projectSessionSnapshotActivity` in the same file states the snapshot policy: episode carryforward, pending-input override, terminal preservation, and message reset. `projectSessionTranscriptActivity` in `session-read-model/agent-session-live-activity.ts` states the transcript rule. The workspace rail activity projection in `features/workspace-activity/` reuses these rules. Agent Studio also records local stop intent, which the rail does not receive, so their transcript results can differ when those inputs differ. Change each rule in its one function, not in a copy.
+- `projectObservedSessionActivity` in `session-read-model/agent-session-live-projection.ts` states the observed status rule. `projectSessionSnapshotActivity` in the same file states the snapshot policy: episode carryforward, pending-input override, terminal preservation, and message reset. `projectSessionTranscriptActivity` in `session-read-model/agent-session-live-activity.ts` states the transcript rule. The workspace activity projection in `features/workspace-activity/`, which feeds the workspace rail and the session list, reuses these rules. Agent Studio also records local stop intent, which the rail does not receive, so their transcript results can differ when those inputs differ. Change each rule in its one function, not in a copy.
 - `SessionTranscriptEventContext.session` is the only event target. Other capability groups do not copy session identity.
 - Transcript text exists only in `session.messages`.
 - `SessionTurnMetadata` owns turn anchors. `SessionTurnTiming` owns timing.
@@ -210,7 +212,7 @@ The repository read model key is repository plus task ID set. Task title, status
 
 Files: `components/features/agents/agent-chat/use-agent-chat-transcript-model.ts`, `agent-chat-transcript-model-cache.ts`, and `agent-chat-transcript-model-build.ts`.
 
-The chat keeps up to six rendered transcript models, keyed by full session identity and thinking-message preference. It updates cached inactive transcripts that came from the active repository session store. Query-owned runtime history keeps its own rendered model. Selected and inactive transcripts use the same incremental update path and chunk limits. The cache retains the skill references used to display Claude skill mentions.
+The app shell owns `AgentChatTranscriptCacheProvider`. Task and workspace chats share up to six rendered transcript models across page and workspace switches, keyed by full session identity and thinking-message preference. It updates cached inactive transcripts that came from the active repository session store. Query-owned runtime history keeps its own rendered model. Selected and inactive transcripts use the same incremental update path and chunk limits. The cache retains the skill references used to display Claude skill mentions.
 
 - Background updates preserve cache recency. Selection determines which entries stay cached.
 - Selection also schedules stale cached entries when their selected build stopped on deselection. Other inactive builds continue through the switch.
@@ -222,13 +224,23 @@ OpenCode live and history text-part rows keep the runtime's text, part IDs, and 
 
 Final history text parts replace a live whole-message row with the same source ID. Keep each part's text separate when merging those rows. Keep live text when its history snapshot is still incomplete.
 
-## Task tabs
+## Session navigation
 
-Files: `pages/agents/agent-studio-task-tabs-storage.ts`, `pages/agents/agent-studio-task-tabs-list.ts`, and `pages/agents/agents-page-session-tabs.ts`.
+Files: `state/read-models/session-navigation-read-model.ts`, `components/layout/sidebar/session-navigation-list.tsx`, `components/layout/sidebar/session-navigation-rail.tsx`, and `pages/sessions/sessions-page.tsx`.
 
-Storage owns repository-scoped localStorage. List helpers own ensure, reorder, fallback, and close. `agents-page-session-tabs.ts` owns workflow and session display. Storage and list helpers do not own runtime or session state.
+The sidebar owns task and workspace session navigation. It shows each durable root once in Needs you, Running, or Recent. The scope control changes the list between the current workspace and all open workspaces. It does not change the visible conversation. Collapsed icons keep the same groups and expose session details on hover and focus.
 
-`agent-studio-state-writer.ts` orders Agent Studio state actions for one workspace in the frontend. The host applies each action to the latest config under serialized writes. Task starts and local tab changes use this path. `use-agent-studio-workspace-state-save.ts` syncs the selected task, session, and task list cleanup through the same path.
+`components/layout/sidebar/session-entry-preview.tsx` owns one interactive preview per sidebar. The preview uses cached task and session records and the existing workspace activity observer. It does not load history, start a runtime, or attach another live observer. Task previews share metadata badges with the task detail sheet and role buttons with the Agent Studio header. A role button opens its latest session with the full session identity, or its task context when no session exists. Model and effort use compact pills. ArrowRight or Tab enters the preview. Escape, Close, or an outside click dismisses it. Reply controls keep it open during input.
+
+`session-preview-pending-input.tsx` reuses the chat question and approval cards. A reply checks the current live request and uses its workspace, runtime kind, working directory, and external session ID. Child requests keep their child identity. The preview sends through the typed host live-reply commands without loading a transcript or changing the visible workspace. Successful replies wait for the live stream to clear the request. Failed replies show their error and keep the draft. A lost stream or failed status read disables replies.
+
+The app shell also owns `contexts/DiffWorkerProvider.tsx`. Page and workspace switches retain the syntax worker pool and its bounded highlight cache. Diff preloads handle their promises. A failed preload reports an error while its view is open. Closing that view stops error reporting for its pending work.
+
+`pages/agents/agent-studio-navigation-state.ts` resolves the committed task selection. Task and workspace views render one conversation without browser tabs. `components/features/agents/session-view-controls.tsx` supplies terminal and work-panel controls in the session header. The header stays visible during a file preview. Workspace session actions expose rename and archive. Archive uses the existing worktree confirmation and unsaved-edit guard.
+
+`pages/agents/agents-page-session-tabs.ts` owns workflow roles and session history choices. It does not own a task tab list.
+
+`agent-studio-state-writer.ts` orders saved navigation actions for one workspace. The host applies each action to the latest config under serialized writes. `use-agent-studio-workspace-state-save.ts` saves the selected task and session through this path. The UI preserves legacy `openTaskIds` in the existing record shape but does not edit them. Background starts appear through their durable session records. They do not write tab state or depend on the retired background-tab setting. A missing requested task keeps its URL and shows an unavailable view without replacing the saved selection.
 
 ## Selected runtime data
 
@@ -289,6 +301,7 @@ Rules:
 - Apply live model restrictions only when a native session identity exists. `model-selection-policy.ts` supplies the same profile and variant rules to visible options and selection actions. A saved workspace draft still uses startup model options.
 - The shared host command updates the native model, saves the durable choice, then publishes metadata. If the save fails, restore the previous native model before releasing the owner permit. A publication failure after a successful save must not roll back the native model.
 - `model-selection-preferences.ts` owns runtime and model fallback order.
+- A saved session model that the catalog no longer offers changes only when the user sends. The send applies the catalog replacement first. Viewing the session never sends a model update, because a model update can resume an idle session.
 
 Build-tool worktree reads belong to `features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot.ts`. Their key is repository, task ID, and task version. Git refresh belongs to `use-agent-studio-build-worktree-refresh.ts`. Transcript display state does not control either read.
 
@@ -312,8 +325,8 @@ Rules:
 - Stop preparation failures before host control succeeds. If later frontend work fails, keep the task session stored by the host.
 - Only the explicit workflow start path can register task ownership. Runtime events cannot attach an unrelated root session.
 - A fresh or forked start holds `starting` until its first message finishes or fails.
-- `RunSessionStartWorkflow` awaits the first message. It reports a send failure in `postStartActionError`. Kanban and the Task Workflows page supply its local recovery callback. The runner invokes that callback before notification delivery, which suppresses the generic in-app toast for that failure and keeps OS and sound policy unchanged.
-- The Task Workflows page, Kanban, and Autopilot call the same `RunSessionStartWorkflow` command.
+- `RunSessionStartWorkflow` awaits the first message. It reports a send failure in `postStartActionError`. Kanban and the task content of the Sessions page supply its local recovery callback. The runner invokes that callback before notification delivery, which suppresses the generic in-app toast for that failure and keeps OS and sound policy unchanged.
+- The task content of the Sessions page, Kanban, and Autopilot call the same `RunSessionStartWorkflow` command.
 - Sessionless send uses the same start-availability rule as an explicit start.
 - The start modal reads runtime definitions from runtime availability context.
 - Action state owns busy, waiting, queued, and send-block rules. It does not copy identity or runtime-data loading.
@@ -328,18 +341,60 @@ Owns read-only history, preference for an existing live session, live pending in
 
 Files: `state/queries/agent-sessions.ts`, `session-read-model/task-session-records.ts`, `session-read-model/use-task-session-records.ts`, `hooks/use-repo-session-read-model.ts`, and `session-read-model/agent-session-workflow-records.ts`.
 
-Owns per-task durable record queries and task session history for the Task Workflows page, Kanban, task details, and Autopilot.
+Owns per-task durable record queries and task session history for the Sessions page, the session list, Kanban, task details, and Autopilot.
 
 Rules:
 
 - Do not read session history from `TaskCard.agentSessions`.
 - Repository startup keys record reads by task ID only.
 - Reset invalidates the exact task record query. It does not call a session refresh command.
-- `useTaskSessionRecords` is the only fan-out hook. `useRepoSessionReadModel` attaches the live stream and commits the collection.
+- `useAgentSessionListQueries` is the only fan-out for task session records. `useTaskSessionRecords` and the session list read through it. `useRepoSessionReadModel` attaches the live stream and commits the collection.
 - Apply durable records before and after each live projection, then commit once. The first pass admits durable roots. The second pass restores durable workflow fields after live status is applied.
 - Reject an unknown live root. Accept an unknown descendant only when its declared parent is already registered.
 - Skip a record update when its read is unloaded, failed, or stale because it cannot prove deletion.
 - Keep `liveReported` on session state. Do not add a presence store.
+
+## Session navigation
+
+Files: `pages/sessions/sessions-page.tsx`, `pages/sessions/use-sessions-workspace-match.ts`, `features/session-navigation/session-navigation-target.ts`, `features/session-navigation/visible-session-target.tsx`, `features/session-navigation/use-session-navigation-model.ts`, `state/read-models/session-navigation-read-model.ts`, and `components/layout/sidebar/workspace-sidebar.tsx`.
+
+The Sessions page shows one content at a time. The `kind` query value selects task content or workspace session content, and that content owns the other query values.
+
+Rules:
+
+- Build each session address with `buildSessionNavigationHref`. A task session address names the workspace, task, role, and complete session identity. A task context address names the workspace and task, and it can name a role. A workspace session address names the saved record ID.
+- Task content keeps the complete session identity in the address on each write.
+- An address or saved selection without the complete identity opens a session only when exactly one session of the task has its external ID. More matches show an error.
+- Keep old `/workflows` and `/chats` addresses as redirects that add the matching `kind`.
+- The address names its workspace. A new address for another workspace selects that workspace. A workspace change from elsewhere replaces the address and drops the old selection, also while the address still waits for its own workspace.
+- A workspace switch that fails or that another workspace action interrupts shows the failure with Retry.
+- Content publishes the visible target after its own selection commits. The session list marks that target as selected. A pending, cancelled, or failed navigation never marks another entry.
+- The session list reveals the selected entry before paint when it opens or the sidebar expands or collapses. Status, group, recency, and record updates keep the user's scroll position.
+- Entry keys and the selected key both come from `sessionNavigationTargetKey`.
+- A requested workspace session that is missing shows as unavailable. Only a restored selection without an explicit request can fall back to the first chat.
+- A failed chat-list refresh keeps the chats and their content, and shows the error with Retry beside them. Only a failed first read replaces the chats with an error.
+- Content asks about unsaved edits before its own selection changes. A sidebar entry and a created chat ask before they navigate. A notification asks only when its target replaces the content with another workspace, another content kind, or another page.
+- The session list reads tasks, task session records, workspace session records, and native activity times through their shared Query keys. `useAgentSessionListQueries` is the one fan-out for task session records.
+- A task session list without data reports its repository's batch read until that read succeeds. A list with data keeps it while the batch read for other tasks loads or fails.
+- Live facts come from the snapshot of the workspace activity observer that also feeds the workspace rail. Do not attach another live observer for navigation.
+- Only saved task roots, saved non-archived workspace roots, and blocked tasks without a saved session become entries. Subagent questions and permission requests count for their root.
+- An entry has one group. Needs you comes before Running, and Running comes before Recent. Keep the Needs you and Running headers visible in both sidebar modes, also when their counts are zero. Recent appears when it has entries. Lost live status keeps known attention but shows no confirmed running or idle state.
+- An entry in Needs you uses a warning surface and shows its attention reason. Selection strengthens the section color: amber for Needs you, blue for Running, and neutral for Recent. A thicker inset outline and a contrasting checkmark in the top-right corner identify the current session in both sidebar modes. The checkmark overlays the corner and does not reserve space in the row. Recent rows have neutral outlines and gaps between them. Rows have no left edge accent. An attention entry never uses the running style. Hover uses the theme's interactive surface tokens and keeps the section color.
+- Session additions reveal in place for 200 ms. Removals collapse for 150 ms. A section move can collapse the source and reveal the destination at the same time. Motion presence retains outgoing visuals until the native CSS transitions finish. Outgoing visuals are inert and hidden from assistive tools. Set each incoming element's entrance state in its initial attributes before any style read.
+- Reduced motion uses only opacity. Initial reads, scope changes, sidebar mode changes, selection, and group toggles stay instant. Transitions retarget from their current position when a session returns before its exit finishes.
+- Expanded session rows use the task's issue type icon or `MessagesSquare` for a workspace session. Task icons use the shared Kanban issue-type colors. Their subtitle shows the workflow role, when present, and the workspace name. Collapsed task session icons keep their workflow role.
+- The workspace rail and session hover cards use `WorkspaceTile` with their own size variants.
+- Expanded rows and collapsed icons use the same session details card on hover and focus. It shows the full title, workspace, session type or task role, attention or activity state, time, and faults. The card closes when its row or section starts to leave. Session rows and attention badges do not use native browser tooltips.
+- A session fault stays on its entry also when the session has no live facts.
+- A failed status read makes the entry status unavailable. For a session with a kept snapshot, the snapshot `statusUnavailableReason` tells. Without a snapshot, a fault with `statusUnavailable` tells. Context, todo, and title updates keep that status. Only a status update clears it.
+- Known questions and permission requests keep such an entry in Needs you. Other session faults keep the live status.
+- All workspaces scope names closed workspaces and incomplete removals with their recovery action. The collapsed list keeps them behind one warning button.
+- Only a successful, current empty session read adds a blocked task without a saved session.
+- New task keeps the workspace that was active when it opened. It names that workspace and blocks creation while another workspace is active.
+- The expanded sidebar keeps New task as a split button. The collapsed sidebar has one plus button that opens the action menu, with New task first. Both menus show action labels without descriptions or a heading. Closing a creation dialog restores keyboard focus to its action.
+- Activity time comes from observed activity changes, the native session metadata read, and the saved workspace session update time. A start time orders an entry only when no activity time is known, and the list labels it as a start time.
+- An observed activity change takes the time of its transcript event. A live snapshot has no event time. When a snapshot changes the status before the transcript event that caused it, that event gives the change its time. Streaming output, repeated status reports, and snapshot receipt do not move the time.
+- Navigation does not load history, start sessions, resume sessions, or change runtime state.
 
 ## Startup sequence
 

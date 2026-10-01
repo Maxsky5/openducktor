@@ -9,8 +9,8 @@ export function AppBrand(): ReactElement {
     <div className="flex items-center gap-3">
       <OpenDucktorMark className="size-10" />
       <div>
-        <p className="text-lg font-semibold tracking-tight">OpenDucktor</p>
-        {APP_VERSION && <p className="text-xs text-sidebar-muted-foreground">{APP_VERSION}</p>}
+        <p className="text-base font-semibold tracking-tight">OpenDucktor</p>
+        {APP_VERSION && <p className="text-[11px] text-sidebar-muted-foreground">{APP_VERSION}</p>}
       </div>
     </div>
   );

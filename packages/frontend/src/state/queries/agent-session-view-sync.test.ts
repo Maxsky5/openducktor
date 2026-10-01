@@ -219,4 +219,44 @@ describe("AgentSessionViewSync", () => {
     expect(loadSessionBatch).toHaveBeenCalledWith("/repo", ["current-task"]);
     expect(refreshLiveSessions).toHaveBeenCalledWith("/repo");
   });
+
+  test("refetches observed session lists of an inactive workspace after a stream snapshot", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const observedKey = agentSessionQueryKeys.list("/other-repo", "observed-task");
+    const unobservedKey = agentSessionQueryKeys.list("/other-repo", "unobserved-task");
+    queryClient.setQueryData(unobservedKey, [{ externalSessionId: "unobserved-session" }]);
+    const freshRecords = [
+      {
+        externalSessionId: "fresh-session",
+        role: "build" as const,
+        runtimeKind: "opencode" as const,
+        workingDirectory: "/other-repo",
+        startedAt: "2026-09-03T20:00:00.000Z",
+        selectedModel: null,
+      },
+    ];
+    const loadObservedSessions = mock(async () => freshRecords);
+    const unsubscribe = new QueryObserver(queryClient, {
+      queryKey: observedKey,
+      queryFn: loadObservedSessions,
+      initialData: [],
+      staleTime: Infinity,
+    }).subscribe(() => {});
+    const sync = createAgentSessionViewSync({
+      queryClient,
+      readPort: readPort({ agentSessionsListForTasks: async () => [] }),
+      removeTaskSessions: () => {},
+      refreshLiveSessions: async () => undefined,
+    });
+
+    try {
+      await sync.reconcileStreamSnapshot("/repo", []);
+
+      expect(loadObservedSessions).toHaveBeenCalledTimes(1);
+      expect(queryClient.getQueryData<typeof freshRecords>(observedKey)).toEqual(freshRecords);
+      expect(queryClient.getQueryData(unobservedKey)).toBeUndefined();
+    } finally {
+      unsubscribe();
+    }
+  });
 });

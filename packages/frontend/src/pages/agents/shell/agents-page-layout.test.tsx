@@ -19,6 +19,7 @@ const render = (element: ReactElement) => {
 const renderWorkspacePanes = (hasSelectedFilePreview: boolean) =>
   render(
     createElement(AgentsPageWorkspacePanes, {
+      headerContent: createElement("header", undefined, "Session header"),
       chatContent: createElement("div", { "data-testid": "mock-chat" }, "Chat"),
       hasSelectedFilePreview,
       selectedFilePreviewContent: createElement(
@@ -45,6 +46,8 @@ describe("AgentsPageWorkspacePanes", () => {
     const view = renderWorkspacePanes(true);
 
     expect(view.getByTestId("mock-file-preview")).toBeTruthy();
+    expect(view.getByText("Session header")).toBeTruthy();
+    expect(view.getByText("Session header").closest("[inert]")).toBeNull();
     expect(view.getByTestId("task-execution-selected-file-preview-pane").className).toContain(
       "h-full",
     );
@@ -113,6 +116,8 @@ describe("AgentsPageWorkspace terminal visibility", () => {
     };
     const view = render(
       createElement(AgentsPageWorkspace, {
+        unavailableTaskId: null,
+        headerContent: null,
         hasSelectedTask: true,
         chatContent: createElement("div", null, "Chat"),
         hasSelectedFilePreview: true,
@@ -180,6 +185,8 @@ describe("AgentsPageWorkspace terminal visibility", () => {
     };
     const renderWorkspace = (isVisible: boolean) =>
       createElement(AgentsPageWorkspace, {
+        unavailableTaskId: null,
+        headerContent: null,
         hasSelectedTask: true,
         chatContent: createElement("div", null, "Chat"),
         hasSelectedFilePreview: false,
@@ -263,6 +270,8 @@ describe("AgentsPageWorkspace terminal visibility", () => {
     };
     const view = render(
       createElement(AgentsPageWorkspace, {
+        unavailableTaskId: null,
+        headerContent: null,
         hasSelectedTask: true,
         chatContent: createElement("div", { "data-testid": "narrow-chat" }, "Chat"),
         hasSelectedFilePreview: false,

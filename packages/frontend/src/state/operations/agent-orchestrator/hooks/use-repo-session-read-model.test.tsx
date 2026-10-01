@@ -17,7 +17,6 @@ import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import { type AgentSessionReadPort, agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { workspaceQueryKeys } from "@/state/queries/workspace";
 import { workspaceSessionQueryKeys } from "@/state/queries/workspace-sessions";
-import { summarizeAgentActivity } from "@/state/read-models/agent-activity-read-model";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createAgentSessionFixture,
@@ -194,8 +193,14 @@ const createState = (
       runtimeKind: AgentSessionRecord["runtimeKind"];
       workingDirectory: string;
     }) => sessionStore.getSessionSnapshot(identity),
-    getActivitySummary: () =>
-      summarizeAgentActivity({ sessions: sessionStore.getActivitySnapshot().sessions }),
+    getSessionActivityStates: () =>
+      sessionStore
+        .getActivitySnapshot()
+        .sessions.map(({ externalSessionId, activityState }) => ({
+          externalSessionId,
+          activityState,
+        }))
+        .sort((left, right) => left.externalSessionId.localeCompare(right.externalSessionId)),
     harness: createHookHarness(useRepoSessionReadModel, props),
     props,
     observeAgentSessionLive,
@@ -2320,15 +2325,11 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
 
       expect(state.getSession()?.pendingApprovals).toHaveLength(1);
-      expect(state.getActivitySummary()).toMatchObject({
-        activeSessionCount: 0,
-        waitingForInputCount: 3,
-      });
-      expect(
-        state
-          .getActivitySummary()
-          .waitingForInputSessions.map(({ externalSessionId }) => externalSessionId),
-      ).toEqual(["thread-3", "thread-2", "thread-1"]);
+      expect(state.getSessionActivityStates()).toEqual([
+        { externalSessionId: "thread-1", activityState: "waiting_input" },
+        { externalSessionId: "thread-2", activityState: "waiting_input" },
+        { externalSessionId: "thread-3", activityState: "waiting_input" },
+      ]);
     } finally {
       await state.harness.unmount();
     }

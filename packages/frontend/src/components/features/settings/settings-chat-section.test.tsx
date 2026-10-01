@@ -59,13 +59,11 @@ describe("settings chat section", () => {
     expect(screen.getByText(/Thinking messages are hidden by default/)).toBeDefined();
     expect(
       screen.getByText(
-        "Thinking messages are hidden by default. When enabled, they will appear in Chats and Workflows transcripts after you save settings.",
+        "Thinking messages are hidden by default. When enabled, they will appear in session transcripts after you save settings.",
       ),
     ).toBeDefined();
     expect(screen.getByText("Expand file diffs by default")).toBeDefined();
-    expect(
-      screen.getByText(/File diffs in Chats and Workflows transcripts will start expanded/),
-    ).toBeDefined();
+    expect(screen.getByText(/File diffs in session transcripts will start expanded/)).toBeDefined();
     expect(screen.getByText("Diff Style")).toBeDefined();
     expect(screen.getByText("Diff Indicators")).toBeDefined();
     expect(screen.getByText("Diff Height")).toBeDefined();
@@ -78,7 +76,7 @@ describe("settings chat section", () => {
 
     renderSettingsChatSection(chatSettings);
 
-    expectSwitchChecked("Show thinking messages in Chats and Workflows transcripts", false);
+    expectSwitchChecked("Show thinking messages in session transcripts", false);
   });
 
   test("renders switch as checked when showThinkingMessages is true", () => {
@@ -86,7 +84,7 @@ describe("settings chat section", () => {
 
     renderSettingsChatSection(chatSettings);
 
-    expectSwitchChecked("Show thinking messages in Chats and Workflows transcripts", true);
+    expectSwitchChecked("Show thinking messages in session transcripts", true);
   });
 
   test("renders file diff switch as checked when diffs expand by default", () => {
@@ -94,7 +92,7 @@ describe("settings chat section", () => {
 
     renderSettingsChatSection(chatSettings);
 
-    expectSwitchChecked("Expand file diffs by default in Chats and Workflows transcripts", true);
+    expectSwitchChecked("Expand file diffs by default in session transcripts", true);
   });
 
   test("renders file diff switch as unchecked when diffs start collapsed", () => {
@@ -102,7 +100,7 @@ describe("settings chat section", () => {
 
     renderSettingsChatSection(chatSettings);
 
-    expectSwitchChecked("Expand file diffs by default in Chats and Workflows transcripts", false);
+    expectSwitchChecked("Expand file diffs by default in session transcripts", false);
   });
 
   test("switch is disabled when disabled prop is true", () => {

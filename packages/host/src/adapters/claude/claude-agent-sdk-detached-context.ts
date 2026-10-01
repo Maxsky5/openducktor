@@ -29,6 +29,9 @@ export const loadClaudeDetachedSessionContextUsage = async (input: {
           processEnv: input.processEnv,
         }),
         resume: input.externalSessionId,
+        // A read must not write the transcript. A write moves the native modified time that
+        // the session list uses as the latest activity time.
+        persistSession: false,
       },
     });
     await withTimeout(

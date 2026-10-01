@@ -318,7 +318,7 @@ describe("createWorkspaceSettingsService", () => {
     expect((await Effect.runPromise(failingService.getSettingsSnapshot())).system).toEqual({});
   });
 
-  test("serializes full settings saves with theme writes", async () => {
+  test("serializes full settings saves with theme and grouping writes", async () => {
     let release!: () => void;
     let started!: () => void;
     const held = new Promise<void>((resolve) => {
@@ -343,11 +343,13 @@ describe("createWorkspaceSettingsService", () => {
     const preferenceWrite = Effect.runPromise(
       saveSettingsSnapshot(service, { ...snapshot, system: { preferredOpenInToolId: "zed" } }),
     );
+    const groupingWrite = Effect.runPromise(service.updateSidebarSessionGrouping("none"));
     release();
-    await Promise.all([themeWrite, preferenceWrite]);
+    await Promise.all([themeWrite, preferenceWrite, groupingWrite]);
     expect(settingsConfig.writtenConfigs.at(-1)).toMatchObject({
       theme: "dark",
       system: { preferredOpenInToolId: "zed" },
+      appearance: { sidebarSessionGrouping: "none" },
     });
   });
 
@@ -419,6 +421,61 @@ describe("createWorkspaceSettingsService", () => {
       recentWorkspaces: ["repo"],
       agentModelFavorites: snapshot.agentModelFavorites,
     });
+  });
+
+  test("persists sidebar grouping across host restarts without changing other preferences", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-session-grouping-"));
+    const configPath = path.join(tempDir, "config.json");
+    try {
+      const service = createWorkspaceSettingsService(createSettingsConfigAdapter({ configPath }));
+      const initial = await Effect.runPromise(service.getSettingsSnapshot());
+      expect(initial.appearance.sidebarSessionGrouping).toBe("task");
+      await Effect.runPromise(
+        saveSettingsSnapshot(service, {
+          ...initial,
+          appearance: { ...initial.appearance, horizontalScrollbarVisibility: "hide" },
+        }),
+      );
+      await Effect.runPromise(service.setTheme("dark"));
+      const saved = await Effect.runPromise(service.updateSidebarSessionGrouping("none"));
+      expect(saved.appearance).toEqual({
+        horizontalScrollbarVisibility: "hide",
+        sidebarSessionGrouping: "none",
+      });
+      expect(saved.theme).toBe("dark");
+      const restarted = createWorkspaceSettingsService(createSettingsConfigAdapter({ configPath }));
+      expect(
+        (await Effect.runPromise(restarted.getSettingsSnapshot())).appearance
+          .sidebarSessionGrouping,
+      ).toBe("none");
+      await Effect.runPromise(restarted.updateSidebarSessionGrouping("task"));
+      expect(JSON.parse(await readFile(configPath, "utf8")).appearance).toEqual({
+        horizontalScrollbarVisibility: "hide",
+        sidebarSessionGrouping: "task",
+      });
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("propagates a failed sidebar grouping write without changing the saved mode", async () => {
+    const settingsConfig = createFakeSettingsConfig({ config: globalConfig() });
+    const failure = new HostOperationError({
+      operation: "config.write",
+      message: "Config directory is read-only",
+    });
+    const service = createWorkspaceSettingsService({
+      ...settingsConfig,
+      writeConfig: () => Effect.fail(failure),
+    });
+    const result = await Effect.runPromise(
+      Effect.either(service.updateSidebarSessionGrouping("none")),
+    );
+    expect(result._tag).toBe("Left");
+    if (result._tag === "Left") expect(result.left).toBe(failure);
+    expect(
+      (await Effect.runPromise(service.getSettingsSnapshot())).appearance.sidebarSessionGrouping,
+    ).toBe("task");
   });
 
   test("updates only the kanban task card view", async () => {
@@ -1152,6 +1209,7 @@ describe("createWorkspaceSettingsService", () => {
     };
     const explicitAppearanceSettings = {
       horizontalScrollbarVisibility: "show" as const,
+      sidebarSessionGrouping: "none" as const,
     };
     const records = await Effect.runPromise(
       saveSettingsSnapshot(service, {

@@ -25,6 +25,10 @@ export * from "./services/runtime-connections";
 export * from "./types/agent-orchestrator";
 export * from "./types/planner";
 
+export type {
+  AgentSessionMetadataPort,
+  LoadAgentSessionMetadataInput,
+} from "./ports/agent-session-metadata";
 export type { AgentSessionQueryParentPort } from "./ports/agent-session-query-parent";
 
 export * from "./ports/runtime-session-import";

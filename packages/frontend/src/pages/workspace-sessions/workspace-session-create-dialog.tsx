@@ -46,6 +46,7 @@ type WorkspaceSessionCreateDialogProps = {
   workspace: ActiveWorkspace;
   onClose: () => void;
   onCreated: (session: WorkspaceSession) => void;
+  onCloseAutoFocus?: (event: Event) => void;
 };
 
 export function WorkspaceSessionCreateDialog({
@@ -53,6 +54,7 @@ export function WorkspaceSessionCreateDialog({
   workspace,
   onClose,
   onCreated,
+  onCloseAutoFocus,
 }: WorkspaceSessionCreateDialogProps): ReactElement {
   const queryClient = useQueryClient();
   const roles = useQuery(customAgentRolesQueryOptions());
@@ -116,7 +118,7 @@ export function WorkspaceSessionCreateDialog({
         if (!open && !create.isPending) onClose();
       }}
     >
-      <DialogContent className="my-0 gap-0 p-0 sm:max-w-2xl">
+      <DialogContent className="my-0 gap-0 p-0 sm:max-w-2xl" onCloseAutoFocus={onCloseAutoFocus}>
         <DialogHeader className="border-b border-border px-6 py-4">
           <DialogTitle>New chat</DialogTitle>
           <DialogDescription>Choose where the agent works and how it starts.</DialogDescription>

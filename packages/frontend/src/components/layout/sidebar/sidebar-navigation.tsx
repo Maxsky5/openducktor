@@ -1,49 +1,28 @@
-import { Bot, Columns3, MessagesSquare } from "lucide-react";
+import { Columns3 } from "lucide-react";
 import { type MouseEvent, type ReactElement, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router";
 import { sidebarNavLinkClassName } from "./sidebar-navigation-styles";
 
-const NAV_ITEMS = [
-  { to: "/kanban", icon: Columns3, label: "Kanban", requiresRepo: false },
-  { to: "/workflows", icon: Bot, label: "Workflows", requiresRepo: true },
-  { to: "/chats", icon: MessagesSquare, label: "Chats", requiresRepo: true },
-] as const;
-
-type NavigationRoute = (typeof NAV_ITEMS)[number]["to"];
-
-type ActivatedNavigation = {
-  route: NavigationRoute;
-  sourceLocationKey: string;
-};
+const KANBAN_ROUTE = "/kanban";
 
 type SidebarNavigationState = {
-  activatedNavigation: ActivatedNavigation | null;
+  isActivated: boolean;
   committedLocationKey: string;
 };
 
 type SidebarNavigationProps = {
-  hasActiveWorkspace: boolean;
   compact?: boolean;
   onBeforeNavigate?: (apply: () => void, cancel?: () => void) => void;
-};
-
-type ShouldActivateSidebarNavigationArgs = {
-  currentPathname: string;
-  event: MouseEvent<HTMLAnchorElement>;
-  isDisabled: boolean;
-  linkTarget: NavigationRoute;
 };
 
 const isModifiedEvent = (event: MouseEvent<HTMLAnchorElement>): boolean =>
   event.metaKey || event.altKey || event.ctrlKey || event.shiftKey;
 
-const shouldActivateSidebarNavigation = ({
-  currentPathname,
-  event,
-  isDisabled,
-  linkTarget,
-}: ShouldActivateSidebarNavigationArgs): boolean => {
-  if (isDisabled || currentPathname === linkTarget || event.defaultPrevented) {
+const shouldActivateSidebarNavigation = (
+  currentPathname: string,
+  event: MouseEvent<HTMLAnchorElement>,
+): boolean => {
+  if (currentPathname === KANBAN_ROUTE || event.defaultPrevented) {
     return false;
   }
 
@@ -52,8 +31,8 @@ const shouldActivateSidebarNavigation = ({
   return event.button === 0 && (!target || target === "_self") && !isModifiedEvent(event);
 };
 
+/** The Kanban link. Sessions have their own list, so the sidebar keeps no page links for them. */
 export function SidebarNavigation({
-  hasActiveWorkspace,
   compact = false,
   onBeforeNavigate,
 }: SidebarNavigationProps): ReactElement {
@@ -63,84 +42,43 @@ export function SidebarNavigation({
   const currentPathname = location.pathname;
   const currentLocationKey = location.key;
   const [navigationState, setNavigationState] = useState<SidebarNavigationState>(() => ({
-    activatedNavigation: null,
+    isActivated: false,
     committedLocationKey: currentLocationKey,
   }));
-  let activatedNavigation = navigationState.activatedNavigation;
+  let isActivated = navigationState.isActivated;
 
   if (navigationState.committedLocationKey !== currentLocationKey) {
     // Reset during render so restored history entries cannot revive stale optimistic feedback.
-    activatedNavigation = null;
-    setNavigationState({ activatedNavigation: null, committedLocationKey: currentLocationKey });
+    isActivated = false;
+    setNavigationState({ isActivated: false, committedLocationKey: currentLocationKey });
   }
 
-  const activateRoute = (
-    event: MouseEvent<HTMLAnchorElement>,
-    linkTarget: NavigationRoute,
-    isDisabled: boolean,
-  ): void => {
-    if (currentPathname === linkTarget) {
-      setNavigationState({ activatedNavigation: null, committedLocationKey: currentLocationKey });
+  const activateRoute = (event: MouseEvent<HTMLAnchorElement>): void => {
+    if (!shouldActivateSidebarNavigation(currentPathname, event)) {
       return;
     }
-
-    if (
-      shouldActivateSidebarNavigation({
-        currentPathname,
-        event,
-        isDisabled,
-        linkTarget,
-      })
-    ) {
-      setNavigationState({
-        activatedNavigation: { route: linkTarget, sourceLocationKey: currentLocationKey },
-        committedLocationKey: currentLocationKey,
-      });
-      if (onBeforeNavigate) {
-        event.preventDefault();
-        onBeforeNavigate(
-          () => navigate(linkTarget),
-          () =>
-            setNavigationState({
-              activatedNavigation: null,
-              committedLocationKey: currentLocationKey,
-            }),
-        );
-      }
+    setNavigationState({ isActivated: true, committedLocationKey: currentLocationKey });
+    if (onBeforeNavigate) {
+      event.preventDefault();
+      onBeforeNavigate(
+        () => navigate(KANBAN_ROUTE),
+        () => setNavigationState({ isActivated: false, committedLocationKey: currentLocationKey }),
+      );
     }
   };
 
   return (
-    <nav className="space-y-1">
-      {NAV_ITEMS.map((item) => {
-        const Icon = item.icon;
-        const isDisabled = item.requiresRepo && !hasActiveWorkspace;
-        const linkTarget: NavigationRoute = isDisabled ? "/kanban" : item.to;
-        const isActivated =
-          activatedNavigation?.route === linkTarget &&
-          activatedNavigation.sourceLocationKey === currentLocationKey;
-        return (
-          <NavLink
-            key={item.to}
-            to={linkTarget}
-            title={item.label}
-            aria-label={item.label}
-            onClick={(event) => activateRoute(event, linkTarget, isDisabled)}
-            className={({ isActive }) =>
-              sidebarNavLinkClassName({
-                compact,
-                isActive,
-                isActivated,
-                isDisabled,
-              })
-            }
-            aria-disabled={isDisabled}
-          >
-            <Icon className="size-4" />
-            {!compact ? item.label : null}
-          </NavLink>
-        );
-      })}
+    <nav aria-label="Pages">
+      <NavLink
+        to={KANBAN_ROUTE}
+        title="Kanban"
+        aria-label="Kanban"
+        onClick={activateRoute}
+        className={({ isActive }) => sidebarNavLinkClassName({ compact, isActive, isActivated })}
+      >
+        <Columns3 className="size-4" />
+        {compact ? null : "Kanban"}
+      </NavLink>
     </nav>
   );
 }

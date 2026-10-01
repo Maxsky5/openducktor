@@ -292,10 +292,10 @@ describe("WorkspaceRail", () => {
 
     renderRail();
 
-    expect(screen.getByRole("button", { name: "Alpha Repo" }).getAttribute("style")).toContain(
+    expect(screen.getByText("AR").closest("[style]")?.getAttribute("style")).toContain(
       "background-color: #3b82f6",
     );
-    expect(screen.getByRole("button", { name: "Beta Repo" }).getAttribute("style")).toContain(
+    expect(screen.getByText("BR").closest("[style]")?.getAttribute("style")).toContain(
       "background-color: #f43f5e",
     );
   });

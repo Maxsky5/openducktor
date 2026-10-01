@@ -1,4 +1,4 @@
-import { type ReactElement, useCallback, useState } from "react";
+import { type ReactElement, type ReactNode, useCallback, useState } from "react";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
 import { OpenTaskDetailsButton } from "@/components/features/tasks/open-task-details-button";
 import { CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,7 +30,7 @@ function HeaderTitle({ taskTitle, taskId, onOpenTaskDetails }: HeaderTitleProps)
           className="truncate text-lg leading-6"
           title={hasTaskTitle ? normalizedTaskTitle : undefined}
         >
-          {hasTaskTitle ? normalizedTaskTitle : "Task workflows"}
+          {hasTaskTitle ? normalizedTaskTitle : "Task session"}
         </CardTitle>
       </div>
       {hasTaskId ? (
@@ -79,7 +79,13 @@ function AgentStudioQuickActionsMenu({
   );
 }
 
-export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }): ReactElement {
+export function AgentStudioHeader({
+  model,
+  viewControls,
+}: {
+  model: AgentStudioHeaderModel;
+  viewControls: ReactNode;
+}): ReactElement {
   const canOpenActionsMenu = canOpenQuickActionsMenu({
     agentStudioReady: model.agentStudioReady,
     isCreatingSession: model.isCreatingSession,
@@ -93,14 +99,14 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
     : "quick-actions-unavailable";
 
   return (
-    <CardHeader className="border-b border-border bg-card py-3 px-3">
+    <CardHeader className="electron-titlebar-safe-area border-b border-border bg-card py-3 px-4">
       <div className="flex items-start justify-between gap-2">
         <HeaderTitle
           taskTitle={model.taskTitle}
           taskId={model.taskId}
           onOpenTaskDetails={model.onOpenTaskDetails}
         />
-        <div className="flex shrink-0 items-stretch gap-2">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
           <SessionHistoryMenu
             selector={model.sessionSelector}
             agentStudioReady={model.agentStudioReady}
@@ -113,12 +119,17 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
         </div>
       </div>
 
-      <WorkflowRail
-        steps={model.workflowSteps}
-        selectedRole={model.selectedRole}
-        agentStudioReady={model.agentStudioReady}
-        onStepSelect={model.onWorkflowStepSelect}
-      />
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="@container/workflow min-w-0 flex-1 overflow-x-auto px-1 py-1">
+          <WorkflowRail
+            steps={model.workflowSteps}
+            selectedRole={model.selectedRole}
+            agentStudioReady={model.agentStudioReady}
+            onStepSelect={model.onWorkflowStepSelect}
+          />
+        </div>
+        {viewControls}
+      </div>
     </CardHeader>
   );
 }

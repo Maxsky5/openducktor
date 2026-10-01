@@ -239,6 +239,10 @@ export const createClaudeAgentSdkSession = async ({
     });
   }
   session.summary.status = isContinuation ? "running" : "idle";
+  // Restoring an idle session must not move its activity time in the session list.
+  if (sessionInput.options.resume && !sessionInput.options.forkSession && !isContinuation) {
+    return session.summary;
+  }
   const timestamp = now();
   if (isContinuation) {
     emit(session, {

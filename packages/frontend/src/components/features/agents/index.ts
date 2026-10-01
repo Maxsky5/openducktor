@@ -13,7 +13,6 @@ export type {
 } from "./agent-chat";
 export { AgentChatSurface } from "./agent-chat/agent-chat";
 export type { AgentRoleOption, AgentStudioHeaderModel } from "./agent-studio-header";
-export type { AgentStudioTaskTab, AgentStudioTaskTabsModel } from "./agent-studio-task-tabs";
 export {
   catalogModelOptionValue,
   toModelGroupsByProvider,

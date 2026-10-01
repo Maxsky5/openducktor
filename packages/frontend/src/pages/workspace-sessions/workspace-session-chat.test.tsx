@@ -110,7 +110,7 @@ const createWorkspaceChatHarness = ({
     },
     stopAgentSession: async () => {},
     continueInterruptedTurn: async () => undefined,
-    updateAgentSessionModel: () => {},
+    updateAgentSessionModel: async () => {},
     replyAgentApproval: async () => {},
     answerAgentQuestion: async () => {},
   };

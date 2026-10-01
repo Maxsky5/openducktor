@@ -577,6 +577,95 @@ describe("createClaudeAgentSdkService", () => {
     ]);
   });
 
+  test("reads conversation activity without counting Claude bookkeeping or retaining the session", async () => {
+    const sessionStore = createClaudeAgentSdkSessionStore();
+    const service = createService(null, undefined, sessionStore);
+    const ref = {
+      repoPath: "/repo/",
+      runtimeKind: "claude" as const,
+      workingDirectory: "/repo/worktree/",
+      externalSessionId: "session-1",
+    };
+    const sessionScope = { kind: "workflow", taskId: "task-1", role: "build" } as const;
+    const sessionInfo = spyOn(realClaudeSdk, "getSessionInfo").mockImplementation(
+      async (sessionId) => ({
+        sessionId,
+        summary: "Saved session",
+        lastModified: 1_790_000_000_000,
+        cwd: "/repo/worktree/",
+      }),
+    );
+    const activityAt = Date.parse("2026-06-25T20:00:01.000Z");
+    const importHistory = spyOn(realClaudeSdk, "importSessionToStore").mockImplementation(
+      async (sessionId, store) => {
+        await store.append({ projectKey: "repo", sessionId }, [
+          { type: "user", timestamp: "2026-06-25T20:00:00.000Z" },
+          { type: "assistant", timestamp: "2026-06-25T20:00:01.000Z" },
+          { type: "custom-title", timestamp: "2026-06-25T21:00:00.000Z" },
+          { type: "cost-state", timestamp: "2026-06-25T21:00:00.000Z" },
+          { type: "user", isMeta: true, timestamp: "2026-06-25T20:00:01.000Z" },
+          { type: "assistant", isSidechain: true, timestamp: "2026-06-25T21:00:00.000Z" },
+        ]);
+      },
+    );
+    try {
+      await expect(
+        Effect.runPromise(service.loadSessionMetadata({ ...ref, sessionScope })),
+      ).resolves.toEqual({ ref, lastActivityAt: activityAt });
+      expect(sessionInfo).toHaveBeenCalledWith("session-1", { dir: "/repo/worktree/" });
+      expect(importHistory).toHaveBeenCalledWith("session-1", expect.any(Object), {
+        dir: "/repo/worktree/",
+        includeSubagents: false,
+      });
+      expect(sessionStore.get(ref.externalSessionId)).toBeUndefined();
+
+      const moved = await Effect.runPromise(
+        Effect.flip(
+          service.loadSessionMetadata({
+            ...ref,
+            workingDirectory: "/repo/other-worktree/",
+            sessionScope,
+          }),
+        ),
+      );
+      expect(moved.cause).toBeInstanceOf(AgentRuntimeQueryError);
+      expect(moved.cause).toMatchObject({ code: "scope_mismatch" });
+      expect(importHistory).toHaveBeenCalledTimes(1);
+
+      importHistory.mockImplementation(async (sessionId, store) => {
+        await store.append({ projectKey: "repo", sessionId }, [
+          { type: "assistant" },
+          { type: "custom-title", timestamp: "2026-06-25T21:00:00.000Z" },
+        ]);
+      });
+      await expect(
+        Effect.runPromise(service.loadSessionMetadata({ ...ref, sessionScope })),
+      ).resolves.toEqual({ ref, lastActivityAt: null });
+    } finally {
+      importHistory.mockRestore();
+      sessionInfo.mockRestore();
+      service.dispose();
+    }
+  });
+
+  test("rejects session metadata for a retained session in another scope", async () => {
+    const service = createService(createSession());
+    const failure = await Effect.runPromise(
+      Effect.flip(
+        service.loadSessionMetadata({
+          repoPath: "/repo/",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree/",
+          externalSessionId: "session-1",
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "qa" },
+        }),
+      ),
+    );
+    expect(failure.cause).toBeInstanceOf(AgentRuntimeQueryError);
+    expect(failure.cause).toMatchObject({ code: "scope_mismatch" });
+    service.dispose();
+  });
+
   test("rejects live history reads from another working directory", () => {
     const service = createService(createSession());
 

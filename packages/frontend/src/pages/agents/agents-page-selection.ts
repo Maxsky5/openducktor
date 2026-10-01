@@ -222,22 +222,6 @@ export const resolveAgentStudioSessionSelection = ({
   }
 };
 
-export const findAgentStudioTaskSessionSummary = (
-  sessions: AgentSessionSummary[],
-  taskId: string,
-  sessionExternalId: string | null,
-): AgentSessionSummary | null => {
-  if (!taskId || !sessionExternalId) {
-    return null;
-  }
-
-  return (
-    sessions.find(
-      (entry) => entry.taskId === taskId && entry.externalSessionId === sessionExternalId,
-    ) ?? null
-  );
-};
-
 export type AgentStudioRouteSessionResolution =
   | { kind: "none" }
   | { kind: "pending"; sessionExternalId: string }
@@ -266,11 +250,22 @@ export const resolveAgentStudioRouteSession = ({
     return { kind: "none" };
   }
 
-  const session = sessionIdentity
-    ? sessions.find(
-        (entry) => entry.taskId === taskId && matchesAgentSessionIdentity(entry, sessionIdentity),
-      )
-    : findAgentStudioTaskSessionSummary(sessions, taskId, sessionExternalId);
+  // Without the complete identity, the external ID must match exactly one session of the task.
+  const matches = sessions.filter(
+    (entry) =>
+      entry.taskId === taskId &&
+      (sessionIdentity
+        ? matchesAgentSessionIdentity(entry, sessionIdentity)
+        : entry.externalSessionId === sessionExternalId),
+  );
+  if (matches.length > 1) {
+    return {
+      kind: "failed",
+      sessionExternalId,
+      message: `More than one session of this task has the session ID "${sessionExternalId}". Open the session from the session list.`,
+    };
+  }
+  const [session] = matches;
   if (session) {
     return { kind: "found", session };
   }

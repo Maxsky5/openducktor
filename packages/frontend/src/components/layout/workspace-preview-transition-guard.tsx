@@ -8,6 +8,7 @@ import {
   useRef,
 } from "react";
 import { useBlocker } from "react-router";
+import { SESSIONS_PATH } from "@/features/session-navigation/session-navigation-target";
 
 type RequestTransition = (
   apply: () => void | Promise<void | boolean>,
@@ -49,13 +50,20 @@ export function useWorkspacePreviewTransitionGuard(): GuardContext {
   return value;
 }
 
+/**
+ * Ask the visible session content before Back or Forward replaces it.
+ *
+ * On the Sessions page the address names the conversation, workspace, and content kind, so
+ * any history step to another address can discard unsaved file edits.
+ */
 export function WorkspacePreviewRouteGuard() {
   const { run } = useWorkspacePreviewTransitionGuard();
   const blocker = useBlocker(
     ({ currentLocation, nextLocation, historyAction }) =>
       historyAction === "POP" &&
-      currentLocation.pathname === "/chats" &&
-      nextLocation.pathname !== "/chats",
+      currentLocation.pathname === SESSIONS_PATH &&
+      (nextLocation.pathname !== currentLocation.pathname ||
+        nextLocation.search !== currentLocation.search),
   );
   useEffect(() => {
     if (blocker.state !== "blocked") return;

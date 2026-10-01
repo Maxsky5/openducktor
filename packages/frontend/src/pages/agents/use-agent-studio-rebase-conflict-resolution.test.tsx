@@ -143,6 +143,8 @@ describe("useAgentStudioRebaseConflictResolution", () => {
       expect(args.scheduleQueryUpdate).toHaveBeenCalledWith({
         task: "task-1",
         session: "build-1",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktrees/build-1",
         agent: "build",
       });
     } finally {
@@ -241,6 +243,8 @@ describe("useAgentStudioRebaseConflictResolution", () => {
       expect(args.scheduleQueryUpdate).toHaveBeenCalledWith({
         task: "task-1",
         session: "build-new-9",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktrees/build-new-9",
         agent: "build",
       });
     } finally {
@@ -277,6 +281,8 @@ describe("useAgentStudioRebaseConflictResolution", () => {
       expect(args.scheduleQueryUpdate).toHaveBeenCalledWith({
         task: "task-1",
         session: "build-new-9",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktrees/build-new-9",
         agent: "build",
       });
     } finally {

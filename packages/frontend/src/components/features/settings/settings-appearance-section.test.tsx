@@ -27,6 +27,7 @@ const createAppearanceSettings = (
   overrides: Partial<AppearanceSettings> = {},
 ): AppearanceSettings => ({
   horizontalScrollbarVisibility: "system",
+  sidebarSessionGrouping: "task",
   ...overrides,
 });
 
@@ -115,6 +116,27 @@ afterEach(() => {
 });
 
 describe("settings appearance section", () => {
+  test("switches task grouping without changing other appearance settings", () => {
+    const { getLatestAppearance, rerenderLatest } = renderAppearanceSectionWithUpdates(
+      createAppearanceSettings({ horizontalScrollbarVisibility: "hide" }),
+    );
+    expect(screen.getByRole("radio", { name: "By task" }).getAttribute("aria-checked")).toBe(
+      "true",
+    );
+    fireEvent.click(screen.getByRole("radio", { name: "Ungrouped" }));
+    rerenderLatest();
+    expect(screen.getByRole("radio", { name: "Ungrouped" }).getAttribute("aria-checked")).toBe(
+      "true",
+    );
+    expect(getLatestAppearance()).toEqual({
+      horizontalScrollbarVisibility: "hide",
+      sidebarSessionGrouping: "none",
+    });
+    fireEvent.click(screen.getByRole("radio", { name: "By task" }));
+    rerenderLatest();
+    expect(getLatestAppearance().sidebarSessionGrouping).toBe("task");
+  });
+
   test("offers the three theme choices and persists a selection at once", async () => {
     const setTheme = mock(async () => undefined);
     const originalSetTheme = hostBridge.client.setTheme;
@@ -223,6 +245,7 @@ describe("settings appearance section", () => {
     expect(onUpdateAppearance).toHaveBeenCalledTimes(3);
     expect(getLatestAppearance()).toEqual({
       horizontalScrollbarVisibility: "system",
+      sidebarSessionGrouping: "task",
     });
   });
 

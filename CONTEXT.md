@@ -22,13 +22,13 @@ _Avoid_: repository, project, folder
 The workspace-scoped SQLite source of truth through which OpenDucktor reads and writes **Tasks**, **Task Statuses**, and **Task Metadata**. Use **Task Store** in developer and agent discussions about building OpenDucktor, not as UI wording.
 _Avoid_: task cache, issue mirror, user-facing label
 
-**Task Workflows Page**:
-The OpenDucktor page for starting, resuming, and inspecting **Task-bound Sessions** in their **Task Workflow** context. **Workspace Sessions** live on the separate **Chats Page**.
-_Avoid_: Agent Studio, Agents page, chat page
+**Sessions Page**:
+The OpenDucktor page for starting, resuming, and inspecting **Task-bound Sessions** and **Workspace Sessions**. A **Task-bound Session** opens in its **Task Workflow** context. A **Workspace Session** opens with its **Execution Target** tools. The **Session List** in the sidebar selects the conversation on this page.
+_Avoid_: Task Workflows page, Chats page, Agent Studio, Agents page
 
-**Chats Page**:
-The OpenDucktor page for creating, resuming, and inspecting **Workspace Sessions**. **Task-bound Sessions** live on the separate **Task Workflows Page**.
-_Avoid_: Workspace Sessions page, repository sessions page, Agent Studio
+**Session List**:
+The sidebar list of saved **Task-bound Sessions** and **Workspace Sessions**, in the groups Needs you, Running, and Recent. Needs you contains sessions with a pending question or permission request, the latest session of a **Blocked** task, and a **Blocked** task that has no saved session. Running contains sessions that are starting or running. Recent contains the other sessions, newest activity first. The list shows the active **Workspace** or all open **Workspaces**.
+_Avoid_: activity card, chat list, workflow list
 
 **Kanban**:
 The OpenDucktor page that presents **Tasks** as a kanban board.
@@ -285,7 +285,7 @@ The history of **Agent Sessions** that belong to a specific **Task**, used to in
 _Avoid_: Transcript, runtime history, browser history
 
 **Task Session Records Query**:
-The frontend read boundary for **Task Session History**. The **Task Workflows Page**, Kanban, task details, and autopilot should use this query instead of reading session history from task-card summaries.
+The frontend read boundary for **Task Session History**. The **Sessions Page**, the **Session List**, Kanban, task details, and autopilot should use this query instead of reading session history from task-card summaries.
 _Avoid_: TaskCard session source, duplicated session history state
 
 **Repo Session Read Model**:
@@ -317,11 +317,11 @@ The host-owned live-state snapshot for **Agent Sessions** that OpenDucktor has r
 _Avoid_: runtime session discovery, Session Status source, polling, reconciliation store
 
 **Agent Chat**:
-The OpenDucktor surface that displays a **Transcript** and, when interaction is allowed, a **Chat Composer**. **Agent Chat** can appear inside or outside the **Task Workflows Page**; it is not a separate **Agent Session**.
-_Avoid_: Agent Session, Runtime, Transcript only, Task Workflows Page only
+The OpenDucktor surface that displays a **Transcript** and, when interaction is allowed, a **Chat Composer**. **Agent Chat** can appear inside or outside the **Sessions Page**; it is not a separate **Agent Session**.
+_Avoid_: Agent Session, Runtime, Transcript only, Sessions Page only
 
 **Read-only Session View**:
-A view on the **Task Workflows Page** that displays an **Agent Session** transcript without a **Chat Composer**. A **Read-only Session View** is used anywhere OpenDucktor needs transcript inspection without interaction.
+A view on the **Sessions Page** that displays an **Agent Session** transcript without a **Chat Composer**. A **Read-only Session View** is used anywhere OpenDucktor needs transcript inspection without interaction.
 _Avoid_: Transcript Session, Primary Session, read-only Agent Session
 
 **Chat Composer**:
@@ -341,7 +341,7 @@ A message produced by the **Runtime** during an **Agent Session**. An **Assistan
 _Avoid_: QA Report, Task Document, Tool Call
 
 **Reasoning Message**:
-A **Transcript** message or message part that displays model reasoning or thinking content when the **Runtime** exposes it. Users can choose whether **Reasoning Messages** are shown or hidden on the **Task Workflows Page**.
+A **Transcript** message or message part that displays model reasoning or thinking content when the **Runtime** exposes it. Users can choose whether **Reasoning Messages** are shown or hidden on the **Sessions Page**.
 _Avoid_: Assistant Message, Tool Call, QA Report
 
 **System Prompt**:
@@ -433,7 +433,7 @@ The **Transcript** entry that summarizes **Subagent** activity, status, prompt, 
 _Avoid_: Assistant Message, Tool Call
 
 **Subagent Pending Input**:
-**Pending Input** that belongs to a child **Subagent** session but is surfaced on the parent **Agent Session** so the user can answer it from the main **Task Workflows Page** context.
+**Pending Input** that belongs to a child **Subagent** session but is surfaced on the parent **Agent Session** so the user can answer it from the main **Sessions Page** context.
 _Avoid_: parent Pending Input, Blocked, Task Status
 
 **Compaction**:
@@ -465,11 +465,11 @@ _Avoid_: Human Approval, Task Completion Path, PR text
 ### Build Tools And Git
 
 **Build Tools**:
-The **Task Workflows Page** area for inspecting and operating on implementation context, including **Git Panel**, **Dev Server**, and **Open In**. **Build Tools** are usually tied to a **Build Worktree**.
+The **Sessions Page** area for inspecting and operating on implementation context, including **Git Panel**, **Dev Server**, and **Open In**. **Build Tools** are usually tied to a **Build Worktree**.
 _Avoid_: Builder Agent, Workflow MCP Tool, Runtime
 
 **Git Panel**:
-The build-tools surface on the **Task Workflows Page** for branch, diff, file status, conflict, reset, commit, rebase, pull, push, and **Open In** actions. **Git Panel** can operate in repository context or worktree context.
+The build-tools surface on the **Sessions Page** for branch, diff, file status, conflict, reset, commit, rebase, pull, push, and **Open In** actions. **Git Panel** can operate in repository context or worktree context.
 _Avoid_: Git provider, Pull Request, Task Completion Path
 
 **Current Branch**:
@@ -545,7 +545,7 @@ A user comment attached directly to a **File Diff** in the **Git Panel**. **Inli
 _Avoid_: Change Request, QA Report, Chat Composer message
 
 **Open In**:
-The **Task Workflows Page** action that opens the current repository or **Build Worktree** in an external tool such as a terminal, editor, or file manager.
+The **Sessions Page** action that opens the current repository or **Build Worktree** in an external tool such as a terminal, editor, or file manager.
 _Avoid_: Runtime, Tool Call, File Reference
 
 **Dev Server**:
@@ -684,7 +684,7 @@ Avoid standalone **Build** as a domain noun because it can mean a software build
 Use **Task Completion Path** for the OpenDucktor route after **Human Approval**, such as **Pull Request** or **Direct Merge**. Use **Git Merge Method** for the internal Git operation used by **Direct Merge**: `merge_commit`, `squash`, or `rebase`.
 
 **Git Panel vs Build Tools**:
-Use **Build Tools** for the **Task Workflows Page** area that groups implementation inspection and operations. Use **Git Panel** for the git-specific surface inside **Build Tools**.
+Use **Build Tools** for the **Sessions Page** area that groups implementation inspection and operations. Use **Git Panel** for the git-specific surface inside **Build Tools**.
 
 **Target Diff vs Uncommitted Diff**:
 Use **Target Diff** for comparison against the **Target Branch**. Use **Uncommitted Diff** for local working-tree changes.
@@ -693,7 +693,7 @@ Use **Target Diff** for comparison against the **Target Branch**. Use **Uncommit
 Use **Git Conflict** for a git operation conflict. Use **QA Rejection** for a rejected **QA Verdict** from **QA Review**.
 
 **Open In vs Tool Call**:
-Use **Open In** for the **Task Workflows Page** action that opens a repository or **Build Worktree** in an external application. Use **Tool Call** for a runtime tool invocation inside an **Agent Session**.
+Use **Open In** for the **Sessions Page** action that opens a repository or **Build Worktree** in an external application. Use **Tool Call** for a runtime tool invocation inside an **Agent Session**.
 
 **AI Review vs QA Review**:
 Use **AI Review** for the persisted **Task Status**. Use **QA Review** for the activity performed by the **QA Agent**.

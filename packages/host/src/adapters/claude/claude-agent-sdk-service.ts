@@ -4,7 +4,7 @@ import {
   updateClaudeSessionTitle,
 } from "./claude-session-title-update";
 import { getClaudeSessionMetadata, readClaudeSessionModel } from "./claude-session-metadata";
-import { resolveClaudeQuerySession } from "./claude-agent-sdk-query-session";
+import { readClaudeMetadata, resolveClaudeQuerySession } from "./claude-agent-sdk-query-session";
 import { randomUUID } from "node:crypto";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentSessionControlUpdateTitleInput } from "@openducktor/contracts";
@@ -16,6 +16,7 @@ import type {
   LoadAgentFileStatusInput,
   LoadAgentSessionDiffInput,
   LoadAgentSessionHistoryInput,
+  LoadAgentSessionMetadataInput,
   LoadAgentSessionTodosInput,
   ReplyApprovalInput,
   ReplyQuestionInput,
@@ -254,6 +255,10 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
       return Effect.succeed([...session.todosById.values()]);
     }
     return fromPromise("claudeRuntime.loadSessionTodos", () => loadClaudeTodos(input));
+  }
+
+  loadSessionMetadata(input: LoadAgentSessionMetadataInput) {
+    return readClaudeMetadata(this.sessionStore, input);
   }
 
   loadSessionContextUsage(input: LoadAgentSessionHistoryInput) {

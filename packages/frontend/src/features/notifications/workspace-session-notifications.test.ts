@@ -71,7 +71,7 @@ describe("Workspace Session notifications", () => {
     selection.resolve();
     await opening;
     expect(navigate).toHaveBeenCalledWith(
-      "/chats?session=chat&attention=question&attentionId=answer",
+      "/sessions?workspace=inactive&kind=workspace&session=chat&attention=question&attentionId=answer",
       expect.anything(),
     );
     expect(loadTasks).not.toHaveBeenCalled();

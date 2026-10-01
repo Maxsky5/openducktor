@@ -65,7 +65,9 @@ export const DEFAULT_GENERAL_SETTINGS = {
 } as const;
 export const DEFAULT_APPEARANCE_SETTINGS = {
   horizontalScrollbarVisibility: "system",
+  sidebarSessionGrouping: "task",
 } as const;
+export const SIDEBAR_SESSION_GROUPING_VALUES = ["task", "none"] as const;
 export const DEFAULT_REUSABLE_PROMPTS = [] as const;
 export const DEFAULT_KANBAN_SETTINGS = {
   doneVisibleDays: 1,
@@ -584,12 +586,18 @@ export type GeneralSettings = z.infer<typeof generalSettingsSchema>;
 export const horizontalScrollbarVisibilitySchema = z.enum(HORIZONTAL_SCROLLBAR_VISIBILITY_VALUES);
 export type HorizontalScrollbarVisibility = z.infer<typeof horizontalScrollbarVisibilitySchema>;
 
+export const sidebarSessionGroupingSchema = z.enum(SIDEBAR_SESSION_GROUPING_VALUES);
+export type SidebarSessionGrouping = z.infer<typeof sidebarSessionGroupingSchema>;
+
 export const appPlatformSchema = z.enum(APP_PLATFORM_VALUES);
 export type AppPlatform = z.infer<typeof appPlatformSchema>;
 
 export const appearanceSettingsSchema = z.object({
   horizontalScrollbarVisibility: horizontalScrollbarVisibilitySchema.default(
     DEFAULT_APPEARANCE_SETTINGS.horizontalScrollbarVisibility,
+  ),
+  sidebarSessionGrouping: sidebarSessionGroupingSchema.default(
+    DEFAULT_APPEARANCE_SETTINGS.sidebarSessionGrouping,
   ),
 });
 export type AppearanceSettings = z.infer<typeof appearanceSettingsSchema>;

@@ -77,7 +77,7 @@ describe("Bun test preload", () => {
       cmd: [
         process.execPath,
         "test",
-        path.join(ROOT, "packages/frontend/src/lib/canonical-route-redirect.test.tsx"),
+        path.join(ROOT, "packages/frontend/src/pages/sessions/legacy-sessions-redirect.test.tsx"),
       ],
       cwd: ROOT,
       stderr: "pipe",

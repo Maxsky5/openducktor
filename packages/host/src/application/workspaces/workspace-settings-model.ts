@@ -14,6 +14,7 @@ import {
   repoHooksSchema,
   type SettingsSnapshot,
   type SettingsSnapshotSaveInput,
+  type SidebarSessionGrouping,
   settingsSnapshotSchema,
   type ThemePreference,
   type WorkspaceCatalog,
@@ -133,6 +134,9 @@ export type WorkspaceSettingsService = {
   ): Effect.Effect<SettingsSnapshot, WorkspaceSettingsError>;
   updateKanbanTaskCardView(
     taskCardView: KanbanTaskCardView,
+  ): Effect.Effect<SettingsSnapshot, WorkspaceSettingsError>;
+  updateSidebarSessionGrouping(
+    grouping: SidebarSessionGrouping,
   ): Effect.Effect<SettingsSnapshot, WorkspaceSettingsError>;
   setTheme(theme: ThemePreference): Effect.Effect<void, WorkspaceSettingsError>;
   updateGlobalGitConfig(git: GlobalGitConfig): Effect.Effect<void, WorkspaceSettingsError>;

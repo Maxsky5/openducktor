@@ -3,6 +3,7 @@ import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-quer
 import { FolderTree } from "lucide-react";
 import {
   type ReactElement,
+  type ReactNode,
   useCallback,
   useEffect,
   useEffectEvent,
@@ -62,6 +63,8 @@ type WorkspaceSessionToolsProps = {
   selectedFile: TaskExecutionSelectedFile | null;
   onSelectFile: (file: TaskExecutionSelectedFile) => false | void;
   onRefreshReady: (refresh: ((scope: "git" | "all") => Promise<void>) | null) => void;
+  /** Replaces the read-only repository branch label for a repository-root session. */
+  repositoryBranchControl?: ReactNode;
 };
 
 function WorkspaceSessionTools({
@@ -81,6 +84,7 @@ function WorkspaceSessionTools({
   selectedFile,
   onSelectFile,
   onRefreshReady,
+  repositoryBranchControl,
 }: WorkspaceSessionToolsProps): ReactElement {
   const devServerOwner = useMemo<DevServerOwner>(
     () => ({ kind: "workspace_session", workspaceId, sessionId }),
@@ -167,6 +171,7 @@ function WorkspaceSessionTools({
       repoPath={repoPath}
       diffData={diffData}
       contextMode={contextMode}
+      repositoryBranchControl={repositoryBranchControl}
       branchReady={branchReady}
       resolvedTarget={resolvedTarget}
       unavailableReason={unavailableReason}

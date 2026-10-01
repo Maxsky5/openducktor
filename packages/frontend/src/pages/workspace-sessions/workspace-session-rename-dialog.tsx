@@ -23,6 +23,7 @@ import { updateWorkspaceSessionQueries } from "@/state/queries/workspace-session
 import { useMountedRef } from "./use-mounted-ref";
 
 type Props = {
+  open: boolean;
   workspaceId: string;
   record: WorkspaceSession;
   onClose: () => void;
@@ -30,6 +31,7 @@ type Props = {
 };
 
 export function WorkspaceSessionRenameDialog({
+  open,
   workspaceId,
   record,
   onClose,
@@ -50,9 +52,9 @@ export function WorkspaceSessionRenameDialog({
   const canSave = draft.trim() !== initialTitle && !rename.isPending;
   return (
     <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open && !rename.isPending) onClose();
+      open={open}
+      onOpenChange={(next) => {
+        if (!next && !rename.isPending) onClose();
       }}
     >
       <DialogContent

@@ -50,6 +50,10 @@ export const createAgentRuntimeQueryCommandHandlers = (
       AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.loadSessionDiff,
       (input) => service.loadSessionDiff(input),
     ),
+    agent_runtime_load_session_metadata: createQueryHandler(
+      AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.loadSessionMetadata,
+      (input) => service.loadSessionMetadata(input),
+    ),
     agent_runtime_file_status: createQueryHandler(
       AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.fileStatus,
       (input) => service.loadFileStatus(input),

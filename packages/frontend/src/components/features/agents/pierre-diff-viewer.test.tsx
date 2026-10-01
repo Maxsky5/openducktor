@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:
 import type { RenderDiffResult, RenderFileResult } from "@pierre/diffs";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
+import { toast } from "sonner";
+import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import {
   withCapturedConsoleMethods,
   withCapturedOutputStreams,
@@ -44,7 +46,7 @@ const createDefaultWorkerPoolMock = (): WorkerPoolMock => ({
   highlightDiffAST: mock(() => undefined),
   highlightFileAST: mock(() => undefined),
   isWorkingPool: mock(() => false),
-  primeDiffHighlightCache: mock(() => undefined),
+  primeDiffHighlightCache: mock(async () => {}),
   subscribeToStatChanges: mock(() => () => undefined),
 });
 
@@ -384,7 +386,9 @@ describe("PierreDiffViewer", () => {
 
   test("preloads parsed diffs by priming the worker cache", async () => {
     const { PierreDiffPreloader } = pierreViewerModule;
-    const primeDiffHighlightCache = mock();
+    const primeDiffHighlightCache = mock<PierreDiffViewerWorkerPool["primeDiffHighlightCache"]>(
+      async () => {},
+    );
     workerPoolMock = {
       ...createDefaultWorkerPoolMock(),
       getDiffResultCache: mock(() => undefined),
@@ -404,6 +408,53 @@ describe("PierreDiffViewer", () => {
     expect(fileDiff).toBeDefined();
     expect(fileDiff?.cacheKey).toBeString();
     expect(workerPoolMock?.getDiffResultCache).toHaveBeenCalledWith(fileDiff);
+  });
+
+  test("handles a pending diff preload being cancelled after its view closes", async () => {
+    const pending = createDeferred<void>();
+    const reportError = spyOn(toast, "error").mockImplementation(() => "preload-error");
+    workerPoolMock = {
+      ...createDefaultWorkerPoolMock(),
+      isWorkingPool: mock(() => true),
+      primeDiffHighlightCache: mock(() => pending.promise),
+    };
+    try {
+      const view = render(
+        <pierreViewerModule.PierreDiffPreloader patch={selectionPatch} filePath="src/app.ts" />,
+      );
+      view.unmount();
+      await act(async () => {
+        pending.reject(new Error("Worker pool terminated"));
+        await Promise.resolve();
+      });
+      expect(reportError).not.toHaveBeenCalled();
+    } finally {
+      reportError.mockRestore();
+    }
+  });
+
+  test("reports a failed diff preload while its view is open", async () => {
+    const pending = createDeferred<void>();
+    const reportError = spyOn(toast, "error").mockImplementation(() => "preload-error");
+    workerPoolMock = {
+      ...createDefaultWorkerPoolMock(),
+      isWorkingPool: mock(() => true),
+      primeDiffHighlightCache: mock(() => pending.promise),
+    };
+    try {
+      render(
+        <pierreViewerModule.PierreDiffPreloader patch={selectionPatch} filePath="src/app.ts" />,
+      );
+      await act(async () => {
+        pending.reject(new Error("Worker failed"));
+        await Promise.resolve();
+      });
+      expect(reportError).toHaveBeenCalledWith("Could not prepare syntax highlighting", {
+        description: "src/app.ts: Worker failed. Open the diff to try again.",
+      });
+    } finally {
+      reportError.mockRestore();
+    }
   });
 
   test("skips preloading when the worker already cached the parsed diff", async () => {

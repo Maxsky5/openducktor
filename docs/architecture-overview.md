@@ -47,7 +47,7 @@ The frontend renders `availableActions`. It does not derive transition rights fr
 
 ## Start an agent session
 
-1. The Task Workflows page calls `startAgentSession` in `use-agent-orchestrator-operations.ts`.
+1. The task content of the Sessions page calls `startAgentSession` in `use-agent-orchestrator-operations.ts`.
 2. `start-session.ts` applies `fresh`, `reuse`, or `fork` rules.
 3. `session-start-launch-options.ts` resolves the mode for the selected launch action.
 4. A fresh or forked session reads task documents, resolves the runtime, and reads the repository default model.

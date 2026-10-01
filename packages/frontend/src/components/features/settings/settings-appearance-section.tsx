@@ -8,6 +8,7 @@ import type { ReactElement } from "react";
 import { ThemePicker } from "@/components/layout/theme-picker";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupSegmentItem } from "@/components/ui/radio-group";
 import { SettingsOpenInTool } from "./settings-open-in-tool";
 
 type SettingsAppearanceSectionProps = {
@@ -91,6 +92,32 @@ export function SettingsAppearanceSection({
       </div>
 
       <SettingsOpenInTool system={system} disabled={disabled} onUpdateSystem={onUpdateSystem} />
+      <div className="grid gap-3 rounded-md border border-border bg-card p-4 md:grid-cols-[minmax(0,1fr)_16rem] md:items-start">
+        <div className="grid gap-2">
+          <Label id="appearance-sidebar-sessions-label">Sidebar sessions</Label>
+          <p id="appearance-sidebar-sessions-description" className="text-xs text-muted-foreground">
+            Show one current session per task, plus every session that needs input. Ungrouped shows
+            each session separately.
+          </p>
+        </div>
+        <RadioGroup
+          aria-labelledby="appearance-sidebar-sessions-label"
+          aria-describedby="appearance-sidebar-sessions-description"
+          orientation="horizontal"
+          data-variant="segmented"
+          className="grid h-9 grid-cols-2 items-center gap-1 rounded-lg bg-muted p-1"
+          value={appearance.sidebarSessionGrouping}
+          disabled={disabled}
+          onValueChange={(value) => {
+            if (value === "task" || value === "none") {
+              onUpdateAppearance((current) => ({ ...current, sidebarSessionGrouping: value }));
+            }
+          }}
+        >
+          <RadioGroupSegmentItem value="task">By task</RadioGroupSegmentItem>
+          <RadioGroupSegmentItem value="none">Ungrouped</RadioGroupSegmentItem>
+        </RadioGroup>
+      </div>
       <div className="grid gap-3 rounded-md border border-border bg-card p-4 md:grid-cols-[minmax(0,1fr)_16rem] md:items-start">
         <div className="grid gap-2">
           <Label id={labelId}>Horizontal Scrollbars</Label>

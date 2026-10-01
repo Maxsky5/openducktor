@@ -1,5 +1,5 @@
 import { GitBranch } from "lucide-react";
-import { memo, type ReactElement, useMemo } from "react";
+import { memo, type ReactElement, type ReactNode, useMemo } from "react";
 import { collectUnmergedFilePaths, type DiffDataState } from "@/features/agent-studio-git";
 import { useAgentStudioGitActions } from "@/pages/agents/use-agent-studio-git-actions";
 import { AgentStudioGitPanel } from "./agent-studio-git-panel/agent-studio-git-panel";
@@ -12,6 +12,7 @@ export function WorkspaceSessionGitTools({
   repoPath,
   diffData,
   contextMode,
+  repositoryBranchControl,
   branchReady,
   resolvedTarget,
   unavailableReason,
@@ -48,6 +49,7 @@ export function WorkspaceSessionGitTools({
     refresh,
     isLoading: diffData.isLoading || isFetchingTarget || !branchReady,
     contextMode,
+    repositoryBranchControl,
     targetBranch: resolvedTarget ?? "",
     comparisonUnavailableReason: unavailableReason,
     diffScope: resolvedTarget ? diffData.diffScope : "uncommitted",
@@ -90,6 +92,7 @@ type WorkspaceSessionGitToolsProps = {
   repoPath: string;
   diffData: DiffDataState;
   contextMode: "repository" | "worktree";
+  repositoryBranchControl?: ReactNode;
   branchReady: boolean;
   resolvedTarget: string | null;
   unavailableReason: string | null;

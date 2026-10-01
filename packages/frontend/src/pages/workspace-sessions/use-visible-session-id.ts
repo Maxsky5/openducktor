@@ -52,17 +52,6 @@ export function useVisibleSessionId(
     visibleSelectedId,
   ]);
 
-  const selectTab = useCallback(
-    (sessionId: string) => {
-      if (sessionId === requestedSelectedId && sessionId !== visibleSelectedId) {
-        canceledTargetRef.current = undefined;
-        setRetryCount((count) => count + 1);
-      } else {
-        updateNavigation({ sessionId }, false);
-      }
-    },
-    [requestedSelectedId, updateNavigation, visibleSelectedId],
-  );
   const leaveRemovedChat = useCallback(() => {
     if (
       requestedSelectedId !== null ||
@@ -82,5 +71,5 @@ export function useVisibleSessionId(
     },
     [updateNavigation],
   );
-  return { visibleSelectedId, selectTab, leaveRemovedChat, completeArchive };
+  return { visibleSelectedId, leaveRemovedChat, completeArchive };
 }

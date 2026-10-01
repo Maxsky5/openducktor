@@ -21,7 +21,6 @@ export const validateExistingGitTaskWorktree = (
   canonicalRepoPath: string,
   worktreePath: string,
   taskId: string,
-  branch: string,
 ) =>
   Effect.gen(function* () {
     const [canonicalWorktreePath, canonicalRepositoryPath] = yield* Effect.all([
@@ -59,22 +58,6 @@ export const validateExistingGitTaskWorktree = (
           field: "taskId",
           message: `Existing canonical path is not a registered worktree for task ${taskId}: ${worktreePath}`,
           details: { repoPath: canonicalRepoPath, taskId, worktreePath },
-        }),
-      );
-    }
-
-    const currentBranch = yield* dependencies.gitPort.getCurrentBranch(worktreePath);
-    if (currentBranch.detached || currentBranch.name !== branch) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "taskId",
-          message: `Existing worktree for task ${taskId} is on ${currentBranch.name ?? "a detached HEAD"} instead of ${branch}.`,
-          details: {
-            taskId,
-            worktreePath,
-            expectedBranch: branch,
-            actualBranch: currentBranch.name ?? null,
-          },
         }),
       );
     }

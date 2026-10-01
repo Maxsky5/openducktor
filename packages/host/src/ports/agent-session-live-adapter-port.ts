@@ -67,6 +67,8 @@ export type AgentSessionLiveAdapterChange = { readonly provenance?: "baseline" |
       readonly message: string;
       readonly operation?: string;
       readonly ref?: AgentSessionLiveRef;
+      /** The current status of `ref` could not be read, so its last snapshot can be stale. */
+      readonly statusUnavailable?: true;
     }
 );
 

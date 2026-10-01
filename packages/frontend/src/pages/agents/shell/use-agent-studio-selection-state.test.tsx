@@ -230,6 +230,8 @@ describe("useAgentStudioSelectionState", () => {
     expect(scheduleQueryUpdate).toHaveBeenCalledWith({
       task: "task-1",
       session: "session-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktrees/session-1",
       agent: "build",
     });
 

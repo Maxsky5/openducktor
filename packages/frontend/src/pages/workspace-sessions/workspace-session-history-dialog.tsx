@@ -25,10 +25,12 @@ export function WorkspaceSessionHistoryDialog({
   workspaceId,
   repoPath,
   onClose,
+  onCloseAutoFocus,
 }: {
   workspaceId: string;
   repoPath: string;
   onClose: () => void;
+  onCloseAutoFocus?: (event: Event) => void;
 }) {
   const queryClient = useQueryClient();
   const archived = useQuery(workspaceSessionListQueryOptions(workspaceId, true));
@@ -62,7 +64,7 @@ export function WorkspaceSessionHistoryDialog({
         if (!open) onClose();
       }}
     >
-      <DialogContent>
+      <DialogContent onCloseAutoFocus={onCloseAutoFocus}>
         <DialogHeader>
           <DialogTitle>Archived chats</DialogTitle>
           <DialogDescription>Restore a chat to return it to your workspace.</DialogDescription>

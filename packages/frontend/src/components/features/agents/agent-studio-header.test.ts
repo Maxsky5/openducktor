@@ -169,9 +169,7 @@ const buildModel = () => ({
 describe("AgentStudioHeader", () => {
   test("renders workflow rail and session controls", () => {
     const html = renderToStaticMarkup(
-      createElement(AgentStudioHeader, {
-        model: buildModel(),
-      }),
+      createElement(AgentStudioHeader, { viewControls: null, model: buildModel() }),
     );
 
     expect(html).toContain("Rework Agent Studio UI");
@@ -196,6 +194,7 @@ describe("AgentStudioHeader", () => {
   test("falls back to generic header title when task title is missing", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
+        viewControls: null,
         model: {
           ...buildModel(),
           taskTitle: null,
@@ -203,14 +202,12 @@ describe("AgentStudioHeader", () => {
       }),
     );
 
-    expect(html).toContain("Task workflows");
+    expect(html).toContain("Task session");
   });
 
   test("adds full task title as hover affordance on truncated heading", () => {
     const html = renderToStaticMarkup(
-      createElement(AgentStudioHeader, {
-        model: buildModel(),
-      }),
+      createElement(AgentStudioHeader, { viewControls: null, model: buildModel() }),
     );
 
     expect(html).toContain('title="Rework Agent Studio UI"');
@@ -218,9 +215,7 @@ describe("AgentStudioHeader", () => {
 
   test("shows selected session label in history trigger title", () => {
     const html = renderToStaticMarkup(
-      createElement(AgentStudioHeader, {
-        model: buildModel(),
-      }),
+      createElement(AgentStudioHeader, { viewControls: null, model: buildModel() }),
     );
 
     expect(html).toContain('title="Session history · Spec Revision · Spec"');
@@ -230,6 +225,7 @@ describe("AgentStudioHeader", () => {
     const onValueChange = mock(() => {});
     const { unmount } = render(
       createElement(AgentStudioHeader, {
+        viewControls: null,
         model: {
           ...buildModel(),
           sessionSelector: {
@@ -283,6 +279,7 @@ describe("AgentStudioHeader", () => {
 
     render(
       createElement(AgentStudioHeader, {
+        viewControls: null,
         model: {
           ...model,
           sessionSelector: {
@@ -309,6 +306,7 @@ describe("AgentStudioHeader", () => {
     const onValueChange = mock(() => {});
     render(
       createElement(AgentStudioHeader, {
+        viewControls: null,
         model: {
           ...buildModel(),
           sessionSelector: {
@@ -385,6 +383,7 @@ describe("AgentStudioHeader", () => {
     const onPrepareMessageFirstSession = mock(() => {});
     render(
       createElement(AgentStudioHeader, {
+        viewControls: null,
         model: {
           ...buildModel(),
           onPrepareMessageFirstSession,
@@ -412,6 +411,7 @@ describe("AgentStudioHeader", () => {
     const onQuickAction = mock(() => {});
     render(
       createElement(AgentStudioHeader, {
+        viewControls: null,
         model: {
           ...buildModel(),
           onQuickAction,
@@ -434,6 +434,7 @@ describe("AgentStudioHeader", () => {
     const onQuickAction = mock(() => {});
     render(
       createElement(AgentStudioHeader, {
+        viewControls: null,
         model: {
           ...buildModel(),
           sessionCreateOptions: [
@@ -495,6 +496,7 @@ describe("AgentStudioHeader", () => {
   test("renders the wider quick-actions popover with the taller result list", async () => {
     const { unmount } = render(
       createElement(AgentStudioHeader, {
+        viewControls: null,
         model: {
           ...buildModel(),
           quickActions: [
@@ -539,6 +541,7 @@ describe("AgentStudioHeader", () => {
   test("filters quick actions by action label instead of description text", async () => {
     const { unmount } = render(
       createElement(AgentStudioHeader, {
+        viewControls: null,
         model: {
           ...buildModel(),
           quickActions: [
@@ -584,9 +587,7 @@ describe("AgentStudioHeader", () => {
 
   test("closes quick-actions menu when actions become unavailable", async () => {
     const { rerender } = render(
-      createElement(AgentStudioHeader, {
-        model: buildModel(),
-      }),
+      createElement(AgentStudioHeader, { viewControls: null, model: buildModel() }),
     );
 
     await act(async () => {
@@ -597,6 +598,7 @@ describe("AgentStudioHeader", () => {
     await act(async () => {
       rerender(
         createElement(AgentStudioHeader, {
+          viewControls: null,
           model: {
             ...buildModel(),
             agentStudioReady: false,
@@ -608,11 +610,7 @@ describe("AgentStudioHeader", () => {
     expect(screen.queryByText("Prepare Builder session")).toBeNull();
 
     await act(async () => {
-      rerender(
-        createElement(AgentStudioHeader, {
-          model: buildModel(),
-        }),
-      );
+      rerender(createElement(AgentStudioHeader, { viewControls: null, model: buildModel() }));
     });
 
     expect(screen.queryByText("Prepare Builder session")).toBeNull();
@@ -623,6 +621,7 @@ describe("AgentStudioHeader", () => {
     const onResolveGitConflictQuickAction = mock(() => {});
     render(
       createElement(AgentStudioHeader, {
+        viewControls: null,
         model: {
           ...buildModel(),
           quickActions: [
@@ -703,9 +702,7 @@ describe("AgentStudioHeader", () => {
 
   test("uses the accent variant for the quick action split button", () => {
     const html = renderToStaticMarkup(
-      createElement(AgentStudioHeader, {
-        model: buildModel(),
-      }),
+      createElement(AgentStudioHeader, { viewControls: null, model: buildModel() }),
     );
 
     expect(html).toMatch(
@@ -720,6 +717,7 @@ describe("AgentStudioHeader", () => {
   test("hides the task details button when no task is selected", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
+        viewControls: null,
         model: {
           ...buildModel(),
           taskId: null,
@@ -735,6 +733,7 @@ describe("AgentStudioHeader", () => {
   test("disables controls when studio is blocked", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
+        viewControls: null,
         model: {
           ...buildModel(),
           agentStudioReady: false,
@@ -757,6 +756,7 @@ describe("AgentStudioHeader", () => {
     const model = buildModel();
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
+        viewControls: null,
         model: {
           ...model,
           sessionSelector: {
@@ -775,6 +775,7 @@ describe("AgentStudioHeader", () => {
   test("disables quick action launch while a session is starting without showing a loader", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
+        viewControls: null,
         model: {
           ...buildModel(),
           isCreatingSession: true,
@@ -795,6 +796,7 @@ describe("AgentStudioHeader", () => {
   test("keeps unavailable workflow step clickable without existing session", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
+        viewControls: null,
         model: {
           ...buildModel(),
           selectedRole: "qa",
@@ -835,6 +837,7 @@ describe("AgentStudioHeader", () => {
   test("highlights selected role with a ring without changing done status color", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
+        viewControls: null,
         model: {
           ...buildModel(),
           selectedRole: "planner",
@@ -864,9 +867,7 @@ describe("AgentStudioHeader", () => {
 
   test("marks workflow step buttons with pressed state for the selected role", () => {
     const html = renderToStaticMarkup(
-      createElement(AgentStudioHeader, {
-        model: buildModel(),
-      }),
+      createElement(AgentStudioHeader, { viewControls: null, model: buildModel() }),
     );
 
     expect(html).toContain('aria-pressed="true"');
@@ -876,6 +877,7 @@ describe("AgentStudioHeader", () => {
   test("renders waiting-input workflow step hint and warning styling", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
+        viewControls: null,
         model: {
           ...buildModel(),
           selectedRole: "qa",
@@ -905,6 +907,7 @@ describe("AgentStudioHeader", () => {
   test("renders blocked builder warning with alert icon and blocked-task copy", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
+        viewControls: null,
         model: {
           ...buildModel(),
           selectedRole: "build",
@@ -935,6 +938,7 @@ describe("AgentStudioHeader", () => {
   test("renders optional workflow step as neutral dashed styling", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
+        viewControls: null,
         model: {
           ...buildModel(),
           selectedRole: "qa",
@@ -966,6 +970,7 @@ describe("AgentStudioHeader", () => {
   test("does not keep the dashed border once an optional step becomes active", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
+        viewControls: null,
         model: {
           ...buildModel(),
           workflowSteps: [
@@ -992,6 +997,7 @@ describe("AgentStudioHeader", () => {
   test("renders failed workflow step hint and destructive styling", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
+        viewControls: null,
         model: {
           ...buildModel(),
           workflowSteps: [
@@ -1019,6 +1025,7 @@ describe("AgentStudioHeader", () => {
   test("renders failed workflow step without session as actionable startup failure", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
+        viewControls: null,
         model: {
           ...buildModel(),
           workflowSteps: [
@@ -1046,6 +1053,7 @@ describe("AgentStudioHeader", () => {
   test("uses neutral rejection copy for rejected review steps", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
+        viewControls: null,
         model: {
           ...buildModel(),
           workflowSteps: [
@@ -1077,6 +1085,7 @@ describe("AgentStudioHeader", () => {
     expect(() =>
       renderToStaticMarkup(
         createElement(AgentStudioHeader, {
+          viewControls: null,
           model: {
             ...buildModel(),
             workflowSteps: [

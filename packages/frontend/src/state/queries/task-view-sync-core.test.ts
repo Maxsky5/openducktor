@@ -254,6 +254,44 @@ describe("TaskViewSync", () => {
     ).toBe(true);
   });
 
+  test("refetches an observed task list of an inactive repository", async () => {
+    const { queryClient, sync } = createSync(createPorts());
+    queryClient.setQueryData(taskQueryKeys.repoData("/inactive"), { tasks: [] });
+    const refreshed = [createTaskCardFixture({ id: "task-1", status: "blocked" })];
+    const readObservedTasks = mock(async () => ({ tasks: refreshed }));
+    const unsubscribe = new QueryObserver(queryClient, {
+      queryKey: taskQueryKeys.repoData("/inactive"),
+      queryFn: readObservedTasks,
+      staleTime: Infinity,
+    }).subscribe(() => {});
+
+    try {
+      await sync.reconcileExternalEvent(
+        {
+          kind: "tasks_updated",
+          eventId: "event-observed-inactive",
+          repoPath: "/inactive",
+          taskIds: ["task-1"],
+          removedTaskIds: [],
+          statusChanges: [],
+          taskSnapshots: [{ id: "task-1", title: "Task 1", status: "blocked" }],
+          emittedAt: "2026-04-10T13:10:00.000Z",
+        },
+        "/repo",
+      );
+
+      expect(readObservedTasks).toHaveBeenCalledTimes(1);
+      expect(
+        queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/inactive")),
+      ).toEqual({ tasks: refreshed });
+
+      await sync.reconcileStreamSnapshot("/repo");
+      expect(readObservedTasks).toHaveBeenCalledTimes(2);
+    } finally {
+      unsubscribe();
+    }
+  });
+
   test("cancels inactive event documents and task lists before invalidation", async () => {
     const { queryClient, sync } = createSync(createPorts());
     const calls = recordQueryOperations(queryClient);

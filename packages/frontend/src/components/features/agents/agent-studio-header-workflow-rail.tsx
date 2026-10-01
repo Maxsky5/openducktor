@@ -11,6 +11,10 @@ import {
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
+import {
+  AGENT_WORKFLOW_TONE_ICON_CLASSES,
+  AGENT_WORKFLOW_TONE_TEXT_CLASSES,
+} from "@/lib/agent-workflow-styles";
 import { cn } from "@/lib/utils";
 import type { AgentWorkflowStepState } from "@/types/agent-workflow";
 import type { AgentWorkflowStep } from "./agent-studio-header.types";
@@ -25,17 +29,14 @@ type WorkflowRailProps = {
 type WorkflowStepAttentionVariant = "none" | "session_waiting_input" | "blocked_task";
 
 const WORKFLOW_STEP_CLASSES = {
-  in_progress: "border-info-border bg-info-surface hover:bg-info-surface text-info-muted shadow-sm",
-  done: "border-success-border bg-success-surface hover:bg-success-surface text-success-muted shadow-sm",
-  available: "border-input bg-card text-foreground",
-  optional: "border-input bg-card text-foreground",
-  rejected:
-    "border-rejected-border bg-rejected-surface text-rejected-muted shadow-sm hover:bg-rejected-surface",
-  waiting_input:
-    "border-warning-border bg-warning-surface hover:bg-warning-surface text-warning-muted shadow-sm",
-  failed:
-    "border-destructive-border bg-destructive-surface hover:bg-destructive-surface text-destructive-muted shadow-sm",
-  blocked: "border-border bg-muted text-muted-foreground",
+  in_progress: "border-info-border bg-info-surface hover:bg-info-surface shadow-sm",
+  done: "border-success-border bg-success-surface hover:bg-success-surface shadow-sm",
+  available: "border-input bg-card",
+  optional: "border-input bg-card",
+  rejected: "border-rejected-border bg-rejected-surface shadow-sm hover:bg-rejected-surface",
+  waiting_input: "border-warning-border bg-warning-surface hover:bg-warning-surface shadow-sm",
+  failed: "border-destructive-border bg-destructive-surface hover:bg-destructive-surface shadow-sm",
+  blocked: "border-border bg-muted",
 } satisfies Record<AgentWorkflowStepState["tone"], string>;
 
 const WORKFLOW_CONNECTOR_CLASSES = {
@@ -142,42 +143,15 @@ const workflowStepHint = (entry: AgentWorkflowStep): string => {
   return "Blocked by workflow state";
 };
 
-function WorkflowStepButton({
-  step,
-  isSelected,
-  agentStudioReady,
-  onSelect,
-}: {
-  step: AgentWorkflowStep;
-  isSelected: boolean;
-  agentStudioReady: boolean;
-  onSelect: (role: AgentRole, sessionValue: string | null) => void;
-}): ReactElement {
+function WorkflowStepContent({ step }: { step: AgentWorkflowStep }): ReactElement {
   const Icon = step.icon;
   const shouldSpinInProgress =
     step.state.liveSession !== "none" && isAgentSessionActivityWorking(step.state.liveSession);
   const attentionVariant = getWorkflowStepAttentionVariant(step);
 
   return (
-    <Button
-      type="button"
-      size="sm"
-      variant="outline"
-      className={cn(
-        "h-9 shrink-0 gap-2 rounded-lg border px-4 text-sm transition-none",
-        workflowStepClassName(step.state),
-        workflowBorderStyleClassName(step.state),
-        workflowSelectionClassName(isSelected, step.state),
-        "cursor-pointer",
-      )}
-      disabled={!agentStudioReady}
-      aria-pressed={isSelected}
-      title={workflowStepHint(step)}
-      onClick={() => {
-        onSelect(step.role, step.sessionValue);
-      }}
-    >
-      <Icon className="size-4" />
+    <>
+      <Icon className={cn("size-4", AGENT_WORKFLOW_TONE_ICON_CLASSES[step.state.tone])} />
       {step.label}
       {step.state.tone === "done" ? <Check className="size-3.5 text-success-accent" /> : null}
       {attentionVariant === "session_waiting_input" ? <CircleDashed className="size-3.5" /> : null}
@@ -193,6 +167,77 @@ function WorkflowStepButton({
       {step.state.tone === "rejected" || step.state.tone === "failed" ? (
         <AlertTriangle className="size-3.5" />
       ) : null}
+    </>
+  );
+}
+
+/** Compact navigation using the same role buttons as the Agent Studio header. */
+export function WorkflowRailPreview({
+  steps,
+  selectedRole,
+  onStepSelect,
+}: Pick<WorkflowRailProps, "steps" | "selectedRole" | "onStepSelect">): ReactElement {
+  return (
+    <ol aria-label="Task workflow" className="flex items-center gap-1 py-1">
+      {steps.map((step, index) => (
+        <li key={step.role} className="flex min-w-0 flex-1 items-center gap-1">
+          <WorkflowStepButton
+            step={step}
+            isSelected={selectedRole === step.role}
+            agentStudioReady
+            onSelect={onStepSelect}
+            compact
+          />
+          {index < steps.length - 1 ? (
+            <ChevronRight
+              aria-hidden="true"
+              className={cn("size-3 shrink-0", workflowConnectorClassName(steps[index + 1]!.state))}
+            />
+          ) : null}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function WorkflowStepButton({
+  step,
+  isSelected,
+  agentStudioReady,
+  onSelect,
+  compact = false,
+}: {
+  step: AgentWorkflowStep;
+  isSelected: boolean;
+  agentStudioReady: boolean;
+  onSelect: (role: AgentRole, sessionValue: string | null) => void;
+  compact?: boolean;
+}): ReactElement {
+  return (
+    <Button
+      type="button"
+      size={compact ? "xs" : "sm"}
+      variant="outline"
+      className={cn(
+        "border transition-none cursor-pointer",
+        compact
+          ? "h-7 min-w-0 flex-1 gap-1 rounded-md px-1.5 text-[11px] [&_svg]:size-3 [&_svg]:shrink-0"
+          : "h-9 shrink-0 gap-2 rounded-lg px-4 text-sm @max-[480px]/workflow:px-1.5",
+        workflowStepClassName(step.state),
+        AGENT_WORKFLOW_TONE_TEXT_CLASSES[step.state.tone],
+        workflowBorderStyleClassName(step.state),
+        workflowSelectionClassName(isSelected, step.state),
+        isSelected && compact && "ring-offset-1 ring-offset-popover",
+      )}
+      disabled={!agentStudioReady}
+      aria-pressed={isSelected}
+      aria-current={isSelected && compact ? "step" : undefined}
+      title={workflowStepHint(step)}
+      onClick={() => {
+        onSelect(step.role, step.sessionValue);
+      }}
+    >
+      <WorkflowStepContent step={step} />
     </Button>
   );
 }
@@ -204,7 +249,7 @@ export function WorkflowRail({
   onStepSelect,
 }: WorkflowRailProps): ReactElement {
   return (
-    <div className="flex items-center justify-center py-0.5">
+    <div className="flex w-max min-w-full items-center justify-center py-0.5">
       <div className="flex items-center gap-1">
         {steps.map((step, index) => {
           const nextStep = steps[index + 1] ?? null;

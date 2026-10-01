@@ -14,7 +14,6 @@ import * as modals from "./agents-page-modal-content";
 import {
   createAgentChatModelFixture,
   createAgentStudioHeaderModelFixture,
-  createAgentStudioTaskTabsModelFixture,
 } from "./use-agents-page-shell-model.test-support";
 
 function MainChatPreview() {
@@ -35,17 +34,15 @@ function MainChatPreview() {
   }, [taskId]);
   const model: AgentsPageLayoutModel = {
     activeWorkspace: { workspaceId: "repo", workspaceName: "Repo", repoPath: "/repo" },
-    activeTabValue: taskId,
     navigationPersistenceError: null,
     chatSettingsLoadError: null,
     gitProviderContextLoadError: null,
     onRetryNavigationPersistence: () => {},
     onRetryChatSettingsLoad: () => {},
     onRetryGitProviderContext: () => {},
-    onTabValueChange: () => {},
-    taskTabsModel: createAgentStudioTaskTabsModelFixture(),
-    rightPanelToggleModel: undefined,
+    rightPanelToggleModel: null,
     hasSelectedTask: true,
+    unavailableTaskId: null,
     chatHeaderModel: createAgentStudioHeaderModelFixture(),
     chatModel,
     chatFileLinkOwner: {

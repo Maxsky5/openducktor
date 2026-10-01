@@ -50,13 +50,18 @@ The runtime catalog keeps inactive results for 60 minutes so a modal can show ca
 | Task list and runs | 30 sec |
 | Runs | 30 sec |
 | Agent session list | 30 sec |
+| Agent session metadata | No expiry |
 | Task documents | 60 sec |
 | Task approval context | 60 sec |
 | Host runtime and MCP bridge status | Infinite, updated by events |
 
-Query modules: `tasks.ts`, `agent-sessions.ts`, `documents.ts`, `task-approval.ts`, `runtime.ts`, and `host-runtime-status.ts`.
+Query modules: `tasks.ts`, `agent-sessions.ts`, `agent-session-metadata.ts`, `documents.ts`, `task-approval.ts`, `runtime.ts`, and `host-runtime-status.ts`.
 
 The `openducktor://runtime-changed` event stream owns host runtime status and MCP bridge status after the first read. Merge each event into the cached snapshot by host instance and revision. Do not poll it.
+
+Agent session metadata holds the native activity time of a saved task session. Live observation supplies newer times, so a successful read does not expire. A failed read retries when its runtime becomes ready or when a new observer mounts. When the runtime becomes ready, a read in flight is cancelled and starts again, because it can still fail from the time the runtime was away.
+
+A task event for an inactive workspace invalidates its task list and session lists. Only lists that a view observes read again at once, such as the session list in all-workspaces scope. A stream snapshot keeps and reads again the observed session lists of inactive workspaces, and removes the others.
 
 ### Checks and file data
 

@@ -31,6 +31,12 @@ Read [the status model](task-workflow-status-model.md) for status and issue type
 | `human_request_changes` | Move `ai_review` or `human_review` to `in_progress`. |
 | `human_approve` | Move `ai_review` or `human_review` to `closed` after the epic child check passes. |
 
+## Session startup
+
+Spec, Planner, Builder, and QA sessions use the canonical task worktree directory. An existing directory must be a registered worktree of the workspace repository. It must not resolve to the repository root.
+
+Session startup accepts any branch or detached HEAD in that worktree. It keeps the current branch and files. If the worktree does not exist, startup creates it with the configured task branch name and runs the configured copy paths and hooks.
+
 ## Document actions
 
 `set_spec` writes or revises the specification. From `open`, it moves the task to `spec_ready`. In any other allowed status, it changes only the document.

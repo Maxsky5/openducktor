@@ -1,7 +1,17 @@
-import { getSessionInfo, getSessionMessages, listSessions } from "@anthropic-ai/claude-agent-sdk";
-import type { SessionRef } from "@openducktor/core";
+import {
+  getSessionInfo,
+  getSessionMessages,
+  importSessionToStore,
+  listSessions,
+} from "@anthropic-ai/claude-agent-sdk";
+import { AgentRuntimeQueryError, type SessionRef } from "@openducktor/core";
 import { z } from "zod";
-import type { AgentSessionModelSelection, WorkspaceSessionExternal } from "@openducktor/contracts";
+import type {
+  AgentSessionMetadata,
+  AgentSessionModelSelection,
+  WorkspaceSessionExternal,
+} from "@openducktor/contracts";
+import { parseClaudeHistoryStoreEntry } from "./claude-agent-sdk-ingress-schemas";
 
 const metadata = (
   row: Awaited<ReturnType<typeof listSessions>>[number],
@@ -54,4 +64,51 @@ export const readClaudeSessionModel = async (
       return { runtimeKind: "claude", providerId: "claude", modelId };
   }
   return null;
+};
+
+/** Reads conversation activity without opening the session or counting native bookkeeping writes. */
+export const loadClaudeSessionMetadata = async (ref: SessionRef): Promise<AgentSessionMetadata> => {
+  const row = await getSessionInfo(ref.externalSessionId, { dir: ref.workingDirectory });
+  if (!row)
+    throw new AgentRuntimeQueryError(
+      "request_failed",
+      "Claude conversation is missing or unreadable. Check its directory and retry.",
+    );
+  if (row.sessionId !== ref.externalSessionId || row.cwd !== ref.workingDirectory)
+    throw new AgentRuntimeQueryError(
+      "scope_mismatch",
+      "The native session does not match the selected session and working directory. Select the matching session.",
+    );
+  const { repoPath, runtimeKind, workingDirectory, externalSessionId } = ref;
+  return {
+    ref: { repoPath, runtimeKind, workingDirectory, externalSessionId },
+    lastActivityAt: await readActivityTime(ref),
+  };
+};
+
+// The SDK's message API drops timestamps. Read root entries in batches and retain only their time.
+const readActivityTime = async (ref: SessionRef): Promise<number | null> => {
+  let latest: number | null = null;
+  await importSessionToStore(
+    ref.externalSessionId,
+    {
+      append: async (_key, entries) => {
+        for (const entry of entries) {
+          if (
+            (entry.type !== "user" && entry.type !== "assistant" && entry.type !== "result") ||
+            entry.isSidechain === true
+          ) {
+            continue;
+          }
+          const { timestamp } = parseClaudeHistoryStoreEntry(entry);
+          if (timestamp === undefined) continue;
+          const time = Date.parse(timestamp);
+          if (!Number.isNaN(time)) latest = Math.max(latest ?? time, time);
+        }
+      },
+      load: async () => null,
+    },
+    { dir: ref.workingDirectory, includeSubagents: false },
+  );
+  return latest;
 };
