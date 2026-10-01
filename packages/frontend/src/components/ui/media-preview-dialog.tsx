@@ -1,19 +1,20 @@
-import { type ReactElement, type ReactNode, useEffect, useState } from "react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./dialog";
+import { X } from "lucide-react";
+import { type ReactElement, type ReactNode, useEffect, useRef, useState } from "react";
+import { Button } from "./button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "./dialog";
 
 export type MediaPreviewItem =
   | { id: string; kind: "image"; src: string; alt: string; unavailableLabel?: string }
   | { id: string; kind: "video"; src: string; ariaLabel: string };
 
-export const MediaPreviewDialog = ({
-  open,
-  onOpenChange,
-  title,
-  description,
-  media,
-  onMediaError,
-  trigger,
-}: {
+type MediaPreviewDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
@@ -21,7 +22,20 @@ export const MediaPreviewDialog = ({
   media: readonly MediaPreviewItem[];
   onMediaError?: (media: MediaPreviewItem) => void;
   trigger?: ReactNode;
-}): ReactElement => {
+  actions?: ReactNode;
+};
+
+export function MediaPreviewDialog({
+  open,
+  onOpenChange,
+  title,
+  description,
+  media,
+  onMediaError,
+  trigger,
+  actions,
+}: MediaPreviewDialogProps): ReactElement {
+  const dialogRef = useRef<HTMLDivElement>(null);
   const [failedSources, setFailedSources] = useState<ReadonlySet<string>>(() => new Set());
 
   useEffect(() => {
@@ -39,10 +53,35 @@ export const MediaPreviewDialog = ({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {trigger}
-      <DialogContent className="my-0 max-w-[min(96vw,72rem)] gap-4 border-border bg-background">
+      <DialogContent
+        ref={dialogRef}
+        closeButton={null}
+        className="my-0 max-w-[min(96vw,72rem)] gap-4 border-border bg-background"
+        onOpenAutoFocus={(event) => {
+          if (!actions) return;
+          event.preventDefault();
+          dialogRef.current?.focus();
+        }}
+      >
         <DialogHeader className="bg-background">
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
+          <div className="flex min-w-0 items-center justify-between gap-3">
+            <DialogTitle>{title}</DialogTitle>
+            <div className="flex shrink-0 items-center gap-1">
+              {actions}
+              <DialogClose asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 text-muted-foreground"
+                  aria-label="Close"
+                >
+                  <X aria-hidden="true" />
+                </Button>
+              </DialogClose>
+            </div>
+          </div>
+          <DialogDescription className="text-foreground/75">{description}</DialogDescription>
         </DialogHeader>
         <div className="max-h-[80vh] space-y-2 overflow-y-auto rounded-md border border-border bg-muted/40 p-2">
           {media.map((item) => (
@@ -57,7 +96,7 @@ export const MediaPreviewDialog = ({
       </DialogContent>
     </Dialog>
   );
-};
+}
 
 const MediaPreviewItemView = ({
   item,

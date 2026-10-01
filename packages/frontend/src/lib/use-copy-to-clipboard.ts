@@ -6,13 +6,14 @@ type UseCopyToClipboardOptions = {
   successMessage?: string;
   getSuccessDescription?: ((value: string) => string | undefined) | undefined;
   copyFailedMessage?: string;
+  copyFailedDescription?: string;
   resetDelayMs?: number;
   errorLogContext?: string;
 };
 
 type UseCopyToClipboardResult = {
   copied: boolean;
-  copyToClipboard: (value: string) => Promise<boolean>;
+  copyToClipboard: (value: string | Blob) => Promise<boolean>;
 };
 
 const DEFAULT_SUCCESS_MESSAGE = "Copied!";
@@ -23,6 +24,7 @@ export function useCopyToClipboard({
   successMessage = DEFAULT_SUCCESS_MESSAGE,
   getSuccessDescription,
   copyFailedMessage = DEFAULT_COPY_FAILED_MESSAGE,
+  copyFailedDescription,
   resetDelayMs = DEFAULT_RESET_DELAY_MS,
   errorLogContext,
 }: UseCopyToClipboardOptions = {}): UseCopyToClipboardResult {
@@ -39,18 +41,20 @@ export function useCopyToClipboard({
   useEffect(() => clearResetTimeout, [clearResetTimeout]);
 
   const copyToClipboard = useCallback(
-    async (value: string): Promise<boolean> => {
+    async (value: string | Blob): Promise<boolean> => {
       try {
-        await navigator.clipboard.writeText(value);
-        if (resetTimeoutRef.current) {
-          clearTimeout(resetTimeoutRef.current);
+        if (value instanceof Blob) {
+          await navigator.clipboard.write([new ClipboardItem({ [value.type]: value })]);
+        } else {
+          await navigator.clipboard.writeText(value);
         }
+        clearResetTimeout();
         setCopied(true);
         resetTimeoutRef.current = setTimeout(() => {
           setCopied(false);
           resetTimeoutRef.current = null;
         }, resetDelayMs);
-        const description = getSuccessDescription?.(value);
+        const description = value instanceof Blob ? undefined : getSuccessDescription?.(value);
         if (description) {
           toast.success(successMessage, { description });
         } else {
@@ -63,11 +67,23 @@ export function useCopyToClipboard({
         }
         const message =
           error instanceof DOMException ? getClipboardErrorMessage(error) : copyFailedMessage;
-        toast.error(message);
+        if (copyFailedDescription) {
+          toast.error(message, { description: copyFailedDescription });
+        } else {
+          toast.error(message);
+        }
         return false;
       }
     },
-    [copyFailedMessage, errorLogContext, getSuccessDescription, resetDelayMs, successMessage],
+    [
+      clearResetTimeout,
+      copyFailedMessage,
+      copyFailedDescription,
+      errorLogContext,
+      getSuccessDescription,
+      resetDelayMs,
+      successMessage,
+    ],
   );
 
   return {

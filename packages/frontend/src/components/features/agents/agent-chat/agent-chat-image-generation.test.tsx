@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, expect, jest, mock, spyOn, test } from "bun:test";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
   DEFAULT_AGENT_RUNTIMES,
@@ -8,7 +8,7 @@ import {
 } from "@openducktor/contracts";
 import { QueryClient, QueryClientProvider, notifyManager } from "@tanstack/react-query";
 import { mergeAgentImageGeneration } from "@openducktor/core";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { withMockedToast } from "@/test-utils/mock-toast";
@@ -237,16 +237,155 @@ const loadImage = async (index = 0) => {
   });
 };
 
+test("downloads and copies the PNG from the card and preview without another read", async () => {
+  const clipboard = navigator.clipboard;
+  const previousItems = await clipboard.read();
+  try {
+    await withMockedToast(async ({ toastSuccessMock }) => {
+      const { read } = harness();
+      expect(screen.queryByRole("link", { name: "Download generated image" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Copy generated image" })).toBeNull();
+      await loadImage();
+      const download = screen.getByRole("link", { name: "Download generated image" });
+      expect(download.getAttribute("href")).toBe(screen.getByRole("img").getAttribute("src"));
+      expect(download.getAttribute("download")).toBe("generated-image.png");
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Copy generated image" }));
+      });
+      const items = await clipboard.read();
+      expect(items).toHaveLength(1);
+      expect(items[0]!.types).toEqual(["image/png"]);
+      const copiedImage = await items[0]!.getType("image/png");
+      const expectedBytes = Uint8Array.from(atob(png), (character) => character.charCodeAt(0));
+      expect(new Uint8Array(await copiedImage.arrayBuffer())).toEqual(expectedBytes);
+      expect(toastSuccessMock).toHaveBeenCalledWith("Image copied");
+      expect(
+        screen.getByRole("button", { name: "Image details" }).getAttribute("aria-expanded"),
+      ).toBe("false");
+      expect(screen.queryByRole("dialog")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Open generated image preview" }));
+      const dialog = await screen.findByRole("dialog", { name: "Generated image" });
+      expect(
+        within(dialog).getByRole("link", { name: "Download generated image" }).getAttribute("href"),
+      ).toBe(download.getAttribute("href"));
+      await act(async () => {
+        fireEvent.click(within(dialog).getByRole("button", { name: "Copy generated image" }));
+      });
+      const previewItems = await clipboard.read();
+      const previewCopy = await previewItems[0]!.getType("image/png");
+      expect(new Uint8Array(await previewCopy.arrayBuffer())).toEqual(expectedBytes);
+      expect(toastSuccessMock).toHaveBeenCalledTimes(2);
+      expect(read).toHaveBeenCalledTimes(1);
+    });
+  } finally {
+    await clipboard.write(previousItems);
+  }
+});
+
+test("keeps copy controls stable and prevents repeat writes while copying", async () => {
+  let finish!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const write = spyOn(navigator.clipboard, "write").mockImplementation(() => pending);
+  try {
+    await withMockedToast(async ({ toastSuccessMock }) => {
+      harness();
+      await loadImage();
+      jest.useFakeTimers();
+      const copyButton = screen.getByRole("button", { name: "Copy generated image" });
+      copyButton.focus();
+      const label = copyButton.textContent;
+      fireEvent.click(copyButton);
+      expect(copyButton.hasAttribute("disabled")).toBe(false);
+      expect(copyButton.getAttribute("aria-disabled")).toBe("true");
+      expect(copyButton.textContent).toBe(label);
+      expect(document.activeElement).toBe(copyButton);
+      fireEvent.click(copyButton);
+      expect(write).toHaveBeenCalledTimes(1);
+      expect(toastSuccessMock).not.toHaveBeenCalled();
+      await act(async () => finish());
+      expect(copyButton.getAttribute("aria-disabled")).toBe("false");
+      expect(toastSuccessMock).toHaveBeenCalledWith("Image copied");
+      expect(copyButton.querySelector(".lucide-check")).toBeTruthy();
+      expect(copyButton.querySelector(".lucide-copy")).toBeNull();
+      act(() => jest.advanceTimersByTime(1999));
+      expect(copyButton.querySelector(".lucide-check")).toBeTruthy();
+      act(() => jest.advanceTimersByTime(1));
+      expect(copyButton.querySelector(".lucide-copy")).toBeTruthy();
+      expect(document.activeElement).toBe(copyButton);
+    });
+  } finally {
+    finish();
+    jest.useRealTimers();
+    write.mockRestore();
+  }
+});
+
+test("reports denied clipboard access and lets the user retry or download", async () => {
+  const write = spyOn(navigator.clipboard, "write").mockRejectedValue(
+    new DOMException("Clipboard denied", "NotAllowedError"),
+  );
+  try {
+    await withMockedToast(async ({ toastSuccessMock, toastErrorMock }) => {
+      harness();
+      await loadImage();
+      const copyButton = screen.getByRole("button", { name: "Copy generated image" });
+      await act(async () => fireEvent.click(copyButton));
+      expect(toastSuccessMock).not.toHaveBeenCalled();
+      expect(toastErrorMock).toHaveBeenCalledWith(
+        "Permission denied: clipboard access not allowed",
+        {
+          description: "Try again or use Download to save this image.",
+        },
+      );
+      expect(copyButton.hasAttribute("disabled")).toBe(false);
+      expect(screen.getByRole("link", { name: "Download generated image" })).toBeTruthy();
+      expect(screen.getByRole("img")).toBeTruthy();
+      write.mockResolvedValue();
+      await act(async () => fireEvent.click(copyButton));
+      expect(toastSuccessMock).toHaveBeenCalledWith("Image copied");
+    });
+  } finally {
+    write.mockRestore();
+  }
+});
+
+test("explains unavailable image copying while keeping download available", async () => {
+  const restoreClipboard = replaceNavigatorClipboard(mock(async () => {}));
+  try {
+    await withMockedToast(async ({ toastSuccessMock, toastErrorMock }) => {
+      harness();
+      await loadImage();
+      await act(async () =>
+        fireEvent.click(screen.getByRole("button", { name: "Copy generated image" })),
+      );
+      expect(toastSuccessMock).not.toHaveBeenCalled();
+      expect(toastErrorMock).toHaveBeenCalledWith("Image copying is unavailable", {
+        description: "Use Download to save this image.",
+      });
+      expect(screen.getByRole("link", { name: "Download generated image" })).toBeTruthy();
+    });
+  } finally {
+    restoreClipboard();
+  }
+});
+
 test("waits for PNG decode then shares one URL between thumbnail and accessible dialog", async () => {
   const { view, client } = harness();
   await waitForImage();
   expect(images).toHaveLength(1);
+  expect(view.container.querySelector('[data-slot="skeleton"]')).toBeTruthy();
+  expect(screen.queryByText("Loading image preview…")).toBeNull();
   expect(screen.queryByRole("button", { name: "Open generated image preview" })).toBeNull();
   await loadImage();
+  expect(view.container.querySelector('[data-slot="skeleton"]')).toBeNull();
+  expect(screen.queryByText("View image")).toBeNull();
   const trigger = screen.getByRole("button", { name: "Open generated image preview" });
   trigger.focus();
   fireEvent.click(trigger);
-  expect(await screen.findByRole("dialog", { name: "Generated image" })).toBeTruthy();
+  const dialog = await screen.findByRole("dialog", { name: "Generated image" });
+  expect(document.activeElement).toBe(dialog);
   expect(
     screen.getAllByRole("img", { hidden: true }).map((image) => image.getAttribute("src")),
   ).toEqual(["blob:image-1", "blob:image-1"]);
@@ -269,6 +408,7 @@ test("reveals the full prompt on request and keeps the preview header short", as
     );
   const { view } = harness(undefined, true, { ...part, revisedPrompt });
   expect(view.container.textContent).not.toContain(revisedPrompt);
+  fireEvent.click(screen.getByRole("button", { name: "Image details" }));
   const promptButton = screen.getByRole("button", { name: "View prompt" });
   expect(promptButton.getAttribute("aria-expanded")).toBe("false");
   fireEvent.click(promptButton);
@@ -357,6 +497,7 @@ test("a changed output revision replaces the preview and ignores the previous de
   await loadImage(1);
   expect(screen.getByRole("img").getAttribute("src")).toBe("blob:image-2");
   expect(read).toHaveBeenCalledTimes(2);
+  fireEvent.click(screen.getByRole("button", { name: "Image details" }));
   view.rerender(
     content(ref, { ...part, savedPath: "/display-only.png", output: { revision: "new-output" } }),
   );
@@ -442,40 +583,74 @@ test("shows a generating placeholder without reading image bytes", () => {
   expect(read).not.toHaveBeenCalled();
 });
 
-test("closes prompt details when the session or image changes", () => {
-  const { view, content } = harness(undefined, true, { ...part, status: "running" });
-  const runningPart = { ...part, status: "running" as const };
-  fireEvent.click(screen.getByRole("button", { name: "View prompt" }));
-  expect(screen.getByText(part.revisedPrompt!)).toBeTruthy();
-  view.rerender(content({ ...ref, externalSessionId: "another-session" }, runningPart));
-  expect(screen.queryByText(part.revisedPrompt!)).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "View prompt" }));
-  view.rerender(
-    content(
-      { ...ref, externalSessionId: "another-session" },
-      { ...runningPart, itemId: "another-image" },
-    ),
-  );
-  expect(screen.queryByText(part.revisedPrompt!)).toBeNull();
-});
-
-for (const transparentBackground of [true, false]) {
-  test(`shows saved file and background ${transparentBackground} without opening the prompt`, () => {
-    const { view } = harness(undefined, true, {
-      ...part,
-      status: "running",
-      transparentBackground,
-    });
-    expect(screen.getByText(part.savedPath!)).toBeTruthy();
-    expect(screen.getByText(transparentBackground ? "Transparent" : "Opaque")).toBeTruthy();
-    expect(screen.queryByText(part.revisedPrompt!)).toBeNull();
+for (const identity of ["session", "image", "turn"] as const) {
+  test(`closes image and prompt details when the ${identity} changes`, () => {
+    const runningPart = { ...part, status: "running" as const };
+    const { view, content } = harness(undefined, true, runningPart);
+    fireEvent.click(screen.getByRole("button", { name: "Image details" }));
     fireEvent.click(screen.getByRole("button", { name: "View prompt" }));
-    const prompt = view.container.querySelector('[data-slot="collapsible-content"]')!;
-    expect(prompt.textContent).toContain(part.revisedPrompt!);
-    expect(prompt.textContent).not.toContain(part.savedPath!);
-    expect(prompt.textContent).not.toContain("Background");
+    expect(screen.getByText(part.revisedPrompt!)).toBeTruthy();
+    const nextRef = identity === "session" ? { ...ref, externalSessionId: "another-session" } : ref;
+    const nextPart = { ...runningPart };
+    if (identity === "image") nextPart.itemId = "another-image";
+    if (identity === "turn") nextPart.turnId = "another-turn";
+    view.rerender(content(nextRef, nextPart));
+    const detailsButton = screen.getByRole("button", { name: "Image details" });
+    expect(detailsButton.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByText(part.revisedPrompt!)).toBeNull();
+    fireEvent.click(detailsButton);
+    expect(screen.getByRole("button", { name: "View prompt" }).getAttribute("aria-expanded")).toBe(
+      "false",
+    );
   });
 }
+
+for (const transparentBackground of [true, false]) {
+  test(`hides saved file, background ${transparentBackground}, and prompt controls until requested`, async () => {
+    const { read } = harness(undefined, true, {
+      ...part,
+      transparentBackground,
+    });
+    await loadImage();
+    const background = transparentBackground ? "Transparent" : "Opaque";
+    expect(screen.queryByText(part.savedPath!)).toBeNull();
+    expect(screen.queryByText("Background")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Copy generated image path" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "View prompt" })).toBeNull();
+    const detailsButton = screen.getByRole("button", { name: "Image details" });
+    expect(detailsButton.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(detailsButton);
+    expect(detailsButton.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText(part.savedPath!)).toBeTruthy();
+    expect(screen.getByText(background)).toBeTruthy();
+    expect(screen.queryByText(part.revisedPrompt!)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "View prompt" }));
+    expect(screen.getByText(part.revisedPrompt!)).toBeTruthy();
+    fireEvent.click(detailsButton);
+    expect(detailsButton.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByText(part.savedPath!)).toBeNull();
+    expect(screen.queryByText(background)).toBeNull();
+    expect(screen.queryByText(part.revisedPrompt!)).toBeNull();
+    expect(screen.queryByRole("button", { name: "View prompt" })).toBeNull();
+    expect(screen.getByRole("img", { name: part.revisedPrompt! })).toBeTruthy();
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+}
+
+test("omits image details when the runtime supplies no metadata", () => {
+  render(
+    <AgentChatImageGeneration
+      part={{
+        kind: "image_generation",
+        itemId: "image",
+        messageId: "image",
+        partId: "image",
+        status: "running",
+      }}
+    />,
+  );
+  expect(screen.queryByRole("button", { name: "Image details" })).toBeNull();
+});
 
 test("general failures preserve the reason and offer an action in the chat", () => {
   const failure = {
@@ -505,6 +680,7 @@ test("copies the exact generated file path without opening the prompt", async ()
     await withMockedToast(async ({ toastSuccessMock }) => {
       const savedPath = "/runtime/generated/my duck.png";
       harness(undefined, true, { ...part, savedPath, status: "running" });
+      fireEvent.click(screen.getByRole("button", { name: "Image details" }));
       await act(async () => {
         fireEvent.click(screen.getByRole("button", { name: "Copy generated image path" }));
       });
@@ -574,6 +750,27 @@ test("saved file metadata waits for visibility and refreshes its content revisio
     await loadImage();
     expect(describe).toHaveBeenCalledTimes(1);
     expect(read.mock.calls[0]?.[0].revision).toBe("saved-first");
+    const src = screen.getByRole("img").getAttribute("src");
+    let finishRefresh!: () => void;
+    describe.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishRefresh = () => resolve({ ref, images: [{ ...saved, output: { revision } }] });
+        }),
+    );
+    let refresh!: Promise<void>;
+    await act(async () => {
+      refresh = client.invalidateQueries({ queryKey: ["agent-generated-image-metadata"] });
+    });
+    await waitFor(() => expect(describe).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole("img").getAttribute("src")).toBe(src);
+    expect(revokeUrl).not.toHaveBeenCalled();
+    await act(async () => {
+      finishRefresh();
+      await refresh;
+    });
+    expect(images).toHaveLength(1);
+    expect(read).toHaveBeenCalledTimes(1);
     revision = "saved-replaced";
     await act(async () => {
       await client.invalidateQueries({ queryKey: ["agent-generated-image-metadata"] });
