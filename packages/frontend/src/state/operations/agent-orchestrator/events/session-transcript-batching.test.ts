@@ -342,7 +342,7 @@ describe("agent-orchestrator session transcript events", () => {
     });
 
     const assistantMessage = getSessionMessages(sessionsRef).find(
-      (message) => message.id === "assistant-1",
+      (message) => message.id === "text:assistant-1:text-1",
     );
     expect(assistantMessage?.content).toBe("Final answer");
   });
@@ -458,6 +458,7 @@ describe("agent-orchestrator session transcript events", () => {
     };
     const sessionsRef = createSessionsRef([
       buildSession({
+        runtimeKind: "claude",
         status: "running",
         sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
         selectedModel: {
@@ -556,7 +557,8 @@ describe("agent-orchestrator session transcript events", () => {
 
     const messages = getSessionMessages(sessionsRef);
     const draftIndex = messages.findIndex(
-      (message) => message.id === "claude-stream:session-1:1:1:0",
+      (message) =>
+        message.id === "text:claude-stream:session-1:1:1:0:claude-stream:session-1:1:1:0:text:0",
     );
     const toolIndex = messages.findIndex(
       (message) => message.id === "tool:assistant-tool-use:tool-1",

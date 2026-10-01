@@ -3,10 +3,13 @@ import { areSessionMessagesSameRevision } from "@/state/operations/agent-orchest
 import type { AgentChatTranscriptSession } from "./agent-chat.types";
 import type { AgentChatTranscriptModel } from "./agent-chat-transcript-model";
 
-const TRANSCRIPT_MODEL_CACHE_LIMIT = 6;
+const MAX_ENTRIES = 6;
 
 export type TranscriptModelCacheEntry = AgentChatTranscriptModel & {
-  messages: AgentChatTranscriptSession["messages"];
+  session: AgentChatTranscriptSession;
+  // Queried history has no live baseline and must stay outside store updates.
+  baseline: AgentChatTranscriptSession["messages"] | null;
+  showThinkingMessages: boolean;
 };
 
 export type TranscriptModelCache = Map<string, TranscriptModelCacheEntry>;
@@ -14,29 +17,6 @@ export type TranscriptModelCache = Map<string, TranscriptModelCacheEntry>;
 export type TranscriptModelCacheLookup = {
   current: TranscriptModelCacheEntry | null;
   latest: TranscriptModelCacheEntry | null;
-};
-
-const toTranscriptModelCacheKey = (sessionKey: string, showThinkingMessages: boolean): string =>
-  `${sessionKey}:${showThinkingMessages ? "thinking:on" : "thinking:off"}`;
-
-const touchTranscriptModelCacheEntry = (
-  cache: TranscriptModelCache,
-  cacheKey: string,
-  entry: TranscriptModelCacheEntry,
-): void => {
-  if (cache.has(cacheKey)) {
-    cache.delete(cacheKey);
-  }
-
-  cache.set(cacheKey, entry);
-
-  while (cache.size > TRANSCRIPT_MODEL_CACHE_LIMIT) {
-    const oldestKey = cache.keys().next().value;
-    if (oldestKey === undefined) {
-      break;
-    }
-    cache.delete(oldestKey);
-  }
 };
 
 export const createTranscriptModelCache = (): TranscriptModelCache =>
@@ -47,20 +27,28 @@ export const writeTranscriptModelCacheEntry = ({
   showThinkingMessages,
   transcriptModel,
   cache,
+  touch = true,
+  baseline = null,
 }: {
   session: AgentChatTranscriptSession;
   showThinkingMessages: boolean;
   transcriptModel: AgentChatTranscriptModel;
   cache: TranscriptModelCache;
+  touch?: boolean;
+  baseline?: AgentChatTranscriptSession["messages"] | null;
 }): void => {
-  const cacheKey = toTranscriptModelCacheKey(
-    agentSessionIdentityKey(session),
-    showThinkingMessages,
-  );
-  touchTranscriptModelCacheEntry(cache, cacheKey, {
+  const cacheKey = keyFor(agentSessionIdentityKey(session), showThinkingMessages);
+  const entry = {
     ...transcriptModel,
-    messages: session.messages,
-  });
+    session,
+    baseline,
+    showThinkingMessages,
+  };
+  if (touch) {
+    touchEntry(cache, cacheKey, entry);
+  } else if (cache.has(cacheKey)) {
+    cache.set(cacheKey, entry);
+  }
 };
 
 export const readTranscriptModelCache = ({
@@ -74,25 +62,39 @@ export const readTranscriptModelCache = ({
   cache: TranscriptModelCache;
   touchCurrent?: boolean;
 }): TranscriptModelCacheLookup => {
-  const cacheKey = toTranscriptModelCacheKey(
-    agentSessionIdentityKey(session),
-    showThinkingMessages,
-  );
+  const cacheKey = keyFor(agentSessionIdentityKey(session), showThinkingMessages);
   const cacheEntry = cache.get(cacheKey);
   if (!cacheEntry) {
     return { current: null, latest: null };
   }
 
-  const isCurrent = areSessionMessagesSameRevision(
-    { externalSessionId: session.externalSessionId, messages: cacheEntry.messages },
-    session,
-  );
+  const isCurrent = areSessionMessagesSameRevision(cacheEntry.session, session);
 
   if (isCurrent && touchCurrent) {
-    touchTranscriptModelCacheEntry(cache, cacheKey, cacheEntry);
+    touchEntry(cache, cacheKey, cacheEntry);
   }
   return {
     current: isCurrent ? cacheEntry : null,
     latest: cacheEntry,
   };
+};
+
+const keyFor = (sessionKey: string, showThinkingMessages: boolean): string =>
+  `${sessionKey}:${showThinkingMessages ? "thinking:on" : "thinking:off"}`;
+
+const touchEntry = (
+  cache: TranscriptModelCache,
+  cacheKey: string,
+  entry: TranscriptModelCacheEntry,
+): void => {
+  cache.delete(cacheKey);
+  cache.set(cacheKey, entry);
+
+  while (cache.size > MAX_ENTRIES) {
+    const oldestKey = cache.keys().next().value;
+    if (oldestKey === undefined) {
+      break;
+    }
+    cache.delete(oldestKey);
+  }
 };

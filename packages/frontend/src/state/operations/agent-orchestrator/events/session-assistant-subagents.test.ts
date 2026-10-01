@@ -750,7 +750,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       (message) => message.role === "assistant",
     );
     expect(assistantMessages).toHaveLength(1);
-    expect(assistantMessages?.[0]?.id).toBe("assistant-live-1");
+    expect(assistantMessages?.[0]?.id).toBe("text:assistant-live-1:part-1");
     expect(assistantMessages?.[0]?.content).toBe("First pass refined");
   });
 

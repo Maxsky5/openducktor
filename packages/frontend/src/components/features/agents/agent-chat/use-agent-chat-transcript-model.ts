@@ -1,5 +1,6 @@
 import {
-  startTransition,
+  useCallback,
+  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -9,33 +10,37 @@ import {
 } from "react";
 import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import type { AgentSessionsStore } from "@/state/agent-sessions-store";
+import { AgentSessionsContext } from "@/state/app-state-contexts";
 import {
-  findFirstChangedSessionMessageIndex,
-  getSessionMessageAt,
+  areSessionMessagesSameRevision,
   getSessionMessageCount,
   getSessionMessagesRevision,
 } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentChatTranscriptSession } from "./agent-chat.types";
+import { toAgentChatTranscriptSession } from "./agent-chat-transcript-session";
+import { withClaudeSkillMentions } from "./claude-skill-mentions";
+import { buildTranscriptModel, MAX_SYNC_MESSAGES } from "./agent-chat-transcript-model-build";
 import {
+  type AgentChatTranscriptModel,
   type AgentChatTranscriptRow,
   type AgentChatTurnAnchor,
   createAgentChatTranscriptModelBuilder,
-  updateAgentChatTranscriptModelFromPrefix,
 } from "./agent-chat-transcript-model";
 import {
   createTranscriptModelCache,
   readTranscriptModelCache,
   type TranscriptModelCache,
-  type TranscriptModelCacheEntry,
   writeTranscriptModelCacheEntry,
 } from "./agent-chat-transcript-model-cache";
 
-const EMPTY_ROWS: AgentChatTranscriptRow[] = [];
-const TRANSCRIPT_DERIVATION_CHUNK_BUDGET_MS = 6;
-const TRANSCRIPT_DERIVATION_MAX_MESSAGES_PER_CHUNK = 250;
-const TRANSCRIPT_DERIVATION_SYNC_MESSAGE_LIMIT = 100;
+type CacheBuild = {
+  session: AgentChatTranscriptSession;
+  baseline: AgentChatTranscriptSession["messages"];
+  stop: () => void;
+};
 
-type TranscriptModelRevision = {
+type Revision = {
   sessionKey: string | null;
   activityState: AgentChatTranscriptSession["activityState"];
   showThinkingMessages: boolean;
@@ -44,40 +49,274 @@ type TranscriptModelRevision = {
   count: number | null;
 };
 
-export type TranscriptModelState = {
-  revision: TranscriptModelRevision;
-  rows: AgentChatTranscriptRow[];
-  turnAnchors: AgentChatTurnAnchor[];
-  hasAttachmentMessages: boolean;
-  lastUserMessageKey: string | null;
-  activeStreamingAssistantMessageId: string | null;
+export type TranscriptModelState = AgentChatTranscriptModel & {
+  revision: Revision;
 };
 
-const EMPTY_TRANSCRIPT_MODEL_REVISION: TranscriptModelRevision = Object.freeze({
-  sessionKey: null,
-  activityState: null,
-  showThinkingMessages: false,
-  messagesSessionKey: null,
-  version: null,
-  count: null,
-});
+export const useAgentChatTranscriptModel = ({
+  session,
+  showThinkingMessages,
+}: {
+  session: AgentChatTranscriptSession | null;
+  showThinkingMessages: boolean;
+}) => {
+  const sessionStore = useContext(AgentSessionsContext);
+  const [cache] = useState(() => createInitialCache(session, showThinkingMessages, sessionStore));
+  const sessionRef = useRef(session);
+  const buildsRef = useRef(new Map<string, CacheBuild>());
+  const shownKeyRef = useRef<string | null>(null);
+  const revision = useMemo(
+    () => buildRevision(session, showThinkingMessages),
+    [session, showThinkingMessages],
+  );
+  const buildKey = JSON.stringify([
+    revision.sessionKey,
+    revision.messagesSessionKey,
+    revision.version,
+    revision.count,
+  ]);
+  const [, publishCacheWrite] = useReducer((generation: number) => generation + 1, 0);
+  const cacheLookup = session
+    ? readTranscriptModelCache({ session, showThinkingMessages, cache })
+    : { current: null, latest: null };
+  const shownModel =
+    cacheLookup.current ??
+    (shownKeyRef.current === revision.sessionKey ? cacheLookup.latest : null);
+  let transcriptState = EMPTY_STATE;
+  if (session && shownModel) {
+    transcriptState = toModelState({
+      session,
+      revision: cacheLookup.current
+        ? revision
+        : buildRevision(session, showThinkingMessages, shownModel.session.messages),
+      transcriptModel: shownModel,
+    });
+  }
+  const hasRowsForActiveSession = shownModel !== null;
+  const hasCurrentRowsForActiveSession = cacheLookup.current !== null;
+  const isTranscriptModelMissing = Boolean(session && !hasRowsForActiveSession);
+  const isTranscriptModelPending = Boolean(session && !hasCurrentRowsForActiveSession);
 
-const EMPTY_TRANSCRIPT_MODEL_STATE: TranscriptModelState = Object.freeze({
-  revision: EMPTY_TRANSCRIPT_MODEL_REVISION,
-  rows: EMPTY_ROWS,
-  turnAnchors: new Array<AgentChatTurnAnchor>(),
-  hasAttachmentMessages: false,
-  lastUserMessageKey: null,
-  activeStreamingAssistantMessageId: null,
-});
+  useLayoutEffect(() => {
+    sessionRef.current = session;
+    shownKeyRef.current = shownModel ? revision.sessionKey : null;
+  }, [session, shownModel, revision.sessionKey]);
 
-const buildTranscriptModelRevision = (
+  const warmCache = useCallback(() => {
+    if (!sessionStore) {
+      return;
+    }
+    const builds = buildsRef.current;
+    for (const [cacheKey, entry] of cache) {
+      const liveSession = sessionStore.getSessionSnapshot(entry.session);
+      const activeSession = sessionRef.current;
+      const isSelected =
+        activeSession !== null &&
+        agentSessionIdentityKey(activeSession) === agentSessionIdentityKey(entry.session);
+      const existingBuild = builds.get(cacheKey);
+      if (!liveSession || isSelected || entry.baseline === null) {
+        existingBuild?.stop();
+        builds.delete(cacheKey);
+        continue;
+      }
+      if (
+        existingBuild &&
+        areSessionMessagesSameRevision(
+          {
+            externalSessionId: liveSession.externalSessionId,
+            messages: existingBuild.baseline,
+          },
+          liveSession,
+        )
+      ) {
+        continue;
+      }
+      if (
+        areSessionMessagesSameRevision(
+          { externalSessionId: liveSession.externalSessionId, messages: entry.baseline },
+          liveSession,
+        )
+      ) {
+        existingBuild?.stop();
+        builds.delete(cacheKey);
+        continue;
+      }
+
+      const skillReferences = entry.session.skillReferences;
+      const transcriptSession = toAgentChatTranscriptSession(liveSession);
+      const nextSession = skillReferences
+        ? { ...withClaudeSkillMentions(transcriptSession, skillReferences), skillReferences }
+        : transcriptSession;
+      existingBuild?.stop();
+      const build: CacheBuild = {
+        session: nextSession,
+        baseline: liveSession.messages,
+        stop: () => {},
+      };
+      // A build can finish before it returns, so track it before starting work.
+      builds.set(cacheKey, build);
+      if (areSessionMessagesSameRevision(entry.session, nextSession)) {
+        continue;
+      }
+      build.stop = buildTranscriptModel({
+        session: nextSession,
+        showThinkingMessages: entry.showThinkingMessages,
+        previous: entry,
+        onComplete: (transcriptModel) => {
+          build.stop = () => {};
+          writeTranscriptModelCacheEntry({
+            session: nextSession,
+            showThinkingMessages: entry.showThinkingMessages,
+            transcriptModel,
+            cache,
+            touch: false,
+            baseline: liveSession.messages,
+          });
+          const selected = sessionRef.current;
+          if (
+            selected &&
+            agentSessionIdentityKey(selected) === agentSessionIdentityKey(nextSession)
+          ) {
+            publishCacheWrite();
+          }
+        },
+      });
+    }
+    stopEvictedBuilds(cache, builds);
+  }, [cache, sessionStore]);
+
+  useEffect(() => {
+    if (!sessionStore) {
+      return;
+    }
+    const builds = buildsRef.current;
+    const unsubscribe = sessionStore.subscribe(warmCache);
+    return () => {
+      unsubscribe();
+      for (const build of builds.values()) {
+        build.stop();
+      }
+      builds.clear();
+    };
+  }, [sessionStore, warmCache]);
+
+  useEffect(() => {
+    // Deselection can stop a selected build without another store event.
+    warmCache();
+  }, [revision.sessionKey, warmCache]);
+
+  useEffect(() => {
+    void buildKey;
+    const currentSession = sessionRef.current;
+    if (!currentSession) {
+      return;
+    }
+
+    const currentSessionKey = agentSessionIdentityKey(currentSession);
+    for (const [cacheKey, build] of buildsRef.current) {
+      if (agentSessionIdentityKey(build.session) === currentSessionKey) {
+        build.stop();
+        buildsRef.current.delete(cacheKey);
+      }
+    }
+    const currentCacheLookup = readTranscriptModelCache({
+      session: currentSession,
+      showThinkingMessages,
+      cache,
+      touchCurrent: true,
+    });
+    if (currentCacheLookup.current) {
+      return;
+    }
+
+    const baseline = readLiveMessages(currentSession, sessionStore);
+    return buildTranscriptModel({
+      session: currentSession,
+      showThinkingMessages,
+      previous: currentCacheLookup.latest,
+      onComplete: (transcriptModel) => {
+        writeTranscriptModelCacheEntry({
+          session: currentSession,
+          showThinkingMessages,
+          transcriptModel,
+          cache,
+          baseline,
+        });
+        stopEvictedBuilds(cache, buildsRef.current);
+        publishCacheWrite();
+      },
+    });
+  }, [buildKey, cache, showThinkingMessages, sessionStore]);
+
+  return {
+    transcriptState,
+    hasRowsForActiveSession,
+    hasCurrentRowsForActiveSession,
+    isTranscriptModelMissing,
+    isTranscriptModelPending,
+  } satisfies {
+    transcriptState: TranscriptModelState;
+    hasRowsForActiveSession: boolean;
+    hasCurrentRowsForActiveSession: boolean;
+    isTranscriptModelMissing: boolean;
+    isTranscriptModelPending: boolean;
+  };
+};
+
+const stopEvictedBuilds = (cache: TranscriptModelCache, builds: Map<string, CacheBuild>): void => {
+  for (const [cacheKey, build] of builds) {
+    if (!cache.has(cacheKey)) {
+      build.stop();
+      builds.delete(cacheKey);
+    }
+  }
+};
+
+const createInitialCache = (
+  session: AgentChatTranscriptSession | null,
+  showThinkingMessages: boolean,
+  sessionStore: AgentSessionsStore | null,
+): TranscriptModelCache => {
+  const cache = createTranscriptModelCache();
+  if (!session || getSessionMessageCount(session) > MAX_SYNC_MESSAGES) {
+    return cache;
+  }
+
+  const transcriptModel = createAgentChatTranscriptModelBuilder(session, {
+    showThinkingMessages,
+  }).complete();
+  writeTranscriptModelCacheEntry({
+    session,
+    showThinkingMessages,
+    transcriptModel,
+    cache,
+    baseline: readLiveMessages(session, sessionStore),
+  });
+  return cache;
+};
+
+const readLiveMessages = (
+  session: AgentChatTranscriptSession,
+  sessionStore: AgentSessionsStore | null,
+): AgentChatTranscriptSession["messages"] | null => {
+  const source = sessionStore?.getSessionSnapshot(session);
+  if (!source) {
+    return null;
+  }
+  const projected = withClaudeSkillMentions(
+    toAgentChatTranscriptSession(source),
+    session.skillReferences ?? [],
+  );
+  return areSessionMessagesSameRevision(projected, session) ? source.messages : null;
+};
+
+const buildRevision = (
   session: AgentChatTranscriptSession | null,
   showThinkingMessages: boolean,
   messages: AgentChatTranscriptSession["messages"] | null = session?.messages ?? null,
-): TranscriptModelRevision => {
+): Revision => {
   if (!session || !messages) {
-    return EMPTY_TRANSCRIPT_MODEL_REVISION;
+    return EMPTY_REVISION;
   }
 
   const messagesRevision = getSessionMessagesRevision({
@@ -97,21 +336,14 @@ const buildTranscriptModelRevision = (
   };
 };
 
-const toTranscriptModelState = ({
+const toModelState = ({
   session,
   revision,
   transcriptModel,
 }: {
   session: AgentChatTranscriptSession;
-  revision: TranscriptModelRevision;
-  transcriptModel: Pick<
-    TranscriptModelState,
-    | "rows"
-    | "turnAnchors"
-    | "hasAttachmentMessages"
-    | "lastUserMessageKey"
-    | "activeStreamingAssistantMessageId"
-  >;
+  revision: Revision;
+  transcriptModel: AgentChatTranscriptModel;
 }): TranscriptModelState => {
   return {
     revision,
@@ -125,316 +357,20 @@ const toTranscriptModelState = ({
   };
 };
 
-const createInitialTranscriptModelCache = (
-  session: AgentChatTranscriptSession | null,
-  showThinkingMessages: boolean,
-): TranscriptModelCache => {
-  const cache = createTranscriptModelCache();
-  if (!session || getSessionMessageCount(session) > TRANSCRIPT_DERIVATION_SYNC_MESSAGE_LIMIT) {
-    return cache;
-  }
+const EMPTY_REVISION: Revision = Object.freeze({
+  sessionKey: null,
+  activityState: null,
+  showThinkingMessages: false,
+  messagesSessionKey: null,
+  version: null,
+  count: null,
+});
 
-  const transcriptModel = createAgentChatTranscriptModelBuilder(session, {
-    showThinkingMessages,
-  }).complete();
-  writeTranscriptModelCacheEntry({
-    session,
-    showThinkingMessages,
-    transcriptModel,
-    cache,
-  });
-  return cache;
-};
-
-const now = (): number => {
-  return globalThis.performance?.now !== undefined ? globalThis.performance.now() : Date.now();
-};
-
-type IncrementalTranscriptModelPlan = {
-  mode: "append" | "replace-tail";
-  startMessageIndex: number;
-};
-
-const isMessageIdInPrefix = (
-  messages: AgentChatTranscriptSession["messages"],
-  messageId: string,
-  endIndex: number,
-): boolean => {
-  for (let index = 0; index < endIndex; index += 1) {
-    if (messages.items[index]?.id === messageId) {
-      return true;
-    }
-  }
-  return false;
-};
-
-const arePrefixMessagesUnchanged = ({
-  previousCacheEntry,
-  currentSession,
-  endIndex,
-}: {
-  previousCacheEntry: TranscriptModelCacheEntry;
-  currentSession: AgentChatTranscriptSession;
-  endIndex: number;
-}): boolean => {
-  for (let index = 0; index < endIndex; index += 1) {
-    if (previousCacheEntry.messages.items[index] !== getSessionMessageAt(currentSession, index)) {
-      return false;
-    }
-  }
-  return true;
-};
-
-const getIncrementalTranscriptModelPlan = ({
-  previousCacheEntry,
-  currentSession,
-}: {
-  previousCacheEntry: TranscriptModelCacheEntry | null;
-  currentSession: AgentChatTranscriptSession;
-}): IncrementalTranscriptModelPlan | null => {
-  if (!previousCacheEntry) {
-    return null;
-  }
-
-  const firstChangedMessageIndex = findFirstChangedSessionMessageIndex(
-    previousCacheEntry.messages,
-    currentSession,
-  );
-  if (firstChangedMessageIndex < 0) {
-    return null;
-  }
-
-  const previousMessageCount = previousCacheEntry.messages.items.length;
-  const currentMessageCount = getSessionMessageCount(currentSession);
-  const changedMessageCount = currentMessageCount - firstChangedMessageIndex;
-  const previousChangedMessage = previousCacheEntry.messages.items[firstChangedMessageIndex];
-  const currentChangedMessage = currentSession.messages.items[firstChangedMessageIndex];
-  const isTailAppend = firstChangedMessageIndex >= previousMessageCount;
-  const isAssistantTailEdit = Boolean(
-    previousChangedMessage &&
-    currentChangedMessage &&
-    firstChangedMessageIndex === previousMessageCount - 1 &&
-    previousChangedMessage.id === currentChangedMessage.id &&
-    previousChangedMessage.role === "assistant" &&
-    currentChangedMessage.role === "assistant",
-  );
-
-  if (isAssistantTailEdit) {
-    if (
-      !arePrefixMessagesUnchanged({
-        previousCacheEntry,
-        currentSession,
-        endIndex: firstChangedMessageIndex,
-      }) ||
-      (currentChangedMessage &&
-        isMessageIdInPrefix(
-          previousCacheEntry.messages,
-          currentChangedMessage.id,
-          firstChangedMessageIndex,
-        ))
-    ) {
-      return null;
-    }
-  }
-
-  if (
-    currentMessageCount < previousMessageCount ||
-    changedMessageCount < 0 ||
-    changedMessageCount > TRANSCRIPT_DERIVATION_SYNC_MESSAGE_LIMIT ||
-    (!isTailAppend && !isAssistantTailEdit)
-  ) {
-    return null;
-  }
-
-  return {
-    mode: isTailAppend ? "append" : "replace-tail",
-    startMessageIndex: firstChangedMessageIndex,
-  };
-};
-
-export const useAgentChatTranscriptModel = ({
-  session,
-  showThinkingMessages,
-}: {
-  session: AgentChatTranscriptSession | null;
-  showThinkingMessages: boolean;
-}) => {
-  const [rowsCache] = useState(() =>
-    createInitialTranscriptModelCache(session, showThinkingMessages),
-  );
-  const derivationSessionRef = useRef(session);
-  const derivationTokenRef = useRef(0);
-  const activeRevision = useMemo(
-    () => buildTranscriptModelRevision(session, showThinkingMessages),
-    [session, showThinkingMessages],
-  );
-  const derivationRevisionKey = JSON.stringify([
-    activeRevision.sessionKey,
-    activeRevision.messagesSessionKey,
-    activeRevision.version,
-    activeRevision.count,
-  ]);
-  const [, publishCacheWrite] = useReducer((generation: number) => generation + 1, 0);
-  const cacheLookup = session
-    ? readTranscriptModelCache({ session, showThinkingMessages, cache: rowsCache })
-    : { current: null, latest: null };
-  const displayedTranscriptModel = cacheLookup.current ?? cacheLookup.latest;
-  let displayedTranscriptState = EMPTY_TRANSCRIPT_MODEL_STATE;
-  if (session && displayedTranscriptModel) {
-    displayedTranscriptState = toTranscriptModelState({
-      session,
-      revision: cacheLookup.current
-        ? activeRevision
-        : buildTranscriptModelRevision(
-            session,
-            showThinkingMessages,
-            displayedTranscriptModel.messages,
-          ),
-      transcriptModel: displayedTranscriptModel,
-    });
-  }
-  const hasRowsForActiveSession = displayedTranscriptModel !== null;
-  const hasCurrentRowsForActiveSession = cacheLookup.current !== null;
-  const isTranscriptModelMissing = Boolean(session && !hasRowsForActiveSession);
-  const isTranscriptModelPending = Boolean(session && !hasCurrentRowsForActiveSession);
-
-  useLayoutEffect(() => {
-    derivationSessionRef.current = session;
-  }, [session]);
-
-  useEffect(() => {
-    void derivationRevisionKey;
-    derivationTokenRef.current += 1;
-    const derivationToken = derivationTokenRef.current;
-    const currentSession = derivationSessionRef.current;
-
-    if (!currentSession) {
-      return;
-    }
-
-    const currentCacheLookup = readTranscriptModelCache({
-      session: currentSession,
-      showThinkingMessages,
-      cache: rowsCache,
-      touchCurrent: true,
-    });
-    if (currentCacheLookup.current) {
-      return;
-    }
-
-    const previousCacheEntry = currentCacheLookup.latest;
-    const incrementalPlan = getIncrementalTranscriptModelPlan({
-      previousCacheEntry,
-      currentSession,
-    });
-    if (previousCacheEntry && incrementalPlan) {
-      const transcriptModel = updateAgentChatTranscriptModelFromPrefix({
-        session: currentSession,
-        showThinkingMessages,
-        previousTranscriptModel: previousCacheEntry,
-        startMessageIndex: incrementalPlan.startMessageIndex,
-        mode: incrementalPlan.mode,
-      });
-      if (transcriptModel) {
-        writeTranscriptModelCacheEntry({
-          session: currentSession,
-          showThinkingMessages,
-          transcriptModel,
-          cache: rowsCache,
-        });
-        if (derivationTokenRef.current === derivationToken) {
-          // Bounded incremental derivation intentionally publishes current selected rows immediately
-          // so large running sessions stay responsive as new tail messages stream in.
-          publishCacheWrite();
-        }
-        return;
-      }
-    }
-
-    const builder = createAgentChatTranscriptModelBuilder(currentSession, {
-      showThinkingMessages,
-    });
-    let scheduledWorkId: ReturnType<typeof globalThis.setTimeout> | null = null;
-    const scheduleNextChunk = (): void => {
-      scheduledWorkId = globalThis.setTimeout(() => {
-        scheduledWorkId = null;
-        if (derivationTokenRef.current !== derivationToken) {
-          return;
-        }
-
-        const chunkStartedAt = now();
-        let processedInChunk = 0;
-        while (
-          !builder.isDone() &&
-          processedInChunk < TRANSCRIPT_DERIVATION_MAX_MESSAGES_PER_CHUNK &&
-          now() - chunkStartedAt < TRANSCRIPT_DERIVATION_CHUNK_BUDGET_MS
-        ) {
-          processedInChunk += builder.step(1);
-        }
-
-        if (derivationTokenRef.current !== derivationToken) {
-          return;
-        }
-
-        if (!builder.isDone()) {
-          scheduleNextChunk();
-          return;
-        }
-
-        const transcriptModel = builder.complete();
-        writeTranscriptModelCacheEntry({
-          session: currentSession,
-          showThinkingMessages,
-          transcriptModel,
-          cache: rowsCache,
-        });
-        startTransition(() => {
-          if (derivationTokenRef.current === derivationToken) {
-            publishCacheWrite();
-          }
-        });
-      }, 0);
-    };
-
-    scheduleNextChunk();
-
-    return () => {
-      if (scheduledWorkId) {
-        globalThis.clearTimeout(scheduledWorkId);
-      }
-    };
-  }, [derivationRevisionKey, rowsCache, showThinkingMessages]);
-
-  const transcriptState = useMemo(() => {
-    if (!hasRowsForActiveSession) {
-      return EMPTY_TRANSCRIPT_MODEL_STATE;
-    }
-
-    if (isAgentSessionActivityWorking(session?.activityState)) {
-      return displayedTranscriptState;
-    }
-
-    if (displayedTranscriptState.activeStreamingAssistantMessageId === null) {
-      return displayedTranscriptState;
-    }
-
-    return {
-      ...displayedTranscriptState,
-      activeStreamingAssistantMessageId: null,
-    };
-  }, [displayedTranscriptState, hasRowsForActiveSession, session?.activityState]);
-
-  return {
-    transcriptState,
-    hasRowsForActiveSession,
-    hasCurrentRowsForActiveSession,
-    isTranscriptModelMissing,
-    isTranscriptModelPending,
-  } satisfies {
-    transcriptState: TranscriptModelState;
-    hasRowsForActiveSession: boolean;
-    hasCurrentRowsForActiveSession: boolean;
-    isTranscriptModelMissing: boolean;
-    isTranscriptModelPending: boolean;
-  };
-};
+const EMPTY_STATE: TranscriptModelState = Object.freeze({
+  revision: EMPTY_REVISION,
+  rows: new Array<AgentChatTranscriptRow>(),
+  turnAnchors: new Array<AgentChatTurnAnchor>(),
+  hasAttachmentMessages: false,
+  lastUserMessageKey: null,
+  activeStreamingAssistantMessageId: null,
+});

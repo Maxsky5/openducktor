@@ -619,7 +619,27 @@ export const mergeHistoryMessages = (
 
   if (getSessionMessageCount(loadedOwner) > 0) {
     const currentIndex = buildCurrentMessageIndex(currentOwner);
+    const finalAssistantSourceIds = new Set<string>();
     forEachSessionMessage(loadedOwner, (message) => {
+      if (
+        isFinalAssistantChatMessage(message) &&
+        message.meta?.kind === "assistant" &&
+        message.meta.sourceMessageId !== undefined
+      ) {
+        finalAssistantSourceIds.add(message.meta.sourceMessageId);
+      }
+    });
+    forEachSessionMessage(loadedOwner, (message) => {
+      const wholeMessage = findWholeAssistantMessage(message, currentIndex.firstById);
+      if (wholeMessage) {
+        // History can lag live text. Keep its live row until the source finishes.
+        if (!finalAssistantSourceIds.has(wholeMessage.id)) {
+          loadedMessageIds.add(message.id);
+          return;
+        }
+        // Whole-message text can span several parts. Keep it out of each part's merge.
+        absorbedCurrentMessageIds.add(wholeMessage.id);
+      }
       const sameIdCurrentMessage = currentIndex.firstById.get(message.id);
       const matchingCurrentMessages = findMatchingCurrentMessages({
         currentIndex,
@@ -661,4 +681,27 @@ export const mergeHistoryMessages = (
         );
 
   return createSessionMessagesState(externalSessionId, resultMessages, currentMessages.version + 1);
+};
+
+const findWholeAssistantMessage = (
+  loadedMessage: AgentChatMessage,
+  currentMessagesById: ReadonlyMap<string, AgentChatMessage>,
+): AgentChatMessage | undefined => {
+  if (
+    loadedMessage.role !== "assistant" ||
+    loadedMessage.meta?.kind !== "assistant" ||
+    loadedMessage.meta.partId === undefined ||
+    loadedMessage.meta.sourceMessageId === undefined
+  ) {
+    return;
+  }
+  const currentMessage = currentMessagesById.get(loadedMessage.meta.sourceMessageId);
+  if (
+    currentMessage?.role === "assistant" &&
+    currentMessage.meta?.kind === "assistant" &&
+    currentMessage.meta.partId === undefined
+  ) {
+    return currentMessage;
+  }
+  return undefined;
 };

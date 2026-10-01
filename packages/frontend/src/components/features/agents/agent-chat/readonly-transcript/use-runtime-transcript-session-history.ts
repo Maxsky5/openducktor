@@ -242,7 +242,10 @@ export function useRuntimeTranscriptSessionHistory({
       });
     }
     return transcriptSession
-      ? withClaudeSkillMentions(transcriptSession, skillSurface.catalog?.skills ?? [])
+      ? {
+          ...withClaudeSkillMentions(transcriptSession, skillSurface.catalog?.skills ?? []),
+          skillReferences: skillSurface.catalog?.skills ?? [],
+        }
       : null;
   }, [historyQuery.data, matchingSession, shouldLoadHistory, skillSurface.catalog, stableTarget]);
   const transcriptState = useMemo<AgentSessionTranscriptState>(() => {

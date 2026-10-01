@@ -132,16 +132,9 @@ const shouldDropQueuedCandidate = (
     return false;
   }
 
-  if (event.type === "assistant_message") {
-    if (candidate.event.type === "assistant_delta") {
-      return candidate.event.messageId === event.messageId;
-    }
-
-    if (candidate.event.type === "assistant_part") {
-      return (
-        candidate.event.part.messageId === event.messageId && candidate.event.part.kind === "text"
-      );
-    }
+  // History keeps the part IDs and order, so final messages must keep queued parts.
+  if (event.type === "assistant_message" && candidate.event.type === "assistant_delta") {
+    return candidate.event.messageId === event.messageId;
   }
 
   if (

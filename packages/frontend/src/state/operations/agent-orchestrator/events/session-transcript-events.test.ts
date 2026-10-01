@@ -379,7 +379,7 @@ describe("agent-orchestrator session transcript events", () => {
     );
     expect(assistantMessages).toHaveLength(2);
     expect(assistantMessages.map((message) => message.id)).toEqual([
-      "assistant-text-1",
+      "text:assistant-text-1:assistant-text-1:text",
       "assistant-result-1",
     ]);
   });

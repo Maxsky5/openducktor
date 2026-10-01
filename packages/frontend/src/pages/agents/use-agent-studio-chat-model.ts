@@ -156,7 +156,12 @@ export function useAgentStudioChatModel({
       activityState: selectedSessionState.activityState,
       loadedSession: selectedSessionState.loadedSession,
     });
-    return session ? withClaudeSkillMentions(session, modelSelection.skills) : null;
+    return session
+      ? {
+          ...withClaudeSkillMentions(session, modelSelection.skills),
+          skillReferences: modelSelection.skills,
+        }
+      : null;
   }, [
     modelSelection.skills,
     selectedSessionIdentity,

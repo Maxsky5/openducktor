@@ -1,12 +1,18 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { render } from "@testing-library/react";
-import { createElement } from "react";
+import type { AgentSkillReference } from "@openducktor/core";
+import { act, createElement, useSyncExternalStore } from "react";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { createAgentSessionsStore } from "@/state/agent-sessions-store";
+import { AgentSessionsContext } from "@/state/app-state-contexts";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { createAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentChatTranscriptSession } from "./agent-chat.types";
 import { buildMessage, buildSession } from "./agent-chat-test-fixtures";
+import { toAgentChatTranscriptSession } from "./agent-chat-transcript-session";
+import { withClaudeSkillMentions } from "./claude-skill-mentions";
 import { useAgentChatTranscriptModel } from "./use-agent-chat-transcript-model";
 
 const actEnvironment: typeof globalThis & {
@@ -618,6 +624,159 @@ describe("useAgentChatTranscriptModel", () => {
     rendered.unmount();
   });
 
+  test.each([
+    "append",
+    "reorder",
+    "replace-tail",
+    "latest-revision",
+    "claude-skills",
+    "in-flight",
+    "deselect-pending",
+  ] as const)(
+    "shows current rows on the first render after an inactive session receives a %s update",
+    async (updateKind) => {
+      const initialTranscript = createLargeSession("session-background-a");
+      const skills: AgentSkillReference[] =
+        updateKind === "claude-skills"
+          ? [{ id: "review", name: "review", path: "/skills/review" }]
+          : [];
+      const firstSession = createAgentSessionFixture({
+        ...initialTranscript,
+        runtimeKind: updateKind === "claude-skills" ? "claude" : "opencode",
+        status: "idle",
+        historyLoadState: "loaded",
+      });
+      const secondSession = createAgentSessionFixture({
+        externalSessionId: "session-background-b",
+        status: "idle",
+        historyLoadState: "loaded",
+      });
+      const store = createAgentSessionsStore("/repo");
+      store.replaceSession(firstSession);
+      store.replaceSession(secondSession);
+      const observedStates: HookResult[] = [];
+      const Probe = ({ identity }: { identity: AgentChatTranscriptSession }) => {
+        const liveSession = useSyncExternalStore(store.subscribe, () =>
+          store.getSessionSnapshot(identity),
+        );
+        const transcriptSession = liveSession ? toAgentChatTranscriptSession(liveSession) : null;
+        observedStates.push(
+          useAgentChatTranscriptModel({
+            session: transcriptSession
+              ? { ...withClaudeSkillMentions(transcriptSession, skills), skillReferences: skills }
+              : null,
+            showThinkingMessages: true,
+          }),
+        );
+        return null;
+      };
+      const view = (identity: AgentChatTranscriptSession) =>
+        createElement(
+          AgentSessionsContext.Provider,
+          { value: store },
+          createElement(Probe, { identity }),
+        );
+      const firstIdentity = toAgentChatTranscriptSession(firstSession);
+      const rendered = render(view(firstIdentity));
+      try {
+        await flushTranscriptDerivation(
+          () => Boolean(observedStates.at(-1)?.hasCurrentRowsForActiveSession),
+          { timeoutMs: 1_000 },
+        );
+        if (updateKind !== "deselect-pending") {
+          rendered.rerender(view(toAgentChatTranscriptSession(secondSession)));
+          await flushTranscriptDerivation(
+            () => Boolean(observedStates.at(-1)?.hasCurrentRowsForActiveSession),
+            { timeoutMs: 1_000 },
+          );
+        }
+
+        const newMessage =
+          updateKind === "claude-skills"
+            ? buildMessage("user", "/review", {
+                id: "background-new",
+                meta: { kind: "user", state: "read", parts: [{ kind: "text", text: "/review" }] },
+              })
+            : buildMessage("assistant", "Received while inactive", {
+                id: updateKind === "replace-tail" ? "assistant-249" : "background-new",
+              });
+        let nextMessages = [...firstSession.messages.items, newMessage];
+        if (updateKind === "replace-tail") {
+          nextMessages = [...firstSession.messages.items.slice(0, -1), newMessage];
+        } else if (
+          updateKind === "reorder" ||
+          updateKind === "in-flight" ||
+          updateKind === "deselect-pending"
+        ) {
+          nextMessages = [newMessage, ...firstSession.messages.items.toReversed()];
+        }
+        act(() => {
+          if (updateKind === "latest-revision") {
+            store.replaceSession({
+              ...firstSession,
+              messages: createSessionMessagesState(
+                firstSession.externalSessionId,
+                firstSession.messages.items.toReversed(),
+                2,
+              ),
+            });
+          }
+          store.replaceSession({
+            ...firstSession,
+            messages: createSessionMessagesState(
+              firstSession.externalSessionId,
+              nextMessages,
+              updateKind === "latest-revision" ? 3 : 2,
+            ),
+          });
+        });
+        if (updateKind === "deselect-pending") {
+          expect(observedStates.at(-1)?.hasCurrentRowsForActiveSession).toBe(false);
+          rendered.rerender(view(toAgentChatTranscriptSession(secondSession)));
+        }
+        if (updateKind !== "in-flight") {
+          await animationFrameDriver.flushTimers(20);
+        }
+
+        const observationsBeforeSwitchBack = observedStates.length;
+        rendered.rerender(view(firstIdentity));
+        const firstRender = observedStates[observationsBeforeSwitchBack];
+        if (updateKind === "in-flight") {
+          expect(firstRender?.transcriptState.rows).toEqual([]);
+          expect(firstRender?.isTranscriptModelMissing).toBe(true);
+          await flushTranscriptDerivation(
+            () => Boolean(observedStates.at(-1)?.hasCurrentRowsForActiveSession),
+            { timeoutMs: 1_000 },
+          );
+        } else {
+          expect(firstRender?.hasCurrentRowsForActiveSession).toBe(true);
+        }
+        const visibleState = updateKind === "in-flight" ? observedStates.at(-1) : firstRender;
+        expect(
+          visibleState?.transcriptState.rows.flatMap((row) =>
+            row.kind === "message" ? [[row.message.id, row.message.content]] : [],
+          ),
+        ).toEqual(nextMessages.map((message) => [message.id, message.content]));
+        if (updateKind === "claude-skills") {
+          const skillMessage = visibleState?.transcriptState.rows.find(
+            (row) => row.kind === "message" && row.message.id === "background-new",
+          );
+          expect(skillMessage?.kind === "message" ? skillMessage.message.meta : null).toMatchObject(
+            {
+              kind: "user",
+              parts: [
+                { kind: "text", text: "/review" },
+                { kind: "skill_mention", skill: skills[0] },
+              ],
+            },
+          );
+        }
+      } finally {
+        rendered.unmount();
+      }
+    },
+  );
+
   test("keeps cached rows visible when the restored session changes before derivation runs", async () => {
     const firstMessages = Array.from({ length: 500 }, (_, index) =>
       buildMessage(index % 2 === 0 ? "user" : "assistant", `First ${index + 1}`, {
@@ -725,5 +884,59 @@ describe("useAgentChatTranscriptModel", () => {
       .transcriptState.rows.find((row) => row.kind === "message");
     expect(messageRow?.kind === "message" ? messageRow.message.content : null).toBe("After");
     await harness.unmount();
+  });
+
+  test("preserves cached runtime history when unrelated live store updates arrive", async () => {
+    const liveTranscript = createLargeSession("session-runtime-history");
+    const liveSession = createAgentSessionFixture({
+      ...liveTranscript,
+      historyLoadState: "loaded",
+    });
+    const queryTranscript = {
+      ...liveTranscript,
+      messages: createSessionMessagesState(
+        liveTranscript.externalSessionId,
+        [
+          buildMessage("user", "Only available in queried history", { id: "history-only" }),
+          ...liveTranscript.messages.items,
+        ],
+        2,
+      ),
+    };
+    const otherSession = createAgentSessionFixture({ externalSessionId: "other-session" });
+    const store = createAgentSessionsStore("/repo");
+    store.replaceSession(liveSession);
+    store.replaceSession(otherSession);
+    const observedStates: HookResult[] = [];
+    const Probe = (props: HarnessProps) => {
+      observedStates.push(useAgentChatTranscriptModel(props));
+      return null;
+    };
+    const view = (session: AgentChatTranscriptSession) =>
+      createElement(
+        AgentSessionsContext.Provider,
+        { value: store },
+        createElement(Probe, { session, showThinkingMessages: true }),
+      );
+    const rendered = render(view(queryTranscript));
+    try {
+      await flushTranscriptDerivation(
+        () => Boolean(observedStates.at(-1)?.hasCurrentRowsForActiveSession),
+        { timeoutMs: 1_000 },
+      );
+      const queryRows = observedStates.at(-1)?.transcriptState.rows;
+      rendered.rerender(view(toAgentChatTranscriptSession(otherSession)));
+      await flushTranscriptDerivation(
+        () => Boolean(observedStates.at(-1)?.hasCurrentRowsForActiveSession),
+        { timeoutMs: 1_000 },
+      );
+      act(() => store.replaceSession({ ...otherSession, title: "Unrelated title update" }));
+      await animationFrameDriver.flushTimers(20);
+      const observationsBeforeReturn = observedStates.length;
+      rendered.rerender(view(queryTranscript));
+      expect(observedStates[observationsBeforeReturn]?.transcriptState.rows).toBe(queryRows);
+    } finally {
+      rendered.unmount();
+    }
   });
 });

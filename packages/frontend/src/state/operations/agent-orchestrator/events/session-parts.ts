@@ -88,8 +88,7 @@ const upsertLiveAssistantMessage = ({
   text,
   timestamp,
 }: UpsertLiveAssistantMessageInput): AgentSessionState => {
-  const nextContent = sanitizeStreamingText(text);
-  if (nextContent.trim().length === 0) {
+  if (text.trim().length === 0) {
     return current;
   }
 
@@ -113,7 +112,7 @@ const upsertLiveAssistantMessage = ({
   const nextMessage: AgentChatMessage = {
     id: messageId,
     role: "assistant",
-    content: nextContent,
+    content: text,
     timestamp: existingMessage?.timestamp ?? timestamp,
     meta: nextMeta,
   };
@@ -142,7 +141,7 @@ export const handleAssistantDelta = (
         current,
         model: resolvePartModelSelection(context, current, messageId),
         messageId,
-        text: `${baseContent}${event.delta}`,
+        text: sanitizeStreamingText(`${baseContent}${event.delta}`),
         timestamp: event.timestamp,
       });
     });
@@ -166,7 +165,8 @@ const handleTextPart = (
     }
 
     const sourceMessage = findSessionMessageById(prepared, part.messageId);
-    const usesPartIdentity = prepared.runtimeKind === "claude";
+    const usesPartIdentity =
+      prepared.runtimeKind === "claude" || prepared.runtimeKind === "opencode";
     const input: UpsertLiveAssistantMessageInput = {
       current: prepared,
       model: resolvePartModelSelection(context, prepared, part.messageId),
