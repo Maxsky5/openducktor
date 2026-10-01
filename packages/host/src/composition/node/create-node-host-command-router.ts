@@ -70,7 +70,11 @@ import type {
 } from "./node-host-command-router-types";
 import type { NodeHostDefaultPorts } from "./node-host-default-ports";
 import { createNodeAgentSessionLiveState } from "./node-agent-session-live-state";
-import { createLiveSessionFaultLogger, defaultLifecycleLogger } from "./node-host-lifecycle-logger";
+import {
+  createLiveSessionFaultLogger,
+  createRuntimeFailureReporter,
+  defaultLifecycleLogger,
+} from "./node-host-lifecycle-logger";
 import { createNodeRuntimeExecutableCommandHandlers } from "./node-runtime-executable-command-handlers";
 import { createNodeHostRouterLifecycle } from "./node-host-router-lifecycle";
 import { createNodeTaskAssetServices } from "./node-task-asset-services";
@@ -192,12 +196,11 @@ export const assembleNodeEffectHostCommandRouter = (
     resolveMcpBridgeConnection: (repoPath) =>
       resolveClaudeWorkspaceRuntimeMcpBridgeConnection(resolvedMcpHostBridge, repoPath),
   });
-  const codexWorkspaceRuntimeStarterInput: Parameters<
-    typeof createCodexWorkspaceRuntimeStarter
-  >[0] = {
+  const codexStarterInput: Parameters<typeof createCodexWorkspaceRuntimeStarter>[0] = {
     toolDiscovery,
     settingsConfig,
     codexAppServer: effectiveCodexTransportRegistry,
+    onRuntimeFailure: createRuntimeFailureReporter(lifecycleLogger, onBackgroundFailure),
     liveSessionLifecycle: agentSessionLiveStateService,
     prepareLiveSessionAdapter: createCodexLiveSessionAdapterPreparer({
       prepareImageGenerations: defaultPorts.imageWorkers.prepareHistory,
@@ -216,13 +219,11 @@ export const assembleNodeEffectHostCommandRouter = (
     resolveMcpBridgeConnection: (runtimeInput) =>
       resolveRuntimeMcpBridge("codex", runtimeInput.repoPath),
   };
-  if (clientVersion) {
-    codexWorkspaceRuntimeStarterInput.clientVersion = clientVersion;
-  }
+  if (clientVersion) codexStarterInput.clientVersion = clientVersion;
   const taskSessionLifecycleCoordinator = createTaskSessionLifecycleCoordinator();
   const workspaceStarter = createRuntimeWorkspaceStarterDispatcher({
     claude: claudeRuntime.workspaceStarter,
-    codex: createCodexWorkspaceRuntimeStarter(codexWorkspaceRuntimeStarterInput),
+    codex: createCodexWorkspaceRuntimeStarter(codexStarterInput),
     opencode: createOpenCodeRuntimeComposition({
       toolDiscovery,
       settingsConfig,

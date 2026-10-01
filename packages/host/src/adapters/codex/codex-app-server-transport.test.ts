@@ -624,28 +624,83 @@ describe("createCodexAppServerTransport", () => {
     }
   });
 
-  test("still fails fast for responses with genuinely unexpected ids", async () => {
+  test("keeps the transport usable after a late response to a timed-out sent request", async () => {
     const child = createChild();
-    const transport = createCodexAppServerTransport("runtime-1", child, 1_000, () => {});
-
+    const transport = createCodexAppServerTransport("runtime-1", child, 100, () => {});
     try {
-      child.stdout.write(
-        `${JSON.stringify({ jsonrpc: "2.0", id: 99, result: { data: [], nextCursor: null } })}\n`,
-      );
-      await waitForStreamEvents();
-
       await expect(
-        Effect.runPromise(
-          transport.request({
-            method: "model/list",
-            params: {},
-          }),
-        ),
-      ).rejects.toThrow("Received Codex app-server response with unexpected id 99 for runtime-1");
+        Effect.runPromise(transport.request({ method: "model/list", params: {} })),
+      ).rejects.toThrow("Timed out waiting for Codex app-server request model/list");
+      child.stdout.write(`${JSON.stringify({ id: 1, result: { data: [], nextCursor: null } })}\n`);
+      const response = Effect.runPromise(transport.request({ method: "model/list", params: {} }));
+      child.stdout.write(`${JSON.stringify({ id: 2, result: { data: [], nextCursor: null } })}\n`);
+      await expect(response).resolves.toEqual({ data: [], nextCursor: null });
     } finally {
       await Effect.runPromise(transport.close());
     }
   });
+
+  test("expires late-response IDs after one timeout window", async () => {
+    const child = createChild();
+    const transport = createCodexAppServerTransport("runtime-1", child, 100, () => {});
+    try {
+      await expect(
+        Effect.runPromise(transport.request({ method: "model/list", params: {} })),
+      ).rejects.toThrow("Timed out waiting");
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      child.stdout.write(`${JSON.stringify({ id: 1, result: { data: [], nextCursor: null } })}\n`);
+      await expect(
+        Effect.runPromise(transport.request({ method: "model/list", params: {} })),
+      ).rejects.toThrow("unexpected id 1");
+    } finally {
+      await Effect.runPromise(transport.close());
+    }
+  });
+
+  test.each([
+    { line: JSON.stringify({ id: 99, result: {} }), message: "unexpected id 99" },
+    { line: "{invalid JSON", message: "Invalid Codex app-server JSON" },
+    {
+      line: JSON.stringify({ id: "time-1", method: "currentTime/read", params: {} }),
+      message: "invalid params",
+    },
+  ])(
+    "reports the first fatal cause once with no pending request for $message",
+    async ({ line, message }) => {
+      const child = createChild();
+      const failures: Error[] = [];
+      const emitted: unknown[] = [];
+      const transport = createCodexAppServerTransport(
+        "runtime-1",
+        child,
+        1_000,
+        (event) => emitted.push(event),
+        (error) => failures.push(error),
+      );
+
+      try {
+        child.stdout.write(`${line}\n`);
+        child.stdout.write(`${JSON.stringify({ id: 100, result: {} })}\n`);
+        child.stdout.write(`${JSON.stringify({ method: "future/notification", params: {} })}\n`);
+        child.emit("close", 1, null);
+        await waitForStreamEvents();
+        expect(failures).toHaveLength(1);
+        expect(failures[0]?.message).toContain(message);
+        expect(emitted).toEqual([]);
+
+        await expect(
+          Effect.runPromise(
+            transport.request({
+              method: "model/list",
+              params: {},
+            }),
+          ),
+        ).rejects.toThrow(message);
+      } finally {
+        await Effect.runPromise(transport.close());
+      }
+    },
+  );
 
   test("fails the request when send fails", async () => {
     const stdin = new Writable({

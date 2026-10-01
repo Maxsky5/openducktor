@@ -46,22 +46,23 @@ export const createCodexAppServerTransport = (
   child: CodexChildProcess,
   requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
   eventEmitter: CodexAppServerEventEmitter,
+  onFatalError?: (error: Error) => void,
 ): CodexAppServerChildTransport => {
   let nextRequestId = 1;
   let closed = false;
   let fatalError: Error | null = null;
   const pending = new Map<number, PendingCodexAppServerRequest>();
-  const cancelledSentRequests = new Map<number, NodeJS.Timeout>();
+  const lateRequestIds = new Map<number, NodeJS.Timeout>();
   let stderrOutput = "";
   let stdoutClosed = false;
   let stderrClosed = false;
   let unexpectedStdoutCloseTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const clearCancelledSentRequests = (): void => {
-    for (const timeout of cancelledSentRequests.values()) {
+  const clearLateRequestIds = (): void => {
+    for (const timeout of lateRequestIds.values()) {
       clearTimeout(timeout);
     }
-    cancelledSentRequests.clear();
+    lateRequestIds.clear();
   };
 
   const clearUnexpectedStdoutCloseTimer = (): void => {
@@ -73,15 +74,16 @@ export const createCodexAppServerTransport = (
   };
 
   const failFast = (error: Error): void => {
-    if (!fatalError) {
-      fatalError = error;
-    }
+    if (closed) return;
+    fatalError = error;
     closed = true;
-    clearCancelledSentRequests();
+    clearUnexpectedStdoutCloseTimer();
+    clearLateRequestIds();
     for (const request of pending.values()) {
       request.reject(error);
     }
     pending.clear();
+    onFatalError?.(error);
   };
 
   const ensureOpen = (): void => {
@@ -135,27 +137,26 @@ export const createCodexAppServerTransport = (
       });
     });
 
-  const forgetCancelledSentRequest = (id: number): boolean => {
-    const timeout = cancelledSentRequests.get(id);
+  const dropLateRequestId = (id: number): boolean => {
+    const timeout = lateRequestIds.get(id);
     if (!timeout) {
       return false;
     }
     clearTimeout(timeout);
-    cancelledSentRequests.delete(id);
+    lateRequestIds.delete(id);
     return true;
   };
 
-  const rememberCancelledSentRequest = (id: number): void => {
-    const timeout = setTimeout(() => {
-      cancelledSentRequests.delete(id);
-    }, requestTimeoutMs);
-    cancelledSentRequests.set(id, timeout);
+  const keepLateRequestId = (id: number): void => {
+    // Keep each sent request ID for one timeout window to accept one late response.
+    const timeout = setTimeout(() => lateRequestIds.delete(id), requestTimeoutMs);
+    lateRequestIds.set(id, timeout);
   };
 
   const resolveResponse = (id: number, message: CodexAppServerJsonObject): void => {
     const request = pending.get(id);
     if (!request) {
-      if (forgetCancelledSentRequest(id)) {
+      if (dropLateRequestId(id)) {
         return;
       }
       failFast(
@@ -242,7 +243,7 @@ export const createCodexAppServerTransport = (
   };
 
   const rejectPendingRequests = (operation: string, message: string): void => {
-    clearCancelledSentRequests();
+    clearLateRequestIds();
     for (const [id, request] of pending) {
       request.reject(
         new HostResourceError({
@@ -338,9 +339,7 @@ export const createCodexAppServerTransport = (
   const lines = createInterface({ input: child.stdout });
   lines.on("line", (line) => {
     const trimmed = line.trim();
-    if (!trimmed) {
-      return;
-    }
+    if (closed || !trimmed) return;
     try {
       const parsedMessage = codexAppServerJsonObjectSchema.safeParse(JSON.parse(trimmed));
       if (!parsedMessage.success) {
@@ -365,6 +364,7 @@ export const createCodexAppServerTransport = (
   });
   lines.on("close", () => {
     stdoutClosed = true;
+    if (closed) return;
     unexpectedStdoutCloseTimer = setTimeout(() => {
       unexpectedStdoutCloseTimer = null;
       if (!closed && !fatalError) {
@@ -407,7 +407,7 @@ export const createCodexAppServerTransport = (
             id,
             method: input.method,
             pending,
-            rememberCancelledSentRequest,
+            keepLateRequestId,
             requestTimeoutMs,
             runtimeId,
           }),
@@ -424,7 +424,7 @@ export const createCodexAppServerTransport = (
               return yield* response;
             }),
           ({ release }, exit) =>
-            Effect.sync(() => release({ preserveLateResponse: Exit.isInterrupted(exit) })),
+            Effect.sync(() => release({ keepRequestId: Exit.isInterrupted(exit) })),
         );
       });
     },
@@ -466,12 +466,13 @@ export const createCodexAppServerTransport = (
       });
     },
     rejectPendingRequestsForShutdown() {
-      return Effect.sync(() =>
+      return Effect.sync(() => {
+        closed = true;
         rejectPendingRequests(
           "codexAppServerTransport.rejectPendingRequestsForShutdown",
           `Codex app-server transport for runtime ${runtimeId} is shutting down`,
-        ),
-      );
+        );
+      });
     },
     close() {
       return Effect.sync(() => {

@@ -1,325 +1,35 @@
-import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
-import type { CodexAppServerStreamEvent } from "../../ports/codex-app-server-port";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ODT_MCP_TOOL_NAMES, RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
+import { terminateProcessTree } from "../../infrastructure/process/process-tree";
+import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
+import type { CodexAppServerStreamEvent } from "../../ports/codex-app-server-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import type { RuntimeWorkspaceHandle } from "../../ports/runtime-registry-port";
-import type { SystemCommandPort } from "../../ports/system-command-port";
-import type { ToolDiscoveryId, ToolDiscoveryPort } from "../../ports/tool-discovery-port";
-import { writeFakeRuntimeCommand } from "../../test-support/fake-runtime-command";
-import { createDiscoveredRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
 import { createAgentSessionRuntimeAdapterTestDouble } from "../../test-support/service-test-doubles";
 import { removeTestDirectory } from "../../test-support/temp-directory";
-import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { createSystemCommandRunner } from "../system/system-command-runner";
-import { createToolDiscoveryAdapter } from "../system/tool-discovery";
-import { createCodexAppServerTransportRegistry as createEffectCodexAppServerTransportRegistry } from "./codex-app-server-transport-registry";
-import { createCodexWorkspaceRuntimeStarter as createEffectCodexWorkspaceRuntimeStarter } from "./codex-workspace-runtime-starter";
-
-type CodexWorkspaceRuntimeStarterInput = Parameters<
-  typeof createEffectCodexWorkspaceRuntimeStarter
->[0];
-type CodexWorkspaceRuntimeStarterTestInput = Omit<
-  CodexWorkspaceRuntimeStarterInput,
-  | "runtimeDistribution"
-  | "toolDiscovery"
-  | "settingsConfig"
-  | "liveSessionLifecycle"
-  | "prepareLiveSessionAdapter"
-> &
-  Partial<
-    Pick<
-      CodexWorkspaceRuntimeStarterInput,
-      | "runtimeDistribution"
-      | "toolDiscovery"
-      | "settingsConfig"
-      | "liveSessionLifecycle"
-      | "prepareLiveSessionAdapter"
-    >
-  > & {
-    systemCommands?: SystemCommandPort;
-  };
-const tomlStringForTest = (value: string): string =>
-  value.includes("'") ? `'''${value}'''` : `'${value}'`;
-const testRuntimeDistribution = createArtifactRuntimeDistribution({
-  mcpLauncher: {
-    kind: "executable",
-    executablePath: process.execPath,
-  },
-});
-const createCodexWorkspaceRuntimeStarter = (input: CodexWorkspaceRuntimeStarterTestInput) => {
-  const {
-    liveSessionLifecycle,
-    prepareLiveSessionAdapter,
-    processEnv,
-    settingsConfig,
-    systemCommands,
-    toolDiscovery,
-    ...starterInput
-  } = input;
-  const defaultLiveSessionLifecycle = {
-    registerRuntimeAdapter: () => Effect.void,
-    releaseRuntime: () => Effect.succeed([]),
-    createRuntimeRegistration: (binding) =>
-      new AgentSessionLiveRegistration(binding, (mutation) =>
-        mutation.pipe(Effect.map((result) => result.value)),
-      ),
-  } satisfies RuntimeLiveSessionLifecyclePort;
-  const toolDiscoveryInput: Parameters<typeof createToolDiscoveryAdapter>[0] = {
-    systemCommands: systemCommands ?? createSystemCommands(),
-  };
-  if (processEnv !== undefined) {
-    toolDiscoveryInput.env = processEnv;
-  }
-  const effectiveToolDiscovery = toolDiscovery ?? createToolDiscoveryAdapter(toolDiscoveryInput);
-  const runtimeStarterInput: Parameters<typeof createEffectCodexWorkspaceRuntimeStarter>[0] = {
-    runtimeDistribution: testRuntimeDistribution,
-    toolDiscovery: effectiveToolDiscovery,
-    settingsConfig:
-      settingsConfig ?? createDiscoveredRuntimeSettingsConfig("codex", effectiveToolDiscovery),
-    liveSessionLifecycle: liveSessionLifecycle ?? defaultLiveSessionLifecycle,
-    prepareLiveSessionAdapter:
-      prepareLiveSessionAdapter ??
-      ((runtime) =>
-        Effect.succeed({
-          adapter: createAgentSessionRuntimeAdapterTestDouble(
-            {
-              runtimeId: runtime.runtimeId,
-              runtimeKind: runtime.kind,
-              repoPath: runtime.repoPath,
-            },
-            {},
-          ),
-          emitRuntimeEvent: () => {},
-          startForwarding: () => Effect.void,
-          discard: () => Effect.void,
-        })),
-    ...starterInput,
-  };
-  if (processEnv !== undefined) {
-    runtimeStarterInput.processEnv = processEnv;
-  }
-  return createEffectCodexWorkspaceRuntimeStarter(runtimeStarterInput);
-};
-const createCodexAppServerTransportRegistry = (
-  ...args: Parameters<typeof createEffectCodexAppServerTransportRegistry>
-) => createEffectCodexAppServerTransportRegistry(...args);
-const createSystemCommands = (): SystemCommandPort => ({
-  resolveCommandPath(command) {
-    return Effect.succeed(command);
-  },
-  versionCommand() {
-    return Effect.succeed("codex 1.0.0");
-  },
-  runCommandAllowFailure() {
-    return Effect.succeed({ ok: true, stdout: "", stderr: "" });
-  },
-});
-
-const createFakeToolDiscovery = (
-  paths: Partial<Record<ToolDiscoveryId, string>>,
-): ToolDiscoveryPort => ({
-  discoverTool(toolId) {
-    return this.resolveTool(toolId);
-  },
-  resolveTool(toolId) {
-    const path = paths[toolId];
-    return path === undefined
-      ? Effect.dieMessage(`Missing fake tool path for ${toolId}`)
-      : Effect.succeed({
-          displayLabel: "Test tool",
-          path,
-          sourceCategory: "provided_path",
-        });
-  },
-  resolveToolPath(toolId) {
-    const path = paths[toolId];
-    return path === undefined
-      ? Effect.dieMessage(`Missing fake tool path for ${toolId}`)
-      : Effect.succeed(path);
-  },
-  validateToolPath(toolId, executablePath) {
-    const expectedPath = paths[toolId];
-    return expectedPath === executablePath
-      ? Effect.succeed({
-          displayLabel: "Saved path",
-          path: executablePath,
-          sourceCategory: "provided_path",
-        })
-      : Effect.dieMessage(`Unexpected fake tool path for ${toolId}: ${executablePath}`);
-  },
-});
-
-const createFakeCodex = async (
-  root: string,
-  {
-    childPidPath,
-    emitStreamEvents = false,
-    exitBeforeInitialize,
-    hangRequestMethods = [],
-    runtimePidPath,
-  }: {
-    childPidPath?: string;
-    emitStreamEvents?: boolean;
-    exitBeforeInitialize?: { code: number; stderr: string };
-    hangRequestMethods?: string[];
-    runtimePidPath?: string;
-  } = {},
-): Promise<string> => {
-  const scriptPath = join(root, "codex.mjs");
-  await writeFile(
-    scriptPath,
-    `import { spawn } from "node:child_process";
-import { createInterface } from "node:readline";
-import { writeFileSync } from "node:fs";
-
-const capturePath = process.env.CODEX_CAPTURE_PATH;
-const childPidPath = ${JSON.stringify(childPidPath ?? null)};
-const emitStreamEvents = ${JSON.stringify(emitStreamEvents)};
-const exitBeforeInitialize = ${JSON.stringify(exitBeforeInitialize ?? null)};
-const hangRequestMethods = new Set(${JSON.stringify(hangRequestMethods)});
-const runtimePidPath = ${JSON.stringify(runtimePidPath ?? null)};
-const capture = {
-  args: process.argv.slice(2),
-  env: {
-    ODT_WORKSPACE_ID: process.env.ODT_WORKSPACE_ID,
-    ODT_HOST_URL: process.env.ODT_HOST_URL,
-    ODT_HOST_TOKEN: process.env.ODT_HOST_TOKEN,
-    ODT_FORBID_WORKSPACE_ID_INPUT: process.env.ODT_FORBID_WORKSPACE_ID_INPUT,
-    ODT_ALLOWED_TOOLS: process.env.ODT_ALLOWED_TOOLS,
-  },
-  initializeVersion: null,
-};
-if (capturePath) {
-  writeFileSync(capturePath, JSON.stringify(capture));
-}
-if (runtimePidPath) {
-  writeFileSync(runtimePidPath, String(process.pid));
-}
-
-if (!process.argv.includes("app-server")) {
-  console.error("expected app-server command");
-  process.exit(2);
-}
-if (exitBeforeInitialize) {
-  console.error(exitBeforeInitialize.stderr);
-  process.exit(exitBeforeInitialize.code);
-}
-if (childPidPath) {
-  const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000);"], {
-    stdio: "ignore",
-  });
-  writeFileSync(childPidPath, String(child.pid));
-}
-
-const lines = createInterface({ input: process.stdin });
-lines.on("line", (line) => {
-  const message = JSON.parse(line);
-  if (message.method === "initialize") {
-    capture.initializeVersion = message.params.clientInfo.version;
-    if (capturePath) {
-      writeFileSync(capturePath, JSON.stringify(capture));
-    }
-    process.stdout.write(JSON.stringify({
-      jsonrpc: "2.0",
-      id: message.id,
-      result: {
-        userAgent: "codex-test",
-        codexHome: "/tmp/codex",
-        platformFamily: "unix",
-        platformOs: "darwin",
-      },
-    }) + "\\n");
-    return;
-  }
-  if (message.method === "initialized") {
-    if (emitStreamEvents) {
-      process.stdout.write(JSON.stringify({
-        jsonrpc: "2.0",
-        method: "thread/status/changed",
-        params: { threadId: "thread-1", status: { type: "idle" } },
-      }) + "\\n");
-      process.stdout.write(JSON.stringify({
-        jsonrpc: "2.0",
-        id: 99,
-        method: "execCommandApproval",
-        params: {
-          conversationId: "thread-1",
-          callId: "call-1",
-          approvalId: null,
-          command: ["true"],
-          cwd: "/repo",
-          reason: null,
-          parsedCmd: [],
-        },
-      }) + "\\n");
-    }
-    return;
-  }
-  if (message.id !== undefined) {
-    if (hangRequestMethods.has(message.method)) {
-      return;
-    }
-    if (message.method === "thread/loaded/list") {
-      process.stdout.write(JSON.stringify({
-        jsonrpc: "2.0",
-        id: message.id,
-        result: { data: [], nextCursor: null },
-      }) + "\\n");
-      return;
-    }
-    process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: message.id, result: { data: [], nextCursor: null } }) + "\\n");
-  }
-});
-const stop = () => process.exit(0);
-lines.on("close", stop);
-process.on("SIGTERM", stop);
-process.on("SIGINT", stop);
-`,
-  );
-  return writeFakeRuntimeCommand(root, "codex", "codex.mjs");
-};
-const waitForEvents = async (events: unknown[], count: number): Promise<void> => {
-  const deadline = Date.now() + 1000;
-  while (Date.now() < deadline) {
-    if (events.length >= count) {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error(`Timed out waiting for ${count} Codex app-server event(s).`);
-};
-
-const waitFor = async (predicate: () => boolean, timeoutMs = 1_000): Promise<void> => {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (predicate()) {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error("Timed out waiting for condition.");
-};
-
-const processIsAlive = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-};
+import { createCodexAppServerTransportRegistry as createTransportRegistry } from "./codex-app-server-transport-registry";
+import {
+  createStarter,
+  processIsAlive,
+  stubCommands,
+  stubTools,
+  tomlString,
+  waitFor,
+  waitForEvents,
+  writeCodex,
+} from "./codex-workspace-runtime-starter.test-support";
 
 describe("createCodexWorkspaceRuntimeStarter", () => {
   test("fails fast when the MCP bridge connection is not configured", async () => {
-    const starter = createCodexWorkspaceRuntimeStarter({
-      systemCommands: createSystemCommands(),
-      codexAppServer: createCodexAppServerTransportRegistry(),
+    const starter = createStarter({
+      systemCommands: stubCommands(),
+      codexAppServer: createTransportRegistry(),
     });
     await expect(
       Effect.runPromise(
@@ -332,6 +42,131 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       ),
     ).rejects.toThrow("Codex workspace startup requires an MCP host bridge connection.");
   });
+
+  test.each(["spawn", "initialize", "register", "forward"])(
+    "cleans up startup failure at %s",
+    async (stage) => {
+      const root = await mkdtemp(join(tmpdir(), "odt-codex-startup-failure-"));
+      const runtimePidPath = join(root, "runtime.pid");
+      let discardCount = 0;
+      let releaseCount = 0;
+      const failures: HostOperationErrorAggregate[] = [];
+      const startupFailure = new HostOperationError({
+        operation: "test.startup",
+        message: `${stage} failed`,
+      });
+      try {
+        const binary = await writeCodex(root, {
+          runtimePidPath,
+          hangRequestMethods: stage === "initialize" ? ["initialize"] : [],
+        });
+        const codexAppServer = createTransportRegistry();
+        const starter = createStarter({
+          codexAppServer,
+          toolDiscovery: stubTools({
+            codex: stage === "spawn" ? join(root, "missing") : binary,
+          }),
+          runtimeId: () => "runtime-startup-failure",
+          requestTimeoutMs: stage === "initialize" ? 1_000 : 4_000,
+          onRuntimeFailure: (failure) =>
+            Effect.sync(() => {
+              failures.push(failure);
+            }),
+          resolveMcpBridgeConnection: () =>
+            Effect.succeed({
+              workspaceId: "repo",
+              hostUrl: "http://127.0.0.1:14327",
+              hostToken: "token-1",
+            }),
+          liveSessionLifecycle: {
+            registerRuntimeAdapter: () =>
+              stage === "register" ? Effect.fail(startupFailure) : Effect.void,
+            releaseRuntime: () =>
+              Effect.sync(() => {
+                releaseCount += 1;
+                return [];
+              }),
+            createRuntimeRegistration: (binding) =>
+              new AgentSessionLiveRegistration(binding, (mutation) =>
+                mutation.pipe(Effect.map((result) => result.value)),
+              ),
+          },
+          prepareLiveSessionAdapter: (runtime) =>
+            Effect.succeed({
+              adapter: createAgentSessionRuntimeAdapterTestDouble(
+                {
+                  runtimeId: runtime.runtimeId,
+                  runtimeKind: "codex",
+                  repoPath: root,
+                },
+                {},
+              ),
+              emitRuntimeEvent: () => {},
+              startForwarding: () =>
+                stage === "forward" ? Effect.fail(startupFailure) : Effect.void,
+              discard: () =>
+                Effect.sync(() => {
+                  discardCount += 1;
+                }),
+            }),
+          processTreeTerminator: (input) =>
+            terminateProcessTree(input).pipe(
+              Effect.zipRight(
+                stage === "register"
+                  ? Effect.fail(
+                      new HostOperationError({
+                        operation: "test.cleanup",
+                        message: "cleanup failure during startup",
+                      }),
+                    )
+                  : Effect.void,
+              ),
+            ),
+        });
+        const failure = await Effect.runPromise(
+          Effect.flip(
+            starter.startWorkspaceRuntime({
+              runtimeKind: "codex",
+              repoPath: root,
+              workingDirectory: root,
+              descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
+            }),
+          ),
+        );
+        if (stage === "spawn") expect(failure.message).toContain("no valid pid");
+        if (stage === "initialize")
+          expect(failure.message).toContain(
+            "Timed out waiting for Codex app-server request initialize",
+          );
+        if (stage === "register" || stage === "forward")
+          expect(failure.message).toContain(startupFailure.message);
+        if (stage === "register") {
+          expect(failure.cause).toBe(startupFailure);
+          expect(failure.message).toContain("cleanup failure during startup");
+        }
+        expect(discardCount).toBe(stage === "forward" ? 0 : 1);
+        expect(releaseCount).toBe(stage === "forward" ? 1 : 0);
+        expect(failures).toEqual([]);
+        if (stage === "spawn") {
+          expect(existsSync(runtimePidPath)).toBe(false);
+        } else {
+          const pid = Number(await readFile(runtimePidPath, "utf8"));
+          await waitFor(() => !processIsAlive(pid));
+        }
+        await expect(
+          Effect.runPromise(
+            codexAppServer.request({
+              runtimeId: "runtime-startup-failure",
+              method: "thread/loaded/list",
+              params: {},
+            }),
+          ),
+        ).rejects.toThrow("Codex app-server transport not found");
+      } finally {
+        await removeTestDirectory(root);
+      }
+    },
+  );
   test("starts a Codex app-server runtime, registers transport, and stops it", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-codex-starter-"));
     const originalCapturePath = process.env.CODEX_CAPTURE_PATH;
@@ -351,28 +186,25 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       const repo = process.cwd();
       const capturePath = join(root, "capture.json");
       process.env.CODEX_CAPTURE_PATH = capturePath;
-      const codexBinary = await createFakeCodex(root, { runtimePidPath });
-      const codexAppServer = createCodexAppServerTransportRegistry();
-      const promiseCodexAppServer = codexAppServer;
-      const starter = createCodexWorkspaceRuntimeStarter({
-        systemCommands: createSystemCommands(),
+      const codexBinary = await writeCodex(root, { runtimePidPath });
+      const codexAppServer = createTransportRegistry();
+      const starter = createStarter({
+        systemCommands: stubCommands(),
         codexAppServer,
-        toolDiscovery: createFakeToolDiscovery({ codex: codexBinary }),
+        toolDiscovery: stubTools({ codex: codexBinary }),
         clientVersion: "0.3.1-test",
         resolveMcpBridgeConnection: () =>
           Effect.tryPromise({
-            try: async () => {
-              return {
-                workspaceId: "repo",
-                hostUrl: "http://127.0.0.1:14327",
-                hostToken: "token-1",
-              };
-            },
+            try: async () => ({
+              workspaceId: "repo",
+              hostUrl: "http://127.0.0.1:14327",
+              hostToken: "token-1",
+            }),
             catch: (cause) =>
               new HostOperationError({
                 operation: "test.effect",
                 message: cause instanceof Error ? cause.message : String(cause),
-                cause: cause,
+                cause,
               }),
           }),
         requestTimeoutMs: 4000,
@@ -402,7 +234,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       });
       await expect(
         Effect.runPromise(
-          promiseCodexAppServer.request({
+          codexAppServer.request({
             runtimeId: "runtime-1",
             method: "thread/loaded/list",
             params: { cursor: null },
@@ -421,7 +253,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       expect(capture.args).toEqual(
         expect.arrayContaining([
           "--config",
-          `mcp_servers.openducktor.command=${tomlStringForTest(process.execPath)}`,
+          `mcp_servers.openducktor.command=${tomlString(process.execPath)}`,
           "--config",
           expect.stringContaining("mcp_servers.openducktor.args="),
           "--config",
@@ -448,7 +280,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       await waitForRuntimeExit();
       await expect(
         Effect.runPromise(
-          promiseCodexAppServer.request({
+          codexAppServer.request({
             runtimeId: "runtime-1",
             method: "thread/loaded/list",
             params: {},
@@ -475,12 +307,12 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       const repo = join(root, "repo");
       const childPidPath = join(root, "child.pid");
       await mkdir(repo);
-      const codexBinary = await createFakeCodex(root, { childPidPath });
-      const codexAppServer = createCodexAppServerTransportRegistry();
-      const starter = createCodexWorkspaceRuntimeStarter({
-        systemCommands: createSystemCommands(),
+      const codexBinary = await writeCodex(root, { childPidPath });
+      const codexAppServer = createTransportRegistry();
+      const starter = createStarter({
+        systemCommands: stubCommands(),
         codexAppServer,
-        toolDiscovery: createFakeToolDiscovery({ codex: codexBinary }),
+        toolDiscovery: stubTools({ codex: codexBinary }),
         resolveMcpBridgeConnection: () =>
           Effect.succeed({
             workspaceId: "repo",
@@ -519,14 +351,14 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
     try {
       const repo = join(root, "repo");
       await mkdir(repo);
-      const codexBinary = await createFakeCodex(root, {
+      const codexBinary = await writeCodex(root, {
         exitBeforeInitialize: { code: 42, stderr: "codex exploded before initialize" },
       });
-      const codexAppServer = createCodexAppServerTransportRegistry();
-      const starter = createCodexWorkspaceRuntimeStarter({
-        systemCommands: createSystemCommands(),
+      const codexAppServer = createTransportRegistry();
+      const starter = createStarter({
+        systemCommands: stubCommands(),
         codexAppServer,
-        toolDiscovery: createFakeToolDiscovery({ codex: codexBinary }),
+        toolDiscovery: stubTools({ codex: codexBinary }),
         resolveMcpBridgeConnection: () =>
           Effect.succeed({
             workspaceId: "repo",
@@ -560,12 +392,12 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
     try {
       const repo = join(root, "repo");
       await mkdir(repo);
-      const codexBinary = await createFakeCodex(root);
-      const codexAppServer = createCodexAppServerTransportRegistry();
-      const starter = createCodexWorkspaceRuntimeStarter({
-        systemCommands: createSystemCommands(),
+      const codexBinary = await writeCodex(root);
+      const codexAppServer = createTransportRegistry();
+      const starter = createStarter({
+        systemCommands: stubCommands(),
         codexAppServer,
-        toolDiscovery: createFakeToolDiscovery({ codex: codexBinary }),
+        toolDiscovery: stubTools({ codex: codexBinary }),
         resolveMcpBridgeConnection: () =>
           Effect.succeed({
             workspaceId: "repo",
@@ -615,10 +447,10 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       const repo = join(root, "repo");
       await mkdir(repo);
       const runtimeId = "runtime-transport-first";
-      const codexBinary = await createFakeCodex(root, {
+      const codexBinary = await writeCodex(root, {
         hangRequestMethods: ["thread/loaded/list"],
       });
-      const codexAppServer = createCodexAppServerTransportRegistry();
+      const codexAppServer = createTransportRegistry();
       let pendingRequestSettled = false;
       let markProcessCleanupStarted: () => void = () => undefined;
       let releaseProcessCleanup: () => void = () => undefined;
@@ -629,7 +461,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
         releaseProcessCleanup = resolve;
       });
 
-      const starter = createCodexWorkspaceRuntimeStarter({
+      const starter = createStarter({
         codexAppServer,
         processEnv: { ...process.env, PATH: `${root}:${process.env.PATH ?? ""}` },
         processTreeTerminator: () =>
@@ -646,7 +478,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
         requestTimeoutMs: 4_000,
         runtimeId: () => runtimeId,
         stopTimeoutMs: 25,
-        toolDiscovery: createFakeToolDiscovery({ codex: codexBinary }),
+        toolDiscovery: stubTools({ codex: codexBinary }),
         resolveMcpBridgeConnection: () =>
           Effect.succeed({
             workspaceId: "repo",
@@ -701,11 +533,11 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       await mkdir(repo);
       const capturePath = join(root, "capture.json");
       process.env.CODEX_CAPTURE_PATH = capturePath;
-      const codexBinary = await createFakeCodex(root);
-      const codexAppServer = createCodexAppServerTransportRegistry();
+      const codexBinary = await writeCodex(root);
+      const codexAppServer = createTransportRegistry();
       const pathWithFakeRuntime = `${root};${process.env.PATH ?? ""}`;
       const localAppData = join(root, "local-app-data");
-      const starter = createCodexWorkspaceRuntimeStarter({
+      const starter = createStarter({
         systemCommands: createSystemCommandRunner({
           env: {
             ...process.env,
@@ -762,8 +594,8 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
     try {
       const repo = join(root, "repo");
       await mkdir(repo);
-      const codexBinary = await createFakeCodex(root, { emitStreamEvents: true });
-      const codexAppServer = createCodexAppServerTransportRegistry();
+      const codexBinary = await writeCodex(root, { emitStreamEvents: true });
+      const codexAppServer = createTransportRegistry();
       const events: unknown[] = [];
       const order: string[] = [];
       const liveSessionLifecycle = {
@@ -781,10 +613,10 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
             mutation.pipe(Effect.map((result) => result.value)),
           ),
       } satisfies RuntimeLiveSessionLifecyclePort;
-      const starter = createCodexWorkspaceRuntimeStarter({
-        systemCommands: createSystemCommands(),
+      const starter = createStarter({
+        systemCommands: stubCommands(),
         codexAppServer,
-        toolDiscovery: createFakeToolDiscovery({ codex: codexBinary }),
+        toolDiscovery: stubTools({ codex: codexBinary }),
         liveSessionLifecycle,
         prepareLiveSessionAdapter: (runtime) =>
           Effect.sync(() => {
@@ -875,119 +707,154 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
     }
   });
 
-  test("releases a service-owned live adapter when the process closes while registration settles", async () => {
-    const root = await mkdtemp(join(tmpdir(), "odt-codex-starter-registration-close-"));
-    const runtimePidPath = join(root, "runtime.pid");
-    let runtimePid: number | null = null;
-    let allowRegistrationToSettle = (): void => {};
-    let markRegistrationStarted = (): void => {};
-    const registrationMaySettle = new Promise<void>((resolve) => {
-      allowRegistrationToSettle = resolve;
-    });
-    const registrationStarted = new Promise<void>((resolve) => {
-      markRegistrationStarted = resolve;
-    });
-    const registeredRuntimeIds = new Set<string>();
-    let discardCount = 0;
-    let releaseCount = 0;
+  test.each(["child close", "fatal transport"])(
+    "releases the adapter when %s occurs while registration settles",
+    async (failureKind) => {
+      const root = await mkdtemp(join(tmpdir(), "odt-codex-starter-registration-close-"));
+      const runtimePidPath = join(root, "runtime.pid");
+      const fatalMessagePath = join(root, "fatal.json");
+      let runtimePid: number | null = null;
+      let finishRegistration = (): void => {};
+      let markRegistrationStarted = (): void => {};
+      const registrationGate = new Promise<void>((resolve) => {
+        finishRegistration = resolve;
+      });
+      const registrationStarted = new Promise<void>((resolve) => {
+        markRegistrationStarted = resolve;
+      });
+      const registeredRuntimeIds = new Set<string>();
+      let discardCount = 0;
+      let releaseCount = 0;
 
-    try {
-      const repo = join(root, "repo");
-      await mkdir(repo);
-      const codexBinary = await createFakeCodex(root, { runtimePidPath });
-      const codexAppServer = createCodexAppServerTransportRegistry();
-      const liveSessionLifecycle = {
-        registerRuntimeAdapter: (adapter) =>
-          Effect.promise(async () => {
-            registeredRuntimeIds.add(adapter.binding.runtimeId);
-            markRegistrationStarted();
-            await registrationMaySettle;
-          }),
-        releaseRuntime: (releasedRuntimeId: string) =>
-          Effect.sync(() => {
-            releaseCount += 1;
-            registeredRuntimeIds.delete(releasedRuntimeId);
-            return [];
-          }),
-        createRuntimeRegistration: (binding) =>
-          new AgentSessionLiveRegistration(binding, (mutation) =>
-            mutation.pipe(Effect.map((result) => result.value)),
-          ),
-      } satisfies RuntimeLiveSessionLifecyclePort;
-      const starter = createCodexWorkspaceRuntimeStarter({
-        systemCommands: createSystemCommands(),
-        codexAppServer,
-        toolDiscovery: createFakeToolDiscovery({ codex: codexBinary }),
-        liveSessionLifecycle,
-        prepareLiveSessionAdapter: (runtime) =>
-          Effect.succeed({
-            adapter: createAgentSessionRuntimeAdapterTestDouble(
-              {
-                runtimeId: runtime.runtimeId,
-                runtimeKind: runtime.kind,
-                repoPath: runtime.repoPath,
-              },
-              {},
+      try {
+        const repo = join(root, "repo");
+        await mkdir(repo);
+        const codexBinary = await writeCodex(root, { runtimePidPath, fatalMessagePath });
+        const codexAppServer = createTransportRegistry();
+        const liveSessionLifecycle = {
+          registerRuntimeAdapter: (adapter) =>
+            Effect.promise(async () => {
+              registeredRuntimeIds.add(adapter.binding.runtimeId);
+              markRegistrationStarted();
+              await registrationGate;
+            }),
+          releaseRuntime: (releasedRuntimeId: string) =>
+            Effect.sync(() => {
+              releaseCount += 1;
+              registeredRuntimeIds.delete(releasedRuntimeId);
+              return [];
+            }),
+          createRuntimeRegistration: (binding) =>
+            new AgentSessionLiveRegistration(binding, (mutation) =>
+              mutation.pipe(Effect.map((result) => result.value)),
             ),
-            emitRuntimeEvent: () => {},
-            startForwarding: () =>
-              Effect.fail(
-                new HostOperationError({
-                  operation: "test.startForwarding",
-                  message: "Forwarding cannot start after the runtime closes.",
+        } satisfies RuntimeLiveSessionLifecyclePort;
+        const starter = createStarter({
+          systemCommands: stubCommands(),
+          codexAppServer,
+          toolDiscovery: stubTools({ codex: codexBinary }),
+          liveSessionLifecycle,
+          prepareLiveSessionAdapter: (runtime) =>
+            Effect.succeed({
+              adapter: createAgentSessionRuntimeAdapterTestDouble(
+                {
+                  runtimeId: runtime.runtimeId,
+                  runtimeKind: runtime.kind,
+                  repoPath: runtime.repoPath,
+                },
+                {},
+              ),
+              emitRuntimeEvent: () => {},
+              startForwarding: () =>
+                Effect.fail(
+                  new HostOperationError({
+                    operation: "test.startForwarding",
+                    message: "Forwarding cannot start after the runtime closes.",
+                  }),
+                ),
+              discard: () =>
+                Effect.sync(() => {
+                  discardCount += 1;
+                }),
+            }),
+          resolveMcpBridgeConnection: () =>
+            Effect.succeed({
+              workspaceId: "repo",
+              hostUrl: "http://127.0.0.1:14327",
+              hostToken: "token-1",
+            }),
+          requestTimeoutMs: 4_000,
+          runtimeId: () => "runtime-registration-close",
+        });
+
+        const startup = Effect.runPromise(
+          Effect.flip(
+            starter.startWorkspaceRuntime({
+              runtimeKind: "codex",
+              repoPath: repo,
+              workingDirectory: repo,
+              descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
+            }),
+          ),
+        );
+        await registrationStarted;
+        await waitFor(() => existsSync(runtimePidPath));
+        const pid = Number(await readFile(runtimePidPath, "utf8"));
+        runtimePid = pid;
+        if (failureKind === "child close") {
+          process.kill(pid, "SIGTERM");
+          await waitFor(() => !processIsAlive(pid), 2_000);
+        } else {
+          await writeFile(fatalMessagePath, JSON.stringify({ id: 999, result: {} }));
+          // Wait for the existing transport to reject work before registration settles.
+          await waitFor(async () => {
+            const result = await Effect.runPromise(
+              Effect.either(
+                codexAppServer.request({
+                  runtimeId: "runtime-registration-close",
+                  method: "thread/loaded/list",
+                  params: {},
                 }),
               ),
-            discard: () =>
-              Effect.sync(() => {
-                discardCount += 1;
-              }),
-          }),
-        resolveMcpBridgeConnection: () =>
-          Effect.succeed({
-            workspaceId: "repo",
-            hostUrl: "http://127.0.0.1:14327",
-            hostToken: "token-1",
-          }),
-        requestTimeoutMs: 4_000,
-        runtimeId: () => "runtime-registration-close",
-      });
+            );
+            return result._tag === "Left";
+          });
+        }
+        await expect(
+          Effect.runPromise(
+            codexAppServer.request({
+              runtimeId: "runtime-registration-close",
+              method: "thread/loaded/list",
+              params: { cursor: null },
+            }),
+          ),
+        ).rejects.toThrow();
 
-      const startup = Effect.runPromise(
-        starter.startWorkspaceRuntime({
-          runtimeKind: "codex",
-          repoPath: repo,
-          workingDirectory: repo,
-          descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
-        }),
-      );
-      await registrationStarted;
-      await waitFor(() => existsSync(runtimePidPath));
-      const startedRuntimePid = Number(await readFile(runtimePidPath, "utf8"));
-      runtimePid = startedRuntimePid;
-      process.kill(startedRuntimePid, "SIGTERM");
-      await waitFor(() => !processIsAlive(startedRuntimePid), 2_000);
-      await expect(
-        Effect.runPromise(
-          codexAppServer.request({
-            runtimeId: "runtime-registration-close",
-            method: "thread/loaded/list",
-            params: { cursor: null },
-          }),
-        ),
-      ).rejects.toThrow();
+        finishRegistration();
 
-      allowRegistrationToSettle();
-
-      await expect(startup).rejects.toThrow();
-      expect(releaseCount).toBe(1);
-      expect(discardCount).toBe(0);
-      expect(registeredRuntimeIds).toEqual(new Set());
-    } finally {
-      allowRegistrationToSettle();
-      if (runtimePid !== null && processIsAlive(runtimePid)) {
-        process.kill(runtimePid, "SIGKILL");
+        const failure = await startup;
+        if (failureKind === "fatal transport")
+          expect(failure.message).toContain("unexpected id 999");
+        expect(releaseCount).toBe(1);
+        expect(discardCount).toBe(0);
+        expect(registeredRuntimeIds).toEqual(new Set());
+        await waitFor(() => !processIsAlive(pid));
+        await expect(
+          Effect.runPromise(
+            codexAppServer.request({
+              runtimeId: "runtime-registration-close",
+              method: "thread/loaded/list",
+              params: {},
+            }),
+          ),
+        ).rejects.toThrow("Codex app-server transport not found");
+      } finally {
+        finishRegistration();
+        if (runtimePid !== null && processIsAlive(runtimePid)) {
+          process.kill(runtimePid, "SIGKILL");
+        }
+        await removeTestDirectory(root);
       }
-      await removeTestDirectory(root);
-    }
-  });
+    },
+  );
 });
