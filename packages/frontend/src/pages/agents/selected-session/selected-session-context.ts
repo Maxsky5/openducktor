@@ -77,7 +77,6 @@ export type AgentStudioSelectedSessionContextInput = {
   sessionsForTask: AgentSessionSummary[];
   allSessionSummaries: AgentSessionSummary[];
   selectedSession: AgentStudioSelectedSessionState;
-  hasActiveGitConflict: boolean;
   documents: AgentStudioDocumentsContext;
   sessionActions: {
     isSessionWorking: boolean;
@@ -153,7 +152,6 @@ export const buildAgentStudioSelectedSessionContext = ({
   sessionsForTask,
   allSessionSummaries,
   selectedSession,
-  hasActiveGitConflict,
   documents,
   sessionActions,
   roleLabelByRole,
@@ -167,7 +165,6 @@ export const buildAgentStudioSelectedSessionContext = ({
     selectedSessionIdentity,
     role,
     isSessionWorking: sessionActions.isSessionWorking,
-    hasActiveGitConflict,
     roleLabelByRole,
     gitProviderContext,
     gitProviderReadError,

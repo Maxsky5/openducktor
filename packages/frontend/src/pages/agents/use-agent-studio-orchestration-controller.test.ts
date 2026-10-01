@@ -107,7 +107,6 @@ const createBaseArgs = (): BuildArgs => {
         transcriptState: createSelectedSessionTranscriptStateFixture(),
         sessionAuxiliaryError: null,
       },
-      hasActiveGitConflict: false,
       documents: {
         specDoc: createTaskDocument(),
         planDoc: createTaskDocument(),

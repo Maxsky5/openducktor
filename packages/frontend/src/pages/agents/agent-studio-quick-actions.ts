@@ -136,13 +136,6 @@ const orderQuickActions = (
   const fallbackPriority = launchActionPriority.size + 1;
 
   return options.toSorted((left, right) => {
-    if (left.launchActionId === "build_rebase_conflict_resolution") {
-      return -1;
-    }
-    if (right.launchActionId === "build_rebase_conflict_resolution") {
-      return 1;
-    }
-
     const leftPriority = launchActionPriority.get(left.launchActionId) ?? fallbackPriority;
     const rightPriority = launchActionPriority.get(right.launchActionId) ?? fallbackPriority;
     if (leftPriority !== rightPriority) {
@@ -157,7 +150,6 @@ export const buildAgentStudioQuickActions = (params: {
   sessionsForTask: AgentSessionSummary[];
   roleEnabledByTask: Record<AgentRole, boolean>;
   createSessionDisabled: boolean;
-  hasActiveGitConflict?: boolean;
   gitProviderContext?: RepositoryGitProviderContext | undefined;
   gitProviderReadError?: string | null;
 }): AgentStudioQuickActionOption[] => {
@@ -197,27 +189,6 @@ export const buildAgentStudioQuickActions = (params: {
     }
     return option;
   };
-  const createSpecialOption = (
-    id: string,
-    role: AgentRole,
-    launchActionId: SessionLaunchActionId,
-    description: string,
-  ): AgentStudioQuickActionOption => {
-    const option: AgentStudioQuickActionOption = {
-      id,
-      role,
-      launchActionId,
-      label: LAUNCH_ACTION_LABELS[launchActionId],
-      description,
-      postStartAction: "kickoff",
-      disabled: disabledReason !== null,
-    };
-    if (disabledReason) {
-      option.disabledReason = disabledReason;
-    }
-    return option;
-  };
-
   const options = workflowActionOrder.reduce<AgentStudioQuickActionOption[]>(
     (nextOptions, action) => {
       const option = createLifecycleOption(action);
@@ -228,18 +199,6 @@ export const buildAgentStudioQuickActions = (params: {
     },
     [],
   );
-
-  if (params.hasActiveGitConflict && params.roleEnabledByTask.build) {
-    options.push({
-      ...createSpecialOption(
-        "quick:build_rebase_conflict_resolution",
-        "build",
-        "build_rebase_conflict_resolution",
-        "Ask Builder to resolve the active git conflict.",
-      ),
-      postStartAction: "send_message",
-    });
-  }
 
   if (
     canShowPullRequestQuickAction(task, params.gitProviderContext, params.gitProviderReadError) &&
@@ -278,6 +237,46 @@ export const buildAgentStudioQuickActions = (params: {
   }
 
   return orderQuickActions(task, options, workflowActionOrder);
+};
+
+/**
+ * Builds the action that asks Builder to resolve an active git conflict.
+ * The page shell adds it to the header, because the git state comes after the workflow model.
+ */
+export const buildGitConflictQuickAction = (params: {
+  selectedTask: TaskCard | null;
+  roleEnabledByTask: Record<AgentRole, boolean>;
+  createSessionDisabled: boolean;
+}): AgentStudioQuickActionOption | null => {
+  if (!params.selectedTask || !params.roleEnabledByTask.build) {
+    return null;
+  }
+  const disabledReason = createQuickActionDisabledReason(params.createSessionDisabled);
+  const option: AgentStudioQuickActionOption = {
+    id: "quick:build_rebase_conflict_resolution",
+    role: "build",
+    launchActionId: "build_rebase_conflict_resolution",
+    label: LAUNCH_ACTION_LABELS.build_rebase_conflict_resolution,
+    description: "Ask Builder to resolve the active git conflict.",
+    postStartAction: "send_message",
+    disabled: disabledReason !== null,
+  };
+  if (disabledReason) {
+    option.disabledReason = disabledReason;
+  }
+  return option;
+};
+
+/** Puts the git conflict action first, so it becomes the primary action while it is enabled. */
+export const withGitConflictQuickAction = (
+  quickActions: AgentStudioQuickActionOption[],
+  gitConflictQuickAction: AgentStudioQuickActionOption,
+) => {
+  const options = [gitConflictQuickAction, ...quickActions];
+  return {
+    quickActions: options,
+    primaryQuickAction: selectPrimaryAgentStudioQuickAction(options),
+  };
 };
 
 export const selectPrimaryAgentStudioQuickAction = (

@@ -64,7 +64,6 @@ type UseAgentStudioOrchestrationControllerArgs = {
   workspaceRepoPath: string | null;
   selection: AgentStudioOrchestrationSelectionContext;
   taskExecutionFilePreview: UseTaskExecutionFilePreviewControllerResult;
-  hasActiveGitConflict: boolean;
   composer: AgentStudioOrchestrationComposerContext;
   actions: AgentStudioOrchestrationActionsContext;
 };
@@ -109,6 +108,8 @@ type UseAgentStudioOrchestrationControllerResult = {
   activeTabValue: string;
   agentStudioTaskTabsModel: AgentStudioTaskTabsModel;
   agentStudioHeaderModel: ReturnType<typeof useAgentStudioPageModels>["agentStudioHeaderModel"];
+  /** The page shell adds this action to the header while the git actions report a conflict. */
+  gitConflictQuickAction: AgentStudioSelectedSessionContext["workflow"]["gitConflictQuickAction"];
   taskExecutionDocumentPanelModel: ReturnType<
     typeof useAgentStudioPageModels
   >["taskExecutionDocumentPanelModel"];
@@ -241,7 +242,6 @@ export function useAgentStudioOrchestrationController({
   workspaceRepoPath,
   selection,
   taskExecutionFilePreview,
-  hasActiveGitConflict,
   composer,
   actions,
 }: UseAgentStudioOrchestrationControllerArgs): UseAgentStudioOrchestrationControllerResult {
@@ -402,7 +402,6 @@ export function useAgentStudioOrchestrationController({
         sessionsForTask: view.sessionsForTask,
         allSessionSummaries: selection.allSessionSummaries,
         selectedSession,
-        hasActiveGitConflict,
         documents: {
           specDoc,
           planDoc,
@@ -422,7 +421,6 @@ export function useAgentStudioOrchestrationController({
       }),
     [
       approvalReplyErrorByRequestId,
-      hasActiveGitConflict,
       gitProviderContext,
       gitProviderReadError,
       isSessionWorking,
@@ -558,6 +556,7 @@ export function useAgentStudioOrchestrationController({
     activeTabValue,
     agentStudioTaskTabsModel,
     agentStudioHeaderModel,
+    gitConflictQuickAction: selectedSessionContext.workflow.gitConflictQuickAction,
     taskExecutionDocumentPanelModel,
     agentChatModel,
     rightPanel,

@@ -97,7 +97,6 @@ const createInput = (
         selectedSessionOverrides.transcriptState ?? createSelectedSessionTranscriptStateFixture(),
       sessionAuxiliaryError: selectedSessionOverrides.sessionAuxiliaryError ?? null,
     },
-    hasActiveGitConflict: false,
     documents: {
       specDoc: createDoc("spec"),
       planDoc: createDoc("plan"),

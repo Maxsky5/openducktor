@@ -231,6 +231,21 @@ Owns selected task document reads, refresh, optimistic workflow-tool updates, an
 
 Key event tracking by selected session identity. A short gap in loaded session state must not reset or replay processed events.
 
+## Build tools state
+
+Files: `pages/agents/shell/use-agents-page-build-tools.ts`, `pages/agents/right-panel/use-agents-page-right-panel-model.ts`, and `pages/agents/shell/use-agent-studio-git-conflict-header-model.ts`.
+
+The page shell owns the build-tools snapshot and the git actions. The right panel model reads them and owns the dev server, file explorer, CI checks, and panel models.
+
+Rules:
+
+- The chat header reads the git conflict from the page shell. Do not send right panel state to the page shell from an effect.
+- The workflow model builds the git conflict quick action. The header model hook adds it while the git actions report a conflict.
+- Show the git conflict quick action only while the right panel is open. Git data does not refresh while the panel is closed.
+- Keep git state through a right panel toggle, so a running git action keeps its result.
+- Show a force push confirmation or a local git conflict only in the worktree where its git action ran. This state stays when the user selects another task.
+- Keep the dev server in the right panel, so its output does not render the page shell again.
+
 ## Composer
 
 Files: `pages/agents/agent-studio-chat-surface-state.ts`, `pages/agents/chat-composer/use-agent-studio-chat-composer.ts`, `components/features/agents/model-picker/*`, `features/agent-chat-composer/context-usage/*`, `features/agent-chat-composer/model-selection/*`, `features/agent-chat-composer/prompt-input/*`, `state/queries/use-runtime-model-catalogs.ts`, and `state/mutations/use-agent-model-favorites.ts`.

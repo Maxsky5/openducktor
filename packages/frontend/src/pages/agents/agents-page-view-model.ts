@@ -42,6 +42,12 @@ export const buildAgentStudioTaskTabsModel = (args: {
   agentStudioReady: args.agentStudioReady,
 });
 
+/** The chat header model without the git conflict handler, which the page shell adds. */
+export type AgentStudioWorkflowHeaderModel = Omit<
+  AgentStudioHeaderModel,
+  "onResolveGitConflictQuickAction"
+>;
+
 export const buildAgentStudioHeaderModel = (args: {
   selectedTask: TaskCard | null;
   onOpenTaskDetails: (() => void) | null;
@@ -61,9 +67,8 @@ export const buildAgentStudioHeaderModel = (args: {
   quickActions: AgentStudioQuickActionOption[];
   primaryQuickAction: AgentStudioQuickActionOption | null;
   onQuickAction: (option: AgentStudioQuickActionOption) => void;
-  onResolveGitConflictQuickAction?: (() => void) | null;
   isStarting: boolean;
-}): AgentStudioHeaderModel => ({
+}): AgentStudioWorkflowHeaderModel => ({
   taskTitle: args.selectedTask?.title ?? null,
   taskId: args.selectedTask?.id ?? null,
   onOpenTaskDetails: args.selectedTask ? args.onOpenTaskDetails : null,
@@ -92,7 +97,6 @@ export const buildAgentStudioHeaderModel = (args: {
   quickActions: args.quickActions,
   primaryQuickAction: args.primaryQuickAction,
   onQuickAction: args.onQuickAction,
-  onResolveGitConflictQuickAction: args.onResolveGitConflictQuickAction ?? null,
   isCreatingSession: args.isStarting,
   agentStudioReady: args.agentStudioReady,
 });

@@ -127,20 +127,26 @@ export function useAgentStudioGitPushActions({
     await pushBranchInternal();
   }, [pushBranchInternal]);
 
+  // A push can finish after the user selects another worktree, so its confirmation shows only in its own worktree.
+  const worktreePendingForcePush =
+    pendingForcePush?.repoPath === repoPath && pendingForcePush.workingDir === workingDir
+      ? pendingForcePush
+      : null;
+
   const confirmForcePush = useCallback(async (): Promise<void> => {
-    if (!pendingForcePush) {
+    if (!worktreePendingForcePush) {
       return;
     }
 
     const confirmedTarget = {
-      repoPath: pendingForcePush.repoPath,
-      branch: pendingForcePush.branch,
-      workingDir: pendingForcePush.workingDir,
+      repoPath: worktreePendingForcePush.repoPath,
+      branch: worktreePendingForcePush.branch,
+      workingDir: worktreePendingForcePush.workingDir,
     } satisfies GitPushTarget;
 
     setPendingForcePush(null);
     await pushBranchInternal({ forceWithLease: true, target: confirmedTarget });
-  }, [pendingForcePush, pushBranchInternal]);
+  }, [pushBranchInternal, worktreePendingForcePush]);
 
   const cancelForcePush = useCallback((): void => {
     setPendingForcePush(null);
@@ -149,7 +155,7 @@ export function useAgentStudioGitPushActions({
 
   return {
     isPushing,
-    pendingForcePush,
+    pendingForcePush: worktreePendingForcePush,
     pushBranch,
     confirmForcePush,
     cancelForcePush,

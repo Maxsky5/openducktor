@@ -116,7 +116,6 @@ describe("useAgentStudioHeaderModel", () => {
   test("builds workflow header state from the workflow adapter context", async () => {
     const onPrepareMessageFirstSession = mock(() => {});
     const onQuickAction = mock(() => {});
-    const onResolveGitConflictQuickAction = mock(() => {});
     const sessionCreateOption = {
       id: "build:build_implementation_start:message_first",
       role: "build" as const,
@@ -138,7 +137,6 @@ describe("useAgentStudioHeaderModel", () => {
       createHookArgs({
         onPrepareMessageFirstSession,
         onQuickAction,
-        onResolveGitConflictQuickAction,
         workflow: {
           ...createHookArgs().workflow,
           sessionCreateOptions: [sessionCreateOption],
@@ -163,15 +161,12 @@ describe("useAgentStudioHeaderModel", () => {
     expect(model.sessionCreateOptions).toEqual([sessionCreateOption]);
     expect(model.quickActions).toEqual([quickAction]);
     expect(model.primaryQuickAction).toEqual(quickAction);
-    expect(model.onResolveGitConflictQuickAction).toBe(onResolveGitConflictQuickAction);
 
     model.onPrepareMessageFirstSession(sessionCreateOption);
     model.onQuickAction(quickAction);
-    model.onResolveGitConflictQuickAction?.();
 
     expect(onPrepareMessageFirstSession).toHaveBeenCalledWith(sessionCreateOption);
     expect(onQuickAction).toHaveBeenCalledWith(quickAction);
-    expect(onResolveGitConflictQuickAction).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       await harness.unmount();

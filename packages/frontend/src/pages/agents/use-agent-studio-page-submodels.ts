@@ -21,7 +21,6 @@ type UseAgentStudioHeaderModelArgs = {
   onSessionSelectionChange: (nextValue: string) => void;
   onPrepareMessageFirstSession: (option: SessionCreateOption) => void;
   onQuickAction: (option: AgentStudioQuickActionOption) => void;
-  onResolveGitConflictQuickAction?: (() => void) | null;
   workflow: WorkflowHeaderContext;
 };
 
@@ -36,7 +35,6 @@ export const useAgentStudioHeaderModel = ({
   onSessionSelectionChange,
   onPrepareMessageFirstSession,
   onQuickAction,
-  onResolveGitConflictQuickAction,
   workflow,
 }: UseAgentStudioHeaderModelArgs): ReturnType<typeof buildAgentStudioHeaderModel> => {
   return useMemo(
@@ -60,7 +58,6 @@ export const useAgentStudioHeaderModel = ({
         quickActions: workflow.quickActions,
         primaryQuickAction: workflow.primaryQuickAction,
         onQuickAction,
-        onResolveGitConflictQuickAction: onResolveGitConflictQuickAction ?? null,
         isStarting,
       }),
     [
@@ -69,7 +66,6 @@ export const useAgentStudioHeaderModel = ({
       onOpenTaskDetails,
       onPrepareMessageFirstSession,
       onQuickAction,
-      onResolveGitConflictQuickAction,
       onSessionSelectionChange,
       onWorkflowStepSelect,
       selectedRole,

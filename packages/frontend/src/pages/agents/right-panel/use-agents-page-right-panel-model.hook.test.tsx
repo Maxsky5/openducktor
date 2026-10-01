@@ -7,7 +7,7 @@ import {
   createDialogPreviewHarness,
   dialogTextFile,
 } from "@/components/features/agents/agent-chat/agent-session-dialog-preview-test-harness";
-import type { FileDiff, GitConflict, PullRequest } from "@openducktor/contracts";
+import type { FileDiff, PullRequest } from "@openducktor/contracts";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { createQueryClient } from "@/lib/query-client";
 import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
@@ -28,32 +28,35 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "../agent-studio-test-utils";
+import {
+  createBuildToolsSnapshotFixture,
+  createDevServerModelFixture,
+  createEmptyScopeStateFixture,
+  createGitActionsFixture,
+  createBuildToolsFixture,
+} from "../shell/agents-page-build-tools.test-support";
 
 enableReactActEnvironment();
 
 type UseAgentsPageRightPanelModel =
   (typeof import("./use-agents-page-right-panel-model"))["useAgentsPageRightPanelModel"];
-type BuildToolsSnapshotModule =
-  typeof import("@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot");
-type GitActionsModule = typeof import("../use-agent-studio-git-actions");
+type DevServerPanelModule =
+  typeof import("@/features/dev-servers/use-agent-studio-dev-server-panel");
 type PullRequestReviewQueriesModule = typeof import("@/state/queries/pull-request-review");
 type HookArgs = Parameters<UseAgentsPageRightPanelModel>[0];
 
 let useAgentsPageRightPanelModel: UseAgentsPageRightPanelModel;
-const realBuildToolsSnapshot: BuildToolsSnapshotModule =
-  await import("@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot");
-const realGitActions: GitActionsModule = await import("../use-agent-studio-git-actions");
+const realDevServerPanel: DevServerPanelModule =
+  await import("@/features/dev-servers/use-agent-studio-dev-server-panel");
 const realPullRequestReviewQueries: PullRequestReviewQueriesModule =
   await import("@/state/queries/pull-request-review");
 let testSpies: Array<{ mockRestore(): void }> = [];
 
-type BuildToolsSnapshotHook = BuildToolsSnapshotModule["useAgentStudioBuildToolsWorktreeSnapshot"];
-type GitActionsHook = GitActionsModule["useAgentStudioGitActions"];
-type BuildToolsSnapshot = ReturnType<BuildToolsSnapshotHook>;
-type GitActionsState = ReturnType<GitActionsHook>;
+type BuildToolsSnapshot = HookArgs["buildTools"]["buildToolsSnapshot"];
 
-const buildToolsSnapshotMock = mock<BuildToolsSnapshotHook>(() => buildToolsSnapshotState.current);
-const gitActionsMock = mock<GitActionsHook>(() => gitActionsState.current);
+const devServerPanelMock = mock<DevServerPanelModule["useAgentStudioDevServerPanel"]>(() =>
+  createDevServerModelFixture(),
+);
 type PrefetchPullRequestReviewContext =
   PullRequestReviewQueriesModule["prefetchPullRequestReviewContextFromQuery"];
 const prefetchPullRequestReviewContextMock = mock(
@@ -72,22 +75,6 @@ const linkedPullRequest = {
   createdAt: "2026-07-08T10:00:00Z",
   updatedAt: "2026-07-08T10:05:00Z",
 } satisfies PullRequest;
-
-const createEmptyScopeState =
-  (): BuildToolsSnapshot["diffData"]["scopeStatesByScope"]["target"] => ({
-    branch: null,
-    gitConflict: null,
-    fileDiffs: [],
-    fileStatuses: [],
-    uncommittedFileCount: 0,
-    commitsAheadBehind: null,
-    upstreamAheadBehind: null,
-    upstreamStatus: "tracking",
-    error: null,
-    hashVersion: null,
-    statusHash: null,
-    diffHash: null,
-  });
 
 type TestStorage = Pick<Storage, "length" | "key" | "getItem" | "setItem" | "removeItem">;
 
@@ -177,135 +164,10 @@ const setScopeState = (
   };
 };
 
-const createSnapshot = (): BuildToolsSnapshot => ({
-  isEnabled: true,
-  context: {
-    repoPath: "/repo",
-    taskId: "task-1",
-    selectedTaskId: "task-1",
-    viewRole: "build",
-    sessionWorkingDirectory: "/repo",
-    hasSelectedTask: true,
-  },
-  diffData: {
-    branch: null,
-    fileStatuses: [],
-    fileDiffs: [],
-    uncommittedFileCount: 0,
-    gitConflict: null,
-    worktreePath: null,
-    targetBranch: "origin/main",
-    diffScope: "uncommitted",
-    scopeStatesByScope: {
-      target: createEmptyScopeState(),
-      uncommitted: createEmptyScopeState(),
-    },
-    loadedScopesByScope: { target: false, uncommitted: true },
-    upstreamStatus: "tracking",
-    commitsAheadBehind: null,
-    hashVersion: null,
-    statusHash: null,
-    diffHash: null,
-    upstreamAheadBehind: null,
-    isLoading: false,
-    error: null,
-    statusSnapshotKey: null,
-    refresh: async () => {},
-    setDiffScope: () => {},
-  },
-  gitPanelContextMode: "repository",
-  openInTarget: { path: null, disabledReason: null },
-  resolvedGitPanelBranch: null,
-  targetBranchState: {
-    validationError: null,
-    effectiveTargetBranch: { remote: "origin", branch: "main" },
-    selectionValue: "origin/main",
-    displayTargetBranch: "origin/main",
-  },
-  worktree: {
-    path: "/repo/.worktrees/task-1",
-    status: "resolved",
-    error: null,
-    retry: async () => {},
-    isResolving: false,
-    shouldBlockDiffLoading: false,
-    resolutionTaskId: null,
-  },
-  devServerModel: {
-    mode: "stopped",
-    isExpanded: false,
-    isLoading: false,
-    disabledReason: null,
-    repoPath: "/repo",
-    owner: { kind: "task", taskId: "task-1" },
-    workingDirectory: "/repo/.worktrees/task-1",
-    scripts: [],
-    selectedScriptId: null,
-    selectedScript: null,
-
-    error: null,
-    isStartPending: false,
-    isRetryPending: false,
-    isStopPending: false,
-    isRestartPending: false,
-    onSelectScript: () => {},
-    onStart: () => {},
-    onRetry: () => {},
-    onStop: () => {},
-    onRestart: () => {},
-  },
-  refreshWorktree: refreshWorktreeMock,
-});
-
-const createGitActions = (gitConflictId: GitConflict["operation"] | null): GitActionsState => ({
-  gitConflict: gitConflictId
-    ? {
-        operation: gitConflictId,
-        currentBranch: null,
-        targetBranch: "origin/main",
-        conflictedFiles: [],
-        output: "",
-        workingDir: null,
-      }
-    : null,
-  askBuilderToResolveGitConflict: async () => {},
-  isHandlingGitConflict: false,
-  isCommitting: false,
-  isPushing: false,
-  isRebasing: false,
-  isResetting: false,
-  isResetDisabled: false,
-  resetDisabledReason: null,
-  gitConflictAction: null,
-  gitConflictAutoOpenNonce: 0,
-  gitConflictCloseNonce: 0,
-  showLockReasonBanner: false,
-  isGitActionsLocked: false,
-  gitActionsLockReason: null,
-  pendingForcePush: null,
-  pendingPullRebase: null,
-  pendingReset: null,
-  commitError: null,
-  pushError: null,
-  rebaseError: null,
-  resetError: null,
-  commitAll: async () => true,
-  requestFileReset: () => {},
-  requestHunkReset: () => {},
-  confirmReset: async () => {},
-  cancelReset: () => {},
-  pushBranch: async () => {},
-  confirmForcePush: async () => {},
-  cancelForcePush: () => {},
-  confirmPullRebase: async () => {},
-  cancelPullRebase: () => {},
-  rebaseOntoTarget: async () => {},
-  abortGitConflict: async () => {},
-  pullFromUpstream: async () => {},
-});
+const createSnapshot = (): BuildToolsSnapshot =>
+  createBuildToolsSnapshotFixture({ refreshWorktree: refreshWorktreeMock });
 
 const buildToolsSnapshotState = { current: createSnapshot() };
-const gitActionsState = { current: createGitActions(null) };
 
 type SelectedViewOverrides = Partial<HookArgs["selectedView"]> & {
   loadedSession?: AgentSessionState | null;
@@ -389,13 +251,12 @@ beforeEach(async () => {
   prefetchPullRequestReviewContextMock.mockClear();
   refreshWorktreeMock.mockClear();
   buildToolsSnapshotState.current = createSnapshot();
-  gitActionsState.current = createGitActions("rebase");
+  devServerPanelMock.mockClear();
 
   testSpies = [
-    spyOn(realBuildToolsSnapshot, "useAgentStudioBuildToolsWorktreeSnapshot").mockImplementation(
-      buildToolsSnapshotMock,
+    spyOn(realDevServerPanel, "useAgentStudioDevServerPanel").mockImplementation(
+      devServerPanelMock,
     ),
-    spyOn(realGitActions, "useAgentStudioGitActions").mockImplementation(gitActionsMock),
     spyOn(
       realPullRequestReviewQueries,
       "prefetchPullRequestReviewContextFromQuery",
@@ -418,7 +279,10 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
     repoPath: "/repo",
   },
   branches: [],
-  activeBranch: null,
+  buildTools: createBuildToolsFixture({
+    buildToolsSnapshot: buildToolsSnapshotState.current,
+    gitActions: createGitActionsFixture(null),
+  }),
   selectedView: createSelectedView(),
   tabs: [
     { id: "document", label: "Document" },
@@ -432,57 +296,21 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   documentsModel: { activeDocument: null },
   selectedFile: null,
   onSelectFile: () => {},
-  repoSettings: {
-    worktreeBasePath: "",
-    branchPrefix: "codex/",
-    defaultModel: null,
-    defaultTargetBranch: { remote: "origin", branch: "main" },
-    preStartHooks: [],
-    postCompleteHooks: [],
-    devServers: [],
-    worktreeCopyPaths: [],
-    agentDefaults: { spec: null, planner: null, build: null, qa: null },
-  },
   detectingPullRequestTaskId: null,
   onDetectPullRequest: () => {},
-  onResolveGitConflict: undefined,
-  onGitConflictQuickActionContextChange: () => {},
   ...overrides,
 });
 
 describe("useAgentsPageRightPanelModel", () => {
-  test("publishes conflict context changes without intermediate null and clears on unmount", async () => {
-    const events: Array<string | null> = [];
-
-    const harness = createHookHarness(
-      useAgentsPageRightPanelModel,
-      createHookArgs({
-        onGitConflictQuickActionContextChange: (context) => {
-          events.push(context ? context.conflict.operation : null);
-        },
-      }),
-    );
+  test("reads the dev server for the snapshot target", async () => {
+    const harness = createHookHarness(useAgentsPageRightPanelModel, createHookArgs());
 
     await harness.mount();
 
-    expect(events).toEqual(["rebase"]);
-
-    buildToolsSnapshotState.current = createSnapshot();
-    gitActionsState.current = createGitActions("pull_rebase");
-
-    await harness.update(
-      createHookArgs({
-        onGitConflictQuickActionContextChange: (context) => {
-          events.push(context ? context.conflict.operation : null);
-        },
-      }),
+    expect(devServerPanelMock).toHaveBeenLastCalledWith(
+      buildToolsSnapshotState.current.devServerTarget,
     );
-
-    expect(events).toEqual(["rebase", "pull_rebase"]);
-
     await harness.unmount();
-
-    expect(events).toEqual(["rebase", "pull_rebase", null]);
   });
 
   test("prefetches CI review data in the background for linked pull requests", async () => {
@@ -626,7 +454,7 @@ describe("useAgentsPageRightPanelModel", () => {
 
     const snapshot = createSnapshot();
     setScopeState(snapshot, "uncommitted", {
-      ...createEmptyScopeState(),
+      ...createEmptyScopeStateFixture(),
       fileDiffs: [createFileDiff("src/present.ts")],
     });
     buildToolsSnapshotState.current = snapshot;
@@ -662,19 +490,19 @@ describe("useAgentsPageRightPanelModel", () => {
     expect(pendingCommentPaths()).toEqual(["src/missing-target.ts", "src/missing-uncommitted.ts"]);
 
     snapshot.diffData.loadedScopesByScope = { target: false, uncommitted: true };
-    setScopeState(snapshot, "uncommitted", createEmptyScopeState());
+    setScopeState(snapshot, "uncommitted", createEmptyScopeStateFixture());
     await harness.update(createHookArgs());
     expect(pendingCommentPaths()).toEqual(["src/missing-target.ts"]);
 
     snapshot.diffData.loadedScopesByScope = { target: true, uncommitted: true };
     setScopeState(snapshot, "target", {
-      ...createEmptyScopeState(),
+      ...createEmptyScopeStateFixture(),
       error: "Failed to load the target diff.",
     });
     await harness.update(createHookArgs());
     expect(pendingCommentPaths()).toEqual(["src/missing-target.ts"]);
 
-    setScopeState(snapshot, "target", createEmptyScopeState());
+    setScopeState(snapshot, "target", createEmptyScopeStateFixture());
     await harness.update(createHookArgs());
     expect(pendingCommentPaths()).toEqual([]);
 
@@ -685,7 +513,7 @@ describe("useAgentsPageRightPanelModel", () => {
         createCommentInput({ filePath: "src/late.ts", diffScope: "target" }),
       );
     setScopeState(snapshot, "target", {
-      ...createEmptyScopeState(),
+      ...createEmptyScopeStateFixture(),
       fileDiffs: [createFileDiff("src/other.ts")],
     });
     await harness.update(createHookArgs());

@@ -43,6 +43,11 @@ import {
 } from "../agent-studio-test-utils";
 import type { AgentsPageModalContentModel } from "./agents-page-modal-content";
 import type { AgentStudioRightPanelBridgeModel } from "./use-agent-studio-right-panel-bridge";
+import type { AgentStudioQuickActionOption } from "../agent-studio-quick-actions";
+import {
+  createGitActionsFixture,
+  createBuildToolsFixture,
+} from "./agents-page-build-tools.test-support";
 import type { AgentStudioQueryUpdate } from "../query-sync/agent-studio-navigation";
 import type { useAgentStudioSessionActions } from "../use-agent-studio-session-actions";
 import {
@@ -162,6 +167,7 @@ type OrchestrationState = {
   activeTabValue: string;
   agentStudioTaskTabsModel: AgentStudioTaskTabsModel;
   agentStudioHeaderModel: AgentStudioHeaderModel;
+  gitConflictQuickAction: AgentStudioQuickActionOption | null;
   taskExecutionDocumentPanelModel: { activeDocument: null };
   agentChatModel: AgentChatModel;
   rightPanel: {
@@ -203,6 +209,7 @@ type AgentsPageShellModelState = {
   onRetryChatSettingsLoad: () => void;
   onRetryGitProviderContext: () => void;
   hasSelectedTask: boolean;
+  chatHeaderModel: AgentStudioHeaderModel;
   isRightPanelVisible: boolean;
   rightPanelBridge: AgentStudioRightPanelBridgeModel | null;
   modalContent: AgentsPageModalContentModel;
@@ -434,6 +441,7 @@ let orchestrationState: OrchestrationState = {
   activeTabValue: "task-1",
   agentStudioTaskTabsModel,
   agentStudioHeaderModel,
+  gitConflictQuickAction: null,
   taskExecutionDocumentPanelModel: { activeDocument: null },
   agentChatModel,
   rightPanel: {
@@ -603,7 +611,11 @@ const AppStateTestWrapper = ({ children }: PropsWithChildren): ReactElement => (
 const repoSettingsModule = await import("../use-agent-studio-repo-settings");
 const routeSessionModule = await import("./use-agents-page-route-session-model");
 const orchestrationShellModule = await import("./use-agents-page-orchestration-shell-model");
+const buildToolsModule = await import("./use-agents-page-build-tools");
 let shellModelSpies: Array<{ mockRestore(): void }> = [];
+type BuildToolsArgs = Parameters<typeof buildToolsModule.useAgentsPageBuildTools>[0];
+let buildToolsState = createBuildToolsFixture();
+let buildToolsArgs: BuildToolsArgs[] = [];
 
 const registerModuleMocks = (): void => {
   shellModelSpies = [
@@ -672,14 +684,19 @@ const registerModuleMocks = (): void => {
           orchestration: orchestrationState,
           orchestrationSelection: lastOrchestrationSelection,
           handleResolveRebaseConflict,
-          agentStudioHeaderModel: orchestrationState.agentStudioHeaderModel,
         };
       },
     ),
+    spyOn(buildToolsModule, "useAgentsPageBuildTools").mockImplementation((args) => {
+      buildToolsArgs.push(args);
+      return buildToolsState;
+    }),
   ];
 };
 
 beforeEach(async () => {
+  buildToolsState = createBuildToolsFixture();
+  buildToolsArgs = [];
   registerModuleMocks();
   ({ useAgentsPageShellModel } = await import("./use-agents-page-shell-model"));
   workspaceState = {
@@ -845,6 +862,7 @@ beforeEach(async () => {
     activeTabValue: "task-1",
     agentStudioTaskTabsModel,
     agentStudioHeaderModel,
+    gitConflictQuickAction: null,
     taskExecutionDocumentPanelModel: { activeDocument: null },
     agentChatModel,
     rightPanel: {
@@ -1011,6 +1029,59 @@ describe("useAgentsPageShellModel", () => {
       expect(harness.getLatest().terminalPanel.scopeKey).toBe(
         JSON.stringify(["workspace-repo", "task-2"]),
       );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("reads the build tools state from the right panel selection", async () => {
+    const harness = createHookHarness();
+
+    try {
+      await harness.mount();
+
+      expect(buildToolsArgs.at(-1)).toMatchObject({
+        activeWorkspace: workspaceState.activeWorkspace,
+        activeBranch: workspaceState.activeBranch,
+        activeTabId: orchestrationState.rightPanel.activeTabId,
+        isPanelOpen: orchestrationState.rightPanel.isPanelOpen,
+        repoSettings: orchestrationState.repoSettings,
+        onResolveGitConflict: handleResolveRebaseConflict,
+      });
+      expect(buildToolsArgs.at(-1)?.selectedView).toBe(selectionState.view);
+      expect(harness.getLatest().rightPanelBridge?.rightPanel.buildTools).toBe(buildToolsState);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("adds the git conflict quick action from the build tools to the chat header", async () => {
+    const gitConflictQuickAction: AgentStudioQuickActionOption = {
+      id: "quick:build_rebase_conflict_resolution",
+      role: "build",
+      launchActionId: "build_rebase_conflict_resolution",
+      label: "Resolve git conflict",
+      description: "Ask Builder to resolve the active git conflict.",
+      postStartAction: "send_message",
+      disabled: false,
+    };
+    const resolveWithBuilder = mock(async () => {});
+    orchestrationState = { ...orchestrationState, gitConflictQuickAction };
+    buildToolsState = createBuildToolsFixture({
+      gitActions: {
+        ...createGitActionsFixture("rebase"),
+        askBuilderToResolveGitConflict: resolveWithBuilder,
+      },
+    });
+    const harness = createHookHarness();
+
+    try {
+      await harness.mount();
+
+      const headerModel = harness.getLatest().chatHeaderModel;
+      expect(headerModel.primaryQuickAction).toBe(gitConflictQuickAction);
+      headerModel.onResolveGitConflictQuickAction?.();
+      expect(resolveWithBuilder).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
     }

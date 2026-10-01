@@ -1,9 +1,6 @@
 import { useMemo } from "react";
 import type { AgentStudioOrchestrationSelectionContext } from "../use-agent-studio-orchestration-controller";
-import type {
-  AgentStudioGitConflictQuickActionContext,
-  UseAgentsPageRightPanelModelArgs,
-} from "../use-agents-page-right-panel-model";
+import type { UseAgentsPageRightPanelModelArgs } from "../use-agents-page-right-panel-model";
 
 type AgentStudioRightPanelBridgeSelection = Pick<AgentStudioOrchestrationSelectionContext, "view">;
 
@@ -19,28 +16,23 @@ type AgentStudioRightPanelPanelState = Pick<
 type UseAgentStudioRightPanelBridgeArgs = {
   activeWorkspace: UseAgentsPageRightPanelModelArgs["activeWorkspace"];
   branches: NonNullable<UseAgentsPageRightPanelModelArgs["branches"]>;
-  activeBranch: UseAgentsPageRightPanelModelArgs["activeBranch"];
+  buildTools: UseAgentsPageRightPanelModelArgs["buildTools"];
   selection: AgentStudioRightPanelBridgeSelection;
   panel: AgentStudioRightPanelPanelState;
   documentsModel: UseAgentsPageRightPanelModelArgs["documentsModel"];
   selectedFile: UseAgentsPageRightPanelModelArgs["selectedFile"];
   onSelectFile: UseAgentsPageRightPanelModelArgs["onSelectFile"];
-  repoSettings: UseAgentsPageRightPanelModelArgs["repoSettings"];
   setTaskTargetBranch: NonNullable<UseAgentsPageRightPanelModelArgs["setTaskTargetBranch"]>;
   detectingPullRequestTaskId: UseAgentsPageRightPanelModelArgs["detectingPullRequestTaskId"];
   onDetectPullRequest: UseAgentsPageRightPanelModelArgs["onDetectPullRequest"];
   gitProviderContext?: UseAgentsPageRightPanelModelArgs["gitProviderContext"];
   gitProviderReadError?: UseAgentsPageRightPanelModelArgs["gitProviderReadError"];
-  onResolveGitConflict: UseAgentsPageRightPanelModelArgs["onResolveGitConflict"];
-  onGitConflictQuickActionContextChange: (
-    context: AgentStudioGitConflictQuickActionContext | null,
-  ) => void;
 };
 
 export type AgentStudioRightPanelRuntimeModel = {
   activeWorkspace: UseAgentsPageRightPanelModelArgs["activeWorkspace"];
   branches: NonNullable<UseAgentsPageRightPanelModelArgs["branches"]>;
-  activeBranch: UseAgentsPageRightPanelModelArgs["activeBranch"];
+  buildTools: UseAgentsPageRightPanelModelArgs["buildTools"];
   selectedView: UseAgentsPageRightPanelModelArgs["selectedView"];
   tabs: UseAgentsPageRightPanelModelArgs["tabs"];
   activeTabId: UseAgentsPageRightPanelModelArgs["activeTabId"];
@@ -50,16 +42,11 @@ export type AgentStudioRightPanelRuntimeModel = {
   documentsModel: UseAgentsPageRightPanelModelArgs["documentsModel"];
   selectedFile: UseAgentsPageRightPanelModelArgs["selectedFile"];
   onSelectFile: UseAgentsPageRightPanelModelArgs["onSelectFile"];
-  repoSettings: UseAgentsPageRightPanelModelArgs["repoSettings"];
   setTaskTargetBranch: NonNullable<UseAgentsPageRightPanelModelArgs["setTaskTargetBranch"]>;
   detectingPullRequestTaskId: UseAgentsPageRightPanelModelArgs["detectingPullRequestTaskId"];
   onDetectPullRequest: UseAgentsPageRightPanelModelArgs["onDetectPullRequest"];
   gitProviderContext?: UseAgentsPageRightPanelModelArgs["gitProviderContext"];
   gitProviderReadError: string | null;
-  onResolveGitConflict: UseAgentsPageRightPanelModelArgs["onResolveGitConflict"];
-  onGitConflictQuickActionContextChange: NonNullable<
-    UseAgentsPageRightPanelModelArgs["onGitConflictQuickActionContextChange"]
-  >;
 };
 
 export type AgentStudioBuildWorktreeRefreshModel = Pick<
@@ -103,7 +90,7 @@ type BuildAgentStudioRightPanelBridgeModelArgs = Omit<
 function buildAgentStudioRightPanelBridgeModel({
   activeWorkspace,
   branches,
-  activeBranch,
+  buildTools,
   selection,
   activeTabId,
   tabs,
@@ -113,14 +100,11 @@ function buildAgentStudioRightPanelBridgeModel({
   documentsModel,
   selectedFile,
   onSelectFile,
-  repoSettings,
   setTaskTargetBranch,
   detectingPullRequestTaskId,
   onDetectPullRequest,
   gitProviderContext,
   gitProviderReadError,
-  onResolveGitConflict,
-  onGitConflictQuickActionContextChange,
 }: BuildAgentStudioRightPanelBridgeModelArgs): AgentStudioRightPanelBridgeModel {
   return {
     buildWorktreeRefresh: {
@@ -133,8 +117,8 @@ function buildAgentStudioRightPanelBridgeModel({
     },
     rightPanel: {
       activeWorkspace,
-      activeBranch,
       branches,
+      buildTools,
       selectedView: selection.view,
       tabs,
       activeTabId,
@@ -144,14 +128,11 @@ function buildAgentStudioRightPanelBridgeModel({
       documentsModel,
       selectedFile,
       onSelectFile,
-      repoSettings,
       setTaskTargetBranch,
       detectingPullRequestTaskId,
       onDetectPullRequest,
       gitProviderContext,
       gitProviderReadError,
-      onResolveGitConflict,
-      onGitConflictQuickActionContextChange,
     },
   };
 }
@@ -159,20 +140,17 @@ function buildAgentStudioRightPanelBridgeModel({
 export function useAgentStudioRightPanelBridge({
   activeWorkspace,
   branches,
-  activeBranch,
+  buildTools,
   selection,
   panel,
   documentsModel,
   selectedFile,
   onSelectFile,
-  repoSettings,
   setTaskTargetBranch,
   detectingPullRequestTaskId,
   onDetectPullRequest,
   gitProviderContext,
   gitProviderReadError = null,
-  onResolveGitConflict,
-  onGitConflictQuickActionContextChange,
 }: UseAgentStudioRightPanelBridgeArgs): AgentStudioRightPanelShellModel {
   const activeTabId = panel.activeTabId;
   const tabs = panel.tabs;
@@ -189,7 +167,7 @@ export function useAgentStudioRightPanelBridge({
     return buildAgentStudioRightPanelBridgeModel({
       activeWorkspace,
       branches,
-      activeBranch,
+      buildTools,
       selection,
       activeTabId,
       tabs,
@@ -199,22 +177,19 @@ export function useAgentStudioRightPanelBridge({
       documentsModel,
       selectedFile,
       onSelectFile,
-      repoSettings,
       setTaskTargetBranch,
       detectingPullRequestTaskId,
       onDetectPullRequest,
       gitProviderContext,
       gitProviderReadError,
-      onResolveGitConflict,
-      onGitConflictQuickActionContextChange,
     });
   }, [
-    activeBranch,
     activeWorkspace,
     branches,
     detectingPullRequestTaskId,
     documentsModel,
     activeTabId,
+    buildTools,
     isPanelOpen,
     onDetectPullRequest,
     gitProviderContext,
@@ -222,9 +197,6 @@ export function useAgentStudioRightPanelBridge({
     onSelectFile,
     onActiveTabChange,
     pullRequestReviewUnavailableReason,
-    onGitConflictQuickActionContextChange,
-    onResolveGitConflict,
-    repoSettings,
     selectedFile,
     selection,
     setTaskTargetBranch,

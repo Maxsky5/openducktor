@@ -1,4 +1,4 @@
-import { type RefObject, useCallback, useMemo } from "react";
+import { useMemo } from "react";
 import type { RepositoryGitProviderContext } from "@openducktor/contracts";
 import type { RunSessionStartWorkflow } from "@/features/session-start";
 import type { useAgentOperations, useTasksState } from "@/state/app-state-provider";
@@ -6,7 +6,6 @@ import type { RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioChatDraftScope } from "../agent-studio-chat-draft";
 import { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
 import { useAgentStudioRebaseConflictResolution } from "../use-agent-studio-rebase-conflict-resolution";
-import type { AgentStudioGitConflictQuickActionContext } from "../use-agents-page-right-panel-model";
 import type { AgentsPageRouteSessionModel } from "./use-agents-page-route-session-model";
 
 type UseAgentsPageOrchestrationShellModelArgs = {
@@ -21,9 +20,6 @@ type UseAgentsPageOrchestrationShellModelArgs = {
   workspaceRepoPath: string | null;
   isForegroundLoadingTasks: boolean;
   routeSession: AgentsPageRouteSessionModel;
-  hasActiveGitConflict: boolean;
-  gitConflictQuickActionContext: AgentStudioGitConflictQuickActionContext | null;
-  gitConflictQuickActionContextRef: RefObject<AgentStudioGitConflictQuickActionContext | null>;
   openTaskDetails: () => void;
   runSessionStartWorkflow: RunSessionStartWorkflow;
   agentOperations: Pick<
@@ -46,9 +42,6 @@ export type AgentsPageOrchestrationShellModel = {
   handleResolveRebaseConflict: ReturnType<
     typeof useAgentStudioRebaseConflictResolution
   >["handleResolveRebaseConflict"];
-  agentStudioHeaderModel: ReturnType<
-    typeof useAgentStudioOrchestrationController
-  >["agentStudioHeaderModel"];
 };
 
 export function useAgentsPageOrchestrationShellModel({
@@ -61,9 +54,6 @@ export function useAgentsPageOrchestrationShellModel({
   workspaceRepoPath,
   isForegroundLoadingTasks,
   routeSession,
-  hasActiveGitConflict,
-  gitConflictQuickActionContext,
-  gitConflictQuickActionContextRef,
   openTaskDetails,
   runSessionStartWorkflow,
   agentOperations,
@@ -109,7 +99,6 @@ export function useAgentsPageOrchestrationShellModel({
     workspaceRepoPath,
     selection: orchestrationSelection,
     taskExecutionFilePreview: routeSession.taskExecutionFilePreview,
-    hasActiveGitConflict,
     composer,
     actions: {
       scheduleQueryUpdate,
@@ -135,28 +124,9 @@ export function useAgentsPageOrchestrationShellModel({
     startSessionRequest: orchestration.startSessionRequest,
   });
 
-  const handleResolveGitConflictQuickAction = useCallback(() => {
-    void gitConflictQuickActionContextRef.current?.resolveWithBuilder();
-  }, [gitConflictQuickActionContextRef]);
-
-  const agentStudioHeaderModel = useMemo(
-    () => ({
-      ...orchestration.agentStudioHeaderModel,
-      onResolveGitConflictQuickAction: gitConflictQuickActionContext
-        ? handleResolveGitConflictQuickAction
-        : null,
-    }),
-    [
-      gitConflictQuickActionContext,
-      handleResolveGitConflictQuickAction,
-      orchestration.agentStudioHeaderModel,
-    ],
-  );
-
   return {
     orchestration,
     orchestrationSelection,
     handleResolveRebaseConflict,
-    agentStudioHeaderModel,
   };
 }
