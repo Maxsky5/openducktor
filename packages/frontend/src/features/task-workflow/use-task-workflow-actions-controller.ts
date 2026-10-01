@@ -91,6 +91,7 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
   const {
     humanReviewFeedbackModal,
     sessionStartModal,
+    isSessionStarting,
     startSessionIntent,
     onPullRequestGenerate,
     onDelegate,
@@ -250,6 +251,21 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
 
   const actions = useMemo<TaskWorkflowActions>(
     () => ({
+      kanbanPendingState: {
+        isSessionStarting,
+        approvingTaskId:
+          taskApprovalModal &&
+          (taskApprovalModal.isSubmitting ||
+            (taskApprovalModal.stage === "approval" && taskApprovalModal.isLoading))
+            ? taskApprovalModal.taskId
+            : null,
+        requestingChangesTaskId: humanReviewFeedbackModal?.isSubmitting
+          ? humanReviewFeedbackModal.taskId
+          : null,
+        resettingImplementationTaskId: resetImplementationModal?.isSubmitting
+          ? resetImplementationModal.taskId
+          : null,
+      },
       onCreateTask,
       onPlan,
       onQaStart,
@@ -281,6 +297,10 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
       activeTaskSessionContextByTaskId,
     }),
     [
+      isSessionStarting,
+      taskApprovalModal,
+      humanReviewFeedbackModal,
+      resetImplementationModal,
       activeTaskSessionContextByTaskId,
       closeTask,
       deleteTask,

@@ -57,6 +57,7 @@ type UseKanbanSessionStartFlowArgs = {
 
 type UseKanbanSessionStartFlowResult = {
   humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
+  isSessionStarting: boolean;
   sessionStartModal: SessionStartModalModel | null;
   startSessionIntent: (
     intent: KanbanSessionStartIntent,
@@ -146,13 +147,14 @@ export function useKanbanSessionStartFlow({
   const isCurrentContext = useSessionStartContext(activeWorkspaceId);
   const [isSubmittingHumanReviewFeedback, setIsSubmittingHumanReviewFeedback] = useState(false);
 
-  const { sessionStartModal, runSessionStartRequest } = useSessionStartModalRunner({
-    scopeKey: activeWorkspaceId,
-    branches,
-    favoriteState,
-    repoSettings,
-    workspaceRepoPath,
-  });
+  const { sessionStartModal, isSessionStarting, runSessionStartRequest } =
+    useSessionStartModalRunner({
+      scopeKey: activeWorkspaceId,
+      branches,
+      favoriteState,
+      repoSettings,
+      workspaceRepoPath,
+    });
 
   const {
     clearHumanReviewFeedback,
@@ -310,10 +312,32 @@ export function useKanbanSessionStartFlow({
   const onOpenSession = useCallback(
     (taskId: string, role: AgentRole, options?: SessionTargetOptions): void => {
       if (options?.session) {
-        openSessionInAgentStudio(
-          { taskId, role, launchActionId: firstLaunchAction(role), postStartAction: "none" },
-          options.session,
-        );
+        try {
+          if (!workspaceRepoPath) {
+            throw new Error("Select the task's workspace, then open the session again.");
+          }
+          navigate(
+            buildAgentStudioHref({
+              taskId,
+              role,
+              sessionExternalId: options.session.externalSessionId,
+            }),
+            {
+              state: {
+                notificationTarget: {
+                  type: "agent_session",
+                  repoPath: workspaceRepoPath,
+                  taskId,
+                  session: toAgentSessionIdentity(options.session),
+                },
+              },
+            },
+          );
+        } catch (error) {
+          toast.error("Failed to open the session.", {
+            description: error instanceof Error ? error.message : "Unknown error",
+          });
+        }
         return;
       }
 
@@ -330,7 +354,7 @@ export function useKanbanSessionStartFlow({
 
       openAgents(taskId, role);
     },
-    [openAgents, openSessionInAgentStudio, sessions],
+    [navigate, openAgents, openSessionInAgentStudio, sessions, workspaceRepoPath],
   );
 
   const onPlan = useCallback(
@@ -455,6 +479,7 @@ export function useKanbanSessionStartFlow({
 
   return {
     humanReviewFeedbackModal,
+    isSessionStarting,
     sessionStartModal,
     startSessionIntent,
     onPullRequestGenerate,

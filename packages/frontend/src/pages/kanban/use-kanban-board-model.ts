@@ -20,6 +20,7 @@ import {
   compareActiveSessionForPrimary,
   type SessionTargetOptions,
 } from "@/components/features/kanban/session-target-resolution";
+import type { WorkflowPendingState } from "@/components/features/kanban/kanban-task-footer";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { KanbanPageContentModel } from "./kanban-page-model-types";
 
@@ -141,6 +142,7 @@ type UseKanbanBoardModelArgs = {
   isSwitchingWorkspace: boolean;
   emptyColumnDisplay: KanbanEmptyColumnDisplay;
   taskCardView: KanbanTaskCardView;
+  pendingState?: WorkflowPendingState | undefined;
   showHorizontalScrollbars: boolean | null;
   tasks: TaskCard[];
   historicalSessionsByTaskId: Map<string, AgentSessionRecord[]>;
@@ -151,8 +153,6 @@ type UseKanbanBoardModelArgs = {
   onOpenSession: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart: (taskId: string) => void;
-  onQaOpen: (taskId: string) => void;
-  onBuild: (taskId: string) => void;
   onHumanApprove: (taskId: string) => void;
   onHumanRequestChanges: (taskId: string) => void;
   onResetImplementation: (taskId: string) => void;
@@ -163,6 +163,7 @@ export function useKanbanBoardModel({
   isSwitchingWorkspace,
   emptyColumnDisplay,
   taskCardView,
+  pendingState,
   showHorizontalScrollbars,
   tasks,
   historicalSessionsByTaskId,
@@ -173,8 +174,6 @@ export function useKanbanBoardModel({
   onOpenSession,
   onPlan,
   onQaStart,
-  onQaOpen,
-  onBuild,
   onHumanApprove,
   onHumanRequestChanges,
   onResetImplementation,
@@ -200,6 +199,7 @@ export function useKanbanBoardModel({
     isSwitchingWorkspace,
     emptyColumnDisplay,
     taskCardView,
+    pendingState,
     showHorizontalScrollbars,
     columns: columnsWithSortedTasks,
     taskSessionsByTaskId,
@@ -211,8 +211,6 @@ export function useKanbanBoardModel({
     onOpenSession,
     onPlan,
     onQaStart,
-    onQaOpen,
-    onBuild,
     onHumanApprove,
     onHumanRequestChanges,
     onResetImplementation,

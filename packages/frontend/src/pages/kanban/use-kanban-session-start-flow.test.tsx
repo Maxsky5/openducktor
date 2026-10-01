@@ -1056,6 +1056,16 @@ describe("useKanbanSessionStartFlow", () => {
 
     expect(args.navigate).toHaveBeenCalledWith(
       agentStudioSessionUrl("TASK-1", "build", sessionIdentity("builder-session-1")),
+      {
+        state: {
+          notificationTarget: {
+            type: "agent_session",
+            repoPath: "/repo",
+            taskId: "TASK-1",
+            session: sessionIdentity("builder-session-1"),
+          },
+        },
+      },
     );
 
     await harness.unmount();
@@ -1063,21 +1073,69 @@ describe("useKanbanSessionStartFlow", () => {
 
   test("onOpenSession uses explicit session identity even when it is not currently loaded", async () => {
     const args = createBaseArgs();
+    const startAgentSession = mock(async () => sessionIdentity("unwanted-replacement"));
+    args.runSessionStartWorkflow = createRunSessionStartWorkflow({ startAgentSession });
+    const target = {
+      ...sessionIdentity("builder-session-2"),
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo/archived-build",
+    };
     const harness = createHookHarness(args);
 
     await harness.mount();
     await harness.run((state) => {
       state.onOpenSession("TASK-1", "build", {
-        session: sessionIdentity("builder-session-archived"),
+        session: target,
       });
     });
 
-    expect(args.navigate).toHaveBeenCalledWith(
-      agentStudioSessionUrl("TASK-1", "build", sessionIdentity("builder-session-archived")),
-    );
+    expect(args.navigate).toHaveBeenCalledWith(agentStudioSessionUrl("TASK-1", "build", target), {
+      state: {
+        notificationTarget: {
+          type: "agent_session",
+          repoPath: "/repo",
+          taskId: "TASK-1",
+          session: target,
+        },
+      },
+    });
+    expect(startAgentSession).not.toHaveBeenCalled();
+    expect(harness.getLatest().sessionStartModal).toBeNull();
 
     await harness.unmount();
   });
+
+  for (const failure of ["missing-workspace", "navigation-error"] as const) {
+    test(`reports an explicit session open failure for ${failure} without opening another conversation`, async () => {
+      const args = createBaseArgs();
+      if (failure === "missing-workspace") args.workspaceRepoPath = null;
+      else
+        args.navigate = mock(() => {
+          throw new Error("The destination is unavailable.");
+        });
+      const toastErrorSpy = spyOn(toast, "error").mockImplementation(() => "toast-id");
+      const harness = createHookHarness(args);
+      try {
+        await harness.mount();
+        await harness.run((state) =>
+          state.onOpenSession("TASK-1", "build", {
+            session: sessionIdentity("builder-session-archived"),
+          }),
+        );
+        expect(toastErrorSpy).toHaveBeenCalledWith("Failed to open the session.", {
+          description:
+            failure === "missing-workspace"
+              ? "Select the task's workspace, then open the session again."
+              : "The destination is unavailable.",
+        });
+        expect(args.navigate).toHaveBeenCalledTimes(failure === "missing-workspace" ? 0 : 1);
+        expect(harness.getLatest().sessionStartModal).toBeNull();
+      } finally {
+        await harness.unmount();
+        toastErrorSpy.mockRestore();
+      }
+    });
+  }
 
   test("onOpenSession uses latest role session when explicit id is absent", async () => {
     const args = createBaseArgs();

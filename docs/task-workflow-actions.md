@@ -82,6 +82,10 @@ Only the task detail sheet can show `close_task`. Do not show it on a Kanban car
 
 A task can have more than one action. The UI can choose one primary action and put the rest in a menu. Display order is a UI rule. The backend list remains the authority.
 
+Non-closed Kanban cards show shortcuts for existing Spec, Planner, Builder, and QA sessions above the main action. The card omits a shortcut when the main control opens the same session. The menu contains the remaining valid actions.
+
+Each session shortcut opens the preferred active session for its role or the latest historical session. The selected target keeps its external session ID, runtime, and working directory. Opening a shortcut does not create a session or change task status.
+
 Current card and detail views use all action IDs except `view_details`, which the card click and details panel already provide.
 
 When you add an action ID, update backend derivation, the transition matrix, the status and action docs, and UI mapping in one change.

@@ -13,7 +13,23 @@ Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {
   writable: true,
 });
 
-type HookArgs = Parameters<typeof useKanbanVirtualization>[0];
+type ProductionHookArgs = Parameters<typeof useKanbanVirtualization>[0];
+type HookArgs = Omit<ProductionHookArgs, "cardLayoutsByTaskId"> &
+  Partial<Pick<ProductionHookArgs, "cardLayoutsByTaskId">>;
+
+const createCardLayouts = (tasks: HookArgs["tasks"]): ProductionHookArgs["cardLayoutsByTaskId"] =>
+  new Map(
+    tasks.map((task) => [
+      task.id,
+      { contentRevision: JSON.stringify(task), hasSessionShortcuts: false },
+    ]),
+  );
+
+const useTestKanbanVirtualization = (props: HookArgs) =>
+  useKanbanVirtualization({
+    ...props,
+    cardLayoutsByTaskId: props.cardLayoutsByTaskId ?? createCardLayouts(props.tasks),
+  });
 type HookState = ReturnType<typeof useKanbanVirtualization>;
 
 const createTasks = (count: number) =>
@@ -30,7 +46,7 @@ const getVirtualizedRenderModel = (
 };
 
 const createHarness = (initialProps: HookArgs) => {
-  return createSharedHookHarness(useKanbanVirtualization, initialProps);
+  return createSharedHookHarness(useTestKanbanVirtualization, initialProps);
 };
 
 type ContainerElementOptions = {
@@ -68,8 +84,8 @@ const createPairHarness = (initialPropsList: [HookArgs, HookArgs]) => {
     firstHook: HookArgs;
     secondHook: HookArgs;
   }): ReactElement | null => {
-    const firstState = useKanbanVirtualization(firstHook);
-    const secondState = useKanbanVirtualization(secondHook);
+    const firstState = useTestKanbanVirtualization(firstHook);
+    const secondState = useTestKanbanVirtualization(secondHook);
     latestStates = [firstState, secondState];
     return null;
   };
@@ -217,6 +233,48 @@ const installMockResizeObserver = () => {
 };
 
 describe("useKanbanVirtualization", () => {
+  test("invalidates an offscreen footer revision and rejects reports from an older revision or density", async () => {
+    const tasks = createTasks(40);
+    const cardLayoutsByTaskId = createCardLayouts(tasks);
+    const harness = createHarness({ tasks, cardLayoutsByTaskId });
+    try {
+      await harness.mount();
+      const originalHeight = getVirtualizedRenderModel(harness.getLatest()).totalHeight;
+      const oldReport = harness.getLatest().onMeasuredHeight;
+      await harness.run(() => {
+        oldReport("task-0", 250);
+        oldReport("task-39", 300);
+      });
+      expect(
+        getVirtualizedRenderModel(harness.getLatest()).visibleTasks.some(
+          (task) => task.id === "task-39",
+        ),
+      ).toBe(false);
+      const changedLayouts = new Map(cardLayoutsByTaskId);
+      changedLayouts.set("task-39", {
+        contentRevision: "planner-session",
+        hasSessionShortcuts: true,
+      });
+      await harness.update({ tasks, cardLayoutsByTaskId: changedLayouts });
+      expect(getVirtualizedRenderModel(harness.getLatest()).totalHeight).toBe(
+        originalHeight + 70 + 24,
+      );
+      await harness.run(() => oldReport("task-39", 500));
+      expect(getVirtualizedRenderModel(harness.getLatest()).totalHeight).toBe(
+        originalHeight + 70 + 24,
+      );
+      const normalReport = harness.getLatest().onMeasuredHeight;
+      await harness.update({ tasks, cardLayoutsByTaskId: changedLayouts, taskCardView: "compact" });
+      const compactEstimate = 40 * 116 + 39 * 12 + 24;
+      expect(getVirtualizedRenderModel(harness.getLatest()).totalHeight).toBe(compactEstimate);
+      await harness.run(() => normalReport("task-39", 500));
+      expect(getVirtualizedRenderModel(harness.getLatest()).totalHeight).toBe(compactEstimate);
+      await harness.run(() => harness.getLatest().onMeasuredHeight("task-39", 150));
+      expect(getVirtualizedRenderModel(harness.getLatest()).totalHeight).toBe(compactEstimate + 10);
+    } finally {
+      await harness.unmount();
+    }
+  });
   test("returns a simple render model when virtualization threshold is not met", async () => {
     const harness = createHarness({ tasks: createTasks(5) });
     await harness.mount();
@@ -268,7 +326,7 @@ describe("useKanbanVirtualization", () => {
     const compactRenderTotals: number[] = [];
     const harness = createSharedHookHarness(
       (props: HookArgs) => {
-        const state = useKanbanVirtualization(props);
+        const state = useTestKanbanVirtualization(props);
         if (props.taskCardView === "compact" && state.renderModel.kind === "virtualized") {
           compactRenderTotals.push(state.renderModel.totalHeight);
         }

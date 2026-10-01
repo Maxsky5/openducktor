@@ -694,6 +694,7 @@ for (const changedScope of ["task", "workspace", "role"] as const) {
         void runner.sessionStartModal?.onConfirm(input);
       });
       expect(executeA).toHaveBeenCalledTimes(1);
+      expect(harness.getLatest().isSessionStarting).toBe(true);
       await harness.update({
         ...props,
         workspaceRepoPath: changedScope === "workspace" ? "/other" : "/repo",
@@ -705,6 +706,7 @@ for (const changedScope of ["task", "workspace", "role"] as const) {
               : "/repo:TASK-1:qa",
       });
       expect(await resultA).toBeUndefined();
+      expect(harness.getLatest().isSessionStarting).toBe(false);
       await harness.run((runner) => {
         resultB = runner.runSessionStartRequest(
           { ...request, taskId: changedScope === "task" ? "TASK-2" : "TASK-1" },
@@ -723,6 +725,7 @@ for (const changedScope of ["task", "workspace", "role"] as const) {
         finishA();
       });
       expect(harness.getLatest().sessionStartModal?.isStarting).toBe(true);
+      expect(harness.getLatest().isSessionStarting).toBe(true);
       await harness.run((runner) => {
         void runner.sessionStartModal?.onConfirm(input);
         expect(() => runner.runSessionStartRequest(request, executeB)).toThrow(
@@ -736,6 +739,7 @@ for (const changedScope of ["task", "workspace", "role"] as const) {
         finishB();
       });
       expect(await resultB).toBe("B");
+      expect(harness.getLatest().isSessionStarting).toBe(false);
       expect(executeA).toHaveBeenCalledTimes(1);
       expect(executeB).toHaveBeenCalledTimes(1);
       expect(harness.getLatest().sessionStartModal?.open).not.toBe(true);

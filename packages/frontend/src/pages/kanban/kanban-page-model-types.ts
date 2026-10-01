@@ -12,6 +12,7 @@ import type {
   KanbanTaskActivityState,
   KanbanTaskSession,
 } from "@/components/features/kanban/kanban-task-activity";
+import type { WorkflowPendingState } from "@/components/features/kanban/kanban-task-footer";
 import type { SessionTargetOptions } from "@/components/features/kanban/session-target-resolution";
 import type { GitConflict, GitConflictAction } from "@/features/agent-studio-git";
 import type { SessionStartFlowRequest } from "@/features/session-start";
@@ -98,6 +99,7 @@ export type KanbanPageContentModel = {
   isSwitchingWorkspace: boolean;
   emptyColumnDisplay: KanbanEmptyColumnDisplay;
   taskCardView: KanbanTaskCardView;
+  pendingState?: WorkflowPendingState | undefined;
   showHorizontalScrollbars: boolean | null;
   columns: KanbanColumnData[];
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
@@ -109,8 +111,6 @@ export type KanbanPageContentModel = {
   onOpenSession: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart: (taskId: string) => void;
-  onQaOpen: (taskId: string) => void;
-  onBuild: (taskId: string) => void;
   onHumanApprove: (taskId: string) => void;
   onHumanRequestChanges: (taskId: string) => void;
   onResetImplementation: (taskId: string) => void;

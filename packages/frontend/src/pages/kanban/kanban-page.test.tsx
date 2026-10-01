@@ -508,10 +508,9 @@ const publishKanbanPageModels = (
         onOpenDetails: models.content.onOpenDetails,
         onDelegate: models.content.onDelegate,
         onOpenSession: models.content.onOpenSession,
+        pendingState: models.content.pendingState,
         onPlan: models.content.onPlan,
         onQaStart: models.content.onQaStart,
-        onQaOpen: models.content.onQaOpen,
-        onBuild: models.content.onBuild,
         onHumanApprove: models.content.onHumanApprove,
         onHumanRequestChanges: models.content.onHumanRequestChanges,
         onResetImplementation: models.content.onResetImplementation,
@@ -1824,7 +1823,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      renderer.getKanbanColumnProps().onBuild("TASK-123");
+      renderer.getKanbanColumnProps().onOpenSession("TASK-123", "build");
     });
 
     expect(renderer.getSessionStartModalModel()).toBeNull();
@@ -1952,7 +1951,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        renderer.getKanbanColumnProps().onBuild("TASK-123");
+        renderer.getKanbanColumnProps().onOpenSession("TASK-123", "build");
       });
 
       expect(renderer.getSessionStartModalModel()).toBeNull();
@@ -1977,7 +1976,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        renderer.getKanbanColumnProps().onBuild("TASK-123");
+        renderer.getKanbanColumnProps().onOpenSession("TASK-123", "build");
       });
 
       expect(renderer.getSessionStartModalModel()).toBeNull();
@@ -2000,7 +1999,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      requireCallback(renderer.getKanbanColumnProps().onQaOpen, "open QA")("TASK-123");
+      renderer.getKanbanColumnProps().onOpenSession("TASK-123", "qa");
     });
 
     expect(renderer.getSessionStartModalModel()).toBeNull();
@@ -2079,7 +2078,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        renderer.getKanbanColumnProps().onBuild("TASK-123");
+        renderer.getKanbanColumnProps().onOpenSession("TASK-123", "build");
       });
 
       expect(renderer.getSessionStartModalModel()).toBeNull();

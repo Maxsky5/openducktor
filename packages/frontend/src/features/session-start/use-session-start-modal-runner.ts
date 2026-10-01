@@ -47,6 +47,7 @@ type SessionStartModalRunResult = {
 
 type SessionStartModalRunnerResult = {
   sessionStartModal: SessionStartModalModel | null;
+  isSessionStarting: boolean;
   runSessionStartRequest: <T>(
     request: SessionStartModalOpenRequest,
     execute: (result: SessionStartModalRunResult) => Promise<T>,
@@ -406,6 +407,7 @@ export function useSessionStartModalRunner({
 
   return {
     sessionStartModal,
+    isSessionStarting: isStarting,
     runSessionStartRequest,
   };
 }
