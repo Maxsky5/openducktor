@@ -18,6 +18,8 @@ Create, list, close, and path setup use host commands. Input, resize, attach, de
 
 The frontend uses an owner-scoped TanStack Query read to discover host terminals. Opening an empty panel creates a terminal only after discovery succeeds with an empty list. New terminal creation stays disabled while discovery runs or fails.
 
+An open request made during discovery waits for that result and creates at most one terminal. Discovery failure, existing terminals, closing the panel, or switching owners cancels the request. Later refreshes do not create terminals without a new open request. The current scope shows loading or empty feedback while other scopes keep their viewports mounted.
+
 Discovery failure appears in the panel with `Retry terminal discovery`. Retry refetches the owner query. A failed refresh keeps existing tabs and their mounted viewports. Discovery does not poll or retry automatically. The live terminal transport remains separate from the list query.
 
 ## Start a terminal

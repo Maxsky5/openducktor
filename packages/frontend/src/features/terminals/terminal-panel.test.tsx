@@ -78,6 +78,33 @@ const model: TerminalPanelModel = {
 };
 
 describe("TerminalPanel", () => {
+  test("shows empty-scope feedback while keeping another scope's viewport mounted", () => {
+    const view = render(<TerminalPanel model={model} />);
+    const viewport = screen.getByRole("tabpanel");
+    const emptyScope: TerminalPanelModel = {
+      ...model,
+      scopeKey: "/repo:task-2",
+      tabs: [],
+      activeTabId: null,
+      isLoading: true,
+    };
+    view.rerender(<TerminalPanel model={emptyScope} />);
+
+    expect(screen.getByRole("status").textContent).toContain("Loading terminals");
+    expect(screen.getByRole("tabpanel", { hidden: true })).toBe(viewport);
+    expect(viewport.getAttribute("aria-hidden")).toBe("true");
+    expect(viewport.hasAttribute("inert")).toBe(true);
+    expect(screen.queryByText("Create a terminal.")).toBeNull();
+
+    view.rerender(<TerminalPanel model={{ ...emptyScope, isLoading: false }} />);
+    expect(screen.getByText("No terminals.")).toBeTruthy();
+    expect(screen.getByText("Create a terminal.")).toBeTruthy();
+    expect(screen.getByRole("tabpanel", { hidden: true })).toBe(viewport);
+
+    view.rerender(<TerminalPanel model={model} />);
+    expect(screen.getByRole("tabpanel")).toBe(viewport);
+  });
+
   test("shows discovery failure instead of an empty list and offers an explicit retry", () => {
     const onRetryDiscovery = mock(() => undefined);
     const view = render(

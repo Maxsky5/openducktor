@@ -1,13 +1,131 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { TerminalCreateRequest, TerminalSummary } from "@openducktor/contracts";
+import type {
+  TerminalCreateRequest,
+  TerminalListResponse,
+  TerminalSummary,
+} from "@openducktor/contracts";
 import { act, render, renderHook, waitFor } from "@testing-library/react";
 import { useLayoutEffect } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
-import { useTerminals, type TerminalDependencies } from "./use-terminals";
+import { useTerminals, type TerminalDependencies, type TerminalScope } from "./use-terminals";
 
 describe("useTerminals", () => {
+  test.each([
+    { name: "empty initial discovery", refresh: false, hasTabs: false },
+    { name: "initial discovery with existing terminals", refresh: false, hasTabs: true },
+    { name: "an empty refresh", refresh: true, hasTabs: false },
+    { name: "a refresh with existing terminals", refresh: true, hasTabs: true },
+  ])("finishes opening the panel after $name", async ({ refresh, hasTabs }) => {
+    const terminal = existingTerminal();
+    let terminals: TerminalSummary[] = [];
+    const discovery = Promise.withResolvers<TerminalListResponse>();
+    const terminalList = mock(async () => ({
+      hostInstanceId: "host-1",
+      terminals: [...terminals],
+    }));
+    if (!refresh) terminalList.mockImplementationOnce(() => discovery.promise);
+    const view = renderModel(terminalList);
+    view.terminalCreate.mockImplementation(async () => {
+      terminals = [terminal];
+      return { ref: { terminalId: terminal.terminalId }, summary: terminal };
+    });
+    try {
+      if (refresh) {
+        await waitFor(() => expect(view.result.current.isLoading).toBe(false), { timeout: 500 });
+        terminalList.mockImplementationOnce(() => discovery.promise);
+        act(() => view.result.current.onRetryDiscovery());
+      }
+      await waitFor(() => expect(view.result.current.isLoading).toBe(true), { timeout: 500 });
+      act(() => view.result.current.onToggle());
+      expect(view.result.current.isVisible).toBe(true);
+      expect(view.terminalCreate).not.toHaveBeenCalled();
+
+      await act(async () => {
+        terminals = hasTabs ? [terminal] : [];
+        discovery.resolve({ hostInstanceId: "host-1", terminals: [...terminals] });
+        await discovery.promise;
+      });
+      await waitFor(
+        () => expect(view.result.current.tabs[0]?.terminalId).toBe(terminal.terminalId),
+        { timeout: 500 },
+      );
+      expect(view.terminalCreate).toHaveBeenCalledTimes(hasTabs ? 0 : 1);
+      expect(view.result.current.tabs).toHaveLength(1);
+
+      await waitFor(() => expect(view.result.current.isLoading).toBe(false), { timeout: 500 });
+      terminals = [];
+      act(() => view.result.current.onRetryDiscovery());
+      await waitFor(() => expect(view.result.current.tabs).toHaveLength(0), { timeout: 500 });
+      await waitFor(() => expect(view.result.current.isLoading).toBe(false), { timeout: 500 });
+      expect(view.result.current.isVisible).toBe(true);
+      expect(view.terminalCreate).toHaveBeenCalledTimes(hasTabs ? 0 : 1);
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test.each(["hide", "toggle closed", "switch scope", "discovery failure"] as const)(
+    "cancels pending terminal creation after %s",
+    async (cancel) => {
+      const empty: TerminalListResponse = { hostInstanceId: "host-1", terminals: [] };
+      const discovery = Promise.withResolvers<TerminalListResponse>();
+      const terminalList = mock(async () => empty).mockImplementationOnce(() => discovery.promise);
+      const view = renderModel(terminalList);
+      try {
+        act(() => view.result.current.onToggle());
+        expect(view.result.current.isVisible).toBe(true);
+        expect(view.result.current.isLoading).toBe(true);
+        expect(view.terminalCreate).not.toHaveBeenCalled();
+
+        switch (cancel) {
+          case "hide":
+            act(() => view.result.current.onHide());
+            break;
+          case "toggle closed":
+            act(() => view.result.current.onToggle());
+            break;
+          case "switch scope":
+            view.rerender({
+              scope: {
+                key: "/repo:task-2",
+                context: { repoPath: "/repo", taskId: "task-2" },
+                workingDirectory: "/repo",
+                workingDirectoryError: "The working directory is unavailable.",
+              },
+              isScopeLoading: false,
+            });
+            break;
+          case "discovery failure":
+            await act(async () => {
+              discovery.reject(new Error("Discovery failed."));
+              await discovery.promise.catch(() => undefined);
+            });
+            await waitFor(
+              () => expect(view.result.current.discoveryError).toBe("Discovery failed."),
+              {
+                timeout: 500,
+              },
+            );
+            act(() => view.result.current.onRetryDiscovery());
+            break;
+        }
+        if (cancel !== "discovery failure") {
+          await act(async () => {
+            discovery.resolve(empty);
+            await discovery.promise;
+          });
+        }
+        await waitFor(() => expect(view.result.current.isLoading).toBe(false), { timeout: 500 });
+        expect(view.result.current.tabs).toEqual([]);
+        expect(view.terminalCreate).not.toHaveBeenCalled();
+      } finally {
+        view.unmount();
+      }
+    },
+  );
+
   test("blocks creation after failed discovery and retries the host list", async () => {
     const terminal = existingTerminal();
     const result = { hostInstanceId: "host-1", terminals: [terminal] };
@@ -404,21 +522,27 @@ function renderModel(terminalList: TerminalDependencies["hostClient"]["terminalL
     },
   };
   const view = renderHook(
-    () =>
+    ({ scope, isScopeLoading }: { scope: TerminalScope; isScopeLoading: boolean }) =>
       useTerminals(
         {
-          scope: {
-            key: "/repo:task-1",
-            context: { repoPath: "/repo", taskId: "task-1" },
-            workingDirectory: "/repo",
-            workingDirectoryError: "The working directory is unavailable.",
-          },
-          isScopeLoading: false,
-          mountedScopeKeys: ["/repo:task-1"],
+          scope,
+          isScopeLoading,
+          mountedScopeKeys: [scope.key],
         },
         dependencies,
       ),
-    { wrapper: IsolatedQueryWrapper },
+    {
+      initialProps: {
+        scope: {
+          key: "/repo:task-1",
+          context: { repoPath: "/repo", taskId: "task-1" },
+          workingDirectory: "/repo",
+          workingDirectoryError: "The working directory is unavailable.",
+        },
+        isScopeLoading: false,
+      },
+      wrapper: IsolatedQueryWrapper,
+    },
   );
   return { ...view, terminalCreate };
 }

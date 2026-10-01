@@ -88,6 +88,7 @@ export const useTerminals = (
     createTerminalPresentationState,
   );
   const abandonedCreationTabIds = useRef(new Set<string>());
+  const pendingOpen = useRef<string | null>(null);
   const { controller, transportError } = useTerminalTransport(dependencies.terminalBridge);
   const listFilter = useMemo(() => filterForContext(scope?.context ?? null), [scope?.context]);
   const terminalOptions = terminalListByFilterQueryOptions({
@@ -200,33 +201,47 @@ export const useTerminals = (
     [dependencies.hostClient, listFilter, queryClient, scope, scopeKey],
   );
 
-  const togglePanel = useCallback((): void => {
-    if (!scopeKey) return;
-    const transition = toggleTerminalPanel(isVisible);
-    dispatch({ type: "visibilitySet", scopeKey, value: transition.visible, isExplicit: true });
-    if (transition.requestFocus) {
-      dispatch({ type: "focusRequested", scopeKey });
-      // Discovery can finish before the effect adds the host terminals to the tabs.
-      if (
-        visibleState.tabs.length === 0 &&
-        terminalQuery.isSuccess &&
-        terminalQuery.data.terminals.length === 0 &&
-        !terminalQuery.isFetching &&
-        !isScopeLoading
-      ) {
-        void createTerminal();
-      }
+  useEffect(() => {
+    if (pendingOpen.current === null) return;
+    if (
+      pendingOpen.current !== scopeKey ||
+      !isVisible ||
+      terminalQuery.isError ||
+      visibleState.tabs.length > 0
+    ) {
+      pendingOpen.current = null;
+      return;
     }
+    if (isScopeLoading || terminalQuery.isFetching || !terminalQuery.isSuccess) return;
+
+    // Consume the open request once so later refreshes cannot recreate closed terminals.
+    pendingOpen.current = null;
+    // Discovery can finish before the effect adds the host terminals to the tabs.
+    if (terminalQuery.data.terminals.length === 0) void createTerminal();
   }, [
     createTerminal,
     isScopeLoading,
+    isVisible,
     scopeKey,
     terminalQuery.data,
+    terminalQuery.isError,
     terminalQuery.isFetching,
     terminalQuery.isSuccess,
-    isVisible,
     visibleState.tabs.length,
   ]);
+
+  const togglePanel = useCallback((): void => {
+    if (!scopeKey) return;
+    const transition = toggleTerminalPanel(isVisible);
+    pendingOpen.current =
+      transition.visible && visibleState.tabs.length === 0 && !terminalQuery.isError
+        ? scopeKey
+        : null;
+    dispatch({ type: "visibilitySet", scopeKey, value: transition.visible, isExplicit: true });
+    if (transition.requestFocus) {
+      dispatch({ type: "focusRequested", scopeKey });
+    }
+  }, [isVisible, scopeKey, terminalQuery.isError, visibleState.tabs.length]);
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent): void => {
@@ -240,6 +255,7 @@ export const useTerminals = (
   }, [togglePanel]);
 
   const hidePanel = useCallback((): void => {
+    pendingOpen.current = null;
     if (scopeKey) dispatch({ type: "visibilitySet", scopeKey, value: false, isExplicit: true });
   }, [scopeKey]);
   const selectTab = useCallback(

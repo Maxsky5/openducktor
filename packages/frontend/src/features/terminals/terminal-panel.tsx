@@ -85,23 +85,22 @@ export function TerminalPanel({ model, headerLeading }: Props): ReactElement {
           </Button>
         </div>
       ) : null}
-      {model.mountedTabs.length > 0 ? (
-        <div className="flex min-h-0 flex-1 flex-col">
-          <MountedTerminals model={model} onRetryCreate={retryTerminalCreation} />
-          {closeError ? (
-            <p className="border-t border-border px-3 py-1.5 text-xs text-destructive">
-              Close failed: {closeError}
-            </p>
-          ) : null}
-        </div>
-      ) : (
-        <div className="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground">
-          {isEmpty(model) ? "Create a terminal." : null}
-          {model.isLoading && model.discoveryError === null ? (
-            <p role="status">Loading terminals...</p>
-          ) : null}
-        </div>
-      )}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <MountedTerminals model={model} onRetryCreate={retryTerminalCreation} />
+        {!hasTabs(model) ? (
+          <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
+            {isEmpty(model) ? "Create a terminal." : null}
+            {model.isLoading && model.discoveryError === null ? (
+              <p role="status">Loading terminals...</p>
+            ) : null}
+          </div>
+        ) : null}
+        {model.mountedTabs.length > 0 && closeError ? (
+          <p className="border-t border-border px-3 py-1.5 text-xs text-destructive">
+            Close failed: {closeError}
+          </p>
+        ) : null}
+      </div>
       {model.transportError ? (
         <p className="bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
           Terminal transport failed: {model.transportError}
@@ -432,12 +431,11 @@ function useTerminalClose(model: TerminalPanelModel) {
 }
 
 function isEmpty(model: TerminalPanelModel): boolean {
-  return (
-    model.tabs.length === 0 &&
-    !model.mountedTabs.some((tab) => tab.scopeKey === model.scopeKey) &&
-    !model.isLoading &&
-    model.discoveryError === null
-  );
+  return !hasTabs(model) && !model.isLoading && model.discoveryError === null;
+}
+
+function hasTabs(model: TerminalPanelModel): boolean {
+  return model.tabs.length > 0 || model.mountedTabs.some((tab) => tab.scopeKey === model.scopeKey);
 }
 
 type Props = {
