@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionTranscriptEvent } from "@openducktor/contracts";
 import { getAgentSession } from "@/state/agent-session-collection";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { applyAgentSessionLiveDelta } from "../session-read-model/agent-session-live-projection";
+import { reloadSessionHistoryIntoStore } from "../history/session-history-loader";
+import { createSessionHistoryReadGeneration } from "../history/session-history-read-generation";
 import { createSessionTurnState } from "../support/session-turn-state";
 import type { UpdateSession } from "./session-event-types";
 import {
@@ -57,6 +60,148 @@ const createConsumerHarness = (
 };
 
 describe("agent session transcript event consumer", () => {
+  for (const runtimeKind of ["opencode", "codex", "claude"] as const) {
+    for (const batchWindowMs of [0, 60_000]) {
+      test(`keeps concurrent ${runtimeKind} reads in call order with a ${batchWindowMs} ms batch`, async () => {
+        const liveRef = { ...sessionRef, runtimeKind };
+        const { consumer, sessionsRef } = createConsumerHarness(
+          batchWindowMs,
+          buildSession({ runtimeKind, historyLoadState: "loaded" }),
+        );
+        const tools = ["first", "second", "third"].map((name, index) => ({
+          kind: "tool" as const,
+          messageId: "assistant-reads",
+          partId: `read-${name}`,
+          callId: `call-${name}`,
+          tool: "read",
+          toolType: "read" as const,
+          status: "running" as const,
+          input: { filePath: `/${name}.ts` },
+          startedAtMs: Date.parse(`2026-10-02T11:57:55.00${index}Z`),
+        }));
+        try {
+          for (const part of tools) {
+            consumer.handle({
+              type: "assistant_part",
+              externalSessionId: liveRef.externalSessionId,
+              sessionRef: liveRef,
+              timestamp: new Date(part.startedAtMs).toISOString(),
+              part,
+            });
+          }
+          for (const [index, part] of [...tools].reverse().entries()) {
+            consumer.handle({
+              type: "assistant_part",
+              externalSessionId: liveRef.externalSessionId,
+              sessionRef: liveRef,
+              timestamp: `2026-10-02T11:57:55.01${index}Z`,
+              part: { ...part, status: "completed", output: part.input.filePath },
+            });
+          }
+          consumer.handle({
+            type: "session_idle",
+            externalSessionId: liveRef.externalSessionId,
+            sessionRef: liveRef,
+            timestamp: "2026-10-02T11:57:55.020Z",
+          });
+          const callOrder = tools.map((part) => `tool:${part.messageId}:${part.callId}`);
+          const liveMessages = getSessionMessages(sessionsRef);
+          expect(liveMessages.map((message) => message.id)).toEqual(callOrder);
+          expect(liveMessages.map((message) => message.timestamp)).toEqual(
+            tools.map((part) => new Date(part.startedAtMs).toISOString()),
+          );
+          expect(
+            liveMessages.map(
+              (message) => message.meta?.kind === "tool" && message.meta.observedEndedAtMs,
+            ),
+          ).toEqual([
+            Date.parse("2026-10-02T11:57:55.012Z"),
+            Date.parse("2026-10-02T11:57:55.011Z"),
+            Date.parse("2026-10-02T11:57:55.010Z"),
+          ]);
+
+          await reloadSessionHistoryIntoStore({
+            repoPath: liveRef.repoPath,
+            identity: liveRef,
+            loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+            adapter: {
+              loadSessionHistory: async () => [
+                {
+                  messageId: "assistant-reads",
+                  role: "assistant",
+                  timestamp: "2026-10-02T11:57:55.000Z",
+                  text: "",
+                  parts: tools.map((part, index) => ({
+                    ...part,
+                    status: "completed",
+                    output: part.input.filePath,
+                    endedAtMs: Date.parse(`2026-10-02T11:57:55.01${2 - index}Z`),
+                  })),
+                },
+              ],
+            },
+            readSessionSnapshot: (identity) => getAgentSession(sessionsRef.current, identity),
+            updateSession: createSessionUpdater(sessionsRef),
+            isStaleRepoOperation: () => false,
+            historyReadGeneration: createSessionHistoryReadGeneration(),
+          });
+          const loadedMessages = getSessionMessages(sessionsRef);
+          expect(getSession(sessionsRef).historyLoadState).toBe("loaded");
+          expect(loadedMessages.map((message) => message.id)).toEqual(callOrder);
+          expect(
+            loadedMessages.map(
+              (message) => message.meta?.kind === "tool" && message.meta.endedAtMs,
+            ),
+          ).toEqual(
+            liveMessages.map(
+              (message) => message.meta?.kind === "tool" && message.meta.observedEndedAtMs,
+            ),
+          );
+        } finally {
+          consumer.close();
+        }
+      });
+    }
+  }
+
+  test("keeps a completed read before a pending read with the same first timestamp", () => {
+    const { consumer, sessionsRef } = createConsumerHarness(60_000);
+    const parts = ["first", "second"].map((name) => ({
+      kind: "tool" as const,
+      messageId: "assistant-reads",
+      partId: `read-${name}`,
+      callId: `call-${name}`,
+      tool: "read",
+      toolType: "read" as const,
+      status: "pending" as const,
+    }));
+    try {
+      for (const part of parts) {
+        consumer.handle({
+          type: "assistant_part",
+          externalSessionId: sessionRef.externalSessionId,
+          sessionRef,
+          timestamp: "2026-10-02T11:57:55.000Z",
+          part,
+        });
+      }
+      consumer.handle({
+        type: "assistant_part",
+        externalSessionId: sessionRef.externalSessionId,
+        sessionRef,
+        timestamp: "2026-10-02T11:57:55.010Z",
+        part: { ...parts[0]!, status: "completed", output: "First file" },
+      });
+      consumer.flushSession(sessionRef);
+      expect(getSessionMessages(sessionsRef)).toMatchObject([
+        { id: "tool:assistant-reads:call-first", meta: { status: "completed" } },
+        { id: "tool:assistant-reads:call-second", meta: { status: "pending" } },
+      ]);
+    } finally {
+      consumer.close();
+    }
+  });
+
   test("keeps text before its tool when text completion shares the event batch", () => {
     const liveRef = { ...sessionRef, runtimeKind: "opencode" as const };
     const { consumer, sessionsRef } = createConsumerHarness(

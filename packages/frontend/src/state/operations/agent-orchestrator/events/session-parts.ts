@@ -280,6 +280,7 @@ const handleSubagentPart = (
 export const handleAssistantPart = (
   context: SessionPartEventContext,
   event: SessionPartEvent,
+  firstTimestamp = event.timestamp,
 ): void => {
   const part = event.part;
   if (part.kind === "image_generation") {
@@ -308,7 +309,7 @@ export const handleAssistantPart = (
       handleReasoningPart(context, event, part, prepareCurrent);
       return;
     case "tool":
-      handleToolPart(context, event, part, prepareCurrent);
+      handleToolPart(context, event, part, prepareCurrent, firstTimestamp);
       return;
     case "subagent":
       handleSubagentPart(context, event, part, prepareCurrent);

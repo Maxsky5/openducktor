@@ -198,6 +198,7 @@ const mergeQueuedSessionEvents = <Item extends QueuedSessionEventBatchItem>(
       key,
       item: {
         ...item,
+        firstTimestamp: previous.firstTimestamp ?? previous.event.timestamp,
         event: mergeQueuedSessionEvent(previous.event, item.event),
       },
     };
@@ -213,6 +214,8 @@ export const prepareForcedQueuedSessionEvents = <Item extends QueuedSessionEvent
 export type QueuedSessionEventBatchItem<Event extends QueuedSessionEvent = QueuedSessionEvent> = {
   event: Event;
   routeKey: string;
+  /** Place a merged row by its first event, while the latest event keeps tool timing. */
+  firstTimestamp?: string;
 };
 
 export type PreparedQueuedSessionEvents<

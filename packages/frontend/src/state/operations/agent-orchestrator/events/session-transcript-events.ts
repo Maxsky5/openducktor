@@ -94,6 +94,7 @@ const notifyMcpReconnectStarted = (
 const dispatchTranscriptEvent = (
   dependencies: TranscriptEventDependencies,
   event: AgentSessionTranscriptEvent,
+  firstTimestamp = event.timestamp,
 ): void => {
   if (!dependencies.readSession(toAgentSessionIdentity(event.sessionRef))) {
     return;
@@ -118,7 +119,7 @@ const dispatchTranscriptEvent = (
       );
       return;
     case "assistant_part":
-      handleAssistantPart(context, event);
+      handleAssistantPart(context, event, firstTimestamp);
       return;
     case "assistant_message":
       handleAssistantMessage(context, event);
@@ -189,7 +190,7 @@ export const createAgentSessionTranscriptEventConsumer = (
     const queued = queuedEventsBySession.get(sessionKey) ?? [];
     queuedEventsBySession.delete(sessionKey);
     for (const item of prepareForcedQueuedSessionEvents(queued)) {
-      dispatchTranscriptEvent(dependencies, item.event);
+      dispatchTranscriptEvent(dependencies, item.event, item.firstTimestamp);
     }
   };
   const flushReady = (): void => {
@@ -198,7 +199,7 @@ export const createAgentSessionTranscriptEventConsumer = (
     for (const [sessionKey, queued] of queuedEventsBySession) {
       const prepared = batcher.prepareQueuedSessionEvents(queued);
       for (const item of prepared.readyEvents) {
-        dispatchTranscriptEvent(dependencies, item.event);
+        dispatchTranscriptEvent(dependencies, item.event, item.firstTimestamp);
       }
       if (prepared.deferredEvents.length === 0) {
         queuedEventsBySession.delete(sessionKey);
