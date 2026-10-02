@@ -103,6 +103,15 @@ const mergeQueuedSessionEvent = <Event extends QueuedSessionEvent>(
 
   if (
     previous.type === "assistant_part" &&
+    event.type === "assistant_part" &&
+    (event.part.kind === "text" || event.part.kind === "reasoning")
+  ) {
+    // Keep the first timestamp so completion cannot move a tool ahead of this part.
+    return { ...event, timestamp: previous.timestamp };
+  }
+
+  if (
+    previous.type === "assistant_part" &&
     previous.part.kind === "subagent" &&
     event.type === "assistant_part" &&
     event.part.kind === "subagent"

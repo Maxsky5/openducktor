@@ -1,5 +1,12 @@
 import { X } from "lucide-react";
-import { type ReactElement, type ReactNode, useEffect, useRef, useState } from "react";
+import {
+  type ReactElement,
+  type ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { Button } from "./button";
 import {
   Dialog,
@@ -119,20 +126,7 @@ const MediaPreviewItemView = ({
     );
   }
   if (item.kind === "video") {
-    return (
-      <video
-        src={item.src}
-        aria-label={item.ariaLabel}
-        className="max-h-[75vh] w-full object-contain"
-        controls
-        autoPlay
-        muted
-        playsInline
-        onError={() => onMediaError(item)}
-      >
-        <track kind="captions" />
-      </video>
-    );
+    return <PreviewVideo item={item} onMediaError={onMediaError} />;
   }
   return (
     <img
@@ -143,3 +137,33 @@ const MediaPreviewItemView = ({
     />
   );
 };
+
+function PreviewVideo({
+  item,
+  onMediaError,
+}: {
+  item: Extract<MediaPreviewItem, { kind: "video" }>;
+  onMediaError: (item: MediaPreviewItem) => void;
+}): ReactElement {
+  const ref = useRef<HTMLVideoElement>(null);
+  useLayoutEffect(() => {
+    const video = ref.current;
+    // Activity keeps the video DOM when it hides the chat.
+    return () => video?.pause();
+  }, [item.src]);
+  return (
+    <video
+      ref={ref}
+      src={item.src}
+      aria-label={item.ariaLabel}
+      className="max-h-[75vh] w-full object-contain"
+      controls
+      autoPlay
+      muted
+      playsInline
+      onError={() => onMediaError(item)}
+    >
+      <track kind="captions" />
+    </video>
+  );
+}

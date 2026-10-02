@@ -85,7 +85,7 @@ describe("agent-orchestrator session event batching rules", () => {
       {
         type: "assistant_part",
         externalSessionId: "session-1",
-        timestamp: "2026-02-22T08:00:04.000Z",
+        timestamp: "2026-02-22T08:00:03.000Z",
         part: {
           kind: "reasoning",
           messageId: "assistant-1",

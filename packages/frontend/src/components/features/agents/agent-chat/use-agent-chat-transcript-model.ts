@@ -18,6 +18,7 @@ import {
   getSessionMessagesRevision,
 } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentChatTranscriptSession } from "./agent-chat.types";
+import { AgentChatTranscriptCacheContext } from "./agent-chat-transcript-cache-context";
 import { toAgentChatTranscriptSession } from "./agent-chat-transcript-session";
 import { withClaudeSkillMentions } from "./claude-skill-mentions";
 import { buildTranscriptModel, MAX_SYNC_MESSAGES } from "./agent-chat-transcript-model-build";
@@ -61,7 +62,10 @@ export const useAgentChatTranscriptModel = ({
   showThinkingMessages: boolean;
 }) => {
   const sessionStore = useContext(AgentSessionsContext);
-  const [cache] = useState(() => createInitialCache(session, showThinkingMessages, sessionStore));
+  const sharedCache = useContext(AgentChatTranscriptCacheContext);
+  const [cache] = useState(() =>
+    createInitialCache(session, showThinkingMessages, sessionStore, sharedCache),
+  );
   const sessionRef = useRef(session);
   const buildsRef = useRef(new Map<string, CacheBuild>());
   const shownKeyRef = useRef<string | null>(null);
@@ -101,6 +105,13 @@ export const useAgentChatTranscriptModel = ({
     sessionRef.current = session;
     shownKeyRef.current = shownModel ? revision.sessionKey : null;
   }, [session, shownModel, revision.sessionKey]);
+  useLayoutEffect(
+    () => () => {
+      // A hidden chat must require current rows when it returns.
+      shownKeyRef.current = null;
+    },
+    [],
+  );
 
   const warmCache = useCallback(() => {
     if (!sessionStore) {
@@ -276,9 +287,14 @@ const createInitialCache = (
   session: AgentChatTranscriptSession | null,
   showThinkingMessages: boolean,
   sessionStore: AgentSessionsStore | null,
+  sharedCache: TranscriptModelCache | null,
 ): TranscriptModelCache => {
-  const cache = createTranscriptModelCache();
-  if (!session || getSessionMessageCount(session) > MAX_SYNC_MESSAGES) {
+  const cache = sharedCache ?? createTranscriptModelCache();
+  if (
+    !session ||
+    getSessionMessageCount(session) > MAX_SYNC_MESSAGES ||
+    readTranscriptModelCache({ session, showThinkingMessages, cache }).latest
+  ) {
     return cache;
   }
 

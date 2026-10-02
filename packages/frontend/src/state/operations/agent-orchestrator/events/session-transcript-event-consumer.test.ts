@@ -57,6 +57,67 @@ const createConsumerHarness = (
 };
 
 describe("agent session transcript event consumer", () => {
+  test("keeps text before its tool when text completion shares the event batch", () => {
+    const liveRef = { ...sessionRef, runtimeKind: "opencode" as const };
+    const { consumer, sessionsRef } = createConsumerHarness(
+      60_000,
+      buildSession({ runtimeKind: "opencode" }),
+    );
+    try {
+      const textPart = {
+        kind: "text",
+        messageId: "assistant-1",
+        partId: "text-1",
+        text: "Before the tool",
+        completed: false,
+      } as const;
+      consumer.handle({
+        type: "assistant_part",
+        externalSessionId: liveRef.externalSessionId,
+        sessionRef: liveRef,
+        timestamp: "2026-10-02T11:57:55.603Z",
+        part: { ...textPart, text: "" },
+      });
+      consumer.handle({
+        type: "assistant_part",
+        externalSessionId: liveRef.externalSessionId,
+        sessionRef: liveRef,
+        timestamp: "2026-10-02T11:57:55.603Z",
+        part: textPart,
+      });
+      consumer.handle({
+        type: "assistant_part",
+        externalSessionId: liveRef.externalSessionId,
+        sessionRef: liveRef,
+        timestamp: "2026-10-02T11:57:55.714Z",
+        part: {
+          kind: "tool",
+          messageId: "assistant-1",
+          partId: "tool-1",
+          callId: "call-1",
+          tool: "bash",
+          toolType: "bash",
+          status: "running",
+          input: { command: "sleep 6" },
+        },
+      });
+      consumer.handle({
+        type: "assistant_part",
+        externalSessionId: liveRef.externalSessionId,
+        sessionRef: liveRef,
+        timestamp: "2026-10-02T11:57:55.914Z",
+        part: { ...textPart, completed: true },
+      });
+
+      expect(getSessionMessages(sessionsRef).map((message) => message.id)).toEqual([
+        "text:assistant-1:text-1",
+        "tool:assistant-1:call-1",
+      ]);
+    } finally {
+      consumer.close();
+    }
+  });
+
   test("a buffered transcript part cannot overwrite a later terminal episode", () => {
     const { consumer, sessionsRef } = createConsumerHarness(60_000);
     consumer.handle({

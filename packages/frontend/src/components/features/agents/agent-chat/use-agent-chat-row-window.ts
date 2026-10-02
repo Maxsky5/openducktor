@@ -289,15 +289,15 @@ export function useAgentChatRowWindow({
     });
   });
 
-  useLayoutEffect(() => {
+  const fillViewport = useCallback(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
-    if (container.clientHeight <= 0 || container.scrollHeight <= 0) return;
+    const currentRange = rangeRef.current;
+    const height = container.clientHeight;
+    const scrollHeight = container.scrollHeight;
+    if (height <= 0 || scrollHeight <= 0) return;
+    if (scrollHeight - height > CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX) return;
 
-    const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
-    if (maxScrollTop > CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX) return;
-
-    const currentRange = range;
     if (rowCountForRange(currentRange) >= MAX_MOUNTED_ROW_COUNT) return;
 
     if (currentRange.startRow > 0) {
@@ -306,7 +306,16 @@ export function useAgentChatRowWindow({
     }
 
     expandAfter({ trimTopAfterAppend: false });
-  }, [expandAfter, expandBefore, messagesContainerRef, range]);
+  }, [expandAfter, expandBefore, messagesContainerRef]);
+  useLayoutEffect(fillViewport, [fillViewport, range]);
+  useLayoutEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    // A pane resize can leave the row window too short even when the transcript stays the same.
+    const observer = new ResizeObserver(fillViewport);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [fillViewport, messagesContainerRef]);
 
   useLayoutEffect(() => {
     const previousRowsLength = previousRowsLengthRef.current;

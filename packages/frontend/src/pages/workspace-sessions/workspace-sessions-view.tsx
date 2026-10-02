@@ -15,6 +15,7 @@ import { useDialogPresence } from "@/components/ui/dialog";
 import type { TerminalPanelModel } from "@/features/terminals";
 import { BrowserTabsBar, BrowserTabsRoot } from "@/components/ui/browser-tabs";
 import { SharedToolsPanelToggleButton } from "@/components/features/agents/shared-tools-panel";
+import { AgentChatTranscriptCacheProvider } from "@/components/features/agents/agent-chat/agent-chat-transcript-cache-context";
 import { useRightPanelOpen } from "@/components/features/agents/use-right-panel-open";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
 import { errorMessage } from "@/lib/errors";
@@ -38,6 +39,7 @@ import { WorkspaceSessionImportDialog } from "./workspace-session-import-dialog"
 import { WorkspaceSessionArchiveDialog } from "./workspace-session-archive-dialog";
 import { WorkspaceSessionTabs } from "./workspace-session-tabs";
 import { WorkspaceSessionTerminalLayout } from "./workspace-session-terminal-layout";
+import { TabsContent } from "@/components/ui/tabs";
 import { useWorkspaceSessionTerminals } from "./use-workspace-session-terminals";
 import { useMountedRef } from "./use-mounted-ref";
 import { useWorkspaceSessionNavigation } from "./use-workspace-session-navigation";
@@ -166,16 +168,19 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
       </BrowserTabsBar>
       <WorkspaceSessionReadModelNotice />
       {archiveTarget === null && <WorkspaceSessionArchiveError error={archive.error} />}
-      <WorkspaceSessionActiveContent
-        workspace={workspace}
-        selected={selected}
-        terminalModel={terminalModel}
-        panelState={panelState}
-        onPanelStateChange={onPanelStateChange}
-        onSafeToLeave={leaveRemovedChat}
-        hasSessions={records.data.length > 0}
-        onCreate={() => setCreating(true)}
-      />
+      <AgentChatTranscriptCacheProvider key={workspace.workspaceId}>
+        <WorkspaceSessionActiveContent
+          workspace={workspace}
+          selected={selected}
+          sessionIds={orderedSessions.map((record) => record.id)}
+          terminalModel={terminalModel}
+          panelState={panelState}
+          onPanelStateChange={onPanelStateChange}
+          onSafeToLeave={leaveRemovedChat}
+          hasSessions={records.data.length > 0}
+          onCreate={() => setCreating(true)}
+        />
+      </AgentChatTranscriptCacheProvider>
       <WorkspaceSessionDialogs
         workspace={workspace}
         importOpen={importOpen}
@@ -271,6 +276,7 @@ function WorkspaceSessionToolbarActions({
 function WorkspaceSessionActiveContent({
   workspace,
   selected,
+  sessionIds,
   terminalModel,
   panelState,
   onPanelStateChange,
@@ -280,9 +286,11 @@ function WorkspaceSessionActiveContent({
 }: {
   workspace: ActiveWorkspace;
   selected: WorkspaceSession | null;
+  sessionIds: readonly string[];
   terminalModel: TerminalPanelModel;
   panelState: WorkspaceSessionPanelState;
   onPanelStateChange: (
+    sessionId: string,
     update: Partial<Pick<WorkspaceSessionPanelState, "activeTabId" | "selectedFile">>,
   ) => void;
   onSafeToLeave: () => void;
@@ -293,14 +301,19 @@ function WorkspaceSessionActiveContent({
     return <WorkspaceSessionEmptyState hasSessions={hasSessions} onCreate={onCreate} />;
   return (
     <WorkspaceSessionTerminalLayout model={terminalModel}>
-      <WorkspaceSessionContent
-        key={selected.id}
-        workspace={workspace}
-        record={selected}
-        panelState={panelState}
-        onPanelStateChange={onPanelStateChange}
-        onSafeToLeave={onSafeToLeave}
-      />
+      <TabsContent
+        value={selected.id}
+        className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-card"
+      >
+        <WorkspaceSessionContent
+          workspace={workspace}
+          record={selected}
+          sessionIds={sessionIds}
+          panelState={panelState}
+          onPanelStateChange={onPanelStateChange}
+          onSafeToLeave={onSafeToLeave}
+        />
+      </TabsContent>
     </WorkspaceSessionTerminalLayout>
   );
 }
@@ -325,26 +338,22 @@ function useSessionPanelState(selectedId: string | null) {
   const panelState: WorkspaceSessionPanelState = selectedId
     ? { isOpen, ...(panelStates[selectedId] ?? { activeTabId: "git", selectedFile: null }) }
     : { isOpen: false, activeTabId: "git", selectedFile: null };
-  const onPanelStateChange = useCallback(
-    (update: Partial<TabState>) => {
-      if (!selectedId) return;
-      setPanelStates((current) => {
-        const previous = current[selectedId] ?? {
-          activeTabId: "git",
-          selectedFile: null,
-        };
-        const next = { ...previous, ...update };
-        if (
-          previous.activeTabId === next.activeTabId &&
-          previous.selectedFile?.rootPath === next.selectedFile?.rootPath &&
-          previous.selectedFile?.relativePath === next.selectedFile?.relativePath
-        )
-          return current;
-        return { ...current, [selectedId]: next };
-      });
-    },
-    [selectedId],
-  );
+  const onPanelStateChange = useCallback((sessionId: string, update: Partial<TabState>) => {
+    setPanelStates((current) => {
+      const previous = current[sessionId] ?? {
+        activeTabId: "git",
+        selectedFile: null,
+      };
+      const next = { ...previous, ...update };
+      if (
+        previous.activeTabId === next.activeTabId &&
+        previous.selectedFile?.rootPath === next.selectedFile?.rootPath &&
+        previous.selectedFile?.relativePath === next.selectedFile?.relativePath
+      )
+        return current;
+      return { ...current, [sessionId]: next };
+    });
+  }, []);
   return { panelState, onPanelStateChange, togglePanel };
 }
 

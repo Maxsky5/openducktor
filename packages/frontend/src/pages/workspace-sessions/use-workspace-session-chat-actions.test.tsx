@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { HostInvokeError } from "@openducktor/host-client";
-import { act, renderHook } from "@testing-library/react";
+import { act, render, renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { PropsWithChildren } from "react";
+import { Activity, type PropsWithChildren } from "react";
 import { createTextSegment } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
@@ -78,6 +78,108 @@ const createOperations = (
   answerAgentQuestion: async () => {},
   ...overrides,
 });
+
+test.each([
+  ["send", "accepted", false],
+  ["send", "rejected", false],
+  ["model", "accepted", false],
+  ["model", "rejected", false],
+  ["start", "accepted", false],
+  ["start", "rejected", false],
+  ["start", "accepted", true],
+] as const)(
+  "settles a hidden chat's %s state after %s, workspace changed=%s",
+  async (action, outcome, workspaceChanged) => {
+    const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
+    const record = createWorkspaceSessionRecord();
+    const bound = { ...record, externalSessionId: "native" };
+    const store = createAgentSessionsStore("/repo");
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const pending = Promise.withResolvers<void>();
+    const operations = createOperations({
+      sendAgentMessage: async () => {
+        if (action !== "start") await pending.promise;
+      },
+      continueInterruptedTurn: async () => {},
+    });
+    configureShellBridge(
+      createShellBridgeFixture({
+        client: {
+          workspaceSessionStart: async () => {
+            if (action === "start") await pending.promise;
+            return { session: bound, runtimeSession: null };
+          },
+          workspaceSessionSetDraftModel: async () => {
+            await pending.promise;
+            return bound;
+          },
+        },
+      }),
+    );
+    let sendResult: Promise<boolean> | undefined;
+    let actions!: ReturnType<typeof useWorkspaceSessionChatActions>;
+    const Probe = () => {
+      actions = useWorkspaceSessionChatActions(workspace, record);
+      return null;
+    };
+    const view = (mode: "visible" | "hidden") => (
+      <QueryClientProvider client={queryClient}>
+        <AgentSessionsContext value={store}>
+          <AgentOperationsContext value={operations}>
+            <Activity mode={mode}>
+              <Probe />
+            </Activity>
+          </AgentOperationsContext>
+        </AgentSessionsContext>
+      </QueryClientProvider>
+    );
+    const rendered = render(view("visible"));
+    try {
+      await act(async () => {
+        if (action !== "model") {
+          sendResult = actions.sendDraft(
+            { segments: [createTextSegment("Hello")] },
+            {
+              canSend: true,
+              reusablePrompts: [],
+              selectedModelDescriptor: null,
+              supportsAttachments: false,
+            },
+          );
+        } else {
+          actions.updateDraftModel({ providerId: "openai", modelId: "gpt-5" });
+        }
+      });
+      expect(
+        action !== "model" ? actions.isSending && actions.isStarting : actions.isSavingModel,
+      ).toBe(true);
+      rendered.rerender(view("hidden"));
+      if (workspaceChanged) store.resetWorkspace("/other");
+      await act(async () => {
+        if (outcome === "accepted") pending.resolve();
+        else pending.reject(new Error("Request failed"));
+      });
+      rendered.rerender(view("visible"));
+      expect(actions.isSending).toBe(false);
+      expect(actions.isStarting).toBe(false);
+      expect(actions.isSavingModel).toBe(false);
+      expect(actions.error).toBe(
+        workspaceChanged
+          ? "Workspace changed while starting the chat. Reopen the chat to send your draft."
+          : outcome === "rejected"
+            ? "Request failed"
+            : null,
+      );
+      if (action !== "model")
+        expect(await sendResult).toBe(outcome === "accepted" && !workspaceChanged);
+      if (workspaceChanged) expect(store.listSessionSnapshots()).toEqual([]);
+    } finally {
+      rendered.unmount();
+      queryClient.clear();
+      configureShellBridge(createUnavailableShellBridge());
+    }
+  },
+);
 
 test.each([
   ["rejected", false],

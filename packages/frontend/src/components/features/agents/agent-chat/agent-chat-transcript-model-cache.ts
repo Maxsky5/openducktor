@@ -3,7 +3,7 @@ import { areSessionMessagesSameRevision } from "@/state/operations/agent-orchest
 import type { AgentChatTranscriptSession } from "./agent-chat.types";
 import type { AgentChatTranscriptModel } from "./agent-chat-transcript-model";
 
-const MAX_ENTRIES = 6;
+export const MAX_CACHED_TRANSCRIPTS = 6;
 
 export type TranscriptModelCacheEntry = AgentChatTranscriptModel & {
   session: AgentChatTranscriptSession;
@@ -90,7 +90,7 @@ const touchEntry = (
   cache.delete(cacheKey);
   cache.set(cacheKey, entry);
 
-  while (cache.size > MAX_ENTRIES) {
+  while (cache.size > MAX_CACHED_TRANSCRIPTS) {
     const oldestKey = cache.keys().next().value;
     if (oldestKey === undefined) {
       break;

@@ -15,7 +15,6 @@ import { host } from "@/state/operations/host";
 import { updateWorkspaceSessionQueries } from "@/state/queries/workspace-sessions";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { startWorkspaceSession } from "./start-workspace-session";
-import { useMountedRef } from "./use-mounted-ref";
 
 type DraftSendOptions = Omit<Parameters<typeof resolveAgentStudioSendDraftParts>[0], "draft"> & {
   canSend: boolean;
@@ -28,7 +27,8 @@ export function useWorkspaceSessionChatActions(
   const store = useAgentSessionsContext();
   const operations = useAgentOperations();
   const queryClient = useQueryClient();
-  const mounted = useMountedRef();
+  const isCurrentWorkspace = () =>
+    store.getActivitySnapshot().workspaceRepoPath === workspace.repoPath;
   const sending = useRef(false);
   const savingModel = useRef(false);
   const [isSending, setSending] = useState(false);
@@ -54,14 +54,14 @@ export function useWorkspaceSessionChatActions(
         })
         .then((saved) => updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, saved))
         .catch((cause: unknown) => {
-          if (mounted.current) setError(errorMessage(cause));
+          setError(errorMessage(cause));
         })
         .finally(() => {
           savingModel.current = false;
-          if (mounted.current) setSavingModel(false);
+          setSavingModel(false);
         });
     },
-    [mounted, queryClient, record.id, record.runtimeKind, workspace.workspaceId],
+    [queryClient, record.id, record.runtimeKind, workspace.workspaceId],
   );
 
   const sendDraft = async (
@@ -74,14 +74,14 @@ export function useWorkspaceSessionChatActions(
     setError(null);
     try {
       const parts = await resolveAgentStudioSendDraftParts({ ...options, draft });
-      if (!parts || !mounted.current) return false;
+      if (!parts || !isCurrentWorkspace()) return false;
       let identity = workspaceSessionIdentity(record);
       if (!identity) {
         setStarting(true);
         const started = await startWorkspaceSession(
           { workspaceId: workspace.workspaceId, sessionId: record.id },
           store,
-          () => mounted.current,
+          isCurrentWorkspace,
         );
         updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, started.session);
         identity = started.identity;
@@ -89,16 +89,14 @@ export function useWorkspaceSessionChatActions(
       await operations.sendAgentMessage(identity, parts);
       return true;
     } catch (cause) {
-      if (mounted.current) setError(errorMessage(cause));
+      setError(errorMessage(cause));
       return false;
     } finally {
       sending.current = false;
-      if (mounted.current) {
-        // Both flags reset in finally after acceptance, rejection, and early return.
-        // react-doctor-disable-next-line react-doctor/no-loading-flag-reset-outside-finally
-        setSending(false);
-        setStarting(false);
-      }
+      // Activity stops effects while hidden, but keeps state for the next visit.
+      // react-doctor-disable-next-line react-doctor/no-loading-flag-reset-outside-finally
+      setSending(false);
+      setStarting(false);
     }
   };
 

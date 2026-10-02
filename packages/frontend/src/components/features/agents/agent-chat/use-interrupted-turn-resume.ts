@@ -65,14 +65,6 @@ export const useInterruptedTurnResume = (
   continueInterruptedTurn: (identity: AgentSessionIdentity) => Promise<void>,
   turnState: InterruptedTurnResumeTurnState,
 ): InterruptedTurnResumeController => {
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
-
   const activeSessionKeysRef = useRef(new Set<string>());
   const [resumingSessionKeys, setResumingSessionKeys] =
     useState<ReadonlySet<string>>(EMPTY_SESSION_KEYS);
@@ -97,7 +89,7 @@ export const useInterruptedTurnResume = (
       });
       void continueInterruptedTurn(identity)
         .catch((cause: unknown) => {
-          if (!mounted.current || !activeSessionKeysRef.current.has(sessionKey)) {
+          if (!activeSessionKeysRef.current.has(sessionKey)) {
             return;
           }
           setFailures((current) => new Map(current).set(sessionKey, toResumeFailure(cause)));
@@ -106,9 +98,7 @@ export const useInterruptedTurnResume = (
           if (!activeSessionKeysRef.current.delete(sessionKey)) {
             return;
           }
-          if (mounted.current) {
-            setResumingSessionKeys(new Set(activeSessionKeysRef.current));
-          }
+          setResumingSessionKeys(new Set(activeSessionKeysRef.current));
         });
     },
     [continueInterruptedTurn],

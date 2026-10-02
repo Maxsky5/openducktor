@@ -48,6 +48,11 @@ export function AgentChatSurface({
   );
   const supportsComposer = model.composer !== undefined;
   const composerModel = model.composer;
+  const clearDrag = useEffectEvent(() => {
+    dragDepthRef.current = 0;
+    isDraggingFilesRef.current = false;
+    dispatchIsDraggingFiles(false);
+  });
 
   const handleDragEnter = useEffectEvent((event: DragEvent): void => {
     if (!supportsComposer) {
@@ -100,9 +105,7 @@ export function AgentChatSurface({
       return;
     }
     event.preventDefault();
-    dragDepthRef.current = 0;
-    isDraggingFilesRef.current = false;
-    dispatchIsDraggingFiles(false);
+    clearDrag();
     const files = Array.from(event.dataTransfer?.files ?? []);
     if (files.length > 0) {
       composerRef.current?.addFiles(files);
@@ -111,9 +114,7 @@ export function AgentChatSurface({
 
   useEffect(() => {
     if (!supportsComposer) {
-      dragDepthRef.current = 0;
-      isDraggingFilesRef.current = false;
-      dispatchIsDraggingFiles(false);
+      clearDrag();
       return;
     }
     const node = dropTargetRef.current;
@@ -169,6 +170,7 @@ export function AgentChatSurface({
     window.addEventListener("drop", onWindowDrop);
     window.addEventListener("dragend", onWindowDragEnd);
     return () => {
+      clearDrag();
       node.removeEventListener("dragenter", onDragEnter);
       node.removeEventListener("dragover", onDragOver);
       node.removeEventListener("dragleave", onDragLeave);
