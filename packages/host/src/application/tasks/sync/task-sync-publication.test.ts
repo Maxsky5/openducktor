@@ -98,113 +98,52 @@ describe("task event publication", () => {
     ]);
   });
 
-  test("reports duplicate task IDs without normalizing or publishing the change set", async () => {
-    const { eventBus, events } = createEventBus();
-    const reports: unknown[] = [];
-    const service = createTaskSyncServiceForTest({
-      eventBus,
-      publicationReporter: {
-        report: (failure) =>
-          Effect.sync(() => {
-            reports.push(failure);
-          }),
-      },
-      taskService: {
-        repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
-      },
-      workspaceSettingsService: {
-        listWorkspaces: () => Effect.succeed([]),
-      },
-    });
-    const changes = { taskIds: ["task-1", "task-1"], removedTaskIds: [] };
+  test.each([
+    { case: "duplicate task IDs", taskIds: ["task-1", "task-1"], removedTaskIds: [] },
+    {
+      case: "removed IDs outside the affected IDs",
+      taskIds: ["task-1"],
+      removedTaskIds: ["task-2"],
+    },
+    { case: "an empty proposed event", taskIds: [], removedTaskIds: [] },
+  ])(
+    "reports $case without changing or publishing the proposed event",
+    async ({ taskIds, removedTaskIds }) => {
+      const { eventBus, events } = createEventBus();
+      const reports: unknown[] = [];
+      const service = createTaskSyncServiceForTest({
+        eventBus,
+        publicationReporter: {
+          report: (failure) =>
+            Effect.sync(() => {
+              reports.push(failure);
+            }),
+        },
+        taskService: {
+          repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
+        },
+        workspaceSettingsService: {
+          listWorkspaces: () => Effect.succeed([]),
+        },
+      });
+      const changes = { taskIds: [...taskIds], removedTaskIds: [...removedTaskIds] };
 
-    await expect(
-      Effect.runPromise(service.publishTasksUpdated("/repo", changes, "task-update", [])),
-    ).resolves.toBeUndefined();
+      await expect(
+        Effect.runPromise(service.publishTasksUpdated("/repo", changes, "task-update", [])),
+      ).resolves.toBeUndefined();
 
-    expect(events).toEqual([]);
-    expect(reports).toEqual([
-      expect.objectContaining({
-        operation: "task-update",
-        repoPath: "/repo",
-        changes,
-        stage: "acceptance",
-        cause: expect.objectContaining({ issues: expect.any(Array) }),
-      }),
-    ]);
-  });
-
-  test("reports removed IDs outside the affected IDs without dropping them", async () => {
-    const { eventBus, events } = createEventBus();
-    const reports: unknown[] = [];
-    const service = createTaskSyncServiceForTest({
-      eventBus,
-      publicationReporter: {
-        report: (failure) =>
-          Effect.sync(() => {
-            reports.push(failure);
-          }),
-      },
-      taskService: {
-        repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
-      },
-      workspaceSettingsService: {
-        listWorkspaces: () => Effect.succeed([]),
-      },
-    });
-    const changes = { taskIds: ["task-1"], removedTaskIds: ["task-2"] };
-
-    await expect(
-      Effect.runPromise(service.publishTasksUpdated("/repo", changes, "task-update", [])),
-    ).resolves.toBeUndefined();
-
-    expect(events).toEqual([]);
-    expect(reports).toEqual([
-      expect.objectContaining({
-        operation: "task-update",
-        repoPath: "/repo",
-        changes,
-        stage: "acceptance",
-        cause: expect.objectContaining({ issues: expect.any(Array) }),
-      }),
-    ]);
-  });
-
-  test("reports an empty proposed event instead of treating it as a no-op", async () => {
-    const { eventBus, events } = createEventBus();
-    const reports: unknown[] = [];
-    const service = createTaskSyncServiceForTest({
-      eventBus,
-      publicationReporter: {
-        report: (failure) =>
-          Effect.sync(() => {
-            reports.push(failure);
-          }),
-      },
-      taskService: {
-        repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
-      },
-      workspaceSettingsService: {
-        listWorkspaces: () => Effect.succeed([]),
-      },
-    });
-    const changes = { taskIds: [], removedTaskIds: [] };
-
-    await expect(
-      Effect.runPromise(service.publishTasksUpdated("/repo", changes, "task-update", [])),
-    ).resolves.toBeUndefined();
-
-    expect(events).toEqual([]);
-    expect(reports).toEqual([
-      expect.objectContaining({
-        operation: "task-update",
-        repoPath: "/repo",
-        changes,
-        stage: "acceptance",
-        cause: expect.objectContaining({ issues: expect.any(Array) }),
-      }),
-    ]);
-  });
+      expect(events).toEqual([]);
+      expect(reports).toEqual([
+        expect.objectContaining({
+          operation: "task-update",
+          repoPath: "/repo",
+          changes,
+          stage: "acceptance",
+          cause: expect.objectContaining({ issues: expect.any(Array) }),
+        }),
+      ]);
+    },
+  );
 
   test("publishes valid affected and removed task IDs unchanged", async () => {
     const { eventBus, events } = createEventBus();

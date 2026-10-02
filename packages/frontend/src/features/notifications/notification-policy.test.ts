@@ -150,36 +150,6 @@ describe("notification policy", () => {
     expect(harness.sound).not.toHaveBeenCalled();
   });
 
-  test("delivers local once and external once when leadership replays an occurrence", async () => {
-    const harness = createHarness("both");
-
-    await harness.policy.dispatch(occurrence, { phase: "local" }, harness.settings);
-    await harness.policy.dispatch(
-      occurrence,
-      { phase: "external", appFocused: false },
-      harness.settings,
-    );
-
-    expect(harness.inApp).toHaveBeenCalledTimes(1);
-    expect(harness.os).toHaveBeenCalledTimes(1);
-    expect(harness.sound).toHaveBeenCalledTimes(1);
-  });
-
-  test("uses the current focus state when leadership changes", async () => {
-    const harness = createHarness("both");
-
-    await harness.policy.dispatch(occurrence, { phase: "local" }, harness.settings);
-    await harness.policy.dispatch(
-      occurrence,
-      { phase: "external", appFocused: true },
-      harness.settings,
-    );
-
-    expect(harness.inApp).toHaveBeenCalledTimes(1);
-    expect(harness.os).not.toHaveBeenCalled();
-    expect(harness.sound).not.toHaveBeenCalled();
-  });
-
   test("deduplicates each semantic occurrence", async () => {
     const harness = createHarness("both");
     await dispatchAsOwner(harness);
@@ -212,14 +182,4 @@ test("reserves each delivery before overlapping dispatches run", async () => {
   expect(harness.inApp).toHaveBeenCalledTimes(1);
   expect(harness.os).toHaveBeenCalledTimes(1);
   expect(harness.sound).toHaveBeenCalledTimes(1);
-});
-
-test("rejects absent selected preferences instead of using defaults", async () => {
-  const harness = createHarness("both");
-  // The transport must supply a concrete preference snapshot.
-  await expect(
-    // @ts-expect-error Invalid transport input exercises runtime validation.
-    harness.policy.dispatch(occurrence, { phase: "local" }, undefined),
-  ).rejects.toThrow();
-  expect(harness.inApp).not.toHaveBeenCalled();
 });

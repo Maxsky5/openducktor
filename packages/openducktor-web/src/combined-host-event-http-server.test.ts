@@ -1,5 +1,5 @@
 import { expect, mock, spyOn, test } from "bun:test";
-import { Effect } from "effect";
+import { Deferred, Effect, Stream } from "effect";
 import { browserEventCursorSchema } from "@openducktor/contracts";
 import { createNotificationStream } from "../../host/src/application/notifications/notification-stream";
 import { BufferedHostEventStream } from "./typescript-host-backend-support";
@@ -112,6 +112,29 @@ test("a stalled combined response fails once and releases both live subscription
   const host = new BufferedHostEventStream(256);
   const notifications = createNotificationStream();
   const failures = mock(() => {});
+  const hostStop = mock(() => {});
+  const notificationStop = mock(() => {});
+  const attached = Effect.runSync(Deferred.make<void>());
+  const released = Effect.runSync(Deferred.make<void>());
+  const subscribeHost = host.subscribe.bind(host);
+  const hostSpy = spyOn(host, "subscribe").mockImplementation((listener) => {
+    const stop = subscribeHost(listener);
+    return () => {
+      hostStop();
+      stop();
+    };
+  });
+  const subscribeNotifications = notifications.subscribe.bind(notifications);
+  const notificationSpy = spyOn(notifications, "subscribe").mockImplementation((input) =>
+    subscribeNotifications(input).pipe(
+      Stream.tap((frame) =>
+        frame.type === "attached" ? Deferred.succeed(attached, undefined) : Effect.void,
+      ),
+      Stream.ensuring(
+        Effect.sync(notificationStop).pipe(Effect.zipRight(Deferred.succeed(released, undefined))),
+      ),
+    ),
+  );
   const response = await Effect.runPromise(
     createCombinedHostSseResponse(
       new Request("http://localhost/events"),
@@ -121,11 +144,22 @@ test("a stalled combined response fails once and releases both live subscription
       failures,
     ),
   );
-  for (let index = 0; index < 600; index++)
-    host.emit({ channel: "openducktor://run-event", payload: { index } }, failures);
-  expect(failures).toHaveBeenCalledTimes(1);
-  await expect(response.body!.getReader().read()).rejects.toThrow("cannot keep up");
-  notifications.publishHealth({ scope: "/repo", source: "session", message: null });
-  await Promise.resolve();
-  expect(failures).toHaveBeenCalledTimes(1);
+  const reader = response.body!.getReader();
+  try {
+    await Effect.runPromise(Deferred.await(attached).pipe(Effect.timeout("500 millis")));
+    for (let index = 0; index < 600; index++)
+      host.emit({ channel: "openducktor://run-event", payload: { index } }, failures);
+    expect(failures).toHaveBeenCalledTimes(1);
+    await expect(reader.read()).rejects.toThrow("cannot keep up");
+    await Effect.runPromise(Deferred.await(released).pipe(Effect.timeout("500 millis")));
+    expect(hostStop).toHaveBeenCalledTimes(1);
+    expect(notificationStop).toHaveBeenCalledTimes(1);
+    notifications.publishHealth({ scope: "/repo", source: "session", message: null });
+    expect(failures).toHaveBeenCalledTimes(1);
+  } finally {
+    await reader.cancel().catch(() => {});
+    await Effect.runPromise(notifications.dispose());
+    hostSpy.mockRestore();
+    notificationSpy.mockRestore();
+  }
 });

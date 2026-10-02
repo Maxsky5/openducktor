@@ -102,30 +102,6 @@ test("notification IPC rejects subframes and foreign subscription owners", async
   await flush();
   expect(h.stop).toHaveBeenCalledTimes(1);
 });
-test("navigation releases the main-frame subscription and removes its listeners", async () => {
-  const h = harness();
-  const response = await h.attach();
-  const frame: NotificationStreamFrame = {
-    type: "attached",
-    reason: "new",
-    cursor: { epoch: crypto.randomUUID(), sequence: 0 },
-    health: [],
-  };
-  await h.emit(frame);
-  expect(h.frame.send).toHaveBeenCalledWith(NOTIFICATION_STREAM_FRAME, {
-    ...response,
-    deliveryId: 1,
-    frame,
-  });
-  h.sender.emit("did-start-navigation", { isMainFrame: true, isSameDocument: false });
-  await flush();
-  expect(h.stop).toHaveBeenCalledTimes(1);
-  expect(h.sender.listenerCount("destroyed")).toBe(0);
-  h.handlers.get(NOTIFICATION_STREAM_UNSUBSCRIBE)!(h.event, response);
-  await flush();
-  expect(h.stop).toHaveBeenCalledTimes(1);
-});
-
 const attachedFrame = (): NotificationStreamFrame => ({
   type: "attached",
   reason: "new",

@@ -6,6 +6,7 @@ import {
   type NotificationSettings,
 } from "@openducktor/contracts";
 import type { NotificationBridge } from "@/lib/shell-bridge";
+import { createNotificationRuntime as createProductionNotificationRuntime } from "./notification-runtime";
 import {
   createBridge,
   createDeliveryAdapters,
@@ -232,36 +233,58 @@ describe("notification publication and coordination", () => {
     expect(recipientLoadSettings).not.toHaveBeenCalled();
   });
 
-  test("uses the settings snapshot selected by publication", async () => {
-    const selectedSettings = createDefaultNotificationSettings();
-    selectedSettings.kinds["workflow.closed"] = {
+  test("keeps the host settings and reports a changed coordination selection", async () => {
+    const settings = createDefaultNotificationSettings();
+    settings.volumePercent = 0;
+    settings.kinds["agent.session_started"] = {
       enabled: true,
-      target: "in_app",
+      target: "both",
       sound: "none",
     };
-    let resolveDelivery = (): void => {};
-    const delivered = new Promise<void>((resolve) => {
-      resolveDelivery = resolve;
-    });
-    const deliverInApp = mock(async () => resolveDelivery());
-    const runtime = createNotificationRuntime({
+    const changedSettings = structuredClone(settings);
+    changedSettings.kinds["agent.session_started"].enabled = false;
+    const occurrence = {
+      ...workflowClosedOccurrence("host-settings"),
+      kind: "agent.session_started" as const,
+    };
+    const publishAction = mock(async () => ({ occurrence, settings, preferenceRevision: 1 }));
+    const publishOccurrence = mock(async (item: NotificationOccurrence) => ({
+      occurrence: item,
+      settings: changedSettings,
+    }));
+    const withExternalDeliveryOwnership = mock(async () => {});
+    const showOsNotification = mock(async () => ({ status: "shown" as const }));
+    const onFailure = mock(() => {});
+    const delivery = createDeliveryAdapters();
+    const runtime = createProductionNotificationRuntime({
       bridge: createBridge({
-        publishOccurrence: async (occurrence) => ({
-          occurrence,
-          settings: selectedSettings,
-        }),
+        publishOccurrence,
+        withExternalDeliveryOwnership,
+        showOsNotification,
       }),
-      selectSettings: async () => selectedSettings,
+      publishAction,
+      subscribeStream: async () => () => {},
       navigate: async () => {},
-      onFailure: () => {},
-      inApp: { deliver: deliverInApp },
-      sound: { play: async () => {} },
+      onFailure,
+      onCoordinationRecovered: () => {},
+      inApp: delivery.inApp,
+      sound: delivery.sound,
     });
 
-    runtime.publish(workflowClosedOccurrence("event-selected-settings"));
-    await delivered;
-
-    expect(deliverInApp).toHaveBeenCalledTimes(1);
+    expect(await runtime.publishAndWait(occurrence)).toBe(true);
+    expect(publishAction).toHaveBeenCalledWith(occurrence);
+    expect(publishOccurrence).toHaveBeenCalledWith(occurrence, settings);
+    expect(delivery.deliverInApp).toHaveBeenCalledTimes(1);
+    expect(onFailure).toHaveBeenCalledWith({
+      channel: "coordination",
+      kind: occurrence.kind,
+      occurrenceId: occurrence.occurrenceId,
+      repoPath: occurrence.repoPath,
+      message: "Notification coordination changed the host selection. Reload to reconnect.",
+    });
+    expect(withExternalDeliveryOwnership).not.toHaveBeenCalled();
+    expect(showOsNotification).not.toHaveBeenCalled();
+    expect(delivery.playSound).not.toHaveBeenCalled();
   });
 
   test("does not send OS delivery when another browser tab owns external delivery", async () => {
