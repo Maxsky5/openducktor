@@ -68,7 +68,7 @@ function SheetContent({
             aria-label="Close sheet overlay"
             data-slot="sheet-overlay"
             data-state={isOpen ? "open" : "closed"}
-            className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm data-[state=closed]:pointer-events-none"
+            className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm"
           />
         </DialogPrimitive.Close>
       ) : (
@@ -79,6 +79,8 @@ function SheetContent({
         data-side={side}
         className={cn(sheetVariants({ side }), className)}
         {...props}
+        aria-hidden={!isOpen}
+        inert={!isOpen}
       >
         {children}
         {renderedCloseButton}

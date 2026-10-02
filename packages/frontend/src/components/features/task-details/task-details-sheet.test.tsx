@@ -588,7 +588,7 @@ describe("TaskDetailsSheet", () => {
         expect(sheet.getAttribute("data-state")).toBe("closed");
         expect(overlay.isConnected).toBe(true);
         expect(overlay.getAttribute("data-state")).toBe("closed");
-        expect(screen.getByRole("dialog", { name: "Task 1" })).toBe(sheet);
+        expect(sheet.textContent).toContain("Task 1");
 
         finishSheetExit();
         expect(sheet.isConnected).toBe(false);

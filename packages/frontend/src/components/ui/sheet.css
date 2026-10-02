@@ -27,6 +27,8 @@
 
 [data-slot="sheet-overlay"][data-state="closed"] {
   animation: sheet-fade-out var(--sheet-close-dur) var(--sheet-ease) both;
+  /* A fading overlay must not take clicks. `!important` beats the inline style Radix sets. */
+  pointer-events: none !important;
 }
 
 [data-slot="sheet-content"][data-state="open"] {
@@ -36,7 +38,6 @@
 
 [data-slot="sheet-content"][data-state="closed"] {
   animation: sheet-slide-out var(--sheet-close-dur) var(--sheet-ease) both;
-  pointer-events: none;
 }
 
 @keyframes sheet-fade-in {

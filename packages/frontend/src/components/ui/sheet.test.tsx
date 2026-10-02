@@ -35,6 +35,25 @@ describe("SheetContent visual overlay", () => {
     });
   });
 
+  test("makes the closing content inert and hidden until it opens again", async () => {
+    await withSheetAnimations(() => {
+      const view = render(renderSheet(true));
+      const content = screen.getByRole("dialog");
+      expect(content.hasAttribute("inert")).toBe(false);
+      expect(content.getAttribute("aria-hidden")).toBe("false");
+
+      view.rerender(renderSheet(false));
+      expect(content.isConnected).toBe(true);
+      expect(content.hasAttribute("inert")).toBe(true);
+      expect(content.getAttribute("aria-hidden")).toBe("true");
+
+      view.rerender(renderSheet(true));
+      expect(content.hasAttribute("inert")).toBe(false);
+      expect(content.getAttribute("aria-hidden")).toBe("false");
+      view.unmount();
+    });
+  });
+
   test("closes the sheet when the overlay is clicked", () => {
     const onOpenChange = mock((_open: boolean) => {});
     render(renderSheet(true, onOpenChange));

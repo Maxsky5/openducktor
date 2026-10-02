@@ -137,13 +137,13 @@ describe("sheet motion", () => {
 
 describe("closing overlays", () => {
   test("stop taking clicks while they play their exit", () => {
-    for (const [file, slot] of [
-      ["popover.css", "popover-content"],
-      ["sheet.css", "sheet-content"],
+    for (const [file, slot, style] of [
+      ["popover.css", "popover-content", ""],
+      // Radix sets an inline `pointer-events: auto` on its sheet overlay.
+      ["sheet.css", "sheet-overlay", "pointer-events: auto"],
     ] as const) {
       const pointerEvents = (state: string) =>
-        readMotion(file, { "data-slot": slot, "data-side": "right", "data-state": state })
-          .pointerEvents;
+        readMotion(file, { "data-slot": slot, "data-state": state, style }).pointerEvents;
       expect(`${slot} open: ${pointerEvents("open")}`).not.toBe(`${slot} open: none`);
       expect(`${slot} closed: ${pointerEvents("closed")}`).toBe(`${slot} closed: none`);
     }
