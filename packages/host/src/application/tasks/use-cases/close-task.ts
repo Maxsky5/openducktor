@@ -108,7 +108,6 @@ export const createTaskCloseUseCase = ({
         const worktreePaths = yield* collectCloseWorktreePaths(
           closeWorktreeDependencies,
           effectiveRepoPath,
-          branchPrefix,
           current,
           currentSessions,
         );

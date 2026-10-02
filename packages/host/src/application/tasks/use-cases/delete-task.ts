@@ -124,7 +124,6 @@ export const createTaskDeleteUseCase = ({
         dependencies,
         effectiveRepoPath,
         managedWorktreeBasePath,
-        branchPrefix,
         targetTaskSessions,
       );
       yield* taskSessionLifecycleCoordinator.acquireWorktreeLifecycle(worktreePaths);

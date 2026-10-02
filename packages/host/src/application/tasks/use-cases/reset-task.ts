@@ -106,7 +106,6 @@ export const createTaskFullResetUseCase = ({
         dependencies,
         effectiveRepoPath,
         managedWorktreeBasePath,
-        branchPrefix,
         current.id,
         currentSessions,
         workflowCleanupSessionRoles,

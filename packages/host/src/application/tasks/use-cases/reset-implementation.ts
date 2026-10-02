@@ -99,7 +99,6 @@ export const createTaskImplementationResetUseCase = ({
         dependencies,
         effectiveRepoPath,
         managedWorktreeBasePath,
-        branchPrefix,
         current.id,
         currentSessions,
         new Set<string>(implementationSessionRoleNames),
@@ -118,6 +117,7 @@ export const createTaskImplementationResetUseCase = ({
             current,
             effectiveRepoPath,
             canonicalWorktree,
+            branchPrefix,
           )
         : null;
       const cleanupTargets = excludeCanonicalImplementationTargets(

@@ -13,6 +13,7 @@ import {
 } from "./task-cleanup-progress";
 import {
   collectSessionsUsingCanonicalWorktree,
+  isRelatedTaskBranch,
   managedWorktreeBaseForRepoConfig,
 } from "./task-cleanup-support";
 import { effectiveTargetBranchForTask, resolveBuildStartPoint } from "./task-worktree-cleanup";
@@ -103,6 +104,7 @@ export const resolveCanonicalImplementationResetTarget = (
   task: TaskCard,
   repoPath: string,
   canonicalWorktreePath: string,
+  branchPrefix: string,
 ) =>
   Effect.gen(function* () {
     const worktreePath = yield* gitPort.canonicalizePath(canonicalWorktreePath);
@@ -114,6 +116,16 @@ export const resolveCanonicalImplementationResetTarget = (
           field: "taskId",
           message: `Cannot reset implementation because canonical worktree ${canonicalWorktreePath} is detached or has no active branch.`,
           details: { repoPath, taskId: task.id, canonicalWorktreePath },
+        }),
+      );
+    }
+    // The reset keeps this worktree and hard-resets its branch, so the branch must belong to the task.
+    if (!isRelatedTaskBranch(branch, branchPrefix, task.id)) {
+      return yield* Effect.fail(
+        new HostValidationError({
+          field: "taskId",
+          message: `Cannot reset implementation because canonical worktree ${canonicalWorktreePath} is on branch ${branch}, which is not a task branch. Check out the task branch or reset the task.`,
+          details: { repoPath, taskId: task.id, canonicalWorktreePath, actualBranch: branch },
         }),
       );
     }

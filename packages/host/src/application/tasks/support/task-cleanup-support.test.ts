@@ -44,7 +44,6 @@ describe("task cleanup support", () => {
         },
         "/repo",
         "/worktrees/repo",
-        "odt",
         "task-1",
         [createAgentSessionRecord({ workingDirectory: legacyWorktree })],
         new Set(["build", "qa"]),
@@ -55,24 +54,20 @@ describe("task cleanup support", () => {
     expect(worktreePaths).toEqual([legacyWorktree]);
   });
 
-  test("accepts task branches created from a prefix with trailing slashes", async () => {
+  test("accepts a registered worktree without reading its branch", async () => {
     const worktreePath = "/worktrees/repo/task-1";
+    const calls: unknown[] = [];
     const result = await Effect.runPromise(
       validateExistingTaskWorktreeCandidate(
-        createDirectMergeGitPort({
-          calls: [],
-          currentBranches: {
-            [worktreePath]: { name: "feature/task-1-title", detached: false },
-          },
-        }),
+        createDirectMergeGitPort({ calls }),
         "/repo",
         worktreePath,
-        "feature/",
         "task-1",
-        "reset implementation",
+        "delete",
       ),
     );
 
     expect(result).toBe(worktreePath);
+    expect(calls).toEqual([]);
   });
 });

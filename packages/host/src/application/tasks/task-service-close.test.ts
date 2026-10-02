@@ -185,7 +185,6 @@ const createDevServerService = (calls: string[] = []): DevServerService =>
 const createGitPort = (input: {
   calls?: string[];
   branches?: GitBranch[];
-  currentBranch?: string | null;
   deleteBranchFails?: boolean;
   registered?: boolean;
 }): GitPort =>
@@ -195,15 +194,6 @@ const createGitPort = (input: {
     shareGitCommonDirectory: () => Effect.succeed(true),
     isRegisteredWorktree: () => Effect.succeed(input.registered ?? true),
     listBranches: () => Effect.succeed(input.branches ?? []),
-    getCurrentBranch: () =>
-      Effect.succeed({
-        detached: false,
-        ...(Object.hasOwn(input, "currentBranch")
-          ? input.currentBranch
-            ? { name: input.currentBranch }
-            : {}
-          : { name: "odt/task-1" }),
-      }),
     removeWorktree: (_repoPath: string, worktreePath: string) => {
       input.calls?.push(`remove-worktree:${worktreePath}`);
       return Effect.succeed(undefined);
@@ -338,7 +328,6 @@ describe("TaskService.closeTask", () => {
       gitPort: createGitPort({
         calls,
         branches: [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
-        currentBranch: "odt/task-1",
       }),
       settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
       taskWorktreeService: createTaskWorktreeService("/worktrees/repo/task-1"),
@@ -365,7 +354,6 @@ describe("TaskService.closeTask", () => {
       gitPort: createGitPort({
         calls,
         branches: [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
-        currentBranch: "odt/task-1",
       }),
       settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
       taskWorktreeService: createTaskWorktreeService("/worktrees/repo/task-1"),
@@ -427,40 +415,33 @@ describe("TaskService.closeTask", () => {
     expect(calls).toEqual(["stop-dev:task-1", "transition:task-1:closed"]);
   });
 
-  test("rejects detached or unnamed task worktrees before cleanup", async () => {
+  test("removes the task worktree without reading its branch", async () => {
     const calls: string[] = [];
     const service = createTaskService({
       taskStore: createTaskStore([task()], calls),
       devServerService: createDevServerService(calls),
-      gitPort: createGitPort({ calls, currentBranch: null }),
+      gitPort: createGitPort({
+        calls,
+        branches: [
+          { name: "feature/other", isCurrent: false, isRemote: false },
+          { name: "odt/task-1", isCurrent: false, isRemote: false },
+        ],
+      }),
       settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
       taskWorktreeService: createTaskWorktreeService("/worktrees/repo/task-1"),
       workspaceSettingsService: createWorkspaceSettingsService(),
       worktreeFiles: createWorktreeFiles(calls),
     });
 
-    await expect(run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }))).rejects.toThrow(
-      "is not on its task branch",
-    );
-    expect(calls).toEqual([]);
-  });
+    await run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }));
 
-  test("rejects task worktrees on unrelated branches before cleanup", async () => {
-    const calls: string[] = [];
-    const service = createTaskService({
-      taskStore: createTaskStore([task()], calls),
-      devServerService: createDevServerService(calls),
-      gitPort: createGitPort({ calls, currentBranch: "feature/other" }),
-      settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
-      taskWorktreeService: createTaskWorktreeService("/worktrees/repo/task-1"),
-      workspaceSettingsService: createWorkspaceSettingsService(),
-      worktreeFiles: createWorktreeFiles(calls),
-    });
-
-    await expect(run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }))).rejects.toThrow(
-      "is not on its task branch",
-    );
-    expect(calls).toEqual([]);
+    expect(calls).toEqual([
+      "stop-dev:task-1",
+      "remove-worktree:/worktrees/repo/task-1",
+      "remove-path:/worktrees/repo/task-1",
+      "delete-branch:odt/task-1",
+      "transition:task-1:closed",
+    ]);
   });
 
   test("retains an unrelated repository at the canonical managed path", async () => {
@@ -468,7 +449,7 @@ describe("TaskService.closeTask", () => {
     const service = createTaskService({
       taskStore: createTaskStore([task()], calls),
       devServerService: createDevServerService(calls),
-      gitPort: createGitPort({ calls, currentBranch: "odt/task-1", registered: false }),
+      gitPort: createGitPort({ calls, registered: false }),
       settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
       taskWorktreeService: createTaskWorktreeService("/worktrees/repo/task-1"),
       workspaceSettingsService: createWorkspaceSettingsService(),
@@ -502,7 +483,6 @@ describe("TaskService.closeTask", () => {
       gitPort: createGitPort({
         calls,
         branches: [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
-        currentBranch: "odt/task-1",
       }),
       settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
       taskWorktreeService: createTaskWorktreeService("/worktrees/repo/task-1"),
@@ -529,7 +509,6 @@ describe("TaskService.closeTask", () => {
       gitPort: createGitPort({
         calls,
         branches: [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
-        currentBranch: "odt/task-1",
         deleteBranchFails: true,
       }),
       settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
@@ -726,7 +705,6 @@ describe("TaskService.closeTask", () => {
       devServerService: createDevServerService(calls),
       gitPort: createGitPort({
         calls,
-        currentBranch: "odt/task-1-legacy",
       }),
       settingsConfig: createSettingsConfig(new Set(["/repo", "/worktrees/repo/planner-session"])),
       taskWorktreeService: createTaskWorktreeService(null),
