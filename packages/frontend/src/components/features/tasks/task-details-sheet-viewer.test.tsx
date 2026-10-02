@@ -11,8 +11,10 @@ import {
   type TaskSnapshotContextValue,
 } from "@/state/app-state-contexts";
 import { taskQueryKeys, type RepoTaskData } from "@/state/queries/tasks";
+import { finishSheetExit, withSheetAnimations } from "@/test-utils/mock-sheet-animations";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { AgentChatTaskTool } from "../agents/agent-chat/agent-chat-task-tool";
+import { TaskDetailsSheetFrame } from "../task-details/task-details-sheet-frame";
 import TaskDetailsSheetViewer from "./task-details-sheet-viewer";
 
 const activeWorkspace = {
@@ -90,10 +92,13 @@ function createHarness(
       </ActiveWorkspaceContext>
     );
   }
-  const viewer = (
-    <TaskDetailsSheetViewer taskId="task-1" onOpenChange={(open) => closed.push(open)} />
+  const onOpenChange = (open: boolean) => closed.push(open);
+  const sheet = (open: boolean) => (
+    <TaskDetailsSheetFrame open={open} onOpenChange={onOpenChange}>
+      <TaskDetailsSheetViewer taskId="task-1" onOpenChange={onOpenChange} />
+    </TaskDetailsSheetFrame>
   );
-  const h = render(viewer, {
+  const h = render(sheet(true), {
     wrapper: ({ children }) => (
       <QueryProvider useIsolatedClient>
         <Providers>{children}</Providers>
@@ -102,6 +107,7 @@ function createHarness(
   });
   return {
     ...h,
+    sheet,
     closed,
     queryClient: queryClient!,
     dispose: () => {
@@ -124,8 +130,8 @@ test("shows a closeable skeleton while context tasks load, then shows the task",
     expect(h.closed).toEqual([false]);
     snapshot.tasks = [createTaskCardFixture({ id: "task-1", title: "Loaded task" })];
     snapshot.isLoadingTasks = false;
-    h.rerender(<TaskDetailsSheetViewer taskId="task-1" onOpenChange={() => {}} />);
-    await waitFor(() => expect(h.getByRole("dialog", { name: "Loaded task" })).toBeTruthy(), {
+    h.rerender(h.sheet(true));
+    await waitFor(() => expect(h.getByRole("dialog", { name: "Loaded task" })).toBe(dialog), {
       timeout: 700,
     });
     expect(h.queryClient.getQueryState(taskQueryKeys.repoData("/repo-a"))?.fetchStatus).toBe(
@@ -213,7 +219,9 @@ test.each(["failure", "missing"])(
   },
 );
 
-test("Open shows a sheet during lazy loading and closing it keeps it closed", async () => {
+function renderChatTaskTool(
+  snapshot: TaskSnapshotContextValue = { tasks: [], isLoadingTasks: true },
+) {
   const task = {
     id: "task-1",
     title: "Chat-created task",
@@ -228,11 +236,11 @@ test("Open shows a sheet during lazy loading and closing it keeps it closed", as
     qaVerdict: "not_reviewed",
     documents: { hasSpec: false, hasPlan: false, hasQaReport: false },
   };
-  const h = render(
+  return render(
     <QueryProvider useIsolatedClient>
       <ActiveWorkspaceContext value={{ activeWorkspace, setActiveWorkspace: () => {} }}>
         <WorkspaceStateContext value={createWorkspaceState()}>
-          <TaskSnapshotContext value={{ tasks: [], isLoadingTasks: true }}>
+          <TaskSnapshotContext value={snapshot}>
             <AgentChatTaskTool
               tool="create_task"
               timeLabel="now"
@@ -253,6 +261,10 @@ test("Open shows a sheet during lazy loading and closing it keeps it closed", as
       </ActiveWorkspaceContext>
     </QueryProvider>,
   );
+}
+
+test("Open shows a sheet during lazy loading and closing it keeps it closed", async () => {
+  const h = renderChatTaskTool();
   try {
     fireEvent.click(h.getByRole("button", { name: "Open task details" }));
     const dialog = h.getByRole("dialog", { name: "Task Details" });
@@ -264,4 +276,59 @@ test("Open shows a sheet during lazy loading and closing it keeps it closed", as
   } finally {
     h.unmount();
   }
+});
+
+test("closing the chat task sheet plays its exit before removal", async () => {
+  await withSheetAnimations(async () => {
+    const h = renderChatTaskTool();
+    try {
+      fireEvent.click(h.getByRole("button", { name: "Open task details" }));
+      const dialog = h.getByRole("dialog", { name: "Task Details" });
+      const overlay = h.getByLabelText("Close sheet overlay");
+
+      fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+      await act(async () => {});
+      expect(dialog.isConnected).toBe(true);
+      expect(dialog.getAttribute("data-state")).toBe("closed");
+      expect(overlay.isConnected).toBe(true);
+      expect(overlay.getAttribute("data-state")).toBe("closed");
+
+      finishSheetExit();
+      expect(dialog.isConnected).toBe(false);
+      expect(overlay.isConnected).toBe(false);
+
+      fireEvent.click(h.getByRole("button", { name: "Open task details" }));
+      expect(h.getByRole("dialog", { name: "Task Details" })).toBeTruthy();
+    } finally {
+      h.unmount();
+    }
+  });
+});
+
+test("keeps the closing sheet when the task arrives during the exit", async () => {
+  await withSheetAnimations(async () => {
+    const snapshot: TaskSnapshotContextValue = { tasks: [], isLoadingTasks: true };
+    const h = createHarness(snapshot);
+    try {
+      const sheet = h.getByRole("dialog", { name: "Task Details" });
+      const overlay = h.getByLabelText("Close sheet overlay");
+
+      h.rerender(h.sheet(false));
+      snapshot.tasks = [createTaskCardFixture({ id: "task-1", title: "Loaded task" })];
+      snapshot.isLoadingTasks = false;
+      h.rerender(h.sheet(false));
+      expect(sheet.isConnected).toBe(true);
+      expect(sheet.getAttribute("data-state")).toBe("closed");
+      expect(overlay.isConnected).toBe(true);
+
+      finishSheetExit();
+      expect(sheet.isConnected).toBe(false);
+      expect(overlay.isConnected).toBe(false);
+
+      h.rerender(h.sheet(true));
+      expect(h.getByRole("dialog", { name: "Loaded task" })).toBeTruthy();
+    } finally {
+      h.dispose();
+    }
+  });
 });

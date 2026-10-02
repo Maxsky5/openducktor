@@ -14,6 +14,7 @@ import { IssueTypeBadge } from "@/components/features/kanban/issue-type-badge";
 import { PriorityBadge } from "@/components/features/kanban/priority-badge";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
 import { OpenTaskDetailsButton } from "@/components/features/tasks/open-task-details-button";
+import { TaskDetailsSheetFrame } from "@/components/features/task-details/task-details-sheet-frame";
 import { TaskDetailsSheetPlaceholder } from "@/components/features/task-details/task-details-sheet-placeholder";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -147,11 +148,11 @@ const TaskResultCard = ({ task }: { task: PublicTaskSummaryTask }) => {
           )}
         </CardContent>
       </Card>
-      {detailsOpen && (
+      <TaskDetailsSheetFrame open={detailsOpen} onOpenChange={setDetailsOpen}>
         <Suspense fallback={<TaskDetailsSheetPlaceholder onOpenChange={setDetailsOpen} />}>
           <TaskDetailsSheetViewer taskId={task.id} onOpenChange={setDetailsOpen} />
         </Suspense>
-      )}
+      </TaskDetailsSheetFrame>
     </>
   );
 };
