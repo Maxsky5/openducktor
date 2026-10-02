@@ -59,9 +59,9 @@ describe("KanbanColumn", () => {
           Number.parseFloat(
             view.container.querySelector<HTMLElement>("div[style*='min-height']")!.style.minHeight,
           );
-        const normalEstimate = 40 * 180 + 39 * 12;
+        const normalEstimate = 40 * 156 + 39 * 12;
         await frames.flushFrame();
-        expect(totalHeight()).toBe(normalEstimate + 20);
+        expect(totalHeight()).toBe(normalEstimate + 44);
         measuredHeight = 240;
         const historicalSessionsByTaskId: ComponentProps<
           typeof KanbanColumn
@@ -90,7 +90,7 @@ describe("KanbanColumn", () => {
           ),
         );
         await frames.flushFrame();
-        expect(totalHeight()).toBe(normalEstimate + 60);
+        expect(totalHeight()).toBe(normalEstimate + 84);
         measuredHeight = 120;
         await act(async () =>
           view.rerender(

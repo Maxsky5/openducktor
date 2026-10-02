@@ -11,7 +11,7 @@ import {
 import type { CardLayout } from "@/components/features/kanban/kanban-task-footer";
 
 const VIRTUALIZATION_MIN_TASK_COUNT = 30;
-const VIRTUAL_CARD_ESTIMATED_HEIGHT_PX = 180;
+const VIRTUAL_CARD_ESTIMATED_HEIGHT_PX = 156;
 const VIRTUAL_COMPACT_CARD_ESTIMATED_HEIGHT_PX = 116;
 const VIRTUAL_CARD_GAP_PX = 12;
 const VIRTUAL_OVERSCAN_PX = 360;
@@ -68,7 +68,7 @@ export function useKanbanVirtualization({
         ? VIRTUAL_COMPACT_CARD_ESTIMATED_HEIGHT_PX
         : VIRTUAL_CARD_ESTIMATED_HEIGHT_PX;
     // The row replaces 10 px of normal padding or 6 px of compact margin.
-    const estimatedShortcutRowHeight = 24;
+    const estimatedShortcutRowHeight = 22;
     return tasks.map((task) => {
       const measuredHeight =
         canUseMeasuredHeights &&

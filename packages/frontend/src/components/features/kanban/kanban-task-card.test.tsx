@@ -285,7 +285,7 @@ describe("KanbanTaskCard active sessions", () => {
     expect(html).toContain("TASK-8");
     expect(html).toContain("Feature");
     expect(html).toContain("P1");
-    expect(html).toContain(">Open<");
+    expect(html).not.toContain(">Open<");
     expect(html).toContain("lucide-tag");
   });
 
@@ -438,9 +438,7 @@ describe("KanbanTaskCard active sessions", () => {
       ),
     );
 
-    expect(html).toContain(
-      'class="inline-flex size-5 shrink-0 items-center justify-center text-foreground" aria-label="Issue type: Task"',
-    );
+    expect(html).toContain('text-foreground" aria-label="Issue type: Task"');
     expect(html).not.toContain("text-emerald-600");
   });
 });

@@ -74,11 +74,38 @@ describe("Kanban card session shortcuts", () => {
         expect(view.getByRole("button", { name: "Reset Implementation" })).toBeDefined();
         expect(view.queryByRole("button", { name: "Open Planner" })).toBeNull();
         expect(view.queryByRole("button", { name: "Open Builder" })).toBeNull();
+        expect(props.onOpenDetails).not.toHaveBeenCalled();
+        expect(view.queryByRole("button", { name: "Open" })).toBeNull();
+        fireEvent.click(view.getByRole("button", { name: `Open details for ${props.task.title}` }));
+        expect(props.onOpenDetails).toHaveBeenCalledTimes(1);
+        expect(props.onOpenDetails).toHaveBeenCalledWith(props.task.id);
       } finally {
         view.unmount();
       }
     });
   }
+
+  test("opens compact details from type, priority, and title controls", () => {
+    const props = cardProps();
+    props.task = { ...props.task, issueType: "feature", priority: 1 };
+    const view = render(<Card {...props} taskCardView="compact" />);
+    try {
+      for (const name of [
+        "Issue type: Feature",
+        "Priority: High",
+        `Open details for ${props.task.title}`,
+      ]) {
+        fireEvent.click(view.getByRole("button", { name }));
+      }
+      expect(props.onOpenDetails).toHaveBeenCalledTimes(3);
+      expect(props.onOpenDetails).toHaveBeenCalledWith(props.task.id);
+      expect(props.onOpenSession).not.toHaveBeenCalled();
+      expect(props.onDelegate).not.toHaveBeenCalled();
+      expect(props.onPlan).not.toHaveBeenCalled();
+    } finally {
+      view.unmount();
+    }
+  });
 
   test("keeps an unresolved existing-session main action disabled", () => {
     const props = cardProps();
@@ -224,6 +251,7 @@ describe("Kanban card session shortcuts", () => {
         expect(view.getByRole("button", { name }).hasAttribute("disabled")).toBe(true);
       fireEvent.click(view.getByRole("button", { name: "Reset Implementation" }));
       expect(props.onResetImplementation).not.toHaveBeenCalled();
+      expect(props.onOpenDetails).not.toHaveBeenCalled();
       view.rerender(
         <Card
           {...props}

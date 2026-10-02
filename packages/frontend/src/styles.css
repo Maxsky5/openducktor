@@ -723,6 +723,19 @@ html.onboarding-stage-transition::view-transition-new(onboarding-stage-content) 
   z-index: 1;
 }
 
+/* Keep controls above the title button, which covers the card. */
+.kanban-task-card-clickable button:not([data-kanban-control="details"]),
+.kanban-task-card-clickable a {
+  position: relative;
+  z-index: 2;
+}
+
+/* Disabled controls must still block clicks on the card beneath them. */
+.kanban-task-card-clickable button:disabled {
+  pointer-events: auto;
+  cursor: default;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .onboarding-stage-enter,
   .running-status-dot::before,

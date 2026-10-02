@@ -257,20 +257,20 @@ describe("useKanbanVirtualization", () => {
       });
       await harness.update({ tasks, cardLayoutsByTaskId: changedLayouts });
       expect(getVirtualizedRenderModel(harness.getLatest()).totalHeight).toBe(
-        originalHeight + 70 + 24,
+        originalHeight + 94 + 22,
       );
       await harness.run(() => oldReport("task-39", 500));
       expect(getVirtualizedRenderModel(harness.getLatest()).totalHeight).toBe(
-        originalHeight + 70 + 24,
+        originalHeight + 94 + 22,
       );
       const normalReport = harness.getLatest().onMeasuredHeight;
       await harness.update({ tasks, cardLayoutsByTaskId: changedLayouts, taskCardView: "compact" });
-      const compactEstimate = 40 * 116 + 39 * 12 + 24;
+      const compactEstimate = 40 * 116 + 39 * 12 + 22;
       expect(getVirtualizedRenderModel(harness.getLatest()).totalHeight).toBe(compactEstimate);
       await harness.run(() => normalReport("task-39", 500));
       expect(getVirtualizedRenderModel(harness.getLatest()).totalHeight).toBe(compactEstimate);
       await harness.run(() => harness.getLatest().onMeasuredHeight("task-39", 150));
-      expect(getVirtualizedRenderModel(harness.getLatest()).totalHeight).toBe(compactEstimate + 10);
+      expect(getVirtualizedRenderModel(harness.getLatest()).totalHeight).toBe(compactEstimate + 12);
     } finally {
       await harness.unmount();
     }
@@ -292,7 +292,7 @@ describe("useKanbanVirtualization", () => {
 
     const state = harness.getLatest();
     const renderModel = getVirtualizedRenderModel(state);
-    expect(renderModel.totalHeight).toBe(5748);
+    expect(renderModel.totalHeight).toBe(5028);
     expect(renderModel.visibleTasks.length).toBeGreaterThan(0);
     expect(renderModel.visibleTasks[0]?.id).toBe("task-0");
 
@@ -310,7 +310,7 @@ describe("useKanbanVirtualization", () => {
     });
 
     const resizedTotalHeight = getVirtualizedRenderModel(harness.getLatest()).totalHeight;
-    expect(resizedTotalHeight - initialTotalHeight).toBe(120);
+    expect(resizedTotalHeight - initialTotalHeight).toBe(144);
 
     await harness.run(() => {
       harness.getLatest().onMeasuredHeight("task-0", 300);
@@ -412,7 +412,7 @@ describe("useKanbanVirtualization", () => {
       harness.getLatest().onMeasuredHeight("task-29", 300);
     });
     expect(getVirtualizedRenderModel(harness.getLatest()).totalHeight - initialTotalHeight).toBe(
-      120,
+      144,
     );
 
     await harness.update({ tasks: createTasks(29) });
