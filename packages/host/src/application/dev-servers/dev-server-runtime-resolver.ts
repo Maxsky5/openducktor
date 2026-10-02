@@ -13,11 +13,11 @@ import {
   type DevServerGroupRuntime,
   nowIso,
   syncGroupState,
-  syncRuntimeTerminalBufferByteCounts,
+  syncRuntimeTerminalSources,
 } from "./dev-server-state";
 import type { DevServerProcessHandle } from "../../ports/dev-server-process-port";
 
-export type RetiredDevServerOrder = { revision: number | null; runGeneration: number };
+export type RetiredDevServerOrder = { revision: number | null };
 
 type ResolverDependencies = {
   groups: Map<string, Map<string, DevServerGroupRuntime>>;
@@ -56,7 +56,7 @@ export const createDevServerRuntimeResolver = ({
           activeDirectory,
           existing.unresolvedStops,
         );
-        syncRuntimeTerminalBufferByteCounts(existing);
+        syncRuntimeTerminalSources(existing);
         return existing;
       }
       const state = buildGroupState(repoConfig, owner, workingDirectory, nowIso());
@@ -65,9 +65,7 @@ export const createDevServerRuntimeResolver = ({
         processes: new Map<string, DevServerProcessHandle>(),
         unresolvedStops: new Set<string>(),
         state,
-        terminalBufferedBytesByScriptId: new Map<string, number>(),
-        terminalNextSequenceByScriptId: new Map<string, number>(),
-        terminalRunGeneration: retiredOrder.runGeneration,
+        terminalOutputs: new Map(),
       };
       repoGroups.set(ownerKey, runtime);
       groups.set(repoConfig.repoPath, repoGroups);

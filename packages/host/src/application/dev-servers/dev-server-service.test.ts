@@ -1,5 +1,6 @@
 import {
   devServerOwnerSchema,
+  type DevServerGroupState,
   type HostEventEnvelope,
   type RepoConfig,
   type TaskWorktreeSummary,
@@ -26,9 +27,51 @@ import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/ser
 import { createWorkspaceSessionOperationGate } from "../workspaces/workspace-session-operation-gate";
 import { createWorkspaceAdmissionService } from "../workspaces/workspace-admission-service";
 
-const createDevServerService = (input: Parameters<typeof createEffectDevServerService>[0]) =>
-  createEffectDevServerService(input);
-type TestDevServerService = ReturnType<typeof createDevServerService>;
+import type { TerminalOutputSourcePort } from "../../ports/terminal-output-source-port";
+import type { TerminalProducerHandle } from "../../ports/terminal-pty-port";
+
+type TestDevServerService = ReturnType<typeof createEffectDevServerService>;
+const outputByService = new WeakMap<TestDevServerService, Map<string, string[]>>();
+const producersByService = new WeakMap<TestDevServerService, TerminalProducerHandle[]>();
+const createDevServerService = (input: Parameters<typeof createEffectDevServerService>[0]) => {
+  const outputs = new Map<string, string[]>();
+  const producers: TerminalProducerHandle[] = [];
+  const terminalSources: TerminalOutputSourcePort = {
+    openOutputSource: ({ onForgotten }) =>
+      Effect.sync(() => {
+        const terminalId = `terminal-output:${outputs.size}`;
+        const data: string[] = [];
+        outputs.set(terminalId, data);
+        let ended = false;
+        return {
+          terminalId,
+          write: (bytes) => {
+            if (!ended) data.push(new TextDecoder().decode(bytes));
+          },
+          activate: (handle) =>
+            Effect.sync(() => {
+              producers.push(handle);
+            }),
+          exit: () => {
+            ended = true;
+          },
+          release: () => {
+            ended = true;
+            onForgotten();
+          },
+        };
+      }),
+  };
+  const service = createEffectDevServerService({ terminalSources, ...input });
+  outputByService.set(service, outputs);
+  producersByService.set(service, producers);
+  return service;
+};
+const readOutput = (service: TestDevServerService, state: DevServerGroupState): string[] => {
+  const terminalId = state.scripts[0]?.terminalId;
+  if (!terminalId) throw new Error("Expected a dev server terminal ID.");
+  return outputByService.get(service)?.get(terminalId) ?? [];
+};
 const repoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   workspaceId: "repo",
   workspaceName: "Repo",
@@ -157,6 +200,9 @@ const createProcessPort = () => {
       input.onOutput({ data: "ready\n" });
       const handle: DevServerProcessHandle = {
         pid,
+        waitForReady: () => Effect.void,
+        pauseOutput: () => Effect.void,
+        resumeOutput: () => Effect.void,
         stop() {
           return Effect.try({
             try: () => {
@@ -251,7 +297,7 @@ describe("createDevServerService", () => {
           startedAt: null,
           exitCode: null,
           lastError: null,
-          bufferedTerminalChunks: [],
+          terminalId: null,
         },
       ],
       updatedAt: expect.any(String),
@@ -297,16 +343,7 @@ describe("createDevServerService", () => {
           status: "running",
           pid: 400,
           startedCommand: "bun run dev",
-          bufferedTerminalChunks: [
-            {
-              data: "Starting `bun run dev`\r\n",
-              sequence: 0,
-            },
-            {
-              data: "ready\r\n",
-              sequence: 1,
-            },
-          ],
+          terminalId: expect.any(String),
         },
       ],
     });
@@ -329,114 +366,12 @@ describe("createDevServerService", () => {
         }),
         expect.objectContaining({
           channel: "openducktor://dev-server-event",
-          payload: expect.objectContaining({ type: "terminal_chunk" }),
-        }),
-        expect.objectContaining({
-          channel: "openducktor://dev-server-event",
           payload: expect.objectContaining({ type: "script_status_changed" }),
         }),
       ]),
     );
   });
-  test("trims buffered terminal output to the chunk limit", async () => {
-    const processPort: DevServerProcessPort = {
-      start(input) {
-        for (let index = 0; index < 2_005; index += 1) {
-          input.onOutput({ data: `line-${index}\n` });
-        }
 
-        return Effect.succeed({
-          pid: 410,
-          stop: () => Effect.succeed(undefined),
-        });
-      },
-    };
-    const service = createDevServerService({
-      processPort,
-      taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
-      workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
-    });
-
-    const state = await Effect.runPromise(
-      service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
-    );
-    const chunks = state.scripts[0]?.bufferedTerminalChunks ?? [];
-
-    expect(chunks).toHaveLength(2_000);
-    expect(chunks[0]).toMatchObject({ sequence: 6, data: "line-5\r\n" });
-    expect(chunks.at(-1)).toMatchObject({ sequence: 2005, data: "line-2004\r\n" });
-  });
-  test("trims buffered terminal output to the byte limit", async () => {
-    const halfLimitChunk = "x".repeat(256 * 1024);
-    const processPort: DevServerProcessPort = {
-      start(input) {
-        input.onOutput({ data: halfLimitChunk });
-        input.onOutput({ data: halfLimitChunk });
-        input.onOutput({ data: halfLimitChunk });
-
-        return Effect.succeed({
-          pid: 411,
-          stop: () => Effect.succeed(undefined),
-        });
-      },
-    };
-    const service = createDevServerService({
-      processPort,
-      taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
-      workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
-    });
-
-    const state = await Effect.runPromise(
-      service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
-    );
-    const chunks = state.scripts[0]?.bufferedTerminalChunks ?? [];
-
-    expect(chunks.map((chunk) => chunk.sequence)).toEqual([2, 3]);
-    expect(chunks.reduce((total, chunk) => total + chunk.data.length, 0)).toBe(512 * 1024);
-  });
-  test("keeps terminal sequences increasing after an oversized chunk empties replay", async () => {
-    const { eventBus, events } = createEventBus();
-    const oversizedChunk = "x".repeat(600 * 1024);
-    const processPort: DevServerProcessPort = {
-      start(input) {
-        input.onOutput({ data: oversizedChunk });
-        input.onOutput({ data: "still live\n" });
-
-        return Effect.succeed({
-          pid: 413,
-          stop: () => Effect.succeed(undefined),
-        });
-      },
-    };
-    const service = createDevServerService({
-      eventBus,
-      processPort,
-      taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
-      workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
-    });
-
-    const state = await Effect.runPromise(
-      service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
-    );
-    const terminalChunkPayloadSchema = z.object({
-      type: z.literal("terminal_chunk"),
-      terminalChunk: z.object({ data: z.string(), sequence: z.number() }),
-    });
-    const terminalChunks = events
-      .map((event) => terminalChunkPayloadSchema.safeParse(event.payload))
-      .filter((payload) => payload.success)
-      .map((payload) => payload.data.terminalChunk);
-
-    expect(terminalChunks.map((chunk) => chunk.sequence)).toEqual([0, 1, 2]);
-    expect(terminalChunks.map((chunk) => chunk.data)).toEqual([
-      "Starting `bun run dev`\r\n",
-      oversizedChunk,
-      "still live\r\n",
-    ]);
-    expect(state.scripts[0]?.bufferedTerminalChunks.map((chunk) => chunk.data)).toEqual([
-      "still live\r\n",
-    ]);
-  });
   test("rejects duplicate starts while a script is running", async () => {
     const { processPort } = createProcessPort();
     const service = createDevServerService({
@@ -588,6 +523,9 @@ describe("createDevServerService", () => {
         }
         return Effect.succeed({
           pid: 501,
+          waitForReady: () => Effect.void,
+          pauseOutput: () => Effect.void,
+          resumeOutput: () => Effect.void,
           stop: () =>
             Effect.sync(() => {
               stoppedPids.push(501);
@@ -662,6 +600,9 @@ describe("createDevServerService", () => {
         }
         return Effect.succeed({
           pid: 501,
+          waitForReady: () => Effect.void,
+          pauseOutput: () => Effect.void,
+          resumeOutput: () => Effect.void,
           stop: () =>
             Effect.fail(
               new HostOperationError({
@@ -728,6 +669,9 @@ describe("createDevServerService", () => {
         input.onExit({ pid: 601, exitCode: 9, signal: null, error: null });
         return Effect.succeed({
           pid: 601,
+          waitForReady: () => Effect.void,
+          pauseOutput: () => Effect.void,
+          resumeOutput: () => Effect.void,
           stop: () => Effect.succeed(undefined),
         });
       },
@@ -749,7 +693,16 @@ describe("createDevServerService", () => {
         },
       ],
       repoPath: "/repo",
-      stoppedScripts: [],
+      stoppedScripts: [
+        {
+          command: "bun run dev",
+          name: "Web",
+          pid: 601,
+          repoPath: "/canonical/repo",
+          scriptId: "web",
+          owner: { kind: "task", taskId: "task-1" },
+        },
+      ],
       owner: { kind: "task", taskId: "task-1" },
     });
     await expect(
@@ -795,6 +748,9 @@ describe("createDevServerService", () => {
 
         return Effect.succeed({
           pid: 412,
+          waitForReady: () => Effect.void,
+          pauseOutput: () => Effect.void,
+          resumeOutput: () => Effect.void,
           stop: () =>
             Effect.sync(() => {
               stoppedPids.push(412);
@@ -818,25 +774,37 @@ describe("createDevServerService", () => {
     );
 
     expect(stoppedPids).toEqual([412]);
-    expect(state.scripts[0]?.bufferedTerminalChunks.map((chunk) => chunk.data)).toEqual([
+    expect(readOutput(service, state)).toEqual([
       "Starting `bun run dev`\r\n",
-      "ready\r\n",
-      "closing dev server\r\n",
+      "ready\n",
+      "closing dev server\n",
     ]);
     expect(state.scripts[0]).toMatchObject({ status: "stopped", pid: null });
   });
-  test("discards output from a stopped process after its replacement run starts", async () => {
+  test("ignores callbacks from a stopped process after its replacement source starts", async () => {
     const starts: DevServerProcessStartInput[] = [];
+    let oldStopFails = false;
     const processPort: DevServerProcessPort = {
       start(input) {
         starts.push(input);
         const pid = 700;
         return Effect.succeed({
           pid,
-          stop: () =>
-            Effect.sync(() => {
+          waitForReady: () => Effect.void,
+          pauseOutput: () => Effect.void,
+          resumeOutput: () => Effect.void,
+          stop: () => {
+            if (oldStopFails && input === starts[0])
+              return Effect.fail(
+                new HostOperationError({
+                  operation: "dev_server.stop",
+                  message: "Old process stop failed.",
+                }),
+              );
+            return Effect.sync(() => {
               input.onExit({ pid, exitCode: 0, signal: null, error: null });
-            }),
+            });
+          },
         });
       },
     };
@@ -848,7 +816,7 @@ describe("createDevServerService", () => {
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
     });
 
-    await Effect.runPromise(
+    const first = await Effect.runPromise(
       service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
     );
     await Effect.runPromise(
@@ -859,40 +827,20 @@ describe("createDevServerService", () => {
     );
     starts[0]?.onOutput({ data: "LATE-OLD\n" });
     starts[0]?.onExit({ pid: 700, exitCode: 9, signal: null, error: null });
+    oldStopFails = true;
+    const oldProducer = producersByService.get(service)?.[0];
+    if (!oldProducer) throw new Error("Expected the first terminal producer.");
+    await expect(Effect.runPromise(oldProducer.terminate())).rejects.toThrow(
+      "Old process stop failed.",
+    );
 
     const state = await Effect.runPromise(
       service.getState({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
     );
-    expect(
-      state.scripts[0]?.bufferedTerminalChunks.some((chunk) => chunk.data.includes("LATE-OLD")),
-    ).toBe(false);
+    expect(readOutput(service, state).some((data) => data.includes("LATE-OLD"))).toBe(false);
     expect(events.some((event) => JSON.stringify(event.payload).includes("LATE-OLD"))).toBe(false);
-    expect(state.scripts[0]).toMatchObject({ status: "running", pid: 700 });
-  });
-  test("uses a distinct run epoch after the host service is replaced", async () => {
-    const createStartedService = async () => {
-      const { processPort } = createProcessPort();
-      const service = createDevServerService({
-        processPort,
-        taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
-        workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
-      });
-      return Effect.runPromise(
-        service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
-      );
-    };
-
-    const firstState = await createStartedService();
-    const replacementState = await createStartedService();
-    const firstRun = firstState.scripts[0];
-    const replacementRun = replacementState.scripts[0];
-
-    expect(firstRun?.runIdentity?.runOrder.generation).toBe(1);
-    expect(replacementRun?.runIdentity?.runOrder.generation).toBe(1);
-    expect(replacementRun?.runIdentity?.runOrder.hostInstanceId).not.toBe(
-      firstRun?.runIdentity?.runOrder.hostInstanceId,
-    );
-    expect(replacementRun?.runIdentity?.runId).not.toBe(firstRun?.runIdentity?.runId);
+    expect(state.scripts[0]).toMatchObject({ status: "running", pid: 700, lastError: null });
+    expect(state.scripts[0]?.terminalId).not.toBe(first.scripts[0]?.terminalId);
   });
   test("keeps runtime ownership isolated for delimiter-colliding repo and task strings", async () => {
     const { processPort, starts } = createProcessPort();
@@ -1035,6 +983,9 @@ describe("createDevServerService", () => {
         nextPid += 1;
         return Effect.succeed({
           pid,
+          waitForReady: () => Effect.void,
+          pauseOutput: () => Effect.void,
+          resumeOutput: () => Effect.void,
           stop: () =>
             Effect.promise(async () => {
               stopCalls.push(pid);
@@ -1129,7 +1080,7 @@ describe("createDevServerService", () => {
     expect(starts.map((start) => start.cwd)).toEqual(["/repo", "/repo", "/worktrees/worktree"]);
     expect(first.workingDirectory).toBe("/repo");
     expect(third.workingDirectory).toBe("/worktrees/worktree");
-    expect(first.scripts[0]?.runIdentity?.runId).not.toBe(second.scripts[0]?.runIdentity?.runId);
+    expect(first.scripts[0]?.terminalId).not.toBe(second.scripts[0]?.terminalId);
     await Effect.runPromise(
       service.stop({
         repoPath: "/repo",
@@ -1216,12 +1167,7 @@ describe("createDevServerService", () => {
     const restored = await Effect.runPromise(service.getState({ repoPath: "/repo", owner: first }));
     expect(restored.revision).toBeGreaterThan(stopped.revision);
     const nextRun = await Effect.runPromise(service.start({ repoPath: "/repo", owner: first }));
-    expect(nextRun.scripts[0]?.runIdentity?.runOrder.generation).toBeGreaterThan(
-      firstRun.scripts[0]?.runIdentity?.runOrder.generation ?? 0,
-    );
-    expect(nextRun.scripts[0]?.runIdentity?.runId).not.toBe(
-      firstRun.scripts[0]?.runIdentity?.runId,
-    );
+    expect(nextRun.scripts[0]?.terminalId).not.toBe(firstRun.scripts[0]?.terminalId);
     expect(
       (await Effect.runPromise(service.getState({ repoPath: "/repo", owner: second }))).scripts[0]
         ?.status,
@@ -1313,6 +1259,9 @@ describe("createDevServerService", () => {
       start: () =>
         Effect.succeed({
           pid: 501,
+          waitForReady: () => Effect.void,
+          pauseOutput: () => Effect.void,
+          resumeOutput: () => Effect.void,
           stop: () =>
             Effect.fail(
               new HostOperationError({ operation: "test.stop", message: "permission denied" }),

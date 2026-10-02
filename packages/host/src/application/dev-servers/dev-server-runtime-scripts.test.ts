@@ -34,9 +34,7 @@ const createRuntime = (): DevServerGroupRuntime => ({
     "/worktrees/task-1",
     "2026-05-24T00:00:00.000Z",
   ),
-  terminalBufferedBytesByScriptId: new Map(),
-  terminalNextSequenceByScriptId: new Map(),
-  terminalRunGeneration: 0,
+  terminalOutputs: new Map(),
 });
 
 const updateScriptState: UpdateScriptState = (runtime, scriptId, update) => {
@@ -87,10 +85,16 @@ describe("dev-server runtime script helpers", () => {
     const script = requireScript(runtime, "web");
     const replacementHandle: DevServerProcessHandle = {
       pid: 402,
+      waitForReady: () => Effect.void,
+      pauseOutput: () => Effect.void,
+      resumeOutput: () => Effect.void,
       stop: () => Effect.succeed(undefined),
     };
     const stoppedHandle: DevServerProcessHandle = {
       pid: 401,
+      waitForReady: () => Effect.void,
+      pauseOutput: () => Effect.void,
+      resumeOutput: () => Effect.void,
       stop: () =>
         Effect.sync(() => {
           runtime.processes.set("web", replacementHandle);
@@ -127,10 +131,7 @@ describe("dev-server runtime script helpers", () => {
     script.command = "bun run dev:next";
     script.startedCommand = "bun run dev";
     script.status = "running";
-    script.runIdentity = {
-      runId: "web:1",
-      runOrder: { hostInstanceId: "host-1", generation: 1 },
-    };
+    script.terminalId = "terminal-1";
     script.pid = 401;
     script.startedAt = "2026-05-24T00:00:00.000Z";
 
@@ -150,10 +151,7 @@ describe("dev-server runtime script helpers", () => {
     const runtime = createRuntime();
     const script = requireScript(runtime, "web");
     script.status = "running";
-    script.runIdentity = {
-      runId: "web:1",
-      runOrder: { hostInstanceId: "host-1", generation: 1 },
-    };
+    script.terminalId = "terminal-1";
     script.pid = 401;
 
     let caught: unknown;

@@ -14,6 +14,12 @@ const createDevServerProcessAdapter = (
   return {
     start: async (...startArgs: Parameters<typeof port.start>) => {
       const handle = await Effect.runPromise(port.start(...startArgs));
+      try {
+        await Effect.runPromise(handle.waitForReady());
+      } catch (cause) {
+        await Effect.runPromise(handle.stop());
+        throw cause;
+      }
       return {
         ...handle,
         stop: () => Effect.runPromise(handle.stop()),
@@ -71,6 +77,92 @@ const firstFailure = async <A, E>(effect: Effect.Effect<A, E>): Promise<E | null
 };
 
 describe("createDevServerProcessAdapter", () => {
+  test("decodes split UTF-8 independently on stdout and stderr", async () => {
+    const root = await mkdtemp(join(tmpdir(), "odt-dev-server-utf8-"));
+    const scriptPath = join(root, "server.mjs");
+    await writeFile(
+      scriptPath,
+      `
+process.stdout.write(Buffer.from([0xf0, 0x9f]));
+process.stderr.write(Buffer.from([0xe2]));
+setTimeout(() => {
+  process.stdout.write(Buffer.from([0x98, 0x80]));
+  process.stderr.write(Buffer.from([0x98, 0x83]));
+}, 30);
+setInterval(() => {}, 1000);
+`,
+    );
+    const port = createDevServerProcessAdapter({ startGracePeriodMs: 20, stopTimeoutMs: 750 });
+    const output: string[] = [];
+    let handle: Awaited<ReturnType<typeof port.start>> | null = null;
+    try {
+      handle = await port.start({
+        command: `${quoteShellCommandArgForTest(process.execPath)} ${quoteShellCommandArgForTest(scriptPath)}`,
+        cwd: root,
+        onExit: () => {},
+        onOutput: (chunk) => output.push(chunk.data),
+      });
+      await waitFor(() => output.length >= 2);
+      expect(output.join("")).toContain("😀");
+      expect(output.join("")).toContain("☃");
+      expect(output.join("")).not.toContain("�");
+    } finally {
+      await handle?.stop();
+      await removeTempRoot(root);
+    }
+  });
+  test.skipIf(process.platform === "win32")(
+    "pauses before readiness and drains stdout and stderr before exit",
+    async () => {
+      const root = await mkdtemp(join(tmpdir(), "odt-dev-server-pause-"));
+      const scriptPath = join(root, "server.mjs");
+      const marker = join(root, "installed");
+      await writeFile(
+        scriptPath,
+        `
+import { writeFileSync } from "node:fs";
+process.on("SIGTERM", () => {
+  process.stderr.write("closing stderr\\n");
+  process.stdout.write("closing stdout\\n", () => process.exit(0));
+});
+writeFileSync(${JSON.stringify(marker)}, "installed");
+process.stdout.write("ready stdout\\n");
+process.stderr.write("ready stderr\\n");
+setInterval(() => {}, 1000);
+`,
+      );
+      const port = createEffectDevServerProcessAdapter({
+        startGracePeriodMs: 100,
+        stopTimeoutMs: 750,
+      });
+      const outputs: string[] = [];
+      const exits: unknown[] = [];
+      const handle = await Effect.runPromise(
+        port.start({
+          command: `exec ${quoteShellCommandArgForTest(process.execPath)} ${quoteShellCommandArgForTest(scriptPath)}`,
+          cwd: root,
+          onOutput: ({ data }) => outputs.push(data),
+          onExit: (exit) => exits.push(exit),
+        }),
+      );
+      try {
+        await Effect.runPromise(handle.pauseOutput());
+        await waitFor(() => existsSync(marker), 1_000);
+        await Effect.runPromise(handle.waitForReady());
+        expect(outputs).toEqual([]);
+        await Effect.runPromise(handle.stop());
+        expect(outputs.join("")).toContain("ready stdout\n");
+        expect(outputs.join("")).toContain("ready stderr\n");
+        expect(outputs.join("")).toContain("closing stdout\n");
+        expect(outputs.join("")).toContain("closing stderr\n");
+        expect(exits).toEqual([expect.objectContaining({ pid: handle.pid, exitCode: 0 })]);
+      } finally {
+        await Effect.runPromise(handle.stop());
+        await removeTempRoot(root);
+      }
+    },
+  );
+
   test("starts a command, streams stdout and stderr, propagates env, and uses cwd with spaces", async () => {
     const outputs: string[] = [];
     const exits: unknown[] = [];
@@ -334,7 +426,7 @@ setInterval(() => {}, 1000);
     const scriptPath = join(root, "server.mjs");
     await writeFile(
       scriptPath,
-      'process.on("SIGTERM", () => {}); process.stdout.write("ready"); setInterval(() => {}, 1000);',
+      'process.on("SIGTERM", () => {}); process.stdout.write("ready"); setInterval(() => process.stdout.write("tick"), 10);',
     );
     const port = createEffectDevServerProcessAdapter({
       startGracePeriodMs: 20,
@@ -356,10 +448,14 @@ setInterval(() => {}, 1000);
       pid = handle.pid;
       await waitFor(() => output.join("").includes("ready"), 1_000);
 
+      await Effect.runPromise(handle.pauseOutput());
       await expect(
         Effect.runPromise(handle.stop().pipe(Effect.timeout("50 millis"))),
       ).rejects.toThrow("timed out");
       expect(processIsAlive(handle.pid)).toBe(true);
+      const afterInterruptedStop = output.join("");
+      await Bun.sleep(80);
+      expect(output.join("")).toBe(afterInterruptedStop);
 
       await Effect.runPromise(handle.stop());
       await waitFor(() => !processIsAlive(handle.pid), 1_000);
@@ -431,12 +527,14 @@ setInterval(() => {}, 1000);
     });
     const command = "definitely-missing-dev-server-command-odt-wr4e --flag";
     const failure = await firstFailure(
-      port.start({
-        command,
-        cwd: process.cwd(),
-        onExit: () => {},
-        onOutput: () => {},
-      }),
+      port
+        .start({
+          command,
+          cwd: process.cwd(),
+          onExit: () => {},
+          onOutput: () => {},
+        })
+        .pipe(Effect.flatMap((handle) => handle.waitForReady())),
     );
 
     expect(failure).toMatchObject({

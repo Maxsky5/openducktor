@@ -6,14 +6,14 @@ import {
   createFileListFixture,
 } from "@/test-utils/focused-fixture";
 import { TERMINAL_PROTOCOL_VERSION } from "@openducktor/contracts";
+import { createTerminalOutputSequencer } from "./terminal-output-sequencer";
 import {
   createLatestResizeScheduler,
   createLiveTerminalFitScheduler,
   createTerminalInputSequencer,
-  createTerminalOutputSequencer,
   createTerminalViewportActivator,
   handleTerminalMetadataFrame,
-} from "./interactive-terminal-policy";
+} from "./terminal-viewport-policy";
 import {
   createTerminalImagePasteHandler,
   extractTransferredImageFiles,
@@ -433,7 +433,7 @@ describe("InteractiveTerminal policies", () => {
     expect(grids).toEqual(["120x40"]);
   });
 
-  test("fits only the active terminal once per animation frame", () => {
+  test("bounds active terminal reflows during resize and flushes before input", () => {
     const frames = new Map<number, FrameRequestCallback>();
     const cancelledFrames: number[] = [];
     const fitEvents: string[] = [];
@@ -468,17 +468,35 @@ describe("InteractiveTerminal policies", () => {
     expect(fitEvents).toEqual(["fit"]);
 
     scheduler.schedule();
-    active = false;
-    const hiddenFrame = frames.get(1);
-    if (!hiddenFrame) throw new Error("Expected a scheduled animation frame.");
+    const earlyFrame = frames.get(1);
+    if (!earlyFrame) throw new Error("Expected a scheduled animation frame.");
     frames.delete(1);
-    hiddenFrame(0);
+    earlyFrame(16);
     expect(fitEvents).toEqual(["fit"]);
+    expect(frames.size).toBe(1);
+    const dueFrame = frames.get(2);
+    if (!dueFrame) throw new Error("Expected a pending fit.");
+    frames.delete(2);
+    dueFrame(100);
+    expect(fitEvents).toEqual(["fit", "fit"]);
+    scheduler.schedule();
+    scheduler.flush();
+    expect(fitEvents).toEqual(["fit", "fit", "fit"]);
+    expect(cancelledFrames).toEqual([3]);
+    expect(frames.size).toBe(0);
+
+    scheduler.schedule();
+    active = false;
+    const hiddenFrame = frames.get(4);
+    if (!hiddenFrame) throw new Error("Expected a scheduled animation frame.");
+    frames.delete(4);
+    hiddenFrame(0);
+    expect(fitEvents).toEqual(["fit", "fit", "fit"]);
 
     active = true;
     scheduler.schedule();
     scheduler.dispose();
-    expect(cancelledFrames).toEqual([2]);
+    expect(cancelledFrames).toEqual([3, 5]);
     expect(frames.size).toBe(0);
   });
 
@@ -657,6 +675,109 @@ describe("InteractiveTerminal policies", () => {
     parsedCallback();
     await completed;
     expect(acknowledgements).toEqual([2]);
+  });
+
+  test("submits a TUI burst without waiting for each parser callback", async () => {
+    const callbacks: Array<() => void> = [];
+    const writes: Uint8Array[] = [];
+    const acknowledgements: number[] = [];
+    const sequencer = createTerminalOutputSequencer({
+      write: (payload, parsed) => {
+        writes.push(payload);
+        callbacks.push(parsed);
+      },
+      onConsumed: (sequence) => acknowledgements.push(sequence),
+    });
+    const encoder = new TextEncoder();
+    const chunks = [
+      "prompt\r\n\u001b[?1049h",
+      ...Array.from({ length: 100 }, (_, i) => `\u001b[Hframe ${i}`),
+      "\u001b[?1049lready\r\n",
+    ];
+    let sequence = 0;
+    const pending = chunks.map((chunk) => {
+      const payload = encoder.encode(chunk);
+      const start = sequence;
+      sequence += payload.byteLength;
+      return sequencer.enqueue({ sequenceStart: start, sequenceEnd: sequence }, payload);
+    });
+    await Promise.resolve();
+    expect(
+      new TextDecoder().decode(Uint8Array.from(writes.flatMap((payload) => [...payload]))),
+    ).toBe(chunks.join(""));
+    expect(acknowledgements).toEqual([]);
+    for (const callback of callbacks) callback();
+    await Promise.all(pending);
+    expect(acknowledgements.at(-1)).toBe(sequence);
+    expect(acknowledgements).toEqual([sequence]);
+  });
+
+  test("deduplicates overlapping in-flight output before the ACK", async () => {
+    const callbacks: Array<() => void> = [];
+    const writes: number[][] = [];
+    const acknowledgements: number[] = [];
+    const sequencer = createTerminalOutputSequencer({
+      write: (payload, callback) => {
+        writes.push([...payload]);
+        callbacks.push(callback);
+      },
+      onConsumed: (sequence) => acknowledgements.push(sequence),
+    });
+    const first = sequencer.enqueue({ sequenceStart: 0, sequenceEnd: 2 }, new Uint8Array([1, 2]));
+    const overlap = sequencer.enqueue(
+      { sequenceStart: 1, sequenceEnd: 4 },
+      new Uint8Array([2, 3, 4]),
+    );
+    expect(writes).toEqual([
+      [1, 2],
+      [3, 4],
+    ]);
+    expect(acknowledgements).toEqual([]);
+    for (const callback of callbacks) callback();
+    await Promise.all([first, overlap]);
+    expect(acknowledgements).toEqual([4]);
+  });
+
+  test("stops output admission on a byte gap", async () => {
+    const writes: Uint8Array[] = [];
+    const sequencer = createTerminalOutputSequencer({
+      write: (payload, callback) => {
+        writes.push(payload);
+        callback();
+      },
+      onConsumed: () => undefined,
+    });
+    await expect(
+      sequencer.enqueue({ sequenceStart: 2, sequenceEnd: 3 }, new Uint8Array([3])),
+    ).rejects.toThrow("byte gap");
+    await expect(
+      sequencer.enqueue({ sequenceStart: 0, sequenceEnd: 2 }, new Uint8Array([1, 2])),
+    ).rejects.toThrow("byte gap");
+    expect(writes).toEqual([]);
+  });
+
+  test("does not restore or acknowledge after its emulator is disposed", async () => {
+    const callbacks: Array<() => void> = [];
+    const events: string[] = [];
+    const sequencer = createTerminalOutputSequencer({
+      write: (_payload, callback) => {
+        callbacks.push(callback);
+        events.push("write");
+      },
+      onConsumed: () => events.push("ack"),
+      onHydrated: () => events.push("hydrated"),
+    });
+    const output = sequencer.enqueue({ sequenceStart: 0, sequenceEnd: 1 }, new Uint8Array([1]));
+    const restore = sequencer.restore(
+      2,
+      new Uint8Array([2]),
+      () => events.push("reset"),
+      () => events.push("restored"),
+    );
+    sequencer.dispose();
+    callbacks[0]?.();
+    await Promise.all([output, restore]);
+    expect(events).toEqual(["write"]);
   });
 
   test("reveals a restored terminal only after its snapshot has been fully parsed", async () => {

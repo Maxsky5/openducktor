@@ -37,12 +37,13 @@ export class TerminalScreenState {
   private writing = false;
   private pendingBytes = 0;
 
-  constructor(grid: TerminalGrid) {
+  constructor(grid: TerminalGrid, convertEol = false) {
     this.terminal = new Terminal({
       cols: grid.columns,
       rows: grid.rows,
       scrollback: SCREEN_SCROLLBACK_ROWS,
       allowProposedApi: true,
+      convertEol,
     });
     this.terminal.loadAddon(this.serializer);
     // SAFETY: xterm 6.0.0 emits parsed OSC color changes from this internal handler.

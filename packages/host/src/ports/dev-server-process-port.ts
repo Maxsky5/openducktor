@@ -22,9 +22,14 @@ export type DevServerProcessStartInput = {
 };
 export type DevServerProcessHandle = {
   pid: number;
+  // Readiness does not release the handle. The owner must stop it after failure or cancellation.
+  waitForReady(): Effect.Effect<void, DevServerProcessStartExitError | HostOperationErrorAggregate>;
+  pauseOutput(): Effect.Effect<void, HostOperationErrorAggregate>;
+  resumeOutput(): Effect.Effect<void, HostOperationErrorAggregate>;
   stop(): Effect.Effect<void, HostOperationErrorAggregate>;
 };
 export type DevServerProcessPort = {
+  // Return the owned handle after spawn so flow control is active before the readiness wait.
   start(
     input: DevServerProcessStartInput,
   ): Effect.Effect<

@@ -191,9 +191,9 @@ function Header({ model, headerLeading, onCloseTab }: HeaderProps): ReactElement
   );
 }
 
-const LazyInteractiveTerminal = lazy(async () => {
-  const module = await import("./interactive-terminal");
-  return { default: module.InteractiveTerminal };
+const LazyTerminalViewport = lazy(async () => {
+  const module = await import("./terminal-viewport");
+  return { default: module.TerminalViewport };
 });
 
 const TerminalViewport = memo(function TerminalViewport({
@@ -284,7 +284,8 @@ const TerminalViewport = memo(function TerminalViewport({
             />
           }
         >
-          <LazyInteractiveTerminal
+          <LazyTerminalViewport
+            mode="interactive"
             terminalId={tab.terminalId}
             controller={controller}
             platform={platform}

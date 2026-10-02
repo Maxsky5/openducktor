@@ -23,13 +23,11 @@ import { useAgentStudioDevServerPanelSelection } from "./use-agent-studio-dev-se
 import {
   type DevServerPanelAction,
   devServerPanelReducer,
-  type TerminalBuffers,
   useDevServerEventStateSync,
-  useDevServerQueryHydration,
+  useDevServerScopeReset,
   useDevServerSubscription,
 } from "./use-agent-studio-dev-server-panel-state";
 import { useAgentStudioDevServerStateQuery } from "./use-agent-studio-dev-server-state-query";
-import { useAgentStudioDevServerTerminalBuffers } from "./use-agent-studio-dev-server-terminal-buffers";
 
 export {
   applyDevServerEventToState,
@@ -59,15 +57,13 @@ export function useAgentStudioDevServerPanel({
   const queryClient = useQueryClient();
   const layoutMemory = getLayoutMemory(queryClient);
   const [localState, dispatchLocalState] = useReducer(devServerPanelReducer, {
-    liveState: null,
     actionError: null,
     subscriptionError: null,
     subscribedScopeKey: null,
     transportEpoch: null,
   });
   const [retryCount, retrySubscription] = useReducer((count: number) => count + 1, 0);
-  const { liveState, actionError, subscriptionError, subscribedScopeKey, transportEpoch } =
-    localState;
+  const { actionError, subscriptionError, subscribedScopeKey, transportEpoch } = localState;
   const transportEpochRef = useRef(transportEpoch);
 
   const subscriptionEnabled = enabled && repoPath !== null && owner !== null;
@@ -78,38 +74,21 @@ export function useAgentStudioDevServerPanel({
     scopeKey !== null &&
     scopeKey === subscribedScopeKey &&
     transportEpoch !== null;
-  const {
-    applyTerminalBuffersFromEvent,
-    beginMutationReplaySync,
-    cancelMutationReplaySync,
-    clearTerminalBuffers,
-    hydrateTerminalBuffersFromState,
-    markMutationReplayObserved,
-    replaceTerminalBuffersFromState,
-    selectedScriptTerminalBuffer,
-    syncSelectedScriptTerminalBuffer,
-    syncTerminalBuffersFromMutationState,
-  } = useAgentStudioDevServerTerminalBuffers(activeScope);
-
-  const { effectiveState, isAwaitingFreshState, queryData, stateQuery } =
-    useAgentStudioDevServerStateQuery({
-      repoPath,
-      owner,
-      enabled: subscriptionEnabled && subscriptionError === null,
-      queryEnabled,
-      liveState,
-      transportEpoch,
-    });
+  const { effectiveState, isAwaitingFreshState, stateQuery } = useAgentStudioDevServerStateQuery({
+    repoPath,
+    owner,
+    enabled: subscriptionEnabled && subscriptionError === null,
+    queryEnabled,
+    transportEpoch,
+  });
   const { refetch: refetchState } = stateQuery;
 
-  const { effectiveSelectedScriptId, onSelectScript, resetSelectedScript, selectedScriptIdRef } =
-    useAgentStudioDevServerPanelSelection({
-      scopeKey,
-      scripts: effectiveState?.scripts ?? [],
-      syncSelectedScriptTerminalBuffer,
-    });
+  const { effectiveSelectedScriptId, onSelectScript } = useAgentStudioDevServerPanelSelection({
+    scopeKey,
+    scripts: effectiveState?.scripts ?? [],
+  });
 
-  const requestTerminalRehydrate = useCallback((): void => {
+  const refreshMetadata = useCallback((): void => {
     const activeTransportEpoch = transportEpochRef.current;
     if (!repoPath || !owner || !activeTransportEpoch) {
       return;
@@ -123,26 +102,15 @@ export function useAgentStudioDevServerPanel({
   }, [queryClient, repoPath, owner]);
 
   const syncStateFromEvent = useDevServerEventStateSync({
-    applyTerminalBuffersFromEvent,
-    dispatchLocalState,
-    markMutationReplayObserved,
     owner,
     queryClient,
     repoPath,
-    selectedScriptIdRef,
     transportEpochRef,
   });
 
-  useDevServerQueryHydration({
-    clearTerminalBuffers,
+  useDevServerScopeReset({
     dispatchLocalState,
-    effectiveSelectedScriptId,
-    effectiveState,
-    hydrateTerminalBuffersFromState,
     scopeKey,
-    queryData,
-    queryEnabled,
-    resetSelectedScript,
     subscriptionEnabled,
     transportEpochRef,
   });
@@ -150,26 +118,17 @@ export function useAgentStudioDevServerPanel({
   const { startMutation, stopMutation, restartMutation, isActiveMutationScope } =
     useDevServerMutations({
       activeScope,
-      beginMutationReplaySync,
-      cancelMutationReplaySync,
       dispatchLocalState,
-      effectiveState,
-      owner,
       queryClient,
-      repoPath,
-      replaceTerminalBuffersFromState,
-      selectedScriptIdRef,
-      syncTerminalBuffersFromMutationState,
       transportEpochRef,
     });
 
   useDevServerSubscription({
-    clearTerminalBuffers,
     dispatchLocalState,
     owner,
     scopeKey,
     repoPath,
-    requestTerminalRehydrate,
+    refreshMetadata,
     retryCount,
     subscriptionEnabled,
     syncStateFromEvent,
@@ -202,7 +161,6 @@ export function useAgentStudioDevServerPanel({
     queryEnabled,
     repoPath,
     restartMutation,
-    selectedScriptTerminalBuffer,
     startMutation,
     stateQuery,
     stopMutation,
@@ -234,7 +192,6 @@ const createDevServerPanelModel = ({
   queryEnabled,
   repoPath,
   restartMutation,
-  selectedScriptTerminalBuffer,
   startMutation,
   stateQuery,
   stopMutation,
@@ -256,7 +213,6 @@ const createDevServerPanelModel = ({
   queryEnabled: boolean;
   repoPath: string | null;
   restartMutation: ReturnType<typeof useDevServerMutations>["restartMutation"];
-  selectedScriptTerminalBuffer: TerminalBuffers["selectedScriptTerminalBuffer"];
   startMutation: ReturnType<typeof useDevServerMutations>["startMutation"];
   stateQuery: ReturnType<typeof useAgentStudioDevServerStateQuery>["stateQuery"];
   stopMutation: ReturnType<typeof useDevServerMutations>["stopMutation"];
@@ -303,7 +259,6 @@ const createDevServerPanelModel = ({
     scripts: effectiveState?.scripts ?? [],
     selectedScriptId: effectiveSelectedScriptId,
     selectedScript,
-    selectedScriptTerminalBuffer,
     error,
     isStartPending,
     isRetryPending: stateQuery.isFetching && mode === "error",

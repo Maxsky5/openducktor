@@ -1,26 +1,16 @@
 import type { DevServerOwner, DevServerScriptState } from "@openducktor/contracts";
 import { Check, Copy, Play, RefreshCw, Square } from "lucide-react";
-import {
-  cloneElement,
-  memo,
-  type ReactElement,
-  useCallback,
-  useId,
-  useMemo,
-  useState,
-} from "react";
+import { cloneElement, memo, type ReactElement, useCallback, useId, useState } from "react";
 import { AgentStudioDevServerTerminal } from "@/components/features/agents/agent-studio-dev-server-terminal";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 import {
   terminalTabsListClassName,
   terminalTabTriggerClassName,
 } from "@/features/terminals/terminal-tab-styles";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
-import { createDevServerScope, formatDevServerScopeKey } from "@/types/dev-server-scope";
 
 export type AgentStudioDevServerPanelMode =
   | "loading"
@@ -41,7 +31,6 @@ export type AgentStudioDevServerPanelModel = {
   scripts: DevServerScriptState[];
   selectedScriptId: string | null;
   selectedScript: DevServerScriptState | null;
-  selectedScriptTerminalBuffer: AgentStudioDevServerTerminalBuffer | null;
   error: string | null;
   isStartPending: boolean;
   isRetryPending: boolean;
@@ -310,15 +299,9 @@ function DevServerErrorBanner({
 function DevServerTerminalContent({
   onRendererError,
   script,
-  terminalBuffer,
-  terminalChunkCount,
-  terminalScopeKey,
 }: {
   onRendererError: (message: string | null) => void;
   script: DevServerScriptState | null;
-  terminalBuffer: AgentStudioDevServerTerminalBuffer | null;
-  terminalChunkCount: number;
-  terminalScopeKey: string;
 }): ReactElement | null {
   if (script === null) {
     return null;
@@ -340,20 +323,20 @@ function DevServerTerminalContent({
         </div>
 
         <div className="relative min-h-0 flex-1 overflow-hidden bg-[var(--dev-server-terminal-panel)]">
-          <AgentStudioDevServerTerminal
-            scopeKey={terminalScopeKey}
-            scriptId={script.scriptId}
-            terminalBuffer={terminalBuffer}
-            onRendererError={onRendererError}
-          />
-          {terminalChunkCount === 0 ? (
+          {script.terminalId ? (
+            <AgentStudioDevServerTerminal
+              key={script.terminalId}
+              terminalId={script.terminalId}
+              onRendererError={onRendererError}
+            />
+          ) : (
             <div
               className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 py-8 text-center text-sm text-[var(--dev-server-terminal-muted)]"
               data-testid="agent-studio-dev-server-empty-log-state"
             >
               {getEmptyTerminalMessage(script)}
             </div>
-          ) : null}
+          )}
         </div>
       </div>
     </TabsContent>
@@ -373,25 +356,6 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
   const hasExpandedActions = model.isExpanded;
   const selectedTabsValue = model.selectedScriptId ?? model.scripts[0]?.scriptId ?? "__none__";
   const selectedScriptContent = selectedScript ?? model.scripts[0] ?? null;
-  const terminalScopeKey = formatDevServerScopeKey(
-    createDevServerScope(model.repoPath, model.owner),
-  );
-  const selectedScriptTerminalBuffer = useMemo(() => {
-    if (model.selectedScriptTerminalBuffer !== null) {
-      return model.selectedScriptTerminalBuffer;
-    }
-    if (selectedScriptContent === null) {
-      return null;
-    }
-
-    return {
-      entries: selectedScriptContent.bufferedTerminalChunks,
-      lastSequence: selectedScriptContent.bufferedTerminalChunks.at(-1)?.sequence ?? null,
-      resetToken: 0,
-      lastDroppedSequence: null,
-    };
-  }, [model.selectedScriptTerminalBuffer, selectedScriptContent]);
-  const selectedScriptTerminalChunkCount = selectedScriptTerminalBuffer?.entries.length ?? 0;
   const panelError = model.error ?? rendererError;
   const disabledReasonId = useId();
   const { copied: copiedWorkingDirectory, copyToClipboard: copyWorkingDirectory } =
@@ -485,9 +449,6 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
           <DevServerTerminalContent
             onRendererError={setRendererError}
             script={selectedScriptContent}
-            terminalBuffer={selectedScriptTerminalBuffer}
-            terminalChunkCount={selectedScriptTerminalChunkCount}
-            terminalScopeKey={terminalScopeKey}
           />
         </div>
       </Tabs>

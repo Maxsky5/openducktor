@@ -1,10 +1,10 @@
+import { Effect } from "effect";
 import type { RepoConfig } from "@openducktor/contracts";
 import {
   buildGroupState,
   type DevServerGroupRuntime,
-  startTerminalRun,
   syncGroupState,
-  syncRuntimeTerminalBufferByteCounts,
+  syncRuntimeTerminalSources,
 } from "./dev-server-state";
 
 const repoConfig: RepoConfig = {
@@ -39,30 +39,27 @@ const createRuntime = (): DevServerGroupRuntime => ({
     "/worktrees/task-1",
     "2026-05-24T00:00:00.000Z",
   ),
-  terminalBufferedBytesByScriptId: new Map(),
-  terminalNextSequenceByScriptId: new Map(),
-  terminalRunGeneration: 0,
+  terminalOutputs: new Map(),
 });
 
 describe("dev-server state helpers", () => {
-  test("prunes terminal runtime accounting for inactive scripts", () => {
+  test("releases removed script output without releasing a retained run", () => {
     const runtime = createRuntime();
     runtime.state.scripts = runtime.state.scripts.filter((script) => script.scriptId === "web");
-    runtime.terminalBufferedBytesByScriptId.set("web", 12);
-    runtime.terminalBufferedBytesByScriptId.set("api", 24);
-    runtime.terminalNextSequenceByScriptId.set("web", 3);
-    runtime.terminalNextSequenceByScriptId.set("api", 9);
-    runtime.terminalNextSequenceByScriptId.set("removed-sequence-only", 17);
-    runtime.terminalRunGeneration = 2;
-
-    syncRuntimeTerminalBufferByteCounts(runtime);
-
-    expect(runtime.terminalBufferedBytesByScriptId.has("api")).toBe(false);
-    expect(runtime.terminalNextSequenceByScriptId.has("api")).toBe(false);
-    expect(runtime.terminalNextSequenceByScriptId.has("removed-sequence-only")).toBe(false);
-    expect(runtime.terminalBufferedBytesByScriptId.get("web")).toBe(12);
-    expect(runtime.terminalNextSequenceByScriptId.get("web")).toBe(3);
-    expect(runtime.terminalRunGeneration).toBe(2);
+    const released: string[] = [];
+    for (const scriptId of ["web", "api"])
+      runtime.terminalOutputs.set(scriptId, {
+        terminalId: scriptId,
+        write: () => {},
+        activate: () => Effect.void,
+        exit: () => {},
+        release: () => {
+          released.push(scriptId);
+        },
+      });
+    syncRuntimeTerminalSources(runtime);
+    expect(released).toEqual(["api"]);
+    expect([...runtime.terminalOutputs.keys()]).toEqual(["web"]);
   });
 
   test("keeps the started command when the configured command changes", () => {
@@ -72,7 +69,6 @@ describe("dev-server state helpers", () => {
       throw new Error("Expected configured web script.");
     }
     firstScript.startedCommand = "bun run dev";
-    startTerminalRun(runtime, firstScript, "host-1");
 
     syncGroupState(
       runtime.state,
@@ -105,38 +101,5 @@ describe("dev-server state helpers", () => {
       name: "Web next",
       startedCommand: null,
     });
-  });
-
-  test("does not reuse a run identity after a script is removed and re-added", () => {
-    const runtime = createRuntime();
-    const firstScript = runtime.state.scripts[0];
-    if (!firstScript) {
-      throw new Error("Expected configured web script.");
-    }
-    startTerminalRun(runtime, firstScript, "host-1");
-    const firstRunId = firstScript.runIdentity?.runId;
-
-    syncGroupState(
-      runtime.state,
-      { ...repoConfig, devServers: [] },
-      runtime.state.owner,
-      "/worktrees/task-1",
-      runtime.unresolvedStops,
-    );
-    syncRuntimeTerminalBufferByteCounts(runtime);
-    syncGroupState(
-      runtime.state,
-      repoConfig,
-      runtime.state.owner,
-      "/worktrees/task-1",
-      runtime.unresolvedStops,
-    );
-    const readdedScript = runtime.state.scripts[0];
-    if (!readdedScript) {
-      throw new Error("Expected re-added web script.");
-    }
-    startTerminalRun(runtime, readdedScript, "host-1");
-
-    expect(readdedScript.runIdentity?.runId).not.toBe(firstRunId);
   });
 });

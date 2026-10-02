@@ -1,10 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { DevServerScriptState } from "@openducktor/contracts";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
+import { fireEvent, render as renderUI, screen } from "@testing-library/react";
+import { createElement, type ReactElement } from "react";
+import { renderToStaticMarkup as renderMarkup } from "react-dom/server";
 import {
   AgentStudioDevServerPanel,
   type AgentStudioDevServerPanelModel,
@@ -16,12 +15,11 @@ if (globalThis.document === undefined) {
   GlobalRegistrator.register();
 }
 
-const buildTerminalBuffer = (script: DevServerScriptState): AgentStudioDevServerTerminalBuffer => ({
-  entries: script.bufferedTerminalChunks,
-  lastSequence: script.bufferedTerminalChunks.at(-1)?.sequence ?? null,
-  resetToken: 0,
-  lastDroppedSequence: null,
-});
+import { QueryProvider } from "@/lib/query-provider";
+const render = (ui: ReactElement) =>
+  renderUI(<QueryProvider useIsolatedClient>{ui}</QueryProvider>);
+const renderToStaticMarkup = (ui: ReactElement) =>
+  renderMarkup(<QueryProvider useIsolatedClient>{ui}</QueryProvider>);
 
 const baseModel = (
   overrides: Partial<AgentStudioDevServerPanelModel> = {},
@@ -36,7 +34,7 @@ const baseModel = (
   scripts: [],
   selectedScriptId: null,
   selectedScript: null,
-  selectedScriptTerminalBuffer: null,
+
   error: null,
   isStartPending: false,
   isRetryPending: false,
@@ -56,36 +54,11 @@ const runningScript: DevServerScriptState = {
   command: "bun run dev",
   startedCommand: "bun run dev",
   status: "running",
-  runIdentity: {
-    runId: "frontend:1",
-    runOrder: { hostInstanceId: "host-1", generation: 1 },
-  },
   pid: 4321,
   startedAt: "2026-03-19T15:30:00.000Z",
   exitCode: null,
   lastError: null,
-  bufferedTerminalChunks: [
-    {
-      scriptId: "frontend",
-      runIdentity: {
-        runId: "frontend:1",
-        runOrder: { hostInstanceId: "host-1", generation: 1 },
-      },
-      sequence: 0,
-      data: "Starting `bun run dev`\r\n",
-      timestamp: "2026-03-19T15:30:00.000Z",
-    },
-    {
-      scriptId: "frontend",
-      runIdentity: {
-        runId: "frontend:1",
-        runOrder: { hostInstanceId: "host-1", generation: 1 },
-      },
-      sequence: 1,
-      data: "ready on http://localhost:5173\r\n",
-      timestamp: "2026-03-19T15:30:01.000Z",
-    },
-  ],
+  terminalId: "terminal-output",
 };
 
 const backendScript: DevServerScriptState = {
@@ -94,26 +67,11 @@ const backendScript: DevServerScriptState = {
   command: "bun run api",
   startedCommand: "bun run api",
   status: "running",
-  runIdentity: {
-    runId: "backend:1",
-    runOrder: { hostInstanceId: "host-1", generation: 1 },
-  },
   pid: 999,
   startedAt: "2026-03-19T15:31:00.000Z",
   exitCode: null,
   lastError: null,
-  bufferedTerminalChunks: [
-    {
-      scriptId: "backend",
-      runIdentity: {
-        runId: "backend:1",
-        runOrder: { hostInstanceId: "host-1", generation: 1 },
-      },
-      sequence: 0,
-      data: "api ready\r\n",
-      timestamp: "2026-03-19T15:31:01.000Z",
-    },
-  ],
+  terminalId: "terminal-output",
 };
 
 const failedScript: DevServerScriptState = {
@@ -122,26 +80,11 @@ const failedScript: DevServerScriptState = {
   command: "bun run broken",
   startedCommand: "bun run broken",
   status: "failed",
-  runIdentity: {
-    runId: "failed:1",
-    runOrder: { hostInstanceId: "host-1", generation: 1 },
-  },
   pid: null,
   startedAt: null,
   exitCode: 1,
   lastError: "Process exited",
-  bufferedTerminalChunks: [
-    {
-      scriptId: "failed",
-      runIdentity: {
-        runId: "failed:1",
-        runOrder: { hostInstanceId: "host-1", generation: 1 },
-      },
-      sequence: 0,
-      data: "Process exited\r\n",
-      timestamp: "2026-03-19T15:32:01.000Z",
-    },
-  ],
+  terminalId: "terminal-output",
 };
 
 describe("AgentStudioDevServerPanel", () => {
@@ -309,7 +252,6 @@ describe("AgentStudioDevServerPanel", () => {
           scripts: [runningScript],
           selectedScriptId: runningScript.scriptId,
           selectedScript: runningScript,
-          selectedScriptTerminalBuffer: buildTerminalBuffer(runningScript),
         }),
       }),
     );
@@ -341,7 +283,6 @@ describe("AgentStudioDevServerPanel", () => {
           scripts: [runningScript],
           selectedScriptId: runningScript.scriptId,
           selectedScript: runningScript,
-          selectedScriptTerminalBuffer: buildTerminalBuffer(runningScript),
         }),
       }),
     );
@@ -361,7 +302,6 @@ describe("AgentStudioDevServerPanel", () => {
           scripts: [runningScript, backendScript],
           selectedScriptId: backendScript.scriptId,
           selectedScript: backendScript,
-          selectedScriptTerminalBuffer: buildTerminalBuffer(backendScript),
         }),
       }),
     );
@@ -380,7 +320,6 @@ describe("AgentStudioDevServerPanel", () => {
           scripts: [runningScript, backendScript],
           selectedScriptId: null,
           selectedScript: null,
-          selectedScriptTerminalBuffer: null,
         }),
       }),
     );
@@ -404,7 +343,6 @@ describe("AgentStudioDevServerPanel", () => {
           scripts: [reconfiguredScript],
           selectedScriptId: reconfiguredScript.scriptId,
           selectedScript: reconfiguredScript,
-          selectedScriptTerminalBuffer: buildTerminalBuffer(reconfiguredScript),
         }),
       }),
     );
@@ -419,12 +357,11 @@ describe("AgentStudioDevServerPanel", () => {
       command: "bun run configured",
       startedCommand: null,
       status: "stopped",
-      runIdentity: null,
       pid: null,
       startedAt: null,
       exitCode: null,
       lastError: null,
-      bufferedTerminalChunks: [],
+      terminalId: null,
     };
     const html = renderToStaticMarkup(
       createElement(AgentStudioDevServerPanel, {
@@ -434,7 +371,6 @@ describe("AgentStudioDevServerPanel", () => {
           scripts: [neverStartedScript],
           selectedScriptId: neverStartedScript.scriptId,
           selectedScript: neverStartedScript,
-          selectedScriptTerminalBuffer: buildTerminalBuffer(neverStartedScript),
         }),
       }),
     );
@@ -460,7 +396,6 @@ describe("AgentStudioDevServerPanel", () => {
           scripts: [stoppedAfterRunScript],
           selectedScriptId: stoppedAfterRunScript.scriptId,
           selectedScript: stoppedAfterRunScript,
-          selectedScriptTerminalBuffer: buildTerminalBuffer(stoppedAfterRunScript),
         }),
       }),
     );
@@ -478,7 +413,6 @@ describe("AgentStudioDevServerPanel", () => {
           scripts: [failedScript],
           selectedScriptId: failedScript.scriptId,
           selectedScript: failedScript,
-          selectedScriptTerminalBuffer: buildTerminalBuffer(failedScript),
         }),
       }),
     );

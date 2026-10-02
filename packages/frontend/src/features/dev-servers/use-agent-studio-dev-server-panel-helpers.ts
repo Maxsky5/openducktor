@@ -3,7 +3,6 @@ import type {
   DevServerGroupState,
   DevServerScriptState,
 } from "@openducktor/contracts";
-import { trimDevServerTerminalChunks } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 import { isBrowserLiveControlEvent } from "@/lib/browser-live-control-events";
 import { isSameDevServerOwner } from "@/types/dev-server-scope";
 
@@ -16,11 +15,6 @@ const replaceScript = (
   return scripts.map((script) => (script.scriptId === nextScript.scriptId ? nextScript : script));
 };
 
-const trimBufferedTerminalReplay = (script: DevServerScriptState): DevServerScriptState => ({
-  ...script,
-  bufferedTerminalChunks: trimDevServerTerminalChunks(script.bufferedTerminalChunks),
-});
-
 export const isDevServerSubscriptionControlEvent = isBrowserLiveControlEvent;
 
 export const applyDevServerEventToState = (
@@ -29,10 +23,7 @@ export const applyDevServerEventToState = (
 ): DevServerGroupState | null => {
   if (event.type === "snapshot") {
     if (state && event.state.revision < state.revision) return state;
-    return {
-      ...event.state,
-      scripts: event.state.scripts.map(trimBufferedTerminalReplay),
-    };
+    return event.state;
   }
 
   if (
@@ -49,7 +40,7 @@ export const applyDevServerEventToState = (
       ...state,
       revision: event.revision,
       updatedAt: event.updatedAt,
-      scripts: replaceScript(state.scripts, trimBufferedTerminalReplay(event.script)),
+      scripts: replaceScript(state.scripts, event.script),
     };
   }
 

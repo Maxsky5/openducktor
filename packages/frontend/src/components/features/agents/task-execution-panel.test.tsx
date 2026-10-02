@@ -10,7 +10,6 @@ import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react
 import { createElement, type PropsWithChildren, useEffect, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ThemeProvider } from "@/components/layout/theme-provider";
-import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 import type { DiffScopeState } from "@/features/agent-studio-git/contracts";
 import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
@@ -224,26 +223,11 @@ const selectedScript: DevServerScriptState = {
   command: "bun run dev",
   startedCommand: "bun run dev",
   status: "running",
-  runIdentity: {
-    runId: "frontend:1",
-    runOrder: { hostInstanceId: "host-1", generation: 1 },
-  },
   pid: 123,
   startedAt: "2026-03-19T10:00:00.000Z",
   exitCode: null,
   lastError: null,
-  bufferedTerminalChunks: [
-    {
-      scriptId: "frontend",
-      runIdentity: {
-        runId: "frontend:1",
-        runOrder: { hostInstanceId: "host-1", generation: 1 },
-      },
-      sequence: 0,
-      data: "ready in 120ms\r\n",
-      timestamp: "2026-03-19T10:00:01.000Z",
-    },
-  ],
+  terminalId: "terminal-output",
 };
 
 const devServerModel: AgentStudioDevServerPanelModel = {
@@ -257,14 +241,7 @@ const devServerModel: AgentStudioDevServerPanelModel = {
   scripts: [selectedScript],
   selectedScriptId: selectedScript.scriptId,
   selectedScript,
-  selectedScriptTerminalBuffer: {
-    entries: selectedScript.bufferedTerminalChunks.map((terminalChunk) => ({
-      ...terminalChunk,
-    })),
-    lastSequence: selectedScript.bufferedTerminalChunks.at(-1)?.sequence ?? null,
-    resetToken: 0,
-    lastDroppedSequence: null,
-  } satisfies AgentStudioDevServerTerminalBuffer,
+
   error: null,
   isStartPending: false,
   isRetryPending: false,

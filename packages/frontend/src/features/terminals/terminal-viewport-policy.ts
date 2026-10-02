@@ -82,13 +82,28 @@ export const createLiveTerminalFitScheduler = ({
   cancelFrame?: (frameId: number) => void;
 }) => {
   let frameId: number | null = null;
+  let lastFitTime = -Infinity;
+  const runFrame: FrameRequestCallback = (time) => {
+    frameId = null;
+    if (!isActive()) return;
+    // Reflow retained rows at most ten times per second during a continuous drag.
+    if (time - lastFitTime < 100) {
+      frameId = requestFrame(runFrame);
+      return;
+    }
+    lastFitTime = time;
+    fit();
+  };
   return {
     schedule(): void {
       if (!isActive() || frameId !== null) return;
-      frameId = requestFrame(() => {
-        frameId = null;
-        if (isActive()) fit();
-      });
+      frameId = requestFrame(runFrame);
+    },
+    flush(): void {
+      if (frameId === null) return;
+      cancelFrame(frameId);
+      frameId = null;
+      if (isActive()) fit();
     },
     dispose(): void {
       if (frameId === null) return;
@@ -143,81 +158,4 @@ export const handleTerminalMetadataFrame = (
     return true;
   }
   return message.type !== "output" && message.type !== "screen_restore";
-};
-
-export const createTerminalOutputSequencer = ({
-  write,
-  onConsumed,
-  onHydrated = () => undefined,
-}: {
-  write: (payload: Uint8Array, parsed: () => void) => void;
-  onConsumed: (sequenceEnd: number) => void;
-  onHydrated?: () => void;
-}) => {
-  let consumedSequence = 0;
-  let snapshotBoundary: number | null = null;
-  let hydrated = false;
-  let epoch = 0;
-  let queue = Promise.resolve();
-  const revealHydratedTerminal = (): void => {
-    if (hydrated || snapshotBoundary === null || consumedSequence < snapshotBoundary) return;
-    hydrated = true;
-    onHydrated();
-  };
-  return {
-    setSnapshotBoundary(sequenceEnd: number): void {
-      snapshotBoundary = sequenceEnd;
-      revealHydratedTerminal();
-    },
-    enqueue(
-      frame: { sequenceStart: number; sequenceEnd: number },
-      payload: Uint8Array,
-    ): Promise<void> {
-      const writeEpoch = epoch;
-      queue = queue.then(() => {
-        if (writeEpoch !== epoch) return;
-        if (frame.sequenceEnd <= consumedSequence) return;
-        const consumedBytes = Math.max(0, consumedSequence - frame.sequenceStart);
-        const remainingPayload = payload.subarray(Math.min(consumedBytes, payload.byteLength));
-        return new Promise<void>((resolve) => {
-          write(remainingPayload, () => {
-            if (writeEpoch !== epoch) {
-              resolve();
-              return;
-            }
-            consumedSequence = Math.max(consumedSequence, frame.sequenceEnd);
-            onConsumed(frame.sequenceEnd);
-            revealHydratedTerminal();
-            resolve();
-          });
-        });
-      });
-      return queue;
-    },
-    restore(
-      sequence: number,
-      payload: Uint8Array,
-      prepare: () => void,
-      finish: (completed: boolean) => void,
-    ): Promise<void> {
-      epoch += 1;
-      const restoreEpoch = epoch;
-      queue = queue.then(async () => {
-        if (restoreEpoch !== epoch) return;
-        let completed = false;
-        try {
-          prepare();
-          await new Promise<void>((resolve) => write(payload, resolve));
-          completed = restoreEpoch === epoch;
-        } finally {
-          finish(completed);
-        }
-        if (restoreEpoch !== epoch) return;
-        consumedSequence = Math.max(consumedSequence, sequence);
-        onConsumed(consumedSequence);
-        revealHydratedTerminal();
-      });
-      return queue;
-    },
-  };
 };

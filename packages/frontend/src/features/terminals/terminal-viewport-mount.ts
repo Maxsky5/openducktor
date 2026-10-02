@@ -8,10 +8,9 @@ import {
   createLatestResizeScheduler,
   createLiveTerminalFitScheduler,
   createTerminalInputSequencer,
-  createTerminalOutputSequencer,
   createTerminalViewportActivator,
   handleTerminalMetadataFrame,
-} from "./interactive-terminal-policy";
+} from "./terminal-viewport-policy";
 import {
   containsTransferredImage,
   createTerminalImagePasteHandler,
@@ -23,13 +22,15 @@ import type { TerminalTransportController } from "./terminal-transport-controlle
 import { createTerminalOptions } from "./terminal-xterm-options";
 import { restoreTerminalPrecedingJoinState } from "./terminal-rep-state";
 import { createTerminalBinding } from "./shared-terminal-binding";
+import { createTerminalOutputSequencer } from "./terminal-output-sequencer";
 
-export type InteractiveTerminalMount = {
+export type TerminalViewportMount = {
   activate(focus: boolean): void;
   dispose(): void;
 };
 
-type MountInteractiveTerminalInput = {
+type MountTerminalViewportInput = {
+  mode?: "interactive" | "output";
   container: HTMLDivElement;
   terminalId: string;
   controller: TerminalTransportController;
@@ -47,7 +48,8 @@ type MountInteractiveTerminalInput = {
   onInteractionFailure: (title: string, cause: unknown) => void;
 };
 
-export const mountInteractiveTerminal = ({
+export const mountTerminalViewport = ({
+  mode = "interactive",
   container,
   terminalId,
   controller,
@@ -63,14 +65,19 @@ export const mountInteractiveTerminal = ({
   onHydrated,
   onImageDragActiveChange,
   onInteractionFailure,
-}: MountInteractiveTerminalInput): InteractiveTerminalMount => {
+}: MountTerminalViewportInput): TerminalViewportMount => {
   let disposed = false;
   const reportFailure = (title: string, cause: unknown): void => {
     if (!disposed) onInteractionFailure(title, cause);
   };
   const binding = createTerminalBinding(
     container,
-    createTerminalOptions(container, { cursorBlink: true, screenReaderMode: true }),
+    createTerminalOptions(container, {
+      cursorBlink: mode === "interactive",
+      screenReaderMode: true,
+      disableStdin: mode === "output",
+      convertEol: mode === "output",
+    }),
   );
   const { fitAddon, terminal } = binding;
   let restoringScreen = false;
@@ -101,6 +108,7 @@ export const mountInteractiveTerminal = ({
     refresh: (start, end) => terminal.refresh(start, end),
     readRows: () => terminal.rows,
   });
+  const fitScheduler = createLiveTerminalFitScheduler({ fit: fitViewport, isActive });
   const outputSequencer = createTerminalOutputSequencer({
     write: (payload, parsed) => terminal.write(payload, parsed),
     onConsumed: (sequenceEnd) => {
@@ -113,24 +121,28 @@ export const mountInteractiveTerminal = ({
       if (!disposed) onHydrated();
     },
   });
-  const enqueueInput = createTerminalInputSequencer({
-    isActive,
-    writeInput: async (data) => {
-      if (inputGate) await inputGate;
-      if (!disposed) await controller.write(terminalId, data);
-    },
-    reportFailure: (cause) => reportFailure("Terminal input failed", cause),
-  });
   const resizeScheduler = createLatestResizeScheduler((columns, rows) => {
     void controller
       .resize(terminalId, columns, rows)
       .catch((cause) => reportFailure("Terminal resize failed", cause));
+  });
+  const enqueueInput = createTerminalInputSequencer({
+    isActive,
+    writeInput: async (data) => {
+      if (inputGate) await inputGate;
+      if (disposed) return;
+      fitScheduler.flush();
+      resizeScheduler.flush();
+      await controller.write(terminalId, data);
+    },
+    reportFailure: (cause) => reportFailure("Terminal input failed", cause),
   });
   const resizeSubscription = terminal.onResize(({ cols, rows }) => {
     if (restoringScreen) return;
     resizeScheduler.schedule(cols, rows);
   });
   const dataSubscription = terminal.onData((data) => {
+    if (mode === "output") return;
     const input = encodeTerminalTextInput(data);
     if (!input) return;
     if (restoringScreen) {
@@ -143,13 +155,14 @@ export const mountInteractiveTerminal = ({
         );
         return;
       }
-    } else resizeScheduler.flush();
+    }
     void enqueueInput(() => input);
   });
   const oscClipboardSubscription = terminal.parser.registerOscHandler(52, () => true);
   terminal.attachCustomKeyEventHandler(
     createTerminalKeyEventHandler({
       getPlatform,
+      readOnly: mode === "output",
       hasSelection: () => terminal.hasSelection(),
       getSelection: () => terminal.getSelection(),
       writeClipboard,
@@ -190,11 +203,13 @@ export const mountInteractiveTerminal = ({
       },
     }).catch((cause) => reportFailure("Image drop failed", cause));
   };
-  container.addEventListener("paste", handleImagePaste, true);
-  container.addEventListener("dragenter", handleImageDragEnter);
-  container.addEventListener("dragover", handleImageDragOver);
-  container.addEventListener("dragleave", handleImageDragLeave);
-  container.addEventListener("drop", handleImageDrop);
+  if (mode === "interactive") {
+    container.addEventListener("paste", handleImagePaste, true);
+    container.addEventListener("dragenter", handleImageDragEnter);
+    container.addEventListener("dragover", handleImageDragOver);
+    container.addEventListener("dragleave", handleImageDragLeave);
+    container.addEventListener("drop", handleImageDrop);
+  }
 
   const handleFrame = (message: TerminalServerMessage, payload: Uint8Array): void => {
     if (message.type === "snapshot") {
@@ -251,7 +266,6 @@ export const mountInteractiveTerminal = ({
       .catch((cause) => reportFailure("Terminal output failed", cause));
   };
   const unsubscribe = controller.subscribe(terminalId, handleFrame);
-  const fitScheduler = createLiveTerminalFitScheduler({ fit: fitViewport, isActive });
   const observer = new ResizeObserver(() => fitScheduler.schedule());
   observer.observe(container);
   if (isActive()) fitViewport();
@@ -264,6 +278,7 @@ export const mountInteractiveTerminal = ({
     dispose: () => {
       if (disposed) return;
       disposed = true;
+      outputSequencer.dispose();
       releaseInput?.();
       releaseInput = null;
       inputGate = null;

@@ -192,8 +192,13 @@ export const createTerminalSessionLifecycle = ({
     Effect.gen(function* () {
       const terminalId = session.summary.terminalId;
       const handle = session.resources.handle;
-      if (isLiveTerminal(session) && !confirmTerminate && handle) {
-        const inspection = yield* Effect.either(handle.hasChildProcesses());
+      if (
+        session.kind === "interactive" &&
+        isLiveTerminal(session) &&
+        !confirmTerminate &&
+        session.resources.handle
+      ) {
+        const inspection = yield* Effect.either(session.resources.handle.hasChildProcesses());
         if (inspection._tag === "Left") {
           return yield* Effect.fail(
             terminalFailure(

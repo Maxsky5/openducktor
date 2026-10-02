@@ -1,16 +1,11 @@
 import {
-  TERMINAL_PROTOCOL_VERSION,
   type TerminalContext,
   type TerminalListFilter,
   type TerminalSummary,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
-import type {
-  TerminalGrid,
-  TerminalPtyLaunchPlan,
-  TerminalPtyPort,
-} from "../../ports/terminal-pty-port";
+import type { TerminalGrid, TerminalPtyPort } from "../../ports/terminal-pty-port";
 import {
   type TerminalTaskScope,
   type TerminalWorkspaceSessionScope,
@@ -21,13 +16,7 @@ import {
 import { TERMINAL_LIMITS } from "./terminal-limits";
 import { formatTerminalPathInput, TerminalPathInputError } from "./terminal-path-input";
 import { TerminalServiceError } from "./terminal-service-error";
-import {
-  activateTerminalSession,
-  createTerminalSession,
-  forgetTerminalSession,
-  isLiveTerminal,
-  type TerminalSession,
-} from "./terminal-session";
+import { isLiveTerminal, type TerminalSession } from "./terminal-session";
 import {
   createTerminalSessionLifecycle,
   terminalFailure,
@@ -38,7 +27,7 @@ import {
   type TerminalSessionAttachInput,
 } from "./terminal-session-output";
 import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler";
-import { createTerminalTitleTracker } from "./terminal-title-tracker";
+import { createTerminalSessionProducer } from "./terminal-session-producer";
 
 export type { TerminalSessionAttachInput } from "./terminal-session-output";
 
@@ -57,34 +46,21 @@ export const createTerminalSessionEngine = ({
   scheduleTitleSettlement?: TerminalTitleSettlementScheduler;
 }) => {
   const sessions = new Map<string, TerminalSession>();
-  const {
-    applyStreamEvents,
-    closeSession,
-    closeSessions,
-    getSession,
-    handleExit,
-    handleFailure,
-    pruneExited,
-  } = createTerminalSessionLifecycle({ now, sessions });
-
-  const publishTitle = (session: TerminalSession, title: string): void => {
-    if (title === session.summary.label) return;
-    session.summary.label = title;
-    applyStreamEvents(
-      session,
-      session.output.publish({
-        version: TERMINAL_PROTOCOL_VERSION,
-        type: "title",
-        terminalId: session.summary.terminalId,
-        title,
-      }),
-    );
-  };
+  const lifecycle = createTerminalSessionLifecycle({ now, sessions });
+  const { applyStreamEvents, closeSession, closeSessions, getSession, pruneExited } = lifecycle;
+  const producer = createTerminalSessionProducer({
+    sessions,
+    ptyPort,
+    lifecycle,
+    scheduleTitleSettlement,
+  });
 
   return {
     countLive: (): number => {
       pruneExited();
-      return [...sessions.values()].filter(isLiveTerminal).length;
+      return [...sessions.values()].filter(
+        (session) => isLiveTerminal(session) && session.summary.lifecycle !== "starting",
+      ).length;
     },
     getContext: (terminalId: string): TerminalContext | null => {
       pruneExited();
@@ -95,6 +71,7 @@ export const createTerminalSessionEngine = ({
       return [...sessions.values()].filter(
         (session) =>
           isLiveTerminal(session) &&
+          session.summary.lifecycle !== "starting" &&
           terminalContextKey(session.summary.context) === terminalContextKey(context),
       ).length;
     },
@@ -108,7 +85,7 @@ export const createTerminalSessionEngine = ({
         const unknownTerminalIds: string[] = [];
         for (const session of sessions.values()) {
           const context = session.summary.context;
-          if (!isLiveTerminal(session) || !("repoPath" in context)) {
+          if (session.kind === "output" || !isLiveTerminal(session) || !("repoPath" in context)) {
             continue;
           }
           if (normalizePathForComparison(context.repoPath) !== normalizedRepoPath) {
@@ -132,87 +109,11 @@ export const createTerminalSessionEngine = ({
         }
         return { activeTerminalIds, unknownTerminalIds };
       }),
-    start: (
-      summary: TerminalSummary,
-      plan: TerminalPtyLaunchPlan,
-    ): Effect.Effect<TerminalSummary, TerminalServiceError> =>
-      Effect.gen(function* () {
-        let session: TerminalSession;
-        const titleTracker = createTerminalTitleTracker(
-          (title) => publishTitle(session, title),
-          scheduleTitleSettlement,
-        );
-        session = createTerminalSession({
-          summary,
-          titleTracker,
-          operations: yield* Effect.makeSemaphore(1),
-          replayByteLimit: TERMINAL_LIMITS.replayBytes,
-          shell: plan.shell,
-          grid: plan.grid,
-        });
-        sessions.set(summary.terminalId, session);
-        const handleResult = yield* Effect.either(
-          ptyPort.start(plan, {
-            onOutput: (data) => {
-              session.resources.consumeOutput(data);
-              if (session.screen.queuedBytes + data.byteLength > TERMINAL_LIMITS.replayBytes) {
-                applyStreamEvents(session, [{ type: "overflow" }]);
-                return;
-              }
-              session.screen.write(data, () => {
-                applyStreamEvents(
-                  session,
-                  session.output.updateParserBacklog(
-                    session.screen.queuedBytes,
-                    session.resources.handle,
-                  ),
-                );
-              });
-              applyStreamEvents(session, session.output.accept(data, session.resources.handle));
-              applyStreamEvents(
-                session,
-                session.output.updateParserBacklog(
-                  session.screen.queuedBytes,
-                  session.resources.handle,
-                ),
-              );
-            },
-            onFailure: (failure) => {
-              applyStreamEvents(
-                session,
-                session.output.publishFailure({
-                  code: failure.code === "operation_failed" ? "protocol_error" : failure.code,
-                  message: `${failure.message} Close this tab and create a new terminal after resolving the error.`,
-                  terminalId: summary.terminalId,
-                  workingDir: plan.cwd,
-                }),
-              );
-              handleFailure(session);
-            },
-            onExit: ({ exitCode, signal }) => handleExit(session, exitCode, signal),
-          }),
-        );
-        if (handleResult._tag === "Left") {
-          forgetTerminalSession(session);
-          sessions.delete(summary.terminalId);
-          return yield* Effect.fail(
-            terminalFailure(
-              handleResult.left.code === "unsupported_runtime"
-                ? "unsupported_runtime"
-                : "spawn_failed",
-              "create",
-              handleResult.left.message,
-              summary.terminalId,
-              handleResult.left,
-            ),
-          );
-        }
-        activateTerminalSession(session, handleResult.right);
-        return { ...session.summary, context: { ...session.summary.context } };
-      }),
+    ...producer,
     list: (filter: TerminalListFilter): TerminalSummary[] => {
       pruneExited();
       return [...sessions.values()].flatMap((session) => {
+        if (session.kind === "output") return [];
         const matches =
           filter.kind === "all" ||
           (filter.kind === "unassociated" && !("repoPath" in session.summary.context)) ||
@@ -232,7 +133,14 @@ export const createTerminalSessionEngine = ({
       Effect.try({
         try: () => {
           const session = getSession(terminalId, "prepare_path_input");
-          return formatTerminalPathInput(session.resources.shell, paths);
+          if (session.kind === "output")
+            throw terminalFailure(
+              "invalid_input",
+              "prepare_path_input",
+              "Dev server output is read-only.",
+              terminalId,
+            );
+          return formatTerminalPathInput(session.shell, paths);
         },
         catch: (cause) => {
           if (cause instanceof TerminalServiceError) return cause;
@@ -318,6 +226,13 @@ export const createTerminalSessionEngine = ({
           try: () => getSession(terminalId, "write"),
           catch: (cause) => terminalOperationFailure(cause, "write"),
         });
+        if (session.kind === "output")
+          return yield* terminalFailure(
+            "invalid_input",
+            "write",
+            "Dev server output is read-only. Use its Stop or Restart action.",
+            terminalId,
+          );
         const handle = session.resources.handle;
         if (!handle || !isLiveTerminal(session))
           return yield* Effect.fail(
@@ -354,7 +269,11 @@ export const createTerminalSessionEngine = ({
           catch: (cause) => terminalOperationFailure(cause, "resize"),
         });
         const handle = session.resources.handle;
-        if (!handle || !isLiveTerminal(session))
+        if (
+          session.kind === "interactive" &&
+          (!handle || !isLiveTerminal(session)) &&
+          session.summary.lifecycle !== "exited"
+        )
           return yield* Effect.fail(
             terminalFailure(
               "terminal_not_found",
@@ -380,15 +299,16 @@ export const createTerminalSessionEngine = ({
             ),
           );
         yield* session.operations.withPermits(1)(
-          handle
-            .resize(grid)
-            .pipe(
-              Effect.mapError((cause) =>
-                terminalFailure("invalid_grid", "resize", cause.message, terminalId, cause),
-              ),
+          (session.kind === "interactive" && session.resources.handle
+            ? session.resources.handle.resize(grid)
+            : Effect.void
+          ).pipe(
+            Effect.mapError((cause) =>
+              terminalFailure("invalid_grid", "resize", cause.message, terminalId, cause),
             ),
+            Effect.tap(() => Effect.sync(() => session.screen.resize(grid))),
+          ),
         );
-        session.screen.resize(grid);
       }),
     acknowledge: (
       terminalId: string,
@@ -461,6 +381,13 @@ export const createTerminalSessionEngine = ({
           try: () => getSession(terminalId, "close"),
           catch: (cause) => terminalOperationFailure(cause, "close"),
         });
+        if (session.kind === "output")
+          return yield* terminalFailure(
+            "invalid_input",
+            "close",
+            "Use the dev server Stop action to close this output source.",
+            terminalId,
+          );
         yield* closeSession(session, confirmTerminate);
       }),
     closeByTaskScope: (scope: TerminalTaskScope): Effect.Effect<string[], TerminalServiceError> =>

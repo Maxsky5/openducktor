@@ -146,6 +146,7 @@ const createTestNodeHostCommandRouter = (): EffectNodeHostCommandRouter => ({
     }),
   },
   terminalService: {
+    openOutputSource: () => unexpectedTerminalOperation("openOutputSource"),
     acknowledge: () => unexpectedTerminalOperation("acknowledge"),
     acquireTaskCleanup: () => unexpectedTerminalOperation("acquireTaskCleanup"),
     acquireWorkspaceSessionCleanup: () =>
@@ -1255,22 +1256,8 @@ describe("TypeScript web host backend", () => {
     const eventBus = new BufferedHostEventBus({ report: () => {} });
     for (let index = 0; index < 258; index += 1) {
       eventBus.publish({
-        channel: "openducktor://dev-server-event",
-        payload: {
-          type: "terminal_chunk",
-          repoPath: "/repo",
-          owner: { kind: "task", taskId: "task-1" },
-          terminalChunk: {
-            scriptId: "web",
-            runIdentity: {
-              runId: "run-1",
-              runOrder: { hostInstanceId: "host-1", generation: 1 },
-            },
-            sequence: index,
-            data: `line-${index}\r\n`,
-            timestamp: "2026-03-19T15:30:00.000Z",
-          },
-        },
+        channel: "openducktor://run-event",
+        payload: { type: "run", sequence: index },
       });
     }
 
@@ -1304,7 +1291,7 @@ describe("TypeScript web host backend", () => {
 
       const replayChunk = await readImmediateStreamChunk(reader);
       expect(replayChunk.done).toBe(false);
-      expect(new TextDecoder().decode(replayChunk.value)).toContain('"data":"line-2\\r\\n"');
+      expect(new TextDecoder().decode(replayChunk.value)).toContain('"sequence":2');
     } finally {
       await reader.cancel();
     }
