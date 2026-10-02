@@ -7,11 +7,9 @@ import type {
   ExternalTaskSyncEvent,
   AgentSessionLiveEnvelope,
 } from "@openducktor/contracts";
-import {
-  agentSessionRefKey,
-  createSessionOccurrenceProjector,
-  createTaskOccurrenceProjector,
-} from "@openducktor/core";
+import { agentSessionRefKey } from "@openducktor/core";
+import { createSessionOccurrenceProjector } from "./session-occurrence-projector";
+import { createTaskOccurrenceProjector } from "./task-occurrence-projector";
 import { Effect, Fiber, Queue } from "effect";
 import type { HostOperationError } from "../../effect/host-errors";
 import type { TaskService } from "../tasks/task-service";

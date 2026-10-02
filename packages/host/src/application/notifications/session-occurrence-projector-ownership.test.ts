@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { AgentSessionLiveSnapshot } from "@openducktor/contracts";
-import { agentSessionRefKey } from "../services/agent-session-ref-key";
+import { agentSessionRefKey } from "@openducktor/core";
 import { createSessionOccurrenceProjector } from "./session-occurrence-projector";
 const ref = {
   repoPath: "/repo",
@@ -96,6 +96,7 @@ test.each([false, true])(
       event: {
         type: "session_error",
         sessionRef: ref,
+        externalSessionId: ref.externalSessionId,
         timestamp: "2026-09-01T00:01:00Z",
         message: "Session failed",
       },

@@ -1,27 +1,22 @@
-import { normalizeSessionErrorMessage } from "./session-error-message";
 import type {
   AgentSessionLiveEnvelope,
-  AgentSessionLivePendingApprovalRequest,
   AgentSessionLivePendingQuestionRequest,
   AgentSessionLiveSnapshot,
   AgentSessionTranscriptEvent,
   AgentSessionScope,
-  NotificationNavigationTarget,
   NotificationOccurrence,
-  NotificationSessionIdentity,
 } from "@openducktor/contracts";
-import { agentSessionRefKey } from "../services/agent-session-ref-key";
+import { agentSessionRefKey, normalizeSessionErrorMessage } from "@openducktor/core";
 import { pendingInputIdentity } from "./pending-input-identity";
-
-type NotificationTaskIdentity = {
-  id: string;
-  title?: string;
-};
+import {
+  createSessionNotificationBuilder,
+  toNotificationStatus,
+} from "./session-notification-builder";
 
 type CreateSessionOccurrenceProjectorOptions = {
   repositoryLabel: string;
   resolveAssociation(ref: AgentSessionLiveSnapshot["ref"]): AgentSessionScope | null;
-  resolveTask(taskId: string): NotificationTaskIdentity | null;
+  resolveTask(taskId: string): { id: string; title?: string } | null;
 };
 
 type SessionProjection = {
@@ -55,7 +50,8 @@ export const createSessionOccurrenceProjector = ({
   resolveAssociation,
   resolveTask,
 }: CreateSessionOccurrenceProjectorOptions) => {
-  let currentRepositoryLabel = repositoryLabel;
+  const { sessionOccurrence, sessionTarget, projectPendingInput, setRepositoryLabel } =
+    createSessionNotificationBuilder({ repositoryLabel, resolveTask });
   const sessions = new Map<string, SessionProjection>();
 
   const observeUnownedInputs = (projection: SessionProjection, live: boolean): void => {
@@ -81,46 +77,6 @@ export const createSessionOccurrenceProjector = ({
         ),
       ),
     };
-  };
-
-  const sessionOccurrence = (
-    projection: SessionProjection,
-    input: {
-      kind:
-        | "agent.permission_requested"
-        | "agent.question_asked"
-        | "agent.session_error"
-        | "agent.session_idle";
-      suffix: string;
-      status: string;
-      navigationTarget: NotificationNavigationTarget;
-    },
-  ): NotificationOccurrence => {
-    const occurrence: NotificationOccurrence = {
-      occurrenceId: `${input.kind}:${agentSessionRefKey(projection.snapshot.ref)}:${input.suffix}`,
-      kind: input.kind,
-      repoPath: projection.snapshot.ref.repoPath,
-      repositoryLabel: currentRepositoryLabel,
-      status: input.status,
-      navigationTarget: input.navigationTarget,
-    };
-    if (projection.association?.kind === "workflow") {
-      const taskId = projection.association.taskId;
-      occurrence.task = resolveTask(taskId) ?? { id: taskId };
-      occurrence.role = projection.association.role;
-    }
-    return occurrence;
-  };
-
-  const sessionTarget = (
-    projection: SessionProjection,
-  ): Omit<Extract<NotificationNavigationTarget, { type: "agent_session" }>, "type"> => {
-    const target: Omit<Extract<NotificationNavigationTarget, { type: "agent_session" }>, "type"> = {
-      repoPath: projection.snapshot.ref.repoPath,
-      session: toSessionIdentity(projection.snapshot.ref),
-    };
-    if (projection.association?.kind === "workflow") target.taskId = projection.association.taskId;
-    return target;
   };
 
   const publishTerminal = (
@@ -190,32 +146,6 @@ export const createSessionOccurrenceProjector = ({
         navigationTarget: { type: "session_error", ...sessionTarget(projection), errorId },
       }),
     );
-  };
-
-  const projectPendingInput = (
-    projection: SessionProjection,
-    input:
-      | { inputKind: "permission"; request: AgentSessionLivePendingApprovalRequest }
-      | { inputKind: "question"; request: AgentSessionLivePendingQuestionRequest },
-  ): NotificationOccurrence => {
-    const requestIdentity = pendingInputIdentity(input.request);
-    const kind =
-      input.inputKind === "permission" ? "agent.permission_requested" : "agent.question_asked";
-    const status =
-      input.inputKind === "permission"
-        ? permissionStatus(input.request)
-        : questionStatus(input.request);
-    return sessionOccurrence(projection, {
-      kind,
-      suffix: requestIdentity,
-      status,
-      navigationTarget: {
-        type: "pending_input",
-        ...sessionTarget(projection),
-        inputKind: input.inputKind,
-        requestId: requestIdentity,
-      },
-    });
   };
 
   const findOwnedAncestor = (snapshot: AgentSessionLiveSnapshot): SessionProjection | null => {
@@ -458,9 +388,7 @@ export const createSessionOccurrenceProjector = ({
         }
       }
     },
-    setRepositoryLabel(label: string) {
-      currentRepositoryLabel = label;
-    },
+    setRepositoryLabel,
     reconcileAssociations(): NotificationOccurrence[] {
       return [...sessions.values()].flatMap((projection) =>
         applyUpsert(projection.snapshot, false),
@@ -524,12 +452,6 @@ export const createSessionOccurrenceProjector = ({
   };
 };
 
-const toSessionIdentity = (ref: AgentSessionLiveSnapshot["ref"]): NotificationSessionIdentity => ({
-  externalSessionId: ref.externalSessionId,
-  runtimeKind: ref.runtimeKind,
-  workingDirectory: ref.workingDirectory,
-});
-
 const createProjection = (
   snapshot: AgentSessionLiveSnapshot,
   association: AgentSessionScope | null,
@@ -561,32 +483,8 @@ const isExpectedUserStop = (
   return message === "session stopped" || message === "runtime stopped";
 };
 
-const toNotificationStatus = (message: string): string =>
-  message.trim().replace(/\s+/g, " ").slice(0, 240);
-
 const pendingRequestsByIdentity = <Request extends { requestId: string }>(requests: Request[]) =>
   new Map(requests.map((request) => [pendingInputIdentity(request), request]));
-
-const permissionStatus = (request: AgentSessionLivePendingApprovalRequest): string => {
-  const summary = request.summary?.trim() || request.title.trim();
-  const action =
-    request.command?.command ??
-    request.action?.description ??
-    request.action?.name ??
-    request.tool?.title ??
-    request.tool?.name;
-  return (
-    toNotificationStatus([summary, action].filter(Boolean).join(": ")) ||
-    "Approval is needed to continue."
-  );
-};
-
-const questionStatus = (request: AgentSessionLivePendingQuestionRequest): string => {
-  const question = request.questions[0]?.question.trim() || "Your answer is needed to continue.";
-  const remaining = request.questions.length - 1;
-  const suffix = remaining > 0 ? ` +${remaining} more question${remaining === 1 ? "" : "s"}` : "";
-  return `${toNotificationStatus(question).slice(0, 240 - suffix.length)}${suffix}`;
-};
 
 const executionEpisodeId = (projection: SessionProjection): string => {
   if (!projection.executionEpisodeId) {

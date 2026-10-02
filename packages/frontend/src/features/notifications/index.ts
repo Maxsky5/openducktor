@@ -5,5 +5,4 @@ export * from "./notification-policy";
 export * from "./notification-runtime";
 export * from "./notification-sound";
 export * from "./notification-navigation";
-export * from "./session-occurrence-projector";
 export * from "./session-start-occurrences";

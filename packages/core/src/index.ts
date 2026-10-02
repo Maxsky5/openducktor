@@ -29,8 +29,6 @@ export type { AgentSessionQueryParentPort } from "./ports/agent-session-query-pa
 
 export * from "./ports/runtime-session-import";
 
-export * from "./notifications/task-occurrence-projector";
-export * from "./notifications/session-occurrence-projector";
 export * from "./notifications/notification-occurrence";
 export * from "./notifications/notification-replay-reason";
 export * from "./notifications/session-error-message";
