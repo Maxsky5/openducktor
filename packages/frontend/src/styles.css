@@ -1,5 +1,8 @@
 @import "tailwindcss";
 @import "./components/ui/dialog.css";
+@import "./components/ui/popover.css";
+@import "./components/ui/sheet.css";
+@import "./components/ui/tooltip.css";
 @source "./";
 @custom-variant dark (&:where(.dark, .dark *));
 @plugin "@tailwindcss/typography";
@@ -625,11 +628,6 @@ html.onboarding-stage-transition::view-transition-new(onboarding-stage-content) 
   }
 }
 
-.agent-chat-row-motion {
-  transform-origin: center bottom;
-  will-change: transform, opacity;
-}
-
 .running-status-dot {
   position: relative;
   display: inline-flex;
@@ -726,7 +724,6 @@ html.onboarding-stage-transition::view-transition-new(onboarding-stage-content) 
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .agent-chat-row-motion,
   .onboarding-stage-enter,
   .running-status-dot::before,
   .running-status-dot::after,

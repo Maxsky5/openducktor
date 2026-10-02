@@ -1,0 +1,50 @@
+:root {
+  --popover-open-dur: 250ms;
+  --popover-close-dur: 150ms;
+  --popover-scale: 0.97;
+  --popover-scale-close: 0.99;
+  --popover-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-slot="popover-content"] {
+  transform-origin: var(--radix-popover-content-transform-origin);
+}
+
+/* Radix keeps the content mounted until its exit animation ends. */
+[data-slot="popover-content"][data-state="open"] {
+  animation: popover-scale-in var(--popover-open-dur) var(--popover-ease) backwards;
+}
+
+/* A closing popover must not take a second click on the item that closed it. */
+[data-slot="popover-content"][data-state="closed"] {
+  animation: popover-scale-out var(--popover-close-dur) var(--popover-ease) both;
+  pointer-events: none;
+}
+
+@keyframes popover-scale-in {
+  from {
+    transform: scale(var(--popover-scale));
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes popover-scale-out {
+  from {
+    transform: scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: scale(var(--popover-scale-close));
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="popover-content"] {
+    animation: none !important;
+  }
+}

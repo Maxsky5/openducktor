@@ -1,6 +1,6 @@
-import type { AgentSessionRecord } from "@openducktor/contracts";
+import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import { type ComponentProps, type ReactElement, useEffect, useRef } from "react";
+import { type ComponentProps, type ReactElement, useEffect, useRef, useState } from "react";
 import type {
   ActiveTaskSessionContext,
   KanbanTaskSession,
@@ -17,17 +17,13 @@ import {
   TaskDetailsSheetFooter,
   type TaskDetailsSheetFooterProps,
 } from "@/components/features/task-details/task-details-sheet-footer";
+import { TaskDetailsSheetFrame } from "@/components/features/task-details/task-details-sheet-frame";
 import { TaskDetailsSheetHeader } from "@/components/features/task-details/task-details-sheet-header";
 import type { TaskDetailsSheetProps } from "@/components/features/task-details/task-details-sheet-types";
 import { TaskResetConfirmDialog } from "@/components/features/task-details/task-reset-confirm-dialog";
 import { useTaskDetailsSheetViewModel } from "@/components/features/task-details/use-task-details-sheet-view-model";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { useDialogOpen } from "@/components/ui/dialog-root";
+import { SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
   type TaskWorkflowActions,
   useTaskWorkflowActions,
@@ -53,19 +49,45 @@ const DETAIL_ACTIONS: readonly TaskWorkflowAction[] = [
 
 const EMPTY_TASK_SESSIONS: KanbanTaskSession[] = [];
 
-export function TaskDetailsSheet(props: TaskDetailsSheetProps): ReactElement {
-  const sheetContentRef = useRef<HTMLDivElement>(null);
+export function TaskDetailsSheet({
+  task,
+  open,
+  ...contentProps
+}: TaskDetailsSheetProps): ReactElement {
+  // The controller clears the task when it closes the sheet. Keep the last task for the exit.
+  // Radix unmounts the closed content, so the held task runs no queries.
+  const [lastTask, setLastTask] = useState(task);
+  if (task && task !== lastTask) setLastTask(task);
+  const shownTask = task ?? lastTask;
+  return (
+    <TaskDetailsSheetFrame open={open} onOpenChange={contentProps.onOpenChange}>
+      {shownTask ? (
+        <TaskDetailsSheetContent {...contentProps} task={shownTask} />
+      ) : (
+        <SheetHeader>
+          <SheetTitle>Task Details</SheetTitle>
+          <SheetDescription>Select a task to inspect details.</SheetDescription>
+        </SheetHeader>
+      )}
+    </TaskDetailsSheetFrame>
+  );
+}
+
+/** The task details inside `TaskDetailsSheetFrame`, with the task's confirm dialogs. */
+export function TaskDetailsSheetContent(
+  props: Omit<TaskDetailsSheetProps, "open" | "task"> & { task: TaskCard },
+): ReactElement {
   const workflowActions = useTaskWorkflowActions();
   const {
     activeWorkspace = null,
     task,
     allTasks,
-    open,
     onOpenChange,
     onEdit = workflowActions?.onEdit,
     onDelete = workflowActions?.onDelete,
   } = props;
-  const taskId = task?.id ?? null;
+  const open = useDialogOpen("TaskDetailsSheetContent", "TaskDetailsSheetFrame");
+  const taskId = task.id;
   const contextTaskSessions = getContextTaskSessions(workflowActions, taskId);
   const activeSessionContext = getActiveTaskSessionContext(workflowActions, taskId);
   const historicalSessions = useTaskDetailsHistoricalSessions({
@@ -89,11 +111,6 @@ export function TaskDetailsSheet(props: TaskDetailsSheetProps): ReactElement {
   );
   const hasActiveSession = Boolean(activeSessionContext);
   const activeSessionRole = activeSessionContext?.role;
-
-  if (!task) {
-    return <TaskDetailsSheetEmptyState open={open} onOpenChange={onOpenChange} />;
-  }
-
   const pullRequestHeaderProps = getPullRequestHeaderProps({
     task,
     onDetectPullRequest: workflowActions?.onDetectPullRequest,
@@ -116,67 +133,56 @@ export function TaskDetailsSheet(props: TaskDetailsSheetProps): ReactElement {
   });
 
   return (
-    <Sheet modal={false} open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        ref={sheetContentRef}
-        side="right"
-        closeButton={null}
-        visualOverlay
-        className="h-full max-h-screen gap-0 p-0 sm:max-w-[680px]"
-        onOpenAutoFocus={(event) => {
-          event.preventDefault();
-          sheetContentRef.current?.focus({ preventScroll: true });
-        }}
-      >
-        <SheetTitle className="sr-only">{task.title}</SheetTitle>
-        <SheetDescription className="sr-only">
-          Inspect task details and workflow actions.
-        </SheetDescription>
-        <SheetHeader className="border-b border-border bg-card px-5 py-4">
-          <TaskDetailsSheetHeader
-            task={task}
-            subtasksCount={viewModel.subtasks.length}
-            taskLabels={viewModel.taskLabels}
-            gitProviderContext={workflowActions?.gitProviderContext}
-            gitProviderReadError={workflowActions?.gitProviderReadError ?? null}
-            {...pullRequestHeaderProps}
-          />
-        </SheetHeader>
+    <>
+      <SheetTitle className="sr-only">{task.title}</SheetTitle>
+      <SheetDescription className="sr-only">
+        Inspect task details and workflow actions.
+      </SheetDescription>
+      <SheetHeader className="border-b border-border bg-card px-5 py-4">
+        <TaskDetailsSheetHeader
+          task={task}
+          subtasksCount={viewModel.subtasks.length}
+          taskLabels={viewModel.taskLabels}
+          gitProviderContext={workflowActions?.gitProviderContext}
+          gitProviderReadError={workflowActions?.gitProviderReadError ?? null}
+          {...pullRequestHeaderProps}
+        />
+      </SheetHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
-          <TaskDetailsSheetBody
-            task={task}
-            {...(activeWorkspace ? { repoPath: activeWorkspace.repoPath } : {})}
-            {...(activeWorkspace ? { workspaceId: activeWorkspace.workspaceId } : {})}
-            shouldRenderSubtasks={viewModel.shouldRenderSubtasks}
-            subtasks={viewModel.subtasks}
-            specDoc={viewModel.specDoc}
-            planDoc={viewModel.planDoc}
-            qaDoc={viewModel.qaDoc}
-            documentSummaries={{
-              hasSpec: viewModel.hasSpecDocument,
-              hasPlan: viewModel.hasPlanDocument,
-              hasQa: viewModel.hasQaDocument,
-              specUpdatedAt: viewModel.specSummaryUpdatedAt,
-              planUpdatedAt: viewModel.planSummaryUpdatedAt,
-              qaUpdatedAt: viewModel.qaSummaryUpdatedAt,
-            }}
-            loadSpecDocumentSection={viewModel.loadSpecDocumentSection}
-            loadPlanDocumentSection={viewModel.loadPlanDocumentSection}
-            loadQaDocumentSection={viewModel.loadQaDocumentSection}
-          />
-        </div>
+      <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+        <TaskDetailsSheetBody
+          task={task}
+          {...(activeWorkspace ? { repoPath: activeWorkspace.repoPath } : {})}
+          {...(activeWorkspace ? { workspaceId: activeWorkspace.workspaceId } : {})}
+          shouldRenderSubtasks={viewModel.shouldRenderSubtasks}
+          subtasks={viewModel.subtasks}
+          specDoc={viewModel.specDoc}
+          planDoc={viewModel.planDoc}
+          qaDoc={viewModel.qaDoc}
+          documentSummaries={{
+            hasSpec: viewModel.hasSpecDocument,
+            hasPlan: viewModel.hasPlanDocument,
+            hasQa: viewModel.hasQaDocument,
+            specUpdatedAt: viewModel.specSummaryUpdatedAt,
+            planUpdatedAt: viewModel.planSummaryUpdatedAt,
+            qaUpdatedAt: viewModel.qaSummaryUpdatedAt,
+          }}
+          loadSpecDocumentSection={viewModel.loadSpecDocumentSection}
+          loadPlanDocumentSection={viewModel.loadPlanDocumentSection}
+          loadQaDocumentSection={viewModel.loadQaDocumentSection}
+        />
+      </div>
 
-        <TaskDetailsSheetFooter {...footerProps} />
-      </SheetContent>
+      <TaskDetailsSheetFooter {...footerProps} />
 
+      {/* Inside the sheet content, so the non-modal sheet treats focus in them as its own. */}
       <TaskDetailsDialogs
         viewModel={viewModel}
         showDelete={onDelete !== undefined}
         showReset={workflowActions?.onResetTask !== undefined}
         showClose={workflowActions?.onCloseTask !== undefined}
       />
-    </Sheet>
+    </>
   );
 }
 
@@ -298,30 +304,6 @@ function resolveTaskHistoricalSessionRoles(
   historicalSessions: AgentSessionRecord[],
 ): AgentRole[] {
   return task ? resolveHistoricalSessionRoles(historicalSessions) : [];
-}
-
-function TaskDetailsSheetEmptyState({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: TaskDetailsSheetProps["onOpenChange"];
-}): ReactElement {
-  return (
-    <Sheet modal={false} open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        closeButton={null}
-        visualOverlay
-        className="h-full max-h-screen gap-0 p-0 sm:max-w-[680px]"
-      >
-        <SheetHeader>
-          <SheetTitle>Task Details</SheetTitle>
-          <SheetDescription>Select a task to inspect details.</SheetDescription>
-        </SheetHeader>
-      </SheetContent>
-    </Sheet>
-  );
 }
 
 function getTaskDetailsFooterProps({

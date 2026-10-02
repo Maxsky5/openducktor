@@ -13,6 +13,7 @@ import {
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import type { TaskStopImpactState, useTaskStopImpact } from "@/state/queries/use-task-stop-impact";
+import { finishSheetExit, withSheetAnimations } from "@/test-utils/mock-sheet-animations";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 
@@ -558,6 +559,135 @@ describe("TaskDetailsSheet", () => {
     );
 
     expect(html).not.toContain('<span class="sr-only">Close</span>');
+  });
+
+  test("keeps the closed task in place until the sheet exit ends", async () => {
+    const { TaskDetailsSheet } = await import("./task-details-sheet");
+    const task = createTaskCardFixture({ id: "TASK-1", title: "Task 1" });
+    // The controller clears the task and closes the sheet in the same render.
+    const renderSheet = (open: boolean) =>
+      createElement(
+        IsolatedProviders,
+        null,
+        createElement(TaskDetailsSheet, {
+          task: open ? task : null,
+          allTasks: [task],
+          open,
+          onOpenChange: () => {},
+        }),
+      );
+
+    await withSheetAnimations(() => {
+      const view = render(renderSheet(true));
+      try {
+        const sheet = screen.getByRole("dialog", { name: "Task 1" });
+        const overlay = screen.getByLabelText("Close sheet overlay");
+
+        view.rerender(renderSheet(false));
+        expect(sheet.isConnected).toBe(true);
+        expect(sheet.getAttribute("data-state")).toBe("closed");
+        expect(overlay.isConnected).toBe(true);
+        expect(overlay.getAttribute("data-state")).toBe("closed");
+        expect(sheet.textContent).toContain("Task 1");
+
+        finishSheetExit();
+        expect(sheet.isConnected).toBe(false);
+        expect(overlay.isConnected).toBe(false);
+      } finally {
+        view.unmount();
+      }
+    });
+  });
+
+  test("removes the closed task at once when the sheet has no exit animation", async () => {
+    const { TaskDetailsSheet } = await import("./task-details-sheet");
+    const task = createTaskCardFixture({ id: "TASK-1", title: "Task 1" });
+    const renderSheet = (open: boolean) =>
+      createElement(
+        IsolatedProviders,
+        null,
+        createElement(TaskDetailsSheet, {
+          task: open ? task : null,
+          allTasks: [task],
+          open,
+          onOpenChange: () => {},
+        }),
+      );
+
+    const view = render(renderSheet(true));
+    try {
+      view.rerender(renderSheet(false));
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(screen.queryByLabelText("Close sheet overlay")).toBeNull();
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("keeps the sheet open when focus moves into its confirm dialog", async () => {
+    const { TaskDetailsSheet } = await import("./task-details-sheet");
+    const { TaskWorkflowActionsContext } =
+      await import("@/features/task-workflow/task-workflow-actions-context");
+    const task = createTaskCardFixture({
+      id: "TASK-1",
+      title: "Task 1",
+      availableActions: ["close_task"],
+    });
+    const onOpenChange = mock((_open: boolean) => {});
+
+    const { unmount } = render(
+      createElement(
+        IsolatedProviders,
+        null,
+        createElement(
+          TaskWorkflowActionsContext.Provider,
+          { value: createTaskWorkflowActionsValue() },
+          createElement(TaskDetailsSheet, { task, allTasks: [task], open: true, onOpenChange }),
+        ),
+      ),
+    );
+
+    try {
+      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+      const closeTask = screen.getByRole("button", { name: "Close Task" });
+      closeTask.focus();
+      fireEvent.click(closeTask);
+      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+
+      expect(screen.getByRole("dialog", { name: "Close Task" })).toBeTruthy();
+      expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    } finally {
+      unmount();
+    }
+  });
+
+  test("closes the sheet when focus moves into an unrelated dialog", async () => {
+    const { TaskDetailsSheet } = await import("./task-details-sheet");
+    const { Dialog, DialogContent, DialogTitle } = await import("@/components/ui/dialog");
+    const task = createTaskCardFixture({ id: "TASK-1", title: "Task 1" });
+    const onOpenChange = mock((_open: boolean) => {});
+    const renderSheet = (editorOpen: boolean) =>
+      createElement(
+        IsolatedProviders,
+        null,
+        createElement(TaskDetailsSheet, { task, allTasks: [task], open: true, onOpenChange }),
+        createElement(
+          Dialog,
+          { open: editorOpen },
+          createElement(DialogContent, null, createElement(DialogTitle, null, "Edit task")),
+        ),
+      );
+
+    const view = render(renderSheet(false));
+    try {
+      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+      view.rerender(renderSheet(true));
+      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    } finally {
+      view.unmount();
+    }
   });
 
   test("focuses the sheet instead of the copy button when it opens", async () => {

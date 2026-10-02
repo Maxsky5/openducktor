@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { TaskDetailsSheet } from "@/components/features/task-details/task-details-sheet";
+import { TaskDetailsSheetContent } from "@/components/features/task-details/task-details-sheet";
 import { TaskDetailsSheetPlaceholder } from "@/components/features/task-details/task-details-sheet-placeholder";
 import { useTaskSnapshotContext } from "@/state/app-state-contexts";
 import { useActiveWorkspace } from "@/state/app-state-provider";
@@ -11,6 +11,7 @@ type TaskDetailsSheetViewerProps = {
   onOpenChange: (open: boolean) => void;
 };
 
+/** Loads a task and renders its details inside `TaskDetailsSheetFrame`. */
 export default function TaskDetailsSheetViewer({
   taskId,
   onOpenChange,
@@ -38,11 +39,10 @@ export default function TaskDetailsSheetViewer({
   }
 
   return (
-    <TaskDetailsSheet
+    <TaskDetailsSheetContent
       activeWorkspace={activeWorkspace}
       task={task}
       allTasks={allTasks}
-      open
       onOpenChange={onOpenChange}
     />
   );

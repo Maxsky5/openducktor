@@ -1,0 +1,41 @@
+:root {
+  --tooltip-open-dur: 150ms;
+  --tooltip-close-dur: 50ms;
+  --tooltip-scale: 0.98;
+  --tooltip-ease: ease-out;
+}
+
+/* Animate only the first tooltip. Radix uses `instant-open` for the next ones in the skip delay. */
+[data-slot="tooltip-content"][data-state="delayed-open"] {
+  animation: tooltip-scale-in var(--tooltip-open-dur) var(--tooltip-ease) backwards;
+}
+
+[data-slot="tooltip-content"][data-state="closed"] {
+  animation: tooltip-fade-out var(--tooltip-close-dur) var(--tooltip-ease) both;
+}
+
+@keyframes tooltip-scale-in {
+  from {
+    transform: scale(var(--tooltip-scale));
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes tooltip-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="tooltip-content"] {
+    animation: none !important;
+  }
+}
