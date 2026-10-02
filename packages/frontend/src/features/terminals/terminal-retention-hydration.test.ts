@@ -1,10 +1,7 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { TERMINAL_PROTOCOL_VERSION, type TerminalServerMessage } from "@openducktor/contracts";
-import {
-  type InteractiveTerminalMount,
-  mountInteractiveTerminal,
-} from "./interactive-terminal-mount";
+import { type TerminalViewportMount, mountTerminalViewport } from "./terminal-viewport-mount";
 import * as sharedTerminalBinding from "./shared-terminal-binding";
 import type { TerminalBinding } from "./shared-terminal-binding";
 import type {
@@ -77,6 +74,7 @@ const sendStaleBuffer = (listener: TerminalFrameListener, terminalId: string): v
 const createLightweightBinding = () => {
   let output = "";
   let inputListener: (data: string) => void = () => undefined;
+  let keyListener: (event: KeyboardEvent) => boolean = () => true;
   let resizeListener: (grid: { cols: number; rows: number }) => void = () => undefined;
   const parsedCallbacks: Array<() => void> = [];
   const subscription = { dispose: mock(() => undefined) };
@@ -105,7 +103,11 @@ const createLightweightBinding = () => {
       resizeListener({ cols, rows });
     }),
     parser: { registerOscHandler: () => subscription },
-    attachCustomKeyEventHandler: () => undefined,
+    attachCustomKeyEventHandler: (listener: typeof keyListener) => {
+      keyListener = listener;
+    },
+    hasSelection: () => false,
+    getSelection: () => "",
     scrollToBottom: mock(() => undefined),
     refresh: mock(() => undefined),
     focus: mock(() => undefined),
@@ -124,10 +126,80 @@ const createLightweightBinding = () => {
     parsedCallbacks,
     readOutput: () => output,
     sendInput: (data: string) => inputListener(data),
+    sendKey: (event: KeyboardEvent) => keyListener(event),
   };
 };
 
 describe("retained terminal rendering", () => {
+  test("flushes the pending viewport and host grid before Ctrl-C input", async () => {
+    const lightweight = createLightweightBinding();
+    const createBinding = spyOn(sharedTerminalBinding, "createTerminalBinding").mockImplementation(
+      // SAFETY: the fake terminal implements every binding method used by this mount test.
+      () => Object.assign(Object.create(null), lightweight.binding) as TerminalBinding,
+    );
+    const { controller } = createController();
+    const operations: string[] = [];
+    controller.resize = async (_terminalId, columns, rows) => {
+      operations.push(`resize:${columns}x${rows}`);
+    };
+    controller.write = async (_terminalId, data) => {
+      operations.push(`input:${[...data].join(",")}`);
+    };
+    const container = document.createElement("div");
+    Object.defineProperties(container, {
+      clientWidth: { value: 800 },
+      clientHeight: { value: 400 },
+    });
+    document.body.append(container);
+    const nativeResizeObserver = globalThis.ResizeObserver;
+    let notifyResize: ResizeObserverCallback = () => undefined;
+    globalThis.ResizeObserver = class {
+      constructor(callback: ResizeObserverCallback) {
+        notifyResize = callback;
+      }
+      observe(): void {}
+      unobserve(): void {}
+      disconnect(): void {}
+    };
+    let mount: TerminalViewportMount | null = null;
+    try {
+      mount = mountTerminalViewport({
+        container,
+        terminalId: "terminal-1",
+        controller,
+        isActive: () => true,
+        getPlatform: () => "darwin",
+        stageFile: async () => "/tmp/image.png",
+        preparePathInput: async () => "/tmp/image.png",
+        writeClipboard: async () => undefined,
+        onAttention: () => undefined,
+        onLifecycle: () => undefined,
+        onForgotten: () => undefined,
+        onTitleChange: () => undefined,
+        onHydrated: () => undefined,
+        onImageDragActiveChange: () => undefined,
+        onInteractionFailure: (_title, cause) => {
+          throw cause;
+        },
+      });
+      lightweight.binding.fitAddon.fit.mockImplementation(() => {
+        lightweight.binding.terminal.resize(120, 40);
+      });
+      notifyResize([], new nativeResizeObserver(() => undefined));
+      expect(lightweight.sendKey(new KeyboardEvent("keydown", { ctrlKey: true, key: "c" }))).toBe(
+        false,
+      );
+      await Bun.sleep(0);
+
+      expect(operations).toEqual(["resize:120x40", "input:3"]);
+    } finally {
+      globalThis.ResizeObserver = nativeResizeObserver;
+      mount?.dispose();
+      container.remove();
+      createBinding.mockRestore();
+    }
+  });
+
   test("skips unusable grids and fits the smallest usable grid", async () => {
     const lightweight = createLightweightBinding();
     const createBinding = spyOn(sharedTerminalBinding, "createTerminalBinding").mockImplementation(
@@ -165,10 +237,10 @@ describe("retained terminal rendering", () => {
       unobserve(): void {}
       disconnect(): void {}
     };
-    let mount: InteractiveTerminalMount | null = null;
+    let mount: TerminalViewportMount | null = null;
     try {
       try {
-        mount = mountInteractiveTerminal({
+        mount = mountTerminalViewport({
           container,
           terminalId: "terminal-hidden-task",
           controller,
@@ -262,9 +334,9 @@ describe("retained terminal rendering", () => {
       unobserve(): void {}
       disconnect(): void {}
     };
-    let mount: InteractiveTerminalMount;
+    let mount: TerminalViewportMount;
     try {
-      mount = mountInteractiveTerminal({
+      mount = mountTerminalViewport({
         container,
         terminalId: "terminal-1",
         controller,
@@ -350,7 +422,7 @@ describe("retained terminal rendering", () => {
     });
     const retained: Array<{
       container: HTMLDivElement;
-      mount: InteractiveTerminalMount;
+      mount: TerminalViewportMount;
       terminalId: string;
     }> = [];
 
@@ -363,7 +435,7 @@ describe("retained terminal rendering", () => {
           clientWidth: { value: 800 },
         });
         document.body.append(container);
-        const mount = mountInteractiveTerminal({
+        const mount = mountTerminalViewport({
           container,
           terminalId,
           controller,
@@ -447,7 +519,7 @@ describe("retained terminal rendering", () => {
   test("renders replay output after activating retained real-xterm mounts", async () => {
     const { controller, listeners } = createController();
     let activeTerminalId: string | null = null;
-    const retained: Array<{ container: HTMLDivElement; mount: InteractiveTerminalMount }> = [];
+    const retained: Array<{ container: HTMLDivElement; mount: TerminalViewportMount }> = [];
     try {
       for (const terminalId of ["terminal-first", "terminal-last"]) {
         const container = document.createElement("div");
@@ -460,7 +532,7 @@ describe("retained terminal rendering", () => {
         const hydrated = new Promise<void>((resolve) => {
           finishHydration = resolve;
         });
-        const mount = mountInteractiveTerminal({
+        const mount = mountTerminalViewport({
           container,
           terminalId,
           controller,
@@ -517,7 +589,7 @@ describe("retained terminal rendering", () => {
     const preparationFinished = new Promise<void>((resolve) => {
       finishPreparation = resolve;
     });
-    const mount = mountInteractiveTerminal({
+    const mount = mountTerminalViewport({
       container,
       terminalId: "terminal-image-drop",
       controller,

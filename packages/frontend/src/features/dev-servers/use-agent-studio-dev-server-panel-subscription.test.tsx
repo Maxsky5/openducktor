@@ -207,591 +207,6 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
     }
   });
 
-  test("rehydrates buffered terminal replay after a browser-live stream warning", async () => {
-    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
-    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
-    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
-
-    const initialState = buildState({
-      scripts: [
-        buildScript({
-          status: "running",
-          pid: 4242,
-          startedAt: "2026-03-19T15:30:00.000Z",
-        }),
-      ],
-    });
-    const refreshedState = buildState({
-      updatedAt: "2026-03-19T15:31:00.000Z",
-      scripts: [
-        buildScript({
-          status: "running",
-          pid: 4242,
-          startedAt: "2026-03-19T15:30:00.000Z",
-          bufferedTerminalChunks: [
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 4,
-              data: "rehydrated output\r\n",
-              timestamp: "2026-03-19T15:31:00.000Z",
-            },
-          ],
-        }),
-      ],
-    });
-    let getStateCalls = 0;
-    devServerGetState = async () => {
-      getStateCalls += 1;
-      return getStateCalls === 1 ? initialState : refreshedState;
-    };
-    const restartDeferred = createDeferred<DevServerGroupState>();
-    devServerRestart = async () => restartDeferred.promise;
-
-    const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
-      repoPath: "/repo",
-      owner: { kind: "task", taskId: "task-7" },
-      enabled: true,
-    });
-
-    try {
-      await waitFor(() => {
-        expect(harness.getLatest().mode).toBe("active");
-      });
-
-      await act(async () => {
-        harness.getLatest().onRestart();
-      });
-      await waitFor(() => {
-        expect(devServerEventListener).not.toBeNull();
-      });
-
-      await act(async () => {
-        devServerEventListener?.({
-          __openducktorBrowserLive: true,
-          kind: "stream-warning",
-          message: "Dev server stream skipped 4 events; reconnect will replay buffered events.",
-        });
-      });
-
-      await waitFor(() => {
-        expect(harness.getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe(
-          "rehydrated output\r\n",
-        );
-      });
-      expect(getStateCalls).toBe(2);
-      restartDeferred.resolve(refreshedState);
-    } finally {
-      harness.unmount();
-    }
-  });
-
-  test("hydrates full buffered terminal replay after the dev-server subscription becomes ready", async () => {
-    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
-    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
-    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
-
-    const bufferedTerminalChunks = Array.from({ length: 300 }, (_, sequence) => ({
-      scriptId: "frontend",
-      runIdentity: {
-        runId: "frontend:1",
-        runOrder: { hostInstanceId: "host-1", generation: 1 },
-      },
-      sequence,
-      data: `subscription-gap output ${sequence}\r\n`,
-      timestamp: "2026-03-19T15:31:00.000Z",
-    }));
-    const refreshedState = buildState({
-      updatedAt: "2026-03-19T15:31:00.000Z",
-      scripts: [
-        buildScript({
-          status: "running",
-          pid: 4242,
-          startedAt: "2026-03-19T15:30:00.000Z",
-          bufferedTerminalChunks,
-        }),
-      ],
-    });
-    let getStateCalls = 0;
-    devServerGetState = async () => {
-      getStateCalls += 1;
-      return refreshedState;
-    };
-    const subscriptionReady = createDeferred<TestDevServerEventSubscription>();
-    subscribeDevServerEventsMock = async (listener: DevServerEventListener) => {
-      devServerEventListener = listener;
-      return subscriptionReady.promise;
-    };
-
-    const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
-      repoPath: "/repo",
-      owner: { kind: "task", taskId: "task-7" },
-      enabled: true,
-    });
-
-    try {
-      expect(harness.getLatest().mode).toBe("loading");
-      expect(getStateCalls).toBe(0);
-
-      subscriptionReady.resolve({
-        transportEpoch: "test:0",
-        unsubscribe: () => {
-          devServerEventListener = null;
-        },
-      });
-
-      await waitFor(() => {
-        expect(harness.getLatest().selectedScriptTerminalBuffer?.entries).toHaveLength(300);
-      });
-      expect(harness.getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe(
-        "subscription-gap output 0\r\n",
-      );
-      expect(harness.getLatest().selectedScriptTerminalBuffer?.entries.at(-1)?.data).toBe(
-        "subscription-gap output 299\r\n",
-      );
-      expect(getStateCalls).toBe(1);
-    } finally {
-      harness.unmount();
-    }
-  });
-
-  test("does not replace newer live terminal output with a stale browser-live rehydrate replay", async () => {
-    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
-    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
-    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
-
-    const initialState = buildState({
-      scripts: [
-        buildScript({
-          status: "running",
-          pid: 4242,
-          startedAt: "2026-03-19T15:30:00.000Z",
-          bufferedTerminalChunks: [
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 0,
-              data: "Starting `cd apps/web && pnpm dev`\r\n",
-              timestamp: "2026-03-19T15:30:00.000Z",
-            },
-          ],
-        }),
-      ],
-    });
-    const staleRehydrateState = buildState({
-      updatedAt: "2026-03-19T15:31:00.000Z",
-      scripts: [
-        buildScript({
-          status: "running",
-          pid: 4242,
-          startedAt: "2026-03-19T15:30:00.000Z",
-          bufferedTerminalChunks: [
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 0,
-              data: "Starting `cd apps/web && pnpm dev`\r\n",
-              timestamp: "2026-03-19T15:30:00.000Z",
-            },
-          ],
-        }),
-      ],
-    });
-    const staleRehydrate = createDeferred<DevServerGroupState>();
-    let getStateCalls = 0;
-    devServerGetState = async () => {
-      getStateCalls += 1;
-      return getStateCalls === 1 ? initialState : staleRehydrate.promise;
-    };
-    const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
-      repoPath: "/repo",
-      owner: { kind: "task", taskId: "task-7" },
-      enabled: true,
-    });
-
-    try {
-      await waitFor(() => {
-        expect(harness.getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe(
-          "Starting `cd apps/web && pnpm dev`\r\n",
-        );
-      });
-      const initialResetToken = harness.getLatest().selectedScriptTerminalBuffer?.resetToken;
-      expect(getStateCalls).toBe(1);
-
-      act(() => {
-        devServerEventListener?.({
-          __openducktorBrowserLive: true,
-          kind: "stream-warning",
-          message: "Dev server stream skipped events; reconnect will replay buffered events.",
-        });
-      });
-
-      await waitFor(() => {
-        expect(getStateCalls).toBe(2);
-      });
-
-      act(() => {
-        devServerEventListener?.({
-          type: "terminal_chunk",
-          repoPath: "/repo",
-          owner: { kind: "task", taskId: "task-7" },
-          terminalChunk: {
-            scriptId: "frontend",
-            runIdentity: {
-              runId: "frontend:1",
-              runOrder: { hostInstanceId: "host-1", generation: 1 },
-            },
-            sequence: 1,
-            data: "$ cd apps/web && pnpm dev\r\n",
-            timestamp: "2026-03-19T15:30:01.000Z",
-          },
-        });
-        devServerEventListener?.({
-          type: "terminal_chunk",
-          repoPath: "/repo",
-          owner: { kind: "task", taskId: "task-7" },
-          terminalChunk: {
-            scriptId: "frontend",
-            runIdentity: {
-              runId: "frontend:1",
-              runOrder: { hostInstanceId: "host-1", generation: 1 },
-            },
-            sequence: 2,
-            data: "ELIFECYCLE Command failed.\r\n",
-            timestamp: "2026-03-19T15:30:02.000Z",
-          },
-        });
-      });
-
-      await waitFor(() => {
-        expect(harness.getLatest().selectedScriptTerminalBuffer?.entries).toHaveLength(3);
-      });
-
-      await act(async () => {
-        staleRehydrate.resolve(staleRehydrateState);
-      });
-
-      await waitFor(() => {
-        expect(
-          harness.getLatest().selectedScriptTerminalBuffer?.entries.map((entry) => entry.data),
-        ).toEqual([
-          "Starting `cd apps/web && pnpm dev`\r\n",
-          "$ cd apps/web && pnpm dev\r\n",
-          "ELIFECYCLE Command failed.\r\n",
-        ]);
-      });
-      expect(harness.getLatest().selectedScriptTerminalBuffer?.resetToken).toBe(initialResetToken);
-    } finally {
-      harness.unmount();
-    }
-  });
-
-  test("does not replace newer live terminal output with stale snapshot or status replay", async () => {
-    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
-    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
-    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
-
-    devServerGetState = async () =>
-      buildState({
-        scripts: [
-          buildScript({
-            status: "running",
-            runIdentity: {
-              runId: "frontend:2",
-              runOrder: { hostInstanceId: "host-1", generation: 2 },
-            },
-            pid: 4242,
-            startedAt: "2026-03-19T15:30:00.000Z",
-          }),
-        ],
-      });
-
-    const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
-      repoPath: "/repo",
-      owner: { kind: "task", taskId: "task-7" },
-      enabled: true,
-    });
-
-    const emitLiveFailureOutput = (): void => {
-      devServerEventListener?.({
-        type: "terminal_chunk",
-        repoPath: "/repo",
-        owner: { kind: "task", taskId: "task-7" },
-        terminalChunk: {
-          scriptId: "frontend",
-          runIdentity: {
-            runId: "frontend:2",
-            runOrder: { hostInstanceId: "host-1", generation: 2 },
-          },
-          sequence: 1,
-          data: "$ cd apps/web && pnpm dev\r\n",
-          timestamp: "2026-03-19T15:30:01.000Z",
-        },
-      });
-      devServerEventListener?.({
-        type: "terminal_chunk",
-        repoPath: "/repo",
-        owner: { kind: "task", taskId: "task-7" },
-        terminalChunk: {
-          scriptId: "frontend",
-          runIdentity: {
-            runId: "frontend:2",
-            runOrder: { hostInstanceId: "host-1", generation: 2 },
-          },
-          sequence: 2,
-          data: "ELIFECYCLE Command failed.\r\n",
-          timestamp: "2026-03-19T15:30:02.000Z",
-        },
-      });
-    };
-    const expectLiveFailureOutput = async (): Promise<void> => {
-      await waitFor(() => {
-        expect(
-          harness.getLatest().selectedScriptTerminalBuffer?.entries.map((entry) => entry.data),
-        ).toEqual(["$ cd apps/web && pnpm dev\r\n", "ELIFECYCLE Command failed.\r\n"]);
-        expect(harness.getLatest().scripts[0]?.runIdentity?.runId).toBe("frontend:2");
-      });
-    };
-    const staleStartingScript = buildScript({
-      status: "starting",
-      pid: null,
-      startedAt: null,
-      bufferedTerminalChunks: [
-        {
-          scriptId: "frontend",
-          runIdentity: {
-            runId: "frontend:1",
-            runOrder: { hostInstanceId: "host-1", generation: 1 },
-          },
-          sequence: 0,
-          data: "Starting `cd apps/web && pnpm dev`\r\n",
-          timestamp: "2026-03-19T15:30:00.000Z",
-        },
-      ],
-    });
-    const staleForeignStartingScript = buildScript({
-      status: "starting",
-      runIdentity: {
-        runId: "retired-host-run",
-        runOrder: { hostInstanceId: "retired-host", generation: 99 },
-      },
-      bufferedTerminalChunks: [
-        {
-          scriptId: "frontend",
-          runIdentity: {
-            runId: "retired-host-run",
-            runOrder: { hostInstanceId: "retired-host", generation: 99 },
-          },
-          sequence: 0,
-          data: "Retired host starting\r\n",
-          timestamp: "2026-03-19T15:29:00.000Z",
-        },
-      ],
-    });
-
-    try {
-      await waitFor(() => {
-        expect(harness.getLatest().mode).toBe("active");
-      });
-      await waitFor(() => {
-        expect(devServerEventListener).not.toBeNull();
-      });
-
-      act(emitLiveFailureOutput);
-      await expectLiveFailureOutput();
-
-      act(() => {
-        devServerEventListener?.({
-          type: "script_status_changed",
-          revision: 1,
-          repoPath: "/repo",
-          owner: { kind: "task", taskId: "task-7" },
-          updatedAt: "2026-03-19T15:30:03.000Z",
-          script: staleStartingScript,
-        });
-      });
-      await expectLiveFailureOutput();
-
-      act(() => {
-        devServerEventListener?.({
-          type: "script_status_changed",
-          revision: 1,
-          repoPath: "/repo",
-          owner: { kind: "task", taskId: "task-7" },
-          updatedAt: "2026-03-19T15:30:03.500Z",
-          script: staleForeignStartingScript,
-        });
-      });
-      await expectLiveFailureOutput();
-
-      act(() => {
-        devServerEventListener?.({
-          type: "snapshot",
-          state: buildState({
-            updatedAt: "2026-03-19T15:30:04.000Z",
-            scripts: [staleStartingScript],
-          }),
-        });
-      });
-      await expectLiveFailureOutput();
-    } finally {
-      harness.unmount();
-    }
-  });
-
-  test("rejects foreign host events for an unowned script in an owned group", async () => {
-    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
-    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
-    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
-
-    devServerGetState = async () =>
-      buildState({
-        scripts: [
-          buildScript({
-            status: "running",
-            runIdentity: {
-              runId: "frontend:1",
-              runOrder: { hostInstanceId: "host-current", generation: 1 },
-            },
-            pid: 4242,
-            startedAt: "2026-03-19T15:30:00.000Z",
-          }),
-          buildScript({
-            scriptId: "backend",
-            name: "Backend",
-            command: "bun run api",
-          }),
-        ],
-      });
-
-    const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
-      repoPath: "/repo",
-      owner: { kind: "task", taskId: "task-7" },
-      enabled: true,
-    });
-
-    try {
-      await waitFor(() => {
-        expect(harness.getLatest().scripts).toHaveLength(2);
-        expect(devServerEventListener).not.toBeNull();
-      });
-
-      act(() => {
-        devServerEventListener?.({
-          type: "script_status_changed",
-          revision: 1,
-          repoPath: "/repo",
-          owner: { kind: "task", taskId: "task-7" },
-          updatedAt: "2026-03-19T15:31:00.000Z",
-          script: buildScript({
-            scriptId: "backend",
-            name: "Backend",
-            command: "bun run api",
-            status: "starting",
-            runIdentity: {
-              runId: "backend:foreign",
-              runOrder: { hostInstanceId: "host-foreign", generation: 99 },
-            },
-          }),
-        });
-        devServerEventListener?.({
-          type: "terminal_chunk",
-          repoPath: "/repo",
-          owner: { kind: "task", taskId: "task-7" },
-          terminalChunk: {
-            scriptId: "backend",
-            runIdentity: {
-              runId: "backend:foreign",
-              runOrder: { hostInstanceId: "host-foreign", generation: 99 },
-            },
-            sequence: 0,
-            data: "foreign backend output\r\n",
-            timestamp: "2026-03-19T15:31:00.000Z",
-          },
-        });
-      });
-
-      const backend = harness.getLatest().scripts.find((script) => script.scriptId === "backend");
-      expect(backend?.status).toBe("stopped");
-      expect(backend?.runIdentity).toBeNull();
-
-      act(() => {
-        harness.getLatest().onSelectScript("backend");
-      });
-      expect(harness.getLatest().selectedScriptTerminalBuffer?.entries).toEqual([]);
-    } finally {
-      harness.unmount();
-    }
-  });
-
-  test("does not expose the previous task terminal buffer after the task scope changes", async () => {
-    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
-    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
-    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
-
-    devServerGetState = async (_repoPath, taskId) =>
-      buildState({
-        owner: taskId,
-        scripts: [
-          buildScript({
-            status: "running",
-            pid: 4242,
-            startedAt: "2026-03-19T15:30:00.000Z",
-            bufferedTerminalChunks:
-              taskId.kind === "task" && taskId.taskId === "task-7"
-                ? [
-                    {
-                      scriptId: "frontend",
-                      runIdentity: {
-                        runId: "frontend:1",
-                        runOrder: { hostInstanceId: "host-1", generation: 1 },
-                      },
-                      sequence: 7,
-                      data: "previous task output\r\n",
-                      timestamp: "2026-03-19T15:30:00.000Z",
-                    },
-                  ]
-                : [],
-          }),
-        ],
-      });
-
-    const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
-      repoPath: "/repo",
-      owner: { kind: "task", taskId: "task-7" },
-      enabled: true,
-    });
-
-    try {
-      await waitFor(() => {
-        expect(harness.getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe(
-          "previous task output\r\n",
-        );
-      });
-
-      act(() => {
-        harness.update({
-          repoPath: "/repo",
-          owner: { kind: "task", taskId: "task-8" },
-          enabled: true,
-        });
-      });
-
-      expect(harness.getLatest().selectedScriptTerminalBuffer).toBeNull();
-    } finally {
-      harness.unmount();
-    }
-  });
-
   test("ignores a mutation result that resolves after the active task changes", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
@@ -806,6 +221,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
             status: "running",
             pid: 4242,
             startedAt: "2026-03-19T15:30:00.000Z",
+            terminalId: `terminal-${taskId.kind === "task" ? taskId.taskId : taskId.sessionId}`,
           }),
         ],
       });
@@ -850,18 +266,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
                 status: "running",
                 pid: 5252,
                 startedAt: "2026-03-19T15:31:00.000Z",
-                bufferedTerminalChunks: [
-                  {
-                    scriptId: "frontend",
-                    runIdentity: {
-                      runId: "frontend:1",
-                      runOrder: { hostInstanceId: "host-1", generation: 1 },
-                    },
-                    sequence: 0,
-                    data: "task seven restarted output\r\n",
-                    timestamp: "2026-03-19T15:31:00.000Z",
-                  },
-                ],
+                terminalId: "terminal-output",
               }),
             ],
           }),
@@ -871,7 +276,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       await waitFor(() => {
         expect(harness.getLatest().workingDirectory).toBe("/tmp/worktree/task-8");
       });
-      expect(harness.getLatest().selectedScriptTerminalBuffer?.entries).toEqual([]);
+      expect(harness.getLatest().selectedScript?.terminalId).toBe("terminal-task-8");
     } finally {
       harness.unmount();
     }
@@ -964,228 +369,6 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
     }
   });
 
-  test("replaces a returned task terminal buffer after its sequence resets while inactive", async () => {
-    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
-    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
-    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
-
-    const taskStateByTaskId = new Map<string, DevServerGroupState>([
-      [
-        "task-7",
-        buildState({
-          owner: { kind: "task", taskId: "task-7" },
-          workingDirectory: "/tmp/worktree/task-7",
-          scripts: [
-            buildScript({
-              status: "running",
-              pid: 4242,
-              startedAt: "2026-03-19T15:30:00.000Z",
-              bufferedTerminalChunks: [
-                {
-                  scriptId: "frontend",
-                  runIdentity: {
-                    runId: "frontend:1",
-                    runOrder: { hostInstanceId: "host-1", generation: 1 },
-                  },
-                  sequence: 7,
-                  data: "old task seven output\r\n",
-                  timestamp: "2026-03-19T15:30:00.000Z",
-                },
-              ],
-            }),
-          ],
-        }),
-      ],
-      [
-        "task-8",
-        buildState({
-          owner: { kind: "task", taskId: "task-8" },
-          workingDirectory: "/tmp/worktree/task-8",
-          scripts: [
-            buildScript({
-              status: "running",
-              pid: 5252,
-              startedAt: "2026-03-19T15:30:30.000Z",
-            }),
-          ],
-        }),
-      ],
-    ]);
-    devServerGetState = async (_repoPath, taskId) => {
-      const state = taskStateByTaskId.get(
-        taskId.kind === "task" ? taskId.taskId : taskId.sessionId,
-      );
-      if (!state) {
-        throw new Error(`Missing test state for ${taskId}.`);
-      }
-
-      return state;
-    };
-
-    const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
-      repoPath: "/repo",
-      owner: { kind: "task", taskId: "task-7" },
-      enabled: true,
-    });
-
-    try {
-      await waitFor(() => {
-        expect(harness.getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe(
-          "old task seven output\r\n",
-        );
-      });
-
-      act(() => {
-        harness.update({
-          repoPath: "/repo",
-          owner: { kind: "task", taskId: "task-8" },
-          enabled: true,
-        });
-      });
-
-      await waitFor(() => {
-        expect(harness.getLatest().workingDirectory).toBe("/tmp/worktree/task-8");
-      });
-
-      taskStateByTaskId.set(
-        "task-7",
-        buildState({
-          owner: { kind: "task", taskId: "task-7" },
-          workingDirectory: "/tmp/worktree/task-7",
-          updatedAt: "2026-03-19T15:31:00.000Z",
-          scripts: [
-            buildScript({
-              status: "running",
-              pid: 6262,
-              startedAt: "2026-03-19T15:31:00.000Z",
-              bufferedTerminalChunks: [
-                {
-                  scriptId: "frontend",
-                  runIdentity: {
-                    runId: "frontend:2",
-                    runOrder: { hostInstanceId: "host-1", generation: 2 },
-                  },
-                  sequence: 0,
-                  data: "new task seven output\r\n",
-                  timestamp: "2026-03-19T15:31:00.000Z",
-                },
-              ],
-            }),
-          ],
-        }),
-      );
-
-      act(() => {
-        harness.update({
-          repoPath: "/repo",
-          owner: { kind: "task", taskId: "task-7" },
-          enabled: true,
-        });
-      });
-
-      await waitFor(() => {
-        expect(
-          harness.getLatest().selectedScriptTerminalBuffer?.entries.map((entry) => entry.data),
-        ).toEqual(["new task seven output\r\n"]);
-      });
-    } finally {
-      harness.unmount();
-    }
-  });
-
-  test("rehydrates buffered terminal replay after a browser-live reconnect", async () => {
-    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
-    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
-    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
-
-    const initialState = buildState({
-      scripts: [
-        buildScript({
-          status: "running",
-          pid: 4242,
-          startedAt: "2026-03-19T15:30:00.000Z",
-          bufferedTerminalChunks: [
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 0,
-              data: "stale output\r\n",
-              timestamp: "2026-03-19T15:30:00.000Z",
-            },
-          ],
-        }),
-      ],
-    });
-    const refreshedState = buildState({
-      updatedAt: "2026-03-19T15:31:00.000Z",
-      scripts: [
-        buildScript({
-          status: "running",
-          runIdentity: {
-            runId: "frontend:2",
-            runOrder: { hostInstanceId: "host-2", generation: 1 },
-          },
-          pid: 4242,
-          startedAt: "2026-03-19T15:30:00.000Z",
-          bufferedTerminalChunks: [
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:2",
-                runOrder: { hostInstanceId: "host-2", generation: 1 },
-              },
-              sequence: 2,
-              data: "reconnected output\r\n",
-              timestamp: "2026-03-19T15:31:00.000Z",
-            },
-          ],
-        }),
-      ],
-    });
-    let getStateCalls = 0;
-    devServerGetState = async () => {
-      getStateCalls += 1;
-      return getStateCalls === 1 ? initialState : refreshedState;
-    };
-
-    const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
-      repoPath: "/repo",
-      owner: { kind: "task", taskId: "task-7" },
-      enabled: true,
-    });
-
-    try {
-      await waitFor(() => {
-        expect(harness.getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe(
-          "stale output\r\n",
-        );
-      });
-      await waitFor(() => {
-        expect(devServerEventListener).not.toBeNull();
-      });
-
-      await act(async () => {
-        devServerEventListener?.({
-          __openducktorBrowserLive: true,
-          kind: "reconnected",
-          transportEpoch: "test:1",
-        });
-      });
-
-      await waitFor(() => {
-        expect(harness.getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe(
-          "reconnected output\r\n",
-        );
-      });
-      expect(getStateCalls).toBe(2);
-    } finally {
-      harness.unmount();
-    }
-  });
-
   test("rejects retired cache and callbacks when a fresh subscription opens on a new host", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
 
@@ -1193,24 +376,9 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       scripts: [
         buildScript({
           status: "running",
-          runIdentity: {
-            runId: "retired-run",
-            runOrder: { hostInstanceId: "host-retired", generation: 1 },
-          },
           pid: 4141,
           startedAt: "2026-03-19T15:30:00.000Z",
-          bufferedTerminalChunks: [
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "retired-run",
-                runOrder: { hostInstanceId: "host-retired", generation: 1 },
-              },
-              sequence: 0,
-              data: "retired host\r\n",
-              timestamp: "2026-03-19T15:30:00.000Z",
-            },
-          ],
+          terminalId: "terminal-retired",
         }),
       ],
     });
@@ -1219,24 +387,9 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       scripts: [
         buildScript({
           status: "running",
-          runIdentity: {
-            runId: "current-run",
-            runOrder: { hostInstanceId: "host-current", generation: 1 },
-          },
           pid: 5151,
           startedAt: "2026-03-19T15:31:00.000Z",
-          bufferedTerminalChunks: [
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "current-run",
-                runOrder: { hostInstanceId: "host-current", generation: 1 },
-              },
-              sequence: 0,
-              data: "current host\r\n",
-              timestamp: "2026-03-19T15:31:00.000Z",
-            },
-          ],
+          terminalId: "terminal-current",
         }),
       ],
     });
@@ -1257,9 +410,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
     );
 
     await waitFor(() => {
-      expect(retiredHarness.getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe(
-        "retired host\r\n",
-      );
+      expect(retiredHarness.getLatest().selectedScript?.terminalId).toBe("terminal-retired");
     });
     act(() => {
       retiredHarness.getLatest().onRestart();
@@ -1280,43 +431,18 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
     );
 
     try {
-      expect(currentHarness.getLatest().selectedScriptTerminalBuffer).toBeNull();
       await waitFor(() => {
-        expect(currentHarness.getLatest().scripts[0]?.runIdentity?.runOrder.hostInstanceId).toBe(
-          "host-current",
-        );
-        expect(currentHarness.getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe(
-          "current host\r\n",
-        );
+        expect(currentHarness.getLatest().selectedScript?.terminalId).toBe("terminal-current");
       });
 
       await act(async () => {
         retiredRestart.resolve(retiredHostState);
-        retiredHostListener?.({
-          type: "terminal_chunk",
-          repoPath: "/repo",
-          owner: { kind: "task", taskId: "task-7" },
-          terminalChunk: {
-            scriptId: "frontend",
-            runIdentity: {
-              runId: "retired-run",
-              runOrder: { hostInstanceId: "host-retired", generation: 1 },
-            },
-            sequence: 1,
-            data: "late retired output\r\n",
-            timestamp: "2026-03-19T15:32:00.000Z",
-          },
-        });
+        retiredHostListener?.({ type: "snapshot", state: retiredHostState });
         await retiredRestart.promise;
         await Promise.resolve();
       });
 
-      expect(currentHarness.getLatest().scripts[0]?.runIdentity?.runOrder.hostInstanceId).toBe(
-        "host-current",
-      );
-      expect(
-        currentHarness.getLatest().selectedScriptTerminalBuffer?.entries.map((entry) => entry.data),
-      ).toEqual(["current host\r\n"]);
+      expect(currentHarness.getLatest().selectedScript?.terminalId).toBe("terminal-current");
     } finally {
       currentHarness.unmount();
     }
@@ -1332,24 +458,9 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       scripts: [
         buildScript({
           status: "running",
-          runIdentity: {
-            runId: "host-current-run",
-            runOrder: { hostInstanceId: "host-current", generation: 1 },
-          },
           pid: 5252,
           startedAt: "2026-03-19T15:31:00.000Z",
-          bufferedTerminalChunks: [
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "host-current-run",
-                runOrder: { hostInstanceId: "host-current", generation: 1 },
-              },
-              sequence: 0,
-              data: "current host\r\n",
-              timestamp: "2026-03-19T15:31:00.000Z",
-            },
-          ],
+          terminalId: "terminal-current",
         }),
       ],
     });
@@ -1397,9 +508,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
 
       await waitFor(() => {
         expect(getStateCalls).toBe(2);
-        expect(harness.getLatest().scripts[0]?.runIdentity?.runOrder.hostInstanceId).toBe(
-          "host-current",
-        );
+        expect(harness.getLatest().selectedScript?.terminalId).toBe("terminal-current");
       });
 
       act(() => {
@@ -1417,10 +526,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
             scripts: [
               buildScript({
                 status: "running",
-                runIdentity: {
-                  runId: "host-stale-run",
-                  runOrder: { hostInstanceId: "host-stale", generation: 99 },
-                },
+                terminalId: "terminal-stale",
                 pid: 4242,
                 startedAt: "2026-03-19T15:29:00.000Z",
               }),
@@ -1432,10 +538,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
             scripts: [
               buildScript({
                 status: "running",
-                runIdentity: {
-                  runId: "host-initial-stale-run",
-                  runOrder: { hostInstanceId: "host-initial-stale", generation: 50 },
-                },
+                terminalId: "terminal-initial-stale",
                 pid: 3131,
                 startedAt: "2026-03-19T15:28:00.000Z",
               }),
@@ -1459,7 +562,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
             return (
               mutation.state.status === "success" &&
               data.success &&
-              data.data.scripts[0]?.runIdentity?.runId === "host-stale-run"
+              data.data.scripts[0]?.terminalId === "terminal-stale"
             );
           });
         expect(staleQuery?.state.status).toBe("success");
@@ -1467,78 +570,10 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
         expect(hasSettledStaleMutation).toBe(true);
         expect(staleRestartSettled).toBe(true);
         expect(staleInitialQuerySettled).toBe(true);
-        expect(harness.getLatest().scripts[0]?.runIdentity?.runOrder.hostInstanceId).toBe(
-          "host-current",
-        );
-        expect(harness.getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe(
-          "current host\r\n",
-        );
+        expect(harness.getLatest().selectedScript?.terminalId).toBe("terminal-current");
       });
     } finally {
       harness.unmount();
     }
   }, 2_500);
-  test("keeps live state and replay with the selected Workspace Session in a shared directory", async () => {
-    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
-    const ownerOne = { kind: "workspace_session" as const, workspaceId: "ws", sessionId: "one" };
-    const ownerTwo = { kind: "workspace_session" as const, workspaceId: "ws", sessionId: "two" };
-    const stateFor = (owner: DevServerOwner): DevServerGroupState => {
-      const name = owner.kind === "workspace_session" ? owner.sessionId : owner.taskId;
-      return buildState({
-        owner,
-        workingDirectory: "/repo",
-        scripts: [
-          buildScript({
-            status: "running",
-            pid: name === "one" ? 401 : 402,
-            bufferedTerminalChunks: [
-              {
-                scriptId: "frontend",
-                runIdentity: {
-                  runId: `${name}:1`,
-                  runOrder: { hostInstanceId: "host-1", generation: 1 },
-                },
-                sequence: 0,
-                data: `${name} log`,
-                timestamp: "2026-09-27T00:00:00.000Z",
-              },
-            ],
-          }),
-        ],
-      });
-    };
-    devServerGetState = async (_repoPath, owner) => stateFor(owner);
-    const harness = renderDevServerPanelHook(useAgentStudioDevServerPanel, {
-      repoPath: "/repo",
-      owner: ownerOne,
-      enabled: true,
-    });
-    try {
-      await waitFor(() =>
-        expect(harness.getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe("one log"),
-      );
-      harness.update({ repoPath: "/repo", owner: ownerTwo, enabled: true });
-      await waitFor(() =>
-        expect(harness.getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe("two log"),
-      );
-      act(() =>
-        devServerEventListener?.({
-          type: "script_status_changed",
-          repoPath: "/repo",
-          owner: ownerOne,
-          script: buildScript({ status: "failed", lastError: "foreign" }),
-          revision: 99,
-          updatedAt: "2026-09-27T00:01:00.000Z",
-        }),
-      );
-      expect(harness.getLatest().scripts[0]?.status).toBe("running");
-      expect(harness.getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe("two log");
-      harness.update({ repoPath: "/repo", owner: ownerOne, enabled: true });
-      await waitFor(() =>
-        expect(harness.getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe("one log"),
-      );
-    } finally {
-      harness.unmount();
-    }
-  });
 });

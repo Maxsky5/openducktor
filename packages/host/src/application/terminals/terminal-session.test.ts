@@ -34,6 +34,7 @@ const handle: TerminalPtyHandle = {
 const makeSession = async () => {
   let disposeCalls = 0;
   const session = createTerminalSession({
+    kind: "interactive",
     summary: summary(),
     titleTracker: {
       consume: () => undefined,

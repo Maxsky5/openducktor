@@ -9,7 +9,7 @@ import {
 } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
-import * as terminalMount from "./interactive-terminal-mount";
+import * as terminalMount from "./terminal-viewport-mount";
 import { createTerminalTransportController } from "./terminal-transport-controller";
 import { TerminalPanel } from "./terminal-panel";
 import type { TerminalPanelModel, TerminalTab } from "./use-terminals";
@@ -175,7 +175,7 @@ describe("TerminalPanel", () => {
       expected: "Shell access denied. Check the shell executable.",
     },
   ])("keeps the $notice visible after exit and reattachment", async ({ attention, expected }) => {
-    const mount = spyOn(terminalMount, "mountInteractiveTerminal").mockReturnValue({
+    const mount = spyOn(terminalMount, "mountTerminalViewport").mockReturnValue({
       activate: () => undefined,
       dispose: () => undefined,
     });

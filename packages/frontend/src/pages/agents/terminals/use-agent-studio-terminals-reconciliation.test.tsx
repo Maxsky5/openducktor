@@ -5,7 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { act, render, waitFor } from "@testing-library/react";
 import { useEffect, useRef } from "react";
 import { TerminalPanel, type TerminalTab } from "@/features/terminals";
-import * as terminalMountModule from "@/features/terminals/interactive-terminal-mount";
+import * as terminalMountModule from "@/features/terminals/terminal-viewport-mount";
 import {
   terminalTabLabel,
   terminalTabLifecycle,
@@ -551,14 +551,14 @@ describe("useAgentStudioTerminals", () => {
       Array<{
         disposals: number;
         mounts: number;
-        input: Parameters<typeof terminalMountModule.mountInteractiveTerminal>[0];
+        input: Parameters<typeof terminalMountModule.mountTerminalViewport>[0];
       }>
     >();
     const getLatest = (): HookResult => {
       if (!latest) throw new Error("Terminal hook result is not ready.");
       return latest;
     };
-    const mountSpy = spyOn(terminalMountModule, "mountInteractiveTerminal").mockImplementation(
+    const mountSpy = spyOn(terminalMountModule, "mountTerminalViewport").mockImplementation(
       (input) => {
         const probe = {
           disposals: 0,
@@ -641,7 +641,7 @@ describe("useAgentStudioTerminals", () => {
       });
 
       view.rerender(renderHarness("task-b", ["task-a", "task-b"]));
-      act(() => taskAProbe.input.onForgotten("Task A terminal was forgotten."));
+      act(() => taskAProbe.input.onForgotten("Task A terminal was forgotten.", null));
       await waitFor(() => expect(taskAProbe.disposals).toBe(1));
 
       view.rerender(renderHarness("task-a", ["task-a", "task-b"]));

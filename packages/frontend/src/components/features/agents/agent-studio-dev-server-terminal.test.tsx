@@ -1,1166 +1,361 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
-import { GlobalRegistrator } from "@happy-dom/global-registrator";
-import type { IDisposable, ITerminalAddon } from "@xterm/xterm";
-import { render, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
+import {
+  decodeTerminalProtocolFrame,
+  encodeTerminalProtocolFrame,
+  TERMINAL_PROTOCOL_VERSION,
+  type TerminalServerMessage,
+} from "@openducktor/contracts";
+import { act, cleanup, render, waitFor } from "@testing-library/react";
+import { Profiler } from "react";
+import * as sharedBinding from "@/features/terminals/shared-terminal-binding";
+import type { TerminalBinding } from "@/features/terminals/shared-terminal-binding";
+import { QueryProvider } from "@/lib/query-provider";
+import {
+  configureShellBridge,
+  createUnavailableShellBridge,
+  type TerminalBridge,
+} from "@/lib/shell-bridge";
+import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { AgentStudioDevServerTerminal } from "./agent-studio-dev-server-terminal";
-
-interface CapturedOptionsContract {
-  disableStdin?: boolean;
-  fontFamily?: string;
-}
-
-if (globalThis.document === undefined) {
-  GlobalRegistrator.register();
-}
+import {
+  AgentStudioDevServerPanel,
+  type AgentStudioDevServerPanelModel,
+} from "./agent-studio-dev-server-panel";
 
 afterEach(() => {
-  document.body.innerHTML = "";
+  cleanup();
+  mock.restore();
+  configureShellBridge(createUnavailableShellBridge());
 });
 
-const createQueuedWriteTerminalHarness = (queuedData: string) => {
-  const open = mock((_container: HTMLElement) => {});
-  const loadAddon = mock((_addon: ITerminalAddon | IDisposable) => {});
-  const fit = mock(() => {});
-  let screen = "";
-  const queuedWrites: Array<() => void> = [];
-  const createTerminalBinding = (container: HTMLElement) => {
-    let active = true;
-    const reset = mock(() => {
-      if (active) {
-        screen = "";
-      }
-    });
-    const clear = mock(() => {
-      if (active) {
-        screen = "";
-      }
-    });
-    const dispose = mock(() => {
-      active = false;
-    });
-    const write = mock((data: string, callback?: () => void) => {
-      if (data === queuedData) {
-        queuedWrites.push(() => {
-          if (active) {
-            screen += data;
-          }
-          callback?.();
-        });
-        return;
-      }
-
-      if (active) {
-        screen += data;
-      }
-      callback?.();
-    });
-    open(container);
-    loadAddon({ dispose: () => {} });
-    return {
-      dispose,
-      terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
-      fitAddon: { dispose: mock(() => {}), fit },
-    };
+const createHarness = () => {
+  let emitFrame: (frame: Uint8Array) => void = () => {};
+  const sent: Array<ReturnType<typeof decodeTerminalProtocolFrame>> = [];
+  const close = mock(async () => {});
+  const bridge: TerminalBridge = {
+    connect: mock(async (onFrame, onState) => {
+      emitFrame = onFrame;
+      onState("connected");
+      return {
+        close,
+        send: async (frame: Uint8Array) => {
+          const decoded = decodeTerminalProtocolFrame(frame);
+          sent.push(decoded);
+          if (decoded.message.type === "attach")
+            emit({
+              version: TERMINAL_PROTOCOL_VERSION,
+              type: "snapshot",
+              terminalId: decoded.message.terminalId,
+              earliestRetainedSequence: 0,
+              snapshotSequenceEnd: 0,
+              lifecycle: "running",
+              title: "Dev",
+              complete: true,
+            });
+        },
+      };
+    }),
   };
-
-  return {
-    createTerminalBinding,
-    queuedWrites,
-    readScreen: () => screen,
+  const emit = (message: TerminalServerMessage, payload = new Uint8Array()): void => {
+    emitFrame(encodeTerminalProtocolFrame({ message, payload }));
   };
+  const emulators: Array<{
+    writes: Uint8Array[];
+    data: (value: string) => void;
+    key: (event: KeyboardEvent) => boolean;
+    dispose: ReturnType<typeof mock>;
+  }> = [];
+  const copied: string[] = [];
+  spyOn(navigator.clipboard, "writeText").mockImplementation(async (text) => {
+    copied.push(text);
+  });
+  const bindingFactory = spyOn(sharedBinding, "createTerminalBinding").mockImplementation(
+    (_container, options) => {
+      const writes: Uint8Array[] = [];
+      const emulator = {
+        writes,
+        data: (_value: string) => {},
+        key: (_event: KeyboardEvent) => true,
+        dispose: mock(() => {}),
+      };
+      const subscription = { dispose: () => {} };
+      const binding = {
+        terminal: {
+          cols: 80,
+          rows: 24,
+          options,
+          write: (bytes: Uint8Array, parsed: () => void) => {
+            writes.push(bytes.slice());
+            parsed();
+          },
+          onResize: () => subscription,
+          onData: (listener: (data: string) => void) => {
+            emulator.data = listener;
+            return subscription;
+          },
+          parser: { registerOscHandler: () => subscription },
+          attachCustomKeyEventHandler: (listener: (event: KeyboardEvent) => boolean) => {
+            emulator.key = listener;
+          },
+          hasSelection: () => true,
+          getSelection: () => "selected logs",
+          reset: () => {},
+          resize: () => {},
+          scrollToBottom: () => {},
+          refresh: () => {},
+          focus: () => {},
+        },
+        fitAddon: { proposeDimensions: () => undefined, fit: () => {} },
+        resetLinkState: () => {},
+        dispose: emulator.dispose,
+      };
+      emulators.push(emulator);
+      // SAFETY: This native-boundary fixture implements each public binding method used by the viewport.
+      return Object.assign(Object.create(null), binding) as TerminalBinding;
+    },
+  );
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: { systemGetPlatform: async () => "darwin" },
+      bridge: { terminals: bridge },
+    }),
+  );
+  return { sent, bridge, emit, emulators, bindingFactory, copied, close };
 };
 
-describe("AgentStudioDevServerTerminal", () => {
-  test("creates a read-only terminal and replays buffered chunks", async () => {
-    const open = mock((_container: HTMLElement) => {});
-    const loadAddon = mock((_addon: ITerminalAddon | IDisposable) => {});
-    const fit = mock(() => {});
-    const reset = mock(() => {});
-    const clear = mock(() => {});
-    const writes: string[] = [];
-    const write = mock((data: string, callback?: () => void) => {
-      writes.push(data);
-      callback?.();
-    });
-    const dispose = mock(() => {});
-    const terminalDispose = mock(() => {});
-    const onRendererError = mock(() => {});
-    let capturedOptions: CapturedOptionsContract = {};
-    const createTerminalBinding = (
-      container: HTMLElement,
-      options: { disableStdin?: boolean; fontFamily?: string },
-    ) => {
-      capturedOptions = options;
-      open(container);
-      loadAddon({ dispose: () => {} });
-      return {
-        dispose,
-        terminal: {
-          clear,
-          dispose: terminalDispose,
-          loadAddon,
-          open,
-          options: {},
-          reset,
-          write,
-        },
-        fitAddon: { dispose, fit },
-      };
-    };
-
-    const view = render(
-      <AgentStudioDevServerTerminal
-        scopeKey="/repo::task-1"
-        scriptId="frontend"
-        terminalBuffer={{
-          entries: [
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 0,
-              data: "ready\r\n",
-              timestamp: "2026-03-19T15:30:00.000Z",
-            },
-          ],
-          lastSequence: 0,
-          resetToken: 0,
-          lastDroppedSequence: null,
-        }}
-        onRendererError={onRendererError}
-        createTerminalBinding={createTerminalBinding}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(open).toHaveBeenCalled();
-    });
-    expect(capturedOptions.disableStdin).toBe(true);
-    expect(capturedOptions.fontFamily).toContain('"Symbols Nerd Font Mono"');
-    expect(reset).toHaveBeenCalledTimes(1);
-    view.unmount();
-    expect(dispose).toHaveBeenCalledTimes(1);
-    expect(terminalDispose).not.toHaveBeenCalled();
-    expect(writes).toEqual(["ready\r\n"]);
-    expect(onRendererError).toHaveBeenCalledWith(null);
-  });
-
-  test("appends only new chunks until a reset token forces replay", async () => {
-    const open = mock((_container: HTMLElement) => {});
-    const loadAddon = mock((_addon: ITerminalAddon | IDisposable) => {});
-    const fit = mock(() => {});
-    const reset = mock(() => {});
-    const clear = mock(() => {});
-    const writes: string[] = [];
-    const write = mock((data: string, callback?: () => void) => {
-      writes.push(data);
-      callback?.();
-    });
-    const dispose = mock(() => {});
-    const onRendererError = () => {};
-    const createTerminalBinding = (container: HTMLElement) => {
-      open(container);
-      loadAddon({ dispose: () => {} });
-      return {
-        dispose,
-        terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
-        fitAddon: { dispose, fit },
-      };
-    };
-
-    const view = render(
-      <AgentStudioDevServerTerminal
-        scopeKey="/repo::task-1"
-        scriptId="frontend"
-        terminalBuffer={{
-          entries: [
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 0,
-              data: "first\r\n",
-              timestamp: "2026-03-19T15:30:00.000Z",
-            },
-          ],
-          lastSequence: 0,
-          resetToken: 0,
-          lastDroppedSequence: null,
-        }}
-        onRendererError={onRendererError}
-        createTerminalBinding={createTerminalBinding}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(writes).toEqual(["first\r\n"]);
-    });
-
-    view.rerender(
-      <AgentStudioDevServerTerminal
-        scopeKey="/repo::task-1"
-        scriptId="frontend"
-        terminalBuffer={{
-          entries: [
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 0,
-              data: "first\r\n",
-              timestamp: "2026-03-19T15:30:00.000Z",
-            },
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 1,
-              data: "second\r\n",
-              timestamp: "2026-03-19T15:30:01.000Z",
-            },
-          ],
-          lastSequence: 1,
-          resetToken: 0,
-          lastDroppedSequence: null,
-        }}
-        onRendererError={onRendererError}
-        createTerminalBinding={createTerminalBinding}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(writes).toEqual(["first\r\n", "second\r\n"]);
-    });
-    expect(reset).toHaveBeenCalledTimes(1);
-
-    view.rerender(
-      <AgentStudioDevServerTerminal
-        scopeKey="/repo::task-1"
-        scriptId="frontend"
-        terminalBuffer={{
-          entries: [
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 4,
-              data: "rehydrated\r\n",
-              timestamp: "2026-03-19T15:30:02.000Z",
-            },
-          ],
-          lastSequence: 4,
-          resetToken: 1,
-          lastDroppedSequence: null,
-        }}
-        onRendererError={onRendererError}
-        createTerminalBinding={createTerminalBinding}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(writes).toEqual(["first\r\n", "second\r\n", "rehydrated\r\n"]);
-    });
-    expect(reset).toHaveBeenCalledTimes(2);
-  });
-
-  test("continues rendering live chunks when an incremental write callback stalls", async () => {
-    const open = mock((_container: HTMLElement) => {});
-    const loadAddon = mock((_addon: ITerminalAddon | IDisposable) => {});
-    const fit = mock(() => {});
-    const reset = mock(() => {});
-    const clear = mock(() => {});
-    const writes: string[] = [];
-    let screen = "";
-    const write = mock((data: string, callback?: () => void) => {
-      writes.push(data);
-      screen += data;
-      if (data === "stalled\r\n") {
-        return;
-      }
-
-      callback?.();
-    });
-    const dispose = mock(() => {});
-    const onRendererError = () => {};
-    const createTerminalBinding = (container: HTMLElement) => {
-      open(container);
-      loadAddon({ dispose: () => {} });
-      return {
-        dispose,
-        terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
-        fitAddon: { dispose, fit },
-      };
-    };
-
-    const view = render(
-      <AgentStudioDevServerTerminal
-        scopeKey="/repo::task-1"
-        scriptId="frontend"
-        terminalBuffer={{
-          entries: [
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 0,
-              data: "ready\r\n",
-              timestamp: "2026-03-19T15:30:00.000Z",
-            },
-          ],
-          lastSequence: 0,
-          resetToken: 0,
-          lastDroppedSequence: null,
-        }}
-        onRendererError={onRendererError}
-        createTerminalBinding={createTerminalBinding}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen).toBe("ready\r\n");
-    });
-
-    view.rerender(
-      <AgentStudioDevServerTerminal
-        scopeKey="/repo::task-1"
-        scriptId="frontend"
-        terminalBuffer={{
-          entries: [
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 0,
-              data: "ready\r\n",
-              timestamp: "2026-03-19T15:30:00.000Z",
-            },
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 1,
-              data: "stalled\r\n",
-              timestamp: "2026-03-19T15:30:01.000Z",
-            },
-          ],
-          lastSequence: 1,
-          resetToken: 0,
-          lastDroppedSequence: null,
-        }}
-        onRendererError={onRendererError}
-        createTerminalBinding={createTerminalBinding}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen).toBe("ready\r\nstalled\r\n");
-    });
-
-    view.rerender(
-      <AgentStudioDevServerTerminal
-        scopeKey="/repo::task-1"
-        scriptId="frontend"
-        terminalBuffer={{
-          entries: [
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 0,
-              data: "ready\r\n",
-              timestamp: "2026-03-19T15:30:00.000Z",
-            },
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 1,
-              data: "stalled\r\n",
-              timestamp: "2026-03-19T15:30:01.000Z",
-            },
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 2,
-              data: "still live\r\n",
-              timestamp: "2026-03-19T15:30:02.000Z",
-            },
-          ],
-          lastSequence: 2,
-          resetToken: 0,
-          lastDroppedSequence: null,
-        }}
-        onRendererError={onRendererError}
-        createTerminalBinding={createTerminalBinding}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen).toBe("ready\r\nstalled\r\nstill live\r\n");
-    });
-    expect(writes).toEqual(["ready\r\n", "stalled\r\n", "still live\r\n"]);
-  });
-
-  test("clears stale terminal rows before replaying a reset window", async () => {
-    const open = mock((_container: HTMLElement) => {});
-    const loadAddon = mock((_addon: ITerminalAddon | IDisposable) => {});
-    const fit = mock(() => {});
-    let screen = "";
-    const reset = mock(() => {});
-    const clear = mock(() => {
-      screen = "";
-    });
-    const write = mock((data: string, callback?: () => void) => {
-      screen += data;
-      callback?.();
-    });
-    const dispose = mock(() => {});
-    const onRendererError = () => {};
-    const createTerminalBinding = (container: HTMLElement) => {
-      open(container);
-      loadAddon({ dispose: () => {} });
-      return {
-        dispose,
-        terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
-        fitAddon: { dispose, fit },
-      };
-    };
-
-    const view = render(
-      <AgentStudioDevServerTerminal
-        scopeKey="/repo::task-1"
-        scriptId="frontend"
-        terminalBuffer={{
-          entries: [
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 0,
-              data: "old failed output\r\n",
-              timestamp: "2026-03-19T15:30:00.000Z",
-            },
-          ],
-          lastSequence: 0,
-          resetToken: 0,
-          lastDroppedSequence: null,
-        }}
-        onRendererError={onRendererError}
-        createTerminalBinding={createTerminalBinding}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen).toBe("old failed output\r\n");
-    });
-
-    view.rerender(
-      <AgentStudioDevServerTerminal
-        scopeKey="/repo::task-1"
-        scriptId="frontend"
-        terminalBuffer={{
-          entries: [
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 0,
-              data: "Starting `cd apps/web && pnpm dev`\r\n",
-              timestamp: "2026-03-19T15:31:00.000Z",
-            },
-          ],
-          lastSequence: 0,
-          resetToken: 1,
-          lastDroppedSequence: null,
-        }}
-        onRendererError={onRendererError}
-        createTerminalBinding={createTerminalBinding}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen).toBe("Starting `cd apps/web && pnpm dev`\r\n");
-    });
-    expect(clear).toHaveBeenCalledTimes(2);
-    expect(reset).toHaveBeenCalledTimes(2);
-  });
-
-  test("replays from scratch when the task scope changes with the same script id", async () => {
-    const open = mock((_container: HTMLElement) => {});
-    const loadAddon = mock((_addon: ITerminalAddon | IDisposable) => {});
-    const fit = mock(() => {});
-    let screen = "";
-    const reset = mock(() => {
-      screen = "";
-    });
-    const clear = mock(() => {
-      screen = "";
-    });
-    const write = mock((data: string, callback?: () => void) => {
-      screen += data;
-      callback?.();
-    });
-    const dispose = mock(() => {});
-    const onRendererError = () => {};
-    const createTerminalBinding = (container: HTMLElement) => {
-      open(container);
-      loadAddon({ dispose: () => {} });
-      return {
-        dispose,
-        terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
-        fitAddon: { dispose, fit },
-      };
-    };
-
-    const view = render(
-      <AgentStudioDevServerTerminal
-        scopeKey="/repo::task-1"
-        scriptId="frontend"
-        terminalBuffer={{
-          entries: [
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 7,
-              data: "task one output\r\n",
-              timestamp: "2026-03-19T15:30:00.000Z",
-            },
-          ],
-          lastSequence: 7,
-          resetToken: 0,
-          lastDroppedSequence: null,
-        }}
-        onRendererError={onRendererError}
-        createTerminalBinding={createTerminalBinding}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen).toBe("task one output\r\n");
-    });
-
-    view.rerender(
-      <AgentStudioDevServerTerminal
-        scopeKey="/repo::task-2"
-        scriptId="frontend"
-        terminalBuffer={{
-          entries: [
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 0,
-              data: "task two output\r\n",
-              timestamp: "2026-03-19T15:31:00.000Z",
-            },
-          ],
-          lastSequence: 0,
-          resetToken: 0,
-          lastDroppedSequence: null,
-        }}
-        onRendererError={onRendererError}
-        createTerminalBinding={createTerminalBinding}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen).toBe("task two output\r\n");
-    });
-    expect(reset).toHaveBeenCalledTimes(2);
-  });
-
-  test("preserves split ANSI sequences across replay and incremental writes", async () => {
-    const open = mock((_container: HTMLElement) => {});
-    const loadAddon = mock((_addon: ITerminalAddon | IDisposable) => {});
-    const fit = mock(() => {});
-    const reset = mock(() => {});
-    const clear = mock(() => {
-      screen = "";
-    });
-    const writes: string[] = [];
-    let screen = "";
-    const write = mock((data: string, callback?: () => void) => {
-      writes.push(data);
-      screen += data;
-      callback?.();
-    });
-    const dispose = mock(() => {});
-    const onRendererError = () => {};
-    const createTerminalBinding = (container: HTMLElement) => {
-      open(container);
-      loadAddon({ dispose: () => {} });
-      return {
-        dispose,
-        terminal: {
-          clear,
-          dispose,
-          loadAddon,
-          open,
-          options: {},
-          reset: () => {
-            screen = "";
-            reset();
-          },
-          write,
-        },
-        fitAddon: { dispose, fit },
-      };
-    };
-
-    const view = render(
-      <AgentStudioDevServerTerminal
-        scopeKey="/repo::task-1"
-        scriptId="frontend"
-        terminalBuffer={{
-          entries: [
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 0,
-              data: "\u001b[38;2;255;0",
-              timestamp: "2026-03-19T15:30:00.000Z",
-            },
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 1,
-              data: ";0mready",
-              timestamp: "2026-03-19T15:30:01.000Z",
-            },
-          ],
-          lastSequence: 1,
-          resetToken: 0,
-          lastDroppedSequence: null,
-        }}
-        onRendererError={onRendererError}
-        createTerminalBinding={createTerminalBinding}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen).toBe("\u001b[38;2;255;0;0mready");
-    });
-    expect(writes).toEqual(["\u001b[38;2;255;0;0mready"]);
-
-    view.rerender(
-      <AgentStudioDevServerTerminal
-        scopeKey="/repo::task-1"
-        scriptId="frontend"
-        terminalBuffer={{
-          entries: [
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 0,
-              data: "\u001b[38;2;255;0",
-              timestamp: "2026-03-19T15:30:00.000Z",
-            },
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 1,
-              data: ";0mready",
-              timestamp: "2026-03-19T15:30:01.000Z",
-            },
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 2,
-              data: "\u001b[0m\r\n",
-              timestamp: "2026-03-19T15:30:02.000Z",
-            },
-          ],
-          lastSequence: 2,
-          resetToken: 0,
-          lastDroppedSequence: null,
-        }}
-        onRendererError={onRendererError}
-        createTerminalBinding={createTerminalBinding}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen).toBe("\u001b[38;2;255;0;0mready\u001b[0m\r\n");
-    });
-    expect(writes).toEqual(["\u001b[38;2;255;0;0mready", "\u001b[0m\r\n"]);
-
-    view.rerender(
-      <AgentStudioDevServerTerminal
-        scopeKey="/repo::task-1"
-        scriptId="frontend"
-        terminalBuffer={{
-          entries: [
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 0,
-              data: "\u001b[38;2;255;0;0mready\u001b[0m\r\n",
-              timestamp: "2026-03-19T15:30:03.000Z",
-            },
-          ],
-          lastSequence: 0,
-          resetToken: 1,
-          lastDroppedSequence: null,
-        }}
-        onRendererError={onRendererError}
-        createTerminalBinding={createTerminalBinding}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen).toBe("\u001b[38;2;255;0;0mready\u001b[0m\r\n");
-    });
-    expect(writes).toEqual([
-      "\u001b[38;2;255;0;0mready",
-      "\u001b[0m\r\n",
-      "\u001b[38;2;255;0;0mready\u001b[0m\r\n",
-    ]);
-    expect(reset).toHaveBeenCalledTimes(2);
-  });
-
-  test("drops queued replay writes when switching scripts", async () => {
-    const onRendererError = () => {};
-    const terminalHarness = createQueuedWriteTerminalHarness("frontend\r\n");
-
-    const view = render(
-      <AgentStudioDevServerTerminal
-        scopeKey="/repo::task-1"
-        scriptId="frontend"
-        terminalBuffer={{
-          entries: [
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 0,
-              data: "frontend\r\n",
-              timestamp: "2026-03-19T15:30:00.000Z",
-            },
-          ],
-          lastSequence: 0,
-          resetToken: 0,
-          lastDroppedSequence: null,
-        }}
-        onRendererError={onRendererError}
-        createTerminalBinding={terminalHarness.createTerminalBinding}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(terminalHarness.queuedWrites).toHaveLength(1);
-    });
-
-    view.rerender(
-      <AgentStudioDevServerTerminal
-        scopeKey="/repo::task-1"
-        scriptId="backend"
-        terminalBuffer={{
-          entries: [
-            {
-              scriptId: "backend",
-              runIdentity: {
-                runId: "backend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 0,
-              data: "backend\r\n",
-              timestamp: "2026-03-19T15:30:01.000Z",
-            },
-          ],
-          lastSequence: 0,
-          resetToken: 0,
-          lastDroppedSequence: null,
-        }}
-        onRendererError={onRendererError}
-        createTerminalBinding={terminalHarness.createTerminalBinding}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(terminalHarness.readScreen()).toBe("backend\r\n");
-    });
-
-    terminalHarness.queuedWrites[0]?.();
-    expect(terminalHarness.readScreen()).toBe("backend\r\n");
-  });
-
-  test("drops queued incremental writes when switching scripts", async () => {
-    const onRendererError = () => {};
-    const terminalHarness = createQueuedWriteTerminalHarness("stale frontend\r\n");
-
-    const view = render(
-      <AgentStudioDevServerTerminal
-        scopeKey="/repo::task-1"
-        scriptId="frontend"
-        terminalBuffer={{
-          entries: [
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 0,
-              data: "frontend ready\r\n",
-              timestamp: "2026-03-19T15:30:00.000Z",
-            },
-          ],
-          lastSequence: 0,
-          resetToken: 0,
-          lastDroppedSequence: null,
-        }}
-        onRendererError={onRendererError}
-        createTerminalBinding={terminalHarness.createTerminalBinding}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(terminalHarness.readScreen()).toBe("frontend ready\r\n");
-    });
-
-    view.rerender(
-      <AgentStudioDevServerTerminal
-        scopeKey="/repo::task-1"
-        scriptId="frontend"
-        terminalBuffer={{
-          entries: [
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 0,
-              data: "frontend ready\r\n",
-              timestamp: "2026-03-19T15:30:00.000Z",
-            },
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 1,
-              data: "stale frontend\r\n",
-              timestamp: "2026-03-19T15:30:01.000Z",
-            },
-          ],
-          lastSequence: 1,
-          resetToken: 0,
-          lastDroppedSequence: null,
-        }}
-        onRendererError={onRendererError}
-        createTerminalBinding={terminalHarness.createTerminalBinding}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(terminalHarness.queuedWrites).toHaveLength(1);
-    });
-
-    view.rerender(
-      <AgentStudioDevServerTerminal
-        scopeKey="/repo::task-1"
-        scriptId="backend"
-        terminalBuffer={{
-          entries: [
-            {
-              scriptId: "backend",
-              runIdentity: {
-                runId: "backend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 0,
-              data: "backend ready\r\n",
-              timestamp: "2026-03-19T15:30:02.000Z",
-            },
-          ],
-          lastSequence: 0,
-          resetToken: 0,
-          lastDroppedSequence: null,
-        }}
-        onRendererError={onRendererError}
-        createTerminalBinding={terminalHarness.createTerminalBinding}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(terminalHarness.readScreen()).toBe("backend ready\r\n");
-    });
-
-    terminalHarness.queuedWrites[0]?.();
-    expect(terminalHarness.readScreen()).toBe("backend ready\r\n");
-  });
-
-  test("surfaces renderer initialization failures", async () => {
-    const onRendererError = mock(() => {});
-
+describe("dev server terminal viewport", () => {
+  test.each([
+    { code: "protocol_error", message: "Output transport disconnected." },
+    { code: "terminal_forgotten", message: "Output attachment is no longer available." },
+  ] as const)("reports $code failures directly to the output owner", async (failure) => {
+    const harness = createHarness();
+    const onError = mock((_message: string | null) => {});
     render(
-      <AgentStudioDevServerTerminal
-        scopeKey="/repo::task-1"
-        scriptId="frontend"
-        terminalBuffer={null}
-        onRendererError={onRendererError}
-        createTerminalBinding={() => {
-          throw new Error("no terminal backend");
-        }}
-      />,
+      <QueryProvider useIsolatedClient>
+        <AgentStudioDevServerTerminal terminalId="dev-1" onRendererError={onError} />
+      </QueryProvider>,
     );
-
-    await waitFor(() => {
-      expect(onRendererError).toHaveBeenCalledWith(
-        "Failed to initialize dev server terminal: no terminal backend",
-      );
+    await waitFor(() => expect(harness.emulators).toHaveLength(1));
+    await act(async () => {
+      const message: TerminalServerMessage = {
+        version: TERMINAL_PROTOCOL_VERSION,
+        type: "protocol_error",
+        failure,
+      };
+      if (failure.code === "terminal_forgotten") message.terminalId = "dev-1";
+      harness.emit(message);
     });
+    expect(onError).toHaveBeenCalledWith(failure.message);
   });
 
-  test("surfaces renderer update failures", async () => {
-    const open = mock((_container: HTMLElement) => {});
-    const loadAddon = mock((_addon: ITerminalAddon | IDisposable) => {});
-    const fit = mock(() => {});
-    const reset = mock(() => {});
-    const clear = mock(() => {});
-    const dispose = mock(() => {});
-    const onRendererError = mock(() => {});
-    let shouldThrow = false;
-    const write = mock((data: string, callback?: () => void) => {
-      if (shouldThrow && data === "broken\r\n") {
-        throw new Error("write failed");
-      }
-
-      callback?.();
+  test("does not report an error when the host releases an exited output source", async () => {
+    const harness = createHarness();
+    const onError = mock((_message: string | null) => {});
+    render(
+      <QueryProvider useIsolatedClient>
+        <AgentStudioDevServerTerminal terminalId="dev-1" onRendererError={onError} />
+      </QueryProvider>,
+    );
+    await waitFor(() => expect(harness.emulators).toHaveLength(1));
+    onError.mockClear();
+    await act(async () => {
+      harness.emit({
+        version: TERMINAL_PROTOCOL_VERSION,
+        type: "lifecycle",
+        terminalId: "dev-1",
+        lifecycle: "exited",
+        exitCode: 0,
+      });
+      harness.emit({
+        version: TERMINAL_PROTOCOL_VERSION,
+        type: "terminal_forgotten",
+        terminalId: "dev-1",
+      });
     });
-    const createTerminalBinding = (container: HTMLElement) => {
-      open(container);
-      loadAddon({ dispose: () => {} });
-      return {
-        dispose,
-        terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
-        fitAddon: { dispose, fit },
-      };
-    };
+    expect(onError.mock.calls.filter(([message]) => message !== null)).toEqual([]);
+  });
 
+  test("keeps an output error on its source and clears it when that source is removed", async () => {
+    const harness = createHarness();
+    const model: AgentStudioDevServerPanelModel = {
+      mode: "active",
+      isExpanded: true,
+      isLoading: false,
+      disabledReason: null,
+      repoPath: "/repo",
+      owner: { kind: "task", taskId: "task" },
+      workingDirectory: "/repo",
+      scripts: [],
+      selectedScriptId: "dev",
+      selectedScript: null,
+      error: null,
+      isStartPending: false,
+      isRetryPending: false,
+      isStopPending: false,
+      isRestartPending: false,
+      onSelectScript: () => {},
+      onStart: () => {},
+      onRetry: () => {},
+      onStop: () => {},
+      onRestart: () => {},
+    };
+    const ui = (terminalId: string | null) => {
+      const script = {
+        scriptId: "dev",
+        name: "Dev",
+        command: "dev",
+        startedCommand: "dev",
+        status: "stopped" as const,
+        pid: null,
+        startedAt: null,
+        exitCode: 0,
+        lastError: null,
+        terminalId,
+      };
+      return (
+        <QueryProvider useIsolatedClient>
+          <AgentStudioDevServerPanel
+            model={{ ...model, scripts: [script], selectedScript: script }}
+          />
+        </QueryProvider>
+      );
+    };
+    const view = render(ui("old-run"));
+    await waitFor(() => expect(harness.emulators).toHaveLength(1));
+    const reportFailure = async (terminalId: string) => {
+      await act(async () => {
+        harness.emit({
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "protocol_error",
+          terminalId,
+          failure: { code: "protocol_error", message: `Output failed for ${terminalId}.` },
+        });
+      });
+      expect(view.getByTestId("agent-studio-dev-server-error-banner").textContent).toBe(
+        `Output failed for ${terminalId}.`,
+      );
+    };
+    await reportFailure("old-run");
+    view.rerender(ui("new-run"));
+    await waitFor(() => expect(harness.emulators).toHaveLength(2));
+    expect(view.queryByTestId("agent-studio-dev-server-error-banner")).toBeNull();
+    await reportFailure("new-run");
+    view.rerender(ui(null));
+    expect(view.getByTestId("agent-studio-dev-server-empty-log-state")).toBeTruthy();
+    expect(view.queryByTestId("agent-studio-dev-server-error-banner")).toBeNull();
+    view.unmount();
+  });
+
+  test("renders live bytes without a metadata update or React commit and keeps output read-only", async () => {
+    const harness = createHarness();
+    let commits = 0;
+    const onError = mock((_message: string | null) => {});
     const view = render(
-      <AgentStudioDevServerTerminal
-        scopeKey="/repo::task-1"
-        scriptId="frontend"
-        terminalBuffer={{
-          entries: [
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 0,
-              data: "ready\r\n",
-              timestamp: "2026-03-19T15:30:00.000Z",
-            },
-          ],
-          lastSequence: 0,
-          resetToken: 0,
-          lastDroppedSequence: null,
-        }}
-        onRendererError={onRendererError}
-        createTerminalBinding={createTerminalBinding}
-      />,
+      <QueryProvider useIsolatedClient>
+        <Profiler
+          id="output"
+          onRender={() => {
+            commits += 1;
+          }}
+        >
+          <AgentStudioDevServerTerminal terminalId="dev-1" onRendererError={onError} />
+        </Profiler>
+      </QueryProvider>,
     );
-
-    await waitFor(() => {
-      expect(open).toHaveBeenCalled();
-    });
-
-    shouldThrow = true;
-    view.rerender(
-      <AgentStudioDevServerTerminal
-        scopeKey="/repo::task-1"
-        scriptId="frontend"
-        terminalBuffer={{
-          entries: [
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 0,
-              data: "ready\r\n",
-              timestamp: "2026-03-19T15:30:00.000Z",
-            },
-            {
-              scriptId: "frontend",
-              runIdentity: {
-                runId: "frontend:1",
-                runOrder: { hostInstanceId: "host-1", generation: 1 },
-              },
-              sequence: 1,
-              data: "broken\r\n",
-              timestamp: "2026-03-19T15:30:01.000Z",
-            },
-          ],
-          lastSequence: 1,
-          resetToken: 0,
-          lastDroppedSequence: null,
-        }}
-        onRendererError={onRendererError}
-        createTerminalBinding={createTerminalBinding}
-      />,
+    await waitFor(() => expect(harness.emulators).toHaveLength(1));
+    await waitFor(() =>
+      expect(view.getByRole("application").classList.contains("invisible")).toBe(false),
     );
-
-    await waitFor(() => {
-      expect(onRendererError).toHaveBeenCalledWith(
-        "Failed to render dev server terminal: write failed",
-      );
+    await act(async () => {
+      await Promise.resolve();
     });
+    const initialCommits = commits;
+    const payload = new TextEncoder().encode(
+      "\u001b[?1049hNx live output 😀\r\n\u001b[?1049lready\r\n",
+    );
+    await act(async () => {
+      for (let index = 0; index < payload.length; index += 1)
+        harness.emit(
+          {
+            version: TERMINAL_PROTOCOL_VERSION,
+            type: "output",
+            terminalId: "dev-1",
+            sequenceStart: index,
+            sequenceEnd: index + 1,
+            replay: false,
+          },
+          payload.subarray(index, index + 1),
+        );
+      await Promise.resolve();
+    });
+    const emulator = harness.emulators[0];
+    if (!emulator) throw new Error("Expected a mounted output terminal.");
+    expect(new Uint8Array(emulator.writes.flatMap((bytes) => [...bytes]))).toEqual(payload);
+    expect(commits).toBe(initialCommits);
+    expect(harness.bindingFactory.mock.calls[0]?.[1]).toMatchObject({
+      disableStdin: true,
+      convertEol: true,
+    });
+    emulator.data("should not reach the process");
+    for (const key of ["PageUp", "PageDown", "Home", "End"])
+      expect(emulator.key(new KeyboardEvent("keydown", { key, shiftKey: true }))).toBe(true);
+    expect(emulator.key(new KeyboardEvent("keydown", { key: "ArrowLeft", metaKey: true }))).toBe(
+      false,
+    );
+    expect(emulator.key(new KeyboardEvent("keydown", { key: "v", metaKey: true }))).toBe(false);
+    await act(async () => {
+      emulator.key(new KeyboardEvent("keydown", { key: "c", metaKey: true }));
+      await Promise.resolve();
+    });
+    expect(harness.copied).toEqual(["selected logs"]);
+    expect(harness.sent.some((frame) => frame.message.type === "input")).toBe(false);
+    await waitFor(() =>
+      expect(harness.sent.at(-1)?.message).toMatchObject({
+        type: "ack",
+        sequenceEnd: payload.byteLength,
+      }),
+    );
+    view.unmount();
+    expect(emulator.dispose).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(harness.close).toHaveBeenCalledTimes(1));
   });
 
-  test("copies terminal selection on keyboard copy shortcut", async () => {
-    const open = mock((_container: HTMLElement) => {});
-    const loadAddon = mock((_addon: ITerminalAddon | IDisposable) => {});
-    const fit = mock(() => {});
-    const reset = mock(() => {});
-    const clear = mock(() => {});
-    const write = mock((_data: string, callback?: () => void) => {
-      callback?.();
-    });
-    const dispose = mock(() => {});
-    const onRendererError = mock(() => {});
-    const clipboardWriteText = mock(async (_value: string) => {});
-    const originalClipboard = navigator.clipboard;
-    let keyHandler: ((event: KeyboardEvent) => boolean) | null = null;
-    const createTerminalBinding = (container: HTMLElement) => {
-      open(container);
-      loadAddon({ dispose: () => {} });
-      return {
-        dispose,
-        terminal: {
-          attachCustomKeyEventHandler: (handler: (event: KeyboardEvent) => boolean) => {
-            keyHandler = handler;
+  test("starts a replacement terminal at its own byte boundary and ignores detached output", async () => {
+    const harness = createHarness();
+    const onError = mock((_message: string | null) => {});
+    const ui = (terminalId: string) => (
+      <QueryProvider useIsolatedClient>
+        <AgentStudioDevServerTerminal terminalId={terminalId} onRendererError={onError} />
+      </QueryProvider>
+    );
+    const view = render(ui("old-run"));
+    await waitFor(() => expect(harness.emulators).toHaveLength(1));
+    view.rerender(ui("new-run"));
+    await waitFor(() => expect(harness.emulators).toHaveLength(2));
+    await act(async () => {
+      for (const terminalId of ["old-run", "new-run"])
+        harness.emit(
+          {
+            version: TERMINAL_PROTOCOL_VERSION,
+            type: "output",
+            terminalId,
+            sequenceStart: 0,
+            sequenceEnd: 3,
+            replay: false,
           },
-          clear,
-          dispose,
-          getSelection: () => "copied terminal text",
-          hasSelection: () => true,
-          loadAddon,
-          open,
-          options: {},
-          reset,
-          write,
-        },
-        fitAddon: { dispose, fit },
-      };
-    };
-
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { writeText: clipboardWriteText },
+          new TextEncoder().encode("new"),
+        );
+      await Promise.resolve();
     });
-
-    try {
-      render(
-        <AgentStudioDevServerTerminal
-          scopeKey="/repo::task-1"
-          scriptId="frontend"
-          terminalBuffer={{
-            entries: [
-              {
-                scriptId: "frontend",
-                runIdentity: {
-                  runId: "frontend:1",
-                  runOrder: { hostInstanceId: "host-1", generation: 1 },
-                },
-                sequence: 0,
-                data: "ready\r\n",
-                timestamp: "2026-03-19T15:30:00.000Z",
-              },
-            ],
-            lastSequence: 0,
-            resetToken: 0,
-            lastDroppedSequence: null,
-          }}
-          onRendererError={onRendererError}
-          createTerminalBinding={createTerminalBinding}
-        />,
-      );
-
-      await waitFor(() => {
-        expect(open).toHaveBeenCalled();
-      });
-      if (!keyHandler) {
-        throw new Error("Expected terminal key handler to be registered");
-      }
-      const terminalKeyHandler: (event: KeyboardEvent) => boolean = keyHandler;
-
-      const handled = terminalKeyHandler(
-        new KeyboardEvent("keydown", {
-          bubbles: true,
-          cancelable: true,
-          ctrlKey: true,
-          key: "c",
-        }),
-      );
-
-      expect(handled).toBe(false);
-      await waitFor(() => {
-        expect(clipboardWriteText).toHaveBeenCalledWith("copied terminal text");
-      });
-    } finally {
-      Object.defineProperty(navigator, "clipboard", {
-        configurable: true,
-        value: originalClipboard,
-      });
-    }
+    expect(harness.emulators[0]?.writes).toEqual([]);
+    expect(harness.emulators[0]?.dispose).toHaveBeenCalledTimes(1);
+    expect(harness.emulators[1]?.writes).toEqual([new TextEncoder().encode("new")]);
+    expect(harness.bridge.connect).toHaveBeenCalledTimes(1);
+    expect(
+      harness.sent
+        .filter((frame) => frame.message.type === "attach")
+        .map((frame) => frame.message.terminalId),
+    ).toEqual(["old-run", "new-run"]);
+    view.unmount();
   });
 });

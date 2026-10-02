@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { TerminalServerMessage, TerminalSummary } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type { TerminalPtyHandle } from "../../ports/terminal-pty-port";
+import type { TerminalProducerHandle } from "../../ports/terminal-pty-port";
 import { TERMINAL_LIMITS } from "./terminal-limits";
 import { TerminalSessionOutput } from "./terminal-session-output";
 
@@ -15,11 +15,8 @@ const summary: TerminalSummary = {
   exit: null,
 };
 
-const pausableHandle: TerminalPtyHandle = {
+const pausableHandle: TerminalProducerHandle = {
   supportsOutputPause: true,
-  hasChildProcesses: () => Effect.succeed(false),
-  write: () => Effect.void,
-  resize: () => Effect.void,
   pauseOutput: () => Effect.void,
   resumeOutput: () => Effect.void,
   terminate: () => Effect.void,
@@ -34,9 +31,9 @@ const createOutput = (): TerminalSessionOutput =>
   }));
 
 describe("TerminalSessionOutput", () => {
-  test("holds the PTY pause until a screen snapshot ends", async () => {
+  test("holds the producer pause until a screen snapshot ends", async () => {
     const calls: string[] = [];
-    const handle: TerminalPtyHandle = {
+    const handle: TerminalProducerHandle = {
       ...pausableHandle,
       pauseOutput: () => Effect.sync(() => calls.push("pause")),
       resumeOutput: () => Effect.sync(() => calls.push("resume")),
@@ -53,9 +50,9 @@ describe("TerminalSessionOutput", () => {
     expect(calls).toEqual(["pause", "resume"]);
   });
 
-  test("keeps the PTY paused until both screen snapshots end", async () => {
+  test("keeps the producer paused until both screen snapshots end", async () => {
     const calls: string[] = [];
-    const handle: TerminalPtyHandle = {
+    const handle: TerminalProducerHandle = {
       ...pausableHandle,
       pauseOutput: () => Effect.sync(() => calls.push("pause")),
       resumeOutput: () => Effect.sync(() => calls.push("resume")),
@@ -74,7 +71,7 @@ describe("TerminalSessionOutput", () => {
 
   test("keeps normal output pressure after the snapshot hold ends", async () => {
     const calls: string[] = [];
-    const handle: TerminalPtyHandle = {
+    const handle: TerminalProducerHandle = {
       ...pausableHandle,
       pauseOutput: () => Effect.sync(() => calls.push("pause")),
       resumeOutput: () => Effect.sync(() => calls.push("resume")),
@@ -109,7 +106,7 @@ describe("TerminalSessionOutput", () => {
 
   test("does not resume before a pending pause starts", async () => {
     const calls: string[] = [];
-    const handle: TerminalPtyHandle = {
+    const handle: TerminalProducerHandle = {
       ...pausableHandle,
       pauseOutput: () => Effect.sync(() => calls.push("pause")),
       resumeOutput: () => Effect.sync(() => calls.push("resume")),
@@ -128,7 +125,7 @@ describe("TerminalSessionOutput", () => {
     const calls: string[] = [];
     const pauseStarted = Promise.withResolvers<void>();
     const finishPause = Promise.withResolvers<void>();
-    const handle: TerminalPtyHandle = {
+    const handle: TerminalProducerHandle = {
       ...pausableHandle,
       pauseOutput: () =>
         Effect.promise(async () => {
@@ -150,6 +147,57 @@ describe("TerminalSessionOutput", () => {
     finishPause.resolve();
     await Promise.all([pause, firstResume, secondResume]);
     expect(calls).toEqual(["pause-start", "pause-end", "resume"]);
+  });
+
+  test("holds a smaller output chunk behind a blocked chunk until its consumer ACKs", async () => {
+    const output = createOutput();
+    const slow: { frame: Extract<TerminalServerMessage, { type: "output" }>; bytes: Uint8Array }[] =
+      [];
+    const healthy: typeof slow = [];
+    for (const [attachmentId, frames] of [
+      ["slow", slow],
+      ["healthy", healthy],
+    ] as const) {
+      output.attach(
+        {
+          terminalId: "terminal-1",
+          attachmentId,
+          lastConsumedSequence: 0,
+          sink: (frame, bytes) => {
+            if (frame.type === "output") frames.push({ frame, bytes });
+          },
+        },
+        summary,
+        pausableHandle,
+      );
+    }
+    const initial = new Uint8Array(500_000).fill(65);
+    const final = new Uint8Array(70_000).fill(66);
+    final.fill(67, 65_536);
+    output.accept(initial, pausableHandle);
+    output.acknowledge("healthy", initial.byteLength);
+    output.accept(final, pausableHandle);
+
+    expect(slow.at(-1)?.frame.sequenceEnd).toBe(initial.byteLength);
+    expect(healthy.at(-1)?.frame.sequenceEnd).toBe(initial.byteLength + final.byteLength);
+    output.acknowledge("slow", initial.byteLength);
+    await Effect.runPromise(output.resumeIfUnblocked(pausableHandle));
+
+    for (const frames of [slow, healthy]) {
+      let sequence = 0;
+      for (const { frame, bytes } of frames) {
+        expect(frame.sequenceStart).toBe(sequence);
+        expect(frame.sequenceEnd).toBe(sequence + bytes.byteLength);
+        sequence = frame.sequenceEnd;
+      }
+      expect(Buffer.concat(frames.map(({ bytes }) => bytes))).toEqual(
+        Buffer.concat([initial, final]),
+      );
+    }
+    const count = slow.length;
+    output.acknowledge("slow", initial.byteLength + final.byteLength);
+    await Effect.runPromise(output.resumeIfUnblocked(pausableHandle));
+    expect(slow).toHaveLength(count);
   });
 
   test("restores a gap and ignores an ACK sent before restoration", () => {

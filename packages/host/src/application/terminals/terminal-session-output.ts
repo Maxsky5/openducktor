@@ -5,7 +5,7 @@ import {
   type TerminalSummary,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type { TerminalPtyError, TerminalPtyHandle } from "../../ports/terminal-pty-port";
+import type { TerminalPtyError, TerminalProducerHandle } from "../../ports/terminal-pty-port";
 import { TERMINAL_LIMITS } from "./terminal-limits";
 import { TerminalScreenBusyError, type TerminalScreenSnapshot } from "./terminal-screen-state";
 
@@ -74,7 +74,7 @@ export class TerminalSessionOutput {
   private sequence = 0;
   private readonly attachments = new Map<string, TerminalAttachment>();
   private paused = false;
-  private ptyPaused = false;
+  private producerPaused = false;
   private overflowed = false;
   private failureFrame: Extract<TerminalServerMessage, { type: "protocol_error" }> | null = null;
   private parserPendingBytes = 0;
@@ -92,6 +92,10 @@ export class TerminalSessionOutput {
     return this.sequence;
   }
 
+  get isOverflowed(): boolean {
+    return this.overflowed;
+  }
+
   get earliestRetainedSequence(): number {
     return this.replay[0]?.sequenceStart ?? this.sequence;
   }
@@ -99,7 +103,7 @@ export class TerminalSessionOutput {
   attach(
     input: TerminalSessionAttachInput,
     summary: TerminalSummary,
-    handle: TerminalPtyHandle | null,
+    handle: TerminalProducerHandle | null,
   ): TerminalOutputEvents {
     const requested = input.lastConsumedSequence ?? 0;
     if (requested > this.sequence) {
@@ -157,7 +161,7 @@ export class TerminalSessionOutput {
     return this.publish(this.failureFrame);
   }
 
-  accept(data: Uint8Array, handle: TerminalPtyHandle | null): TerminalOutputEvents {
+  accept(data: Uint8Array, handle: TerminalProducerHandle | null): TerminalOutputEvents {
     let events: TerminalOutputEvents = [];
     if (data.byteLength === 0 || this.overflowed) return events;
     for (let offset = 0; offset < data.byteLength; offset += OUTPUT_CHUNK_BYTES) {
@@ -173,7 +177,7 @@ export class TerminalSessionOutput {
     return events;
   }
 
-  updateParserBacklog(bytes: number, handle: TerminalPtyHandle | null): TerminalOutputEvents {
+  updateParserBacklog(bytes: number, handle: TerminalProducerHandle | null): TerminalOutputEvents {
     const wasBacklogged = this.parserPendingBytes > TERMINAL_LIMITS.resumeOutputBytes;
     this.parserPendingBytes = bytes;
     const pressure = bytes >= TERMINAL_LIMITS.pendingOutputBytes ? this.requestPause(handle) : [];
@@ -228,20 +232,20 @@ export class TerminalSessionOutput {
   }
 
   resumeIfUnblocked(
-    handle: TerminalPtyHandle | null,
+    handle: TerminalProducerHandle | null,
   ): Effect.Effect<TerminalOutputEvents, TerminalPtyError> {
     return this.flowOperations.withPermits(1)(this.resumeUnblocked(handle));
   }
 
   pauseIfRequested(
-    handle: TerminalPtyHandle,
+    handle: TerminalProducerHandle,
   ): Effect.Effect<TerminalOutputEvents, TerminalPtyError> {
     return this.flowOperations.withPermits(1)(
       Effect.gen(this, function* () {
         if (!this.paused || this.overflowed) return [];
-        if (!this.ptyPaused) {
+        if (!this.producerPaused) {
           yield* handle.pauseOutput();
-          this.ptyPaused = true;
+          this.producerPaused = true;
         }
         return yield* this.resumeUnblocked(handle);
       }),
@@ -249,7 +253,7 @@ export class TerminalSessionOutput {
   }
 
   private resumeUnblocked(
-    handle: TerminalPtyHandle | null,
+    handle: TerminalProducerHandle | null,
   ): Effect.Effect<TerminalOutputEvents, TerminalPtyError> {
     return Effect.gen(this, function* () {
       if (this.snapshotHolds > 0) return [];
@@ -261,8 +265,8 @@ export class TerminalSessionOutput {
           )
         )
           return [];
-        if (handle && this.ptyPaused) yield* handle.resumeOutput();
-        this.ptyPaused = false;
+        if (handle && this.producerPaused) yield* handle.resumeOutput();
+        this.producerPaused = false;
         this.paused = false;
         if (
           this.parserPendingBytes >= TERMINAL_LIMITS.pendingOutputBytes ||
@@ -337,7 +341,7 @@ export class TerminalSessionOutput {
     }
   }
 
-  private requestPause(handle: TerminalPtyHandle | null): TerminalOutputEvents {
+  private requestPause(handle: TerminalProducerHandle | null): TerminalOutputEvents {
     if (this.paused || !handle) return [];
     if (!handle.supportsOutputPause) return event("overflow");
     this.paused = true;
@@ -348,10 +352,13 @@ export class TerminalSessionOutput {
     attachment: TerminalAttachment,
     chunk: ReplayChunk,
     replay: boolean,
-    handle: TerminalPtyHandle | null,
+    handle: TerminalProducerHandle | null,
   ): TerminalDeliveryResult {
     if (chunk.sequenceEnd <= attachment.deliveredSequence) {
       return { delivered: true, events: [] };
+    }
+    if (chunk.sequenceStart > attachment.deliveredSequence) {
+      return { delivered: false, events: this.requestPause(handle) };
     }
     const start = Math.max(chunk.sequenceStart, attachment.deliveredSequence);
     const payload = chunk.data.subarray(start - chunk.sequenceStart);
@@ -383,7 +390,7 @@ export class TerminalSessionOutput {
   private flush(
     attachment: TerminalAttachment,
     replay: boolean,
-    handle: TerminalPtyHandle | null = null,
+    handle: TerminalProducerHandle | null = null,
   ): TerminalOutputEvents {
     let events: TerminalOutputEvents = [];
     const earliest = this.earliestRetainedSequence;

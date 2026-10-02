@@ -3,21 +3,15 @@ import {
   type DevServerScriptState,
   devServerGroupStateSchema,
   formatDevServerOwnerKey,
-  type RepoConfig,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   errorMessage,
-  HostDependencyError,
   HostInvariantError,
   HostOperationError,
   HostValidationError,
 } from "../../effect/host-errors";
-import {
-  type DevServerProcessHandle,
-  DevServerProcessStartExitError,
-  devServerExitMessage,
-} from "../../ports/dev-server-process-port";
+import type { DevServerProcessHandle } from "../../ports/dev-server-process-port";
 import {
   markScriptProcessHandleMissing,
   stopScriptProcessHandle,
@@ -31,23 +25,19 @@ import type {
 } from "./dev-server-service-types";
 import { createDevServerEventPublisher } from "./dev-server-event-publisher";
 import {
-  DEV_SERVER_CLICOLOR_FORCE,
-  DEV_SERVER_COLORTERM,
-  DEV_SERVER_FORCE_COLOR,
-  DEV_SERVER_TERM,
   type DevServerGroupRuntime,
   inspectDevServerWorkspaceActivity,
   nowIso,
   scriptHasLiveProcess,
-  startTerminalRun,
   syncGroupState,
-  syncRuntimeTerminalBufferByteCounts,
+  syncRuntimeTerminalSources,
 } from "./dev-server-state";
 import {
   createDevServerRuntimeResolver,
   type RetiredDevServerOrder,
 } from "./dev-server-runtime-resolver";
 import { stopAllDevServers } from "./dev-server-shutdown";
+import { createDevServerScriptStarter } from "./dev-server-script-starter";
 
 export type {
   CreateDevServerServiceInput,
@@ -61,17 +51,16 @@ export const createDevServerService = ({
   withProcessStartAdmission,
   eventBus,
   processPort,
+  terminalSources,
   taskWorktreeService,
   workspaceSessions,
   workspaceSettingsService,
 }: CreateDevServerServiceInput): DisposableDevServerService => {
-  const hostInstanceId = globalThis.crypto.randomUUID();
   const groups = new Map<string, Map<string, DevServerGroupRuntime>>();
   const retiredOrder: RetiredDevServerOrder = {
     revision: null,
-    runGeneration: 0,
   };
-  const { publish, publishSnapshot, terminalWriter } = createDevServerEventPublisher(eventBus);
+  const { publish, publishSnapshot } = createDevServerEventPublisher(eventBus);
   const resolveRuntime = createDevServerRuntimeResolver({
     groups,
     retiredOrder,
@@ -111,170 +100,11 @@ export const createDevServerService = ({
       updatedAt: runtime.state.updatedAt,
     });
   };
-  const markStartFailed = (
-    runtime: DevServerGroupRuntime,
-    scriptId: string,
-    message: string,
-    exitCode: number | null = null,
-  ): void => {
-    updateScriptState(runtime, scriptId, (script) => {
-      script.status = "failed";
-      script.pid = null;
-      script.startedAt = null;
-      script.exitCode = exitCode;
-      script.lastError = message;
-    });
-    terminalWriter.appendSystemMessage(runtime, scriptId, message);
-  };
-  const handleProcessExit = (
-    runtime: DevServerGroupRuntime,
-    scriptId: string,
-    expectedRunId: string,
-    pid: number,
-    exitCode: number | null,
-    signal: string | null,
-    error: string | null,
-  ): void => {
-    const script = runtime.state.scripts.find((candidate) => candidate.scriptId === scriptId);
-    const isStartingWithoutRecordedPid = script?.pid === null && script.status === "starting";
-    if (
-      !script ||
-      script.runIdentity?.runId !== expectedRunId ||
-      (script.pid !== pid && !isStartingWithoutRecordedPid)
-    ) {
-      return;
-    }
-    runtime.processes.delete(scriptId);
-    runtime.unresolvedStops.delete(scriptId);
-    const expectedStop = script.status === "stopping";
-    const message = error ?? devServerExitMessage(exitCode, signal);
-    if (!expectedStop) {
-      terminalWriter.appendSystemMessage(runtime, scriptId, message);
-    }
-    updateScriptState(runtime, scriptId, (state) => {
-      state.pid = null;
-      state.startedAt = null;
-      state.exitCode = exitCode;
-      if (expectedStop) {
-        state.status = "stopped";
-        state.lastError = null;
-      } else {
-        state.status = "failed";
-        state.lastError = message;
-      }
-    });
-  };
-  const startScript = (
-    runtime: DevServerGroupRuntime,
-    workingDirectory: string,
-    scriptConfig: RepoConfig["devServers"][number],
-  ) =>
-    Effect.gen(function* () {
-      if (!processPort) {
-        return yield* Effect.fail(
-          new HostDependencyError({
-            dependency: "DevServerProcessPort",
-            operation: "dev_server.start_script",
-            message: "Dev server process port is required to start dev servers.",
-          }),
-        );
-      }
-      updateScriptState(runtime, scriptConfig.id, (script) => {
-        script.status = "starting";
-        script.startedCommand = scriptConfig.command;
-        startTerminalRun(runtime, script, hostInstanceId);
-        script.pid = null;
-        script.startedAt = null;
-        script.exitCode = null;
-        script.lastError = null;
-      });
-      const expectedRunId = runtime.state.scripts.find(
-        (candidate) => candidate.scriptId === scriptConfig.id,
-      )?.runIdentity?.runId;
-      if (!expectedRunId) {
-        return yield* Effect.fail(
-          new HostInvariantError({
-            invariant: "dev_server_script_run_known",
-            message: `Dev server script has no active run id: ${scriptConfig.id}`,
-          }),
-        );
-      }
-      terminalWriter.appendSystemMessage(
-        runtime,
-        scriptConfig.id,
-        `Starting \`${scriptConfig.command}\``,
-      );
-      const handle = yield* processPort
-        .start({
-          command: scriptConfig.command,
-          cwd: workingDirectory,
-          env: {
-            CLICOLOR_FORCE: DEV_SERVER_CLICOLOR_FORCE,
-            COLORTERM: DEV_SERVER_COLORTERM,
-            FORCE_COLOR: DEV_SERVER_FORCE_COLOR,
-            TERM: DEV_SERVER_TERM,
-          },
-          onExit: ({ pid, exitCode, signal, error }) =>
-            handleProcessExit(
-              runtime,
-              scriptConfig.id,
-              expectedRunId,
-              pid,
-              exitCode,
-              signal,
-              error,
-            ),
-          onOutput: ({ data }) =>
-            terminalWriter.pushProcessOutput(runtime, scriptConfig.id, expectedRunId, data),
-        })
-        .pipe(
-          Effect.catchAll((error) =>
-            Effect.gen(function* () {
-              const script = runtime.state.scripts.find(
-                (candidate) => candidate.scriptId === scriptConfig.id,
-              );
-              if (script?.status !== "failed") {
-                const exitCode =
-                  error instanceof DevServerProcessStartExitError ? error.exitCode : null;
-                markStartFailed(runtime, scriptConfig.id, errorMessage(error), exitCode);
-              }
-              return yield* Effect.fail(error);
-            }),
-          ),
-        );
-      const script = runtime.state.scripts.find(
-        (candidate) => candidate.scriptId === scriptConfig.id,
-      );
-      if (script?.status !== "starting") {
-        const message = script?.lastError ?? "Dev server exited before startup completed.";
-        const stopResult = yield* Effect.either(handle.stop());
-        if (stopResult._tag === "Left") {
-          runtime.processes.set(scriptConfig.id, handle);
-          runtime.unresolvedStops.add(scriptConfig.id);
-          markStartFailed(runtime, scriptConfig.id, errorMessage(stopResult.left));
-        }
-        const cleanupMessage =
-          stopResult._tag === "Left"
-            ? `\nFailed stopping dev server ${scriptConfig.id} after startup failure: ${errorMessage(stopResult.left)}`
-            : "";
-        return yield* Effect.fail(
-          new HostOperationError({
-            operation: "dev_server.start_script",
-            message: `${message}${cleanupMessage}`,
-            details: { scriptId: scriptConfig.id },
-          }),
-        );
-      }
-      runtime.processes.set(scriptConfig.id, handle);
-      const startedAt = nowIso();
-      updateScriptState(runtime, scriptConfig.id, (script) => {
-        script.status = "running";
-        script.pid = handle.pid;
-        script.startedAt = startedAt;
-        script.exitCode = null;
-        script.lastError = null;
-      });
-    });
+  const startScript = createDevServerScriptStarter({
+    processPort,
+    terminalSources,
+    updateScriptState,
+  });
   const stopRuntime = (runtime: DevServerGroupRuntime) =>
     Effect.gen(function* () {
       const targets: Array<{
@@ -403,6 +233,15 @@ export const createDevServerService = ({
             runtime,
             updateScriptState,
           );
+          if (
+            !runtime.processes.has(failedScript.scriptId) &&
+            !runtime.unresolvedStops.has(failedScript.scriptId)
+          ) {
+            updateScriptState(runtime, failedScript.scriptId, (script) => {
+              script.status = "failed";
+              script.lastError = failedScript.message;
+            });
+          }
           publishSnapshot(runtime);
           return yield* new HostOperationError({
             operation: "dev_server.start",
@@ -452,7 +291,7 @@ export const createDevServerService = ({
         workingDirectory,
         runtime.unresolvedStops,
       );
-      syncRuntimeTerminalBufferByteCounts(runtime);
+      syncRuntimeTerminalSources(runtime);
       publishSnapshot(runtime);
       return devServerGroupStateSchema.parse(runtime.state);
     });
@@ -483,12 +322,10 @@ export const createDevServerService = ({
         const ownerKey = formatDevServerOwnerKey(owner);
         const runtime = repoGroups?.get(ownerKey);
         if (runtime) {
-          // A restored session must outrank state and runs cached before its archive.
+          for (const output of runtime.terminalOutputs.values()) output.release();
+          runtime.terminalOutputs.clear();
+          // A restored session must outrank state cached before its archive.
           retiredOrder.revision = Math.max(retiredOrder.revision ?? 0, runtime.state.revision);
-          retiredOrder.runGeneration = Math.max(
-            retiredOrder.runGeneration,
-            runtime.terminalRunGeneration,
-          );
           repoGroups?.delete(ownerKey);
         }
         if (repoGroups?.size === 0) groups.delete(repoPath);

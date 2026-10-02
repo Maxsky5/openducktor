@@ -242,7 +242,7 @@ const createSnapshot = (): BuildToolsSnapshot => ({
     scripts: [],
     selectedScriptId: null,
     selectedScript: null,
-    selectedScriptTerminalBuffer: null,
+
     error: null,
     isStartPending: false,
     isRetryPending: false,

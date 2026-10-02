@@ -1,34 +1,47 @@
 import type { TerminalSummary } from "@openducktor/contracts";
 import type { Effect } from "effect";
-import type { TerminalPtyHandle } from "../../ports/terminal-pty-port";
-import type { TerminalGrid } from "../../ports/terminal-pty-port";
+import type {
+  TerminalGrid,
+  TerminalProducerHandle,
+  TerminalPtyHandle,
+} from "../../ports/terminal-pty-port";
 import { TerminalScreenState } from "./terminal-screen-state";
 import { TerminalSessionOutput } from "./terminal-session-output";
 import type { TerminalTitleTracker } from "./terminal-title-tracker";
 
-export type TerminalSession = {
+type TerminalSessionState = {
+  onForgotten?: () => void;
   summary: TerminalSummary;
-  resources: TerminalSessionResources;
   output: TerminalSessionOutput;
   screen: TerminalScreenState;
   screenReleaseStarted: boolean;
   operations: Effect.Semaphore;
 };
 
-class TerminalSessionResources {
-  private currentHandle: TerminalPtyHandle | null = null;
+export type InteractiveTerminalSession = TerminalSessionState & {
+  readonly kind: "interactive";
+  readonly shell: string;
+  resources: TerminalSessionResources<TerminalPtyHandle>;
+};
+
+export type OutputTerminalSession = TerminalSessionState & {
+  readonly kind: "output";
+  resources: TerminalSessionResources<TerminalProducerHandle>;
+};
+
+export type TerminalSession = InteractiveTerminalSession | OutputTerminalSession;
+
+class TerminalSessionResources<Handle extends TerminalProducerHandle> {
+  private currentHandle: Handle | null = null;
   private disposed = false;
 
-  constructor(
-    readonly shell: string,
-    private readonly titleTracker: TerminalTitleTracker,
-  ) {}
+  constructor(private readonly titleTracker: TerminalTitleTracker) {}
 
-  get handle(): TerminalPtyHandle | null {
+  get handle(): Handle | null {
     return this.currentHandle;
   }
 
-  activate(handle: TerminalPtyHandle): boolean {
+  activate(handle: Handle): boolean {
     if (this.disposed) return false;
     this.currentHandle = handle;
     return true;
@@ -46,31 +59,46 @@ class TerminalSessionResources {
   }
 }
 
-export const createTerminalSession = ({
-  summary,
-  titleTracker,
-  operations,
-  replayByteLimit,
-  shell,
-  grid,
-}: {
+type TerminalSessionInput = {
   summary: TerminalSummary;
   titleTracker: TerminalTitleTracker;
   operations: Effect.Semaphore;
   replayByteLimit: number;
-  shell: string;
   grid: TerminalGrid;
-}): TerminalSession => {
-  const screen = new TerminalScreenState(grid);
-  return {
-    summary,
-    resources: new TerminalSessionResources(shell, titleTracker),
-    output: new TerminalSessionOutput(summary.terminalId, replayByteLimit, () => screen.snapshot()),
+};
+
+export function createTerminalSession(
+  input: TerminalSessionInput & { kind: "interactive"; shell: string },
+): InteractiveTerminalSession;
+export function createTerminalSession(
+  input: TerminalSessionInput & { kind: "output" },
+): OutputTerminalSession;
+export function createTerminalSession(
+  input: TerminalSessionInput & ({ kind: "interactive"; shell: string } | { kind: "output" }),
+): TerminalSession {
+  const screen = new TerminalScreenState(input.grid, input.kind === "output");
+  const state: TerminalSessionState = {
+    summary: input.summary,
+    output: new TerminalSessionOutput(input.summary.terminalId, input.replayByteLimit, () =>
+      screen.snapshot(),
+    ),
     screen,
     screenReleaseStarted: false,
-    operations,
+    operations: input.operations,
   };
-};
+  return input.kind === "interactive"
+    ? {
+        ...state,
+        kind: input.kind,
+        shell: input.shell,
+        resources: new TerminalSessionResources<TerminalPtyHandle>(input.titleTracker),
+      }
+    : {
+        ...state,
+        kind: input.kind,
+        resources: new TerminalSessionResources<TerminalProducerHandle>(input.titleTracker),
+      };
+}
 
 export const isLiveTerminal = (session: TerminalSession): boolean =>
   session.summary.lifecycle === "starting" ||
@@ -78,14 +106,22 @@ export const isLiveTerminal = (session: TerminalSession): boolean =>
   session.summary.lifecycle === "closing" ||
   session.summary.lifecycle === "close_failed";
 
-export const activateTerminalSession = (
-  session: TerminalSession,
+export function activateTerminalSession(
+  session: InteractiveTerminalSession,
   handle: TerminalPtyHandle,
-): boolean => {
+): boolean;
+export function activateTerminalSession(
+  session: OutputTerminalSession,
+  handle: TerminalProducerHandle,
+): boolean;
+export function activateTerminalSession<Handle extends TerminalProducerHandle>(
+  session: TerminalSessionState & { resources: TerminalSessionResources<Handle> },
+  handle: NoInfer<Handle>,
+): boolean {
   if (session.summary.lifecycle !== "starting" || !session.resources.activate(handle)) return false;
   session.summary.lifecycle = "running";
   return true;
-};
+}
 
 export const beginTerminalClose = (session: TerminalSession): void => {
   session.summary.lifecycle = "closing";
@@ -103,6 +139,7 @@ export const forgetTerminalSession = (session: TerminalSession): void => {
   session.resources.dispose();
   if (session.screenReleaseStarted) return;
   session.screenReleaseStarted = true;
+  session.onForgotten?.();
   void session.screen.drained().then(() => session.screen.dispose());
 };
 

@@ -29,6 +29,7 @@ import type { GitPort } from "../../ports/git-port";
 import type { GitPortError } from "../../ports/git-port";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
 import type { createWorkspaceSessionOperationGate } from "../workspaces/workspace-session-operation-gate";
+import type { TerminalOutputSourcePort } from "../../ports/terminal-output-source-port";
 
 export type DevServerServiceError =
   | DevServerProcessStartExitError
@@ -91,6 +92,7 @@ export type CreateDevServerServiceInput = {
   withProcessStartAdmission?: WithProcessStartAdmission;
   eventBus?: HostEventBusPort | undefined;
   processPort?: DevServerProcessPort;
+  terminalSources?: TerminalOutputSourcePort;
   taskWorktreeService?: TaskWorktreeService;
   workspaceSessions?: {
     store: Pick<WorkspaceSessionStorePort, "get">;

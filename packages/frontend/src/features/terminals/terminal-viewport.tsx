@@ -1,18 +1,16 @@
 import "@xterm/xterm/css/xterm.css";
-import type { AppPlatform, TerminalLifecycle } from "@openducktor/contracts";
+import type { AppPlatform, TerminalFailure, TerminalLifecycle } from "@openducktor/contracts";
 import { type ReactElement, useEffect, useEffectEvent, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { hostClient } from "@/lib/host-client";
 import { stageLocalAttachmentFile } from "@/lib/local-attachment-files";
 import { cn } from "@/lib/utils";
-import {
-  type InteractiveTerminalMount,
-  mountInteractiveTerminal,
-} from "./interactive-terminal-mount";
+import { type TerminalViewportMount, mountTerminalViewport } from "./terminal-viewport-mount";
 import type { TerminalTransportController } from "./terminal-transport-controller";
 
-type InteractiveTerminalProps = {
+type TerminalViewportProps = {
+  mode: "interactive" | "output";
   terminalId: string;
   controller: TerminalTransportController;
   platform: AppPlatform | undefined;
@@ -20,11 +18,12 @@ type InteractiveTerminalProps = {
   focusRequest: number;
   onAttention: (message: string | null) => void;
   onLifecycle: (lifecycle: TerminalLifecycle, exitText: string | null) => void;
-  onForgotten: (message: string) => void;
+  onForgotten: (message: string, failure: TerminalFailure | null) => void;
   onTitleChange: (title: string) => void;
 };
 
-export function InteractiveTerminal({
+export function TerminalViewport({
+  mode,
   terminalId,
   controller,
   platform,
@@ -34,9 +33,9 @@ export function InteractiveTerminal({
   onLifecycle,
   onForgotten,
   onTitleChange,
-}: InteractiveTerminalProps): ReactElement {
+}: TerminalViewportProps): ReactElement {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const mountRef = useRef<InteractiveTerminalMount | null>(null);
+  const mountRef = useRef<TerminalViewportMount | null>(null);
   const platformRef = useRef(platform);
   const callbacksRef = useRef({ onAttention, onLifecycle, onForgotten, onTitleChange });
   const [mountError, setMountError] = useState<string | null>(null);
@@ -61,8 +60,9 @@ export function InteractiveTerminal({
     const interactionToastId = `terminal:${terminalId}:interaction`;
     let interactionToastShown = false;
     try {
-      mountRef.current = mountInteractiveTerminal({
+      mountRef.current = mountTerminalViewport({
         container,
+        mode,
         terminalId,
         controller,
         isActive,
@@ -78,7 +78,7 @@ export function InteractiveTerminal({
         writeClipboard: (text) => navigator.clipboard.writeText(text),
         onAttention: (message) => callbacksRef.current.onAttention(message),
         onLifecycle: (lifecycle, exitText) => callbacksRef.current.onLifecycle(lifecycle, exitText),
-        onForgotten: (message) => callbacksRef.current.onForgotten(message),
+        onForgotten: (message, failure) => callbacksRef.current.onForgotten(message, failure),
         onTitleChange: (title) => callbacksRef.current.onTitleChange(title),
         onHydrated: () => setIsHydrated(true),
         onImageDragActiveChange: setIsImageDragActive,
@@ -95,7 +95,7 @@ export function InteractiveTerminal({
       mountRef.current = null;
       if (interactionToastShown) toast.dismiss(interactionToastId);
     };
-  }, [controller, terminalId]);
+  }, [controller, mode, terminalId]);
 
   useEffect(() => {
     if (!active || !isHydrated) return;
@@ -109,7 +109,7 @@ export function InteractiveTerminal({
         ref={containerRef}
         className={cn("h-full min-h-0 px-2 py-1", (!isHydrated || mountError) && "invisible")}
         role="application"
-        aria-label={`Interactive terminal ${terminalId}`}
+        aria-label={`${mode === "output" ? "Dev server output" : "Interactive terminal"} ${terminalId}`}
       />
       {isImageDragActive ? (
         <div
@@ -124,7 +124,10 @@ export function InteractiveTerminal({
           <div role="alert" className="flex max-w-md flex-col items-center gap-2 text-center">
             <p className="text-sm font-semibold text-foreground">Terminal failed to start</p>
             <p className="text-xs text-muted-foreground">
-              {mountError} Close and reopen this terminal tab.
+              {mountError}{" "}
+              {mode === "output"
+                ? "Stop and restart this dev server."
+                : "Close and reopen this terminal tab."}
             </p>
           </div>
         </div>

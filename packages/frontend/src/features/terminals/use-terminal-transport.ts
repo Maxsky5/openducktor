@@ -1,44 +1,27 @@
-import type { TerminalFailure } from "@openducktor/contracts";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import type { TerminalBridge } from "@/lib/shell-bridge";
-import {
-  createTerminalTransportController,
-  type TerminalTransportController,
-} from "./terminal-transport-controller";
+import type { TerminalTransportController } from "./terminal-transport-controller";
+import { acquireTerminalTransport } from "./terminal-transport-pool";
 
-type ActiveController = {
-  bridge: TerminalBridge;
-  controller: TerminalTransportController;
-};
+type ActiveController = { bridge: TerminalBridge; controller: TerminalTransportController };
 
-export const useTerminalTransport = (bridge: TerminalBridge) => {
+export const useTerminalTransport = (
+  bridge: TerminalBridge,
+  onError?: (error: string | null) => void,
+) => {
   const [activeController, setActiveController] = useState<ActiveController | null>(null);
   const [transportError, setTransportError] = useState<string | null>(null);
-  const handleStateChange = useCallback((state: "connected" | "disconnected"): void => {
-    if (state === "connected") setTransportError(null);
-  }, []);
-  const handleProtocolFailure = useCallback((failure: TerminalFailure): void => {
-    setTransportError(failure.message);
-  }, []);
-
+  const handleError = useEffectEvent((error: string | null) => {
+    setTransportError(error);
+    onError?.(error);
+  });
   useEffect(() => {
-    setTransportError(null);
-    const controller = createTerminalTransportController(
-      bridge,
-      handleStateChange,
-      handleProtocolFailure,
-    );
-    setActiveController({ bridge, controller });
-    void controller.connect().catch(() => undefined);
-    return () => {
-      void controller.dispose().catch((cause: unknown) => {
-        console.error("Failed to disconnect terminal transport.", cause);
-      });
-    };
-  }, [bridge, handleProtocolFailure, handleStateChange]);
-
+    const lease = acquireTerminalTransport(bridge, handleError);
+    setActiveController({ bridge, controller: lease.controller });
+    return () => lease.release();
+  }, [bridge]);
   return {
     controller: activeController?.bridge === bridge ? activeController.controller : null,
     transportError,
-  } satisfies { controller: TerminalTransportController | null; transportError: string | null };
+  };
 };

@@ -27,18 +27,22 @@ describe("browser-live-control-events", () => {
   test("rejects dev server events", () => {
     expect(
       isBrowserLiveControlEvent({
-        type: "terminal_chunk",
+        type: "script_status_changed",
         repoPath: "/repo",
         owner: { kind: "task", taskId: "task-1" },
-        terminalChunk: {
+        revision: 1,
+        updatedAt: "now",
+        script: {
           scriptId: "dev",
-          runIdentity: {
-            runId: "run-1",
-            runOrder: { hostInstanceId: "host-1", generation: 1 },
-          },
-          sequence: 0,
-          data: "ready",
-          timestamp: "2026-08-30T10:00:00.000Z",
+          name: "Dev",
+          command: "dev",
+          startedCommand: null,
+          terminalId: null,
+          status: "stopped",
+          pid: null,
+          startedAt: null,
+          exitCode: null,
+          lastError: null,
         },
       }),
     ).toBe(false);

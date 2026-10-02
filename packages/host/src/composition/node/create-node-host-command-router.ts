@@ -279,6 +279,7 @@ export const assembleNodeEffectHostCommandRouter = (
   const devServerService = createDevServerService({
     withProcessStartAdmission: workspaceAdmissionService.withProcessStartAdmission,
     processPort: devServerProcesses,
+    terminalSources: terminalService,
     taskWorktreeService,
     workspaceSessions: {
       store: assets.workspaceSessionStore,

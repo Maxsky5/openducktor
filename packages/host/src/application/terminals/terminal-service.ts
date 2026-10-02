@@ -14,6 +14,8 @@ import {
 } from "@openducktor/contracts";
 import { Effect, type Scope } from "effect";
 import type { TerminalGrid, TerminalPtyPort } from "../../ports/terminal-pty-port";
+import { TerminalPtyError } from "../../ports/terminal-pty-port";
+import type { TerminalOutputSourcePort } from "../../ports/terminal-output-source-port";
 import { createTerminalAdmission } from "./terminal-admission";
 import { type TerminalTaskScope, type TerminalWorkspaceSessionScope } from "./terminal-context";
 import {
@@ -36,7 +38,7 @@ export type TerminalAttachInput = TerminalSessionAttachInput;
 
 export type TerminalCloseByTaskResult = { closedTerminalIds: string[] };
 
-export type TerminalService = {
+export type TerminalService = TerminalOutputSourcePort & {
   readonly hostInstanceId: string;
   create(input: TerminalCreateRequest): Effect.Effect<TerminalCreateResponse, TerminalServiceError>;
   list(filter: TerminalListFilter): Effect.Effect<TerminalListResponse, TerminalServiceError>;
@@ -122,6 +124,53 @@ export const createTerminalService = ({
 
     const service: TerminalService = {
       hostInstanceId,
+      openOutputSource: ({ context, workingDir, label, onForgotten }) =>
+        Effect.gen(function* () {
+          const reservation = yield* admission.beginCreation(context);
+          return yield* Effect.gen(function* () {
+            yield* reservation.bind(context);
+            const source = yield* engine.openOutputSource(
+              {
+                terminalId: idFactory(),
+                label,
+                context,
+                initialWorkingDir: workingDir,
+                createdAt: now().toISOString(),
+                lifecycle: "starting",
+                exit: null,
+              },
+              () => {
+                reservation.release();
+                onForgotten();
+              },
+            );
+            return {
+              ...source,
+              activate: (handle: Parameters<typeof source.activate>[0]) =>
+                source
+                  .activate(handle)
+                  .pipe(Effect.ensuring(Effect.sync(() => reservation.release()))),
+              exit: (exit: Parameters<typeof source.exit>[0]) => {
+                source.exit(exit);
+                reservation.release();
+              },
+              release: () => {
+                source.release();
+                reservation.release();
+              },
+            };
+          }).pipe(Effect.onError(() => Effect.sync(() => reservation.release())));
+        }).pipe(
+          Effect.mapError(
+            (cause) =>
+              new TerminalPtyError({
+                code: "spawn_failed",
+                operation: "start",
+                message: cause.message,
+                cause,
+              }),
+          ),
+        ),
       create: (rawInput) =>
         Effect.gen(function* () {
           const input = terminalCreateRequestSchema.parse(rawInput);

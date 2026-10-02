@@ -1384,6 +1384,64 @@ describe("TerminalService", () => {
     expect(listed.terminals[0]?.lifecycle).toBe("close_failed");
   });
 
+  test.each(["context", "host"] as const)(
+    "reports shared %s capacity and how to free a slot when shells and output sources reach the limit",
+    async (limitKind) => {
+      let id = 0;
+      const { service } = await makeService(makePty(), () => `terminal-${++id}`);
+      const limit =
+        limitKind === "context" ? TERMINAL_LIMITS.livePerTask : TERMINAL_LIMITS.livePerHost;
+      const outputHandle = {
+        supportsOutputPause: true,
+        pauseOutput: () => Effect.void,
+        resumeOutput: () => Effect.void,
+        terminate: () => Effect.void,
+      };
+      const taskIdFor = (index: number) => (limitKind === "context" ? "shared" : `task-${index}`);
+      try {
+        for (let index = 0; index < limit; index += 1) {
+          const taskId = taskIdFor(index);
+          if (index % 2 === 0) {
+            await Effect.runPromise(
+              service.create({ workingDir: "/repo", context: { repoPath: "/repo", taskId } }),
+            );
+          } else {
+            const source = await Effect.runPromise(
+              service.openOutputSource({
+                context: { repoPath: "/canonical/repo", taskId },
+                workingDir: "/canonical/repo",
+                label: "Dev server",
+                onForgotten: () => {},
+              }),
+            );
+            await Effect.runPromise(source.activate(outputHandle));
+          }
+        }
+        expect((await Effect.runPromise(service.list({ kind: "all" }))).terminals).toHaveLength(
+          limit / 2,
+        );
+        const create = () =>
+          service.create({
+            workingDir: "/repo",
+            context: { repoPath: "/repo", taskId: taskIdFor(limit) },
+          });
+        const rejected = await Effect.runPromise(Effect.either(create()));
+        expect(rejected._tag).toBe("Left");
+        if (rejected._tag !== "Left") throw new Error("Expected the shared terminal limit.");
+        expect(rejected.left.code).toBe(`${limitKind}_terminal_limit`);
+        expect(rejected.left.message).toContain(`${limit}/${limit}`);
+        expect(rejected.left.message).toContain("Shell terminals and dev server output");
+        expect(rejected.left.message).toContain("Close a terminal or stop a dev server");
+        await Effect.runPromise(
+          service.close({ terminalId: "terminal-1", confirmTerminate: true }),
+        );
+        expect((await Effect.runPromise(create())).ref.terminalId).toBeTruthy();
+      } finally {
+        await Effect.runPromise(service.dispose());
+      }
+    },
+  );
+
   test("closes an idle shell without confirmation", async () => {
     const { service, pty } = await makeService(makePty(true, false));
     await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));

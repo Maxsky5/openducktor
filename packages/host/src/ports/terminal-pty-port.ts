@@ -32,14 +32,17 @@ export class TerminalPtyError extends Data.TaggedError("TerminalPtyError")<{
   readonly cause?: unknown;
 }> {}
 
-export type TerminalPtyHandle = {
+export type TerminalProducerHandle = {
   readonly supportsOutputPause: boolean;
-  hasChildProcesses(): Effect.Effect<boolean, TerminalPtyError>;
-  write(data: Uint8Array): Effect.Effect<void, TerminalPtyError>;
-  resize(grid: TerminalGrid): Effect.Effect<void, TerminalPtyError>;
   pauseOutput(): Effect.Effect<void, TerminalPtyError>;
   resumeOutput(): Effect.Effect<void, TerminalPtyError>;
   terminate(): Effect.Effect<void, TerminalPtyError>;
+};
+
+export type TerminalPtyHandle = TerminalProducerHandle & {
+  hasChildProcesses(): Effect.Effect<boolean, TerminalPtyError>;
+  write(data: Uint8Array): Effect.Effect<void, TerminalPtyError>;
+  resize(grid: TerminalGrid): Effect.Effect<void, TerminalPtyError>;
 };
 
 export type TerminalPtyPort = {

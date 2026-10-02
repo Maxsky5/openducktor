@@ -88,6 +88,7 @@ const matchesAnyKeyChord = (
 ): boolean => chords.some((chord) => matchesKeyChord(event, chord));
 
 type TerminalKeyEventHandlerInput = {
+  readOnly?: boolean;
   getPlatform: () => AppPlatform | undefined;
   hasSelection: () => boolean;
   getSelection: () => string;
@@ -122,6 +123,7 @@ export const resolveTerminalKeyAction = (
 };
 
 export const createTerminalKeyEventHandler = ({
+  readOnly = false,
   getPlatform,
   hasSelection,
   getSelection,
@@ -133,6 +135,7 @@ export const createTerminalKeyEventHandler = ({
     const platform = getPlatform();
     if (!platform) return true;
     const action = resolveTerminalKeyAction(event, platform, hasSelection());
+    if (readOnly && (action.type === "input" || action.type === "paste")) return false;
     switch (action.type) {
       case "copy":
         void writeClipboard(getSelection()).catch(reportFailure);

@@ -7,28 +7,24 @@ type SelectedScriptMemory = Map<string, string>;
 type UseAgentStudioDevServerPanelSelectionArgs = {
   scopeKey: string | null;
   scripts: DevServerScriptState[];
-  syncSelectedScriptTerminalBuffer: (scriptId: string | null) => void;
 };
 
 type UseAgentStudioDevServerPanelSelectionResult = {
   effectiveSelectedScriptId: string | null;
   onSelectScript: (scriptId: string) => void;
-  resetSelectedScript: () => void;
-  selectedScriptIdRef: { current: string | null };
 };
 
 export const useAgentStudioDevServerPanelSelection = ({
   scopeKey,
   scripts,
-  syncSelectedScriptTerminalBuffer,
 }: UseAgentStudioDevServerPanelSelectionArgs): UseAgentStudioDevServerPanelSelectionResult => {
   const selectionMemoryRef = useRef<SelectedScriptMemory | null>(null);
   if (selectionMemoryRef.current === null) {
     selectionMemoryRef.current = new Map();
   }
   const selectionMemory = selectionMemoryRef.current;
-  const selectedScriptIdRef = useRef<string | null>(null);
-  const [selectedScriptId, setSelectedScriptId] = useState<string | null>(null);
+  const [selection, setSelection] = useState<{ scopeKey: string; scriptId: string } | null>(null);
+  const selectedScriptId = selection?.scopeKey === scopeKey ? selection?.scriptId : null;
 
   const rememberedScriptId = scopeKey ? (selectionMemory.get(scopeKey) ?? null) : null;
 
@@ -37,9 +33,6 @@ export const useAgentStudioDevServerPanelSelection = ({
   }, [rememberedScriptId, scripts, selectedScriptId]);
 
   useLayoutEffect(() => {
-    selectedScriptIdRef.current = effectiveSelectedScriptId;
-    syncSelectedScriptTerminalBuffer(effectiveSelectedScriptId);
-
     if (!scopeKey) {
       return;
     }
@@ -49,11 +42,7 @@ export const useAgentStudioDevServerPanelSelection = ({
     } else {
       selectionMemory.delete(scopeKey);
     }
-
-    setSelectedScriptId((current) =>
-      current === effectiveSelectedScriptId ? current : effectiveSelectedScriptId,
-    );
-  }, [effectiveSelectedScriptId, selectionMemory, syncSelectedScriptTerminalBuffer, scopeKey]);
+  }, [effectiveSelectedScriptId, selectionMemory, scopeKey]);
 
   const onSelectScript = useCallback(
     (scriptId: string): void => {
@@ -62,21 +51,13 @@ export const useAgentStudioDevServerPanelSelection = ({
       }
 
       selectionMemory.set(scopeKey, scriptId);
-      setSelectedScriptId(scriptId);
+      setSelection({ scopeKey, scriptId });
     },
     [selectionMemory, scopeKey],
   );
 
-  const resetSelectedScript = useCallback((): void => {
-    selectedScriptIdRef.current = null;
-    setSelectedScriptId(null);
-    syncSelectedScriptTerminalBuffer(null);
-  }, [syncSelectedScriptTerminalBuffer]);
-
   return {
     effectiveSelectedScriptId,
     onSelectScript,
-    resetSelectedScript,
-    selectedScriptIdRef,
   };
 };

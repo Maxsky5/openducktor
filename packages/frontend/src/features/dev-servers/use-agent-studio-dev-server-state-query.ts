@@ -8,23 +8,7 @@ type UseAgentStudioDevServerStateQueryArgs = {
   owner: DevServerOwner | null;
   enabled: boolean;
   queryEnabled: boolean;
-  liveState: DevServerGroupState | null;
   transportEpoch: string | null;
-};
-
-const selectEffectiveState = (
-  queryData: DevServerGroupState | null,
-  liveState: DevServerGroupState | null,
-  repoPath: string | null,
-  owner: DevServerOwner | null,
-): DevServerGroupState | null => {
-  const scopedLiveState =
-    liveState?.repoPath === repoPath && owner && isSameDevServerOwner(liveState.owner, owner)
-      ? liveState
-      : null;
-  return scopedLiveState && queryData && queryData.revision > scopedLiveState.revision
-    ? queryData
-    : (scopedLiveState ?? queryData);
 };
 
 export function useAgentStudioDevServerStateQuery({
@@ -32,7 +16,6 @@ export function useAgentStudioDevServerStateQuery({
   owner,
   enabled,
   queryEnabled,
-  liveState,
   transportEpoch,
 }: UseAgentStudioDevServerStateQueryArgs) {
   const queryClient = useQueryClient();
@@ -44,12 +27,7 @@ export function useAgentStudioDevServerStateQuery({
   const { data, error, isFetching, isPending } = stateQuery;
 
   const queryData = queryEnabled ? (data ?? null) : null;
-  const currentState = selectEffectiveState(
-    queryData,
-    queryEnabled ? liveState : null,
-    repoPath,
-    owner,
-  );
+  const currentState = queryData;
   const cachedState = latestCachedState(queryClient, repoPath, owner, enabled);
   const effectiveState = currentState ?? (error ? null : cachedState);
   const isAwaitingFreshState =

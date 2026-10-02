@@ -650,6 +650,9 @@ const createDevServerProcesses = (): DevServerProcessPort => ({
       input.onOutput({ data: "ready\n" });
       return {
         pid: 1234,
+        waitForReady: () => Effect.void,
+        pauseOutput: () => Effect.void,
+        resumeOutput: () => Effect.void,
         stop() {
           input.onExit({ pid: 1234, exitCode: 0, signal: null, error: null });
           return Effect.succeed(undefined);
@@ -1022,6 +1025,7 @@ describe("createElectronHostCommandRouter", () => {
           scriptId: "web",
           status: "running",
           pid: 1234,
+          terminalId: expect.any(String),
         },
       ],
     });
@@ -1085,9 +1089,7 @@ describe("createElectronHostCommandRouter", () => {
     });
 
     expect(state.scripts[0]).toMatchObject({ status: "failed", lastError: diagnostic.message });
-    expect(state.scripts[0]?.bufferedTerminalChunks.map((chunk) => chunk.data)).toContain(
-      `${diagnostic.message}\r\n`,
-    );
+    expect(state.scripts[0]?.terminalId).toEqual(expect.any(String));
   });
 
   test("blocks an injected dev server process when the user PATH is unavailable", async () => {

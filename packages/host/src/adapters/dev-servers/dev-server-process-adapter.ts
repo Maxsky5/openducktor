@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
-import { Effect, Exit, Scope } from "effect";
+import { StringDecoder } from "node:string_decoder";
+import { Cause, Effect } from "effect";
 import {
   HostOperationError,
   HostValidationError,
@@ -103,12 +104,16 @@ const trackDevServerProcess = ({
       timeoutMs,
     });
 
-  child.stdout?.on("data", (chunk: Buffer) => {
-    onOutput({ data: chunk.toString("utf8") });
-  });
-  child.stderr?.on("data", (chunk: Buffer) => {
-    onOutput({ data: chunk.toString("utf8") });
-  });
+  // Each pipe has its own UTF-8 stream. A code point can span native chunks.
+  for (const stream of [child.stdout, child.stderr]) {
+    if (!stream) continue;
+    const decoder = new StringDecoder("utf8");
+    const publish = (data: string): void => {
+      if (data.length > 0) onOutput({ data });
+    };
+    stream.on("data", (chunk: Buffer) => publish(decoder.write(chunk)));
+    stream.once("end", () => publish(decoder.end()));
+  }
   child.once("error", (error) => {
     spawnError = error;
     notifyCloseListeners();
@@ -144,110 +149,151 @@ export const createDevServerProcessAdapter = ({
   stopTimeoutMs = DEFAULT_STOP_TIMEOUT_MS,
 }: CreateDevServerProcessAdapterInput = {}): DevServerProcessPort => ({
   start(input: DevServerProcessStartInput) {
-    let scope: Parameters<typeof Scope.close>[0] | null = null;
-    return Effect.gen(function* () {
-      const { command, cwd, env, onExit, onOutput } = input;
-      const commandEnv = sanitizeChildProcessEnvironment(
-        { ...processEnv, ...env },
-        process.platform,
-      );
-      const launch = yield* Effect.try({
-        try: () => createDevServerCommandLaunch(command, commandEnv, process.platform),
-        catch: (cause) =>
-          cause instanceof HostValidationError
-            ? cause
-            : toHostOperationError(cause, "devServerProcess.parseCommand", { command }),
-      });
-      const launchFailureDetails: DevServerLaunchFailureDetails = {
-        command,
-        cwd,
-        launchCommand: launch.command,
-        launchArgs: launch.args,
-      };
-
-      const runtimeScope = yield* Scope.make();
-      scope = runtimeScope;
-      const child = yield* Effect.try({
-        try: () =>
-          spawn(launch.command, launch.args, {
-            cwd,
-            detached: shouldStartDetachedProcessGroup(process.platform),
-            env: launch.env,
-            stdio: ["ignore", "pipe", "pipe"],
-            windowsHide: launch.windowsHide,
-            windowsVerbatimArguments: launch.windowsVerbatimArguments,
-          }),
-        catch: (cause) =>
-          toHostOperationError(cause, "devServerProcess.spawn", launchFailureDetails),
-      });
-      const pid = child.pid;
-      const processTracker = trackDevServerProcess({
-        child,
-        onExit,
-        onOutput,
-        pid,
-      });
-
-      if (!pid || pid <= 0) {
-        yield* processTracker.waitForClose(0);
-        const spawnError = processTracker.getSpawnError();
-        if (spawnError) {
-          return yield* Effect.fail(
-            toHostOperationError(spawnError, "devServerProcess.spawn", launchFailureDetails),
-          );
-        }
-        return yield* Effect.fail(
-          new HostOperationError({
-            message: "Failed to start dev server: child process did not expose a valid pid.",
-            operation: "dev-server.start",
-            details: launchFailureDetails,
-          }),
+    return Effect.uninterruptible(
+      Effect.gen(function* () {
+        const { command, cwd, env, onExit, onOutput } = input;
+        const commandEnv = sanitizeChildProcessEnvironment(
+          { ...processEnv, ...env },
+          process.platform,
         );
-      }
+        const launch = yield* Effect.try({
+          try: () => createDevServerCommandLaunch(command, commandEnv, process.platform),
+          catch: (cause) =>
+            cause instanceof HostValidationError
+              ? cause
+              : toHostOperationError(cause, "devServerProcess.parseCommand", { command }),
+        });
+        const launchFailureDetails: DevServerLaunchFailureDetails = {
+          command,
+          cwd,
+          launchCommand: launch.command,
+          launchArgs: launch.args,
+        };
 
-      let released = false;
-      const stopProcess = Effect.gen(function* () {
-        if (released) {
-          return;
-        }
-        yield* terminateProcessTree({
+        const child = yield* Effect.try({
+          try: () =>
+            spawn(launch.command, launch.args, {
+              cwd,
+              detached: shouldStartDetachedProcessGroup(process.platform),
+              env: launch.env,
+              stdio: ["ignore", "pipe", "pipe"],
+              windowsHide: launch.windowsHide,
+              windowsVerbatimArguments: launch.windowsVerbatimArguments,
+            }),
+          catch: (cause) =>
+            toHostOperationError(cause, "devServerProcess.spawn", launchFailureDetails),
+        });
+        const pid = child.pid;
+        const processTracker = trackDevServerProcess({
+          child,
+          onExit,
+          onOutput,
           pid,
-          label: `dev server command "${command}"`,
-          isClosed: processTracker.isClosed,
-          waitForExit: processTracker.waitForClose,
-          stopTimeoutMs,
-        }).pipe(Effect.mapError((cause) => toHostOperationError(cause, "devServerProcess.stop")));
-        released = true;
-      });
-      yield* Scope.addFinalizer(runtimeScope, stopProcess.pipe(Effect.ignore));
+        });
 
-      const exitedDuringGracePeriod = yield* processTracker.waitForClose(startGracePeriodMs);
-      const spawnError = processTracker.getSpawnError();
-      if (spawnError) {
-        return yield* Effect.fail(
-          toHostOperationError(spawnError, "devServerProcess.spawn", launchFailureDetails),
-        );
-      }
-      const immediateClose = processTracker.getCloseResult();
-      if (exitedDuringGracePeriod && immediateClose) {
-        return yield* Effect.fail(
-          new DevServerProcessStartExitError(immediateClose.exitCode, immediateClose.signal),
-        );
-      }
-
-      return {
-        pid,
-        stop() {
-          return stopProcess.pipe(
-            Effect.zipRight(Scope.close(runtimeScope, Exit.succeed(undefined)).pipe(Effect.ignore)),
-            Effect.mapError((cause) => toHostOperationError(cause, "devServerProcess.stop")),
+        if (!pid || pid <= 0) {
+          yield* processTracker.waitForClose(0);
+          const spawnError = processTracker.getSpawnError();
+          if (spawnError) {
+            return yield* Effect.fail(
+              toHostOperationError(spawnError, "devServerProcess.spawn", launchFailureDetails),
+            );
+          }
+          return yield* Effect.fail(
+            new HostOperationError({
+              message: "Failed to start dev server: child process did not expose a valid pid.",
+              operation: "dev-server.start",
+              details: launchFailureDetails,
+            }),
           );
-        },
-      };
-    }).pipe(
-      Effect.onError(() =>
-        scope ? Scope.close(scope, Exit.fail("startup failed")).pipe(Effect.ignore) : Effect.void,
-      ),
+        }
+
+        let released = false;
+        let outputPaused = false;
+        let stopping = false;
+        const setOutputPaused = (paused: boolean) =>
+          Effect.try({
+            try: () => {
+              outputPaused = paused;
+              if (stopping || released) return;
+              for (const stream of [child.stdout, child.stderr]) {
+                if (paused) stream?.pause();
+                else stream?.resume();
+              }
+            },
+            catch: (cause) =>
+              toHostOperationError(
+                cause,
+                paused ? "devServerProcess.pause" : "devServerProcess.resume",
+              ),
+          });
+        const stopProcess = Effect.uninterruptibleMask((restore) =>
+          restore(
+            Effect.gen(function* () {
+              if (released) {
+                return;
+              }
+              stopping = true;
+              yield* Effect.try({
+                try: () => {
+                  child.stdout?.resume();
+                  child.stderr?.resume();
+                },
+                catch: (cause) => toHostOperationError(cause, "devServerProcess.resumeForStop"),
+              });
+              yield* terminateProcessTree({
+                pid,
+                label: `dev server command "${command}"`,
+                isClosed: processTracker.isClosed,
+                waitForExit: processTracker.waitForClose,
+                stopTimeoutMs,
+              }).pipe(
+                Effect.mapError((cause) => toHostOperationError(cause, "devServerProcess.stop")),
+              );
+              released = true;
+            }),
+          ).pipe(
+            Effect.catchAllCause((failure) =>
+              Effect.gen(function* () {
+                stopping = false;
+                const restored = yield* Effect.either(setOutputPaused(outputPaused));
+                return yield* Effect.failCause(
+                  restored._tag === "Left"
+                    ? Cause.sequential(failure, Cause.fail(restored.left))
+                    : failure,
+                );
+              }),
+            ),
+          ),
+        );
+
+        return {
+          pid,
+          waitForReady: () =>
+            Effect.gen(function* () {
+              const exitedDuringGracePeriod =
+                yield* processTracker.waitForClose(startGracePeriodMs);
+              const spawnError = processTracker.getSpawnError();
+              if (spawnError) {
+                return yield* Effect.fail(
+                  toHostOperationError(spawnError, "devServerProcess.spawn", launchFailureDetails),
+                );
+              }
+              const immediateClose = processTracker.getCloseResult();
+              if (exitedDuringGracePeriod && immediateClose) {
+                return yield* Effect.fail(
+                  new DevServerProcessStartExitError(
+                    immediateClose.exitCode,
+                    immediateClose.signal,
+                  ),
+                );
+              }
+            }),
+          pauseOutput: () => setOutputPaused(true),
+          resumeOutput: () => setOutputPaused(false),
+          stop: () => stopProcess,
+        };
+      }),
     );
   },
 });
