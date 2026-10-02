@@ -1,4 +1,5 @@
 import type { CommitsAheadBehind, FileDiff, FileStatus } from "@openducktor/contracts";
+import { arraysEqual } from "@/lib/arrays-equal";
 import type { DiffScope, DiffScopeState } from "../contracts";
 
 export type DiffBatchState = {
@@ -59,28 +60,6 @@ export const createInitialDiffBatchState = (): DiffBatchState => ({
   },
   isLoading: false,
 });
-
-const arraysEqual = <T>(a: T[], b: T[], areItemsEqual: (left: T, right: T) => boolean): boolean => {
-  if (a === b) {
-    return true;
-  }
-  if (a.length !== b.length) {
-    return false;
-  }
-
-  for (let index = 0; index < a.length; index += 1) {
-    const left = a[index];
-    const right = b[index];
-    if (left === undefined || right === undefined) {
-      return false;
-    }
-    if (!areItemsEqual(left, right)) {
-      return false;
-    }
-  }
-
-  return true;
-};
 
 const fileDiffEqual = (left: FileDiff, right: FileDiff): boolean =>
   left.file === right.file &&

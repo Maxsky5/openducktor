@@ -79,6 +79,7 @@ const emptyDiffScopeState: DiffScopeState = {
 };
 
 const diffModel: AgentStudioGitPanelModel = {
+  subjectKey: "task-12",
   contextMode: "worktree",
   branch: "feature/task-12",
   worktreePath: "/tmp/worktree/task-12",

@@ -1,142 +1,18 @@
-import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
-import {
-  fireEvent,
-  type RenderResult,
-  render as testingLibraryRender,
-} from "@testing-library/react";
-import { act, createElement, type ReactElement } from "react";
-import { QueryProvider } from "@/lib/query-provider";
+import { describe, expect, mock, test } from "bun:test";
+import { fireEvent, type RenderResult, screen } from "@testing-library/react";
+import { act, createElement } from "react";
 import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
+import { AgentStudioGitPanel } from "./agent-studio-git-panel";
+import {
+  baseModel,
+  ensureRenderer,
+  flush,
+  render,
+  renderAgentStudioGitPanelElement,
+  setupAgentStudioGitPanelTests,
+} from "./agent-studio-git-panel.test-support";
 
 enableReactActEnvironment();
-
-type AgentStudioGitPanelComponent =
-  (typeof import("./agent-studio-git-panel"))["AgentStudioGitPanel"];
-type AgentStudioGitPanelModel = import("./agent-studio-git-panel").AgentStudioGitPanelModel;
-type DiffScopeState = import("@/features/agent-studio-git/contracts").DiffScopeState;
-
-let AgentStudioGitPanel: AgentStudioGitPanelComponent;
-const actualThemeProvider = await import("@/components/layout/theme-provider");
-const actualBranchSelector = await import("@/components/features/repository/branch-selector");
-const actualPierreDiffsReact = await import("@pierre/diffs/react");
-let moduleSpies: Array<{ mockRestore: () => void }> = [];
-
-const toScopeState = (overrides: Partial<DiffScopeState> = {}): DiffScopeState => ({
-  branch: "feature/task-11",
-  fileDiffs: [],
-  fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
-  uncommittedFileCount: 1,
-  commitsAheadBehind: { ahead: 2, behind: 1 },
-  upstreamAheadBehind: { ahead: 1, behind: 0 },
-  upstreamStatus: "tracking",
-  error: null,
-  hashVersion: 1,
-  statusHash: "0123456789abcdef",
-  diffHash: "fedcba9876543210",
-  ...overrides,
-});
-
-const baseModel = (overrides: Partial<AgentStudioGitPanelModel> = {}): AgentStudioGitPanelModel => {
-  const model: AgentStudioGitPanelModel = {
-    contextMode: "worktree",
-    branch: "feature/task-11",
-    worktreePath: "/tmp/worktree",
-    targetBranch: "origin/main",
-    diffScope: "target",
-    scopeStatesByScope: {
-      target: toScopeState(),
-      uncommitted: toScopeState(),
-    },
-    loadedScopesByScope: {
-      target: true,
-      uncommitted: true,
-    },
-    commitsAheadBehind: { ahead: 2, behind: 1 },
-    upstreamAheadBehind: { ahead: 1, behind: 0 },
-    upstreamStatus: "tracking",
-    fileDiffs: [],
-    fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
-    hashVersion: 1,
-    statusHash: "0123456789abcdef",
-    diffHash: "fedcba9876543210",
-    uncommittedFileCount: 1,
-    isLoading: false,
-    error: null,
-    refresh: async () => {},
-    setDiffScope: () => {},
-    isCommitting: false,
-    isPushing: false,
-    isRebasing: false,
-    commitError: null,
-    pushError: null,
-    rebaseError: null,
-    commitAll: async () => true,
-    pushBranch: async () => {},
-    rebaseOntoTarget: async () => {},
-    pullFromUpstream: async () => {},
-    ...overrides,
-  };
-
-  if (overrides.scopeStatesByScope === undefined) {
-    const derivedScopeState = toScopeState({
-      branch: model.branch,
-      fileDiffs: model.fileDiffs,
-      fileStatuses: model.fileStatuses,
-      uncommittedFileCount: model.uncommittedFileCount,
-      commitsAheadBehind: model.commitsAheadBehind,
-      upstreamAheadBehind: model.upstreamAheadBehind,
-      upstreamStatus: model.upstreamStatus,
-      error: model.error,
-      hashVersion: model.hashVersion,
-      statusHash: model.statusHash,
-      diffHash: model.diffHash,
-    });
-    model.scopeStatesByScope = {
-      target: derivedScopeState,
-      uncommitted: derivedScopeState,
-    };
-  }
-
-  if (overrides.loadedScopesByScope === undefined) {
-    model.loadedScopesByScope = {
-      target: true,
-      uncommitted: true,
-    };
-  }
-
-  if (overrides.uncommittedFileCount === undefined) {
-    model.uncommittedFileCount = model.fileStatuses.length;
-    if (overrides.scopeStatesByScope === undefined) {
-      model.scopeStatesByScope = {
-        target: {
-          ...model.scopeStatesByScope.target,
-          uncommittedFileCount: model.uncommittedFileCount,
-        },
-        uncommitted: {
-          ...model.scopeStatesByScope.uncommitted,
-          uncommittedFileCount: model.uncommittedFileCount,
-        },
-      };
-    }
-  }
-
-  return model;
-};
-
-const flush = async (): Promise<void> => {
-  await Promise.resolve();
-  await Promise.resolve();
-};
-
-const render = (element: ReactElement): RenderResult =>
-  testingLibraryRender(createElement(QueryProvider, { useIsolatedClient: true }, element));
-
-const renderAgentStudioGitPanelElement = (model: AgentStudioGitPanelModel): ReactElement =>
-  createElement(
-    QueryProvider,
-    { useIsolatedClient: true },
-    createElement(AgentStudioGitPanel, { model }),
-  );
 
 type DomTestNode = {
   readonly element: Element;
@@ -259,13 +135,6 @@ const findDiffScopeTabs = (root: DomTestNode, value: "target" | "uncommitted"): 
       : "agent-studio-git-diff-scope-uncommitted",
   );
 
-const ensureRenderer = (renderer: RenderResult | null): RenderResult => {
-  if (!renderer) {
-    throw new Error("AgentStudioGitPanel renderer is not initialized");
-  }
-  return renderer;
-};
-
 const getRoot = (renderer: RenderResult | null): DomTestNode => wrapRoot(ensureRenderer(renderer));
 
 const hasVisibleText = (root: DomTestNode, text: string): boolean =>
@@ -291,66 +160,7 @@ const findButtonByText = (root: DomTestNode, text: string): DomTestNode => {
 };
 
 describe("AgentStudioGitPanel", () => {
-  beforeEach(async () => {
-    moduleSpies = [
-      spyOn(actualThemeProvider, "useTheme").mockImplementation(() => ({
-        theme: "light",
-        themePreference: "light",
-        setThemePreference: () => {},
-      })),
-      spyOn(actualBranchSelector, "BranchSelector").mockImplementation(
-        ({
-          value,
-          options,
-          onValueChange,
-          disabled,
-          className,
-          popoverClassName,
-        }: {
-          value: string;
-          options: { value: string; label: string }[];
-          onValueChange: (value: string) => void;
-          disabled?: boolean;
-          className?: string;
-          popoverClassName?: string;
-        }) =>
-          createElement(
-            "button",
-            {
-              type: "button",
-              disabled,
-              className,
-              "data-testid": "mock-branch-selector",
-              "data-popover-class": popoverClassName,
-              onClick: () => {
-                const fallback = options.find((option) => option.value !== value)?.value ?? value;
-                onValueChange(fallback);
-              },
-            },
-            value,
-          ),
-      ),
-      spyOn(actualPierreDiffsReact, "File").mockImplementation(() =>
-        createElement("div", { "data-testid": "mock-pierre-file-viewer" }),
-      ),
-      spyOn(actualPierreDiffsReact, "FileDiff").mockImplementation(() =>
-        createElement("div", { "data-testid": "mock-pierre-diff-viewer" }),
-      ),
-      spyOn(actualPierreDiffsReact, "Virtualizer").mockImplementation(
-        ({ children }: { children: React.ReactNode }) =>
-          createElement("div", { "data-testid": "mock-pierre-virtualizer" }, children),
-      ),
-      spyOn(actualPierreDiffsReact, "useWorkerPool").mockImplementation(() => undefined),
-    ];
-    ({ AgentStudioGitPanel } = await import("./agent-studio-git-panel"));
-  });
-
-  afterEach(() => {
-    for (const moduleSpy of moduleSpies) {
-      moduleSpy.mockRestore();
-    }
-    moduleSpies = [];
-  });
+  setupAgentStudioGitPanelTests();
 
   test("renders branch context labels and git action controls", async () => {
     const refresh = mock(async () => {});
@@ -1966,6 +1776,11 @@ describe("AgentStudioGitPanel", () => {
           }),
         }),
       );
+      await flush();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "List view" }));
       await flush();
     });
 

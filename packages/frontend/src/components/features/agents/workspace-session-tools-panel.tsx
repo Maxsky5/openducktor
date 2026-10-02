@@ -10,7 +10,11 @@ import { OpenInMenu } from "./agent-studio-git-panel/open-in-menu";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel/types";
 import { SharedToolsPanel } from "./shared-tools-panel";
 import { useAgentStudioDevServerPanel } from "@/features/dev-servers/use-agent-studio-dev-server-panel";
-import { type DiffDataState, useAgentStudioDiffData } from "@/features/agent-studio-git";
+import {
+  collectUnmergedFilePaths,
+  type DiffDataState,
+  useAgentStudioDiffData,
+} from "@/features/agent-studio-git";
 import { useAgentStudioGitActions } from "@/pages/agents/use-agent-studio-git-actions";
 import { errorMessage } from "@/lib/errors";
 import { hostClient } from "@/lib/host-client";
@@ -126,10 +130,7 @@ export function WorkspaceSessionToolsPanel({
     };
   }, [workingDirectory]);
   const conflictedFiles = useMemo(
-    () =>
-      diffData.fileStatuses
-        .filter((status) => status.status === "unmerged")
-        .map((status) => status.path),
+    () => collectUnmergedFilePaths(diffData.fileStatuses),
     [diffData.fileStatuses],
   );
   const actions = useAgentStudioGitActions({
@@ -149,6 +150,7 @@ export function WorkspaceSessionToolsPanel({
     isDiffDataLoading: diffData.isLoading,
   });
   const gitModel = workspaceGitModel({
+    subjectKey: JSON.stringify([workspaceId, sessionId]),
     diffData,
     actions,
     contextMode,
@@ -370,6 +372,7 @@ function comparisonUnavailableReason(input: {
 }
 
 function workspaceGitModel(input: {
+  subjectKey: string;
   diffData: DiffDataState;
   actions: ReturnType<typeof useAgentStudioGitActions>;
   contextMode: "repository" | "worktree";
@@ -381,6 +384,7 @@ function workspaceGitModel(input: {
   refresh: () => Promise<void>;
 }): AgentStudioGitPanelModel {
   const {
+    subjectKey,
     diffData,
     actions,
     contextMode,
@@ -394,6 +398,7 @@ function workspaceGitModel(input: {
   return {
     ...diffData,
     ...actions,
+    subjectKey,
     refresh,
     isLoading: diffData.isLoading || isFetchingTarget || !branchReady,
     contextMode,

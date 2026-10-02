@@ -1,203 +1,40 @@
-import { afterAll, afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, mock, test } from "bun:test";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { act, type ReactElement, useMemo, useState } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { toInlineCommentDraftStorageKey } from "@/state/inline-comment-draft-storage";
+import { useInlineCommentDraftStore } from "@/state/use-inline-comment-draft-store";
+import { FileDiffList } from "./file-diff-list";
 import {
-  resetInlineCommentDraftStoreForTests,
-  setInlineCommentDraftScheduleTaskForTests,
-  setInlineCommentDraftStorageForTests,
-  useInlineCommentDraftStore,
-} from "@/state/use-inline-comment-draft-store";
+  installMeasuredRows,
+  OWNER_KEY,
+  preloaderMock,
+  setupFileDiffListTests,
+  viewerMock,
+} from "./file-diff-list.test-support";
+import type { FileListState } from "./use-file-list-state";
 
-const OWNER_KEY = toInlineCommentDraftStorageKey({ workspaceId: "workspace-1", taskId: "task-1" });
+setupFileDiffListTests();
+
 const OTHER_OWNER_KEY = toInlineCommentDraftStorageKey({
   workspaceId: "workspace-1",
   taskId: "task-2",
 });
 
-type TestStorage = Pick<Storage, "length" | "key" | "getItem" | "setItem" | "removeItem">;
-
-const createMemoryStorage = (): TestStorage => {
-  const store = new Map<string, string>();
-  return {
-    get length() {
-      return store.size;
-    },
-    key: (index) => Array.from(store.keys())[index] ?? null,
-    getItem: (key) => store.get(key) ?? null,
-    setItem: (key, value) => {
-      store.set(key, value);
-    },
-    removeItem: (key) => {
-      store.delete(key);
-    },
-  };
+const IDLE_FILE_LIST_STATE: FileListState = {
+  searchText: "",
+  setSearchText: () => {},
+  appliedSearchText: "",
+  query: "",
+  closedDirectories: new Set(),
+  toggleDirectory: () => {},
 };
 
-const pierreDiffViewerModule = await import("@/components/features/agents/pierre-diff-viewer");
-type RestorableSpy = { mockRestore(): void };
-let pierreViewerSpies: RestorableSpy[] = [];
-
-type FileDiffListComponent = (typeof import("./file-diff-list"))["FileDiffList"];
-
-let FileDiffList: FileDiffListComponent;
-
-const reactActEnvironmentGlobal: typeof globalThis & {
-  IS_REACT_ACT_ENVIRONMENT?: boolean;
-} = globalThis;
-const previousActEnvironmentValue = reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT;
-
-const preloaderMock = mock((_props: { patch: string; filePath: string }) => null);
-
-const fileViewerMock = mock(
-  ({ content, filePath }: { content: string; filePath: string; className?: string }) => (
-    <div data-testid="pierre-file-viewer" data-content={content} data-file-path={filePath}>
-      {content}
-    </div>
-  ),
-);
-
-const viewerMock = mock(
-  ({
-    diffStyle,
-    filePath,
-    diffIndicators,
-    heightMode,
-    hunkSeparators,
-    lineOverflow,
-    onLineSelectionEnd,
-    lineAnnotations,
-    renderAnnotation,
-  }: {
-    diffStyle?: string;
-    filePath: string;
-    diffIndicators?: string;
-    heightMode?: string;
-    lineOverflow?: string;
-    hunkSeparators?: string;
-    onLineSelectionEnd?:
-      | ((
-          selection: {
-            selectedLines: { start: number; end: number; side: "additions"; endSide: "additions" };
-            side: "new";
-            startLine: number;
-            endLine: number;
-            codeContext: Array<{ lineNumber: number; text: string; isSelected: boolean }>;
-            language: string | null;
-          } | null,
-        ) => void)
-      | undefined;
-    lineAnnotations?: Array<{
-      side: "additions" | "deletions";
-      lineNumber: number;
-      metadata: unknown;
-    }>;
-    renderAnnotation?:
-      | ((annotation: {
-          side: "additions" | "deletions";
-          lineNumber: number;
-          metadata: unknown;
-        }) => ReactElement | null)
-      | undefined;
-  }) => (
-    <div>
-      <div
-        data-testid="pierre-diff-viewer"
-        data-diff-indicators={diffIndicators ?? ""}
-        data-diff-style={diffStyle ?? ""}
-        data-height-mode={heightMode ?? ""}
-        data-hunk-separators={hunkSeparators ?? ""}
-        data-line-overflow={lineOverflow ?? ""}
-      >
-        {filePath}
-      </div>
-      <button
-        type="button"
-        data-testid="pierre-diff-select-lines"
-        onClick={() =>
-          onLineSelectionEnd?.({
-            selectedLines: { start: 2, end: 3, side: "additions", endSide: "additions" },
-            side: "new",
-            startLine: 2,
-            endLine: 3,
-            codeContext: [
-              { lineNumber: 1, text: "before", isSelected: false },
-              { lineNumber: 2, text: "selected one", isSelected: true },
-              { lineNumber: 3, text: "selected two", isSelected: true },
-            ],
-            language: "ts",
-          })
-        }
-      >
-        Select lines
-      </button>
-      <div data-testid="pierre-diff-annotations">
-        {(lineAnnotations ?? []).map((annotation) => (
-          <div
-            key={`${annotation.side}-${annotation.lineNumber}-${JSON.stringify(annotation.metadata)}`}
-            data-testid="pierre-diff-annotation"
-          >
-            {renderAnnotation?.(annotation)}
-          </div>
-        ))}
-      </div>
-    </div>
-  ),
-);
-
-const resetInlineComments = (): void => {
-  resetInlineCommentDraftStoreForTests();
-};
-
-beforeEach(async () => {
-  reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT = true;
-
-  resetInlineCommentDraftStoreForTests();
-  setInlineCommentDraftStorageForTests(createMemoryStorage());
-  setInlineCommentDraftScheduleTaskForTests(() => () => {});
-
-  pierreViewerSpies = [
-    spyOn(pierreDiffViewerModule, "PierreDiffPreloader").mockImplementation(
-      Object.assign(preloaderMock, {
-        $$typeof: pierreDiffViewerModule.PierreDiffPreloader.$$typeof,
-        type: preloaderMock,
-      }),
-    ),
-    spyOn(pierreDiffViewerModule, "PierreDiffViewer").mockImplementation(
-      Object.assign(viewerMock, {
-        $$typeof: pierreDiffViewerModule.PierreDiffViewer.$$typeof,
-        type: viewerMock,
-      }),
-    ),
-    spyOn(pierreDiffViewerModule, "PierreFileViewer").mockImplementation(
-      Object.assign(fileViewerMock, {
-        $$typeof: pierreDiffViewerModule.PierreFileViewer.$$typeof,
-        type: fileViewerMock,
-      }),
-    ),
-  ];
-
-  ({ FileDiffList } = await import("./file-diff-list"));
-});
-
-afterEach(() => {
-  for (const pierreViewerSpy of pierreViewerSpies) pierreViewerSpy.mockRestore();
-  pierreViewerSpies = [];
-  cleanup();
-  preloaderMock.mockClear();
-  viewerMock.mockClear();
-  fileViewerMock.mockClear();
-  resetInlineComments();
-});
-
-afterAll(() => {
-  if (previousActEnvironmentValue === undefined) {
-    delete reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT;
-  } else {
-    reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT = previousActEnvironmentValue;
-  }
-});
+const LIST_VIEW_PROPS = {
+  viewMode: "list",
+  onViewModeChange: () => {},
+  listState: IDLE_FILE_LIST_STATE,
+} as const;
 
 function FileDiffListHarness({
   file = "src/example.ts",
@@ -215,6 +52,7 @@ function FileDiffListHarness({
   return (
     <TooltipProvider>
       <FileDiffList
+        {...LIST_VIEW_PROPS}
         fileDiffs={[
           {
             file,
@@ -267,6 +105,7 @@ function ScopeSwitchFileDiffListHarness(): ReactElement {
         Switch scope
       </button>
       <FileDiffList
+        {...LIST_VIEW_PROPS}
         fileDiffs={[
           {
             file: "src/example.ts",
@@ -312,6 +151,7 @@ function OwnerSwitchFileDiffListHarness(): ReactElement {
         Switch owner
       </button>
       <FileDiffList
+        {...LIST_VIEW_PROPS}
         fileDiffs={[
           {
             file: "src/example.ts",
@@ -369,6 +209,7 @@ function LargeFileDiffListHarness(): ReactElement {
       </button>
       <div className="h-[400px]">
         <FileDiffList
+          {...LIST_VIEW_PROPS}
           fileDiffs={fileDiffs}
           diffScope="uncommitted"
           ownerKey={OWNER_KEY}
@@ -440,6 +281,7 @@ function ResizingFileDiffListHarness({ fileCount = 20 } = {}): ReactElement {
       </button>
       <div className="h-[400px]">
         <FileDiffList
+          {...LIST_VIEW_PROPS}
           fileDiffs={fileDiffs}
           diffScope="uncommitted"
           ownerKey={ownerKey}
@@ -463,106 +305,6 @@ function ResizingFileDiffListHarness({ fileCount = 20 } = {}): ReactElement {
       </div>
     </TooltipProvider>
   );
-}
-
-function installMeasuredRows() {
-  const previousResizeObserver = globalThis.ResizeObserver;
-  const observers: Array<{
-    callback: ResizeObserverCallback;
-    elements: Set<Element>;
-    observer: ResizeObserver;
-  }> = [];
-  const previousGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
-  const previousOffsetHeight = Object.getOwnPropertyDescriptor(
-    HTMLElement.prototype,
-    "offsetHeight",
-  );
-  let currentWidth = 600;
-  let currentExpandedRowHeight = 800;
-  const rowHeight = (element: Element): number =>
-    element
-      .querySelector('[data-testid="agent-studio-git-file-toggle-button"]')
-      ?.getAttribute("aria-expanded") === "true"
-      ? currentExpandedRowHeight
-      : 40;
-  Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
-    configurable: true,
-    get: function (this: HTMLElement) {
-      if (this.getAttribute("role") === "listitem") {
-        return rowHeight(this);
-      }
-      return previousOffsetHeight?.get?.call(this) ?? 0;
-    },
-  });
-  HTMLElement.prototype.getBoundingClientRect = function () {
-    if (this.getAttribute("role") === "list") return new DOMRect(0, 0, currentWidth, 400);
-    if (this.getAttribute("role") === "listitem") {
-      const rowStart = Number(/translateY\((\d+)px\)/.exec(this.style.transform)?.[1] ?? 0);
-      const height = rowHeight(this);
-      return new DOMRect(0, rowStart - (this.parentElement?.scrollTop ?? 0), currentWidth, height);
-    }
-    return previousGetBoundingClientRect.call(this);
-  };
-  globalThis.ResizeObserver = class implements ResizeObserver {
-    private readonly controller: (typeof observers)[number];
-
-    constructor(callback: ResizeObserverCallback) {
-      this.controller = { callback, elements: new Set(), observer: this };
-      observers.push(this.controller);
-    }
-
-    observe(element: Element): void {
-      this.controller.elements.add(element);
-    }
-
-    unobserve(element: Element): void {
-      this.controller.elements.delete(element);
-    }
-
-    disconnect(): void {
-      this.controller.elements.clear();
-    }
-  };
-
-  return {
-    resize: (width: number, expandedRowHeight: number, passes = 3) => {
-      currentWidth = width;
-      currentExpandedRowHeight = expandedRowHeight;
-      for (let pass = 0; pass < passes; pass++) {
-        act(() => {
-          for (const observer of observers) {
-            const entries = Array.from(observer.elements, (element) => {
-              const isList = element.getAttribute("role") === "list";
-              const height = rowHeight(element);
-              const boxSize = { blockSize: height, inlineSize: width };
-              return {
-                target: element,
-                contentRect: new DOMRect(0, 0, width, isList ? 400 : height),
-                borderBoxSize: [boxSize],
-                contentBoxSize: [boxSize],
-                devicePixelContentBoxSize: [boxSize],
-              } satisfies ResizeObserverEntry;
-            });
-            observer.callback(entries, observer.observer);
-          }
-        });
-        for (const observer of observers) {
-          for (const element of observer.elements) {
-            if (element.getAttribute("role") === "list") fireEvent.scroll(element);
-          }
-        }
-      }
-    },
-    restore: () => {
-      globalThis.ResizeObserver = previousResizeObserver;
-      HTMLElement.prototype.getBoundingClientRect = previousGetBoundingClientRect;
-      if (previousOffsetHeight) {
-        Object.defineProperty(HTMLElement.prototype, "offsetHeight", previousOffsetHeight);
-      } else {
-        Reflect.deleteProperty(HTMLElement.prototype, "offsetHeight");
-      }
-    },
-  };
 }
 
 describe("FileDiffList", () => {

@@ -313,6 +313,37 @@ describe("useAgentsPageRightPanelModel", () => {
     await harness.unmount();
   });
 
+  test("gives the git panel a new subject key only for another workspace, task, or session", async () => {
+    const harness = createHookHarness(useAgentsPageRightPanelModel, createHookArgs());
+    const subjectKey = () => harness.getLatest().rightPanelModel?.gitModel.subjectKey;
+    await harness.mount();
+    const firstKey = subjectKey();
+    expect(firstKey).toBeString();
+
+    await harness.update(createHookArgs());
+    expect(subjectKey()).toBe(firstKey);
+
+    const otherSession = {
+      externalSessionId: "session-2",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo",
+    } as const;
+    for (const args of [
+      createHookArgs({
+        activeWorkspace: { workspaceId: "workspace-2", workspaceName: "Repo", repoPath: "/repo" },
+      }),
+      createHookArgs({ selectedView: createSelectedView({ taskId: "task-2" }) }),
+      createHookArgs({
+        selectedView: createSelectedView({ selectedSessionIdentity: otherSession }),
+      }),
+      createHookArgs({ selectedView: createSelectedView({ selectedSessionIdentity: null }) }),
+    ]) {
+      await harness.update(args);
+      expect(subjectKey()).not.toBe(firstKey);
+    }
+    await harness.unmount();
+  });
+
   test("prefetches CI review data in the background for linked pull requests", async () => {
     const queryClient = createQueryClient();
     const harness = createHookHarness(

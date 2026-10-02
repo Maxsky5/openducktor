@@ -13,9 +13,18 @@ import { PierreDiffViewer } from "@/components/features/agents/pierre-diff-viewe
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { DiffScope } from "@/features/agent-studio-git";
+import { arraysEqual } from "@/lib/arrays-equal";
 import { cn } from "@/lib/utils";
 import type { InlineCommentDraft } from "@/state/use-inline-comment-draft-store";
-import { FILE_STATUS_COLOR, FILE_STATUS_ICON } from "./constants";
+import {
+  FILE_LIST_ROW_CLASS_NAME,
+  FILE_STATUS_COLOR,
+  FILE_STATUS_ICON,
+  fileListRowIndentStyle,
+} from "./constants";
+import type { FileRow, RowLabel } from "./file-list-rows";
+import type { HighlightRange } from "./file-list-search";
+import { HighlightedText } from "./highlighted-text";
 import {
   type FileDiffAnnotationAction,
   type FileDiffAnnotationState,
@@ -29,12 +38,29 @@ const areFileDiffsEqual = (left: FileDiff, right: FileDiff): boolean =>
   left.deletions === right.deletions &&
   left.diff === right.diff;
 
+const areRangesEqual = (left: HighlightRange, right: HighlightRange): boolean =>
+  left.start === right.start && left.end === right.end;
+
+const areLabelsEqual = (left: RowLabel | null, right: RowLabel | null): boolean =>
+  left === right ||
+  (left !== null &&
+    right !== null &&
+    left.text === right.text &&
+    arraysEqual(left.highlights, right.highlights, areRangesEqual));
+
+const areFileRowsEqual = (left: FileRow, right: FileRow): boolean =>
+  left === right ||
+  (left.depth === right.depth &&
+    areLabelsEqual(left.name, right.name) &&
+    areLabelsEqual(left.directory, right.directory) &&
+    areFileDiffsEqual(left.diff, right.diff));
+
 const DIFF_BODY_CONTAINER_STYLE = {
   contain: "layout paint",
 } as const;
 
 type FileDiffEntryProps = {
-  diff: FileDiff;
+  row: FileRow;
   diffScope: DiffScope;
   ownerKey: string | null;
   fileComments: InlineCommentDraft[];
@@ -60,19 +86,41 @@ type FileDiffEntryProps = {
   onRequestHunkReset?: ((filePath: string, hunkIndex: number) => void) | undefined;
 };
 
+function FileDiffEntryLabel({ row }: { row: FileRow }): ReactElement {
+  const { diff, name, directory } = row;
+  // Without a directory line, the hover shows the full path from the outer title.
+  return (
+    <span
+      className="flex min-w-0 flex-1 flex-col gap-0.5 overflow-hidden"
+      data-testid="agent-studio-git-file-path"
+      title={diff.file}
+    >
+      <span
+        className="block truncate leading-tight font-medium"
+        title={directory ? name.text : undefined}
+      >
+        <HighlightedText label={name} />
+      </span>
+      {directory ? (
+        <span
+          className="block truncate text-[10px] leading-tight text-muted-foreground"
+          title={directory.text}
+        >
+          <HighlightedText label={directory} />
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 function FileDiffEntryHeader({
-  diff,
-  labels,
+  row,
   resetState,
   status,
   onRequestFileReset,
   onToggle,
 }: {
-  diff: FileDiff;
-  labels: {
-    dirName: string;
-    fileName: string;
-  };
+  row: FileRow;
   resetState: {
     canReset: boolean;
     isResetDisabled: boolean;
@@ -89,7 +137,7 @@ function FileDiffEntryHeader({
   onRequestFileReset?: ((filePath: string) => void) | undefined;
   onToggle: (filePath: string) => void;
 }): ReactElement {
-  const { dirName, fileName } = labels;
+  const { diff } = row;
   const { canReset, isResetDisabled, resetDisabledReason } = resetState;
   const {
     StatusIcon,
@@ -104,10 +152,8 @@ function FileDiffEntryHeader({
     <div className="relative hover:bg-muted/50">
       <button
         type="button"
-        className={cn(
-          "flex min-h-10 w-full min-w-0 cursor-pointer items-center gap-2 overflow-hidden px-3 py-1 text-left text-xs",
-          canReset && "pr-12",
-        )}
+        className={cn(FILE_LIST_ROW_CLASS_NAME, "overflow-hidden", canReset && "pr-12")}
+        style={fileListRowIndentStyle(row.depth)}
         aria-label={`Toggle diff for ${diff.file}`}
         aria-expanded={isExpanded}
         data-testid="agent-studio-git-file-toggle-button"
@@ -130,23 +176,7 @@ function FileDiffEntryHeader({
             data-testid="agent-studio-git-file-conflict-slot"
           />
         ) : null}
-        <span
-          className="flex min-w-0 flex-1 flex-col gap-0.5 overflow-hidden"
-          data-testid="agent-studio-git-file-path"
-          title={diff.file}
-        >
-          <span className="block truncate leading-tight font-medium" title={fileName}>
-            {fileName}
-          </span>
-          {dirName ? (
-            <span
-              className="block truncate text-[10px] leading-tight text-muted-foreground"
-              title={dirName}
-            >
-              {dirName}
-            </span>
-          ) : null}
-        </span>
+        <FileDiffEntryLabel row={row} />
         <span
           className="ml-2 flex min-w-[4.75rem] shrink-0 items-center justify-end gap-2"
           data-testid="agent-studio-git-file-stats"
@@ -284,7 +314,7 @@ function FileDiffEntryBody({
 }
 
 function FileDiffEntry({
-  diff,
+  row,
   diffScope,
   ownerKey,
   fileComments,
@@ -298,12 +328,11 @@ function FileDiffEntry({
   onRequestFileReset,
   onRequestHunkReset,
 }: FileDiffEntryProps): ReactElement {
+  const { diff } = row;
   const { isConflicted, reserveConflictSlot, isExpanded } = viewState;
   const { canReset, isResetDisabled } = resetState;
   const StatusIcon = FILE_STATUS_ICON.get(diff.type) ?? FileText;
   const statusColor = FILE_STATUS_COLOR.get(diff.type) ?? "text-muted-foreground";
-  const fileName = diff.file.split("/").pop() ?? diff.file;
-  const dirName = diff.file.includes("/") ? diff.file.slice(0, diff.file.lastIndexOf("/")) : "";
   const hasDiffContent = diff.diff.trim().length > 0;
   const fileCommentCount = fileComments.length;
 
@@ -326,8 +355,7 @@ function FileDiffEntry({
   return (
     <div className="min-w-0 max-w-full">
       <FileDiffEntryHeader
-        diff={diff}
-        labels={{ dirName, fileName }}
+        row={row}
         resetState={{ canReset, isResetDisabled, resetDisabledReason }}
         status={{
           StatusIcon,
@@ -377,5 +405,5 @@ export const FileDiffEntryWithMemo = memo(
     previous.fileComments === next.fileComments &&
     previous.annotationState === next.annotationState &&
     previous.onAnnotationAction === next.onAnnotationAction &&
-    areFileDiffsEqual(previous.diff, next.diff),
+    areFileRowsEqual(previous.row, next.row),
 );

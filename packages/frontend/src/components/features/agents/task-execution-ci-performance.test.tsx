@@ -69,6 +69,7 @@ const createLoadedCiContext = (
 });
 
 const gitModel: AgentStudioGitPanelModel = {
+  subjectKey: "task-12",
   contextMode: "worktree",
   branch: "feature/task-12",
   worktreePath: "/tmp/worktree/task-12",

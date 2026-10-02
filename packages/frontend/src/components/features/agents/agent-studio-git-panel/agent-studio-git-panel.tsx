@@ -14,7 +14,7 @@ import {
 import type { PierreDiffStyle } from "@/components/features/agents/pierre-diff-viewer";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import type { DiffScope } from "@/features/agent-studio-git";
+import { collectUnmergedFilePaths, type DiffScope } from "@/features/agent-studio-git";
 import {
   createGitConflictActionsModel,
   GitConflictDialog,
@@ -25,11 +25,13 @@ import { CommitComposer } from "./commit-composer";
 import { INLINE_CODE_CLASS_NAME, PRELOAD_DIFF_LIMIT } from "./constants";
 import { EmptyDiffState } from "./empty-diff-state";
 import { FileDiffList } from "./file-diff-list";
+import { useFileListViewModeStore } from "./file-list-view-preference";
 import { ForcePushDialog } from "./force-push-dialog";
 import { GitConfirmationDialog } from "./git-confirmation-dialog";
 import { GitInfoHeader } from "./git-info-header";
 import { PullRebaseDialog } from "./pull-rebase-dialog";
 import type { AgentStudioGitPanelModel } from "./types";
+import { useFileListState } from "./use-file-list-state";
 
 type OptimisticDiffScopeChange = {
   modelScopeAtRequest: DiffScope;
@@ -65,15 +67,10 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
   const canResetFiles = diffScope === "uncommitted" && model.requestFileReset != null;
   const isResetDisabled = model.isResetDisabled ?? true;
   const resetDisabledReason = model.resetDisabledReason ?? null;
-  const conflictedFiles = useMemo(() => {
-    const paths = new Set<string>();
-    for (const status of displayedFileStatuses) {
-      if (status.status === "unmerged") {
-        paths.add(status.path);
-      }
-    }
-    return paths;
-  }, [displayedFileStatuses]);
+  const conflictedFiles = useMemo(
+    () => new Set(collectUnmergedFilePaths(displayedFileStatuses)),
+    [displayedFileStatuses],
+  );
 
   const preloadLimit = PRELOAD_DIFF_LIMIT;
 
@@ -236,6 +233,14 @@ function AgentStudioGitDiff({
     () => (model.commentOwner ? toInlineCommentDraftOwnerKey(model.commentOwner) : null),
     [model.commentOwner],
   );
+  const viewMode = useFileListViewModeStore((store) => store.viewMode);
+  const setViewMode = useFileListViewModeStore((store) => store.setViewMode);
+  // This component stays mounted while a scope has no files, so the search text stays too.
+  const listState = useFileListState({
+    subjectKey: model.subjectKey,
+    diffScope: view.diffScope,
+    fileDiffs: view.displayedFileDiffs,
+  });
 
   if (view.hasFiles) {
     return (
@@ -247,6 +252,9 @@ function AgentStudioGitDiff({
           conflictedFiles={view.conflictedFiles}
           diffStyle={view.diffStyle}
           setDiffStyle={view.setDiffStyle}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          listState={listState}
           expandedFiles={view.expandedFiles}
           onToggleFile={view.onToggleFile}
           preloadLimit={view.preloadLimit}

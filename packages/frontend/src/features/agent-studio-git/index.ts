@@ -11,4 +11,5 @@ export type {
   GitDiffRefreshMode,
   UseAgentStudioDiffDataInput,
 } from "./contracts";
+export { collectUnmergedFilePaths } from "./model/unmerged-file-paths";
 export { useAgentStudioDiffData } from "./use-agent-studio-diff-data";

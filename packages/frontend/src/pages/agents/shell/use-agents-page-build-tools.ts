@@ -5,6 +5,7 @@ import {
   type AgentStudioBuildToolsWorktreeSnapshot,
   useAgentStudioBuildToolsWorktreeSnapshot,
 } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot";
+import { collectUnmergedFilePaths } from "@/features/agent-studio-git";
 import type { useWorkspaceState } from "@/state";
 import type { ActiveWorkspace, RepoSettingsInput } from "@/types/state-slices";
 import { useAgentStudioGitActions } from "../use-agent-studio-git-actions";
@@ -71,16 +72,4 @@ export function useAgentsPageBuildTools({
   const gitActions = useAgentStudioGitActions(gitActionInput);
 
   return useMemo(() => ({ buildToolsSnapshot, gitActions }), [buildToolsSnapshot, gitActions]);
-}
-
-function collectUnmergedFilePaths(
-  fileStatuses: AgentStudioBuildToolsWorktreeSnapshot["diffData"]["fileStatuses"],
-): string[] {
-  const paths: string[] = [];
-  for (const status of fileStatuses) {
-    if (status.status === "unmerged") {
-      paths.push(status.path);
-    }
-  }
-  return paths;
 }

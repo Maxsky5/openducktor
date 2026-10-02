@@ -28,6 +28,7 @@ import {
   toInlineCommentDraftOwnerKey,
   useInlineCommentDraftStore,
 } from "@/state/use-inline-comment-draft-store";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { buildTaskExecutionPanelModel } from "./use-agent-studio-right-panel";
 import type { AgentsPageBuildTools } from "../shell/use-agents-page-build-tools";
@@ -63,6 +64,7 @@ type BuildAgentsPageDiffModelSnapshot = Pick<
 >;
 
 type BuildAgentsPageDiffModelArgs<GitActions extends object> = {
+  subjectKey: string;
   branches: GitBranch[];
   buildToolsSnapshot: BuildAgentsPageDiffModelSnapshot;
   gitActions: GitActions;
@@ -94,7 +96,25 @@ type FileExplorerRoot = {
 
 const COMMENT_VALIDATION_SCOPES: readonly DiffScope[] = ["uncommitted", "target"];
 
+/** Identifies the task and session that the git panel shows. */
+function toGitPanelSubjectKey({
+  workspaceId,
+  taskId,
+  sessionIdentity,
+}: {
+  workspaceId: string | null;
+  taskId: string;
+  sessionIdentity: Pick<AgentSessionIdentity, "runtimeKind" | "externalSessionId"> | null;
+}): string {
+  return JSON.stringify([
+    workspaceId,
+    taskId,
+    sessionIdentity ? [sessionIdentity.runtimeKind, sessionIdentity.externalSessionId] : null,
+  ]);
+}
+
 export function buildAgentsPageDiffModel<GitActions extends object>({
+  subjectKey,
   branches,
   buildToolsSnapshot,
   gitActions,
@@ -169,6 +189,7 @@ export function buildAgentsPageDiffModel<GitActions extends object>({
 
   return {
     ...diffData,
+    subjectKey,
     contextMode: gitPanelContextMode,
     commentOwner,
     branch: resolvedGitPanelBranch,
@@ -314,8 +335,14 @@ export function useAgentsPageRightPanelModel({
     isCommentStoreHydrated,
   ]);
 
+  const gitPanelSubjectKey = toGitPanelSubjectKey({
+    workspaceId: activeWorkspace?.workspaceId ?? null,
+    taskId: selectedView.taskId,
+    sessionIdentity: selectedView.selectedSession.identity,
+  });
   const diffModel = useMemo(() => {
     const input: BuildAgentsPageDiffModelArgs<typeof gitActions> = {
+      subjectKey: gitPanelSubjectKey,
       branches,
       buildToolsSnapshot,
       gitActions,
@@ -338,6 +365,7 @@ export function useAgentsPageRightPanelModel({
     onDetectPullRequest,
     gitProviderContext,
     gitProviderReadError,
+    gitPanelSubjectKey,
     detectingPullRequestTaskId,
     setTaskTargetBranch,
     selectedView.selectedTask,
