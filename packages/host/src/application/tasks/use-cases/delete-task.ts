@@ -132,6 +132,8 @@ export const createTaskDeleteUseCase = ({
         effectiveRepoPath,
         branchPrefix,
         targetTaskIds,
+        worktreePaths,
+        "delete",
       );
       const cleanupProgress = createTaskCleanupProgressState();
       if (hasWorkflowSessions && activityGuard) {

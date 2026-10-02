@@ -7,10 +7,7 @@ import {
   createDirectMergeGitPort,
 } from "../test-support/task-workflow-harness";
 import { appendTaskCleanupProgress } from "./task-cleanup-progress";
-import {
-  collectResetWorktreePaths,
-  validateExistingTaskWorktreeCandidate,
-} from "./task-cleanup-support";
+import { collectResetWorktreePaths } from "./task-cleanup-support";
 
 describe("task cleanup support", () => {
   test("reports reset implementation cleanup progress with the narrow operation label", () => {
@@ -34,12 +31,7 @@ describe("task cleanup support", () => {
     const worktreePaths = await Effect.runPromise(
       collectResetWorktreePaths(
         {
-          gitPort: createDirectMergeGitPort({
-            calls: [],
-            currentBranches: {
-              [legacyWorktree]: { name: "odt/task-1-legacy", detached: false },
-            },
-          }),
+          gitPort: createDirectMergeGitPort({ calls: [] }),
           settingsConfig: createBuildSettingsConfig(new Set(["/repo", legacyWorktree])),
         },
         "/repo",
@@ -52,22 +44,5 @@ describe("task cleanup support", () => {
     );
 
     expect(worktreePaths).toEqual([legacyWorktree]);
-  });
-
-  test("accepts a registered worktree without reading its branch", async () => {
-    const worktreePath = "/worktrees/repo/task-1";
-    const calls: unknown[] = [];
-    const result = await Effect.runPromise(
-      validateExistingTaskWorktreeCandidate(
-        createDirectMergeGitPort({ calls }),
-        "/repo",
-        worktreePath,
-        "task-1",
-        "delete",
-      ),
-    );
-
-    expect(result).toBe(worktreePath);
-    expect(calls).toEqual([]);
   });
 });

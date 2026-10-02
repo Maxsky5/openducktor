@@ -327,7 +327,14 @@ describe("TaskService.closeTask", () => {
       devServerService: createDevServerService(calls),
       gitPort: createGitPort({
         calls,
-        branches: [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
+        branches: [
+          {
+            name: "odt/task-1",
+            isCurrent: false,
+            isRemote: false,
+            worktreePath: "/worktrees/repo/task-1",
+          },
+        ],
       }),
       settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
       taskWorktreeService: createTaskWorktreeService("/worktrees/repo/task-1"),
@@ -415,7 +422,7 @@ describe("TaskService.closeTask", () => {
     expect(calls).toEqual(["stop-dev:task-1", "transition:task-1:closed"]);
   });
 
-  test("removes the task worktree without reading its branch", async () => {
+  test("removes the task worktree whatever branch it has checked out", async () => {
     const calls: string[] = [];
     const service = createTaskService({
       taskStore: createTaskStore([task()], calls),
@@ -442,6 +449,27 @@ describe("TaskService.closeTask", () => {
       "delete-branch:odt/task-1",
       "transition:task-1:closed",
     ]);
+  });
+
+  test("rejects cleanup when another worktree has the task branch checked out", async () => {
+    const calls: string[] = [];
+    const service = createTaskService({
+      taskStore: createTaskStore([task()], calls),
+      devServerService: createDevServerService(calls),
+      gitPort: createGitPort({
+        calls,
+        branches: [{ name: "odt/task-1", isCurrent: true, isRemote: false, worktreePath: "/repo" }],
+      }),
+      settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
+      taskWorktreeService: createTaskWorktreeService("/worktrees/repo/task-1"),
+      workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeFiles: createWorktreeFiles(calls),
+    });
+
+    await expect(run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }))).rejects.toThrow(
+      "Cannot close task task-1 because branch odt/task-1 is checked out in worktree /repo.",
+    );
+    expect(calls).toEqual([]);
   });
 
   test("retains an unrelated repository at the canonical managed path", async () => {

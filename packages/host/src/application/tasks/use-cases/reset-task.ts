@@ -117,6 +117,8 @@ export const createTaskFullResetUseCase = ({
         effectiveRepoPath,
         branchPrefix,
         [taskId],
+        worktreePaths,
+        "reset task",
       );
       const cleanupProgress = createTaskCleanupProgressState();
       if (hasWorkflowSessions && activityGuard) {

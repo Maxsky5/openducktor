@@ -112,6 +112,14 @@ export const createTaskCloseUseCase = ({
           currentSessions,
         );
         yield* taskSessionLifecycleCoordinator.acquireWorktreeLifecycle(worktreePaths);
+        const branchNames = yield* collectRelatedTaskBranches(
+          dependencies.gitPort,
+          effectiveRepoPath,
+          branchPrefix,
+          [taskId],
+          worktreePaths,
+          "close",
+        );
         if (hasWorkflowSessions && taskActivityGuard) {
           const { stoppedSessionCount } = yield* taskActivityGuard.cleanupTaskSessions({
             repoPath: effectiveRepoPath,
@@ -124,12 +132,6 @@ export const createTaskCloseUseCase = ({
           });
           recordStoppedAgentSessionCount(cleanupProgress, stoppedSessionCount);
         }
-        const branchNames = yield* collectRelatedTaskBranches(
-          dependencies.gitPort,
-          effectiveRepoPath,
-          branchPrefix,
-          [taskId],
-        );
         yield* runTaskLocalCleanup({
           branchNames,
           devServerService: dependencies.devServerService,

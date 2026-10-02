@@ -838,7 +838,12 @@ describe("createTaskService task mutations and reset", () => {
               "/repo": [
                 { name: "main", isCurrent: true, isRemote: false },
                 { name: "feature/other", isCurrent: false, isRemote: false },
-                { name: "odt/task-1", isCurrent: false, isRemote: false },
+                {
+                  name: "odt/task-1",
+                  isCurrent: false,
+                  isRemote: false,
+                  worktreePath: "/worktrees/repo/task-1",
+                },
                 { name: "origin/odt/task-1", isCurrent: false, isRemote: true },
               ],
             },
@@ -1540,7 +1545,12 @@ describe("createTaskService task mutations and reset", () => {
             branches: {
               "/repo": [
                 { name: "main", isCurrent: true, isRemote: false },
-                { name: "odt/task-1-original-title", isCurrent: false, isRemote: false },
+                {
+                  name: "odt/task-1-original-title",
+                  isCurrent: false,
+                  isRemote: false,
+                  worktreePath: "/worktrees/repo/task-1",
+                },
                 { name: "odt/task-1-legacy", isCurrent: false, isRemote: false },
               ],
             },
@@ -1828,7 +1838,12 @@ describe("createTaskService task mutations and reset", () => {
             branches: {
               "/repo": [
                 { name: "feature/other", isCurrent: false, isRemote: false },
-                { name: "odt/task-1", isCurrent: false, isRemote: false },
+                {
+                  name: "odt/task-1",
+                  isCurrent: false,
+                  isRemote: false,
+                  worktreePath: "/worktrees/repo/task-1",
+                },
               ],
             },
           }),
@@ -2042,6 +2057,53 @@ describe("createTaskService task mutations and reset", () => {
       { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
     ]);
   });
+  test.each([
+    {
+      operationLabel: "delete",
+      run: (service: ReturnType<typeof createTaskService>) =>
+        service
+          .deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false })
+          .pipe(Effect.asVoid),
+    },
+    {
+      operationLabel: "reset task",
+      run: (service: ReturnType<typeof createTaskService>) =>
+        service.resetTask({ repoPath: "/repo", taskId: "task-1" }).pipe(Effect.asVoid),
+    },
+  ])(
+    "rejects $operationLabel when another worktree has the task branch checked out",
+    async ({ operationLabel, run }) => {
+      const calls: unknown[] = [];
+      const taskStore: TaskStorePort = {
+        listTasks: () => Effect.succeed([task({ status: "in_progress" })]),
+        getTaskMetadata: () => Effect.succeed(metadataWithSessions([])),
+      };
+      const service = createTaskService({
+        devServerService: createDirectMergeDevServerService(calls),
+        gitPort: createDirectMergeGitPort({
+          calls,
+          branches: {
+            "/repo": [
+              { name: "odt/task-1", isCurrent: true, isRemote: false, worktreePath: "/repo" },
+            ],
+          },
+        }),
+        settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+        taskStore,
+        worktreeFiles: createCleanupWorktreeFiles(calls),
+        workspaceSettingsService: createBuildWorkspaceSettingsService({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          hooks: { preStart: [], postComplete: [] },
+        }),
+      });
+
+      await expect(Effect.runPromise(run(service))).rejects.toThrow(
+        `Cannot ${operationLabel} task task-1 because branch odt/task-1 is checked out in worktree /repo.`,
+      );
+      expect(calls).toEqual([{ type: "listBranches", workingDir: "/repo" }]);
+    },
+  );
   test("reports task reset failures after workflow document clearing as partial progress", async () => {
     const failure = new HostOperationError({
       operation: "task-store.clear-agent-sessions",

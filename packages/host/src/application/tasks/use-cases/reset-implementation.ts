@@ -109,6 +109,8 @@ export const createTaskImplementationResetUseCase = ({
         effectiveRepoPath,
         branchPrefix,
         [taskId],
+        worktreePaths,
+        "reset implementation",
       );
       const canonicalTarget = canonicalSessionState.canonicalExists
         ? yield* resolveCanonicalImplementationResetTarget(
