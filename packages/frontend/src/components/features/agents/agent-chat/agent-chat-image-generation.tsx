@@ -1,43 +1,41 @@
 import { useQuery } from "@tanstack/react-query";
-import {
-  generatedImageMetadataQueryOptions,
-  type GeneratedImageMetadataInput,
-} from "@/state/queries/agent-generated-image-metadata";
 import type { AgentImageGenerationPart, AgentSessionLiveRef } from "@openducktor/contracts";
-import {
-  ChevronDown,
-  ImageIcon,
-  LoaderCircle,
-  Maximize2,
-  TextAlignStart,
-  TriangleAlert,
-} from "lucide-react";
-import { type ReactElement, useContext, useState, useEffect, useRef } from "react";
-import { Button } from "@/components/ui/button";
+import { ChevronDown, ImageIcon, LoaderCircle, TextAlignStart, TriangleAlert } from "lucide-react";
+import { type ReactElement, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { CopyIconButton } from "@/components/ui/copy-icon-button";
+import { DialogTrigger } from "@/components/ui/dialog";
+import { MediaPreviewDialog } from "@/components/ui/media-preview-dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { DialogTrigger } from "@/components/ui/dialog";
 import {
   useAgentOperationsContext,
   useRuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
 import {
+  generatedImageMetadataQueryOptions,
+  type GeneratedImageMetadataInput,
+} from "@/state/queries/agent-generated-image-metadata";
+import {
   agentGeneratedImageQueryKeys,
   type AgentGeneratedImageQueryInput,
 } from "@/state/queries/agent-generated-images";
 import { AgentChatImageSessionContext } from "./agent-chat-image-session-context";
-import { MediaPreviewDialog } from "@/components/ui/media-preview-dialog";
+import { AgentChatGeneratedImageActions } from "./agent-chat-generated-image-actions";
 import { useAgentGeneratedImagePreview } from "./use-agent-generated-image-preview";
 
-export function AgentChatImageGeneration({
-  part,
-}: {
-  part: AgentImageGenerationPart;
-}): ReactElement {
+type AgentChatImageGenerationProps = { part: AgentImageGenerationPart };
+
+type ImagePreviewProps = {
+  alt: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+};
+
+export function AgentChatImageGeneration({ part }: AgentChatImageGenerationProps): ReactElement {
   const sessionRef = useContext(AgentChatImageSessionContext);
   return (
     <div
@@ -46,17 +44,9 @@ export function AgentChatImageGeneration({
         part.status !== "completed" && "max-w-lg",
       )}
     >
-      <p role="status" className="inline-flex items-center gap-2 text-sm font-medium">
-        {part.status === "running" ? (
-          <LoaderCircle
-            aria-hidden="true"
-            className="size-4 motion-safe:animate-spin text-muted-foreground"
-          />
-        ) : (
-          <ImageIcon aria-hidden="true" className="size-4 text-muted-foreground" />
-        )}
-        {statusLabel(part)}
-      </p>
+      {part.status !== "completed" || !sessionRef ? (
+        <ImageGenerationHeader label={statusLabel(part)} running={part.status === "running"} />
+      ) : null}
       {part.status === "running" ? <GeneratingImage /> : null}
       {part.status === "completed" && sessionRef ? (
         <CompletedImage part={part} sessionRef={sessionRef} />
@@ -84,12 +74,65 @@ export function AgentChatImageGeneration({
   );
 }
 
+function ImageGenerationHeader({
+  label,
+  running = false,
+  children,
+}: {
+  label: string;
+  running?: boolean;
+  children?: ReactNode;
+}): ReactElement {
+  return (
+    <div className="flex h-8 min-w-0 shrink-0 items-center justify-between gap-3">
+      <p role="status" className="inline-flex min-w-0 items-center gap-2 text-sm font-medium">
+        {running ? (
+          <LoaderCircle
+            aria-hidden="true"
+            className="size-4 shrink-0 motion-safe:animate-spin text-muted-foreground"
+          />
+        ) : (
+          <ImageIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+        )}
+        {label}
+      </p>
+      {children}
+    </div>
+  );
+}
+
+function GeneratedImageFrame({
+  actions,
+  children,
+}: {
+  actions?: ReactNode;
+  children: ReactNode;
+}): ReactElement {
+  return (
+    <div className="flex min-w-0 flex-col gap-3">
+      <ImageGenerationHeader label="Image generated">{actions}</ImageGenerationHeader>
+      {children}
+    </div>
+  );
+}
+
 function GeneratingImage(): ReactElement {
   return (
     <Skeleton
       aria-hidden="true"
       className="aspect-[4/3] max-h-64 w-full rounded-lg motion-reduce:animate-none"
     />
+  );
+}
+
+function ImagePreviewSkeleton(): ReactElement {
+  return (
+    <div role="status" aria-label="Loading generated image preview" className="h-64 w-full">
+      <Skeleton
+        aria-hidden="true"
+        className="h-full w-full rounded-lg motion-reduce:animate-none"
+      />
+    </div>
   );
 }
 
@@ -101,44 +144,65 @@ function ImageDetails({ part }: { part: AgentImageGenerationPart }): ReactElemen
   )
     return null;
   return (
-    <div className="flex min-w-0 flex-col gap-3">
-      {part.savedPath !== undefined ? (
-        <SavedImagePath key={part.savedPath} path={part.savedPath} />
-      ) : null}
-      {part.transparentBackground !== undefined ? (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          Background
-          <Badge variant="secondary">{part.transparentBackground ? "Transparent" : "Opaque"}</Badge>
-        </div>
-      ) : null}
-      {part.revisedPrompt ? (
-        <Collapsible>
-          <CollapsibleTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="group w-full justify-start gap-2 text-muted-foreground"
-            >
-              <TextAlignStart aria-hidden="true" className="size-4" />
-              View prompt
-              <ChevronDown
-                aria-hidden="true"
-                className="ml-auto size-4 transition-transform motion-reduce:transition-none group-data-[state=open]:rotate-180"
-              />
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <div className="mt-2 flex flex-col gap-2 rounded-lg bg-muted/50 p-3">
-              <p className="text-xs font-medium text-muted-foreground">Generation prompt</p>
-              <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-                {part.revisedPrompt}
-              </p>
+    <Collapsible className="min-w-0">
+      <CollapsibleTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="group w-full justify-start text-muted-foreground"
+        >
+          Image details
+          <ChevronDown
+            aria-hidden="true"
+            data-icon="inline-end"
+            className="ml-auto transition-transform motion-reduce:transition-none group-data-[state=open]:rotate-180"
+          />
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="mt-3 flex min-w-0 flex-col gap-3">
+          {part.savedPath !== undefined ? (
+            <SavedImagePath key={part.savedPath} path={part.savedPath} />
+          ) : null}
+          {part.transparentBackground !== undefined ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              Background
+              <Badge variant="secondary">
+                {part.transparentBackground ? "Transparent" : "Opaque"}
+              </Badge>
             </div>
-          </CollapsibleContent>
-        </Collapsible>
-      ) : null}
-    </div>
+          ) : null}
+          {part.revisedPrompt ? (
+            <Collapsible>
+              <CollapsibleTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="group w-full justify-start gap-2 text-muted-foreground"
+                >
+                  <TextAlignStart aria-hidden="true" className="size-4" />
+                  View prompt
+                  <ChevronDown
+                    aria-hidden="true"
+                    className="ml-auto size-4 transition-transform motion-reduce:transition-none group-data-[state=open]:rotate-180"
+                  />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="mt-2 flex flex-col gap-2 rounded-lg bg-muted/50 p-3">
+                  <p className="text-xs font-medium text-muted-foreground">Generation prompt</p>
+                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+                    {part.revisedPrompt}
+                  </p>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          ) : null}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -179,7 +243,12 @@ function CompletedImage({
       .optionalSurfaces.supportsImageGeneration === true;
   if (!supported)
     return (
-      <p className="text-sm text-muted-foreground">This runtime does not support image previews.</p>
+      <>
+        <ImageGenerationHeader label="Image generated" />
+        <p className="text-sm text-muted-foreground">
+          This runtime does not support image previews.
+        </p>
+      </>
     );
   if (!part.output && part.savedPath !== undefined && !part.previewUnavailableReason) {
     const input: GeneratedImageMetadataInput = { ref: sessionRef, itemId: part.itemId };
@@ -194,10 +263,13 @@ function CompletedImage({
   }
   if (!part.output)
     return (
-      <p className="text-sm text-muted-foreground">
-        {part.previewUnavailableReason ??
-          "Preview unavailable: the runtime did not report image output. Check the session in the runtime."}
-      </p>
+      <>
+        <ImageGenerationHeader label="Image generated" />
+        <p className="text-sm text-muted-foreground">
+          {part.previewUnavailableReason ??
+            "Preview unavailable: the runtime did not report image output. Check the session in the runtime."}
+        </p>
+      </>
     );
   const input: AgentGeneratedImageQueryInput = {
     ref: sessionRef,
@@ -271,22 +343,30 @@ function GeneratedImagePreview({
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
+
+  let content: ReactElement;
+  if (!visible && !open) {
+    content = (
+      <GeneratedImageFrame>
+        <ImagePreviewSkeleton />
+      </GeneratedImageFrame>
+    );
+  } else if (input.revision === undefined) {
+    content = <SavedImagePreview input={input} alt={alt} open={open} onOpenChange={setOpen} />;
+  } else {
+    content = (
+      <LoadedImagePreview
+        input={{ ...input, revision: input.revision }}
+        alt={alt}
+        open={open}
+        onOpenChange={setOpen}
+      />
+    );
+  }
+
   return (
-    <div ref={container} className="h-80 min-w-0 overflow-y-auto">
-      {visible || open ? (
-        input.revision === undefined ? (
-          <SavedImagePreview input={input} alt={alt} open={open} onOpenChange={setOpen} />
-        ) : (
-          <LoadedImagePreview
-            input={{ ...input, revision: input.revision }}
-            alt={alt}
-            open={open}
-            onOpenChange={setOpen}
-          />
-        )
-      ) : (
-        <Skeleton className="h-full w-full" aria-label="Generated image preview" />
-      )}
+    <div ref={container} className="min-w-0">
+      {content}
     </div>
   );
 }
@@ -296,25 +376,27 @@ function SavedImagePreview({
   alt,
   open,
   onOpenChange,
-}: {
+}: ImagePreviewProps & {
   input: GeneratedImageMetadataInput;
-  alt: string;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
 }): ReactElement {
   const operations = useAgentOperationsContext();
   const metadata = useQuery(generatedImageMetadataQueryOptions(input, operations));
   if (metadata.error)
     return (
-      <p role="alert" className="text-sm text-destructive">
-        {metadata.error.message}
-      </p>
+      <GeneratedImageFrame>
+        <p
+          role="alert"
+          className="whitespace-pre-wrap text-sm text-destructive [overflow-wrap:anywhere]"
+        >
+          {metadata.error.message}
+        </p>
+      </GeneratedImageFrame>
     );
-  if (!metadata.data || metadata.isFetching)
+  if (!metadata.data)
     return (
-      <p role="status" className="text-sm text-muted-foreground">
-        Loading image preview…
-      </p>
+      <GeneratedImageFrame>
+        <ImagePreviewSkeleton />
+      </GeneratedImageFrame>
     );
   return (
     <LoadedImagePreview
@@ -332,11 +414,8 @@ function LoadedImagePreview({
   alt,
   open,
   onOpenChange,
-}: {
+}: ImagePreviewProps & {
   input: AgentGeneratedImageQueryInput;
-  alt: string;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
 }): ReactElement {
   const operations = useAgentOperationsContext();
   const preview = useAgentGeneratedImagePreview(input, operations);
@@ -345,16 +424,20 @@ function LoadedImagePreview({
     preview.error ?? (displayFailed ? "Preview unavailable. Check the runtime output file." : null);
   if (error)
     return (
-      <p role="alert" className="text-sm text-destructive">
-        {error}
-      </p>
+      <GeneratedImageFrame>
+        <p
+          role="alert"
+          className="whitespace-pre-wrap text-sm text-destructive [overflow-wrap:anywhere]"
+        >
+          {error}
+        </p>
+      </GeneratedImageFrame>
     );
-  if (!preview.src)
+  if (!preview.src || !preview.blob)
     return (
-      <p role="status" className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-        <LoaderCircle aria-hidden="true" className="size-4 motion-safe:animate-spin" />
-        Loading image preview…
-      </p>
+      <GeneratedImageFrame>
+        <ImagePreviewSkeleton />
+      </GeneratedImageFrame>
     );
   const src = preview.src;
   const onImageError = () => {
@@ -362,35 +445,34 @@ function LoadedImagePreview({
     onOpenChange(false);
   };
   return (
-    <MediaPreviewDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Generated image"
-      description="Preview of the generated image."
-      media={[{ id: "generated-image", kind: "image", src, alt }]}
-      onMediaError={onImageError}
-      trigger={
-        <DialogTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            aria-label="Open generated image preview"
-            className="h-full w-full min-w-0 flex-col gap-0 overflow-hidden rounded-lg bg-muted/40 p-0"
-          >
-            <img
-              src={src}
-              alt={alt}
-              className="min-h-0 w-full flex-1 object-contain"
-              onError={onImageError}
-            />
-            <span className="flex w-full shrink-0 items-center justify-center gap-2 border-t border-border bg-card px-3 py-2 text-xs text-muted-foreground">
-              <Maximize2 aria-hidden="true" className="size-3.5" />
-              View image
-            </span>
-          </Button>
-        </DialogTrigger>
-      }
-    />
+    <GeneratedImageFrame actions={<AgentChatGeneratedImageActions src={src} blob={preview.blob} />}>
+      <MediaPreviewDialog
+        open={open}
+        onOpenChange={onOpenChange}
+        title="Generated image"
+        description="Preview of the generated image."
+        media={[{ id: "generated-image", kind: "image", src, alt }]}
+        onMediaError={onImageError}
+        actions={<AgentChatGeneratedImageActions src={src} blob={preview.blob} />}
+        trigger={
+          <DialogTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              aria-label="Open generated image preview"
+              className="h-64 w-full min-w-0 overflow-hidden rounded-lg bg-muted/40 p-0"
+            >
+              <img
+                src={src}
+                alt={alt}
+                className="h-full w-full object-contain"
+                onError={onImageError}
+              />
+            </Button>
+          </DialogTrigger>
+        }
+      />
+    </GeneratedImageFrame>
   );
 }
 

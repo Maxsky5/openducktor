@@ -51,5 +51,10 @@ export const useAgentGeneratedImagePreview = (
   }, [blob]);
   const current = preview?.blob === blob ? preview : null;
   const error = query.error?.message ?? current?.error ?? null;
-  return { src: current?.src ?? null, error, isLoading: !error && !current?.src };
+  return {
+    src: current?.src ?? null,
+    blob: current?.src ? current.blob : null,
+    error,
+    isLoading: !error && !current?.src,
+  };
 };
