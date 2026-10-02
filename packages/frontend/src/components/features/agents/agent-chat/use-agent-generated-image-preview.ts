@@ -18,8 +18,9 @@ export const useAgentGeneratedImagePreview = (
     AgentEnginePort,
     "readGeneratedImage" | "beginGeneratedImageBatch" | "releaseGeneratedImageBatch"
   >,
+  enabled: boolean,
 ) => {
-  const query = useQuery(agentGeneratedImageQueryOptions(input, read));
+  const query = useQuery({ ...agentGeneratedImageQueryOptions(input, read), enabled });
   const [preview, setPreview] = useState<DecodedPreview | null>(null);
   const blob = query.data;
   useEffect(() => {

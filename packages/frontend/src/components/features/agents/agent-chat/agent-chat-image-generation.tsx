@@ -357,6 +357,7 @@ function GeneratedImagePreview({
     content = (
       <LoadedImagePreview
         input={{ ...input, revision: input.revision }}
+        enabled
         alt={alt}
         open={open}
         onOpenChange={setOpen}
@@ -402,6 +403,7 @@ function SavedImagePreview({
     <LoadedImagePreview
       key={metadata.data.revision}
       input={{ ...input, revision: metadata.data.revision }}
+      enabled={!metadata.isStale}
       alt={alt}
       open={open}
       onOpenChange={onOpenChange}
@@ -411,14 +413,16 @@ function SavedImagePreview({
 
 function LoadedImagePreview({
   input,
+  enabled,
   alt,
   open,
   onOpenChange,
 }: ImagePreviewProps & {
   input: AgentGeneratedImageQueryInput;
+  enabled: boolean;
 }): ReactElement {
   const operations = useAgentOperationsContext();
-  const preview = useAgentGeneratedImagePreview(input, operations);
+  const preview = useAgentGeneratedImagePreview(input, operations, enabled);
   const [displayFailed, setDisplayFailed] = useState(false);
   const error =
     preview.error ?? (displayFailed ? "Preview unavailable. Check the runtime output file." : null);
