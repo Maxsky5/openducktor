@@ -104,7 +104,11 @@ test.each([
     runtimeSession: null,
   }));
   const send = mock(async () => {});
-  const view = renderChatPanes(record, start, send);
+  const view = renderChatPanes(
+    record,
+    start,
+    createOperations({ sendAgentMessage: send, continueInterruptedTurn: async () => {} }),
+  );
   let result!: Promise<boolean>;
   try {
     act(() => {
@@ -159,7 +163,11 @@ test.each([
     if (phase === "send") await pending.promise;
   });
   const failure = spyOn(toast, "error").mockImplementation(() => "failure");
-  const view = renderChatPanes(record, start, send);
+  const view = renderChatPanes(
+    record,
+    start,
+    createOperations({ sendAgentMessage: send, continueInterruptedTurn: async () => {} }),
+  );
   let result!: Promise<boolean>;
   try {
     await act(async () => {
@@ -197,6 +205,91 @@ test.each([
         description: "Request failed. Reopen the chat to retry.",
       });
     } else expect(failure).not.toHaveBeenCalled();
+  } finally {
+    view.dispose();
+    failure.mockRestore();
+  }
+});
+
+test.each([
+  ["hidden", "host"],
+  ["removed", "host"],
+  ["evicted", "host"],
+  ["unmounted", "plain"],
+  ["evicted", "accepted"],
+] as const)("shows the %s pane's late resume result: %s", async (change, outcome) => {
+  const record = {
+    ...createWorkspaceSessionRecord(),
+    manualTitle: "Test chat",
+    externalSessionId: "native",
+  };
+  const pending = Promise.withResolvers<void>();
+  const failure = spyOn(toast, "error").mockImplementation(() => "failure");
+  const resume = mock(() => pending.promise);
+  const view = renderChatPanes(
+    record,
+    async () => {
+      throw new Error("Unexpected start");
+    },
+    createOperations({ sendAgentMessage: async () => {}, continueInterruptedTurn: resume }),
+  );
+  try {
+    act(() =>
+      view.actions.resumeInterruptedTurn({
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "native",
+      }),
+    );
+    expect(resume).toHaveBeenCalledTimes(1);
+    expect(view.actions.isResumingSession).toBe(true);
+    if (change === "unmounted") view.unmount();
+    else if (change === "evicted") {
+      for (let index = 0; index < 6; index += 1) view.select({ ...record, id: `other-${index}` });
+    } else {
+      view.select(
+        { ...record, id: "other" },
+        change === "removed" ? ["other"] : [record.id, "other"],
+      );
+    }
+    await act(async () => {
+      if (outcome === "accepted") pending.resolve();
+      else if (outcome === "plain")
+        pending.reject(new Error("Connection lost. Reopen the chat to retry."));
+      else
+        pending.reject(
+          new HostInvokeError("Continuation unconfirmed", {
+            kind: "agent_session_resume",
+            agentSessionResumeFailure: {
+              reason: "runtime_unavailable",
+              sessionRef: {
+                repoPath: "/repo",
+                runtimeKind: "codex",
+                workingDirectory: "/repo",
+                externalSessionId: "native",
+              },
+              operation: "agent-session.continue-interrupted-turn",
+              message: "The runtime did not confirm the continuation.",
+              nextAction: "Inspect the runtime and this session.",
+            },
+          }),
+        );
+    });
+    if (change === "hidden") {
+      view.select(record);
+      expect(view.actions.isResumingSession).toBe(false);
+      expect(view.actions.persistentResumeError).toBe(
+        "The runtime did not confirm the continuation. Inspect the runtime and this session.",
+      );
+      expect(failure).not.toHaveBeenCalled();
+    } else if (outcome === "accepted") expect(failure).not.toHaveBeenCalled();
+    else
+      expect(failure).toHaveBeenCalledWith('Could not resume "Test chat"', {
+        description:
+          outcome === "plain"
+            ? "Connection lost. Reopen the chat to retry."
+            : "The runtime did not confirm the continuation. Inspect the runtime and this session.",
+      });
   } finally {
     view.dispose();
     failure.mockRestore();
@@ -738,7 +831,7 @@ test("clears an unconfirmed continuation failure when the transcript settles", a
 function renderChatPanes(
   record: WorkspaceSession,
   start: () => Promise<{ session: WorkspaceSession; runtimeSession: null }>,
-  send: AgentOperationsContextValue["sendAgentMessage"],
+  operations: AgentOperationsContextValue,
 ) {
   const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
   const store = createAgentSessionsStore("/repo");
@@ -749,10 +842,6 @@ function renderChatPanes(
   );
   queryClient.setQueryData(workspaceSessionQueryKeys.list(workspace.workspaceId, false), [record]);
   configureShellBridge(createShellBridgeFixture({ client: { workspaceSessionStart: start } }));
-  const operations = createOperations({
-    sendAgentMessage: send,
-    continueInterruptedTurn: async () => {},
-  });
   let actions!: ReturnType<typeof useWorkspaceSessionChatActions>;
   const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation((props) => {
     const current = useWorkspaceSessionChatActions(props.workspace, props.record, props.isMounted);

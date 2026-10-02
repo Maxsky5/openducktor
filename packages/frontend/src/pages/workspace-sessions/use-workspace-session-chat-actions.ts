@@ -1,5 +1,6 @@
 import type { WorkspaceSession } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
+import { HostInvokeError } from "@openducktor/host-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -9,6 +10,7 @@ import { hasSettledLatestTurn } from "@/lib/agent-session-interrupted-turn";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { errorMessage } from "@/lib/errors";
 import { resolveAgentStudioSendDraftParts } from "@/pages/agents/session-actions/agent-studio-send-draft";
+import { getAgentSessionResumeFailureNotice } from "@/state/agent-runtime-services";
 import { useAgentSessionsContext } from "@/state/app-state-contexts";
 import { useAgentOperations, useAgentSession } from "@/state/app-state-provider";
 import {
@@ -18,6 +20,7 @@ import {
 import { host } from "@/state/operations/host";
 import { updateWorkspaceSessionQueries } from "@/state/queries/workspace-sessions";
 import type { ActiveWorkspace } from "@/types/state-slices";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { startWorkspaceSession } from "./start-workspace-session";
 
 type DraftSendOptions = Omit<Parameters<typeof resolveAgentStudioSendDraftParts>[0], "draft"> & {
@@ -32,6 +35,7 @@ export function useWorkspaceSessionChatActions(
   const store = useAgentSessionsContext();
   const operations = useAgentOperations();
   const queryClient = useQueryClient();
+  const title = workspaceSessionTitle(record);
   const isCurrentWorkspace = () =>
     store.getActivitySnapshot().workspaceRepoPath === workspace.repoPath;
   const sending = useRef(false);
@@ -99,7 +103,7 @@ export function useWorkspaceSessionChatActions(
       const message = errorMessage(cause);
       if (isMounted()) setError(message);
       else
-        toast.error(`Could not send to "${workspaceSessionTitle(record)}"`, {
+        toast.error(`Could not send to "${title}"`, {
           description: message,
         });
       return false;
@@ -112,6 +116,25 @@ export function useWorkspaceSessionChatActions(
     }
   };
 
+  const { continueInterruptedTurn } = operations;
+  const resumeTurn = useCallback(
+    async (identity: AgentSessionIdentity): Promise<void> => {
+      try {
+        await continueInterruptedTurn(identity);
+      } catch (cause) {
+        if (!isMounted()) {
+          const notice =
+            cause instanceof HostInvokeError ? getAgentSessionResumeFailureNotice(cause) : null;
+          toast.error(`Could not resume "${title}"`, {
+            description: notice?.text ?? errorMessage(cause),
+          });
+        }
+        throw cause;
+      }
+    },
+    [continueInterruptedTurn, isMounted, title],
+  );
+
   const recordIdentity = workspaceSessionIdentity(record);
   const session = useAgentSession(recordIdentity);
   const recordSessionKey = recordIdentity === null ? null : agentSessionIdentityKey(recordIdentity);
@@ -120,7 +143,7 @@ export function useWorkspaceSessionChatActions(
     isSessionResuming,
     resumeErrorForSession,
     persistentResumeErrorForSession,
-  } = useInterruptedTurnResume(operations.continueInterruptedTurn, {
+  } = useInterruptedTurnResume(resumeTurn, {
     sessionKey: recordSessionKey,
     isLatestTurnSettled: hasSettledLatestTurn(session?.messages.items ?? []),
   });
