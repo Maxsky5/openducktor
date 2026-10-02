@@ -953,12 +953,6 @@ describe("useAgentStudioGitActions", () => {
       await harness.run(async (state) => {
         await state.rebaseOntoTarget();
       });
-      await harness.update(
-        createBaseArgs({
-          refreshDiffData,
-          workingDir: "/tmp/worktree/other",
-        }),
-      );
 
       await harness.run((state) => {
         void state.abortGitConflict();
@@ -1192,12 +1186,12 @@ describe("useAgentStudioGitActions", () => {
         await state.pushBranch();
       });
 
+      // The worktree now reports another branch.
       await harness.update(
         createBaseArgs({
-          repoPath: "/repo-2",
           branch: "feature/task-11",
           refreshDiffData,
-          workingDir: "/tmp/worktree/task-11",
+          workingDir: "/tmp/worktree/task-10",
         }),
       );
 
@@ -1208,6 +1202,90 @@ describe("useAgentStudioGitActions", () => {
       expect(gitPushBranchMock).toHaveBeenNthCalledWith(2, "/repo", "feature/task-10", {
         setUpstream: true,
         forceWithLease: true,
+        workingDir: "/tmp/worktree/task-10",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("shows a force push confirmation only in the worktree that pushed", async () => {
+    const pushDeferred = createDeferred<GitPushResult>();
+    gitPushBranchMock.mockImplementationOnce(async () => pushDeferred.promise);
+    const firstTaskArgs = createBaseArgs({ workingDir: "/tmp/worktree/task-10" });
+    const harness = createHookHarness(firstTaskArgs);
+
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        void state.pushBranch();
+      });
+      await harness.waitFor((state) => state.isPushing);
+
+      // The user selects another task before the push finishes.
+      await harness.update(
+        createBaseArgs({ branch: "feature/task-11", workingDir: "/tmp/worktree/task-11" }),
+      );
+      pushDeferred.resolve({
+        outcome: "rejected_non_fast_forward",
+        remote: "origin",
+        branch: "feature/task-10",
+        output: "non-fast-forward",
+      });
+      await harness.waitFor((state) => !state.isPushing);
+      expect(harness.getLatest().pendingForcePush).toBeNull();
+
+      await harness.run(async (state) => {
+        await state.confirmForcePush();
+      });
+      expect(gitPushBranchMock).toHaveBeenCalledTimes(1);
+
+      await harness.update(firstTaskArgs);
+      expect(harness.getLatest().pendingForcePush).toEqual({
+        remote: "origin",
+        branch: "feature/task-10",
+        output: "non-fast-forward",
+        repoPath: "/repo",
+        workingDir: "/tmp/worktree/task-10",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("shows a rebase conflict only in the worktree that rebased", async () => {
+    const rebaseDeferred = createDeferred<GitRebaseResult>();
+    gitRebaseBranchMock.mockImplementationOnce(() => rebaseDeferred.promise);
+    const firstTaskArgs = createBaseArgs({ workingDir: "/tmp/worktree/task-10" });
+    const harness = createHookHarness(firstTaskArgs);
+
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        void state.rebaseOntoTarget();
+      });
+      await harness.waitFor((state) => state.isRebasing);
+
+      // The user selects another task before the rebase finishes.
+      await harness.update(
+        createBaseArgs({ branch: "feature/task-11", workingDir: "/tmp/worktree/task-11" }),
+      );
+      rebaseDeferred.resolve({
+        outcome: "conflicts",
+        conflictedFiles: ["src/main.ts"],
+        output: "CONFLICT (content): Merge conflict in src/main.ts",
+      });
+      await harness.waitFor((state) => !state.isRebasing);
+      expect(harness.getLatest().gitConflict).toBeNull();
+      expect(harness.getLatest().isGitActionsLocked).toBe(false);
+
+      await harness.update(firstTaskArgs);
+      expect(harness.getLatest().gitConflict).toEqual({
+        operation: "rebase",
+        currentBranch: "feature/task-10",
+        targetBranch: "origin/main",
+        conflictedFiles: ["src/main.ts"],
+        output: "CONFLICT (content): Merge conflict in src/main.ts",
         workingDir: "/tmp/worktree/task-10",
       });
     } finally {

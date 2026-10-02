@@ -11,6 +11,7 @@ import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import {
   type AgentStudioQuickActionOption,
   buildAgentStudioQuickActions,
+  buildGitConflictQuickAction,
   selectPrimaryAgentStudioQuickAction,
 } from "./agent-studio-quick-actions";
 import {
@@ -41,7 +42,6 @@ type BuildWorkflowModelContextArgs = {
   selectedSessionIdentity: AgentSessionIdentity | null;
   role: AgentRole;
   isSessionWorking: boolean;
-  hasActiveGitConflict: boolean;
   roleLabelByRole: Record<AgentRole, string>;
   gitProviderContext?: RepositoryGitProviderContext | undefined;
   gitProviderReadError?: string | null;
@@ -60,6 +60,8 @@ export type WorkflowModelContext = {
   sessionCreateOptions: ReturnType<typeof buildSessionCreateOptions>;
   quickActions: AgentStudioQuickActionOption[];
   primaryQuickAction: AgentStudioQuickActionOption | null;
+  /** Shown first while the git actions report an active conflict. */
+  gitConflictQuickAction: AgentStudioQuickActionOption | null;
   selectedRoleAvailable: boolean;
   selectedRoleReadOnlyReason: string | null;
   createSessionDisabled: boolean;
@@ -71,7 +73,6 @@ export const buildWorkflowModelContext = ({
   selectedSessionIdentity,
   role,
   isSessionWorking,
-  hasActiveGitConflict,
   roleLabelByRole,
   gitProviderContext,
   gitProviderReadError = null,
@@ -118,7 +119,6 @@ export const buildWorkflowModelContext = ({
     sessionsForTask,
     roleEnabledByTask,
     createSessionDisabled,
-    hasActiveGitConflict,
     gitProviderContext,
     gitProviderReadError,
   });
@@ -132,6 +132,11 @@ export const buildWorkflowModelContext = ({
     sessionCreateOptions,
     quickActions,
     primaryQuickAction: selectPrimaryAgentStudioQuickAction(quickActions),
+    gitConflictQuickAction: buildGitConflictQuickAction({
+      selectedTask,
+      roleEnabledByTask,
+      createSessionDisabled,
+    }),
     selectedRoleAvailable,
     selectedRoleReadOnlyReason,
     createSessionDisabled,

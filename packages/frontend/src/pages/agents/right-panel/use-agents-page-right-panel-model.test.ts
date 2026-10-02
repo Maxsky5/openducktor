@@ -347,6 +347,7 @@ describe("resolveBuildToolsOpenInTarget", () => {
 
 describe("buildAgentsPageDiffModel", () => {
   const createPullRequestDetectionArgs = () => ({
+    subjectKey: "task-24",
     branches: [],
     buildToolsSnapshot: {
       diffData: createDiffData(),
@@ -433,6 +434,7 @@ describe("buildAgentsPageDiffModel", () => {
   test("locks git actions from snapshot target-branch validation", () => {
     const validationError = "Invalid openducktor.targetBranch metadata: missing field `branch`.";
     const diffModel = buildAgentsPageDiffModel({
+      subjectKey: "task-24",
       branches: [],
       buildToolsSnapshot: {
         diffData: createDiffData(),

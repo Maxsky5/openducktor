@@ -92,7 +92,6 @@ describe("use-agent-studio-page-model-builders", () => {
       selectedSessionIdentity: null,
       role: "planner",
       isSessionWorking: false,
-      hasActiveGitConflict: false,
       roleLabelByRole,
     });
 
@@ -131,7 +130,6 @@ describe("use-agent-studio-page-model-builders", () => {
       selectedSessionIdentity: null,
       role: "spec",
       isSessionWorking: false,
-      hasActiveGitConflict: false,
       roleLabelByRole,
     });
 
@@ -169,7 +167,6 @@ describe("use-agent-studio-page-model-builders", () => {
       selectedSessionIdentity: selectedIdentityFromSession(activeSession),
       role: "spec",
       isSessionWorking: true,
-      hasActiveGitConflict: false,
       roleLabelByRole,
       gitProviderContext: createGitProviderContextFixture(),
     });
@@ -209,7 +206,6 @@ describe("use-agent-studio-page-model-builders", () => {
       selectedSessionIdentity: null,
       role: "build",
       isSessionWorking: false,
-      hasActiveGitConflict: false,
       roleLabelByRole,
     });
 
@@ -240,7 +236,6 @@ describe("use-agent-studio-page-model-builders", () => {
       selectedSessionIdentity: null,
       role: "build",
       isSessionWorking: false,
-      hasActiveGitConflict: false,
       roleLabelByRole,
     });
 

@@ -159,6 +159,39 @@ describe("useAgentStudioGitConflictController", () => {
     }
   });
 
+  test("shows a local conflict only in the worktree where it happened", async () => {
+    const firstTaskArgs = createBaseArgs({
+      workingDir: "/tmp/worktree/task-10",
+      worktreeStatusSnapshotKey: "1:aaaaaaaaaaaaaaaa:bbbbbbbbbbbbbbbb",
+    });
+    const harness = createHookHarness(useAgentStudioGitConflictController, firstTaskArgs);
+
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        state.captureFreshConflict(createConflict());
+      });
+
+      // The clean snapshot of another task must not clear the conflict of the first task.
+      await harness.update(
+        createBaseArgs({
+          branch: "feature/task-11",
+          workingDir: "/tmp/worktree/task-11",
+          worktreeStatusSnapshotKey: "1:cccccccccccccccc:dddddddddddddddd",
+        }),
+      );
+      expect(harness.getLatest().activeGitConflict).toBeNull();
+      expect(harness.getLatest().isGitActionsLocked).toBe(false);
+      expect(harness.getLatest().gitConflictCloseNonce).toBe(0);
+
+      await harness.update(firstTaskArgs);
+      expect(harness.getLatest().activeGitConflict).toEqual(createConflict());
+      expect(harness.getLatest().isGitActionsLocked).toBe(true);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("keeps local conflicted file ordering when a newer snapshot reports the same files", async () => {
     const harness = createHookHarness(
       useAgentStudioGitConflictController,
@@ -230,17 +263,15 @@ describe("useAgentStudioGitConflictController", () => {
     }
   });
 
-  test("aborts conflicts using the captured working directory", async () => {
+  test("aborts a local conflict only from the worktree where it happened", async () => {
     const refreshDiffData = mock(async () => {});
     const abortDeferred = createDeferred<{ output: string }>();
     gitAbortConflictMock.mockImplementationOnce(async () => abortDeferred.promise);
-    const harness = createHookHarness(
-      useAgentStudioGitConflictController,
-      createBaseArgs({
-        refreshDiffData,
-        workingDir: "/tmp/worktree/task-10",
-      }),
-    );
+    const firstTaskArgs = createBaseArgs({
+      refreshDiffData,
+      workingDir: "/tmp/worktree/task-10",
+    });
+    const harness = createHookHarness(useAgentStudioGitConflictController, firstTaskArgs);
 
     try {
       await harness.mount();
@@ -255,7 +286,12 @@ describe("useAgentStudioGitConflictController", () => {
           workingDir: "/tmp/worktree/other",
         }),
       );
+      await harness.run((state) => {
+        void state.abortGitConflict();
+      });
+      expect(gitAbortConflictMock).not.toHaveBeenCalled();
 
+      await harness.update(firstTaskArgs);
       await harness.run((state) => {
         void state.abortGitConflict();
       });

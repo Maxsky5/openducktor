@@ -5,7 +5,9 @@ import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { createGitProviderContextFixture } from "@/test-utils/shared-test-fixtures";
 import {
   buildAgentStudioQuickActions,
+  buildGitConflictQuickAction,
   selectPrimaryAgentStudioQuickAction,
+  withGitConflictQuickAction,
 } from "./agent-studio-quick-actions";
 import { createAgentSessionSummaryFixture } from "./agent-studio-test-utils";
 import { buildRoleEnabledMapForTask } from "./agents-page-session-tabs";
@@ -437,22 +439,61 @@ describe("agent-studio-quick-actions", () => {
       },
     });
 
-    const options = buildAgentStudioQuickActions({
+    const roleEnabledByTask = buildRoleEnabledMapForTask(task);
+    const workflowOptions = buildAgentStudioQuickActions({
       selectedTask: task,
       sessionsForTask: [],
-      roleEnabledByTask: buildRoleEnabledMapForTask(task),
+      roleEnabledByTask,
       createSessionDisabled: false,
-      hasActiveGitConflict: true,
     });
+    const gitConflictQuickAction = buildGitConflictQuickAction({
+      selectedTask: task,
+      roleEnabledByTask,
+      createSessionDisabled: false,
+    });
+    if (!gitConflictQuickAction) {
+      throw new Error("Expected the git conflict quick action for an enabled Builder role.");
+    }
 
-    expect(options[0]).toMatchObject({
+    expect(
+      workflowOptions.some(
+        (option) => option.launchActionId === "build_rebase_conflict_resolution",
+      ),
+    ).toBe(false);
+    expect(gitConflictQuickAction).toMatchObject({
       launchActionId: "build_rebase_conflict_resolution",
       postStartAction: "send_message",
       disabled: false,
     });
-    expect(selectPrimaryAgentStudioQuickAction(options)?.launchActionId).toBe(
-      "build_rebase_conflict_resolution",
+
+    const { quickActions, primaryQuickAction } = withGitConflictQuickAction(
+      workflowOptions,
+      gitConflictQuickAction,
     );
+    expect(quickActions).toEqual([gitConflictQuickAction, ...workflowOptions]);
+    expect(primaryQuickAction).toBe(gitConflictQuickAction);
+  });
+
+  test("disables git conflict resolution while a session is working", () => {
+    const roleEnabledByTask = { spec: false, planner: false, build: true, qa: false };
+
+    expect(
+      buildGitConflictQuickAction({
+        selectedTask: buildTask({ id: "task-1" }),
+        roleEnabledByTask,
+        createSessionDisabled: true,
+      }),
+    ).toMatchObject({
+      disabled: true,
+      disabledReason: "Wait for the current session to finish.",
+    });
+    expect(
+      buildGitConflictQuickAction({
+        selectedTask: null,
+        roleEnabledByTask,
+        createSessionDisabled: false,
+      }),
+    ).toBeNull();
   });
 
   test("only proposes pull-request generation for review states", () => {
@@ -606,7 +647,6 @@ describe("agent-studio-quick-actions", () => {
         qa: true,
       },
       createSessionDisabled: false,
-      hasActiveGitConflict: true,
     });
 
     expect(options.map((option) => option.launchActionId)).toEqual([
@@ -614,6 +654,13 @@ describe("agent-studio-quick-actions", () => {
       "spec_initial",
       "planner_initial",
     ]);
+    expect(
+      buildGitConflictQuickAction({
+        selectedTask: task,
+        roleEnabledByTask: { spec: true, planner: true, build: false, qa: true },
+        createSessionDisabled: false,
+      }),
+    ).toBeNull();
     expect(
       options.some(
         (option) =>

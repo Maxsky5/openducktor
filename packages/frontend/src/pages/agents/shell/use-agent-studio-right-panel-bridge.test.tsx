@@ -7,6 +7,7 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "../agent-studio-test-utils";
+import { createBuildToolsFixture } from "./agents-page-build-tools.test-support";
 import { useAgentStudioRightPanelBridge } from "./use-agent-studio-right-panel-bridge";
 
 enableReactActEnvironment();
@@ -77,7 +78,7 @@ const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
     repoPath: "/repo",
   },
   branches: [],
-  activeBranch: null,
+  buildTools: createBuildToolsFixture(),
   selection: {
     view: createSelectionView(),
   },
@@ -87,12 +88,9 @@ const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   },
   selectedFile: null,
   onSelectFile: mock(() => {}),
-  repoSettings: null,
   setTaskTargetBranch: mock(async () => undefined),
   detectingPullRequestTaskId: null,
   onDetectPullRequest: mock((_taskId: string) => {}),
-  onResolveGitConflict: mock(async () => true),
-  onGitConflictQuickActionContextChange: mock(() => {}),
   ...overrides,
 });
 
@@ -113,7 +111,7 @@ describe("useAgentStudioRightPanelBridge", () => {
       expect(state.rightPanelBridge?.rightPanel.selectedView.taskId).toBe("task-1");
       expect(state.rightPanelBridge?.rightPanel.selectedView.role).toBe("build");
       expect(state.rightPanelBridge?.rightPanel.documentsModel).toBe(args.documentsModel);
-      expect(state.rightPanelBridge?.rightPanel.repoSettings).toBe(args.repoSettings);
+      expect(state.rightPanelBridge?.rightPanel.buildTools).toBe(args.buildTools);
       expect(state.rightPanelBridge?.buildWorktreeRefresh.selectedView.loadedSession).toBe(
         args.selection.view.selectedSession.loadedSession,
       );

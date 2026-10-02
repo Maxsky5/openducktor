@@ -6,7 +6,7 @@ import {
   buildAgentStudioGitPanelBranchIdentityKey,
   resolveAgentStudioGitPanelBranch,
 } from "@/pages/agents/right-panel/agents-page-git-panel";
-import { useAgentStudioDevServerPanel } from "@/features/dev-servers/use-agent-studio-dev-server-panel";
+import type { useAgentStudioDevServerPanel } from "@/features/dev-servers/use-agent-studio-dev-server-panel";
 import type { useAgentStudioOrchestrationController } from "@/pages/agents/use-agent-studio-orchestration-controller";
 import type { useWorkspaceState } from "@/state/app-state-provider";
 import type { TaskWorktreeQueryHost } from "@/state/queries/build-runtime";
@@ -44,8 +44,9 @@ type UseAgentStudioBuildToolsWorktreeSnapshotArgs = {
 type AgentStudioBuildToolsWorktreeSnapshotDependencies = {
   taskWorktreeHost: TaskWorktreeQueryHost;
   useDiffData: typeof useAgentStudioDiffData;
-  useDevServerPanel: typeof useAgentStudioDevServerPanel;
 };
+
+type AgentStudioDevServerTarget = Parameters<typeof useAgentStudioDevServerPanel>[0];
 
 export type AgentStudioBuildToolsWorktreeSnapshot = {
   isEnabled: boolean;
@@ -62,7 +63,8 @@ export type AgentStudioBuildToolsWorktreeSnapshot = {
   resolvedGitPanelBranch: string | null;
   worktree: BuildToolsWorktreeSnapshotState;
   diffData: DiffDataState;
-  devServerModel: ReturnType<typeof useAgentStudioDevServerPanel>;
+  /** The right panel reads the dev server for this target. */
+  devServerTarget: AgentStudioDevServerTarget;
   openInTarget: BuildToolsOpenInTarget;
   refreshWorktree: GitDiffRefresh;
 };
@@ -70,7 +72,6 @@ export type AgentStudioBuildToolsWorktreeSnapshot = {
 const DEFAULT_SNAPSHOT_DEPENDENCIES: AgentStudioBuildToolsWorktreeSnapshotDependencies = {
   taskWorktreeHost: hostClient,
   useDiffData: useAgentStudioDiffData,
-  useDevServerPanel: useAgentStudioDevServerPanel,
 };
 
 function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
@@ -178,7 +179,6 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     diffDataInput.preconditionError = worktreeDiffPreconditionError;
   }
   const diffData = dependencies.useDiffData(diffDataInput);
-  const devServerModel = dependencies.useDevServerPanel(devServerTarget);
   const resolvedGitPanelBranch = resolveAgentStudioGitPanelBranch({
     contextMode: gitPanelContextMode,
     workspaceActiveBranch: activeBranch,
@@ -220,13 +220,13 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
       resolvedGitPanelBranch,
       worktree,
       diffData,
-      devServerModel,
+      devServerTarget,
       openInTarget,
       refreshWorktree: diffData.refresh,
     }),
     [
       buildToolsBootstrap.sessionWorkingDirectory,
-      devServerModel,
+      devServerTarget,
       diffData,
       gitPanelContextMode,
       hasSelectedTask,
@@ -257,7 +257,7 @@ function buildDevServerTarget(
   repoPath: string | null,
   hasSelectedTask: boolean,
   taskId: string | null,
-) {
+): AgentStudioDevServerTarget {
   const path = enabled ? repoPath : null;
   const owner: DevServerOwner | null =
     enabled && hasSelectedTask && taskId ? { kind: "task", taskId } : null;

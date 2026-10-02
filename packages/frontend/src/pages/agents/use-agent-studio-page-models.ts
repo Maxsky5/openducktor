@@ -100,7 +100,6 @@ export function useAgentStudioPageModels({
     onSessionSelectionChange: sessionActions.handleSessionSelectionChange,
     onPrepareMessageFirstSession: sessionActions.handlePrepareMessageFirstSession,
     onQuickAction: sessionActions.handleQuickAction,
-    onResolveGitConflictQuickAction: null,
     workflow: {
       workflowStateByRole,
       workflowSessionByRole,

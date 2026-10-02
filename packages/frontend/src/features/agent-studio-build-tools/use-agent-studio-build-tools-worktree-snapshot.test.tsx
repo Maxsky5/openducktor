@@ -30,7 +30,6 @@ type SnapshotDependencies = Parameters<
   typeof createAgentStudioBuildToolsWorktreeSnapshotHookForTest
 >[0];
 type UseDiffData = NonNullable<SnapshotDependencies["useDiffData"]>;
-type UseDevServerPanel = NonNullable<SnapshotDependencies["useDevServerPanel"]>;
 
 const useAgentStudioDiffDataMock = mock(
   (args: Parameters<UseDiffData>[0]): ReturnType<UseDiffData> => ({
@@ -62,31 +61,6 @@ const useAgentStudioDiffDataMock = mock(
     setDiffScope: setDiffScopeMock,
   }),
 );
-const useAgentStudioDevServerPanelMock = mock(
-  (args: Parameters<UseDevServerPanel>[0]): ReturnType<UseDevServerPanel> => ({
-    mode: "empty",
-    isExpanded: false,
-    isLoading: false,
-    disabledReason: null,
-    repoPath: args.repoPath,
-    owner: args.owner,
-    workingDirectory: null,
-    scripts: [],
-    selectedScriptId: null,
-    selectedScript: null,
-
-    error: null,
-    isStartPending: false,
-    isRetryPending: false,
-    isStopPending: false,
-    isRestartPending: false,
-    onSelectScript: () => {},
-    onStart: () => {},
-    onRetry: () => {},
-    onStop: () => {},
-    onRestart: () => {},
-  }),
-);
 const taskWorktreeGetMock = mock(
   async (_repoPath: string, _taskId: string): Promise<{ workingDirectory: string } | null> => ({
     workingDirectory: "/repo/.worktrees/task-24",
@@ -98,7 +72,6 @@ const useSnapshotHookForTest = createAgentStudioBuildToolsWorktreeSnapshotHookFo
     taskWorktreeGet: taskWorktreeGetMock,
   },
   useDiffData: useAgentStudioDiffDataMock,
-  useDevServerPanel: useAgentStudioDevServerPanelMock,
 });
 
 type UseSnapshotHook = typeof useAgentStudioBuildToolsWorktreeSnapshot;
@@ -214,7 +187,6 @@ beforeEach(async () => {
   refreshDiffMock.mockClear();
   setDiffScopeMock.mockClear();
   useAgentStudioDiffDataMock.mockClear();
-  useAgentStudioDevServerPanelMock.mockClear();
   taskWorktreeGetMock.mockClear();
   taskWorktreeGetMock.mockResolvedValue({ workingDirectory: "/repo/.worktrees/task-24" });
 });
@@ -230,7 +202,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
 
       expect(harness.getLatest().isEnabled).toBe(false);
       expect(taskWorktreeGetMock).not.toHaveBeenCalled();
-      expect(useAgentStudioDevServerPanelMock.mock.calls.at(-1)?.[0]).toMatchObject({
+      expect(harness.getLatest().devServerTarget).toEqual({
         repoPath: null,
         owner: null,
         enabled: false,
@@ -494,7 +466,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         error: null,
       });
       expect(harness.getLatest().openInTarget.path).toBe("/repo/.worktrees/task-24");
-      expect(useAgentStudioDevServerPanelMock.mock.calls.at(-1)?.[0]).toMatchObject({
+      expect(harness.getLatest().devServerTarget).toEqual({
         repoPath: "/repo",
         owner: { kind: "task", taskId: "task-24" },
         enabled: true,
@@ -703,7 +675,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
 
       expect(taskWorktreeGetMock).toHaveBeenCalledWith("/repo", "task-24");
       expect(harness.getLatest().context.taskId).toBe("task-24");
-      expect(useAgentStudioDevServerPanelMock.mock.calls.at(-1)?.[0]).toMatchObject({
+      expect(harness.getLatest().devServerTarget).toEqual({
         repoPath: "/repo",
         owner: null,
         enabled: false,

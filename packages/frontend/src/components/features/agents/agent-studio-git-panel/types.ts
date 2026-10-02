@@ -10,6 +10,8 @@ import type {
 } from "@/features/agent-studio-git";
 
 export type AgentStudioGitPanelModel = DiffDataState & {
+  /** Identifies the task or session that the panel shows. A new value clears the file search and opens all directories. */
+  subjectKey: string;
   contextMode?: "repository" | "worktree";
   comparisonUnavailableReason?: string | null;
   commentOwner?: { workspaceId: string; taskId: string } | null;

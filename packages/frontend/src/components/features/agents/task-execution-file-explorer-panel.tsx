@@ -1,19 +1,21 @@
 import type { WorkspaceFileTreeEntry } from "@openducktor/contracts";
 import type { TreeThemeInput } from "@pierre/trees";
 import { prepareFileTreeInput, themeToTreeStyles } from "@pierre/trees";
-import { FileTree, useFileTree } from "@pierre/trees/react";
+import { FileTree, useFileTree, useFileTreeSearch } from "@pierre/trees/react";
 import { useQuery } from "@tanstack/react-query";
 import {
   type CSSProperties,
   type ReactElement,
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
 } from "react";
 import { useTheme } from "@/components/layout/theme-provider";
 import { CopyIconButton } from "@/components/ui/copy-icon-button";
+import { CompactSearchField } from "@/components/ui/search-field";
 import { errorMessage } from "@/lib/errors";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { workspaceFileTreeQueryOptions } from "@/state/queries/filesystem";
@@ -250,14 +252,16 @@ export function TaskExecutionFileExplorerPanel({
   });
   const previousRootPathRef = useRef(rootPath);
 
+  // The panel renders its own search field, so the file explorer and the git panel share one look.
   const { model: fileTree } = useFileTree({
     preparedInput: EMPTY_TREE_INPUT,
     initialExpansion: "closed",
     fileTreeSearchMode: "hide-non-matches",
-    search: true,
     icons: "complete",
     gitStatus: [],
   });
+  const search = useFileTreeSearch(fileTree);
+  const searchFieldId = useId();
   const preparedInput = useMemo(
     () => (treeData ? prepareFileTreeInput(fileTreeInputPaths) : null),
     [fileTreeInputPaths, treeData],
@@ -332,12 +336,23 @@ export function TaskExecutionFileExplorerPanel({
         ) : fileTreeInputPaths.length === 0 ? (
           <FileExplorerUnavailableState message="No files found." />
         ) : (
-          <FileTree
-            model={fileTree}
-            style={treeStyle}
-            className="h-full min-h-0"
-            aria-label="Workspace file explorer"
-          />
+          <div className="flex h-full min-h-0 flex-col gap-2.5">
+            <div className="px-3">
+              <CompactSearchField
+                id={searchFieldId}
+                label="Search files"
+                value={search.value}
+                placeholder="Search files"
+                onValueChange={(value) => search.setValue(value === "" ? null : value)}
+              />
+            </div>
+            <FileTree
+              model={fileTree}
+              style={treeStyle}
+              className="min-h-0 flex-1"
+              aria-label="Workspace file explorer"
+            />
+          </div>
         )}
       </div>
     </div>

@@ -488,6 +488,10 @@ _Avoid_: Target Diff, Pull Request state, Task Status
 The **Git Panel** mode that chooses which diff is displayed. Current **Diff Scopes** are `target` and `uncommitted`.
 _Avoid_: diff style, branch
 
+**File List View**:
+The **Git Panel** layout of the changed files. The tree view groups the files by directory. The list view shows one row for each file. All **Git Panels** on a device use the same **File List View**.
+_Avoid_: Diff Scope, diff style
+
 **Target Diff**:
 The **Diff Scope** that compares the current branch or worktree against the target branch.
 _Avoid_: Uncommitted Diff, Pull Request diff

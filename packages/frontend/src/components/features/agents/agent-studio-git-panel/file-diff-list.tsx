@@ -1,5 +1,4 @@
 import type { FileDiff } from "@openducktor/contracts";
-import { AlignJustify, SplitSquareHorizontal } from "lucide-react";
 import {
   memo,
   type ReactElement,
@@ -10,23 +9,22 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  type DynamicRowHeight,
-  List,
-  type RowComponentProps,
-  useDynamicRowHeight,
-  useListRef,
-} from "react-window";
+import { List, type RowComponentProps } from "react-window";
 import type { PierreDiffStyle } from "@/components/features/agents/pierre-diff-viewer";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { DiffScope } from "@/features/agent-studio-git";
-import { cn } from "@/lib/utils";
 import {
   type InlineCommentDraft,
   useInlineCommentDraftStore,
 } from "@/state/use-inline-comment-draft-store";
 import { DiffPreloadQueue } from "./diff-preload-queue";
 import { FileDiffEntryWithMemo } from "./file-diff-entry";
+import { FileListDirectoryRow } from "./file-list-directory-row";
+import { FileListHeader } from "./file-list-header";
+import { buildFileTree, buildListRows, type FileListRow, flattenFileTree } from "./file-list-rows";
+import { searchFiles } from "./file-list-search";
+import type { FileListViewMode } from "./file-list-view-preference";
+import { rowKeyAttributes, useFileListScrollAnchor } from "./use-file-list-scroll-anchor";
+import type { FileListState } from "./use-file-list-state";
 import {
   EMPTY_FILE_DIFF_ANNOTATION_STATE,
   type FileDiffAnnotationAction,
@@ -62,6 +60,9 @@ type FileDiffListProps = {
   conflictedFiles: ReadonlySet<string>;
   diffStyle: PierreDiffStyle;
   setDiffStyle: (style: PierreDiffStyle) => void;
+  viewMode: FileListViewMode;
+  onViewModeChange: (viewMode: FileListViewMode) => void;
+  listState: FileListState;
   expandedFiles: ReadonlySet<string>;
   onToggleFile: (filePath: string) => void;
   preloadLimit: number;
@@ -71,42 +72,6 @@ type FileDiffListProps = {
   onRequestFileReset?: ((filePath: string) => void) | undefined;
   onRequestHunkReset?: ((filePath: string, hunkIndex: number) => void) | undefined;
 };
-
-type DiffStyleToggleButtonProps = {
-  icon: typeof SplitSquareHorizontal;
-  isActive: boolean;
-  label: string;
-  onClick: () => void;
-};
-
-function DiffStyleToggleButton({
-  icon: Icon,
-  isActive,
-  label,
-  onClick,
-}: DiffStyleToggleButtonProps): ReactElement {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          aria-pressed={isActive}
-          className={cn(
-            "p-1",
-            isActive ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
-          )}
-          onClick={onClick}
-        >
-          <Icon className="size-3" />
-          <span className="sr-only">{label}</span>
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="bottom">
-        <p>{label}</p>
-      </TooltipContent>
-    </Tooltip>
-  );
-}
 
 type FileEditorState = { diffText: string; state: FileDiffAnnotationState };
 type FileAnnotationDispatch = (
@@ -160,83 +125,42 @@ function useFileEditorStates(
   return { editorStateByFile, onAnnotationAction };
 }
 
-type FileOrderState = {
-  fileDiffs: FileDiff[];
-  measurementKey: string;
-  version: number;
-};
-
-type VisibleFileAnchor = { filePath: string; index: number; offset: number };
-
-function getRenderedFileRow(list: HTMLElement, index: number): HTMLElement | undefined {
-  for (const child of list.children) {
-    if (child instanceof HTMLElement && child.getAttribute("aria-posinset") === String(index + 1)) {
-      return child;
-    }
-  }
-  return undefined;
-}
-
-function remapFileRowHeights(
-  rowHeight: DynamicRowHeight,
-  previousFileDiffs: FileDiff[],
-  fileDiffs: FileDiff[],
-): void {
-  const heightByFile = new Map(
-    previousFileDiffs.map((diff, index) => [diff.file, rowHeight.getRowHeight(index) ?? 40]),
-  );
-  for (const [index, diff] of fileDiffs.entries()) {
-    const height = heightByFile.get(diff.file) ?? 40;
-    if (rowHeight.getRowHeight(index) !== height) rowHeight.setRowHeight(index, height);
-  }
-}
-
-function useFileRowHeights(fileDiffs: FileDiff[], measurementKey: string) {
-  // Keep heights through width and content changes; mounted rows remeasure before paint.
-  const rowHeight = useDynamicRowHeight({ defaultRowHeight: 40 });
-  const [fileOrder, setFileOrder] = useState<FileOrderState>(() => ({
-    fileDiffs,
-    measurementKey,
-    version: 0,
-  }));
-  if (fileOrder.fileDiffs !== fileDiffs || fileOrder.measurementKey !== measurementKey) {
-    const filesChanged =
-      fileOrder.fileDiffs.length !== fileDiffs.length ||
-      fileDiffs.some((diff, index) => fileOrder.fileDiffs[index]?.file !== diff.file);
-    const measurementOwnerChanged = fileOrder.measurementKey !== measurementKey;
-    if (filesChanged || measurementOwnerChanged) {
-      // Move known heights with their files before the new order reaches the DOM.
-      remapFileRowHeights(rowHeight, measurementOwnerChanged ? [] : fileOrder.fileDiffs, fileDiffs);
-    }
-    setFileOrder({
-      fileDiffs,
-      measurementKey,
-      version: fileOrder.version + (filesChanged ? 1 : 0),
-    });
-  }
-  return { rowHeight, fileOrderVersion: fileOrder.version };
-}
-
-type FileDiffRowProps = Omit<FileDiffListProps, "preloadLimit" | "setDiffStyle"> & {
+type FileListRowProps = Pick<
+  FileDiffListProps,
+  | "diffScope"
+  | "ownerKey"
+  | "conflictedFiles"
+  | "diffStyle"
+  | "expandedFiles"
+  | "onToggleFile"
+  | "canResetFiles"
+  | "isResetDisabled"
+  | "resetDisabledReason"
+  | "onRequestFileReset"
+  | "onRequestHunkReset"
+> & {
+  rows: readonly FileListRow[];
+  onToggleDirectory: FileListState["toggleDirectory"];
   inlineCommentsByFile: Map<string, InlineCommentDraft[]>;
   reserveConflictSlot: boolean;
   editorStateByFile: Map<string, FileEditorState>;
   onAnnotationAction: FileAnnotationDispatch;
-  onMeasureRow: (index: number, height: number) => void;
+  onMeasureRow: (rowKey: string, height: number) => void;
   measurementKey: string;
 };
 
-function FileDiffRow({
+function FileListRowView({
   index,
   style,
   ariaAttributes,
-  fileDiffs,
+  rows,
   diffScope,
   ownerKey,
   conflictedFiles,
   diffStyle,
   expandedFiles,
   onToggleFile,
+  onToggleDirectory,
   canResetFiles,
   isResetDisabled,
   resetDisabledReason,
@@ -248,32 +172,42 @@ function FileDiffRow({
   onAnnotationAction,
   onMeasureRow,
   measurementKey,
-}: RowComponentProps<FileDiffRowProps>): ReactElement {
+}: RowComponentProps<FileListRowProps>): ReactElement {
   const rowRef = useRef<HTMLDivElement>(null);
-  const lastMeasurementRef = useRef<{ index: number; height: number; key: string } | null>(null);
+  const lastMeasurementRef = useRef<{
+    rowKey: string;
+    height: number;
+    measurementKey: string;
+  } | null>(null);
   useLayoutEffect(() => {
-    // Match the border-box height that react-window receives from ResizeObserver.
+    // Match the border-box height that the ResizeObserver of the scroll anchor reports.
+    const rowKey = rows[index]?.key;
     const height = rowRef.current?.offsetHeight ?? 0;
     const previous = lastMeasurementRef.current;
     if (
+      rowKey &&
       height > 0 &&
-      (previous?.index !== index ||
-        previous.key !== measurementKey ||
+      (previous?.rowKey !== rowKey ||
+        previous.measurementKey !== measurementKey ||
         Math.abs(previous.height - height) > 1)
     ) {
-      lastMeasurementRef.current = { index, height, key: measurementKey };
-      onMeasureRow(index, height);
+      lastMeasurementRef.current = { rowKey, height, measurementKey };
+      onMeasureRow(rowKey, height);
     }
   });
-  const diff = fileDiffs[index];
-  if (!diff) {
-    throw new RangeError(`Missing file diff at row ${index}`);
+  const row = rows[index];
+  if (!row) {
+    throw new RangeError(`Missing file list row at index ${index}`);
   }
-  const editor = editorStateByFile.get(diff.file);
-  return (
-    <div ref={rowRef} style={style} {...ariaAttributes} className="border-b border-border/50">
+  let content: ReactElement;
+  if (row.kind === "directory") {
+    content = <FileListDirectoryRow row={row} onToggle={onToggleDirectory} />;
+  } else {
+    const { diff } = row;
+    const editor = editorStateByFile.get(diff.file);
+    content = (
       <FileDiffEntryWithMemo
-        diff={diff}
+        row={row}
         diffScope={diffScope}
         ownerKey={ownerKey}
         fileComments={inlineCommentsByFile.get(diff.file) ?? EMPTY_INLINE_COMMENTS}
@@ -293,17 +227,54 @@ function FileDiffRow({
         onRequestFileReset={onRequestFileReset}
         onRequestHunkReset={onRequestHunkReset}
       />
+    );
+  }
+  return (
+    <div
+      ref={rowRef}
+      style={style}
+      {...ariaAttributes}
+      {...rowKeyAttributes(row.key)}
+      className="border-b border-border/50"
+    >
+      {content}
     </div>
   );
 }
 
-const fileRowKey = (index: number, { fileDiffs }: FileDiffRowProps): string => {
-  const diff = fileDiffs[index];
-  if (!diff) {
-    throw new RangeError(`Missing file diff at row ${index}`);
+const listRowKey = (index: number, { rows }: FileListRowProps): string => {
+  const row = rows[index];
+  if (!row) {
+    throw new RangeError(`Missing file list row at index ${index}`);
   }
-  return diff.file;
+  return row.key;
 };
+
+function useFileListRows({
+  fileDiffs,
+  viewMode,
+  listState: { query, closedDirectories },
+}: Pick<FileDiffListProps, "fileDiffs" | "viewMode" | "listState">) {
+  const matches = useMemo(() => searchFiles(fileDiffs, query), [fileDiffs, query]);
+  const tree = useMemo(
+    () => (viewMode === "tree" ? buildFileTree(matches) : null),
+    [matches, viewMode],
+  );
+  const rows = useMemo<readonly FileListRow[]>(
+    () => (tree ? flattenFileTree(tree, closedDirectories) : buildListRows(matches)),
+    [closedDirectories, matches, tree],
+  );
+  const totals = useMemo(() => {
+    let additions = 0;
+    let deletions = 0;
+    for (const { diff } of matches) {
+      additions += diff.additions;
+      deletions += diff.deletions;
+    }
+    return { additions, deletions };
+  }, [matches]);
+  return { matches, rows, totals };
+}
 
 export const FileDiffList = memo(function FileDiffList({
   fileDiffs,
@@ -312,6 +283,9 @@ export const FileDiffList = memo(function FileDiffList({
   conflictedFiles,
   diffStyle,
   setDiffStyle,
+  viewMode,
+  onViewModeChange,
+  listState,
   expandedFiles,
   onToggleFile,
   preloadLimit,
@@ -321,15 +295,13 @@ export const FileDiffList = memo(function FileDiffList({
   onRequestFileReset,
   onRequestHunkReset,
 }: FileDiffListProps): ReactElement {
-  const { totalAdditions, totalDeletions } = useMemo(() => {
-    let additions = 0;
-    let deletions = 0;
-    for (const fileDiff of fileDiffs) {
-      additions += fileDiff.additions;
-      deletions += fileDiff.deletions;
-    }
-    return { totalAdditions: additions, totalDeletions: deletions };
-  }, [fileDiffs]);
+  const { query } = listState;
+  const { matches, rows, totals } = useFileListRows({ fileDiffs, viewMode, listState });
+  // Preload the files that the list shows, in their order. A search or a closed directory hides the others.
+  const shownFileDiffs = useMemo(
+    () => rows.flatMap((row) => (row.kind === "file" ? [row.diff] : [])),
+    [rows],
+  );
   const inlineCommentDrafts = useInlineCommentDraftStore((store) =>
     ownerKey === null
       ? EMPTY_INLINE_COMMENTS
@@ -346,80 +318,22 @@ export const FileDiffList = memo(function FileDiffList({
     fileDiffs,
   );
 
-  const listRef = useListRef(null);
-  const visibleFileRef = useRef<VisibleFileAnchor | null>(null);
-  const pendingAnchorRef = useRef<VisibleFileAnchor | null>(null);
   const measurementKey = JSON.stringify([ownerKey, diffScope]);
-  const { rowHeight, fileOrderVersion } = useFileRowHeights(fileDiffs, measurementKey);
-  const restoredFileOrderVersionRef = useRef(fileOrderVersion);
-
-  const captureVisibleOffset = useCallback(() => {
-    const list = listRef.current?.element;
-    const anchor = visibleFileRef.current;
-    if (!list || !anchor) return;
-    const row = getRenderedFileRow(list, anchor.index);
-    if (!row) return;
-    anchor.offset = Math.max(0, list.getBoundingClientRect().top - row.getBoundingClientRect().top);
-  }, [listRef]);
-
-  useLayoutEffect(() => {
-    if (restoredFileOrderVersionRef.current !== fileOrderVersion) {
-      restoredFileOrderVersionRef.current = fileOrderVersion;
-      pendingAnchorRef.current = visibleFileRef.current && { ...visibleFileRef.current };
-    }
-    const anchor = pendingAnchorRef.current;
-    const list = listRef.current?.element;
-    if (!anchor || !list) return;
-    if (fileDiffs.length === 0) {
-      pendingAnchorRef.current = null;
-      return;
-    }
-
-    const matchingIndex = fileDiffs.findIndex((diff) => diff.file === anchor.filePath);
-    const index = matchingIndex >= 0 ? matchingIndex : Math.min(anchor.index, fileDiffs.length - 1);
-    const row = getRenderedFileRow(list, index);
-    if (!row) {
-      let rowStart = 0;
-      for (let rowIndex = 0; rowIndex < index; rowIndex++) {
-        rowStart += rowHeight.getRowHeight(rowIndex) ?? 40;
-      }
-      list.scrollTop = rowStart;
-      return;
-    }
-
-    const listTop = list.getBoundingClientRect().top;
-    const rowRect = row.getBoundingClientRect();
-    if (rowRect.height === 0) return;
-    if (Math.abs((rowHeight.getRowHeight(index) ?? 40) - rowRect.height) > 1) {
-      rowHeight.setRowHeight(index, rowRect.height);
-      return;
-    }
-
-    const rowStart = list.scrollTop + rowRect.top - listTop;
-    const offset =
-      matchingIndex >= 0 ? Math.min(anchor.offset, Math.max(0, rowRect.height - 1)) : 0;
-    list.scrollTop = rowStart + offset;
-    pendingAnchorRef.current = null;
-  }, [fileDiffs, fileOrderVersion, listRef, rowHeight]);
-
-  const onRowsRendered = useCallback(
-    ({ startIndex }: { startIndex: number }) => {
-      const filePath = fileDiffs[startIndex]?.file;
-      if (filePath) {
-        visibleFileRef.current = { filePath, index: startIndex, offset: 0 };
-        captureVisibleOffset();
-      }
-    },
-    [captureVisibleOffset, fileDiffs],
-  );
-  const rowProps: FileDiffRowProps = {
-    fileDiffs,
+  const { listRef, rowHeight, onMeasureRow, onRowsRendered, onScroll } = useFileListScrollAnchor({
+    rows,
+    measurementKey,
+    // A new search, and a cleared search, start at the top.
+    scrollResetKey: query,
+  });
+  const rowProps: FileListRowProps = {
+    rows,
     diffScope,
     ownerKey,
     conflictedFiles,
     diffStyle,
     expandedFiles,
     onToggleFile,
+    onToggleDirectory: listState.toggleDirectory,
     canResetFiles,
     isResetDisabled,
     resetDisabledReason,
@@ -429,60 +343,55 @@ export const FileDiffList = memo(function FileDiffList({
     reserveConflictSlot,
     editorStateByFile,
     onAnnotationAction,
-    onMeasureRow: rowHeight.setRowHeight,
+    onMeasureRow,
     measurementKey,
   };
 
   return (
     <div className="flex h-full min-h-0 w-0 min-w-full max-w-full flex-col overflow-hidden">
-      <div
-        className="flex min-w-0 shrink-0 flex-wrap items-center gap-x-2 gap-y-2 border-b border-border/50 px-3 py-2 text-xs text-muted-foreground"
-        data-testid="agent-studio-git-list-header"
-      >
-        <span className="shrink-0">
-          {fileDiffs.length} changed file{fileDiffs.length > 1 ? "s" : ""}
-        </span>
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          <div className="flex shrink-0 items-center overflow-hidden rounded-md border border-border/50">
-            <DiffStyleToggleButton
-              icon={SplitSquareHorizontal}
-              isActive={diffStyle === "split"}
-              label="Side-by-side"
-              onClick={() => setDiffStyle("split")}
-            />
-            <DiffStyleToggleButton
-              icon={AlignJustify}
-              isActive={diffStyle === "unified"}
-              label="Unified"
-              onClick={() => setDiffStyle("unified")}
-            />
-          </div>
-          <span className="shrink-0 whitespace-nowrap font-mono">
-            {totalAdditions > 0 ? (
-              <span className="mr-1.5 text-green-400">+{totalAdditions}</span>
-            ) : null}
-            {totalDeletions > 0 ? <span className="text-red-400">-{totalDeletions}</span> : null}
-          </span>
-        </div>
-      </div>
-
-      <DiffPreloadQueue fileDiffs={fileDiffs} expandedFiles={expandedFiles} limit={preloadLimit} />
-
-      <List
-        aria-label="Changed files"
-        tabIndex={0}
-        className="h-0 min-h-0 flex-1 overflow-x-hidden"
-        defaultHeight={400}
-        listRef={listRef}
-        rowComponent={FileDiffRow}
-        rowCount={fileDiffs.length}
-        rowHeight={rowHeight}
-        rowKey={fileRowKey}
-        rowProps={rowProps}
-        overscanCount={3}
-        onRowsRendered={onRowsRendered}
-        onScroll={captureVisibleOffset}
+      <FileListHeader
+        fileCount={fileDiffs.length}
+        matchCount={query === "" ? null : matches.length}
+        totalAdditions={totals.additions}
+        totalDeletions={totals.deletions}
+        viewMode={viewMode}
+        onViewModeChange={onViewModeChange}
+        diffStyle={diffStyle}
+        onDiffStyleChange={setDiffStyle}
+        searchText={listState.searchText}
+        onSearchTextChange={listState.setSearchText}
       />
+
+      <DiffPreloadQueue
+        fileDiffs={shownFileDiffs}
+        expandedFiles={expandedFiles}
+        limit={preloadLimit}
+      />
+
+      {rows.length === 0 ? (
+        <p
+          className="px-3 py-4 text-xs break-words text-muted-foreground"
+          data-testid="agent-studio-git-no-file-matches"
+        >
+          No files match "{listState.appliedSearchText.trim()}"
+        </p>
+      ) : (
+        <List
+          aria-label="Changed files"
+          tabIndex={0}
+          className="h-0 min-h-0 flex-1 overflow-x-hidden"
+          defaultHeight={400}
+          listRef={listRef}
+          rowComponent={FileListRowView}
+          rowCount={rows.length}
+          rowHeight={rowHeight}
+          rowKey={listRowKey}
+          rowProps={rowProps}
+          overscanCount={3}
+          onRowsRendered={onRowsRendered}
+          onScroll={onScroll}
+        />
+      )}
     </div>
   );
 });

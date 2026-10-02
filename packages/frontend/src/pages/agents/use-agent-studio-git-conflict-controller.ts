@@ -11,6 +11,8 @@ import {
 
 type GitConflictControllerState = {
   localConflict: GitConflict | null;
+  /** The repository and working directory where the local conflict happened. */
+  localConflictWorktreeKey: string | null;
   gitConflictSnapshotKey: string | null;
   isHandlingGitConflict: boolean;
   gitConflictAction: GitConflictAction;
@@ -22,6 +24,7 @@ type GitConflictControllerAction =
   | {
       type: "capture_conflict";
       conflict: GitConflict;
+      worktreeKey: string;
       snapshotKey: string | null;
     }
   | {
@@ -65,6 +68,7 @@ type UseAgentStudioGitConflictControllerArgs = {
 
 const initialState: GitConflictControllerState = {
   localConflict: null,
+  localConflictWorktreeKey: null,
   gitConflictSnapshotKey: null,
   isHandlingGitConflict: false,
   gitConflictAction: null,
@@ -106,6 +110,7 @@ function gitConflictControllerReducer(
       return {
         ...state,
         localConflict: action.conflict,
+        localConflictWorktreeKey: action.worktreeKey,
         gitConflictSnapshotKey: action.snapshotKey,
         gitConflictAutoOpenNonce: state.gitConflictAutoOpenNonce + 1,
       };
@@ -136,6 +141,7 @@ function gitConflictControllerReducer(
       return {
         ...state,
         localConflict: null,
+        localConflictWorktreeKey: null,
         gitConflictSnapshotKey: null,
         gitConflictCloseNonce: action.closeModal
           ? state.gitConflictCloseNonce + 1
@@ -171,6 +177,9 @@ export function useAgentStudioGitConflictController({
   onResolveGitConflict,
 }: UseAgentStudioGitConflictControllerArgs) {
   const [state, dispatch] = useReducer(gitConflictControllerReducer, initialState);
+  // The local conflict belongs to the worktree where the rebase or pull ran, so other worktrees do not show it.
+  const worktreeKey = JSON.stringify([repoPath, workingDir]);
+  const localConflict = state.localConflictWorktreeKey === worktreeKey ? state.localConflict : null;
 
   const fallbackDetectedConflict = useMemo(
     () =>
@@ -190,17 +199,13 @@ export function useAgentStudioGitConflictController({
 
   const effectiveDetectedConflict = detectedConflict ?? fallbackDetectedConflict;
 
-  const activeGitConflict = state.localConflict ?? effectiveDetectedConflict;
+  const activeGitConflict = localConflict ?? effectiveDetectedConflict;
   const isGitActionsLocked = activeGitConflict != null;
   const gitActionsLockReason = activeGitConflict != null ? CONFLICT_LOCK_REASON : null;
   const showLockReasonBanner = isGitActionsLocked;
 
   useEffect(() => {
-    if (
-      state.localConflict == null ||
-      state.isHandlingGitConflict ||
-      worktreeStatusSnapshotKey == null
-    ) {
+    if (localConflict == null || state.isHandlingGitConflict || worktreeStatusSnapshotKey == null) {
       return;
     }
 
@@ -209,10 +214,7 @@ export function useAgentStudioGitConflictController({
     }
 
     if ((effectiveDetectedConflict?.conflictedFiles ?? detectedConflictedFiles).length > 0) {
-      if (
-        detectedConflict != null &&
-        !haveSameConflictMetadata(state.localConflict, detectedConflict)
-      ) {
+      if (detectedConflict != null && !haveSameConflictMetadata(localConflict, detectedConflict)) {
         dispatch({
           type: "replace_conflict",
           conflict: detectedConflict,
@@ -222,7 +224,7 @@ export function useAgentStudioGitConflictController({
       }
 
       const conflictedFilesChanged = !haveSameConflictedFiles(
-        state.localConflict.conflictedFiles,
+        localConflict.conflictedFiles,
         effectiveDetectedConflict?.conflictedFiles ?? detectedConflictedFiles,
       );
 
@@ -247,9 +249,9 @@ export function useAgentStudioGitConflictController({
     detectedConflictedFiles,
     detectedConflict,
     effectiveDetectedConflict,
+    localConflict,
     state.gitConflictSnapshotKey,
     state.isHandlingGitConflict,
-    state.localConflict,
     worktreeStatusSnapshotKey,
   ]);
 
@@ -258,10 +260,11 @@ export function useAgentStudioGitConflictController({
       dispatch({
         type: "capture_conflict",
         conflict,
+        worktreeKey,
         snapshotKey: worktreeStatusSnapshotKey,
       });
     },
-    [worktreeStatusSnapshotKey],
+    [worktreeKey, worktreeStatusSnapshotKey],
   );
 
   const abortGitConflict = useCallback(async (): Promise<void> => {

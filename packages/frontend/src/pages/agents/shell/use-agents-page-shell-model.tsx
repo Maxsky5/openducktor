@@ -1,4 +1,5 @@
 import type { ChatFileLinkOwner } from "@/components/features/agents/agent-chat/agent-chat-file-link-context";
+import type { AgentStudioHeaderModel } from "@/components/features/agents/agent-studio-header.types";
 import { useMemo } from "react";
 import { useSessionStartWorkflowRunner } from "@/features/session-start";
 import { gitProviderReadError } from "@/lib/git-provider-health";
@@ -12,8 +13,9 @@ import {
 import { useAgentStudioTerminals } from "../terminals/use-agent-studio-terminals";
 import type { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
 import { useAgentStudioRepoSettings } from "../use-agent-studio-repo-settings";
+import { useAgentsPageBuildTools } from "./use-agents-page-build-tools";
 import type { AgentsPageModalContentModel } from "./agents-page-modal-content";
-import { useAgentStudioGitConflictQuickActionState } from "./use-agent-studio-git-conflict-quick-action-state";
+import { useAgentStudioGitConflictHeaderModel } from "./use-agent-studio-git-conflict-header-model";
 import {
   type AgentStudioRightPanelBridgeModel,
   type AgentStudioSelectedFileRefreshModel,
@@ -41,9 +43,7 @@ type AgentsPageShellModel = {
     typeof useAgentStudioOrchestrationController
   >["rightPanel"]["rightPanelToggleModel"];
   hasSelectedTask: boolean;
-  chatHeaderModel: ReturnType<
-    typeof useAgentStudioOrchestrationController
-  >["agentStudioHeaderModel"];
+  chatHeaderModel: AgentStudioHeaderModel;
   chatModel: ReturnType<typeof useAgentStudioOrchestrationController>["agentChatModel"];
   taskExecutionSelectedFilePreviewModel: ReturnType<
     typeof useAgentStudioOrchestrationController
@@ -95,11 +95,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   });
   const sessions = useAgentSessionSummaries();
 
-  const {
-    gitConflictQuickActionContext,
-    gitConflictQuickActionContextRef,
-    onGitConflictQuickActionContextChange,
-  } = useAgentStudioGitConflictQuickActionState();
   const routeSession = useAgentsPageRouteSessionModel({
     activeWorkspaceId,
     workspaceRepoPath,
@@ -123,37 +118,46 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     cancelLinkMergedPullRequest,
   });
 
-  const {
-    orchestration,
-    orchestrationSelection,
-    handleResolveRebaseConflict,
-    agentStudioHeaderModel,
-  } = useAgentsPageOrchestrationShellModel({
-    activeWorkspaceId,
-    branches: branches ?? [],
-    runtimeDefinitions,
-    repoSettings,
-    gitProviderContext: gitProvider.context,
-    gitProviderReadError: providerReadError,
-    workspaceRepoPath,
-    isForegroundLoadingTasks,
-    routeSession,
-    hasActiveGitConflict: gitConflictQuickActionContext !== null,
-    gitConflictQuickActionContext,
-    gitConflictQuickActionContextRef,
-    openTaskDetails: taskActions.taskDetailsLauncher.openTaskDetails,
-    runSessionStartWorkflow,
-    agentOperations: {
-      sendAgentMessage,
-      continueInterruptedTurn,
-      stopAgentSession,
-      loadAgentSessionHistory,
-      updateAgentSessionModel,
-      replyAgentApproval,
-      answerAgentQuestion,
-    },
-    humanRequestChangesTask,
-    setTaskTargetBranch,
+  const { orchestration, orchestrationSelection, handleResolveRebaseConflict } =
+    useAgentsPageOrchestrationShellModel({
+      activeWorkspaceId,
+      branches: branches ?? [],
+      runtimeDefinitions,
+      repoSettings,
+      gitProviderContext: gitProvider.context,
+      gitProviderReadError: providerReadError,
+      workspaceRepoPath,
+      isForegroundLoadingTasks,
+      routeSession,
+      openTaskDetails: taskActions.taskDetailsLauncher.openTaskDetails,
+      runSessionStartWorkflow,
+      agentOperations: {
+        sendAgentMessage,
+        continueInterruptedTurn,
+        stopAgentSession,
+        loadAgentSessionHistory,
+        updateAgentSessionModel,
+        replyAgentApproval,
+        answerAgentQuestion,
+      },
+      humanRequestChangesTask,
+      setTaskTargetBranch,
+    });
+  const buildTools = useAgentsPageBuildTools({
+    activeWorkspace,
+    activeBranch,
+    selectedView: orchestrationSelection.view,
+    activeTabId: orchestration.rightPanel.activeTabId,
+    isPanelOpen: orchestration.rightPanel.isPanelOpen,
+    repoSettings: orchestration.repoSettings,
+    onResolveGitConflict: handleResolveRebaseConflict,
+  });
+  const agentStudioHeaderModel = useAgentStudioGitConflictHeaderModel({
+    headerModel: orchestration.agentStudioHeaderModel,
+    gitConflictQuickAction: orchestration.gitConflictQuickAction,
+    gitConflict: buildTools.gitActions.gitConflict,
+    resolveGitConflict: buildTools.gitActions.askBuilderToResolveGitConflict,
+    isPanelOpen: orchestration.rightPanel.isPanelOpen,
   });
   const terminalPanel = useAgentStudioTerminals({
     workspaceId: activeWorkspaceId,
@@ -167,20 +171,17 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     useAgentStudioRightPanelBridge({
       activeWorkspace,
       branches: branches ?? [],
-      activeBranch,
+      buildTools,
       selection: orchestrationSelection,
       panel: orchestration.rightPanel,
       documentsModel: orchestration.taskExecutionDocumentPanelModel,
       selectedFile: orchestration.taskExecutionSelectedFilePreviewModel.selectedFile,
       onSelectFile: orchestration.onSelectTaskExecutionFile,
-      repoSettings: orchestration.repoSettings,
       setTaskTargetBranch,
       detectingPullRequestTaskId,
       onDetectPullRequest: taskActions.onDetectPullRequest,
       gitProviderContext: gitProvider.context,
       gitProviderReadError: providerReadError,
-      onResolveGitConflict: handleResolveRebaseConflict,
-      onGitConflictQuickActionContextChange,
     });
 
   const modalContent = useMemo<AgentsPageModalContentModel>(
