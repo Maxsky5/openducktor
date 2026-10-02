@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { lazy, memo, type ReactElement, Suspense } from "react";
+import { lazy, memo, type ReactElement, Suspense, useCallback } from "react";
+import type { TerminalFailure } from "@openducktor/contracts";
 import { useTerminalTransport } from "@/features/terminals/use-terminal-transport";
 import { getShellBridge } from "@/lib/shell-bridge";
 import { platformQueryOptions } from "@/state/queries/system";
@@ -21,6 +22,12 @@ export const AgentStudioDevServerTerminal = memo(function AgentStudioDevServerTe
 }: AgentStudioDevServerTerminalProps): ReactElement {
   const { controller } = useTerminalTransport(getShellBridge().terminals, onRendererError);
   const platform = useQuery(platformQueryOptions());
+  const handleForgotten = useCallback(
+    (message: string, failure: TerminalFailure | null) => {
+      if (failure) onRendererError(message);
+    },
+    [onRendererError],
+  );
   return (
     <div className="h-full min-h-0 w-full" data-testid="agent-studio-dev-server-terminal">
       {controller ? (
@@ -35,7 +42,7 @@ export const AgentStudioDevServerTerminal = memo(function AgentStudioDevServerTe
             active
             focusRequest={0}
             onAttention={onRendererError}
-            onForgotten={onRendererError}
+            onForgotten={handleForgotten}
             onLifecycle={ignoreMetadata}
             onTitleChange={ignoreMetadata}
           />

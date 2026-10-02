@@ -1,4 +1,8 @@
-import type { TerminalLifecycle, TerminalServerMessage } from "@openducktor/contracts";
+import type {
+  TerminalFailure,
+  TerminalLifecycle,
+  TerminalServerMessage,
+} from "@openducktor/contracts";
 
 export const createTerminalViewportActivator = ({
   fit,
@@ -119,7 +123,7 @@ export const handleTerminalMetadataFrame = (
     onAttention: (message: string | null) => void;
     onLifecycle: (lifecycle: TerminalLifecycle, exitText: string | null) => void;
     onTitle: (title: string) => void;
-    onForgotten: (message: string) => void;
+    onForgotten: (message: string, failure: TerminalFailure | null) => void;
     onFailure: (message: string) => void;
   },
 ): message is Exclude<TerminalServerMessage, { type: "output" | "screen_restore" }> => {
@@ -146,12 +150,12 @@ export const handleTerminalMetadataFrame = (
     return true;
   }
   if (message.type === "terminal_forgotten") {
-    handlers.onForgotten("This terminal is no longer available from the host.");
+    handlers.onForgotten("This terminal is no longer available from the host.", null);
     return true;
   }
   if (message.type === "protocol_error") {
     if (message.failure.code === "terminal_forgotten") {
-      handlers.onForgotten(message.failure.message);
+      handlers.onForgotten(message.failure.message, message.failure);
       return true;
     }
     handlers.onFailure(message.failure.message);

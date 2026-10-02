@@ -17,6 +17,10 @@ import {
 } from "@/lib/shell-bridge";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { AgentStudioDevServerTerminal } from "./agent-studio-dev-server-terminal";
+import {
+  AgentStudioDevServerPanel,
+  type AgentStudioDevServerPanelModel,
+} from "./agent-studio-dev-server-panel";
 
 afterEach(() => {
   cleanup();
@@ -120,7 +124,10 @@ const createHarness = () => {
 };
 
 describe("dev server terminal viewport", () => {
-  test("reports a connection failure directly to the output owner", async () => {
+  test.each([
+    { code: "protocol_error", message: "Output transport disconnected." },
+    { code: "terminal_forgotten", message: "Output attachment is no longer available." },
+  ] as const)("reports $code failures directly to the output owner", async (failure) => {
     const harness = createHarness();
     const onError = mock((_message: string | null) => {});
     render(
@@ -130,13 +137,113 @@ describe("dev server terminal viewport", () => {
     );
     await waitFor(() => expect(harness.emulators).toHaveLength(1));
     await act(async () => {
-      harness.emit({
+      const message: TerminalServerMessage = {
         version: TERMINAL_PROTOCOL_VERSION,
         type: "protocol_error",
-        failure: { code: "protocol_error", message: "Output transport disconnected." },
+        failure,
+      };
+      if (failure.code === "terminal_forgotten") message.terminalId = "dev-1";
+      harness.emit(message);
+    });
+    expect(onError).toHaveBeenCalledWith(failure.message);
+  });
+
+  test("does not report an error when the host releases an exited output source", async () => {
+    const harness = createHarness();
+    const onError = mock((_message: string | null) => {});
+    render(
+      <QueryProvider useIsolatedClient>
+        <AgentStudioDevServerTerminal terminalId="dev-1" onRendererError={onError} />
+      </QueryProvider>,
+    );
+    await waitFor(() => expect(harness.emulators).toHaveLength(1));
+    onError.mockClear();
+    await act(async () => {
+      harness.emit({
+        version: TERMINAL_PROTOCOL_VERSION,
+        type: "lifecycle",
+        terminalId: "dev-1",
+        lifecycle: "exited",
+        exitCode: 0,
+      });
+      harness.emit({
+        version: TERMINAL_PROTOCOL_VERSION,
+        type: "terminal_forgotten",
+        terminalId: "dev-1",
       });
     });
-    expect(onError).toHaveBeenCalledWith("Output transport disconnected.");
+    expect(onError.mock.calls.filter(([message]) => message !== null)).toEqual([]);
+  });
+
+  test("keeps an output error on its source and clears it when that source is removed", async () => {
+    const harness = createHarness();
+    const model: AgentStudioDevServerPanelModel = {
+      mode: "active",
+      isExpanded: true,
+      isLoading: false,
+      disabledReason: null,
+      repoPath: "/repo",
+      owner: { kind: "task", taskId: "task" },
+      workingDirectory: "/repo",
+      scripts: [],
+      selectedScriptId: "dev",
+      selectedScript: null,
+      error: null,
+      isStartPending: false,
+      isRetryPending: false,
+      isStopPending: false,
+      isRestartPending: false,
+      onSelectScript: () => {},
+      onStart: () => {},
+      onRetry: () => {},
+      onStop: () => {},
+      onRestart: () => {},
+    };
+    const ui = (terminalId: string | null) => {
+      const script = {
+        scriptId: "dev",
+        name: "Dev",
+        command: "dev",
+        startedCommand: "dev",
+        status: "stopped" as const,
+        pid: null,
+        startedAt: null,
+        exitCode: 0,
+        lastError: null,
+        terminalId,
+      };
+      return (
+        <QueryProvider useIsolatedClient>
+          <AgentStudioDevServerPanel
+            model={{ ...model, scripts: [script], selectedScript: script }}
+          />
+        </QueryProvider>
+      );
+    };
+    const view = render(ui("old-run"));
+    await waitFor(() => expect(harness.emulators).toHaveLength(1));
+    const reportFailure = async (terminalId: string) => {
+      await act(async () => {
+        harness.emit({
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "protocol_error",
+          terminalId,
+          failure: { code: "protocol_error", message: `Output failed for ${terminalId}.` },
+        });
+      });
+      expect(view.getByTestId("agent-studio-dev-server-error-banner").textContent).toBe(
+        `Output failed for ${terminalId}.`,
+      );
+    };
+    await reportFailure("old-run");
+    view.rerender(ui("new-run"));
+    await waitFor(() => expect(harness.emulators).toHaveLength(2));
+    expect(view.queryByTestId("agent-studio-dev-server-error-banner")).toBeNull();
+    await reportFailure("new-run");
+    view.rerender(ui(null));
+    expect(view.getByTestId("agent-studio-dev-server-empty-log-state")).toBeTruthy();
+    expect(view.queryByTestId("agent-studio-dev-server-error-banner")).toBeNull();
+    view.unmount();
   });
 
   test("renders live bytes without a metadata update or React commit and keeps output read-only", async () => {
@@ -190,6 +297,12 @@ describe("dev server terminal viewport", () => {
       convertEol: true,
     });
     emulator.data("should not reach the process");
+    for (const key of ["PageUp", "PageDown", "Home", "End"])
+      expect(emulator.key(new KeyboardEvent("keydown", { key, shiftKey: true }))).toBe(true);
+    expect(emulator.key(new KeyboardEvent("keydown", { key: "ArrowLeft", metaKey: true }))).toBe(
+      false,
+    );
+    expect(emulator.key(new KeyboardEvent("keydown", { key: "v", metaKey: true }))).toBe(false);
     await act(async () => {
       emulator.key(new KeyboardEvent("keydown", { key: "c", metaKey: true }));
       await Promise.resolve();

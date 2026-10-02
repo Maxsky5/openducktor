@@ -219,6 +219,11 @@ describe("shared terminal output sources", () => {
       ),
     );
     expect(rejected._tag).toBe("Left");
+    if (rejected._tag !== "Left") throw new Error("Expected pending sources to reach the limit.");
+    expect(rejected.left.message).toContain(
+      `${TERMINAL_LIMITS.livePerTask}/${TERMINAL_LIMITS.livePerTask}`,
+    );
+    expect(rejected.left.message).toContain("Close a terminal or stop a dev server");
     let cleaned = false;
     const cleanup = Effect.runPromise(
       Effect.scoped(service.acquireTaskCleanup({ repoPath: "/repo", taskIds: ["task"] })),

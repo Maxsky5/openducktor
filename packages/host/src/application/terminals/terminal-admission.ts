@@ -97,12 +97,13 @@ export const createTerminalAdmission = ({
           }),
         );
       }
-      if (countLive() + pendingTotal >= TERMINAL_LIMITS.livePerHost) {
+      const hostUsage = countLive() + pendingTotal;
+      if (hostUsage >= TERMINAL_LIMITS.livePerHost) {
         return Effect.fail(
           new TerminalServiceError({
             code: "host_terminal_limit",
             operation: "create",
-            message: "The host terminal limit has been reached.",
+            message: `The host terminal limit has been reached (${hostUsage}/${TERMINAL_LIMITS.livePerHost}). Shell terminals and dev server output share this limit. Close a terminal or stop a dev server to free a slot.`,
           }),
         );
       }
@@ -131,17 +132,21 @@ export const createTerminalAdmission = ({
             }
             const pendingForContext = pendingByContext.get(key) ?? 0;
             let contextLimit = TERMINAL_LIMITS.liveUnassociated;
+            let contextLabel = "terminals with no owner";
             if (taskId) {
               contextLimit = TERMINAL_LIMITS.livePerTask;
+              contextLabel = "this task";
             } else if (isWorkspaceSessionTerminalContext(context)) {
               contextLimit = TERMINAL_LIMITS.livePerWorkspaceSession;
+              contextLabel = "this Workspace Session";
             }
-            if (countLiveForContext(context) + pendingForContext >= contextLimit) {
+            const contextUsage = countLiveForContext(context) + pendingForContext;
+            if (contextUsage >= contextLimit) {
               return Effect.fail(
                 new TerminalServiceError({
                   code: "context_terminal_limit",
                   operation: "create",
-                  message: "The terminal limit for this context has been reached.",
+                  message: `The terminal limit for ${contextLabel} has been reached (${contextUsage}/${contextLimit}). Shell terminals and dev server output share this limit. Close a terminal or stop a dev server to free a slot.`,
                 }),
               );
             }

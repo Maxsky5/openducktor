@@ -135,7 +135,7 @@ export const createTerminalKeyEventHandler = ({
     const platform = getPlatform();
     if (!platform) return true;
     const action = resolveTerminalKeyAction(event, platform, hasSelection());
-    if (readOnly && action.type !== "copy") return false;
+    if (readOnly && (action.type === "input" || action.type === "paste")) return false;
     switch (action.type) {
       case "copy":
         void writeClipboard(getSelection()).catch(reportFailure);

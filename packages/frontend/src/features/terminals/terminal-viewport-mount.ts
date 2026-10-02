@@ -1,6 +1,7 @@
 import {
   TERMINAL_PROTOCOL_MAX_INPUT_BYTES,
   type AppPlatform,
+  type TerminalFailure,
   type TerminalLifecycle,
   type TerminalServerMessage,
 } from "@openducktor/contracts";
@@ -41,7 +42,7 @@ type MountTerminalViewportInput = {
   writeClipboard: (text: string) => Promise<void>;
   onAttention: (message: string | null) => void;
   onLifecycle: (lifecycle: TerminalLifecycle, exitText: string | null) => void;
-  onForgotten: (message: string) => void;
+  onForgotten: (message: string, failure: TerminalFailure | null) => void;
   onTitleChange: (title: string) => void;
   onHydrated: () => void;
   onImageDragActiveChange: (active: boolean) => void;

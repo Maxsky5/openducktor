@@ -641,7 +641,7 @@ describe("useAgentStudioTerminals", () => {
       });
 
       view.rerender(renderHarness("task-b", ["task-a", "task-b"]));
-      act(() => taskAProbe.input.onForgotten("Task A terminal was forgotten."));
+      act(() => taskAProbe.input.onForgotten("Task A terminal was forgotten.", null));
       await waitFor(() => expect(taskAProbe.disposals).toBe(1));
 
       view.rerender(renderHarness("task-a", ["task-a", "task-b"]));

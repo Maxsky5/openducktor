@@ -1,5 +1,5 @@
 import "@xterm/xterm/css/xterm.css";
-import type { AppPlatform, TerminalLifecycle } from "@openducktor/contracts";
+import type { AppPlatform, TerminalFailure, TerminalLifecycle } from "@openducktor/contracts";
 import { type ReactElement, useEffect, useEffectEvent, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
@@ -18,7 +18,7 @@ type TerminalViewportProps = {
   focusRequest: number;
   onAttention: (message: string | null) => void;
   onLifecycle: (lifecycle: TerminalLifecycle, exitText: string | null) => void;
-  onForgotten: (message: string) => void;
+  onForgotten: (message: string, failure: TerminalFailure | null) => void;
   onTitleChange: (title: string) => void;
 };
 
@@ -78,7 +78,7 @@ export function TerminalViewport({
         writeClipboard: (text) => navigator.clipboard.writeText(text),
         onAttention: (message) => callbacksRef.current.onAttention(message),
         onLifecycle: (lifecycle, exitText) => callbacksRef.current.onLifecycle(lifecycle, exitText),
-        onForgotten: (message) => callbacksRef.current.onForgotten(message),
+        onForgotten: (message, failure) => callbacksRef.current.onForgotten(message, failure),
         onTitleChange: (title) => callbacksRef.current.onTitleChange(title),
         onHydrated: () => setIsHydrated(true),
         onImageDragActiveChange: setIsImageDragActive,

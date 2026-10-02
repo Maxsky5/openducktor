@@ -350,13 +350,29 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
   model: AgentStudioDevServerPanelModel;
   compactAction?: ReactElement;
 }): ReactElement {
-  const [rendererError, setRendererError] = useState<string | null>(null);
+  const [rendererError, setRendererError] = useState<{
+    terminalId: string;
+    message: string;
+  } | null>(null);
   const selectedScript = model.selectedScript;
   const isActionPending = model.isStartPending || model.isStopPending || model.isRestartPending;
   const hasExpandedActions = model.isExpanded;
   const selectedTabsValue = model.selectedScriptId ?? model.scripts[0]?.scriptId ?? "__none__";
   const selectedScriptContent = selectedScript ?? model.scripts[0] ?? null;
-  const panelError = model.error ?? rendererError;
+  const selectedTerminalId = selectedScriptContent?.terminalId ?? null;
+  const handleRendererError = useCallback(
+    (message: string | null) => {
+      setRendererError(
+        message === null || selectedTerminalId === null
+          ? null
+          : { terminalId: selectedTerminalId, message },
+      );
+    },
+    [selectedTerminalId],
+  );
+  const panelError =
+    model.error ??
+    (rendererError?.terminalId === selectedTerminalId ? rendererError.message : null);
   const disabledReasonId = useId();
   const { copied: copiedWorkingDirectory, copyToClipboard: copyWorkingDirectory } =
     useCopyToClipboard({
@@ -447,7 +463,7 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
           </div>
 
           <DevServerTerminalContent
-            onRendererError={setRendererError}
+            onRendererError={handleRendererError}
             script={selectedScriptContent}
           />
         </div>
