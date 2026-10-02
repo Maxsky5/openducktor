@@ -1,10 +1,6 @@
-import { createContext, type ReactNode, useState } from "react";
-import {
-  createTranscriptModelCache,
-  type TranscriptModelCache,
-} from "./agent-chat-transcript-model-cache";
-
-export const AgentChatTranscriptCacheContext = createContext<TranscriptModelCache | null>(null);
+import { type ReactNode, useState } from "react";
+import { AgentChatTranscriptCacheContext } from "./agent-chat-transcript-cache-context";
+import { createTranscriptModelCache } from "./agent-chat-transcript-model-cache";
 
 /** Keeps rendered transcripts across chat mounts while each chat keeps its own UI state. */
 export function AgentChatTranscriptCacheProvider({ children }: { children: ReactNode }) {

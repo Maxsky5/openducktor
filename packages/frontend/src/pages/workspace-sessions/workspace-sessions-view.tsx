@@ -15,7 +15,7 @@ import { useDialogPresence } from "@/components/ui/dialog";
 import type { TerminalPanelModel } from "@/features/terminals";
 import { BrowserTabsBar, BrowserTabsRoot } from "@/components/ui/browser-tabs";
 import { SharedToolsPanelToggleButton } from "@/components/features/agents/shared-tools-panel";
-import { AgentChatTranscriptCacheProvider } from "@/components/features/agents/agent-chat/agent-chat-transcript-cache-context";
+import { AgentChatTranscriptCacheProvider } from "@/components/features/agents/agent-chat/agent-chat-transcript-cache-provider";
 import { useRightPanelOpen } from "@/components/features/agents/use-right-panel-open";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
 import { errorMessage } from "@/lib/errors";

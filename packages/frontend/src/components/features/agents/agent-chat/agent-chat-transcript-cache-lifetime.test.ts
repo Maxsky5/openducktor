@@ -9,7 +9,7 @@ import { installReactActEnvironment } from "@/test-utils/react-act-environment";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentChatTranscriptSession } from "./agent-chat.types";
 import { buildMessage, buildSession } from "./agent-chat-test-fixtures";
-import { AgentChatTranscriptCacheProvider } from "./agent-chat-transcript-cache-context";
+import { AgentChatTranscriptCacheProvider } from "./agent-chat-transcript-cache-provider";
 import { toAgentChatTranscriptSession } from "./agent-chat-transcript-session";
 import { useAgentChatTranscriptModel } from "./use-agent-chat-transcript-model";
 
