@@ -1,6 +1,6 @@
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
-import { Activity, memo, useMemo, useState } from "react";
+import { Activity, memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChatFileLinkProvider } from "@/components/features/agents/agent-chat/agent-chat-file-link-provider";
 import type { ChatFileLinkOwner } from "@/components/features/agents/agent-chat/agent-chat-file-link-context";
 import { MAX_CACHED_TRANSCRIPTS } from "@/components/features/agents/agent-chat/agent-chat-transcript-model-cache";
@@ -49,27 +49,47 @@ export function WorkspaceSessionChatPanes({
       {shown
         .toSorted((left, right) => left.record.id.localeCompare(right.record.id))
         .map((pane) => (
-          <Activity
+          <WorkspaceSessionChatPane
             key={pane.record.id}
+            {...pane}
             mode={pane.record.id === current.record.id ? "visible" : "hidden"}
-          >
-            <div className="h-full min-h-0 overflow-hidden">
-              <WorkspaceSessionChatPane {...pane} />
-            </div>
-          </Activity>
+          />
         ))}
     </div>
   );
 }
 
 const WorkspaceSessionChatPane = memo(function WorkspaceSessionChatPane({
+  mode,
+  ...pane
+}: ChatPane & { mode: "visible" | "hidden" }) {
+  const mounted = useRef(false);
+  // Activity stops its effects when hidden. Keep pane lifetime outside that boundary.
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const isMounted = useCallback(() => mounted.current, []);
+  return (
+    <Activity mode={mode}>
+      <div className="h-full min-h-0 overflow-hidden">
+        <WorkspaceSessionChatPaneContent {...pane} isMounted={isMounted} />
+      </div>
+    </Activity>
+  );
+});
+
+const WorkspaceSessionChatPaneContent = memo(function WorkspaceSessionChatPaneContent({
   workspace,
   record,
   onToolRefresh,
   onSelectFile,
   workingDirectory,
   branchKey,
-}: ChatPane) {
+  isMounted,
+}: ChatPane & { isMounted: () => boolean }) {
   const owner = useMemo<ChatFileLinkOwner>(
     () => ({
       kind: "workspace",
@@ -102,6 +122,7 @@ const WorkspaceSessionChatPane = memo(function WorkspaceSessionChatPane({
         chatSettings={settings.data.chat}
         reusablePrompts={settings.data.reusablePrompts}
         onToolRefresh={onToolRefresh}
+        isMounted={isMounted}
       />
     </ChatFileLinkProvider>
   );

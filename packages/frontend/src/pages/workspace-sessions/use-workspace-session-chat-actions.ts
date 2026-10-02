@@ -2,6 +2,7 @@ import type { WorkspaceSession } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef, useState } from "react";
+import { toast } from "sonner";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import { useInterruptedTurnResume } from "@/components/features/agents/agent-chat/use-interrupted-turn-resume";
 import { hasSettledLatestTurn } from "@/lib/agent-session-interrupted-turn";
@@ -10,7 +11,10 @@ import { errorMessage } from "@/lib/errors";
 import { resolveAgentStudioSendDraftParts } from "@/pages/agents/session-actions/agent-studio-send-draft";
 import { useAgentSessionsContext } from "@/state/app-state-contexts";
 import { useAgentOperations, useAgentSession } from "@/state/app-state-provider";
-import { workspaceSessionIdentity } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
+import {
+  workspaceSessionIdentity,
+  workspaceSessionTitle,
+} from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
 import { host } from "@/state/operations/host";
 import { updateWorkspaceSessionQueries } from "@/state/queries/workspace-sessions";
 import type { ActiveWorkspace } from "@/types/state-slices";
@@ -23,6 +27,7 @@ type DraftSendOptions = Omit<Parameters<typeof resolveAgentStudioSendDraftParts>
 export function useWorkspaceSessionChatActions(
   workspace: ActiveWorkspace,
   record: WorkspaceSession,
+  isMounted: () => boolean,
 ) {
   const store = useAgentSessionsContext();
   const operations = useAgentOperations();
@@ -68,16 +73,17 @@ export function useWorkspaceSessionChatActions(
     draft: AgentChatComposerDraft,
     options: DraftSendOptions,
   ): Promise<boolean> => {
-    if (sending.current || savingModel.current || !options.canSend) return false;
+    if (sending.current || savingModel.current || !options.canSend || !isMounted()) return false;
     sending.current = true;
     setSending(true);
     setError(null);
     try {
       const parts = await resolveAgentStudioSendDraftParts({ ...options, draft });
-      if (!parts || !isCurrentWorkspace()) return false;
+      if (!parts || !isMounted() || !isCurrentWorkspace()) return false;
       let identity = workspaceSessionIdentity(record);
       if (!identity) {
         setStarting(true);
+        // Keep an accepted start in the store even if the pane closes while the host works.
         const started = await startWorkspaceSession(
           { workspaceId: workspace.workspaceId, sessionId: record.id },
           store,
@@ -86,10 +92,16 @@ export function useWorkspaceSessionChatActions(
         updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, started.session);
         identity = started.identity;
       }
+      if (!isMounted() || !isCurrentWorkspace()) return false;
       await operations.sendAgentMessage(identity, parts);
       return true;
     } catch (cause) {
-      setError(errorMessage(cause));
+      const message = errorMessage(cause);
+      if (isMounted()) setError(message);
+      else
+        toast.error(`Could not send to "${workspaceSessionTitle(record)}"`, {
+          description: message,
+        });
       return false;
     } finally {
       sending.current = false;

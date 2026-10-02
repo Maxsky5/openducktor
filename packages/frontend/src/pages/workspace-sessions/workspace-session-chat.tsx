@@ -48,6 +48,7 @@ type WorkspaceSessionChatProps = {
   chatSettings: ChatSettings;
   reusablePrompts: ReusablePrompt[];
   onToolRefresh: () => void;
+  isMounted: () => boolean;
 };
 
 export function WorkspaceSessionChat({
@@ -56,11 +57,12 @@ export function WorkspaceSessionChat({
   chatSettings,
   reusablePrompts,
   onToolRefresh,
+  isMounted,
 }: WorkspaceSessionChatProps): ReactElement {
   const identity = useMemo(() => workspaceSessionIdentity(record), [record]);
   const session = useAgentSession(identity);
   useWorkspaceSessionToolRefresh(session, onToolRefresh);
-  const actions = useWorkspaceSessionChatActions(workspace, record);
+  const actions = useWorkspaceSessionChatActions(workspace, record, isMounted);
   const { isSending, isStarting, isSavingModel, updateDraftModel } = actions;
   const draftPersistence = useMemo(
     () => createWorkspaceSessionChatDraftPersistence(workspace.workspaceId, record.id),

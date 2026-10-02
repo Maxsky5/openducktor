@@ -181,6 +181,7 @@ const createWorkspaceChatHarness = ({
                       chatSettings={DEFAULT_CHAT_SETTINGS}
                       reusablePrompts={[]}
                       onToolRefresh={() => {}}
+                      isMounted={() => true}
                     />
                   </AgentSessionsContext>
                 </AgentSessionReadModelStateContext>
