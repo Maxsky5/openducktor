@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { HostInvokeError } from "@openducktor/host-client";
-import { act, renderHook } from "@testing-library/react";
+import { act, render, renderHook } from "@testing-library/react";
+import { Activity } from "react";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { useInterruptedTurnResume } from "./use-interrupted-turn-resume";
@@ -51,6 +52,43 @@ const createResumeRecorder = () => {
     });
   return { pending, continueInterruptedTurn };
 };
+
+test.each(["accepted", "rejected"] as const)(
+  "settles a %s resume while the chat is hidden",
+  async (outcome) => {
+    const { pending, continueInterruptedTurn } = createResumeRecorder();
+    let controller!: ReturnType<typeof useInterruptedTurnResume>;
+    const Probe = () => {
+      controller = useInterruptedTurnResume(continueInterruptedTurn, NO_SELECTION);
+      return null;
+    };
+    const view = (mode: "visible" | "hidden") => (
+      <Activity mode={mode}>
+        <Probe />
+      </Activity>
+    );
+    const rendered = render(view("visible"));
+    try {
+      act(() => controller.resume(identityA));
+      expect(controller.isSessionResuming(keyA)).toBe(true);
+      rendered.rerender(view("hidden"));
+      await act(async () => {
+        if (outcome === "accepted") pending[0]?.resolve();
+        else pending[0]?.reject(unconfirmedContinuationFailure());
+      });
+      rendered.rerender(view("visible"));
+      expect(controller.isSessionResuming(keyA)).toBe(false);
+      expect(controller.persistentResumeErrorForSession(keyA)).toBe(
+        outcome === "rejected"
+          ? "The runtime did not confirm the continuation. Inspect the runtime and this session."
+          : null,
+      );
+      expect(controller.isSessionResuming(keyB)).toBe(false);
+    } finally {
+      rendered.unmount();
+    }
+  },
+);
 
 test("keys the loading and failure state to the session that started the resume", async () => {
   const { pending, continueInterruptedTurn } = createResumeRecorder();

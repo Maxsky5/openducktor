@@ -14,6 +14,7 @@ import {
   findLastSessionMessageByRole,
   replaceSessionMessageById,
   sessionMessageBelongsToSourceMessage,
+  someSessionMessage,
   upsertSessionMessage,
   upsertUserSessionMessage,
 } from "../support/messages";
@@ -128,7 +129,7 @@ export const handleAssistantMessage = (
       shouldPreserveContextUsage,
     });
     const sourceTextMessage =
-      current.runtimeKind === "claude"
+      current.runtimeKind === "claude" || current.runtimeKind === "opencode"
         ? findLastSessionMessageByRole(
             settledOwner,
             "assistant",
@@ -151,6 +152,20 @@ export const handleAssistantMessage = (
         id: sourceTextMessage.id,
         meta: assistantMeta,
       };
+      if (current.runtimeKind === "opencode") {
+        // History keeps raw part text. Final events join and trim it.
+        const hasEarlierTextPart = someSessionMessage(
+          settledOwner,
+          (message) =>
+            message.id !== sourceTextMessage.id &&
+            message.meta?.kind === "assistant" &&
+            message.meta.sourceMessageId === event.messageId,
+        );
+        if (hasEarlierTextPart || sourceTextMessage.content.trim() === event.message) {
+          assistantMessage.content = sourceTextMessage.content;
+        }
+        assistantMessage.timestamp = sourceTextMessage.timestamp;
+      }
     }
     return {
       ...current,

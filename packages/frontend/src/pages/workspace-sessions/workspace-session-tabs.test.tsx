@@ -1020,7 +1020,9 @@ test("tab selection survives reload and Back/Forward without refetching workspac
 
 test("switching loaded chats keeps only the selected session header", async () => {
   const chat = spyOn(workspaceChat, "WorkspaceSessionChat").mockImplementation(({ record }) => (
-    <div data-testid="selected-chat">{record.id}</div>
+    <div role="region" aria-label="Chat transcript">
+      {record.id}
+    </div>
   ));
   configureShellBridge(
     createShellBridgeFixture({
@@ -1036,7 +1038,7 @@ test("switching loaded chats keeps only the selected session header", async () =
   );
   const view = renderTabs(undefined, "/chats?session=First");
   try {
-    await view.findByTestId("selected-chat", {}, { timeout: 3_000 });
+    await view.findByRole("region", { name: "Chat transcript" }, { timeout: 3_000 });
     expect(view.getAllByRole("heading", { level: 2 }).map((header) => header.textContent)).toEqual([
       "First",
     ]);
@@ -1045,9 +1047,13 @@ test("switching loaded chats keeps only the selected session header", async () =
         button: 0,
         ctrlKey: false,
       });
-      await waitFor(() => expect(view.getByTestId("selected-chat").textContent).toBe(selected), {
-        timeout: 3_000,
-      });
+      await waitFor(
+        () =>
+          expect(view.getByRole("region", { name: "Chat transcript" }).textContent).toBe(selected),
+        {
+          timeout: 3_000,
+        },
+      );
       expect(
         view.getAllByRole("heading", { level: 2 }).map((header) => header.textContent),
       ).toEqual([selected]);
@@ -1062,7 +1068,7 @@ test("switching loaded chats keeps only the selected session header", async () =
     expect(view.getAllByRole("heading", { level: 2 }).map((header) => header.textContent)).toEqual([
       "Second",
     ]);
-    expect(view.getByTestId("selected-chat").textContent).toBe("Second");
+    expect(view.getByRole("region", { name: "Chat transcript" }).textContent).toBe("Second");
   } finally {
     view.unmount();
     chat.mockRestore();

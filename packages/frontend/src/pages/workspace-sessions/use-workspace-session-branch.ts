@@ -37,8 +37,10 @@ export function useWorkspaceSessionBranch({
   );
   const lastBranch = useRef<string | null>(null);
   useEffect(() => {
-    if (!previewBranch || !workingDirectory || lastBranch.current === previewBranch) return;
-    lastBranch.current = previewBranch;
+    if (!previewBranch || !workingDirectory) return;
+    const key = JSON.stringify([workingDirectory, previewBranch]);
+    if (lastBranch.current === key) return;
+    lastBranch.current = key;
     if (!isWorktree && isSwitchingBranch) return;
     void invalidateWorkspaceFileQueries(queryClient, workingDirectory);
   }, [isSwitchingBranch, isWorktree, previewBranch, queryClient, workingDirectory]);

@@ -482,6 +482,37 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
+  test("fills a larger viewport so the user can keep scrolling", async () => {
+    const rows = createSingleTurnRows(160);
+    const harness = await mountHarness(
+      {
+        rows,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+      },
+      { attachDom: true },
+    );
+    const container = harness.messagesContainerRef.current;
+    if (!container) throw new Error("Expected messages container");
+    try {
+      await act(async () => {
+        triggerResizeObservers(container);
+      });
+      expect(harness.getLatestResult().visibleRows).toHaveLength(AGENT_CHAT_ROW_WINDOW_SIZE);
+      Object.defineProperty(container, "clientHeight", { configurable: true, value: 2000 });
+      await act(async () => {
+        triggerResizeObservers(container);
+      });
+      expect(harness.getLatestResult().visibleRows.length).toBeGreaterThan(
+        AGENT_CHAT_ROW_WINDOW_SIZE,
+      );
+      expect(harness.getLatestResult().visibleRows.at(-1)).toBe(rows.at(-1));
+      expect(getMaxScrollTop(container)).toBeGreaterThan(0);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("underfilled first history range appends rows until the user can keep scrolling", async () => {
     const rows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE * 3);
     const harness = await mountHarness(

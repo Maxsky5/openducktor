@@ -2,7 +2,7 @@ import { expect, mock, spyOn, test } from "bun:test";
 import { repoConfigSchema, type WorkspaceSession } from "@openducktor/contracts";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { act, memo, type ReactElement, useState } from "react";
+import { act, memo, type ReactElement, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Tabs } from "@/components/ui/tabs";
 import {
@@ -79,6 +79,9 @@ function renderClosedSession(
   panelOpen = false,
   onSafeToLeave?: () => void,
 ) {
+  let currentRecord = sessionRecord;
+  let currentFile = selectedFile;
+  let sessionIds = [sessionRecord.id];
   const content = (
     name: string | null | undefined,
     currentRevision?: string,
@@ -103,14 +106,15 @@ function renderClosedSession(
       >
         <WorkspacePreviewTransitionGuardProvider>
           {switchWorkspace ? <WorkspaceChange apply={switchWorkspace} /> : null}
-          <Tabs value={sessionRecord.id}>
+          <Tabs value={currentRecord.id}>
             <WorkspaceSessionContent
               workspace={workspace}
-              record={sessionRecord}
+              record={currentRecord}
+              sessionIds={sessionIds}
               panelState={{
                 isOpen: panelOpen,
                 activeTabId: "file_explorer",
-                selectedFile,
+                selectedFile: currentFile,
               }}
               onPanelStateChange={() => {}}
               {...(onSafeToLeave ? { onSafeToLeave } : {})}
@@ -123,6 +127,16 @@ function renderClosedSession(
   const view = render(content(branch, revision));
   return {
     ...view,
+    setSession: (next: WorkspaceSession, file: WorkspaceSessionPanelState["selectedFile"]) => {
+      currentRecord = next;
+      currentFile = file;
+      if (!sessionIds.includes(next.id)) sessionIds = [...sessionIds, next.id];
+      view.rerender(content(branch, revision));
+    },
+    setSessions: (ids: string[]) => {
+      sessionIds = ids;
+      view.rerender(content(branch, revision));
+    },
     setBranch: (
       name: string | null | undefined,
       nextRevision?: string,
@@ -130,6 +144,121 @@ function renderClosedSession(
     ) => view.rerender(content(name, nextRevision, isSwitchingBranch)),
   };
 }
+
+test("switching chats keeps the tools and chat drafts and resets the file owner", () => {
+  const preview = mockFilePreview(({ model }) => (
+    <div>Preview: {model.selectedFile?.relativePath}</div>
+  ));
+  const tools = spyOn(toolsPanel, "WorkspaceSessionToolsPanel").mockImplementation(
+    ({ onSelectFile }) => (
+      <div>
+        <input aria-label="Tools input" />
+        <button onClick={() => onSelectFile({ rootPath: "/repo", relativePath: "next.ts" })}>
+          Open next file
+        </button>
+      </div>
+    ),
+  );
+  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(() => (
+    <input aria-label="Chat input" />
+  ));
+  const queryClient = newQueryClient();
+  const firstFile = { rootPath: "/repo", relativePath: "first.ts" };
+  queryClient.setQueryData(
+    repoConfigQueryOptions(workspace.workspaceId).queryKey,
+    repoConfigSchema.parse({ ...workspace, agentStudioState: { openTaskIds: [] } }),
+  );
+  const view = renderClosedSession(
+    queryClient,
+    "main",
+    undefined,
+    record,
+    firstFile,
+    undefined,
+    true,
+  );
+  try {
+    const toolsInput = screen.getByRole("textbox", { name: "Tools input" });
+    const chatInput = view.container.querySelector<HTMLInputElement>('[aria-label="Chat input"]');
+    if (!chatInput) throw new Error("Expected the chat input.");
+    fireEvent.change(chatInput, { target: { value: "First chat draft" } });
+    const other = {
+      ...record,
+      id: "other",
+      externalSessionId: "native-other",
+      manualTitle: "Other",
+    };
+    view.setSession(other, { rootPath: "/repo", relativePath: "other.ts" });
+    expect(screen.getByText("Preview: other.ts")).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Tools input" })).toBe(toolsInput);
+    const otherInput = [
+      ...view.container.querySelectorAll<HTMLInputElement>('[aria-label="Chat input"]'),
+    ].find((input) => input !== chatInput);
+    expect(otherInput?.value).toBe("");
+    fireEvent.click(screen.getByRole("button", { name: "Open next file" }));
+    expect(screen.getByText("Preview: next.ts")).toBeTruthy();
+    view.setSession(record, firstFile);
+    expect(screen.getByText("Preview: first.ts")).toBeTruthy();
+    expect(view.container.querySelector('[aria-label="Chat input"]')).toBe(chatInput);
+    expect(chatInput.value).toBe("First chat draft");
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    preview.mockRestore();
+    tools.mockRestore();
+    chat.mockRestore();
+  }
+});
+
+test("retained chats stop hidden subscriptions and drop old or removed chats", () => {
+  const active = new Set<string>();
+  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(({ record }) => {
+    useEffect(() => {
+      active.add(record.id);
+      return () => {
+        active.delete(record.id);
+      };
+    }, [record.id]);
+    return <input aria-label={`${record.manualTitle} draft`} />;
+  });
+  const queryClient = newQueryClient();
+  queryClient.setQueryData(
+    repoConfigQueryOptions(workspace.workspaceId).queryKey,
+    repoConfigSchema.parse({ ...workspace, agentStudioState: { openTaskIds: [] } }),
+  );
+  const sessions = Array.from({ length: 7 }, (_, index) => ({
+    ...record,
+    id: `chat-${index}`,
+    externalSessionId: `native-${index}`,
+    manualTitle: `Chat ${index}`,
+  }));
+  const view = renderClosedSession(queryClient, "main", undefined, sessions[0], null);
+  try {
+    view.setSessions(sessions.map((session) => session.id));
+    let second: Element | null = null;
+    for (const session of sessions.slice(1)) {
+      view.setSession(session, null);
+      expect([...active]).toEqual([session.id]);
+      if (session.id === "chat-1")
+        second = view.container.querySelector('[aria-label="Chat 1 draft"]');
+    }
+    expect(view.container.querySelectorAll("input")).toHaveLength(6);
+    expect(view.container.querySelector('[aria-label="Chat 0 draft"]')).toBeNull();
+    view.setSession(sessions[1]!, null);
+    expect(view.container.querySelector('[aria-label="Chat 1 draft"]')).toBe(second);
+    view.setSessions(
+      sessions.filter((session) => session.id !== "chat-1").map((session) => session.id),
+    );
+    expect([...active]).toEqual(["chat-1"]);
+    view.setSession(sessions[2]!, null);
+    expect(view.container.querySelector('[aria-label="Chat 1 draft"]')).toBeNull();
+  } finally {
+    view.unmount();
+    expect(active.size).toBe(0);
+    queryClient.clear();
+    chat.mockRestore();
+  }
+});
 
 test.each(["clean", "close"])("a kept file preview is safe after it is %s", async (finish) => {
   const onSafeToLeave = mock(() => {});
@@ -433,6 +562,7 @@ test("the tools panel starts beside the chat header", () => {
             <WorkspaceSessionContent
               workspace={workspace}
               record={record}
+              sessionIds={[record.id]}
               panelState={{ isOpen: true, activeTabId: "git", selectedFile: null }}
               onPanelStateChange={() => {}}
             />

@@ -489,6 +489,69 @@ describe("agent-orchestrator/support/history-message-merge", () => {
     ]);
   });
 
+  test.each([false, true])(
+    "replaces a whole assistant row with separate history parts, live first part=%s",
+    (hasLivePart) => {
+      const firstPart: AgentChatMessage = {
+        id: "text:response-1:first",
+        role: "assistant",
+        content: "    First block\n\n\n",
+        timestamp: "2026-03-01T09:00:01.000Z",
+        meta: {
+          kind: "assistant",
+          isFinal: false,
+          sourceMessageId: "response-1",
+          partId: "first",
+        },
+      };
+      const tool: AgentChatMessage = {
+        id: "tool:response-1:call-1",
+        role: "tool",
+        content: "Tool read completed",
+        timestamp: "2026-03-01T09:00:01.000Z",
+        meta: {
+          kind: "tool",
+          tool: "read",
+          toolType: "read",
+          status: "completed",
+          callId: "call-1",
+          partId: "tool-1",
+        },
+      };
+      const lastPart: AgentChatMessage = {
+        ...firstPart,
+        id: "text:response-1:last",
+        content: "    Last block\n",
+        meta: {
+          kind: "assistant",
+          isFinal: true,
+          sourceMessageId: "response-1",
+          partId: "last",
+        },
+      };
+      const wholeMessage: AgentChatMessage = {
+        id: "response-1",
+        role: "assistant",
+        content: "First block\nLast block",
+        timestamp: "2026-03-01T09:00:01.000Z",
+        meta: { kind: "assistant", isFinal: true },
+      };
+      const livePart: AgentChatMessage = { ...firstPart, content: "    Newer first block\n" };
+      const otherMessage = {
+        ...wholeMessage,
+        id: "response-2",
+        timestamp: "2026-03-01T09:00:02.000Z",
+      };
+
+      expect(
+        mergedMessages(
+          [firstPart, tool, lastPart],
+          [...(hasLivePart ? [livePart] : []), wholeMessage, otherMessage],
+        ),
+      ).toEqual([hasLivePart ? livePart : firstPart, tool, lastPart, otherMessage]);
+    },
+  );
+
   test("keeps completed current reasoning when history reasoning is still incomplete", () => {
     const merged = mergedMessages(
       [

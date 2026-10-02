@@ -49,6 +49,7 @@ export type AgentChatTranscriptSession = AgentSessionIdentity & {
   runtimeStatusMessage: string | null;
   messages: SessionMessagesState;
   pendingQuestions: AgentQuestionRequest[];
+  skillReferences?: readonly AgentSkillReference[];
 };
 
 export type AgentChatTranscriptNoticeAction = {

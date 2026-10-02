@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { createRef } from "react";
+import { Activity, createRef } from "react";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AgentChat } from "./agent-chat";
 import {
@@ -133,6 +133,35 @@ const buildModel = () => ({
 });
 
 describe("AgentChat attachments", () => {
+  test("clears a file drag when its chat hides and accepts the next drag", () => {
+    const model = buildModel();
+    const chat = (mode: "visible" | "hidden") => (
+      <Activity mode={mode}>
+        <AgentChat model={model} />
+      </Activity>
+    );
+    const view = render(chat("visible"));
+    const transfer = {
+      types: ["Files"],
+      files: [new File(["pdf"], "brief.pdf", { type: "application/pdf" })],
+    };
+    try {
+      const target = view.getByTestId("agent-chat-drop-target");
+      fireEvent.dragEnter(target, { dataTransfer: transfer });
+      expect(view.getByText("Drop files to attach them")).toBeTruthy();
+      view.rerender(chat("hidden"));
+      fireEvent.dragEnd(window);
+      view.rerender(chat("visible"));
+      expect(view.queryByText("Drop files to attach them")).toBeNull();
+      fireEvent.dragEnter(target, { dataTransfer: transfer });
+      expect(view.getByText("Drop files to attach them")).toBeTruthy();
+      fireEvent.dragLeave(target, { dataTransfer: transfer });
+      expect(view.queryByText("Drop files to attach them")).toBeNull();
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("shows the drag overlay and stages dropped files in the composer", async () => {
     const file = new File(["pdf"], "brief.pdf", { type: "application/pdf" });
     const { getByTestId } = render(<AgentChat model={buildModel()} />);

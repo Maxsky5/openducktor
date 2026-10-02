@@ -240,6 +240,7 @@ export const handleToolPart = (
   event: SessionPartEvent,
   part: ToolPart,
   prepareCurrent: PrepareCurrent,
+  firstTimestamp = event.timestamp,
 ): void => {
   const input = normalizeToolInput(part.input);
   const output = normalizeToolText(part.output);
@@ -266,7 +267,7 @@ export const handleToolPart = (
       input,
       output,
       error,
-      timestamp: event.timestamp,
+      timestamp: firstTimestamp,
     });
   });
 };

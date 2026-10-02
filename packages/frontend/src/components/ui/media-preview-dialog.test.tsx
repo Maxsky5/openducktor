@@ -1,5 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { fireEvent, render } from "@testing-library/react";
+import { Activity } from "react";
 import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { MediaPreviewDialog } from "./media-preview-dialog";
 
@@ -12,6 +13,31 @@ const baseProps = {
 };
 
 describe("MediaPreviewDialog", () => {
+  test("hides the portal and pauses a retained video when its chat hides", () => {
+    const media = [
+      { id: "video", kind: "video" as const, src: "blob:video", ariaLabel: "Preview video" },
+    ];
+    const dialog = (mode: "visible" | "hidden") => (
+      <Activity mode={mode}>
+        <MediaPreviewDialog {...baseProps} open media={media} />
+      </Activity>
+    );
+    const view = render(dialog("visible"));
+    const video = view.getByRole("dialog").querySelector("video");
+    if (!video) throw new Error("Expected the video.");
+    const pause = spyOn(video, "pause").mockImplementation(() => {});
+    try {
+      view.rerender(dialog("hidden"));
+      expect(view.queryByRole("dialog")).toBeNull();
+      expect(pause).toHaveBeenCalledTimes(1);
+      view.rerender(dialog("visible"));
+      expect(view.getByRole("dialog").querySelector("video")).toBe(video);
+    } finally {
+      view.unmount();
+      pause.mockRestore();
+    }
+  });
+
   test("renders images and videos in order", () => {
     const view = render(
       <MediaPreviewDialog

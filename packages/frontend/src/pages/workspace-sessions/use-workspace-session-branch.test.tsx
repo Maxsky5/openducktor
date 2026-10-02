@@ -5,6 +5,53 @@ import type { ReactNode } from "react";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { useWorkspaceSessionBranch } from "./use-workspace-session-branch";
+import { filesystemQueryKeys } from "@/state/queries/filesystem";
+import { worktreeBranchQueryOptions } from "@/state/queries/git";
+
+test("switching worktrees refreshes file data when both branches have the same name", async () => {
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: { gitGetCurrentBranch: async () => ({ name: "main", detached: false }) },
+    }),
+  );
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  for (const path of ["/repo/first", "/repo/second"]) {
+    queryClient.setQueryData(worktreeBranchQueryOptions("/repo", path).queryKey, {
+      name: "main",
+      detached: false,
+    });
+    queryClient.setQueryData(filesystemQueryKeys.tree(path), "cached tree");
+  }
+  const view = renderHook(
+    ({ path }) =>
+      useWorkspaceSessionBranch({
+        repoPath: "/repo",
+        workingDirectory: path,
+        isWorktree: true,
+        isSwitchingBranch: false,
+        activeBranch: null,
+      }),
+    {
+      initialProps: { path: "/repo/first" },
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      ),
+    },
+  );
+  try {
+    await waitFor(() => expect(view.result.current.previewBranch).toBe("branch:main"));
+    view.rerender({ path: "/repo/second" });
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryState(filesystemQueryKeys.tree("/repo/second"))?.isInvalidated,
+      ).toBe(true),
+    );
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
 
 test.each([
   { name: "repository", isWorktree: false, workingDirectory: "/repo" },

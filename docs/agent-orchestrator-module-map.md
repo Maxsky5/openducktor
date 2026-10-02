@@ -200,6 +200,22 @@ The selected view reads runtime, check, and read-model contexts. Do not pass tho
 
 The repository read model key is repository plus task ID set. Task title, status, order, or document changes do not restart it. Durable records prove durable existence. The host snapshot proves live existence. Only a local `starting` session can exist for a short time without either source.
 
+### Rendered transcript cache
+
+Files: `components/features/agents/agent-chat/use-agent-chat-transcript-model.ts`, `agent-chat-transcript-model-cache.ts`, and `agent-chat-transcript-model-build.ts`.
+
+The chat keeps up to six rendered transcript models, keyed by full session identity and thinking-message preference. It updates cached inactive transcripts that came from the active repository session store. Query-owned runtime history keeps its own rendered model. Selected and inactive transcripts use the same incremental update path and chunk limits. The cache retains the skill references used to display Claude skill mentions.
+
+- Background updates preserve cache recency. Selection determines which entries stay cached.
+- Selection also schedules stale cached entries when their selected build stopped on deselection. Other inactive builds continue through the switch.
+- Stop older work when a newer message revision arrives, the session leaves the active repository, the cache drops its entry, or the chat unmounts.
+- A newly selected session shows current cached rows on its first render. If those rows still need work, show loading until they are ready. Keep already visible rows while a selected session processes a large revision.
+- Cache updates do not read history or call the host. History reads stay with the selected history owner.
+
+OpenCode live and history text-part rows keep the runtime's text, part IDs, and order. A final assistant event preserves separate parts and their whitespace when its text only trims a matching part. Changed final text still replaces a single part.
+
+Final history text parts replace a live whole-message row with the same source ID. Keep each part's text separate when merging those rows. Keep live text when its history snapshot is still incomplete.
+
 ## Task tabs
 
 Files: `pages/agents/agent-studio-task-tabs-storage.ts`, `pages/agents/agent-studio-task-tabs-list.ts`, and `pages/agents/agents-page-session-tabs.ts`.

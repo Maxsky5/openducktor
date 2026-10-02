@@ -103,6 +103,15 @@ const mergeQueuedSessionEvent = <Event extends QueuedSessionEvent>(
 
   if (
     previous.type === "assistant_part" &&
+    event.type === "assistant_part" &&
+    (event.part.kind === "text" || event.part.kind === "reasoning")
+  ) {
+    // Keep the first timestamp so completion cannot move a tool ahead of this part.
+    return { ...event, timestamp: previous.timestamp };
+  }
+
+  if (
+    previous.type === "assistant_part" &&
     previous.part.kind === "subagent" &&
     event.type === "assistant_part" &&
     event.part.kind === "subagent"
@@ -132,16 +141,9 @@ const shouldDropQueuedCandidate = (
     return false;
   }
 
-  if (event.type === "assistant_message") {
-    if (candidate.event.type === "assistant_delta") {
-      return candidate.event.messageId === event.messageId;
-    }
-
-    if (candidate.event.type === "assistant_part") {
-      return (
-        candidate.event.part.messageId === event.messageId && candidate.event.part.kind === "text"
-      );
-    }
+  // History keeps the part IDs and order, so final messages must keep queued parts.
+  if (event.type === "assistant_message" && candidate.event.type === "assistant_delta") {
+    return candidate.event.messageId === event.messageId;
   }
 
   if (
@@ -196,6 +198,7 @@ const mergeQueuedSessionEvents = <Item extends QueuedSessionEventBatchItem>(
       key,
       item: {
         ...item,
+        firstTimestamp: previous.firstTimestamp ?? previous.event.timestamp,
         event: mergeQueuedSessionEvent(previous.event, item.event),
       },
     };
@@ -211,6 +214,8 @@ export const prepareForcedQueuedSessionEvents = <Item extends QueuedSessionEvent
 export type QueuedSessionEventBatchItem<Event extends QueuedSessionEvent = QueuedSessionEvent> = {
   event: Event;
   routeKey: string;
+  /** Place a merged row by its first event, while the latest event keeps tool timing. */
+  firstTimestamp?: string;
 };
 
 export type PreparedQueuedSessionEvents<

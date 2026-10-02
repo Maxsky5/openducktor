@@ -272,6 +272,30 @@ describe("OpencodeSdkAdapter session history", () => {
               text: "Final answer",
               time: { start: Date.now(), end: Date.now() },
             },
+            {
+              id: "tool-1",
+              sessionID: "session-opencode-1",
+              messageID: "msg-200",
+              type: "tool",
+              callID: "call-1",
+              tool: "read",
+              state: {
+                status: "completed",
+                input: { filePath: "README.md" },
+                output: "File contents",
+                title: "Read file",
+                metadata: {},
+                time: { start: Date.now(), end: Date.now() },
+              },
+            },
+            {
+              id: "text-2",
+              sessionID: "session-opencode-1",
+              messageID: "msg-200",
+              type: "text",
+              text: "After reading",
+              time: { start: Date.now(), end: Date.now() },
+            },
           ],
         },
       ],
@@ -295,7 +319,7 @@ describe("OpencodeSdkAdapter session history", () => {
       profileId: "Hephaestus",
       variant: "high",
     });
-    expect(history[1]?.text).toBe("Final answer");
+    expect(history[1]?.text).toBe("Final answer\nAfter reading");
     if (history[0]?.role !== "user") {
       throw new Error("Expected first history entry to be a user message");
     }
@@ -310,10 +334,22 @@ describe("OpencodeSdkAdapter session history", () => {
       profileId: "Hephaestus",
       variant: "high",
     });
-    expect(history[1]?.parts).toHaveLength(1);
+    expect(history[1]?.parts.map(({ kind, partId }) => [kind, partId])).toEqual([
+      ["reasoning", "reason-1"],
+      ["text", "text-1"],
+      ["tool", "tool-1"],
+      ["text", "text-2"],
+    ]);
     expect(history[1]?.parts[0]).toMatchObject({
       kind: "reasoning",
       text: "Reasoning block",
+    });
+    expect(history[1]?.parts[1]).toMatchObject({
+      kind: "text",
+      messageId: "msg-200",
+      partId: "text-1",
+      text: "Final answer",
+      completed: true,
     });
   });
 

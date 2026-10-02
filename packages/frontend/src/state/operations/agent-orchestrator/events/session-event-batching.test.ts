@@ -84,7 +84,7 @@ describe("session-event-batching", () => {
     ]);
   });
 
-  test("drops streamed text events that are superseded by a final assistant message", async () => {
+  test("keeps text parts when a final assistant message replaces deltas", async () => {
     const batcher = createSessionEventBatcher();
     const prepared = prepareQueuedEvents(batcher, [
       {
@@ -129,6 +129,18 @@ describe("session-event-batching", () => {
     ] satisfies QueuedSessionEvent[]);
 
     expect(prepared.readyEvents).toEqual([
+      {
+        type: "assistant_part",
+        externalSessionId: "session-1",
+        timestamp: "2026-02-22T08:00:02.000Z",
+        part: {
+          kind: "text",
+          messageId: "assistant-1",
+          partId: "text-1",
+          text: "Draft refined",
+          completed: false,
+        },
+      },
       {
         type: "assistant_part",
         externalSessionId: "session-1",

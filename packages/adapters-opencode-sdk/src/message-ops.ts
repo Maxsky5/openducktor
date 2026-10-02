@@ -245,6 +245,7 @@ const createHistoryStreamPartNormalizationState = (
 const normalizeHistoryStreamParts = (
   parts: ParsedOpencodePart[],
   state: HistoryStreamPartNormalizationState,
+  role: ParsedOpencodeMessage["info"]["role"],
   timestamp?: string,
 ): AgentStreamPart[] => {
   const normalized: AgentStreamPart[] = [];
@@ -279,6 +280,11 @@ const normalizeHistoryStreamParts = (
         state.correlationByExternalSessionId.set(externalSessionId, correlationKey);
         removePendingSubagentCorrelationKey(state.pendingBySignature, correlationKey);
         normalized.push(mapped);
+      } else if (role === "assistant") {
+        const textPart = mapPartToAgentStreamPart(rawPart);
+        if (textPart) {
+          normalized.push(textPart);
+        }
       }
       continue;
     }
@@ -447,6 +453,7 @@ export const loadSessionHistory = async (
     parts: normalizeHistoryStreamParts(
       item.rawParts,
       historyPartNormalizationState,
+      item.entry.info.role,
       item.timestamp,
     ),
   }));
