@@ -111,7 +111,7 @@ function GeneratedImageFrame({
   return (
     <div className="flex min-w-0 flex-col gap-3">
       <ImageGenerationHeader label="Image generated">{actions}</ImageGenerationHeader>
-      <div className="flex h-64 min-w-0 flex-col overflow-y-auto">{children}</div>
+      {children}
     </div>
   );
 }
@@ -127,7 +127,7 @@ function GeneratingImage(): ReactElement {
 
 function ImagePreviewSkeleton(): ReactElement {
   return (
-    <div role="status" aria-label="Loading generated image preview" className="h-full w-full">
+    <div role="status" aria-label="Loading generated image preview" className="h-64 w-full">
       <Skeleton
         aria-hidden="true"
         className="h-full w-full rounded-lg motion-reduce:animate-none"
@@ -384,7 +384,10 @@ function SavedImagePreview({
   if (metadata.error)
     return (
       <GeneratedImageFrame>
-        <p role="alert" className="text-sm text-destructive">
+        <p
+          role="alert"
+          className="whitespace-pre-wrap text-sm text-destructive [overflow-wrap:anywhere]"
+        >
           {metadata.error.message}
         </p>
       </GeneratedImageFrame>
@@ -422,7 +425,10 @@ function LoadedImagePreview({
   if (error)
     return (
       <GeneratedImageFrame>
-        <p role="alert" className="text-sm text-destructive">
+        <p
+          role="alert"
+          className="whitespace-pre-wrap text-sm text-destructive [overflow-wrap:anywhere]"
+        >
           {error}
         </p>
       </GeneratedImageFrame>
@@ -454,7 +460,7 @@ function LoadedImagePreview({
               type="button"
               variant="outline"
               aria-label="Open generated image preview"
-              className="h-full w-full min-w-0 overflow-hidden rounded-lg bg-muted/40 p-0"
+              className="h-64 w-full min-w-0 overflow-hidden rounded-lg bg-muted/40 p-0"
             >
               <img
                 src={src}
