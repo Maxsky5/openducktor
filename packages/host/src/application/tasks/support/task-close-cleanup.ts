@@ -35,7 +35,6 @@ export const collectCloseWorktreePaths = (
     taskWorktreeService?: TaskWorktreeService;
   },
   repoPath: string,
-  branchPrefix: string,
   task: TaskCard,
   sessions: AgentSessionRecord[],
 ) =>
@@ -81,7 +80,6 @@ export const collectCloseWorktreePaths = (
           dependencies.gitPort,
           repoPath,
           worktreePath,
-          branchPrefix,
           task.id,
           "close",
         );

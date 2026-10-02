@@ -124,7 +124,6 @@ export const createTaskDeleteUseCase = ({
         dependencies,
         effectiveRepoPath,
         managedWorktreeBasePath,
-        branchPrefix,
         targetTaskSessions,
       );
       yield* taskSessionLifecycleCoordinator.acquireWorktreeLifecycle(worktreePaths);
@@ -133,6 +132,8 @@ export const createTaskDeleteUseCase = ({
         effectiveRepoPath,
         branchPrefix,
         targetTaskIds,
+        worktreePaths,
+        "delete",
       );
       const cleanupProgress = createTaskCleanupProgressState();
       if (hasWorkflowSessions && activityGuard) {

@@ -7,10 +7,7 @@ import {
   createDirectMergeGitPort,
 } from "../test-support/task-workflow-harness";
 import { appendTaskCleanupProgress } from "./task-cleanup-progress";
-import {
-  collectResetWorktreePaths,
-  validateExistingTaskWorktreeCandidate,
-} from "./task-cleanup-support";
+import { collectResetWorktreePaths } from "./task-cleanup-support";
 
 describe("task cleanup support", () => {
   test("reports reset implementation cleanup progress with the narrow operation label", () => {
@@ -34,17 +31,11 @@ describe("task cleanup support", () => {
     const worktreePaths = await Effect.runPromise(
       collectResetWorktreePaths(
         {
-          gitPort: createDirectMergeGitPort({
-            calls: [],
-            currentBranches: {
-              [legacyWorktree]: { name: "odt/task-1-legacy", detached: false },
-            },
-          }),
+          gitPort: createDirectMergeGitPort({ calls: [] }),
           settingsConfig: createBuildSettingsConfig(new Set(["/repo", legacyWorktree])),
         },
         "/repo",
         "/worktrees/repo",
-        "odt",
         "task-1",
         [createAgentSessionRecord({ workingDirectory: legacyWorktree })],
         new Set(["build", "qa"]),
@@ -53,26 +44,5 @@ describe("task cleanup support", () => {
     );
 
     expect(worktreePaths).toEqual([legacyWorktree]);
-  });
-
-  test("accepts task branches created from a prefix with trailing slashes", async () => {
-    const worktreePath = "/worktrees/repo/task-1";
-    const result = await Effect.runPromise(
-      validateExistingTaskWorktreeCandidate(
-        createDirectMergeGitPort({
-          calls: [],
-          currentBranches: {
-            [worktreePath]: { name: "feature/task-1-title", detached: false },
-          },
-        }),
-        "/repo",
-        worktreePath,
-        "feature/",
-        "task-1",
-        "reset implementation",
-      ),
-    );
-
-    expect(result).toBe(worktreePath);
   });
 });

@@ -834,13 +834,16 @@ describe("createTaskService task mutations and reset", () => {
           devServerService: createDirectMergeDevServerService(calls),
           gitPort: createDirectMergeGitPort({
             calls,
-            currentBranches: {
-              "/worktrees/repo/task-1": { name: "odt/task-1-task-1", detached: false },
-            },
             branches: {
               "/repo": [
                 { name: "main", isCurrent: true, isRemote: false },
-                { name: "odt/task-1", isCurrent: false, isRemote: false },
+                { name: "feature/other", isCurrent: false, isRemote: false },
+                {
+                  name: "odt/task-1",
+                  isCurrent: false,
+                  isRemote: false,
+                  worktreePath: "/worktrees/repo/task-1",
+                },
                 { name: "origin/odt/task-1", isCurrent: false, isRemote: true },
               ],
             },
@@ -862,7 +865,6 @@ describe("createTaskService task mutations and reset", () => {
     });
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo-alias" } },
-      { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
       { type: "listBranches", workingDir: "/repo" },
       {
         type: "activityGuard",
@@ -1539,15 +1541,16 @@ describe("createTaskService task mutations and reset", () => {
                 name: "odt/task-1-original-title",
                 detached: false,
               },
-              "/worktrees/repo/task-1-legacy": {
-                name: "odt/task-1-legacy",
-                detached: false,
-              },
             },
             branches: {
               "/repo": [
                 { name: "main", isCurrent: true, isRemote: false },
-                { name: "odt/task-1-original-title", isCurrent: false, isRemote: false },
+                {
+                  name: "odt/task-1-original-title",
+                  isCurrent: false,
+                  isRemote: false,
+                  worktreePath: "/worktrees/repo/task-1",
+                },
                 { name: "odt/task-1-legacy", isCurrent: false, isRemote: false },
               ],
             },
@@ -1568,8 +1571,6 @@ describe("createTaskService task mutations and reset", () => {
     ).resolves.toMatchObject({ id: "task-1", status: "ready_for_dev" });
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo-alias" } },
-      { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
-      { type: "currentBranch", workingDir: "/worktrees/repo/task-1-legacy" },
       { type: "listBranches", workingDir: "/repo" },
       { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
       {
@@ -1834,11 +1835,16 @@ describe("createTaskService task mutations and reset", () => {
           devServerService: createDirectMergeDevServerService(calls),
           gitPort: createDirectMergeGitPort({
             calls,
-            currentBranches: {
-              "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
-            },
             branches: {
-              "/repo": [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
+              "/repo": [
+                { name: "feature/other", isCurrent: false, isRemote: false },
+                {
+                  name: "odt/task-1",
+                  isCurrent: false,
+                  isRemote: false,
+                  worktreePath: "/worktrees/repo/task-1",
+                },
+              ],
             },
           }),
           settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
@@ -1855,7 +1861,6 @@ describe("createTaskService task mutations and reset", () => {
     ).resolves.toMatchObject({ id: "task-1", status: "open" });
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo-alias" } },
-      { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
       { type: "listBranches", workingDir: "/repo" },
       {
         type: "resetActivityGuard",
@@ -2008,6 +2013,97 @@ describe("createTaskService task mutations and reset", () => {
     expect(result.failure.message).toContain("Cleared Builder and QA session records.");
     expect(result.failure).toMatchObject({ cause: failure });
   });
+  test("rejects implementation reset when the canonical worktree is not on a task branch", async () => {
+    const calls: unknown[] = [];
+    const taskStore: TaskStorePort = {
+      listTasks: () => Effect.succeed([task({ status: "blocked" })]),
+      getTaskMetadata: () =>
+        Effect.succeed(
+          metadataWithSessions([
+            createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" }),
+          ]),
+        ),
+    };
+    const service = createTaskService({
+      devServerService: createDirectMergeDevServerService(calls),
+      gitPort: createDirectMergeGitPort({
+        calls,
+        currentBranches: {
+          "/worktrees/repo/task-1": { name: "feature/other", detached: false },
+        },
+      }),
+      settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+      taskActivityGuard: {
+        countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+        cleanupTaskSessions: () =>
+          Effect.sync(() => {
+            calls.push({ type: "cleanupTaskSessions" });
+            return { stoppedSessionCount: 0 };
+          }),
+      },
+      taskStore,
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { preStart: [], postComplete: [] },
+      }),
+    });
+
+    await expect(
+      Effect.runPromise(service.resetImplementation({ repoPath: "/repo", taskId: "task-1" })),
+    ).rejects.toThrow("is on branch feature/other, which is not a task branch");
+    expect(calls).toEqual([
+      { type: "listBranches", workingDir: "/repo" },
+      { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
+    ]);
+  });
+  test.each([
+    {
+      operationLabel: "delete",
+      run: (service: ReturnType<typeof createTaskService>) =>
+        service
+          .deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false })
+          .pipe(Effect.asVoid),
+    },
+    {
+      operationLabel: "reset task",
+      run: (service: ReturnType<typeof createTaskService>) =>
+        service.resetTask({ repoPath: "/repo", taskId: "task-1" }).pipe(Effect.asVoid),
+    },
+  ])(
+    "rejects $operationLabel when another worktree has the task branch checked out",
+    async ({ operationLabel, run }) => {
+      const calls: unknown[] = [];
+      const taskStore: TaskStorePort = {
+        listTasks: () => Effect.succeed([task({ status: "in_progress" })]),
+        getTaskMetadata: () => Effect.succeed(metadataWithSessions([])),
+      };
+      const service = createTaskService({
+        devServerService: createDirectMergeDevServerService(calls),
+        gitPort: createDirectMergeGitPort({
+          calls,
+          branches: {
+            "/repo": [
+              { name: "odt/task-1", isCurrent: true, isRemote: false, worktreePath: "/repo" },
+            ],
+          },
+        }),
+        settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+        taskStore,
+        worktreeFiles: createCleanupWorktreeFiles(calls),
+        workspaceSettingsService: createBuildWorkspaceSettingsService({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          hooks: { preStart: [], postComplete: [] },
+        }),
+      });
+
+      await expect(Effect.runPromise(run(service))).rejects.toThrow(
+        `Cannot ${operationLabel} task task-1 because branch odt/task-1 is checked out in worktree /repo.`,
+      );
+      expect(calls).toEqual([{ type: "listBranches", workingDir: "/repo" }]);
+    },
+  );
   test("reports task reset failures after workflow document clearing as partial progress", async () => {
     const failure = new HostOperationError({
       operation: "task-store.clear-agent-sessions",

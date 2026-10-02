@@ -99,7 +99,6 @@ export const createTaskImplementationResetUseCase = ({
         dependencies,
         effectiveRepoPath,
         managedWorktreeBasePath,
-        branchPrefix,
         current.id,
         currentSessions,
         new Set<string>(implementationSessionRoleNames),
@@ -110,6 +109,8 @@ export const createTaskImplementationResetUseCase = ({
         effectiveRepoPath,
         branchPrefix,
         [taskId],
+        worktreePaths,
+        "reset implementation",
       );
       const canonicalTarget = canonicalSessionState.canonicalExists
         ? yield* resolveCanonicalImplementationResetTarget(
@@ -118,6 +119,7 @@ export const createTaskImplementationResetUseCase = ({
             current,
             effectiveRepoPath,
             canonicalWorktree,
+            branchPrefix,
           )
         : null;
       const cleanupTargets = excludeCanonicalImplementationTargets(

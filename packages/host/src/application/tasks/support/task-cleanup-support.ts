@@ -89,7 +89,6 @@ export const validateExistingTaskWorktreeCandidate = (
   gitPort: GitPort,
   repoPath: string,
   worktreePath: string,
-  branchPrefix: string,
   taskId: string,
   operationLabel: string,
 ) =>
@@ -130,44 +129,48 @@ export const validateExistingTaskWorktreeCandidate = (
         }),
       );
     }
-    const currentBranch = yield* gitPort.getCurrentBranch(canonicalWorktreePath);
-    const branchName = currentBranch.name?.trim();
-    if (
-      !branchName ||
-      currentBranch.detached ||
-      !isRelatedTaskBranch(branchName, branchPrefix, taskId)
-    ) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "taskId",
-          message: `Cannot ${operationLabel} task ${taskId} because worktree ${worktreePath} is not on its task branch.`,
-          details: {
-            repoPath: canonicalRepoPath,
-            taskId,
-            worktreePath: canonicalWorktreePath,
-            actualBranch: branchName,
-          },
-        }),
-      );
-    }
     return canonicalWorktreePath;
   });
+/**
+ * Lists the local task branches that cleanup deletes. Fails when a worktree that the cleanup
+ * keeps has one of them checked out: Git refuses to delete that branch, and the cleanup
+ * deletes branches only after it removes the task worktrees.
+ */
 export const collectRelatedTaskBranches = (
   gitPort: GitPort,
   repoPath: string,
   branchPrefix: string,
   taskIds: string[],
+  removedWorktreePaths: string[],
+  operationLabel: string,
 ) =>
   Effect.gen(function* () {
     const branches = yield* gitPort.listBranches(repoPath);
+    const removedWorktrees = new Set(removedWorktreePaths.map(normalizePathForComparison));
     const names = new Set<string>();
     for (const branch of branches) {
       if (branch.isRemote) {
         continue;
       }
-      if (taskIds.some((taskId) => isRelatedTaskBranch(branch.name, branchPrefix, taskId))) {
-        names.add(branch.name);
+      const taskId = taskIds.find((candidate) =>
+        isRelatedTaskBranch(branch.name, branchPrefix, candidate),
+      );
+      if (!taskId) {
+        continue;
       }
+      if (
+        branch.worktreePath &&
+        !removedWorktrees.has(normalizePathForComparison(branch.worktreePath))
+      ) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "taskId",
+            message: `Cannot ${operationLabel} task ${taskId} because branch ${branch.name} is checked out in worktree ${branch.worktreePath}. Switch that worktree to another branch, then try again.`,
+            details: { repoPath, taskId, branch: branch.name, worktreePath: branch.worktreePath },
+          }),
+        );
+      }
+      names.add(branch.name);
     }
     return [...names].sort();
   });
@@ -178,7 +181,6 @@ const collectManagedTaskWorktreePaths = (
   },
   repoPath: string,
   managedWorktreeBasePath: string,
-  branchPrefix: string,
   targetTaskSessions: Array<TaskSessionRecords & { sessionRoles: Set<string> }>,
   operationLabel: "delete" | "reset implementation" | "reset task",
 ) =>
@@ -203,7 +205,6 @@ const collectManagedTaskWorktreePaths = (
           dependencies.gitPort,
           repoPath,
           canonicalWorktree,
-          branchPrefix,
           taskId,
           operationLabel,
         );
@@ -230,7 +231,6 @@ const collectManagedTaskWorktreePaths = (
             dependencies.gitPort,
             repoPath,
             workingDirectory,
-            branchPrefix,
             taskId,
             operationLabel,
           );
@@ -254,14 +254,12 @@ export const collectDeleteWorktreePaths = (
   },
   repoPath: string,
   managedWorktreeBasePath: string,
-  branchPrefix: string,
   targetTaskSessions: TaskSessionRecords[],
 ) =>
   collectManagedTaskWorktreePaths(
     dependencies,
     repoPath,
     managedWorktreeBasePath,
-    branchPrefix,
     targetTaskSessions.map((target) => ({
       ...target,
       sessionRoles: workflowCleanupSessionRoles,
@@ -276,7 +274,6 @@ export const collectResetWorktreePaths = (
   },
   repoPath: string,
   managedWorktreeBasePath: string,
-  branchPrefix: string,
   taskId: string,
   sessions: AgentSessionRecord[],
   sessionRoles: Set<string>,
@@ -286,7 +283,6 @@ export const collectResetWorktreePaths = (
     dependencies,
     repoPath,
     managedWorktreeBasePath,
-    branchPrefix,
     [{ taskId, sessions, sessionRoles }],
     operationLabel,
   );
