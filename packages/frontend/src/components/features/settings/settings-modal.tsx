@@ -20,11 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type {
-  SettingsContentFocusRequest,
-  SettingsDeepLink,
-  SettingsDeepLinkResolution,
-} from "./settings-deep-link";
+import type { SettingsContentFocusRequest, SettingsDeepLink } from "./settings-deep-link";
 import type {
   PromptRoleTabId,
   RepositorySectionId,
@@ -33,12 +29,10 @@ import type {
 import { SettingsModalContent } from "./settings-modal-content";
 import { SettingsModalFooter } from "./settings-modal-footer";
 import { isSettingsInteractionDisabled } from "./settings-modal-model";
-import {
-  resolveSettingsModalOpenState,
-  type SettingsModalNavigationState,
-} from "./settings-modal-open-state";
+import { INITIAL_NAVIGATION, getOpenState, type Navigation } from "./settings-modal-open-state";
 import { SettingsSidebar } from "./settings-modal-sidebars";
 import { SettingsModalOpenButton, SettingsModalTrigger } from "./settings-modal-trigger";
+import type { SettingsWorkspaceSelectionPolicy } from "./settings-workspace-selection";
 import { useSettingsModalController } from "./use-settings-modal-controller";
 
 export type { SettingsDeepLink } from "./settings-deep-link";
@@ -52,35 +46,122 @@ type SettingsModalProps = {
   onOpenChange?: (open: boolean) => void;
 };
 
-type SettingsModalDialogProps = {
+type SettingsModalContextValue = {
+  openSettings(request?: SettingsModalOpenRequest): void;
+};
+
+const SettingsModalContext = createContext<SettingsModalContextValue | null>(null);
+
+export function SettingsModal(props: SettingsModalProps): ReactElement {
+  const context = useContext(SettingsModalContext);
+  if (!context) return <LocalSettingsModal {...props} />;
+
+  const request: SettingsModalOpenRequest = {};
+  if (props.deepLink) request.deepLink = props.deepLink;
+  if (props.onOpenChange) request.onOpenChange = props.onOpenChange;
+
+  return (
+    <SettingsModalOpenButton
+      className={props.triggerClassName}
+      iconOnly={props.triggerIconOnly ?? false}
+      label={props.triggerLabel ?? "Settings"}
+      size={props.triggerSize ?? (props.triggerIconOnly ? "icon" : "sm")}
+      onClick={() => context.openSettings(request)}
+    />
+  );
+}
+
+export function SettingsModalProvider({ children }: PropsWithChildren): ReactElement {
+  const { activeRequest, openSettings, handleOpenChange } = useSettingsModalRequests();
+  const [navigation, setNavigation] = useState(INITIAL_NAVIGATION);
+  const handleDialogOpenChange = useCallback(
+    (open: boolean, next: Navigation): void => {
+      if (!open) setNavigation(next);
+      handleOpenChange(open);
+    },
+    [handleOpenChange],
+  );
+
+  const contextValue = useMemo(() => ({ openSettings }), [openSettings]);
+
+  return (
+    <SettingsModalContext.Provider value={contextValue}>
+      {children}
+      {activeRequest ? (
+        <SettingsDialog
+          key={activeRequest.id}
+          open
+          initialNavigation={navigation}
+          {...(activeRequest.deepLink ? { deepLink: activeRequest.deepLink } : {})}
+          onOpenChange={handleDialogOpenChange}
+        />
+      ) : null}
+    </SettingsModalContext.Provider>
+  );
+}
+
+export function useSettingsModal(): SettingsModalContextValue {
+  const value = useContext(SettingsModalContext);
+  if (!value) throw new Error("useSettingsModal must be used inside SettingsModalProvider.");
+  return value;
+}
+
+function LocalSettingsModal({
+  triggerClassName,
+  triggerIconOnly = false,
+  triggerSize = triggerIconOnly ? "icon" : "sm",
+  triggerLabel = "Settings",
+  deepLink,
+  onOpenChange,
+}: SettingsModalProps): ReactElement {
+  const [open, setOpen] = useState(false);
+  const handleOpenChange = useCallback(
+    (nextOpen: boolean): void => {
+      setOpen(nextOpen);
+      onOpenChange?.(nextOpen);
+    },
+    [onOpenChange],
+  );
+
+  return (
+    <SettingsDialog open={open} deepLink={deepLink} onOpenChange={handleOpenChange}>
+      <SettingsModalTrigger
+        className={triggerClassName}
+        iconOnly={triggerIconOnly}
+        label={triggerLabel}
+        size={triggerSize}
+      />
+    </SettingsDialog>
+  );
+}
+
+type SettingsDialogProps = {
   children?: ReactNode;
   deepLink?: SettingsDeepLink | undefined;
-  onOpenChange: (open: boolean) => void;
+  initialNavigation?: Navigation;
+  onOpenChange: (open: boolean, navigation: Navigation) => void;
   open: boolean;
 };
 
-function SettingsModalDialog({
+function SettingsDialog({
   children,
   deepLink,
+  initialNavigation = INITIAL_NAVIGATION,
   onOpenChange,
   open,
-}: SettingsModalDialogProps): ReactElement {
-  const initialOpenState = resolveSettingsModalOpenState(deepLink);
-  const [activeDeepLinkResolution, setActiveDeepLinkResolution] =
-    useState<SettingsDeepLinkResolution | null>(initialOpenState.deepLinkResolution);
-  const [contentFocusRequest, setContentFocusRequest] =
-    useState<SettingsContentFocusRequest | null>(initialOpenState.contentFocusRequest);
-  const [navigation, setNavigation] = useState<SettingsModalNavigationState>(
-    initialOpenState.navigation,
+}: SettingsDialogProps): ReactElement {
+  const initial = getOpenState(deepLink, initialNavigation);
+  const [workspaceSelectionPolicy, setWorkspaceSelectionPolicy] = useState<
+    SettingsWorkspaceSelectionPolicy | undefined
+  >(initial.workspaceSelectionPolicy);
+  const [focusRequest, setFocusRequest] = useState<SettingsContentFocusRequest | null>(
+    initial.focusRequest,
   );
+  const [navigation, setNavigation] = useState<Navigation>(initial.navigation);
   const handleRuntimeAvailabilityError = useCallback((runtimeKind: RuntimeKind): void => {
     setNavigation((current) => ({ ...current, section: "runtimes" }));
-    setContentFocusRequest({ kind: "runtime-executable", runtimeKind });
+    setFocusRequest({ kind: "runtime-executable", runtimeKind });
   }, []);
-  const workspaceSelectionPolicy =
-    activeDeepLinkResolution?.scope === "repository"
-      ? activeDeepLinkResolution.workspaceSelectionPolicy
-      : undefined;
   const controller = useSettingsModalController({
     open,
     shouldLoadCatalog:
@@ -110,24 +191,21 @@ function SettingsModalDialog({
     setNavigation((current) => ({ ...current, selectedReusablePromptId }));
   };
 
-  const handleContentFocusRequestHandled = useCallback(
-    (handledRequest: SettingsContentFocusRequest): void => {
-      setContentFocusRequest((current) => (current === handledRequest ? null : current));
-    },
-    [],
-  );
+  const clearFocusRequest = useCallback((request: SettingsContentFocusRequest): void => {
+    setFocusRequest((current) => (current === request ? null : current));
+  }, []);
 
-  const closeModal = useCallback((): void => {
-    setActiveDeepLinkResolution(null);
-    setContentFocusRequest(null);
-    onOpenChange(false);
-  }, [onOpenChange]);
+  const close = useCallback((): void => {
+    setWorkspaceSelectionPolicy(undefined);
+    setFocusRequest(null);
+    onOpenChange(false, navigation);
+  }, [navigation, onOpenChange]);
 
   const handleSave = (): void => {
     controller.markRepoScriptSaveAttempt();
     void controller.submit().then((saved) => {
       if (saved) {
-        closeModal();
+        close();
       }
     });
   };
@@ -135,16 +213,16 @@ function SettingsModalDialog({
   const handleOpenChange = (nextOpen: boolean): void => {
     if (!nextOpen) {
       if (!controller.isSaving) {
-        closeModal();
+        close();
       }
       return;
     }
 
-    const nextOpenState = resolveSettingsModalOpenState(deepLink);
-    setActiveDeepLinkResolution(nextOpenState.deepLinkResolution);
-    setNavigation(nextOpenState.navigation);
-    setContentFocusRequest(nextOpenState.contentFocusRequest);
-    onOpenChange(true);
+    const next = getOpenState(deepLink, navigation);
+    setWorkspaceSelectionPolicy(next.workspaceSelectionPolicy);
+    setNavigation(next.navigation);
+    setFocusRequest(next.focusRequest);
+    onOpenChange(true, next.navigation);
   };
 
   return (
@@ -184,8 +262,8 @@ function SettingsModalDialog({
                 onGlobalPromptRoleTabChange={handleGlobalPromptRoleTabChange}
                 onRepoPromptRoleTabChange={handleRepoPromptRoleTabChange}
                 onSelectedReusablePromptIdChange={handleSelectedReusablePromptIdChange}
-                contentFocusRequest={contentFocusRequest}
-                onContentFocusRequestHandled={handleContentFocusRequestHandled}
+                contentFocusRequest={focusRequest}
+                onContentFocusRequestHandled={clearFocusRequest}
               />
             </div>
           </div>
@@ -220,90 +298,10 @@ function SettingsModalDialog({
             section: navigation.section,
             repositorySection: navigation.repositorySection,
           }}
-          onCancel={closeModal}
+          onCancel={close}
           onSave={handleSave}
         />
       </DialogContent>
     </Dialog>
-  );
-}
-
-function LocalSettingsModal({
-  triggerClassName,
-  triggerIconOnly = false,
-  triggerSize = triggerIconOnly ? "icon" : "sm",
-  triggerLabel = "Settings",
-  deepLink,
-  onOpenChange,
-}: SettingsModalProps): ReactElement {
-  const [open, setOpen] = useState(false);
-  const handleOpenChange = useCallback(
-    (nextOpen: boolean): void => {
-      setOpen(nextOpen);
-      onOpenChange?.(nextOpen);
-    },
-    [onOpenChange],
-  );
-
-  return (
-    <SettingsModalDialog open={open} deepLink={deepLink} onOpenChange={handleOpenChange}>
-      <SettingsModalTrigger
-        className={triggerClassName}
-        iconOnly={triggerIconOnly}
-        label={triggerLabel}
-        size={triggerSize}
-      />
-    </SettingsModalDialog>
-  );
-}
-
-type SettingsModalContextValue = {
-  openSettings(request?: SettingsModalOpenRequest): void;
-};
-
-const SettingsModalContext = createContext<SettingsModalContextValue | null>(null);
-
-export function SettingsModalProvider({ children }: PropsWithChildren): ReactElement {
-  const { activeRequest, openSettings, handleOpenChange } = useSettingsModalRequests();
-
-  const contextValue = useMemo(() => ({ openSettings }), [openSettings]);
-
-  return (
-    <SettingsModalContext.Provider value={contextValue}>
-      {children}
-      {activeRequest ? (
-        <SettingsModalDialog
-          key={activeRequest.id}
-          open
-          {...(activeRequest.deepLink ? { deepLink: activeRequest.deepLink } : {})}
-          onOpenChange={handleOpenChange}
-        />
-      ) : null}
-    </SettingsModalContext.Provider>
-  );
-}
-
-export function useSettingsModal(): SettingsModalContextValue {
-  const value = useContext(SettingsModalContext);
-  if (!value) throw new Error("useSettingsModal must be used inside SettingsModalProvider.");
-  return value;
-}
-
-export function SettingsModal(props: SettingsModalProps): ReactElement {
-  const context = useContext(SettingsModalContext);
-  if (!context) return <LocalSettingsModal {...props} />;
-
-  const request: SettingsModalOpenRequest = {};
-  if (props.deepLink) request.deepLink = props.deepLink;
-  if (props.onOpenChange) request.onOpenChange = props.onOpenChange;
-
-  return (
-    <SettingsModalOpenButton
-      className={props.triggerClassName}
-      iconOnly={props.triggerIconOnly ?? false}
-      label={props.triggerLabel ?? "Settings"}
-      size={props.triggerSize ?? (props.triggerIconOnly ? "icon" : "sm")}
-      onClick={() => context.openSettings(request)}
-    />
   );
 }
