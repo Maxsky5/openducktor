@@ -65,7 +65,9 @@ export function MediaPreviewDialog({
       >
         <DialogHeader className="bg-background">
           <div className="flex min-w-0 items-center justify-between gap-3">
-            <DialogTitle>{title}</DialogTitle>
+            <DialogTitle className="min-w-0 text-lg font-semibold [overflow-wrap:anywhere]">
+              {title}
+            </DialogTitle>
             <div className="flex shrink-0 items-center gap-1">
               {actions}
               <DialogClose asChild>
