@@ -1,0 +1,83 @@
+:root {
+  --sheet-open-dur: 300ms;
+  --sheet-close-dur: 200ms;
+  --sheet-ease: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+[data-slot="sheet-content"][data-side="right"] {
+  --sheet-offset: translateX(100%);
+}
+
+[data-slot="sheet-content"][data-side="left"] {
+  --sheet-offset: translateX(-100%);
+}
+
+[data-slot="sheet-content"][data-side="top"] {
+  --sheet-offset: translateY(-100%);
+}
+
+[data-slot="sheet-content"][data-side="bottom"] {
+  --sheet-offset: translateY(100%);
+}
+
+/* Radix keeps each portal child mounted until its exit animation ends. */
+[data-slot="sheet-overlay"][data-state="open"] {
+  animation: sheet-fade-in var(--sheet-open-dur) var(--sheet-ease) both;
+}
+
+[data-slot="sheet-overlay"][data-state="closed"] {
+  animation: sheet-fade-out var(--sheet-close-dur) var(--sheet-ease) both;
+}
+
+[data-slot="sheet-content"][data-state="open"] {
+  /* Release the transform after opening so fixed descendants keep the viewport as their box. */
+  animation: sheet-slide-in var(--sheet-open-dur) var(--sheet-ease) backwards;
+}
+
+[data-slot="sheet-content"][data-state="closed"] {
+  animation: sheet-slide-out var(--sheet-close-dur) var(--sheet-ease) both;
+  pointer-events: none;
+}
+
+@keyframes sheet-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes sheet-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes sheet-slide-in {
+  from {
+    transform: var(--sheet-offset);
+  }
+  to {
+    transform: translate(0);
+  }
+}
+
+@keyframes sheet-slide-out {
+  from {
+    transform: translate(0);
+  }
+  to {
+    transform: var(--sheet-offset);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="sheet-overlay"],
+  [data-slot="sheet-content"] {
+    animation: none !important;
+  }
+}

@@ -1,33 +1,13 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
-import { createContext, useCallback, useContext, useState } from "react";
+import { useCallback } from "react";
 import type * as React from "react";
 import { cn } from "@/lib/utils";
 import { observeDialogResize } from "./dialog-resize";
+import { DialogRoot, useDialogOpen } from "./dialog-root";
 
-const DialogOpenContext = createContext<boolean | null>(null);
-
-function Dialog({
-  open,
-  defaultOpen,
-  onOpenChange,
-  ...props
-}: React.ComponentProps<typeof DialogPrimitive.Root>) {
-  const [internalOpen, setInternalOpen] = useState(defaultOpen ?? false);
-  const isOpen = open ?? internalOpen;
-  return (
-    <DialogOpenContext.Provider value={isOpen}>
-      <DialogPrimitive.Root
-        {...props}
-        data-slot="dialog"
-        open={isOpen}
-        onOpenChange={(nextOpen) => {
-          if (open === undefined) setInternalOpen(nextOpen);
-          onOpenChange?.(nextOpen);
-        }}
-      />
-    </DialogOpenContext.Provider>
-  );
+function Dialog(props: React.ComponentProps<typeof DialogPrimitive.Root>) {
+  return <DialogRoot {...props} data-slot="dialog" />;
 }
 
 function DialogTrigger(props: React.ComponentProps<typeof DialogPrimitive.Trigger>) {
@@ -64,7 +44,7 @@ function DialogContent({
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   closeButton?: React.ReactNode;
 }) {
-  const isOpen = useContext(DialogOpenContext);
+  const isOpen = useDialogOpen("DialogContent", "Dialog");
   const setContentRef = useCallback(
     (element: HTMLDivElement | null) => {
       if (!element) return;
@@ -97,8 +77,6 @@ function DialogContent({
     ) : (
       closeButton
     );
-
-  if (isOpen === null) throw new Error("DialogContent must be used within Dialog.");
 
   return (
     <DialogPortal>

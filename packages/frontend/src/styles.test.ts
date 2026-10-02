@@ -40,4 +40,12 @@ describe("global styles", () => {
     expect(linkCursor).toContain("cursor: pointer");
     expect(styles).not.toContain(".odt-terminal-links .xterm.xterm-cursor-pointer");
   });
+
+  test("does not promote each chat row to its own compositor layer", () => {
+    const styles = readStyles();
+
+    expect(styles).not.toMatch(
+      /\.agent-chat-row-motion[^{]*\{[^}]*(?:will-change|transform-origin)/,
+    );
+  });
 });
