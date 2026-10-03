@@ -27,6 +27,8 @@ import * as filePreview from "@/components/features/agents/task-execution-file-p
 import * as toolsPanel from "@/components/features/agents/workspace-session-tools-panel";
 import * as sessionChat from "./workspace-session-chat";
 import { AgentChatMarkdownRenderer } from "@/components/features/agents/agent-chat/agent-chat-markdown-renderer";
+import { AgentSessionQuestionCard } from "@/components/features/agents/agent-chat/agent-session-question-card";
+import { buildQuestionRequest } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import {
   WorkspaceSessionContent,
   WorkspaceSessionReadModelNotice,
@@ -137,6 +139,10 @@ function renderClosedSession(
       sessionIds = ids;
       view.rerender(content(branch, revision));
     },
+    setPanelOpen: (open: boolean) => {
+      panelOpen = open;
+      view.rerender(content(branch, revision));
+    },
     setBranch: (
       name: string | null | undefined,
       nextRevision?: string,
@@ -207,6 +213,55 @@ test("switching chats keeps the tools and chat drafts and resets the file owner"
     preview.mockRestore();
     tools.mockRestore();
     chat.mockRestore();
+  }
+});
+
+test("opening and closing tools preserves question drafts, tabs, and collapse choices", () => {
+  const request = buildQuestionRequest({
+    questions: [
+      { header: "First", question: "Enter a first answer", options: [] },
+      { header: "Second", question: "Enter a second answer", options: [] },
+    ],
+  });
+  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(() => (
+    <AgentSessionQuestionCard request={request} onSubmit={async () => {}} />
+  ));
+  const tools = spyOn(toolsPanel, "WorkspaceSessionToolsPanel").mockImplementation(() => (
+    <div>Workspace tools</div>
+  ));
+  const queryClient = newQueryClient();
+  queryClient.setQueryData(
+    repoConfigQueryOptions(workspace.workspaceId).queryKey,
+    repoConfigSchema.parse({ ...workspace, agentStudioState: { openTaskIds: [] } }),
+  );
+  const view = renderClosedSession(queryClient, "main", undefined, record, null);
+  try {
+    fireEvent.change(screen.getByPlaceholderText("Write your answer..."), {
+      target: { value: "First draft" },
+    });
+    fireEvent.click(screen.getByRole("tab", { name: "Second" }));
+    fireEvent.change(screen.getByPlaceholderText("Write your answer..."), {
+      target: { value: "Second draft" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Collapse question request" }));
+
+    for (const open of [true, false, true]) {
+      view.setPanelOpen(open);
+      expect(screen.getByRole("button", { name: "Expand question request" })).toBeTruthy();
+      expect(screen.getByText("2/2 answered")).toBeTruthy();
+      expect(screen.queryByText("Workspace tools") !== null).toBe(open);
+    }
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand question request" }));
+    expect(screen.getByRole("tab", { name: "Second" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByDisplayValue("Second draft")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "First" }));
+    expect(screen.getByDisplayValue("First draft")).toBeTruthy();
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    chat.mockRestore();
+    tools.mockRestore();
   }
 });
 
