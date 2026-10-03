@@ -1037,65 +1037,86 @@ describe("CodexAppServerAdapter streaming", () => {
     expect(transports.size).toBe(0);
   });
 
-  test("settles the active turn when runtime status changes to idle before turn completion", async () => {
-    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
-    const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });
+  test.each(["idle", "systemError"] as const)(
+    "settles the failed turn when status changes to %s",
+    async (type) => {
+      const ref = codexSessionRuntimeRef();
+      const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+      const mutations: CodexLiveSessionMutation[] = [];
+      const { adapter, transports } = createHarness(
+        {
+          subscribeEvents,
+          onLiveSessionMutation: (mutation) => mutations.push(mutation),
+        },
+        { deferTurnStart: true },
+      );
 
-    await adapter.startSession(codexStartSessionInput());
-    const events: AgentEvent[] = [];
-    const unsubscribe = await adapter.subscribeEvents(
-      codexSessionRuntimeRef("thread/start-runtime-live"),
-      (event) => events.push(event),
-    );
-    await flushCodexAdapterWork();
+      await adapter.startSession(codexStartSessionInput());
+      const events: AgentEvent[] = [];
+      const unsubscribe = await adapter.subscribeEvents(ref, (event) => events.push(event));
+      await flushCodexAdapterWork();
 
-    await adapter.sendUserMessage(
-      codexUserMessageInput({
-        externalSessionId: "thread/start-runtime-live",
-        parts: [{ kind: "text", text: "Start now" }],
-        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-      }),
-    );
-    transports.get("runtime-live")?.turnStartDeferred.resolve({
-      turn: codexTurnFixture({ id: "turn-live", items: [], status: "inProgress" }),
-    });
-    await flushCodexAdapterWork();
+      await adapter.sendUserMessage(
+        codexUserMessageInput({
+          externalSessionId: ref.externalSessionId,
+          parts: [{ kind: "text", text: "Start now" }],
+          model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+        }),
+      );
+      transports.get("runtime-live")?.turnStartDeferred.resolve({
+        turn: codexTurnFixture({ id: "turn-live", items: [], status: "inProgress" }),
+      });
+      await flushCodexAdapterWork();
 
-    emitNotification({
-      method: "thread/status/changed",
-      params: {
-        threadId: "thread/start-runtime-live",
-        status: { type: "idle" },
-      },
-    });
-    await flushCodexAdapterWork();
+      emitNotification({
+        method: "thread/status/changed",
+        params: {
+          threadId: ref.externalSessionId,
+          status: { type },
+        },
+      });
+      await flushCodexAdapterWork();
 
-    await expect(
-      adapter.readSessionRuntimeSnapshot({
-        repoPath: "/repo",
-        runtimeKind: "codex",
-        workingDirectory: "/repo",
-        externalSessionId: "thread/start-runtime-live",
-      }),
-    ).resolves.toMatchObject({ classification: "idle" });
-    expect(events.some((event) => event.type === "session_idle")).toBe(true);
-    expect(events.find((event) => event.type === "session_idle")).not.toHaveProperty(
-      "turnCompleted",
-    );
+      await expect(adapter.readSessionRuntimeSnapshot(ref)).resolves.toMatchObject({
+        classification: "idle",
+      });
+      const idle = events.find((event) => event.type === "session_idle");
+      expect(idle).toBeDefined();
+      expect(idle).not.toHaveProperty("turnCompleted");
 
-    await adapter.sendUserMessage(
-      codexUserMessageInput({
-        externalSessionId: "thread/start-runtime-live",
-        parts: [{ kind: "text", text: "Continue after idle" }],
-        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-      }),
-    );
+      const message = "Selected model is at capacity. Please try a different model.";
+      emitNotification({
+        method: "turn/completed",
+        params: {
+          threadId: ref.externalSessionId,
+          turn: codexTurnFixture({
+            id: "turn-live",
+            items: [],
+            status: "failed",
+            error: { message, codexErrorInfo: null, additionalDetails: null },
+          }),
+        },
+      });
+      await flushCodexAdapterWork();
+      expect(events.filter((event) => event.type === "session_error")).toEqual([
+        expect.objectContaining({ type: "session_error", message }),
+      ]);
+      expect(mutations.some((mutation) => mutation.fault !== undefined)).toBe(false);
 
-    const runtimeCalls = transports.get("runtime-live")?.calls ?? [];
-    expect(runtimeCalls.filter((call) => call.method === "turn/steer")).toEqual([]);
-    expect(runtimeCalls.filter((call) => call.method === "turn/start")).toHaveLength(2);
-    unsubscribe();
-  });
+      await adapter.sendUserMessage(
+        codexUserMessageInput({
+          externalSessionId: ref.externalSessionId,
+          parts: [{ kind: "text", text: "Continue after idle" }],
+          model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+        }),
+      );
+
+      const runtimeCalls = transports.get("runtime-live")?.calls ?? [];
+      expect(runtimeCalls.filter((call) => call.method === "turn/steer")).toEqual([]);
+      expect(runtimeCalls.filter((call) => call.method === "turn/start")).toHaveLength(2);
+      unsubscribe();
+    },
+  );
 
   test("waits for turn completion timing before flushing a final assistant message", async () => {
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();

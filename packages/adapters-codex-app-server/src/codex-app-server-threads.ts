@@ -100,18 +100,18 @@ const codexTimestampMsFromSeconds = (value: number | null | undefined): number |
 export const codexThreadStatusSnapshot = (
   status: CodexAppServerThreadStatus | CodexAppServerThreadStatus["type"] | undefined,
 ): CodexThreadStatusSnapshot => {
-  if (status === undefined || status === "idle" || status === "notLoaded") {
+  if (
+    status === undefined ||
+    status === "idle" ||
+    status === "notLoaded" ||
+    status === "systemError"
+  ) {
     return { classification: "idle" };
   }
   if (status === "active") return { classification: "running" };
-  if (status === "systemError") {
-    throw new Error("Codex thread reported a system error.");
-  }
-  if (status.type === "idle" || status.type === "notLoaded") {
+  // Native turn events carry the error. A failed turn can still accept input.
+  if (status.type !== "active") {
     return { classification: "idle" };
-  }
-  if (status.type === "systemError") {
-    throw new Error("Codex thread reported a system error.");
   }
   if (status.activeFlags.includes("waitingOnApproval")) {
     return { classification: "waiting_for_permission" };

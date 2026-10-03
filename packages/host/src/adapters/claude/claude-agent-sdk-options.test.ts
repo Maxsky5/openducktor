@@ -15,6 +15,7 @@ import {
   buildClaudeAgentSdkOptions,
   CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV,
   CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV,
+  CLAUDE_CODE_RESUME_INTERRUPTED_TURN_MAX_AGE_MS_ENV,
 } from "./claude-agent-sdk-options";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import type {
@@ -229,29 +230,32 @@ test.each(["repository", "workflow"] as const)(
 );
 
 describe("buildClaudeAgentSdkBaseOptions", () => {
-  test("injects the interrupted-turn resume switch only when it is requested", () => {
-    const withoutSwitch = buildClaudeAgentSdkBaseOptions({
+  test("sets resume switches only for an explicit request", () => {
+    const normal = buildClaudeAgentSdkBaseOptions({
       claudeExecutablePath: process.execPath,
       cwd: process.cwd(),
     });
-    const withSwitch = buildClaudeAgentSdkBaseOptions({
+    const resume = buildClaudeAgentSdkBaseOptions({
       claudeExecutablePath: process.execPath,
       cwd: process.cwd(),
       resumeInterruptedTurn: true,
     });
-    const inheritedSwitch = buildClaudeAgentSdkBaseOptions({
+    const inherited = buildClaudeAgentSdkBaseOptions({
       claudeExecutablePath: process.execPath,
       cwd: process.cwd(),
       processEnv: {
         [CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV]: "1",
         [CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV]: "1",
+        [CLAUDE_CODE_RESUME_INTERRUPTED_TURN_MAX_AGE_MS_ENV]: "1",
       },
     });
 
-    expect(withoutSwitch.env?.[CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV]).toBeUndefined();
-    expect(withSwitch.env?.[CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV]).toBe("1");
-    expect(inheritedSwitch.env?.[CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV]).toBeUndefined();
-    expect(inheritedSwitch.env?.[CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV]).toBeUndefined();
+    expect(normal.env?.[CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV]).toBeUndefined();
+    expect(resume.env?.[CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV]).toBe("1");
+    expect(inherited.env?.[CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV]).toBeUndefined();
+    expect(inherited.env?.[CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV]).toBeUndefined();
+    expect(normal.env?.[CLAUDE_CODE_RESUME_INTERRUPTED_TURN_MAX_AGE_MS_ENV]).toBeUndefined();
+    expect(inherited.env?.[CLAUDE_CODE_RESUME_INTERRUPTED_TURN_MAX_AGE_MS_ENV]).toBeUndefined();
   });
 });
 
