@@ -1325,6 +1325,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     expect(changes).toContainEqual({
       type: "fault",
       repoPath: runtime.repoPath,
+      runtimeKind: "codex",
       operation: "codex-live-session.process-event",
       message: "Codex event processing failed.",
       ref,

@@ -30,7 +30,7 @@ import type {
   RuntimeKind,
   SlashCommandCatalog,
 } from "@openducktor/contracts";
-import type { Effect } from "effect";
+import { Effect, Exit, Scope } from "effect";
 import type { HostError } from "../effect/host-errors";
 import type { AgentRuntimeQueryAdapterPort } from "./agent-runtime-query-port";
 
@@ -63,6 +63,7 @@ export type AgentSessionLiveAdapterChange = { readonly provenance?: "baseline" |
     }
   | {
       readonly type: "fault";
+      readonly runtimeKind?: RuntimeKind;
       readonly repoPath: string;
       readonly message: string;
       readonly operation?: string;
@@ -91,6 +92,10 @@ export class AgentSessionLiveRegistration implements AgentSessionLiveAdapterBind
   readonly runtimeId: string;
   readonly runtimeKind: RuntimeKind;
   readonly repoPath: string;
+  readonly generation = globalThis.crypto.randomUUID();
+  readonly #recoveryScopes = new Set<Scope.CloseableScope>();
+  #recoveryReleased = false;
+  readonly #transcriptRevisions = new Map<string, number>();
   readonly #run: RunLiveMutation;
 
   constructor(binding: AgentSessionLiveAdapterBinding, run: RunLiveMutation) {
@@ -100,7 +105,51 @@ export class AgentSessionLiveRegistration implements AgentSessionLiveAdapterBind
     this.#run = run;
   }
 
-  readonly runMutation: RunLiveMutation = (mutation) => this.#run(mutation);
+  readonly ownRecoveryScope = (scope: Scope.CloseableScope): Effect.Effect<boolean> =>
+    Effect.suspend(() => {
+      if (this.#recoveryReleased) return Scope.close(scope, Exit.void).pipe(Effect.as(false));
+      this.#recoveryScopes.add(scope);
+      return Effect.succeed(true);
+    });
+
+  readonly retireRecoveryScope = (scope: Scope.CloseableScope): Effect.Effect<void> =>
+    Effect.suspend(() => {
+      this.#recoveryScopes.delete(scope);
+      return Scope.close(scope, Exit.void);
+    });
+
+  readonly closeRecoveryScopes: Effect.Effect<void> = Effect.suspend(() => {
+    this.#recoveryReleased = true;
+    const scopes = [...this.#recoveryScopes];
+    this.#recoveryScopes.clear();
+    return Effect.forEach(scopes, (scope) => Scope.close(scope, Exit.void), { discard: true });
+  });
+
+  readonly transcriptRevision = (ref: AgentSessionLiveRef): number =>
+    this.#transcriptRevisions.get(JSON.stringify([ref.workingDirectory, ref.externalSessionId])) ??
+    0;
+
+  readonly runMutation: RunLiveMutation = (mutation) =>
+    this.#run(
+      mutation.pipe(
+        Effect.map((result) => ({
+          ...result,
+          changes: result.changes.map((change) =>
+            change.type === "fault" ? { ...change, runtimeKind: this.runtimeKind } : change,
+          ),
+        })),
+        Effect.tap((result) =>
+          Effect.sync(() => {
+            for (const change of result.changes) {
+              if (change.type !== "transcript_event") continue;
+              const ref = change.event.sessionRef;
+              const key = JSON.stringify([ref.workingDirectory, ref.externalSessionId]);
+              this.#transcriptRevisions.set(key, this.transcriptRevision(ref) + 1);
+            }
+          }),
+        ),
+      ),
+    );
 }
 
 export type AgentSessionLiveAdapterScope = Pick<AgentSessionLiveRef, "repoPath" | "runtimeKind">;
@@ -163,6 +212,7 @@ export type AgentSessionTitleUpdateOutcome =
   | { readonly status: "not_attached" };
 
 export type AgentSessionControlAdapterPort = {
+  readonly restoreSessionTree: (ref: AgentSessionLiveRef) => Effect.Effect<void, HostError>;
   readonly startSession: (
     input: AgentSessionControlStartInput,
   ) => Effect.Effect<AgentSessionControlSummary, HostError>;

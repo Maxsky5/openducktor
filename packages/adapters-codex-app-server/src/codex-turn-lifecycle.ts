@@ -62,6 +62,7 @@ const steerRetainedTurn = async (
   activeTurn: ActiveCodexTurn,
   input: ReturnType<typeof toCodexTurnInputList>,
   turnId: string,
+  clientUserMessageId: string,
 ): Promise<void> => {
   requireRetainedTurnSession(context, activeTurn.session);
   try {
@@ -69,6 +70,7 @@ const steerRetainedTurn = async (
       threadId: activeTurn.session.threadId,
       input,
       expectedTurnId: turnId,
+      clientUserMessageId,
     });
   } finally {
     requireRetainedTurnSession(context, activeTurn.session);
@@ -87,7 +89,13 @@ const flushQueuedUserMessages = async (
     if (!queued) {
       continue;
     }
-    await steerRetainedTurn(context, activeTurn, queued, activeTurn.turnId);
+    await steerRetainedTurn(
+      context,
+      activeTurn,
+      queued.input,
+      activeTurn.turnId,
+      queued.clientUserMessageId,
+    );
   }
 };
 
@@ -147,17 +155,32 @@ const steerActiveTurn = async (
             `Codex turn for session '${activeTurn.session.threadId}' ended before it could accept the message. Retry the message.`,
           );
         }
-        await steerRetainedTurn(context, activeTurn, input, activeTurn.turnId);
+        await steerRetainedTurn(
+          context,
+          activeTurn,
+          input,
+          activeTurn.turnId,
+          acceptedUserMessage.messageId,
+        );
         return publishAcceptedMessage
           ? emitAcceptedUserMessage(context, acceptedUserMessage)
           : acceptedUserMessage;
       }
-      activeTurn.queuedUserMessages.push(input);
+      activeTurn.queuedUserMessages.push({
+        input,
+        clientUserMessageId: acceptedUserMessage.messageId,
+      });
       return publishAcceptedMessage
         ? emitAcceptedUserMessage(context, acceptedUserMessage)
         : acceptedUserMessage;
     }
-    await steerRetainedTurn(context, activeTurn, input, activeTurn.turnId);
+    await steerRetainedTurn(
+      context,
+      activeTurn,
+      input,
+      activeTurn.turnId,
+      acceptedUserMessage.messageId,
+    );
     return publishAcceptedMessage
       ? emitAcceptedUserMessage(context, acceptedUserMessage)
       : acceptedUserMessage;
@@ -306,6 +329,7 @@ const runCodexTurn = async (
     input,
     ...toTransportModelSelection(model),
   };
+  if (acceptedUserMessage) turnInput.clientUserMessageId = acceptedUserMessage.messageId;
   if (!session.preserveNativeSettings) {
     turnInput.approvalPolicy = policy.approvalPolicy;
     turnInput.approvalsReviewer = codexApprovalsReviewer(policy);

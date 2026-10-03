@@ -42,6 +42,10 @@ export const createAgentRuntimeQueryCommandHandlers = (
       AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.loadSessionHistory,
       (input) => service.loadSessionHistory(input),
     ),
+    agent_runtime_recover_session_history: createQueryHandler(
+      AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.recoverSessionHistory,
+      (input) => service.recoverSessionHistory(input),
+    ),
     agent_runtime_load_session_todos: createQueryHandler(
       AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.loadSessionTodos,
       (input) => service.loadSessionTodos(input),

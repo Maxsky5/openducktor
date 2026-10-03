@@ -1,5 +1,6 @@
 import type { AgentEnginePort } from "@openducktor/core";
-import type { PropsWithChildren, ReactElement } from "react";
+import { type PropsWithChildren, type ReactElement, useEffect } from "react";
+import { WorkspaceActivityContext } from "../workspace-activity/workspace-activity-context";
 import {
   AgentOperationsContext,
   AgentSessionHistoryLoadContext,
@@ -20,6 +21,7 @@ export function AgentStudioStateProvider({
   agentEngine,
   children,
 }: AgentStudioStateProviderProps): ReactElement {
+  const activityObserver = useRequiredContext(WorkspaceActivityContext, "AgentStudioStateProvider");
   const { activeWorkspace } = useRequiredContext(WorkspaceStateContext, "AgentStudioStateProvider");
   const { tasks, isLoadingTasks } = useTaskSnapshotContext();
   const { refreshTaskData } = useTaskControlContext();
@@ -31,6 +33,11 @@ export function AgentStudioStateProvider({
       refreshTaskData,
       agentEngine,
     });
+
+  useEffect(
+    () => activityObserver.subscribeHistoryInvalidations(sessionStore.invalidateRetainedHistory),
+    [activityObserver, sessionStore],
+  );
 
   return (
     <AgentOperationsContext.Provider value={operations}>

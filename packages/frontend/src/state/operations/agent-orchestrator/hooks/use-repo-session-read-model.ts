@@ -9,7 +9,11 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/lib/errors";
-import type { AgentSessionCollection } from "@/state/agent-session-collection";
+import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
+import {
+  createAgentSessionCollection,
+  type AgentSessionCollection,
+} from "@/state/agent-session-collection";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import type { AgentSessionReadPort } from "@/state/queries/agent-sessions";
 import {
@@ -20,7 +24,7 @@ import {
 import { workspaceSessionListQueryOptions } from "@/state/queries/workspace-sessions";
 import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
 import { invalidateRuntimeQueries } from "@/state/queries/runtime-query-invalidation";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import {
   type AgentSessionReadModelLoadState,
   currentAgentSessionReadModelLoadState,
@@ -78,7 +82,9 @@ type UseRepoSessionReadModelArgs = {
   commitSessionCollection: AgentSessionsStore["commitSessionCollection"];
   liveSessionPort: AgentSessionLiveFrontendPort;
   transcriptEvents: AgentSessionTranscriptEventConsumer;
-  recoverTranscriptGap: (message: string) => Promise<void>;
+  recoverTranscriptGap: (
+    gap: Extract<AgentSessionLiveEnvelope, { type: "transcript_gap" }>,
+  ) => Promise<void>;
   queryClient: QueryClient;
   sessionReadPort: AgentSessionReadPort;
 };
@@ -188,8 +194,7 @@ export const useRepoSessionReadModel = ({
   // Marks a loading window created by demoting a stale-scope failure, so its
   // own success can end it without promoting unrelated loading windows.
   const demotedStaleFailureRef = useRef(false);
-  // Marks a loading window created when a healthy snapshot clears a public
-  // live failure before the current task-record scope finishes hydrating.
+  // Keep the read state loading when live recovery finishes before task records arrive.
   const recoveredLiveFailureRef = useRef(false);
   const initialLiveSnapshotReceivedRef = useRef(false);
   const taskIdsKey = taskIdsScopeKey(taskIds);
@@ -213,8 +218,9 @@ export const useRepoSessionReadModel = ({
   const flushTranscriptSession = useEffectEvent((ref: AgentSessionLiveRef) =>
     transcriptEvents.flushSession(ref),
   );
-  const recoverTranscriptHistory = useEffectEvent((message: string) =>
-    recoverTranscriptGap(message),
+  const recoverTranscriptHistory = useEffectEvent(
+    (gap: Extract<AgentSessionLiveEnvelope, { type: "transcript_gap" }>) =>
+      recoverTranscriptGap(gap),
   );
   const clearSessionFaults = useCallback(() => {
     setSessionFaults((current) => (current.size === 0 ? current : new Map()));
@@ -468,11 +474,9 @@ export const useRepoSessionReadModel = ({
     if (!applied) {
       return;
     }
-    // Current-scope records loaded: a prior task-record failure no longer
-    // describes this read model. An unresolved live-stream failure still does
-    // until the stream itself recovers through a fresh snapshot. A loading
-    // window created by a stale-scope or recovered live failure ends with this
-    // success.
+    // Current task records clear a fault from an older task set.
+    // A live failure stays visible until its own recovery finishes.
+    // End loading when the fault that caused it clears.
     const liveMessage = liveStreamFailureRef.current;
     const staleFailureWasDemoted = demotedStaleFailureRef.current;
     const liveFailureWasRecovered = recoveredLiveFailureRef.current;
@@ -722,16 +726,37 @@ export const useRepoSessionReadModel = ({
           current: registered,
           snapshots: envelope.sessions,
         });
-        return applyWorkspaceRecords(applyLoadedRecords(projected, current), current);
+        const collection = applyWorkspaceRecords(applyLoadedRecords(projected, current), current);
+        if (!envelope.runtimeGenerations) return collection;
+        const generations = new Map(
+          envelope.runtimeGenerations.map((runtime) => [runtime.runtimeKind, runtime.generation]),
+        );
+        return createAgentSessionCollection(
+          [...collection.values()].map((session) => {
+            const generation = generations.get(session.runtimeKind);
+            return {
+              ...session,
+              runtimeGeneration: generation,
+            };
+          }),
+        );
       });
       initialLiveSnapshotReceivedRef.current = true;
       if (isStaleRepoOperation()) {
         return;
       }
-      // Any fresh authoritative snapshot proves the stream recovered.
+      // An HTTP baseline can arrive while the event stream is disconnected.
+      if (connectionFailure) {
+        failObservation(connectionFailure);
+        return;
+      }
+      clearLiveFailure();
+    };
+    /** Clear the live failure without bypassing snapshot or task-record readiness. */
+    const clearLiveFailure = (): void => {
       const recoveredLiveFailure = liveStreamFailureRef.current !== null;
       liveStreamFailureRef.current = null;
-      if (readLoadedWorkflowRecords()) {
+      if (initialLiveSnapshotReceivedRef.current && readLoadedWorkflowRecords()) {
         setSessionReadModelLoadState(readyAgentSessionReadModelLoadState(repoPath));
         return;
       }
@@ -761,8 +786,23 @@ export const useRepoSessionReadModel = ({
       }
       // Hydration owns the public state until its own read resolves.
     };
+    let connectionFailure: string | null = null;
     const applyEnvelope = (envelope: AgentSessionLiveEnvelope): void => {
       if (isStaleRepoOperation()) {
+        return;
+      }
+      if (envelope.type === "connection_state") {
+        if (envelope.state === "uncertain") {
+          const previous = connectionFailure;
+          connectionFailure =
+            envelope.message ?? "Host connection interrupted. Reconnect to the host.";
+          if (liveStreamFailureRef.current === null || liveStreamFailureRef.current === previous)
+            failObservation(connectionFailure);
+        } else {
+          const recovered = connectionFailure && liveStreamFailureRef.current === connectionFailure;
+          connectionFailure = null;
+          if (recovered) clearLiveFailure();
+        }
         return;
       }
       if (envelope.type === "snapshot") {
@@ -773,6 +813,28 @@ export const useRepoSessionReadModel = ({
         const message = faultMessage(envelope);
         if (envelope.ref) {
           recordSessionFault(envelope.ref, message);
+        } else if (envelope.runtimeKind) {
+          const affected = commitSessionCollection((current) => ({
+            collection: current,
+            result: [...current.values()]
+              .filter((session) => session.runtimeKind === envelope.runtimeKind)
+              .map((session) => ({
+                repoPath,
+                runtimeKind: session.runtimeKind,
+                workingDirectory: session.workingDirectory,
+                externalSessionId: session.externalSessionId,
+              })),
+          }));
+          for (const ref of affected) recordSessionFault(ref, message);
+          runOrchestratorSideEffect(
+            "agent-session-live-observation-failed",
+            invalidateRuntimeQueries(
+              queryClient,
+              { repoPath, runtimeKind: envelope.runtimeKind },
+              "stopped",
+            ),
+            { tags: { repoPath, runtimeKind: envelope.runtimeKind } },
+          );
         } else {
           failObservation(message);
         }
@@ -786,7 +848,7 @@ export const useRepoSessionReadModel = ({
       }
       if (envelope.type === "session_upsert" || envelope.type === "session_removed") {
         const upsert = envelope.type === "session_upsert";
-        clearSessionFault(upsert ? envelope.session.ref : envelope.ref);
+        if (upsert) clearSessionFault(envelope.session.ref);
         if (upsert && isSettlingLiveSessionSnapshot(envelope.session)) {
           // Apply the session's queued transcript events first, so a settled snapshot
           // cannot render an unfinished last turn.
@@ -802,12 +864,48 @@ export const useRepoSessionReadModel = ({
       }
       if (envelope.type === "transcript_event") {
         clearSessionFault(envelope.event.sessionRef);
-        commitTranscriptActivity(envelope);
+        if (!envelope.stateCovered) commitTranscriptActivity(envelope);
         handleTranscriptEvent(envelope.event);
         return;
       }
       if (envelope.type === "transcript_gap") {
-        void recoverTranscriptHistory(envelope.message).catch((cause: unknown) => {
+        commitProjected((current) =>
+          createAgentSessionCollection(
+            [...current.values()].map((session): AgentSessionState => {
+              const affected = envelope.refs
+                ? envelope.refs.some((ref) => matchesAgentSessionIdentity(session, ref))
+                : !envelope.runtimeKind || envelope.runtimeKind === session.runtimeKind;
+              if (!affected) return session;
+              let historyRecoveryGeneration = session.historyRecoveryGeneration;
+              if (envelope.replayPending || !session.historyReplayPending) {
+                historyRecoveryGeneration = (historyRecoveryGeneration ?? 0) + 1;
+              }
+              let historyLoadState = session.historyLoadState;
+              if (envelope.replayPending && historyLoadState === "loading") {
+                const hasRetainedHistory =
+                  session.historyCompleteness === "recovering" || session.messages.items.length > 0;
+                historyLoadState = hasRetainedHistory ? "loaded" : "not_requested";
+              }
+              return {
+                ...session,
+                historyReplayPending: envelope.replayPending === true,
+                historyRecoveryGeneration,
+                historyLoadState,
+                historyCompleteness: "incomplete",
+              };
+            }),
+          ),
+        );
+        if (envelope.replayPending) return;
+        if (envelope.refs || envelope.runtimeKind) {
+          runOrchestratorSideEffect(
+            "agent-session-live-recover-scoped-history",
+            recoverTranscriptHistory(envelope),
+            { tags: { repoPath } },
+          );
+          return;
+        }
+        void recoverTranscriptHistory(envelope).catch((cause: unknown) => {
           failObservation(
             `Failed to recover transcript history after a live-stream gap: ${errorMessage(cause)}`,
           );
@@ -841,6 +939,43 @@ export const useRepoSessionReadModel = ({
         return;
       }
       if (envelope.type === "runtime_changed") {
+        commitProjected((current) =>
+          createAgentSessionCollection(
+            [...current.values()].map((session) => {
+              if (session.runtimeKind !== envelope.scope.runtimeKind) return session;
+              let historyLoadState = session.historyLoadState;
+              if (historyLoadState === "loading") {
+                historyLoadState = session.messages.items.length > 0 ? "loaded" : "not_requested";
+              }
+              const next: AgentSessionState = {
+                ...session,
+                runtimeGeneration:
+                  envelope.state === "stopped"
+                    ? undefined
+                    : (envelope.runtimeGeneration ?? session.runtimeGeneration),
+                historyRecoveryGeneration: (session.historyRecoveryGeneration ?? 0) + 1,
+                historyLoadState,
+              };
+              if (
+                session.historyLoadState === "loaded" ||
+                session.historyCompleteness === "recovering"
+              )
+                next.historyCompleteness = "incomplete";
+              return next;
+            }),
+          ),
+        );
+
+        runOrchestratorSideEffect(
+          "agent-session-live-runtime-history-discontinuity",
+          recoverTranscriptHistory({
+            type: "transcript_gap",
+            repoPath: envelope.scope.repoPath,
+            runtimeKind: envelope.scope.runtimeKind,
+            message: "Runtime observation changed. Reload affected conversation history.",
+          }),
+          { tags: envelope.scope },
+        );
         runOrchestratorSideEffect(
           "agent-session-live-runtime-changed",
           invalidateRuntimeQueries(queryClient, envelope.scope, envelope.state),

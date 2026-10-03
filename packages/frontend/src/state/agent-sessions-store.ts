@@ -1,3 +1,4 @@
+import type { AgentSessionLiveEnvelope } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   type AgentSessionCollection,
@@ -49,6 +50,9 @@ export type AgentSessionsStore = {
     identity: AgentSessionIdentity,
     updater: (current: AgentSessionState) => AgentSessionState,
   ) => AgentSessionState | null;
+  invalidateRetainedHistory: (
+    envelope: Extract<AgentSessionLiveEnvelope, { type: "transcript_gap" | "runtime_changed" }>,
+  ) => void;
   resetWorkspace: (workspaceRepoPath: string | null) => void;
 };
 
@@ -103,13 +107,15 @@ export const createAgentSessionsStore = (
   };
 
   // A repository switch drops the late result of an unfinished history load.
-  // Return it to not requested, so the next visit requests the baseline history
-  // again.
+  // Let the next visit request history again. Interrupted recovery stays incomplete.
   const resetLoadingHistoryLoads = (collection: AgentSessionCollection): AgentSessionCollection => {
     let next = collection;
     for (const session of listAgentSessions(collection)) {
       if (session.historyLoadState === "loading") {
-        next = replaceAgentSession(next, { ...session, historyLoadState: "not_requested" });
+        const retained: AgentSessionState = { ...session, historyLoadState: "not_requested" };
+        if (session.historyCompleteness === "recovering")
+          retained.historyCompleteness = "incomplete";
+        next = replaceAgentSession(next, retained);
       }
     }
     return next;
@@ -175,6 +181,31 @@ export const createAgentSessionsStore = (
         replaceAgentSessionByIdentity(current, identity, nextSession),
       );
       return nextSession;
+    },
+    invalidateRetainedHistory: (envelope) => {
+      const repoPath =
+        envelope.type === "runtime_changed" ? envelope.scope.repoPath : envelope.repoPath;
+      if (repoPath === workspaceRepoPath) return;
+      const collection = retainedCollections.get(repoPath);
+      if (!collection) return;
+      let next = collection;
+      for (const session of listAgentSessions(collection)) {
+        const affected =
+          envelope.type === "runtime_changed"
+            ? session.runtimeKind === envelope.scope.runtimeKind
+            : (!envelope.runtimeKind || session.runtimeKind === envelope.runtimeKind) &&
+              (!envelope.refs ||
+                envelope.refs.some(
+                  (ref) => agentSessionIdentityKey(ref) === agentSessionIdentityKey(session),
+                ));
+        if (
+          affected &&
+          (session.historyLoadState === "loaded" || session.historyCompleteness === "recovering")
+        ) {
+          next = replaceAgentSession(next, { ...session, historyCompleteness: "incomplete" });
+        }
+      }
+      retainedCollections.set(repoPath, next);
     },
     resetWorkspace: (nextWorkspaceRepoPath) => {
       retainActiveCollection();

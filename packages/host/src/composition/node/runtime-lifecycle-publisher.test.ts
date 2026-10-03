@@ -4,14 +4,28 @@ import {
   type HostEventEnvelope,
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
+import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
+import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
 import { Effect } from "effect";
 import { createRuntimeRegistry } from "../../adapters/runtimes/runtime-registry";
 import { HostOperationError, HostResourceError } from "../../effect/host-errors";
 import { createHostEventBus } from "../../events/host-event-bus";
+import { createAgentSessionRuntimeAdapterTestDouble } from "../../test-support/service-test-doubles";
 import {
   createLiveSessionPublisher,
   createRuntimeLifecyclePublisher,
 } from "./runtime-lifecycle-publisher";
+
+const createLiveStateForBus = (
+  eventBus: import("../../events/host-event-bus").HostEventBusPort,
+  adapterRegistry = createLiveSessionAdapterRegistry(),
+) =>
+  createAgentSessionLiveStateService({
+    hostEpoch: "test-epoch",
+    adapterRegistry,
+    faultLog: () => Effect.void,
+    publish: createLiveSessionPublisher(eventBus),
+  });
 
 const runtime: RuntimeInstanceSummary = {
   runtimeId: "runtime-1",
@@ -24,6 +38,39 @@ const runtime: RuntimeInstanceSummary = {
   startedAt: "2026-09-12T10:00:00.000Z",
   descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
 };
+
+test("publishes the registered generation when runtime observation becomes ready", async () => {
+  const adapter = createAgentSessionRuntimeAdapterTestDouble(
+    { repoPath: runtime.repoPath, runtimeId: runtime.runtimeId, runtimeKind: runtime.kind },
+    {},
+  );
+  const envelopes: HostEventEnvelope[] = [];
+  const registrations = createLiveSessionAdapterRegistry();
+  await Effect.runPromise(registrations.register(adapter));
+  const publish = createRuntimeLifecyclePublisher(
+    createLiveStateForBus(
+      {
+        publish: (envelope) => {
+          envelopes.push(envelope);
+        },
+        subscribe: () => () => {},
+      },
+      registrations,
+    ),
+    (error) => Effect.die(error),
+  );
+  await Effect.runPromise(publish(runtime, "ready"));
+  expect(envelopes[0]).toEqual({
+    channel: "openducktor://agent-session-live-event",
+    payload: {
+      type: "runtime_changed",
+      scope: { repoPath: runtime.repoPath, runtimeKind: runtime.kind },
+      state: "ready",
+      runtimeGeneration: adapter.binding.generation,
+      cursor: { hostEpoch: "test-epoch", sequence: 1 },
+    },
+  });
+});
 
 test("keeps runtime start, reuse, replacement, and stop consistent when publication fails", async () => {
   const failure = new Error("event delivery unavailable");
@@ -45,12 +92,12 @@ test("keeps runtime start, reuse, replacement, and stop consistent when publicat
         })),
     },
     onRuntimeChanged: createRuntimeLifecyclePublisher(
-      {
+      createLiveStateForBus({
         publish: () => {
           throw failure;
         },
         subscribe: () => () => {},
-      },
+      }),
       (error) =>
         Effect.sync(() => {
           failures.push(error);
@@ -77,7 +124,8 @@ test("keeps runtime start, reuse, replacement, and stop consistent when publicat
   expect(failures).toHaveLength(4);
   for (const error of failures) {
     expect(error.operation).toBe("runtime.publish-change");
-    expect(error.cause).toBe(failure);
+    expect(error.cause).toBeInstanceOf(HostOperationError);
+    if (error.cause instanceof HostOperationError) expect(error.cause.cause).toBe(failure);
   }
 });
 
@@ -125,17 +173,20 @@ test("publishes runtime scope and preserves required live session bus errors", a
   const unsubscribe = eventBus.subscribe("openducktor://agent-session-live-event", (envelope) =>
     envelopes.push(envelope),
   );
-  const publish = createRuntimeLifecyclePublisher(eventBus, (error) => Effect.die(error));
+  const publish = createRuntimeLifecyclePublisher(createLiveStateForBus(eventBus), (error) =>
+    Effect.die(error),
+  );
   try {
     await Effect.runPromise(publish(runtime, "ready"));
     await Effect.runPromise(publish(runtime, "stopped"));
     expect(envelopes).toEqual(
-      (["ready", "stopped"] as const).map((state) => ({
+      (["ready", "stopped"] as const).map((state, index) => ({
         channel: "openducktor://agent-session-live-event",
         payload: {
           type: "runtime_changed",
           scope: { repoPath: "/repo", runtimeKind: "opencode" },
           state,
+          cursor: { hostEpoch: "test-epoch", sequence: index + 1 },
         },
       })),
     );

@@ -24,6 +24,7 @@ import type {
 import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type AgentSessionAuthorizedRoot,
+  type AgentSessionScope,
   type AgentSessionControlUpdateTitleInput,
 } from "@openducktor/contracts";
 import {
@@ -73,6 +74,10 @@ export type OpencodeSessionRuntimeConnection = {
   readonly readSessionSources: (
     roots?: AgentSessionAuthorizedRoot[],
   ) => Promise<OpencodeRuntimeSnapshotRead>;
+  readonly readSessionTree: (
+    root: SessionRef,
+    install?: (read: OpencodeRuntimeSnapshotRead) => Promise<void>,
+  ) => Promise<OpencodeRuntimeSnapshotRead>;
   readonly loadContextUsage: (ref: SessionRef) => Promise<OpencodeSessionContextUsage | null>;
   readonly replyApproval: (input: OpencodeNativeApprovalReply) => Promise<void>;
   readonly replyQuestion: (input: OpencodeNativeQuestionReply) => Promise<void>;
@@ -112,6 +117,8 @@ type PrepareOpencodeSessionRuntimeOptions = OpencodeSdkAdapterOptions & {
   readonly readDirectory: ReadOpencodeDirectory;
 };
 
+type RuntimeRoot = SessionRef & { sessionScope?: AgentSessionScope };
+
 export const createPrepareOpencodeSessionRuntime = (
   options: PrepareOpencodeSessionRuntimeOptions,
 ): PrepareOpencodeSessionRuntime => {
@@ -139,17 +146,19 @@ export const createPrepareOpencodeSessionRuntime = (
     const pendingSignals: OpencodeSessionRuntimeSignal[] = [];
     const pendingSessionSignals: OpencodeSessionRuntimeSignal[] = [];
     const eventsBeforeSubscribers: Event[] = [];
-    const initializationEvents: Event[] = [];
     let forwardingListener:
       | ((signal: OpencodeSessionRuntimeSignal) => void | Promise<void>)
       | null = null;
     let deliveryTail = Promise.resolve();
     let startingForwarding = false;
     let initializing = true;
-    let subscribersReady = false;
+    let restoringTree = false;
+    const treeEvents: Event[] = [];
     let released = false;
+    let observationFailure: Error | undefined;
 
     const requireActive = (): void => {
+      if (observationFailure) throw observationFailure;
       if (released) {
         throw new Error(`OpenCode runtime '${input.runtimeId}' has been released.`);
       }
@@ -206,12 +215,27 @@ export const createPrepareOpencodeSessionRuntime = (
     const syncEventSessions = async (
       { sources, failures }: OpencodeRuntimeSnapshotRead,
       bindings: ReadonlyMap<string, SessionRecord>,
-      roots: readonly AgentSessionAuthorizedRoot[],
+      roots: readonly RuntimeRoot[],
     ): Promise<void> => {
       const sourceIds = new Set([
         ...sources.map((source) => source.externalSessionId),
         ...failures.map((failure) => failure.externalSessionId),
       ]);
+      const failedIds = new Set(failures.map((failure) => failure.externalSessionId));
+      let expanded = true;
+      while (expanded) {
+        expanded = false;
+        for (const session of bindings.values()) {
+          const parentId = runtimeEventTransports
+            .get(input.runtimeId)
+            ?.parentExternalSessionIdByChildExternalSessionId.get(session.externalSessionId);
+          if (parentId && failedIds.has(parentId) && !failedIds.has(session.externalSessionId)) {
+            failedIds.add(session.externalSessionId);
+            sourceIds.add(session.externalSessionId);
+            expanded = true;
+          }
+        }
+      }
       for (const session of bindings.values()) {
         const scope = session.input.sessionScope;
         const hasSource = sources.some(
@@ -229,6 +253,7 @@ export const createPrepareOpencodeSessionRuntime = (
                 (root) =>
                   root.externalSessionId === candidate.externalSessionId &&
                   root.workingDirectory === candidate.workingDirectory &&
+                  root.sessionScope !== undefined &&
                   agentSessionScopesEqual(root.sessionScope, scope),
               )),
         );
@@ -290,22 +315,50 @@ export const createPrepareOpencodeSessionRuntime = (
       }
     };
 
-    let readSessionSourcesTail = Promise.resolve();
+    let readTail = Promise.resolve();
     let authorizedRoots: AgentSessionAuthorizedRoot[] = [];
-    const admittedRoots = new Map<string, AgentSessionAuthorizedRoot>();
+    const admittedRoots = new Map<string, RuntimeRoot>();
     const readSessionSources = (
       roots?: AgentSessionAuthorizedRoot[],
+      treeRoot?: SessionRef,
+      install?: (read: OpencodeRuntimeSnapshotRead) => Promise<void>,
     ): Promise<OpencodeRuntimeSnapshotRead> => {
-      const read = readSessionSourcesTail.then(async () => {
+      const read = readTail.then(async () => {
         requireActive();
-        const rootsToRead = [...(roots ?? authorizedRoots), ...admittedRoots.values()];
+        if (treeRoot) restoringTree = true;
+        const restoredRoot: RuntimeRoot | undefined = treeRoot
+          ? (admittedRoots.get(treeRoot.externalSessionId) ??
+            authorizedRoots.find((root) => agentSessionRefsEqual(root, treeRoot)) ??
+            treeRoot)
+          : undefined;
+        if (restoredRoot) admittedRoots.set(restoredRoot.externalSessionId, restoredRoot);
+        const rootsToRead = restoredRoot
+          ? [restoredRoot]
+          : [...(roots ?? authorizedRoots), ...admittedRoots.values()];
         const bindings = new Map(eventSessions);
+        if (treeRoot) {
+          const ids = new Set([treeRoot.externalSessionId]);
+          const parents = runtimeEventTransports.get(
+            input.runtimeId,
+          )?.parentExternalSessionIdByChildExternalSessionId;
+          let expanded = true;
+          while (expanded) {
+            expanded = false;
+            for (const [child, parent] of parents ?? [])
+              if (ids.has(parent) && !ids.has(child)) {
+                ids.add(child);
+                expanded = true;
+              }
+          }
+          for (const id of bindings.keys()) if (!ids.has(id)) bindings.delete(id);
+        }
         // Block sends until the refresh checks each workflow tree or drops its binding.
-        const permissionSessions = roots
-          ? [...bindings.values()].filter(
-              (session) => session.input.sessionScope?.kind === "workflow",
-            )
-          : [];
+        const permissionSessions =
+          roots || treeRoot
+            ? [...bindings.values()].filter(
+                (session) => session.input.sessionScope?.kind === "workflow",
+              )
+            : [];
         const finishPermissionSetups = permissionSessions.map(beginPermissionSetup);
         try {
           const snapshotInput: Parameters<typeof listOpencodeRuntimeSnapshotSources>[0] = {
@@ -327,7 +380,7 @@ export const createPrepareOpencodeSessionRuntime = (
                   },
                   "attach session",
                 );
-              if (!roots && existing) {
+              if (!roots && !treeRoot && existing) {
                 if (existing.permissionSetupError) throw existing.permissionSetupError;
                 return;
               }
@@ -356,27 +409,36 @@ export const createPrepareOpencodeSessionRuntime = (
             },
             readDirectory,
             now,
+            readContextUsage: (ref) =>
+              readLatestOpencodeContextUsage(
+                { createClient, runtimeEndpoint: input.runtimeEndpoint },
+                ref,
+              ),
           };
           if (input.directories) {
             snapshotInput.directories = input.directories;
           }
           const result = await listOpencodeRuntimeSnapshotSources(snapshotInput);
           requireActive();
-          const shouldRetainRoot = (root: AgentSessionAuthorizedRoot): boolean =>
-            root.sessionScope.kind === "repository" ||
+          const shouldRetainRoot = (root: RuntimeRoot): boolean =>
+            root.sessionScope?.kind === "repository" ||
             result.sources.some(
               (source) =>
                 source.externalSessionId === root.externalSessionId &&
                 source.workingDirectory === root.workingDirectory,
             );
-          authorizedRoots = (roots ?? authorizedRoots).filter(shouldRetainRoot);
+          if (!treeRoot) authorizedRoots = (roots ?? authorizedRoots).filter(shouldRetainRoot);
           for (const root of rootsToRead) {
-            if (roots?.includes(root) || !shouldRetainRoot(root))
+            if (
+              roots?.some((authorized) => agentSessionRefsEqual(authorized, root)) ||
+              !shouldRetainRoot(root)
+            )
               admittedRoots.delete(root.externalSessionId);
           }
           await syncEventSessions(result, bindings, rootsToRead);
+          await initialize();
           requireActive();
-          return {
+          const recovered = {
             ...result,
             sources: result.sources.map((source) =>
               applyOpencodeAwaitingTurnStartToRuntimeSnapshot({
@@ -386,18 +448,42 @@ export const createPrepareOpencodeSessionRuntime = (
               }),
             ),
           };
+          if (treeRoot) {
+            await install?.(recovered);
+            for (let index = 0; index < treeEvents.length; index++) {
+              const event = treeEvents[index]!;
+              if (!(await observation.dispatch(event)))
+                throw new Error(
+                  "OpenCode event projection failed during restore. Stop and start the assigned runtime.",
+                );
+              await forwardEventSignals(event);
+            }
+          }
+          return recovered;
         } catch (cause) {
           for (const session of permissionSessions)
             session.permissionSetupError = new Error(
               `Failed to restore permissions for OpenCode session '${session.externalSessionId}' in '${session.input.workingDirectory}'. Reconnect the selected runtime and retry attachment: ${cause instanceof Error ? cause.message : String(cause)}`,
               { cause },
             );
+          if (treeRoot && !released) {
+            const error =
+              cause instanceof Error
+                ? cause
+                : new Error("OpenCode session tree restore failed.", { cause });
+            observationFailure ??= observation.fail(error);
+            throw observationFailure;
+          }
           throw cause;
         } finally {
           for (const finish of finishPermissionSetups) finish();
+          if (treeRoot) {
+            restoringTree = false;
+            treeEvents.length = 0;
+          }
         }
       });
-      readSessionSourcesTail = read.then(
+      readTail = read.then(
         () => undefined,
         () => undefined,
       );
@@ -439,18 +525,23 @@ export const createPrepareOpencodeSessionRuntime = (
       emit: (externalSessionId, event: AgentEvent) => {
         pendingSessionSignals.push({ type: "session_event", externalSessionId, event });
       },
-      observer: async (event) => {
-        if (initializing) {
-          initializationEvents.push(event);
-          if (!subscribersReady) {
-            eventsBeforeSubscribers.push(event);
-          }
-          return;
+      // Hold events until the host installs the restored tree.
+      deferEvent: (event) => {
+        if (restoringTree) {
+          treeEvents.push(event);
+          return true;
         }
-        await forwardEventSignals(event);
+        if (initializing) {
+          eventsBeforeSubscribers.push(event);
+          return true;
+        }
+        return false;
       },
-      terminalObserver: (error) =>
-        emitSignal({ type: "fault", message: toOpencodeObservationFailureMessage(error) }),
+      observer: forwardEventSignals,
+      terminalObserver: (error) => {
+        observationFailure = error;
+        return emitSignal({ type: "fault", message: toOpencodeObservationFailureMessage(error) });
+      },
     };
     if (input.signal) {
       observationInput.signal = input.signal;
@@ -461,19 +552,25 @@ export const createPrepareOpencodeSessionRuntime = (
     const observation = await observeRuntimeEvents(observationInput);
 
     const initialize = async (): Promise<void> => {
-      subscribersReady = true;
-      for (const event of eventsBeforeSubscribers.splice(0)) {
-        await observation.dispatch(event);
-        requireActive();
-      }
-      initializationEvents.length = 0;
+      if (!initializing) return;
       await drainSessionSignals();
       requireActive();
+      for (let index = 0; index < eventsBeforeSubscribers.length; index += 1) {
+        const event = eventsBeforeSubscribers[index]!;
+        if (!(await observation.dispatch(event)))
+          throw new Error(
+            "OpenCode event projection failed during attachment. Stop and start the assigned runtime.",
+          );
+        await forwardEventSignals(event);
+        requireActive();
+      }
+      eventsBeforeSubscribers.length = 0;
       initializing = false;
     };
 
     try {
-      await waitForRuntimeInitialization(initialize(), input.signal, input.runtimeId);
+      if (input.signal?.aborted)
+        throw runtimeInitializationAbortFailure(input.signal, input.runtimeId);
     } catch (error) {
       released = true;
       const cleanupFailures: unknown[] = [];
@@ -498,6 +595,7 @@ export const createPrepareOpencodeSessionRuntime = (
 
     const connection: OpencodeSessionRuntimeConnection = {
       readSessionSources,
+      readSessionTree: (root, install) => readSessionSources(undefined, root, install),
       loadContextUsage: (ref) =>
         readLatestOpencodeContextUsage(
           { createClient, runtimeEndpoint: input.runtimeEndpoint },
@@ -516,6 +614,7 @@ export const createPrepareOpencodeSessionRuntime = (
           workingDirectory: sessionInput.workingDirectory,
           sessionScope: sessionInput.sessionScope!,
         });
+        await initialize();
         return summary;
       },
       resumeSession: async (sessionInput) => {
@@ -524,6 +623,7 @@ export const createPrepareOpencodeSessionRuntime = (
           ...sessionInput,
           sessionScope: sessionInput.sessionScope!,
         });
+        await initialize();
         return summary;
       },
       continueInterruptedTurn: (sessionInput) =>
@@ -537,6 +637,7 @@ export const createPrepareOpencodeSessionRuntime = (
           workingDirectory: sessionInput.workingDirectory,
           sessionScope: sessionInput.sessionScope!,
         });
+        await initialize();
         return summary;
       },
       sendUserMessage: (messageInput) => controlAdapter.sendUserMessage(messageInput),
@@ -598,7 +699,6 @@ export const createPrepareOpencodeSessionRuntime = (
         pendingSignals.length = 0;
         pendingSessionSignals.length = 0;
         eventsBeforeSubscribers.length = 0;
-        initializationEvents.length = 0;
       }
       if (failures.length > 0) {
         throw new AggregateError(
@@ -634,31 +734,6 @@ const runtimeInitializationAbortFailure = (signal: AbortSignal, runtimeId: strin
   signal.reason instanceof Error
     ? signal.reason
     : new Error(`OpenCode runtime '${runtimeId}' initialization was aborted.`);
-
-const waitForRuntimeInitialization = <Value>(
-  initialization: Promise<Value>,
-  signal: AbortSignal | undefined,
-  runtimeId: string,
-): Promise<Value> => {
-  if (!signal) return initialization;
-  return new Promise<Value>((resolve, reject) => {
-    let settled = false;
-    const finish = (complete: () => void): void => {
-      if (settled) return;
-      settled = true;
-      signal.removeEventListener("abort", abort);
-      complete();
-    };
-    const abort = (): void =>
-      finish(() => reject(runtimeInitializationAbortFailure(signal, runtimeId)));
-    signal.addEventListener("abort", abort, { once: true });
-    void initialization.then(
-      (value) => finish(() => resolve(value)),
-      (cause: unknown) => finish(() => reject(cause)),
-    );
-    if (signal.aborted) abort();
-  });
-};
 
 const releaseEventSessions = async (
   sessions: Map<string, SessionRecord>,

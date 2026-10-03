@@ -39,7 +39,13 @@ const resolveGlobalEventStream = async (
   client: GlobalEventClient,
   signal: AbortSignal,
 ): Promise<AsyncIterable<OpencodeGlobalEvent>> => {
-  const stream = await client.global.event({ signal });
+  const stream = await client.global.event({
+    signal,
+    sseMaxRetryAttempts: 1,
+    onSseError: (cause) => {
+      throw cause;
+    },
+  });
   return stream.stream;
 };
 

@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+import { writeHostLifecycleLog } from "../host-lifecycle";
 import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
 import type { HostEventBusPort } from "../../events/host-event-bus";
@@ -21,12 +23,34 @@ export const createNodeAgentSessionLiveState = ({
   ...dependencies
 }: Input) => {
   const liveSessionAdapterRegistry = createLiveSessionAdapterRegistry();
+  const readRoots = createLiveSessionRootRefsReader({
+    ...dependencies,
+    reportReads: (repoPath, durableHostReads) =>
+      writeHostLifecycleLog(
+        lifecycleLogger,
+        "info",
+        `recovery.ownership.reads ${JSON.stringify({ hostEpoch: eventBus?.hostEpoch, repoPath, durableHostReads })}`,
+      ),
+  });
   return {
     liveSessionAdapterRegistry,
     liveState: createAgentSessionLiveStateService({
       ...dependencies,
+      hostEpoch: eventBus?.hostEpoch,
       adapterRegistry: liveSessionAdapterRegistry,
-      readSessionRootRefs: createLiveSessionRootRefsReader(dependencies),
+      readSessionRootRefs: (repoPath) =>
+        Effect.suspend(() => {
+          const startedAt = performance.now();
+          return readRoots(repoPath).pipe(
+            Effect.tap((roots) =>
+              writeHostLifecycleLog(
+                lifecycleLogger,
+                "info",
+                `recovery.ownership ${JSON.stringify({ hostEpoch: eventBus?.hostEpoch, repoPath, roots: roots.length, elapsedMs: performance.now() - startedAt })}`,
+              ),
+            ),
+          );
+        }),
       faultLog: createLiveSessionFaultLogger(lifecycleLogger),
       publish: createLiveSessionPublisher(eventBus),
     }),

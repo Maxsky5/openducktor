@@ -1190,7 +1190,7 @@ describe("TypeScript web host backend", () => {
       new Request("http://127.0.0.1/events", {
         method: "GET",
         headers: {
-          "last-event-id": "0",
+          "last-event-id": `${eventBus.hostEpoch}:0`,
           "x-openducktor-app-token": APP_TOKEN,
         },
       }),
@@ -1203,17 +1203,17 @@ describe("TypeScript web host backend", () => {
       throw new Error("Expected SSE response body.");
     }
     try {
-      expect(new TextDecoder().decode((await readImmediateStreamChunk(reader)).value)).toBe(
-        ": openducktor-ready\n\n",
-      );
       let replay = "";
-      for (const _event of events) {
+      for (let count = 0; count < 300 && !replay.includes("event: replay-complete"); count++) {
         replay += new TextDecoder().decode((await readImmediateStreamChunk(reader)).value);
       }
+      expect(replay).toContain("event: replay-complete");
       for (const event of events) {
         expect(replay).toContain(JSON.stringify(event));
       }
-      expect(replay).toContain(`id: 3\nevent: ${liveSessionStreamEventName("/repo")}\ndata: `);
+      expect(replay).toContain(
+        `id: ${eventBus.hostEpoch}:3\nevent: ${liveSessionStreamEventName("/repo")}\ndata: `,
+      );
       eventBus.publish({
         channel: "openducktor://agent-session-live-event",
         payload: {
@@ -1223,7 +1223,9 @@ describe("TypeScript web host backend", () => {
         },
       });
       const next = new TextDecoder().decode((await readImmediateStreamChunk(reader)).value);
-      expect(next).toContain(`id: 4\nevent: ${liveSessionStreamEventName("/other")}\ndata: `);
+      expect(next).toContain(
+        `id: ${eventBus.hostEpoch}:4\nevent: ${liveSessionStreamEventName("/other")}\ndata: `,
+      );
     } finally {
       await reader.cancel();
     }
@@ -1258,7 +1260,7 @@ describe("TypeScript web host backend", () => {
     expect(eventBus.stream().replayAfter(0)).toHaveLength(1);
   });
 
-  test("emits a stream warning when shared SSE replay cannot cover the reconnect gap", async () => {
+  test("reports channel loss when SSE replay cannot cover the reconnect gap", async () => {
     const eventBus = new BufferedHostEventBus({ report: () => {} });
     for (let index = 0; index < 258; index += 1) {
       eventBus.publish({
@@ -1271,7 +1273,7 @@ describe("TypeScript web host backend", () => {
       new Request("http://127.0.0.1/events", {
         method: "GET",
         headers: {
-          "last-event-id": "1",
+          "last-event-id": `${eventBus.hostEpoch}:1`,
           "x-openducktor-app-token": APP_TOKEN,
         },
       }),
@@ -1284,20 +1286,15 @@ describe("TypeScript web host backend", () => {
       throw new Error("Expected SSE response body.");
     }
     try {
-      const readyChunk = await readImmediateStreamChunk(reader);
-      expect(readyChunk.done).toBe(false);
-      expect(new TextDecoder().decode(readyChunk.value)).toBe(": openducktor-ready\n\n");
-
-      const warningChunk = await readImmediateStreamChunk(reader);
-      expect(warningChunk.done).toBe(false);
-      expect(new TextDecoder().decode(warningChunk.value)).toBe(
-        "event: stream-warning\n" +
-          "data: Host event stream skipped 1 event; reconnect will replay buffered events.\n\n",
-      );
-
-      const replayChunk = await readImmediateStreamChunk(reader);
-      expect(replayChunk.done).toBe(false);
-      expect(new TextDecoder().decode(replayChunk.value)).toContain('"sequence":2');
+      let replay = "";
+      for (let count = 0; count < 300 && !replay.includes("event: replay-complete"); count++) {
+        replay += new TextDecoder().decode((await readImmediateStreamChunk(reader)).value);
+      }
+      expect(replay).toContain("event: replay-start");
+      expect(replay).toContain('"facet":"other"');
+      expect(replay).toContain('"channel":"openducktor://run-event"');
+      expect(replay).toContain("event: replay-complete");
+      expect(replay).toContain('"sequence":2');
     } finally {
       await reader.cancel();
     }
@@ -1700,8 +1697,8 @@ describe("TypeScript web host backend", () => {
       if (!reader) {
         throw new Error("Expected SSE response body.");
       }
-      expect(new TextDecoder().decode((await readImmediateStreamChunk(reader)).value)).toBe(
-        ": openducktor-ready\n\n",
+      expect(new TextDecoder().decode((await readImmediateStreamChunk(reader)).value)).toContain(
+        "event: replay-complete",
       );
 
       const shutdown = stop();

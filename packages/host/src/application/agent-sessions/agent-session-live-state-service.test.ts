@@ -9,7 +9,7 @@ import type {
   AgentSessionLiveSnapshot,
   RuntimeKind,
 } from "@openducktor/contracts";
-import { Deferred, Effect, Fiber } from "effect";
+import { Deferred, Effect, Fiber, FiberId, Scope, Exit } from "effect";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
 import { type HostError, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type {
@@ -95,6 +95,7 @@ const titleControlAdapter = (
   ...fakeAdapter({ runtimeId: "runtime-1", snapshots: () => [liveSnapshot("session-1")] }),
   queries: unexpectedRuntimeQueries,
   supportsSessionControl: true,
+  restoreSessionTree: () => Effect.dieMessage("unexpected restore"),
   startSession: () => Effect.dieMessage("unexpected start"),
   resumeSession: () => Effect.dieMessage("unexpected resume"),
   continueInterruptedTurn: () => Effect.dieMessage("unexpected continue"),
@@ -303,7 +304,7 @@ describe("createAgentSessionLiveStateService", () => {
     events.length = 0;
     broken = true;
     expect(await Effect.runPromise(service.releaseRuntime("released"))).toEqual([owned.ref]);
-    expect(events).toEqual([{ type: "session_removed", ref: owned.ref }]);
+    expect(events).toMatchObject([{ type: "session_removed", ref: owned.ref }]);
   });
   test("publishes the same execution episode to list, read, and refresh consumers", async () => {
     const { events, service } = createHarness();
@@ -325,7 +326,7 @@ describe("createAgentSessionLiveStateService", () => {
     });
     events.length = 0;
     await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
-    expect(events).toEqual([
+    expect(events).toMatchObject([
       {
         type: "snapshot",
         repoPath: "/repo",
@@ -510,7 +511,7 @@ describe("createAgentSessionLiveStateService", () => {
     );
 
     await Effect.runPromise(Effect.yieldNow());
-    expect(events).toEqual([]);
+    expect(events).toMatchObject([]);
     await Effect.runPromise(Deferred.succeed(release, undefined));
     await Effect.runPromise(Fiber.join(refreshFiber));
     await Effect.runPromise(Fiber.join(changeFiber));
@@ -761,7 +762,7 @@ describe("createAgentSessionLiveStateService", () => {
       ),
     );
 
-    expect(events).toEqual([
+    expect(events).toMatchObject([
       {
         type: "fault",
         repoPath: "/repo",
@@ -795,7 +796,7 @@ describe("createAgentSessionLiveStateService", () => {
       ),
     );
 
-    expect(events).toEqual([
+    expect(events).toMatchObject([
       {
         type: "fault",
         repoPath: "/repo",
@@ -842,7 +843,7 @@ describe("createAgentSessionLiveStateService", () => {
 
     expect(failure).toBe(logFailure);
     expect(logAttempts).toBe(1);
-    expect(events).toEqual([
+    expect(events).toMatchObject([
       {
         type: "fault",
         repoPath: "/repo",
@@ -882,7 +883,7 @@ describe("createAgentSessionLiveStateService", () => {
     );
 
     expect(failure).toBe(logFailure);
-    expect(events).toEqual([
+    expect(events).toMatchObject([
       {
         type: "fault",
         repoPath: "/repo",
@@ -968,7 +969,7 @@ describe("createAgentSessionLiveStateService", () => {
     );
 
     expect(failure).toBe(publishFailure);
-    expect(published).toEqual([
+    expect(published).toMatchObject([
       {
         type: "fault",
         repoPath: "/repo",
@@ -1040,7 +1041,7 @@ describe("createAgentSessionLiveStateService", () => {
 
     await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
 
-    expect(events).toEqual([{ type: "snapshot", repoPath: "/repo", sessions: [] }]);
+    expect(events).toMatchObject([{ type: "snapshot", repoPath: "/repo", sessions: [] }]);
     expect(faultLogs).toEqual([]);
   });
 
@@ -1133,7 +1134,7 @@ describe("createAgentSessionLiveStateService", () => {
         ),
       ),
     ).rejects.toThrow();
-    expect(events).toEqual([]);
+    expect(events).toMatchObject([]);
     await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toEqual([]);
   });
 
@@ -1290,7 +1291,7 @@ describe("createAgentSessionLiveStateService", () => {
       "live snapshot read failed",
     );
 
-    expect(events).toEqual([{ type: "snapshot", repoPath: "/repo", sessions: [] }]);
+    expect(events).toMatchObject([{ type: "snapshot", repoPath: "/repo", sessions: [] }]);
     await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toEqual([]);
   });
 
@@ -1313,6 +1314,7 @@ describe("createAgentSessionLiveStateService", () => {
       queries: unexpectedRuntimeQueries,
       sessionImport: unexpectedSessionImport,
       supportsSessionControl: true,
+      restoreSessionTree: () => Effect.dieMessage("unexpected restore"),
       startSession: () => Effect.dieMessage("unexpected start"),
       resumeSession: (input) =>
         Effect.sync(() => {
@@ -1360,6 +1362,7 @@ describe("createAgentSessionLiveStateService", () => {
       queries: unexpectedRuntimeQueries,
       sessionImport: unexpectedSessionImport,
       supportsSessionControl: true,
+      restoreSessionTree: () => Effect.dieMessage("unexpected restore"),
       startSession: () => Effect.dieMessage("unexpected start"),
       resumeSession: () => Effect.dieMessage("unexpected resume"),
       continueInterruptedTurn: (input: { externalSessionId: string; workingDirectory: string }) => {
@@ -1480,6 +1483,7 @@ describe("createAgentSessionLiveStateService", () => {
       queries: unexpectedRuntimeQueries,
       sessionImport: unexpectedSessionImport,
       supportsSessionControl: true,
+      restoreSessionTree: () => Effect.dieMessage("unexpected restore"),
       startSession: () => Effect.dieMessage("unexpected start"),
       resumeSession: () => Effect.dieMessage("unexpected resume"),
       continueInterruptedTurn: () => Effect.dieMessage("unexpected continue"),
@@ -1616,4 +1620,350 @@ describe("createAgentSessionLiveStateService", () => {
     );
     await expectMissingRoute(service.loadContext(ref));
   });
+});
+
+test("additional attachments share runtime initialization and do not repeat durable reads", async () => {
+  const adapterRegistry = createLiveSessionAdapterRegistry();
+  let hostReads = 0;
+  let nativeReads = 0;
+  const service = createAgentSessionLiveStateService({
+    adapterRegistry,
+    readSessionRootRefs: () =>
+      Effect.sync(() => {
+        hostReads++;
+        return [{ ...sessionRef("one"), sessionScope: { kind: "repository" as const } }];
+      }),
+    faultLog: () => Effect.void,
+    publish: () => {},
+  });
+  const adapter = fakeAdapter({
+    runtimeId: "runtime",
+    snapshots: () => [liveSnapshot("one")],
+    refreshEffect: () =>
+      Effect.sync(() => {
+        nativeReads++;
+      }),
+  });
+  await Effect.runPromise(service.registerRuntimeAdapter(adapter));
+  const results = await Promise.all(
+    Array.from({ length: 8 }, () => Effect.runPromise(service.attach({ repoPath: "/repo" }))),
+  );
+  expect(hostReads).toBe(1);
+  expect(nativeReads).toBe(1);
+  expect(
+    results.every(
+      (result) =>
+        result.cursor.hostEpoch === results[0]?.cursor.hostEpoch && result.sessions.length === 1,
+    ),
+  ).toBe(true);
+  await Effect.runPromise(service.attach({ repoPath: "/repo" }));
+  expect(hostReads).toBe(1);
+  expect(nativeReads).toBe(1);
+});
+
+test("interrupted registration closes reconstruction and recovery scopes before replacement", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const registry = createLiveSessionAdapterRegistry();
+      const service = createAgentSessionLiveStateService({
+        adapterRegistry: registry,
+        faultLog: () => Effect.void,
+        publish: () => {},
+      });
+      const entered = yield* Deferred.make<void>();
+      const gate = yield* Deferred.make<void>();
+      let cancelled = false;
+      let recoveryClosed = false;
+      let replacementStarted = false;
+      const old = fakeAdapter({
+        runtimeId: "old",
+        snapshots: () => [],
+        refreshEffect: () =>
+          Deferred.succeed(entered, undefined).pipe(
+            Effect.zipRight(Deferred.await(gate)),
+            Effect.onInterrupt(() =>
+              Effect.sync(() => {
+                cancelled = true;
+              }),
+            ),
+          ),
+      });
+      const scope = yield* Scope.make();
+      yield* Scope.addFinalizer(
+        scope,
+        Effect.sync(() => {
+          recoveryClosed = true;
+        }),
+      );
+      yield* old.binding.ownRecoveryScope(scope);
+      const registering = yield* Effect.fork(service.registerRuntimeAdapter(old));
+      yield* Deferred.await(entered);
+      try {
+        yield* Fiber.interrupt(registering);
+        yield* service.releaseRuntime("old");
+        const replacement = fakeAdapter({
+          runtimeId: "new",
+          snapshots: () => [],
+          refreshEffect: () =>
+            Effect.sync(() => {
+              replacementStarted = true;
+            }),
+        });
+        const result = yield* service
+          .registerRuntimeAdapter(replacement)
+          .pipe(Effect.timeoutOption("100 millis"));
+        expect(result._tag).toBe("Some");
+        expect(cancelled).toBe(true);
+        expect(recoveryClosed).toBe(true);
+        expect(replacementStarted).toBe(true);
+      } finally {
+        yield* Deferred.succeed(gate, undefined);
+        yield* Scope.close(scope, Exit.void);
+        yield* service.releaseRuntime("new");
+      }
+    }),
+  );
+});
+
+test("failed registration retires recovery scopes and preserves its source error", async () => {
+  const registry = createLiveSessionAdapterRegistry();
+  const service = createAgentSessionLiveStateService({
+    adapterRegistry: registry,
+    faultLog: () => Effect.void,
+    publish: () => {},
+  });
+  const failure = new HostOperationError({
+    operation: "test.refresh",
+    message: "Runtime refresh failed. Start the assigned runtime.",
+  });
+  const adapter = fakeAdapter({
+    runtimeId: "failed",
+    snapshots: () => [],
+    refreshEffect: () => Effect.fail(failure),
+  });
+  let closed = false;
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const scope = yield* Scope.make();
+      yield* Scope.addFinalizer(
+        scope,
+        Effect.sync(() => {
+          closed = true;
+        }),
+      );
+      yield* adapter.binding.ownRecoveryScope(scope);
+      try {
+        const result = yield* Effect.either(service.registerRuntimeAdapter(adapter));
+        expect(result._tag).toBe("Left");
+        if (result._tag === "Left") expect(result.left).toBe(failure);
+        expect(closed).toBe(true);
+        expect(registry.listForRepo("/repo")).toHaveLength(0);
+      } finally {
+        yield* Scope.close(scope, Exit.void);
+      }
+    }),
+  );
+});
+
+test("archiving releases descendant subscriptions without releasing another root", async () => {
+  const root = liveSnapshot("root", "opencode");
+  const child = { ...liveSnapshot("child", "opencode"), parentExternalSessionId: "root" };
+  const grandchild = {
+    ...liveSnapshot("grandchild", "opencode"),
+    parentExternalSessionId: "child",
+  };
+  const other = liveSnapshot("other", "opencode");
+  const tree = [root, child, grandchild];
+  let snapshots = [...tree, other];
+  const subscribers = new Set(snapshots.map((session) => session.ref.externalSessionId));
+  const { service, events } = createHarness();
+  const binding = service.createRuntimeRegistration({
+    repoPath: "/repo",
+    runtimeId: "runtime-1",
+    runtimeKind: "opencode",
+  });
+  const adapter: AgentSessionRuntimeAdapterPort = {
+    ...titleControlAdapter(() => Effect.succeed({ status: "not_attached" })),
+    binding,
+    listSnapshots: () => Effect.succeed(snapshots),
+    releaseSession: (ref) =>
+      Effect.sync(() => {
+        subscribers.delete(ref.externalSessionId);
+        snapshots = snapshots.filter((session) =>
+          ref.externalSessionId === "root"
+            ? !tree.includes(session)
+            : session.ref.externalSessionId !== ref.externalSessionId,
+        );
+      }),
+    restoreSessionTree: () =>
+      Effect.sync(() => {
+        snapshots = [...tree, other];
+        for (const session of tree) subscribers.add(session.ref.externalSessionId);
+      }),
+  };
+  const emit = async (session: AgentSessionLiveSnapshot) => {
+    if (!subscribers.has(session.ref.externalSessionId)) return;
+    await Effect.runPromise(
+      binding.runMutation(
+        Effect.succeed({
+          value: undefined,
+          changes: [
+            {
+              type: "transcript_event" as const,
+              event: {
+                type: "assistant_message" as const,
+                sessionRef: session.ref,
+                externalSessionId: session.ref.externalSessionId,
+                timestamp: root.startedAt,
+                messageId: session.ref.externalSessionId,
+                message: "Still observed",
+              },
+            },
+          ],
+        }),
+      ),
+    );
+  };
+  await Effect.runPromise(service.registerRuntimeAdapter(adapter));
+  try {
+    await Effect.runPromise(service.setSessionOwnership(root.ref, false));
+    expect(
+      (await Effect.runPromise(service.attach({ repoPath: "/repo" }))).sessions.map(
+        (session) => session.ref.externalSessionId,
+      ),
+    ).toEqual(["other"]);
+    for (const session of [...tree, other]) await emit(session);
+    expect(
+      events
+        .filter((event) => event.type === "transcript_event")
+        .map((event) => event.event.externalSessionId),
+    ).toEqual(["other"]);
+
+    await Effect.runPromise(service.setSessionOwnership(root.ref, true));
+    expect(
+      (await Effect.runPromise(service.attach({ repoPath: "/repo" }))).sessions.map(
+        (session) => session.ref.externalSessionId,
+      ),
+    ).toEqual(["root", "child", "grandchild", "other"]);
+    events.length = 0;
+    await emit(child);
+    expect(
+      events
+        .filter((event) => event.type === "transcript_event")
+        .map((event) => event.event.externalSessionId),
+    ).toEqual(["child"]);
+  } finally {
+    await Effect.runPromise(service.releaseRuntime("runtime-1"));
+  }
+});
+
+test("shares ownership reconstruction and holds attachments until it commits", async () => {
+  const entered = Promise.withResolvers<void>();
+  const finish = Promise.withResolvers<void>();
+  let reads = 0;
+  let snapshots: AgentSessionLiveSnapshot[] = [];
+  const service = createAgentSessionLiveStateService({
+    adapterRegistry: createLiveSessionAdapterRegistry(),
+    faultLog: () => Effect.void,
+    publish: () => {},
+  });
+  const adapter: AgentSessionRuntimeAdapterPort = {
+    ...titleControlAdapter(() => Effect.succeed({ status: "not_attached" })),
+    listSnapshots: () => Effect.succeed(snapshots),
+    restoreSessionTree: () =>
+      Effect.promise(async () => {
+        reads++;
+        entered.resolve();
+        await finish.promise;
+        snapshots = [liveSnapshot("restored")];
+      }),
+  };
+  await Effect.runPromise(service.registerRuntimeAdapter(adapter));
+  expect((await Effect.runPromise(service.attach({ repoPath: "/repo" }))).sessions).toEqual([]);
+  const restore = Effect.runPromise(service.setSessionOwnership(sessionRef("restored"), true));
+  await entered.promise;
+  const second = Effect.runPromise(service.setSessionOwnership(sessionRef("restored"), true));
+  let attached = false;
+  const baseline = Effect.runPromise(service.attach({ repoPath: "/repo" })).then((result) => {
+    attached = true;
+    return result;
+  });
+  await Bun.sleep(10);
+  expect(attached).toBe(false);
+  expect(reads).toBe(1);
+  finish.resolve();
+  await Promise.all([restore, second]);
+  expect(await baseline).toMatchObject({ complete: true, sessions: [liveSnapshot("restored")] });
+  await Effect.runPromise(service.releaseRuntime("runtime-1"));
+});
+
+test("reports failed ownership repair as incomplete and permits an explicit retry", async () => {
+  let fail = true;
+  const service = createAgentSessionLiveStateService({
+    adapterRegistry: createLiveSessionAdapterRegistry(),
+    faultLog: () => Effect.void,
+    publish: () => {},
+  });
+  const adapter: AgentSessionRuntimeAdapterPort = {
+    ...titleControlAdapter(() => Effect.succeed({ status: "not_attached" })),
+    restoreSessionTree: () =>
+      Effect.suspend(() =>
+        fail
+          ? Effect.fail(new HostOperationError({ operation: "restore", message: "Retry Restore." }))
+          : Effect.void,
+      ),
+  };
+  await Effect.runPromise(service.registerRuntimeAdapter(adapter));
+  await expect(
+    Effect.runPromise(service.setSessionOwnership(sessionRef("session-1"), true)),
+  ).rejects.toThrow("Retry Restore.");
+  expect(await Effect.runPromise(service.attach({ repoPath: "/repo" }))).toMatchObject({
+    complete: false,
+    failures: [expect.objectContaining({ ref: sessionRef("session-1") })],
+  });
+  fail = false;
+  await Effect.runPromise(service.setSessionOwnership(sessionRef("session-1"), true));
+  expect((await Effect.runPromise(service.attach({ repoPath: "/repo" }))).complete).toBe(true);
+  await Effect.runPromise(service.releaseRuntime("runtime-1"));
+});
+
+test("canceling a restore caller leaves shared reconstruction owned by the runtime", async () => {
+  const entered = Deferred.unsafeMake<void>(FiberId.none);
+  const finish = Deferred.unsafeMake<void>(FiberId.none);
+  let snapshots: AgentSessionLiveSnapshot[] = [];
+  let interrupted = false;
+  const service = createAgentSessionLiveStateService({
+    adapterRegistry: createLiveSessionAdapterRegistry(),
+    faultLog: () => Effect.void,
+    publish: () => {},
+  });
+  const adapter: AgentSessionRuntimeAdapterPort = {
+    ...titleControlAdapter(() => Effect.succeed({ status: "not_attached" })),
+    listSnapshots: () => Effect.succeed(snapshots),
+    restoreSessionTree: () =>
+      Deferred.succeed(entered, undefined).pipe(
+        Effect.zipRight(Deferred.await(finish)),
+        Effect.tap(() =>
+          Effect.sync(() => {
+            snapshots = [liveSnapshot("restored")];
+          }),
+        ),
+        Effect.onInterrupt(() =>
+          Effect.sync(() => {
+            interrupted = true;
+          }),
+        ),
+      ),
+  };
+  await Effect.runPromise(service.registerRuntimeAdapter(adapter));
+  const caller = Effect.runFork(service.setSessionOwnership(sessionRef("restored"), true));
+  await Effect.runPromise(Deferred.await(entered));
+  await Effect.runPromise(Fiber.interrupt(caller));
+  expect(interrupted).toBe(false);
+  await Effect.runPromise(Deferred.succeed(finish, undefined));
+  expect(await Effect.runPromise(service.attach({ repoPath: "/repo" }))).toMatchObject({
+    complete: true,
+    sessions: [liveSnapshot("restored")],
+  });
+  await Effect.runPromise(service.releaseRuntime("runtime-1"));
 });

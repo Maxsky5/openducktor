@@ -76,6 +76,7 @@ type UpsertLiveAssistantMessageInput = {
   sourceMessageId?: string;
   text: string;
   timestamp: string;
+  contentMode: "delta" | "cumulative";
 };
 
 const upsertLiveAssistantMessage = ({
@@ -87,6 +88,7 @@ const upsertLiveAssistantMessage = ({
   sourceMessageId,
   text,
   timestamp,
+  contentMode,
 }: UpsertLiveAssistantMessageInput): AgentSessionState => {
   if (text.trim().length === 0) {
     return current;
@@ -116,8 +118,12 @@ const upsertLiveAssistantMessage = ({
     timestamp: existingMessage?.timestamp ?? timestamp,
     meta: nextMeta,
   };
+  const deltaMessageIds = new Set(current.historyDeltaMessageIds);
+  if (contentMode === "delta") deltaMessageIds.add(messageId);
+  else deltaMessageIds.delete(messageId);
   return {
     ...current,
+    historyDeltaMessageIds: deltaMessageIds,
     messages: replacedMessageId
       ? replaceSessionMessageById(current, replacedMessageId, nextMessage)
       : upsertSessionMessage(current, nextMessage),
@@ -141,6 +147,7 @@ export const handleAssistantDelta = (
         current,
         model: resolvePartModelSelection(context, current, messageId),
         messageId,
+        contentMode: "delta",
         text: sanitizeStreamingText(`${baseContent}${event.delta}`),
         timestamp: event.timestamp,
       });
@@ -164,20 +171,27 @@ const handleTextPart = (
       return prepared;
     }
 
+    const existingPart = prepared.messages.items.find(
+      (message) =>
+        message.meta?.kind === "assistant" &&
+        message.meta.sourceMessageId === part.messageId &&
+        message.meta.partId === part.partId,
+    );
     const sourceMessage = findSessionMessageById(prepared, part.messageId);
     const usesPartIdentity =
       prepared.runtimeKind === "claude" || prepared.runtimeKind === "opencode";
     const input: UpsertLiveAssistantMessageInput = {
       current: prepared,
       model: resolvePartModelSelection(context, prepared, part.messageId),
-      messageId: usesPartIdentity ? toTextMessageId(part.messageId, part.partId) : part.messageId,
+      messageId:
+        existingPart?.id ??
+        (usesPartIdentity ? toTextMessageId(part.messageId, part.partId) : part.messageId),
+      contentMode: "cumulative",
       text: part.text,
       timestamp: event.timestamp,
     };
-    if (usesPartIdentity) {
-      input.partId = part.partId;
-      input.sourceMessageId = part.messageId;
-    }
+    input.partId = part.partId;
+    input.sourceMessageId = part.messageId;
     if (usesPartIdentity && sourceMessage) {
       input.replacedMessageId = part.messageId;
     }

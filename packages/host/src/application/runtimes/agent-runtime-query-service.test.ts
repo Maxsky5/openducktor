@@ -6,7 +6,7 @@ import {
   type RuntimeKind,
   repoConfigSchema,
 } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
 import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import {
@@ -44,7 +44,10 @@ const harness = async (
     descriptor: RUNTIME_DESCRIPTORS_BY_KIND[runtimeKind],
   };
   const calls: unknown[] = [];
+  let ownsSession = true;
+  let ownershipReads = 0;
   let beforeModels = async () => {};
+  let beforeHistory = async () => {};
   let snapshots: AgentSessionLiveSnapshot[] = [];
   const adapterRegistry = createLiveSessionAdapterRegistry();
   const adapter = createAgentSessionRuntimeAdapterTestDouble(
@@ -66,8 +69,9 @@ const harness = async (
             };
           }),
         loadSessionHistory: (input) =>
-          Effect.sync(() => {
+          Effect.promise(async () => {
             calls.push(input);
+            await beforeHistory();
             return [];
           }),
         searchFiles: (input) =>
@@ -119,19 +123,24 @@ const harness = async (
     }),
     taskReader: {
       getTaskMetadata: () =>
-        Effect.succeed({
-          spec: { markdown: "" },
-          plan: { markdown: "" },
-          agentSessions: [
-            {
-              externalSessionId: "root",
-              runtimeKind,
-              workingDirectory: options.sessionWorkingDirectory ?? workingDirectory,
-              role: "build",
-              startedAt: "2026-09-10T10:00:00.000Z",
-              selectedModel: null,
-            },
-          ],
+        Effect.sync(() => {
+          ownershipReads += 1;
+          return {
+            spec: { markdown: "" },
+            plan: { markdown: "" },
+            agentSessions: ownsSession
+              ? [
+                  {
+                    externalSessionId: "root",
+                    runtimeKind,
+                    workingDirectory: options.sessionWorkingDirectory ?? workingDirectory,
+                    role: "build",
+                    startedAt: "2026-09-10T10:00:00.000Z",
+                    selectedModel: null,
+                  },
+                ]
+              : [],
+          };
         }),
     },
     worktreeReads: createTaskSessionLifecycleCoordinator(),
@@ -144,6 +153,13 @@ const harness = async (
     adapter,
     adapterRegistry,
     calls,
+    setOwnership: (owned: boolean) => {
+      ownsSession = owned;
+    },
+    readOwnershipReads: () => ownershipReads,
+    setBeforeHistory: (read: () => Promise<void>) => {
+      beforeHistory = read;
+    },
     setBeforeModels: (read: () => Promise<void>) => {
       beforeModels = read;
     },
@@ -363,6 +379,27 @@ const historyRef = {
   runtimePolicy: { kind: "opencode" },
 } as const;
 
+test("history reads reject an obsolete generation before reaching the native runtime", async () => {
+  const h = await harness();
+  const failure = await Effect.runPromise(
+    Effect.flip(
+      h.service.loadSessionHistory({
+        ...historyRef,
+        expectedRuntimeGeneration: "obsolete-runtime",
+      }),
+    ),
+  );
+  expect(failure.failure.code).toBe("runtime_unavailable");
+  expect(h.calls).toHaveLength(0);
+  await Effect.runPromise(
+    h.service.loadSessionHistory({
+      ...historyRef,
+      expectedRuntimeGeneration: h.adapter.binding.generation,
+    }),
+  );
+  expect(h.calls).toEqual([historyRef]);
+});
+
 test("reads cold history without a live snapshot and requires task ownership when scope is supplied", async () => {
   const h = await harness();
   await Effect.runPromise(h.service.loadSessionHistory(historyRef));
@@ -460,4 +497,180 @@ test("reads cold child history through native lineage and an existing ODT owners
     }),
   );
   expect(h.calls).toHaveLength(1);
+});
+
+test("concurrent browsers share full history recovery and a closing browser does not cancel it", async () => {
+  const h = await harness();
+  const started = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  h.setBeforeHistory(async () => {
+    started.resolve();
+    await release.promise;
+  });
+  const input = { ...historyRef };
+  const closingBrowser = Effect.runFork(h.service.recoverSessionHistory(input));
+  await started.promise;
+  const remainingBrowser = Effect.runPromise(h.service.recoverSessionHistory(input));
+  await Effect.runPromise(Fiber.interrupt(closingBrowser));
+  release.resolve();
+  expect((await remainingBrowser).coverage).toBe("full");
+  expect(h.calls).toHaveLength(1);
+  expect(h.calls[0]).not.toHaveProperty("limit");
+  await Effect.runPromise(h.service.recoverSessionHistory(input));
+  expect(h.calls).toHaveLength(1);
+  await Effect.runPromise(h.adapter.binding.closeRecoveryScopes);
+});
+
+test("a transcript publication invalidates shared full-history coverage", async () => {
+  const h = await harness();
+  const input = { ...historyRef };
+  const first = await Effect.runPromise(h.service.recoverSessionHistory(input));
+  await Effect.runPromise(
+    h.adapter.binding.runMutation(
+      Effect.succeed({
+        value: undefined,
+        changes: [
+          {
+            type: "transcript_event" as const,
+            event: {
+              type: "assistant_message" as const,
+              externalSessionId: "root",
+              messageId: "message",
+              message: "new output",
+              timestamp: "2026-09-30T10:00:00Z",
+              sessionRef: historyRef,
+            },
+          },
+        ],
+      }),
+    ),
+  );
+  const second = await Effect.runPromise(h.service.recoverSessionHistory(input));
+  expect(first.transcriptRevisionAtStart).toBe(0);
+  expect(second.transcriptRevisionAtStart).toBe(1);
+  expect(h.calls).toHaveLength(2);
+  await Effect.runPromise(h.adapter.binding.closeRecoveryScopes);
+});
+
+test("recovery rejects an expected runtime generation that has been replaced", async () => {
+  const h = await harness();
+  const failure = await Effect.runPromise(
+    Effect.flip(
+      h.service.recoverSessionHistory({
+        ...historyRef,
+        expectedRuntimeGeneration: "old-runtime-generation",
+      }),
+    ),
+  );
+  expect(failure.failure.code).toBe("runtime_unavailable");
+  expect(h.calls).toHaveLength(0);
+});
+
+test("runtime release interrupts a blocked shared history read", async () => {
+  const h = await harness();
+  const started = Promise.withResolvers<void>();
+  h.setBeforeHistory(async () => {
+    started.resolve();
+    await new Promise<void>(() => {});
+  });
+  const waiter = Effect.runPromiseExit(h.service.recoverSessionHistory({ ...historyRef }));
+  await started.promise;
+  const closed = Effect.runPromise(h.adapter.binding.closeRecoveryScopes).then(() => true);
+  expect(await Promise.race([closed, Bun.sleep(100).then(() => false)])).toBe(true);
+  expect((await waiter)._tag).toBe("Failure");
+});
+
+test("a later explicit reload can recover after a failed shared history read", async () => {
+  const h = await harness();
+  h.setBeforeHistory(async () => {
+    throw new Error("native history unavailable");
+  });
+  const input = { ...historyRef };
+  expect((await Effect.runPromiseExit(h.service.recoverSessionHistory(input)))._tag).toBe(
+    "Failure",
+  );
+  h.setBeforeHistory(async () => {});
+  expect((await Effect.runPromiseExit(h.service.recoverSessionHistory(input)))._tag).toBe(
+    "Success",
+  );
+  expect(h.calls).toHaveLength(2);
+  await Effect.runPromise(h.adapter.binding.closeRecoveryScopes);
+});
+
+test("cached history recovery rejects removed task ownership without another native read", async () => {
+  const h = await harness();
+  const input = {
+    ...historyRef,
+    sessionScope: { kind: "workflow" as const, taskId: "task", role: "build" as const },
+  };
+  try {
+    await Effect.runPromise(h.service.recoverSessionHistory(input));
+    const reads = h.readOwnershipReads();
+    h.setOwnership(false);
+    const result = await Effect.runPromise(
+      Effect.either(h.service.recoverSessionHistory({ ...input })),
+    );
+    expect(result._tag).toBe("Left");
+    if (result._tag === "Left") {
+      expect(result.left.failure.code).toBe("scope_mismatch");
+      expect(result.left.message).toContain("no ownership record");
+    }
+    expect(h.readOwnershipReads()).toBeGreaterThan(reads);
+    expect(h.calls).toHaveLength(1);
+  } finally {
+    await Effect.runPromise(h.adapter.binding.closeRecoveryScopes);
+  }
+});
+
+test("cached history recovery validates the current directory", async () => {
+  let missing = false;
+  const h = await harness("opencode", {
+    canonicalizePath: (path) =>
+      missing && path === workingDirectory
+        ? Effect.fail(new HostOperationError({ operation: "realpath", message: "missing" }))
+        : Effect.succeed(path),
+  });
+  try {
+    const input = { ...historyRef };
+    await Effect.runPromise(h.service.recoverSessionHistory(input));
+    missing = true;
+    const result = await Effect.runPromise(
+      Effect.either(h.service.recoverSessionHistory({ ...input })),
+    );
+    expect(result._tag).toBe("Left");
+    if (result._tag === "Left") expect(result.left.failure.code).toBe("scope_mismatch");
+    expect(h.calls).toHaveLength(1);
+  } finally {
+    await Effect.runPromise(h.adapter.binding.closeRecoveryScopes);
+  }
+});
+
+test("shared recovery validates ownership after an in-flight native read", async () => {
+  const h = await harness();
+  const started = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  h.setBeforeHistory(async () => {
+    started.resolve();
+    await release.promise;
+  });
+  const input = {
+    ...historyRef,
+    sessionScope: { kind: "workflow" as const, taskId: "task", role: "build" as const },
+  };
+  const first = Effect.runPromise(Effect.either(h.service.recoverSessionHistory(input)));
+  try {
+    await started.promise;
+    const second = Effect.runPromise(Effect.either(h.service.recoverSessionHistory({ ...input })));
+    h.setOwnership(false);
+    release.resolve();
+    for (const result of await Promise.all([first, second])) {
+      expect(result._tag).toBe("Left");
+      if (result._tag === "Left") expect(result.left.failure.code).toBe("scope_mismatch");
+    }
+    expect(h.calls).toHaveLength(1);
+  } finally {
+    release.resolve();
+    await first;
+    await Effect.runPromise(h.adapter.binding.closeRecoveryScopes);
+  }
 });

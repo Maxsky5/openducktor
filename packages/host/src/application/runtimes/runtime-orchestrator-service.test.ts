@@ -834,3 +834,44 @@ describe("createRuntimeOrchestratorService", () => {
     expect(stopCalls).toEqual([runtime.runtimeId]);
   });
 });
+
+test("a live process with invalid observation is unavailable until a replacement binding exists", async () => {
+  const runtime = createRuntime();
+  let observationValid = false;
+  const service = createRuntimeOrchestratorService({
+    gitPort: createGitPort(),
+    runtimeDefinitionsService: createRuntimeDefinitionsService(),
+    runtimeRegistry: createRegistry([runtime]),
+    taskReader: createTaskStore(),
+    requireRuntimeObservation: () =>
+      observationValid
+        ? Effect.void
+        : Effect.fail(
+            new HostOperationError({
+              operation: "runtime.observe",
+              message: "Native observation failed. Stop then start the assigned runtime.",
+            }),
+          ),
+  });
+  const health = await Effect.runPromise(
+    service.repoRuntimeHealthStatus({ runtimeKind: "opencode", repoPath: "/repo" }),
+  );
+  expect(health.runtime.status).toBe("error");
+  expect(health.runtime.instance?.runtimeId).toBe(runtime.runtimeId);
+  expect(health.runtime.detail).toContain("Stop then start");
+  expect(
+    (
+      await Effect.runPromise(
+        Effect.flip(service.runtimeRequire({ runtimeKind: "opencode", repoPath: "/repo" })),
+      )
+    ).message,
+  ).toContain("Native observation failed");
+  observationValid = true;
+  expect(
+    (
+      await Effect.runPromise(
+        service.repoRuntimeHealthStatus({ runtimeKind: "opencode", repoPath: "/repo" }),
+      )
+    ).runtime.status,
+  ).toBe("ready");
+});

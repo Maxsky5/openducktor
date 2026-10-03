@@ -18,6 +18,7 @@ import {
 } from "./assistant-turn-duration";
 import { toReasoningMessageId, toTextMessageId, toToolMessageId } from "./chat-message-ids";
 import { isFinalAssistantHistoryMessage } from "./history-finality";
+import { mergeRecoveryHistory } from "./recovery-history-merge";
 import { mergeHistoryMessages } from "./history-message-merge";
 import { createSessionMessagesState } from "./messages";
 import { mergeModelSelection } from "./models";
@@ -365,6 +366,7 @@ export const historyToChatMessages = (
         meta = assistantMeta;
       } else if (message.role === "user") {
         meta = userMessageMeta(message.model, message.state, userDisplayParts);
+        if (message.nativeMessageId) meta.nativeMessageId = message.nativeMessageId;
       } else if (message.role === "system" && message.notice) {
         const notice = message.notice;
         const { reason, title, tone } = notice;
@@ -429,12 +431,17 @@ export const applyLoadedSessionHistory = (
   history: AgentSessionHistoryMessage[],
   messagesAtReadStart?: AgentSessionState["messages"],
   questionsAtReadStart?: AgentSessionState["pendingQuestions"],
+  recovery = false,
 ): AgentSessionState => {
-  const historyMessages = historyToChatMessages(history, {
+  const { historyReadRetractedMessageIds, ...sessionAfterRead } = session;
+  const retainedHistory = history.filter(
+    (message) => !historyReadRetractedMessageIds?.has(message.messageId),
+  );
+  const historyMessages = historyToChatMessages(retainedHistory, {
     role: session.sessionAssociation.kind === "workflow" ? session.sessionAssociation.role : null,
   });
   const loadedMessages = createSessionMessagesState(session.externalSessionId, historyMessages);
-  const historyQuestions = projectBackgroundQuestions(history);
+  const historyQuestions = projectBackgroundQuestions(retainedHistory);
   const historyQuestionIds = new Set(historyQuestions.map(pendingInputIdentity));
   const oldQuestionIds = new Set(questionsAtReadStart?.map(pendingInputIdentity));
   const pendingQuestions =
@@ -453,18 +460,35 @@ export const applyLoadedSessionHistory = (
         ];
 
   return {
-    ...session,
+    ...sessionAfterRead,
     historyLoadState: "loaded",
     historyLoadFailure: null,
+    historyCompleteness: "complete",
     pendingQuestions,
     messages: settleImageGenerationMessages({
       ...session,
-      messages: mergeHistoryMessages(
-        session.externalSessionId,
-        loadedMessages,
-        session.messages,
-        messagesAtReadStart,
-      ),
+      messages: recovery
+        ? mergeRecoveryHistory(
+            session.externalSessionId,
+            loadedMessages,
+            session.messages,
+            messagesAtReadStart,
+            session.historyDeltaMessageIds,
+          )
+        : mergeHistoryMessages(
+            session.externalSessionId,
+            loadedMessages,
+            session.messages,
+            messagesAtReadStart,
+          ),
     }),
   };
 };
+
+export const applyRecoveredSessionHistory = (
+  session: AgentSessionState,
+  history: AgentSessionHistoryMessage[],
+  messagesAtReadStart?: AgentSessionState["messages"],
+  questionsAtReadStart?: AgentSessionState["pendingQuestions"],
+): AgentSessionState =>
+  applyLoadedSessionHistory(session, history, messagesAtReadStart, questionsAtReadStart, true);

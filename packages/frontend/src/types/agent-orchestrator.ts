@@ -71,6 +71,7 @@ export type AgentChatMessageMeta =
     }
   | {
       kind: "user";
+      nativeMessageId?: string;
       state: AgentUserMessageState;
       providerId?: string;
       modelId?: string;
@@ -202,10 +203,21 @@ export type AgentSessionState = {
   imageGenerationTurnStarts?: ReadonlySet<string>;
   imageGenerationFailureTimestamp?: string;
   imageGenerationTurnEnds?: ReadonlyMap<string, "interrupted" | "turn_ended" | "runtime_failure">;
+  /** Runtime changes make earlier history reads stale. */
+  runtimeGeneration?: string | undefined;
   /** Host execution identity. Terminal activity applies only to this episode. */
   executionEpisodeId?: string | undefined;
   historyLoadState: AgentSessionHistoryLoadState;
   historyLoadFailure?: SessionHistoryFailure | null;
+  /** Keep saved messages visible until history recovery finishes. */
+  historyCompleteness?: "complete" | "incomplete" | "recovering";
+  historyReplayPending?: boolean;
+  /** Reject history reads started before replay or runtime changes. */
+  historyRecoveryGeneration?: number | undefined;
+  /** Track text deltas with no full runtime message to cover them. */
+  historyDeltaMessageIds?: ReadonlySet<string>;
+  /** Track removals during a history read; clear them when the read ends. */
+  historyReadRetractedMessageIds?: ReadonlySet<string>;
   messages: AgentSessionMessages;
   contextUsage?: AgentSessionContextUsage | null;
   contextUsageError?: string | null;

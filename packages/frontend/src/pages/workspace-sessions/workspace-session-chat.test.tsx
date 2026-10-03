@@ -487,6 +487,7 @@ test("workspace chat keeps a retained transcript when the workspace switches awa
     workingDirectory: "/repo",
     sessionAssociation: { kind: "repository" },
     historyLoadState: "loaded",
+    runtimeGeneration: "generation-1",
     status: "idle",
     messages: [buildMessage("assistant", "Retained answer", { id: "assistant-1" })],
     pendingApprovals: [],

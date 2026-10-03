@@ -207,7 +207,7 @@ The persistence observer does not call the runtime inside the publication or loc
 
 Renderer attachment is atomic. Its first envelope has the current snapshot. Later changes use the same ordered channel. Separate snapshot and subscribe calls have a race.
 
-Map native completion, stream end, runtime failure, stop, and release as different events. Final release removes the session tree and rejects unresolved requests.
+Map native completion, stream end, runtime failure, stop, and release as different events. A native stream failure makes observation unavailable even if the runtime process is alive. A replacement runtime rejects pending requests from the previous registration. Final release removes the session tree and rejects unresolved requests.
 
 Current context use is live state, not total result use. If a direct read races stream events, queued events set the baseline and an event processed during the read wins.
 

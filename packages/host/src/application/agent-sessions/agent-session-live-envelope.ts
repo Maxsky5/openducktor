@@ -1,3 +1,4 @@
+import { agentSessionRefKey } from "@openducktor/core";
 import type { AgentSessionLiveEnvelope, AgentSessionLiveRef } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
@@ -138,6 +139,7 @@ export const toAgentSessionLiveEnvelope = (
         repoPath: change.repoPath,
         message: change.message,
       };
+      if (change.runtimeKind) envelope.runtimeKind = change.runtimeKind;
       if (change.operation) {
         envelope.operation = change.operation;
       }
@@ -176,3 +178,87 @@ const toAgentSessionLiveEnvelopePublishError = (
         cause,
         details: { eventType },
       });
+
+export const createAgentSessionPublicationCursor = (
+  hostEpoch: string,
+  runtimeGenerations: (
+    repoPath: string,
+  ) => ReadonlyArray<{ runtimeKind: string; generation: string }>,
+) => {
+  let revision = 0;
+  type Fault = {
+    envelope: Extract<AgentSessionLiveEnvelope, { type: "fault" }>;
+    generation: string;
+    revision: number;
+  };
+  const faults = new Map<string, Fault>();
+  const generationFor = (repoPath: string, ref?: AgentSessionLiveRef, kind?: string) => {
+    const runtimeKind = ref?.runtimeKind ?? kind;
+    return JSON.stringify(
+      runtimeGenerations(repoPath).filter(
+        (generation) => !runtimeKind || generation.runtimeKind === runtimeKind,
+      ),
+    );
+  };
+  const sequences = new Map<string, number>();
+  const read = (repoPath: string) => ({ hostEpoch, sequence: sequences.get(repoPath) ?? 0 });
+  return {
+    read,
+    beginRecovery: () => revision,
+    completeRecovery: (
+      repoPath: string,
+      startedAt: number,
+      refs?: ReadonlyArray<AgentSessionLiveRef>,
+    ) => {
+      for (const [key, fault] of faults) {
+        if (
+          fault.envelope.repoPath === repoPath &&
+          (!refs ||
+            (fault.envelope.ref &&
+              refs.some(
+                (ref) => agentSessionRefKey(ref) === agentSessionRefKey(fault.envelope.ref!),
+              ))) &&
+          fault.revision <= startedAt &&
+          fault.envelope.operation !== "agent-session.persist" &&
+          !fault.envelope.operation?.includes("observe")
+        )
+          faults.delete(key);
+      }
+    },
+    failures: (repoPath: string) =>
+      Array.from(faults.values())
+        .filter(
+          (fault) =>
+            fault.envelope.repoPath === repoPath &&
+            (generationFor(repoPath, fault.envelope.ref, fault.envelope.runtimeKind) === "[]" ||
+              fault.generation ===
+                generationFor(repoPath, fault.envelope.ref, fault.envelope.runtimeKind)),
+        )
+        .map(({ envelope }) => {
+          const { type: _type, repoPath: _repoPath, cursor: _cursor, ...failure } = envelope;
+          return failure;
+        }),
+    stamp: (envelope: AgentSessionLiveEnvelope): AgentSessionLiveEnvelope => {
+      const repoPath =
+        "repoPath" in envelope
+          ? envelope.repoPath
+          : "scope" in envelope
+            ? envelope.scope.repoPath
+            : envelope.type === "session_upsert"
+              ? envelope.session.ref.repoPath
+              : envelope.type === "session_removed"
+                ? envelope.ref.repoPath
+                : envelope.event.sessionRef.repoPath;
+      if (envelope.type === "fault") {
+        revision += 1;
+        faults.set(JSON.stringify([repoPath, envelope.ref, envelope.operation]), {
+          envelope,
+          generation: generationFor(repoPath, envelope.ref, envelope.runtimeKind),
+          revision,
+        });
+      }
+      sequences.set(repoPath, (sequences.get(repoPath) ?? 0) + 1);
+      return { ...envelope, cursor: read(repoPath) };
+    },
+  };
+};

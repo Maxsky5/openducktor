@@ -301,6 +301,7 @@ const transcriptEventSchema = <Fields extends ZodSchemaFields>(fields: Fields) =
 export const agentUserMessageEventSchema = transcriptEventSchema({
   type: z.literal("user_message"),
   messageId: z.string(),
+  nativeMessageId: z.string().optional(),
   message: z.string(),
   parts: z.array(agentUserMessageDisplayPartSchema),
   state: z.enum(["queued", "read"]),

@@ -1,7 +1,9 @@
-import type { TaskCard } from "@openducktor/contracts";
+import { normalizeWorkingDirectory } from "@/lib/working-directory";
+import type { AgentSessionLiveEnvelope, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { useCallback, useMemo } from "react";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { matchesAgentSessionIdentity, toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { loadAgentSessionContextFromQuery } from "@/state/queries/agent-session-context";
 import { agentSessionHistoryQueryKeys } from "@/state/queries/agent-session-history";
@@ -180,6 +182,10 @@ export function useAgentOrchestratorOperations({
       }),
       loadSettingsSnapshot: () => loadSettingsSnapshotFromQuery(queryClient),
       historyReadGeneration,
+      flushTranscript: (identity: AgentSessionIdentity) => {
+        if (workspaceRepoPath)
+          transcriptEvents.flushSession({ ...identity, repoPath: workspaceRepoPath });
+      },
     };
 
     return {
@@ -197,25 +203,47 @@ export function useAgentOrchestratorOperations({
     repoEpochRef,
     sessionStore,
     taskRef,
+    transcriptEvents,
     updateSession,
     workspaceId,
     workspaceRepoPath,
   ]);
-  const recoverTranscriptGap = useCallback(async (): Promise<void> => {
-    const loadedSessions = sessionStore
-      .listSessionSnapshots()
-      .filter((session) => session.historyLoadState === "loaded");
+  const recoverTranscriptGap = useCallback(
+    async (gap: Extract<AgentSessionLiveEnvelope, { type: "transcript_gap" }>): Promise<void> => {
+      const matches = (session: AgentSessionIdentity): boolean =>
+        (!gap.runtimeKind || gap.runtimeKind === session.runtimeKind) &&
+        (!gap.refs || gap.refs.some((ref) => matchesAgentSessionIdentity(session, ref)));
+      const loadedSessions = sessionStore
+        .listSessionSnapshots()
+        .filter(
+          (session) =>
+            (session.historyLoadState === "loaded" ||
+              session.historyCompleteness === "recovering") &&
+            matches(session),
+        );
 
-    await Promise.all([
-      ...loadedSessions.map((session) =>
-        sessionHistoryLoaders.reloadAgentSessionHistory(toAgentSessionIdentity(session)),
-      ),
-      queryClient.invalidateQueries({
-        queryKey: agentSessionHistoryQueryKeys.all,
-        refetchType: "active",
-      }),
-    ]);
-  }, [queryClient, sessionHistoryLoaders, sessionStore]);
+      await Promise.all([
+        ...loadedSessions.map((session) =>
+          sessionHistoryLoaders.reloadAgentSessionHistory(toAgentSessionIdentity(session)),
+        ),
+        queryClient.invalidateQueries({
+          predicate: (query) =>
+            query.queryKey[0] === agentSessionHistoryQueryKeys.all[0] &&
+            query.queryKey[1] === normalizeWorkingDirectory(gap.repoPath) &&
+            (!gap.runtimeKind || query.queryKey[2] === gap.runtimeKind) &&
+            (!gap.refs ||
+              gap.refs.some(
+                (ref) =>
+                  query.queryKey[2] === ref.runtimeKind &&
+                  query.queryKey[3] === normalizeWorkingDirectory(ref.workingDirectory) &&
+                  query.queryKey[4] === ref.externalSessionId,
+              )),
+          refetchType: "active",
+        }),
+      ]);
+    },
+    [queryClient, sessionHistoryLoaders, sessionStore],
+  );
   const currentSessionReadModel = useRepoSessionReadModel({
     workspaceRepoPath,
     workspaceId,

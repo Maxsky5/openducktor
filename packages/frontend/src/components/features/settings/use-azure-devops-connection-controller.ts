@@ -45,7 +45,6 @@ const useAzureDevOpsConnectionUpdates = ({
   invalidateProviderContext,
   queryClient,
   selectedRepoPath,
-  setActionError,
   workspaceId,
 }: {
   activeAttemptIdRef: RefObject<string | null>;
@@ -53,15 +52,30 @@ const useAzureDevOpsConnectionUpdates = ({
   invalidateProviderContext: () => Promise<void>;
   queryClient: QueryClient;
   selectedRepoPath: string;
-  setActionError: (message: string | null) => void;
   workspaceId: string;
-}): boolean => {
+}) => {
   const [updatesReady, setUpdatesReady] = useState(false);
+  const [updatesError, setUpdatesError] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
     let unsubscribe: (() => void) | undefined;
     setUpdatesReady(false);
+    setUpdatesError(null);
     void subscribeAzureDevOpsConnectionUpdates((event) => {
+      if ("__openducktorBrowserLive" in event) {
+        if (event.kind === "stream-warning")
+          setUpdatesError(
+            event.message ??
+              "Azure DevOps connection updates are incomplete. Reconnect to the host.",
+          );
+        else if (event.kind === "reconnected") setUpdatesError(null);
+        void queryClient.invalidateQueries({
+          queryKey: connectionKey(configurationFingerprint),
+          exact: true,
+        });
+        void invalidateProviderContext();
+        return;
+      }
       if (
         isAzureDevOpsConnectionEventCurrent(event, {
           workspaceId,
@@ -91,7 +105,9 @@ const useAzureDevOpsConnectionUpdates = ({
       })
       .catch((cause: unknown) => {
         if (active) {
-          setActionError(`Azure DevOps connection updates are unavailable: ${errorMessage(cause)}`);
+          setUpdatesError(
+            `Azure DevOps connection updates are unavailable: ${errorMessage(cause)}`,
+          );
         }
       });
     return () => {
@@ -104,10 +120,9 @@ const useAzureDevOpsConnectionUpdates = ({
     invalidateProviderContext,
     queryClient,
     selectedRepoPath,
-    setActionError,
     workspaceId,
   ]);
-  return updatesReady;
+  return { ready: updatesReady, error: updatesError };
 };
 
 type ConnectionActionDependencies = {
@@ -242,13 +257,12 @@ export const useAzureDevOpsConnectionController = ({
     if (pendingAttemptId) activeAttemptIdRef.current = pendingAttemptId;
   }, [pendingAttemptId]);
 
-  const updatesReady = useAzureDevOpsConnectionUpdates({
+  const updates = useAzureDevOpsConnectionUpdates({
     activeAttemptIdRef,
     configurationFingerprint,
     invalidateProviderContext,
     queryClient,
     selectedRepoPath,
-    setActionError,
     workspaceId,
   });
 
@@ -275,7 +289,7 @@ export const useAzureDevOpsConnectionController = ({
   };
 
   return {
-    actionError,
+    actionError: actionError ?? updates.error,
     canManageConnection,
     connectionReadFailed,
     connectionState,
@@ -298,8 +312,8 @@ export const useAzureDevOpsConnectionController = ({
       setConnectionState: (state) =>
         queryClient.setQueryData(connectionKey(configurationFingerprint), state),
       setPat,
-      updatesReady,
+      updatesReady: updates.ready,
     }),
-    updatesReady,
+    updatesReady: updates.ready,
   };
 };

@@ -8,6 +8,7 @@ const toUserMessageMeta = (event: AcceptedAgentUserMessage) => {
     kind: "user",
     state: event.state,
   };
+  if (event.nativeMessageId) meta.nativeMessageId = event.nativeMessageId;
   if (model?.providerId) {
     meta.providerId = model.providerId;
   }

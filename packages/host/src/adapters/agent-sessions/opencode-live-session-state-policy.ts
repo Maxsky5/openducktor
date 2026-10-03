@@ -1,5 +1,6 @@
 import {
   type AgentSessionActivity,
+  type AgentSessionContextUsage,
   type AgentSessionScope,
   type AgentSessionLiveRef,
   type AgentSessionLiveSnapshot,
@@ -90,6 +91,28 @@ export const openCodeEventChildId = (event: AgentEvent): string | null => {
   }
   return null;
 };
+
+export const childSnapshot = (
+  ref: AgentSessionLiveRef,
+  event: AgentEvent,
+  contextUsage: AgentSessionContextUsage | null,
+): AgentSessionLiveSnapshot =>
+  parseOpenCodeLiveSnapshot(
+    {
+      ref,
+      activity: "idle",
+      title:
+        event.type === "assistant_part" && event.part.kind === "subagent"
+          ? (event.part.agent ?? event.part.description ?? "OpenCode subagent")
+          : "OpenCode subagent",
+      startedAt: event.timestamp,
+      parentExternalSessionId: openCodeEventParentId(event)!,
+      pendingApprovals: [],
+      pendingQuestions: [],
+      contextUsage,
+    },
+    "opencode-live-session.create-child-event-state",
+  );
 
 export const openCodeEventParentId = (event: AgentEvent): string | null => {
   if ("parentExternalSessionId" in event) {

@@ -38,6 +38,16 @@ export const createOpenCodePendingRequestRouter = ({
   runtimeId,
   nextOccurrenceId,
 }: CreateOpenCodePendingRequestRouterInput) => {
+  let revision = 0;
+  const changes = new Map<string, number>();
+  const reads = new Set<ReadonlyMap<string, number>>();
+  const recordChange = (
+    ref: AgentSessionLiveRef,
+    kind: OpenCodePendingRoute["kind"],
+    nativeId: string,
+  ): void => {
+    if (reads.size > 0) changes.set(nativeRouteKey(ref, kind, nativeId), ++revision);
+  };
   const routesByOccurrenceId = new Map<string, OpenCodePendingRoute>();
   const occurrenceIdByNativeKey = new Map<string, string>();
 
@@ -57,6 +67,24 @@ export const createOpenCodePendingRequestRouter = ({
   };
 
   return {
+    captureVersions: (): ReadonlyMap<string, number> => {
+      const captured = new Map(changes);
+      reads.add(captured);
+      return captured;
+    },
+    finishRead: (captured: ReadonlyMap<string, number>): void => {
+      reads.delete(captured);
+      if (reads.size === 0) changes.clear();
+    },
+    changedSince: (route: OpenCodePendingRoute, captured: ReadonlyMap<string, number>): boolean => {
+      const key = nativeRouteKey(route.ref, route.kind, route.nativeRequestId);
+      return changes.get(key) !== captured.get(key);
+    },
+    recordResolution: (
+      ref: AgentSessionLiveRef,
+      nativeId: string,
+      kind: OpenCodePendingRoute["kind"],
+    ): void => recordChange(ref, kind, nativeId),
     stageApproval: (
       ref: AgentSessionLiveRef,
       request: AgentPendingApprovalRequest,
@@ -94,6 +122,7 @@ export const createOpenCodePendingRequestRouter = ({
         AgentSessionLivePendingApprovalRequest | AgentSessionLivePendingQuestionRequest
       >,
     ): void => {
+      recordChange(staged.route.ref, staged.route.kind, staged.route.nativeRequestId);
       routesByOccurrenceId.set(staged.route.occurrenceId, staged.route);
       occurrenceIdByNativeKey.set(
         nativeRouteKey(staged.route.ref, staged.route.kind, staged.route.nativeRequestId),
@@ -131,6 +160,7 @@ export const createOpenCodePendingRequestRouter = ({
       if (!routesByOccurrenceId.has(route.occurrenceId)) {
         return false;
       }
+      recordChange(route.ref, route.kind, route.nativeRequestId);
       routesByOccurrenceId.delete(route.occurrenceId);
       occurrenceIdByNativeKey.delete(nativeRouteKey(route.ref, route.kind, route.nativeRequestId));
       return true;
@@ -138,6 +168,7 @@ export const createOpenCodePendingRequestRouter = ({
     removeSession: (ref: AgentSessionLiveRef): void => {
       for (const [occurrenceId, route] of routesByOccurrenceId) {
         if (refsEqual(route.ref, ref)) {
+          recordChange(route.ref, route.kind, route.nativeRequestId);
           routesByOccurrenceId.delete(occurrenceId);
           occurrenceIdByNativeKey.delete(
             nativeRouteKey(route.ref, route.kind, route.nativeRequestId),
@@ -151,6 +182,7 @@ export const createOpenCodePendingRequestRouter = ({
     ): void => {
       for (const [occurrenceId, route] of routesByOccurrenceId) {
         if (refsEqual(route.ref, ref) && !activeOccurrenceIds.has(occurrenceId)) {
+          recordChange(route.ref, route.kind, route.nativeRequestId);
           routesByOccurrenceId.delete(occurrenceId);
           occurrenceIdByNativeKey.delete(
             nativeRouteKey(route.ref, route.kind, route.nativeRequestId),
@@ -159,6 +191,8 @@ export const createOpenCodePendingRequestRouter = ({
       }
     },
     clear: (): void => {
+      reads.clear();
+      changes.clear();
       routesByOccurrenceId.clear();
       occurrenceIdByNativeKey.clear();
     },

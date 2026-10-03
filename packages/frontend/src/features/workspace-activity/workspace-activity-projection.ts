@@ -13,6 +13,7 @@ export type WorkspaceActivityProjection = {
   /** True after the stream delivered its first authoritative snapshot. */
   hasSnapshot: boolean;
   unavailableReason: string | null;
+  connectionFailure?: string | null;
 };
 
 export const emptyWorkspaceActivityProjection = (): WorkspaceActivityProjection => ({
@@ -74,13 +75,22 @@ export const applyWorkspaceActivityEnvelope = (
   current: WorkspaceActivityProjection,
   envelope: AgentSessionLiveEnvelope,
 ): WorkspaceActivityProjection => {
+  if (envelope.type === "connection_state") {
+    if (envelope.state === "uncertain")
+      return {
+        ...current,
+        connectionFailure:
+          envelope.message ?? "Host connection interrupted. Reconnect to the host.",
+      };
+    return { ...current, connectionFailure: null };
+  }
   if (envelope.type === "snapshot") {
     const sessions = new Map<string, WorkspaceActivitySession>();
     for (const snapshot of envelope.sessions) {
       const key = sessionKey(snapshot.ref);
       sessions.set(key, toActivitySession(snapshot, current.sessions.get(key)));
     }
-    return { sessions, hasSnapshot: true, unavailableReason: null };
+    return { ...current, sessions, hasSnapshot: true, unavailableReason: null };
   }
 
   if (envelope.type === "session_upsert") {
@@ -101,6 +111,7 @@ export const applyWorkspaceActivityEnvelope = (
   }
 
   if (envelope.type === "transcript_event") {
+    if (envelope.stateCovered) return current;
     const key = sessionKey(envelope.event.sessionRef);
     const session = current.sessions.get(key);
     if (!session) {
@@ -116,15 +127,9 @@ export const applyWorkspaceActivityEnvelope = (
   }
 
   if (envelope.type === "fault") {
-    if (envelope.ref) {
-      return current;
-    }
     return withUnavailableReason(current, faultReason(envelope));
   }
 
-  if (envelope.type === "transcript_gap") {
-    return withUnavailableReason(current, envelope.message);
-  }
-
+  // Transcript completeness does not invalidate authoritative activity state.
   return current;
 };

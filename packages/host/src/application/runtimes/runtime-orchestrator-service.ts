@@ -57,6 +57,7 @@ export const createRuntimeOrchestratorService = ({
   taskReader,
   activeMcpProbeRetryDelayMs = ACTIVE_MCP_PROBE_RETRY_DELAY_MS,
   logger,
+  requireRuntimeObservation,
 }: {
   withProcessStartAdmission?: WithProcessStartAdmission;
   gitPort: Pick<GitPort, "canonicalizePath" | "isGitRepository">;
@@ -65,6 +66,9 @@ export const createRuntimeOrchestratorService = ({
   taskReader: Pick<TaskReader, "getTaskMetadata">;
   activeMcpProbeRetryDelayMs?: number;
   logger?: RuntimeOrchestratorLogger;
+  requireRuntimeObservation?: (
+    runtime: RuntimeInstanceSummary,
+  ) => Effect.Effect<void, HostOperationError>;
 }): RuntimeOrchestratorService => {
   const runtimeStartupStatuses = new Map<string, RepoRuntimeStartupStatus>();
   const writeRuntimeLog = (
@@ -85,6 +89,8 @@ export const createRuntimeOrchestratorService = ({
       : Effect.void;
   const startupStatusKey = (runtimeKind: string, repoPath: string): string =>
     `${runtimeKind}::${repoPath}`;
+  const requireObservation = (runtime: RuntimeInstanceSummary) =>
+    requireRuntimeObservation?.(runtime) ?? Effect.void;
   const ensureWorkspaceRuntime = ({
     runtimeKind,
     repoPath,
@@ -102,6 +108,7 @@ export const createRuntimeOrchestratorService = ({
         descriptor,
       })
       .pipe(
+        Effect.tap(requireObservation),
         Effect.flatMap((runtime) =>
           Effect.try({
             try: () => runtimeInstanceSummarySchema.parse(runtime),
@@ -142,6 +149,18 @@ export const createRuntimeOrchestratorService = ({
       });
       const statusKey = startupStatusKey(runtimeKind, canonicalRepoPath);
       if (runtime) {
+        const observed = yield* Effect.either(requireObservation(runtime));
+        if (observed._tag === "Left") {
+          const failure = buildFailedStartupStatus(
+            runtimeKind,
+            canonicalRepoPath,
+            runtime.startedAt,
+            isoFromMillis(yield* Clock.currentTimeMillis),
+            "error",
+            observed.left.message,
+          );
+          return { ...failure, runtime };
+        }
         const readyStatus = buildReadyStartupStatus(runtimeInstanceSummarySchema.parse(runtime));
         runtimeStartupStatuses.set(statusKey, readyStatus);
         return readyStatus;
@@ -176,6 +195,7 @@ export const createRuntimeOrchestratorService = ({
           }),
         );
       }
+      yield* requireObservation(runtime);
       return runtimeInstanceSummarySchema.parse(runtime);
     });
   const runtimeEnsure: RuntimeOrchestratorService["runtimeEnsure"] = (input) =>

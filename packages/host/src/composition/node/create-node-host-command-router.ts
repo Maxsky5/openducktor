@@ -31,7 +31,6 @@ import {
 import { createGitService } from "../../application/git/git-service";
 import { createOdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import { createPullRequestReviewService } from "../../application/pull-requests/pull-request-review-service";
-import { createRuntimeOrchestratorService } from "../../application/runtimes/runtime-orchestrator-service";
 import { readSavedRuntimeExecutablePath } from "../../application/runtimes/saved-runtime-executable";
 import { createOpenInToolsService } from "../../application/system/open-in-tools-service";
 import { createTaskSessionLifecycleCoordinator } from "../../application/tasks/worktrees/task-session-lifecycle-coordinator";
@@ -71,6 +70,8 @@ import type {
 } from "./node-host-command-router-types";
 import type { NodeHostDefaultPorts } from "./node-host-default-ports";
 import { createNodeAgentSessionLiveState } from "./node-agent-session-live-state";
+import { createRuntimeOrchestratorService } from "../../application/runtimes/runtime-orchestrator-service";
+import { createRuntimeObservationRequirement } from "./runtime-observation";
 import {
   createLiveSessionFaultLogger,
   createRuntimeFailureReporter,
@@ -227,6 +228,7 @@ export const assembleNodeEffectHostCommandRouter = (
     claude: claudeRuntime.workspaceStarter,
     codex: createCodexWorkspaceRuntimeStarter(codexStarterInput),
     opencode: createOpenCodeRuntimeComposition({
+      lifecycleLogger,
       toolDiscovery,
       settingsConfig,
       processEnv,
@@ -252,7 +254,7 @@ export const assembleNodeEffectHostCommandRouter = (
   };
   if (eventBus) {
     runtimeRegistryInput.onRuntimeChanged = createRuntimeLifecyclePublisher(
-      eventBus,
+      agentSessionLiveStateService,
       onBackgroundFailure,
     );
   }
@@ -260,10 +262,7 @@ export const assembleNodeEffectHostCommandRouter = (
     runtimeRegistry ?? createRuntimeRegistry(runtimeRegistryInput),
     processEnvironment,
   );
-  const taskWorktreeService = createTaskWorktreeService({
-    settingsConfig,
-    workspaceSettingsService,
-  });
+  const taskWorktreeService = createTaskWorktreeService(workingDirectoryDependencies);
   const terminalService = Effect.runSync(
     createTerminalService({
       withProcessStartAdmission: workspaceAdmissionService.withProcessStartAdmission,
@@ -394,6 +393,7 @@ export const assembleNodeEffectHostCommandRouter = (
     runtimeDefinitionsService,
     runtimeRegistry: effectiveRuntimeRegistry,
     taskReader: taskStore,
+    requireRuntimeObservation: createRuntimeObservationRequirement(liveSessionAdapterRegistry),
     logger: lifecycleLogger,
   });
   const { workspaceSessionService, workspaceSessionImports, unsubscribeImportCatalogs } =

@@ -133,48 +133,90 @@ export const agentSessionLiveScopeSchema = z
   .strict();
 export type AgentSessionLiveScope = z.infer<typeof agentSessionLiveScopeSchema>;
 
+export const agentSessionLiveCursorSchema = z.strictObject({
+  hostEpoch: nonEmptyStringSchema,
+  sequence: z.number().int().nonnegative(),
+});
+export type AgentSessionLiveCursor = z.infer<typeof agentSessionLiveCursorSchema>;
+
+export const agentSessionLiveBaselineSchema = z.strictObject({
+  repoPath: nonEmptyStringSchema,
+  cursor: agentSessionLiveCursorSchema,
+  sessions: z.array(agentSessionLiveSnapshotSchema),
+  runtimeGenerations: z.array(
+    z.strictObject({ runtimeKind: runtimeKindSchema, generation: nonEmptyStringSchema }),
+  ),
+  complete: z.boolean(),
+  failures: z.array(
+    z.strictObject({
+      runtimeKind: runtimeKindSchema.optional(),
+      ref: agentSessionLiveRefSchema.optional(),
+      message: nonEmptyStringSchema,
+      operation: nonEmptyStringSchema.optional(),
+    }),
+  ),
+});
+export type AgentSessionLiveBaseline = z.infer<typeof agentSessionLiveBaselineSchema>;
+
 export const agentSessionLiveEnvelopeSchema = z.discriminatedUnion("type", [
+  z.strictObject({
+    type: z.literal("connection_state"),
+    repoPath: nonEmptyStringSchema,
+    state: z.enum(["uncertain", "ready"]),
+    message: z.string().optional(),
+    cursor: agentSessionLiveCursorSchema.optional(),
+  }),
   z
     .object({
+      cursor: agentSessionLiveCursorSchema.optional(),
       type: z.literal("runtime_changed"),
       scope: agentSessionLiveScopeSchema.pick({ repoPath: true, runtimeKind: true }),
       state: z.enum(["ready", "stopped"]),
+      runtimeGeneration: nonEmptyStringSchema.optional(),
     })
     .strict(),
   z
     .object({
+      cursor: agentSessionLiveCursorSchema.optional(),
       type: z.literal("snapshot"),
       repoPath: nonEmptyStringSchema,
       sessions: z.array(agentSessionLiveSnapshotSchema),
       isConnectionSnapshot: z.boolean().optional(),
+      runtimeGenerations: agentSessionLiveBaselineSchema.shape.runtimeGenerations.optional(),
     })
     .strict(),
   z
     .object({
+      cursor: agentSessionLiveCursorSchema.optional(),
       type: z.literal("session_upsert"),
       session: agentSessionLiveSnapshotSchema,
     })
     .strict(),
   z
     .object({
+      cursor: agentSessionLiveCursorSchema.optional(),
       type: z.literal("session_removed"),
       ref: agentSessionLiveRefSchema,
     })
     .strict(),
   z
     .object({
+      cursor: agentSessionLiveCursorSchema.optional(),
       type: z.literal("transcript_event"),
+      stateCovered: z.boolean().optional(),
       event: agentSessionTranscriptEventSchema,
     })
     .strict(),
   z
     .object({
+      cursor: agentSessionLiveCursorSchema.optional(),
       type: z.literal("catalog_invalidated"),
       scope: agentSessionLiveScopeSchema,
     })
     .strict(),
   z
     .object({
+      cursor: agentSessionLiveCursorSchema.optional(),
       type: z.literal("slash_command_catalog_updated"),
       scope: agentSessionLiveScopeSchema.extend({
         workingDirectory: nonEmptyStringSchema,
@@ -184,14 +226,21 @@ export const agentSessionLiveEnvelopeSchema = z.discriminatedUnion("type", [
     .strict(),
   z
     .object({
+      cursor: agentSessionLiveCursorSchema.optional(),
       type: z.literal("transcript_gap"),
+      // The local attachment still holds transcript events needed before history repair.
+      replayPending: z.boolean().optional(),
+      runtimeKind: runtimeKindSchema.optional(),
+      refs: z.array(agentSessionLiveRefSchema).optional(),
       repoPath: nonEmptyStringSchema,
       message: nonEmptyStringSchema,
     })
     .strict(),
   z
     .object({
+      cursor: agentSessionLiveCursorSchema.optional(),
       type: z.literal("fault"),
+      runtimeKind: runtimeKindSchema.optional(),
       repoPath: nonEmptyStringSchema,
       message: nonEmptyStringSchema,
       operation: nonEmptyStringSchema.optional(),
@@ -212,6 +261,9 @@ export const agentSessionLiveRefreshInputSchema = z
   .object({ repoPath: nonEmptyStringSchema })
   .strict();
 export type AgentSessionLiveRefreshInput = z.infer<typeof agentSessionLiveRefreshInputSchema>;
+
+export const agentSessionLiveAttachInputSchema = agentSessionLiveRefreshInputSchema;
+export const agentSessionLiveRecoverInputSchema = agentSessionLiveRefreshInputSchema;
 
 export const agentSessionLiveReadInputSchema = agentSessionLiveRefSchema;
 export type AgentSessionLiveReadInput = z.infer<typeof agentSessionLiveReadInputSchema>;

@@ -1,3 +1,4 @@
+import { expect } from "bun:test";
 import type {
   AcceptedAgentUserMessage,
   AgentSessionControlResumeInput,
@@ -212,6 +213,10 @@ export const createPersistenceHarness = async (
     live.registerRuntimeAdapter(
       createAgentSessionRuntimeAdapterTestDouble(registration, {
         matches: () => true,
+        releaseSession: (input) =>
+          Effect.sync(() => {
+            expect(input).toEqual(ref);
+          }),
         listSnapshots: () => Effect.succeed([]),
         listRetainedSnapshots: () => Effect.succeed([]),
         resumeSession: (input) =>

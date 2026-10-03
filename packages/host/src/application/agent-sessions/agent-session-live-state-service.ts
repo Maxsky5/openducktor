@@ -1,3 +1,4 @@
+import { createSetSessionOwnership } from "./live-session-ownership";
 import {
   type AcceptedAgentUserMessage,
   type AgentSessionContextUsage,
@@ -11,6 +12,7 @@ import {
   type AgentSessionControlUpdateModelInput,
   type AgentSessionControlUpdateTitleInput,
   type AgentSessionLiveEnvelope,
+  type AgentSessionLiveBaseline,
   type AgentSessionLiveListInput,
   type AgentSessionLiveLoadContextInput,
   type AgentSessionLiveLoadDiffInput,
@@ -30,14 +32,16 @@ import {
 } from "@openducktor/contracts";
 import { agentSessionRefKey } from "@openducktor/core";
 import { Effect } from "effect";
+import { createLiveProjectionAttachment } from "./live-projection-attachment";
+import { createLiveProjectionAttachmentOwner } from "./live-projection-attachment-owner";
 import {
   type HostError,
   HostInvariantError,
   HostResourceError,
   HostValidationError,
 } from "../../effect/host-errors";
-import type { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
 import type {
+  AgentSessionLiveRegistration,
   AgentSessionLiveAdapterChange,
   AgentSessionLiveAdapterBinding,
   AgentSessionLiveAdapterPort,
@@ -54,6 +58,7 @@ import {
   type AgentSessionLiveEnvelopePublisher,
   type AgentSessionLiveFaultLogger,
   createAgentSessionLiveEnvelopePublisher,
+  createAgentSessionPublicationCursor,
   toAgentSessionLiveEnvelope,
 } from "./agent-session-live-envelope";
 import { createLiveStateCoordinator, type LiveStateCoordinator } from "./live-state-coordinator";
@@ -68,6 +73,14 @@ export type {
 } from "./agent-session-live-envelope";
 
 export type AgentSessionLiveStateService = {
+  readonly publishRuntimeChange: (
+    binding: AgentSessionLiveAdapterBinding,
+    state: "ready" | "stopped",
+  ) => Effect.Effect<void, HostError>;
+  readonly attach: (
+    input: AgentSessionLiveRefreshInput,
+  ) => Effect.Effect<AgentSessionLiveBaseline, HostError>;
+  readonly setSessionOwnership: ReturnType<typeof createSetSessionOwnership>;
   readonly refresh: (input: AgentSessionLiveRefreshInput) => Effect.Effect<void, HostError>;
   readonly list: (
     input: AgentSessionLiveListInput,
@@ -124,6 +137,7 @@ export type AgentSessionLiveStateService = {
 };
 
 export type CreateAgentSessionLiveStateServiceInput = {
+  readonly hostEpoch?: string | undefined;
   readonly readSessionRootRefs?: (
     repoPath: string,
   ) => Effect.Effect<AgentSessionAuthorizedRoot[], HostError>;
@@ -148,6 +162,7 @@ export const createAgentSessionLiveStateService = ({
   observeNotificationInput,
   coordinator = createLiveStateCoordinator(),
   persistence,
+  hostEpoch = crypto.randomUUID(),
 }: CreateAgentSessionLiveStateServiceInput): AgentSessionLiveStateService => {
   const withStartAdmission =
     <Input extends { repoPath: string }, Success>(
@@ -159,11 +174,21 @@ export const createAgentSessionLiveStateService = ({
         : operation(input);
   // Runtime reads can wait on the network, so they need a gate that does not block live events.
   const refreshGate = createLiveStateCoordinator();
+  const generations = (repoPath: string) =>
+    adapterRegistry.listForRepo(repoPath).map((adapter) => ({
+      runtimeKind: adapter.binding.runtimeKind,
+      generation: adapter.binding.generation,
+    }));
+  const publication = createAgentSessionPublicationCursor(hostEpoch, generations);
+  const attachmentOwner = createLiveProjectionAttachmentOwner({
+    readSessionRootRefs,
+    refreshGate,
+  });
   // Transient admission guard that spans the probe and the native continuation for one session.
   const continuationsInFlight = new Set<string>();
   const executionEpisodes = createAgentSessionExecutionEpisodes();
   const publishEnvelopeResult = createAgentSessionLiveEnvelopePublisher(
-    publish,
+    (envelope) => publish(publication.stamp(envelope)),
     faultLog,
     persistence,
   );
@@ -174,7 +199,6 @@ export const createAgentSessionLiveStateService = ({
         faultLogFailure ? Effect.fail(faultLogFailure) : Effect.void,
       ),
     );
-
   const publishChanges = (changes: ReadonlyArray<AgentSessionLiveAdapterChange>) =>
     Effect.gen(function* () {
       let faultLogFailure: HostError | null = null;
@@ -190,7 +214,6 @@ export const createAgentSessionLiveStateService = ({
         return yield* Effect.fail(faultLogFailure);
       }
     });
-
   const listSnapshots = (repoPath: string) =>
     Effect.gen(function* () {
       const snapshots = yield* Effect.forEach(adapterRegistry.listForRepo(repoPath), (adapter) =>
@@ -215,35 +238,14 @@ export const createAgentSessionLiveStateService = ({
       }
       return executionEpisodes.replaceSnapshots(repoPath, flattened);
     });
-
-  const refreshAdapters = (
-    repoPath: string,
-    adapters: ReadonlyArray<AgentSessionLiveAdapterPort>,
-  ): Effect.Effect<void, HostError> =>
-    Effect.gen(function* () {
-      const roots = readSessionRootRefs ? yield* readSessionRootRefs(repoPath) : [];
-      yield* Effect.forEach(
-        adapters,
-        (adapter) =>
-          adapter.refreshSnapshots?.(
-            repoPath,
-            roots.filter((root) => root.runtimeKind === adapter.binding.runtimeKind),
-          ) ?? Effect.void,
-      );
-    });
-
   const lifecycle = createAgentSessionLiveRuntimeLifecycle({
     adapterRegistry,
     coordinator,
     publishChanges,
     publishEnvelope,
     listSnapshots,
-    refreshSnapshots: (adapter) =>
-      adapter.refreshSnapshots
-        ? refreshGate.run(refreshAdapters(adapter.binding.repoPath, [adapter]))
-        : Effect.void,
+    initializeAdapter: attachmentOwner.initialize,
   });
-
   const continuationSessionRef = (
     input: AgentSessionControlContinueInterruptedTurnInput,
   ): AgentSessionLiveRef => ({
@@ -292,14 +294,42 @@ export const createAgentSessionLiveStateService = ({
       return result;
     });
 
+  const setSessionOwnership = createSetSessionOwnership({
+    adapterRegistry,
+    attachmentOwner,
+    publication,
+    publishEnvelope,
+    lifecycle,
+  });
   const service: AgentSessionLiveStateService = {
+    publishRuntimeChange: lifecycle.publishRuntimeChange,
+    attach: createLiveProjectionAttachment({
+      registry: adapterRegistry,
+      coordinator,
+      initialize: attachmentOwner.initialize,
+      isCovered: attachmentOwner.isCovered,
+      listSnapshots,
+      readCursor: publication.read,
+      failures: publication.failures,
+    }),
+    setSessionOwnership,
     refresh: (input) =>
       refreshGate.run(
         Effect.gen(function* () {
-          yield* refreshAdapters(input.repoPath, adapterRegistry.listForRepo(input.repoPath));
+          const recoveryStartedAt = publication.beginRecovery();
+          const roots = readSessionRootRefs ? yield* readSessionRootRefs(input.repoPath) : [];
+          yield* Effect.forEach(
+            adapterRegistry.listForRepo(input.repoPath),
+            (adapter) =>
+              adapter.refreshSnapshots?.(
+                input.repoPath,
+                roots.filter((root) => root.runtimeKind === adapter.binding.runtimeKind),
+              ) ?? Effect.void,
+          );
           yield* coordinator.run(
             Effect.gen(function* () {
               const snapshots = yield* listSnapshots(input.repoPath);
+              publication.completeRecovery(input.repoPath, recoveryStartedAt);
               yield* publishEnvelope({
                 type: "snapshot",
                 repoPath: input.repoPath,

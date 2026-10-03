@@ -211,7 +211,7 @@ describe("createWorkspaceActivityObserver", () => {
     });
   });
 
-  test("keeps workspace activity ready when one session faults", async () => {
+  test("reports incomplete workspace activity when one session faults", async () => {
     const harness = createHarness();
     harness.observer.syncWorkspaces([{ workspaceId: "alpha", repoPath: "/alpha" }]);
     await harness.settle();
@@ -229,7 +229,10 @@ describe("createWorkspaceActivityObserver", () => {
       message: "Codex thread reported a system error.",
     });
 
-    expect(harness.observer.getWorkspaceActivity("alpha")).toBe(ready);
+    expect(harness.observer.getWorkspaceActivity("alpha")).toEqual({
+      kind: "unavailable",
+      reason: "Codex thread reported a system error.",
+    });
     expect(ready).toEqual({
       kind: "ready",
       inputRequired: false,

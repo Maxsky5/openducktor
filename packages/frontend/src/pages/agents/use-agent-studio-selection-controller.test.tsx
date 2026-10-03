@@ -974,6 +974,7 @@ describe("useAgentStudioSelectionController", () => {
     const loadSessionHistory = mock(async () => null);
     const session = createSession("task-1", "session-live", {
       historyLoadState: "not_requested",
+      runtimeGeneration: "generation-1",
     });
     const harness = createHookHarness(
       createBaseArgs({
@@ -1003,6 +1004,7 @@ describe("useAgentStudioSelectionController", () => {
     const loadSessionHistory = mock(async () => null);
     const session = createSession("task-1", "session-live", {
       historyLoadState: "not_requested",
+      runtimeGeneration: "generation-1",
       messages: createSessionMessagesState("session-live", [
         {
           id: "live-message",

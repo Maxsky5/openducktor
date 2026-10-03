@@ -30,7 +30,7 @@ export type ActiveCodexTurn = {
   isTurnSettled: () => boolean;
   markTurnSettled: () => void;
   handledRequestKeys: Set<string>;
-  queuedUserMessages: CodexUserInput[][];
+  queuedUserMessages: { input: CodexUserInput[]; clientUserMessageId: string }[];
   model: AgentModelSelection;
   turnId?: string;
 };

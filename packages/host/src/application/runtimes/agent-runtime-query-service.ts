@@ -3,6 +3,7 @@ import type {
   RuntimeDescriptor,
   RuntimeInstanceSummary,
 } from "@openducktor/contracts";
+import { createSharedHistoryRecovery } from "./shared-history-recovery";
 import { Effect } from "effect";
 import { hasNestedNodeErrorCode } from "../../effect/host-errors";
 import type {
@@ -44,6 +45,7 @@ type QueryMethod = keyof AgentRuntimeQueryPort;
 export const createAgentRuntimeQueryService = (
   dependencies: AgentRuntimeQueryDependencies,
 ): AgentRuntimeQueryPort => {
+  const recoverHistory = createSharedHistoryRecovery();
   const read = <Input extends QueryInput, Result>(
     method: QueryMethod,
     input: Input,
@@ -51,6 +53,7 @@ export const createAgentRuntimeQueryService = (
       queries: NativeAgentRuntimeQueryPort,
       input: Input,
       runtime: RuntimeInstanceSummary,
+      adapter: AgentSessionLiveAdapterPort,
     ) => Effect.Effect<Result, RuntimeQueryError>,
   ): Effect.Effect<Result, RuntimeQueryError> =>
     Effect.gen(function* () {
@@ -84,7 +87,7 @@ export const createAgentRuntimeQueryService = (
           }).pipe(
             Effect.as(false),
             Effect.catchTag("HostOperationError", (cause) =>
-              method === "loadSessionHistory" &&
+              (method === "loadSessionHistory" || method === "recoverSessionHistory") &&
               input.sessionScope?.kind === "workflow" &&
               hasNestedNodeErrorCode(cause, "ENOENT")
                 ? Effect.succeed(true)
@@ -93,6 +96,17 @@ export const createAgentRuntimeQueryService = (
             Effect.mapError(directoryFailure),
           );
           const { runtime, adapter } = yield* resolveAdapter(request, method);
+          if (
+            "expectedRuntimeGeneration" in request &&
+            request.expectedRuntimeGeneration &&
+            request.expectedRuntimeGeneration !== adapter.binding.generation
+          )
+            return yield* runtimeQueryError(
+              method,
+              request,
+              "runtime_unavailable",
+              "The runtime changed before the history read. Reload the conversation with its assigned runtime.",
+            );
           if (!supportsQuery(runtime.descriptor, method)) {
             return yield* runtimeQueryError(
               method,
@@ -108,7 +122,7 @@ export const createAgentRuntimeQueryService = (
               workingDirectory: directory,
             }).pipe(Effect.mapError(directoryFailure));
           }
-          const result = yield* invoke(adapter.queries, request, runtime);
+          const result = yield* invoke(adapter.queries, request, runtime, adapter);
           const current = yield* resolveAdapter(request, method);
           if (current.adapter !== adapter) {
             return yield* runtimeQueryError(
@@ -133,7 +147,78 @@ export const createAgentRuntimeQueryService = (
     searchFiles: (input) =>
       read("searchFiles", input, (queries, request) => queries.searchFiles(request)),
     loadSessionHistory: (input) =>
-      read("loadSessionHistory", input, (queries, request) => queries.loadSessionHistory(request)),
+      read("loadSessionHistory", input, (queries, request) => {
+        const { expectedRuntimeGeneration: _generation, ...nativeInput } = request;
+        return queries.loadSessionHistory(nativeInput);
+      }),
+    recoverSessionHistory: (input) =>
+      Effect.gen(function* () {
+        const repoPath = yield* resolveRepoPath(dependencies.gitPort, input.repoPath).pipe(
+          Effect.mapError((cause) =>
+            runtimeQueryError(
+              "recoverSessionHistory",
+              input,
+              "scope_mismatch",
+              "The selected repository is missing or inaccessible. Check the repository path.",
+              cause,
+            ),
+          ),
+        );
+        const request = { ...input, repoPath };
+        const { adapter } = yield* resolveAdapter(request, "recoverSessionHistory");
+        if (
+          input.expectedRuntimeGeneration &&
+          input.expectedRuntimeGeneration !== adapter.binding.generation
+        ) {
+          return yield* runtimeQueryError(
+            "recoverSessionHistory",
+            request,
+            "runtime_unavailable",
+            "The runtime changed before recovery. Reload the conversation with its assigned runtime.",
+          );
+        }
+        const { expectedRuntimeGeneration: _expectedRuntimeGeneration, ...historyInput } = request;
+        const revision = adapter.binding.transcriptRevision(request);
+        const key = JSON.stringify([revision, historyInput]);
+        const work = read(
+          "recoverSessionHistory",
+          request,
+          (queries, _request, _runtime, currentAdapter) =>
+            Effect.gen(function* () {
+              if (currentAdapter !== adapter)
+                return yield* runtimeQueryError(
+                  "recoverSessionHistory",
+                  request,
+                  "runtime_unavailable",
+                  "The runtime changed before history recovery. Reload this conversation.",
+                );
+              const atStart = adapter.binding.transcriptRevision(request);
+              const history = yield* queries.loadSessionHistory(historyInput);
+              return {
+                history,
+                coverage: "full" as const,
+                runtimeGeneration: adapter.binding.generation,
+                transcriptRevisionAtStart: atStart,
+                transcriptRevisionAtEnd: adapter.binding.transcriptRevision(request),
+              };
+            }),
+        );
+        const result = yield* recoverHistory(adapter, key, work);
+        // Each caller validates current ownership under its own worktree guard.
+        return yield* read(
+          "recoverSessionHistory",
+          request,
+          (_queries, _request, _runtime, currentAdapter) =>
+            currentAdapter === adapter
+              ? Effect.succeed(result)
+              : runtimeQueryError(
+                  "recoverSessionHistory",
+                  request,
+                  "runtime_unavailable",
+                  "The runtime changed during history recovery. Reload this conversation.",
+                ),
+        );
+      }),
     loadSessionTodos: (input) =>
       read("loadSessionTodos", input, (queries, request) => queries.loadSessionTodos(request)),
     loadSessionDiff: (input) =>
@@ -205,6 +290,7 @@ const supportsQuery = (runtime: RuntimeDescriptor, method: QueryMethod): boolean
     case "searchFiles":
       return promptInput.supportsFileSearch;
     case "loadSessionHistory":
+    case "recoverSessionHistory":
       return history.loadable;
     case "loadSessionTodos":
       return optionalSurfaces.supportsTodos;

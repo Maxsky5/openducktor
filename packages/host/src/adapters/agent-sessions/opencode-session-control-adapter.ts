@@ -69,7 +69,10 @@ export const createOpenCodeSessionControlAdapter = ({
   state,
   serializeRuntime,
   commit,
-}: CreateOpenCodeSessionControlAdapterInput): AgentSessionControlAdapterPort => {
+}: CreateOpenCodeSessionControlAdapterInput): Omit<
+  AgentSessionControlAdapterPort,
+  "restoreSessionTree"
+> => {
   const serializeSendBySession = new Map<string, SerializeRuntime>();
 
   const serializeSessionSend = <Success>(

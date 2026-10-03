@@ -137,6 +137,16 @@ export const createAgentSessionLiveCommandHandlers = (
         args,
         "agent_session_workflow_start",
       ).pipe(Effect.flatMap(service.startWorkflowSession)),
+    agent_session_live_attach: (args) =>
+      parseCommandInput(agentSessionLiveRefreshInputSchema, args, "agent_session_live_attach").pipe(
+        Effect.flatMap(service.attach),
+      ),
+    agent_session_live_recover: (args) =>
+      parseCommandInput(
+        agentSessionLiveRefreshInputSchema,
+        args,
+        "agent_session_live_recover",
+      ).pipe(Effect.flatMap(service.attach)),
     agent_session_live_refresh: (args) =>
       parseCommandInput(
         agentSessionLiveRefreshInputSchema,

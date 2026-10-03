@@ -4,6 +4,9 @@ import {
   notificationStreamSubscribeSchema,
   type NotificationCursor,
   type AgentSessionLiveEnvelope,
+  type AgentSessionLiveBaseline,
+  type HostReplayLoss,
+  hostReplayBoundarySchema,
   type AgentSessionLiveRefreshInput,
   type HostErrorResponse,
   type HostEventChannel,
@@ -29,6 +32,7 @@ import type {
 } from "@openducktor/frontend/lib/shell-bridge";
 import {
   createAgentSessionLiveAttachment,
+  agentSessionLiveEnvelopeRepoPath,
   createHostClient,
   type HostClient,
   HostInvokeError,
@@ -53,7 +57,9 @@ import {
 import { hostEventStreamEventName, liveSessionStreamEventName } from "./host-event-stream-name";
 import { subscribeLocalTaskEventStreamEffect } from "./local-task-event-transport";
 
-type BrowserSseControlEvent = ReturnType<typeof browserLiveControlEvent>;
+type BrowserSseControlEvent = ReturnType<typeof browserLiveControlEvent> & {
+  replayFailure?: boolean;
+};
 type BrowserSseEvent = HostEventEnvelope | BrowserSseControlEvent;
 type BrowserSseListener = (event: BrowserSseEvent) => void;
 type BrowserSseListenerRegistration = {
@@ -61,7 +67,8 @@ type BrowserSseListenerRegistration = {
   eventName: string;
   listener: BrowserSseListener;
   receivesControlEvents: boolean;
-  onReplayGap?: (message: string) => void;
+  onReplayGap?: (loss: HostReplayLoss | null) => void;
+  onReplayComplete?: () => void;
 };
 
 const RUN_EVENT_CHANNEL = "openducktor://run-event";
@@ -78,12 +85,15 @@ type BrowserSseChannel = {
   listeners: Map<number, BrowserSseListenerRegistration>;
   ready: Promise<void>;
   readTransportEpoch: () => string | null;
+  readReplayPending: () => boolean;
+  notifyPendingReplay: (registration: BrowserSseListenerRegistration) => void;
   handleMessage: EventListener;
-  handleOpen: EventListener;
   handleError: EventListener;
   handleStreamWarning: EventListener;
   handleNotification: EventListener;
   notifications: ReturnType<typeof createNotificationFrameRelay>;
+  handleReplayStart: EventListener;
+  handleReplayComplete: EventListener;
 };
 
 type BrowserSseSubscription = {
@@ -102,7 +112,6 @@ const isBrowserSseControlEvent = (event: BrowserSseEvent): event is BrowserSseCo
 
 let sseChannel: BrowserSseChannel | null = null;
 let nextSseListenerId = 0;
-let nextSseTransportEpoch = 0;
 let sessionPromise: Promise<void> | null = null;
 
 const createLocalHostRequestError = (
@@ -289,10 +298,11 @@ const closeSseChannelIfUnused = (channel: BrowserSseChannel): void => {
     return;
   }
   channel.eventSource.removeEventListener("message", channel.handleMessage);
-  channel.eventSource.removeEventListener("open", channel.handleOpen);
   channel.eventSource.removeEventListener("error", channel.handleError);
   channel.eventSource.removeEventListener("stream-warning", channel.handleStreamWarning);
   channel.eventSource.removeEventListener("notification-frame", channel.handleNotification);
+  channel.eventSource.removeEventListener("replay-start", channel.handleReplayStart);
+  channel.eventSource.removeEventListener("replay-complete", channel.handleReplayComplete);
   channel.eventSource.close();
   if (sseChannel === channel) {
     sseChannel = null;
@@ -342,15 +352,38 @@ const getSseChannelEffect = (
       let hasReportedConnectionError = false;
       let transportEpoch: string | null = null;
       let resolveReady: () => void = () => {};
-      const ready = new Promise<void>((resolve) => {
+      let rejectReady: (cause: unknown) => void = () => {};
+      const ready = new Promise<void>((resolve, reject) => {
         resolveReady = resolve;
+        rejectReady = reject;
       });
+      void ready.catch(() => undefined);
+      let replayFailed = false;
       const snapshotControlListeners = (): BrowserSseListener[] =>
         [...listeners.values()]
           .filter((registration) => registration.receivesControlEvents)
           .map((registration) => registration.listener);
       const handleMessage: EventListener = (event) => {
-        const hostEvent = parseHostEvent(readEventSourceData(event, event.type));
+        if (replayFailed) return;
+        let hostEvent: HostEventEnvelope;
+        try {
+          hostEvent = parseHostEvent(readEventSourceData(event, event.type));
+        } catch (cause) {
+          dispatchBrowserSseListeners(
+            [...listeners.values()].map((registration) => () => {
+              registration.onReplayGap?.(null);
+              if (registration.receivesControlEvents)
+                registration.listener(
+                  browserLiveControlEvent(
+                    BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
+                    `Host event validation failed: ${errorMessage(cause)}. Recover affected state.`,
+                  ),
+                );
+            }),
+            undefined,
+          );
+          throw cause;
+        }
         const expectedName = hostEventStreamEventName(hostEvent);
         if (event.type !== expectedName) {
           throw new Error("OpenDucktor host event arrived on the wrong stream event name.");
@@ -361,24 +394,102 @@ const getSseChannelEffect = (
               (registration) =>
                 registration.channel === hostEvent.channel && registration.eventName === event.type,
             )
-            .map((registration) => registration.listener),
+            .map((registration) => (payload: HostEventEnvelope) => {
+              try {
+                registration.listener(payload);
+              } catch (cause) {
+                const loss: HostReplayLoss = { channel: payload.channel, facet: "other" };
+                if (payload.channel === AGENT_SESSION_LIVE_EVENT_CHANNEL) {
+                  loss.repoPath = agentSessionLiveEnvelopeRepoPath(payload.payload);
+                  loss.facet = payload.payload.type === "transcript_event" ? "transcript" : "state";
+                  if (payload.payload.type === "transcript_event")
+                    loss.refs = [payload.payload.event.sessionRef];
+                }
+                registration.onReplayGap?.(loss);
+                throw cause;
+              }
+            }),
           hostEvent,
         );
       };
-      const handleOpen: EventListener = () => {
-        transportEpoch = `${HOST_EVENT_STREAM_PATH}:${nextSseTransportEpoch}`;
-        nextSseTransportEpoch += 1;
+      let replayBoundary: ReturnType<typeof hostReplayBoundarySchema.parse> | null = null;
+      const notifyReplayBoundary = (
+        registration: BrowserSseListenerRegistration,
+        boundary: ReturnType<typeof hostReplayBoundarySchema.parse>,
+      ): void => {
+        const losses = boundary.losses.filter((loss) => loss.channel === registration.channel);
+        if (boundary.hostChanged) registration.onReplayGap?.(null);
+        else for (const loss of losses) registration.onReplayGap?.(loss);
+        if (boundary.hostChanged || losses.length > 0)
+          registration.listener(
+            browserLiveControlEvent(
+              BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
+              "Host replay is incomplete. Recover the affected state.",
+            ),
+          );
+      };
+      const failReplay = (cause: unknown): void => {
+        replayFailed = true;
+        eventSource.close();
+        sseChannel = null;
+        const message = `Invalid host replay: ${errorMessage(cause)} Reload the browser to reconnect to the configured host.`;
+        rejectReady(new Error(message));
+        dispatchBrowserSseListeners(snapshotControlListeners(), {
+          ...browserLiveControlEvent(BROWSER_LIVE_STREAM_WARNING_EVENT_KIND, message),
+          replayFailure: true,
+        });
+      };
+      const handleReplayStart: EventListener = (event) => {
+        if (replayFailed) return;
+        let boundary: ReturnType<typeof hostReplayBoundarySchema.parse>;
+        try {
+          boundary = hostReplayBoundarySchema.parse(
+            JSON.parse(readEventSourceData(event, "replay-start")),
+          );
+        } catch (cause) {
+          failReplay(cause);
+          return;
+        }
+        replayBoundary = boundary;
+        transportEpoch = boundary.hostEpoch;
+        dispatchBrowserSseListeners(
+          Array.from(listeners.values()).map(
+            (registration) => () => notifyReplayBoundary(registration, boundary),
+          ),
+          undefined,
+        );
+      };
+      const handleReplayComplete: EventListener = (event) => {
+        if (replayFailed) return;
+        let complete: ReturnType<typeof hostReplayBoundarySchema.parse>;
+        try {
+          complete = hostReplayBoundarySchema.parse(
+            JSON.parse(readEventSourceData(event, "replay-complete")),
+          );
+          if (!replayBoundary || JSON.stringify(complete) !== JSON.stringify(replayBoundary))
+            throw new Error(
+              "Host replay completion does not match its boundary. Reload the browser to reconnect.",
+            );
+        } catch (cause) {
+          failReplay(cause);
+          return;
+        }
+        replayBoundary = null;
+        dispatchBrowserSseListeners(
+          [...listeners.values()].map((registration) => () => registration.onReplayComplete?.()),
+          undefined,
+        );
         if (!hasOpened) {
           hasOpened = true;
           hasReportedConnectionError = false;
           resolveReady();
-          return;
+        } else {
+          hasReportedConnectionError = false;
+          dispatchBrowserSseListeners(
+            snapshotControlListeners(),
+            browserLiveControlEvent(BROWSER_LIVE_RECONNECTED_EVENT_KIND, complete.hostEpoch),
+          );
         }
-        hasReportedConnectionError = false;
-        dispatchBrowserSseListeners(
-          snapshotControlListeners(),
-          browserLiveControlEvent(BROWSER_LIVE_RECONNECTED_EVENT_KIND, transportEpoch),
-        );
       };
       const handleError: EventListener = () => {
         if (!hasReportedConnectionError)
@@ -417,33 +528,36 @@ const getSseChannelEffect = (
           BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
           warning,
         );
-        const replayGapListeners = [...listeners.values()].flatMap((registration) =>
-          registration.onReplayGap ? [registration.onReplayGap] : [],
+        dispatchBrowserSseListeners(
+          [...listeners.values()]
+            .filter((registration) => registration.receivesControlEvents)
+            .map((registration) => registration.listener),
+          warningPayload,
         );
-        const controlListeners = [...listeners.values()]
-          .filter((registration) => registration.receivesControlEvents)
-          .map((registration) => (_message: string): void => {
-            registration.listener(warningPayload);
-          });
-        dispatchBrowserSseListeners([...replayGapListeners, ...controlListeners], warning);
       };
 
       eventSource.addEventListener("notification-frame", handleNotification);
       eventSource.addEventListener("message", handleMessage);
-      eventSource.addEventListener("open", handleOpen);
       eventSource.addEventListener("error", handleError);
       eventSource.addEventListener("stream-warning", handleStreamWarning);
+      eventSource.addEventListener("replay-start", handleReplayStart);
+      eventSource.addEventListener("replay-complete", handleReplayComplete);
       channel = {
         eventSource,
         listeners,
         ready,
         readTransportEpoch: () => transportEpoch,
+        readReplayPending: () => replayBoundary !== null,
+        notifyPendingReplay: (registration) => {
+          if (replayBoundary) notifyReplayBoundary(registration, replayBoundary);
+        },
         handleMessage,
-        handleOpen,
         handleError,
         handleStreamWarning,
         handleNotification,
         notifications,
+        handleReplayStart,
+        handleReplayComplete,
       };
       sseChannel = channel;
     }
@@ -455,8 +569,9 @@ const subscribeSseChannelEffect = (
   eventChannel: HostEventChannel,
   listener: BrowserSseListener,
   receivesControlEvents = false,
-  onReplayGap?: (message: string) => void,
+  onReplayGap?: (loss: HostReplayLoss | null) => void,
   eventName = "message",
+  onReplayComplete?: () => void,
 ): Effect.Effect<BrowserSseSubscription, WebError> =>
   Effect.gen(function* () {
     const channel = yield* getSseChannelEffect();
@@ -471,6 +586,7 @@ const subscribeSseChannelEffect = (
     if (onReplayGap) {
       registration.onReplayGap = onReplayGap;
     }
+    if (onReplayComplete) registration.onReplayComplete = onReplayComplete;
     if (
       eventName !== "message" &&
       ![...channel.listeners.values()].some((entry) => entry.eventName === eventName)
@@ -493,23 +609,27 @@ const subscribeSseChannelEffect = (
     });
     void subscriptionReady.catch(() => {});
 
-    return {
-      ready: subscriptionReady,
-      unsubscribe: () => {
-        const currentChannel = sseChannel;
-        if (!currentChannel) {
-          return;
-        }
-        currentChannel.listeners.delete(listenerId);
-        if (
-          eventName !== "message" &&
-          ![...currentChannel.listeners.values()].some((entry) => entry.eventName === eventName)
-        ) {
-          currentChannel.eventSource.removeEventListener(eventName, currentChannel.handleMessage);
-        }
-        closeSseChannelIfUnused(currentChannel);
-      },
+    const unsubscribe = (): void => {
+      const currentChannel = sseChannel;
+      if (!currentChannel) {
+        return;
+      }
+      currentChannel.listeners.delete(listenerId);
+      if (
+        eventName !== "message" &&
+        ![...currentChannel.listeners.values()].some((entry) => entry.eventName === eventName)
+      ) {
+        currentChannel.eventSource.removeEventListener(eventName, currentChannel.handleMessage);
+      }
+      closeSseChannelIfUnused(currentChannel);
     };
+    try {
+      activeChannel.notifyPendingReplay(registration);
+    } catch (cause) {
+      unsubscribe();
+      throw cause;
+    }
+    return { ready: subscriptionReady, unsubscribe };
   });
 
 export const subscribeLocalHostRunEvents = async (
@@ -518,11 +638,16 @@ export const subscribeLocalHostRunEvents = async (
   return runWebBoundary(
     Effect.gen(function* () {
       yield* ensureLocalHostSessionDedupedEffect();
-      return (yield* subscribeSseChannelEffect(RUN_EVENT_CHANNEL, (event) => {
-        if (!isBrowserSseControlEvent(event) && event.channel === RUN_EVENT_CHANNEL) {
-          listener(event.payload);
-        }
-      })).unsubscribe;
+      return (yield* subscribeSseChannelEffect(
+        RUN_EVENT_CHANNEL,
+        (event) => {
+          if (isBrowserSseControlEvent(event)) listener(event);
+          else if (event.channel === RUN_EVENT_CHANNEL) {
+            listener(event.payload);
+          }
+        },
+        true,
+      )).unsubscribe;
     }),
   );
 };
@@ -532,10 +657,8 @@ export const subscribeLocalHostAzureDevOpsConnectionUpdates = async (
 ): Promise<() => void> => {
   const subscription = await runWebBoundary(
     subscribeReadyLocalHostEventsEffect(AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL, (event) => {
-      if (
-        !isBrowserSseControlEvent(event) &&
-        event.channel === AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL
-      ) {
+      if (isBrowserSseControlEvent(event)) listener(event);
+      else if (event.channel === AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL) {
         listener(event.payload);
       }
     }),
@@ -546,8 +669,9 @@ export const subscribeLocalHostAzureDevOpsConnectionUpdates = async (
 const subscribeReadyLocalHostEventsEffect = (
   channel: HostEventChannel,
   listener: BrowserSseListener,
-  onReplayGap?: (message: string) => void,
+  onReplayGap?: (loss: HostReplayLoss | null) => void,
   eventName = "message",
+  onReplayComplete?: () => void,
 ): Effect.Effect<DevServerEventSubscription, WebError> =>
   Effect.gen(function* () {
     yield* ensureLocalHostSessionDedupedEffect();
@@ -557,6 +681,7 @@ const subscribeReadyLocalHostEventsEffect = (
       true,
       onReplayGap,
       eventName,
+      onReplayComplete,
     );
     const readyExit = yield* Effect.exit(
       Effect.tryPromise({
@@ -640,6 +765,13 @@ export const subscribeLocalHostDevServerEvents = async (
   );
 };
 
+type PendingTranscriptRepair = {
+  repoPath: string;
+  losses: Array<HostReplayLoss | null>;
+  closed: boolean;
+};
+const pendingTranscriptRepairs = new Set<PendingTranscriptRepair>();
+
 export const observeLocalHostAgentSessions = async (
   input: AgentSessionLiveRefreshInput,
   listener: (envelope: AgentSessionLiveEnvelope) => void,
@@ -647,34 +779,127 @@ export const observeLocalHostAgentSessions = async (
   return runWebBoundary(
     Effect.gen(function* () {
       const client = createLocalHostClient();
-      let closed = false;
+      const inherited = [...pendingTranscriptRepairs].filter(
+        (owner) => owner.closed && owner.repoPath === input.repoPath,
+      );
+      const repairOwner: PendingTranscriptRepair = {
+        repoPath: input.repoPath,
+        losses: [],
+        closed: false,
+      };
       let refreshTail = Promise.resolve();
+      let refreshQueued = false;
+      let recovering = false;
+      let pendingBaseline: AgentSessionLiveBaseline | null = null;
+      let initialAttachmentSuperseded = false;
       const attachment = createAgentSessionLiveAttachment(input.repoPath, listener);
+      const installBaseline = (baseline: AgentSessionLiveBaseline): void => {
+        if (baseline.cursor.hostEpoch !== sseChannel?.readTransportEpoch())
+          throw new Error(
+            "The host changed during attachment. Reconnect to the configured host to restore observation.",
+          );
+        attachment.install(baseline);
+        // Baseline faults do not keep a delivered gap pending.
+        pendingTranscriptRepairs.delete(repairOwner);
+        repairOwner.losses = [];
+        for (const owner of inherited) pendingTranscriptRepairs.delete(owner);
+      };
+      const reportRefreshFailure = (cause: unknown): void => {
+        if (!repairOwner.closed)
+          listener({
+            type: "fault",
+            repoPath: input.repoPath,
+            operation: "agent-session-live.refresh",
+            message: errorMessage(cause),
+          });
+      };
+      const installPendingBaseline = (): boolean => {
+        if (
+          repairOwner.closed ||
+          sseChannel?.readReplayPending() ||
+          refreshQueued ||
+          !pendingBaseline
+        )
+          return false;
+        const baseline = pendingBaseline;
+        pendingBaseline = null;
+        installBaseline(baseline);
+        recovering = false;
+        return true;
+      };
       const refresh = (): void => {
+        initialAttachmentSuperseded = true;
+        recovering = true;
         attachment.restart();
+        pendingBaseline = null;
+        // Losses from one replay boundary share the queued recovery read.
+        if (refreshQueued) return;
+        refreshQueued = true;
         refreshTail = refreshTail
           .then(async () => {
-            if (!closed) {
-              await client.agentSessionLiveRefresh(input);
+            refreshQueued = false;
+            if (!repairOwner.closed) {
+              attachment.restart();
+              const baseline = await client.agentSessionLiveRecover(input);
+              // Keep replay buffered when a later loss requires another baseline.
+              if (!repairOwner.closed && !refreshQueued) {
+                pendingBaseline = baseline;
+                if (installPendingBaseline())
+                  listener({ type: "connection_state", repoPath: input.repoPath, state: "ready" });
+              }
             }
           })
-          .catch((cause: unknown) => {
-            if (!closed) {
-              listener({
-                type: "fault",
-                repoPath: input.repoPath,
-                operation: "agent-session-live.refresh",
-                message: errorMessage(cause),
-              } satisfies AgentSessionLiveEnvelope);
-            }
-          });
+          .catch(reportRefreshFailure);
+      };
+      const recoverLoss = (loss: HostReplayLoss | null): void => {
+        if (loss?.repoPath && loss.repoPath !== input.repoPath) return;
+        if (!loss || loss.facet === "transcript") {
+          repairOwner.losses.push(loss);
+          pendingTranscriptRepairs.add(repairOwner);
+        }
+        refresh();
+        if (!loss || loss.facet === "transcript") {
+          const gap: Extract<AgentSessionLiveEnvelope, { type: "transcript_gap" }> = {
+            type: "transcript_gap",
+            repoPath: input.repoPath,
+            message: "Transcript events were lost. Reload affected conversation history.",
+          };
+          if (loss?.refs) gap.refs = loss.refs;
+          attachment.accept(gap);
+        }
       };
       const subscription = yield* subscribeReadyLocalHostEventsEffect(
         AGENT_SESSION_LIVE_EVENT_CHANNEL,
         (event) => {
           if (isBrowserSseControlEvent(event)) {
+            if (event.replayFailure && event.kind === BROWSER_LIVE_STREAM_WARNING_EVENT_KIND) {
+              repairOwner.losses.push(null);
+              pendingTranscriptRepairs.add(repairOwner);
+              repairOwner.closed = true;
+              listener({
+                type: "transcript_gap",
+                repoPath: input.repoPath,
+                replayPending: true,
+                message: event.message ?? "Invalid host replay. Reload the browser to reconnect.",
+              });
+              listener({
+                type: "fault",
+                repoPath: input.repoPath,
+                operation: "agent-session-live.replay",
+                message: event.message ?? "Invalid host replay. Reload the browser to reconnect.",
+              });
+            }
             if (event.kind === BROWSER_LIVE_RECONNECTED_EVENT_KIND) {
-              refresh();
+              // Replay can finish before the recovery request.
+              if (recovering) return;
+              listener({ type: "connection_state", repoPath: input.repoPath, state: "ready" });
+            } else {
+              listener({
+                type: "connection_state",
+                repoPath: input.repoPath,
+                state: "uncertain",
+                message: event.message ?? "Host connection interrupted. Reconnect to the host.",
+              });
             }
             return;
           }
@@ -682,14 +907,35 @@ export const observeLocalHostAgentSessions = async (
             attachment.accept(event.payload);
           }
         },
-        (message) => {
-          listener({ type: "transcript_gap", repoPath: input.repoPath, message });
-        },
+        recoverLoss,
         liveSessionStreamEventName(input.repoPath),
+        () => {
+          try {
+            installPendingBaseline();
+          } catch (cause) {
+            reportRefreshFailure(cause);
+          }
+        },
+      ).pipe(
+        Effect.onError(() =>
+          Effect.sync(() => {
+            repairOwner.closed = true;
+          }),
+        ),
       );
+      for (const owner of inherited)
+        for (const loss of owner.losses)
+          if (
+            !repairOwner.losses.some((pending) => JSON.stringify(pending) === JSON.stringify(loss))
+          )
+            recoverLoss(loss);
       const initialRefreshExit = yield* Effect.exit(
         Effect.tryPromise({
-          try: () => client.agentSessionLiveRefresh(input),
+          try: async () => {
+            const baseline = await client.agentSessionLiveAttach(input);
+            // A later recovery owns attachment and its buffered replay.
+            if (!initialAttachmentSuperseded) installBaseline(baseline);
+          },
           catch: (cause) =>
             isWebError(cause)
               ? cause
@@ -702,11 +948,12 @@ export const observeLocalHostAgentSessions = async (
         }),
       );
       if (initialRefreshExit._tag === "Failure") {
+        repairOwner.closed = true;
         subscription.unsubscribe();
         return yield* causeToWebBoundaryError(initialRefreshExit.cause);
       }
       return () => {
-        closed = true;
+        repairOwner.closed = true;
         subscription.unsubscribe();
       };
     }),

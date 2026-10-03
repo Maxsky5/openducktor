@@ -1,3 +1,5 @@
+import { setWorkspaceSessionOwnership } from "./workspace-session-live-ownership";
+import { restoreWorkspaceSession } from "./workspace-session-restore";
 import {
   type WorkspaceSession,
   type WorkspaceSessionArchiveInput,
@@ -43,7 +45,6 @@ import {
 import {
   readWorkspaceSessionArchivePreview,
   removeWorkspaceSessionWorktree,
-  withRestoredWorkspaceSessionWorktree,
 } from "./workspace-session-worktree-lifecycle";
 
 import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
@@ -64,7 +65,12 @@ export type WorkspaceSessionServiceDependencies = WorkspaceSessionTargetDependen
   runtime: Pick<RuntimeOrchestratorService, "runtimeEnsure">;
   live: Pick<
     AgentSessionLiveStateService,
-    "startSession" | "releaseSession" | "read" | "stopSession" | "updateSessionTitle"
+    | "startSession"
+    | "releaseSession"
+    | "read"
+    | "stopSession"
+    | "updateSessionTitle"
+    | "setSessionOwnership"
   >;
 };
 
@@ -360,7 +366,10 @@ export const createWorkspaceSessionService = (
         Effect.scoped(
           Effect.gen(function* () {
             const { ref, session } = yield* recordFor(input);
-            if (session.archivedAt !== null) return session;
+            if (session.archivedAt !== null) {
+              yield* setWorkspaceSessionOwnership(live, ref.repoPath, session, false);
+              return session;
+            }
             let target = session.executionTarget;
             let worktreePath = target.workingDirectory;
             if (input.removeWorktree) {
@@ -456,6 +465,7 @@ export const createWorkspaceSessionService = (
                     ),
                   );
                 yield* forgetWorkspaceSessionDevServers(dependencies.devServerService, ref);
+                yield* setWorkspaceSessionOwnership(live, ref.repoPath, archived, false);
                 return archived;
               }),
             );
@@ -467,25 +477,7 @@ export const createWorkspaceSessionService = (
         input,
         Effect.gen(function* () {
           const { ref, session } = yield* recordFor(input);
-          if (session.archivedAt === null) return session;
-          if (
-            session.executionTarget.kind === "local_worktree" &&
-            session.executionTarget.worktreeState === "removed"
-          ) {
-            const config = yield* settings.getRepoConfig(input.workspaceId);
-            return yield* withRestoredWorkspaceSessionWorktree(
-              dependencies,
-              { ...config, repoPath: ref.repoPath },
-              session.executionTarget,
-              (executionTarget) => store.restore({ ...ref, executionTarget }),
-            );
-          }
-          yield* validateWorkspaceSessionTarget(
-            dependencies,
-            ref.repoPath,
-            session.executionTarget,
-          );
-          return yield* store.restore(ref);
+          return yield* restoreWorkspaceSession(dependencies, ref, session);
         }),
       ),
   };

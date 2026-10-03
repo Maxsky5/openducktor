@@ -31,6 +31,7 @@ type CreateLoadAgentSessionHistoryArgs = {
   loadSystemPromptContext: LoadSessionHistorySystemPromptContext;
   loadSettingsSnapshot?: LoadSettingsSnapshotForRuntimePolicy;
   historyReadGeneration: SessionHistoryReadGeneration;
+  flushTranscript?: (identity: AgentSessionIdentity) => void;
 };
 
 type SessionHistoryLoadClaim = {
@@ -52,6 +53,7 @@ const claimSessionHistoryLoad = ({
   updateSession: UpdateSession;
 }): SessionHistoryLoadClaim => {
   const currentSession = readSessionSnapshot(identity);
+  if (currentSession?.historyReplayPending) return { session: currentSession, claimedLoad: false };
   if (!currentSession) {
     return { session: null, claimedLoad: false };
   }
@@ -111,6 +113,7 @@ type LoadSessionHistoryIntoStoreArgs = {
   loadSystemPromptContext?: LoadSessionHistorySystemPromptContext;
   isStaleRepoOperation: () => boolean;
   historyReadGeneration: SessionHistoryReadGeneration;
+  flushTranscript?: (identity: AgentSessionIdentity) => void;
 };
 
 const loadSessionHistoryIntoStoreWithPolicy = async ({
@@ -119,11 +122,12 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
   readSessionSnapshot,
   updateSession,
   identity,
-  policy,
+  policy: requestedPolicy,
   loadSettingsSnapshot,
   loadSystemPromptContext,
   isStaleRepoOperation,
   historyReadGeneration,
+  flushTranscript,
 }: LoadSessionHistoryIntoStoreArgs & {
   policy: SessionHistoryLoadPolicy;
 }): Promise<AgentSessionState | null> => {
@@ -132,6 +136,10 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
   }
 
   const currentSession = readSessionSnapshot(identity);
+  const policy =
+    currentSession?.historyCompleteness === "incomplete"
+      ? transcriptGapRecoveryHistoryLoadPolicy
+      : requestedPolicy;
   if (currentSession) {
     requireBoundSessionAssociation(currentSession, "load history");
   }
@@ -161,6 +169,8 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
   };
   const finishSupersededHistoryRead = (): AgentSessionState | null => readSessionSnapshot(identity);
 
+  let readingSession: AgentSessionState | undefined;
+  let readingRecoveryGeneration: number | undefined;
   try {
     if (isStaleRepoOperation()) {
       return finishStaleHistoryLoad();
@@ -199,17 +209,36 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
       return finishSupersededHistoryRead();
     }
 
+    const runtimeGeneration = sessionForHistory.runtimeGeneration;
+    readingSession = sessionForHistory;
+    readingRecoveryGeneration = sessionForHistory.historyRecoveryGeneration;
     const historyInput: Parameters<typeof adapter.loadSessionHistory>[0] = {
       ...sessionRef,
-      limit: SESSION_HISTORY_LOAD_LIMIT,
     };
+    if (runtimeGeneration) historyInput.expectedRuntimeGeneration = runtimeGeneration;
+    if (!policy.fullHistory) historyInput.limit = SESSION_HISTORY_LOAD_LIMIT;
     if (systemPromptContext) {
       historyInput.systemPromptContext = systemPromptContext;
     }
-    const sessionAtReadStart = readSessionSnapshot(identity);
+    flushTranscript?.(identity);
+    const sessionAtReadStart = updateSession(identity, (current) => ({
+      ...current,
+      historyReadRetractedMessageIds: new Set(),
+    }));
     const messagesAtReadStart = sessionAtReadStart?.messages;
     const questionsAtReadStart = sessionAtReadStart?.pendingQuestions;
+    readingRecoveryGeneration = sessionAtReadStart?.historyRecoveryGeneration;
     const history = await adapter.loadSessionHistory(historyInput);
+    const observed = readSessionSnapshot(identity);
+    if (observed?.historyReplayPending) return observed;
+    if (
+      observed?.runtimeGeneration !== runtimeGeneration ||
+      observed?.historyRecoveryGeneration !== readingRecoveryGeneration
+    )
+      return observed;
+    flushTranscript?.(identity);
+    const afterFlush = readSessionSnapshot(identity);
+    if (afterFlush?.historyRecoveryGeneration !== readingRecoveryGeneration) return afterFlush;
     if (isStaleRepoOperation()) {
       return finishStaleHistoryLoad();
     }
@@ -221,6 +250,14 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
       policy.applyLoadedHistory(current, history, messagesAtReadStart, questionsAtReadStart),
     );
   } catch (error) {
+    const observed = readSessionSnapshot(identity);
+    if (observed?.historyReplayPending) return observed;
+    if (
+      readingSession &&
+      (observed?.runtimeGeneration !== readingSession.runtimeGeneration ||
+        observed?.historyRecoveryGeneration !== readingRecoveryGeneration)
+    )
+      return observed;
     if (isStaleRepoOperation()) {
       return finishStaleHistoryLoad();
     }
@@ -238,6 +275,14 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
     }
     return failedSession?.historyLoadState === "loaded" ? failedSession : null;
   } finally {
+    if (!isSupersededRead()) {
+      updateSession(identity, (current) => {
+        if (!current.historyReadRetractedMessageIds) return current;
+        const next = { ...current };
+        delete next.historyReadRetractedMessageIds;
+        return next;
+      });
+    }
     historyReadGeneration.finish(identity, readToken);
   }
 };
@@ -286,6 +331,7 @@ const createLoadSessionHistoryWithPolicy = ({
   historyReadGeneration,
   policy,
   skipInFlightLoads = false,
+  flushTranscript,
 }: CreateLoadAgentSessionHistoryArgs & {
   policy: SessionHistoryLoadPolicy;
   skipInFlightLoads?: boolean;
@@ -317,6 +363,7 @@ const createLoadSessionHistoryWithPolicy = ({
       isStaleRepoOperation,
       historyReadGeneration,
     };
+    if (flushTranscript) input.flushTranscript = flushTranscript;
     if (loadSettingsSnapshot) {
       input.loadSettingsSnapshot = loadSettingsSnapshot;
     }

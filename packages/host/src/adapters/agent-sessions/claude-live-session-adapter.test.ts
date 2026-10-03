@@ -1902,6 +1902,7 @@ describe("Claude host live-session adapter", () => {
       {
         type: "fault",
         repoPath: "/repo",
+        runtimeKind: "claude",
         operation: "claude-live-session.update-session-title",
         message: "Publication failed.",
       },

@@ -116,6 +116,7 @@ const createActivityStore = (
     updateSession: (): AgentSessionState | null => {
       throw new Error("updateSession is not used in this test");
     },
+    invalidateRetainedHistory: () => {},
     resetWorkspace: (workspaceRepoPath): void => {
       activityWorkspaceRepoPath = workspaceRepoPath;
       activitySessions = [];

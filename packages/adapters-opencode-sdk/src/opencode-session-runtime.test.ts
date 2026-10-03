@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { createPrepareOpencodeSessionRuntime, type OpencodeSessionRuntimeSignal } from "./index";
-import { permissionAskedEvent, sessionStatusEvent } from "./event-stream.test-support";
+import {
+  permissionAskedEvent,
+  questionAskedEvent,
+  sessionStatusEvent,
+} from "./event-stream.test-support";
 import type { OpencodePermissionRule } from "./workflow-tool-permissions";
 import {
   createOpencodeEventFixtures,
@@ -49,18 +53,8 @@ const createLiveClientHarness = (
     parentSessionIdsBySessionId?: Readonly<Record<string, string>>;
     missingSessionIds?: string[];
     busySessionIds?: string[];
-    listBarrier?: () => Promise<void>;
-    listError?: Error;
-    onList?: () => void;
     messagesBarrier?: () => Promise<void>;
     onMessages?: () => void;
-    permissionListBarrier?: () => Promise<void>;
-    onPermissionList?: () => void;
-    onPermissionListSettled?: () => void;
-    questionListBarrier?: () => Promise<void>;
-    onQuestionList?: () => void;
-    onQuestionListSettled?: () => void;
-    streamCloseBarrier?: () => Promise<void>;
     initiallyConnected?: boolean;
   } = {},
 ): LiveClientHarness => {
@@ -98,27 +92,7 @@ const createLiveClientHarness = (
       ...baseClient.session,
       list: async () => {
         callOrder.push("list");
-        input.onList?.();
-        await input.listBarrier?.();
-        if (input.listError) {
-          throw input.listError;
-        }
-        return {
-          data: externalSessionIds.map((sessionId) =>
-            createOpencodeSessionFixture({
-              id: sessionId,
-              permission: rules.get(sessionId),
-              parentID: input.parentSessionIdsBySessionId?.[sessionId],
-              directory: "/repo",
-              title: "Live session",
-              time: {
-                created: Date.parse("2026-07-16T10:00:00.000Z"),
-                updated: Date.parse("2026-07-16T10:00:00.000Z"),
-              },
-            }),
-          ),
-          error: undefined,
-        };
+        throw new Error("Broad session enumeration is forbidden");
       },
       get: async ({ sessionID }) => {
         callOrder.push(`get:${sessionID}`);
@@ -230,6 +204,8 @@ const createLiveClientHarness = (
       ...baseClient.permission,
       list: async () => {
         callOrder.push("permission.list");
+        input.onPermissionList?.();
+        await input.permissionListBarrier?.();
         const data = pendingApproval
           ? externalSessionIds.map((sessionId) => ({
               id: nativeRequestId,
@@ -240,9 +216,6 @@ const createLiveClientHarness = (
               always: [],
             }))
           : [];
-        input.onPermissionList?.();
-        await input.permissionListBarrier?.();
-        input.onPermissionListSettled?.();
         return { data, error: undefined };
       },
       reply: async (request: PermissionReplyRequest) => {
@@ -273,9 +246,6 @@ const createLiveClientHarness = (
               },
             ]
           : [];
-        input.onQuestionList?.();
-        await input.questionListBarrier?.();
-        input.onQuestionListSettled?.();
         return { data, error: undefined };
       },
       reply: async (request: QuestionReplyRequest) => {
@@ -291,37 +261,33 @@ const createLiveClientHarness = (
         signal = options?.signal ?? null;
         async function* events() {
           let eventIndex = 0;
-          try {
-            while (!options?.signal?.aborted) {
-              if (queuedEvents.length === 0) {
-                await new Promise<void>((resolve) => {
-                  wakeStream = resolve;
-                  options?.signal?.addEventListener("abort", resolve, { once: true });
-                });
-              }
-              const entry = queuedEvents.shift();
-              if (!entry) {
-                continue;
-              }
-              if (entry.type === "complete") {
-                entry.consumed();
-                return;
-              }
-              if (entry.type === "failure") {
-                entry.consumed();
-                throw entry.error;
-              }
-              if (entry.event.type === "server.connected") {
-                callOrder.push("connected");
-              }
-              for (const payload of createOpencodeEventFixtures(entry.event, eventIndex)) {
-                yield { directory: "/repo", payload };
-              }
-              eventIndex += 1;
-              entry.consumed?.();
+          while (!options?.signal?.aborted) {
+            if (queuedEvents.length === 0) {
+              await new Promise<void>((resolve) => {
+                wakeStream = resolve;
+                options?.signal?.addEventListener("abort", resolve, { once: true });
+              });
             }
-          } finally {
-            await input.streamCloseBarrier?.();
+            const entry = queuedEvents.shift();
+            if (!entry) {
+              continue;
+            }
+            if (entry.type === "complete") {
+              entry.consumed();
+              return;
+            }
+            if (entry.type === "failure") {
+              entry.consumed();
+              throw entry.error;
+            }
+            if (entry.event.type === "server.connected") {
+              callOrder.push("connected");
+            }
+            for (const payload of createOpencodeEventFixtures(entry.event, eventIndex)) {
+              yield { directory: "/repo", payload };
+            }
+            eventIndex += 1;
+            entry.consumed?.();
           }
         }
         return { stream: events() };
@@ -411,6 +377,423 @@ const resumeOpenDucktorSession = async (
 };
 
 describe("OpenCode session runtime connection", () => {
+  test("retains cold root and child events received after the idle snapshot read", async () => {
+    const entered = Promise.withResolvers<void>();
+    const finish = Promise.withResolvers<void>();
+    const harness = createLiveClientHarness({
+      externalSessionIds: ["session-1", "child-session"],
+      parentSessionIdsBySessionId: { "child-session": "session-1" },
+      childSessionIdsByParent: { "session-1": ["child-session"] },
+      onMessages: () => entered.resolve(),
+      messagesBarrier: () => finish.promise,
+    });
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    const signals: OpencodeSessionRuntimeSignal[] = [];
+    try {
+      const read = prepared.connection.readSessionSources([
+        {
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo",
+          externalSessionId: "session-1",
+        },
+      ]);
+      await entered.promise;
+      for (const sessionID of ["session-1", "child-session"]) {
+        await harness.emitAndWait(sessionStatusEvent({ type: "busy" }, sessionID));
+        await harness.emitAndWait(
+          createOpencodeMessageEventGroupFixture({
+            info: { id: `${sessionID}-message`, role: "assistant", sessionID },
+            parts: [
+              {
+                type: "text",
+                id: `${sessionID}-part`,
+                sessionID,
+                messageID: `${sessionID}-message`,
+                text: "Received during reconstruction",
+              },
+            ],
+          }),
+        );
+      }
+      await harness.emitAndWait({
+        type: "message.updated",
+        properties: {
+          info: createOpencodeMessageInfoFixture({
+            id: "child-context",
+            role: "assistant",
+            sessionID: "child-session",
+            providerID: "openai",
+            modelID: "gpt-5",
+            tokens: { input: 900, output: 100 },
+            time: { created: Date.parse("2026-07-16T10:03:00.000Z") },
+          }),
+          parts: [],
+        },
+      });
+      for (const id of ["child-session", "unknown-session"]) {
+        const info = createOpencodeSessionFixture({ id, directory: "/repo" });
+        if (id === "child-session") info.parentID = "session-1";
+        await harness.emitAndWait({
+          type: "session.deleted",
+          properties: {
+            sessionID: id,
+            info,
+          },
+        });
+      }
+      finish.resolve();
+      const source = await read;
+      expect(source.sources[0]?.runtimeActivity).toBe("idle");
+      await prepared.startForwarding((signal) => {
+        signals.push(signal);
+      });
+      for (const sessionID of ["session-1", "child-session"]) {
+        expect(signals).toContainEqual(
+          expect.objectContaining({
+            type: "session_event",
+            event: expect.objectContaining({
+              type: "session_status",
+              externalSessionId: sessionID,
+              status: expect.objectContaining({ type: "busy" }),
+            }),
+          }),
+        );
+        expect(
+          signals.filter(
+            (signal) =>
+              signal.type === "session_event" &&
+              signal.event.type === "assistant_part" &&
+              signal.event.externalSessionId === sessionID,
+          ),
+        ).toHaveLength(1);
+      }
+      expect(signals).toContainEqual({
+        type: "context_updated",
+        externalSessionId: "child-session",
+        contextUsage: {
+          totalTokens: 1_000,
+          model: { providerId: "openai", modelId: "gpt-5", profileId: "build" },
+        },
+      });
+      expect(signals.filter((signal) => signal.type === "session_removed")).toEqual([
+        { type: "session_removed", externalSessionId: "child-session" },
+      ]);
+    } finally {
+      finish.resolve();
+      await prepared.release();
+    }
+  });
+
+  test("retains restoring tree events until its host snapshot is installed", async () => {
+    const entered = Promise.withResolvers<void>();
+    const finish = Promise.withResolvers<void>();
+    let paused = false;
+    let installed = false;
+    const harness = createLiveClientHarness({
+      childSessionIdsByParent: { "session-1": ["child-session"] },
+      onMessages: () => {
+        if (paused) entered.resolve();
+      },
+      messagesBarrier: () => (paused ? finish.promise : Promise.resolve()),
+    });
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    const signals: OpencodeSessionRuntimeSignal[] = [];
+    await prepared.startForwarding((signal) => {
+      expect(installed || !paused).toBe(true);
+      signals.push(signal);
+    });
+    const root = {
+      repoPath: "/repo",
+      runtimeKind: "opencode" as const,
+      externalSessionId: "other",
+      workingDirectory: "/repo",
+    };
+    try {
+      await prepared.connection.readSessionSources([root]);
+      paused = true;
+      const read = prepared.connection.readSessionTree(
+        { ...root, externalSessionId: "session-1" },
+        async (snapshot) => {
+          expect(snapshot.sources[0]?.runtimeActivity).toBe("idle");
+          expect(signals).toEqual([]);
+          installed = true;
+        },
+      );
+      await entered.promise;
+      await harness.emitAndWait(sessionStatusEvent({ type: "busy" }, "other"));
+      for (const sessionID of ["session-1", "child-session"]) {
+        await harness.emitAndWait(sessionStatusEvent({ type: "busy" }, sessionID));
+        await harness.emitAndWait(
+          permissionAskedEvent({ requestId: `pending-${sessionID}`, sessionId: sessionID }),
+        );
+        await harness.emitAndWait(
+          questionAskedEvent({ requestId: `question-${sessionID}`, sessionId: sessionID }),
+        );
+        await harness.emitAndWait(
+          createOpencodeMessageEventGroupFixture({
+            info: { id: `${sessionID}-message`, role: "assistant", sessionID },
+            parts: [
+              {
+                type: "text",
+                id: `${sessionID}-part`,
+                sessionID,
+                messageID: `${sessionID}-message`,
+                text: "During restore",
+              },
+            ],
+          }),
+        );
+      }
+      expect(signals).toEqual([]);
+      finish.resolve();
+      await read;
+      expect(
+        signals.filter(
+          (signal) =>
+            signal.type === "session_event" &&
+            signal.externalSessionId === "other" &&
+            signal.event.type === "session_status",
+        ),
+      ).toHaveLength(1);
+      for (const sessionID of ["session-1", "child-session"]) {
+        const events = signals.filter(
+          (signal) => signal.type === "session_event" && signal.externalSessionId === sessionID,
+        );
+        expect(
+          events.filter(
+            (signal) => signal.type === "session_event" && signal.event.type === "session_status",
+          ),
+        ).toHaveLength(1);
+        expect(
+          events.filter(
+            (signal) =>
+              signal.type === "session_event" && signal.event.type === "approval_required",
+          ),
+        ).toHaveLength(1);
+        expect(
+          events.filter(
+            (signal) =>
+              signal.type === "session_event" && signal.event.type === "question_required",
+          ),
+        ).toHaveLength(1);
+        expect(
+          events.filter(
+            (signal) => signal.type === "session_event" && signal.event.type === "assistant_part",
+          ),
+        ).toHaveLength(1);
+      }
+    } finally {
+      finish.resolve();
+      await prepared.release();
+    }
+  });
+
+  test("invalidates observation when buffered lineage failure discards healthy events", async () => {
+    const entered = Promise.withResolvers<void>();
+    const finish = Promise.withResolvers<void>();
+    const fault = Promise.withResolvers<OpencodeSessionRuntimeSignal>();
+    let paused = false;
+    const harness = createLiveClientHarness({
+      childSessionIdsByParent: { "session-1": ["child-session"] },
+      onMessages: () => {
+        if (paused) entered.resolve();
+      },
+      messagesBarrier: () => (paused ? finish.promise : Promise.resolve()),
+    });
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    const signals: OpencodeSessionRuntimeSignal[] = [];
+    await prepared.startForwarding((signal) => {
+      signals.push(signal);
+      if (signal.type === "fault") fault.resolve(signal);
+    });
+    const healthy = {
+      repoPath: "/repo",
+      runtimeKind: "opencode" as const,
+      externalSessionId: "other",
+      workingDirectory: "/repo",
+    };
+    try {
+      await prepared.connection.readSessionSources([healthy]);
+      paused = true;
+      const read = prepared.connection.readSessionTree({
+        ...healthy,
+        externalSessionId: "session-1",
+      });
+      void read.catch(() => undefined);
+      await entered.promise;
+      await harness.emitAndWait({
+        type: "session.created",
+        properties: {
+          sessionID: "child-session",
+          info: createOpencodeSessionFixture({ id: "child-session", parentID: "session-1" }),
+        },
+      });
+      await harness.emitAndWait({
+        type: "session.updated",
+        properties: {
+          sessionID: "child-session",
+          info: createOpencodeSessionFixture({ id: "child-session" }),
+        },
+      });
+      await harness.emitAndWait(sessionStatusEvent({ type: "busy" }, "other"));
+      await harness.emitAndWait(
+        permissionAskedEvent({ requestId: "healthy-request", sessionId: "other" }),
+      );
+      await harness.emitAndWait(
+        createOpencodeMessageEventGroupFixture({
+          info: { id: "healthy-message", role: "assistant", sessionID: "other" },
+          parts: [
+            {
+              type: "text",
+              id: "healthy-part",
+              sessionID: "other",
+              messageID: "healthy-message",
+              text: "Buffered output",
+            },
+          ],
+        }),
+      );
+      finish.resolve();
+      await expect(read).rejects.toThrow("missing authoritative info.parentID lineage");
+      expect(await fault.promise).toEqual({
+        type: "fault",
+        message: expect.stringContaining("missing authoritative info.parentID lineage"),
+      });
+      expect(signals.filter((signal) => signal.type === "fault")).toHaveLength(1);
+      expect(signals.find((signal) => signal.type === "fault")?.message).toContain(
+        "Stop and start the assigned runtime",
+      );
+      expect(harness.streamSignal()?.aborted).toBe(true);
+      harness.emit(sessionStatusEvent({ type: "idle" }, "other"));
+      await expect(prepared.connection.readSessionSources([healthy])).rejects.toThrow(
+        "Stop and start the assigned runtime",
+      );
+      expect(
+        signals.filter(
+          (signal) => signal.type === "session_event" && signal.externalSessionId === "other",
+        ),
+      ).toEqual([]);
+    } finally {
+      finish.resolve();
+      await prepared.release();
+    }
+  });
+
+  test("invalidates observation when a failed tree install drops another root's events", async () => {
+    const entered = Promise.withResolvers<void>();
+    const finish = Promise.withResolvers<void>();
+    const fault = Promise.withResolvers<OpencodeSessionRuntimeSignal>();
+    const harness = createLiveClientHarness();
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    const signals: OpencodeSessionRuntimeSignal[] = [];
+    await prepared.startForwarding((signal) => {
+      signals.push(signal);
+      if (signal.type === "fault") fault.resolve(signal);
+    });
+    const healthy = {
+      repoPath: "/repo",
+      runtimeKind: "opencode" as const,
+      externalSessionId: "other",
+      workingDirectory: "/repo",
+    };
+    try {
+      await prepared.connection.readSessionSources([healthy]);
+      const read = prepared.connection.readSessionTree(
+        { ...healthy, externalSessionId: "session-1" },
+        async () => {
+          entered.resolve();
+          await finish.promise;
+          throw new Error("Host tree install failed");
+        },
+      );
+      void read.catch(() => undefined);
+      await entered.promise;
+      await harness.emitAndWait(sessionStatusEvent({ type: "busy" }, "other"));
+      expect(signals).toEqual([]);
+      finish.resolve();
+      await expect(read).rejects.toThrow("Host tree install failed");
+      expect(harness.streamSignal()?.aborted).toBe(true);
+      expect(await fault.promise).toEqual({
+        type: "fault",
+        message: expect.stringContaining("Host tree install failed"),
+      });
+      expect(signals.filter((signal) => signal.type === "fault")).toHaveLength(1);
+      expect(signals.find((signal) => signal.type === "fault")?.message).toContain(
+        "Stop and start the assigned runtime",
+      );
+      await expect(prepared.connection.readSessionSources([healthy])).rejects.toThrow(
+        "Stop and start the assigned runtime",
+      );
+      expect(
+        signals.filter(
+          (signal) => signal.type === "session_event" && signal.externalSessionId === "other",
+        ),
+      ).toEqual([]);
+    } finally {
+      finish.resolve();
+      await prepared.release();
+    }
+  });
+
+  test("admits one restored tree while retaining other owned event routes", async () => {
+    const harness = createLiveClientHarness({
+      externalSessionIds: ["session-1", "restored", "child-session"],
+      childSessionIdsByParent: { restored: ["child-session"] },
+      parentSessionIdsBySessionId: { "child-session": "restored" },
+    });
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    const signals: OpencodeSessionRuntimeSignal[] = [];
+    await prepared.startForwarding((signal) => {
+      signals.push(signal);
+    });
+    const root = {
+      repoPath: "/repo",
+      runtimeKind: "opencode" as const,
+      externalSessionId: "session-1",
+      workingDirectory: "/repo",
+    };
+    try {
+      await prepared.connection.readSessionSources([root]);
+      harness.callOrder.length = 0;
+      const read = await prepared.connection.readSessionTree({
+        ...root,
+        externalSessionId: "restored",
+      });
+      expect(read.failures).toEqual([]);
+      expect(read.sources.map((source) => source.externalSessionId)).toEqual([
+        "restored",
+        "child-session",
+      ]);
+      expect(harness.callOrder).toContain("get:restored");
+      expect(harness.callOrder).toContain("children:restored");
+      expect(harness.callOrder).not.toContain("get:session-1");
+      expect(harness.callOrder).not.toContain("list");
+      expect(harness.promptCalls).toEqual([]);
+      await harness.emitAndWait({
+        type: "session.status",
+        properties: { sessionID: "session-1", status: { type: "busy" } },
+      });
+      expect(signals).toContainEqual(
+        expect.objectContaining({
+          type: "session_event",
+          externalSessionId: "session-1",
+          event: expect.objectContaining({
+            type: "session_status",
+            status: { type: "busy", message: null },
+          }),
+        }),
+      );
+      expect(
+        (await prepared.connection.readSessionSources()).sources
+          .map((source) => source.externalSessionId)
+          .sort(),
+      ).toEqual(["child-session", "restored", "session-1"]);
+    } finally {
+      await prepared.release();
+    }
+  });
+
   test("reads scoped restored roots and children without binding or changing live state", async () => {
     const harness = createLiveClientHarness({
       externalSessionIds: ["session-1", "child-session"],
@@ -468,7 +851,11 @@ describe("OpenCode session runtime connection", () => {
             sessionScope: { kind: "repository" },
           },
         ]),
-      ).toEqual(before);
+      ).toMatchObject({
+        sources: before.sources,
+        failures: before.failures,
+        diagnostics: { nativeRequests: before.diagnostics?.nativeRequests },
+      });
       expect(harness.promptCalls).toEqual([]);
       expect(updateCalls).toBe(0);
       expect(harness.permissionReplyCalls).toEqual([]);

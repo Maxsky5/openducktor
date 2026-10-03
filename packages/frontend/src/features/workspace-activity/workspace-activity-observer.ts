@@ -45,6 +45,11 @@ export type WorkspaceActivityObserver = {
   /** Report the health of the shared workspace session record stream. */
   setSessionRecordsError(message: string | null): void;
   subscribe(listener: () => void): () => void;
+  subscribeHistoryInvalidations(
+    listener: (
+      envelope: Extract<AgentSessionLiveEnvelope, { type: "transcript_gap" | "runtime_changed" }>,
+    ) => void,
+  ): () => void;
   getWorkspaceActivity(workspaceId: string): WorkspaceActivityState;
   dispose(): void;
 };
@@ -74,6 +79,11 @@ export const createWorkspaceActivityObserver = ({
 }): WorkspaceActivityObserver => {
   const observations = new Map<string, Observation>();
   const listeners = new Set<() => void>();
+  const historyListeners = new Set<
+    (
+      envelope: Extract<AgentSessionLiveEnvelope, { type: "transcript_gap" | "runtime_changed" }>,
+    ) => void
+  >();
   const cache = new Map<string, { version: number; state: WorkspaceActivityState }>();
   let sessionRecordsError: string | null = null;
   let stopArchivedSubscription: (() => void) | null = null;
@@ -95,6 +105,7 @@ export const createWorkspaceActivityObserver = ({
     const reason =
       (archived.status === "error" ? archived.reason : null) ??
       observation.projection.unavailableReason ??
+      observation.projection.connectionFailure ??
       sessionRecordsError;
     if (reason !== null) {
       return { kind: "unavailable", reason };
@@ -140,6 +151,9 @@ export const createWorkspaceActivityObserver = ({
     void observe({ repoPath: workspace.repoPath }, (envelope) => {
       if (observation.cancelled) {
         return;
+      }
+      if (envelope.type === "transcript_gap" || envelope.type === "runtime_changed") {
+        for (const listener of historyListeners) listener(envelope);
       }
       const projection = applyWorkspaceActivityEnvelope(observation.projection, envelope);
       if (projection === observation.projection) {
@@ -208,6 +222,12 @@ export const createWorkspaceActivityObserver = ({
         listeners.delete(listener);
       };
     },
+    subscribeHistoryInvalidations(listener) {
+      historyListeners.add(listener);
+      return () => {
+        historyListeners.delete(listener);
+      };
+    },
     // Returns a stable object identity while the state is unchanged, so a tile
     // subscribed through useSyncExternalStore does not re-render needlessly.
     getWorkspaceActivity(workspaceId: string): WorkspaceActivityState {
@@ -228,6 +248,7 @@ export const createWorkspaceActivityObserver = ({
         stopObservation(workspaceId);
       }
       listeners.clear();
+      historyListeners.clear();
       cache.clear();
     },
   };

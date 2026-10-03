@@ -922,21 +922,16 @@ describe("createElectronHostCommandRouter", () => {
         repoPath: "/repo",
       }),
     ).resolves.toMatchObject({
-      status: "ready",
-      runtime: { status: "ready", stage: "runtime_ready" },
-      mcp: { status: "connected", toolIds: ["odt_read_task"] },
+      status: "error",
+      runtime: { status: "error", stage: "startup_failed", instance: { runtimeId: "runtime-1" } },
+      mcp: { status: "waiting_for_runtime" },
     });
     await expect(
       router.invoke("runtime_ensure", {
         runtimeKind: "opencode",
         repoPath: "/repo",
       }),
-    ).resolves.toMatchObject({
-      kind: "opencode",
-      repoPath: "/repo",
-      role: "workspace",
-      workingDirectory: "/repo",
-    });
+    ).rejects.toThrow("Runtime observation is unavailable");
     await expect(
       router.invoke("runtime_list", {
         runtimeKind: "opencode",
@@ -948,7 +943,7 @@ describe("createElectronHostCommandRouter", () => {
         runtimeKind: "opencode",
         repoPath: "/repo",
       }),
-    ).resolves.toMatchObject({ runtimeId: "runtime-1" });
+    ).rejects.toThrow("Runtime observation is unavailable");
     expect(runtimeStarts).toEqual([
       {
         runtimeKind: "opencode",

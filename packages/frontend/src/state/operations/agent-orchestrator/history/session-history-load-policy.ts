@@ -1,7 +1,10 @@
 import type { SessionHistoryFailure } from "@openducktor/contracts";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { applyLoadedSessionHistory } from "../support/session-history-chat-messages";
+import {
+  applyLoadedSessionHistory,
+  applyRecoveredSessionHistory,
+} from "../support/session-history-chat-messages";
 import { hasLoadedSessionHistory } from "../transcript/session-transcript-content";
 
 type SessionHistoryLoadPolicySession = Pick<
@@ -12,6 +15,7 @@ type SessionHistoryLoadPolicySession = Pick<
 export type SessionHistoryLoadPolicy = {
   claimLoad(session: AgentSessionState): AgentSessionState | null;
   propagateFailure: boolean;
+  fullHistory?: boolean;
   abandonLoad(session: AgentSessionState): AgentSessionState;
   failLoad(session: AgentSessionState, failure: SessionHistoryFailure): AgentSessionState;
   applyLoadedHistory(
@@ -65,7 +69,11 @@ export const requestedSessionHistoryLoadPolicy: SessionHistoryLoadPolicy = {
     if (session.historyLoadState === "loading") {
       return null;
     }
-    if (hasLoadedSessionHistory(session) && session.historyLoadFailure == null) {
+    if (
+      hasLoadedSessionHistory(session) &&
+      session.historyLoadFailure == null &&
+      session.historyCompleteness !== "incomplete"
+    ) {
       return null;
     }
     return markSessionHistoryLoading(session);
@@ -88,12 +96,23 @@ export const selectedSessionBaselineHistoryLoadPolicy: SessionHistoryLoadPolicy 
 };
 
 export const transcriptGapRecoveryHistoryLoadPolicy: SessionHistoryLoadPolicy = {
+  fullHistory: true,
   claimLoad: (session) =>
-    hasLoadedSessionHistory(session) ? markSessionHistoryLoading(session) : null,
+    hasLoadedSessionHistory(session) ||
+    session.historyCompleteness === "recovering" ||
+    session.historyCompleteness === "incomplete"
+      ? { ...markSessionHistoryLoading(session), historyCompleteness: "recovering" }
+      : null,
   propagateFailure: true,
-  abandonLoad: restoreLoadedHistoryState,
-  failLoad: markLoadedHistoryFailed,
-  applyLoadedHistory: applyLoadedSessionHistory,
+  abandonLoad: (session) => ({
+    ...restoreLoadedHistoryState(session),
+    historyCompleteness: "incomplete",
+  }),
+  failLoad: (session, failure) => ({
+    ...markLoadedHistoryFailed(session, failure),
+    historyCompleteness: "incomplete",
+  }),
+  applyLoadedHistory: applyRecoveredSessionHistory,
 };
 
 export const retainedSessionRevalidationHistoryLoadPolicy: SessionHistoryLoadPolicy = {

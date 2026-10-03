@@ -30,6 +30,7 @@ const createSession = (overrides: AgentSessionFixtureOverrides = {}): AgentSessi
       runtimeKind: selectedSessionIdentity.runtimeKind,
       workingDirectory: selectedSessionIdentity.workingDirectory,
       historyLoadState: "not_requested",
+      runtimeGeneration: "generation-1",
     },
     overrides,
   );
@@ -78,14 +79,20 @@ const createHistoryLoadHarness = (
   });
 
 describe("useSelectedSessionHistoryLoad", () => {
-  test("loads the selected session history when the runtime is ready", async () => {
+  test("waits for the live runtime generation before loading selected history", async () => {
     const loadSessionHistory = mock(async () => null);
-    const harness = createHistoryLoadHarness(createProps(), loadSessionHistory);
+    const harness = createHistoryLoadHarness(
+      createProps({ session: createSession({ runtimeGeneration: undefined }) }),
+      loadSessionHistory,
+    );
 
     try {
       await harness.mount();
 
+      expect(loadSessionHistory).not.toHaveBeenCalled();
+      await harness.update(createProps());
       expect(loadSessionHistory).toHaveBeenCalledWith(selectedSessionIdentity);
+      expect(loadSessionHistory).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
     }

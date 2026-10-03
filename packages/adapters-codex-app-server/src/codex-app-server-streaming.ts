@@ -62,11 +62,14 @@ export type CompletedAgentMessage = {
 
 export type CodexUserMessageEcho = {
   readonly text: string;
+  readonly event: AcceptedAgentUserMessage;
+  published: boolean;
 };
 
 export type CodexStreamingContext = {
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
   syntheticUserMessageEchoesByThreadId: Map<string, CodexUserMessageEcho[]>;
+  nativeUserMessageAliasesByThreadId: Map<string, Map<string, string>>;
   completedAgentMessagesByTurnKey: Map<string, CompletedAgentMessage>;
   tokenUsageByTurnKey: Map<string, CodexTokenUsageTotals>;
   modelByTurnKey: Map<string, AgentModelSelection>;
@@ -211,18 +214,30 @@ const consumeSyntheticUserMessage = (
   context: CodexStreamingContext,
   externalSessionId: string,
   message: string,
+  nativeMessageId: string,
+  clientMessageId: string | null,
 ): boolean => {
   const pendingEchoes = context.syntheticUserMessageEchoesByThreadId.get(externalSessionId);
   if (!pendingEchoes || pendingEchoes.length === 0) {
     return false;
   }
   const normalizedMessage = normalizeSyntheticUserMessageText(message);
-  const index = pendingEchoes.findIndex(
-    (echo) => normalizeSyntheticUserMessageText(echo.text) === normalizedMessage,
+  const index = pendingEchoes.findIndex((echo) =>
+    clientMessageId
+      ? echo.event.messageId === clientMessageId
+      : normalizeSyntheticUserMessageText(echo.text) === normalizedMessage,
   );
   if (index === -1) {
     return false;
   }
+  const echo = pendingEchoes[index]!;
+  // Keep the native ID so history and live messages share one identity.
+  const aliases =
+    context.nativeUserMessageAliasesByThreadId.get(externalSessionId) ?? new Map<string, string>();
+  aliases.set(nativeMessageId, echo.event.messageId);
+  context.nativeUserMessageAliasesByThreadId.set(externalSessionId, aliases);
+  if (echo.published) emitCodexUserMessage(context, { ...echo.event, nativeMessageId });
+  else echo.event.nativeMessageId = nativeMessageId;
   pendingEchoes.splice(index, 1);
   if (pendingEchoes.length === 0) {
     context.syntheticUserMessageEchoesByThreadId.delete(externalSessionId);
@@ -344,6 +359,8 @@ export const expectCodexUserMessageEcho = (
 ): (() => void) => {
   const echo: CodexUserMessageEcho = {
     text: codexUserInputListToText(input),
+    event,
+    published: false,
   };
   const pendingEchoes =
     context.syntheticUserMessageEchoesByThreadId.get(event.externalSessionId) ?? [];
@@ -366,6 +383,9 @@ export const emitCodexUserMessage = (
   context: CodexStreamingContext,
   event: AcceptedAgentUserMessage,
 ): AcceptedAgentUserMessage => {
+  for (const echo of context.syntheticUserMessageEchoesByThreadId.get(event.externalSessionId) ??
+    [])
+    if (echo.event === event) echo.published = true;
   emitCodexSessionEvent(context, event.externalSessionId, event);
   return event;
 };
@@ -425,7 +445,7 @@ const emitCompletedItem = (
   if (codexItemTypeMatches(item, "userMessage")) {
     const input = codexUserInputsFromItem(item);
     const message = codexUserInputListToText(input);
-    if (consumeSyntheticUserMessage(context, session.threadId, message)) {
+    if (consumeSyntheticUserMessage(context, session.threadId, message, itemId, item.clientId)) {
       return;
     }
     const canonicalEvents = context.eventMapperPipeline.runLive(
