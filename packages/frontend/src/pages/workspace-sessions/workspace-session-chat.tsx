@@ -49,6 +49,7 @@ type WorkspaceSessionChatProps = {
   reusablePrompts: ReusablePrompt[];
   onToolRefresh: () => void;
   isMounted: () => boolean;
+  visitKey?: number;
 };
 
 export function WorkspaceSessionChat({
@@ -58,6 +59,7 @@ export function WorkspaceSessionChat({
   reusablePrompts,
   onToolRefresh,
   isMounted,
+  visitKey = 0,
 }: WorkspaceSessionChatProps): ReactElement {
   const identity = useMemo(() => workspaceSessionIdentity(record), [record]);
   const session = useAgentSession(identity);
@@ -346,5 +348,5 @@ export function WorkspaceSessionChat({
       modelPicker: picker.modelPicker,
     },
   });
-  return <AgentChatSurface model={surface} />;
+  return <AgentChatSurface model={surface} visitKey={visitKey} />;
 }

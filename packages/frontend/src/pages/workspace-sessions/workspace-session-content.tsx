@@ -235,7 +235,6 @@ function WorkspaceSessionPaneLayout({
   mainContent: ReactNode;
   toolsContent: ReactNode;
 }) {
-  if (!isOpen) return mainContent;
   return (
     <ResizablePanelGroup
       direction={isNarrow ? "vertical" : "horizontal"}
@@ -244,12 +243,16 @@ function WorkspaceSessionPaneLayout({
       <ResizablePanel defaultSize={isNarrow ? 55 : 63} minSize={isNarrow ? 30 : 35}>
         {mainContent}
       </ResizablePanel>
-      <ResizableHandle withHandle />
-      <ResizablePanel defaultSize={isNarrow ? 45 : 37} minSize={isNarrow ? 25 : 30}>
-        <div className="h-full min-h-0 overflow-hidden border-l border-border bg-card">
-          {toolsContent}
-        </div>
-      </ResizablePanel>
+      {isOpen ? (
+        <>
+          <ResizableHandle withHandle />
+          <ResizablePanel defaultSize={isNarrow ? 45 : 37} minSize={isNarrow ? 25 : 30}>
+            <div className="h-full min-h-0 overflow-hidden border-l border-border bg-card">
+              {toolsContent}
+            </div>
+          </ResizablePanel>
+        </>
+      ) : null}
     </ResizablePanelGroup>
   );
 }

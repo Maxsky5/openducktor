@@ -95,6 +95,92 @@ const createCardHarness = (props: CardProps) => {
 };
 
 describe("AgentSessionQuestionCard", () => {
+  test("collapse preserves answers, text, tabs, focus, and errors through a new visit", async () => {
+    const request = buildRequest({
+      questions: [
+        buildRequest().questions[0]!,
+        {
+          header: "Details",
+          question: "Give more detail",
+          options: [],
+        },
+      ],
+      source: {
+        kind: "subagent",
+        parentExternalSessionId: "parent",
+        childExternalSessionId: "child",
+      },
+    });
+    const onSubmit = mock(async () => {
+      throw new Error("Retry this answer");
+    });
+    const props = { request, onSubmit, collapseResetKey: "visit-1" };
+    const harness = createCardHarness(props);
+    await harness.mount();
+    try {
+      await harness.clickButtonByText("Frontend");
+      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>("Write your answer...");
+      await act(async () => {
+        fireEvent.change(textarea, { target: { value: "Keep this draft" } });
+        textarea.focus();
+      });
+      const toggle = screen.getByRole("button", { name: "Collapse question request" });
+      const content = document.getElementById(getRequiredAttribute(toggle, "aria-controls"));
+      await act(async () => {
+        fireEvent.click(screen.getByText("Input needed"));
+      });
+      expect(document.activeElement).toBe(toggle);
+      expect(toggle.getAttribute("aria-expanded")).toBe("false");
+      expect(content?.hasAttribute("hidden")).toBe(true);
+      expect(screen.queryByRole("textbox")).toBeNull();
+      expect(screen.queryByRole("tablist")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Reset" })).toBeNull();
+      expect(screen.getByText("2/2 answered")).toBeTruthy();
+      expect(screen.getByText("Subagent request")).toBeTruthy();
+      expect(onSubmit).not.toHaveBeenCalled();
+
+      await harness.rerender({ ...props, request: structuredClone(request) });
+      expect(screen.getByRole("button", { name: "Expand question request" })).toBeTruthy();
+      await act(async () => {
+        fireEvent.click(screen.getByText("2/2 answered"));
+      });
+      expect(screen.getByPlaceholderText("Write your answer...")).toBe(textarea);
+      expect(textarea.value).toBe("Keep this draft");
+      expectActiveTabPanel(screen.getByRole("tab", { name: "Details" }));
+      await harness.clickTabByText("Summary");
+      await harness.clickButtonByText("Confirm Answers");
+      await waitFor(() => expect(screen.getByText("Retry this answer")).toBeTruthy());
+      await harness.clickButtonByText("Collapse question request");
+      expect(screen.getByText("Retry this answer")).toBeTruthy();
+      await harness.rerender({ ...props, collapseResetKey: "visit-2" });
+      expect(screen.getByRole("button", { name: "Collapse question request" })).toBeTruthy();
+      expectActiveTabPanel(screen.getByRole("tab", { name: "Summary" }));
+      expect(screen.getByText("Retry this answer")).toBeTruthy();
+      expect(onSubmit).toHaveBeenCalledWith("request-1", [["Frontend"], ["Keep this draft"]]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps the toggle and submission feedback available while answers are disabled", async () => {
+    const harness = createCardHarness({
+      request: buildRequest(),
+      disabled: true,
+      isSubmitting: true,
+      onSubmit: async () => {},
+    });
+    await harness.mount();
+    try {
+      await harness.clickButtonByText("Collapse question request");
+      expect(screen.getByRole("status").textContent).toBe("Submitting answers…");
+      await harness.clickButtonByText("Expand question request");
+      expect(harness.getButtonDisabled("Frontend")).toBe(true);
+      expect(harness.getButtonDisabled("Reset")).toBe(true);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   beforeEach(() => {
     console.error = (...args: unknown[]): void => {
       originalConsoleError(...args);

@@ -34,9 +34,11 @@ const hasDraggedFiles = (dataTransfer: DataTransfer | null | undefined): boolean
 export function AgentChatSurface({
   model,
   header,
+  visitKey = 0,
 }: {
   model: AgentChatSurfaceModel;
   header?: ReactNode;
+  visitKey?: number;
 }): ReactElement {
   const composerRef = useRef<AgentChatComposerHandle | null>(null);
   const dropTargetRef = useRef<HTMLDivElement | null>(null);
@@ -201,7 +203,7 @@ export function AgentChatSurface({
             </div>
           ) : null}
           <AgentChatSettingsProvider value={model.chatSettings}>
-            <MemoizedAgentChatThread model={model.thread} />
+            <MemoizedAgentChatThread model={model.thread} visitKey={visitKey} />
             {supportsComposer && composerModel ? (
               <MemoizedAgentChatComposer ref={composerRef} model={composerModel} />
             ) : null}
@@ -215,9 +217,11 @@ export function AgentChatSurface({
 export function AgentChat({
   model,
   header,
+  visitKey = 0,
 }: {
   model: AgentChatModel;
   header?: ReactNode;
+  visitKey?: number;
 }): ReactElement {
-  return <AgentChatSurface model={model} header={header} />;
+  return <AgentChatSurface model={model} header={header} visitKey={visitKey} />;
 }

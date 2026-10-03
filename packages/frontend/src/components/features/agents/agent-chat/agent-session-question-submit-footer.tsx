@@ -71,3 +71,26 @@ export const QuestionSubmitFooter = ({
     </footer>
   );
 };
+
+export function QuestionFeedback({
+  submitError,
+  isSubmitting,
+}: {
+  submitError: string | null;
+  isSubmitting: boolean;
+}): ReactElement | null {
+  return submitError || isSubmitting ? (
+    <div className="space-y-2 px-2.5 pb-2.5">
+      {submitError ? (
+        <p className="rounded-md border border-destructive-border bg-destructive-surface px-2 py-1.5 text-xs text-destructive-muted">
+          {submitError}
+        </p>
+      ) : null}
+      {isSubmitting ? (
+        <p role="status" className="text-xs text-muted-foreground">
+          Submitting answers…
+        </p>
+      ) : null}
+    </div>
+  ) : null;
+}
