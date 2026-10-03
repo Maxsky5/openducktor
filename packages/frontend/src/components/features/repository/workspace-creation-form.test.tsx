@@ -1,11 +1,23 @@
+import { beforeAll, afterAll } from "bun:test";
+import {
+  installLocalOnlyProviderSetup,
+  localOnlyWorkspaceDetails,
+} from "@/test-utils/workspace-provider-setup-fixture";
+let releaseProviderFixture: (() => void) | undefined;
+beforeAll(() => {
+  releaseProviderFixture = installLocalOnlyProviderSetup();
+});
+afterAll(() => releaseProviderFixture?.());
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { CODEX_RUNTIME_DESCRIPTOR, type WorkspaceRecord } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
+import { hostClient } from "@/lib/host-client";
+import { createHookHarness } from "@/test-utils/react-hook-harness";
 import type {
-  WorkspaceModelDefaultsDraft,
+  WorkspaceStateContextValue,
   WorkspaceSelectionOperationsInput,
 } from "@/types/state-slices";
 import {
@@ -83,27 +95,21 @@ const surface: WorkspaceCreationModelSurface = {
 };
 
 function CreationHarness({
-  addWorkspace,
-  saveWorkspaceModelDefaults = async () => {},
+  commit,
   onSuccess = () => {},
   modelSurface = surface,
 }: {
-  addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<WorkspaceRecord>;
-  saveWorkspaceModelDefaults?: (
-    workspaceId: string,
-    draft: WorkspaceModelDefaultsDraft,
-  ) => Promise<void>;
+  commit: WorkspaceStateContextValue["commitWorkspaceProviderSetup"];
   onSuccess?: () => void;
   modelSurface?: WorkspaceCreationModelSurface;
 }): ReactElement {
   const creation = useWorkspaceCreation({
     workspaces: [],
-    addWorkspace,
-    saveWorkspaceModelDefaults,
+    commitWorkspaceProviderSetup: commit,
     onSuccess,
   });
   return (
-    <QueryProvider useIsolatedClient>
+    <>
       <button type="button" onClick={() => void creation.confirmRepo("/repo")}>
         Choose repo
       </button>
@@ -131,159 +137,220 @@ function CreationHarness({
       <WorkspaceCreationFields controller={creation} modelSurface={modelSurface} />
       <WorkspaceCreationBackAction controller={creation} />
       <WorkspaceCreationSubmitAction controller={creation} modelSurface={modelSurface} />
-    </QueryProvider>
+    </>
   );
 }
-
 const renderHarness = (props: Parameters<typeof CreationHarness>[0]) => {
-  const view = render(<CreationHarness {...props} />);
+  const view = render(
+    <QueryProvider useIsolatedClient>
+      <CreationHarness {...props} />
+    </QueryProvider>,
+  );
   views.add(view);
   return view;
 };
-
-const advanceToModels = async () => {
+const outcome = (
+  input: Parameters<WorkspaceStateContextValue["commitWorkspaceProviderSetup"]>[0],
+) => ({
+  workspace: record(localOnlyWorkspaceDetails(input)),
+  registrationSaved: true,
+  settingsSaved: true,
+  credentialsSaved: true,
+  phase: "complete" as const,
+  error: null,
+});
+const chooseRepo = async () => {
   fireEvent.click(screen.getByRole("button", { name: "Choose repo" }));
+  await screen.findByRole("button", { name: "Skip Git provider setup" });
+};
+const skipProvider = async () => {
+  fireEvent.click(screen.getByRole("button", { name: "Skip Git provider setup" }));
   await screen.findByLabelText("Workspace ID");
+};
+const advanceToModels = async () => {
+  await chooseRepo();
+  await skipProvider();
   fireEvent.click(screen.getByRole("button", { name: "Continue to models" }));
   await screen.findByRole("button", { name: "Open repository" });
 };
 
-describe("workspace creation stages", () => {
-  test("shows effort for the workspace default and every role before models are selected", async () => {
-    renderHarness({ addWorkspace: async (input) => record(input) });
-    await advanceToModels();
-
-    expect(screen.getAllByText("Effort")).toHaveLength(5);
-    expect(screen.queryByText("Variant")).toBeNull();
+describe("workspace creation", () => {
+  test("keeps cleanup failure visible before reopening a closed workspace", async () => {
+    const closed = {
+      ...record({ workspaceId: "closed", workspaceName: "Closed", repoPath: "/closed" }),
+      isActive: false,
+    };
+    const reopen = mock(async () => {});
+    const success = mock(() => {});
+    let allowChange = false;
+    const h = createHookHarness(
+      () =>
+        useWorkspaceCreation({
+          workspaces: [],
+          commitWorkspaceProviderSetup: mock(async (input) => outcome(input)),
+          resolveRepoPath: async (path) =>
+            path === "/closed"
+              ? { kind: "closed", workspace: closed }
+              : { kind: "new", repoPath: path },
+          onReopenClosedWorkspace: reopen,
+          onSuccess: success,
+          runWorkspaceChange: async (change) => {
+            if (!allowChange) return false;
+            await change();
+            return true;
+          },
+        }),
+      {},
+      { wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider> },
+    );
+    await h.mount();
+    const originalDiscard = hostClient.workspaceProviderSetupDiscard;
+    let failCleanup = true;
+    let ownedId: string | undefined;
+    hostClient.workspaceProviderSetupDiscard = async (ref) => {
+      if (ref.setupId === ownedId && failCleanup) throw new Error("Cleanup unavailable");
+      return originalDiscard(ref);
+    };
+    try {
+      await h.run(async (state) => {
+        await state.confirmRepo("/new-reopen-test");
+      });
+      ownedId = h.getLatest().provider.session?.setupId;
+      await h.run((state) => state.back());
+      await h.run(async (state) => {
+        await state.confirmRepo("/closed").catch(() => {});
+      });
+      expect(reopen).not.toHaveBeenCalled();
+      expect(success).not.toHaveBeenCalled();
+      expect(h.getLatest().provider.error).toContain("Cleanup unavailable");
+      expect(h.getLatest().provider.session?.setupId).toBe(ownedId);
+      failCleanup = false;
+      await h.run(async (state) => {
+        await state.confirmRepo("/closed");
+      });
+      expect(reopen).not.toHaveBeenCalled();
+      expect(success).not.toHaveBeenCalled();
+      expect(h.getLatest().repoPath).toBe("");
+      expect(h.getLatest().provider.session).toBeNull();
+      allowChange = true;
+      await h.run(async (state) => {
+        await state.confirmRepo("/closed");
+      });
+      expect(reopen).toHaveBeenCalledTimes(1);
+      expect(success).toHaveBeenCalledTimes(1);
+      expect(h.getLatest().provider.session).toBeNull();
+    } finally {
+      hostClient.workspaceProviderSetupDiscard = originalDiscard;
+      await h.unmount();
+    }
   });
-
-  test("shows one catalog loading status and removes it when models are ready", async () => {
-    const addWorkspace = async (input: WorkspaceSelectionOperationsInput) => record(input);
-    const loadingSurface = { ...surface, isLoadingCatalog: true };
-    const view = renderHarness({ addWorkspace, modelSurface: loadingSurface });
-    await advanceToModels();
-
-    expect(screen.getAllByRole("status")).toHaveLength(1);
-    expect(screen.getByRole("status").textContent).toBe("Loading models…");
-
-    view.rerender(<CreationHarness addWorkspace={addWorkspace} modelSurface={surface} />);
-    expect(screen.queryByRole("status")).toBeNull();
-    expect(screen.getByRole("heading", { name: "Role defaults" })).toBeTruthy();
+  test("clears the abandoned path and starts a new setup after returning from the chooser", async () => {
+    const h = createHookHarness(
+      () =>
+        useWorkspaceCreation({
+          workspaces: [],
+          commitWorkspaceProviderSetup: mock(async (input) => outcome(input)),
+        }),
+      {},
+      { wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider> },
+    );
+    await h.mount();
+    try {
+      await h.run(async (state) => {
+        await state.confirmRepo("/abandoned-test");
+      });
+      const oldId = h.getLatest().provider.session?.setupId;
+      await h.run(async (state) => {
+        expect(await state.abandon()).toBe(true);
+      });
+      expect(h.getLatest().repoPath).toBe("");
+      expect(h.getLatest().stage).toBe("repository");
+      await h.run((state) => {
+        state.openPicker();
+      });
+      await h.run((state) => {
+        state.closePicker();
+        state.reviewRepo();
+      });
+      expect(h.getLatest().stage).toBe("repository");
+      await h.run(async (state) => {
+        await state.confirmRepo("/abandoned-test");
+      });
+      expect(h.getLatest().provider.session?.setupId).not.toBe(oldId);
+      await h.run(async (state) => {
+        await state.skipProvider();
+      });
+      expect(h.getLatest().stage).toBe("information");
+    } finally {
+      await h.unmount();
+    }
   });
-
-  test("keeps identity changes while moving back and forward without creating a workspace", async () => {
-    const addWorkspace = mock(async (input: WorkspaceSelectionOperationsInput) => record(input));
-    renderHarness({ addWorkspace });
-    fireEvent.click(screen.getByRole("button", { name: "Choose repo" }));
-    await screen.findByLabelText("Workspace ID");
+  test("keeps provider setup optional and retains details across navigation", async () => {
+    const commit = mock(async (input) => outcome(input));
+    renderHarness({ commit });
+    await chooseRepo();
+    expect(screen.getByLabelText<HTMLInputElement>("Selected repository path").value).toBe("/repo");
+    await skipProvider();
     fireEvent.change(screen.getByLabelText("Workspace name"), { target: { value: "Renamed" } });
     fireEvent.click(screen.getByRole("button", { name: "Continue to models" }));
+    expect(screen.getAllByText("Effort")).toHaveLength(5);
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.getByLabelText<HTMLInputElement>("Workspace name").value).toBe("Renamed");
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    await skipProvider();
     expect(screen.getByLabelText<HTMLInputElement>("Workspace ID").value).toBe("renamed");
-    expect(addWorkspace).not.toHaveBeenCalled();
+    expect(commit).not.toHaveBeenCalled();
   });
-
-  test("blocks blank names on the information stage", async () => {
-    const addWorkspace = mock(async (input: WorkspaceSelectionOperationsInput) => record(input));
-    renderHarness({ addWorkspace });
-    fireEvent.click(screen.getByRole("button", { name: "Choose repo" }));
-    await screen.findByLabelText("Workspace name");
-    fireEvent.change(screen.getByLabelText("Workspace name"), { target: { value: "" } });
-    expect(screen.getByRole("alert").textContent).toContain("Workspace name cannot be blank.");
-    expect(
-      screen.getByRole<HTMLButtonElement>("button", { name: "Continue to models" }).disabled,
-    ).toBe(true);
-    expect(addWorkspace).not.toHaveBeenCalled();
-  });
-
-  test("creates only on the final action and saves a selected model before success", async () => {
-    const addWorkspace = mock(async (input: WorkspaceSelectionOperationsInput) => record(input));
-    const saveWorkspaceModelDefaults = mock(async () => {});
+  test("submits workspace details and current models only on the final action", async () => {
+    const commit = mock(async (input) => outcome(input));
     const onSuccess = mock(() => {});
-    renderHarness({ addWorkspace, saveWorkspaceModelDefaults, onSuccess });
+    renderHarness({ commit, onSuccess });
     await advanceToModels();
-    expect(addWorkspace).not.toHaveBeenCalled();
+    expect(commit).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Choose model" }));
     fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
     await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
-    expect(addWorkspace).toHaveBeenCalledTimes(1);
-    expect(saveWorkspaceModelDefaults).toHaveBeenCalledWith("repo", {
-      defaultModel: {
-        runtimeKind: "codex",
-        providerId: "openai",
-        modelId: "o3",
-        variant: "low",
-        profileId: "",
-      },
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(commit.mock.calls[0]?.[0]).toMatchObject({
+      workspaceId: "repo",
+      workspaceName: "repo",
       agentDefaults: {},
+      defaultModel: { runtimeKind: "codex", providerId: "openai", modelId: "o3", variant: "low" },
     });
   });
-
-  test("keeps a created workspace and retries only the failed model save", async () => {
-    const addWorkspace = mock(async (input: WorkspaceSelectionOperationsInput) => record(input));
-    let saves = 0;
-    const saveWorkspaceModelDefaults = mock(async () => {
-      saves += 1;
-      if (saves === 1) throw new Error("Model save failed");
-    });
+  test("retains a partial workspace and retries the same setup", async () => {
+    let calls = 0;
+    const commit = mock(async (input) => ({
+      ...outcome(input),
+      phase: ++calls === 1 ? ("credentials" as const) : ("complete" as const),
+      error: calls === 1 ? "Workspace saved. Credential transfer failed. Retry." : null,
+    }));
     const onSuccess = mock(() => {});
-    renderHarness({ addWorkspace, saveWorkspaceModelDefaults, onSuccess });
+    renderHarness({ commit, onSuccess });
     await advanceToModels();
-    fireEvent.click(screen.getByRole("button", { name: "Choose model" }));
     fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
-    expect(await screen.findByText("Model save failed")).toBeTruthy();
+    await screen.findByText(/Credential transfer failed/);
     expect(screen.getByTestId("created-id").textContent).toBe("repo");
     expect(onSuccess).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
     await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
-    expect(addWorkspace).toHaveBeenCalledTimes(1);
-    expect(saveWorkspaceModelDefaults).toHaveBeenCalledTimes(2);
+    expect(commit.mock.calls[1]?.[0].setupId).toBe(commit.mock.calls[0]?.[0].setupId);
   });
-
-  test("resets identity and models when the repository changes", async () => {
-    const addWorkspace = mock(async (input: WorkspaceSelectionOperationsInput) => record(input));
-    const saveWorkspaceModelDefaults = mock(async () => {});
-    renderHarness({ addWorkspace, saveWorkspaceModelDefaults });
-    await advanceToModels();
-    fireEvent.click(screen.getByRole("button", { name: "Choose model" }));
-    fireEvent.click(screen.getByRole("button", { name: "Back" }));
-    fireEvent.click(screen.getByRole("button", { name: "Back" }));
-    fireEvent.click(screen.getByRole("button", { name: "Choose other" }));
-    expect(await screen.findByLabelText<HTMLInputElement>("Workspace ID")).toHaveProperty(
-      "value",
-      "other",
-    );
+  test("blocks blank names and unavailable selected models before saving", async () => {
+    const commit = mock(async (input) => outcome(input));
+    renderHarness({
+      commit,
+      modelSurface: { ...surface, catalogResources: [], getCatalogForRuntime: () => null },
+    });
+    await chooseRepo();
+    await skipProvider();
+    fireEvent.change(screen.getByLabelText("Workspace name"), { target: { value: "" } });
+    expect(screen.getByRole("alert").textContent).toContain("Workspace name cannot be blank");
+    fireEvent.change(screen.getByLabelText("Workspace name"), { target: { value: "repo" } });
     fireEvent.click(screen.getByRole("button", { name: "Continue to models" }));
-    fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
-    await waitFor(() =>
-      expect(addWorkspace).toHaveBeenCalledWith({
-        workspaceId: "other",
-        workspaceName: "other",
-        repoPath: "/other",
-      }),
-    );
-    expect(saveWorkspaceModelDefaults).not.toHaveBeenCalled();
-  });
-
-  test("rejects a selected model when its runtime catalog is unavailable", async () => {
-    const addWorkspace = mock(async (input: WorkspaceSelectionOperationsInput) => record(input));
-    const unavailableSurface: WorkspaceCreationModelSurface = {
-      ...surface,
-      catalogResources: [
-        { ...surface.catalogResources[0]!, isEnabled: false, error: "Runtime failed" },
-      ],
-      getCatalogForRuntime: () => null,
-      errors: ["Runtime failed"],
-    };
-    renderHarness({ addWorkspace, modelSurface: unavailableSurface });
-    await advanceToModels();
     fireEvent.click(screen.getByRole("button", { name: "Choose model" }));
     fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
-    expect(await screen.findByText(/Default Model is unavailable/)).toBeTruthy();
-    expect(addWorkspace).not.toHaveBeenCalled();
-    fireEvent.click(screen.getAllByRole("button", { name: "Clear" })[0]!);
-    fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
-    await waitFor(() => expect(addWorkspace).toHaveBeenCalledTimes(1));
+    await screen.findByText(/Default Model is unavailable/);
+    expect(commit).not.toHaveBeenCalled();
   });
 });

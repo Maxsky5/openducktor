@@ -1,4 +1,13 @@
 import {
+  type WorkspaceProviderSetupRef,
+  type WorkspaceProviderSetupSelection,
+  type WorkspaceProviderSetupCommit,
+  workspaceProviderSetupSessionSchema,
+  workspaceProviderSetupDetectionSchema,
+  workspaceProviderSetupStatusSchema,
+  workspaceProviderSetupGithubSchema,
+  workspaceProviderSetupProgressSchema,
+  workspaceProviderSetupProgressReadSchema,
   type AgentModelFavorite,
   type AzureDevOpsConnectionState,
   azureDevOpsConnectionStateSchema,
@@ -277,6 +286,87 @@ const workspaceResolveLocalAttachmentPath = async (
 };
 
 export class HostWorkspaceClient {
+  workspaceProviderSetupBegin(input: { repoPath: string }) {
+    return this.invokeFn(
+      "workspace_provider_setup_begin",
+      input,
+      workspaceProviderSetupSessionSchema,
+    );
+  }
+  workspaceProviderSetupSet(
+    input: WorkspaceProviderSetupRef & { selection: WorkspaceProviderSetupSelection },
+  ) {
+    return this.invokeFn(
+      "workspace_provider_setup_set",
+      input,
+      workspaceProviderSetupSessionSchema,
+    );
+  }
+  workspaceProviderSetupDetect(input: WorkspaceProviderSetupRef) {
+    return this.invokeFn(
+      "workspace_provider_setup_detect",
+      { setupId: input.setupId, revision: input.revision },
+      workspaceProviderSetupDetectionSchema,
+    );
+  }
+  workspaceProviderSetupStatus(input: WorkspaceProviderSetupRef) {
+    return this.invokeFn(
+      "workspace_provider_setup_status",
+      { setupId: input.setupId, revision: input.revision },
+      workspaceProviderSetupStatusSchema,
+    );
+  }
+  workspaceProviderSetupGithub(input: WorkspaceProviderSetupRef & { host: string }) {
+    return this.invokeFn(
+      "workspace_provider_setup_github",
+      { setupId: input.setupId, revision: input.revision, host: input.host },
+      workspaceProviderSetupGithubSchema,
+    );
+  }
+  workspaceProviderSetupAreas(input: WorkspaceProviderSetupRef) {
+    return this.invokeFn(
+      "workspace_provider_setup_areas",
+      { setupId: input.setupId, revision: input.revision },
+      z.array(z.string()),
+    );
+  }
+  workspaceProviderSetupSignIn(input: WorkspaceProviderSetupRef) {
+    return this.invokeFn(
+      "workspace_provider_setup_sign_in",
+      { setupId: input.setupId, revision: input.revision },
+      azureDevOpsDeviceCodeSchema,
+    );
+  }
+  workspaceProviderSetupCancelSignIn(input: WorkspaceProviderSetupRef & { attemptId: string }) {
+    return this.invokeFn("workspace_provider_setup_cancel_sign_in", input, voidResultSchema);
+  }
+  workspaceProviderSetupPat(input: WorkspaceProviderSetupRef & { pat: string }) {
+    return this.invokeFn("workspace_provider_setup_pat", input, azureDevOpsConnectionStateSchema);
+  }
+  workspaceProviderSetupDisconnect(input: WorkspaceProviderSetupRef) {
+    return this.invokeFn(
+      "workspace_provider_setup_disconnect",
+      { setupId: input.setupId, revision: input.revision },
+      voidResultSchema,
+    );
+  }
+  workspaceProviderSetupCommit(input: WorkspaceProviderSetupCommit) {
+    return this.invokeFn(
+      "workspace_provider_setup_commit",
+      input,
+      workspaceProviderSetupProgressSchema,
+    );
+  }
+  workspaceProviderSetupProgress(input: { setupId: string }) {
+    return this.invokeFn(
+      "workspace_provider_setup_progress",
+      input,
+      workspaceProviderSetupProgressReadSchema,
+    );
+  }
+  workspaceProviderSetupDiscard(input: { setupId: string }) {
+    return this.invokeFn("workspace_provider_setup_discard", input, voidResultSchema);
+  }
   constructor(private readonly invokeFn: InvokeFn) {}
 
   async customAgentRoleList(): Promise<CustomAgentRole[]> {

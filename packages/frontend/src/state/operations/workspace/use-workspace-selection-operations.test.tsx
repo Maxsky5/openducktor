@@ -4,6 +4,7 @@ import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { taskQueryKeys } from "../../queries/tasks";
+import { repositoryGitProviderContextQueryKeys } from "../../queries/git-provider-context";
 import { workspaceQueryKeys } from "../../queries/workspace";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useWorkspaceSelectionOperations } from "./use-workspace-selection-operations";
@@ -129,6 +130,61 @@ const createRepoSelectionHarness = (
   });
 
 describe("use-workspace-selection-operations", () => {
+  test.each([false, true])(
+    "keeps a partially saved workspace when refresh fails=%s",
+    async (failRefresh) => {
+      const record = workspace("/new-repo", true);
+      let registered = false;
+      workspaceHost.workspaceCatalogGet = mock(async () => ({
+        openWorkspaces: registered ? [record] : [],
+        closedWorkspaces: [],
+        incompleteRemovals: [],
+      }));
+      const outcome = {
+        workspace: record,
+        registrationSaved: true,
+        settingsSaved: true,
+        credentialsSaved: false,
+        phase: "credentials" as const,
+        error: "Credentials could not save. Retry creation.",
+      };
+      workspaceHost.workspaceProviderSetupCommit = mock(async () => {
+        registered = true;
+        return outcome;
+      });
+      const harness = createRepoSelectionHarness(null);
+      await harness.mount();
+      await harness.waitFor((state) => state.hasLoadedWorkspaceList);
+      const queryClient = harness.getQueryClient();
+      const providerKey = repositoryGitProviderContextQueryKeys.repo(record.repoPath);
+      queryClient.setQueryData(providerKey, null);
+      const invalidate = failRefresh
+        ? spyOn(queryClient, "invalidateQueries").mockRejectedValue(
+            new Error("Refresh unavailable"),
+          )
+        : null;
+      try {
+        await harness.run(async (state) => {
+          const saved = await state.commitWorkspaceProviderSetup({
+            setupId: crypto.randomUUID(),
+            revision: 1,
+            workspaceId: record.workspaceId,
+            workspaceName: record.workspaceName,
+            agentDefaults: {},
+          });
+          expect(saved).toEqual(outcome);
+        });
+        await harness.waitFor((state) =>
+          state.workspaces.some((entry) => entry.workspaceId === record.workspaceId),
+        );
+        expect(harness.getLatest().workspaces).toContainEqual(record);
+        if (!failRefresh) expect(queryClient.getQueryState(providerKey)?.isInvalidated).toBe(true);
+      } finally {
+        invalidate?.mockRestore();
+        await harness.unmount();
+      }
+    },
+  );
   test("waits for the workspace catalog before reporting loaded state", async () => {
     const catalogDeferred =
       createDeferred<Awaited<ReturnType<typeof workspaceHost.workspaceCatalogGet>>>();

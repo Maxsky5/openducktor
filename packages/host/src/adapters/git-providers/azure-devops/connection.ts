@@ -7,7 +7,6 @@ import {
   type RepoConfig,
 } from "@openducktor/contracts";
 import {
-  azureDevOpsCollectionUrl,
   azureDevOpsConnectionConfigurationFingerprint,
   azureDevOpsRepositoryKey,
 } from "@openducktor/core";
@@ -25,6 +24,7 @@ import { loadConnection, saveConnection, saveConnectionRecord } from "./connecti
 import { createAzureDevOpsConnectionScopeGate } from "./connection-scope-gate";
 import type { AzureDevOpsCredentialIndex } from "./credential-index";
 import { validatePat } from "./pat-validation";
+import { requireClientId, requireConnectionTransport } from "./connection-validation";
 import type { AzureDevOpsProtectedStorage } from "./protected-storage";
 import {
   createAzureDevOpsPublicClient,
@@ -37,6 +37,7 @@ type SignInAttempt = {
   request: DeviceCodeRequest;
   scope: string;
   cancelled: boolean;
+  cancelStart: () => void;
   fiber?: Fiber.RuntimeFiber<void, never>;
 };
 
@@ -71,6 +72,7 @@ export const createAzureDevOpsConnectionAdapter = ({
   const cancelAttempt = (attemptId: string, attempt: SignInAttempt): void => {
     attempt.cancelled = true;
     attempt.request.cancel = true;
+    attempt.cancelStart();
     scopeGate.invalidate(attempt.scope);
     if (attempts.get(attemptId) === attempt) {
       attempts.delete(attemptId);
@@ -290,7 +292,21 @@ export const createAzureDevOpsConnectionAdapter = ({
               resume(Effect.succeed(deviceCode));
             },
           };
-          attempt = { request, scope, cancelled: false };
+          attempt = {
+            request,
+            scope,
+            cancelled: false,
+            cancelStart: () => {
+              if (!codeReturned)
+                resume(
+                  Effect.fail(
+                    new HostValidationError({
+                      message: "Microsoft sign-in was cancelled. Start sign-in again to connect.",
+                    }),
+                  ),
+                );
+            },
+          };
           attempts.set(attemptId, attempt);
           const persistence = scopeGate
             .run(
@@ -365,6 +381,10 @@ export const createAzureDevOpsConnectionAdapter = ({
               Effect.asVoid,
             );
           attempt.fiber = Effect.runFork(persistence);
+          return Effect.gen(function* () {
+            cancelAttempt(attemptId, attempt);
+            if (attempt.fiber) yield* Fiber.interrupt(attempt.fiber);
+          });
         });
       });
     },
@@ -418,44 +438,10 @@ export const createAzureDevOpsConnectionAdapter = ({
   };
 };
 
-const requireClientId = (clientId: string | undefined) =>
-  clientId
-    ? Effect.succeed(clientId)
-    : Effect.fail(
-        new HostValidationError({
-          field: "OPENDUCKTOR_AZURE_DEVOPS_CLIENT_ID",
-          message:
-            "Azure DevOps Services sign-in is unavailable because the OpenDucktor Entra client ID is not configured.",
-        }),
-      );
-
-const requireConnectionTransport = (repoConfig: RepoConfig, repository: AzureDevOpsRepository) =>
-  Effect.gen(function* () {
-    const collectionUrl = azureDevOpsCollectionUrl(repository);
-    const transportProtocol = new URL(collectionUrl).protocol;
-    if (repository.deployment === "services" && transportProtocol !== "https:") {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "git.provider.repository.serviceUrl",
-          message: "Azure DevOps Services requires HTTPS.",
-        }),
-      );
-    }
-    if (
-      repository.deployment === "server" &&
-      transportProtocol === "http:" &&
-      repoConfig.git.provider?.settings?.httpConsentCollectionUrl !== collectionUrl
-    ) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "git.provider.settings.httpConsentCollectionUrl",
-          message: `Confirm the unencrypted Azure DevOps Server connection for ${collectionUrl} before sending credentials.`,
-        }),
-      );
-    }
-  });
-
-const connectionScope = (repoConfig: RepoConfig, repository: AzureDevOpsRepository): string =>
+export const connectionScope = (
+  repoConfig: RepoConfig,
+  repository: AzureDevOpsRepository,
+): string =>
   [repoConfig.workspaceId, repoConfig.repoPath, azureDevOpsRepositoryKey(repository)].join("\n");
 
 const connectionUpdate = (

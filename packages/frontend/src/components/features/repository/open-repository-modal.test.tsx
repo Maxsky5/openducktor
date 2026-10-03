@@ -1,3 +1,13 @@
+import { beforeAll, afterAll } from "bun:test";
+import {
+  installLocalOnlyProviderSetup,
+  localOnlyWorkspaceDetails,
+} from "@/test-utils/workspace-provider-setup-fixture";
+let releaseProviderFixture: (() => void) | undefined;
+beforeAll(() => {
+  releaseProviderFixture = installLocalOnlyProviderSetup();
+});
+afterAll(() => releaseProviderFixture?.());
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { DEFAULT_AGENT_RUNTIMES, type WorkspaceRecord } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -9,6 +19,7 @@ import {
   WorkspacePreviewTransitionGuardProvider,
 } from "@/components/layout/workspace-preview-transition-guard";
 import { createQueryClient } from "@/lib/query-client";
+import { hostBridge, hostClient } from "@/lib/host-client";
 import { useWorkspaceSessionPreview } from "@/pages/workspace-sessions/use-workspace-session-preview";
 import { RuntimeDefinitionsContext, WorkspaceStateContext } from "@/state/app-state-contexts";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
@@ -56,6 +67,16 @@ const workspaceState = (
   isLoadingBranches: false,
   isSwitchingBranch: false,
   branchSyncDegraded: false,
+  commitWorkspaceProviderSetup: async (input) => ({
+    workspace: await (overrides.addWorkspace ?? (async (value) => record(value)))(
+      localOnlyWorkspaceDetails(input),
+    ),
+    registrationSaved: true,
+    settingsSaved: true,
+    credentialsSaved: true,
+    phase: "complete",
+    error: null,
+  }),
   addWorkspace: async (input) => record(input),
   saveWorkspaceModelDefaults: async () => {},
   selectWorkspace: async () => {},
@@ -190,10 +211,84 @@ const chooseRepository = async () => {
     fireEvent.click(screen.getByRole("button", { name: "Choose repository folder" }));
   }
   fireEvent.click(await screen.findByRole("button", { name: "Choose This Folder" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Skip Git provider setup" }));
   await screen.findByLabelText("Workspace ID");
 };
 
 describe("OpenRepositoryModal", () => {
+  test("offers cancellation during sign-in startup and keeps cleanup failures open", async () => {
+    const startup =
+      createDeferred<Awaited<ReturnType<typeof hostClient.workspaceProviderSetupSignIn>>>();
+    const originalSignIn = hostClient.workspaceProviderSetupSignIn;
+    const originalDiscard = hostClient.workspaceProviderSetupDiscard;
+    const originalSubscribe = hostBridge.subscribeWorkspaceProviderSetupUpdates;
+    let ownedId: string | undefined;
+    let failCleanup = true;
+    const cleanup = mock(async (ref: { setupId: string }) => {
+      if (ref.setupId !== ownedId) return originalDiscard(ref);
+      if (failCleanup) throw new Error("Sign-in cleanup unavailable");
+      return originalDiscard(ref);
+    });
+    hostClient.workspaceProviderSetupSignIn = (ref) => {
+      ownedId = ref.setupId;
+      return startup.promise;
+    };
+    hostClient.workspaceProviderSetupDiscard = cleanup;
+    hostBridge.subscribeWorkspaceProviderSetupUpdates = async () => () => {};
+    const onOpenChange = mock((_open: boolean) => {});
+    const commit = mock(async () => {
+      throw new Error("No workspace should be created");
+    });
+    const view = renderModal({
+      state: workspaceState({ commitWorkspaceProviderSetup: commit }),
+      onOpenChange,
+    });
+    try {
+      fireEvent.click(await screen.findByRole("button", { name: "Choose This Folder" }));
+      fireEvent.click(await screen.findByRole("radio", { name: "Azure DevOps" }));
+      for (const [label, value] of [
+        ["Organization", "org"],
+        ["Project", "project"],
+        ["Repository", "repo"],
+      ] as const) {
+        const input = await screen.findByLabelText<HTMLInputElement>(label);
+        await waitFor(() => expect(input.disabled).toBe(false));
+        fireEvent.change(input, { target: { value } });
+      }
+      const signIn = await screen.findByRole<HTMLButtonElement>("button", {
+        name: "Sign in with Microsoft",
+      });
+      await waitFor(() => expect(signIn.disabled).toBe(false));
+      fireEvent.click(signIn);
+      const cancel = await screen.findByRole<HTMLButtonElement>("button", {
+        name: "Cancel provider setup",
+      });
+      const close = within(
+        screen.getByRole("group", { name: "Repository actions" }),
+      ).getByRole<HTMLButtonElement>("button", { name: "Close" });
+      expect(cancel.disabled).toBe(false);
+      expect(close.disabled).toBe(false);
+      expect(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Skip Git provider setup" }).disabled,
+      ).toBe(true);
+      fireEvent.click(close);
+      await screen.findByText(/Cancel provider setup failed: Sign-in cleanup unavailable/);
+      expect(onOpenChange).not.toHaveBeenCalled();
+      expect(screen.getByLabelText<HTMLInputElement>("Organization").value).toBe("org");
+      failCleanup = false;
+      fireEvent.click(screen.getByRole("button", { name: "Cancel provider setup" }));
+      await screen.findByRole("heading", { name: "Choose a repository" });
+      expect(commit).not.toHaveBeenCalled();
+      expect(cleanup).toHaveBeenCalledTimes(2);
+    } finally {
+      failCleanup = false;
+      await act(async () => startup.reject(new Error("Sign-in was cancelled")));
+      view.unmount();
+      hostClient.workspaceProviderSetupSignIn = originalSignIn;
+      hostClient.workspaceProviderSetupDiscard = originalDiscard;
+      hostBridge.subscribeWorkspaceProviderSetupUpdates = originalSubscribe;
+    }
+  });
   test("opens the folder picker directly when no workspaces are closed", async () => {
     renderModal();
 
@@ -240,6 +335,7 @@ describe("OpenRepositoryModal", () => {
         }
         fireEvent.click(await screen.findByRole("button", { name: "Choose This Folder" }));
         if (path === "add") {
+          fireEvent.click(await screen.findByRole("button", { name: "Skip Git provider setup" }));
           await screen.findByLabelText("Workspace ID");
           fireEvent.click(screen.getByRole("button", { name: "Continue to models" }));
           fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
@@ -250,6 +346,11 @@ describe("OpenRepositoryModal", () => {
       await waitFor(() =>
         expect(path === "add" ? addWorkspace : reopenWorkspace).toHaveBeenCalledTimes(1),
       );
+      if (path === "add") {
+        expect(screen.getByRole<HTMLButtonElement>("button", { name: "Close" }).disabled).toBe(
+          true,
+        );
+      }
       expect(screen.getByTestId("draft").textContent).toBe("draft.ts");
       await act(async () => action.reject(new Error("Workspace failed")));
       expect(await screen.findByText("Workspace failed")).toBeTruthy();

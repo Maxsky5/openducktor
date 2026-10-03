@@ -9,9 +9,16 @@ import { Label } from "@/components/ui/label";
 import { Stepper, type StepperStep } from "@/components/ui/stepper";
 import type { WorkspaceCreationController, WorkspaceCreationStage } from "./use-workspace-creation";
 import type { WorkspaceCreationModelSurface } from "./use-workspace-creation-models";
+import { WorkspaceProviderFields } from "./workspace-provider-fields";
 
 const STAGES: readonly StepperStep<WorkspaceCreationStage>[] = [
   { id: "repository", title: "Repository", shortTitle: "Repo", description: "Choose a Git folder" },
+  {
+    id: "provider",
+    title: "Git provider",
+    shortTitle: "Provider",
+    description: "Connect an integration",
+  },
   {
     id: "information",
     title: "Workspace details",
@@ -20,6 +27,136 @@ const STAGES: readonly StepperStep<WorkspaceCreationStage>[] = [
   },
   { id: "models", title: "Models", description: "Set your defaults" },
 ];
+
+type WorkspaceCreationFieldsProps = {
+  controller: WorkspaceCreationController;
+  picker?: ReactNode;
+  modelSurface?: WorkspaceCreationModelSurface | undefined;
+};
+
+export function WorkspaceCreationFields({
+  controller,
+  picker,
+  modelSurface,
+}: WorkspaceCreationFieldsProps): ReactElement {
+  return (
+    <div className="flex min-w-0 flex-col gap-5">
+      <Stepper steps={STAGES} step={controller.stage} label="Workspace setup stages" fill />
+      <fieldset disabled={controller.busy} className="flex min-w-0 flex-col gap-5">
+        <WorkspaceCreationStageFields
+          controller={controller}
+          picker={picker}
+          modelSurface={modelSurface}
+        />
+      </fieldset>
+      {controller.stage === "provider" && controller.provider.isStartingSignIn ? (
+        <Button
+          type="button"
+          variant="outline"
+          disabled={!controller.canAbandon}
+          onClick={() => void controller.abandon()}
+        >
+          {controller.provider.isCancelling
+            ? "Cancelling provider setup..."
+            : "Cancel provider setup"}
+        </Button>
+      ) : null}
+      {controller.error || (controller.stage === "information" && controller.validationError) ? (
+        <p className="text-sm text-destructive" role="alert">
+          {controller.error ?? controller.validationError}
+        </p>
+      ) : null}
+      {controller.stage === "models" && controller.error ? (
+        <Button
+          type="button"
+          variant="outline"
+          disabled={controller.busy}
+          onClick={() => void controller.recoverCreation()}
+        >
+          Read saved creation progress
+        </Button>
+      ) : null}
+      {controller.stage !== "provider" && controller.provider.error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {controller.provider.error} Retry the action.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+export function WorkspaceCreationBackAction({
+  controller,
+}: {
+  controller: WorkspaceCreationController;
+}): ReactElement | null {
+  if (controller.stage === "repository") return null;
+  return (
+    <Button type="button" variant="outline" disabled={controller.busy} onClick={controller.back}>
+      <ArrowLeft data-icon="inline-start" /> Back
+    </Button>
+  );
+}
+
+export function WorkspaceCreationSubmitAction({
+  controller,
+  modelSurface,
+}: {
+  controller: WorkspaceCreationController;
+  modelSurface?: WorkspaceCreationModelSurface | undefined;
+}): ReactElement | null {
+  if (controller.stage === "repository") {
+    return controller.repoPath && !controller.pickerOpen ? (
+      <Button type="button" disabled={controller.busy} onClick={controller.reviewRepo}>
+        Continue to Git provider <ArrowRight data-icon="inline-end" />
+      </Button>
+    ) : null;
+  }
+  if (controller.stage === "provider")
+    return (
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          disabled={controller.busy}
+          onClick={() => void controller.skipProvider()}
+        >
+          Skip Git provider setup
+        </Button>
+        <Button
+          type="button"
+          disabled={controller.busy}
+          onClick={() => void controller.continueProvider()}
+        >
+          Continue to workspace information <ArrowRight data-icon="inline-end" />
+        </Button>
+      </div>
+    );
+  if (controller.stage === "information") {
+    return (
+      <Button
+        type="button"
+        disabled={controller.busy || controller.validationError !== null}
+        onClick={controller.next}
+      >
+        Continue to models <ArrowRight data-icon="inline-end" />
+      </Button>
+    );
+  }
+  let progressLabel = "Open repository";
+  if (controller.progress === "creating") progressLabel = "Creating workspace...";
+  else if (controller.progress === "saving") progressLabel = "Saving model defaults...";
+  else if (controller.progress === "finishing") progressLabel = "Opening repository...";
+  return (
+    <Button
+      type="button"
+      disabled={controller.busy || controller.validationError !== null}
+      onClick={() => void controller.submit(modelSurface)}
+    >
+      {progressLabel}
+    </Button>
+  );
+}
 
 function WorkspaceRepositoryChooser({
   controller,
@@ -68,6 +205,7 @@ function WorkspaceRepositoryFields({
           <Label htmlFor="workspace-name">Workspace name</Label>
           <Input
             id="workspace-name"
+            disabled={controller.createdWorkspaceId !== null}
             value={controller.workspaceName}
             onChange={(event) => controller.updateWorkspaceName(event.currentTarget.value)}
           />
@@ -76,6 +214,7 @@ function WorkspaceRepositoryFields({
           <Label htmlFor="workspace-id">Workspace ID</Label>
           <Input
             id="workspace-id"
+            disabled={controller.createdWorkspaceId !== null}
             value={controller.workspaceId}
             aria-invalid={invalidWorkspaceId}
             onChange={(event) => controller.updateWorkspaceId(event.currentTarget.value)}
@@ -87,7 +226,7 @@ function WorkspaceRepositoryFields({
         workspaceName={controller.workspaceName}
         abbreviation={controller.abbreviation || null}
         tileColor={controller.tileColor}
-        isDisabled={controller.busy}
+        isDisabled={controller.busy || controller.createdWorkspaceId !== null}
         onChangeAbbreviation={controller.updateAbbreviation}
         onChangeTileColor={controller.updateTileColor}
       />
@@ -127,7 +266,7 @@ function WorkspaceModelsFields({
           isLoadingRuntimeDefinitions: surface.isLoadingRuntimeDefinitions,
           isLoadingCatalog: surface.isLoadingCatalog,
           isLoadingSettings: false,
-          isSaving: controller.busy,
+          isSaving: controller.busy || controller.createdWorkspaceId !== null,
         }}
         runtimeDefinitionsError={null}
         runtimeAvailabilityErrors={surface.errors}
@@ -177,95 +316,26 @@ function WorkspaceModelsFields({
   );
 }
 
-export function WorkspaceCreationFields({
+function WorkspaceCreationStageFields({
   controller,
   picker,
   modelSurface,
-}: {
-  controller: WorkspaceCreationController;
-  picker?: ReactNode;
-  modelSurface?: WorkspaceCreationModelSurface | undefined;
-}): ReactElement {
-  return (
-    <div className="flex min-w-0 flex-col gap-5">
-      <Stepper steps={STAGES} step={controller.stage} label="Workspace setup stages" fill />
-      <fieldset disabled={controller.busy} className="flex min-w-0 flex-col gap-5">
-        {controller.stage === "repository" ? (
-          picker !== undefined && controller.pickerOpen ? (
-            picker
-          ) : (
-            <WorkspaceRepositoryChooser controller={controller} />
-          )
-        ) : null}
-        {controller.stage === "information" ? (
-          <WorkspaceRepositoryFields controller={controller} />
-        ) : null}
-        {controller.stage === "models" ? (
-          <WorkspaceModelsFields controller={controller} surface={modelSurface} />
-        ) : null}
-      </fieldset>
-      {controller.error || (controller.stage === "information" && controller.validationError) ? (
-        <p className="text-sm text-destructive" role="alert">
-          {controller.error ?? controller.validationError}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-export function WorkspaceCreationBackAction({
-  controller,
-}: {
-  controller: WorkspaceCreationController;
-}): ReactElement | null {
-  if (controller.stage === "repository" || controller.createdWorkspaceId) return null;
-  return (
-    <Button type="button" variant="outline" disabled={controller.busy} onClick={controller.back}>
-      <ArrowLeft data-icon="inline-start" /> Back
-    </Button>
-  );
-}
-
-export function WorkspaceCreationSubmitAction({
-  controller,
-  modelSurface,
-}: {
-  controller: WorkspaceCreationController;
-  modelSurface?: WorkspaceCreationModelSurface | undefined;
-}): ReactElement | null {
-  if (controller.stage === "repository") {
-    return controller.repoPath && !controller.pickerOpen ? (
-      <Button type="button" disabled={controller.busy} onClick={controller.reviewRepo}>
-        Continue to workspace information <ArrowRight data-icon="inline-end" />
-      </Button>
-    ) : null;
+}: WorkspaceCreationFieldsProps): ReactNode {
+  switch (controller.stage) {
+    case "repository":
+      if (picker !== undefined && controller.pickerOpen) return picker;
+      return <WorkspaceRepositoryChooser controller={controller} />;
+    case "provider":
+      return (
+        <WorkspaceProviderFields
+          provider={controller.provider}
+          disabled={controller.busy}
+          onSkip={controller.skipProvider}
+        />
+      );
+    case "information":
+      return <WorkspaceRepositoryFields controller={controller} />;
+    case "models":
+      return <WorkspaceModelsFields controller={controller} surface={modelSurface} />;
   }
-  if (controller.stage === "information") {
-    return (
-      <Button
-        type="button"
-        disabled={controller.busy || controller.validationError !== null}
-        onClick={controller.next}
-      >
-        Continue to models <ArrowRight data-icon="inline-end" />
-      </Button>
-    );
-  }
-  const progressLabel =
-    controller.progress === "creating"
-      ? "Creating workspace..."
-      : controller.progress === "saving"
-        ? "Saving model defaults..."
-        : controller.progress === "finishing"
-          ? "Opening repository..."
-          : "Open repository";
-  return (
-    <Button
-      type="button"
-      disabled={controller.busy || controller.validationError !== null}
-      onClick={() => void controller.submit(modelSurface)}
-    >
-      {progressLabel}
-    </Button>
-  );
 }

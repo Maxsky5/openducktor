@@ -7,6 +7,41 @@ import { forwardElectronHostEvent } from "../main/electron-host-event-forwarding
 import { type ElectronHostEventListener, subscribeElectronHostEvent } from "./electron-host-events";
 
 describe("subscribeElectronHostEvent", () => {
+  test("routes temporary provider updates through IPC and releases the listener", () => {
+    const ipcRenderer = new EventEmitter();
+    const listener = mock(() => {});
+    const channel = "openducktor://workspace-provider-setup-updated";
+    const stop = subscribeElectronHostEvent(ipcRenderer, channel, listener);
+    const payload: HostEventPayload<typeof channel> = {
+      setupId: crypto.randomUUID(),
+      repoPath: "/new-repo",
+      revision: 2,
+      configurationFingerprint: "current",
+      attemptId: crypto.randomUUID(),
+      state: { status: "connected", account: "user" },
+    };
+    try {
+      forwardElectronHostEvent(
+        [
+          {
+            isDestroyed: () => false,
+            webContents: {
+              isDestroyed: () => false,
+              send: (name, event) => {
+                ipcRenderer.emit(name, {}, event);
+              },
+            },
+          },
+        ],
+        { channel, payload },
+        () => undefined,
+      );
+      expect(listener).toHaveBeenCalledWith(payload);
+    } finally {
+      stop();
+    }
+    expect(ipcRenderer.eventNames()).toEqual([]);
+  });
   test("validates incoming envelopes before forwarding matching payloads", () => {
     let receive: ElectronHostEventListener | undefined;
     const ipcRenderer = {

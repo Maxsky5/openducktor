@@ -154,6 +154,9 @@ const createHookHarness = (
     activeWorkspace: workspaceRecords[0] ?? null,
     branches: EMPTY_BRANCHES,
     activeBranch: null,
+    commitWorkspaceProviderSetup: async () => {
+      throw new Error("Not used");
+    },
     addWorkspace: async () => {
       throw new Error("Not used");
     },

@@ -1,5 +1,6 @@
 import type { createNotificationCommandHandlers } from "../commands/notification-command-handlers";
 import type { createWorkspaceSessionImportCommandHandlers } from "../commands/workspace-session-import-command-handlers";
+import type { createWorkspaceProviderSetupCommandHandlers } from "../commands/workspace-provider-setup-command-handlers";
 import type { createGeneratedImageCommandHandlers } from "../commands/generated-image-command-handlers";
 import type { Effect } from "effect";
 import type { createAgentSessionLiveCommandHandlers } from "../commands/agent-session-live-command-handlers";
@@ -31,6 +32,7 @@ import type { HostCommandName } from "../commands/host-command-registry";
 
 type AllHostCommandHandlers = ReturnType<typeof createNotificationCommandHandlers> &
   ReturnType<typeof createGeneratedImageCommandHandlers> &
+  ReturnType<typeof createWorkspaceProviderSetupCommandHandlers> &
   ReturnType<typeof createAgentSessionLiveCommandHandlers> &
   ReturnType<typeof createAgentRuntimeQueryCommandHandlers> &
   ReturnType<typeof createWorkspaceSessionImportCommandHandlers> &

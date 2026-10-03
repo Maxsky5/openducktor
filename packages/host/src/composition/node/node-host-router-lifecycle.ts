@@ -40,6 +40,7 @@ export const createNodeHostRouterLifecycle = ({
   unsubscribeImportCatalogs,
   notifications,
   azureDevOpsConnection,
+  workspaceProviderSetup,
   devServerService,
   imageWorkers,
   lifecycleLogger,
@@ -56,6 +57,9 @@ export const createNodeHostRouterLifecycle = ({
   notifications: Pick<NotificationService, "initialize" | "dispose">;
   assets: { taskStoreConnectionShutdownStep: HostShutdownStep };
   azureDevOpsConnection?: Pick<AzureDevOpsConnectionPort, "shutdown"> | undefined;
+  workspaceProviderSetup: {
+    shutdown(): Effect.Effect<void, import("../../effect/host-errors").HostError>;
+  };
   devServerService: DisposableDevServerService;
   imageWorkers: Pick<GeneratedImageWorkers, "shutdown">;
   lifecycleLogger: HostLifecycleLogger;
@@ -127,6 +131,7 @@ export const createNodeHostRouterLifecycle = ({
               ...(azureDevOpsConnection
                 ? [{ label: "Azure DevOps sign-in", run: () => azureDevOpsConnection.shutdown() }]
                 : []),
+              { label: "Workspace provider setup", run: () => workspaceProviderSetup.shutdown() },
               { label: "image workers", run: () => imageWorkers.shutdown },
               createStopTerminalsStep(terminalService),
               createStopDevServersStep(devServerService, lifecycleLogger),

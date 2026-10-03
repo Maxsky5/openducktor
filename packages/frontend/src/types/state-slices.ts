@@ -24,6 +24,8 @@ import type {
   WorkspaceRecord,
   WorkspaceLifecycleTargetInput,
   WorkspaceRemovalInput,
+  WorkspaceProviderSetupCommit,
+  WorkspaceProviderSetupProgress,
 } from "@openducktor/contracts";
 import type {
   AgentModelSelection,
@@ -101,6 +103,9 @@ export type WorkspaceStateContextValue = {
   branches: GitBranch[];
   activeBranch: GitCurrentBranch | null;
   addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<WorkspaceRecord>;
+  commitWorkspaceProviderSetup: (
+    input: WorkspaceProviderSetupCommit,
+  ) => Promise<WorkspaceProviderSetupProgress>;
   saveWorkspaceModelDefaults: (
     workspaceId: string,
     draft: WorkspaceModelDefaultsDraft,

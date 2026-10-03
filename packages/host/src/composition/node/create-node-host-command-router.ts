@@ -6,6 +6,7 @@ import { createWorkspaceSessionImportCommandHandlers } from "../../interface/com
 import { createRuntimeLifecyclePublisher } from "./runtime-lifecycle-publisher";
 import { createNodeImageCommandHandlers } from "./node-image-command-handlers";
 import { createNodeGitProviderCommandHandlers } from "./node-git-provider-command-handlers";
+import { createNodeWorkspaceProviderSetup } from "./node-workspace-provider-setup";
 import { resolveCodexEffectivePolicy } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
@@ -36,8 +37,6 @@ import { createTaskSessionLifecycleCoordinator } from "../../application/tasks/w
 import { createTaskWorktreeService } from "../../application/tasks/worktrees/task-worktree-service";
 import { createTerminalService } from "../../application/terminals/terminal-service";
 import { loadGlobalConfig } from "../../application/workspaces/workspace-settings-model";
-import { createWorkspaceAdmissionService } from "../../application/workspaces/workspace-admission-service";
-import { createWorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { createWorkspaceSessionCommandHandlers } from "../../interface/commands/workspace-session-command-handlers";
 import type { GitProviderResolver } from "../../application/git/git-provider-resolver";
 import type { AzureDevOpsConnectionPort } from "../../ports/azure-devops-connection-port";
@@ -129,10 +128,8 @@ export const assembleNodeEffectHostCommandRouter = (
   const { environment: processEnv, error: processEnvironmentError } = processEnvironment;
   const notificationComposition = createNodeNotificationServices(baseSettingsConfig, eventBus);
   const { settingsConfig } = notificationComposition;
-  const workspaceSettingsService = createWorkspaceSettingsService(settingsConfig);
-  const workspaceAdmissionService = createWorkspaceAdmissionService({
-    workspaceSettingsService,
-  });
+  const setup = createNodeWorkspaceProviderSetup({ ...defaultPorts, settingsConfig }, input);
+  const { workspaceSettingsService, workspaceProviderSetup, workspaceAdmissionService } = setup;
   const assets = createNodeTaskAssetServices({
     configDir,
     assertWorkspaceAdmitted: workspaceAdmissionService.assertTaskStoreAccess,
@@ -143,7 +140,6 @@ export const assembleNodeEffectHostCommandRouter = (
     workspaceSettingsService,
   });
   const { startupSweep, taskAssetReadService, taskAssetStagingService, taskStore } = assets;
-  // Call live state in the title callback because live state and persistence depend on each other.
   const workspaceSessions = createNodeWorkspaceSessionPersistence({
     store: assets.workspaceSessionStore,
     settings: workspaceSettingsService,
@@ -421,6 +417,7 @@ export const assembleNodeEffectHostCommandRouter = (
     notifications: notificationService,
     assets,
     azureDevOpsConnection,
+    workspaceProviderSetup,
     devServerService,
     imageWorkers: defaultPorts.imageWorkers,
     lifecycleLogger,
@@ -432,6 +429,7 @@ export const assembleNodeEffectHostCommandRouter = (
     terminalService,
   });
   const handlers = {
+    ...setup.handlers,
     ...createNotificationCommandHandlers(notificationService),
     ...createAgentSessionLiveCommandHandlers(agentSessionCommandService, localAttachmentService),
     ...createNodeAgentRuntimeQueryCommandHandlers(

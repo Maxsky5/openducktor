@@ -77,6 +77,8 @@ export const createElectronShellBridge = (): ShellBridge => {
       dispose: () => {},
     },
     subscribeRunEvents: subscribeElectronEvent(electronApi, RUN_EVENT_CHANNEL),
+    subscribeWorkspaceProviderSetupUpdates: async (listener) =>
+      electronApi.subscribe("openducktor://workspace-provider-setup-updated", listener),
     subscribeAzureDevOpsConnectionUpdates: async (listener) =>
       electronApi.subscribe(AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL, listener),
     subscribeDevServerEvents: async (listener) => {

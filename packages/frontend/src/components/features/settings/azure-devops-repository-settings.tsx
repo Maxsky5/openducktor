@@ -160,14 +160,25 @@ export function AzureDevOpsRepositorySettings({
 }
 
 type ManualRepositoryFormProps = {
-  controller: AzureDevOpsGitProviderFormController;
+  controller: Pick<
+    AzureDevOpsGitProviderFormController,
+    | "consentGranted"
+    | "draft"
+    | "httpCollectionUrl"
+    | "mappingErrors"
+    | "remoteMappingDrafts"
+    | "repositoryErrors"
+    | "setHttpConsent"
+    | "updateDraft"
+    | "updateRemoteMappings"
+  >;
   disabled: boolean;
   touchedFields: Set<AzureRepositoryDraftField>;
   markFieldTouched: (field: AzureRepositoryDraftField) => void;
   updateField: (field: AzureRepositoryDraftField, value: string) => void;
 };
 
-function ManualRepositoryForm({
+export function ManualRepositoryForm({
   controller,
   disabled,
   markFieldTouched,

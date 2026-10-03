@@ -88,6 +88,26 @@ const createClient = (
 };
 
 describe("HostClient", () => {
+  test("projects a full setup session to the strict read reference contract", async () => {
+    const session = { setupId: crypto.randomUUID(), revision: 2, repoPath: "/new-repo" };
+    const { client, calls } = createClient((command) => {
+      if (command === "workspace_provider_setup_detect") return { outcome: "none", candidates: [] };
+      if (command === "workspace_provider_setup_status") return { health: null, connection: null };
+      throw new Error(`Unexpected command ${command}`);
+    });
+    await client.workspaceProviderSetupDetect(session);
+    await client.workspaceProviderSetupStatus(session);
+    expect(calls).toEqual([
+      {
+        command: "workspace_provider_setup_detect",
+        args: { setupId: session.setupId, revision: session.revision },
+      },
+      {
+        command: "workspace_provider_setup_status",
+        args: { setupId: session.setupId, revision: session.revision },
+      },
+    ]);
+  });
   test("routes setSpec through the host command", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "set_spec") {
