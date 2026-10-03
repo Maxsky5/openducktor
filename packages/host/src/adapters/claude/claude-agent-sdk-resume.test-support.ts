@@ -1,3 +1,4 @@
+import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -17,6 +18,8 @@ async function run(): Promise<void> {
   const transcripts = join(config, "projects", cwd.replace(/[^a-zA-Z0-9]/g, "-"));
   const sessionId = randomUUID();
   const queue = new AsyncInputQueue<SDKUserMessage>();
+  let cli: ChildProcessWithoutNullStreams | undefined;
+  let closed = Promise.resolve();
   try {
     await mkdir(cwd, { recursive: true });
     await mkdir(transcripts, { recursive: true });
@@ -39,7 +42,25 @@ async function run(): Promise<void> {
     delete options.pathToClaudeCodeExecutable;
     const stream = query({
       prompt: queue,
-      options: { ...options, resume: sessionId, settingSources: [], tools: [] },
+      options: {
+        ...options,
+        resume: sessionId,
+        settingSources: [],
+        tools: [],
+        spawnClaudeCodeProcess({ command, args, cwd, env, signal }) {
+          const child = spawn(command, args, {
+            cwd,
+            env,
+            signal,
+            stdio: ["pipe", "pipe", "pipe"],
+            windowsHide: true,
+          });
+          cli = child;
+          closed = new Promise<void>((resolve) => child.once("close", () => resolve()));
+          child.stderr.pipe(process.stderr);
+          return child;
+        },
+      },
     });
     const timeout = setTimeout(() => {
       queue.close();
@@ -59,6 +80,9 @@ async function run(): Promise<void> {
       stream.close();
     }
   } finally {
+    // SDK close returns before the CLI exits. Windows locks its working directory.
+    cli?.kill("SIGKILL");
+    await closed;
     await rm(root, { recursive: true, force: true });
   }
 }
