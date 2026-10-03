@@ -33,6 +33,7 @@ import {
 } from "./opencode-live-session-recovery-merge";
 import { applyOpenCodeSessionSources } from "./opencode-live-session-source-refresh";
 import {
+  childSnapshot,
   openCodeActivityForPending,
   openCodeActivityFromEvent,
   openCodeEventChildId,
@@ -126,24 +127,14 @@ export const createOpenCodeLiveSessionState = ({
       }
       return existing;
     }
-    const title =
-      event.type === "assistant_part" && event.part.kind === "subagent"
-        ? (event.part.agent ?? event.part.description ?? "OpenCode subagent")
-        : "OpenCode subagent";
-    const snapshot = parseOpenCodeLiveSnapshot(
-      {
-        ref: childRef,
-        activity: "idle",
-        title,
-        startedAt: event.timestamp,
-        parentExternalSessionId: parentExternalSessionId,
-        pendingApprovals: [],
-        pendingQuestions: [],
-        contextUsage: contextUsageBySessionId.get(childExternalSessionId) ?? null,
-      },
-      "opencode-live-session.create-child-event-state",
-    );
-    return { snapshot, runtimeActivity: "idle" as const };
+    return {
+      snapshot: childSnapshot(
+        childRef,
+        event,
+        contextUsageBySessionId.get(childExternalSessionId) ?? null,
+      ),
+      runtimeActivity: "idle" as const,
+    };
   };
 
   const setContext = (

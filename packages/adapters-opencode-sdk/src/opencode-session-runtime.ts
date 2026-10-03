@@ -735,31 +735,6 @@ const runtimeInitializationAbortFailure = (signal: AbortSignal, runtimeId: strin
     ? signal.reason
     : new Error(`OpenCode runtime '${runtimeId}' initialization was aborted.`);
 
-const waitForRuntimeInitialization = <Value>(
-  initialization: Promise<Value>,
-  signal: AbortSignal | undefined,
-  runtimeId: string,
-): Promise<Value> => {
-  if (!signal) return initialization;
-  return new Promise<Value>((resolve, reject) => {
-    let settled = false;
-    const finish = (complete: () => void): void => {
-      if (settled) return;
-      settled = true;
-      signal.removeEventListener("abort", abort);
-      complete();
-    };
-    const abort = (): void =>
-      finish(() => reject(runtimeInitializationAbortFailure(signal, runtimeId)));
-    signal.addEventListener("abort", abort, { once: true });
-    void initialization.then(
-      (value) => finish(() => resolve(value)),
-      (cause: unknown) => finish(() => reject(cause)),
-    );
-    if (signal.aborted) abort();
-  });
-};
-
 const releaseEventSessions = async (
   sessions: Map<string, SessionRecord>,
   runtimeEventTransports: Map<string, RuntimeEventTransportRecord>,
