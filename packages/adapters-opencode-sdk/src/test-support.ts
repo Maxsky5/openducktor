@@ -405,7 +405,11 @@ export const makeMockClient = ({
         session.updateCalls.push(input);
         if (session.updateResult.error || session.updateResult.data !== undefined)
           return session.updateResult;
-        if (input.permission) nativeRules.set(input.sessionID, input.permission);
+        if (input.permission)
+          nativeRules.set(input.sessionID, [
+            ...(nativeRules.get(input.sessionID) ?? []),
+            ...input.permission,
+          ]);
         const data = detail(input.sessionID, input.directory);
         if (input.title !== undefined) data.title = input.title;
         return { data, error: undefined };

@@ -59,7 +59,7 @@ describe("OpenCode session permission continuity", () => {
     await mock.client.session.update({
       sessionID: ref.externalSessionId,
       directory: ref.workingDirectory,
-      permission: nativeAfterAttachment,
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
     });
     await adapter.resumeSession(ref);
     const restored = await rulesFor(mock);
@@ -244,6 +244,7 @@ describe("OpenCode session permission continuity", () => {
         directory: ref.workingDirectory,
         permission: broadAllow,
       });
+      const native = await rulesFor(mock);
       const get = mock.client.session.get;
       if (failure === "read failure")
         mock.client.session.get = async () => ({
@@ -268,7 +269,7 @@ describe("OpenCode session permission continuity", () => {
       mock.session.updateResult = {};
       await adapter.resumeSession(ref);
       const restored = await rulesFor(mock);
-      expect(restored.slice(0, broadAllow.length)).toEqual(broadAllow);
+      expect(restored.slice(0, native.length)).toEqual(native);
       expect(restored).toContainEqual({ permission: "edit", pattern: "*", action: "deny" });
       const updates = mock.session.updateCalls.length;
       await adapter.sendUserMessage({ ...ref, parts: [{ kind: "text", text: "recovered" }] });

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { createPrepareOpencodeSessionRuntime, type OpencodeSessionRuntimeSignal } from "./index";
 import { permissionAskedEvent, sessionStatusEvent } from "./event-stream.test-support";
+import type { OpencodePermissionRule } from "./workflow-tool-permissions";
 import {
   createOpencodeEventFixtures,
   createOpencodeMessageInfoFixture,
@@ -71,6 +72,7 @@ const createLiveClientHarness = (
   const promptCalls: unknown[] = [];
   const permissionReplyCalls: unknown[] = [];
   const questionReplyCalls: unknown[] = [];
+  const rules = new Map<string, OpencodePermissionRule[]>();
   let permissionReplyError: Error | null = null;
   let pendingApproval = input.pendingQuestion !== true;
   let pendingQuestion = input.pendingQuestion === true;
@@ -105,6 +107,7 @@ const createLiveClientHarness = (
           data: externalSessionIds.map((sessionId) =>
             createOpencodeSessionFixture({
               id: sessionId,
+              permission: rules.get(sessionId),
               parentID: input.parentSessionIdsBySessionId?.[sessionId],
               directory: "/repo",
               title: "Live session",
@@ -131,6 +134,7 @@ const createLiveClientHarness = (
         return {
           data: createOpencodeSessionFixture({
             id: sessionID,
+            permission: rules.get(sessionID),
             parentID:
               input.parentSessionIdsBySessionId?.[sessionID] ??
               Object.entries(input.childSessionIdsByParent ?? {}).find(([, children]) =>
@@ -154,6 +158,7 @@ const createLiveClientHarness = (
           data: (input.childSessionIdsByParent?.[sessionID] ?? []).map((childSessionId) =>
             createOpencodeSessionFixture({
               id: childSessionId,
+              permission: rules.get(childSessionId),
               parentID: sessionID,
               directory: "/repo",
               title: "OpenCode subagent",
@@ -208,14 +213,18 @@ const createLiveClientHarness = (
         promptCalls.push(request);
         return { data: {}, error: undefined };
       },
-      update: async (request) => ({
-        data: createOpencodeSessionFixture({
-          id: request.sessionID,
-          directory: request.directory ?? "/repo",
-          permission: request.permission,
-        }),
-        error: undefined,
-      }),
+      update: async (request) => {
+        const permission = [...(rules.get(request.sessionID) ?? []), ...(request.permission ?? [])];
+        rules.set(request.sessionID, permission);
+        return {
+          data: createOpencodeSessionFixture({
+            id: request.sessionID,
+            directory: request.directory ?? "/repo",
+            permission,
+          }),
+          error: undefined,
+        };
+      },
     },
     permission: {
       ...baseClient.permission,
@@ -1193,12 +1202,13 @@ test("restores workflow roots and descendant denies before publishing reload sou
   const updates: Parameters<typeof harness.client.session.update>[0][] = [];
   harness.client.session.update = async (request) => {
     updates.push(request);
-    rules.set(request.sessionID, request.permission!);
+    const permission = [...(rules.get(request.sessionID) ?? []), ...(request.permission ?? [])];
+    rules.set(request.sessionID, permission);
     return {
       data: createOpencodeSessionFixture({
         id: request.sessionID,
         directory: "/repo",
-        permission: request.permission,
+        permission,
       }),
       error: undefined,
     };
@@ -1319,6 +1329,12 @@ test("reports failed reload permission setup and excludes the workflow tree", as
     const recovered = await prepared.connection.readSessionSources([root]);
     expect(recovered.failures).toEqual([]);
     expect(recovered.sources).toHaveLength(2);
+    for (const sessionID of ["session-1", "child-session"])
+      await harness.client.session.update({
+        sessionID,
+        directory: "/repo",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      });
     const get = harness.client.session.get;
     const readEntered = Promise.withResolvers<void>();
     const releaseRead = Promise.withResolvers<void>();

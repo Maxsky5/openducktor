@@ -21,7 +21,12 @@ export const restoreSessionPermissions = async (input: {
   const detail = input.detail ?? (await readPermissionSession(input));
   const native = detail.permission ?? [];
   const permission = addPermissionRules(native, input.policy.permission);
-  if (permission !== native) await setSessionPermissions({ ...input, permission });
+  if (permission !== native)
+    await appendSessionPermissions({
+      client: input.client,
+      detail,
+      permission: input.policy.permission,
+    });
 };
 
 export const readPermissionSession = async (input: {
@@ -43,27 +48,26 @@ export const readPermissionSession = async (input: {
   }
 };
 
-export const setSessionPermissions = async (input: {
+/** OpenCode appends update rules. Check the primary response against the full list. */
+export const appendSessionPermissions = async (input: {
   client: SessionRecord["client"];
-  externalSessionId: string;
-  workingDirectory: string;
+  detail: ParsedOpencodeSession;
   permission: OpencodePermissionRule[];
 }): Promise<void> => {
-  const action = permissionAction("install", input.externalSessionId, input.workingDirectory);
+  const { id, directory } = input.detail;
+  const action = permissionAction("install", id, directory);
   try {
     const result = await input.client.session.update({
-      directory: input.workingDirectory,
-      sessionID: input.externalSessionId,
+      directory,
+      sessionID: id,
       permission: input.permission,
     });
     if (result.error || result.data == null)
       throw toOpenCodeRequestError(action, result.error, result.response);
-    checkSessionPermissions(
-      result.data,
-      input.workingDirectory,
-      input.externalSessionId,
-      input.permission,
-    );
+    checkSessionPermissions(result.data, directory, id, [
+      ...(input.detail.permission ?? []),
+      ...input.permission,
+    ]);
   } catch (error) {
     throw toOpenCodeRequestError(action, error);
   }

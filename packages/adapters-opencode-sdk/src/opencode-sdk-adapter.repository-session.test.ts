@@ -771,11 +771,11 @@ describe("OpencodeSdkAdapter repository sessions", () => {
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
     mock.session.updateCalls.length = 0;
-    const get = mock.client.session.get;
-    mock.client.session.get = async (...args) => {
-      const response = await get(...args);
-      return { ...response, data: { ...response.data!, permission: [] } };
-    };
+    await mock.client.session.update({
+      sessionID: started.externalSessionId,
+      directory: "/repo",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    });
     mock.session.updateResult = {
       data: undefined,
       error: new Error("permission update rejected"),

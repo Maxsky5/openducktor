@@ -82,7 +82,7 @@ import {
 import {
   restoreSessionPermissions,
   readPermissionSession,
-  setSessionPermissions,
+  appendSessionPermissions,
   checkSessionPermissions,
   assertTurnPermissionsReady,
 } from "./opencode-session-permissions";
@@ -665,11 +665,10 @@ export class OpencodeSdkAdapter
         new Error("The native fork response has no session ID."),
       );
     try {
-      checkSessionPermissions(forkedData, input.workingDirectory, externalSessionId);
-      await setSessionPermissions({
+      const detail = checkSessionPermissions(forkedData, input.workingDirectory, externalSessionId);
+      await appendSessionPermissions({
         client,
-        externalSessionId,
-        workingDirectory: input.workingDirectory,
+        detail,
         permission: addPermissionRules(source.permission ?? [], policy.permission),
       });
       await setSessionTitle({
