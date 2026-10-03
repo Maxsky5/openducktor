@@ -20,7 +20,7 @@ import {
 import { SettingsModal, SettingsModalProvider } from "./settings-modal";
 
 for (const shared of [true, false]) {
-  test(`${shared ? "shared" : "local"} settings keeps navigation after cancel and save`, async () => {
+  test(`${shared ? "shared" : "local"} settings keeps the prompt tab after cancel`, async () => {
     const settings = renderSettings(shared);
     try {
       let content = await settings.open();
@@ -35,6 +35,17 @@ for (const shared of [true, false]) {
       expect(content.getByRole("tab", { name: "Builder" }).getAttribute("aria-selected")).toBe(
         "true",
       );
+    } finally {
+      settings.unmount();
+    }
+  });
+
+  test(`${shared ? "shared" : "local"} settings keeps navigation after saving edits`, async () => {
+    const settings = renderSettings(shared);
+    try {
+      let content = await settings.open();
+      fireEvent.click(content.getByRole("button", { name: "System Prompts" }));
+      fireEvent.click(content.getByRole("tab", { name: "Builder" }));
       fireEvent.click(content.getByRole("button", { name: "Chat" }));
       const thinkingMessages = content.getByRole("switch", {
         name: "Show thinking messages in Chats and Workflows transcripts",
@@ -58,7 +69,7 @@ for (const shared of [true, false]) {
   });
 }
 
-test("shared settings follows deep links and remembers sections without keeping the repository target", async () => {
+test("shared settings remembers the section opened by a deep link", async () => {
   const settings = renderSettings(true);
   try {
     let content = await settings.open("Open roles");
@@ -66,16 +77,30 @@ test("shared settings follows deep links and remembers sections without keeping 
     await settings.close(content);
     content = await settings.open();
     expect(content.getByText("Custom agent roles")).toBeDefined();
-    await settings.close(content);
-    content = await settings.open("Open scripts");
+  } finally {
+    settings.unmount();
+  }
+});
+
+test("shared settings remembers the repository subsection and prompt tab", async () => {
+  const settings = renderSettings(true);
+  try {
+    let content = await settings.open("Open scripts");
     expect(content.getByLabelText("Worktree setup script (one command per line)")).toBeDefined();
     fireEvent.click(content.getByRole("button", { name: "Repo Prompts" }));
     fireEvent.click(content.getByRole("tab", { name: "QA" }));
     await settings.close(content);
     content = await settings.open();
     expect(content.getByRole("tab", { name: "QA" }).getAttribute("aria-selected")).toBe("true");
-    await settings.close(content);
-    content = await settings.open("Open missing scripts");
+  } finally {
+    settings.unmount();
+  }
+});
+
+test("shared settings clears the repository target after closing", async () => {
+  const settings = renderSettings(true);
+  try {
+    let content = await settings.open("Open missing scripts");
     expect(content.getByRole("alert").textContent).toContain("/missing");
     await settings.close(content);
     content = await settings.open();
@@ -86,10 +111,10 @@ test("shared settings follows deep links and remembers sections without keeping 
   }
 });
 
-test("issue import opens configuration for its repository after another settings section", async () => {
-  const settings = renderSettings(true);
-  try {
-    for (const section of ["Chat", "Scripts"]) {
+for (const section of ["Chat", "Scripts"]) {
+  test(`issue import opens repository configuration after ${section}`, async () => {
+    const settings = renderSettings(true);
+    try {
       let content = await settings.open();
       if (section === "Scripts") {
         fireEvent.click(content.getByRole("button", { name: "Repositories" }));
@@ -99,12 +124,11 @@ test("issue import opens configuration for its repository after another settings
       fireEvent.click(within(document.body).getByRole("button", { name: "Import issues" }));
       content = await settings.open("Open repository settings");
       expect(content.getByLabelText<HTMLInputElement>("Repository path").value).toBe("/repo");
-      await settings.close(content);
+    } finally {
+      settings.unmount();
     }
-  } finally {
-    settings.unmount();
-  }
-});
+  });
+}
 
 function renderSettings(shared: boolean) {
   const snapshot = createSettingsSnapshotFixture({
