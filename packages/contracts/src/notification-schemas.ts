@@ -130,9 +130,11 @@ const notificationSessionTargetFields = {
   taskId: withMaxUtf16Length(z.string().trim().min(1), 128).optional(),
 } as const;
 
-export const notificationSessionIdentitySchema = agentSessionRecordSchema
-  .pick({ externalSessionId: true, runtimeKind: true, workingDirectory: true })
-  .strict();
+export const notificationSessionIdentitySchema = z.strictObject({
+  externalSessionId: agentSessionRecordSchema.shape.externalSessionId,
+  runtimeKind: agentSessionRecordSchema.shape.runtimeKind,
+  workingDirectory: agentSessionRecordSchema.shape.workingDirectory,
+});
 export type NotificationSessionIdentity = z.infer<typeof notificationSessionIdentitySchema>;
 
 export const notificationNavigationTargetSchema = z.discriminatedUnion("type", [

@@ -310,6 +310,11 @@ export const agentUserMessageEventSchema = transcriptEventSchema({
 
 const inferredAgentRuntimeEventSchema = z.discriminatedUnion("type", [
   transcriptEventSchema({
+    type: z.literal("session_policy_notice"),
+    messageId: z.string(),
+    message: z.string(),
+  }),
+  transcriptEventSchema({
     type: z.literal("session_started"),
     message: z.string(),
   }),
@@ -437,6 +442,7 @@ export const agentRuntimeEventSchema = inferredAgentRuntimeEventSchema;
 export type AgentRuntimeEvent = z.infer<typeof agentRuntimeEventSchema>;
 
 export type AgentSessionTranscriptEventType =
+  | "session_policy_notice"
   | "session_started"
   | "assistant_delta"
   | "assistant_message"
@@ -456,6 +462,7 @@ export type AgentSessionTranscriptEventType =
   | "session_finished";
 
 const agentSessionTranscriptEventTypes: ReadonlySet<string> = new Set([
+  "session_policy_notice",
   "session_started",
   "assistant_delta",
   "assistant_message",

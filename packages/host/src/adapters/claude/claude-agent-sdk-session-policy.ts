@@ -1,3 +1,4 @@
+import type { ClaudePolicyFields } from "@openducktor/contracts";
 import type { Options, Query } from "@anthropic-ai/claude-agent-sdk";
 import { type AgentSessionScope, withAgentSessionTitle } from "@openducktor/core";
 import { Effect } from "effect";
@@ -18,6 +19,7 @@ export const requireClaudeSessionScope = (
       );
 
 export type ClaudeSessionLaunchInput = {
+  claudePolicy?: ClaudePolicyFields | null;
   externalSessionId: string;
   options: Pick<Options, "forkSession" | "resume" | "sessionId">;
   parentExternalSessionId?: string;

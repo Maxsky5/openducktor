@@ -1,6 +1,5 @@
 import {
   type AgentSessionContextUsage,
-  type AgentSessionControlSummary,
   type AgentSessionLivePendingApprovalRequest,
   type AgentSessionLivePendingQuestionRequest,
   type AgentSessionLiveRef,
@@ -9,8 +8,7 @@ import {
   agentSessionTranscriptEventSchema,
   isAgentSessionTranscriptEventType,
 } from "@openducktor/contracts";
-import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
-import type { AgentSessionSummary } from "@openducktor/core";
+import type { AgentEvent, AgentSessionSummary, AgentStreamPart } from "@openducktor/core";
 import type {
   AgentSessionLiveAdapterChange,
   AgentSessionLiveAdapterMutation,
@@ -18,6 +16,11 @@ import type {
 import { isClaudeSubagentTranscriptTarget } from "../claude/claude-agent-sdk-subagent-transcripts";
 import type { ClaudeAgentSdkEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
 import type { ClaudeRuntimeInstance } from "./claude-live-session-adapter-contract";
+import {
+  activityForPending,
+  activityForStatus,
+  activityForSummary,
+} from "./claude-live-session-activity";
 
 type LoadedContextResult = AgentSessionLiveAdapterMutation<AgentSessionContextUsage | null>;
 const refKey = (ref: AgentSessionLiveRef): string =>
@@ -28,37 +31,6 @@ const snapshotsEqual = (left: AgentSessionLiveSnapshot, right: AgentSessionLiveS
 
 const cloneSnapshot = (snapshot: AgentSessionLiveSnapshot): AgentSessionLiveSnapshot =>
   agentSessionLiveSnapshotSchema.parse(snapshot);
-
-const activityForSummary = (
-  status: AgentSessionControlSummary["status"],
-): AgentSessionLiveSnapshot["activity"] =>
-  status === "starting" || status === "running" ? "running" : "idle";
-
-const activityForPending = (
-  snapshot: AgentSessionLiveSnapshot,
-): AgentSessionLiveSnapshot["activity"] => {
-  if (snapshot.pendingQuestions.length > 0) {
-    return "waiting_for_question";
-  }
-  if (snapshot.pendingApprovals.length > 0) {
-    return "waiting_for_permission";
-  }
-  return "running";
-};
-
-const activityForStatus = (
-  status: Extract<AgentEvent, { type: "session_status" }>["status"],
-  snapshot: AgentSessionLiveSnapshot,
-): AgentSessionLiveSnapshot["activity"] => {
-  if (status.type === "busy") {
-    return "running";
-  }
-  if (status.type === "retry") {
-    return "retrying";
-  }
-  const pendingActivity = activityForPending(snapshot);
-  return pendingActivity === "running" ? "idle" : pendingActivity;
-};
 
 const toApprovalRequest = (
   event: Extract<AgentEvent, { type: "approval_required" }>,
@@ -345,7 +317,12 @@ export const createClaudeLiveSessionState = ({
         contextUsage,
       });
     }
-    if (event.type === "session_status") {
+    if (event.type === "session_policy_notice") {
+      const { messageId, message, timestamp } = event;
+      changes.push(
+        ...commitSnapshot({ ...snapshot, policyNotice: { messageId, message, timestamp } }),
+      );
+    } else if (event.type === "session_status") {
       changes.push(
         ...commitSnapshot({ ...snapshot, activity: activityForStatus(event.status, snapshot) }),
       );
@@ -487,6 +464,9 @@ export const createClaudeLiveSessionState = ({
       };
       if (summary.sessionAssociation.kind === "repository") {
         nextSnapshot.repositoryScope = summary.sessionAssociation;
+      }
+      if (current?.policyNotice) {
+        nextSnapshot.policyNotice = current.policyNotice;
       }
       if (options.parentExternalSessionId) {
         nextSnapshot.parentExternalSessionId = options.parentExternalSessionId;

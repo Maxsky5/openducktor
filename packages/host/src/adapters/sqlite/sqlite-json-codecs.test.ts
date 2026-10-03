@@ -89,4 +89,26 @@ describe("SQLite JSON codecs", () => {
 
     expect(sessions.map((session) => session.externalSessionId)).toEqual(["newer", "older"]);
   });
+
+  test("reads old session metadata without retaining its Claude policy", async () => {
+    const record = createAgentSessionRecord({ runtimeKind: "claude" });
+    const sessions = await Effect.runPromise(
+      agentSessionsFromRow(
+        taskRowFixture({
+          agentSessionsJson: JSON.stringify([
+            {
+              ...record,
+              claudeLaunchPolicy: {
+                kind: "claude",
+                version: 1,
+                workingDirectory: record.workingDirectory,
+                settings: { permissionMode: "bypassPermissions" },
+              },
+            },
+          ]),
+        }),
+      ),
+    );
+    expect(JSON.parse(encodeAgentSessionBatch(sessions))).toEqual([record]);
+  });
 });

@@ -65,7 +65,7 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
       defaults: { ...DEFAULT_CODEX_RUNTIME_POLICY },
       roleOverrides: {},
     },
-    claude: { enabled: false, executablePath: "/bin/claude" },
+    claude: { enabled: false, executablePath: "/bin/claude", defaults: {}, roleOverrides: {} },
   },
   agentModelFavorites: [],
   workspaces: {},

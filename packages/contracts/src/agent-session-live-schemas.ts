@@ -104,6 +104,14 @@ export const agentSessionLiveSnapshotSchema = z
     pendingQuestions: z.array(agentSessionLivePendingQuestionRequestSchema),
     contextUsage: agentSessionContextUsageSchema.nullable(),
     model: agentModelSelectionSchema.optional(),
+    policyNotice: z
+      .object({
+        messageId: nonEmptyStringSchema,
+        message: z.string(),
+        timestamp: isoTimestampSchema,
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 export type AgentSessionLiveSnapshot = z.infer<typeof agentSessionLiveSnapshotSchema>;

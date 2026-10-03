@@ -224,6 +224,7 @@ export function useAgentOrchestratorOperations({
     currentWorkspaceRepoPathRef,
     repoEpochRef,
     commitSessionCollection: sessionStore.commitSessionCollection,
+    applyLivePolicyNotices: sessionStore.applyLivePolicyNotices,
     liveSessionPort: liveSessionHostPort,
     transcriptEvents,
     recoverTranscriptGap,

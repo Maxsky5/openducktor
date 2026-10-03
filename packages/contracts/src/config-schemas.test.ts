@@ -471,7 +471,12 @@ describe("config-schemas", () => {
 
     expect(snapshot.agentRuntimes).toEqual(DEFAULT_AGENT_RUNTIMES);
     expect(globalConfig.agentRuntimes).toEqual(DEFAULT_AGENT_RUNTIMES);
-    expect(DEFAULT_AGENT_RUNTIMES.claude).toEqual({ enabled: false, executablePath: "" });
+    expect(DEFAULT_AGENT_RUNTIMES.claude).toEqual({
+      enabled: false,
+      executablePath: "",
+      defaults: {},
+      roleOverrides: {},
+    });
   });
 
   test("defaults missing and enabled-only codex runtime config", () => {

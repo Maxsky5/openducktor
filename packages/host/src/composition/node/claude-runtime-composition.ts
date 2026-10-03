@@ -1,3 +1,4 @@
+import type { ClaudeLaunchPolicyPort } from "../../application/runtimes/claude-launch-policy";
 import type { Effect } from "effect";
 import {
   createClaudeAgentSdkEventHub,
@@ -32,6 +33,7 @@ export type CreateClaudeRuntimeCompositionInput = {
   runtimeExecutableProbe: RuntimeExecutableProbePort;
   runtimeDistribution: HostRuntimeDistribution;
   settingsConfig: SettingsConfigPort;
+  launchPolicy: ClaudeLaunchPolicyPort;
   toolDiscovery: ToolDiscoveryPort;
   workingDirectoryDependencies: RuntimeWorkingDirectoryDependencies;
 };
@@ -44,6 +46,7 @@ export const createClaudeRuntimeComposition = ({
   runtimeExecutableProbe,
   runtimeDistribution,
   settingsConfig,
+  launchPolicy,
   toolDiscovery,
   workingDirectoryDependencies,
 }: CreateClaudeRuntimeCompositionInput): ClaudeRuntimeComposition => {
@@ -54,6 +57,7 @@ export const createClaudeRuntimeComposition = ({
   >[0]["prepareLiveSessionAdapter"] = (runtime, claudeExecutablePath) => {
     const agentSdkServiceInput: Parameters<typeof createClaudeAgentSdkService>[0] = {
       claudeExecutablePath,
+      launchPolicy,
       emit: eventHub.emit,
       onBackgroundFailure,
       resolveMcpBridgeConnection,

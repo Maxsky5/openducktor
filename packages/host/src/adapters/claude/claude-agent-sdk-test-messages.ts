@@ -33,6 +33,8 @@ type ClaudeSdkResultMessage = Extract<SDKMessage, { type: "result" }>;
 type ClaudeSdkStreamEventMessage = Extract<SDKMessage, { type: "stream_event" }>;
 type ClaudeSdkToolProgressMessage = Extract<SDKMessage, { type: "tool_progress" }>;
 type ClaudeSdkUsedSystemSubtype =
+  | "init"
+  | "status"
   | "background_tasks_changed"
   | "commands_changed"
   | "compact_boundary"
@@ -376,6 +378,25 @@ export function claudeSdkMessageFixture(
   }
 
   switch (message.subtype) {
+    case "init":
+      return {
+        apiKeySource: "none",
+        claude_code_version: "test",
+        cwd: "/repo",
+        tools: [],
+        mcp_servers: [],
+        model: "claude-test",
+        permissionMode: "default",
+        slash_commands: [],
+        output_style: "default",
+        skills: [],
+        plugins: [],
+        ...message,
+        session_id,
+        uuid,
+      };
+    case "status":
+      return { status: null, ...message, session_id, uuid };
     case "commands_changed":
       return { commands: [], ...message, session_id, uuid };
     case "compact_boundary":

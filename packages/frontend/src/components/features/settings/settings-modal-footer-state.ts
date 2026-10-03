@@ -13,6 +13,7 @@ type SettingsModalFooterValidationSummary = {
   promptPlaceholderErrorCount: number;
   reusablePromptFieldErrorCount: number;
   runtimeAvailabilityErrorCount: number;
+  claudeSettingsError?: string | null | undefined;
   hasUnacknowledgedCodexDangerousSettings: boolean;
   repoScriptFieldErrorCount: number;
 };
@@ -42,6 +43,7 @@ const validationMessage = (summary: SettingsModalFooterValidationSummary): strin
   fieldErrors(summary.promptPlaceholderErrorCount, "prompt placeholder") ??
   fieldErrors(summary.reusablePromptFieldErrorCount, "reusable prompt field") ??
   fieldErrors(summary.runtimeAvailabilityErrorCount, "runtime executable") ??
+  summary.claudeSettingsError ??
   (summary.hasUnacknowledgedCodexDangerousSettings
     ? "Confirm the Codex safety acknowledgement before saving."
     : fieldErrors(summary.repoScriptFieldErrorCount, "dev server field"));
@@ -64,6 +66,7 @@ export function resolveSettingsModalFooter({
     validationSummary.reusablePromptFieldErrorCount > 0 ||
     validationSummary.customAgentRoleFieldErrorCount > 0 ||
     validationSummary.runtimeAvailabilityErrorCount > 0 ||
+    Boolean(validationSummary.claudeSettingsError) ||
     validationSummary.hasUnacknowledgedCodexDangerousSettings;
   const messages: Array<{ id: string; text: string }> = [];
   if (errors.saveError) {

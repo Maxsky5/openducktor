@@ -60,6 +60,44 @@ const createConsumerHarness = (
 };
 
 describe("agent session transcript event consumer", () => {
+  test("updates native Claude policy feedback in place without changing session activity", () => {
+    const liveRef = { ...sessionRef, runtimeKind: "claude" as const };
+    const { consumer, sessionsRef } = createConsumerHarness(
+      60_000,
+      buildSession({ runtimeKind: "claude" }),
+    );
+    const before = getSession(sessionsRef).status;
+    try {
+      for (const message of [
+        "Automatic approvals requested; native mode is unconfirmed.",
+        "Claude reports automatic approvals are active.",
+      ])
+        consumer.handle({
+          type: "session_policy_notice",
+          externalSessionId: liveRef.externalSessionId,
+          sessionRef: liveRef,
+          timestamp: "2026-10-03T10:00:00Z",
+          messageId: "policy",
+          message,
+        });
+      expect(getSessionMessages(sessionsRef).filter((message) => message.id === "policy")).toEqual([
+        expect.objectContaining({
+          role: "system",
+          content: "Claude reports automatic approvals are active.",
+          meta: {
+            kind: "session_notice",
+            tone: "info",
+            reason: "runtime_policy",
+            title: "Claude permission mode",
+          },
+        }),
+      ]);
+      expect(getSession(sessionsRef).status).toBe(before);
+    } finally {
+      consumer.close();
+    }
+  });
+
   for (const runtimeKind of ["opencode", "codex", "claude"] as const) {
     for (const batchWindowMs of [0, 60_000]) {
       test(`keeps concurrent ${runtimeKind} reads in call order with a ${batchWindowMs} ms batch`, async () => {

@@ -11,6 +11,8 @@ import type {
 } from "./claude-agent-sdk-types";
 
 export type ClaudeEventSession = ClaudeBackgroundToolState & {
+  appliedPermissionMode?: string;
+  requestedPermissionMode?: string;
   acceptedUserMessages?: readonly ClaudeAcceptedUserMessage[];
   activeBackgroundSubagentTaskIds?: Set<string>;
   activeManualCompaction?: ClaudeManualCompactionState;

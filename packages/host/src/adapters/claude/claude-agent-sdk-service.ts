@@ -122,7 +122,9 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
 
   startSession(input: StartAgentSessionInput, runtimeId: string) {
     return requireClaudeSessionScope(input.sessionScope, "start Claude session").pipe(
-      Effect.flatMap((scope) => this.start(input, runtimeId, scope)),
+      Effect.flatMap((scope) =>
+        this.createSession(input, runtimeId, freshClaudeSessionLaunch(scope, this.randomId())),
+      ),
     );
   }
 
@@ -135,7 +137,11 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
             resumeRetainedClaudeSession({ request: input, runtimeId, scope, session: existing }),
           );
         }
-        return this.resume(input, runtimeId, scope);
+        return this.createSession(
+          input,
+          runtimeId,
+          resumedClaudeSessionLaunch(scope, input.externalSessionId),
+        );
       }),
     );
   }
@@ -187,7 +193,13 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
 
   forkSession(input: ForkAgentSessionInput, runtimeId: string) {
     return requireClaudeSessionScope(input.sessionScope, "fork Claude session").pipe(
-      Effect.flatMap((scope) => this.fork(input, runtimeId, scope)),
+      Effect.flatMap((scope) =>
+        this.createSession(
+          input,
+          runtimeId,
+          forkedClaudeSessionLaunch(scope, this.randomId(), input.parentExternalSessionId),
+        ),
+      ),
     );
   }
 
@@ -368,28 +380,6 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     return this.sessionStore.stopSessionsForRuntime(runtimeId);
   }
 
-  private start(input: StartAgentSessionInput, runtimeId: string, scope: SessionScope) {
-    const externalSessionId = this.randomId();
-    return this.createSession(input, runtimeId, freshClaudeSessionLaunch(scope, externalSessionId));
-  }
-
-  private resume(input: ResumeAgentSessionInput, runtimeId: string, scope: SessionScope) {
-    return this.createSession(
-      input,
-      runtimeId,
-      resumedClaudeSessionLaunch(scope, input.externalSessionId),
-    );
-  }
-
-  private fork(input: ForkAgentSessionInput, runtimeId: string, scope: SessionScope) {
-    const externalSessionId = this.randomId();
-    return this.createSession(
-      input,
-      runtimeId,
-      forkedClaudeSessionLaunch(scope, externalSessionId, input.parentExternalSessionId),
-    );
-  }
-
   private createSession(
     input: ClaudeSessionInput,
     runtimeId: string,
@@ -397,6 +387,13 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     onContinuationAdmission?: () => void,
   ) {
     return Effect.gen(this, function* () {
+      const isNew = !sessionInput.options.resume || sessionInput.options.forkSession === true;
+      const claudePolicy = isNew
+        ? yield* this.input.launchPolicy.resolve({
+            role: input.sessionScope.kind === "workflow" ? input.sessionScope.role : null,
+          })
+        : null;
+      const launchSessionInput = { ...sessionInput, claudePolicy };
       const resumeSessionId = sessionInput.options.resume;
       const initialTodos = resumeSessionId
         ? yield* fromPromise("claudeRuntime.loadSessionTodos", () =>
@@ -433,7 +430,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
         },
         runtimeId,
         serviceInput: this.input,
-        sessionInput,
+        sessionInput: launchSessionInput,
         sessionStore: this.sessionStore,
       };
       if (onContinuationAdmission) {

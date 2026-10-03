@@ -1,3 +1,4 @@
+import type { ClaudeLaunchPolicyPort } from "../../application/runtimes/claude-launch-policy";
 import type {
   PermissionResult,
   Query,
@@ -41,6 +42,7 @@ export type ClaudeMcpBridgeConnectionResolver = (
 
 export type CreateClaudeAgentSdkServiceInput = {
   claudeExecutablePath: string;
+  launchPolicy: ClaudeLaunchPolicyPort;
   emit?: (session: ClaudeSessionContext, event: ClaudeAgentSdkEvent) => void;
   fileSearch?: ClaudeWorkspaceFileSearch;
   onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
@@ -104,6 +106,8 @@ export type ClaudeSessionQuery = AsyncGenerator<SDKMessage, void> &
   >;
 
 export type ClaudeSession = ClaudeBackgroundToolState & {
+  appliedPermissionMode?: string;
+  requestedPermissionMode?: string;
   acceptedUserMessages: ClaudeAcceptedUserMessage[];
   activeBackgroundSubagentTaskIds?: Set<string>;
   activeManualCompaction?: ClaudeManualCompactionState;

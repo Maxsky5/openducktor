@@ -171,6 +171,7 @@ const createState = (
     currentWorkspaceRepoPathRef: { current: "/repo" },
     repoEpochRef: { current: 0 },
     commitSessionCollection: sessionStore.commitSessionCollection,
+    applyLivePolicyNotices: sessionStore.applyLivePolicyNotices,
     liveSessionPort,
     transcriptEvents,
     recoverTranscriptGap,
@@ -180,6 +181,7 @@ const createState = (
 
   return {
     callOrder,
+    subscribe: sessionStore.subscribe,
     resetWorkspace: sessionStore.resetWorkspace,
     replaceSession: sessionStore.replaceSession,
     getSession: () =>
@@ -229,6 +231,136 @@ const createRepositoryConflictRetryState = (
   });
 
 describe("useRepoSessionReadModel", () => {
+  test.each(["snapshot", "session_upsert"] as const)(
+    "publishes policy feedback and session fields together for %s",
+    async (type) => {
+      const initial = snapshot({
+        ref: { ...snapshot().ref, runtimeKind: "claude" },
+        title: "Old title",
+      });
+      const state = createState(
+        (emit) => emit({ type: "snapshot", repoPath: "/repo", sessions: [initial] }),
+        { ...record, runtimeKind: "claude" },
+      );
+      const observed: Array<{
+        title: string | undefined;
+        status: string | undefined;
+        messages: string[];
+      }> = [];
+      let unsubscribe = () => {};
+      try {
+        await state.harness.mount();
+        await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+        unsubscribe = state.subscribe(() => {
+          const session = state.getStoredSession(initial.ref);
+          observed.push({
+            title: session?.title,
+            status: session?.status,
+            messages: session
+              ? sessionMessagesToArray(session).map((message) => message.content)
+              : [],
+          });
+        });
+        const updated = {
+          ...initial,
+          title: "New title",
+          activity: "running" as const,
+          policyNotice: {
+            messageId: "claude-permission-mode:thread-1",
+            timestamp: "2026-10-03T10:00:00Z",
+            message: "Claude reports permission mode 'auto'.",
+          },
+        };
+        state.emit(
+          type === "snapshot"
+            ? { type, repoPath: "/repo", sessions: [updated] }
+            : { type, session: updated },
+        );
+        expect(observed).toEqual([
+          { title: "New title", status: "running", messages: [updated.policyNotice.message] },
+        ]);
+      } finally {
+        unsubscribe();
+        await state.harness.unmount();
+        state.queryClient.clear();
+      }
+    },
+  );
+
+  test.each(["unconfirmed", "reported"] as const)(
+    "keeps %s startup permission feedback through workflow registration",
+    async (mode) => {
+      const state = createState(
+        (emit) => emit({ type: "snapshot", repoPath: "/repo", sessions: [] }),
+        [],
+      );
+      const ref = { ...snapshot().ref, runtimeKind: "claude" as const };
+      const session = createAgentSessionFixture({
+        ...ref,
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        status: "starting",
+      });
+      const policyNotice = {
+        messageId: "claude-permission-mode:thread-1",
+        timestamp: "2026-10-03T10:00:00Z",
+        message:
+          mode === "unconfirmed"
+            ? "Automatic approvals requested; native mode is unconfirmed."
+            : "Claude reports automatic approvals are active.",
+      };
+      const liveSession = { ...snapshot({ ref, activity: "running" }), policyNotice };
+      const consumer = createAgentSessionTranscriptEventConsumer({
+        readSession: state.getStoredSession,
+        ensureSession: (_identity, createSession) => createSession(),
+        updateSession: state.updateSession,
+        updateSessionTodos: () => undefined,
+        sessionTurnState: createSessionTurnState(),
+      });
+      state.props.transcriptEvents = consumer;
+      try {
+        await state.harness.mount();
+        await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+        state.emit({ type: "session_upsert", session: liveSession });
+        state.emit({
+          type: "transcript_event",
+          event: {
+            ...policyNotice,
+            type: "session_policy_notice",
+            externalSessionId: ref.externalSessionId,
+            sessionRef: ref,
+          },
+        });
+        expect(state.getStoredSession(ref)).toBeNull();
+        state.replaceSession(session);
+        // The launch can replace a record-hydrated session again before attachment finishes.
+        state.replaceSession(session);
+        expect(sessionMessagesToArray(state.getStoredSession(ref)!)).toEqual([
+          expect.objectContaining({
+            id: policyNotice.messageId,
+            role: "system",
+            content: policyNotice.message,
+            meta: expect.objectContaining({ reason: "runtime_policy" }),
+          }),
+        ]);
+        expect(state.getStoredSession(ref)?.status).toBe("starting");
+        const reported = {
+          ...policyNotice,
+          timestamp: "2026-10-03T10:00:01Z",
+          message: "Claude reports permission mode 'default'. Automatic approvals are not active.",
+        };
+        state.emit({ type: "session_upsert", session: { ...liveSession, policyNotice: reported } });
+        state.replaceSession(session);
+        expect(sessionMessagesToArray(state.getStoredSession(ref)!)).toEqual([
+          expect.objectContaining({ id: reported.messageId, content: reported.message }),
+        ]);
+      } finally {
+        consumer.close();
+        await state.harness.unmount();
+        state.queryClient.clear();
+      }
+    },
+  );
+
   test.each([false, true])(
     "chat record failure does not block task observation, cached=%s",
     async (cached) => {

@@ -164,7 +164,6 @@ export function SettingsModalContent({
       <AgentRuntimesSection
         agentRuntimes={snapshotDraft.agentRuntimes}
         runtimeDefinitions={runtimeDefinitions}
-        runtimeCheck={controller.runtimeCheck}
         isLoadingRuntimeDefinitions={isLoadingRuntimeDefinitions}
         runtimeDefinitionsError={runtimeDefinitionsError}
         runtimeDiscoveryError={runtimeDiscoveryError}
@@ -173,6 +172,9 @@ export function SettingsModalContent({
         onCheckAgain={checkRuntimeExecutablesAgain}
         isCheckingExecutables={isCheckingRuntimeExecutables}
         disabled={isInteractionDisabled}
+        requiresClaudeDangerAcknowledgement={controller.requiresClaudeDangerAcknowledgement}
+        isClaudeDangerAcknowledged={controller.isClaudeDangerAcknowledged}
+        onClaudeDangerAcknowledgedChange={controller.setClaudeDangerAcknowledged}
         requiresCodexDangerAcknowledgement={requiresCodexDangerAcknowledgement}
         isCodexDangerAcknowledged={isCodexDangerAcknowledged}
         onCodexDangerAcknowledgedChange={setCodexDangerAcknowledged}

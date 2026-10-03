@@ -1,3 +1,10 @@
+import { ClaudePolicySection } from "./settings-claude-policy-section";
+import {
+  RuntimePolicyCard,
+  RuntimePolicyDefault,
+  RuntimePolicyInfo,
+  RuntimePolicyRoleOverrides,
+} from "./settings-runtime-policy-layout";
 import {
   type AgentRuntimes,
   CODEX_APPROVAL_POLICY_VALUES,
@@ -7,7 +14,6 @@ import {
   type CodexRoleOverride,
   type CodexRuntimeConfig,
   DEFAULT_CODEX_RUNTIME_POLICY,
-  type RuntimeCheck,
   type RuntimeDescriptor,
   type RuntimeKind,
   resolveCodexEffectivePolicy,
@@ -19,12 +25,10 @@ import { toast } from "sonner";
 import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { errorMessage } from "@/lib/errors";
-import { openExternalUrl } from "@/lib/open-external-url";
 import { cn } from "@/lib/utils";
 import type { RuntimeExecutableValidationState } from "@/state/queries/use-runtime-executable-validation";
 import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
@@ -39,7 +43,6 @@ type RuntimeExecutableFocusRequest = Extract<
 type AgentRuntimesSectionProps = {
   agentRuntimes: AgentRuntimes;
   runtimeDefinitions: RuntimeDescriptor[];
-  runtimeCheck?: RuntimeCheck | null;
   isLoadingRuntimeDefinitions: boolean;
   runtimeDefinitionsError: string | null;
   runtimeDiscoveryError: string | null;
@@ -48,6 +51,9 @@ type AgentRuntimesSectionProps = {
   onCheckAgain: () => Promise<void>;
   isCheckingExecutables: boolean;
   disabled: boolean;
+  requiresClaudeDangerAcknowledgement: boolean;
+  isClaudeDangerAcknowledged: boolean;
+  onClaudeDangerAcknowledgedChange: (value: boolean) => void;
   requiresCodexDangerAcknowledgement: boolean;
   isCodexDangerAcknowledged: boolean;
   onCodexDangerAcknowledgedChange: (acknowledged: boolean) => void;
@@ -119,18 +125,6 @@ const FEATURE_FIELDS: CodexPolicyField[] = [
 ];
 
 const INHERIT_ROLE_OVERRIDE_VALUE = "__inherit__";
-const CLAUDE_INSTALLATION_URL = "https://docs.anthropic.com/en/docs/claude-code/getting-started";
-const CLAUDE_PLAN_POLICY_URL =
-  "https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan";
-
-const openClaudeSetupUrl = (url: string): void => {
-  void openExternalUrl(url).catch((error) => {
-    toast.error("Failed to open Claude setup link", {
-      description: errorMessage(error),
-    });
-  });
-};
-
 const CODEX_POLICY_VALUES_BY_FIELD: CodexPolicyValuesByField = {
   sandboxMode: CODEX_SANDBOX_MODE_VALUES,
   approvalPolicy: CODEX_APPROVAL_POLICY_VALUES,
@@ -240,78 +234,6 @@ function PolicyValueDropdown<T extends string | boolean>({
         onValueChange={(nextValue) => onChange(policyValueFromOption(values, nextValue))}
       />
     </div>
-  );
-}
-
-function ClaudeSetup({ runtimeCheck }: { runtimeCheck: RuntimeCheck | null }): ReactElement {
-  const health = runtimeCheck?.runtimes.find((runtime) => runtime.kind === "claude");
-  let installationStatus = "Not checked";
-  if (runtimeCheck !== null) {
-    if (health?.ok) {
-      installationStatus = health.version ? `Ready (${health.version})` : "Ready";
-    } else {
-      installationStatus = "Needs setup";
-    }
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Claude Code setup</CardTitle>
-        <CardDescription>
-          OpenDucktor uses your external Claude Code installation and its existing authentication.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <dl className="grid gap-3 text-sm sm:grid-cols-2">
-          <div className="flex flex-col gap-1">
-            <dt className="font-medium text-foreground">Installation</dt>
-            <dd className="text-muted-foreground">{installationStatus}</dd>
-          </div>
-          <div className="flex flex-col gap-1">
-            <dt className="font-medium text-foreground">Authentication</dt>
-            <dd className="text-muted-foreground">Verified when a Claude session starts</dd>
-          </div>
-        </dl>
-
-        {health?.error ? <p className="text-sm text-destructive">{health.error}</p> : null}
-
-        <ol className="flex list-decimal flex-col gap-2 pl-5 text-sm text-muted-foreground">
-          <li>
-            Install Claude Code, then run <code className="font-mono text-foreground">claude</code>{" "}
-            once to sign in.
-          </li>
-          <li>
-            Use <code className="font-mono text-foreground">/login</code> in Claude Code to choose a
-            subscription or Console account before enabling this runtime.
-          </li>
-          <li>
-            Review billing before starting work: an{" "}
-            <code className="font-mono text-foreground">ANTHROPIC_API_KEY</code> can select
-            pay-as-you-go API billing instead of subscription usage.
-          </li>
-        </ol>
-
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => openClaudeSetupUrl(CLAUDE_INSTALLATION_URL)}
-          >
-            Installation and authentication
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => openClaudeSetupUrl(CLAUDE_PLAN_POLICY_URL)}
-          >
-            Current Agent SDK plan policy
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
   );
 }
 
@@ -486,25 +408,13 @@ function CodexFeatureGroup<Field extends CodexPolicyField>({
   const roleOverrideSwitchId = `codex-${field}-role-overrides`;
 
   return (
-    <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4">
-      <div className="flex flex-col gap-1">
-        <h4 className="text-base font-semibold text-foreground">{POLICY_LABELS[field]}</h4>
-        <p className="text-sm text-muted-foreground">
-          Configure the default value, then opt into role-specific overrides only when needed.
-        </p>
-      </div>
-
+    <RuntimePolicyCard title={POLICY_LABELS[field]}>
       <PolicyInfoPanel field={field} />
 
-      <div className="grid gap-3 border-t border-border pt-4 sm:grid-cols-[minmax(0,1fr)_minmax(14rem,18rem)] sm:items-center">
-        <div className="flex flex-col gap-1">
-          <Label id={defaultLabelId} className="text-sm font-medium text-foreground">
-            Default {POLICY_LABELS[field].toLowerCase()}
-          </Label>
-          <p className="text-xs text-muted-foreground">
-            Used by every role unless that role overrides it.
-          </p>
-        </div>
+      <RuntimePolicyDefault
+        labelId={defaultLabelId}
+        label={`Default ${POLICY_LABELS[field].toLowerCase()}`}
+      >
         <PolicyValueDropdown
           value={defaultValue}
           values={defaultValuesForField(field)}
@@ -512,29 +422,17 @@ function CodexFeatureGroup<Field extends CodexPolicyField>({
           labelId={defaultLabelId}
           onChange={(value) => onDefaultChange(field, value)}
         />
-      </div>
+      </RuntimePolicyDefault>
 
       <EffectivePolicyNotes config={config} field={field} />
 
-      <div className="flex flex-col gap-3 border-t border-border pt-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex flex-col gap-1">
-            <Label htmlFor={roleOverrideSwitchId} className="text-sm font-medium text-foreground">
-              Role overrides
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              Enable this only when a role needs a different value for this setting.
-            </p>
-          </div>
-          <Switch
-            id={roleOverrideSwitchId}
-            checked={roleOverridesVisible}
-            disabled={disabled}
-            onCheckedChange={(enabled) => onRoleOverridesEnabledChange(field, enabled)}
-            aria-label={`Enable ${POLICY_LABELS[field]} role overrides`}
-          />
-        </div>
-
+      <RuntimePolicyRoleOverrides
+        id={roleOverrideSwitchId}
+        label={POLICY_LABELS[field]}
+        enabled={roleOverridesVisible}
+        disabled={disabled}
+        onEnabledChange={(enabled) => onRoleOverridesEnabledChange(field, enabled)}
+      >
         {roleOverridesVisible ? (
           <RoleOverrideRows
             field={field}
@@ -543,8 +441,8 @@ function CodexFeatureGroup<Field extends CodexPolicyField>({
             onOverrideChange={onOverrideChange}
           />
         ) : null}
-      </div>
-    </div>
+      </RuntimePolicyRoleOverrides>
+    </RuntimePolicyCard>
   );
 }
 
@@ -555,20 +453,23 @@ function PolicyInfoPanel<Field extends CodexPolicyField>({
 }): ReactElement {
   const values = defaultValuesForField(field);
   return (
-    <div className="flex flex-col gap-2.5 rounded-md border border-info-border bg-info-surface px-3 py-3 text-foreground">
+    <RuntimePolicyInfo>
       <p className="max-w-3xl text-sm leading-6 text-pretty">{FEATURE_HELP[field]}</p>
       <dl className="grid gap-1.5 border-info-border/70 border-t pt-2 text-sm">
         {values.map((option) => {
           const display = policyValueDisplay(option);
           return (
-            <div key={String(option)} className="grid gap-1 sm:grid-cols-[10rem_minmax(0,1fr)]">
+            <div
+              key={String(option)}
+              className="grid gap-1 @min-[34rem]:grid-cols-[10rem_minmax(0,1fr)]"
+            >
               <dt className="font-semibold">{display.label}</dt>
               <dd className="leading-relaxed text-foreground/80">{display.description}</dd>
             </div>
           );
         })}
       </dl>
-    </div>
+    </RuntimePolicyInfo>
   );
 }
 
@@ -596,7 +497,7 @@ function RoleOverrideRows<Field extends CodexPolicyField>({
         return (
           <div
             key={role}
-            className="grid gap-2 px-3 py-2.5 sm:grid-cols-[minmax(7rem,9rem)_minmax(0,1fr)] sm:items-center"
+            className="grid gap-2 px-3 py-2.5 @min-[28rem]:grid-cols-[minmax(7rem,9rem)_minmax(0,1fr)] @min-[28rem]:items-center"
           >
             <Label id={roleLabelId} className="text-sm font-medium text-foreground">
               {AGENT_ROLE_LABELS[role]}
@@ -681,13 +582,7 @@ function valuesForRole<Field extends CodexPolicyField>(
   return values;
 }
 
-function EffectivePolicyNotes({
-  config,
-  field,
-}: {
-  config: CodexRuntimeConfig;
-  field: CodexPolicyField;
-}): ReactElement | null {
+const effectivePolicyNotes = (config: CodexRuntimeConfig, field: CodexPolicyField) => {
   const notes: string[] = [];
   const errors: string[] = [];
   let reviewerIsInactive = false;
@@ -715,6 +610,18 @@ function EffectivePolicyNotes({
     notes.push("Reviewer is saved but has no effect while approval prompts are never.");
   }
 
+  return { notes, errors };
+};
+
+function EffectivePolicyNotes({
+  config,
+  field,
+}: {
+  config: CodexRuntimeConfig;
+  field: CodexPolicyField;
+}): ReactElement | null {
+  const { notes, errors } = effectivePolicyNotes(config, field);
+
   if (notes.length === 0 && errors.length === 0) {
     return null;
   }
@@ -736,7 +643,6 @@ function EffectivePolicyNotes({
 export function AgentRuntimesSection({
   agentRuntimes,
   runtimeDefinitions,
-  runtimeCheck = null,
   isLoadingRuntimeDefinitions,
   runtimeDefinitionsError,
   runtimeDiscoveryError,
@@ -745,6 +651,9 @@ export function AgentRuntimesSection({
   onCheckAgain,
   isCheckingExecutables,
   disabled,
+  requiresClaudeDangerAcknowledgement,
+  isClaudeDangerAcknowledged,
+  onClaudeDangerAcknowledgedChange,
   requiresCodexDangerAcknowledgement,
   isCodexDangerAcknowledged,
   onCodexDangerAcknowledgedChange,
@@ -767,7 +676,7 @@ export function AgentRuntimesSection({
     ) ?? sortedRuntimeDefinitions[0];
 
   return (
-    <div className="grid gap-4 p-4">
+    <div className="@container/runtime-settings grid gap-4 p-4">
       <div className="space-y-2">
         <h3 className="text-sm font-semibold text-foreground">Agent Runtimes</h3>
         <p className="text-xs text-muted-foreground">
@@ -831,9 +740,15 @@ export function AgentRuntimesSection({
       ) : null}
 
       {selectedDefinition ? (
-        <div className="grid gap-4 overflow-hidden rounded-md border border-border bg-card md:grid-cols-[15rem_minmax(0,1fr)]">
-          <aside className="border-border bg-muted/50 p-3 md:border-r">
-            <div className="space-y-1" role="tablist">
+        <div className="grid gap-4 overflow-hidden rounded-md border border-border bg-card @min-[48rem]/runtime-settings:grid-cols-[15rem_minmax(0,1fr)]">
+          <aside
+            aria-label="Agent runtimes"
+            className="border-b border-border bg-muted/50 p-3 @min-[48rem]/runtime-settings:border-r @min-[48rem]/runtime-settings:border-b-0"
+          >
+            <div
+              className="grid gap-1 @min-[32rem]/runtime-settings:grid-cols-3 @min-[48rem]/runtime-settings:grid-cols-1"
+              role="tablist"
+            >
               {sortedRuntimeDefinitions.map((definition) => {
                 const runtimeKind = definition.kind;
                 const enabled = agentRuntimes[runtimeKind]?.enabled === true;
@@ -928,7 +843,18 @@ export function AgentRuntimesSection({
                   />
                 ) : null}
                 {selectedDefinition.kind === "claude" ? (
-                  <ClaudeSetup runtimeCheck={runtimeCheck} />
+                  <>
+                    <ClaudePolicySection
+                      config={agentRuntimes.claude}
+                      disabled={disabled}
+                      requiresAcknowledgement={requiresClaudeDangerAcknowledgement}
+                      acknowledged={isClaudeDangerAcknowledged}
+                      onAcknowledgedChange={onClaudeDangerAcknowledgedChange}
+                      onChange={(claude) =>
+                        onUpdateAgentRuntimes((current) => ({ ...current, claude }))
+                      }
+                    />
+                  </>
                 ) : null}
               </div>
             );

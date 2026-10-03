@@ -101,6 +101,7 @@ export type AgentChatMessageMeta =
       startedAtMs?: number;
       endedAtMs?: number;
     }
+  | { kind: "session_notice"; tone: "info"; reason: "runtime_policy"; title: string }
   | {
       kind: "session_notice";
       tone: "cancelled";

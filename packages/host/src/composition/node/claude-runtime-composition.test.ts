@@ -107,6 +107,9 @@ const createComposition = (options: {
     runtimeDistribution: createArtifactRuntimeDistribution({
       mcpLauncher: { kind: "executable", executablePath: process.execPath },
     }),
+    launchPolicy: {
+      resolve: () => Effect.succeed({}),
+    },
     settingsConfig: createFixedRuntimeSettingsConfig("claude", process.execPath),
     toolDiscovery: createToolDiscovery(),
     workingDirectoryDependencies,

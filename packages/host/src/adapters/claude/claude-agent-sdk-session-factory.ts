@@ -156,8 +156,19 @@ export const createClaudeAgentSdkSession = async ({
       emit,
       resumeInterruptedTurn: sessionInput.resumeInterruptedTurn === true,
       preserveNativeSettings: sessionInput.preserveNativeSettings === true,
+      claudePolicy: sessionInput.claudePolicy ?? null,
       sessionOptions,
     });
+    if (options.permissionMode) sessionContext.requestedPermissionMode = options.permissionMode;
+    if (options.permissionMode === "auto")
+      emit(sessionContext, {
+        type: "session_policy_notice",
+        externalSessionId: sessionContext.externalSessionId,
+        timestamp: now(),
+        messageId: `claude-permission-mode:${sessionContext.externalSessionId}`,
+        message:
+          "Automatic approvals requested. Claude has not confirmed the applied permission mode.",
+      });
     sdkQuery = query({ prompt: queue, options });
   } catch (error) {
     abortController.abort();

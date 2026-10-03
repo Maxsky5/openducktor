@@ -1,13 +1,12 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import {
-  filterEscalatingDefaultMode,
   type McpServerConfig,
   type Options,
   resolveSettings,
 } from "@anthropic-ai/claude-agent-sdk";
-import { CLAUDE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { type ClaudePolicyFields, CLAUDE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { AGENT_ROLE_TOOL_POLICY } from "@openducktor/core";
 import { Effect } from "effect";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
@@ -64,6 +63,7 @@ type BuildClaudeAgentSdkOptionsInput = {
   resolvedDependencies: ClaudeAgentSdkOptionsDependencies;
   resumeInterruptedTurn?: boolean;
   preserveNativeSettings?: boolean;
+  claudePolicy?: ClaudePolicyFields | null;
 };
 
 const CLAUDE_OPENDUCKTOR_MCP_TOKEN_FILE_ENV = "ODT_HOST_TOKEN_FILE";
@@ -117,6 +117,7 @@ export const buildClaudeAgentSdkOptions = async ({
   randomId,
   resolvedDependencies,
   preserveNativeSettings,
+  claudePolicy,
   resumeInterruptedTurn,
   serviceInput,
   session,
@@ -132,8 +133,8 @@ export const buildClaudeAgentSdkOptions = async ({
     }),
     resolveSettings({ cwd: input.workingDirectory }),
   ]);
-  const permissionMode =
-    filterEscalatingDefaultMode(resolvedSettings).permissions?.defaultMode ?? "default";
+  const overlay = claudePolicy;
+  const permissionMode = overlay?.permissionMode;
   const model = input.model;
   const readOnlyWorkflowRole = isReadOnlyWorkflowRole(workflowRole);
   const systemPrompt = [
@@ -177,7 +178,6 @@ export const buildClaudeAgentSdkOptions = async ({
       ],
     },
     mcpServers,
-    permissionMode,
     systemPrompt: {
       type: "preset",
       preset: "claude_code",
@@ -204,7 +204,47 @@ export const buildClaudeAgentSdkOptions = async ({
       !("systemPrompt" in input && input.systemPrompt))
   ) {
     delete options.systemPrompt;
-    delete options.permissionMode;
+  }
+  const nativePreservation =
+    claudePolicy === null || (claudePolicy === undefined && preserveNativeSettings);
+  // The supported SDK leaves an omitted mode to Claude Code's native settings and policy.
+  if (permissionMode === undefined) delete options.permissionMode;
+  else options.permissionMode = permissionMode;
+  const managedSandbox = resolvedSettings.sources.findLast((source) => source.source === "managed")
+    ?.settings.sandbox;
+  const sandboxEnabled =
+    managedSandbox?.enabled ??
+    overlay?.sandbox?.enabled ??
+    resolvedSettings.effective.sandbox?.enabled;
+  if (!nativePreservation && sandboxEnabled && managedSandbox?.failIfUnavailable === false)
+    throw new HostValidationError({
+      field: "sandbox.failIfUnavailable",
+      message:
+        "Managed Claude settings permit execution when isolation is unavailable. Ask your administrator to set sandbox.failIfUnavailable to true before launching an enabled sandbox.",
+    });
+  if (overlay?.permissions) {
+    const permissions: NonNullable<
+      Exclude<Options["settings"], string | undefined>["permissions"]
+    > = {};
+    for (const action of ["allow", "ask", "deny"] as const) {
+      const rules = overlay.permissions[action];
+      if (rules !== undefined) permissions[action] = rules;
+    }
+    options.settings = { permissions };
+  }
+  // Enforce failure on unsupported isolation, including an inherited enabled sandbox.
+  if (!nativePreservation) {
+    const sandbox = structuredClone(overlay?.sandbox ?? {});
+    const path = (value: string) =>
+      isAbsolute(value) || value.startsWith("~/") ? value : resolve(input.workingDirectory, value);
+    if (sandbox.filesystem) {
+      for (const key of ["allowWrite", "denyWrite", "denyRead", "allowRead"] as const) {
+        if (sandbox.filesystem[key]) sandbox.filesystem[key] = sandbox.filesystem[key].map(path);
+      }
+    }
+    if (sandbox.network?.allowUnixSockets)
+      sandbox.network.allowUnixSockets = sandbox.network.allowUnixSockets.map(path);
+    options.sandbox = { ...sandbox, failIfUnavailable: true };
   }
   if (options.permissionMode === "bypassPermissions") {
     options.allowDangerouslySkipPermissions = true;

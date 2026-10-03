@@ -72,7 +72,7 @@ describe("useOnboardingRuntimeSetup", () => {
     const runtimes: AgentRuntimes = {
       opencode: { enabled: true, executablePath: "/Users/dev/.local/bin/opencode" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
-      claude: { enabled: false, executablePath: "" },
+      claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
     const original = {
       filesystemListDirectory: host.filesystemListDirectory,
@@ -219,7 +219,7 @@ describe("useOnboardingRuntimeSetup", () => {
     const runtimes: AgentRuntimes = {
       opencode: { enabled: true, executablePath: "/valid/opencode" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
-      claude: { enabled: false, executablePath: "" },
+      claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
     const snapshot = createSettingsSnapshotFixture({ agentRuntimes: runtimes });
     const original = {
@@ -266,7 +266,7 @@ describe("useOnboardingRuntimeSetup", () => {
     const runtimes: AgentRuntimes = {
       opencode: { enabled: true, executablePath: "/initial/opencode" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
-      claude: { enabled: false, executablePath: "" },
+      claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
     const initialValidation = createDeferred<RuntimeExecutableCheck>();
     const latestValidation = createDeferred<RuntimeExecutableCheck>();
@@ -346,7 +346,7 @@ describe("useOnboardingRuntimeSetup", () => {
     const runtimes: AgentRuntimes = {
       opencode: { enabled: true, executablePath: "/valid/opencode" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
-      claude: { enabled: false, executablePath: "/broken/claude" },
+      claude: { enabled: false, executablePath: "/broken/claude", defaults: {}, roleOverrides: {} },
     };
     const originalCheck = host.runtimeExecutablesCheck;
     host.runtimeExecutablesCheck = mock(async (input) => {
@@ -376,7 +376,7 @@ describe("useOnboardingRuntimeSetup", () => {
     const runtimes: AgentRuntimes = {
       opencode: { enabled: true, executablePath: "/valid/opencode" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
-      claude: { enabled: false, executablePath: "/slow/claude" },
+      claude: { enabled: false, executablePath: "/slow/claude", defaults: {}, roleOverrides: {} },
     };
     const claudeValidation = createDeferred<RuntimeExecutableCheck>();
     const opencodePaths: string[] = [];
@@ -427,7 +427,7 @@ describe("useOnboardingRuntimeSetup", () => {
     const runtimes: AgentRuntimes = {
       opencode: { enabled: true, executablePath: "/valid/opencode" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
-      claude: { enabled: false, executablePath: "" },
+      claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
     const saveSettingsSnapshot = mock(async () => {});
     let discoveryAttempts = 0;
@@ -468,7 +468,7 @@ describe("useOnboardingRuntimeSetup", () => {
     const runtimes: AgentRuntimes = {
       opencode: { enabled: true, executablePath: "/valid/opencode" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
-      claude: { enabled: false, executablePath: "" },
+      claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
     const discovery = createDeferred<RuntimeExecutableCheck>();
     const originalCheck = host.runtimeExecutablesCheck;
@@ -508,7 +508,7 @@ describe("useOnboardingRuntimeSetup", () => {
     const runtimes: AgentRuntimes = {
       opencode: { enabled: true, executablePath: "/valid/opencode" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
-      claude: { enabled: false, executablePath: "" },
+      claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
     const discoveredRuntimes: AgentRuntimes = {
       ...runtimes,
@@ -566,7 +566,7 @@ describe("useOnboardingRuntimeSetup", () => {
     const runtimes: AgentRuntimes = {
       opencode: { enabled: true, executablePath: "/valid/opencode" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
-      claude: { enabled: false, executablePath: "" },
+      claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
     const discoveredRuntimes: AgentRuntimes = {
       ...runtimes,
@@ -614,7 +614,7 @@ describe("useOnboardingRuntimeSetup", () => {
     const runtimes: AgentRuntimes = {
       opencode: { enabled: true, executablePath: "/tools/opencode" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
-      claude: { enabled: false, executablePath: "" },
+      claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
     const originalCheck = host.runtimeExecutablesCheck;
     host.runtimeExecutablesCheck = mock(async (input) =>
@@ -648,7 +648,7 @@ describe("useOnboardingRuntimeSetup", () => {
     const initialRuntimes: AgentRuntimes = {
       opencode: { enabled: true, executablePath: "/valid/opencode" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
-      claude: { enabled: false, executablePath: "" },
+      claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
     const invalidCheck = createDeferred<RuntimeExecutableCheck>();
     const runtimeExecutablesCheck = mock(async (input) => {
@@ -713,7 +713,7 @@ describe("useOnboardingRuntimeSetup", () => {
     const runtimes: AgentRuntimes = {
       opencode: { enabled: true, executablePath: "/valid/opencode" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: true, executablePath: "/valid/codex" },
-      claude: { enabled: true, executablePath: "/valid/claude" },
+      claude: { enabled: true, executablePath: "/valid/claude", defaults: {}, roleOverrides: {} },
     };
     const requests: RuntimeKind[][] = [];
     const changedCheck = createDeferred<RuntimeExecutableCheck>();
@@ -778,7 +778,7 @@ describe("useOnboardingRuntimeSetup", () => {
     const runtimes: AgentRuntimes = {
       opencode: { enabled: false, executablePath: "" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
-      claude: { enabled: false, executablePath: "" },
+      claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
     const originalCheck = host.runtimeExecutablesCheck;
     host.runtimeExecutablesCheck = mock(async (input) => {
@@ -828,7 +828,7 @@ describe("useOnboardingRuntimeSetup", () => {
     const runtimes: AgentRuntimes = {
       opencode: { enabled: false, executablePath: "" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
-      claude: { enabled: false, executablePath: "" },
+      claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
     const originalCheck = host.runtimeExecutablesCheck;
     host.runtimeExecutablesCheck = mock(async (input) => {
@@ -877,7 +877,7 @@ describe("useOnboardingRuntimeSetup", () => {
     const runtimes: AgentRuntimes = {
       opencode: { enabled: false, executablePath: "" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
-      claude: { enabled: false, executablePath: "" },
+      claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
     let saveCalls = 0;
     const saveSettingsSnapshot = mock(async () => {
@@ -929,7 +929,7 @@ describe("useOnboardingRuntimeSetup", () => {
     const runtimes: AgentRuntimes = {
       opencode: { enabled: true, executablePath: "/valid/opencode" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: true, executablePath: "/valid/codex" },
-      claude: { enabled: true, executablePath: "/valid/claude" },
+      claude: { enabled: true, executablePath: "/valid/claude", defaults: {}, roleOverrides: {} },
     };
     const availableCheck: RuntimeExecutableCheck = {
       runtimes: runtimeDefinitions.map(({ kind }) => ({

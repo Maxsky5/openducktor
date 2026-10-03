@@ -1,3 +1,4 @@
+import { buildSessionPolicyNoticeMessage } from "../support/session-notice-messages";
 import { normalizeSessionErrorMessage } from "@/lib/session-error-message";
 import { recordImageGenerationEnd } from "../support/image-generation-settlement";
 import type {
@@ -422,4 +423,17 @@ export const handleSessionFinished = (
   });
   context.turn.clearTurnDuration(context.session.key, event.timestamp);
   clearTurnTracking(context);
+};
+
+export const handleSessionPolicyNotice = (
+  context: Pick<SessionLifecycleEventContext, "session" | "store">,
+  event: Extract<SessionEvent, { type: "session_policy_notice" }>,
+): void => {
+  context.store.updateSession(context.session.identity, (current) => ({
+    ...current,
+    messages: upsertSessionMessage(
+      current,
+      buildSessionPolicyNoticeMessage(event.timestamp, event.message, event.messageId),
+    ),
+  }));
 };

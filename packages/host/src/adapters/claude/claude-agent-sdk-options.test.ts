@@ -1,9 +1,10 @@
 import { describe, expect, spyOn, test } from "bun:test";
+import * as realClaudeSdk from "@anthropic-ai/claude-agent-sdk";
 import * as fsPromises from "node:fs/promises";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
+import { type ClaudePolicyFields, ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { normalizePathForComparison } from "@openducktor/path-support";
 import { Effect } from "effect";
@@ -101,6 +102,9 @@ const createServiceInput = (events?: {
   resolvedBridgeRepoPaths?: string[];
 }): CreateClaudeAgentSdkServiceInput => ({
   claudeExecutablePath: process.execPath,
+  launchPolicy: {
+    resolve: () => Effect.succeed({}),
+  },
   onBackgroundFailure: (failure) =>
     Effect.sync(() => {
       events?.backgroundFailures?.push(failure);
@@ -143,9 +147,11 @@ const buildOptions = (
   events?: {
     resolvedBridgeRepoPaths?: string[];
   },
+  claudePolicy?: ClaudePolicyFields | null,
+  sessionOptions: Partial<realClaudeSdk.Options> = {},
 ) => {
   events?.resolvedBridgeRepoPaths?.push(session.input.repoPath);
-  return buildClaudeAgentSdkOptions({
+  const request: Parameters<typeof buildClaudeAgentSdkOptions>[0] = {
     input: session.input,
     session,
     resolvedDependencies: {
@@ -161,8 +167,28 @@ const buildOptions = (
     now: () => "2026-06-25T20:00:00.000Z",
     randomId: () => "id",
     emit: () => {},
-    sessionOptions: {},
-  });
+    sessionOptions,
+  };
+  if (claudePolicy !== undefined) request.claudePolicy = claudePolicy;
+  return buildClaudeAgentSdkOptions(request);
+};
+
+const captureSdkLaunchArgs = (options: realClaudeSdk.Options): string[] => {
+  const launchArgs: string[] = [];
+  const stopBeforeSpawn = new Error("Stopped before creating a Claude process");
+  expect(() =>
+    realClaudeSdk.query({
+      prompt: "Inspect native permission inheritance",
+      options: {
+        ...options,
+        spawnClaudeCodeProcess: ({ args }) => {
+          launchArgs.push(...args);
+          throw stopBeforeSpawn;
+        },
+      },
+    }),
+  ).toThrow(stopBeforeSpawn);
+  return launchArgs;
 };
 
 const preToolUseHook = async (
@@ -230,6 +256,24 @@ test.each(["repository", "workflow"] as const)(
 );
 
 describe("buildClaudeAgentSdkBaseOptions", () => {
+  test("rejects managed settings that allow enabled sandbox execution without isolation", async () => {
+    const sandbox = { enabled: true, failIfUnavailable: false };
+    const resolve = spyOn(realClaudeSdk, "resolveSettings").mockResolvedValue({
+      effective: { sandbox },
+      provenance: {},
+      sources: [{ source: "managed", settings: { sandbox } }],
+    });
+    try {
+      await expect(buildOptions(createSession(), undefined, {})).rejects.toThrow(
+        "Ask your administrator",
+      );
+      const inherited = await buildOptions(createSession(), undefined, null);
+      expect(inherited.sandbox).toBeUndefined();
+    } finally {
+      resolve.mockRestore();
+    }
+  });
+
   test("sets resume switches only for an explicit request", () => {
     const normal = buildClaudeAgentSdkBaseOptions({
       claudeExecutablePath: process.execPath,
@@ -260,6 +304,148 @@ describe("buildClaudeAgentSdkBaseOptions", () => {
 });
 
 describe("buildClaudeAgentSdkOptions", () => {
+  test("maps launch settings without granting tool availability or changing native rule strings", async () => {
+    const session = createSession("qa");
+    const policy: ClaudePolicyFields = {
+      permissionMode: "auto",
+      permissions: {
+        allow: ["Bash(git status)", "Read(./Finance (2024)/**)", "mcp__future__*"],
+        ask: ["Read"],
+        deny: ["Agent(custom-agent)", "WebFetch(domain:*.example.com)"],
+      },
+      sandbox: {
+        enabled: true,
+        autoAllowBashIfSandboxed: false,
+        allowUnsandboxedCommands: false,
+        excludedCommands: [],
+        filesystem: {
+          allowWrite: ["./src/**", "/tmp/**", "~/cache/**"],
+          denyWrite: [],
+          denyRead: ["./secrets/**"],
+          allowRead: [],
+        },
+        network: {
+          allowedDomains: [],
+          deniedDomains: ["*.example.com"],
+          strictAllowlist: true,
+          allowLocalBinding: false,
+          allowUnixSockets: ["./run/socket"],
+          allowAllUnixSockets: false,
+        },
+      },
+    };
+    try {
+      const options = await buildOptions(session, undefined, policy);
+      expect(options.permissionMode).toBe("auto");
+      expect<unknown>(options.settings).toEqual({ permissions: policy.permissions });
+      expect(options).not.toHaveProperty("allowedTools");
+      expect(options.sandbox).toEqual({
+        ...policy.sandbox,
+        failIfUnavailable: true,
+        filesystem: {
+          ...policy.sandbox?.filesystem,
+          allowWrite: [join(session.input.workingDirectory, "src/**"), "/tmp/**", "~/cache/**"],
+          denyRead: [join(session.input.workingDirectory, "secrets/**")],
+        },
+        network: {
+          ...policy.sandbox?.network,
+          allowUnixSockets: [join(session.input.workingDirectory, "run/socket")],
+        },
+      });
+      expect(policy.sandbox?.filesystem?.allowWrite?.[0]).toBe("./src/**");
+      expect(options.disallowedTools).toContain("Write");
+      const denied = await preToolUseHook(options, {
+        permissionMode: "bypassPermissions",
+        toolName: "Write",
+        toolInput: { file_path: join(session.input.workingDirectory, "src/file") },
+      });
+      expect(denied).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
+    } finally {
+      session.abortController.abort();
+    }
+  });
+
+  test("leaves native dontAsk policy to Claude at the real SDK launch boundary", async () => {
+    const workingDirectory = await mkdtemp(join(tmpdir(), "odt-claude-native-mode-"));
+    const session = createRepositorySession();
+    session.input.workingDirectory = workingDirectory;
+    try {
+      await mkdir(join(workingDirectory, ".claude"));
+      await writeFile(
+        join(workingDirectory, ".claude", "settings.json"),
+        JSON.stringify({ permissions: { defaultMode: "dontAsk" } }),
+      );
+      const nativeSettings = await realClaudeSdk.resolveSettings({ cwd: workingDirectory });
+      expect(nativeSettings.effective.permissions?.defaultMode).toBe("dontAsk");
+      const options = await buildOptions(session, undefined, null, {
+        resume: "00000000-0000-4000-8000-000000000001",
+      });
+      for (const field of [
+        "permissionMode",
+        "settings",
+        "sandbox",
+        "allowDangerouslySkipPermissions",
+      ])
+        expect(options).not.toHaveProperty(field);
+      const args = captureSdkLaunchArgs(options);
+      expect(args).toContain("--resume=00000000-0000-4000-8000-000000000001");
+      expect(args).not.toContain("--permission-mode");
+    } finally {
+      session.abortController.abort();
+      await rm(workingDirectory, { recursive: true, force: true });
+    }
+  });
+
+  test.each(["fresh", "fork"] as const)(
+    "leaves inherited %s approval mode to the real SDK with no native default",
+    async (launch) => {
+      const session = createSession("spec");
+      const resolve = spyOn(realClaudeSdk, "resolveSettings").mockResolvedValue({
+        effective: {},
+        provenance: {},
+        sources: [],
+      });
+      try {
+        const options = await buildOptions(
+          session,
+          undefined,
+          {},
+          launch === "fork"
+            ? { resume: "00000000-0000-4000-8000-000000000001", forkSession: true }
+            : {},
+        );
+        expect(captureSdkLaunchArgs(options)).not.toContain("--permission-mode");
+        expect(options.sandbox?.failIfUnavailable).toBe(true);
+        expect(options.disallowedTools).toContain("Write");
+        expect(options).not.toHaveProperty("allowDangerouslySkipPermissions");
+      } finally {
+        resolve.mockRestore();
+        session.abortController.abort();
+      }
+    },
+  );
+
+  test.each(["default", "acceptEdits", "dontAsk", "bypassPermissions", "auto"] as const)(
+    "maps explicit %s independently from sandbox enablement",
+    async (permissionMode) => {
+      const session = createSession();
+      try {
+        const options = await buildOptions(session, undefined, {
+          permissionMode,
+          sandbox: { enabled: true },
+        });
+        expect(options.permissionMode).toBe(permissionMode);
+        const args = captureSdkLaunchArgs(options);
+        expect(args[args.indexOf("--permission-mode") + 1]).toBe(permissionMode);
+        expect(options.sandbox?.enabled).toBe(true);
+        expect(options.allowDangerouslySkipPermissions === true).toBe(
+          permissionMode === "bypassPermissions",
+        );
+      } finally {
+        session.abortController.abort();
+      }
+    },
+  );
   test("keeps the full workspace-bound OpenDucktor catalog available for repository sessions", async () => {
     const session = createRepositorySession();
     const options = await buildOptions(session);
@@ -318,10 +504,10 @@ describe("buildClaudeAgentSdkOptions", () => {
     expect(JSON.stringify(options.mcpServers)).not.toContain("bridge-secret-value");
     session.abortController.abort();
     expect(options).not.toHaveProperty("managedSettings");
-    expect(options).not.toHaveProperty("sandbox");
+    expect(options.sandbox).toEqual({ failIfUnavailable: true });
     expect(options.forwardSubagentText).toBe(true);
     expect(options.includePartialMessages).toBe(true);
-    expect(options).toHaveProperty("permissionMode");
+    expect(options).not.toHaveProperty("permissionMode");
     expect(options).not.toHaveProperty("allowedTools");
     expect(options.skills).toBe("all");
     const systemPrompt = z
@@ -427,33 +613,38 @@ describe("buildClaudeAgentSdkOptions", () => {
     expect(options.hooks?.PostToolUseFailure).toHaveLength(1);
   });
 
-  test("inherits a trusted local default permission mode", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "openducktor-claude-permissions-"));
-    const session = createSession();
-    session.input = {
-      ...session.input,
-      repoPath: cwd,
-      workingDirectory: cwd,
-    };
+  test.each(["acceptEdits", "plan"] as const)(
+    "inherits trusted local %s without a mode rewrite",
+    async (mode) => {
+      const cwd = await mkdtemp(join(tmpdir(), "openducktor-claude-permissions-"));
+      const session = createSession();
+      session.input = {
+        ...session.input,
+        repoPath: cwd,
+        workingDirectory: cwd,
+      };
 
-    try {
-      await mkdir(join(cwd, ".claude"), { recursive: true });
-      await writeFile(
-        join(cwd, ".claude", "settings.local.json"),
-        JSON.stringify({ permissions: { defaultMode: "acceptEdits" } }),
-      );
+      try {
+        await mkdir(join(cwd, ".claude"), { recursive: true });
+        await writeFile(
+          join(cwd, ".claude", "settings.local.json"),
+          JSON.stringify({ permissions: { defaultMode: mode } }),
+        );
 
-      const options = await buildOptions(session);
+        const options = await buildOptions(session);
 
-      expect(options.permissionMode).toBe("acceptEdits");
-      expect(options).not.toHaveProperty("allowDangerouslySkipPermissions");
-    } finally {
-      session.abortController.abort();
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
+        const nativeSettings = await realClaudeSdk.resolveSettings({ cwd });
+        expect(nativeSettings.effective.permissions?.defaultMode).toBe(mode);
+        expect(captureSdkLaunchArgs(options)).not.toContain("--permission-mode");
+        expect(options).not.toHaveProperty("allowDangerouslySkipPermissions");
+      } finally {
+        session.abortController.abort();
+        await rm(cwd, { recursive: true, force: true });
+      }
+    },
+  );
 
-  test("does not trust a local bypass mode the pinned SDK filters out", async () => {
+  test("leaves local bypass resolution to Claude while retaining workflow guards", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "openducktor-claude-permissions-"));
     const session = createSession("spec");
     session.input = {
@@ -471,7 +662,7 @@ describe("buildClaudeAgentSdkOptions", () => {
 
       const options = await buildOptions(session);
 
-      expect(options.permissionMode).toBe("default");
+      expect(captureSdkLaunchArgs(options)).not.toContain("--permission-mode");
       expect(options).not.toHaveProperty("allowDangerouslySkipPermissions");
       expect(
         await preToolUseHook(options, {

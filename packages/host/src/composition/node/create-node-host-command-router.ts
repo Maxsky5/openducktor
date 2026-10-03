@@ -64,6 +64,7 @@ import { createWorkspaceFilesCommandHandlers } from "../../interface/commands/wo
 import { createWorkspaceLifecycleCommandHandlers } from "../../interface/commands/workspace-lifecycle-command-handlers";
 import { createWorkspaceSettingsCommandHandlers } from "../../interface/commands/workspace-settings-command-handlers";
 import { createClaudeRuntimeComposition } from "./claude-runtime-composition";
+import { createClaudeLaunchPolicy } from "../../application/runtimes/claude-launch-policy";
 import { createHostRuntimeDefinitionsService } from "./create-host-runtime-definitions-service";
 import type {
   CreateNodeHostCommandRouterInput,
@@ -179,14 +180,12 @@ export const assembleNodeEffectHostCommandRouter = (
     toolDiscovery,
     repoStoreDiagnostics: taskStore,
   });
-  const workingDirectoryDependencies = {
-    settingsConfig,
-    workspaceSettingsService,
-  };
+  const workingDirectoryDependencies = { settingsConfig, workspaceSettingsService };
   let resolvedMcpHostBridge = mcpHostBridge;
   const resolveRuntimeMcpBridge = (kind: "codex" | "opencode", repoPath: string) =>
     resolveWorkspaceRuntimeMcpBridgeConnection(resolvedMcpHostBridge, kind, repoPath);
   const claudeRuntime = createClaudeRuntimeComposition({
+    launchPolicy: createClaudeLaunchPolicy(settingsConfig),
     liveSessionLifecycle: agentSessionLiveStateService,
     onBackgroundFailure,
     processEnv,

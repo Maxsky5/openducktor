@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { AgentSessionLiveSnapshot } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createAgentSessionFixture } from "@/pages/agents/agent-studio-test-utils";
 import { createAgentSessionCollection } from "./agent-session-collection";
@@ -43,6 +44,60 @@ describe("toAgentSessionSummary", () => {
 });
 
 describe("createAgentSessionsStore session snapshots", () => {
+  test.each(["removed", "snapshot", "workspace"] as const)(
+    "clears unregistered policy feedback after %s and keeps runtime identities separate",
+    (cleanup) => {
+      const store = createAgentSessionsStore("/repo");
+      const session = createAgentSessionFixture({
+        externalSessionId: "session-1",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree",
+      });
+      const snapshot: AgentSessionLiveSnapshot = {
+        ref: {
+          repoPath: "/repo",
+          externalSessionId: session.externalSessionId,
+          runtimeKind: session.runtimeKind,
+          workingDirectory: session.workingDirectory,
+        },
+        activity: "running",
+        title: "Claude",
+        startedAt: "2026-10-03T10:00:00Z",
+        pendingApprovals: [],
+        pendingQuestions: [],
+        contextUsage: null,
+        policyNotice: {
+          messageId: "policy",
+          message: "Unconfirmed",
+          timestamp: "2026-10-03T10:00:00Z",
+        },
+      };
+      store.applyLivePolicyNotices({ type: "session_upsert", session: snapshot });
+      const siblings = [
+        { ...session, runtimeKind: "codex" as const },
+        { ...session, workingDirectory: "/repo/other" },
+      ];
+      for (const sibling of siblings) {
+        store.replaceSession(sibling);
+        expect(getSessionMessageCount(store.getSessionSnapshot(sibling)!)).toBe(0);
+      }
+      if (cleanup === "removed") {
+        store.applyLivePolicyNotices({ type: "session_removed", ref: snapshot.ref });
+      } else if (cleanup === "snapshot") {
+        store.applyLivePolicyNotices({ type: "snapshot", repoPath: "/repo", sessions: [] });
+      } else {
+        store.resetWorkspace("/other");
+        // A late callback from the previous workspace must not retain feedback here.
+        store.applyLivePolicyNotices({ type: "session_upsert", session: snapshot });
+        store.replaceSession(session);
+        expect(getSessionMessageCount(store.getSessionSnapshot(session)!)).toBe(0);
+        store.resetWorkspace("/repo");
+      }
+      store.replaceSession(session);
+      expect(getSessionMessageCount(store.getSessionSnapshot(session)!)).toBe(0);
+    },
+  );
+
   test("publishes repository activity and pending input without leaking it into workflow summaries", () => {
     const store = createAgentSessionsStore("/repo");
     const session = createAgentSessionFixture({
