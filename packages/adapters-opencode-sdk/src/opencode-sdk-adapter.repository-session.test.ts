@@ -133,6 +133,7 @@ describe("OpencodeSdkAdapter repository sessions", () => {
       runtimePolicy,
       systemPrompt: "repository system",
     });
+    expect(mock.session.deleteCalls).toEqual([]);
     await adapter.sendUserMessage({
       ...sessionRuntimeRef(started.externalSessionId, { sessionScope: repositoryScope }),
       parts: [{ kind: "text", text: "Inspect the repository" }],

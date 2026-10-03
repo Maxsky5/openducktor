@@ -5,6 +5,7 @@ import {
   type RuntimeDescriptor,
   type RuntimeKind,
 } from "@openducktor/contracts";
+import type { Session } from "@opencode-ai/sdk/v2/client";
 import type {
   AcceptedAgentUserMessage,
   AgentCatalogPort,
@@ -216,19 +217,35 @@ export class OpencodeSdkAdapter
       createRequest.title = policy.title;
     }
     const createAction = `create permissions for OpenCode session in '${input.workingDirectory}'. Reconnect the selected OpenCode runtime and retry; update OpenCode if its permission API is unsupported`;
-    let createdData: ParsedOpencodeSession;
+    let created: Session;
     try {
-      const created = await client.session.create(createRequest);
-      createdData = checkSessionPermissions(
-        unwrapData(created, createAction),
-        input.workingDirectory,
-        undefined,
-        policy.permission,
-      );
+      created = unwrapData(await client.session.create(createRequest), createAction);
     } catch (error) {
       throw toOpenCodeRequestError(createAction, error);
     }
-    const externalSessionId = createdData.id;
+    const id = opencodeSessionDetailPayloadSchema.shape.id
+      .refine((value) => value.trim().length > 0)
+      .safeParse(created.id);
+    if (!id.success) {
+      throw toOpenCodeRequestError(
+        createAction,
+        new Error("The native create response has no usable session ID."),
+      );
+    }
+    const externalSessionId = id.data;
+    try {
+      checkSessionPermissions(
+        created,
+        input.workingDirectory,
+        externalSessionId,
+        policy.permission,
+      );
+    } catch (error) {
+      return this.deleteUnregisteredSession(
+        { client, externalSessionId, workingDirectory: input.workingDirectory },
+        toOpenCodeRequestError(createAction, error),
+      );
+    }
     const sessionInput = toSessionInput(input);
 
     const registrationInput: Parameters<typeof registerSession>[0] = {
@@ -662,25 +679,13 @@ export class OpencodeSdkAdapter
         title: policy.title,
       });
     } catch (policyError) {
-      try {
-        const deleted = await client.session.delete({
-          directory: input.workingDirectory,
-          sessionID: externalSessionId,
-        });
-        if (deleted.data !== true) {
-          throw toOpenCodeRequestError(
-            `delete unregistered fork '${externalSessionId}'`,
-            deleted.error,
-            deleted.response,
-          );
-        }
-      } catch (cleanupError) {
-        throw new AggregateError(
-          [policyError, cleanupError],
-          `Failed to apply ${policy.scope.kind} policy to forked OpenCode session '${externalSessionId}' and delete the unregistered fork: ${String(policyError)}; ${String(cleanupError)}`,
-        );
-      }
-      throw policyError;
+      return this.deleteUnregisteredSession(
+        { client, externalSessionId, workingDirectory: input.workingDirectory },
+        toOpenCodeRequestError(
+          `apply ${policy.scope.kind} policy to forked OpenCode session '${externalSessionId}' in '${input.workingDirectory}'`,
+          policyError,
+        ),
+      );
     }
     const sessionInput = toSessionInput(input);
 
@@ -971,6 +976,36 @@ export class OpencodeSdkAdapter
       (await this.resolveRuntimeClientInput(input, "load file status")).runtimeEndpoint,
       input.workingDirectory,
     );
+  }
+
+  /** Delete a new session before returning its setup failure. Keep both errors if cleanup fails. */
+  private async deleteUnregisteredSession(
+    input: {
+      client: SessionRecord["client"];
+      externalSessionId: string;
+      workingDirectory: string;
+    },
+    setupError: Error,
+  ): Promise<never> {
+    try {
+      const deleted = await input.client.session.delete({
+        directory: input.workingDirectory,
+        sessionID: input.externalSessionId,
+      });
+      if (deleted.error || deleted.data !== true) {
+        throw toOpenCodeRequestError(
+          `delete unregistered OpenCode session '${input.externalSessionId}' in '${input.workingDirectory}'`,
+          deleted.error,
+          deleted.response,
+        );
+      }
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [setupError, cleanupError],
+        `OpenCode session '${input.externalSessionId}' in '${input.workingDirectory}' failed setup and could not be deleted: ${String(setupError)}; ${String(cleanupError)}. Delete the unused session in OpenCode before retrying.`,
+      );
+    }
+    throw setupError;
   }
 
   private emit(externalSessionId: string, event: AgentEvent): void {

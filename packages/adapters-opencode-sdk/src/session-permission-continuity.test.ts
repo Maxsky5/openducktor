@@ -334,37 +334,120 @@ describe("OpenCode session permission continuity", () => {
     expect(mock.session.forkCalls).toEqual([]);
   });
 
-  test("fails fresh creation when OpenCode does not confirm installed permissions", async () => {
+  test.each(["missing", "malformed", "incorrect"] as const)(
+    "deletes a fresh session when its permission response is %s",
+    async (kind) => {
+      const mock = makeMockClient();
+      const create = mock.client.session.create;
+      mock.client.session.create = async (...args) => {
+        const response = await create(...args);
+        // SAFETY: An invalid rule action models malformed native data at the SDK boundary.
+        return {
+          ...response,
+          data: {
+            ...response.data!,
+            permission:
+              kind === "missing"
+                ? undefined
+                : kind === "malformed"
+                  ? [{ permission: "bash", pattern: "*", action: "invalid" }]
+                  : [],
+          },
+        } as typeof response;
+      };
+      const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
+      await expect(
+        adapter.startSession({ ...defaultRepoRuntimeInput, systemPrompt: "start" }),
+      ).rejects.toThrow("create permissions");
+      expect(mock.session.deleteCalls).toEqual([
+        { directory: "/repo", sessionID: "session-opencode-1" },
+      ]);
+      expect(mock.session.getCalls).toEqual([]);
+      expect(mock.session.promptAsyncCalls).toEqual([]);
+      await expect(adapter.stopSession(sessionRuntimeRef())).rejects.toThrow("Unknown session");
+    },
+  );
+
+  test.each([undefined, "", "   ", 123])(
+    "does not guess a session to delete when creation returns ID %j",
+    async (id) => {
+      const mock = makeMockClient();
+      const create = mock.client.session.create;
+      mock.client.session.create = async (...args) => {
+        const response = await create(...args);
+        // SAFETY: Invalid IDs model malformed native responses at the SDK boundary.
+        return { ...response, data: { ...response.data!, id } } as typeof response;
+      };
+      const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
+      await expect(
+        adapter.startSession({ ...defaultRepoRuntimeInput, systemPrompt: "start" }),
+      ).rejects.toThrow("create permissions");
+      expect(mock.session.deleteCalls).toEqual([]);
+    },
+  );
+
+  test("does not delete a session when native creation fails", async () => {
     const mock = makeMockClient();
-    const create = mock.client.session.create;
-    mock.client.session.create = async (...args) => {
-      const response = await create(...args);
-      return { ...response, data: { ...response.data!, permission: undefined } };
+    mock.client.session.create = async () => {
+      throw new Error("creation rejected");
     };
     const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
     await expect(
       adapter.startSession({ ...defaultRepoRuntimeInput, systemPrompt: "start" }),
-    ).rejects.toThrow("did not confirm");
-    expect(mock.session.promptAsyncCalls).toEqual([]);
+    ).rejects.toThrow("creation rejected");
+    expect(mock.session.deleteCalls).toEqual([]);
   });
 
-  test("reports the policy and cleanup errors for an unusable fork", async () => {
-    const mock = makeMockClient({ sessionUpdateResult: { error: new Error("policy rejected") } });
-    mock.client.session.delete = async () => {
-      throw new Error("cleanup rejected");
-    };
-    const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
-    const failure = await adapter
-      .forkSession({
-        ...defaultRepoRuntimeInput,
-        parentExternalSessionId: "session-opencode-1",
-        systemPrompt: "fork",
-      })
-      .catch((error) => error);
-    expect(failure).toBeInstanceOf(AggregateError);
-    expect(failure.message).toContain("session-opencode-fork");
-    expect(failure.message).toContain("policy rejected");
-    expect(failure.message).toContain("cleanup rejected");
-    expect(mock.session.promptAsyncCalls).toEqual([]);
-  });
+  test.each([
+    ["create", "throw"],
+    ["create", "API error"],
+    ["create", "false"],
+    ["fork", "throw"],
+    ["fork", "API error"],
+    ["fork", "false"],
+  ] as const)(
+    "reports both setup and cleanup failures for %s when deletion returns %s",
+    async (operation, cleanup) => {
+      const mock = makeMockClient({ sessionUpdateResult: { error: new Error("policy rejected") } });
+      const create = mock.client.session.create;
+      mock.client.session.create = async (...args) => {
+        const response = await create(...args);
+        return { ...response, data: { ...response.data!, permission: undefined } };
+      };
+      mock.client.session.delete = async (input) => {
+        mock.session.deleteCalls.push(input);
+        if (cleanup === "throw") throw new Error("cleanup rejected");
+        if (cleanup === "API error")
+          return {
+            data: undefined,
+            error: { message: "cleanup rejected" },
+            response: new Response(null, { status: 503, statusText: "Service Unavailable" }),
+          };
+        return { data: false, error: undefined };
+      };
+      const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
+      const failure = await (
+        operation === "create"
+          ? adapter.startSession({ ...defaultRepoRuntimeInput, systemPrompt: "start" })
+          : adapter.forkSession({
+              ...defaultRepoRuntimeInput,
+              parentExternalSessionId: "session-opencode-1",
+              systemPrompt: "fork",
+            })
+      ).catch((error) => error);
+      const id = operation === "create" ? "session-opencode-1" : "session-opencode-fork";
+      expect(failure).toBeInstanceOf(AggregateError);
+      expect(failure.message).toContain(id);
+      expect(failure.errors[0].message).toContain(
+        operation === "create" ? "did not confirm" : "policy rejected",
+      );
+      expect(failure.errors[1].message).toContain(
+        cleanup === "false" ? "delete unregistered" : "cleanup rejected",
+      );
+      if (cleanup === "API error") expect(failure.errors[1].status).toBe(503);
+      expect(mock.session.deleteCalls).toEqual([{ directory: "/repo", sessionID: id }]);
+      expect(mock.session.promptAsyncCalls).toEqual([]);
+      await expect(adapter.stopSession(sessionRuntimeRef(id))).rejects.toThrow("Unknown session");
+    },
+  );
 });
