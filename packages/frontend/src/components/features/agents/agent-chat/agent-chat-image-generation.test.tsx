@@ -49,7 +49,6 @@ const payload = (input: AgentGeneratedImageReadInput): AgentGeneratedImageReadRe
   byteLength: atob(png).length,
 });
 const images: HTMLImageElement[] = [];
-const imageWaiters = new Map<number, (image: HTMLImageElement) => void>();
 const queryClients = new Set<QueryClient>();
 let decodeImage: ReturnType<typeof spyOn<typeof imageWorkerClient, "decodeGeneratedImage">>;
 const originalImage = globalThis.Image;
@@ -117,10 +116,7 @@ beforeEach(() => {
   globalThis.Image = class extends originalImage {
     constructor() {
       super();
-      const index = images.length;
       images.push(this);
-      imageWaiters.get(index)?.(this);
-      imageWaiters.delete(index);
     }
   };
   let next = 0;
@@ -131,7 +127,6 @@ afterEach(async () => {
   await Promise.all([...queryClients].map((client) => client.cancelQueries()));
   for (const client of queryClients) client.clear();
   queryClients.clear();
-  imageWaiters.clear();
   notifyManager.setNotifyFunction((notify) => notify());
   decodeImage.mockRestore();
   globalThis.Image = originalImage;
@@ -224,10 +219,14 @@ const harness = (
   return { client, read, view, content };
 };
 const waitForImage = (index = 0): Promise<HTMLImageElement> => {
-  const image = images[index];
-  return image
-    ? Promise.resolve(image)
-    : new Promise((resolve) => imageWaiters.set(index, resolve));
+  return waitFor(
+    () => {
+      const image = images[index];
+      if (!image) throw new Error(`Preview ${index} has not started.`);
+      return image;
+    },
+    { timeout: 500 },
+  );
 };
 const loadImage = async (index = 0) => {
   const image = await waitForImage(index);
@@ -826,7 +825,6 @@ test("saved metadata survives scrolling and refreshes after offscreen invalidati
     });
     expect(describe).toHaveBeenCalledTimes(1);
     let finishRefresh!: () => void;
-    // Cached bytes can load before the new metadata arrives.
     describe.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
@@ -834,14 +832,15 @@ test("saved metadata survives scrolling and refreshes after offscreen invalidati
         }),
     );
     await act(async () => observers[0]!.show(true));
-    await loadImage(2);
-    expect(describe).toHaveBeenCalledTimes(2);
-    expect(screen.getByRole("img").getAttribute("src")).toBe("blob:image-3");
+    await waitFor(() => expect(describe).toHaveBeenCalledTimes(2));
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("img")).toBeNull();
+    expect(screen.getByRole("status", { name: "Loading generated image preview" })).toBeTruthy();
     await act(async () => finishRefresh());
-    await loadImage(3);
+    await loadImage(2);
+    expect(read).toHaveBeenCalledTimes(3);
     expect(read.mock.lastCall?.[0].revision).toBe("saved-replaced");
-    expect(screen.getByRole("img").getAttribute("src")).toBe("blob:image-4");
-    expect(revokeUrl).toHaveBeenCalledWith("blob:image-3");
+    expect(screen.getByRole("img").getAttribute("src")).toBe("blob:image-3");
   } finally {
     view.unmount();
     client.clear();
