@@ -215,7 +215,7 @@
       "version": "0.9.0",
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "0.3.286",
-        "@azure/msal-node": "^6.0.1",
+        "@azure/msal-node": "^7.0.0",
         "@azure/msal-node-extensions": "^5.5.1",
         "@ff-labs/fff-node": "0.10.6",
         "@openducktor/adapters-codex-app-server": "workspace:*",
@@ -405,7 +405,7 @@
 
     "@azure/msal-common": ["@azure/msal-common@16.14.1", "", {}, "sha512-Or6xhPNyi4zHW25158yxBoyxuCqNSPa5YBVqfF1J5Ks4MJWBo/USXdp05DQIPu1Zli00YZu6t0+h6KvHJealxQ=="],
 
-    "@azure/msal-node": ["@azure/msal-node@6.0.1", "", { "dependencies": { "@azure/msal-common": "16.14.1", "jsonwebtoken": "^9.0.0" } }, "sha512-ixSO1Y/kCVRthRs+hSx/5qkwaunX1/RAePhlMN0wIpIQ4WEZ6AREGGnGd1AP0qspHVsAwzWQKGubpjh50JyJIQ=="],
+    "@azure/msal-node": ["@azure/msal-node@7.0.0", "", { "dependencies": { "@azure/msal-common": "16.14.1", "jsonwebtoken": "^9.0.0" } }, "sha512-bw9EwsovrPc/20NKLcmk+KDQTJ341qfsipn314s8cUZD1UGlTPvjlO7/fe4mH1WZPyGUnv+XBvmEqcRyFHkS2A=="],
 
     "@azure/msal-node-extensions": ["@azure/msal-node-extensions@5.5.1", "", { "dependencies": { "@azure/msal-common": "16.14.1", "@azure/msal-node-runtime": "^0.20.0", "keytar": "^7.8.0" } }, "sha512-o7L5OCEoHcqRELBeXRSHUibe5JYee7/dQ46Glaj7Ly7fVe76ac6oq2klr/bXDl1CHaiS0OuI6T3oWKD9FFL52g=="],
 
