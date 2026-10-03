@@ -4,6 +4,8 @@ import { AlertTriangle, Info, LoaderCircle, RefreshCcw, Sparkles } from "lucide-
 import { memo, type ReactElement, type RefObject, useEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { pendingInputIdentity } from "@/lib/pending-input-identity";
 import { AgentChatInterruptedTurnResume } from "./agent-chat-interrupted-turn-resume";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatTurnGroup } from "./agent-chat-turn-group";
@@ -20,295 +22,13 @@ import {
   useAgentChatRenderedTranscript,
 } from "./use-agent-chat-rendered-transcript";
 
-type AgentChatTranscriptProps = {
-  emptyState: AgentChatThreadModel["emptyState"];
-  modelCatalog: AgentChatThreadModel["modelCatalog"];
-  isStarting: boolean;
-  isSending: boolean;
-  isInteractionEnabled: boolean;
-  sessionAgentColors: Record<string, string>;
-  transcriptTarget: AgentSessionTranscriptTarget | null;
-  subagentPendingApprovalCountBySessionKey: AgentChatThreadModel["subagentPendingApprovalCountBySessionKey"];
-  subagentPendingQuestionCountBySessionKey: AgentChatThreadModel["subagentPendingQuestionCountBySessionKey"];
-  messagesContainerRef: AgentChatThreadModel["messagesContainerRef"];
-  messagesContentRef: RefObject<HTMLDivElement | null>;
-  renderedTurns: AgentChatRenderedTurn[];
-  transcriptNotice: AgentChatThreadModel["transcript"]["notice"];
-  runtimePresentation: AgentChatThreadModel["runtimePresentation"];
-};
-
-const AgentChatTranscriptNotice = memo(function AgentChatTranscriptNotice({
-  notice,
+export function AgentChatThread({
+  model,
+  visitKey = 0,
 }: {
-  notice: NonNullable<AgentChatThreadModel["transcript"]["notice"]>;
+  model: AgentChatThreadModel;
+  visitKey?: number;
 }): ReactElement {
-  const isLoadingNotice = notice.severity === "loading";
-  const action = notice.action;
-
-  return (
-    <div className="sticky top-0 z-20 mb-4">
-      <div
-        className={cn(
-          "mx-auto flex max-w-3xl items-start gap-3 rounded-xl border px-4 py-3 text-sm shadow-sm backdrop-blur",
-          isLoadingNotice
-            ? "border-border bg-card/95 supports-[backdrop-filter]:bg-card/85"
-            : "border-destructive-border bg-destructive-surface text-destructive-muted",
-        )}
-      >
-        <div
-          className={cn(
-            "mt-0.5 rounded-full p-2",
-            isLoadingNotice ? "bg-muted text-muted-foreground" : "text-destructive-muted",
-          )}
-        >
-          {isLoadingNotice ? (
-            <LoaderCircle className="size-4 animate-spin" />
-          ) : (
-            <AlertTriangle className="size-4" />
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className={cn("font-medium", isLoadingNotice ? "text-foreground" : "")}>
-            {notice.title}
-          </p>
-          <p className={isLoadingNotice ? "text-muted-foreground" : ""}>{notice.description}</p>
-          {notice.details && notice.details.length > 0 ? (
-            <details className="mt-2">
-              <summary className="cursor-pointer select-none font-medium">Show details</summary>
-              <dl className="mt-2 space-y-1 text-xs">
-                {notice.details.map((detail) => (
-                  <div key={detail.label} className="grid grid-cols-[auto_1fr] gap-2">
-                    <dt className="font-medium">{detail.label}</dt>
-                    <dd className="min-w-0 break-words font-mono">{detail.value}</dd>
-                  </div>
-                ))}
-              </dl>
-            </details>
-          ) : null}
-        </div>
-        {action ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-8 border-destructive-border bg-card text-destructive-muted hover:bg-destructive-surface"
-            disabled={action.disabled}
-            onClick={action.onAction}
-          >
-            <RefreshCcw className={cn("size-3.5", action.isPending ? "animate-spin" : "")} />
-            {action.label}
-          </Button>
-        ) : null}
-      </div>
-    </div>
-  );
-});
-
-type AgentChatBottomStackProps = {
-  externalSessionId: string;
-  interruptedTurnResume: AgentChatThreadModel["interruptedTurnResume"];
-  resumeDisabled: boolean;
-  pendingQuestions: AgentChatThreadModel["pendingQuestionRequests"];
-  pendingApprovals: AgentChatThreadModel["pendingApprovalRequests"];
-  todos: readonly AgentSessionTodoItem[];
-  sessionAuxiliaryError: string | null;
-  runtimeStatusMessage: string | null;
-  canSubmitQuestionAnswers: boolean;
-  isSubmittingQuestionByRequestId: AgentChatThreadModel["isSubmittingQuestionByRequestId"];
-  onSubmitQuestionAnswers: AgentChatThreadModel["onSubmitQuestionAnswers"];
-  canReplyToApprovals: boolean;
-  runtimeSupportedApprovalReplyOutcomes: AgentChatThreadModel["runtimePresentation"]["supportedApprovalReplyOutcomes"];
-  isSubmittingApprovalByRequestId: AgentChatThreadModel["isSubmittingApprovalByRequestId"];
-  approvalReplyErrorByRequestId: AgentChatThreadModel["approvalReplyErrorByRequestId"];
-  onReplyApproval: AgentChatThreadModel["onReplyApproval"];
-  todoPanelCollapsed: boolean;
-  isSessionWorking: boolean;
-  sessionAccentColor: string | undefined;
-  onToggleTodoPanel: () => void;
-};
-
-const AgentChatTranscript = memo(function AgentChatTranscript({
-  emptyState,
-  modelCatalog,
-  isStarting,
-  isSending,
-  isInteractionEnabled,
-  sessionAgentColors,
-  transcriptTarget,
-  subagentPendingApprovalCountBySessionKey,
-  subagentPendingQuestionCountBySessionKey,
-  messagesContainerRef,
-  messagesContentRef,
-  renderedTurns,
-  transcriptNotice,
-  runtimePresentation,
-}: AgentChatTranscriptProps): ReactElement {
-  return (
-    <div
-      ref={messagesContainerRef}
-      className="agent-chat-scroll-region hide-scrollbar relative min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-4"
-    >
-      {transcriptNotice ? <AgentChatTranscriptNotice notice={transcriptNotice} /> : null}
-
-      <div ref={messagesContentRef}>
-        {!transcriptNotice && emptyState ? (
-          <div className="space-y-3 rounded-lg border border-dashed border-input bg-card p-4 text-sm text-muted-foreground">
-            <p>{emptyState.title}</p>
-            {emptyState.actionLabel && emptyState.onAction ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={
-                  !isInteractionEnabled ||
-                  isStarting ||
-                  isSending ||
-                  emptyState.actionDisabled ||
-                  emptyState.isActionPending
-                }
-                onClick={emptyState.onAction}
-              >
-                {emptyState.isActionPending ? (
-                  <LoaderCircle className="size-3.5 animate-spin" />
-                ) : (
-                  <Sparkles className="size-3.5" />
-                )}
-                {emptyState.actionLabel}
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
-
-        <div>
-          {renderedTurns.map((turn) => (
-            <AgentChatTurnGroup
-              key={turn.key}
-              turn={turn}
-              modelCatalog={modelCatalog}
-              sessionAgentColors={sessionAgentColors}
-              transcriptTarget={transcriptTarget}
-              runtimePresentation={runtimePresentation}
-              subagentPendingApprovalCountBySessionKey={subagentPendingApprovalCountBySessionKey}
-              subagentPendingQuestionCountBySessionKey={subagentPendingQuestionCountBySessionKey}
-            />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-});
-
-const AgentChatBottomStack = memo(function AgentChatBottomStack({
-  externalSessionId,
-  interruptedTurnResume,
-  resumeDisabled,
-  pendingQuestions,
-  pendingApprovals,
-  todos,
-  sessionAuxiliaryError,
-  runtimeStatusMessage,
-  canSubmitQuestionAnswers,
-  isSubmittingQuestionByRequestId,
-  onSubmitQuestionAnswers,
-  canReplyToApprovals,
-  runtimeSupportedApprovalReplyOutcomes,
-  isSubmittingApprovalByRequestId,
-  approvalReplyErrorByRequestId,
-  onReplyApproval,
-  todoPanelCollapsed,
-  isSessionWorking,
-  sessionAccentColor,
-  onToggleTodoPanel,
-}: AgentChatBottomStackProps): ReactElement {
-  const hasVisibleTodo = getActionableSessionTodo(getVisibleSessionTodos(todos)) !== null;
-  const shouldAddComposerGap = !hasVisibleTodo;
-
-  return (
-    <div
-      className={cn(
-        "agent-chat-bottom-stack shrink-0 space-y-2 px-4 pt-3",
-        shouldAddComposerGap ? "pb-3" : "pb-0",
-      )}
-    >
-      {interruptedTurnResume ? (
-        <AgentChatInterruptedTurnResume
-          isPending={interruptedTurnResume.isPending}
-          error={interruptedTurnResume.error}
-          disabled={resumeDisabled}
-          onResume={interruptedTurnResume.onResume}
-        />
-      ) : null}
-
-      {pendingQuestions.map((request) => (
-        <AgentSessionQuestionCard
-          key={buildQuestionCardKey(externalSessionId, request)}
-          request={request}
-          disabled={!canSubmitQuestionAnswers}
-          isSubmitting={Boolean(isSubmittingQuestionByRequestId[request.requestId])}
-          onSubmit={onSubmitQuestionAnswers}
-        />
-      ))}
-
-      {pendingApprovals.map((request) => (
-        <div key={`${externalSessionId}:${request.requestId}`} className="relative z-30">
-          <AgentSessionApprovalCard
-            request={request}
-            runtimeSupportedReplyOutcomes={runtimeSupportedApprovalReplyOutcomes ?? null}
-            disabled={!canReplyToApprovals}
-            isSubmitting={Boolean(isSubmittingApprovalByRequestId[request.requestId])}
-            errorMessage={approvalReplyErrorByRequestId[request.requestId]}
-            onReply={onReplyApproval}
-          />
-        </div>
-      ))}
-
-      {sessionAuxiliaryError ? (
-        <div
-          className="rounded-md border border-destructive-border bg-destructive-surface px-3 py-2 text-sm text-destructive-surface-foreground"
-          data-notification-attention-kind="error"
-          tabIndex={-1}
-        >
-          {sessionAuxiliaryError}
-        </div>
-      ) : null}
-
-      {runtimeStatusMessage ? (
-        <div
-          role="status"
-          className="flex items-start gap-2 rounded-md border border-info-border bg-info-surface px-3 py-2 text-sm text-info-surface-foreground"
-        >
-          <Info className="mt-0.5 size-4 shrink-0 text-info-accent" aria-hidden="true" />
-          <span>{runtimeStatusMessage}</span>
-        </div>
-      ) : null}
-
-      <AgentSessionTodoPanel
-        todos={todos}
-        collapsed={todoPanelCollapsed}
-        isSessionWorking={isSessionWorking}
-        accentColor={sessionAccentColor}
-        onToggleCollapse={onToggleTodoPanel}
-      />
-    </div>
-  );
-});
-
-const resolveHasBottomStack = (input: {
-  hasSession: boolean;
-  hasWaitingInput: boolean;
-  hasVisibleTodo: boolean;
-  sessionAuxiliaryError: string | null;
-  runtimeStatusMessage: string | null;
-  hasInterruptedTurnResume: boolean;
-}): boolean =>
-  input.hasSession &&
-  (input.hasWaitingInput ||
-    input.hasVisibleTodo ||
-    input.sessionAuxiliaryError !== null ||
-    input.runtimeStatusMessage !== null ||
-    input.hasInterruptedTurnResume);
-
-export function AgentChatThread({ model }: { model: AgentChatThreadModel }): ReactElement {
   const {
     transcript,
     runtimePresentation,
@@ -341,6 +61,11 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     syncBottomAfterComposerLayoutRef,
   } = model;
   const { session, target: transcriptTarget } = transcript;
+  const sessionKey = JSON.stringify([
+    transcript.repoPath,
+    session ? agentSessionIdentityKey(session) : null,
+  ]);
+  const collapseResetKey = JSON.stringify([sessionKey, visitKey]);
   const imageRuntimeKind = session?.runtimeKind;
   const imageWorkingDirectory = session?.workingDirectory;
   const imageExternalSessionId = session?.externalSessionId;
@@ -453,7 +178,8 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         {hasBottomStack && session ? (
           <div ref={bottomStackRef} className="min-h-0 overflow-y-auto">
             <AgentChatBottomStack
-              externalSessionId={session.externalSessionId}
+              sessionKey={sessionKey}
+              collapseResetKey={collapseResetKey}
               interruptedTurnResume={interruptedTurnResume}
               resumeDisabled={!isInteractionEnabled || isSending || isStarting}
               pendingQuestions={pendingQuestionRequests}
@@ -484,3 +210,298 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     </AgentChatImageSessionContext.Provider>
   );
 }
+
+type AgentChatTranscriptProps = {
+  emptyState: AgentChatThreadModel["emptyState"];
+  modelCatalog: AgentChatThreadModel["modelCatalog"];
+  isStarting: boolean;
+  isSending: boolean;
+  isInteractionEnabled: boolean;
+  sessionAgentColors: Record<string, string>;
+  transcriptTarget: AgentSessionTranscriptTarget | null;
+  subagentPendingApprovalCountBySessionKey: AgentChatThreadModel["subagentPendingApprovalCountBySessionKey"];
+  subagentPendingQuestionCountBySessionKey: AgentChatThreadModel["subagentPendingQuestionCountBySessionKey"];
+  messagesContainerRef: AgentChatThreadModel["messagesContainerRef"];
+  messagesContentRef: RefObject<HTMLDivElement | null>;
+  renderedTurns: AgentChatRenderedTurn[];
+  transcriptNotice: AgentChatThreadModel["transcript"]["notice"];
+  runtimePresentation: AgentChatThreadModel["runtimePresentation"];
+};
+
+const AgentChatTranscriptNotice = memo(function AgentChatTranscriptNotice({
+  notice,
+}: {
+  notice: NonNullable<AgentChatThreadModel["transcript"]["notice"]>;
+}): ReactElement {
+  const isLoadingNotice = notice.severity === "loading";
+  const action = notice.action;
+
+  return (
+    <div className="sticky top-0 z-20 mb-4">
+      <div
+        className={cn(
+          "mx-auto flex max-w-3xl items-start gap-3 rounded-xl border px-4 py-3 text-sm shadow-sm backdrop-blur",
+          isLoadingNotice
+            ? "border-border bg-card/95 supports-[backdrop-filter]:bg-card/85"
+            : "border-destructive-border bg-destructive-surface text-destructive-muted",
+        )}
+      >
+        <div
+          className={cn(
+            "mt-0.5 rounded-full p-2",
+            isLoadingNotice ? "bg-muted text-muted-foreground" : "text-destructive-muted",
+          )}
+        >
+          {isLoadingNotice ? (
+            <LoaderCircle className="size-4 animate-spin" />
+          ) : (
+            <AlertTriangle className="size-4" />
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className={cn("font-medium", isLoadingNotice ? "text-foreground" : "")}>
+            {notice.title}
+          </p>
+          <p className={isLoadingNotice ? "text-muted-foreground" : ""}>{notice.description}</p>
+          {notice.details && notice.details.length > 0 ? (
+            <details className="mt-2">
+              <summary className="cursor-pointer select-none font-medium">Show details</summary>
+              <dl className="mt-2 space-y-1 text-xs">
+                {notice.details.map((detail) => (
+                  <div key={detail.label} className="grid grid-cols-[auto_1fr] gap-2">
+                    <dt className="font-medium">{detail.label}</dt>
+                    <dd className="min-w-0 break-words font-mono">{detail.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </details>
+          ) : null}
+        </div>
+        {action ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 border-destructive-border bg-card text-destructive-muted hover:bg-destructive-surface"
+            disabled={action.disabled}
+            onClick={action.onAction}
+          >
+            <RefreshCcw className={cn("size-3.5", action.isPending ? "animate-spin" : "")} />
+            {action.label}
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
+});
+
+type AgentChatBottomStackProps = {
+  sessionKey: string;
+  collapseResetKey: string;
+  interruptedTurnResume: AgentChatThreadModel["interruptedTurnResume"];
+  resumeDisabled: boolean;
+  pendingQuestions: AgentChatThreadModel["pendingQuestionRequests"];
+  pendingApprovals: AgentChatThreadModel["pendingApprovalRequests"];
+  todos: readonly AgentSessionTodoItem[];
+  sessionAuxiliaryError: string | null;
+  runtimeStatusMessage: string | null;
+  canSubmitQuestionAnswers: boolean;
+  isSubmittingQuestionByRequestId: AgentChatThreadModel["isSubmittingQuestionByRequestId"];
+  onSubmitQuestionAnswers: AgentChatThreadModel["onSubmitQuestionAnswers"];
+  canReplyToApprovals: boolean;
+  runtimeSupportedApprovalReplyOutcomes: AgentChatThreadModel["runtimePresentation"]["supportedApprovalReplyOutcomes"];
+  isSubmittingApprovalByRequestId: AgentChatThreadModel["isSubmittingApprovalByRequestId"];
+  approvalReplyErrorByRequestId: AgentChatThreadModel["approvalReplyErrorByRequestId"];
+  onReplyApproval: AgentChatThreadModel["onReplyApproval"];
+  todoPanelCollapsed: boolean;
+  isSessionWorking: boolean;
+  sessionAccentColor: string | undefined;
+  onToggleTodoPanel: () => void;
+};
+
+const AgentChatTranscript = memo(function AgentChatTranscript({
+  emptyState,
+  modelCatalog,
+  isStarting,
+  isSending,
+  isInteractionEnabled,
+  sessionAgentColors,
+  transcriptTarget,
+  subagentPendingApprovalCountBySessionKey,
+  subagentPendingQuestionCountBySessionKey,
+  messagesContainerRef,
+  messagesContentRef,
+  renderedTurns,
+  transcriptNotice,
+  runtimePresentation,
+}: AgentChatTranscriptProps): ReactElement {
+  return (
+    <div
+      ref={messagesContainerRef}
+      className="agent-chat-scroll-region hide-scrollbar relative min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-4"
+    >
+      {transcriptNotice ? <AgentChatTranscriptNotice notice={transcriptNotice} /> : null}
+
+      <div ref={messagesContentRef}>
+        {!transcriptNotice && emptyState ? (
+          <div className="space-y-3 rounded-lg border border-dashed border-input bg-card p-4 text-sm text-muted-foreground">
+            <p>{emptyState.title}</p>
+            {emptyState.actionLabel && emptyState.onAction ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={
+                  !isInteractionEnabled ||
+                  isStarting ||
+                  isSending ||
+                  emptyState.actionDisabled ||
+                  emptyState.isActionPending
+                }
+                onClick={emptyState.onAction}
+              >
+                {emptyState.isActionPending ? (
+                  <LoaderCircle className="size-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="size-3.5" />
+                )}
+                {emptyState.actionLabel}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div>
+          {renderedTurns.map((turn) => (
+            <AgentChatTurnGroup
+              key={turn.key}
+              turn={turn}
+              modelCatalog={modelCatalog}
+              sessionAgentColors={sessionAgentColors}
+              transcriptTarget={transcriptTarget}
+              runtimePresentation={runtimePresentation}
+              subagentPendingApprovalCountBySessionKey={subagentPendingApprovalCountBySessionKey}
+              subagentPendingQuestionCountBySessionKey={subagentPendingQuestionCountBySessionKey}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+});
+
+const AgentChatBottomStack = memo(function AgentChatBottomStack({
+  sessionKey,
+  collapseResetKey,
+  interruptedTurnResume,
+  resumeDisabled,
+  pendingQuestions,
+  pendingApprovals,
+  todos,
+  sessionAuxiliaryError,
+  runtimeStatusMessage,
+  canSubmitQuestionAnswers,
+  isSubmittingQuestionByRequestId,
+  onSubmitQuestionAnswers,
+  canReplyToApprovals,
+  runtimeSupportedApprovalReplyOutcomes,
+  isSubmittingApprovalByRequestId,
+  approvalReplyErrorByRequestId,
+  onReplyApproval,
+  todoPanelCollapsed,
+  isSessionWorking,
+  sessionAccentColor,
+  onToggleTodoPanel,
+}: AgentChatBottomStackProps): ReactElement {
+  const hasVisibleTodo = getActionableSessionTodo(getVisibleSessionTodos(todos)) !== null;
+  const shouldAddComposerGap = !hasVisibleTodo;
+
+  return (
+    <div
+      className={cn(
+        "agent-chat-bottom-stack shrink-0 space-y-2 px-4 pt-3",
+        shouldAddComposerGap ? "pb-3" : "pb-0",
+      )}
+    >
+      {interruptedTurnResume ? (
+        <AgentChatInterruptedTurnResume
+          isPending={interruptedTurnResume.isPending}
+          error={interruptedTurnResume.error}
+          disabled={resumeDisabled}
+          onResume={interruptedTurnResume.onResume}
+        />
+      ) : null}
+
+      {pendingQuestions.map((request) => (
+        <AgentSessionQuestionCard
+          key={buildQuestionCardKey(sessionKey, request)}
+          request={request}
+          collapseResetKey={collapseResetKey}
+          disabled={!canSubmitQuestionAnswers}
+          isSubmitting={Boolean(isSubmittingQuestionByRequestId[request.requestId])}
+          onSubmit={onSubmitQuestionAnswers}
+        />
+      ))}
+
+      {pendingApprovals.map((request) => (
+        <div
+          key={JSON.stringify([sessionKey, "permission", pendingInputIdentity(request)])}
+          className="relative z-30"
+        >
+          <AgentSessionApprovalCard
+            request={request}
+            collapseResetKey={collapseResetKey}
+            runtimeSupportedReplyOutcomes={runtimeSupportedApprovalReplyOutcomes ?? null}
+            disabled={!canReplyToApprovals}
+            isSubmitting={Boolean(isSubmittingApprovalByRequestId[request.requestId])}
+            errorMessage={approvalReplyErrorByRequestId[request.requestId]}
+            onReply={onReplyApproval}
+          />
+        </div>
+      ))}
+
+      {sessionAuxiliaryError ? (
+        <div
+          className="rounded-md border border-destructive-border bg-destructive-surface px-3 py-2 text-sm text-destructive-surface-foreground"
+          data-notification-attention-kind="error"
+          tabIndex={-1}
+        >
+          {sessionAuxiliaryError}
+        </div>
+      ) : null}
+
+      {runtimeStatusMessage ? (
+        <div
+          role="status"
+          className="flex items-start gap-2 rounded-md border border-info-border bg-info-surface px-3 py-2 text-sm text-info-surface-foreground"
+        >
+          <Info className="mt-0.5 size-4 shrink-0 text-info-accent" aria-hidden="true" />
+          <span>{runtimeStatusMessage}</span>
+        </div>
+      ) : null}
+
+      <AgentSessionTodoPanel
+        todos={todos}
+        collapsed={todoPanelCollapsed}
+        isSessionWorking={isSessionWorking}
+        accentColor={sessionAccentColor}
+        onToggleCollapse={onToggleTodoPanel}
+      />
+    </div>
+  );
+});
+
+const resolveHasBottomStack = (input: {
+  hasSession: boolean;
+  hasWaitingInput: boolean;
+  hasVisibleTodo: boolean;
+  sessionAuxiliaryError: string | null;
+  runtimeStatusMessage: string | null;
+  hasInterruptedTurnResume: boolean;
+}): boolean =>
+  input.hasSession &&
+  (input.hasWaitingInput ||
+    input.hasVisibleTodo ||
+    input.sessionAuxiliaryError !== null ||
+    input.runtimeStatusMessage !== null ||
+    input.hasInterruptedTurnResume);

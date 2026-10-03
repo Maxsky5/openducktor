@@ -5,7 +5,7 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type WorkspaceSession,
 } from "@openducktor/contracts";
-import { act, type ReactElement, useState } from "react";
+import { act, type ReactElement, type ReactNode, useState } from "react";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { useIsFetching } from "@tanstack/react-query";
 import * as messageContent from "@/components/features/agents/agent-chat/agent-chat-message-card-content";
@@ -37,6 +37,11 @@ import type {
 } from "@/types/state-slices";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { WorkspaceSessionChat } from "./workspace-session-chat";
+import { WorkspaceSessionChatPanes } from "./workspace-session-chat-panes";
+import {
+  buildApprovalRequest,
+  buildQuestionRequest,
+} from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import { createWorkspaceSessionChatDraftPersistence } from "./workspace-session-chat-draft";
 import { createTextSegment } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 
@@ -131,7 +136,7 @@ const createWorkspaceChatHarness = ({
   const health = { opencode: createRepoRuntimeHealthFixture() };
   let completeObservation = (): void => {};
 
-  function Harness(): ReactElement {
+  function Harness({ children }: { children?: ReactNode }): ReactElement {
     const [phase, setPhase] = useState<"fault" | "loading" | "ready">(
       scenario === "retry" || scenario === "record-failure" ? "fault" : "ready",
     );
@@ -175,14 +180,16 @@ const createWorkspaceChatHarness = ({
               >
                 <AgentSessionReadModelStateContext value={readModel}>
                   <AgentSessionsContext value={store}>
-                    <WorkspaceSessionChat
-                      workspace={workspace}
-                      record={entry}
-                      chatSettings={DEFAULT_CHAT_SETTINGS}
-                      reusablePrompts={[]}
-                      onToolRefresh={() => {}}
-                      isMounted={() => true}
-                    />
+                    {children ?? (
+                      <WorkspaceSessionChat
+                        workspace={workspace}
+                        record={entry}
+                        chatSettings={DEFAULT_CHAT_SETTINGS}
+                        reusablePrompts={[]}
+                        onToolRefresh={() => {}}
+                        isMounted={() => true}
+                      />
+                    )}
                   </AgentSessionsContext>
                 </AgentSessionReadModelStateContext>
               </AgentSessionHistoryLoadContext>
@@ -195,6 +202,107 @@ const createWorkspaceChatHarness = ({
 
   return { Harness, completeObservation: () => completeObservation() };
 };
+
+test("returning to a retained chat expands requests without clearing drafts, while a preview keeps collapse choices", async () => {
+  const workspace = { workspaceId: "A", workspaceName: "Test", repoPath: "/repo" };
+  const entry: WorkspaceSession = {
+    id: "session-1",
+    runtimeKind: "opencode",
+    externalSessionId: "native-1",
+    executionTarget: { kind: "local_repo_root", workingDirectory: "/repo" },
+    roleSnapshot: null,
+    selectedModel: null,
+    generatedTitle: null,
+    manualTitle: null,
+    createdAt: 1000,
+    updatedAt: 1000,
+    archivedAt: null,
+  };
+  const session = createAgentSessionFixture({
+    runtimeKind: "opencode",
+    externalSessionId: "native-1",
+    workingDirectory: "/repo",
+    sessionAssociation: { kind: "repository" },
+    historyLoadState: "loaded",
+    livePresence: "present",
+    status: "idle",
+    pendingQuestions: [
+      buildQuestionRequest({
+        questions: [{ header: "Draft", question: "Enter an answer", options: [] }],
+      }),
+    ],
+    pendingApprovals: [buildApprovalRequest()],
+  });
+  const store = createAgentSessionsStore("/repo");
+  store.replaceSession(session);
+  const { Harness } = createWorkspaceChatHarness({
+    workspace,
+    entry,
+    session,
+    store,
+    scenario: "switch-return",
+    counters: { runtimeReads: 0, baselineLoads: 0, revalidations: 0 },
+  });
+  const other = { ...entry, id: "session-2", externalSessionId: null };
+  const onToolRefresh = () => {};
+  const onSelectFile = () => {};
+  const content = (record: WorkspaceSession, preview = false) => (
+    <Harness>
+      <div style={{ visibility: preview ? "hidden" : undefined }} inert={preview}>
+        <WorkspaceSessionChatPanes
+          workspace={workspace}
+          record={record}
+          sessionIds={[entry.id, other.id]}
+          workingDirectory="/repo"
+          branchKey="main"
+          onToolRefresh={onToolRefresh}
+          onSelectFile={onSelectFile}
+        />
+      </div>
+    </Harness>
+  );
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
+    }),
+  );
+  const view = render(content(entry));
+  try {
+    const textarea = await view.findByPlaceholderText("Write your answer...");
+    if (!(textarea instanceof HTMLTextAreaElement)) throw new Error("Expected an answer textarea");
+    await act(async () => {
+      fireEvent.change(textarea, { target: { value: "Preserved visit draft" } });
+      fireEvent.click(view.getByRole("button", { name: "Collapse question request" }));
+      fireEvent.click(view.getByRole("button", { name: "Collapse permission request" }));
+    });
+    await act(async () => {
+      view.rerender(content(entry, true));
+    });
+    await act(async () => {
+      view.rerender(content(entry));
+    });
+    expect(view.getByRole("button", { name: "Expand question request" })).toBeTruthy();
+    expect(view.getByRole("button", { name: "Expand permission request" })).toBeTruthy();
+
+    await act(async () => {
+      view.rerender(content(other));
+    });
+    await act(async () => {
+      view.rerender(content(entry));
+    });
+    await waitFor(() =>
+      expect(view.getByRole("button", { name: "Collapse question request" })).toBeTruthy(),
+    );
+    expect(view.getByRole("button", { name: "Collapse permission request" })).toBeTruthy();
+    expect(view.getByPlaceholderText("Write your answer...")).toBe(textarea);
+    expect(textarea.value).toBe("Preserved visit draft");
+    expect(view.getByText("1/1 answered")).toBeTruthy();
+  } finally {
+    view.unmount();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+  // The full chat render includes settings queries and retained Activity transitions.
+}, 5000);
 
 test.each(["retry", "streaming", "draft", "record-failure"] as const)(
   "workspace chat %s preserves readiness and completed turns",

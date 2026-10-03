@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { act, createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
@@ -137,6 +137,134 @@ const buildLongSession = (externalSessionId: string, count = 80) => {
 };
 
 describe("AgentChatThread", () => {
+  test("keeps each request independent through updates, removal, and replacement instances", async () => {
+    const question = buildQuestionRequest({ requestInstanceId: "question-instance" });
+    const approval = buildApprovalRequest({ requestInstanceId: "approval-instance" });
+    const other = buildApprovalRequest({ requestId: "permission-2", title: "Second approval" });
+    const onReplyApproval = mock(async () => {});
+    const onSubmitQuestionAnswers = mock(async () => {});
+    const base = {
+      ...buildBaseModel(),
+      transcript: buildSessionTranscript(buildSession()),
+      onReplyApproval,
+      onSubmitQuestionAnswers,
+    };
+    const model = {
+      ...base,
+      pendingQuestionRequests: [question],
+      pendingApprovalRequests: [approval, other],
+    };
+    const view = render(createElement(AgentChatThread, { model }));
+    const approvalCard = () => {
+      const card = view.container.querySelector(
+        '[data-notification-attention-id="approval-instance"]',
+      );
+      if (!(card instanceof HTMLElement)) throw new Error("Missing approval card");
+      return card;
+    };
+    try {
+      await act(async () => {
+        fireEvent.click(
+          within(approvalCard()).getByRole("button", { name: "Collapse permission request" }),
+        );
+        fireEvent.click(view.getByRole("button", { name: "Collapse question request" }));
+      });
+      expect(view.getAllByRole("button", { name: "Collapse permission request" })).toHaveLength(1);
+      const target = approvalCard();
+      target.focus();
+      expect(document.activeElement).toBe(target);
+      expect(
+        within(target).getByRole("button", { name: "Expand permission request" }),
+      ).toBeTruthy();
+      await act(async () => {
+        view.rerender(
+          createElement(AgentChatThread, {
+            model: {
+              ...model,
+              pendingQuestionRequests: [structuredClone(question)],
+              pendingApprovalRequests: [structuredClone(approval)],
+            },
+          }),
+        );
+      });
+      expect(approvalCard()).toBe(target);
+      expect(view.getByRole("button", { name: "Expand question request" })).toBeTruthy();
+      expect(view.getByRole("button", { name: "Expand permission request" })).toBeTruthy();
+
+      await act(async () => {
+        view.rerender(
+          createElement(AgentChatThread, {
+            model: {
+              ...model,
+              pendingQuestionRequests: [{ ...question, requestInstanceId: "replacement-question" }],
+              pendingApprovalRequests: [{ ...approval, requestInstanceId: "replacement-approval" }],
+            },
+          }),
+        );
+      });
+      expect(view.getByRole("button", { name: "Collapse question request" })).toBeTruthy();
+      expect(view.getByRole("button", { name: "Collapse permission request" })).toBeTruthy();
+      await act(async () => {
+        fireEvent.click(view.getByRole("button", { name: "Collapse question request" }));
+        fireEvent.click(view.getByRole("button", { name: "Collapse permission request" }));
+        view.rerender(createElement(AgentChatThread, { model: base }));
+      });
+      await act(async () => {
+        view.rerender(createElement(AgentChatThread, { model }));
+      });
+      expect(view.getByRole("button", { name: "Collapse question request" })).toBeTruthy();
+      expect(view.getAllByRole("button", { name: "Collapse permission request" })).toHaveLength(2);
+      expect(onReplyApproval).not.toHaveBeenCalled();
+      expect(onSubmitQuestionAnswers).not.toHaveBeenCalled();
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test.each(["runtime", "directory", "repository"] as const)(
+    "isolates collapse state by %s with matching session and request IDs",
+    async (scope) => {
+      const session = buildSession();
+      const model = {
+        ...buildBaseModel(),
+        transcript: buildSessionTranscript(session),
+        pendingQuestionRequests: [buildQuestionRequest()],
+        pendingApprovalRequests: [buildApprovalRequest()],
+      };
+      const nextSession = {
+        ...session,
+        runtimeKind: scope === "runtime" ? ("codex" as const) : session.runtimeKind,
+        workingDirectory: scope === "directory" ? "/other" : session.workingDirectory,
+      };
+      const next = {
+        ...model,
+        transcript: {
+          ...buildSessionTranscript(nextSession),
+          repoPath: scope === "repository" ? "/other-repo" : model.transcript.repoPath,
+        },
+      };
+      const view = render(createElement(AgentChatThread, { model }));
+      try {
+        await act(async () => {
+          fireEvent.click(view.getByRole("button", { name: "Collapse question request" }));
+          fireEvent.click(view.getByRole("button", { name: "Collapse permission request" }));
+        });
+        await act(async () => {
+          view.rerender(createElement(AgentChatThread, { model: next }));
+        });
+        expect(view.getByRole("button", { name: "Collapse question request" })).toBeTruthy();
+        expect(view.getByRole("button", { name: "Collapse permission request" })).toBeTruthy();
+        await act(async () => {
+          view.rerender(createElement(AgentChatThread, { model }));
+        });
+        expect(view.getByRole("button", { name: "Collapse question request" })).toBeTruthy();
+        expect(view.getByRole("button", { name: "Collapse permission request" })).toBeTruthy();
+      } finally {
+        view.unmount();
+      }
+    },
+  );
+
   const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
   const originalIntersectionObserver = globalThis.IntersectionObserver;
   const originalMatchMedia = globalThis.matchMedia;

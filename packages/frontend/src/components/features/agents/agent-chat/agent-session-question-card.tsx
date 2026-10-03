@@ -1,19 +1,19 @@
-import { CheckCircle2, Circle, CircleDotDashed, ListChecks } from "lucide-react";
 import type { HTMLAttributes, ReactElement } from "react";
 import { useId } from "react";
-import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
-import { cn } from "@/lib/utils";
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { pendingInputIdentity } from "@/lib/pending-input-identity";
 import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
-import { isAgentQuestionAnswered } from "./agent-session-question-draft";
-import { buildQuestionContentEntries } from "./agent-session-question-keys";
-import { QuestionSubmitFooter } from "./agent-session-question-submit-footer";
+import { QuestionFeedback, QuestionSubmitFooter } from "./agent-session-question-submit-footer";
 import { QuestionSummaryTab } from "./agent-session-question-summary-tab";
+import { QuestionTabs } from "./agent-session-question-tabs";
 import { QuestionTab } from "./agent-session-question-tab";
 import { QUESTION_SUMMARY_TAB_ID, useQuestionDraft } from "./use-agent-session-question-draft";
+import { RequestCardHeader } from "./request-card-header";
+import { useRequestCardCollapse } from "./use-request-card-collapse";
 
 type AgentSessionQuestionCardProps = {
   request: AgentQuestionRequest;
+  collapseResetKey?: string;
   disabled?: boolean;
   isSubmitting?: boolean;
   onSubmit: (requestId: string, answers: string[][]) => Promise<void>;
@@ -21,10 +21,13 @@ type AgentSessionQuestionCardProps = {
 
 export function AgentSessionQuestionCard({
   request,
+  collapseResetKey = "",
   disabled = false,
   isSubmitting = false,
   onSubmit,
 }: AgentSessionQuestionCardProps): ReactElement | null {
+  const { isExpanded, onExpandedChange, contentRef, triggerRef } =
+    useRequestCardCollapse(collapseResetKey);
   const {
     activeTabId,
     setActiveTabId,
@@ -52,16 +55,14 @@ export function AgentSessionQuestionCard({
     return null;
   }
 
-  const sourceLabel = request.source?.kind === "subagent" ? "Subagent request" : null;
+  const firstQuestion = request.questions[0];
+  const description = firstQuestion?.header.trim() || firstQuestion?.question;
   const nextQuestionIndex =
     hasMultipleQuestions &&
     activeQuestionIndex >= 0 &&
     activeQuestionIndex + 1 < request.questions.length
       ? activeQuestionIndex + 1
       : null;
-  const questionContentEntries = buildQuestionContentEntries(request.questions);
-  const questionTabClassName = (active: boolean): string =>
-    cn("h-7 gap-1 border px-2 transition-none", active ? "border-transparent" : "border-input");
   const getTabId = (tabId: string): string => `${tabGroupId}-tab-${tabId}`;
   const getPanelId = (tabId: string): string => `${tabGroupId}-panel-${tabId}`;
   const goToQuestionTab = (index: number): void => {
@@ -69,7 +70,7 @@ export function AgentSessionQuestionCard({
     setActiveTabId(tabId);
     document.getElementById(getTabId(tabId))?.focus();
   };
-  const getTabPanelProps = (tabId: string): HTMLAttributes<HTMLDivElement> | undefined => {
+  const getPanelProps = (tabId: string): HTMLAttributes<HTMLDivElement> | undefined => {
     if (!hasMultipleQuestions) {
       return undefined;
     }
@@ -80,136 +81,95 @@ export function AgentSessionQuestionCard({
     };
   };
 
+  let panel: ReactElement | null = null;
+  if (isSummaryTab) {
+    panel = (
+      <QuestionSummaryTab
+        request={request}
+        draft={normalizedDraft}
+        panelProps={getPanelProps(QUESTION_SUMMARY_TAB_ID)}
+        onSelectQuestion={(index) => setActiveTabId(String(index))}
+      />
+    );
+  } else if (activeQuestion) {
+    panel = (
+      <QuestionTab
+        question={activeQuestion}
+        questionIndex={activeQuestionIndex}
+        entry={activeEntry}
+        disabled={disabled || isSubmitting}
+        onSelectOption={(optionLabel) => selectOption(activeQuestionIndex, optionLabel)}
+        onToggleFreeText={() => toggleFreeText(activeQuestionIndex)}
+        onChangeFreeText={(value) => updateFreeText(activeQuestionIndex, value)}
+        panelProps={getPanelProps(String(activeQuestionIndex))}
+      />
+    );
+  }
+
   return (
-    <section
-      className="rounded-xl border border-input bg-card shadow-sm"
-      data-notification-attention-kind="question"
-      data-notification-attention-id={pendingInputIdentity(request)}
-      tabIndex={-1}
-    >
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-input px-3 py-1.5">
-        <div className="flex min-w-0 items-center gap-2 text-foreground">
-          <CircleDotDashed className="size-4 text-muted-foreground" />
-          <p className="text-[13px] font-semibold">Input needed</p>
-          {sourceLabel ? (
-            <span className="rounded-full border border-input bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase text-muted-foreground">
-              {sourceLabel}
-            </span>
-          ) : null}
-        </div>
-        <p className="text-[11px] font-medium text-foreground">
-          {answeredCount}/{requiredCount} answered
-        </p>
-      </header>
-
-      <div className="space-y-2 p-2.5">
-        {hasMultipleQuestions ? (
-          <SegmentedControlRoot
-            role="tablist"
-            size="sm"
-            className="h-auto flex-wrap bg-transparent p-0"
-            aria-label="Questions"
-          >
-            {questionContentEntries.map(({ question, contentKey }, index) => {
-              const tabId = String(index);
-              const isTabActive = activeTabId === tabId;
-              const answered = isAgentQuestionAnswered(question, normalizedDraft[index]);
-              return (
-                <SegmentedControlItem
-                  key={contentKey}
-                  active={isTabActive}
-                  role="tab"
-                  id={getTabId(tabId)}
-                  aria-controls={getPanelId(tabId)}
-                  grow="hug"
-                  size="xs"
-                  inactiveClassName="bg-card text-foreground hover:bg-accent"
-                  className={questionTabClassName(isTabActive)}
-                  onClick={() => setActiveTabId(tabId)}
-                >
-                  {answered ? (
-                    <CheckCircle2
-                      className={cn(
-                        "size-3.5",
-                        isTabActive ? "text-selected-control-foreground/70" : "text-success-accent",
-                      )}
-                    />
-                  ) : (
-                    <Circle
-                      className={cn(
-                        "size-3.5",
-                        isTabActive
-                          ? "text-selected-control-foreground/70"
-                          : "text-muted-foreground",
-                      )}
-                    />
-                  )}
-                  {question.header?.trim() || `Question ${index + 1}`}
-                </SegmentedControlItem>
-              );
-            })}
-            <SegmentedControlItem
-              active={isSummaryTab}
-              role="tab"
-              id={getTabId(QUESTION_SUMMARY_TAB_ID)}
-              aria-controls={getPanelId(QUESTION_SUMMARY_TAB_ID)}
-              grow="hug"
-              size="xs"
-              inactiveClassName="bg-card text-foreground hover:bg-muted"
-              className={questionTabClassName(isSummaryTab)}
-              onClick={() => setActiveTabId(QUESTION_SUMMARY_TAB_ID)}
-            >
-              <ListChecks className="size-3.5" />
-              Summary
-            </SegmentedControlItem>
-          </SegmentedControlRoot>
-        ) : null}
-
-        {isSummaryTab ? (
-          <QuestionSummaryTab
-            request={request}
-            draft={normalizedDraft}
-            panelProps={getTabPanelProps(QUESTION_SUMMARY_TAB_ID)}
-            onSelectQuestion={(index) => setActiveTabId(String(index))}
-          />
-        ) : activeQuestion ? (
-          <QuestionTab
-            question={activeQuestion}
-            questionIndex={activeQuestionIndex}
-            entry={activeEntry}
-            disabled={disabled || isSubmitting}
-            onSelectOption={(optionLabel) => selectOption(activeQuestionIndex, optionLabel)}
-            onToggleFreeText={() => toggleFreeText(activeQuestionIndex)}
-            onChangeFreeText={(value) => updateFreeText(activeQuestionIndex, value)}
-            panelProps={getTabPanelProps(String(activeQuestionIndex))}
-          />
-        ) : null}
-
-        {submitError ? (
-          <p className="rounded-md border border-destructive-border bg-destructive-surface px-2 py-1.5 text-xs text-destructive-muted">
-            {submitError}
-          </p>
-        ) : null}
-
-        <QuestionSubmitFooter
-          disabled={disabled}
-          isSubmitting={isSubmitting}
-          isComplete={isComplete}
-          onReset={resetDraft}
-          onNext={nextQuestionIndex === null ? undefined : () => goToQuestionTab(nextQuestionIndex)}
-          onSubmit={() => {
-            clearSubmitError();
-            const answers = buildAnswers();
-            void onSubmit(request.requestId, answers).catch((error) => {
-              const description =
-                error instanceof Error && error.message.trim().length > 0
-                  ? error.message
-                  : "Failed to submit answers.";
-              setSubmitError(description);
-            });
-          }}
+    <Collapsible open={isExpanded} onOpenChange={onExpandedChange} asChild>
+      <section
+        className="rounded-xl border border-input bg-card shadow-sm"
+        data-notification-attention-kind="question"
+        data-notification-attention-id={pendingInputIdentity(request)}
+        tabIndex={-1}
+      >
+        <RequestCardHeader
+          kind="question"
+          description={description}
+          isSubagent={request.source?.kind === "subagent"}
+          status={
+            <>
+              {answeredCount}/{requiredCount} answered
+            </>
+          }
+          isExpanded={isExpanded}
+          triggerRef={triggerRef}
         />
-      </div>
-    </section>
+
+        <CollapsibleContent
+          forceMount
+          ref={contentRef}
+          hidden={!isExpanded}
+          style={{ display: isExpanded ? undefined : "none" }}
+          className="space-y-2 border-t border-input p-2.5"
+        >
+          {hasMultipleQuestions ? (
+            <QuestionTabs
+              request={request}
+              draft={normalizedDraft}
+              activeTabId={activeTabId}
+              onSelectTab={setActiveTabId}
+              getTabId={getTabId}
+              getPanelId={getPanelId}
+            />
+          ) : null}
+
+          {panel}
+
+          <QuestionSubmitFooter
+            disabled={disabled}
+            isSubmitting={isSubmitting}
+            isComplete={isComplete}
+            onReset={resetDraft}
+            onNext={
+              nextQuestionIndex === null ? undefined : () => goToQuestionTab(nextQuestionIndex)
+            }
+            onSubmit={() => {
+              clearSubmitError();
+              const answers = buildAnswers();
+              void onSubmit(request.requestId, answers).catch((error) => {
+                const description =
+                  error instanceof Error && error.message.trim().length > 0
+                    ? error.message
+                    : "Failed to submit answers.";
+                setSubmitError(description);
+              });
+            }}
+          />
+        </CollapsibleContent>
+        <QuestionFeedback submitError={submitError} isSubmitting={isSubmitting} />
+      </section>
+    </Collapsible>
   );
 }

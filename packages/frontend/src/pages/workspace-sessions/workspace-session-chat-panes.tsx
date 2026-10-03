@@ -63,6 +63,10 @@ const WorkspaceSessionChatPane = memo(function WorkspaceSessionChatPane({
   mode,
   ...pane
 }: ChatPane & { mode: "visible" | "hidden" }) {
+  const [visit, setVisit] = useState({ mode, key: 0 });
+  if (visit.mode !== mode) {
+    setVisit({ mode, key: visit.key + (mode === "visible" ? 1 : 0) });
+  }
   const mounted = useRef(false);
   // Activity stops its effects when hidden. Keep pane lifetime outside that boundary.
   useLayoutEffect(() => {
@@ -75,7 +79,7 @@ const WorkspaceSessionChatPane = memo(function WorkspaceSessionChatPane({
   return (
     <Activity mode={mode}>
       <div className="h-full min-h-0 overflow-hidden">
-        <WorkspaceSessionChatPaneContent {...pane} isMounted={isMounted} />
+        <WorkspaceSessionChatPaneContent {...pane} isMounted={isMounted} visitKey={visit.key} />
       </div>
     </Activity>
   );
@@ -89,7 +93,8 @@ const WorkspaceSessionChatPaneContent = memo(function WorkspaceSessionChatPaneCo
   workingDirectory,
   branchKey,
   isMounted,
-}: ChatPane & { isMounted: () => boolean }) {
+  visitKey,
+}: ChatPane & { isMounted: () => boolean; visitKey: number }) {
   const owner = useMemo<ChatFileLinkOwner>(
     () => ({
       kind: "workspace",
@@ -123,6 +128,7 @@ const WorkspaceSessionChatPaneContent = memo(function WorkspaceSessionChatPaneCo
         reusablePrompts={settings.data.reusablePrompts}
         onToolRefresh={onToolRefresh}
         isMounted={isMounted}
+        visitKey={visitKey}
       />
     </ChatFileLinkProvider>
   );

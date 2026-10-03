@@ -8,21 +8,8 @@ type AgentQuestionContentEntry = {
   contentKey: string;
 };
 
-const buildQuestionBaseKey = (question: AgentQuestion): string => {
-  const optionsKey = question.options
-    .map((option) => `${option.label}:${option.description}`)
-    .join("|");
-  const headerKey = question.header.trim();
-  const promptKey = question.question.trim();
-
-  return [
-    headerKey,
-    promptKey,
-    optionsKey,
-    question.multiple ? "multiple" : "single",
-    question.custom ? "custom" : "default",
-  ].join(":");
-};
+export const buildQuestionCardKey = (sessionKey: string, request: AgentQuestionRequest): string =>
+  JSON.stringify([sessionKey, "question", pendingInputIdentity(request)]);
 
 export const buildQuestionContentEntries = (
   questions: AgentQuestionRequest["questions"],
@@ -41,7 +28,18 @@ export const buildQuestionContentEntries = (
   });
 };
 
-export const buildQuestionCardKey = (
-  externalSessionId: string,
-  request: AgentQuestionRequest,
-): string => `${externalSessionId}:${pendingInputIdentity(request)}`;
+const buildQuestionBaseKey = (question: AgentQuestion): string => {
+  const optionsKey = question.options
+    .map((option) => `${option.label}:${option.description}`)
+    .join("|");
+  const headerKey = question.header.trim();
+  const promptKey = question.question.trim();
+
+  return [
+    headerKey,
+    promptKey,
+    optionsKey,
+    question.multiple ? "multiple" : "single",
+    question.custom ? "custom" : "default",
+  ].join(":");
+};

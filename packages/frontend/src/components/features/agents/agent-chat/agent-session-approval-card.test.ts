@@ -1,5 +1,6 @@
-import { describe, expect, test } from "bun:test";
-import { createElement } from "react";
+import { describe, expect, mock, test } from "bun:test";
+import { fireEvent, render } from "@testing-library/react";
+import { act, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AgentSessionApprovalCard } from "./agent-session-approval-card";
 import { resolveApprovalReplyOutcomes } from "./agent-session-approval-card-model";
@@ -37,6 +38,67 @@ describe("resolveApprovalReplyOutcomes", () => {
         runtimeSupportedReplyOutcomes: null,
       }),
     ).toEqual([]);
+  });
+});
+
+describe("AgentSessionApprovalCard", () => {
+  test("collapse keeps feedback visible and preserves reply availability", async () => {
+    const onReply = mock(async () => {});
+    const props = {
+      request: approvalRequest,
+      runtimeSupportedReplyOutcomes: null,
+      errorMessage: "Retry approval",
+      disabled: true,
+      isSubmitting: true,
+      onReply,
+    };
+    const view = render(createElement(AgentSessionApprovalCard, props));
+    try {
+      await act(async () => {
+        fireEvent.click(view.getByText("Approval required"));
+      });
+      expect(
+        view.getByRole("button", { name: "Expand permission request" }).hasAttribute("disabled"),
+      ).toBe(false);
+      expect(view.getByText("Retry approval")).toBeTruthy();
+      expect(view.getByText(/Runtime approval capabilities are unavailable/)).toBeTruthy();
+      expect(view.getByText("Submitting approval choice…")).toBeTruthy();
+      expect(view.getByText("Affected paths:").closest("[hidden]")).not.toBeNull();
+      expect(onReply).not.toHaveBeenCalled();
+      await act(async () => {
+        view.rerender(
+          createElement(AgentSessionApprovalCard, {
+            ...props,
+            runtimeSupportedReplyOutcomes: ["approve_once", "reject"],
+          }),
+        );
+      });
+      expect(view.queryByRole("button", { name: "Approve once" })).toBeNull();
+      await act(async () => {
+        fireEvent.click(view.getByText("Action required"));
+      });
+      expect(view.getByRole("button", { name: "Approve once" }).hasAttribute("disabled")).toBe(
+        true,
+      );
+      expect(onReply).not.toHaveBeenCalled();
+      await act(async () => {
+        view.rerender(
+          createElement(AgentSessionApprovalCard, {
+            ...props,
+            runtimeSupportedReplyOutcomes: ["approve_once", "reject"],
+            disabled: false,
+            isSubmitting: false,
+          }),
+        );
+      });
+      await act(async () => {
+        fireEvent.click(view.getByRole("button", { name: "Approve once" }));
+      });
+      expect(onReply).toHaveBeenCalledTimes(1);
+      expect(onReply).toHaveBeenCalledWith("approval-1", "approve_once");
+    } finally {
+      view.unmount();
+    }
   });
 
   test("renders only outcomes supported by the active runtime", () => {
