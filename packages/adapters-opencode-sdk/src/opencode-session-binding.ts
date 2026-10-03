@@ -8,106 +8,80 @@ import type { OpencodeSessionPolicy } from "./opencode-session-policy";
 import { toOpenCodeRequestError } from "./request-errors";
 import { opencodeSessionRef } from "./session-ref";
 import type { SessionRecord } from "./types";
-import { ensureTrustedOdtMcpServerConnected } from "./workflow-tool-selection";
+import { ensureTrustedOdtMcpServerConnected } from "./opencode-mcp-readiness";
+import {
+  restoreSessionPermissions,
+  beginPermissionSetup,
+  permissionAction,
+} from "./opencode-session-permissions";
 
-export const requireOpencodeSessionPolicyRuntime = async (input: {
-  client: SessionRecord["client"];
+export const getBoundSession = (input: {
+  action: string;
+  bindSession: () => Promise<SessionRecord>;
+  request: PolicyBoundSessionRef;
+  session: SessionRecord | undefined;
+}): SessionRecord | Promise<SessionRecord> => {
+  const { request, session } = input;
+  if (!session || (session.summary.sessionAssociation.kind === "unbound" && request.sessionScope)) {
+    return input.bindSession();
+  }
+  assertSessionRef(session, request, input.action);
+  applySessionContext(session, request, input.action);
+  return session;
+};
+
+/** Keep the old binding if native permission setup fails. */
+export const restoreSessionPolicy = async (input: {
+  action: string;
   policy: OpencodeSessionPolicy;
-  workingDirectory: string;
+  request: PolicyBoundSessionRef;
+  session: SessionRecord;
 }): Promise<void> => {
-  if (input.policy.toolSelection.kind === "repository") {
+  assertSessionScope(input.session, input.request, input.action);
+  const finishSetup =
+    input.policy.scope.kind === "workflow" ? beginPermissionSetup(input.session) : undefined;
+  try {
     await ensureTrustedOdtMcpServerConnected({
-      client: input.client,
-      workingDirectory: input.workingDirectory,
+      client: input.session.client,
+      workingDirectory: input.request.workingDirectory,
     });
+    await restoreSessionPermissions({
+      client: input.session.client,
+      externalSessionId: input.session.externalSessionId,
+      policy: input.policy,
+      workingDirectory: input.request.workingDirectory,
+    });
+    delete input.session.permissionSetupError;
+  } catch (cause) {
+    if (input.policy.scope.kind === "workflow")
+      input.session.permissionSetupError = toOpenCodeRequestError(
+        permissionAction(
+          "restore",
+          input.session.externalSessionId,
+          input.request.workingDirectory,
+        ),
+        cause,
+      );
+    throw cause;
+  } finally {
+    finishSetup?.();
   }
+  const title = await setSessionTitle({
+    client: input.session.client,
+    externalSessionId: input.session.externalSessionId,
+    title: input.policy.title,
+    workingDirectory: input.request.workingDirectory,
+  });
+  applySessionContext(input.session, input.request, input.action);
+  if (title !== null) input.session.summary = { ...input.session.summary, title };
 };
 
-const updateNativeSession = async (
-  client: SessionRecord["client"],
-  action: string,
-  request: Parameters<SessionRecord["client"]["session"]["update"]>[0],
-): Promise<void> => {
-  try {
-    const updated = await client.session.update(request);
-    if (updated.data === undefined || updated.data === null) {
-      throw toOpenCodeRequestError(action, updated.error, updated.response);
-    }
-  } catch (error) {
-    throw toOpenCodeRequestError(action, error);
-  }
-};
-
-export const applySessionPolicy = async (input: {
-  client: SessionRecord["client"];
-  externalSessionId: string;
-  policy: OpencodeSessionPolicy;
-  workingDirectory: string;
-}): Promise<void> => {
-  const action = `update ${input.policy.toolSelection.kind} session policy for session '${input.externalSessionId}'`;
-  const request: Parameters<typeof input.client.session.update>[0] = {
-    directory: input.workingDirectory,
-    sessionID: input.externalSessionId,
-    permission: input.policy.permission,
-  };
-  if (input.policy.title !== undefined) {
-    request.title = input.policy.title;
-  }
-  await updateNativeSession(input.client, action, request);
-};
-
-/**
- * Reconciles a durable title with the runtime on an attach. A failed update keeps the
- * durable title, so the next attach can retry. Returns the applied title, or null when
- * the scope carries no title or the runtime rejects the update.
- */
-export const reconcileSessionTitle = async (input: {
-  client: SessionRecord["client"];
-  externalSessionId: string;
-  title: string | undefined;
-  workingDirectory: string;
-}): Promise<string | null> => {
-  if (input.title === undefined) {
-    return null;
-  }
-  try {
-    await updateNativeSession(
-      input.client,
-      `update the title of session '${input.externalSessionId}'`,
-      {
-        directory: input.workingDirectory,
-        sessionID: input.externalSessionId,
-        title: input.title,
-      },
-    );
-    return input.title;
-  } catch {
-    return null;
-  }
-};
-
-export const assertRuntimeContextCompatibleWithSession = (
-  session: SessionRecord,
-  input: PolicyBoundSessionRef,
-  action: string,
-  toConflictError?: (message: string) => Error,
-): void => {
-  const transition = resolveAgentSessionAssociationTransition(
-    session.summary.sessionAssociation,
-    input.sessionScope ?? { kind: "unbound" },
-  );
-  if (transition.kind === "conflict") {
-    const message = `Cannot ${action} for OpenCode session '${session.externalSessionId}' because its registered ${describeAgentSessionScope(transition.previous)} does not match the requested ${describeAgentSessionScope(transition.incoming)}.`;
-    throw toConflictError?.(message) ?? new Error(message);
-  }
-};
-
-export const applyRuntimeContextToSession = (
+export const applySessionContext = (
   session: SessionRecord,
   input: PolicyBoundSessionRef,
   action: string,
 ): void => {
-  assertRuntimeContextCompatibleWithSession(session, input, action);
+  assertSessionScope(session, input, action);
   session.input = { ...session.input };
   const sessionScope = input.sessionScope;
   if (sessionScope) {
@@ -130,44 +104,23 @@ export const applyRuntimeContextToSession = (
   }
 };
 
-export const synchronizeOpencodeSessionPolicy = async (input: {
-  action: string;
-  policy: OpencodeSessionPolicy;
-  request: PolicyBoundSessionRef;
-  session: SessionRecord;
-}): Promise<void> => {
-  assertRuntimeContextCompatibleWithSession(input.session, input.request, input.action);
-  await requireOpencodeSessionPolicyRuntime({
-    client: input.session.client,
-    policy: input.policy,
-    workingDirectory: input.request.workingDirectory,
-  });
-  if (input.request.sessionScope?.kind === "repository" && !input.request.systemPrompt) {
-    const reconciledTitle = await reconcileSessionTitle({
-      client: input.session.client,
-      externalSessionId: input.session.externalSessionId,
-      title: input.policy.title,
-      workingDirectory: input.request.workingDirectory,
-    });
-    if (reconciledTitle !== null) {
-      input.session.summary = { ...input.session.summary, title: reconciledTitle };
-    }
-    applyRuntimeContextToSession(input.session, input.request, input.action);
-    return;
-  }
-  await applySessionPolicy({
-    client: input.session.client,
-    externalSessionId: input.session.externalSessionId,
-    policy: input.policy,
-    workingDirectory: input.request.workingDirectory,
-  });
-  applyRuntimeContextToSession(input.session, input.request, input.action);
-  if (input.policy.title !== undefined) {
-    input.session.summary = { ...input.session.summary, title: input.policy.title };
+export const assertSessionScope = (
+  session: SessionRecord,
+  input: PolicyBoundSessionRef,
+  action: string,
+  toConflictError?: (message: string) => Error,
+): void => {
+  const transition = resolveAgentSessionAssociationTransition(
+    session.summary.sessionAssociation,
+    input.sessionScope ?? { kind: "unbound" },
+  );
+  if (transition.kind === "conflict") {
+    const message = `Cannot ${action} for OpenCode session '${session.externalSessionId}' because its registered ${describeAgentSessionScope(transition.previous)} does not match the requested ${describeAgentSessionScope(transition.incoming)}.`;
+    throw toConflictError?.(message) ?? new Error(message);
   }
 };
 
-export const assertOpencodeSessionRef = (
+export const assertSessionRef = (
   session: SessionRecord,
   request: {
     repoPath: string;
@@ -185,17 +138,25 @@ export const assertOpencodeSessionRef = (
   }
 };
 
-export const resolveOpencodePolicyBoundSession = (input: {
-  action: string;
-  bindSession: () => Promise<SessionRecord>;
-  request: PolicyBoundSessionRef;
-  session: SessionRecord | undefined;
-}): SessionRecord | Promise<SessionRecord> => {
-  const { request, session } = input;
-  if (!session || (session.summary.sessionAssociation.kind === "unbound" && request.sessionScope)) {
-    return input.bindSession();
+/** A title failure must not block attachment; the saved title lets the next attach retry. */
+export const setSessionTitle = async (input: {
+  client: SessionRecord["client"];
+  externalSessionId: string;
+  title: string | undefined;
+  workingDirectory: string;
+}): Promise<string | null> => {
+  if (input.title === undefined) {
+    return null;
   }
-  assertOpencodeSessionRef(session, request, input.action);
-  applyRuntimeContextToSession(session, request, input.action);
-  return session;
+  try {
+    const updated = await input.client.session.update({
+      directory: input.workingDirectory,
+      sessionID: input.externalSessionId,
+      title: input.title,
+    });
+    if (updated.data === undefined || updated.data === null) return null;
+    return input.title;
+  } catch {
+    return null;
+  }
 };

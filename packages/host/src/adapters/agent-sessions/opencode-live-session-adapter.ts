@@ -12,6 +12,7 @@ import {
   type AgentSessionContextUsage,
   type AgentSessionLiveLoadContextInput,
   type AgentSessionLiveRef,
+  type AgentSessionAuthorizedRoot,
   agentSessionTranscriptEventSchema,
   isAgentSessionTranscriptEventType,
   type RuntimeInstanceSummary,
@@ -144,20 +145,21 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
 
       const refreshSnapshots = (
         repoPath: string,
-        roots?: AgentSessionLiveRef[],
+        roots?: AgentSessionAuthorizedRoot[],
       ): Effect.Effect<void, HostError> =>
         Effect.gen(function* () {
           if (repoPath !== runtime.repoPath) {
             return;
           }
           const readVersions = state.versions();
-          const read = yield* Effect.tryPromise({
+          const readEffect = Effect.tryPromise({
             try: () => prepared.connection.readSessionSources(roots),
             catch: (cause) =>
               toHostOperationError(cause, "opencode-live-session.refresh-snapshots", {
                 runtimeId: runtime.runtimeId,
               }),
           });
+          const read = yield* roots ? serializeRuntime(readEffect) : readEffect;
           yield* serializeRuntime(
             commit("opencode-live-session.commit-refreshed-snapshots", () => ({
               value: undefined,
@@ -339,7 +341,11 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
           serializeRuntime(
             stateEffect(
               "opencode-live-session.resolve-approval-route",
-              () => state.requirePendingRoute(input, input.requestId, "approval"),
+              () => {
+                const route = state.requirePendingRoute(input, input.requestId, "approval");
+                state.assertApprovalAllowed(route, input.outcome);
+                return route;
+              },
               {
                 runtimeId: runtime.runtimeId,
                 externalSessionId: input.externalSessionId,

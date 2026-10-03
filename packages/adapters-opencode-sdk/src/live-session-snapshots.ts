@@ -1,3 +1,4 @@
+import type { AgentSessionScope } from "@openducktor/contracts";
 import type {
   SessionRef,
   AgentPendingApprovalRequest,
@@ -7,6 +8,7 @@ import type {
   AgentSessionRuntimeSnapshotSource,
 } from "@openducktor/core";
 import type { SessionStatus } from "@opencode-ai/sdk/v2/client";
+import { readPermissionSession } from "./opencode-session-permissions";
 import { unwrapData } from "./data-utils";
 import { parseOpencodeSessionListPayload, type ParsedOpencodeSession } from "./opencode-ingress";
 import { listOpencodeLiveSessionPendingInput } from "./pending-input-ops";
@@ -19,7 +21,12 @@ export type ListOpencodeRuntimeSnapshotSourcesInput = {
   createClient: ClientFactory;
   runtimeEndpoint: string;
   directories?: string[];
-  roots?: SessionRef[];
+  roots?: Array<SessionRef & { sessionScope?: AgentSessionScope }>;
+  attachSession?: (
+    session: ParsedOpencodeSession,
+    scope: AgentSessionScope | undefined,
+    descendant: boolean,
+  ) => Promise<void>;
   readDirectory: ReadOpencodeDirectory;
   now: () => string;
 };
@@ -39,6 +46,121 @@ export type OpencodeRuntimeSnapshotFailure = {
 export type OpencodeRuntimeSnapshotRead = {
   sources: OpencodeRuntimeSnapshotSource[];
   failures: OpencodeRuntimeSnapshotFailure[];
+};
+
+export const listOpencodeRuntimeSnapshotSources = async ({
+  createClient,
+  runtimeEndpoint,
+  directories,
+  roots = [],
+  readDirectory,
+  now,
+  attachSession,
+}: ListOpencodeRuntimeSnapshotSourcesInput): Promise<OpencodeRuntimeSnapshotRead> => {
+  const unscopedClient = createClient({ runtimeEndpoint });
+  const owned = await readOwnedSessions(unscopedClient, roots, readDirectory, attachSession);
+  const sessions = owned.sessions;
+  const requestedDirectorySet =
+    directories && directories.length > 0
+      ? new Set(
+          directories
+            .map((directory) => normalizeSessionDirectory(directory))
+            .filter((directory): directory is string => directory !== undefined),
+        )
+      : null;
+  const filteredSessions =
+    requestedDirectorySet === null
+      ? sessions
+      : sessions.filter((session) => {
+          const directory = normalizeSessionDirectory(session.directory);
+          return directory !== undefined && requestedDirectorySet.has(directory);
+        });
+  const sessionDirectories = Array.from(
+    new Set(
+      filteredSessions.map((session) => requireSessionDirectory(session.directory, session.id)),
+    ),
+  );
+  const directoryResults = await Promise.allSettled(
+    sessionDirectories.map((directory) =>
+      readDirectory(directory, async () => {
+        const [statusResult, pendingInputResult] = await Promise.allSettled([
+          unscopedClient.session.status({ directory }),
+          listOpencodeLiveSessionPendingInput(createClient, {
+            runtimeEndpoint,
+            workingDirectory: directory,
+          }),
+        ]);
+        if (statusResult.status === "rejected") {
+          throw statusResult.reason;
+        }
+        if (pendingInputResult.status === "rejected") {
+          throw pendingInputResult.reason;
+        }
+        return {
+          directory,
+          statuses: toOpencodeSessionStatusMap(
+            unwrapData(statusResult.value, "get session status"),
+            directory,
+          ),
+          pendingInput: pendingInputResult.value,
+        };
+      }),
+    ),
+  );
+  const directoryEntries = directoryResults.flatMap((result) =>
+    result.status === "fulfilled" ? [result.value] : [],
+  );
+  const failures = directoryResults.flatMap((result, index) => {
+    if (result.status === "fulfilled") {
+      return [];
+    }
+    const directory = sessionDirectories[index];
+    if (!directory) {
+      return [];
+    }
+    const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
+    return filteredSessions
+      .filter((session) => requireSessionDirectory(session.directory, session.id) === directory)
+      .map((session) => ({
+        externalSessionId: session.id,
+        workingDirectory: directory,
+        message,
+      }));
+  });
+  const availableDirectoryEntries = directoryEntries.filter(
+    (entry): entry is NonNullable<typeof entry> => entry !== null,
+  );
+  const statusesByDirectory = new Map(
+    availableDirectoryEntries.map(({ directory, statuses }) => [directory, statuses]),
+  );
+  const availableDirectories = new Set(statusesByDirectory.keys());
+  const pendingInputBySession = mergeOpencodePendingInputBySession(
+    availableDirectoryEntries.map(({ pendingInput }) => pendingInput),
+  );
+
+  const sources = filteredSessions.flatMap((session) => {
+    const normalizedDirectory = requireSessionDirectory(session.directory, session.id);
+    if (!availableDirectories.has(normalizedDirectory)) {
+      return [];
+    }
+    const directoryStatuses = statusesByDirectory.get(normalizedDirectory);
+    const parentExternalSessionId = readParentExternalSessionId(session);
+    const snapshot: OpencodeRuntimeSnapshotSource = {
+      externalSessionId: session.id,
+      sessionAssociation: session.sessionAssociation,
+      title: session.title,
+      workingDirectory: normalizedDirectory,
+      startedAt: toIsoFromEpoch(session.time?.created, now),
+      runtimeActivity: toOpencodeRuntimeActivity(directoryStatuses?.[session.id]),
+      pendingApprovals: pendingInputBySession[session.id]?.approvals ?? [],
+      pendingQuestions: pendingInputBySession[session.id]?.questions ?? [],
+    };
+    if (parentExternalSessionId) {
+      snapshot.parentExternalSessionId = parentExternalSessionId;
+    }
+    return [snapshot];
+  });
+  return { sources, failures: [...owned.failures, ...failures] };
 };
 
 type ApplyOpencodeAwaitingTurnStartToRuntimeSnapshotInput = {
@@ -179,26 +301,32 @@ const mergeOpencodePendingInputBySession = (
   return merged satisfies OpencodeLiveSessionPendingInputBySessionId;
 };
 
+type OwnedSession = ParsedOpencodeSession & {
+  sessionAssociation: AgentSessionAssociation;
+};
+
 const readOwnedSessions = async (
   client: ReturnType<ClientFactory>,
-  roots: SessionRef[],
+  roots: NonNullable<ListOpencodeRuntimeSnapshotSourcesInput["roots"]>,
   readDirectory: ReadOpencodeDirectory,
-): Promise<{ sessions: ParsedOpencodeSession[]; failures: OpencodeRuntimeSnapshotFailure[] }> => {
-  const sessions = new Map<string, ParsedOpencodeSession>();
+  attachSession: ListOpencodeRuntimeSnapshotSourcesInput["attachSession"],
+): Promise<{ sessions: OwnedSession[]; failures: OpencodeRuntimeSnapshotFailure[] }> => {
+  const sessions = new Map<string, OwnedSession>();
   const failures: OpencodeRuntimeSnapshotFailure[] = [];
   for (const root of roots) {
     if (sessions.has(root.externalSessionId)) continue;
-    const tree = new Map<string, ParsedOpencodeSession>();
+    const tree = new Map<string, OwnedSession>();
     const visit = async (id: string, directory: string, parent?: string): Promise<void> => {
       if (tree.has(id)) return;
-      const row = parseOpencodeSessionListPayload([
-        unwrapData(await client.session.get({ sessionID: id, directory }), "read owned session"),
-      ])[0]!;
-      if (row.id !== id || row.directory !== directory)
-        throw new Error(`OpenCode returned a different identity or directory for ${id}.`);
+      const row = await readPermissionSession({
+        client,
+        externalSessionId: id,
+        workingDirectory: directory,
+      });
       if (parent ? row.parentID !== parent : Boolean(row.parentID))
         throw new Error(`Invalid parent for OpenCode session ${id}.`);
-      tree.set(id, row);
+      await attachSession?.(row, root.sessionScope, parent !== undefined);
+      tree.set(id, { ...row, sessionAssociation: root.sessionScope ?? { kind: "unbound" } });
       const children = parseOpencodeSessionListPayload(
         unwrapData(
           await client.session.children({ sessionID: id, directory }),
@@ -225,118 +353,4 @@ const readOwnedSessions = async (
     }
   }
   return { sessions: [...sessions.values()], failures };
-};
-
-export const listOpencodeRuntimeSnapshotSources = async ({
-  createClient,
-  runtimeEndpoint,
-  directories,
-  roots = [],
-  readDirectory,
-  now,
-}: ListOpencodeRuntimeSnapshotSourcesInput): Promise<OpencodeRuntimeSnapshotRead> => {
-  const unscopedClient = createClient({ runtimeEndpoint });
-  const owned = await readOwnedSessions(unscopedClient, roots, readDirectory);
-  const sessions = owned.sessions;
-  const requestedDirectorySet =
-    directories && directories.length > 0
-      ? new Set(
-          directories
-            .map((directory) => normalizeSessionDirectory(directory))
-            .filter((directory): directory is string => directory !== undefined),
-        )
-      : null;
-  const filteredSessions =
-    requestedDirectorySet === null
-      ? sessions
-      : sessions.filter((session) => {
-          const directory = normalizeSessionDirectory(session.directory);
-          return directory !== undefined && requestedDirectorySet.has(directory);
-        });
-  const sessionDirectories = Array.from(
-    new Set(
-      filteredSessions.map((session) => requireSessionDirectory(session.directory, session.id)),
-    ),
-  );
-  const directoryResults = await Promise.allSettled(
-    sessionDirectories.map((directory) =>
-      readDirectory(directory, async () => {
-        const [statusResult, pendingInputResult] = await Promise.allSettled([
-          unscopedClient.session.status({ directory }),
-          listOpencodeLiveSessionPendingInput(createClient, {
-            runtimeEndpoint,
-            workingDirectory: directory,
-          }),
-        ]);
-        if (statusResult.status === "rejected") {
-          throw statusResult.reason;
-        }
-        if (pendingInputResult.status === "rejected") {
-          throw pendingInputResult.reason;
-        }
-        return {
-          directory,
-          statuses: toOpencodeSessionStatusMap(
-            unwrapData(statusResult.value, "get session status"),
-            directory,
-          ),
-          pendingInput: pendingInputResult.value,
-        };
-      }),
-    ),
-  );
-  const directoryEntries = directoryResults.flatMap((result) =>
-    result.status === "fulfilled" ? [result.value] : [],
-  );
-  const failures = directoryResults.flatMap((result, index) => {
-    if (result.status === "fulfilled") {
-      return [];
-    }
-    const directory = sessionDirectories[index];
-    if (!directory) {
-      return [];
-    }
-    const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
-    return filteredSessions
-      .filter((session) => requireSessionDirectory(session.directory, session.id) === directory)
-      .map((session) => ({
-        externalSessionId: session.id,
-        workingDirectory: directory,
-        message,
-      }));
-  });
-  const availableDirectoryEntries = directoryEntries.filter(
-    (entry): entry is NonNullable<typeof entry> => entry !== null,
-  );
-  const statusesByDirectory = new Map(
-    availableDirectoryEntries.map(({ directory, statuses }) => [directory, statuses]),
-  );
-  const availableDirectories = new Set(statusesByDirectory.keys());
-  const pendingInputBySession = mergeOpencodePendingInputBySession(
-    availableDirectoryEntries.map(({ pendingInput }) => pendingInput),
-  );
-
-  const sources = filteredSessions.flatMap((session) => {
-    const normalizedDirectory = requireSessionDirectory(session.directory, session.id);
-    if (!availableDirectories.has(normalizedDirectory)) {
-      return [];
-    }
-    const directoryStatuses = statusesByDirectory.get(normalizedDirectory);
-    const parentExternalSessionId = readParentExternalSessionId(session);
-    const snapshot: OpencodeRuntimeSnapshotSource = {
-      externalSessionId: session.id,
-      sessionAssociation: { kind: "unbound" },
-      title: session.title,
-      workingDirectory: normalizedDirectory,
-      startedAt: toIsoFromEpoch(session.time?.created, now),
-      runtimeActivity: toOpencodeRuntimeActivity(directoryStatuses?.[session.id]),
-      pendingApprovals: pendingInputBySession[session.id]?.approvals ?? [],
-      pendingQuestions: pendingInputBySession[session.id]?.questions ?? [],
-    };
-    if (parentExternalSessionId) {
-      snapshot.parentExternalSessionId = parentExternalSessionId;
-    }
-    return [snapshot];
-  });
-  return { sources, failures: [...owned.failures, ...failures] };
 };

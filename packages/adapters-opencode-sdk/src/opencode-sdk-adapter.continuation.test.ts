@@ -40,6 +40,7 @@ describe("OpencodeSdkAdapter interrupted-turn continuation", () => {
       runtimeKind: "opencode",
     });
     expect(mock.session.promptAsyncCalls).toHaveLength(1);
+    expect(mock.session.promptAsyncCalls[0]).not.toHaveProperty("tools");
     expect(mock.session.promptAsyncCalls[0]).toMatchObject({
       sessionID: "session-opencode-1",
       directory: "/repo",
@@ -143,6 +144,7 @@ describe("OpencodeSdkAdapter interrupted-turn continuation", () => {
       model: { providerId: "openai", modelId: "gpt-5", variant: "low" },
       systemPrompt: "Loaded system prompt.",
     });
+    const permissionUpdates = mock.session.updateCalls.filter((call) => call.permission).length;
 
     await adapter.continueInterruptedTurn({
       ...ref,
@@ -151,6 +153,10 @@ describe("OpencodeSdkAdapter interrupted-turn continuation", () => {
     });
 
     expect(mock.session.promptAsyncCalls).toHaveLength(1);
+    expect(mock.session.promptAsyncCalls[0]).not.toHaveProperty("tools");
+    expect(mock.session.updateCalls.filter((call) => call.permission)).toHaveLength(
+      permissionUpdates,
+    );
     expect(mock.session.promptAsyncCalls[0]).toMatchObject({
       model: { providerID: "openai", modelID: "gpt-5" },
       variant: "high",

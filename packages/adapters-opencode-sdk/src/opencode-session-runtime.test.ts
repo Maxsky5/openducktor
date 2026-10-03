@@ -208,7 +208,14 @@ const createLiveClientHarness = (
         promptCalls.push(request);
         return { data: {}, error: undefined };
       },
-      update: async () => ({ data: { id: externalSessionId }, error: undefined }),
+      update: async (request) => ({
+        data: createOpencodeSessionFixture({
+          id: request.sessionID,
+          directory: request.directory ?? "/repo",
+          permission: request.permission,
+        }),
+        error: undefined,
+      }),
     },
     permission: {
       ...baseClient.permission,
@@ -424,6 +431,7 @@ describe("OpenCode session runtime connection", () => {
           runtimeKind: "opencode",
           externalSessionId: "session-1",
           workingDirectory: "/repo",
+          sessionScope: { kind: "repository" },
         },
       ]);
       const input = {
@@ -431,7 +439,7 @@ describe("OpenCode session runtime connection", () => {
         runtimeKind: "opencode" as const,
         workingDirectory: "/repo",
         runtimePolicy: { kind: "opencode" as const },
-        sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
+        sessionScope: { kind: "repository" as const },
       };
       for (const externalSessionId of ["session-1", "child-session"]) {
         await expect(
@@ -448,6 +456,7 @@ describe("OpenCode session runtime connection", () => {
             runtimeKind: "opencode",
             externalSessionId: "session-1",
             workingDirectory: "/repo",
+            sessionScope: { kind: "repository" },
           },
         ]),
       ).toEqual(before);
@@ -468,7 +477,7 @@ describe("OpenCode session runtime connection", () => {
         prepared.queries.loadSessionHistory({
           ...input,
           externalSessionId: "session-1",
-          sessionScope: { ...input.sessionScope, taskId: "other-task" },
+          sessionScope: { kind: "workflow", taskId: "other-task", role: "build" },
         }),
       ).rejects.toMatchObject({ code: "scope_mismatch" });
     } finally {
@@ -500,6 +509,7 @@ describe("OpenCode session runtime connection", () => {
         runtimeKind: "opencode",
         externalSessionId: "session-1",
         workingDirectory: "/repo",
+        sessionScope: { kind: "repository" },
       },
     ]);
 
@@ -534,7 +544,9 @@ describe("OpenCode session runtime connection", () => {
       workingDirectory: "/repo",
     };
     try {
-      await prepared.connection.readSessionSources([ref]);
+      await prepared.connection.readSessionSources([
+        { ...ref, sessionScope: { kind: "repository" } },
+      ]);
       const readsBeforeRelease = harness.callOrder.filter(
         (call) => call === "get:session-1",
       ).length;
@@ -562,7 +574,9 @@ describe("OpenCode session runtime connection", () => {
     };
     try {
       await resumeOpenDucktorSession(prepared);
-      await prepared.connection.readSessionSources([ref]);
+      await prepared.connection.readSessionSources([
+        { ...ref, sessionScope: { kind: "repository" } },
+      ]);
 
       await expect(
         prepared.connection.releaseSession({ ...ref, workingDirectory: "/other" }),
@@ -606,6 +620,7 @@ describe("OpenCode session runtime connection", () => {
         runtimeKind: "opencode",
         externalSessionId: "session-1",
         workingDirectory: "/repo",
+        sessionScope: { kind: "repository" },
       },
     ]);
     await listStarted;
@@ -636,6 +651,7 @@ describe("OpenCode session runtime connection", () => {
         runtimeKind: "opencode",
         externalSessionId: "parent-session",
         workingDirectory: "/repo",
+        sessionScope: { kind: "repository" },
       },
     ]);
 
@@ -650,7 +666,7 @@ describe("OpenCode session runtime connection", () => {
     await prepared.release();
   });
 
-  test("keeps task ownership out of runtime snapshots", async () => {
+  test("retains authorized workflow ownership in runtime snapshots", async () => {
     const harness = createLiveClientHarness();
     const prepared = await createPrepareRuntime(harness)(runtimeInput);
     await prepared.connection.resumeSession({
@@ -668,10 +684,15 @@ describe("OpenCode session runtime connection", () => {
         runtimeKind: "opencode",
         externalSessionId: "session-1",
         workingDirectory: "/repo",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
       },
     ]);
 
-    expect(sources[0]?.sessionAssociation).toEqual({ kind: "unbound" });
+    expect(sources[0]?.sessionAssociation).toEqual({
+      kind: "workflow",
+      taskId: "task-1",
+      role: "build",
+    });
     await prepared.release();
   });
 
@@ -688,6 +709,7 @@ describe("OpenCode session runtime connection", () => {
         runtimeKind: "opencode",
         externalSessionId: "session-1",
         workingDirectory: "/repo",
+        sessionScope: { kind: "repository" },
       },
     ]);
     await prepared.startForwarding((signal) => {
@@ -744,6 +766,7 @@ describe("OpenCode session runtime connection", () => {
         runtimeKind: "opencode",
         externalSessionId: "session-1",
         workingDirectory: "/repo",
+        sessionScope: { kind: "repository" },
       },
     ]);
     await prepared.startForwarding((signal) => {
@@ -788,6 +811,7 @@ describe("OpenCode session runtime connection", () => {
         runtimeKind: "opencode",
         externalSessionId: "session-1",
         workingDirectory: "/repo",
+        sessionScope: { kind: "repository" },
       },
     ]);
     await prepared.connection.resumeSession(childInput);
@@ -1146,4 +1170,221 @@ describe("OpenCode session runtime connection", () => {
     await Promise.resolve();
     expect(releasedSignals).toEqual([]);
   });
+});
+
+test("restores workflow roots and descendant denies before publishing reload sources", async () => {
+  const harness = createLiveClientHarness({
+    externalSessionIds: ["session-1", "child-session"],
+    childSessionIdsByParent: { "session-1": ["child-session"] },
+  });
+  const native = [
+    { permission: "bash", pattern: "git *", action: "ask" as const },
+    { permission: "task", pattern: "*", action: "deny" as const },
+  ];
+  const rules = new Map([
+    ["session-1", native],
+    ["child-session", [...native]],
+  ]);
+  const get = harness.client.session.get;
+  harness.client.session.get = async (...args) => {
+    const response = await get(...args);
+    return { ...response, data: { ...response.data!, permission: rules.get(args[0].sessionID) } };
+  };
+  const updates: Parameters<typeof harness.client.session.update>[0][] = [];
+  harness.client.session.update = async (request) => {
+    updates.push(request);
+    rules.set(request.sessionID, request.permission!);
+    return {
+      data: createOpencodeSessionFixture({
+        id: request.sessionID,
+        directory: "/repo",
+        permission: request.permission,
+      }),
+      error: undefined,
+    };
+  };
+  const prepared = await createPrepareRuntime(harness)(runtimeInput);
+  const root = {
+    repoPath: "/repo",
+    runtimeKind: "opencode" as const,
+    workingDirectory: "/repo",
+    externalSessionId: "session-1",
+    sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "qa" as const },
+  };
+  try {
+    const read = await prepared.connection.readSessionSources([root]);
+    expect(read.failures).toEqual([]);
+    expect(read.sources).toHaveLength(2);
+    expect(read.sources[0]?.sessionAssociation).toEqual(root.sessionScope);
+    expect(read.sources[1]?.sessionAssociation).toEqual(root.sessionScope);
+    expect(rules.get("session-1")?.slice(0, native.length)).toEqual(native);
+    expect(rules.get("session-1")).toContainEqual({
+      permission: "edit",
+      pattern: "*",
+      action: "deny",
+    });
+    expect(rules.get("session-1")).toContainEqual({
+      permission: "odt_qa_approved",
+      pattern: "*",
+      action: "allow",
+    });
+    const childRules = rules.get("child-session")!;
+    expect(childRules.slice(0, native.length)).toEqual(native);
+    expect(childRules).toContainEqual({ permission: "edit", pattern: "*", action: "deny" });
+    expect(childRules.slice(native.length).every((rule) => rule.action === "deny")).toBe(true);
+    const count = updates.length;
+    await prepared.connection.readSessionSources([root]);
+    await prepared.connection.readSessionSources();
+    await prepared.queries.loadSessionHistory({ ...root, runtimePolicy: { kind: "opencode" } });
+    expect(updates).toHaveLength(count);
+  } finally {
+    await prepared.release();
+  }
+});
+
+test("keeps repository roots available after a source read failure without changing permissions", async () => {
+  const harness = createLiveClientHarness();
+  const get = harness.client.session.get;
+  harness.client.session.get = async () => ({
+    data: undefined,
+    error: new Error("native session unavailable"),
+  });
+  harness.client.session.update = async () => {
+    throw new Error("Repository source reads must not write permissions");
+  };
+  const prepared = await createPrepareRuntime(harness)(runtimeInput);
+  try {
+    const read = await prepared.connection.readSessionSources([
+      {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo",
+        externalSessionId: "session-1",
+        sessionScope: { kind: "repository" },
+      },
+    ]);
+    expect(read.sources).toEqual([]);
+    expect(read.failures).toHaveLength(1);
+    harness.client.session.get = get;
+    const recovered = await prepared.connection.readSessionSources();
+    expect(recovered.failures).toEqual([]);
+    expect(recovered.sources).toHaveLength(1);
+    expect(recovered.sources[0]?.sessionAssociation).toEqual({ kind: "repository" });
+  } finally {
+    await prepared.release();
+  }
+});
+
+test("reports failed reload permission setup and excludes the workflow tree", async () => {
+  const harness = createLiveClientHarness({
+    externalSessionIds: ["session-1", "child-session"],
+    childSessionIdsByParent: { "session-1": ["child-session"] },
+  });
+  const update = harness.client.session.update;
+  harness.client.session.update = async () => ({
+    data: undefined,
+    error: new Error("permission API unavailable"),
+    response: new Response(null, { status: 503 }),
+  });
+  const failingUpdate = harness.client.session.update;
+  const prepared = await createPrepareRuntime(harness)(runtimeInput);
+  const root = {
+    repoPath: "/repo",
+    runtimeKind: "opencode" as const,
+    workingDirectory: "/repo",
+    externalSessionId: "session-1",
+    sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "spec" as const },
+  };
+  try {
+    const read = await prepared.connection.readSessionSources([root]);
+    expect(read.sources).toEqual([]);
+    expect(read.failures).toEqual([
+      expect.objectContaining({
+        externalSessionId: "session-1",
+        workingDirectory: "/repo",
+        message: expect.stringContaining("permission API unavailable"),
+      }),
+    ]);
+    expect(read.failures[0]?.message).toContain("Reconnect the selected OpenCode runtime");
+    expect((await prepared.connection.readSessionSources()).sources).toEqual([]);
+    await expect(
+      prepared.connection.sendUserMessage({
+        ...root,
+        runtimePolicy: { kind: "opencode" },
+        parts: [{ kind: "text", text: "blocked" }],
+      }),
+    ).rejects.toThrow("permissions");
+    expect(harness.promptCalls).toEqual([]);
+    harness.client.session.update = update;
+    const recovered = await prepared.connection.readSessionSources([root]);
+    expect(recovered.failures).toEqual([]);
+    expect(recovered.sources).toHaveLength(2);
+    const get = harness.client.session.get;
+    const readEntered = Promise.withResolvers<void>();
+    const releaseRead = Promise.withResolvers<void>();
+    const approvalDelivered = Promise.withResolvers<void>();
+    await prepared.startForwarding((signal) => {
+      if (
+        signal.type === "session_event" &&
+        signal.event.type === "approval_required" &&
+        signal.event.requestId === "approval-during-attachment"
+      )
+        approvalDelivered.resolve();
+    });
+    harness.client.session.get = async (...args) => {
+      readEntered.resolve();
+      await releaseRead.promise;
+      return get(...args);
+    };
+    harness.client.session.update = failingUpdate;
+    const restoring = prepared.connection.readSessionSources([root]);
+    await readEntered.promise;
+    try {
+      for (const externalSessionId of ["session-1", "child-session"])
+        await expect(
+          prepared.connection.sendUserMessage({
+            ...root,
+            externalSessionId,
+            runtimePolicy: { kind: "opencode" },
+            parts: [{ kind: "text", text: "attachment pending" }],
+          }),
+        ).rejects.toThrow("permissions");
+      expect(harness.promptCalls).toEqual([]);
+      harness.emit(
+        permissionAskedEvent({
+          sessionId: "session-1",
+          requestId: "approval-during-attachment",
+          permission: "read",
+          patterns: ["README.md"],
+        }),
+      );
+      await approvalDelivered.promise;
+    } finally {
+      releaseRead.resolve();
+      await restoring;
+    }
+    harness.client.session.get = get;
+    expect((await restoring).sources).toEqual([]);
+    expect((await prepared.connection.readSessionSources()).sources).toEqual([]);
+    harness.client.session.update = update;
+    for (const externalSessionId of ["session-1", "child-session"])
+      await expect(
+        prepared.connection.sendUserMessage({
+          ...root,
+          externalSessionId,
+          runtimePolicy: { kind: "opencode" },
+          parts: [{ kind: "text", text: "still blocked" }],
+        }),
+      ).rejects.toThrow("permissions");
+    expect(harness.promptCalls).toEqual([]);
+    expect((await prepared.connection.readSessionSources([root])).sources).toHaveLength(2);
+    await prepared.connection.sendUserMessage({
+      ...root,
+      runtimePolicy: { kind: "opencode" },
+      parts: [{ kind: "text", text: "recovered" }],
+    });
+    expect(harness.promptCalls).toHaveLength(1);
+  } finally {
+    await prepared.release();
+  }
 });

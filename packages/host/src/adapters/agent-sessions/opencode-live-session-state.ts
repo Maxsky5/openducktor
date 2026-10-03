@@ -1,3 +1,4 @@
+import { assertApprovalAllowed } from "./opencode-approval-authorization";
 import { OpenCodeSessionRefIndex } from "./opencode-live-session-ref-index";
 import type {
   OpencodeRuntimeSnapshotRead,
@@ -8,6 +9,7 @@ import {
   type AgentSessionLiveReadResult,
   type AgentSessionLiveRef,
   type AgentSessionLiveSnapshot,
+  type RuntimeApprovalReplyOutcome,
 } from "@openducktor/contracts";
 import type { AgentEvent, AgentSessionSummary } from "@openducktor/core";
 import { HostValidationError } from "../../effect/host-errors";
@@ -461,6 +463,17 @@ export const createOpenCodeLiveSessionState = ({
     },
     applyEvent,
     requirePendingRoute,
+    assertApprovalAllowed: (
+      route: OpenCodePendingRoute,
+      outcome: RuntimeApprovalReplyOutcome,
+    ): void =>
+      assertApprovalAllowed({
+        route,
+        outcome,
+        sessionsByRef,
+        refsByExternalSessionId,
+        runtimeId: runtime.runtimeId,
+      }),
     completePendingReply,
     removeSession,
     refForExternalSession: (externalSessionId: string): AgentSessionLiveRef | null =>

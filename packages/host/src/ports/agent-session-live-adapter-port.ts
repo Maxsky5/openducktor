@@ -21,6 +21,7 @@ import type {
   AgentSessionLiveLoadDiffInput,
   AgentSessionLiveReadResult,
   AgentSessionLiveRef,
+  AgentSessionAuthorizedRoot,
   AgentSessionLiveReplyApprovalInput,
   AgentSessionLiveReplyQuestionInput,
   AgentSessionLiveSnapshot,
@@ -121,7 +122,7 @@ type AgentSessionLiveAdapterBase = {
   readonly binding: AgentSessionLiveRegistration;
   readonly refreshSnapshots?: (
     repoPath: string,
-    roots?: AgentSessionLiveRef[],
+    roots?: AgentSessionAuthorizedRoot[],
   ) => Effect.Effect<void, HostError>;
   readonly listSnapshots: (
     repoPath: string,

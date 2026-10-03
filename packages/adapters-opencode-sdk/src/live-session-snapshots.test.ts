@@ -96,6 +96,7 @@ describe("OpenCode live session snapshots", () => {
     });
 
     expect(result.sources).toHaveLength(1);
+    expect(result.sources[0]?.sessionAssociation).toEqual({ kind: "unbound" });
     expect(result.failures).toEqual([]);
     expect(calls).toEqual(["status", "permissions", "questions"]);
     expect(reading).toBe(false);

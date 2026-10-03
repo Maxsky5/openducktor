@@ -36,7 +36,7 @@ describe("workflow-tool-permissions", () => {
       pattern: "*",
       action: "deny",
     });
-    expect(rules).toContainEqual({ permission: "task", pattern: "*", action: "allow" });
+    expect(rules.some((rule) => rule.permission === "task")).toBe(false);
     expect(rules).not.toContainEqual({ permission: "edit", pattern: "*", action: "deny" });
     for (const toolName of ODT_MCP_TOOL_NAMES) {
       for (const permission of toOpencodeExposedOdtToolIds(toolName)) {
@@ -111,7 +111,7 @@ describe("workflow-tool-permissions", () => {
         action: "deny",
       });
     }
-    expect(rules).toContainEqual({ permission: "task", pattern: "*", action: "allow" });
+    expect(rules.some((rule) => rule.permission === "task")).toBe(false);
     expect(rules).toContainEqual({ permission: "subtask", pattern: "*", action: "deny" });
     expect(rules).not.toContainEqual({ permission: "bash", pattern: "*", action: "deny" });
     expect(rules).toContainEqual({ permission: "openducktor_*", pattern: "*", action: "deny" });
@@ -240,3 +240,39 @@ describe("workflow-tool-permissions", () => {
     expect(findFinalExactAction(rules, "functions.openducktor_odt_qa_approved")).toBe("deny");
   });
 });
+
+// Independent last-match evaluation of the native wildcard contract.
+const matches = (value: string, pattern: string): boolean =>
+  new RegExp(
+    `^${pattern
+      .split("*")
+      .map((piece) => piece.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .join(".*")}$`,
+  ).test(value);
+const effectiveAction = (rules: PermissionRule[], permission: string): string =>
+  rules.findLast((rule) => matches(permission, rule.permission) && matches("target", rule.pattern))
+    ?.action ?? "ask";
+
+test.each([
+  ["spec", "odt_set_spec"],
+  ["planner", "odt_set_plan"],
+  ["build", "odt_build_completed"],
+  ["qa", "odt_qa_approved"],
+] as const)(
+  "%s rules deny unknown tools despite native grants and keep eligible writes allowed",
+  (role, eligible) => {
+    const rules: PermissionRule[] = [
+      { permission: "*", pattern: "*", action: "allow" },
+      ...buildRoleScopedPermissionRules({ role, runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR }),
+    ];
+    for (const prefix of ["", "openducktor_", "functions.openducktor_"]) {
+      expect(effectiveAction(rules, `${prefix}odt_future_tool`)).toBe("deny");
+      expect(effectiveAction(rules, `${prefix}odt_get_workspaces`)).toBe("deny");
+      expect(effectiveAction(rules, `${prefix}${eligible}`)).toBe("allow");
+    }
+    expect(effectiveAction(rules, "other_mcp_tool")).toBe("allow");
+    expect(effectiveAction(rules, "bash")).toBe("allow");
+    expect(effectiveAction(rules, "task")).toBe("allow");
+    expect(effectiveAction(rules, "edit")).toBe(role === "build" ? "allow" : "deny");
+  },
+);

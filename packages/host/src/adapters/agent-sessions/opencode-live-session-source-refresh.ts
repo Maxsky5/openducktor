@@ -92,6 +92,7 @@ export const applyOpenCodeSessionSources = ({
       runtimeActivity: source.runtimeActivity,
       snapshot: parseOpenCodeLiveSnapshot(snapshotInput, "opencode-live-session.refresh-source"),
     };
+    if (source.sessionAssociation.kind !== "unbound") base.sessionScope = source.sessionAssociation;
     stagedSessions.push({
       session: {
         ...base,

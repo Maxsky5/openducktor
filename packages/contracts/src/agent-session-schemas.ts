@@ -47,6 +47,14 @@ export const agentSessionScopeSchema = z.discriminatedUnion("kind", [
 ]);
 export type AgentSessionScope = z.infer<typeof agentSessionScopeSchema>;
 
+/** Task and workspace records supply this scope; do not store it separately. */
+export const agentSessionAuthorizedRootSchema = agentSessionLiveRefSchema
+  .extend({
+    sessionScope: agentSessionScopeSchema,
+  })
+  .strict();
+export type AgentSessionAuthorizedRoot = z.infer<typeof agentSessionAuthorizedRootSchema>;
+
 export const agentSessionUnboundAssociationSchema = z
   .object({
     kind: z.literal("unbound"),

@@ -1,5 +1,6 @@
 import {
   type AgentSessionActivity,
+  type AgentSessionScope,
   type AgentSessionLiveRef,
   type AgentSessionLiveSnapshot,
   agentSessionLiveSnapshotSchema,
@@ -12,6 +13,7 @@ import { refKey, refsEqual } from "./opencode-live-session-normalization";
 export type OpenCodeLiveSession = {
   snapshot: AgentSessionLiveSnapshot;
   runtimeActivity: AgentSessionActivity;
+  sessionScope?: AgentSessionScope;
 };
 
 export type OpenCodeLiveSnapshotInput = z.input<typeof agentSessionLiveSnapshotSchema>;
