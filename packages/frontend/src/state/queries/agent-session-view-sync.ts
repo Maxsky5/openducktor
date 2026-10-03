@@ -60,7 +60,7 @@ export const createAgentSessionViewSync = ({
       forceFresh: true,
       readPort,
     });
-    await refreshLiveSessions(activeRepoPath);
+    // The live subscription owns its baseline. A task snapshot only reloads records.
   },
 });
 

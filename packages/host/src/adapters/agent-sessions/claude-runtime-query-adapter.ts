@@ -3,13 +3,13 @@ import type { ClaudeAgentSdkService } from "../../application/runtimes/claude-ag
 import type { RuntimeQueryIdentity } from "../../ports/runtime-query-error";
 import type { ClaudeAgentSdkServiceError } from "../../application/runtimes/claude-agent-sdk-service";
 import type {
-  AgentRuntimeQueryPort,
+  NativeAgentRuntimeQueryPort,
   AgentRuntimeQueryAdapterPort,
 } from "../../ports/agent-runtime-query-port";
 import { toRuntimeQueryError } from "./runtime-query-adapter";
 
 export const createClaudeRuntimeQueryAdapter = (
-  service: Pick<ClaudeAgentSdkService, keyof AgentRuntimeQueryPort | "resolveSessionParent">,
+  service: Pick<ClaudeAgentSdkService, keyof NativeAgentRuntimeQueryPort | "resolveSessionParent">,
 ): AgentRuntimeQueryAdapterPort => {
   const read = <Result>(
     operation: string,

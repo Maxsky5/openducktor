@@ -134,6 +134,7 @@ test.each([
     const firstSession = createAgentSessionFixture({
       externalSessionId: "session-a",
       runtimeKind: "opencode",
+      runtimeGeneration: "generation-1",
       historyLoadState: "loaded",
       messages: createSessionMessagesState("session-a", [
         buildMessage("user", "Inspect the task", {
@@ -145,6 +146,7 @@ test.each([
     });
     const otherSession = createAgentSessionFixture({
       externalSessionId: "session-b",
+      runtimeGeneration: "generation-1",
       historyLoadState: "loaded",
     });
     const store = createAgentSessionsStore("/repo");

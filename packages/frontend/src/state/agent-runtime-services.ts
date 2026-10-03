@@ -119,7 +119,11 @@ const createAgentEngine = (hostClient: HostClient): AgentEnginePort => {
       toCatalogRead(await hostClient.agentRuntimeLoadCatalog(input)),
     searchFiles: (input) => hostClient.agentRuntimeSearchFiles(input),
     loadSessionHistory: async (input) => {
-      const history = await hostClient.agentRuntimeLoadSessionHistory(input);
+      const { limit: _limit, ...recoveryInput } = input;
+      const history =
+        input.limit === undefined
+          ? (await hostClient.agentRuntimeRecoverSessionHistory(recoveryInput)).history
+          : await hostClient.agentRuntimeLoadSessionHistory(input);
       const filters = { queryKey: generatedImageMetadataSessionKey(input) };
       void appQueryClient
         .cancelQueries(filters)

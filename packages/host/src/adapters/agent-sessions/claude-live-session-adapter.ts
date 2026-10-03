@@ -210,7 +210,6 @@ export const createClaudeLiveSessionAdapterPreparer =
             }),
           ),
         );
-
       const { runSummary, runTitleUpdate } = createClaudeControlRunner({
         runControlMutation: eventCoordinator.runControlMutation,
         retainSummary: (operation, summary, options) =>
@@ -226,7 +225,6 @@ export const createClaudeLiveSessionAdapterPreparer =
           repoPath: runtime.repoPath,
         }),
       });
-
       const requireSessionWorkingDirectory = (
         input: { repoPath: string; runtimeKind: RuntimeKind; workingDirectory: string },
         operation: string,
@@ -243,6 +241,8 @@ export const createClaudeLiveSessionAdapterPreparer =
         ...unsupportedGeneratedImageOperations,
         resolveGeneratedImageSource: unsupportedGeneratedImageSource,
         supportsSessionControl: true,
+        restoreSessionTree: (ref) =>
+          adapter.sessionImport.inspectSession(ref).pipe(Effect.flatMap((source) => source.attach)),
         binding,
         listSnapshots: (repoPath) => Effect.succeed(state.listSnapshots(repoPath)),
         readSnapshot: (ref) => Effect.succeed(state.readSnapshot(ref)),

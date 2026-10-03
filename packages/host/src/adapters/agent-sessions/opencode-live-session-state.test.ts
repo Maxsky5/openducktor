@@ -39,7 +39,7 @@ type LiveState = ReturnType<typeof createState>;
 type SessionSources = Parameters<LiveState["applySessionSources"]>[0]["sources"];
 
 const applySources = (state: LiveState, sources: SessionSources) =>
-  state.applySessionSources({ sources, failures: [] }, state.versions());
+  state.applySessionSources({ sources, failures: [] }, state.captureSourceRead());
 
 describe("OpenCode host live-session state", () => {
   test("starts empty and adds a session from an OpenDucktor control result", () => {
@@ -327,7 +327,7 @@ describe("OpenCode host live-session state", () => {
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
     });
     const parentRef = state.listSnapshots()[0]!.ref;
-    const readVersions = state.versions();
+    const read = state.captureSourceRead();
     state.applyEvent(parentRef, {
       type: "approval_required",
       externalSessionId: "parent",
@@ -341,9 +341,10 @@ describe("OpenCode host live-session state", () => {
       mutation: "mutating",
     });
 
-    expect(state.applySessionSources({ sources: [], failures: [] }, readVersions)).toEqual([
+    expect(state.applySessionSources({ sources: [], failures: [] }, read)).toEqual([
       { type: "session_removed", ref: parentRef, provenance: "baseline" },
     ]);
+    state.finishSourceRead(read);
     const child = state.listSnapshots()[0]!;
     expect(child.ref.externalSessionId).toBe("child");
     expect(child.parentExternalSessionId).toBe("parent");
@@ -380,7 +381,7 @@ describe("OpenCode host live-session state", () => {
             },
           ],
         },
-        state.versions(),
+        state.captureSourceRead(),
       ),
     ).toEqual([
       {
@@ -474,4 +475,212 @@ describe("OpenCode host live-session state", () => {
     );
     expect(state.listSnapshots()[0]?.pendingApprovals).toEqual([]);
   });
+});
+
+for (const kind of ["approval", "question"] as const) {
+  const source = (ids: string[]): SessionSources => [
+    {
+      externalSessionId: "session-1",
+      workingDirectory: "/repo/worktree",
+      sessionAssociation: { kind: "unbound" },
+      runtimeActivity: "idle",
+      title: "Recovered",
+      startedAt: runtime.startedAt,
+      pendingApprovals:
+        kind === "approval"
+          ? ids.map((id) => ({ requestId: id, requestType: "command_execution", title: id }))
+          : [],
+      pendingQuestions:
+        kind === "question" ? ids.map((id) => ({ requestId: id, questions: [] })) : [],
+    },
+  ];
+  const arrive = (state: LiveState, id: string) => {
+    const ref = state.listSnapshots()[0]!.ref;
+    if (kind === "approval")
+      state.applyEvent(ref, {
+        type: "approval_required",
+        externalSessionId: ref.externalSessionId,
+        timestamp: runtime.startedAt,
+        requestId: id,
+        requestType: "command_execution",
+        title: id,
+      });
+    else
+      state.applyEvent(ref, {
+        type: "question_required",
+        externalSessionId: ref.externalSessionId,
+        timestamp: runtime.startedAt,
+        requestId: id,
+        questions: [],
+      });
+  };
+  const nativeIds = (state: LiveState) => {
+    const snapshot = state.listSnapshots()[0]!;
+    const pending = kind === "approval" ? snapshot.pendingApprovals : snapshot.pendingQuestions;
+    return pending
+      .map((item) => state.requirePendingRoute(snapshot.ref, item.requestId, kind).nativeRequestId)
+      .sort();
+  };
+  test(`recovery keeps missed ${kind} P and concurrent ${kind} Q with usable reply routes`, () => {
+    const state = createState();
+    state.applyControlSummary(summary());
+    const captured = state.captureSourceRead();
+    arrive(state, "Q");
+    state.applySessionSources({ sources: source(["P"]), failures: [] }, captured);
+    expect(nativeIds(state)).toEqual(["P", "Q"]);
+    expect(state.listSnapshots()[0]!.activity).toBe(
+      kind === "approval" ? "waiting_for_permission" : "waiting_for_question",
+    );
+  });
+  test(`recovery cannot revive ${kind} R that arrived and resolved during its read`, () => {
+    const state = createState();
+    state.applyControlSummary(summary());
+    arrive(state, "Q");
+    const captured = state.captureSourceRead();
+    arrive(state, "R");
+    const snapshot = state.listSnapshots()[0]!;
+    state.applyEvent(snapshot.ref, {
+      type: kind === "approval" ? "approval_resolved" : "question_resolved",
+      externalSessionId: snapshot.ref.externalSessionId,
+      requestId: "R",
+      timestamp: runtime.startedAt,
+    });
+    state.applySessionSources({ sources: source(["Q", "R"]), failures: [] }, captured);
+    expect(nativeIds(state)).toEqual(["Q"]);
+  });
+  test(`recovery keeps ${kind} resolution received without a request occurrence`, () => {
+    const state = createState();
+    state.applyControlSummary({ ...summary(), status: "idle" });
+    const captured = state.captureSourceRead();
+    const ref = state.listSnapshots()[0]!.ref;
+    state.applyEvent(ref, {
+      type: kind === "approval" ? "approval_resolved" : "question_resolved",
+      externalSessionId: ref.externalSessionId,
+      requestId: "R",
+      timestamp: runtime.startedAt,
+    });
+    state.applySessionSources({ sources: source(["R"]), failures: [] }, captured);
+    expect(nativeIds(state)).toEqual([]);
+    expect(state.listSnapshots()[0]!.activity).toBe("idle");
+  });
+}
+
+test("source recovery preserves activity that changed away and back during the read", () => {
+  const state = createState();
+  state.applyControlSummary(summary());
+  const ref = state.listSnapshots()[0]!.ref;
+  const read = state.captureSourceRead();
+  state.applyEvent(ref, {
+    type: "session_idle",
+    externalSessionId: ref.externalSessionId,
+    timestamp: runtime.startedAt,
+  });
+  state.applyEvent(ref, {
+    type: "session_status",
+    externalSessionId: ref.externalSessionId,
+    timestamp: runtime.startedAt,
+    status: { type: "busy", message: null },
+  });
+  expect(state.listSnapshots()[0]!.activity).toBe("running");
+  state.applySessionSources(
+    {
+      sources: [
+        {
+          externalSessionId: ref.externalSessionId,
+          workingDirectory: ref.workingDirectory,
+          sessionAssociation: { kind: "unbound" },
+          title: "Recovered metadata",
+          startedAt: runtime.startedAt,
+          runtimeActivity: "idle",
+          pendingApprovals: [],
+          pendingQuestions: [],
+        },
+      ],
+      failures: [],
+    },
+    read,
+  );
+  expect(state.listSnapshots()[0]!.activity).toBe("running");
+  expect(state.listSnapshots()[0]!.title).toBe("Recovered metadata");
+});
+
+test("an unchanged busy event during a source read still wins over an idle source", () => {
+  const state = createState();
+  state.applyControlSummary(summary());
+  const ref = state.listSnapshots()[0]!.ref;
+  const read = state.captureSourceRead();
+  state.applyEvent(ref, {
+    type: "session_status",
+    externalSessionId: ref.externalSessionId,
+    timestamp: runtime.startedAt,
+    status: { type: "busy", message: null },
+  });
+  state.applySessionSources(
+    {
+      sources: [
+        {
+          externalSessionId: ref.externalSessionId,
+          workingDirectory: ref.workingDirectory,
+          sessionAssociation: { kind: "unbound" },
+          title: "Recovered",
+          startedAt: runtime.startedAt,
+          runtimeActivity: "idle",
+          pendingApprovals: [],
+          pendingQuestions: [],
+        },
+      ],
+      failures: [],
+    },
+    read,
+  );
+  expect(state.listSnapshots()[0]!.activity).toBe("running");
+});
+
+test("source recovery preserves metadata and context that changed away and back", () => {
+  const state = createState();
+  state.applyControlSummary(summary());
+  state.setContext("session-1", { totalTokens: 10 });
+  const ref = state.listSnapshots()[0]!.ref;
+  const read = state.captureSourceRead();
+  state.applyControlSummary({ ...summary(), title: "Intermediate" });
+  state.setContext("session-1", { totalTokens: 20 });
+  state.applyControlSummary(summary());
+  state.setContext("session-1", { totalTokens: 10 });
+  state.applySessionSources(
+    {
+      sources: [
+        {
+          externalSessionId: ref.externalSessionId,
+          workingDirectory: ref.workingDirectory,
+          sessionAssociation: { kind: "unbound" },
+          title: "Intermediate",
+          startedAt: runtime.startedAt,
+          runtimeActivity: "running",
+          contextUsage: { totalTokens: 20 },
+          pendingApprovals: [],
+          pendingQuestions: [],
+        },
+      ],
+      failures: [],
+    },
+    read,
+  );
+  expect(state.listSnapshots()[0]!.title).toBe(summary().title!);
+  expect(state.listSnapshots()[0]!.contextUsage).toEqual({ totalTokens: 10 });
+});
+
+test("a repeated activity event prevents an older source omission from deleting the session", () => {
+  const state = createState();
+  state.applyControlSummary(summary());
+  const ref = state.listSnapshots()[0]!.ref;
+  const read = state.captureSourceRead();
+  state.applyEvent(ref, {
+    type: "session_status",
+    externalSessionId: ref.externalSessionId,
+    timestamp: runtime.startedAt,
+    status: { type: "busy", message: null },
+  });
+  state.applySessionSources({ sources: [], failures: [] }, read);
+  expect(state.listSnapshots()).toHaveLength(1);
+  expect(state.listSnapshots()[0]!.activity).toBe("running");
 });

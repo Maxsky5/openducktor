@@ -16,6 +16,7 @@ import type {
   AgentEvent,
   AgentModelSelection,
   AgentSessionTodoItem,
+  AgentSessionHistoryMessage,
   SessionRef,
 } from "@openducktor/core";
 import { agentSessionStatusFromActivity, withAgentSessionRef } from "@openducktor/core";
@@ -171,6 +172,7 @@ export class CodexRuntimeSessionEvents {
     Map<string, Set<string>>
   >();
   private readonly syntheticUserMessageEchoesByThreadId = new Map<string, CodexUserMessageEcho[]>();
+  private readonly nativeUserMessageAliasesByThreadId = new Map<string, Map<string, string>>();
   private readonly completedAgentMessagesByTurnKey = new Map<string, CompletedAgentMessage>();
   private readonly tokenUsageByTurnKey = new Map<string, CodexTokenUsageTotals>();
   private readonly modelByTurnKey = new Map<string, AgentModelSelection>();
@@ -434,6 +436,7 @@ export class CodexRuntimeSessionEvents {
     }
     this.clearHandledStreamRequestKeys(externalSessionId, runtimeId);
     this.syntheticUserMessageEchoesByThreadId.delete(externalSessionId);
+    this.nativeUserMessageAliasesByThreadId.delete(externalSessionId);
     this.latestTodosBySessionId.delete(externalSessionId);
     this.clearSessionDiffs(externalSessionId, runtimeId);
     this.contextUsage.clearSession(externalSessionId, runtimeId);
@@ -503,6 +506,20 @@ export class CodexRuntimeSessionEvents {
 
   expectUserMessageEcho(event: AcceptedAgentUserMessage, input: CodexUserInput[]): () => void {
     return expectCodexUserMessageEcho(this.streamingContext(), event, input);
+  }
+
+  reconcileUserHistory(
+    externalSessionId: string,
+    history: AgentSessionHistoryMessage[],
+  ): AgentSessionHistoryMessage[] {
+    const aliases = this.nativeUserMessageAliasesByThreadId.get(externalSessionId);
+    if (!aliases) return history;
+    return history.map((message) => {
+      const acceptedId = message.role === "user" ? aliases.get(message.messageId) : undefined;
+      return acceptedId && message.role === "user"
+        ? { ...message, messageId: acceptedId, nativeMessageId: message.messageId }
+        : message;
+    });
   }
 
   emitUserMessage(event: AcceptedAgentUserMessage): AcceptedAgentUserMessage {
@@ -977,6 +994,7 @@ export class CodexRuntimeSessionEvents {
     return {
       activeTurnsBySessionId: this.deps.activeTurnsBySessionId,
       syntheticUserMessageEchoesByThreadId: this.syntheticUserMessageEchoesByThreadId,
+      nativeUserMessageAliasesByThreadId: this.nativeUserMessageAliasesByThreadId,
       completedAgentMessagesByTurnKey: this.completedAgentMessagesByTurnKey,
       tokenUsageByTurnKey: this.tokenUsageByTurnKey,
       modelByTurnKey: this.modelByTurnKey,

@@ -180,6 +180,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
           }),
       },
       live: {
+        setSessionOwnership: () => Effect.void,
         startSession: (input) =>
           Effect.suspend(() => {
             starts.push(input);

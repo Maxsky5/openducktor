@@ -1,22 +1,36 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { AgentImageGenerationPart, RepoPromptOverrides } from "@openducktor/contracts";
-import type { AgentSessionHistoryMessage } from "@openducktor/core";
+import type {
+  AcceptedAgentUserMessage,
+  AgentEnginePort,
+  AgentSessionHistoryMessage,
+} from "@openducktor/core";
 import { HostInvokeError } from "@openducktor/host-client";
 import {
   createAgentSessionCollection,
   getAgentSession,
   replaceAgentSession,
 } from "@/state/agent-session-collection";
+import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
-import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createAgentSessionFixture,
+  createSettingsSnapshotFixture,
+} from "@/test-utils/shared-test-fixtures";
 import type {
   AgentQuestionRequest,
   AgentSessionIdentity,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
+import { toUserChatMessage } from "../support/user-message-event";
 import type { UpdateSession } from "../events/session-event-types";
+import { handleTranscriptRetracted } from "../events/session-lifecycle";
 import { upsertImageGenerationMessage } from "../support/image-generation-messages";
-import { createSessionMessagesState } from "../support/messages";
+import {
+  createSessionMessagesState,
+  upsertSessionMessage,
+  upsertUserSessionMessage,
+} from "../support/messages";
 import { createTaskCardFixture } from "../test-utils";
 import {
   createLoadAgentSessionHistory,
@@ -140,7 +154,315 @@ const createRetainedSessionHarness = () =>
     ]),
   });
 
+const startDeferredRecovery = (
+  harness: ReturnType<typeof createHistoryLoadHarness>,
+  generation = createSessionHistoryReadGeneration(),
+) => {
+  const history = Promise.withResolvers<AgentSessionHistoryMessage[]>();
+  const started = Promise.withResolvers<void>();
+  const loading = reloadSessionHistoryIntoStore({
+    repoPath: "/repo",
+    adapter: {
+      loadSessionHistory: async () => {
+        started.resolve();
+        return history.promise;
+      },
+    },
+    readSessionSnapshot: harness.readSessionSnapshot,
+    updateSession: harness.updateSession,
+    identity: sessionTarget,
+    isStaleRepoOperation: () => false,
+    historyReadGeneration: generation,
+  });
+  return { history, started, loading };
+};
+
+const retractHistoryMessage = (
+  harness: ReturnType<typeof createHistoryLoadHarness>,
+  messageId: string,
+) =>
+  handleTranscriptRetracted(
+    {
+      session: { identity: sessionTarget, key: "session", repoPath: "/repo" },
+      store: {
+        updateSession: harness.updateSession,
+        readSession: harness.readSessionSnapshot,
+        ensureSession: () => harness.session,
+        isSessionObserved: () => true,
+      },
+    },
+    {
+      type: "transcript_retracted",
+      externalSessionId: sessionTarget.externalSessionId,
+      timestamp: "2026-06-12T08:00:03.000Z",
+      messageIds: [messageId],
+    },
+  );
+
 describe("session history loader", () => {
+  for (const aliasSource of ["live", "history", "unknown"] as const) {
+    test(`recovers a Codex acceptance with ${aliasSource} native identity and overlapping queued input`, async () => {
+      const accepted: AcceptedAgentUserMessage = {
+        type: "user_message",
+        externalSessionId: "codex-session",
+        messageId: "codex-user-1770000000000-1",
+        timestamp: "2026-06-12T08:00:00.000Z",
+        message: "Hello",
+        parts: [{ kind: "text", text: "Hello" }],
+        state: "read",
+        resolvedQuestionRequestIds: [],
+      };
+      const identity: AgentSessionIdentity = {
+        externalSessionId: accepted.externalSessionId,
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+      };
+      const acceptedRow = toUserChatMessage(
+        aliasSource === "live" ? { ...accepted, nativeMessageId: "native-user" } : accepted,
+      );
+      const harness = createHistoryLoadHarness(
+        createAgentSessionFixture({
+          ...identity,
+          sessionAssociation: { kind: "repository" },
+          historyLoadState: "loaded",
+          historyCompleteness: "incomplete",
+          messages: createSessionMessagesState(identity.externalSessionId, [acceptedRow]),
+        }),
+      );
+      // A later HTTP acceptance must not erase the identity already delivered by the live echo.
+      harness.updateSession(identity, (session) => ({
+        ...session,
+        messages: upsertUserSessionMessage(session, toUserChatMessage(accepted)),
+      }));
+      const history = Promise.withResolvers<AgentSessionHistoryMessage[]>();
+      const started = Promise.withResolvers<void>();
+      const loading = reloadSessionHistoryIntoStore({
+        repoPath: "/repo",
+        adapter: {
+          loadSessionHistory: async () => {
+            started.resolve();
+            return history.promise;
+          },
+        },
+        identity,
+        readSessionSnapshot: harness.readSessionSnapshot,
+        updateSession: harness.updateSession,
+        isStaleRepoOperation: () => false,
+        historyReadGeneration: createSessionHistoryReadGeneration(),
+        loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+      });
+      await started.promise;
+      const queued = toUserChatMessage({
+        ...accepted,
+        messageId: "codex-user-1770000000000-2",
+        message: "Next request",
+        parts: [{ kind: "text", text: "Next request" }],
+        state: "queued",
+      });
+      harness.updateSession(identity, (session) => ({
+        ...session,
+        messages: upsertUserSessionMessage(session, queued),
+      }));
+      const nativeUser: Extract<AgentSessionHistoryMessage, { role: "user" }> = {
+        messageId: aliasSource === "history" ? accepted.messageId : "native-user",
+        role: "user",
+        state: "read",
+        timestamp: accepted.timestamp,
+        text: aliasSource === "unknown" ? "Hello" : "Authoritative Hello",
+        displayParts: [{ kind: "text", text: "Hello" }],
+        parts: [],
+      };
+      if (aliasSource === "history") nativeUser.nativeMessageId = "native-user";
+      history.resolve([
+        nativeUser,
+        {
+          messageId: "native-reply",
+          role: "assistant",
+          timestamp: accepted.timestamp,
+          text: "Hi",
+          parts: [],
+        },
+      ]);
+      if (aliasSource === "unknown") {
+        await expect(loading).rejects.toThrow("did not cover a retained transcript item");
+        expect(harness.session.historyCompleteness).toBe("incomplete");
+        expect(harness.session.historyLoadFailure?.detail).toContain("did not cover");
+        expect(sessionMessagesToArray(harness.session).map((message) => message.id)).toEqual([
+          accepted.messageId,
+          queued.id,
+        ]);
+      } else {
+        await loading;
+        expect(
+          sessionMessagesToArray(harness.session).map(({ id, content }) => ({ id, content })),
+        ).toEqual([
+          { id: accepted.messageId, content: "Authoritative Hello" },
+          { id: "native-reply", content: "Hi" },
+          { id: queued.id, content: "Next request" },
+        ]);
+        expect(harness.session.historyCompleteness).toBe("complete");
+        // The accepted/native alias remains available for another full recovery.
+        harness.updateSession(identity, (session) => ({
+          ...session,
+          historyCompleteness: "incomplete",
+        }));
+        await reloadSessionHistoryIntoStore({
+          repoPath: "/repo",
+          identity,
+          adapter: {
+            loadSessionHistory: async () => [
+              nativeUser,
+              {
+                messageId: "native-reply",
+                role: "assistant",
+                timestamp: accepted.timestamp,
+                text: "Hi",
+                parts: [],
+              },
+            ],
+          },
+          readSessionSnapshot: harness.readSessionSnapshot,
+          updateSession: harness.updateSession,
+          isStaleRepoOperation: () => false,
+          historyReadGeneration: createSessionHistoryReadGeneration(),
+          loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+        });
+        expect(sessionMessagesToArray(harness.session).map((message) => message.id)).toEqual([
+          accepted.messageId,
+          "native-reply",
+          queued.id,
+        ]);
+        expect(harness.session.historyCompleteness).toBe("complete");
+      }
+    });
+  }
+
+  test("does not restore an absent message retracted during recovery or any of its native parts", async () => {
+    const known: AgentSessionHistoryMessage = {
+      messageId: "known",
+      role: "user",
+      timestamp: "2026-06-12T08:00:00.000Z",
+      text: "Retain this message",
+      displayParts: [{ kind: "text", text: "Retain this message" }],
+      state: "read",
+      parts: [],
+    };
+    const harness = createHistoryLoadHarness({
+      ...createSession(),
+      historyLoadState: "loaded",
+      historyCompleteness: "incomplete",
+      messages: createSessionMessagesState("external-1", [
+        { id: known.messageId, role: "user", content: known.text, timestamp: known.timestamp },
+      ]),
+    });
+    const { history, started, loading } = startDeferredRecovery(harness);
+    await started.promise;
+    retractHistoryMessage(harness, "missed-message");
+    history.resolve([
+      known,
+      {
+        messageId: "missed-message",
+        role: "assistant",
+        timestamp: "2026-06-12T08:00:02.000Z",
+        text: "Removed before recovery completed",
+        parts: [
+          {
+            kind: "text",
+            messageId: "missed-message",
+            partId: "native-part",
+            text: "Removed before recovery completed",
+            completed: true,
+          },
+          {
+            kind: "reasoning",
+            messageId: "missed-message",
+            partId: "native-reasoning",
+            text: "Removed reasoning",
+            completed: true,
+          },
+        ],
+      },
+    ]);
+    await loading;
+    expect(harness.session.messages.items.map((message) => message.id)).toEqual(["known"]);
+    expect(harness.session.historyCompleteness).toBe("complete");
+    expect(harness.session.historyLoadFailure).toBeNull();
+    expect(harness.session.historyReadRetractedMessageIds).toBeUndefined();
+  });
+
+  test("keeps a live replacement after a retraction and releases removals before the next read", async () => {
+    const harness = createRetainedSessionHarness();
+    const { history, started, loading } = startDeferredRecovery(harness);
+    await started.promise;
+    retractHistoryMessage(harness, "missed-1");
+    harness.updateSession(sessionTarget, (current) => ({
+      ...current,
+      messages: upsertSessionMessage(current, {
+        id: "text:missed-1:replacement",
+        role: "assistant",
+        timestamp: "2026-06-12T08:00:04.000Z",
+        content: "Newer replacement",
+        meta: { kind: "assistant", sourceMessageId: "missed-1", partId: "replacement" },
+      }),
+    }));
+    history.resolve([retainedHistoryMessage, missedHistoryMessage]);
+    await loading;
+    expect(harness.session.messages.items.map((message) => message.content)).toEqual([
+      "Retained transcript",
+      "Newer replacement",
+    ]);
+    expect(harness.session.historyCompleteness).toBe("complete");
+
+    const next = startDeferredRecovery(harness);
+    await next.started.promise;
+    next.history.resolve([
+      retainedHistoryMessage,
+      {
+        ...missedHistoryMessage,
+        parts: [
+          {
+            kind: "text",
+            messageId: "missed-1",
+            partId: "replacement",
+            text: "Current authoritative replacement",
+            completed: true,
+          },
+        ],
+      },
+    ]);
+    await next.loading;
+    expect(harness.session.messages.items.map((message) => message.content)).toEqual([
+      "Retained transcript",
+      "Current authoritative replacement",
+    ]);
+  });
+
+  test.each(["success", "failure"] as const)(
+    "a superseded read cannot clear removals owned by the newer read ending in %s",
+    async (outcome) => {
+      const harness = createRetainedSessionHarness();
+      const generation = createSessionHistoryReadGeneration();
+      const old = startDeferredRecovery(harness, generation);
+      await old.started.promise;
+      const latest = startDeferredRecovery(harness, generation);
+      await latest.started.promise;
+      retractHistoryMessage(harness, "missed-1");
+      old.history.reject(new Error("Obsolete read failed"));
+      await old.loading;
+      if (outcome === "success") {
+        latest.history.resolve([retainedHistoryMessage, missedHistoryMessage]);
+        await latest.loading;
+        expect(harness.session.historyCompleteness).toBe("complete");
+      } else {
+        latest.history.reject(new Error("History unavailable. Check the assigned runtime."));
+        await expect(latest.loading).rejects.toThrow("Check the assigned runtime");
+        expect(harness.session.historyCompleteness).toBe("incomplete");
+      }
+      expect(harness.session.messages.items.map((message) => message.id)).toEqual(["retained-1"]);
+      expect(harness.session.historyReadRetractedMessageIds).toBeUndefined();
+    },
+  );
+
   test("history reloads clear absent image media and can later restore it", async () => {
     const harness = createHistoryLoadHarness();
     const empty: AgentImageGenerationPart = {
@@ -576,6 +898,13 @@ describe("session history loader", () => {
         text: "Recovered from history",
         parts: [],
       },
+      {
+        messageId: "live-1",
+        role: "assistant" as const,
+        timestamp: "2026-06-12T08:00:02.000Z",
+        text: "Arrived after the gap",
+        parts: [],
+      },
     ]);
     const harness = createHistoryLoadHarness({
       ...createSession(),
@@ -734,6 +1063,7 @@ describe("session history loader", () => {
       repoPath: "/repo",
       adapter: {
         loadSessionHistory: async () => [
+          retainedHistoryMessage,
           createFinalAssistantHistoryMessage({
             messageId: "missed-1",
             text: "Produced while inactive",
@@ -806,6 +1136,7 @@ describe("session history loader", () => {
     ]);
 
     recoveryHistoryPromise.resolve([
+      retainedHistoryMessage,
       createFinalAssistantHistoryMessage({
         messageId: "missed-1",
         text: "Produced while inactive",
@@ -1435,4 +1766,144 @@ describe("session history loader", () => {
       "System prompt:\n\nRuntime provided prompt.",
     ]);
   });
+});
+
+test("runtime replacement prevents an older history read from completing replacement content", async () => {
+  const h = createHistoryLoadHarness({
+    ...createSession(),
+    runtimeGeneration: "old",
+  });
+  const started = Promise.withResolvers<void>();
+  const finish = Promise.withResolvers<AgentSessionHistoryMessage[]>();
+  let expectedGeneration: string | undefined;
+  const loading = loadSessionHistoryIntoStore({
+    repoPath: "/repo",
+    adapter: {
+      loadSessionHistory: async (input) => {
+        expectedGeneration = input.expectedRuntimeGeneration;
+        started.resolve();
+        return finish.promise;
+      },
+    },
+    readSessionSnapshot: h.readSessionSnapshot,
+    updateSession: h.updateSession,
+    identity: sessionTarget,
+    isStaleRepoOperation: () => false,
+    historyReadGeneration: createSessionHistoryReadGeneration(),
+  });
+  await started.promise;
+  h.updateSession(sessionTarget, (session) => ({
+    ...session,
+    runtimeGeneration: "new",
+    historyLoadState: "loaded",
+    historyCompleteness: "incomplete",
+  }));
+  finish.resolve([retainedHistoryMessage]);
+  await loading;
+  expect(expectedGeneration).toBe("old");
+  expect(h.session.messages.items).toHaveLength(0);
+  expect(h.session.historyCompleteness).toBe("incomplete");
+});
+
+test("an explicit load restores full history for an unopened conversation affected by a gap", async () => {
+  const h = createHistoryLoadHarness({ ...createSession(), historyCompleteness: "incomplete" });
+  const load = mock(async (input: Parameters<AgentEnginePort["loadSessionHistory"]>[0]) => {
+    expect(input.limit).toBeUndefined();
+    return [missedHistoryMessage];
+  });
+  await loadSessionHistoryIntoStore({
+    repoPath: "/repo",
+    adapter: { loadSessionHistory: load },
+    readSessionSnapshot: h.readSessionSnapshot,
+    updateSession: h.updateSession,
+    identity: sessionTarget,
+    isStaleRepoOperation: () => false,
+    historyReadGeneration: createSessionHistoryReadGeneration(),
+  });
+  expect(load).toHaveBeenCalledTimes(1);
+  expect(h.session.historyLoadState).toBe("loaded");
+  expect(h.session.historyCompleteness).toBe("complete");
+  expect(sessionMessagesToArray(h.session).map((message) => message.content)).toEqual([
+    missedHistoryMessage.text,
+  ]);
+});
+
+test("an explicit incomplete unopened history load exposes an adapter failure", async () => {
+  const h = createHistoryLoadHarness({ ...createSession(), historyCompleteness: "incomplete" });
+  const failure = new Error("Runtime history unavailable. Start the assigned runtime.");
+  await expect(
+    loadSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => {
+          throw failure;
+        },
+      },
+      readSessionSnapshot: h.readSessionSnapshot,
+      updateSession: h.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration: createSessionHistoryReadGeneration(),
+    }),
+  ).rejects.toBe(failure);
+  expect(h.session.historyCompleteness).toBe("incomplete");
+  expect(h.session.historyLoadFailure?.detail).toBe(failure.message);
+});
+
+test("a workspace revisit completes interrupted full recovery", async () => {
+  const store = createAgentSessionsStore("/repo");
+  store.replaceSession({ ...createSession(), historyCompleteness: "incomplete" });
+  const started = Promise.withResolvers<void>();
+  const finish = Promise.withResolvers<AgentSessionHistoryMessage[]>();
+  let epoch = 1;
+  const generation = createSessionHistoryReadGeneration();
+  const loading = loadSelectedSessionBaselineHistoryIntoStore({
+    repoPath: "/repo",
+    adapter: {
+      loadSessionHistory: async () => {
+        started.resolve();
+        return finish.promise;
+      },
+    },
+    readSessionSnapshot: store.getSessionSnapshot,
+    updateSession: store.updateSession,
+    identity: sessionTarget,
+    isStaleRepoOperation: () => epoch !== 1,
+    historyReadGeneration: generation,
+  });
+  await started.promise;
+  expect(store.getSessionSnapshot(sessionTarget)?.historyCompleteness).toBe("recovering");
+  epoch += 1;
+  store.resetWorkspace("/other");
+  finish.resolve([retainedHistoryMessage]);
+  await loading;
+  store.resetWorkspace("/repo");
+  expect(store.getSessionSnapshot(sessionTarget)).toMatchObject({
+    historyLoadState: "not_requested",
+    historyCompleteness: "incomplete",
+  });
+  const history = Array.from({ length: 701 }, (_, index) => ({
+    ...missedHistoryMessage,
+    messageId: `missed-${index}`,
+    text: `Missing content ${index}`,
+  }));
+  const read = mock(async (input: Parameters<AgentEnginePort["loadSessionHistory"]>[0]) => {
+    expect(input.limit).toBeUndefined();
+    return input.limit ? history.slice(-input.limit) : history;
+  });
+  await loadSelectedSessionBaselineHistoryIntoStore({
+    repoPath: "/repo",
+    adapter: { loadSessionHistory: read },
+    readSessionSnapshot: store.getSessionSnapshot,
+    updateSession: store.updateSession,
+    identity: sessionTarget,
+    isStaleRepoOperation: () => false,
+    historyReadGeneration: generation,
+  });
+  const restored = store.getSessionSnapshot(sessionTarget)!;
+  expect(read).toHaveBeenCalledTimes(1);
+  expect(restored.historyLoadState).toBe("loaded");
+  expect(restored.historyCompleteness).toBe("complete");
+  expect(sessionMessagesToArray(restored)).toHaveLength(701);
+  expect(sessionMessagesToArray(restored)[0]?.content).toBe("Missing content 0");
 });

@@ -22,6 +22,7 @@ export const createCombinedHostSseResponse = (
       let cursor: BrowserEventCursor;
       if (raw === null) {
         cursor = {
+          hostEpoch: host.hostEpoch,
           hostEventId: host.currentEventId(),
           notificationCursor:
             requested === null ? null : notificationCursorSchema.parse(JSON.parse(requested)),
@@ -29,6 +30,7 @@ export const createCombinedHostSseResponse = (
       } else {
         cursor = browserEventCursorSchema.parse(JSON.parse(raw));
       }
+      const replay = host.replayAfterWithDiagnostics(`${cursor.hostEpoch}:${cursor.hostEventId}`);
       let closed = false;
       let stopHost: (() => void) | null = null;
       let stopNotifications: (() => void) | null = null;
@@ -68,18 +70,18 @@ export const createCombinedHostSseResponse = (
               }
             };
             controller.enqueue(encoder.encode(": openducktor-ready\n\n"));
-            const replay = host.replayAfterWithDiagnostics(cursor.hostEventId);
-            if (replay.skippedEventCount > 0)
-              write(
-                "stream-warning",
-                `Host event stream skipped ${replay.skippedEventCount} events; reconnect will replay buffered events.`,
-              );
+            write("replay-start", JSON.stringify(replay.boundary));
             for (const event of replay.events) {
+              cursor.hostEpoch = event.hostEpoch;
               cursor.hostEventId = event.id;
               write(event.eventName, event.payload);
             }
+            cursor.hostEpoch = replay.boundary.hostEpoch;
+            cursor.hostEventId = replay.boundary.sequence;
+            write("replay-complete", JSON.stringify(replay.boundary));
             if (closed) return;
             stopHost = host.subscribe((event) => {
+              cursor.hostEpoch = event.hostEpoch;
               cursor.hostEventId = event.id;
               write(event.eventName, event.payload);
             });
@@ -100,8 +102,9 @@ export const createCombinedHostSseResponse = (
           },
           cancel: stop,
         },
-        { highWaterMark: 515 },
-      ); // Two 256-frame replays, readiness, a gap warning, and notification attachment.
+        // Reserve space for notification replay, attachment, and host replay controls.
+        { highWaterMark: replay.events.length + 260 },
+      );
       return new Response(body, {
         headers: {
           ...corsHeaders,

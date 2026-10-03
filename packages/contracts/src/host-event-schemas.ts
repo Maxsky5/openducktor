@@ -2,6 +2,7 @@ import { z } from "zod";
 import { agentSessionLiveEnvelopeSchema } from "./agent-session-live-schemas";
 import { azureDevOpsConnectionStateSchema } from "./azure-devops-schemas";
 import { devServerEventSchema } from "./dev-server-schemas";
+import { agentSessionLiveRefSchema } from "./agent-session-schemas";
 import { workspaceSessionSchema } from "./workspace-session-schemas";
 
 const runEventPayloadSchema = z.record(z.string(), z.json());
@@ -82,3 +83,18 @@ export const parseHostEventEnvelope = (value: HostEventWireEnvelope): HostEventE
 
   throw new Error("Invalid OpenDucktor host event envelope.", { cause: parsed.error });
 };
+
+export const hostReplayLossSchema = z.strictObject({
+  channel: z.enum(HOST_EVENT_CHANNELS),
+  repoPath: z.string().min(1).optional(),
+  facet: z.enum(["state", "transcript", "other"]),
+  refs: z.array(agentSessionLiveRefSchema).optional(),
+});
+export type HostReplayLoss = z.infer<typeof hostReplayLossSchema>;
+export const hostReplayBoundarySchema = z.strictObject({
+  hostEpoch: z.string().uuid(),
+  sequence: z.number().int().nonnegative(),
+  hostChanged: z.boolean(),
+  losses: z.array(hostReplayLossSchema),
+});
+export type HostReplayBoundary = z.infer<typeof hostReplayBoundarySchema>;

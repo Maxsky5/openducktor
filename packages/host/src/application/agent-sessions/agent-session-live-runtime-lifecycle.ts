@@ -12,6 +12,7 @@ import {
   AgentSessionLiveRegistration,
   type AgentSessionLiveAdapterChange,
   type AgentSessionLiveAdapterPort,
+  type AgentSessionLiveAdapterBinding,
   type AgentSessionLiveAdapterRegistryPort,
 } from "../../ports/agent-session-live-adapter-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
@@ -19,6 +20,10 @@ import type { LiveStateCoordinator } from "./live-state-coordinator";
 import { parseAdapterOutput } from "./agent-session-live-validation";
 
 type LiveRuntimeLifecycle = RuntimeLiveSessionLifecyclePort & {
+  readonly publishRuntimeChange: (
+    binding: AgentSessionLiveAdapterBinding,
+    state: "ready" | "stopped",
+  ) => Effect.Effect<void, HostError>;
   readonly requireAttached: (
     registration: AgentSessionLiveRegistration,
   ) => Effect.Effect<void, HostError>;
@@ -30,8 +35,11 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
   publishChanges,
   publishEnvelope,
   listSnapshots,
-  refreshSnapshots,
+  initializeAdapter,
 }: {
+  readonly initializeAdapter: (
+    adapter: AgentSessionLiveAdapterPort,
+  ) => Effect.Effect<void, HostError>;
   readonly adapterRegistry: AgentSessionLiveAdapterRegistryPort;
   readonly coordinator: LiveStateCoordinator;
   readonly publishChanges: (
@@ -41,14 +49,10 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
   readonly listSnapshots: (
     repoPath: string,
   ) => Effect.Effect<ReadonlyArray<AgentSessionLiveSnapshot>, HostError>;
-  readonly refreshSnapshots: (
-    adapter: AgentSessionLiveAdapterPort,
-  ) => Effect.Effect<void, HostError>;
 }): LiveRuntimeLifecycle => {
-  const detachedBindings = new WeakSet<AgentSessionLiveRegistration>();
-  const activeRegistrations = new WeakSet<AgentSessionLiveRegistration>();
+  const states = new WeakMap<AgentSessionLiveRegistration, "active" | "detached">();
   const requireAttached = (binding: AgentSessionLiveRegistration) =>
-    detachedBindings.has(binding)
+    states.get(binding) === "detached"
       ? Effect.fail(
           new HostOperationError({
             operation: "agent-session-live.runtime-detached",
@@ -59,6 +63,23 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
       : Effect.void;
 
   return {
+    publishRuntimeChange: (binding, state) =>
+      coordinator.run(
+        Effect.suspend(() => {
+          const envelope: Extract<AgentSessionLiveEnvelope, { type: "runtime_changed" }> = {
+            type: "runtime_changed",
+            scope: { repoPath: binding.repoPath, runtimeKind: binding.runtimeKind },
+            state,
+          };
+          if (state === "ready") {
+            const registration = adapterRegistry
+              .listForRepo(binding.repoPath)
+              .find((adapter) => adapter.binding.runtimeId === binding.runtimeId);
+            if (registration) envelope.runtimeGeneration = registration.binding.generation;
+          }
+          return publishEnvelope(envelope);
+        }),
+      ),
     requireAttached,
     registerRuntimeAdapter: (adapter) => {
       let registered = false;
@@ -69,12 +90,12 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
             Effect.tap(() =>
               Effect.sync(() => {
                 registered = true;
-                activeRegistrations.add(adapter.binding);
+                states.set(adapter.binding, "active");
               }),
             ),
           ),
         );
-        yield* refreshSnapshots(adapter);
+        yield* initializeAdapter(adapter);
         yield* coordinator.run(
           Effect.gen(function* () {
             yield* requireAttached(adapter.binding);
@@ -98,15 +119,16 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
       }).pipe(
         Effect.onError(() =>
           registered
-            ? coordinator.run(
-                Effect.gen(function* () {
-                  detachedBindings.add(adapter.binding);
-                  activeRegistrations.delete(adapter.binding);
-                  if (adapterRegistry.listForRepo(adapter.binding.repoPath).includes(adapter)) {
-                    yield* adapterRegistry.remove(adapter.binding.runtimeId);
-                  }
-                }),
-              )
+            ? coordinator
+                .run(
+                  Effect.gen(function* () {
+                    states.set(adapter.binding, "detached");
+                    if (adapterRegistry.listForRepo(adapter.binding.repoPath).includes(adapter)) {
+                      yield* adapterRegistry.remove(adapter.binding.runtimeId);
+                    }
+                  }),
+                )
+                .pipe(Effect.ensuring(adapter.binding.closeRecoveryScopes))
             : Effect.void,
         ),
       );
@@ -118,8 +140,7 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
             Effect.gen(function* () {
               const adapter = yield* adapterRegistry.remove(runtimeId);
               if (!adapter) return null;
-              detachedBindings.add(adapter.binding);
-              activeRegistrations.delete(adapter.binding);
+              states.set(adapter.binding, "detached");
               const snapshots = yield* Effect.exit(
                 adapter
                   .listSnapshots(adapter.binding.repoPath)
@@ -159,6 +180,7 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
           );
           if (!detached) return [];
           const { adapter, snapshots, settlement, detachedPublication } = detached;
+          yield* adapter.binding.closeRecoveryScopes;
           // Native cleanup can wait for controls or events that need the live coordinator.
           const cleanup = yield* Effect.exit(adapter.releaseRuntime());
           const releasedRefs = Exit.isSuccess(cleanup)
@@ -253,7 +275,7 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
           Effect.gen(function* () {
             const result = yield* mutation;
             // Cleanup can drain native events. A detached lease cannot publish them.
-            if (activeRegistrations.has(registration)) yield* publishChanges(result.changes);
+            if (states.get(registration) === "active") yield* publishChanges(result.changes);
             return result.value;
           }),
         ),

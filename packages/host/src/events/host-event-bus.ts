@@ -16,6 +16,7 @@ export type HostEventDeliveryReporter = {
 };
 
 export type HostEventBusPort = {
+  readonly hostEpoch?: string;
   publish(envelope: HostEventEnvelope): void;
   subscribe(channel: string, listener: HostEventListener): HostEventUnsubscribe;
 };

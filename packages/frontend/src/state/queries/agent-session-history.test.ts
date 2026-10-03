@@ -31,6 +31,8 @@ describe("agent session history queries", () => {
       { ...sessionRefFixture, limit: 5 },
       { ...sessionRefFixture, systemPrompt: "Read only" },
       { ...sessionRefFixture, sessionScope: { kind: "repository" } },
+      { ...sessionRefFixture, expectedRuntimeGeneration: "old-runtime" },
+      { ...sessionRefFixture, expectedRuntimeGeneration: "new-runtime" },
     ];
     const reads = inputs.flatMap((input) => [
       client.fetchQuery(sessionHistoryQueryOptions(input, reader)),
@@ -54,6 +56,7 @@ describe("agent session history queries", () => {
         systemPromptContext: undefined,
         systemPrompt: undefined,
         model: undefined,
+        expectedRuntimeGeneration: undefined,
       },
     ]);
   });

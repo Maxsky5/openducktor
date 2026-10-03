@@ -112,6 +112,7 @@ export const agentSessionHistoryMessageSchema = z.discriminatedUnion("role", [
     .object({
       ...sessionHistoryMessageFields,
       role: z.literal("user"),
+      nativeMessageId: nonEmptyStringSchema.optional(),
       displayParts: z.array(agentUserMessageDisplayPartSchema),
       state: z.enum(["queued", "read"]),
       model: agentModelSelectionSchema.optional(),

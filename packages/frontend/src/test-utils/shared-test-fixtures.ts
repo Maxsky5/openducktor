@@ -525,6 +525,7 @@ export const createRepoRuntimeHealthFixture = (
 export const createWorkspaceActivityObserverStub = (
   states: Readonly<Record<string, WorkspaceActivityState>> = {},
 ): WorkspaceActivityObserver => ({
+  subscribeHistoryInvalidations: () => () => {},
   syncWorkspaces: () => {},
   setSessionRecordsError: () => {},
   subscribe: () => () => {},

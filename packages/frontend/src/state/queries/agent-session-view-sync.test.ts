@@ -158,7 +158,7 @@ describe("AgentSessionViewSync", () => {
     }
   });
 
-  test("reloads task session records and live sessions for a stream snapshot", async () => {
+  test("reloads task session records without scanning the runtime for a stream snapshot", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const sessionQueryKey = agentSessionQueryKeys.list("/repo", "task-1");
     const loadSessions = mock(async () => []);
@@ -184,7 +184,7 @@ describe("AgentSessionViewSync", () => {
       await sync.reconcileStreamSnapshot("/repo", ["task-1"]);
 
       expect(loadSessionBatch).toHaveBeenCalledWith("/repo", ["task-1"]);
-      expect(refreshLiveSessions).toHaveBeenCalledWith("/repo");
+      expect(refreshLiveSessions).not.toHaveBeenCalled();
     } finally {
       unsubscribeSessions();
     }
@@ -217,6 +217,6 @@ describe("AgentSessionViewSync", () => {
     expect(queryClient.getQueryData<unknown[]>(currentActiveSessionKey)).toEqual([]);
     expect(removeTaskSessions).toHaveBeenCalledWith("/repo", ["deleted-task"]);
     expect(loadSessionBatch).toHaveBeenCalledWith("/repo", ["current-task"]);
-    expect(refreshLiveSessions).toHaveBeenCalledWith("/repo");
+    expect(refreshLiveSessions).not.toHaveBeenCalled();
   });
 });

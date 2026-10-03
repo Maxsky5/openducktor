@@ -1,4 +1,4 @@
-import type { RuntimeKind } from "@openducktor/contracts";
+import type { RepoConfig, RuntimeKind } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createDefaultGlobalConfig } from "../config/global-config";
 import { HostValidationError } from "../effect/host-errors";
@@ -8,6 +8,7 @@ import type { ToolDiscoveryPort } from "../ports/tool-discovery-port";
 const createSettingsConfig = (
   resolveExecutablePath: () => Effect.Effect<string, HostValidationError>,
   kind: RuntimeKind,
+  workspaces: Record<string, RepoConfig> = {},
 ): SettingsConfigPort => ({
   readConfig: () =>
     resolveExecutablePath().pipe(
@@ -15,6 +16,7 @@ const createSettingsConfig = (
         const config = createDefaultGlobalConfig();
         return {
           ...config,
+          workspaces,
           agentRuntimes: {
             ...config.agentRuntimes,
             [kind]: {
@@ -38,7 +40,9 @@ const createSettingsConfig = (
 export const createFixedRuntimeSettingsConfig = (
   kind: RuntimeKind,
   executablePath: string,
-): SettingsConfigPort => createSettingsConfig(() => Effect.succeed(executablePath), kind);
+  workspaces: Record<string, RepoConfig> = {},
+): SettingsConfigPort =>
+  createSettingsConfig(() => Effect.succeed(executablePath), kind, workspaces);
 
 export const createDiscoveredRuntimeSettingsConfig = (
   kind: RuntimeKind,

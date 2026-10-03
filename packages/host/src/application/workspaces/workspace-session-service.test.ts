@@ -1,3 +1,11 @@
+import { createLiveSessionRootRefsReader } from "../../composition/node/live-session-root-refs";
+import { createAgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
+import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
+import { createOpenCodeLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/opencode-live-session-adapter";
+import {
+  createRuntimeHarness,
+  runtime as nativeRuntime,
+} from "../../adapters/agent-sessions/opencode-live-session-adapter.test-support";
 import {
   readWorkspaceSessionArchivePreview,
   removeWorkspaceSessionWorktree,
@@ -275,6 +283,7 @@ describe("host-owned Workspace Session lifecycle", () => {
           }),
       },
       live: {
+        setSessionOwnership: () => Effect.void,
         startSession: (request) =>
           Effect.suspend(() => {
             calls.push("start");
@@ -342,6 +351,144 @@ describe("host-owned Workspace Session lifecycle", () => {
       registered,
     };
   };
+
+  test("restores an archived root into an already initialized projection without resuming", async () => {
+    const h = setup();
+    const created = await Effect.runPromise(h.service.create(input()));
+    const recordRef = { workspaceId: "fairnest", sessionId: created.session.id };
+    const started = await Effect.runPromise(h.service.start(recordRef));
+    await Effect.runPromise(
+      h.service.archive({ ...recordRef, removeWorktree: false, confirmStop: false }),
+    );
+    const root = {
+      repoPath: database.repoPath,
+      runtimeKind: "opencode" as const,
+      externalSessionId: started.session.externalSessionId!,
+      workingDirectory: database.repoPath,
+    };
+    const entered = Promise.withResolvers<void>();
+    const finish = Promise.withResolvers<void>();
+    let treeReads = 0;
+    const harness = createRuntimeHarness({
+      readSessionTree: async (ref) => {
+        expect(ref).toEqual(root);
+        expect(
+          (
+            await Effect.runPromise(
+              h.dependencies.store.get({ ...recordRef, repoPath: database.repoPath }),
+            )
+          ).archivedAt,
+        ).toBeNull();
+        treeReads++;
+        entered.resolve();
+        await finish.promise;
+        return {
+          failures: [],
+          sources: [
+            {
+              externalSessionId: root.externalSessionId,
+              workingDirectory: root.workingDirectory,
+              sessionAssociation: { kind: "unbound" },
+              title: "Restored root",
+              startedAt: nativeRuntime.startedAt,
+              runtimeActivity: "idle",
+              pendingApprovals: [],
+              pendingQuestions: [],
+            },
+            {
+              externalSessionId: "restored-child",
+              parentExternalSessionId: root.externalSessionId,
+              workingDirectory: root.workingDirectory,
+              sessionAssociation: { kind: "unbound" },
+              title: "Restored child",
+              startedAt: nativeRuntime.startedAt,
+              runtimeActivity: "idle",
+              pendingApprovals: [
+                { requestId: "permission-1", requestType: "file_change", title: "Edit" },
+              ],
+              pendingQuestions: [],
+              contextUsage: { totalTokens: 42 },
+            },
+          ],
+        };
+      },
+    });
+    const live = createAgentSessionLiveStateService({
+      adapterRegistry: createLiveSessionAdapterRegistry(),
+      faultLog: () => Effect.void,
+      publish: () => {},
+      readSessionRootRefs: createLiveSessionRootRefsReader({
+        store: h.dependencies.store,
+        taskStore: database.store,
+        settings: {
+          getRepoConfigByRepoPath: () => h.dependencies.settings.getRepoConfig("fairnest"),
+        },
+      }),
+    });
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: live,
+        prepareRuntime: harness.prepareRuntime,
+      })({ ...nativeRuntime, repoPath: root.repoPath, workingDirectory: root.workingDirectory }),
+    );
+    await Effect.runPromise(live.registerRuntimeAdapter(prepared.adapter));
+    await Effect.runPromise(prepared.startForwarding());
+    const service = createWorkspaceSessionService({ ...h.dependencies, live });
+    try {
+      expect((await Effect.runPromise(live.attach({ repoPath: root.repoPath }))).sessions).toEqual(
+        [],
+      );
+      const restore = Effect.runPromise(service.restore(recordRef));
+      await entered.promise;
+      let attached = false;
+      const attaching = Effect.runPromise(live.attach({ repoPath: root.repoPath })).then(
+        (baseline) => {
+          attached = true;
+          return baseline;
+        },
+      );
+      await Bun.sleep(10);
+      expect(attached).toBe(false);
+      finish.resolve();
+      expect((await restore).archivedAt).toBeNull();
+      const baseline = await attaching;
+      expect(baseline.complete).toBe(true);
+      expect(baseline.sessions.map((session) => session.ref.externalSessionId).sort()).toEqual(
+        [root.externalSessionId, "restored-child"].sort(),
+      );
+      expect(
+        baseline.sessions.find((session) => session.ref.externalSessionId === "restored-child"),
+      ).toMatchObject({ activity: "waiting_for_permission", contextUsage: { totalTokens: 42 } });
+      expect(harness.controlCalls).toEqual([]);
+      expect(harness.sessionSourceReadCalls).toBe(1);
+      expect(treeReads).toBe(1);
+      await harness.emit({
+        type: "session_event",
+        externalSessionId: root.externalSessionId,
+        event: {
+          type: "approval_required",
+          externalSessionId: root.externalSessionId,
+          timestamp: nativeRuntime.startedAt,
+          requestId: "new-approval",
+          requestType: "file_change",
+          title: "Restored event",
+        },
+      });
+      expect(await Effect.runPromise(live.read(root))).toMatchObject({
+        type: "live",
+        session: { activity: "waiting_for_permission" },
+      });
+      await Effect.runPromise(
+        service.archive({ ...recordRef, removeWorktree: false, confirmStop: true }),
+      );
+      expect((await Effect.runPromise(live.attach({ repoPath: root.repoPath }))).sessions).toEqual(
+        [],
+      );
+    } finally {
+      finish.resolve();
+      await Effect.runPromise(live.releaseRuntime(nativeRuntime.runtimeId));
+    }
+  });
 
   test("keeps a fresh Codex manual rename until the first turn ends", async () => {
     const h = setup();

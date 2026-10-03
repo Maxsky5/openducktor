@@ -923,7 +923,7 @@ export class CodexAppServerAdapter
     const history = this.questionHistory.merge(
       runtime.runtimeId,
       input.externalSessionId,
-      nativeHistory,
+      this.runtimeEvents.reconcileUserHistory(input.externalSessionId, nativeHistory),
     );
     this.asyncQuestions.loadHistory(runtime.runtimeId, input.externalSessionId, history);
     if (session && this.options.onLiveSessionMutation) {

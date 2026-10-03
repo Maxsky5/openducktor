@@ -193,6 +193,12 @@ export const handleTranscriptRetracted = (
   };
   context.store.updateSession(context.session.identity, (current) => ({
     ...current,
+    ...(current.historyReadRetractedMessageIds && {
+      historyReadRetractedMessageIds: new Set([
+        ...current.historyReadRetractedMessageIds,
+        ...retractedMessageIds,
+      ]),
+    }),
     messages: createSessionMessagesState(
       current.externalSessionId,
       current.messages.items.filter((message) => !belongsToRetractedMessage(message)),

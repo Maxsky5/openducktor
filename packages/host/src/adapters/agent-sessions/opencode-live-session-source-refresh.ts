@@ -10,7 +10,7 @@ import type {
 } from "@openducktor/contracts";
 import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
 import type { OpenCodeRuntimeInstance } from "./opencode-live-session-normalization";
-import { refKey } from "./opencode-live-session-normalization";
+import { refKey, toContextUsage } from "./opencode-live-session-normalization";
 import type {
   OpenCodePendingRequestRouter,
   StagedOpenCodeRequest,
@@ -30,6 +30,10 @@ type ApplyOpenCodeSessionSourcesInput = {
   contextUsageBySessionId: ReadonlyMap<string, AgentSessionContextUsage>;
   pendingRequests: OpenCodePendingRequestRouter;
   isFresh: (ref: AgentSessionLiveRef) => boolean;
+  mergeRecovered: (
+    session: OpenCodeLiveSession,
+    routes: ReadonlyArray<import("./opencode-pending-request-router").OpenCodePendingRoute>,
+  ) => OpenCodeLiveSession | null;
   saveSession: (session: OpenCodeLiveSession) => AgentSessionLiveAdapterChange[];
   removeSession: (ref: AgentSessionLiveRef) => AgentSessionLiveAdapterChange[];
 };
@@ -52,6 +56,7 @@ export const applyOpenCodeSessionSources = ({
   contextUsageBySessionId,
   pendingRequests,
   isFresh,
+  mergeRecovered,
   saveSession,
   removeSession,
 }: ApplyOpenCodeSessionSourcesInput): AgentSessionLiveAdapterChange[] => {
@@ -65,9 +70,6 @@ export const applyOpenCodeSessionSources = ({
       externalSessionId: source.externalSessionId,
     };
     seenKeys.add(refKey(ref));
-    if (!isFresh(ref)) {
-      continue;
-    }
     const approvals = source.pendingApprovals.map((request) =>
       pendingRequests.stageApproval(ref, request),
     );
@@ -81,7 +83,12 @@ export const applyOpenCodeSessionSources = ({
       startedAt: source.startedAt,
       pendingApprovals: approvals.map(({ request }) => request),
       pendingQuestions: questions.map(({ request }) => request),
-      contextUsage: contextUsageBySessionId.get(source.externalSessionId) ?? null,
+      contextUsage:
+        source.contextUsage === undefined
+          ? (contextUsageBySessionId.get(source.externalSessionId) ?? null)
+          : source.contextUsage === null
+            ? null
+            : toContextUsage(source.contextUsage),
     };
     if (source.parentExternalSessionId) {
       snapshotInput.parentExternalSessionId = source.parentExternalSessionId;
@@ -94,18 +101,35 @@ export const applyOpenCodeSessionSources = ({
       snapshot: parseOpenCodeLiveSnapshot(snapshotInput, "opencode-live-session.refresh-source"),
     };
     if (source.sessionAssociation.kind !== "unbound") base.sessionScope = source.sessionAssociation;
-    stagedSessions.push({
-      session: {
+    const merged = mergeRecovered(
+      {
         ...base,
         snapshot: parseOpenCodeLiveSnapshot(
           { ...base.snapshot, activity: openCodeActivityForPending(base) },
           "opencode-live-session.refresh-activity",
         ),
       },
-      requests: [...approvals, ...questions],
-    });
+      [...approvals, ...questions].map((request) => request.route),
+    );
+    if (merged) stagedSessions.push({ session: merged, requests: [...approvals, ...questions] });
   }
 
+  // A failed root or child-tree read cannot prove that prior descendants vanished.
+  const protectedIds = new Set(failures.map((failure) => failure.externalSessionId));
+  let expanded = true;
+  while (expanded) {
+    expanded = false;
+    for (const snapshot of snapshots) {
+      if (
+        snapshot.parentExternalSessionId &&
+        protectedIds.has(snapshot.parentExternalSessionId) &&
+        !protectedIds.has(snapshot.ref.externalSessionId)
+      ) {
+        protectedIds.add(snapshot.ref.externalSessionId);
+        expanded = true;
+      }
+    }
+  }
   const changes: AgentSessionLiveAdapterChange[] = failures.map((failure) => {
     const ref: AgentSessionLiveRef = {
       repoPath: runtime.repoPath,
@@ -123,18 +147,25 @@ export const applyOpenCodeSessionSources = ({
     };
   });
   for (const snapshot of snapshots) {
-    if (!seenKeys.has(refKey(snapshot.ref)) && isFresh(snapshot.ref)) {
+    if (
+      !protectedIds.has(snapshot.ref.externalSessionId) &&
+      !seenKeys.has(refKey(snapshot.ref)) &&
+      isFresh(snapshot.ref)
+    ) {
       changes.push(...removeSession(snapshot.ref));
     }
   }
   for (const staged of stagedSessions) {
-    for (const request of staged.requests) {
-      pendingRequests.save(request);
-    }
-    pendingRequests.removeMissingForSession(
-      staged.session.snapshot.ref,
-      new Set(staged.requests.map(({ route }) => route.occurrenceId)),
+    const retainedRequestIds = new Set(
+      [
+        ...staged.session.snapshot.pendingApprovals,
+        ...staged.session.snapshot.pendingQuestions,
+      ].map((request) => request.requestId),
     );
+    for (const request of staged.requests) {
+      if (retainedRequestIds.has(request.route.occurrenceId)) pendingRequests.save(request);
+    }
+    pendingRequests.removeMissingForSession(staged.session.snapshot.ref, retainedRequestIds);
     changes.push(...saveSession(staged.session));
   }
   return baselineLiveSessionChanges(changes);

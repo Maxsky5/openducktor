@@ -1,3 +1,4 @@
+import type { AgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
 import { Effect } from "effect";
 import type { AgentSessionLiveEnvelope } from "@openducktor/contracts";
 import type { CreateRuntimeRegistryInput } from "../../adapters/runtimes/runtime-registry";
@@ -19,22 +20,23 @@ export const createLiveSessionPublisher =
 
 export const createRuntimeLifecyclePublisher =
   (
-    eventBus: HostEventBusPort,
+    liveState: Pick<AgentSessionLiveStateService, "publishRuntimeChange">,
     onBackgroundFailure: (failure: HostOperationError) => Effect.Effect<void>,
   ): NonNullable<CreateRuntimeRegistryInput["onRuntimeChanged"]> =>
   (runtime, state) =>
-    Effect.try({
-      try: () => {
-        createLiveSessionPublisher(eventBus)({
-          type: "runtime_changed",
-          scope: { repoPath: runtime.repoPath, runtimeKind: runtime.kind },
-          state,
-        });
-      },
-      catch: (cause) =>
-        new HostOperationError({
-          operation: "runtime.publish-change",
-          message: "Cannot publish the runtime change. Check the host event bus.",
-          cause,
-        }),
-    }).pipe(Effect.catchTag("HostOperationError", onBackgroundFailure));
+    liveState
+      .publishRuntimeChange(
+        { runtimeId: runtime.runtimeId, repoPath: runtime.repoPath, runtimeKind: runtime.kind },
+        state,
+      )
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new HostOperationError({
+              operation: "runtime.publish-change",
+              message: "Cannot publish the runtime change. Check the host event bus.",
+              cause,
+            }),
+        ),
+        Effect.catchTag("HostOperationError", onBackgroundFailure),
+      );

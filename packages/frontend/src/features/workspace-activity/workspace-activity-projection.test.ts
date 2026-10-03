@@ -1,3 +1,4 @@
+import { createAgentSessionLiveAttachment } from "@openducktor/host-client";
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionLiveEnvelope, AgentSessionLiveSnapshot } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
@@ -343,12 +344,12 @@ describe("applyWorkspaceActivityEnvelope", () => {
       repoPath,
       message: "events were dropped",
     });
-    expect(gapped.unavailableReason).toBe("events were dropped");
+    expect(gapped.unavailableReason).toBe("stream closed (during list)");
 
     expect(apply(gapped, sessionSnapshot([])).unavailableReason).toBeNull();
   });
 
-  test("ignores a session-scoped fault without changing the ready projection", () => {
+  test("retains known activity but reports uncertainty after a session-scoped fault", () => {
     const ready = apply(emptyWorkspaceActivityProjection(), sessionSnapshot([snapshot("a")]));
     const faulted = applyWorkspaceActivityEnvelope(ready, {
       type: "fault",
@@ -358,9 +359,9 @@ describe("applyWorkspaceActivityEnvelope", () => {
       operation: "codex-live-session.process-event",
     });
 
-    expect(faulted).toBe(ready);
+    expect(faulted.sessions).toBe(ready.sessions);
     expect(faulted.hasSnapshot).toBe(true);
-    expect(faulted.unavailableReason).toBeNull();
+    expect(faulted.unavailableReason).toContain("Codex thread reported a system error");
     expect(badges(faulted)).toEqual({ inputRequired: false, error: false, active: false });
 
     const unavailable = apply(ready, {
@@ -375,7 +376,7 @@ describe("applyWorkspaceActivityEnvelope", () => {
         ref: snapshot("a").ref,
         message: "session failed",
       }),
-    ).toBe(unavailable);
+    ).toMatchObject({ hasSnapshot: true, unavailableReason: "session failed" });
   });
 
   test("returns the same reference when an envelope changes no badge input", () => {
@@ -396,3 +397,42 @@ describe("applyWorkspaceActivityEnvelope", () => {
     ).toBe(projection);
   });
 });
+
+for (const failed of [false, true]) {
+  test(`state repair restores activity while transcript repair remains pending, source failure=${failed}`, () => {
+    let projection = emptyWorkspaceActivityProjection();
+    const attachment = createAgentSessionLiveAttachment(repoPath, (event) => {
+      projection = applyWorkspaceActivityEnvelope(projection, event);
+    });
+    const baseline = {
+      repoPath,
+      sessions: [snapshot("a")],
+      runtimeGenerations: [],
+      complete: true,
+      failures: [],
+      cursor: { hostEpoch: "host", sequence: 1 },
+    };
+    attachment.install(baseline);
+    attachment.restart();
+    attachment.accept({
+      type: "transcript_gap",
+      repoPath,
+      refs: [snapshot("a").ref],
+      message: "Missing transcript",
+    });
+    attachment.install({
+      ...baseline,
+      complete: !failed,
+      failures: failed ? [{ message: "Source unavailable", ref: snapshot("a").ref }] : [],
+      cursor: { hostEpoch: "host", sequence: 2 },
+    });
+    attachment.accept({
+      type: "session_upsert",
+      session: snapshot("a", { activity: "running" }),
+      cursor: { hostEpoch: "host", sequence: 3 },
+    });
+    attachment.accept({ type: "connection_state", repoPath, state: "ready" });
+    expect(projection.unavailableReason).toBe(failed ? "Source unavailable" : null);
+    expect(badges(projection).active).toBe(true);
+  });
+}

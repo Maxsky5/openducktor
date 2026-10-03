@@ -57,6 +57,7 @@ const createHarness = async (
     queries: unexpectedRuntimeQueries,
     sessionImport: unexpectedSessionImport,
     supportsSessionControl: true,
+    restoreSessionTree: () => Effect.dieMessage("unexpected restore"),
     beginGeneratedImageBatch: () => Effect.dieMessage("Unexpected beginGeneratedImageBatch"),
     releaseGeneratedImageBatch: () => Effect.dieMessage("Unexpected releaseGeneratedImageBatch"),
     describeGeneratedImages: () => Effect.dieMessage("Unexpected describeGeneratedImages"),

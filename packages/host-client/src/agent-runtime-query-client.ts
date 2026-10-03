@@ -1,6 +1,7 @@
 import {
   AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS,
   type AgentRuntimePreviewModelsInput,
+  type AgentRuntimeRecoverSessionHistoryInput,
 } from "@openducktor/contracts";
 import type {
   LoadAgentRuntimeCatalogInput,
@@ -44,6 +45,15 @@ export class HostAgentRuntimeQueryClient {
 
   agentRuntimeLoadSessionHistory(input: LoadAgentSessionHistoryInput) {
     const contract = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.loadSessionHistory;
+    return this.invokeFn(
+      contract.command,
+      { input: contract.inputSchema.parse(input) },
+      contract.responseSchema,
+    );
+  }
+
+  agentRuntimeRecoverSessionHistory(input: AgentRuntimeRecoverSessionHistoryInput) {
+    const contract = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.recoverSessionHistory;
     return this.invokeFn(
       contract.command,
       { input: contract.inputSchema.parse(input) },

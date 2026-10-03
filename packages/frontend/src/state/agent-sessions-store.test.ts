@@ -629,3 +629,80 @@ describe("createAgentSessionsStore activity snapshots", () => {
     });
   });
 });
+
+test("scoped gaps mark retained inactive transcripts incomplete without loading other sessions", () => {
+  const store = createAgentSessionsStore("/first");
+  const affected = createAgentSessionFixture({
+    externalSessionId: "affected",
+    runtimeKind: "codex",
+    workingDirectory: "/first",
+    historyLoadState: "loaded",
+    historyCompleteness: "complete",
+  });
+  const healthy = createAgentSessionFixture({
+    externalSessionId: "healthy",
+    runtimeKind: "codex",
+    workingDirectory: "/first",
+    historyLoadState: "loaded",
+    historyCompleteness: "complete",
+  });
+  const unloaded = createAgentSessionFixture({
+    externalSessionId: "unloaded",
+    runtimeKind: "codex",
+    workingDirectory: "/first",
+    historyLoadState: "not_requested",
+  });
+  replaceStoreSessions(store, [affected, healthy, unloaded]);
+  store.resetWorkspace("/second");
+  store.invalidateRetainedHistory({
+    type: "transcript_gap",
+    repoPath: "/first",
+    refs: [
+      {
+        repoPath: "/first",
+        runtimeKind: "codex",
+        workingDirectory: "/first",
+        externalSessionId: "affected",
+      },
+    ],
+    message: "Replay lost content",
+  });
+  store.resetWorkspace("/first");
+  expect(store.getSessionSnapshot(affected)?.historyCompleteness).toBe("incomplete");
+  expect(store.getSessionSnapshot(healthy)?.historyCompleteness).toBe("complete");
+  expect(store.getSessionSnapshot(unloaded)?.historyLoadState).toBe("not_requested");
+});
+
+test("inactive gap invalidation retires recovering transcripts without a loaded baseline", () => {
+  const store = createAgentSessionsStore("/repo");
+  const affected = createAgentSessionFixture({
+    externalSessionId: "recovering",
+    workingDirectory: "/repo",
+    runtimeKind: "opencode",
+    historyLoadState: "not_requested",
+    historyCompleteness: "recovering",
+  });
+  const healthy = {
+    ...affected,
+    externalSessionId: "healthy",
+    historyCompleteness: "complete" as const,
+  };
+  replaceStoreSessions(store, [affected, healthy]);
+  store.resetWorkspace("/other");
+  store.invalidateRetainedHistory({
+    type: "transcript_gap",
+    repoPath: "/repo",
+    message: "Missing transcript",
+    refs: [
+      {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo",
+        externalSessionId: affected.externalSessionId,
+      },
+    ],
+  });
+  store.resetWorkspace("/repo");
+  expect(store.getSessionSnapshot(affected)?.historyCompleteness).toBe("incomplete");
+  expect(store.getSessionSnapshot(healthy)?.historyCompleteness).toBe("complete");
+});

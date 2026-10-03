@@ -123,17 +123,21 @@ const normalizePendingQuestion = (
 const listPendingInputBySession = async (
   client: OpencodeClient,
   workingDirectory: string,
+  onRequest?: () => void,
 ): Promise<OpencodeLiveSessionPendingInputBySessionId> => {
-  const [permissionResponse, questionResponse] = await Promise.all([
-    client.permission.list({
-      directory: workingDirectory,
-    }),
-    client.question.list({
-      directory: workingDirectory,
-    }),
+  onRequest?.();
+  const pendingPermissions = client.permission.list({ directory: workingDirectory });
+  onRequest?.();
+  const pendingQuestions = client.question.list({ directory: workingDirectory });
+  // Keep the directory read guard until both requests stop, even when one fails.
+  const [permissionResponse, questionResponse] = await Promise.allSettled([
+    pendingPermissions,
+    pendingQuestions,
   ]);
-  const permissions = unwrapData(permissionResponse, "list pending permissions");
-  const questions = unwrapData(questionResponse, "list pending questions");
+  if (permissionResponse.status === "rejected") throw permissionResponse.reason;
+  if (questionResponse.status === "rejected") throw questionResponse.reason;
+  const permissions = unwrapData(permissionResponse.value, "list pending permissions");
+  const questions = unwrapData(questionResponse.value, "list pending questions");
 
   const bySession: OpencodeLiveSessionPendingInputBySessionId = {};
 
@@ -183,12 +187,13 @@ export const listOpencodeLiveSessionPendingInput = async (
     runtimeEndpoint: string;
     workingDirectory: string;
   },
+  onRequest?: () => void,
 ): Promise<OpencodeLiveSessionPendingInputBySessionId> => {
   const client = createClient({
     runtimeEndpoint: input.runtimeEndpoint,
     workingDirectory: input.workingDirectory,
   });
-  return listPendingInputBySession(client, input.workingDirectory);
+  return listPendingInputBySession(client, input.workingDirectory, onRequest);
 };
 
 export const replyApproval = async (

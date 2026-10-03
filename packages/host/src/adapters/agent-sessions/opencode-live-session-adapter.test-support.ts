@@ -99,6 +99,7 @@ export const createRuntimeHarness = (
     readonly onContinueInterruptedTurn?: () => void;
     readonly sendUserMessageBarrier?: Promise<void>;
     readonly onSendUserMessage?: () => void;
+    readonly readSessionTree?: OpencodeSessionRuntimeConnection["readSessionTree"];
     readonly sessionFailures?: OpencodeRuntimeSnapshotFailure[];
     readonly sessionSources?: OpencodeRuntimeSnapshotSource[];
   } = {},
@@ -118,6 +119,13 @@ export const createRuntimeHarness = (
         sources: options.sessionSources ?? [],
         failures: options.sessionFailures ?? [],
       };
+    },
+    readSessionTree: async (root, install) => {
+      const read = options.readSessionTree
+        ? await options.readSessionTree(root)
+        : { sources: options.sessionSources ?? [], failures: options.sessionFailures ?? [] };
+      await install?.(read);
+      return read;
     },
     loadContextUsage: async (input) => {
       contextLoadCalls.push(input.externalSessionId);

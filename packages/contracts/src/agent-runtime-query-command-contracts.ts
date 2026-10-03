@@ -86,6 +86,7 @@ const historyFields = {
   ...policyBoundSessionFields,
   systemPromptContext: agentSessionHistorySystemPromptContextSchema.optional(),
   limit: z.number().int().positive().optional(),
+  expectedRuntimeGeneration: z.string().trim().min(1).optional(),
 };
 export const agentRuntimeLoadSessionHistoryInputSchema = z.discriminatedUnion("runtimeKind", [
   z.object({ ...historyFields, ...runtimePolicyBindings[0] }).strict(),
@@ -94,6 +95,29 @@ export const agentRuntimeLoadSessionHistoryInputSchema = z.discriminatedUnion("r
 ]);
 export type AgentRuntimeLoadSessionHistoryInput = z.infer<
   typeof agentRuntimeLoadSessionHistoryInputSchema
+>;
+const recoveryHistoryFields = {
+  ...policyBoundSessionFields,
+  systemPromptContext: agentSessionHistorySystemPromptContextSchema.optional(),
+  expectedRuntimeGeneration: z.string().trim().min(1).optional(),
+};
+export const agentRuntimeRecoverSessionHistoryInputSchema = z.discriminatedUnion("runtimeKind", [
+  z.object({ ...recoveryHistoryFields, ...runtimePolicyBindings[0] }).strict(),
+  z.object({ ...recoveryHistoryFields, ...runtimePolicyBindings[1] }).strict(),
+  z.object({ ...recoveryHistoryFields, ...runtimePolicyBindings[2] }).strict(),
+]);
+export type AgentRuntimeRecoverSessionHistoryInput = z.infer<
+  typeof agentRuntimeRecoverSessionHistoryInputSchema
+>;
+export const agentRuntimeRecoveredSessionHistorySchema = z.strictObject({
+  history: agentSessionHistorySchema,
+  coverage: z.literal("full"),
+  runtimeGeneration: z.string().min(1),
+  transcriptRevisionAtStart: z.number().int().nonnegative(),
+  transcriptRevisionAtEnd: z.number().int().nonnegative(),
+});
+export type AgentRuntimeRecoveredSessionHistory = z.infer<
+  typeof agentRuntimeRecoveredSessionHistorySchema
 >;
 export const agentRuntimeLoadSessionDiffInputSchema = agentSessionLiveRefSchema.extend({
   runtimeHistoryAnchor: z.string().trim().min(1).optional(),
@@ -132,6 +156,11 @@ export const AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS = {
     command: "agent_runtime_load_session_history",
     inputSchema: agentRuntimeLoadSessionHistoryInputSchema,
     responseSchema: agentSessionHistorySchema,
+  },
+  recoverSessionHistory: {
+    command: "agent_runtime_recover_session_history",
+    inputSchema: agentRuntimeRecoverSessionHistoryInputSchema,
+    responseSchema: agentRuntimeRecoveredSessionHistorySchema,
   },
   loadSessionTodos: {
     command: "agent_runtime_load_session_todos",

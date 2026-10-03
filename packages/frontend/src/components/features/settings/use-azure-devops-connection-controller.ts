@@ -62,6 +62,19 @@ const useAzureDevOpsConnectionUpdates = ({
     let unsubscribe: (() => void) | undefined;
     setUpdatesReady(false);
     void subscribeAzureDevOpsConnectionUpdates((event) => {
+      if ("__openducktorBrowserLive" in event) {
+        if (event.kind === "stream-warning")
+          setActionError(
+            event.message ??
+              "Azure DevOps connection updates are incomplete. Reconnect to the host.",
+          );
+        void queryClient.invalidateQueries({
+          queryKey: connectionKey(configurationFingerprint),
+          exact: true,
+        });
+        void invalidateProviderContext();
+        return;
+      }
       if (
         isAzureDevOpsConnectionEventCurrent(event, {
           workspaceId,

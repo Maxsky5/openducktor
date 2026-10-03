@@ -1,8 +1,17 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import * as approvalPolicy from "../session-read-model/pending-approval-policy";
 import * as workspaceRecords from "../session-read-model/workspace-session-records";
+import { createAgentSessionLiveAttachment } from "@openducktor/host-client";
+import { reloadSessionHistoryIntoStore } from "../history/session-history-loader";
+import { loadSelectedSessionBaselineHistoryIntoStore } from "../history/session-history-loader";
+import { useSelectedSessionHistoryLoad } from "../history/use-selected-session-history-load";
+import { AgentSessionHistoryLoadContext } from "@/state/app-state-contexts";
+import type { PropsWithChildren } from "react";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { createSessionHistoryReadGeneration } from "../history/session-history-read-generation";
+import { createSessionMessagesState } from "../support/messages";
 import { CODEX_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import type { AgentRuntimeCatalog } from "@openducktor/core";
+import type { AgentRuntimeCatalog, AgentSessionHistoryMessage } from "@openducktor/core";
 import type {
   AgentSessionLiveEnvelope,
   AgentSessionLiveRefreshInput,
@@ -163,7 +172,9 @@ const createState = (
     flushSession: mock(() => undefined),
     close: mock(() => undefined),
   };
-  const recoverTranscriptGap = mock(async (_message: string) => undefined);
+  const recoverTranscriptGap = mock(
+    async (_gap: Extract<AgentSessionLiveEnvelope, { type: "transcript_gap" }>) => undefined,
+  );
   const props: Parameters<typeof useRepoSessionReadModel>[0] = {
     workspaceRepoPath: "/repo",
     taskIds: ["task-1"],
@@ -1928,7 +1939,9 @@ describe("useRepoSessionReadModel", () => {
       flushSession: mock(() => undefined),
       close: mock(() => undefined),
     };
-    const refreshedRecoverTranscriptGap = mock(async (_message: string) => undefined);
+    const refreshedRecoverTranscriptGap = mock(
+      async (_gap: Extract<AgentSessionLiveEnvelope, { type: "transcript_gap" }>) => undefined,
+    );
 
     try {
       await state.harness.mount();
@@ -1967,7 +1980,10 @@ describe("useRepoSessionReadModel", () => {
       expect(refreshedTranscriptEvents.handle).toHaveBeenCalledTimes(1);
       expect(state.recoverTranscriptGap).not.toHaveBeenCalled();
       expect(refreshedRecoverTranscriptGap).toHaveBeenCalledWith(
-        "Refresh history with the latest callback.",
+        expect.objectContaining({
+          type: "transcript_gap",
+          message: "Refresh history with the latest callback.",
+        }),
       );
     } finally {
       await state.harness.unmount();
@@ -2296,6 +2312,61 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
+  test("fences replacement baseline history and scopes runtime discontinuity to its generation", async () => {
+    const state = createState((emit) => {
+      emit({
+        type: "snapshot",
+        repoPath: "/repo",
+        sessions: [snapshot()],
+        runtimeGenerations: [{ runtimeKind: "codex", generation: "old-runtime" }],
+      });
+    });
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(state.getSession()?.runtimeGeneration).toBe("old-runtime");
+      state.replaceSession({
+        ...state.getSession()!,
+        historyLoadState: "loaded",
+        historyCompleteness: "complete",
+      });
+      await state.harness.run(async () => {
+        state.emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [snapshot()],
+          runtimeGenerations: [{ runtimeKind: "codex", generation: "new-runtime" }],
+        });
+      });
+      expect(state.getSession()?.runtimeGeneration).toBe("new-runtime");
+      const other = createAgentSessionFixture({
+        runtimeKind: "claude",
+        externalSessionId: "other",
+        workingDirectory: "/repo",
+        historyLoadState: "loaded",
+        historyCompleteness: "complete",
+        runtimeGeneration: "other-runtime",
+      });
+      state.replaceSession(other);
+      await state.harness.run(async () => {
+        state.emit({
+          type: "runtime_changed",
+          scope: { repoPath: "/repo", runtimeKind: "codex" },
+          state: "ready",
+          runtimeGeneration: "new-runtime",
+        });
+      });
+      expect(state.getSession()?.historyCompleteness).toBe("incomplete");
+      expect(state.getStoredSession(other)?.historyCompleteness).toBe("complete");
+      expect(state.getStoredSession(other)?.runtimeGeneration).toBe("other-runtime");
+      expect(state.recoverTranscriptGap).toHaveBeenCalledWith(
+        expect.objectContaining({ runtimeKind: "codex" }),
+      );
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
   test("recovers loaded transcripts when the live stream reports a replay gap", async () => {
     const state = createState((emit) => {
       emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
@@ -2313,7 +2384,10 @@ describe("useRepoSessionReadModel", () => {
       });
 
       expect(state.recoverTranscriptGap).toHaveBeenCalledWith(
-        "Host event replay skipped transcript events.",
+        expect.objectContaining({
+          type: "transcript_gap",
+          message: "Host event replay skipped transcript events.",
+        }),
       );
       expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("ready");
     } finally {
@@ -2539,7 +2613,9 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.run(() => {
         state.emit({ type: "session_removed", ref: { repoPath: "/repo", ...firstIdentity } });
       });
-      expect(state.harness.getLatest().getSessionFault(firstIdentity)).toBeNull();
+      expect(state.harness.getLatest().getSessionFault(firstIdentity)).toEqual({
+        message: "Live-session observation failed: The runtime lost this session.",
+      });
     } finally {
       await state.harness.unmount();
     }
@@ -2911,3 +2987,293 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 });
+
+for (const replay of ["cumulative", "delta"] as const) {
+  test(`history repair waits for ${replay} replay and supersedes a read completed before the baseline`, async () => {
+    const state = createState((emit) =>
+      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] }),
+    );
+    const ref = snapshot().ref;
+    const transcriptEvents = createAgentSessionTranscriptEventConsumer(
+      {
+        readSession: state.getStoredSession,
+        ensureSession: (identity, create) => state.getStoredSession(identity) ?? create(),
+        updateSession: state.updateSession,
+        updateSessionTodos: () => undefined,
+        sessionTurnState: createSessionTurnState(),
+      },
+      { batchWindowMs: 60_000 },
+    );
+    state.props.transcriptEvents = transcriptEvents;
+    const finishOldRead = Promise.withResolvers<AgentSessionHistoryMessage[]>();
+    const started = Promise.withResolvers<void>();
+    const completeHistory = [
+      {
+        messageId: "message",
+        role: "assistant" as const,
+        timestamp: record.startedAt,
+        text: "Prefix plus completed text",
+        parts: [],
+      },
+    ];
+    const adapter = {
+      loadSessionHistory: mock(async () => {
+        if (adapter.loadSessionHistory.mock.calls.length === 1) {
+          started.resolve();
+          return finishOldRead.promise;
+        }
+        return completeHistory;
+      }),
+    };
+    const input: Parameters<typeof reloadSessionHistoryIntoStore>[0] = {
+      repoPath: "/repo",
+      adapter,
+      identity: ref,
+      readSessionSnapshot: state.getStoredSession,
+      updateSession: state.updateSession,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration: createSessionHistoryReadGeneration(),
+      flushTranscript: (identity) =>
+        transcriptEvents.flushSession({ ...identity, repoPath: "/repo" }),
+      loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+    };
+    state.recoverTranscriptGap.mockImplementation(async () => {
+      await reloadSessionHistoryIntoStore(input);
+    });
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      state.updateSession(ref, (session) => ({
+        ...session,
+        historyLoadState: "loaded",
+        historyCompleteness: "complete",
+        messages: createSessionMessagesState(ref.externalSessionId, [
+          { id: "message", role: "assistant", content: "Prefix", timestamp: record.startedAt },
+        ]),
+      }));
+      const attachment = createAgentSessionLiveAttachment("/repo", state.emit);
+      const baseline = {
+        repoPath: "/repo",
+        sessions: [snapshot()],
+        failures: [],
+        complete: true,
+        runtimeGenerations: [],
+        cursor: { hostEpoch: "host", sequence: 1 },
+      };
+      attachment.install(baseline);
+      const oldRead = reloadSessionHistoryIntoStore(input);
+      await started.promise;
+      await state.harness.run(() => {
+        attachment.restart();
+        attachment.accept({
+          type: "transcript_gap",
+          repoPath: "/repo",
+          refs: [ref],
+          message: "Replay lost events",
+        });
+        attachment.accept({
+          type: "transcript_event",
+          cursor: { hostEpoch: "host", sequence: 2 },
+          event:
+            replay === "cumulative"
+              ? {
+                  type: "assistant_message",
+                  messageId: "message",
+                  message: "Prefix plus",
+                  timestamp: record.startedAt,
+                  externalSessionId: ref.externalSessionId,
+                  sessionRef: ref,
+                }
+              : {
+                  type: "assistant_delta",
+                  channel: "text",
+                  messageId: "message",
+                  delta: " plus",
+                  timestamp: record.startedAt,
+                  externalSessionId: ref.externalSessionId,
+                  sessionRef: ref,
+                },
+        });
+      });
+      expect(state.getSession()?.historyReplayPending).toBe(true);
+      expect(state.getSession()?.historyLoadState).toBe("loaded");
+      expect(state.recoverTranscriptGap).not.toHaveBeenCalled();
+      finishOldRead.resolve(completeHistory);
+      await oldRead;
+      await reloadSessionHistoryIntoStore(input);
+      expect(adapter.loadSessionHistory).toHaveBeenCalledTimes(1);
+      expect(sessionMessagesToArray(state.getSession()!).map((message) => message.content)).toEqual(
+        ["Prefix"],
+      );
+      expect(state.getSession()?.historyCompleteness).toBe("incomplete");
+      await state.harness.run(() =>
+        attachment.install({ ...baseline, cursor: { hostEpoch: "host", sequence: 3 } }),
+      );
+      await waitFor(() => expect(state.getSession()?.historyCompleteness).toBe("complete"));
+      expect(adapter.loadSessionHistory).toHaveBeenCalledTimes(2);
+      expect(state.getSession()?.historyReplayPending).toBe(false);
+      expect(sessionMessagesToArray(state.getSession()!).map((message) => message.content)).toEqual(
+        ["Prefix plus completed text"],
+      );
+    } finally {
+      finishOldRead.resolve(completeHistory);
+      await state.harness.unmount();
+      state.queryClient.clear();
+    }
+  });
+}
+
+test("replay waiting retains an empty loaded transcript's eligibility for repair", async () => {
+  const state = createState((emit) =>
+    emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] }),
+  );
+  const gap: Extract<AgentSessionLiveEnvelope, { type: "transcript_gap" }> = {
+    type: "transcript_gap",
+    repoPath: "/repo",
+    refs: [snapshot().ref],
+    message: "Missing transcript",
+  };
+  try {
+    await state.harness.mount();
+    await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+    await state.harness.run(() => {
+      state.updateSession(snapshot().ref, (session) => ({
+        ...session,
+        historyLoadState: "loading",
+        historyCompleteness: "recovering",
+      }));
+      state.emit({ ...gap, replayPending: true });
+    });
+    expect(state.getSession()?.messages.items).toHaveLength(0);
+    expect(state.getSession()?.historyLoadState).toBe("loaded");
+    expect(state.recoverTranscriptGap).not.toHaveBeenCalled();
+    await state.harness.run(() => state.emit(gap));
+    expect(state.getSession()?.historyReplayPending).toBe(false);
+    expect(state.recoverTranscriptGap).toHaveBeenCalledTimes(1);
+  } finally {
+    await state.harness.unmount();
+    state.queryClient.clear();
+  }
+});
+
+for (const completes of ["during replay", "after replay"] as const) {
+  test(`selected first history restarts after a gap when obsolete history finishes ${completes}`, async () => {
+    const unopened = { ...record, externalSessionId: "unopened" };
+    const state = createState(
+      (emit) =>
+        emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          runtimeGenerations: [{ runtimeKind: "codex", generation: "generation-1" }],
+          sessions: [
+            snapshot(),
+            snapshot({ ref: { ...snapshot().ref, externalSessionId: "unopened" } }),
+          ],
+        }),
+      [record, unopened],
+    );
+    const finish = Promise.withResolvers<AgentSessionHistoryMessage[]>();
+    const started = Promise.withResolvers<void>();
+    const requests: Promise<AgentSessionState | null>[] = [];
+    const adapter = {
+      loadSessionHistory: mock(async () => {
+        if (adapter.loadSessionHistory.mock.calls.length === 1) {
+          started.resolve();
+          return finish.promise;
+        }
+        return [
+          {
+            messageId: "new",
+            role: "assistant" as const,
+            timestamp: record.startedAt,
+            text: "Recovered selected history",
+            parts: [],
+          },
+        ];
+      }),
+    };
+    const input = {
+      repoPath: "/repo",
+      adapter,
+      identity: snapshot().ref,
+      readSessionSnapshot: state.getStoredSession,
+      updateSession: state.updateSession,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration: createSessionHistoryReadGeneration(),
+      loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+    };
+    const actions = {
+      loadSelectedSessionBaselineHistory: (
+        identity: Parameters<typeof state.getStoredSession>[0],
+      ) => {
+        const request = loadSelectedSessionBaselineHistoryIntoStore({ ...input, identity });
+        requests.push(request);
+        return request;
+      },
+      revalidateAgentSessionHistory: mock(async () => null),
+    };
+    let unmountSelected: (() => Promise<void>) | undefined;
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      const selectedHarness = createHookHarness(
+        useSelectedSessionHistoryLoad,
+        { session: state.getSession(), repoReadinessState: "ready" as const },
+        {
+          wrapper: ({ children }: PropsWithChildren) => (
+            <AgentSessionHistoryLoadContext.Provider value={actions}>
+              {children}
+            </AgentSessionHistoryLoadContext.Provider>
+          ),
+        },
+      );
+      unmountSelected = selectedHarness.unmount;
+      await selectedHarness.mount();
+      await started.promise;
+      const gap = { type: "transcript_gap" as const, repoPath: "/repo", message: "Missing replay" };
+      await state.harness.run(() => state.emit({ ...gap, replayPending: true }));
+      await selectedHarness.update({ session: state.getSession(), repoReadinessState: "ready" });
+      expect(adapter.loadSessionHistory).toHaveBeenCalledTimes(1);
+      if (completes === "during replay") {
+        finish.resolve([
+          {
+            messageId: "stale",
+            role: "assistant",
+            timestamp: record.startedAt,
+            text: "Obsolete first history",
+            parts: [],
+          },
+        ]);
+        await requests[0];
+      }
+      await state.harness.run(() => state.emit(gap));
+      if (completes === "after replay") {
+        finish.resolve([
+          {
+            messageId: "stale",
+            role: "assistant",
+            timestamp: record.startedAt,
+            text: "Obsolete first history",
+            parts: [],
+          },
+        ]);
+        await requests[0];
+      }
+      expect(state.getSession()?.historyCompleteness).toBe("incomplete");
+      expect(state.getSession()?.messages.items).toHaveLength(0);
+      await selectedHarness.update({ session: state.getSession(), repoReadinessState: "ready" });
+      await waitFor(() => expect(state.getSession()?.historyCompleteness).toBe("complete"));
+      expect(adapter.loadSessionHistory).toHaveBeenCalledTimes(2);
+      expect(state.getSession()?.messages.items.map((message) => message.content)).toEqual([
+        "Recovered selected history",
+      ]);
+      expect(state.getStoredSession(unopened)?.historyLoadState).toBe("not_requested");
+      expect(actions.revalidateAgentSessionHistory).not.toHaveBeenCalled();
+    } finally {
+      finish.resolve([]);
+      await unmountSelected?.();
+      await state.harness.unmount();
+      state.queryClient.clear();
+    }
+  });
+}

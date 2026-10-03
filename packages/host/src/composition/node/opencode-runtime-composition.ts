@@ -10,6 +10,7 @@ import {
 } from "../../adapters/opencode/opencode-workspace-runtime-starter";
 import type { HostRuntimeDistribution } from "../../adapters/runtimes/runtime-distribution";
 import type { TaskSessionLifecycleCoordinator } from "../../application/tasks/worktrees/task-session-lifecycle-coordinator";
+import { type HostLifecycleLogger, writeHostLifecycleLog } from "../host-lifecycle";
 import { toHostOperationError } from "../../effect/host-errors";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import type { RuntimeWorkspaceStarterPort } from "../../ports/runtime-registry-port";
@@ -18,6 +19,7 @@ import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 
 export type CreateOpenCodeRuntimeCompositionInput = {
   liveSessionLifecycle: RuntimeLiveSessionLifecyclePort;
+  lifecycleLogger: HostLifecycleLogger;
   processEnv: NodeJS.ProcessEnv;
   resolveMcpBridgeConnection: OpenCodeMcpBridgeConnectionResolver;
   runtimeDistribution: HostRuntimeDistribution;
@@ -28,6 +30,7 @@ export type CreateOpenCodeRuntimeCompositionInput = {
 
 export const createOpenCodeRuntimeComposition = ({
   liveSessionLifecycle,
+  lifecycleLogger,
   processEnv,
   resolveMcpBridgeConnection,
   runtimeDistribution,
@@ -60,6 +63,7 @@ export const createOpenCodeRuntimeComposition = ({
     liveSessionLifecycle,
     prepareLiveSessionAdapter: createOpenCodeLiveSessionAdapterPreparer({
       liveSessionLifecycle,
+      recoveryLog: (message) => writeHostLifecycleLog(lifecycleLogger, "info", message),
       prepareRuntime: createPrepareOpencodeSessionRuntime({
         readDirectory,
       }),

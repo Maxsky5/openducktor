@@ -17,6 +17,7 @@ import { clearAwaitingRuntimeTurnStart, isAwaitingRuntimeTurnStart } from "./ses
 import { toIsoFromEpoch } from "./session-runtime-utils";
 import type { ClientFactory, ReadOpencodeDirectory, SessionRecord } from "./types";
 import { z } from "zod";
+import type { OpencodeSessionContextUsage } from "./opencode-session-runtime-signals";
 
 export type ListOpencodeRuntimeSnapshotSourcesInput = {
   createClient: ClientFactory;
@@ -30,12 +31,14 @@ export type ListOpencodeRuntimeSnapshotSourcesInput = {
   ) => Promise<void>;
   readDirectory: ReadOpencodeDirectory;
   now: () => string;
+  readContextUsage?: (ref: SessionRef) => Promise<OpencodeSessionContextUsage | null>;
 };
 
 export type OpencodeRuntimeSnapshotSource = AgentSessionRuntimeSnapshotSource & {
   externalSessionId: string;
   sessionAssociation: AgentSessionAssociation;
   workingDirectory: string;
+  contextUsage?: OpencodeSessionContextUsage | null;
 };
 
 export type OpencodeRuntimeSnapshotFailure = {
@@ -47,6 +50,7 @@ export type OpencodeRuntimeSnapshotFailure = {
 export type OpencodeRuntimeSnapshotRead = {
   sources: OpencodeRuntimeSnapshotSource[];
   failures: OpencodeRuntimeSnapshotFailure[];
+  diagnostics?: { nativeRequests: number; elapsedMs: number };
 };
 
 export const listOpencodeRuntimeSnapshotSources = async ({
@@ -56,10 +60,22 @@ export const listOpencodeRuntimeSnapshotSources = async ({
   roots = [],
   readDirectory,
   now,
+  readContextUsage,
   attachSession,
 }: ListOpencodeRuntimeSnapshotSourcesInput): Promise<OpencodeRuntimeSnapshotRead> => {
+  const startedAt = performance.now();
+  let nativeRequests = 0;
+  const onRequest = () => {
+    nativeRequests += 1;
+  };
   const unscopedClient = createClient({ runtimeEndpoint });
-  const owned = await readOwnedSessions(unscopedClient, roots, readDirectory, attachSession);
+  const owned = await readOwnedSessions(
+    unscopedClient,
+    roots,
+    readDirectory,
+    attachSession,
+    onRequest,
+  );
   const sessions = owned.sessions;
   const requestedDirectorySet =
     directories && directories.length > 0
@@ -84,12 +100,17 @@ export const listOpencodeRuntimeSnapshotSources = async ({
   const directoryResults = await Promise.allSettled(
     sessionDirectories.map((directory) =>
       readDirectory(directory, async () => {
+        onRequest();
         const [statusResult, pendingInputResult] = await Promise.allSettled([
           unscopedClient.session.status({ directory }),
-          listOpencodeLiveSessionPendingInput(createClient, {
-            runtimeEndpoint,
-            workingDirectory: directory,
-          }),
+          listOpencodeLiveSessionPendingInput(
+            createClient,
+            {
+              runtimeEndpoint,
+              workingDirectory: directory,
+            },
+            onRequest,
+          ),
         ]);
         if (statusResult.status === "rejected") {
           throw statusResult.reason;
@@ -97,8 +118,26 @@ export const listOpencodeRuntimeSnapshotSources = async ({
         if (pendingInputResult.status === "rejected") {
           throw pendingInputResult.reason;
         }
+        const contexts = new Map<string, OpencodeSessionContextUsage | null>();
+        if (readContextUsage)
+          for (const session of filteredSessions.filter(
+            (session) => session.directory === directory,
+          )) {
+            const root = roots.find((root) => root.workingDirectory === directory) ?? roots[0];
+            if (!root) throw new Error("Owned OpenCode context read has no registered root.");
+            onRequest();
+            contexts.set(
+              session.id,
+              await readContextUsage({
+                ...root,
+                workingDirectory: directory,
+                externalSessionId: session.id,
+              }),
+            );
+          }
         return {
           directory,
+          contexts,
           statuses: toOpencodeSessionStatusMap(
             unwrapData(statusResult.value, "get session status"),
             directory,
@@ -112,14 +151,20 @@ export const listOpencodeRuntimeSnapshotSources = async ({
     result.status === "fulfilled" ? [result.value] : [],
   );
   const failures = directoryResults.flatMap((result, index) => {
-    if (result.status === "fulfilled") {
+    if (result.status === "fulfilled" && result.value !== null) {
       return [];
     }
     const directory = sessionDirectories[index];
     if (!directory) {
       return [];
     }
-    const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
+    const cause =
+      result.status === "rejected"
+        ? result.reason
+        : new Error(
+            `Working directory '${directory}' is unavailable. Restore the directory or stop the assigned runtime before restoring observation.`,
+          );
+    const message = cause instanceof Error ? cause.message : String(cause);
     return filteredSessions
       .filter((session) => requireSessionDirectory(session.directory, session.id) === directory)
       .map((session) => ({
@@ -156,12 +201,21 @@ export const listOpencodeRuntimeSnapshotSources = async ({
       pendingApprovals: pendingInputBySession[session.id]?.approvals ?? [],
       pendingQuestions: pendingInputBySession[session.id]?.questions ?? [],
     };
+    if (readContextUsage)
+      snapshot.contextUsage =
+        availableDirectoryEntries
+          .find((entry) => entry.directory === normalizedDirectory)
+          ?.contexts.get(session.id) ?? null;
     if (parentExternalSessionId) {
       snapshot.parentExternalSessionId = parentExternalSessionId;
     }
     return [snapshot];
   });
-  return { sources, failures: [...owned.failures, ...failures] };
+  return {
+    sources,
+    failures: [...owned.failures, ...failures],
+    diagnostics: { nativeRequests, elapsedMs: performance.now() - startedAt },
+  };
 };
 
 type ApplyOpencodeAwaitingTurnStartToRuntimeSnapshotInput = {
@@ -311,6 +365,7 @@ const readOwnedSessions = async (
   roots: NonNullable<ListOpencodeRuntimeSnapshotSourcesInput["roots"]>,
   readDirectory: ReadOpencodeDirectory,
   attachSession: ListOpencodeRuntimeSnapshotSourcesInput["attachSession"],
+  onRequest: () => void,
 ): Promise<{ sessions: OwnedSession[]; failures: OpencodeRuntimeSnapshotFailure[] }> => {
   const sessions = new Map<string, OwnedSession>();
   const failures: OpencodeRuntimeSnapshotFailure[] = [];
@@ -343,6 +398,7 @@ const readOwnedSessions = async (
     const tree = new Map<string, OwnedSession>();
     const visit = async (id: string, directory: string, parent?: string): Promise<void> => {
       if (tree.has(id)) return;
+      onRequest();
       const row = await readPermissionSession({
         client,
         externalSessionId: id,
@@ -352,6 +408,7 @@ const readOwnedSessions = async (
         throw new Error(`Invalid parent for OpenCode session ${id}.`);
       await attachSession?.(row, root.sessionScope, parent !== undefined);
       tree.set(id, { ...row, sessionAssociation: root.sessionScope ?? { kind: "unbound" } });
+      onRequest();
       const children = parseOpencodeSessionListPayload(
         unwrapData(
           await client.session.children({ sessionID: id, directory }),
@@ -365,10 +422,14 @@ const readOwnedSessions = async (
       }
     };
     try {
-      await readDirectory(root.workingDirectory, async () => {
+      const read = await readDirectory(root.workingDirectory, async () => {
         await visit(root.externalSessionId, root.workingDirectory);
         for (const [id, row] of tree) sessions.set(id, row);
       });
+      if (read === null)
+        throw new Error(
+          `Working directory '${root.workingDirectory}' is unavailable. Restore the directory or stop the assigned runtime before restoring observation.`,
+        );
     } catch (cause) {
       failures.push({
         externalSessionId: root.externalSessionId,

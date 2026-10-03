@@ -1,6 +1,6 @@
 import { liveSessionStreamEventName } from "./host-event-stream-name";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { AgentSessionLiveEnvelope } from "@openducktor/contracts";
+import type { AgentSessionLiveBaseline, AgentSessionLiveEnvelope } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { JSONType } from "zod";
 import { configureBrowserRuntimeConfig } from "./browser-config";
@@ -51,6 +51,16 @@ class FakeEventSource {
     if (type === "open") {
       this.readyState = FakeEventSource.OPEN;
     }
+    if (type === "open") {
+      const boundary = JSON.stringify({
+        hostEpoch: TEST_HOST_EPOCH,
+        sequence: 0,
+        hostChanged: false,
+        losses: [],
+      });
+      this.emit("replay-start", boundary);
+      this.emit("replay-complete", boundary);
+    }
     const current = this.listeners.get(type);
     if (!current) {
       return;
@@ -64,6 +74,12 @@ class FakeEventSource {
     }
   }
 
+  emitAsBrowser(type: string, data: string): void {
+    const target = new EventTarget();
+    for (const listener of this.listeners.get(type) ?? []) target.addEventListener(type, listener);
+    target.dispatchEvent(new MessageEvent(type, { data }));
+  }
+
   hasListener(type: string): boolean {
     return (this.listeners.get(type)?.size ?? 0) > 0;
   }
@@ -72,6 +88,31 @@ class FakeEventSource {
     FakeEventSource.instances = [];
   }
 }
+
+const TEST_HOST_EPOCH = "12345678-1234-4234-9234-123456789abc";
+const liveBaseline = (sequence: number): AgentSessionLiveBaseline => ({
+  repoPath: "/repo",
+  sessions: [
+    {
+      ref: {
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread",
+      },
+      activity: "idle",
+      title: "Initial",
+      startedAt: "2026-10-01T08:00:00Z",
+      pendingApprovals: [],
+      pendingQuestions: [],
+      contextUsage: null,
+    },
+  ],
+  runtimeGenerations: [],
+  complete: true,
+  failures: [],
+  cursor: { hostEpoch: TEST_HOST_EPOCH, sequence },
+});
 
 const originalEventSource = globalThis.EventSource;
 const originalFetch = globalThis.fetch;
@@ -432,12 +473,12 @@ describe("local host SSE subscriptions", () => {
       },
     );
     const eventSource = await waitForEventSourceInstance();
-    await waitForEventSourceListener(eventSource, "open");
+    await waitForEventSourceListener(eventSource, "replay-complete");
 
     eventSource.emit("error", "initial failure");
     await Promise.resolve();
     expect(ready).toBe(false);
-    expect(listener).not.toHaveBeenCalled();
+    expect(listener).toHaveBeenCalledWith(expect.objectContaining({ kind: "stream-warning" }));
 
     eventSource.emit("open", "");
     const unsubscribe = await subscription;
@@ -455,9 +496,23 @@ describe("local host SSE subscriptions", () => {
     } = await loadLocalHostTransport();
     const fetchMock = mock(
       async (url: string | URL | Request) =>
-        new Response(url.toString().includes("/invoke/") ? "null" : JSON.stringify({ ok: true }), {
-          status: 200,
-        }),
+        new Response(
+          JSON.stringify(
+            url.toString().includes("/invoke/")
+              ? {
+                  repoPath: "/repo",
+                  sessions: [],
+                  runtimeGenerations: [],
+                  complete: true,
+                  failures: [],
+                  cursor: { hostEpoch: TEST_HOST_EPOCH, sequence: 0 },
+                }
+              : { ok: true },
+          ),
+          {
+            status: 200,
+          },
+        ),
     );
     globalThis.fetch = createFetchFixture(fetchMock);
     const runListener = mock(() => {});
@@ -539,16 +594,18 @@ describe("local host SSE subscriptions", () => {
         updatedAt: "2026-03-19T15:30:00.000Z",
       },
     });
-    expect(liveSessionListener).toHaveBeenCalledWith({
-      isConnectionSnapshot: true,
-      type: "snapshot",
-      repoPath: "/repo",
-      sessions: [],
-    });
+    expect(liveSessionListener).toHaveBeenCalledWith(
+      expect.objectContaining({
+        isConnectionSnapshot: true,
+        type: "snapshot",
+        repoPath: "/repo",
+        sessions: [],
+      }),
+    );
     expect(() => emitHostEvent("openducktor://dev-server-event", { type: "dev-server" })).toThrow(
       "Invalid OpenDucktor host event envelope.",
     );
-    expect(devServerListener).toHaveBeenCalledTimes(1);
+    expect(devServerListener).toHaveBeenCalledTimes(2);
 
     unsubscribeRun();
     unsubscribeDevServer();
@@ -595,7 +652,21 @@ describe("local host SSE subscriptions", () => {
 
   test("routes named live events only to observed repositories and removes unused listeners", async () => {
     const { observeLocalHostAgentSessions } = await loadLocalHostTransport();
-    globalThis.fetch = createFetchFixture(mock(async () => new Response("null", { status: 200 })));
+    globalThis.fetch = createFetchFixture(
+      mock(
+        async (_url: string | URL | Request, init?: RequestInit) =>
+          new Response(
+            JSON.stringify({
+              repoPath: JSON.parse(String(init?.body ?? "{}")).repoPath ?? "/repo",
+              sessions: [],
+              runtimeGenerations: [],
+              complete: true,
+              failures: [],
+              cursor: { hostEpoch: TEST_HOST_EPOCH, sequence: 0 },
+            }),
+          ),
+      ),
+    );
     const first = mock((_event: AgentSessionLiveEnvelope) => {});
     const duplicate = mock((_event: AgentSessionLiveEnvelope) => {});
     const second = mock((_event: AgentSessionLiveEnvelope) => {});
@@ -615,9 +686,9 @@ describe("local host SSE subscriptions", () => {
         payload: snapshot,
       }),
     );
-    expect(first).toHaveBeenCalledTimes(1);
-    expect(duplicate).toHaveBeenCalledTimes(1);
-    expect(second).not.toHaveBeenCalled();
+    expect(first).toHaveBeenCalledTimes(2);
+    expect(duplicate).toHaveBeenCalledTimes(2);
+    expect(second).toHaveBeenCalledTimes(1);
     expect(() =>
       source.emit(
         liveSessionStreamEventName("/first"),
@@ -663,16 +734,28 @@ describe("local host SSE subscriptions", () => {
     await Promise.resolve();
     expect(didResolve).toBe(false);
 
-    eventSource.emit("open", "");
+    eventSource.emitAsBrowser("open", "");
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(didResolve).toBe(false);
+    const boundary = JSON.stringify({
+      hostEpoch: TEST_HOST_EPOCH,
+      sequence: 0,
+      hostChanged: false,
+      losses: [],
+    });
+    eventSource.emit("replay-start", boundary);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(didResolve).toBe(false);
+    eventSource.emit("replay-complete", boundary);
     const { transportEpoch, unsubscribe } = await subscription;
-    expect(transportEpoch).toBe("events:0");
+    expect(transportEpoch).toBe(TEST_HOST_EPOCH);
     expect(listener).not.toHaveBeenCalled();
 
     eventSource.emit("open", "");
     expect(listener).toHaveBeenNthCalledWith(1, {
       __openducktorBrowserLive: true,
       kind: "reconnected",
-      transportEpoch: "events:1",
+      transportEpoch: TEST_HOST_EPOCH,
     });
 
     unsubscribe();
@@ -709,7 +792,7 @@ describe("local host SSE subscriptions", () => {
     expect(later).toHaveBeenCalledWith({
       __openducktorBrowserLive: true,
       kind: "reconnected",
-      transportEpoch: "events:1",
+      transportEpoch: TEST_HOST_EPOCH,
     });
 
     expect(() => eventSource.emit("open", "")).toThrow("reconnect listener failed");
@@ -717,176 +800,103 @@ describe("local host SSE subscriptions", () => {
     unsubscribeFirst();
   });
 
-  test("refreshes live-session state on the shared connection without losing ordered deltas", async () => {
+  test("keeps complete replay reconnects on the stream without a source refresh", async () => {
     const { observeLocalHostAgentSessions } = await loadLocalHostTransport();
-    let refreshCallCount = 0;
-    let resolveSecondRefresh: () => void = () => {};
-    const secondRefresh = new Promise<void>((resolve) => {
-      resolveSecondRefresh = resolve;
-    });
-    const fetchMock = mock(async (url: string | URL | Request) => {
-      if (url.toString().endsWith("/invoke/agent_session_live_refresh")) {
-        refreshCallCount += 1;
-        if (refreshCallCount === 2) {
-          resolveSecondRefresh();
-        }
-      }
-      return new Response("null", { status: 200 });
-    });
+    const fetchMock = mock(
+      async (url: string | URL | Request) =>
+        new Response(
+          JSON.stringify(
+            url.toString().includes("/invoke/")
+              ? {
+                  repoPath: "/repo",
+                  sessions: [],
+                  runtimeGenerations: [],
+                  complete: true,
+                  failures: [],
+                  cursor: { hostEpoch: TEST_HOST_EPOCH, sequence: 0 },
+                }
+              : { ok: true },
+          ),
+        ),
+    );
     globalThis.fetch = createFetchFixture(fetchMock);
     const listener = mock((_envelope: AgentSessionLiveEnvelope) => {});
-
     const observation = observeLocalHostAgentSessions({ repoPath: "/repo" }, listener);
-    const eventSource = await waitForEventSourceInstance();
-    expect(new URL(eventSource.url).pathname).toBe("/events");
-
-    eventSource.emit("open", "");
-    const stopObserving = await observation;
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://127.0.0.1:14327/invoke/agent_session_live_refresh",
-      expect.objectContaining({ body: JSON.stringify({ repoPath: "/repo" }) }),
-    );
-
-    const transcriptEvent = {
-      type: "transcript_event",
-      event: {
-        type: "assistant_message",
-        externalSessionId: "child-thread",
-        messageId: "assistant-1",
-        message: "New child output",
-        timestamp: "2026-07-17T08:00:00.000Z",
-        sessionRef: {
-          repoPath: "/repo",
-          runtimeKind: "codex",
-          workingDirectory: "/repo/worktree",
-          externalSessionId: "child-thread",
-        },
-      },
-    } satisfies AgentSessionLiveEnvelope;
-    eventSource.emit(
-      liveSessionStreamEventName("/repo"),
-      JSON.stringify({
-        channel: "openducktor://agent-session-live-event",
-        payload: transcriptEvent,
-      }),
-    );
-    expect(listener).not.toHaveBeenCalled();
-
-    const snapshot = {
-      type: "snapshot",
-      repoPath: "/repo",
-      sessions: [],
-    } satisfies AgentSessionLiveEnvelope;
-    eventSource.emit(
-      liveSessionStreamEventName("/repo"),
-      JSON.stringify({
-        channel: "openducktor://agent-session-live-event",
-        payload: snapshot,
-      }),
-    );
-    expect(listener.mock.calls.map(([envelope]) => envelope)).toEqual([
-      { ...snapshot, isConnectionSnapshot: true },
-      transcriptEvent,
-    ]);
-
-    eventSource.emit("open", "");
-    await secondRefresh;
+    const source = await waitForEventSourceInstance();
+    source.emit("open", "");
+    const stop = await observation;
+    source.emit("error", "disconnect");
+    source.emit("open", "");
     expect(
-      fetchMock.mock.calls.filter(([url]) =>
-        url.toString().endsWith("/invoke/agent_session_live_refresh"),
-      ),
-    ).toHaveLength(2);
-
-    const transcriptGap = {
-      type: "transcript_gap",
-      repoPath: "/repo",
-      message: "Host event stream skipped 2 events; reconnect will replay buffered events.",
-    } satisfies AgentSessionLiveEnvelope;
-    eventSource.emit("stream-warning", transcriptGap.message);
-    expect(listener).toHaveBeenNthCalledWith(3, transcriptGap);
-
-    const reconnectTranscriptEvent = {
-      ...transcriptEvent,
-      event: {
-        ...transcriptEvent.event,
-        messageId: "assistant-2",
-        message: "Output during reconnect",
-      },
-    } satisfies AgentSessionLiveEnvelope;
-    eventSource.emit(
-      liveSessionStreamEventName("/repo"),
-      JSON.stringify({
-        channel: "openducktor://agent-session-live-event",
-        payload: reconnectTranscriptEvent,
-      }),
-    );
-    expect(listener).toHaveBeenCalledTimes(3);
-    const replayedSnapshot = { ...snapshot };
-    eventSource.emit(
-      liveSessionStreamEventName("/repo"),
-      JSON.stringify({
-        channel: "openducktor://agent-session-live-event",
-        payload: replayedSnapshot,
-      }),
-    );
-    const refreshedSnapshot = { ...snapshot };
-    eventSource.emit(
-      liveSessionStreamEventName("/repo"),
-      JSON.stringify({
-        channel: "openducktor://agent-session-live-event",
-        payload: refreshedSnapshot,
-      }),
-    );
-    expect(listener.mock.calls.map(([envelope]) => envelope)).toEqual([
-      { ...snapshot, isConnectionSnapshot: true },
-      transcriptEvent,
-      transcriptGap,
-      { ...replayedSnapshot, isConnectionSnapshot: true },
-      reconnectTranscriptEvent,
-      refreshedSnapshot,
+      fetchMock.mock.calls.filter(([url]) => url.toString().includes("/invoke/")),
+    ).toHaveLength(1);
+    expect(listener.mock.calls.map(([event]) => event.type)).toEqual([
+      "snapshot",
+      "connection_state",
+      "connection_state",
     ]);
-
-    stopObserving();
+    stop();
   });
 
-  test("delivers replay gaps to every live-session observer when one listener fails", async () => {
+  test("delivers scoped transcript loss to every observer after a callback failure", async () => {
     const { observeLocalHostAgentSessions } = await loadLocalHostTransport();
     globalThis.fetch = createFetchFixture(
       mock(
-        async (url: string | URL | Request) =>
+        async () =>
           new Response(
-            url.toString().includes("/invoke/") ? "null" : JSON.stringify({ ok: true }),
-            {
-              status: 200,
-            },
+            JSON.stringify({
+              repoPath: "/repo",
+              sessions: [],
+              runtimeGenerations: [],
+              complete: true,
+              failures: [],
+              cursor: { hostEpoch: TEST_HOST_EPOCH, sequence: 0 },
+            }),
           ),
       ),
     );
-    const throwingListener = mock((envelope: AgentSessionLiveEnvelope) => {
-      if (envelope.type === "transcript_gap") {
-        throw new Error("listener failed");
-      }
+    const throwing = mock((event: AgentSessionLiveEnvelope) => {
+      if (event.type === "transcript_gap") throw new Error("listener failed");
     });
-    const listener = mock((_envelope: AgentSessionLiveEnvelope) => {});
-
-    const firstObservation = observeLocalHostAgentSessions({ repoPath: "/repo" }, throwingListener);
-    const eventSource = await waitForEventSourceInstance();
-    const secondObservation = observeLocalHostAgentSessions({ repoPath: "/repo" }, listener);
-    eventSource.emit("open", "");
-    const stopFirstObservation = await firstObservation;
-    const stopSecondObservation = await secondObservation;
-
+    const listener = mock((_event: AgentSessionLiveEnvelope) => {});
+    const first = observeLocalHostAgentSessions({ repoPath: "/repo" }, throwing);
+    const source = await waitForEventSourceInstance();
+    source.emit("open", "");
+    const stopFirst = await first;
+    const stopSecond = await observeLocalHostAgentSessions({ repoPath: "/repo" }, listener);
+    const ref = {
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "thread",
+    };
     expect(() =>
-      eventSource.emit("stream-warning", "Host event replay skipped transcript events."),
+      source.emit(
+        "replay-start",
+        JSON.stringify({
+          hostEpoch: TEST_HOST_EPOCH,
+          sequence: 3,
+          hostChanged: false,
+          losses: [
+            {
+              channel: "openducktor://agent-session-live-event",
+              repoPath: "/repo",
+              facet: "transcript",
+              refs: [ref],
+            },
+          ],
+        }),
+      ),
     ).toThrow("listener failed");
     expect(listener).toHaveBeenCalledWith({
       type: "transcript_gap",
       repoPath: "/repo",
-      message: "Host event replay skipped transcript events.",
+      message: "Transcript events were lost. Reload affected conversation history.",
+      refs: [ref],
+      replayPending: true,
     });
-
-    stopFirstObservation();
-    stopSecondObservation();
+    stopFirst();
+    stopSecond();
   });
 
   test("waits for the native EventSource reconnect when the initial open fails", async () => {
@@ -912,7 +922,7 @@ describe("local host SSE subscriptions", () => {
 
     eventSource.emit("open", "");
     const { transportEpoch, unsubscribe } = await subscription;
-    expect(transportEpoch).toBe("events:0");
+    expect(transportEpoch).toBe(TEST_HOST_EPOCH);
     unsubscribe();
     expect(eventSource.closed).toBe(true);
   });
@@ -944,7 +954,7 @@ describe("local host SSE subscriptions", () => {
     expect(listener).toHaveBeenNthCalledWith(2, {
       __openducktorBrowserLive: true,
       kind: "reconnected",
-      transportEpoch: "events:1",
+      transportEpoch: TEST_HOST_EPOCH,
     });
 
     eventSource.emit("error", "lost again");
@@ -1604,3 +1614,424 @@ test("a notification reconnect cursor is sent when it opens the shared connectio
   expect(fetchMock).toHaveBeenCalledTimes(1);
   stop();
 });
+
+test("one replay boundary coalesces state and transcript losses without stale baseline installation", async () => {
+  const { observeLocalHostAgentSessions } = await loadLocalHostTransport();
+  const finish = Promise.withResolvers<Response>();
+  const started = Promise.withResolvers<void>();
+  const baseline = liveBaseline;
+  const session = baseline(0).sessions[0]!;
+  const ref = session.ref;
+  let reads = 0;
+  globalThis.fetch = createFetchFixture(
+    mock(async (url: string | URL | Request) => {
+      if (!url.toString().includes("/invoke/")) return new Response(JSON.stringify({ ok: true }));
+      reads += 1;
+      if (reads === 1) return new Response(JSON.stringify(baseline(0)));
+      if (reads === 2) {
+        started.resolve();
+        return finish.promise;
+      }
+      return new Response(JSON.stringify(baseline(11)));
+    }),
+  );
+  const received: AgentSessionLiveEnvelope[] = [];
+  const observing = observeLocalHostAgentSessions(
+    { repoPath: "/repo" },
+    (event: AgentSessionLiveEnvelope) => received.push(event),
+  );
+  const source = await waitForEventSourceInstance();
+  source.emit("open", "");
+  const stop = await observing;
+  try {
+    const boundary = {
+      hostEpoch: TEST_HOST_EPOCH,
+      sequence: 12,
+      hostChanged: false,
+      losses: ["state", "transcript"].map((facet) => ({
+        channel: "openducktor://agent-session-live-event",
+        repoPath: "/repo",
+        facet,
+        refs: [ref],
+      })),
+    };
+    source.emit("replay-start", JSON.stringify(boundary));
+    await started.promise;
+    source.emit(
+      liveSessionStreamEventName("/repo"),
+      JSON.stringify({
+        channel: "openducktor://agent-session-live-event",
+        payload: {
+          type: "session_upsert",
+          session: { ...session, title: "New live state" },
+          cursor: { hostEpoch: TEST_HOST_EPOCH, sequence: 12 },
+        },
+      }),
+    );
+    finish.resolve(new Response(JSON.stringify(baseline(10))));
+    for (let turn = 0; turn < 100; turn += 1) await Promise.resolve();
+    expect(reads).toBe(2);
+    expect(received.filter((event) => event.type === "snapshot")).toHaveLength(1);
+    expect(
+      received.filter((event) => event.type === "transcript_gap" && !event.replayPending),
+    ).toHaveLength(0);
+    source.emit("replay-complete", JSON.stringify(boundary));
+    expect(
+      received
+        .filter((event) => event.type === "snapshot" || event.type === "session_upsert")
+        .map((event) => (event.type === "snapshot" ? event.cursor?.sequence : event.session.title)),
+    ).toEqual([0, 10, "New live state"]);
+  } finally {
+    finish.resolve(new Response(JSON.stringify(baseline(10))));
+    stop();
+  }
+});
+
+test("a new loss during recovery keeps replay buffered until the last baseline", async () => {
+  const { observeLocalHostAgentSessions } = await loadLocalHostTransport();
+  const finishes = [Promise.withResolvers<Response>(), Promise.withResolvers<Response>()];
+  const starts = [Promise.withResolvers<void>(), Promise.withResolvers<void>()];
+  let reads = 0;
+  const baseline = liveBaseline;
+  const session = baseline(0).sessions[0]!;
+  const ref = session.ref;
+  globalThis.fetch = createFetchFixture(
+    mock(async (url: string | URL | Request) => {
+      if (!url.toString().includes("/invoke/")) return new Response(JSON.stringify({ ok: true }));
+      reads += 1;
+      if (reads === 1) return new Response(JSON.stringify(baseline(0)));
+      starts[reads - 2]!.resolve();
+      return finishes[reads - 2]!.promise;
+    }),
+  );
+  const received: AgentSessionLiveEnvelope[] = [];
+  const observing = observeLocalHostAgentSessions(
+    { repoPath: "/repo" },
+    (event: AgentSessionLiveEnvelope) => received.push(event),
+  );
+  const source = await waitForEventSourceInstance();
+  source.emit("open", "");
+  const stop = await observing;
+  const loss = (sequence: number) => {
+    const boundary = {
+      hostEpoch: TEST_HOST_EPOCH,
+      sequence,
+      hostChanged: false,
+      losses: [
+        {
+          channel: "openducktor://agent-session-live-event",
+          repoPath: "/repo",
+          facet: "transcript",
+          refs: [ref],
+        },
+      ],
+    };
+    source.emit("replay-start", JSON.stringify(boundary));
+    return boundary;
+  };
+  try {
+    loss(10);
+    await starts[0]!.promise;
+    const lastBoundary = loss(11);
+    finishes[0]!.resolve(new Response(JSON.stringify(baseline(10))));
+    await starts[1]!.promise;
+    source.emit(
+      liveSessionStreamEventName("/repo"),
+      JSON.stringify({
+        channel: "openducktor://agent-session-live-event",
+        payload: {
+          type: "session_upsert",
+          session: { ...session, title: "Live 12" },
+          cursor: { hostEpoch: TEST_HOST_EPOCH, sequence: 12 },
+        },
+      }),
+    );
+    expect(received.filter((event) => event.type === "snapshot")).toHaveLength(1);
+    expect(received.filter((event) => event.type === "session_upsert")).toHaveLength(0);
+    expect(
+      received.filter((event) => event.type === "transcript_gap" && !event.replayPending),
+    ).toHaveLength(0);
+    finishes[1]!.resolve(new Response(JSON.stringify(baseline(11))));
+    for (let turn = 0; turn < 100; turn += 1) await Promise.resolve();
+    expect(reads).toBe(3);
+    expect(received.filter((event) => event.type === "snapshot")).toHaveLength(1);
+    expect(
+      received.filter((event) => event.type === "transcript_gap" && !event.replayPending),
+    ).toHaveLength(0);
+    source.emit("replay-complete", JSON.stringify(lastBoundary));
+    expect(
+      received
+        .filter((event) => event.type === "snapshot" || event.type === "session_upsert")
+        .map((event) => (event.type === "snapshot" ? event.cursor?.sequence : event.session.title)),
+    ).toEqual([0, 11, "Live 12"]);
+    expect(
+      received.filter((event) => event.type === "transcript_gap" && !event.replayPending),
+    ).toHaveLength(2);
+  } finally {
+    for (const finish of finishes) finish.resolve(new Response(JSON.stringify(baseline(11))));
+    stop();
+  }
+});
+
+for (const timing of ["before", "after"] as const) {
+  test(`state recovery arriving ${timing} retained replay preserves transcript content exactly once`, async () => {
+    const { observeLocalHostAgentSessions } = await loadLocalHostTransport();
+    const finish = Promise.withResolvers<Response>();
+    const started = Promise.withResolvers<void>();
+    const baseline = liveBaseline;
+    const session = baseline(0).sessions[0]!;
+    const ref = session.ref;
+    const cursor = (sequence: number) => ({ hostEpoch: TEST_HOST_EPOCH, sequence });
+    let reads = 0;
+    globalThis.fetch = createFetchFixture(
+      mock(async (url: string | URL | Request) => {
+        if (!url.toString().includes("/invoke/")) return new Response(JSON.stringify({ ok: true }));
+        reads += 1;
+        if (reads === 1) return new Response(JSON.stringify(baseline(1)));
+        started.resolve();
+        return finish.promise;
+      }),
+    );
+    const received: AgentSessionLiveEnvelope[] = [];
+    const observing = observeLocalHostAgentSessions(
+      { repoPath: "/repo" },
+      (event: AgentSessionLiveEnvelope) => received.push(event),
+    );
+    const source = await waitForEventSourceInstance();
+    source.emit("open", "");
+    const stop = await observing;
+    const publish = (payload: AgentSessionLiveEnvelope) =>
+      source.emit(
+        liveSessionStreamEventName("/repo"),
+        JSON.stringify({ channel: "openducktor://agent-session-live-event", payload }),
+      );
+    const message = (messageId: string, sequence: number): AgentSessionLiveEnvelope => ({
+      type: "transcript_event",
+      cursor: cursor(sequence),
+      event: {
+        type: "assistant_message",
+        externalSessionId: ref.externalSessionId,
+        sessionRef: ref,
+        messageId,
+        message: messageId,
+        timestamp: session.startedAt,
+      },
+    });
+    const resolveRecovery = async () => {
+      finish.resolve(new Response(JSON.stringify(baseline(10))));
+      for (let turn = 0; turn < 100; turn += 1) await Promise.resolve();
+      expect(received.filter((event) => event.type === "snapshot")).toHaveLength(2);
+    };
+    try {
+      publish(message("prior", 2));
+      const boundary = {
+        hostEpoch: TEST_HOST_EPOCH,
+        sequence: 10,
+        hostChanged: false,
+        losses: [
+          { channel: "openducktor://agent-session-live-event", repoPath: "/repo", facet: "state" },
+        ],
+      };
+      source.emit("replay-start", JSON.stringify(boundary));
+      await started.promise;
+      if (timing === "before") await resolveRecovery();
+      publish(message("prior", 2));
+      publish({
+        type: "session_upsert",
+        session: { ...session, activity: "running" },
+        cursor: cursor(7),
+      });
+      publish({
+        type: "transcript_event",
+        cursor: cursor(8),
+        event: {
+          type: "session_status",
+          externalSessionId: ref.externalSessionId,
+          sessionRef: ref,
+          timestamp: session.startedAt,
+          status: { type: "busy", message: "Earlier activity" },
+        },
+      });
+      publish(message("retained", 9));
+      publish(message("retained", 9));
+      if (timing === "after") await resolveRecovery();
+      source.emit("replay-complete", JSON.stringify(boundary));
+      publish(message("retained", 9));
+      publish(message("later", 11));
+      publish(message("later", 11));
+      const transcripts = received.filter((event) => event.type === "transcript_event");
+      expect(transcripts.map((event) => event.cursor?.sequence)).toEqual([2, 8, 9, 11]);
+      expect(
+        transcripts.filter((event) => event.stateCovered).map((event) => event.cursor?.sequence),
+      ).toEqual([8, 9]);
+      expect(received.some((event) => event.type === "session_upsert")).toBe(false);
+      expect(received.some((event) => event.type === "transcript_gap")).toBe(false);
+      expect(reads).toBe(2);
+    } finally {
+      finish.resolve(new Response(JSON.stringify(baseline(10))));
+      stop();
+    }
+  });
+}
+
+for (const { timing, attachment, invalid } of [
+  { timing: "before", attachment: "settled" },
+  { timing: "after", attachment: "settled" },
+  { timing: "before", attachment: "pending" },
+  { timing: "after", attachment: "pending" },
+  { timing: "before", attachment: "late" },
+  { timing: "after", attachment: "late" },
+  { timing: "before", attachment: "replacement" },
+  { timing: "after", attachment: "replacement" },
+  { timing: "after", attachment: "replacement_completed" },
+  { timing: "before", attachment: "settled", invalid: "mismatch" },
+  { timing: "before", attachment: "settled", invalid: "start" },
+  { timing: "before", attachment: "settled", invalid: "complete" },
+].map((input) => ({ ...input, invalid: "invalid" in input ? input.invalid : undefined }))) {
+  test(`transcript repair waits for replay with ${attachment} initial attachment and recovery arriving ${timing} retained deltas, invalid control ${invalid ?? "none"}`, async () => {
+    const initialPending = attachment === "pending" || attachment === "late";
+    const { observeLocalHostAgentSessions } = await loadLocalHostTransport();
+    const finish = Promise.withResolvers<Response>();
+    const started = Promise.withResolvers<void>();
+    const initialStarted = Promise.withResolvers<void>();
+    const initialFinish = Promise.withResolvers<Response>();
+    const baseline = liveBaseline;
+    const session = baseline(0).sessions[0]!;
+    const ref = session.ref;
+    const timestamp = session.startedAt;
+    const received: AgentSessionLiveEnvelope[] = [];
+    const applyEnvelope = (event: AgentSessionLiveEnvelope) => received.push(event);
+    const readyGaps = () =>
+      received.filter((event) => event.type === "transcript_gap" && !event.replayPending);
+    let reads = 0;
+    globalThis.fetch = createFetchFixture(
+      mock(async (url: string | URL | Request) => {
+        if (!url.toString().includes("/invoke/")) return new Response(JSON.stringify({ ok: true }));
+        reads += 1;
+        if (url.toString().includes("agent_session_live_attach")) {
+          initialStarted.resolve();
+          return initialPending ? initialFinish.promise : new Response(JSON.stringify(baseline(1)));
+        }
+        started.resolve();
+        return finish.promise.then((response) => response.clone());
+      }),
+    );
+    const background = attachment.startsWith("replacement")
+      ? observeLocalHostAgentSessions({ repoPath: "/repo" }, () => {})
+      : null;
+    let observing = observeLocalHostAgentSessions({ repoPath: "/repo" }, applyEnvelope);
+    const source = await waitForEventSourceInstance();
+    source.emit("open", "");
+    await initialStarted.promise;
+    let stop: (() => void) | undefined;
+    if (!initialPending) stop = await observing;
+    const stopBackground = background ? await background : undefined;
+    const resolveBaseline = async () => {
+      finish.resolve(new Response(JSON.stringify(baseline(10))));
+      for (let turn = 0; turn < 100; turn++) await Promise.resolve();
+    };
+    const boundary = {
+      hostEpoch: TEST_HOST_EPOCH,
+      sequence: 10,
+      hostChanged: false,
+      losses: [
+        {
+          channel: "openducktor://agent-session-live-event",
+          repoPath: "/repo",
+          facet: "transcript",
+          refs: [ref],
+        },
+      ],
+    };
+    try {
+      source.emit("replay-start", JSON.stringify(boundary));
+      await started.promise;
+      if (attachment === "replacement") {
+        stop?.();
+        observing = observeLocalHostAgentSessions({ repoPath: "/repo" }, applyEnvelope);
+        stop = await observing;
+      }
+      if (attachment === "pending") {
+        initialFinish.resolve(new Response(JSON.stringify(baseline(10))));
+        stop = await observing;
+        for (let turn = 0; turn < 100; turn++) await Promise.resolve();
+      }
+      if (timing === "before") await resolveBaseline();
+      expect(readyGaps()).toHaveLength(0);
+      expect(received).toContainEqual(
+        expect.objectContaining({ type: "transcript_gap", replayPending: true }),
+      );
+      if (invalid) {
+        source.emitAsBrowser(
+          invalid === "start" ? "replay-start" : "replay-complete",
+          invalid === "mismatch" ? JSON.stringify({ ...boundary, sequence: 11 }) : "{",
+        );
+        await Promise.resolve();
+        expect(received).toContainEqual(
+          expect.objectContaining({
+            type: "fault",
+            operation: "agent-session-live.replay",
+            message: expect.stringContaining("Reload the browser to reconnect"),
+          }),
+        );
+        expect(source.closed).toBe(true);
+        expect(readyGaps()).toHaveLength(0);
+        return;
+      }
+
+      source.emit(
+        liveSessionStreamEventName("/repo"),
+        JSON.stringify({
+          channel: "openducktor://agent-session-live-event",
+          payload: {
+            type: "transcript_event",
+            cursor: { hostEpoch: TEST_HOST_EPOCH, sequence: 9 },
+            event: {
+              type: "assistant_delta",
+              sessionRef: ref,
+              externalSessionId: ref.externalSessionId,
+              timestamp,
+              messageId: "reply",
+              channel: "text",
+              delta: " world",
+            },
+          },
+        }),
+      );
+      source.emit("replay-complete", JSON.stringify(boundary));
+      if (attachment === "replacement_completed") {
+        stop?.();
+        observing = observeLocalHostAgentSessions({ repoPath: "/repo" }, applyEnvelope);
+        stop = await observing;
+      }
+      if (timing === "after") {
+        expect(readyGaps()).toHaveLength(0);
+        await resolveBaseline();
+      }
+      if (attachment === "late") {
+        initialFinish.resolve(new Response(JSON.stringify(baseline(1))));
+        stop = await observing;
+      }
+      const transcripts = received.filter((event) => event.type === "transcript_event");
+      expect(readyGaps().length).toBeGreaterThan(0);
+      if (attachment === "replacement_completed") {
+        expect(transcripts).toHaveLength(0);
+      } else {
+        expect(transcripts).toHaveLength(1);
+        expect(transcripts[0]).toMatchObject({
+          cursor: { sequence: 9 },
+          event: { type: "assistant_delta", delta: " world" },
+        });
+        expect(received.indexOf(transcripts[0]!)).toBeLessThan(received.indexOf(readyGaps()[0]!));
+      }
+      const snapshots = received.filter((event) => event.type === "snapshot");
+      expect(snapshots.at(-1)?.cursor?.sequence).toBe(10);
+      expect(reads).toBe(attachment.startsWith("replacement") ? 6 : 2);
+    } finally {
+      finish.resolve(new Response(JSON.stringify(baseline(10))));
+      initialFinish.resolve(new Response(JSON.stringify(baseline(10))));
+      (stop ?? (await observing))();
+      stopBackground?.();
+    }
+  });
+}

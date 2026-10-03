@@ -169,6 +169,7 @@ const ensureRuntimeEventTransport = (input: {
   now: () => string;
   emit: (sessionId: string, event: AgentEvent) => void;
   logEvent?: OpencodeEventLogger;
+  deferEvent?: (event: Event) => boolean;
 }): RuntimeEventTransportRecord => {
   const existingTransport = input.runtimeEventTransports.get(input.runtimeId);
   if (existingTransport) {
@@ -191,11 +192,41 @@ const ensureRuntimeEventTransport = (input: {
     rejectReady = reject;
   });
   void ready.catch(() => undefined);
+  let terminalFailure: Error | undefined;
+  let rejectProjection: (failure: Error) => void = () => undefined;
+  const projectionFailure = new Promise<never>((_resolve, reject) => {
+    rejectProjection = reject;
+  });
+  const reportProjectionFailure = (cause: Error, scope: OpencodeGlobalEventFailureScope): void => {
+    if (streamRecord.terminalObservers.size > 0) {
+      throw streamRecord.fail(cause);
+    }
+    reportRuntimeEventFailure({
+      eventTransport: streamRecord,
+      scope,
+      error: cause,
+      now: input.now,
+      emit: input.emit,
+    });
+  };
   const streamRecord: RuntimeEventTransportRecord = {
     runtimeId: input.runtimeId,
     runtimeEndpoint: input.runtimeEndpoint,
     controller,
+    fail: (cause) => {
+      if (terminalFailure) return terminalFailure;
+      terminalFailure = new Error(
+        `${cause.message} Stop and start the assigned runtime to restore observation.`,
+        { cause },
+      );
+      // Report through the stream so host cleanup can close the restore job's scope
+      // without waiting for that same job to finish.
+      rejectProjection(terminalFailure);
+      controller.abort();
+      return terminalFailure;
+    },
     dispatch: async (event) => {
+      if (terminalFailure) throw terminalFailure;
       const externalSessionId = readEventSessionId(event);
       const parentExternalSessionId = readEventParentExternalSessionId(event);
       const scope: OpencodeGlobalEventFailureScope = {
@@ -210,13 +241,7 @@ const ensureRuntimeEventTransport = (input: {
       try {
         processRuntimeSessionLineage(streamRecord, event);
       } catch (error) {
-        reportRuntimeEventFailure({
-          eventTransport: streamRecord,
-          scope,
-          error,
-          now: input.now,
-          emit: input.emit,
-        });
+        reportProjectionFailure(toRuntimeEventFailure(error), scope);
         return false;
       }
       let projectionFailed = false;
@@ -266,12 +291,9 @@ const ensureRuntimeEventTransport = (input: {
           });
         } catch (error) {
           projectionFailed = true;
-          reportRuntimeEventFailure({
-            eventTransport: streamRecord,
-            scope: { ...scope, externalSessionId: subscriber.externalSessionId },
-            error,
-            now: input.now,
-            emit: input.emit,
+          reportProjectionFailure(toRuntimeEventFailure(error), {
+            ...scope,
+            externalSessionId: subscriber.externalSessionId,
           });
         }
       }
@@ -284,29 +306,38 @@ const ensureRuntimeEventTransport = (input: {
     terminalObservers: new Set(),
     parentExternalSessionIdByChildExternalSessionId: new Map(),
   };
-  streamRecord.streamDone = subscribeGlobalEvents({
-    client: streamClient,
-    controller,
-    onReady: resolveReady,
-    onEvent: async (event) => {
-      const projected = await streamRecord.dispatch(event);
-      if (!projected) {
-        return;
-      }
-      for (const observer of streamRecord.observers) {
-        await observer(event);
-      }
-    },
-    onEventError: (error, scope) => {
-      reportRuntimeEventFailure({
-        eventTransport: streamRecord,
-        scope,
-        error,
-        now: input.now,
-        emit: input.emit,
-      });
-    },
-  })
+  streamRecord.streamDone = Promise.race([
+    projectionFailure,
+    subscribeGlobalEvents({
+      client: streamClient,
+      controller,
+      onReady: resolveReady,
+      onEvent: async (event) => {
+        if (input.deferEvent?.(event)) return;
+        const projected = await streamRecord.dispatch(event);
+        if (!projected) {
+          if (streamRecord.terminalObservers.size > 0)
+            throw new Error(
+              "OpenCode event projection failed. Stop and start the assigned runtime to restore observation.",
+            );
+          return;
+        }
+        for (const observer of streamRecord.observers) {
+          await observer(event);
+        }
+      },
+      onEventError: (error, scope) => {
+        reportRuntimeEventFailure({
+          eventTransport: streamRecord,
+          scope,
+          error,
+          now: input.now,
+          emit: input.emit,
+        });
+        if (streamRecord.terminalObservers.size > 0) throw error;
+      },
+    }),
+  ])
     .then(() => {
       if (!controller.signal.aborted && streamRecord.terminalObservers.size > 0) {
         throw new Error("OpenCode live event observation ended unexpectedly.");
@@ -370,7 +401,12 @@ export const observeRuntimeEvents = async (input: {
   terminalObserver: (error: Error) => void | Promise<void>;
   signal?: AbortSignal;
   logEvent?: OpencodeEventLogger;
-}): Promise<{ dispatch: (event: Event) => Promise<boolean>; release: () => Promise<void> }> => {
+  deferEvent?: (event: Event) => boolean;
+}): Promise<{
+  dispatch: (event: Event) => Promise<boolean>;
+  fail: (cause: Error) => Error;
+  release: () => Promise<void>;
+}> => {
   const eventTransport = ensureRuntimeEventTransport(input);
   eventTransport.observers.add(input.observer);
   eventTransport.terminalObservers.add(input.terminalObserver);
@@ -403,6 +439,7 @@ export const observeRuntimeEvents = async (input: {
   }
   return {
     dispatch: eventTransport.dispatch,
+    fail: eventTransport.fail,
     release: async () => {
       eventTransport.observers.delete(input.observer);
       eventTransport.terminalObservers.delete(input.terminalObserver);

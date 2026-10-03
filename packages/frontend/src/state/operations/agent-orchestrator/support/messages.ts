@@ -445,6 +445,11 @@ export const upsertUserSessionMessage = (
   const previous = getSessionState(owner);
   const idIndex = findMessageIndexById(owner, message.id);
   if (idIndex >= 0) {
+    const existing = previous.items[idIndex];
+    const nativeMessageId =
+      existing?.meta?.kind === "user" ? existing.meta.nativeMessageId : undefined;
+    if (nativeMessageId && message.meta?.kind === "user" && !message.meta.nativeMessageId)
+      message = { ...message, meta: { ...message.meta, nativeMessageId } };
     return mergeAtIndex(previous, idIndex, message);
   }
 

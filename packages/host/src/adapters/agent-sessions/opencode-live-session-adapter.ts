@@ -17,7 +17,7 @@ import {
   isAgentSessionTranscriptEventType,
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import {
   type HostError,
   type HostErrorDetails,
@@ -58,6 +58,7 @@ export type CreateOpenCodeLiveSessionAdapterPreparerInput = {
     "releaseRuntime" | "createRuntimeRegistration"
   >;
   readonly prepareRuntime: PrepareOpencodeSessionRuntime;
+  readonly recoveryLog?: (message: string) => Effect.Effect<void, HostError>;
 };
 
 const stateEffect = <Value, Details extends object>(
@@ -76,6 +77,7 @@ const stateEffect = <Value, Details extends object>(
 export const createOpenCodeLiveSessionAdapterPreparer = ({
   liveSessionLifecycle,
   prepareRuntime,
+  recoveryLog,
 }: CreateOpenCodeLiveSessionAdapterPreparerInput): OpenCodeRuntimeSessionAdapterPreparer => {
   let nextOccurrence = 1;
 
@@ -146,26 +148,55 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
       const refreshSnapshots = (
         repoPath: string,
         roots?: AgentSessionAuthorizedRoot[],
+        treeRoot?: AgentSessionLiveRef,
       ): Effect.Effect<void, HostError> =>
         Effect.gen(function* () {
           if (repoPath !== runtime.repoPath) {
             return;
           }
-          const readVersions = state.versions();
-          const readEffect = Effect.tryPromise({
-            try: () => prepared.connection.readSessionSources(roots),
-            catch: (cause) =>
-              toHostOperationError(cause, "opencode-live-session.refresh-snapshots", {
-                runtimeId: runtime.runtimeId,
-              }),
-          });
-          const read = yield* roots ? serializeRuntime(readEffect) : readEffect;
-          yield* serializeRuntime(
-            commit("opencode-live-session.commit-refreshed-snapshots", () => ({
-              value: undefined,
-              changes: state.applySessionSources(read, readVersions),
-            })),
-          );
+          const sourceRead = state.captureSourceRead();
+          return yield* Effect.gen(function* () {
+            const read = yield* Effect.tryPromise({
+              try: () =>
+                treeRoot
+                  ? prepared.connection.readSessionTree(treeRoot, (read) =>
+                      Effect.runPromise(
+                        serializeRuntime(
+                          commit("opencode-live-session.commit-restored-tree", () => ({
+                            value: undefined,
+                            changes: state.applySessionSources(read, sourceRead, treeRoot),
+                          })),
+                        ),
+                      ),
+                    )
+                  : prepared.connection.readSessionSources(roots),
+              catch: (cause) =>
+                toHostOperationError(cause, "opencode-live-session.refresh-snapshots", {
+                  runtimeId: runtime.runtimeId,
+                }),
+            });
+            if (recoveryLog)
+              yield* recoveryLog(
+                `runtime.reconstruction ${JSON.stringify({ runtimeId: runtime.runtimeId, runtimeKind: runtime.kind, repoPath, runtimeGeneration: binding.generation, ...read.diagnostics, sources: read.sources.length, failures: read.failures.length })}`,
+              );
+            if (!treeRoot)
+              yield* serializeRuntime(
+                commit("opencode-live-session.commit-refreshed-snapshots", () => ({
+                  value: undefined,
+                  changes: state.applySessionSources(read, sourceRead, treeRoot),
+                })),
+              );
+            if (treeRoot && read.failures.length > 0)
+              return yield* new HostOperationError({
+                operation: "opencode-live-session.restore-tree",
+                message:
+                  "The chat was restored, but its runtime tree is incomplete. Retry Restore to load the assigned session tree.",
+                details: {
+                  externalSessionId: treeRoot.externalSessionId,
+                  failures: read.failures.length,
+                },
+              });
+          }).pipe(Effect.ensuring(Effect.sync(() => state.finishSourceRead(sourceRead))));
         });
 
       const handleSignal = (
@@ -211,23 +242,30 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
               }),
             );
           case "fault":
-            return serializeRuntime(
-              commit("opencode-live-session.commit-fault", () => ({
-                value: undefined,
-                changes: [
-                  {
-                    type: "fault",
-                    repoPath: runtime.repoPath,
-                    operation: "opencode-live-session.observe-runtime",
-                    message: signal.message,
-                  },
-                ],
-              })),
-            ).pipe(
-              Effect.flatMap(() =>
-                liveSessionLifecycle.releaseRuntime(runtime.runtimeId).pipe(Effect.asVoid),
-              ),
-            );
+            return Effect.gen(function* () {
+              const reporting = yield* Effect.exit(
+                serializeRuntime(
+                  commit("opencode-live-session.commit-fault", () => ({
+                    value: undefined,
+                    changes: [
+                      {
+                        type: "fault",
+                        repoPath: runtime.repoPath,
+                        operation: "opencode-live-session.observe-runtime",
+                        message: signal.message,
+                      },
+                    ],
+                  })),
+                ),
+              );
+              const cleanup = yield* Effect.exit(
+                liveSessionLifecycle.releaseRuntime(runtime.runtimeId),
+              );
+              if (Exit.isFailure(reporting) && Exit.isFailure(cleanup))
+                return yield* Effect.failCause(Cause.sequential(reporting.cause, cleanup.cause));
+              if (Exit.isFailure(reporting)) return yield* Effect.failCause(reporting.cause);
+              if (Exit.isFailure(cleanup)) return yield* Effect.failCause(cleanup.cause);
+            }).pipe(Effect.uninterruptible);
         }
       };
 
@@ -293,6 +331,7 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
         ...unsupportedGeneratedImageOperations,
         resolveGeneratedImageSource: unsupportedGeneratedImageSource,
         supportsSessionControl: true,
+        restoreSessionTree: (ref) => refreshSnapshots(ref.repoPath, undefined, ref),
         binding,
         refreshSnapshots,
         listSnapshots: (repoPath) =>

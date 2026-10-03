@@ -59,7 +59,17 @@ const createElectronApi = () => {
   return {
     electronApi: {
       platform: "darwin",
-      invoke: mock(async () => ({ ok: true as const, value: undefined })),
+      invoke: mock(async () => ({
+        ok: true as const,
+        value: {
+          repoPath: "/repo",
+          sessions: [],
+          runtimeGenerations: [],
+          complete: true,
+          failures: [],
+          cursor: { hostEpoch: "test-host", sequence: 0 },
+        },
+      })),
       subscribe: mock(() => unsubscribe),
       appUpdates: {
         getState: mock(async () => ({ status: "idle", currentVersion: "0.4.2" })),
@@ -218,7 +228,7 @@ describe("electron shell bridge", () => {
       expect.any(Function),
       "/repo",
     );
-    expect(electronApi.invoke).toHaveBeenCalledWith("agent_session_live_refresh", {
+    expect(electronApi.invoke).toHaveBeenCalledWith("agent_session_live_attach", {
       repoPath: "/repo",
     });
 
@@ -327,7 +337,16 @@ describe("electron shell bridge", () => {
     const bridge = createElectronShellBridge();
     const listener = mock(() => {});
 
-    await bridge.observeAgentSessionLive({ repoPath: "/repo" }, listener);
+    const pending = deferred<{
+      ok: true;
+      value: {
+        repoPath: string;
+        sessions: never[];
+        cursor: { hostEpoch: string; sequence: number };
+      };
+    }>();
+    electronApi.invoke.mockImplementation(() => pending.promise);
+    const observing = bridge.observeAgentSessionLive({ repoPath: "/repo" }, listener);
     const subscription = electronApi.subscribe.mock.calls.find(
       ([channel]) => channel === "openducktor://agent-session-live-event",
     )?.[1];
@@ -350,16 +369,29 @@ describe("electron shell bridge", () => {
         },
       },
     };
-    const snapshot = { type: "snapshot", repoPath: "/repo", sessions: [] };
-
     subscription(transcriptEvent);
     expect(listener).not.toHaveBeenCalled();
-    subscription(snapshot);
-
+    const baseline = {
+      repoPath: "/repo",
+      sessions: [],
+      runtimeGenerations: [],
+      complete: true,
+      failures: [],
+      cursor: { hostEpoch: "test-host", sequence: 0 },
+    };
+    pending.resolve({ ok: true, value: baseline });
+    const stop = await observing;
     expect(listener.mock.calls.map(([envelope]) => envelope)).toEqual([
-      { ...snapshot, isConnectionSnapshot: true },
+      {
+        type: "snapshot",
+        repoPath: baseline.repoPath,
+        sessions: baseline.sessions,
+        cursor: baseline.cursor,
+        isConnectionSnapshot: true,
+      },
       transcriptEvent,
     ]);
+    stop();
   });
 
   test("uses the preload bridge for app update state and actions", async () => {

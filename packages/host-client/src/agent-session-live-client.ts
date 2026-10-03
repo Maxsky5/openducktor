@@ -25,6 +25,8 @@ import {
   type AgentSessionControlStopInput,
   type AgentSessionControlSummary,
   type AgentSessionControlUpdateModelInput,
+  type AgentSessionLiveBaseline,
+  agentSessionLiveBaselineSchema,
   type AgentSessionLiveListInput,
   type AgentSessionLiveLoadContextInput,
   type AgentSessionLiveLoadDiffInput,
@@ -159,6 +161,26 @@ export class HostAgentSessionLiveClient {
       "agent_session_control_release",
       agentSessionControlReleaseInputSchema.parse(input),
       voidResultSchema,
+    );
+  }
+
+  async agentSessionLiveAttach(
+    input: AgentSessionLiveRefreshInput,
+  ): Promise<AgentSessionLiveBaseline> {
+    return this.invokeFn(
+      "agent_session_live_attach",
+      agentSessionLiveRefreshInputSchema.parse(input),
+      agentSessionLiveBaselineSchema,
+    );
+  }
+
+  async agentSessionLiveRecover(
+    input: AgentSessionLiveRefreshInput,
+  ): Promise<AgentSessionLiveBaseline> {
+    return this.invokeFn(
+      "agent_session_live_recover",
+      agentSessionLiveRefreshInputSchema.parse(input),
+      agentSessionLiveBaselineSchema,
     );
   }
 

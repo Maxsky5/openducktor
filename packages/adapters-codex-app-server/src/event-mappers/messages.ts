@@ -44,7 +44,7 @@ export const userMessageMapper: CodexEventMapper = {
     if (!asyncQuestionReplies && isCodexContextualUserMessage(input.item)) {
       return { handled: true, events: [] };
     }
-    const messageId = input.item.id;
+    const messageId = input.item.clientId ?? input.item.id;
     const timestamp = ctx.timestamp ?? input.timestamp;
     if (asyncQuestionReplies) {
       const events = codexAsyncQuestionReplyTools(asyncQuestionReplies).map(

@@ -4,11 +4,14 @@ import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-ada
 import { describe, expect, test } from "bun:test";
 import type { PrepareOpencodeSessionRuntime } from "@openducktor/adapters-opencode-sdk";
 import type {
+  AgentSessionLiveEnvelope,
   AgentSessionLiveSnapshot,
   AgentSessionTranscriptEvent,
   RuntimeInstanceSummary,
 } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Cause, Effect, Runtime } from "effect";
+import { HostOperationError } from "../../effect/host-errors";
+import { createRuntimeObservationRequirement } from "../../composition/node/runtime-observation";
 import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
 import type {
   AgentSessionLiveAdapterChange,
@@ -24,6 +27,289 @@ import {
 } from "./opencode-live-session-adapter.test-support";
 
 describe("createOpenCodeLiveSessionAdapterPreparer", () => {
+  test("commits the restored snapshot before projecting buffered native signals", async () => {
+    const harness = createRuntimeHarness();
+    const envelopes: AgentSessionLiveEnvelope[] = [];
+    const service = createAgentSessionLiveStateService({
+      adapterRegistry: createLiveSessionAdapterRegistry(),
+      faultLog: () => Effect.void,
+      publish: (envelope) => {
+        envelopes.push(envelope);
+      },
+    });
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: service,
+        prepareRuntime: async (input) => {
+          const native = await harness.prepareRuntime(input);
+          return {
+            ...native,
+            connection: {
+              ...native.connection,
+              readSessionTree: async (_root, install) => {
+                const snapshot = {
+                  sources: [
+                    {
+                      externalSessionId: ref.externalSessionId,
+                      workingDirectory: ref.workingDirectory,
+                      sessionAssociation: { kind: "unbound" as const },
+                      title: "Restored",
+                      startedAt: runtime.startedAt,
+                      runtimeActivity: "idle" as const,
+                      pendingApprovals: [],
+                      pendingQuestions: [],
+                    },
+                  ],
+                  failures: [],
+                };
+                await install?.(snapshot);
+                expect(await Effect.runPromise(service.read(ref))).toMatchObject({
+                  type: "live",
+                  session: { activity: "idle" },
+                });
+                await harness.emit({
+                  type: "session_event",
+                  externalSessionId: ref.externalSessionId,
+                  event: {
+                    type: "session_status",
+                    externalSessionId: ref.externalSessionId,
+                    timestamp: runtime.startedAt,
+                    status: { type: "busy", message: null },
+                  },
+                });
+                await harness.emit({
+                  type: "session_event",
+                  externalSessionId: ref.externalSessionId,
+                  event: {
+                    type: "approval_required",
+                    externalSessionId: ref.externalSessionId,
+                    timestamp: runtime.startedAt,
+                    requestId: "during-restore",
+                    requestType: "file_change",
+                    title: "Edit",
+                  },
+                });
+                await harness.emit({
+                  type: "session_event",
+                  externalSessionId: ref.externalSessionId,
+                  event: {
+                    type: "assistant_delta",
+                    externalSessionId: ref.externalSessionId,
+                    timestamp: runtime.startedAt,
+                    channel: "text",
+                    delta: "During restore",
+                  },
+                });
+                return snapshot;
+              },
+            },
+          };
+        },
+      })(runtime),
+    );
+    await Effect.runPromise(service.registerRuntimeAdapter(prepared.adapter));
+    await Effect.runPromise(prepared.startForwarding());
+    try {
+      await Effect.runPromise(service.setSessionOwnership(ref, true));
+      expect(await Effect.runPromise(service.read(ref))).toMatchObject({
+        type: "live",
+        session: {
+          activity: "waiting_for_permission",
+          pendingApprovals: [expect.objectContaining({ title: "Edit" })],
+        },
+      });
+      expect(
+        envelopes.filter(
+          (envelope) =>
+            envelope.type === "transcript_event" && envelope.event.type === "assistant_delta",
+        ),
+      ).toHaveLength(1);
+    } finally {
+      await Effect.runPromise(service.releaseRuntime(runtime.runtimeId));
+    }
+  });
+
+  test("invalidates the registration when observation fails inside tree reconstruction", async () => {
+    const healthyRef = { ...ref, externalSessionId: "healthy-session" };
+    const harness = createRuntimeHarness({
+      sessionSources: [
+        {
+          externalSessionId: healthyRef.externalSessionId,
+          workingDirectory: healthyRef.workingDirectory,
+          sessionAssociation: { kind: "unbound" },
+          title: "Healthy session",
+          startedAt: runtime.startedAt,
+          runtimeActivity: "idle",
+          pendingApprovals: [
+            { requestId: "healthy-request", requestType: "file_change", title: "Edit" },
+          ],
+          pendingQuestions: [],
+        },
+      ],
+    });
+    const envelopes: AgentSessionLiveEnvelope[] = [];
+    const registry = createLiveSessionAdapterRegistry();
+    const service = createAgentSessionLiveStateService({
+      adapterRegistry: registry,
+      faultLog: () => Effect.void,
+      publish: (envelope) => {
+        envelopes.push(envelope);
+      },
+    });
+    const sourceFailure =
+      "OpenCode child session event is missing authoritative info.parentID lineage. Stop and start the assigned runtime to restore observation.";
+    const faultDelivery = Promise.withResolvers<void>();
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: service,
+        prepareRuntime: async (input) => {
+          const native = await harness.prepareRuntime(input);
+          return {
+            ...native,
+            connection: {
+              ...native.connection,
+              readSessionTree: async (_root, install) => {
+                const snapshot = { sources: [], failures: [] };
+                await install?.(snapshot);
+                // Native stream ownership delivers the fault outside the restore job.
+                harness
+                  .emit({ type: "fault", message: sourceFailure })
+                  .then(faultDelivery.resolve, faultDelivery.reject);
+                throw new Error(sourceFailure);
+              },
+            },
+          };
+        },
+      })(runtime),
+    );
+    await Effect.runPromise(service.registerRuntimeAdapter(prepared.adapter));
+    await Effect.runPromise(prepared.startForwarding());
+    try {
+      const before = await Effect.runPromise(service.attach({ repoPath: "/repo" }));
+      expect(before.complete).toBe(true);
+      expect(before.runtimeGenerations).toHaveLength(1);
+      expect(before.sessions[0]?.pendingApprovals).toHaveLength(1);
+      await Effect.runPromiseExit(service.setSessionOwnership(ref, true));
+      await faultDelivery.promise;
+      const after = await Effect.runPromise(service.attach({ repoPath: "/repo" }));
+      expect(after.complete).toBe(false);
+      expect(after.runtimeGenerations).toEqual([]);
+      expect(after.sessions).toEqual([]);
+      expect(after.failures).toContainEqual(expect.objectContaining({ message: sourceFailure }));
+      expect(await Effect.runPromise(service.read(healthyRef))).toMatchObject({ type: "missing" });
+      const staleReply = await Effect.runPromiseExit(
+        service.replyApproval({
+          ...healthyRef,
+          requestId: before.sessions[0]!.pendingApprovals[0]!.requestId,
+          outcome: "approve_once",
+        }),
+      );
+      expect(staleReply._tag).toBe("Failure");
+      expect(harness.approvalReplies).toEqual([]);
+      expect(harness.releaseCalls).toEqual([runtime.runtimeId]);
+      expect(envelopes.filter((envelope) => envelope.type === "fault")).toContainEqual(
+        expect.objectContaining({ message: sourceFailure }),
+      );
+    } finally {
+      await Effect.runPromise(service.releaseRuntime(runtime.runtimeId));
+    }
+  });
+
+  for (const failure of ["logging", "publication", "cleanup", "all"] as const) {
+    test(`retires failed observation when ${failure} fails`, async () => {
+      const logFails = failure === "logging" || failure === "all";
+      const publishFails = failure === "publication" || failure === "all";
+      const cleanupFails = failure === "cleanup" || failure === "all";
+      const harness = createRuntimeHarness({
+        sessionSources: [
+          {
+            externalSessionId: ref.externalSessionId,
+            workingDirectory: ref.workingDirectory,
+            sessionAssociation: { kind: "unbound" },
+            title: "Session",
+            startedAt: runtime.startedAt,
+            runtimeActivity: "idle",
+            pendingApprovals: [
+              { requestId: "native-request", requestType: "file_change", title: "Edit" },
+            ],
+            pendingQuestions: [],
+          },
+        ],
+      });
+      const registry = createLiveSessionAdapterRegistry();
+      const service = createAgentSessionLiveStateService({
+        adapterRegistry: registry,
+        faultLog: () =>
+          logFails
+            ? Effect.fail(
+                new HostOperationError({ operation: "test.fault-log", message: "disk full" }),
+              )
+            : Effect.void,
+        publish: (envelope) => {
+          if (envelope.type === "fault" && publishFails) throw new Error("fault publisher failed");
+        },
+      });
+      const prepared = await Effect.runPromise(
+        createOpenCodeLiveSessionAdapterPreparer({
+          liveSessionLifecycle: service,
+          prepareRuntime: async (input) => {
+            const native = await harness.prepareRuntime(input);
+            return {
+              ...native,
+              release: async () => {
+                await native.release();
+                if (cleanupFails) throw new Error("native cleanup failed");
+              },
+            };
+          },
+        })(runtime),
+      );
+      await Effect.runPromise(service.registerRuntimeAdapter(prepared.adapter));
+      await Effect.runPromise(prepared.startForwarding());
+      const before = await Effect.runPromise(service.attach({ repoPath: "/repo" }));
+      const delivered = await Effect.runPromiseExit(
+        Effect.tryPromise({
+          try: () =>
+            harness.emit({
+              type: "fault",
+              message: "Native continuity lost. Stop and start the assigned runtime.",
+            }),
+          catch: (error) => error,
+        }),
+      );
+      expect(delivered._tag).toBe("Failure");
+      if (delivered._tag === "Failure") {
+        const boundaryFailure = [...Cause.failures(delivered.cause)][0];
+        const reason = Cause.pretty(
+          Runtime.isFiberFailure(boundaryFailure)
+            ? boundaryFailure[Runtime.FiberFailureCauseId]
+            : delivered.cause,
+        );
+        if (logFails) expect(reason).toContain("disk full");
+        if (publishFails) expect(reason).toContain("fault publisher failed");
+        if (cleanupFails) expect(reason).toContain("native cleanup failed");
+      }
+      expect(harness.releaseCalls).toEqual([runtime.runtimeId]);
+      const health = await Effect.runPromiseExit(
+        createRuntimeObservationRequirement(registry)(runtime),
+      );
+      expect(health._tag).toBe("Failure");
+      const after = await Effect.runPromise(service.attach({ repoPath: "/repo" }));
+      expect(after.runtimeGenerations).toEqual([]);
+      expect(after.sessions).toEqual([]);
+      expect(after.complete).toBe(false);
+      const reply = await Effect.runPromiseExit(
+        service.replyApproval({
+          ...ref,
+          requestId: before.sessions[0]!.pendingApprovals[0]!.requestId,
+          outcome: "approve_once",
+        }),
+      );
+      expect(reply._tag).toBe("Failure");
+      expect(harness.approvalReplies).toEqual([]);
+    });
+  }
+
   test("loads every OpenCode session for task matching", async () => {
     const harness = createRuntimeHarness({
       sessionSources: [
@@ -251,6 +537,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       {
         type: "fault",
         repoPath: "/repo",
+        runtimeKind: "opencode",
         operation: "opencode-live-session.observe-runtime",
         message: "OpenCode live event observation failed: connection lost",
       },

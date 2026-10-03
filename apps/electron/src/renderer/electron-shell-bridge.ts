@@ -93,7 +93,7 @@ export const createElectronShellBridge = (): ShellBridge => {
         input.repoPath,
       );
       try {
-        await client.agentSessionLiveRefresh(input);
+        attachment.install(await client.agentSessionLiveAttach(input));
       } catch (cause) {
         unsubscribe();
         throw cause;

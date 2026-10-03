@@ -246,6 +246,10 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     agentSessionLiveLoadDiff:
       agentSessionLiveClient.agentSessionLiveLoadDiff.bind(agentSessionLiveClient),
     agentSessionLiveRead: agentSessionLiveClient.agentSessionLiveRead.bind(agentSessionLiveClient),
+    agentSessionLiveAttach:
+      agentSessionLiveClient.agentSessionLiveAttach.bind(agentSessionLiveClient),
+    agentSessionLiveRecover:
+      agentSessionLiveClient.agentSessionLiveRecover.bind(agentSessionLiveClient),
     agentSessionLiveRefresh:
       agentSessionLiveClient.agentSessionLiveRefresh.bind(agentSessionLiveClient),
     agentSessionLiveReplyApproval:
@@ -260,6 +264,8 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
       agentRuntimeQueryClient.agentRuntimePreviewModels.bind(agentRuntimeQueryClient),
     agentRuntimeLoadSessionDiff:
       agentRuntimeQueryClient.agentRuntimeLoadSessionDiff.bind(agentRuntimeQueryClient),
+    agentRuntimeRecoverSessionHistory:
+      agentRuntimeQueryClient.agentRuntimeRecoverSessionHistory.bind(agentRuntimeQueryClient),
     agentRuntimeLoadSessionHistory:
       agentRuntimeQueryClient.agentRuntimeLoadSessionHistory.bind(agentRuntimeQueryClient),
     agentRuntimeLoadSessionTodos:

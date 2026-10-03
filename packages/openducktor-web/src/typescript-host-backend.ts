@@ -426,7 +426,7 @@ const validateAppCookieOrHeader = (
 
 const writeSseEvent = (event: BufferedHostEvent): string =>
   [
-    `id: ${event.id}`,
+    `id: ${event.hostEpoch}:${event.id}`,
     `event: ${event.eventName}`,
     ...event.payload.split(/\r?\n/).map((line) => `data: ${line}`),
     "",
@@ -436,52 +436,87 @@ const writeSseNamedEvent = (eventName: string, data: string): string =>
   [`event: ${eventName}`, ...data.split(/\r?\n/).map((line) => `data: ${line}`), "", ""].join("\n");
 const SSE_READY_COMMENT = ": openducktor-ready\n\n";
 
-const skippedReplayWarningMessage = (skippedEventCount: number): string => {
-  const eventLabel = skippedEventCount === 1 ? "event" : "events";
-  return `Host event stream skipped ${skippedEventCount} ${eventLabel}; reconnect will replay buffered events.`;
-};
-
 const createSseResponse = (
   stream: BufferedHostEventStream,
-  lastEventId: number | null,
+  lastEventId: string | null,
   corsHeaders: HeadersInit,
   reportDeliveryFailure: (cause: unknown) => void,
+  reportReplay: (diagnostics: {
+    hostEpoch: string;
+    sequence: number;
+    hostChanged: boolean;
+    losses: number;
+    events: number;
+    deliveryBytes: number;
+    elapsedMs: number;
+  }) => void,
 ): Response => {
   const encoder = new TextEncoder();
   let unsubscribe: (() => void) | null = null;
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
+      const startedAt = performance.now();
+      let deliveryBytes = 0;
       const enqueue = (payload: string): boolean => {
         try {
-          controller.enqueue(encoder.encode(payload));
+          const bytes = encoder.encode(payload);
+          controller.enqueue(bytes);
+          deliveryBytes += bytes.byteLength;
           return true;
         } catch (cause) {
           reportDeliveryFailure(cause);
           return false;
         }
       };
-      if (!enqueue(SSE_READY_COMMENT)) return;
-      const replay = stream.replayAfterWithDiagnostics(lastEventId);
-      if (
-        replay.skippedEventCount > 0 &&
-        !enqueue(
-          writeSseNamedEvent(
-            "stream-warning",
-            skippedReplayWarningMessage(replay.skippedEventCount),
-          ),
-        )
-      ) {
-        return;
-      }
-      for (const event of replay.events) {
-        if (!enqueue(writeSseEvent(event))) return;
-      }
+      const pending: BufferedHostEvent[] = [];
+      let replaying = true;
       unsubscribe = stream.subscribe((event) => {
-        if (!enqueue(writeSseEvent(event))) {
+        if (replaying) pending.push(event);
+        else if (!enqueue(writeSseEvent(event))) {
           unsubscribe?.();
           unsubscribe = null;
         }
       });
+      const replay = stream.replayAfterWithDiagnostics(lastEventId);
+      if (!enqueue(SSE_READY_COMMENT)) {
+        unsubscribe();
+        return;
+      }
+      if (!enqueue(writeSseNamedEvent("replay-start", JSON.stringify(replay.boundary)))) {
+        unsubscribe();
+        return;
+      }
+      for (const event of replay.events) {
+        if (!enqueue(writeSseEvent(event))) {
+          unsubscribe();
+          return;
+        }
+      }
+      if (
+        !enqueue(
+          `id: ${replay.boundary.hostEpoch}:${replay.boundary.sequence}\n` +
+            writeSseNamedEvent("replay-complete", JSON.stringify(replay.boundary)),
+        )
+      ) {
+        unsubscribe();
+        return;
+      }
+      reportReplay({
+        hostEpoch: replay.boundary.hostEpoch,
+        sequence: replay.boundary.sequence,
+        hostChanged: replay.boundary.hostChanged,
+        losses: replay.boundary.losses.length,
+        events: replay.events.length,
+        deliveryBytes,
+        elapsedMs: performance.now() - startedAt,
+      });
+      replaying = false;
+      for (const event of pending) {
+        if (event.id > replay.boundary.sequence && !enqueue(writeSseEvent(event))) {
+          unsubscribe();
+          return;
+        }
+      }
     },
     cancel() {
       unsubscribe?.();
@@ -548,17 +583,19 @@ const parseJsonObjectBody = (
     return body.data;
   });
 
-const parseLastEventId = (request: Request): Effect.Effect<number | null, WebHostRequestError> =>
+const parseLastEventId = (request: Request): Effect.Effect<string | null, WebHostRequestError> =>
   Effect.gen(function* () {
     const raw = request.headers.get(LAST_EVENT_ID_HEADER);
     if (raw === null) {
       return null;
     }
-    const parsed = Number(raw);
-    if (!Number.isInteger(parsed) || parsed < 0) {
+    if (
+      !/^[0-9a-f-]{36}:(0|[1-9][0-9]*)$/u.test(raw) ||
+      !Number.isSafeInteger(Number(raw.split(":")[1]))
+    ) {
       return yield* rejectWebHostRequest(`Invalid Last-Event-ID header: ${raw}`, 400);
     }
-    return parsed;
+    return raw;
   });
 
 const statLocalAttachmentPreview = (
@@ -765,12 +802,28 @@ const routeCorsRequest = ({
             ),
         );
       }
+      const cursor = yield* parseLastEventId(request);
+      yield* Effect.try({
+        try: () => eventBus.stream().replayAfterWithDiagnostics(cursor),
+        catch: (cause) =>
+          new WebHostRequestError({
+            message: cause instanceof Error ? cause.message : String(cause),
+            status: 400,
+          }),
+      });
       return createSseResponse(
         eventBus.stream(),
-        yield* parseLastEventId(request),
+        cursor,
         corsHeaders,
         (cause) =>
           scheduleNonFatalWebEventFailure(logger, "Failed to enqueue an SSE host event.", cause),
+        (diagnostics) => {
+          void runWebBoundary(
+            writeWebLogEffect(logger, "info", `host.replay ${JSON.stringify(diagnostics)}`),
+          ).catch((cause: unknown) =>
+            scheduleNonFatalWebEventFailure(logger, "Failed to record replay diagnostics.", cause),
+          );
+        },
       );
     }
 

@@ -50,6 +50,67 @@ const observeSessionState = async (
 };
 
 describe("CodexAppServerAdapter streaming", () => {
+  test("keeps acceptance IDs through queued steering and reversed equal-text native echoes", async () => {
+    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+    const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });
+    await adapter.startSession(codexStartSessionInput());
+    const events: AgentEvent[] = [];
+    const ref = codexSessionRuntimeRef("thread/start-runtime-live");
+    const stop = await adapter.subscribeEvents(ref, (event) => events.push(event));
+    try {
+      const first = await adapter.sendUserMessage(
+        codexUserMessageInput({ parts: [{ kind: "text", text: "Hello" }] }),
+      );
+      const second = await adapter.sendUserMessage(
+        codexUserMessageInput({ parts: [{ kind: "text", text: "Hello" }] }),
+      );
+      expect(first.messageId).not.toBe(second.messageId);
+      const transport = transports.get("runtime-live");
+      if (!transport) throw new Error("Expected the runtime transport");
+      expect(transport.calls.some((call) => call.method === "turn/steer")).toBe(false);
+      transport.turnStartDeferred.resolve({
+        turn: codexTurnFixture({ id: "turn-live", status: "inProgress", items: [] }),
+      });
+      await flushCodexAdapterWork();
+      expect(
+        transport.calls.find((call) => call.method === "turn/start")?.params.clientUserMessageId,
+      ).toBe(first.messageId);
+      expect(
+        transport.calls.find((call) => call.method === "turn/steer")?.params.clientUserMessageId,
+      ).toBe(second.messageId);
+      for (const [accepted, nativeId] of [
+        [second, "native-second"],
+        [first, "native-first"],
+      ] as const) {
+        emitNotification({
+          method: "item/completed",
+          params: {
+            threadId: ref.externalSessionId,
+            turnId: "turn-live",
+            completedAtMs: 1_777_766_419_700,
+            item: codexUserMessageItemFixture({
+              id: nativeId,
+              clientId: accepted.messageId,
+              content: [{ type: "text", text: "Hello", text_elements: [] }],
+            }),
+          },
+        });
+        await flushCodexAdapterWork();
+        expect(events.filter((event) => event.type === "user_message").at(-1)).toEqual(
+          expect.objectContaining({ messageId: accepted.messageId, nativeMessageId: nativeId }),
+        );
+      }
+      expect(
+        new Set(
+          events.filter((event) => event.type === "user_message").map((event) => event.messageId),
+        ).size,
+      ).toBe(2);
+    } finally {
+      stop();
+      await adapter.releaseSession(ref);
+    }
+  });
+
   test("keeps asynchronous questions pending without blocking the turn and sends contextual replies", async () => {
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
     const mutations: CodexLiveSessionMutation[] = [];
@@ -695,6 +756,7 @@ describe("CodexAppServerAdapter streaming", () => {
           messageId: accepted.messageId,
           message: accepted.message,
           resolvedQuestionRequestIds: ["history-question"],
+          nativeMessageId: "native-echo",
         }),
       ]);
     } finally {
@@ -1392,6 +1454,7 @@ describe("CodexAppServerAdapter streaming", () => {
         threadId: "thread/start-runtime-live",
         input: toCodexTurnInputList([{ kind: "text", text: "Steer replacement turn" }], []),
         expectedTurnId: "turn-new",
+        clientUserMessageId: expect.any(String),
       },
     });
     unsubscribe();
@@ -1442,6 +1505,7 @@ describe("CodexAppServerAdapter streaming", () => {
         threadId: "thread/start-runtime-live",
         input: toCodexTurnInputList([{ kind: "text", text: "Keep steering" }], []),
         expectedTurnId: "turn-live",
+        clientUserMessageId: expect.any(String),
       },
     });
     unsubscribe();
@@ -1496,6 +1560,7 @@ describe("CodexAppServerAdapter streaming", () => {
         threadId: "thread/start-runtime-live",
         input: toCodexTurnInputList([{ kind: "text", text: "Also inspect failing tests" }], []),
         expectedTurnId: "turn-active",
+        clientUserMessageId: events.filter((event) => event.type === "user_message")[1]?.messageId,
       },
     });
 
@@ -1551,7 +1616,7 @@ describe("CodexAppServerAdapter streaming", () => {
       }),
     );
 
-    streamListeners[0]?.({
+    streamListeners.at(-1)?.({
       runtimeId: "runtime-live",
       kind: "notification",
       receivedAt: new Date().toISOString(),
@@ -1560,21 +1625,44 @@ describe("CodexAppServerAdapter streaming", () => {
         params: {
           threadId: "thread/start-runtime-live",
           turnId: "turn-1",
-          item: {
-            id: "codex-user-confirmed",
+          completedAtMs: 1_777_766_419_700,
+          item: codexUserMessageItemFixture({
+            id: "user-history-1",
             type: "userMessage",
-            content: [{ type: "text", text: "Hello   streamed\nCodex" }],
-          },
+            content: [{ type: "text", text: "Hello   streamed\nCodex", text_elements: [] }],
+          }),
         },
       },
     });
     await flushCodexAdapterWork();
 
     const userMessages = events.filter((event) => event.type === "user_message");
-    expect(userMessages).toHaveLength(1);
-    expect(userMessages[0]).toEqual(expect.objectContaining({ message: "Hello streamed Codex" }));
+    expect(new Set(userMessages.map((event) => event.messageId)).size).toBe(1);
+    expect(userMessages.at(-1)?.nativeMessageId).toBe("user-history-1");
+    expect(userMessages.at(-1)).toEqual(
+      expect.objectContaining({
+        message: "Hello streamed Codex",
+        nativeMessageId: "user-history-1",
+      }),
+    );
     expect(userMessages).not.toContainEqual(
-      expect.objectContaining({ messageId: "codex-user-confirmed" }),
+      expect.objectContaining({ messageId: "user-history-1" }),
+    );
+    const history = await adapter.loadSessionHistory(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+    );
+    expect(history.find((message) => message.role === "user")).toEqual(
+      expect.objectContaining({
+        messageId: userMessages[0]!.messageId,
+        nativeMessageId: "user-history-1",
+      }),
+    );
+    await adapter.releaseSession(codexSessionRuntimeRef("thread/start-runtime-live"));
+    const releasedHistory = await adapter.loadSessionHistory(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+    );
+    expect(releasedHistory.find((message) => message.role === "user")?.messageId).toBe(
+      "user-history-1",
     );
     unsubscribe();
   });
@@ -1595,7 +1683,7 @@ describe("CodexAppServerAdapter streaming", () => {
       (event) => events.push(event),
     );
 
-    await adapter.sendUserMessage(
+    const accepted = await adapter.sendUserMessage(
       codexUserMessageInput({
         externalSessionId: "thread/start-runtime-live",
         parts: [
@@ -1609,7 +1697,7 @@ describe("CodexAppServerAdapter streaming", () => {
       }),
     );
 
-    streamListeners[0]?.({
+    streamListeners.at(-1)?.({
       runtimeId: "runtime-live",
       kind: "notification",
       receivedAt: new Date().toISOString(),
@@ -1618,21 +1706,24 @@ describe("CodexAppServerAdapter streaming", () => {
         params: {
           threadId: "thread/start-runtime-live",
           turnId: "turn-1",
-          item: {
+          completedAtMs: 1_777_766_419_700,
+          item: codexUserMessageItemFixture({
             id: "codex-structured-user-confirmed",
+            clientId: accepted.messageId,
             type: "userMessage",
             content: [
-              { type: "text", text: "Inspect" },
+              { type: "text", text: "Inspect revised", text_elements: [] },
               { type: "mention", name: "app.ts", path: "/repo/src/app.ts" },
             ],
-          },
+          }),
         },
       },
     });
     await flushCodexAdapterWork();
 
     const userMessages = events.filter((event) => event.type === "user_message");
-    expect(userMessages).toHaveLength(1);
+    expect(new Set(userMessages.map((event) => event.messageId)).size).toBe(1);
+    expect(userMessages.at(-1)?.nativeMessageId).toBe("codex-structured-user-confirmed");
     expect(userMessages[0]).toEqual(
       expect.objectContaining({
         parts: expect.arrayContaining([
@@ -1683,7 +1774,7 @@ describe("CodexAppServerAdapter streaming", () => {
       }),
     );
 
-    streamListeners[0]?.({
+    streamListeners.at(-1)?.({
       runtimeId: "runtime-live",
       kind: "notification",
       receivedAt: new Date().toISOString(),
@@ -1692,26 +1783,28 @@ describe("CodexAppServerAdapter streaming", () => {
         params: {
           threadId: "thread/start-runtime-live",
           turnId: "turn-1",
-          item: {
+          completedAtMs: 1_777_766_419_700,
+          item: codexUserMessageItemFixture({
             id: "codex-skill-user-confirmed",
             type: "userMessage",
             content: [
-              { type: "text", text: "Tell me the purpose of " },
-              { type: "text", text: "$address-pr-comments" },
+              { type: "text", text: "Tell me the purpose of ", text_elements: [] },
+              { type: "text", text: "$address-pr-comments", text_elements: [] },
               {
                 type: "skill",
                 name: "address-pr-comments",
                 path: "/skills/address-pr-comments/SKILL.md",
               },
             ],
-          },
+          }),
         },
       },
     });
-    await Promise.resolve();
+    await flushCodexAdapterWork();
 
     const userMessages = events.filter((event) => event.type === "user_message");
-    expect(userMessages).toHaveLength(1);
+    expect(new Set(userMessages.map((event) => event.messageId)).size).toBe(1);
+    expect(userMessages.at(-1)?.nativeMessageId).toBe("codex-skill-user-confirmed");
     expect(userMessages[0]).toEqual(
       expect.objectContaining({
         message: "Tell me the purpose of $address-pr-comments",

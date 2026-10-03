@@ -28,6 +28,7 @@ export const createAgentSessionRuntimeAdapterTestDouble = <
   queries: unexpectedRuntimeQueries,
   sessionImport: unexpectedSessionImport,
   supportsSessionControl: true,
+  restoreSessionTree: unexpectedEffectCall("session adapter", "restoreSessionTree"),
   beginGeneratedImageBatch: unexpectedEffectCall("session adapter", "beginGeneratedImageBatch"),
   releaseGeneratedImageBatch: unexpectedEffectCall("session adapter", "releaseGeneratedImageBatch"),
   describeGeneratedImages: unexpectedEffectCall("session adapter", "describeGeneratedImages"),

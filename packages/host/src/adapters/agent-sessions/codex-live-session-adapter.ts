@@ -191,6 +191,8 @@ export const createCodexLiveSessionAdapterPreparer = ({
         queries: createRuntimeQueryAdapter(controller),
         ...createCodexImageOperations(controller, sessionError),
         supportsSessionControl: true,
+        restoreSessionTree: (ref) =>
+          adapter.sessionImport.inspectSession(ref).pipe(Effect.flatMap((source) => source.attach)),
         binding: projection.binding,
         listSnapshots: projection.listSnapshots,
         readSnapshot: projection.readSnapshot,

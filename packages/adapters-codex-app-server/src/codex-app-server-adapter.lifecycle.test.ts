@@ -390,6 +390,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
         ...expectedTurnPolicy("/repo"),
         threadId: "thread/start-runtime-live",
         input: toCodexTurnInputList([{ kind: "text", text: "Hello Codex" }], []),
+        clientUserMessageId: expect.any(String),
         model: "gpt-5",
         effort: "medium",
       },
@@ -441,6 +442,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       sandboxPolicy: codexSandboxPolicy(runtimePolicy.policy, "/repo"),
       threadId: "thread/start-runtime-live",
       input: toCodexTurnInputList([{ kind: "text", text: "Build it" }], []),
+      clientUserMessageId: expect.any(String),
       model: "gpt-5",
       effort: "medium",
     });
@@ -649,6 +651,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
         ...expectedTurnPolicy("/repo"),
         threadId: "thread/start-runtime-live",
         input: toCodexTurnInputList([{ kind: "text", text: "Use deeper reasoning" }], []),
+        clientUserMessageId: expect.any(String),
         model: "gpt-5",
         effort: "high",
       },

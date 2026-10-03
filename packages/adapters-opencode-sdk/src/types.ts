@@ -99,6 +99,7 @@ export type RuntimeEventTransportRecord = {
   runtimeEndpoint: string;
   controller: AbortController;
   dispatch: (event: Event) => Promise<boolean>;
+  fail: (cause: Error) => Error;
   ready: Promise<void>;
   streamDone: Promise<void>;
   subscribers: RuntimeEventSubscribers;

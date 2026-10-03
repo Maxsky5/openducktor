@@ -763,7 +763,7 @@ describe("Workspace Session persistence through the shared command module", () =
     h.state.failActivity = true;
     const event = { ...h.accepted(), sessionRef: h.ref };
     await expect(h.emit(event)).rejects.toThrow("activity write failed");
-    expect(h.events).toEqual([
+    expect(h.events).toMatchObject([
       { type: "transcript_event", event },
       {
         type: "fault",

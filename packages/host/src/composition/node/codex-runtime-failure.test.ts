@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { repoConfigSchema } from "@openducktor/contracts";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -40,6 +41,7 @@ describe("Codex runtime failure reporting", () => {
       const codexAppServer = createCodexAppServerTransportRegistry();
       router = await createRouter(
         root,
+        [repo, otherRepo],
         codexAppServer,
         {
           error: (text) =>
@@ -135,6 +137,7 @@ describe("Codex runtime failure reporting", () => {
     try {
       router = await createRouter(
         root,
+        [root],
         createCodexAppServerTransportRegistry(),
         {
           error: (text) =>
@@ -173,6 +176,7 @@ describe("Codex runtime failure reporting", () => {
 
 const createRouter = async (
   root: string,
+  repoPaths: string[],
   codexAppServer: ReturnType<typeof createCodexAppServerTransportRegistry>,
   lifecycleLogger: HostLifecycleLogger,
   onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>,
@@ -205,10 +209,22 @@ const createRouter = async (
       onBackgroundFailure,
       processEnv: { ...process.env, OPENDUCKTOR_CONFIG_DIR: join(root, "config") },
       runtimeDistribution: createSourceRuntimeDistribution(join(import.meta.dir, "../../../../..")),
-      settingsConfig: createFixedRuntimeSettingsConfig("codex", binary),
+      settingsConfig: createFixedRuntimeSettingsConfig(
+        "codex",
+        binary,
+        Object.fromEntries(
+          repoPaths.map((repoPath, index) => {
+            const workspaceId = `repo-${index}`;
+            return [
+              workspaceId,
+              repoConfigSchema.parse({ workspaceId, workspaceName: workspaceId, repoPath }),
+            ];
+          }),
+        ),
+      ),
       systemCommands: stubCommands(),
       taskEventPublicationReporter: { report: () => Effect.void },
-      taskStore: createTaskStoreTestDouble({}),
+      taskStore: createTaskStoreTestDouble({ listTasks: () => Effect.succeed([]) }),
       terminalPty: { start: () => Effect.die("Terminal PTY is not expected in this test.") },
       toolDiscovery: stubTools({ bun: process.execPath, codex: binary }),
     }),

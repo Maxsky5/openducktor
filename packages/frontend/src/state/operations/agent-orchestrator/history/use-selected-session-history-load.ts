@@ -20,7 +20,13 @@ const resolveSelectedSessionHistoryAction = ({
   session: AgentSessionState | null;
   repoReadinessState: RepoRuntimeReadinessState;
 }): SelectedSessionHistoryAction | null => {
-  if (session === null || repoReadinessState !== "ready") {
+  // The first live baseline supplies the generation that fences the history read.
+  if (
+    session === null ||
+    repoReadinessState !== "ready" ||
+    !session.runtimeGeneration ||
+    session.historyReplayPending
+  ) {
     return null;
   }
 
@@ -53,27 +59,31 @@ export const useSelectedSessionHistoryLoad = ({
     repoReadinessState,
   });
   const stableTarget = useStableAgentSessionIdentity(action?.identity ?? null);
-  const previousTargetKeyRef = useRef<string | null>(null);
+  const previousRequestRef = useRef<{ targetKey: string; recoveryGeneration: number } | null>(null);
+  const recoveryGeneration = session?.historyRecoveryGeneration ?? 0;
   const hasSelectedSession = session !== null;
 
   useEffect(() => {
     if (!hasSelectedSession) {
-      previousTargetKeyRef.current = null;
+      previousRequestRef.current = null;
       return;
     }
 
-    // Run once per selected session, not on every state it passes through. A
-    // baseline load turns the state loading, then loaded; both must not start a
-    // revalidation of the history that just arrived.
+    // Ordinary state changes do not request history again. A new recovery
+    // generation restarts only an invalidated baseline read.
     if (stableTarget === null) {
       return;
     }
 
     const targetKey = agentSessionIdentityKey(stableTarget);
-    if (previousTargetKeyRef.current === targetKey) {
+    const previous = previousRequestRef.current;
+    if (
+      previous?.targetKey === targetKey &&
+      (action?.kind !== "baseline" || previous.recoveryGeneration === recoveryGeneration)
+    ) {
       return;
     }
-    previousTargetKeyRef.current = targetKey;
+    previousRequestRef.current = { targetKey, recoveryGeneration };
 
     if (action?.kind === "revalidate") {
       runOrchestratorSideEffect(
@@ -94,6 +104,7 @@ export const useSelectedSessionHistoryLoad = ({
     hasSelectedSession,
     loadSelectedSessionBaselineHistory,
     revalidateAgentSessionHistory,
+    recoveryGeneration,
     stableTarget,
   ]);
 };

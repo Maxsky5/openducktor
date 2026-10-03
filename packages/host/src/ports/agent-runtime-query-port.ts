@@ -1,4 +1,9 @@
-import type { AgentSessionLiveRef, AgentRuntimeCatalog } from "@openducktor/contracts";
+import type {
+  AgentRuntimeRecoverSessionHistoryInput,
+  AgentRuntimeRecoveredSessionHistory,
+  AgentSessionLiveRef,
+  AgentRuntimeCatalog,
+} from "@openducktor/contracts";
 import type {
   AgentCatalogPort,
   AgentSessionHistoryPort,
@@ -27,6 +32,10 @@ type HostQueryResponse<Method extends keyof NativeAgentRuntimeQueries> =
 
 /** Application reads. Catalog failures carry user-facing messages. */
 export type AgentRuntimeQueryPort = {
+  readonly recoverSessionHistory: (
+    input: AgentRuntimeRecoverSessionHistoryInput,
+  ) => Effect.Effect<AgentRuntimeRecoveredSessionHistory, RuntimeQueryError>;
+} & {
   readonly [Method in keyof NativeAgentRuntimeQueries]: (
     input: Parameters<NativeAgentRuntimeQueries[Method]>[0],
   ) => Effect.Effect<HostQueryResponse<Method>, RuntimeQueryError>;

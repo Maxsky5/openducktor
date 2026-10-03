@@ -1,10 +1,12 @@
 import { Effect } from "effect";
 import type {
   AgentRuntimeQueryAdapterPort,
+  AgentRuntimeQueryPort,
   NativeAgentRuntimeQueries,
 } from "../ports/agent-runtime-query-port";
 
 export const unexpectedRuntimeQueries = {
+  recoverSessionHistory: () => Effect.dieMessage("Unexpected query: recoverSessionHistory"),
   resolveSessionParent: () => Effect.dieMessage("Unexpected query: resolveSessionParent"),
   loadRuntimeCatalog: () => Effect.dieMessage("Unexpected query: loadRuntimeCatalog"),
   searchFiles: () => Effect.dieMessage("Unexpected query: searchFiles"),
@@ -12,7 +14,7 @@ export const unexpectedRuntimeQueries = {
   loadSessionTodos: () => Effect.dieMessage("Unexpected query: loadSessionTodos"),
   loadSessionDiff: () => Effect.dieMessage("Unexpected query: loadSessionDiff"),
   loadFileStatus: () => Effect.dieMessage("Unexpected query: loadFileStatus"),
-} satisfies AgentRuntimeQueryAdapterPort;
+} satisfies AgentRuntimeQueryAdapterPort & Pick<AgentRuntimeQueryPort, "recoverSessionHistory">;
 
 export const unexpectedNativeRuntimeQueries = {
   resolveSessionParent: async () => {

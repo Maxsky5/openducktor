@@ -39,13 +39,13 @@ Owns durable record reads, root admission from durable records or explicit start
 
 Rules:
 
-- Attach the host listener before `agentSessionLiveRefresh`.
+- Attach the host listener before `agentSessionLiveAttach`. Install its baseline and apply changes beyond its repository cursor.
 - A live snapshot cannot create a root. A root enters through an OpenDucktor start registration or a durable task or workspace session record.
 - A live event can add a descendant only when its parent already exists in the collection.
 - On reload, the host reads exact root references from durable task and workspace session records. Runtime adapters read only those roots and their verified descendants.
 - Runtime state cannot prove task ownership. Only an explicit workflow start or durable task record can attach a session to a task.
 - The browser uses one tagged SSE channel for all host events. Electron uses its generic host-event IPC message.
-- Ignore replayed changes while a reconnect waits for its new snapshot.
+- Apply replayed changes after a reconnect. Use the reported gaps to repair affected state and loaded transcripts.
 - Treat each later snapshot as a full collection reset.
 - Commit a snapshot once so rows, activity, pending input, context, and counters use the same state.
 - Per-task session-list queries own workflow records. Workspace session-list queries own repository records. The first live projection waits for task records and for the workspace record query to settle. A workspace record failure blocks chat actions, not healthy task sessions.
@@ -344,7 +344,7 @@ Rules:
 3. Attach to the generic host-event channel, then request a repository live snapshot. The host reads exact root references from both durable record kinds.
 4. Each runtime adapter reads only registered roots and verified descendants. Apply durable records before and after the live projection, then commit once.
 5. Derive rows, activity, pending input, current context usage, and counters from that commit.
-6. Apply ordered changes on the same channel. After browser reconnect, wait for a fresh snapshot before replayed changes.
+6. Apply ordered changes on the same channel. Follow the [host live projection rules](#host-live-projection) after a reconnect.
 7. Load history or missing context only for the selected session.
 
 Startup is complete when task records and the first host snapshot have produced one committed collection after the workspace record query settles. Workspace record failures remain visible through `workspaceSessionRecordsError`. They do not stop the shared observer or fail task-session startup. History does not block startup.
