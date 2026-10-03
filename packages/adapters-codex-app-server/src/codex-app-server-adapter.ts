@@ -694,6 +694,12 @@ export class CodexAppServerAdapter
         message: `Codex session '${input.externalSessionId}' has a completed latest turn.`,
       });
     }
+    if (latestTurn.status === "inProgress") {
+      throw interruptedTurnResumeError({
+        reason: "live_turn",
+        message: `Codex session '${input.externalSessionId}' has a live turn.`,
+      });
+    }
 
     const policy = sessionPolicy.runtimePolicy;
     this.options.logSessionPolicy?.(
