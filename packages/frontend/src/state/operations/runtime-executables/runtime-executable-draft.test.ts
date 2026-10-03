@@ -12,7 +12,7 @@ describe("replaceRuntimeExecutablePaths", () => {
         enabled: true,
         executablePath: "/old/codex",
       },
-      claude: { enabled: false, executablePath: "/old/claude" },
+      claude: { enabled: false, executablePath: "/old/claude", defaults: {}, roleOverrides: {} },
     };
     const results: RuntimeExecutableCheckResult[] = [
       {

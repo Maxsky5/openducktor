@@ -325,9 +325,6 @@ export const createClaudeCanUseTool = (input: CreateClaudeCanUseToolInput): CanU
         });
       }
 
-      if (authorization.approval !== "interactive") {
-        return withAllowedToolInput({ behavior: "allow" }, effectiveToolInput);
-      }
       const mutation = mutationForTool(toolName, effectiveToolInput);
 
       if (options.signal.aborted) {

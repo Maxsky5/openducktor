@@ -74,6 +74,39 @@ const ref = {
 };
 
 describe("Claude host live-session state", () => {
+  test("retains the latest permission notice across control summaries and drops it on removal", () => {
+    const state = createClaudeLiveSessionState({ runtime });
+    state.applyControlSummary(summary);
+    const notice = {
+      type: "session_policy_notice" as const,
+      externalSessionId: ref.externalSessionId,
+      timestamp: "2026-10-03T10:00:00Z",
+      messageId: "claude-permission-mode:session-1",
+      message: "Automatic approvals requested; native mode is unconfirmed.",
+    };
+    state.applyEvent(session, notice);
+    expect(state.listSnapshots(runtime.repoPath)).toMatchObject([
+      { policyNotice: { message: notice.message, messageId: notice.messageId } },
+    ]);
+    const applied = { ...notice, message: "Claude reports automatic approvals are active." };
+    state.applyEvent(session, applied);
+    state.applyControlSummary(summary);
+    expect(state.readSnapshot(ref)).toMatchObject({
+      type: "live",
+      session: {
+        policyNotice: {
+          message: applied.message,
+          messageId: applied.messageId,
+          timestamp: applied.timestamp,
+        },
+      },
+    });
+    state.removeSession(ref);
+    expect(state.applyEvent(session, notice)).toEqual([]);
+    state.applyControlSummary(summary);
+    expect(state.listSnapshots(runtime.repoPath)[0]).not.toHaveProperty("policyNotice");
+  });
+
   test("keeps a resumed wake-up turn running in the live snapshot until its result", () => {
     const state = createClaudeLiveSessionState({ runtime });
     state.applyControlSummary(summary);

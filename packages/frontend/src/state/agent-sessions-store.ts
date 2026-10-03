@@ -1,3 +1,4 @@
+import type { AgentSessionLiveEnvelope, AgentSessionLiveSnapshot } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   type AgentSessionCollection,
@@ -20,7 +21,13 @@ import {
   type AgentSessionVisiblePendingInput,
   getAgentSessionVisiblePendingInput,
 } from "@/state/agent-session-visible-pending-input";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentChatMessage,
+  AgentSessionIdentity,
+  AgentSessionState,
+} from "@/types/agent-orchestrator";
+import { upsertSessionMessage } from "./operations/agent-orchestrator/support/messages";
+import { buildSessionPolicyNoticeMessage } from "./operations/agent-orchestrator/support/session-notice-messages";
 
 export {
   type AgentActivitySessionsSnapshot,
@@ -29,6 +36,10 @@ export {
 } from "@/state/agent-session-snapshots";
 
 type Listener = () => void;
+type LivePolicyEnvelope = Extract<
+  AgentSessionLiveEnvelope,
+  { type: "snapshot" | "session_upsert" | "session_removed" }
+>;
 type AgentSessionCollectionCommit<Result> = (current: AgentSessionCollection) => {
   collection: AgentSessionCollection;
   result: Result;
@@ -42,6 +53,7 @@ export type AgentSessionsStore = {
     identity: AgentSessionIdentity | null,
   ) => AgentSessionVisiblePendingInput;
   commitSessionCollection: <Result>(commit: AgentSessionCollectionCommit<Result>) => Result;
+  applyLivePolicyNotices: (envelope: LivePolicyEnvelope) => void;
   setSessionCollection: (updater: AgentSessionCollectionUpdater) => void;
   replaceSession: (session: AgentSessionState) => void;
   removeSession: (identity: AgentSessionIdentity) => void;
@@ -69,6 +81,41 @@ export const createAgentSessionsStore = (
   };
   let visiblePendingInputSnapshot: VisiblePendingInputSnapshot | null = null;
   const listeners = new Set<Listener>();
+  // Keep one current notice for each live identity, including roots not registered yet.
+  const policyNotices = new Map<string, AgentChatMessage>();
+
+  const projectPolicyNotices = (collection: AgentSessionCollection): AgentSessionCollection => {
+    let next = collection;
+    for (const [key, notice] of policyNotices) {
+      const session = next.get(key);
+      if (!session) continue;
+      const messages = upsertSessionMessage(session, notice);
+      if (messages !== session.messages) {
+        next = replaceAgentSession(next, { ...session, messages });
+      }
+    }
+    return next;
+  };
+
+  const retainPolicyNotice = (snapshot: AgentSessionLiveSnapshot): void => {
+    const key = agentSessionIdentityKey(snapshot.ref);
+    const notice = snapshot.policyNotice;
+    if (!notice) {
+      policyNotices.delete(key);
+      return;
+    }
+    const current = policyNotices.get(key);
+    if (
+      current?.id !== notice.messageId ||
+      current.content !== notice.message ||
+      current.timestamp !== notice.timestamp
+    ) {
+      policyNotices.set(
+        key,
+        buildSessionPolicyNoticeMessage(notice.timestamp, notice.message, notice.messageId),
+      );
+    }
+  };
 
   const notifyListeners = (): void => {
     // oxlint-disable-next-line unicorn/no-useless-spread -- listeners can unsubscribe during delivery
@@ -80,7 +127,8 @@ export const createAgentSessionsStore = (
   const commitSessionCollection = <Result>(
     commit: AgentSessionCollectionCommit<Result>,
   ): Result => {
-    const { collection: nextCollection, result } = commit(sessionCollection);
+    const { collection, result } = commit(sessionCollection);
+    const nextCollection = projectPolicyNotices(collection);
     if (areAgentSessionCollectionsEquivalent(sessionCollection, nextCollection)) {
       return result;
     }
@@ -153,6 +201,23 @@ export const createAgentSessionsStore = (
       return snapshot;
     },
     commitSessionCollection,
+    applyLivePolicyNotices: (envelope) => {
+      const repoPath =
+        envelope.type === "snapshot"
+          ? envelope.repoPath
+          : envelope.type === "session_upsert"
+            ? envelope.session.ref.repoPath
+            : envelope.ref.repoPath;
+      if (repoPath !== workspaceRepoPath) return;
+      if (envelope.type === "snapshot") {
+        policyNotices.clear();
+        for (const snapshot of envelope.sessions) retainPolicyNotice(snapshot);
+      } else if (envelope.type === "session_upsert") {
+        retainPolicyNotice(envelope.session);
+      } else {
+        policyNotices.delete(agentSessionIdentityKey(envelope.ref));
+      }
+    },
     setSessionCollection,
     replaceSession: (session) => {
       setSessionCollection((current) => replaceAgentSession(current, session));
@@ -174,10 +239,11 @@ export const createAgentSessionsStore = (
       setSessionCollection((current) =>
         replaceAgentSessionByIdentity(current, identity, nextSession),
       );
-      return nextSession;
+      return getAgentSession(sessionCollection, nextSession);
     },
     resetWorkspace: (nextWorkspaceRepoPath) => {
       retainActiveCollection();
+      if (nextWorkspaceRepoPath !== workspaceRepoPath) policyNotices.clear();
       workspaceRepoPath = nextWorkspaceRepoPath;
       sessionCollection = activateCollection(nextWorkspaceRepoPath);
       activitySnapshot = createAgentActivitySnapshot({

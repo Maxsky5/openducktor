@@ -360,7 +360,7 @@ describe("agent-runtime capability policies", () => {
         agentRuntimes: {
           opencode: { enabled: false, executablePath: "" },
           codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: true },
-          claude: { enabled: false, executablePath: "" },
+          claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
         },
       }).map((definition) => definition.kind),
     ).toEqual(["codex"]);
@@ -371,7 +371,7 @@ describe("agent-runtime capability policies", () => {
         agentRuntimes: {
           opencode: { enabled: true, executablePath: "/bin/opencode" },
           codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false },
-          claude: { enabled: false, executablePath: "" },
+          claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
         },
         startMode: "fresh",
       }).map((definition) => definition.kind),
@@ -383,7 +383,7 @@ describe("agent-runtime capability policies", () => {
         agentRuntimes: {
           opencode: { enabled: false, executablePath: "" },
           codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false },
-          claude: { enabled: false, executablePath: "" },
+          claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
         },
       }).map((definition) => definition.kind),
     ).toEqual([]);

@@ -1,6 +1,7 @@
 import type { SessionEvent } from "./session-event-types";
 
 const IMMEDIATE_SESSION_EVENT_TYPE_LIST = [
+  "session_policy_notice",
   "user_message",
   "approval_required",
   "approval_resolved",

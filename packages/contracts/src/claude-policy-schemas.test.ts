@@ -1,0 +1,91 @@
+import { describe, expect, test } from "bun:test";
+import { agentRuntimesSchema, persistedGlobalConfigV4Schema } from "./config-schemas";
+import {
+  claudePolicyFieldsSchema,
+  resolveClaudePolicy,
+  validateClaudePermissionRule,
+} from "./claude-policy-schemas";
+
+describe("Claude policy contracts", () => {
+  test("loads old configuration with native inheritance and rejects invalid present fields", () => {
+    expect(
+      agentRuntimesSchema.parse({ claude: { enabled: true, executablePath: "/bin/claude" } })
+        .claude,
+    ).toEqual({ enabled: true, executablePath: "/bin/claude", defaults: {}, roleOverrides: {} });
+    expect(
+      persistedGlobalConfigV4Schema.safeParse({
+        version: 4,
+        agentRuntimes: {
+          claude: { enabled: true, executablePath: "", defaults: { permissionMode: "plan" } },
+        },
+      }).success,
+    ).toBe(false);
+  });
+  test("replaces each role list, keeps sibling defaults, and preserves false and empty values", () => {
+    const config = {
+      defaults: {
+        permissionMode: "auto" as const,
+        permissions: { allow: ["Read"], ask: ["Bash"] },
+        sandbox: {
+          enabled: true,
+          filesystem: { allowWrite: ["./src"], denyRead: ["~/.ssh"] },
+          network: { strictAllowlist: true },
+        },
+      },
+      roleOverrides: {
+        qa: {
+          permissions: { allow: [] },
+          sandbox: { enabled: false, filesystem: { allowWrite: [] } },
+        },
+      },
+    };
+    const resolved = resolveClaudePolicy(config, "qa");
+    expect(resolved.settings).toEqual({
+      permissionMode: "auto",
+      permissions: { allow: [], ask: ["Bash"] },
+      sandbox: {
+        enabled: false,
+        filesystem: { allowWrite: [], denyRead: ["~/.ssh"] },
+        network: { strictAllowlist: true },
+      },
+    });
+    expect(resolved.sources["sandbox.enabled"]).toBe("role");
+    expect(resolved.sources["sandbox.network.allowAllUnixSockets"]).toBe("native");
+    expect(resolved.sources["sandbox.filesystem.denyRead"]).toBe("default");
+    config.roleOverrides.qa.permissions = {};
+    expect(resolveClaudePolicy(config, "qa").settings.permissions?.allow).toEqual(["Read"]);
+    expect(resolveClaudePolicy(config).settings).toEqual(config.defaults);
+  });
+  test.each([
+    "Read",
+    "Bash(git status)",
+    "Bash(echo $(date))",
+    "Read(./Finance (2024)/**)",
+    "Edit(//tmp/**)",
+    "WebFetch(domain:*.example.com)",
+    "mcp__future-server__get_*",
+    "Agent(custom-agent)",
+  ])("preserves native rule %s", (rule) => {
+    expect(validateClaudePermissionRule(rule, "deny")).toBeNull();
+  });
+  test.each([
+    "",
+    "Read()",
+    "Read(foo",
+    "mcp__github__get_issue(x)",
+    "Write(./src/**)",
+    "WebFetch(https://example.com)",
+    "Bash(command:rm *)",
+  ])("rejects ignored or malformed rule %s", (rule) => {
+    expect(validateClaudePermissionRule(rule, "deny")).not.toBeNull();
+  });
+  test("restricts allow globs to fixed MCP servers and reports an entry's field path", () => {
+    expect(validateClaudePermissionRule("mcp__future__get_*", "allow")).toBeNull();
+    for (const rule of ["*", "B*", "mcp__*", "mcp__*__get_issue"])
+      expect(validateClaudePermissionRule(rule, "allow")).not.toBeNull();
+    expect(validateClaudePermissionRule("mcp__*", "ask")).toBeNull();
+    const result = claudePolicyFieldsSchema.safeParse({ permissions: { ask: ["Read", "Read()"] } });
+    if (result.success) throw new Error("Expected invalid rule");
+    expect(result.error.issues[0]?.path).toEqual(["permissions", "ask", 1]);
+  });
+});

@@ -66,6 +66,9 @@ const createService = (
     claudeExecutablePath: process.execPath,
     fileSearch: { dispose: () => {}, prewarm: () => {}, release: () => {}, search: async () => [] },
     now: () => "2026-06-25T20:00:00.000Z",
+    launchPolicy: {
+      resolve: () => Effect.succeed({}),
+    },
     onBackgroundFailure: () => Effect.void,
     resolveMcpBridgeConnection: () => {
       throw new Error("unused");
@@ -100,6 +103,64 @@ const createService = (
 };
 
 describe("createClaudeAgentSdkService", () => {
+  for (const operation of ["start", "fork", "resume"] as const) {
+    test(`${operation} applies OpenDucktor settings only to new sessions`, async () => {
+      const request = {
+        repoPath: "/repo/",
+        runtimeKind: "claude" as const,
+        workingDirectory: "/repo/worktree/",
+        runtimePolicy: { kind: "claude" as const },
+        sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "qa" as const },
+        systemPrompt: "Review",
+      };
+      const currentPolicy = { permissionMode: "default" as const };
+      const resolve = mock(
+        (
+          _input: Parameters<
+            Parameters<typeof createClaudeAgentSdkService>[0]["launchPolicy"]["resolve"]
+          >[0],
+        ) => Effect.succeed(currentPolicy),
+      );
+      const launch = spyOn(sessionFactory, "createClaudeAgentSdkSession").mockImplementation(
+        async (input) => {
+          expect(input.sessionInput.claudePolicy).toEqual(
+            operation === "resume" ? null : currentPolicy,
+          );
+          return createSession().summary;
+        },
+      );
+      const loadTodos = spyOn(todos, "loadClaudeTodos").mockResolvedValue([]);
+      const service = createService(null, undefined, undefined, {
+        launchPolicy: { resolve },
+        resolveMcpBridgeConnection: () =>
+          Effect.succeed({
+            workspaceId: "workspace-1",
+            hostUrl: "http://127.0.0.1:1",
+            hostToken: "test-token",
+          }),
+      });
+      try {
+        const effect =
+          operation === "start"
+            ? service.startSession(request, "runtime-1")
+            : operation === "fork"
+              ? service.forkSession({ ...request, parentExternalSessionId: "parent" }, "runtime-1")
+              : service.resumeSession({ ...request, externalSessionId: "original" }, "runtime-1");
+        await Effect.runPromise(effect);
+        expect(launch).toHaveBeenCalledTimes(1);
+        if (operation === "resume") {
+          expect(resolve).not.toHaveBeenCalled();
+        } else {
+          expect(resolve).toHaveBeenCalledWith({ role: "qa" });
+        }
+      } finally {
+        launch.mockRestore();
+        loadTodos.mockRestore();
+        service.dispose();
+      }
+    });
+  }
+
   test("imports a saved conversation only when live registration runs", async () => {
     const ref = {
       repoPath: "/repo/",
@@ -122,6 +183,7 @@ describe("createClaudeAgentSdkService", () => {
     const create = spyOn(sessionFactory, "createClaudeAgentSdkSession").mockImplementation(
       async (request) => {
         expect(request.sessionInput).toEqual({
+          claudePolicy: null,
           externalSessionId: "session-1",
           options: { resume: "session-1" },
           preserveNativeSettings: true,
@@ -255,6 +317,7 @@ describe("createClaudeAgentSdkService", () => {
     const attach = spyOn(sessionFactory, "createClaudeAgentSdkSession").mockImplementation(
       async (request) => {
         expect(request.sessionInput).toEqual({
+          claudePolicy: null,
           externalSessionId: "session-1",
           options: { resume: "session-1" },
           reconcileTitle: true,
@@ -566,6 +629,9 @@ describe("createClaudeAgentSdkService", () => {
       {
         claudeExecutablePath: "/usr/local/bin/claude",
         now: () => "2026-06-25T20:00:00.000Z",
+        launchPolicy: {
+          resolve: () => Effect.succeed({}),
+        },
         onBackgroundFailure: () => Effect.void,
         processEnv: { HOME: "/home/user" },
         resolveMcpBridgeConnection: () => {
@@ -1080,6 +1146,7 @@ describe("createClaudeAgentSdkService", () => {
           expect(request.input).toMatchObject({ ...ref, systemPrompt: "" });
           expect(request.input.model).toBeUndefined();
           expect(request.sessionInput).toEqual({
+            claudePolicy: null,
             externalSessionId: "session-1",
             options: { resume: "session-1" },
             preserveNativeSettings: true,
@@ -1632,9 +1699,13 @@ describe("continueInterruptedTurn eligibility", () => {
     });
     const close = mock((target: ClaudeSession) => store.close(target));
     const replacement = createSession();
+    const resolvePolicy = mock(() =>
+      Effect.succeed({ permissionMode: "bypassPermissions" as const }),
+    );
     const loadTodos = spyOn(todos, "loadClaudeTodos").mockResolvedValue([]);
     const start = spyOn(sessionFactory, "createClaudeAgentSdkSession").mockImplementation(
-      async ({ sessionStore }) => {
+      async ({ sessionStore, sessionInput }) => {
+        expect(sessionInput.claudePolicy).toBeNull();
         sessionStore.set(replacement);
         sessionStore.close(replacement);
         throw new HostOperationError({
@@ -1652,6 +1723,7 @@ describe("continueInterruptedTurn eligibility", () => {
       undefined,
       { ...store, close },
       {
+        launchPolicy: { resolve: resolvePolicy },
         randomId: () => "00000000-0000-4000-8000-000000000001",
         resolveMcpBridgeConnection: () =>
           Effect.succeed({
@@ -1665,6 +1737,7 @@ describe("continueInterruptedTurn eligibility", () => {
       expect(
         await resumeFailureReason(service.continueInterruptedTurn(continuationInput, "runtime-1")),
       ).toBe("continuation_failed");
+      expect(resolvePolicy).not.toHaveBeenCalled();
       expect(close).not.toHaveBeenCalledWith(attached);
       expect(store.get("session-1")).toBe(attached);
       expect(

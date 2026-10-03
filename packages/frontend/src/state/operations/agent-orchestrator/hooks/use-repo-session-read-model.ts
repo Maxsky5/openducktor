@@ -76,6 +76,7 @@ type UseRepoSessionReadModelArgs = {
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
   repoEpochRef: MutableRefObject<number>;
   commitSessionCollection: AgentSessionsStore["commitSessionCollection"];
+  applyLivePolicyNotices: AgentSessionsStore["applyLivePolicyNotices"];
   liveSessionPort: AgentSessionLiveFrontendPort;
   transcriptEvents: AgentSessionTranscriptEventConsumer;
   recoverTranscriptGap: (message: string) => Promise<void>;
@@ -131,6 +132,7 @@ export const useRepoSessionReadModel = ({
   currentWorkspaceRepoPathRef,
   repoEpochRef,
   commitSessionCollection,
+  applyLivePolicyNotices,
   liveSessionPort,
   transcriptEvents,
   recoverTranscriptGap,
@@ -210,6 +212,7 @@ export const useRepoSessionReadModel = ({
     (event: Parameters<AgentSessionTranscriptEventConsumer["handle"]>[0]) =>
       transcriptEvents.handle(event),
   );
+  const retainLivePolicyNotices = useEffectEvent(applyLivePolicyNotices);
   const flushTranscriptSession = useEffectEvent((ref: AgentSessionLiveRef) =>
     transcriptEvents.flushSession(ref),
   );
@@ -766,6 +769,7 @@ export const useRepoSessionReadModel = ({
         return;
       }
       if (envelope.type === "snapshot") {
+        retainLivePolicyNotices(envelope);
         commitInitialSnapshot(envelope);
         return;
       }
@@ -785,6 +789,7 @@ export const useRepoSessionReadModel = ({
         return;
       }
       if (envelope.type === "session_upsert" || envelope.type === "session_removed") {
+        retainLivePolicyNotices(envelope);
         const upsert = envelope.type === "session_upsert";
         clearSessionFault(upsert ? envelope.session.ref : envelope.ref);
         if (upsert && isSettlingLiveSessionSnapshot(envelope.session)) {

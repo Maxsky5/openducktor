@@ -24,6 +24,7 @@ import type {
 } from "./session-event-types";
 import {
   handleAssistantMessage,
+  handleSessionPolicyNotice,
   handleSessionCompacted,
   handleSessionCompactionStarted,
   handleSessionError,
@@ -101,6 +102,9 @@ const dispatchTranscriptEvent = (
   }
   const context = transcriptEventContext(dependencies, event);
   switch (event.type) {
+    case "session_policy_notice":
+      handleSessionPolicyNotice(context, event);
+      return;
     case "session_started":
       return;
     case "assistant_delta":

@@ -1,3 +1,4 @@
+import { claudePolicyFieldsSchema } from "./claude-policy-schemas";
 import { z } from "zod";
 import { azureDevOpsRepositorySchema } from "./azure-devops-schemas";
 import { systemOpenInToolIdSchema } from "./system-open-schemas";
@@ -191,17 +192,28 @@ export const codexRuntimeConfigSchema = withCodexRuntimeValidation(
 );
 export type CodexRuntimeConfig = z.infer<typeof codexRuntimeConfigSchema>;
 
-export type AgentRuntimeConfig = AgentRuntimeEnabledConfig | CodexRuntimeConfig;
+export const claudeRuntimeConfigSchema = agentRuntimeEnabledConfigSchema
+  .extend({
+    defaults: claudePolicyFieldsSchema.default({}),
+    roleOverrides: z.partialRecord(agentRoleSchema, claudePolicyFieldsSchema).default({}),
+  })
+  .strict();
+export type ClaudeRuntimeConfig = z.infer<typeof claudeRuntimeConfigSchema>;
+
+export type AgentRuntimeConfig =
+  | AgentRuntimeEnabledConfig
+  | CodexRuntimeConfig
+  | ClaudeRuntimeConfig;
 export type AgentRuntimes = Record<string, AgentRuntimeConfig> & {
   opencode: AgentRuntimeEnabledConfig;
   codex: CodexRuntimeConfig;
-  claude: AgentRuntimeEnabledConfig;
+  claude: ClaudeRuntimeConfig;
 };
 
 type DefaultAgentRuntimes = {
   opencode: AgentRuntimeEnabledConfig;
   codex: CodexRuntimeConfig;
-  claude: AgentRuntimeEnabledConfig;
+  claude: ClaudeRuntimeConfig;
 };
 
 const createDefaultAgentRuntimes = (): DefaultAgentRuntimes => ({
@@ -212,7 +224,7 @@ const createDefaultAgentRuntimes = (): DefaultAgentRuntimes => ({
     defaults: createDefaultCodexRuntimePolicy(),
     roleOverrides: {},
   },
-  claude: { enabled: false, executablePath: "" },
+  claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
 });
 
 export const DEFAULT_AGENT_RUNTIMES: AgentRuntimes = createDefaultAgentRuntimes();
@@ -221,7 +233,7 @@ export const agentRuntimesSchema = z
   .object({
     opencode: agentRuntimeEnabledConfigSchema.optional(),
     codex: codexRuntimeConfigSchema.optional(),
-    claude: agentRuntimeEnabledConfigSchema.optional(),
+    claude: claudeRuntimeConfigSchema.optional(),
   })
   .catchall(agentRuntimeEnabledConfigSchema)
   .transform((value): AgentRuntimes => ({
@@ -233,7 +245,7 @@ export const agentRuntimesSchema = z
       defaults: createDefaultCodexRuntimePolicy(),
       roleOverrides: {},
     },
-    claude: value.claude ?? { enabled: false, executablePath: "" },
+    claude: value.claude ?? { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
   }))
   .default(() => createDefaultAgentRuntimes());
 

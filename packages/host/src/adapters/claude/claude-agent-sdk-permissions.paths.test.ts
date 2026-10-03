@@ -131,6 +131,10 @@ describe("Claude permission path routing", () => {
 
   test("routes Claude file paths through the session worktree", async () => {
     const events: AgentEvent[] = [];
+    let notifyApproval!: () => void;
+    const approvalPublished = new Promise<void>((resolve) => {
+      notifyApproval = resolve;
+    });
     const session = createSession("build");
     session.input = {
       ...session.input,
@@ -141,10 +145,13 @@ describe("Claude permission path routing", () => {
       session,
       now: () => "2026-06-25T12:00:00.000Z",
       randomId: () => "request-1",
-      emit: (_session, event) => events.push(event),
+      emit: (_session, event) => {
+        events.push(event);
+        notifyApproval();
+      },
     });
 
-    const result = await canUseTool(
+    const resultPromise = canUseTool(
       "Read",
       { file_path: "/repo/fairnest/apps/api/src/lib/auth.ts" },
       {
@@ -155,17 +162,23 @@ describe("Claude permission path routing", () => {
       },
     );
 
+    await approvalPublished;
+    session.pendingApprovals.get("request-1")?.resolve({ behavior: "allow" });
+    const result = await resultPromise;
     expect(result).toEqual({
       behavior: "allow",
       updatedInput: {
         file_path: "/repo/fairnest-task-worktree/apps/api/src/lib/auth.ts",
       },
     });
-    expect(events).toEqual([]);
-    expect(session.pendingApprovals.size).toBe(0);
+    expect(events).toContainEqual(expect.objectContaining({ type: "approval_required" }));
   });
 
   test("preserves paths already rooted in a nested session worktree", async () => {
+    let notifyApproval!: () => void;
+    const approvalPublished = new Promise<void>((resolve) => {
+      notifyApproval = resolve;
+    });
     const session = createSession("build");
     session.input = {
       ...session.input,
@@ -176,22 +189,23 @@ describe("Claude permission path routing", () => {
       session,
       now: () => "2026-06-25T12:00:00.000Z",
       randomId: () => "request-1",
-      emit: () => {},
+      emit: () => notifyApproval(),
     });
     const filePath = "/repo/fairnest/.worktrees/task/apps/api/src/lib/auth.ts";
 
-    await expect(
-      canUseTool(
-        "Read",
-        { file_path: filePath },
-        {
-          signal: new AbortController().signal,
-          toolUseID: "tool-use-1",
-          requestId: "sdk-request-1",
-          blockedPath: filePath,
-        },
-      ),
-    ).resolves.toEqual({
+    const result = canUseTool(
+      "Read",
+      { file_path: filePath },
+      {
+        signal: new AbortController().signal,
+        toolUseID: "tool-use-1",
+        requestId: "sdk-request-1",
+        blockedPath: filePath,
+      },
+    );
+    await approvalPublished;
+    session.pendingApprovals.get("request-1")?.resolve({ behavior: "allow" });
+    await expect(result).resolves.toEqual({
       behavior: "allow",
       updatedInput: { file_path: filePath },
     });

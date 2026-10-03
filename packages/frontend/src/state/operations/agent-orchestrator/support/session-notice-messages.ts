@@ -111,3 +111,20 @@ export const removeRunningSessionCompactionNotices = (
     version: messages.version + 1,
   };
 };
+
+export const buildSessionPolicyNoticeMessage = (
+  timestamp: string,
+  message: string,
+  id: string,
+): AgentChatMessage =>
+  buildSessionNoticeMessage({
+    timestamp,
+    content: message,
+    id,
+    meta: {
+      kind: "session_notice",
+      tone: "info",
+      reason: "runtime_policy",
+      title: "Claude permission mode",
+    },
+  });

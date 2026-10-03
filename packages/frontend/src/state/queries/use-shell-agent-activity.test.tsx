@@ -104,6 +104,9 @@ const createActivityStore = (
     commitSessionCollection: () => {
       throw new Error("commitSessionCollection is not used in this test");
     },
+    applyLivePolicyNotices: () => {
+      throw new Error("applyLivePolicyNotices is not used in this test");
+    },
     setSessionCollection: (): void => {
       throw new Error("setSessionCollection is not used in this test");
     },

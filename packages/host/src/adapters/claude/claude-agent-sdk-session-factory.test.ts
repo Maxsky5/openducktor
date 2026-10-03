@@ -56,6 +56,9 @@ describe("createClaudeAgentSdkSession", () => {
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
         claudeExecutablePath: process.execPath,
+        launchPolicy: {
+          resolve: () => Effect.succeed({}),
+        },
         onBackgroundFailure: () => Effect.void,
         resolveMcpBridgeConnection: () => Effect.die("unused"),
         runtimeDistribution: createArtifactRuntimeDistribution({
@@ -135,6 +138,9 @@ describe("createClaudeAgentSdkSession", () => {
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
         claudeExecutablePath: process.execPath,
+        launchPolicy: {
+          resolve: () => Effect.succeed({}),
+        },
         onBackgroundFailure: () => Effect.void,
         resolveMcpBridgeConnection: () => Effect.die("unused"),
         runtimeDistribution: createArtifactRuntimeDistribution({
@@ -223,6 +229,9 @@ describe("createClaudeAgentSdkSession", () => {
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
         claudeExecutablePath: process.execPath,
+        launchPolicy: {
+          resolve: () => Effect.succeed({}),
+        },
         onBackgroundFailure: () => Effect.void,
         resolveMcpBridgeConnection: () => Effect.die("unused"),
         runtimeDistribution: createArtifactRuntimeDistribution({
@@ -320,6 +329,9 @@ describe("createClaudeAgentSdkSession", () => {
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
         claudeExecutablePath: process.execPath,
+        launchPolicy: {
+          resolve: () => Effect.succeed({}),
+        },
         onBackgroundFailure: () => Effect.void,
         resolveMcpBridgeConnection: () => Effect.die("unused"),
         runtimeDistribution: createArtifactRuntimeDistribution({
@@ -414,6 +426,9 @@ describe("createClaudeAgentSdkSession", () => {
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
         claudeExecutablePath: process.execPath,
+        launchPolicy: {
+          resolve: () => Effect.succeed({}),
+        },
         onBackgroundFailure: () => Effect.void,
         resolveMcpBridgeConnection: () => Effect.die("unused"),
         runtimeDistribution: createArtifactRuntimeDistribution({
@@ -521,6 +536,9 @@ describe("createClaudeAgentSdkSession", () => {
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
         claudeExecutablePath: process.execPath,
+        launchPolicy: {
+          resolve: () => Effect.succeed({}),
+        },
         onBackgroundFailure: () => Effect.void,
         resolveMcpBridgeConnection: () => Effect.die("unused"),
         runtimeDistribution: createArtifactRuntimeDistribution({
@@ -625,6 +643,9 @@ describe("createClaudeAgentSdkSession", () => {
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
         claudeExecutablePath: process.execPath,
+        launchPolicy: {
+          resolve: () => Effect.succeed({}),
+        },
         onBackgroundFailure: () => Effect.void,
         resolveMcpBridgeConnection: () => Effect.die("unused"),
         runtimeDistribution: createArtifactRuntimeDistribution({
@@ -719,6 +740,9 @@ describe("createClaudeAgentSdkSession", () => {
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
         claudeExecutablePath: process.execPath,
+        launchPolicy: {
+          resolve: () => Effect.succeed({}),
+        },
         onBackgroundFailure: () => Effect.void,
         resolveMcpBridgeConnection: () => Effect.die("unused"),
         runtimeDistribution: createArtifactRuntimeDistribution({
@@ -812,6 +836,9 @@ describe("createClaudeAgentSdkSession", () => {
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
         claudeExecutablePath: process.execPath,
+        launchPolicy: {
+          resolve: () => Effect.succeed({}),
+        },
         onBackgroundFailure: () => Effect.void,
         resolveMcpBridgeConnection: () => Effect.die("unused"),
         runtimeDistribution: createArtifactRuntimeDistribution({
@@ -908,6 +935,9 @@ describe("createClaudeAgentSdkSession", () => {
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
         claudeExecutablePath: process.execPath,
+        launchPolicy: {
+          resolve: () => Effect.succeed({}),
+        },
         onBackgroundFailure: () => Effect.void,
         resolveMcpBridgeConnection: () => Effect.die("unused"),
         runtimeDistribution: createArtifactRuntimeDistribution({

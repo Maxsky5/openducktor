@@ -73,7 +73,7 @@ describe("createClaudeCanUseTool", () => {
     expect(session.pendingApprovals.size).toBe(0);
   });
 
-  test("auto-allows trusted repository task creation", async () => {
+  test("honors native approval requests for trusted repository task creation", async () => {
     const events: AgentEvent[] = [];
     const session = createClaudeRepositoryPermissionTestSession();
     const canUseTool = createClaudeCanUseTool({
@@ -93,13 +93,12 @@ describe("createClaudeCanUseTool", () => {
       },
     );
 
-    // Settle the old behavior so a regression fails without leaving an unresolved promise.
     session.pendingApprovals.get("request-1")?.resolve({ behavior: "allow" });
     await expect(resultPromise).resolves.toEqual({
       behavior: "allow",
       updatedInput: { title: "New task" },
     });
-    expect(events).toEqual([]);
+    expect(events).toContainEqual(expect.objectContaining({ type: "approval_required" }));
   });
 
   test.each(["odt_create_task", "odt_search_tasks"])(
@@ -119,60 +118,35 @@ describe("createClaudeCanUseTool", () => {
     },
   );
 
-  test("auto-allows repository task search as a read-only runtime tool", async () => {
-    const events: AgentEvent[] = [];
-    const session = createClaudeRepositoryPermissionTestSession();
-    const canUseTool = createClaudeCanUseTool({
-      session,
-      now: () => "2026-06-25T12:00:00.000Z",
-      randomId: () => "request-1",
-      emit: (_session, event) => events.push(event),
-    });
-
-    await expect(
-      canUseTool(
-        "mcp__openducktor__odt_search_tasks",
-        { query: "repository chat" },
-        {
-          signal: new AbortController().signal,
-          toolUseID: "tool-use-1",
-          requestId: "sdk-request-1",
-        },
-      ),
-    ).resolves.toEqual({
-      behavior: "allow",
-      updatedInput: { query: "repository chat" },
-    });
-    expect(events).toEqual([]);
-  });
-
-  test("allows native Claude ODT read tool aliases for workflow roles", async () => {
-    const events: AgentEvent[] = [];
-    const session = createSession("build");
-    const canUseTool = createClaudeCanUseTool({
-      session,
-      now: () => "2026-06-25T12:00:00.000Z",
-      randomId: () => "request-1",
-      emit: (_session, event) => events.push(event),
-    });
-
-    const result = await canUseTool(
-      "mcp__openducktor__odt_read_task",
-      { taskId: "task-1" },
-      {
-        signal: new AbortController().signal,
-        toolUseID: "tool-use-1",
-        requestId: "sdk-request-1",
-      },
-    );
-
-    expect(result).toEqual({
-      behavior: "allow",
-      updatedInput: { taskId: "task-1" },
-    });
-    expect(events).toEqual([]);
-    expect(session.pendingApprovals.size).toBe(0);
-  });
+  test.each(["spec", "planner", "qa", "build"] as const)(
+    "honors native approval requests for read and workflow tools in %s sessions",
+    async (role) => {
+      const session = createSession(role);
+      for (const tool of ["odt_read_task", "odt_search_tasks", "odt_create_task"]) {
+        const events: AgentEvent[] = [];
+        const canUseTool = createClaudeCanUseTool({
+          session,
+          now: () => "2026-06-25T12:00:00.000Z",
+          randomId: () => "request-1",
+          emit: (_session, event) => events.push(event),
+        });
+        const result = canUseTool(
+          `mcp__openducktor__${tool}`,
+          { taskId: "task-1" },
+          {
+            signal: new AbortController().signal,
+            toolUseID: "tool-use-1",
+            requestId: "sdk-request-1",
+          },
+        );
+        expect(events).toContainEqual(expect.objectContaining({ type: "approval_required" }));
+        session.pendingApprovals
+          .get("request-1")
+          ?.resolve({ behavior: "deny", message: "Rejected" });
+        await expect(result).resolves.toMatchObject({ behavior: "deny", message: "Rejected" });
+      }
+    },
+  );
 
   test("denies native Claude ODT mutation tool aliases outside the role policy", async () => {
     const events: AgentEvent[] = [];
@@ -201,48 +175,6 @@ describe("createClaudeCanUseTool", () => {
     });
     expect(events).toEqual([]);
     expect(session.pendingApprovals.size).toBe(0);
-  });
-
-  test("allows task search and create for every workflow role without an interactive approval", async () => {
-    const cases = [
-      { toolName: "mcp__openducktor__odt_search_tasks", toolInput: { status: "open" } },
-      {
-        toolName: "mcp__openducktor__odt_create_task",
-        toolInput: { title: "Follow-up", issueType: "task", priority: 2 },
-      },
-    ];
-    for (const role of ["spec", "planner", "qa", "build"] as const) {
-      const events: AgentEvent[] = [];
-      const session = createSession(role);
-      const canUseTool = createClaudeCanUseTool({
-        session,
-        now: () => "2026-06-25T12:00:00.000Z",
-        randomId: () => "request-1",
-        emit: (_session, event) => events.push(event),
-      });
-
-      for (const { toolName, toolInput } of cases) {
-        expect(
-          await authorizeClaudeToolUse({
-            session,
-            toolName,
-            toolInput,
-          }),
-        ).toMatchObject({ behavior: "allow", approval: "workflow_role" });
-        await expect(
-          canUseTool(toolName, toolInput, {
-            signal: new AbortController().signal,
-            toolUseID: "tool-use-1",
-            requestId: "sdk-request-1",
-          }),
-        ).resolves.toEqual({
-          behavior: "allow",
-          updatedInput: toolInput,
-        });
-      }
-      expect(events).toEqual([]);
-      expect(session.pendingApprovals.size).toBe(0);
-    }
   });
 
   test("delegates Bash permission decisions for read-only workflow roles", async () => {

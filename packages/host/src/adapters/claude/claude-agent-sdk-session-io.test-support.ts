@@ -115,6 +115,7 @@ type ClaudeQueryControlMethods = Pick<
   | "interrupt"
   | "mcpServerStatus"
   | "readFile"
+  | "readMcpResource"
   | "reconnectMcpServer"
   | "reinitialize"
   | "reloadOutputStyles"
@@ -151,6 +152,7 @@ const defaultQueryControls = (): ClaudeQueryControlMethods => ({
   interrupt: mock(unusedQueryControl),
   mcpServerStatus: mock(async () => []),
   readFile: mock(unusedQueryControl),
+  readMcpResource: mock(unusedQueryControl),
   reconnectMcpServer: mock(unusedQueryControl),
   reinitialize: mock(unusedQueryControl),
   reloadOutputStyles: mock(unusedQueryControl),
