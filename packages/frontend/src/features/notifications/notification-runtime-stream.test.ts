@@ -84,6 +84,118 @@ test.each(["gap", "epoch_changed"] as const)(
       expect(h.onObservationHealth.mock.calls).toEqual([[health], [{ ...health, message: null }]]);
       expect(h.delivery.deliverInApp).toHaveBeenCalledTimes(1);
       expect(h.publishAction).not.toHaveBeenCalled();
+      expect(h.onCoordinationRecovered).not.toHaveBeenCalled();
+    } finally {
+      stop();
+    }
+  },
+);
+
+test.each(["new", "replay"] as const)(
+  "clears a stream failure on %s attachment without another notification",
+  async (reason) => {
+    const h = harness();
+    const stop = h.runtime.subscribe();
+    h.finishAttachment();
+    await h.attachment;
+    try {
+      h.fail(new Error("Connection lost."));
+      h.emit({ type: "attached", reason, cursor: { epoch, sequence: 0 }, health: [] });
+      h.emit({ type: "attached", reason, cursor: { epoch, sequence: 0 }, health: [] });
+
+      expect(h.onFailure).toHaveBeenCalledTimes(1);
+      expect(h.onCoordinationRecovered).toHaveBeenCalledTimes(1);
+      expect(h.delivery.deliverInApp).not.toHaveBeenCalled();
+    } finally {
+      stop();
+    }
+  },
+);
+
+test("recovers stream and publication failures only when both paths are healthy", async () => {
+  const h = harness();
+  const stop = h.runtime.subscribe();
+  h.finishAttachment();
+  await h.attachment;
+  try {
+    h.fail(new Error("Connection lost."));
+    await h.runtime.publishAndWait(workflowClosedOccurrence("while-disconnected"));
+    expect(h.onCoordinationRecovered).not.toHaveBeenCalled();
+
+    h.publishAction.mockRejectedValueOnce(new Error("Publication failed."));
+    await h.runtime.publishAndWait(workflowClosedOccurrence("failed-publication"));
+    h.emit({ type: "attached", reason: "replay", cursor: { epoch, sequence: 0 }, health: [] });
+    expect(h.onCoordinationRecovered).not.toHaveBeenCalled();
+
+    await h.runtime.publishAndWait(workflowClosedOccurrence("healthy-publication"));
+    expect(h.onFailure).toHaveBeenCalledTimes(2);
+    expect(h.onCoordinationRecovered).toHaveBeenCalledTimes(1);
+  } finally {
+    stop();
+  }
+});
+
+test.each(["new", "replay", "epoch_changed"] as const)(
+  "clears only absent health errors on %s attachment",
+  async (reason) => {
+    const h = harness();
+    let stop = h.runtime.subscribe();
+    h.finishAttachment();
+    await h.attachment;
+    const session: NotificationHealth = {
+      scope: "/repo",
+      source: "session",
+      message: "Session observation failed.",
+    };
+    const other: NotificationHealth = { ...session, scope: "/other" };
+    const task: NotificationHealth = { ...session, source: "task", message: "Task read failed." };
+    const current: NotificationHealth = {
+      ...session,
+      message: "Session observation still failed.",
+    };
+    const clear = (health: NotificationHealth): NotificationHealth => ({
+      ...health,
+      message: null,
+    });
+    try {
+      h.emit({
+        type: "attached",
+        reason: "new",
+        cursor: { epoch, sequence: 0 },
+        health: [session, other],
+      });
+      h.emit({ type: "health", cursor: { epoch, sequence: 1 }, health: task });
+      h.emit({ type: "health", cursor: { epoch, sequence: 2 }, health: clear(other) });
+      if (reason === "new") {
+        stop();
+        stop = h.runtime.subscribe();
+      }
+      const cursor = {
+        epoch: reason === "epoch_changed" ? "22222222-2222-4222-8222-222222222222" : epoch,
+        sequence: 3,
+      };
+      h.emit({ type: "attached", reason, cursor, health: reason === "replay" ? [current] : [] });
+      const expected = [
+        session,
+        other,
+        task,
+        clear(other),
+        ...(reason === "replay" ? [clear(task), current] : [clear(session), clear(task)]),
+      ];
+      const reported = h.onObservationHealth.mock.calls.map(([health]) => health);
+      expect(reported).toHaveLength(expected.length);
+      expect(reported).toEqual(expect.arrayContaining(expected));
+
+      if (reason === "replay")
+        h.emit({ type: "health", cursor: { ...cursor, sequence: 4 }, health: clear(current) });
+      const count = h.onObservationHealth.mock.calls.length;
+      h.emit({
+        type: "attached",
+        reason: "replay",
+        cursor: { ...cursor, sequence: 4 },
+        health: [],
+      });
+      expect(h.onObservationHealth).toHaveBeenCalledTimes(count);
     } finally {
       stop();
     }
@@ -159,6 +271,7 @@ const harness = () => {
   const stopOccurrences = mock(() => {});
   const stopClicks = mock(() => {});
   const onFailure = mock(() => {});
+  const onCoordinationRecovered = mock(() => {});
   const onObservationHealth = mock((_health: NotificationHealth) => {});
   const publishAction = mock(async (occurrence: SelectedNotification["occurrence"]) => ({
     occurrence,
@@ -196,7 +309,7 @@ const harness = () => {
     navigate: async () => {},
     onFailure,
     onObservationHealth,
-    onCoordinationRecovered: () => {},
+    onCoordinationRecovered,
     inApp: delivery.inApp,
     sound: delivery.sound,
   });
@@ -211,6 +324,7 @@ const harness = () => {
     stopOccurrences,
     stopClicks,
     onFailure,
+    onCoordinationRecovered,
     onObservationHealth,
     attachment,
     finishAttachment: () => resolveAttachment(stopStream),

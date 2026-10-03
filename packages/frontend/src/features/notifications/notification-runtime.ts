@@ -25,7 +25,7 @@ import {
   type NotificationDispatchContext,
 } from "./notification-policy";
 
-type CoordinationFailurePhase = "publication" | "external_delivery";
+type CoordinationFailurePhase = "stream" | "publication" | "external_delivery";
 
 export const createNotificationRuntime = ({
   bridge,
@@ -59,6 +59,7 @@ export const createNotificationRuntime = ({
   sound: ReturnType<typeof createCuelumeNotificationSoundAdapter>;
 }) => {
   const activeCoordinationFailures = new Set<CoordinationFailurePhase>();
+  const activeHealth = new Map<string, NotificationHealth>();
   const localErrorPublications = new Set<string>();
   const coordinatedOccurrences = new Set<string>();
   const os = createShellOsNotificationAdapter(bridge, onOsShown);
@@ -114,6 +115,12 @@ export const createNotificationRuntime = ({
   const recoverCoordinationFailure = (phase: CoordinationFailurePhase): void => {
     if (!activeCoordinationFailures.delete(phase) || activeCoordinationFailures.size > 0) return;
     onCoordinationRecovered();
+  };
+
+  const reportHealth = (health: NotificationHealth): void => {
+    if (health.message === null) activeHealth.delete(healthKey(health));
+    else activeHealth.set(healthKey(health), health);
+    onObservationHealth(health);
   };
 
   const dispatch = async (
@@ -210,7 +217,7 @@ export const createNotificationRuntime = ({
       let stopStream: (() => void) | null = null;
       let cursor: NotificationCursor | null = null;
       const reportStreamFailure = (cause: unknown) =>
-        reportCoordinationFailure("publication", testOccurrence, cause);
+        reportCoordinationFailure("stream", testOccurrence, cause);
       void subscribeStream(
         { cursor },
         (frame) => {
@@ -223,7 +230,12 @@ export const createNotificationRuntime = ({
                   "Notification replay is unavailable. Earlier alerts were not restored. Live notification delivery continues.",
                 ),
               );
-            for (const health of frame.health) onObservationHealth(health);
+            else recoverCoordinationFailure("stream");
+            const currentHealth = new Set(frame.health.map(healthKey));
+            // Attachment replaces host health, including clears missed while disconnected.
+            for (const [key, health] of activeHealth)
+              if (!currentHealth.has(key)) reportHealth({ ...health, message: null });
+            for (const health of frame.health) reportHealth(health);
             return;
           }
           if (
@@ -234,7 +246,7 @@ export const createNotificationRuntime = ({
             return;
           cursor = frame.cursor;
           if (frame.type === "health") {
-            onObservationHealth(frame.health);
+            reportHealth(frame.health);
             return;
           }
           const { occurrence, settings } = frame.selected;
@@ -311,3 +323,5 @@ export const createNotificationRuntime = ({
     },
   };
 };
+
+const healthKey = (health: NotificationHealth): string => `${health.scope}:${health.source}`;
