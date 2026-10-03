@@ -1,5 +1,5 @@
 import type { AgentSessionLiveRef, AgentSessionLiveEnvelope } from "@openducktor/contracts";
-import { agentSessionRefKey } from "@openducktor/core";
+import { agentSessionRefKey, agentSessionRefsEqual } from "@openducktor/core";
 import { Effect } from "effect";
 import { sessionTreeSnapshots } from "../../domain/agent-sessions/live-session-tree";
 import type { HostError } from "../../effect/host-errors";
@@ -37,7 +37,13 @@ export const createSetSessionOwnership =
             [...(yield* adapter.listSnapshots(ref.repoPath))],
             ref,
           );
-          yield* active ? adapter.restoreSessionTree(ref) : adapter.releaseSession(ref);
+          if (active) yield* adapter.restoreSessionTree(ref);
+          else {
+            yield* adapter.releaseSession(ref);
+            for (const session of before)
+              if (!agentSessionRefsEqual(session.ref, ref))
+                yield* adapter.releaseSession(session.ref);
+          }
           const after = sessionTreeSnapshots(
             [...(yield* adapter.listSnapshots(ref.repoPath))],
             ref,

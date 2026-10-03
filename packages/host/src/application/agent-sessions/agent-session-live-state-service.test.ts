@@ -1765,6 +1765,98 @@ test("failed registration retires recovery scopes and preserves its source error
   );
 });
 
+test("archiving releases descendant subscriptions without releasing another root", async () => {
+  const root = liveSnapshot("root", "opencode");
+  const child = { ...liveSnapshot("child", "opencode"), parentExternalSessionId: "root" };
+  const grandchild = {
+    ...liveSnapshot("grandchild", "opencode"),
+    parentExternalSessionId: "child",
+  };
+  const other = liveSnapshot("other", "opencode");
+  const tree = [root, child, grandchild];
+  let snapshots = [...tree, other];
+  const subscribers = new Set(snapshots.map((session) => session.ref.externalSessionId));
+  const { service, events } = createHarness();
+  const binding = service.createRuntimeRegistration({
+    repoPath: "/repo",
+    runtimeId: "runtime-1",
+    runtimeKind: "opencode",
+  });
+  const adapter: AgentSessionRuntimeAdapterPort = {
+    ...titleControlAdapter(() => Effect.succeed({ status: "not_attached" })),
+    binding,
+    listSnapshots: () => Effect.succeed(snapshots),
+    releaseSession: (ref) =>
+      Effect.sync(() => {
+        subscribers.delete(ref.externalSessionId);
+        snapshots = snapshots.filter((session) =>
+          ref.externalSessionId === "root"
+            ? !tree.includes(session)
+            : session.ref.externalSessionId !== ref.externalSessionId,
+        );
+      }),
+    restoreSessionTree: () =>
+      Effect.sync(() => {
+        snapshots = [...tree, other];
+        for (const session of tree) subscribers.add(session.ref.externalSessionId);
+      }),
+  };
+  const emit = async (session: AgentSessionLiveSnapshot) => {
+    if (!subscribers.has(session.ref.externalSessionId)) return;
+    await Effect.runPromise(
+      binding.runMutation(
+        Effect.succeed({
+          value: undefined,
+          changes: [
+            {
+              type: "transcript_event" as const,
+              event: {
+                type: "assistant_message" as const,
+                sessionRef: session.ref,
+                externalSessionId: session.ref.externalSessionId,
+                timestamp: root.startedAt,
+                messageId: session.ref.externalSessionId,
+                message: "Still observed",
+              },
+            },
+          ],
+        }),
+      ),
+    );
+  };
+  await Effect.runPromise(service.registerRuntimeAdapter(adapter));
+  try {
+    await Effect.runPromise(service.setSessionOwnership(root.ref, false));
+    expect(
+      (await Effect.runPromise(service.attach({ repoPath: "/repo" }))).sessions.map(
+        (session) => session.ref.externalSessionId,
+      ),
+    ).toEqual(["other"]);
+    for (const session of [...tree, other]) await emit(session);
+    expect(
+      events
+        .filter((event) => event.type === "transcript_event")
+        .map((event) => event.event.externalSessionId),
+    ).toEqual(["other"]);
+
+    await Effect.runPromise(service.setSessionOwnership(root.ref, true));
+    expect(
+      (await Effect.runPromise(service.attach({ repoPath: "/repo" }))).sessions.map(
+        (session) => session.ref.externalSessionId,
+      ),
+    ).toEqual(["root", "child", "grandchild", "other"]);
+    events.length = 0;
+    await emit(child);
+    expect(
+      events
+        .filter((event) => event.type === "transcript_event")
+        .map((event) => event.event.externalSessionId),
+    ).toEqual(["child"]);
+  } finally {
+    await Effect.runPromise(service.releaseRuntime("runtime-1"));
+  }
+});
+
 test("shares ownership reconstruction and holds attachments until it commits", async () => {
   const entered = Promise.withResolvers<void>();
   const finish = Promise.withResolvers<void>();
