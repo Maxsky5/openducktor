@@ -107,7 +107,9 @@ function IssueImportDialogSession({
 
   const showSettings = (): void => {
     onOpenChange(false);
-    openSettings();
+    openSettings({
+      deepLink: { kind: "repository-configuration", repositoryPath: repoPath },
+    });
   };
 
   const openSource = (item: SourceIssue): void => {

@@ -5,7 +5,7 @@ import type { SettingsWorkspaceSelectionPolicy } from "./settings-workspace-sele
 export type SettingsDeepLink =
   | { kind: "custom-agent-roles" }
   | {
-      kind: "repository-dev-servers";
+      kind: "repository-configuration" | "repository-dev-servers";
       repositoryPath: string | null;
     }
   | {
@@ -47,6 +47,18 @@ export const resolveSettingsDeepLink = (deepLink: SettingsDeepLink): SettingsDee
       };
     case "custom-agent-roles":
       return { scope: "global", navigation: { section: "custom-agent-roles" } };
+    case "repository-configuration":
+      return {
+        scope: "repository",
+        navigation: {
+          section: "repositories",
+          repositorySection: "configuration",
+        },
+        workspaceSelectionPolicy: {
+          kind: "required",
+          repoPath: deepLink.repositoryPath,
+        },
+      };
     case "repository-dev-servers":
       return {
         scope: "repository",

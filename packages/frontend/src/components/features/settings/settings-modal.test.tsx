@@ -2,8 +2,9 @@ import { expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR, knownRuntimeKindValues } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, waitFor, within } from "@testing-library/react";
-import type { PropsWithChildren } from "react";
+import { useState, type PropsWithChildren, type ReactElement } from "react";
 import { createQueryClient } from "@/lib/query-client";
+import { IssueImportDialog } from "@/pages/kanban/issue-import-dialog";
 import {
   ChecksStateContext,
   RuntimeDefinitionsContext,
@@ -12,6 +13,7 @@ import {
 import { runtimeExecutableQueryOptions } from "@/state/queries/runtime";
 import { repoBranchesQueryOptions } from "@/state/queries/git";
 import {
+  createGitProviderContextFixture,
   createSettingsSnapshotFixture,
   createRepoSettingsConfigFixture,
 } from "@/test-utils/shared-test-fixtures";
@@ -84,13 +86,38 @@ test("shared settings follows deep links and remembers sections without keeping 
   }
 });
 
+test("issue import opens configuration for its repository after another settings section", async () => {
+  const settings = renderSettings(true);
+  try {
+    for (const section of ["Chat", "Scripts"]) {
+      let content = await settings.open();
+      if (section === "Scripts") {
+        fireEvent.click(content.getByRole("button", { name: "Repositories" }));
+      }
+      fireEvent.click(content.getByRole("button", { name: section }));
+      await settings.close(content);
+      fireEvent.click(within(document.body).getByRole("button", { name: "Import issues" }));
+      content = await settings.open("Open repository settings");
+      expect(content.getByLabelText<HTMLInputElement>("Repository path").value).toBe("/repo");
+      await settings.close(content);
+    }
+  } finally {
+    settings.unmount();
+  }
+});
+
 function renderSettings(shared: boolean) {
   const snapshot = createSettingsSnapshotFixture({
-    workspaces: { repo: createRepoSettingsConfigFixture("repo", "/repo") },
+    workspaces: {
+      other: createRepoSettingsConfigFixture("other", "/other"),
+      repo: createRepoSettingsConfigFixture("repo", "/repo"),
+    },
   });
   const saveSettingsSnapshot = mock(async () => {});
   const queryClient = createQueryClient();
-  queryClient.setQueryData(repoBranchesQueryOptions("/repo").queryKey, []);
+  for (const workspace of Object.values(snapshot.workspaces)) {
+    queryClient.setQueryData(repoBranchesQueryOptions(workspace.repoPath).queryKey, []);
+  }
   for (const kind of knownRuntimeKindValues) {
     const path = snapshot.agentRuntimes[kind].executablePath;
     queryClient.setQueryData(runtimeExecutableQueryOptions(kind, path).queryKey, {
@@ -103,20 +130,18 @@ function renderSettings(shared: boolean) {
   }
   const workspaceState = {
     activeWorkspace: null,
-    workspaces: [
-      {
-        workspaceId: "repo",
-        workspaceName: "Repo",
-        abbreviation: null,
-        tileColor: null,
-        repoPath: "/repo",
-        isActive: true,
-        hasConfig: true,
-        configuredWorktreeBasePath: null,
-        defaultWorktreeBasePath: "/tmp/worktrees",
-        effectiveWorktreeBasePath: "/tmp/worktrees",
-      },
-    ],
+    workspaces: Object.values(snapshot.workspaces).map((workspace) => ({
+      workspaceId: workspace.workspaceId,
+      workspaceName: workspace.workspaceName,
+      abbreviation: workspace.abbreviation ?? null,
+      tileColor: workspace.tileColor ?? null,
+      repoPath: workspace.repoPath,
+      isActive: workspace.workspaceId === "repo",
+      hasConfig: true,
+      configuredWorktreeBasePath: null,
+      defaultWorktreeBasePath: "/tmp/worktrees",
+      effectiveWorktreeBasePath: "/tmp/worktrees",
+    })),
     branches: [],
     activeBranch: null,
     isSwitchingWorkspace: false,
@@ -175,6 +200,7 @@ function renderSettings(shared: boolean) {
     <>
       <SettingsModal triggerLabel="Open settings" />
       {shared ? <SettingsModal triggerLabel="Other settings" /> : null}
+      {shared ? <ImportTrigger /> : null}
       <SettingsModal triggerLabel="Open roles" deepLink={{ kind: "custom-agent-roles" }} />
       <SettingsModal
         triggerLabel="Open scripts"
@@ -235,4 +261,22 @@ function renderSettings(shared: boolean) {
       queryClient.clear();
     },
   };
+}
+
+function ImportTrigger(): ReactElement {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)}>
+        Import issues
+      </button>
+      <IssueImportDialog
+        open={open}
+        onOpenChange={setOpen}
+        repoPath="/repo"
+        provider={createGitProviderContextFixture({ available: false })}
+        onImported={() => {}}
+      />
+    </>
+  );
 }
