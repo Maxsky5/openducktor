@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { createElement } from "react";
+import { render } from "@testing-library/react";
+import { act, type ComponentProps, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 import type {
@@ -7,11 +8,110 @@ import type {
   KanbanTaskSession,
 } from "@/components/features/kanban/kanban-task-activity";
 import { createTaskCardFixture } from "@/pages/agents/agent-studio-test-utils";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
 import { KanbanColumn } from "./kanban-column";
+
+const renderColumnMarkup = (element: Parameters<typeof renderToStaticMarkup>[0]): string =>
+  renderToStaticMarkup(createElement(TooltipProvider, null, element));
 
 const noop = (): void => {};
 
 describe("KanbanColumn", () => {
+  test("remeasures mounted cards when session content and density change in a long lane", async () => {
+    await withAnimationFrameTestDriver(async (frames) => {
+      const tasks = Array.from({ length: 40 }, (_, index) =>
+        createTaskCardFixture({
+          id: `measurement-${index}`,
+          status: "ready_for_dev",
+          availableActions: ["build_start"],
+        }),
+      );
+      const firstTask = tasks[0]!;
+      const props: ComponentProps<typeof KanbanColumn> = {
+        column: { id: "ready_for_dev", title: "Ready for Dev", tasks },
+        taskSessionsByTaskId: new Map(),
+        historicalSessionsByTaskId: new Map(),
+        activeTaskSessionContextByTaskId: new Map(),
+        taskActivityStateByTaskId: new Map(tasks.map((task) => [task.id, "idle"])),
+        onOpenDetails: noop,
+        onDelegate: noop,
+        onPlan: noop,
+        onOpenSession: noop,
+      };
+      const view = render(
+        <MemoryRouter>
+          <TooltipProvider>
+            <KanbanColumn {...props} />
+          </TooltipProvider>
+        </MemoryRouter>,
+      );
+      try {
+        const wrapper = view.container.querySelector(
+          `article[data-kanban-task-id="${firstTask.id}"]`,
+        )!.parentElement!;
+        let measuredHeight = 200;
+        Object.defineProperty(wrapper, "getBoundingClientRect", {
+          configurable: true,
+          value: () => new DOMRect(0, 0, 302, measuredHeight),
+        });
+        const totalHeight = () =>
+          Number.parseFloat(
+            view.container.querySelector<HTMLElement>("div[style*='min-height']")!.style.minHeight,
+          );
+        const normalEstimate = 40 * 156 + 39 * 12;
+        await frames.flushFrame();
+        expect(totalHeight()).toBe(normalEstimate + 44);
+        measuredHeight = 240;
+        const historicalSessionsByTaskId: ComponentProps<
+          typeof KanbanColumn
+        >["historicalSessionsByTaskId"] = new Map([
+          [
+            firstTask.id,
+            [
+              {
+                externalSessionId: "planner",
+                runtimeKind: "codex",
+                workingDirectory: "/repo",
+                role: "planner",
+                startedAt: "2026-10-01T10:00:00Z",
+                selectedModel: null,
+              },
+            ],
+          ],
+        ]);
+        await act(async () =>
+          view.rerender(
+            <MemoryRouter>
+              <TooltipProvider>
+                <KanbanColumn {...props} historicalSessionsByTaskId={historicalSessionsByTaskId} />
+              </TooltipProvider>
+            </MemoryRouter>,
+          ),
+        );
+        await frames.flushFrame();
+        expect(totalHeight()).toBe(normalEstimate + 84);
+        measuredHeight = 120;
+        await act(async () =>
+          view.rerender(
+            <MemoryRouter>
+              <TooltipProvider>
+                <KanbanColumn
+                  {...props}
+                  taskCardView="compact"
+                  historicalSessionsByTaskId={historicalSessionsByTaskId}
+                />
+              </TooltipProvider>
+            </MemoryRouter>,
+          ),
+        );
+        await frames.flushFrame();
+        expect(totalHeight()).toBe(40 * 116 + 39 * 12 + 4);
+      } finally {
+        view.unmount();
+      }
+    });
+  });
   test("passes waiting-input ordering data through to rendered task cards", () => {
     const waitingTask = createTaskCardFixture({ id: "TASK-WAITING", title: "Need answer" });
     const activeTask = createTaskCardFixture({ id: "TASK-ACTIVE", title: "Still running" });
@@ -48,7 +148,7 @@ describe("KanbanColumn", () => {
       ["TASK-IDLE", "idle"],
     ]);
 
-    const html = renderToStaticMarkup(
+    const html = renderColumnMarkup(
       createElement(
         MemoryRouter,
         { initialEntries: ["/kanban"] },
@@ -65,7 +165,6 @@ describe("KanbanColumn", () => {
           onOpenDetails: noop,
           onDelegate: noop,
           onPlan: noop,
-          onBuild: noop,
           onOpenSession: noop,
         }),
       ),

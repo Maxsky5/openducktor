@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import type { SessionStartModalModel } from "@/components/features/agents";
+import type { WorkflowPendingState } from "@/components/features/kanban/kanban-task-footer";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import {
   createGitConflictActionsModel,
@@ -91,6 +92,7 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
   const {
     humanReviewFeedbackModal,
     sessionStartModal,
+    isSessionStarting,
     startSessionIntent,
     onPullRequestGenerate,
     onDelegate,
@@ -247,9 +249,26 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     () => buildActiveTaskSessionContextByTaskId(sessions),
     [sessions],
   );
+  const approvingTaskId = getApprovingTaskId(taskApprovalModal);
+  const requestingChangesTaskId = humanReviewFeedbackModal?.isSubmitting
+    ? humanReviewFeedbackModal.taskId
+    : null;
+  const resettingImplementationTaskId = resetImplementationModal?.isSubmitting
+    ? resetImplementationModal.taskId
+    : null;
+  const kanbanPendingState = useMemo<WorkflowPendingState>(
+    () => ({
+      isSessionStarting,
+      approvingTaskId,
+      requestingChangesTaskId,
+      resettingImplementationTaskId,
+    }),
+    [isSessionStarting, approvingTaskId, requestingChangesTaskId, resettingImplementationTaskId],
+  );
 
   const actions = useMemo<TaskWorkflowActions>(
     () => ({
+      kanbanPendingState,
       onCreateTask,
       onPlan,
       onQaStart,
@@ -281,6 +300,7 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
       activeTaskSessionContextByTaskId,
     }),
     [
+      kanbanPendingState,
       activeTaskSessionContextByTaskId,
       closeTask,
       deleteTask,
@@ -327,4 +347,10 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     taskGitConflictDialog,
     gitConflictActions,
   };
+}
+
+function getApprovingTaskId(modal: TaskApprovalModalModel | null): string | null {
+  return modal && (modal.isSubmitting || (modal.stage === "approval" && modal.isLoading))
+    ? modal.taskId
+    : null;
 }

@@ -6,6 +6,9 @@ import { createTaskCardFixture } from "@/pages/agents/agent-studio-test-utils";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { KanbanTaskCard } from "./kanban-task-card";
 
+const renderCardMarkup = (element: Parameters<typeof renderToStaticMarkup>[0]): string =>
+  renderToStaticMarkup(createElement(TooltipProvider, null, element));
+
 const noop = (): void => {};
 
 describe("KanbanTaskCard active sessions", () => {
@@ -26,7 +29,7 @@ describe("KanbanTaskCard active sessions", () => {
       },
     ];
 
-    const html = renderToStaticMarkup(
+    const html = renderCardMarkup(
       createElement(
         MemoryRouter,
         { initialEntries: ["/kanban"] },
@@ -55,7 +58,7 @@ describe("KanbanTaskCard active sessions", () => {
           onOpenDetails: noop,
           onDelegate: noop,
           onPlan: noop,
-          onBuild: noop,
+          onOpenSession: noop,
         }),
       ),
     );
@@ -66,7 +69,7 @@ describe("KanbanTaskCard active sessions", () => {
     expect(html).toContain("Running");
     expect(html).toContain("text-status-running");
     expect(html).toContain("lucide-circle-play");
-    expect(html).toContain('data-slot="popover-trigger"');
+    expect(html).not.toContain('data-slot="popover-trigger"');
     expect(html.split("kanban-active-session-ray")).toHaveLength(2);
     expect(html).not.toContain("Start Builder");
     expect(html).not.toContain("Start Spec");
@@ -100,7 +103,7 @@ describe("KanbanTaskCard active sessions", () => {
       },
     ];
 
-    const html = renderToStaticMarkup(
+    const html = renderCardMarkup(
       createElement(
         MemoryRouter,
         { initialEntries: ["/kanban"] },
@@ -112,14 +115,14 @@ describe("KanbanTaskCard active sessions", () => {
           onOpenDetails: noop,
           onDelegate: noop,
           onPlan: noop,
-          onBuild: noop,
+          onOpenSession: noop,
         }),
       ),
     );
 
     expect(html).not.toContain("kanban-active-session-card");
     expect(html).toContain("Start Builder");
-    expect(html).toContain('data-slot="popover-trigger"');
+    expect(html).not.toContain('data-slot="popover-trigger"');
     expect(html).not.toContain("Sessions");
   });
 
@@ -149,7 +152,7 @@ describe("KanbanTaskCard active sessions", () => {
       },
     ];
 
-    const html = renderToStaticMarkup(
+    const html = renderCardMarkup(
       createElement(
         MemoryRouter,
         { initialEntries: ["/kanban"] },
@@ -161,7 +164,7 @@ describe("KanbanTaskCard active sessions", () => {
           onOpenDetails: noop,
           onDelegate: noop,
           onPlan: noop,
-          onBuild: noop,
+          onOpenSession: noop,
         }),
       ),
     );
@@ -177,7 +180,7 @@ describe("KanbanTaskCard active sessions", () => {
   test("renders waiting-input active primary style and suppresses the animated ray", () => {
     const task = createTaskCardFixture({ id: "TASK-WAITING", title: "Need approval" });
 
-    const html = renderToStaticMarkup(
+    const html = renderCardMarkup(
       createElement(
         MemoryRouter,
         { initialEntries: ["/kanban"] },
@@ -205,7 +208,7 @@ describe("KanbanTaskCard active sessions", () => {
           onOpenDetails: noop,
           onDelegate: noop,
           onPlan: noop,
-          onBuild: noop,
+          onOpenSession: noop,
         }),
       ),
     );
@@ -232,7 +235,7 @@ describe("KanbanTaskCard active sessions", () => {
       },
     });
 
-    const html = renderToStaticMarkup(
+    const html = renderCardMarkup(
       createElement(
         MemoryRouter,
         { initialEntries: ["/kanban"] },
@@ -243,7 +246,7 @@ describe("KanbanTaskCard active sessions", () => {
           onOpenDetails: noop,
           onDelegate: noop,
           onPlan: noop,
-          onBuild: noop,
+          onOpenSession: noop,
         }),
       ),
     );
@@ -260,7 +263,7 @@ describe("KanbanTaskCard active sessions", () => {
       labels: ["frontend", "phase:open", "ux"],
     });
 
-    const html = renderToStaticMarkup(
+    const html = renderCardMarkup(
       createElement(
         MemoryRouter,
         { initialEntries: ["/kanban"] },
@@ -271,7 +274,7 @@ describe("KanbanTaskCard active sessions", () => {
           onOpenDetails: noop,
           onDelegate: noop,
           onPlan: noop,
-          onBuild: noop,
+          onOpenSession: noop,
         }),
       ),
     );
@@ -282,7 +285,7 @@ describe("KanbanTaskCard active sessions", () => {
     expect(html).toContain("TASK-8");
     expect(html).toContain("Feature");
     expect(html).toContain("P1");
-    expect(html).toContain(">Open<");
+    expect(html).not.toContain(">Open<");
     expect(html).toContain("lucide-tag");
   });
 
@@ -292,7 +295,7 @@ describe("KanbanTaskCard active sessions", () => {
       labels: ["phase:open", "phase:ready_for_dev"],
     });
 
-    const html = renderToStaticMarkup(
+    const html = renderCardMarkup(
       createElement(
         MemoryRouter,
         { initialEntries: ["/kanban"] },
@@ -303,7 +306,7 @@ describe("KanbanTaskCard active sessions", () => {
           onOpenDetails: noop,
           onDelegate: noop,
           onPlan: noop,
-          onBuild: noop,
+          onOpenSession: noop,
         }),
       ),
     );
@@ -330,7 +333,7 @@ describe("KanbanTaskCard active sessions", () => {
       },
     });
 
-    const html = renderToStaticMarkup(
+    const html = renderCardMarkup(
       createElement(
         MemoryRouter,
         { initialEntries: ["/kanban"] },
@@ -341,7 +344,7 @@ describe("KanbanTaskCard active sessions", () => {
           onOpenDetails: noop,
           onDelegate: noop,
           onPlan: noop,
-          onBuild: noop,
+          onOpenSession: noop,
         }),
       ),
     );
@@ -361,7 +364,7 @@ describe("KanbanTaskCard active sessions", () => {
       availableActions: ["set_spec"],
     });
 
-    const html = renderToStaticMarkup(
+    const html = renderCardMarkup(
       createElement(
         MemoryRouter,
         { initialEntries: ["/kanban"] },
@@ -376,7 +379,7 @@ describe("KanbanTaskCard active sessions", () => {
             onOpenDetails: noop,
             onDelegate: noop,
             onPlan: noop,
-            onBuild: noop,
+            onOpenSession: noop,
           }),
         ),
       ),
@@ -414,7 +417,7 @@ describe("KanbanTaskCard active sessions", () => {
       availableActions: ["set_spec"],
     });
 
-    const html = renderToStaticMarkup(
+    const html = renderCardMarkup(
       createElement(
         MemoryRouter,
         { initialEntries: ["/kanban"] },
@@ -429,15 +432,13 @@ describe("KanbanTaskCard active sessions", () => {
             onOpenDetails: noop,
             onDelegate: noop,
             onPlan: noop,
-            onBuild: noop,
+            onOpenSession: noop,
           }),
         ),
       ),
     );
 
-    expect(html).toContain(
-      'class="inline-flex size-5 shrink-0 items-center justify-center text-foreground" aria-label="Issue type: Task"',
-    );
+    expect(html).toContain('text-foreground" aria-label="Issue type: Task"');
     expect(html).not.toContain("text-emerald-600");
   });
 });

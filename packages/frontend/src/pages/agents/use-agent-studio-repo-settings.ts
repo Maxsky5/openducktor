@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { RepositoryGitProviderContext } from "@openducktor/contracts";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import type { host } from "@/state/operations/host";
 import {
   repositoryGitProviderContextQueryOptions,
@@ -33,8 +33,10 @@ export function useAgentStudioRepoSettings(args: {
   const providerContextQuery = useQuery(
     repositoryGitProviderContextQueryOptionsOrSkip(activeRepoPath, hostClient),
   );
-  const repoSettings =
-    activeWorkspaceId !== null && repoConfig ? toRepoSettingsInput(repoConfig) : null;
+  const repoSettings = useMemo(
+    () => (activeWorkspaceId !== null && repoConfig ? toRepoSettingsInput(repoConfig) : null),
+    [activeWorkspaceId, repoConfig],
+  );
   const gitProviderContext = activeRepoPath !== null ? providerContextQuery.data : undefined;
   const gitProviderContextError =
     activeRepoPath !== null && providerContextQuery.isError ? providerContextQuery.error : null;

@@ -40,7 +40,7 @@ describe("KanbanTaskCard rerender behavior", () => {
           onOpenDetails={noop}
           onDelegate={noop}
           onPlan={noop}
-          onBuild={noop}
+          onOpenSession={noop}
         />
       </MemoryRouter>,
     );
@@ -56,7 +56,7 @@ describe("KanbanTaskCard rerender behavior", () => {
           onOpenDetails={noop}
           onDelegate={noop}
           onPlan={noop}
-          onBuild={noop}
+          onOpenSession={noop}
         />
       </MemoryRouter>,
     );
@@ -83,7 +83,7 @@ describe("KanbanTaskCard rerender behavior", () => {
           onOpenDetails={noop}
           onDelegate={noop}
           onPlan={noop}
-          onBuild={noop}
+          onOpenSession={noop}
         />
       </MemoryRouter>,
     );
@@ -103,7 +103,7 @@ describe("KanbanTaskCard rerender behavior", () => {
           onOpenDetails={noop}
           onDelegate={noop}
           onPlan={noop}
-          onBuild={noop}
+          onOpenSession={noop}
           onHumanRequestChanges={noop}
         />
       </MemoryRouter>,
@@ -138,7 +138,7 @@ describe("KanbanTaskCard rerender behavior", () => {
           onOpenDetails={noop}
           onDelegate={noop}
           onPlan={noop}
-          onBuild={noop}
+          onOpenSession={noop}
         />
       </MemoryRouter>,
     );
@@ -162,7 +162,7 @@ describe("KanbanTaskCard rerender behavior", () => {
           onOpenDetails={noop}
           onDelegate={noop}
           onPlan={noop}
-          onBuild={noop}
+          onOpenSession={noop}
         />
       </MemoryRouter>,
     );
@@ -201,7 +201,6 @@ describe("KanbanTaskCard rerender behavior", () => {
           onDelegate={noop}
           onOpenSession={onOpenSession}
           onPlan={noop}
-          onBuild={noop}
         />
       </MemoryRouter>,
     );
@@ -226,7 +225,6 @@ describe("KanbanTaskCard rerender behavior", () => {
           onDelegate={noop}
           onOpenSession={onOpenSession}
           onPlan={noop}
-          onBuild={noop}
         />
       </MemoryRouter>,
     );
@@ -276,7 +274,7 @@ describe("KanbanTaskCard rerender behavior", () => {
           onOpenDetails={noop}
           onDelegate={noop}
           onPlan={noop}
-          onBuild={noop}
+          onOpenSession={noop}
         />
       </MemoryRouter>,
     );
@@ -292,7 +290,7 @@ describe("KanbanTaskCard rerender behavior", () => {
           onOpenDetails={noop}
           onDelegate={noop}
           onPlan={noop}
-          onBuild={noop}
+          onOpenSession={noop}
         />
       </MemoryRouter>,
     );

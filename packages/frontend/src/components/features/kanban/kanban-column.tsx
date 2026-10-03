@@ -5,7 +5,7 @@ import type {
 } from "@openducktor/core";
 import type { KanbanTaskCardView } from "@openducktor/contracts";
 import { Inbox } from "lucide-react";
-import { type ComponentProps, memo, type ReactElement, useEffect, useRef } from "react";
+import { type ComponentProps, memo, type ReactElement, useEffect, useMemo, useRef } from "react";
 import {
   KANBAN_LANE_HEADER_HEIGHT_CLASS,
   KANBAN_LANE_WIDTH_CLASS,
@@ -17,19 +17,25 @@ import type {
 } from "@/components/features/kanban/kanban-task-activity";
 import { KanbanTaskCard } from "@/components/features/kanban/kanban-task-card";
 import { laneTheme } from "@/components/features/kanban/kanban-theme";
+import {
+  getCardLayout,
+  type WorkflowPendingState,
+} from "@/components/features/kanban/kanban-task-footer";
 import type { SessionTargetOptions } from "@/components/features/kanban/session-target-resolution";
 import { useKanbanVirtualization } from "@/components/features/kanban/use-kanban-virtualization";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-type TaskSessions = NonNullable<ComponentProps<typeof KanbanTaskCard>["taskSessions"]>;
-type HistoricalSessions = NonNullable<ComponentProps<typeof KanbanTaskCard>["historicalSessions"]>;
+type CardProps = ComponentProps<typeof KanbanTaskCard>;
+type TaskSessions = NonNullable<CardProps["taskSessions"]>;
+type HistoricalSessions = NonNullable<CardProps["historicalSessions"]>;
 const EMPTY_TASK_SESSIONS: TaskSessions = [];
 const EMPTY_HISTORICAL_SESSIONS: HistoricalSessions = [];
 
 type KanbanColumnProps = {
   column: KanbanColumnData;
   taskCardView?: KanbanTaskCardView;
+  pendingState?: WorkflowPendingState | undefined;
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
   historicalSessionsByTaskId: Map<string, HistoricalSessions>;
   activeTaskSessionContextByTaskId: ActiveTaskSessionContextByTaskId;
@@ -39,12 +45,133 @@ type KanbanColumnProps = {
   onOpenSession: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart?: (taskId: string) => void;
-  onQaOpen?: (taskId: string) => void;
-  onBuild: (taskId: string) => void;
   onHumanApprove?: (taskId: string) => void;
   onHumanRequestChanges?: (taskId: string) => void;
   onResetImplementation?: (taskId: string) => void;
 };
+
+export function KanbanColumn({
+  column,
+  taskCardView = "normal",
+  pendingState,
+  taskSessionsByTaskId,
+  historicalSessionsByTaskId,
+  activeTaskSessionContextByTaskId,
+  taskActivityStateByTaskId,
+  onOpenDetails,
+  onDelegate,
+  onOpenSession,
+  onPlan,
+  onQaStart,
+  onHumanApprove,
+  onHumanRequestChanges,
+  onResetImplementation,
+}: KanbanColumnProps): ReactElement {
+  const theme = laneTheme(column.id);
+  const cardLayoutsByTaskId = useMemo(
+    () =>
+      new Map(
+        column.tasks.map((task) => {
+          const context = activeTaskSessionContextByTaskId.get(task.id);
+          const inputs = {
+            task,
+            taskSessions: taskSessionsByTaskId.get(task.id) ?? EMPTY_TASK_SESSIONS,
+            historicalSessions:
+              historicalSessionsByTaskId.get(task.id) ?? EMPTY_HISTORICAL_SESSIONS,
+            hasActiveSession: Boolean(context),
+            activeSessionRole: context?.role,
+            taskActivityState: getRequiredTaskActivityState(taskActivityStateByTaskId, task.id),
+            pendingState,
+          };
+          return [task.id, getCardLayout(inputs)];
+        }),
+      ),
+    [
+      column.tasks,
+      activeTaskSessionContextByTaskId,
+      taskSessionsByTaskId,
+      historicalSessionsByTaskId,
+      taskActivityStateByTaskId,
+      pendingState,
+    ],
+  );
+  const {
+    containerRef: cardsViewportRef,
+    renderModel,
+    measurementVersion,
+    onMeasuredHeight: handleMeasuredHeight,
+  } = useKanbanVirtualization({
+    tasks: column.tasks,
+    taskCardView,
+    cardLayoutsByTaskId,
+  });
+  const isVirtualized = renderModel.kind === "virtualized";
+  const renderCard = (task: KanbanColumnData["tasks"][number]): ReactElement => {
+    const context = activeTaskSessionContextByTaskId.get(task.id);
+    const cardProps: CardProps = {
+      task,
+      taskCardView,
+      pendingState,
+      taskSessions: taskSessionsByTaskId.get(task.id) ?? EMPTY_TASK_SESSIONS,
+      historicalSessions: historicalSessionsByTaskId.get(task.id) ?? EMPTY_HISTORICAL_SESSIONS,
+      hasActiveSession: Boolean(context),
+      taskActivityState: getRequiredTaskActivityState(taskActivityStateByTaskId, task.id),
+      onOpenDetails,
+      onDelegate,
+      onOpenSession,
+      onPlan,
+    };
+    if (context?.role) cardProps.activeSessionRole = context.role;
+    if (onQaStart) cardProps.onQaStart = onQaStart;
+    if (onHumanApprove) cardProps.onHumanApprove = onHumanApprove;
+    if (onHumanRequestChanges) cardProps.onHumanRequestChanges = onHumanRequestChanges;
+    if (onResetImplementation) cardProps.onResetImplementation = onResetImplementation;
+    if (!isVirtualized) return <KanbanTaskCard key={task.id} {...cardProps} />;
+    return (
+      <MeasuredCard
+        key={task.id}
+        {...cardProps}
+        contentRevision={cardLayoutsByTaskId.get(task.id)!.contentRevision}
+        measurementVersion={measurementVersion}
+        onMeasuredHeight={handleMeasuredHeight}
+      />
+    );
+  };
+  let cards = <div className="space-y-3">{renderModel.visibleTasks.map(renderCard)}</div>;
+  if (isVirtualized) {
+    cards = (
+      <div style={{ minHeight: renderModel.totalHeight }}>
+        {renderModel.topSpacerHeight > 0 ? (
+          <div style={{ height: renderModel.topSpacerHeight }} />
+        ) : null}
+        {cards}
+        {renderModel.bottomSpacerHeight > 0 ? (
+          <div style={{ height: renderModel.bottomSpacerHeight }} />
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <section
+      tabIndex={-1}
+      aria-label={`${column.title} lane`}
+      data-kanban-lane-id={column.id}
+      className={cn(
+        "flex flex-col overflow-hidden rounded-2xl border shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+        KANBAN_LANE_WIDTH_CLASS,
+        theme.boardSurfaceClass,
+      )}
+    >
+      <LaneHeader id={column.id} title={column.title} count={column.tasks.length} />
+      <div ref={cardsViewportRef} className="flex-1 p-3">
+        {column.tasks.length === 0 ? <LaneEmptyState id={column.id} /> : null}
+
+        {column.tasks.length > 0 ? cards : null}
+      </div>
+    </section>
+  );
+}
 
 const laneCountLabel = (count: number): string => (count === 1 ? "1 task" : `${count} tasks`);
 
@@ -60,81 +187,25 @@ const getRequiredTaskActivityState = (
   return taskActivityState;
 };
 
-type TaskCardHandlers = Pick<
-  KanbanColumnProps,
-  | "onOpenDetails"
-  | "onDelegate"
-  | "onOpenSession"
-  | "onPlan"
-  | "onQaStart"
-  | "onQaOpen"
-  | "onBuild"
-  | "onHumanApprove"
-  | "onHumanRequestChanges"
-  | "onResetImplementation"
->;
-
-type MeasuredTaskCardProps = {
-  task: KanbanColumnData["tasks"][number];
-  taskCardView: KanbanTaskCardView;
-  taskSessions: TaskSessions | undefined;
-  historicalSessions: HistoricalSessions | undefined;
-  hasActiveSession: boolean;
-  activeSessionRole: AgentRole | undefined;
-  activeSessionActivityState: KanbanTaskSession["activityState"] | undefined;
-  taskActivityState: KanbanTaskActivityState;
+type MeasuredCardProps = CardProps & {
+  contentRevision: string;
   measurementVersion: number;
   onMeasuredHeight: (taskId: string, height: number) => void;
-} & TaskCardHandlers;
-
-const createTaskMeasurementTrigger = (props: MeasuredTaskCardProps): string => {
-  const taskMeasurementKey = [
-    props.task.updatedAt ?? "",
-    props.task.title,
-    props.task.status,
-    props.task.issueType,
-    props.task.priority,
-    props.task.subtaskIds.join(","),
-    props.task.availableActions.join(","),
-    props.task.pullRequest?.number ?? "",
-    props.task.pullRequest?.state ?? "",
-    props.task.pullRequest?.url ?? "",
-  ].join("|");
-  const taskSessionsMeasurementKey =
-    props.taskSessions
-      ?.map((session) => `${session.externalSessionId}:${session.role}:${session.activityState}`)
-      .join("|") ?? "";
-  const historicalSessionsMeasurementKey =
-    props.historicalSessions
-      ?.map((session) => `${session.externalSessionId}:${session.role}:${session.startedAt}`)
-      .join("|") ?? "";
-
-  return [
-    props.measurementVersion,
-    props.taskCardView,
-    props.taskActivityState,
-    taskMeasurementKey,
-    taskSessionsMeasurementKey,
-    historicalSessionsMeasurementKey,
-    props.hasActiveSession ? "active" : "idle",
-    props.activeSessionRole ?? "",
-    props.activeSessionActivityState ?? "",
-  ].join("::");
 };
 
-const useMeasuredTaskCard = (props: MeasuredTaskCardProps) => {
-  const taskWrapperRef = useRef<HTMLDivElement | null>(null);
-  const measurementTrigger = createTaskMeasurementTrigger(props);
-  const taskId = props.task.id;
-  const { onMeasuredHeight } = props;
+const MeasuredCard = memo(function MeasuredCard({
+  contentRevision,
+  measurementVersion,
+  onMeasuredHeight,
+  ...cardProps
+}: MeasuredCardProps): ReactElement {
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const taskId = cardProps.task.id;
 
+  // Content and density changes need a fresh DOM height even when the task stays in place.
   useEffect(() => {
-    const element = taskWrapperRef.current;
+    const element = wrapperRef.current;
     if (!element) {
-      return;
-    }
-
-    if (measurementTrigger.length === 0) {
       return;
     }
 
@@ -157,48 +228,11 @@ const useMeasuredTaskCard = (props: MeasuredTaskCardProps) => {
     return () => {
       window.cancelAnimationFrame(frameHandle);
     };
-  }, [measurementTrigger, onMeasuredHeight, taskId]);
-
-  return taskWrapperRef;
-};
-
-const toKanbanTaskCardProps = (
-  props: MeasuredTaskCardProps,
-): ComponentProps<typeof KanbanTaskCard> => {
-  const cardProps: ComponentProps<typeof KanbanTaskCard> = {
-    task: props.task,
-    taskCardView: props.taskCardView,
-    taskSessions: props.taskSessions,
-    historicalSessions: props.historicalSessions,
-    hasActiveSession: props.hasActiveSession,
-    taskActivityState: props.taskActivityState,
-    onOpenDetails: props.onOpenDetails,
-    onDelegate: props.onDelegate,
-    onOpenSession: props.onOpenSession,
-    onPlan: props.onPlan,
-    onBuild: props.onBuild,
-  };
-  if (props.activeSessionRole) cardProps.activeSessionRole = props.activeSessionRole;
-  if (props.onQaStart) cardProps.onQaStart = props.onQaStart;
-  if (props.onQaOpen) cardProps.onQaOpen = props.onQaOpen;
-  if (props.onHumanApprove) cardProps.onHumanApprove = props.onHumanApprove;
-  if (props.onHumanRequestChanges) {
-    cardProps.onHumanRequestChanges = props.onHumanRequestChanges;
-  }
-  if (props.onResetImplementation) {
-    cardProps.onResetImplementation = props.onResetImplementation;
-  }
-  return cardProps;
-};
-
-const MeasuredTaskCard = memo(function MeasuredTaskCard(
-  props: MeasuredTaskCardProps,
-): ReactElement {
-  const taskWrapperRef = useMeasuredTaskCard(props);
+  }, [contentRevision, measurementVersion, cardProps.taskCardView, onMeasuredHeight, taskId]);
 
   return (
-    <div ref={taskWrapperRef}>
-      <KanbanTaskCard {...toKanbanTaskCardProps(props)} />
+    <div ref={wrapperRef}>
+      <KanbanTaskCard {...cardProps} />
     </div>
   );
 });
@@ -252,134 +286,5 @@ function LaneEmptyState({ id }: { id: KanbanColumnId }): ReactElement {
       <Inbox className="size-4 opacity-70" />
       <p className="text-xs font-medium">No tasks in this lane.</p>
     </div>
-  );
-}
-
-export function KanbanColumn({
-  column,
-  taskCardView = "normal",
-  taskSessionsByTaskId,
-  historicalSessionsByTaskId,
-  activeTaskSessionContextByTaskId,
-  taskActivityStateByTaskId,
-  onOpenDetails,
-  onDelegate,
-  onOpenSession,
-  onPlan,
-  onQaStart,
-  onQaOpen,
-  onBuild,
-  onHumanApprove,
-  onHumanRequestChanges,
-  onResetImplementation,
-}: KanbanColumnProps): ReactElement {
-  const theme = laneTheme(column.id);
-  const {
-    containerRef: cardsViewportRef,
-    renderModel,
-    measurementVersion,
-    onMeasuredHeight: handleMeasuredHeight,
-  } = useKanbanVirtualization({
-    tasks: column.tasks,
-    taskCardView,
-  });
-  const isVirtualized = renderModel.kind === "virtualized";
-
-  return (
-    <section
-      className={cn(
-        "flex flex-col overflow-hidden rounded-2xl border shadow-sm",
-        KANBAN_LANE_WIDTH_CLASS,
-        theme.boardSurfaceClass,
-      )}
-    >
-      <LaneHeader id={column.id} title={column.title} count={column.tasks.length} />
-      <div ref={cardsViewportRef} className="flex-1 p-3">
-        {column.tasks.length === 0 ? <LaneEmptyState id={column.id} /> : null}
-
-        {column.tasks.length > 0 && isVirtualized ? (
-          <div style={{ minHeight: renderModel.totalHeight }}>
-            {renderModel.topSpacerHeight > 0 ? (
-              <div style={{ height: renderModel.topSpacerHeight }} />
-            ) : null}
-            <div className="space-y-3">
-              {renderModel.visibleTasks.map((task) => {
-                const activeSessionContext = activeTaskSessionContextByTaskId.get(task.id);
-                return (
-                  <MeasuredTaskCard
-                    key={task.id}
-                    task={task}
-                    taskCardView={taskCardView}
-                    taskSessions={taskSessionsByTaskId.get(task.id) ?? EMPTY_TASK_SESSIONS}
-                    historicalSessions={
-                      historicalSessionsByTaskId.get(task.id) ?? EMPTY_HISTORICAL_SESSIONS
-                    }
-                    hasActiveSession={Boolean(activeSessionContext)}
-                    activeSessionRole={activeSessionContext?.role}
-                    activeSessionActivityState={activeSessionContext?.activityState}
-                    taskActivityState={getRequiredTaskActivityState(
-                      taskActivityStateByTaskId,
-                      task.id,
-                    )}
-                    measurementVersion={measurementVersion}
-                    onMeasuredHeight={handleMeasuredHeight}
-                    onOpenDetails={onOpenDetails}
-                    onDelegate={onDelegate}
-                    onOpenSession={onOpenSession}
-                    onPlan={onPlan}
-                    onBuild={onBuild}
-                    {...(onQaStart ? { onQaStart } : {})}
-                    {...(onQaOpen ? { onQaOpen } : {})}
-                    {...(onHumanApprove ? { onHumanApprove } : {})}
-                    {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
-                    {...(onResetImplementation ? { onResetImplementation } : {})}
-                  />
-                );
-              })}
-            </div>
-            {renderModel.bottomSpacerHeight > 0 ? (
-              <div style={{ height: renderModel.bottomSpacerHeight }} />
-            ) : null}
-          </div>
-        ) : null}
-
-        {column.tasks.length > 0 && !isVirtualized ? (
-          <div className="space-y-3">
-            {renderModel.visibleTasks.map((task) => {
-              const activeSessionContext = activeTaskSessionContextByTaskId.get(task.id);
-              return (
-                <KanbanTaskCard
-                  key={task.id}
-                  task={task}
-                  taskCardView={taskCardView}
-                  taskSessions={taskSessionsByTaskId.get(task.id) ?? EMPTY_TASK_SESSIONS}
-                  historicalSessions={
-                    historicalSessionsByTaskId.get(task.id) ?? EMPTY_HISTORICAL_SESSIONS
-                  }
-                  hasActiveSession={Boolean(activeSessionContext)}
-                  {...(activeSessionContext?.role
-                    ? { activeSessionRole: activeSessionContext.role }
-                    : {})}
-                  taskActivityState={getRequiredTaskActivityState(
-                    taskActivityStateByTaskId,
-                    task.id,
-                  )}
-                  onOpenDetails={onOpenDetails}
-                  onDelegate={onDelegate}
-                  onOpenSession={onOpenSession}
-                  onPlan={onPlan}
-                  onBuild={onBuild}
-                  {...(onQaStart ? { onQaStart } : {})}
-                  {...(onQaOpen ? { onQaOpen } : {})}
-                  {...(onHumanApprove ? { onHumanApprove } : {})}
-                  {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
-                  {...(onResetImplementation ? { onResetImplementation } : {})}
-                />
-              );
-            })}
-          </div>
-        ) : null}
-      </div>
-    </section>
   );
 }

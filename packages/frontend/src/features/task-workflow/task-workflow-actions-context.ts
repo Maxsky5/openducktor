@@ -5,9 +5,11 @@ import type {
   ActiveTaskSessionContext,
   KanbanTaskSession,
 } from "@/components/features/kanban/kanban-task-activity";
+import type { WorkflowPendingState } from "@/components/features/kanban/kanban-task-footer";
 import type { SessionTargetOptions } from "@/components/features/kanban/session-target-resolution";
 
 export type TaskWorkflowActions = {
+  kanbanPendingState?: WorkflowPendingState;
   onCreateTask: () => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart: (taskId: string) => void;
