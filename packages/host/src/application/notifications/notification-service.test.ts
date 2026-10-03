@@ -196,8 +196,9 @@ test.each(["before", "after"])(
   "saved OpenCode sessions notify without a browser refresh when the runtime joins %s startup",
   async (order) => {
     const savedRef = { ...ref("/beta"), runtimeKind: "opencode" as const };
+    const savedRoot = { ...savedRef, sessionScope: { kind: "repository" as const } };
     const readRoots = mock(() =>
-      Effect.succeed([savedRef, { ...savedRef, runtimeKind: "codex" as const }]),
+      Effect.succeed([savedRoot, { ...savedRoot, runtimeKind: "codex" as const }]),
     );
     const live = createAgentSessionLiveStateService({
       adapterRegistry: createLiveSessionAdapterRegistry(),
@@ -265,7 +266,7 @@ test.each(["before", "after"])(
       if (order === "before") await Effect.runPromise(h.service.initialize());
       await flush();
       expect(readRoots).toHaveBeenCalledWith("/beta");
-      expect(rootBatches).toEqual([[savedRef]]);
+      expect(rootBatches).toEqual([[savedRoot]]);
       expect(await Effect.runPromise(live.list({ repoPath: "/beta" }))).toMatchObject([
         { ref: savedRef, title: "Saved session" },
       ]);
@@ -433,6 +434,61 @@ test.each(["baseline", "committed"] as const)(
         id: task.id,
         title: source === "baseline" ? "Saved task" : "Updated task",
       });
+    } finally {
+      await Effect.runPromise(h.service.dispose());
+    }
+  },
+);
+test.each(["question", "error", "task", "resolved"])(
+  "startup handles %s input received before workspace observers exist",
+  async (kind) => {
+    const h = harness();
+    h.port.defaultWorktreeBasePath = (id) => {
+      if (id === "beta") {
+        if (kind === "task") h.service.acceptTask(transition("startup-transition", "/beta"));
+        else {
+          h.service.acceptLive(
+            {
+              type: "session_upsert",
+              session: snapshot({ ref: ref("/beta"), pendingQuestions: [question("startup")] }),
+            },
+            "live",
+          );
+          if (kind === "error")
+            h.service.acceptLive(
+              {
+                type: "transcript_event",
+                event: {
+                  type: "session_error",
+                  sessionRef: ref("/beta"),
+                  externalSessionId: "root",
+                  timestamp: "2026-09-01T00:01:00Z",
+                  message: "Session failed",
+                },
+              },
+              "live",
+            );
+          if (kind === "resolved")
+            h.service.acceptLive(
+              { type: "session_upsert", session: snapshot({ ref: ref("/beta") }) },
+              "live",
+            );
+        }
+      }
+      return `/${id}/worktrees`;
+    };
+    try {
+      await Effect.runPromise(h.service.initialize());
+      await flush();
+      expect(occurrences(h.frames).map((frame) => frame.selected.occurrence.kind)).toEqual(
+        kind === "task"
+          ? ["workflow.blocked"]
+          : kind === "error"
+            ? ["agent.question_asked", "agent.session_error"]
+            : kind === "question"
+              ? ["agent.question_asked"]
+              : [],
+      );
     } finally {
       await Effect.runPromise(h.service.dispose());
     }

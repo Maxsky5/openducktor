@@ -342,7 +342,7 @@ describe("OpenCode host live-session state", () => {
     });
 
     expect(state.applySessionSources({ sources: [], failures: [] }, readVersions)).toEqual([
-      { type: "session_removed", ref: parentRef },
+      { type: "session_removed", ref: parentRef, provenance: "baseline" },
     ]);
     const child = state.listSnapshots()[0]!;
     expect(child.ref.externalSessionId).toBe("child");

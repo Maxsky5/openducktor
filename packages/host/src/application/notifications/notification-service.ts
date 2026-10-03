@@ -50,8 +50,8 @@ export const createNotificationService = ({
   let preferenceRevision = 0;
   let stopped = false;
   let committedConfig: GlobalConfig | null = null;
-  let started = false;
-  const startupInputs: Array<{ repoPath: string; input: WorkspaceNotificationInput }> = [];
+  let startup: "pending" | "starting" | "ready" = "pending";
+  let startupInputs: Array<{ repoPath: string; input: WorkspaceNotificationInput }> = [];
 
   const failure = (
     scope: string,
@@ -140,6 +140,11 @@ export const createNotificationService = ({
             stream.publishHealth({ scope, source: "initialization", message: null }),
         });
         workspaces.set(record.repoPath, { record, observer });
+        // Queue earlier inputs before starting the baseline read or accepting later live inputs.
+        const pending = startupInputs;
+        startupInputs = pending.filter((entry) => entry.repoPath !== record.repoPath);
+        for (const entry of pending)
+          if (entry.repoPath === record.repoPath) observer.accept(entry.input);
         yield* observer.start();
       }
     });
@@ -160,7 +165,7 @@ export const createNotificationService = ({
         preferences = structuredClone(settings);
         preferenceRevision += 1;
       }
-      if (started)
+      if (startup !== "pending")
         yield* updateWorkspaces(openWorkspaceRecordsInEffectiveOrder(settingsConfig, config));
     });
   return {
@@ -168,14 +173,10 @@ export const createNotificationService = ({
     initialize: () =>
       Effect.gen(function* () {
         const config = yield* loadGlobalConfig(settingsConfig);
-        started = true;
+        startup = "starting";
         yield* acceptConfig(committedConfig ?? config);
-        for (const pending of startupInputs) {
-          const state = workspaces.get(pending.repoPath);
-          if (!state) continue;
-          state.observer.accept(pending.input);
-        }
         startupInputs.length = 0;
+        startup = "ready";
       }).pipe(
         Effect.catchAll((cause) => Effect.sync(() => failure("application", "settings", cause))),
       ),
@@ -187,11 +188,13 @@ export const createNotificationService = ({
         );
       }),
     acceptTask(event: ExternalTaskSyncEvent) {
+      if (stopped) return;
       const state = workspaces.get(event.repoPath);
-      if (state && !stopped) state.observer.accept({ type: "task", event });
-      else if (!started) captureStartup(event.repoPath, { type: "task", event });
+      if (state) state.observer.accept({ type: "task", event });
+      else if (startup !== "ready") captureStartup(event.repoPath, { type: "task", event });
     },
     acceptLive(envelope: AgentSessionLiveEnvelope, provenance: "baseline" | "live") {
+      if (stopped) return;
       let path: string | null;
       if (envelope.type === "session_upsert") path = envelope.session.ref.repoPath;
       else if (envelope.type === "session_removed") path = envelope.ref.repoPath;
@@ -200,10 +203,10 @@ export const createNotificationService = ({
       if (!path) return;
       const state = workspaces.get(path);
       if (!state) {
-        if (!started) captureStartup(path, { type: "live", envelope, provenance });
+        if (startup !== "ready") captureStartup(path, { type: "live", envelope, provenance });
         return;
       }
-      if (!stopped) state.observer.accept({ type: "live", envelope, provenance });
+      state.observer.accept({ type: "live", envelope, provenance });
     },
     acceptWorkspaceSession(workspaceId: string, session: WorkspaceSession) {
       for (const state of workspaces.values())
@@ -250,6 +253,7 @@ export const createNotificationService = ({
     dispose: () =>
       Effect.gen(function* () {
         stopped = true;
+        startupInputs.length = 0;
         // Stop all observers before interrupting a worker, which can yield.
         for (const { observer } of workspaces.values()) observer.deactivate();
         for (const { observer } of workspaces.values()) yield* observer.dispose();

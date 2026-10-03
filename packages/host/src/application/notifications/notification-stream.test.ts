@@ -1,4 +1,4 @@
-import { Effect, Fiber, Stream } from "effect";
+import { Effect, Fiber, Scheduler, Stream } from "effect";
 import { afterEach, expect, test } from "bun:test";
 import {
   createDefaultNotificationSettings,
@@ -108,6 +108,46 @@ test("a subscriber that exceeds its bounded queue fails instead of losing frames
   await failed;
   expect(failures).toHaveLength(1);
   expect(String(failures[0])).toContain("cannot keep up");
+});
+
+test("a full reconnect replay leaves room for live frames before delivery starts", async () => {
+  const stream = createNotificationStream();
+  const attached = await Effect.runPromise(stream.subscribe({ cursor: null }).pipe(Stream.runHead));
+  expect(attached._tag).toBe("Some");
+  if (attached._tag !== "Some") throw new Error("Missing attachment");
+  for (let index = 0; index < 256; index++) stream.publishOccurrence(selected(String(index)));
+  const frames: NotificationStreamFrame[] = [];
+  const scheduler = new Scheduler.ControlledScheduler();
+  const fiber = Effect.runFork(
+    stream.subscribe({ cursor: attached.value.cursor }).pipe(
+      Stream.take(259),
+      Stream.runForEach((frame) => Effect.sync(() => frames.push(frame))),
+    ),
+    { scheduler },
+  );
+  try {
+    // Pause delivery while the native event source continues to publish.
+    scheduler.step();
+    expect(frames).toEqual([]);
+    stream.publishOccurrence(selected("first-live"));
+    stream.publishOccurrence(selected("second-live"));
+    scheduler.deferred = true;
+    scheduler.step();
+    await Effect.runPromise(Fiber.join(fiber).pipe(Effect.timeout("500 millis")));
+    expect(frames[0]).toMatchObject({ type: "attached", reason: "replay" });
+    expect(frames.map((frame) => frame.cursor.sequence)).toEqual(
+      Array.from({ length: 259 }, (_, index) => index),
+    );
+    expect(frames.slice(-2)).toMatchObject([
+      { selected: { occurrence: { occurrenceId: "first-live" } } },
+      { selected: { occurrence: { occurrenceId: "second-live" } } },
+    ]);
+  } finally {
+    scheduler.deferred = true;
+    scheduler.step();
+    await Effect.runPromise(Fiber.interrupt(fiber));
+    await Effect.runPromise(stream.dispose());
+  }
 });
 
 test("shutdown ends both subscriptions and rejects new readers", async () => {

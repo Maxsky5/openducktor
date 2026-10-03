@@ -79,19 +79,23 @@ export const createNotificationStream = (): NotificationStream => {
           const current = cursor();
           const reason = notificationReplayReason(requested, current, retained[0]?.cursor.sequence);
           subscribers.add(subscriber);
-          subscriber.queue.unsafeOffer({
-            type: "attached",
-            cursor: reason === "replay" && requested ? requested : current,
-            reason,
-            health: structuredClone([...health.values()]),
-          });
+          const initial: NotificationStreamFrame[] = [
+            {
+              type: "attached",
+              cursor: reason === "replay" && requested ? requested : current,
+              reason,
+              health: structuredClone([...health.values()]),
+            },
+          ];
           if (reason === "replay" && requested) {
             for (const frame of retained)
-              if (frame.cursor.sequence > requested.sequence) subscriber.queue.unsafeOffer(frame);
+              if (frame.cursor.sequence > requested.sequence) initial.push(frame);
           }
           // Let the transport install its cleanup before the first frame reaches its listener.
           return Stream.fromEffect(Effect.yieldNow()).pipe(
             Stream.drain,
+            // Replay must not use the queue space reserved for live events during delivery.
+            Stream.concat(Stream.fromIterable(initial)),
             Stream.concat(Stream.fromQueue(subscriber.queue)),
             Stream.map((frame) => structuredClone(frame)),
             Stream.interruptWhenDeferred(subscriber.failure),
