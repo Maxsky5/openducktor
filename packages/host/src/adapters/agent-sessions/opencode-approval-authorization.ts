@@ -50,7 +50,16 @@ export const assertApprovalAllowed = ({
     if (visited.has(parentId)) break;
     visited.add(parentId);
     const parentRef = refsByExternalSessionId.find(parentId);
-    if (!parentRef) break;
+    if (!parentRef)
+      throw new HostValidationError({
+        field: "parentExternalSessionId",
+        message: `Cannot approve this OpenCode request because its parent '${parentId}' is no longer registered. Reject the request or reconnect the selected runtime and retry.`,
+        details: {
+          ref: route.ref,
+          requestId: route.occurrenceId,
+          parentExternalSessionId: parentId,
+        },
+      });
     session = requireSession(parentRef);
   }
   const scope = session.sessionScope;

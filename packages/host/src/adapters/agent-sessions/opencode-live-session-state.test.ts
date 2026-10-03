@@ -318,6 +318,46 @@ describe("OpenCode host live-session state", () => {
     expect(state.listSnapshots()).toEqual([]);
   });
 
+  test("blocks child approval when a refresh drops its parent after a new request", () => {
+    const state = createState();
+    state.applyControlSummary({
+      ...summary("parent"),
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+    });
+    const parentRef = state.listSnapshots()[0]!.ref;
+    const readVersions = state.versions();
+    state.applyEvent(parentRef, {
+      type: "approval_required",
+      externalSessionId: "parent",
+      childExternalSessionId: "child",
+      parentExternalSessionId: "parent",
+      timestamp: "2026-07-16T10:02:00.000Z",
+      requestId: "child-edit",
+      requestType: "file_change",
+      title: "Edit",
+      action: { name: "write" },
+      mutation: "mutating",
+    });
+
+    expect(state.applySessionSources({ sources: [], failures: [] }, readVersions)).toEqual([
+      { type: "session_removed", ref: parentRef },
+    ]);
+    const child = state.listSnapshots()[0]!;
+    expect(child.ref.externalSessionId).toBe("child");
+    expect(child.parentExternalSessionId).toBe("parent");
+    const requestId = child.pendingApprovals[0]!.requestId;
+    const route = state.requirePendingRoute(child.ref, requestId, "approval");
+    for (const outcome of ["approve_once", "approve_session"] as const) {
+      expect(() => state.assertApprovalAllowed(route, outcome)).toThrow(
+        "parent 'parent' is no longer registered",
+      );
+    }
+    expect(state.requirePendingRoute(child.ref, requestId, "approval")).toEqual(route);
+    expect(() => state.assertApprovalAllowed(route, "reject")).not.toThrow();
+    state.completePendingReply(route);
+    expect(state.listSnapshots()[0]?.pendingApprovals).toEqual([]);
+  });
+
   test("keeps a session when its runtime directory read fails", () => {
     const state = createState();
     state.applyControlSummary(summary("parent"));
