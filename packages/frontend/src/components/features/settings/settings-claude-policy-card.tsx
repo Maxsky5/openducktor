@@ -7,7 +7,11 @@ import { Label } from "@/components/ui/label";
 import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
 import { ClaudeListEditor } from "./settings-claude-list-editor";
 import { readClaudePolicyField, updateClaudePolicyField } from "./settings-claude-policy";
-import { CLAUDE_PERMISSION_MODES, type ClaudePolicyField } from "./settings-claude-policy-fields";
+import {
+  CLAUDE_PERMISSION_MODES,
+  CLAUDE_POLICY_ROLES,
+  type ClaudePolicyField,
+} from "./settings-claude-policy-fields";
 import {
   RuntimePolicyCard,
   RuntimePolicyDefault,
@@ -15,7 +19,6 @@ import {
   RuntimePolicyRoleOverrides,
 } from "./settings-runtime-policy-layout";
 
-export const CLAUDE_POLICY_ROLES: AgentRole[] = ["spec", "planner", "build", "qa"];
 type Scope = "defaults" | AgentRole;
 type PolicyValue = string | boolean | string[] | undefined;
 

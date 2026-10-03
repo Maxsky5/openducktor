@@ -8,8 +8,12 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { readClaudePolicyField } from "./settings-claude-policy";
-import { ClaudePolicyCard, CLAUDE_POLICY_ROLES } from "./settings-claude-policy-card";
-import { CLAUDE_POLICY_GROUPS, type ClaudePolicyField } from "./settings-claude-policy-fields";
+import { ClaudePolicyCard } from "./settings-claude-policy-card";
+import {
+  CLAUDE_POLICY_GROUPS,
+  CLAUDE_POLICY_ROLES,
+  type ClaudePolicyField,
+} from "./settings-claude-policy-fields";
 import type { z } from "zod";
 
 const approvalField = CLAUDE_POLICY_GROUPS[0]!.fields[0]!;
