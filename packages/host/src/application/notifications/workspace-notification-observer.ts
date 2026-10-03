@@ -72,7 +72,10 @@ export const createWorkspaceNotificationObserver = ({
       }),
       projector: createSessionOccurrenceProjector({
         repositoryLabel: record.workspaceName,
-        resolveTask: (id) => state.tasks.get(id) ?? null,
+        resolveTask: (id) => {
+          const task = state.tasks.get(id);
+          return task ? { id: task.id, title: task.title } : null;
+        },
         resolveAssociation: (ref) => {
           if (!state.initialized) return null;
           const key = agentSessionRefKey(ref);

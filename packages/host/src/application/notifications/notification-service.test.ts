@@ -2,6 +2,7 @@ import { expect, mock, test } from "bun:test";
 import {
   globalConfigSchema,
   repoConfigSchema,
+  taskCardSchema,
   type AgentSessionLiveSnapshot,
   type AgentSessionLiveRef,
   type ExternalTaskSyncEvent,
@@ -25,6 +26,7 @@ import {
   type AgentSessionLiveStateService,
 } from "../agent-sessions/agent-session-live-state-service";
 import { createNotificationService } from "./notification-service";
+import type { TaskService } from "../tasks/task-service";
 const config = () =>
   globalConfigSchema.parse({
     version: 4,
@@ -76,7 +78,10 @@ const association = (repoPath = "/alpha", externalSessionId = "root"): Workspace
   updatedAt: 1,
   archivedAt: null,
 });
-const transition = (id: string, repoPath = "/alpha"): ExternalTaskSyncEvent => ({
+const transition = (
+  id: string,
+  repoPath = "/alpha",
+): Extract<ExternalTaskSyncEvent, { kind: "tasks_updated" }> => ({
   kind: "tasks_updated",
   eventId: id,
   repoPath,
@@ -113,7 +118,7 @@ const harness = (
     pathExists: () => Effect.succeed(true),
     join: (...parts) => parts.join("/"),
   };
-  const listTasks = mock(({ repoPath }: { repoPath: string }) => {
+  const listTasks = mock<TaskService["listTasks"]>(({ repoPath }) => {
     if (repoPath === options.failWorkspace)
       return Effect.fail(
         new HostOperationError({ operation: "test.read", message: "Task store unavailable" }),
@@ -122,7 +127,7 @@ const harness = (
       ? Effect.promise(() => options.initialRead!).pipe(Effect.as([]))
       : Effect.succeed([]);
   });
-  const listAssociations = mock(() => Effect.succeed([]));
+  const listAssociations = mock<TaskService["agentSessionsListForTasks"]>(() => Effect.succeed([]));
   const listActive = mock(({ repoPath }: { repoPath: string }) =>
     Effect.succeed([association(repoPath)]),
   );
@@ -358,6 +363,81 @@ test("two browsers add no notification baseline reads and share ordered committe
     await Effect.runPromise(h.service.dispose());
   }
 });
+test.each(["baseline", "committed"] as const)(
+  "workflow session notifications use %s task labels without leaking task records",
+  async (source) => {
+    const task = taskCardSchema.parse({
+      id: "task",
+      title: "Saved task",
+      description: "Private task description",
+      status: "in_progress",
+      issueType: "task",
+      createdAt: "2026-09-01T00:00:00Z",
+      updatedAt: "2026-09-01T00:00:00Z",
+    });
+    const h = harness({ baseline: [snapshot()] });
+    h.listTasks.mockImplementation(({ repoPath }) =>
+      Effect.succeed(repoPath === "/alpha" ? [task] : []),
+    );
+    h.listAssociations.mockImplementation(({ repoPath }) =>
+      Effect.succeed(
+        repoPath === "/alpha"
+          ? [
+              {
+                taskId: task.id,
+                agentSessions: [
+                  {
+                    externalSessionId: "root",
+                    runtimeKind: "codex",
+                    workingDirectory: "/alpha",
+                    role: "build",
+                    startedAt: "2026-09-01T00:00:00Z",
+                    selectedModel: null,
+                  },
+                ],
+              },
+            ]
+          : [],
+      ),
+    );
+    try {
+      await Effect.runPromise(h.service.initialize());
+      await flush();
+      if (source === "committed") {
+        h.service.acceptTask({
+          ...transition("task-renamed"),
+          taskSnapshots: [{ id: task.id, title: "Updated task", status: task.status }],
+          statusChanges: [],
+        });
+        await flush();
+      }
+      h.service.acceptLive(
+        {
+          type: "session_upsert",
+          session: snapshot({ pendingQuestions: [question("live-question")] }),
+        },
+        "live",
+      );
+      await flush();
+      expect(h.frames.filter((frame) => frame.type === "health" && frame.health.message)).toEqual(
+        [],
+      );
+      expect(occurrences(h.frames).map((frame) => frame.selected.occurrence)).toMatchObject([
+        {
+          kind: "agent.question_asked",
+          role: "build",
+          navigationTarget: { type: "pending_input", taskId: task.id, requestId: "live-question" },
+        },
+      ]);
+      expect(occurrences(h.frames)[0]?.selected.occurrence.task).toEqual({
+        id: task.id,
+        title: source === "baseline" ? "Saved task" : "Updated task",
+      });
+    } finally {
+      await Effect.runPromise(h.service.dispose());
+    }
+  },
+);
 test("baseline pending input is silent; live input during initialization survives later reads", async () => {
   const gate = Promise.withResolvers<void>();
   const h = harness({
