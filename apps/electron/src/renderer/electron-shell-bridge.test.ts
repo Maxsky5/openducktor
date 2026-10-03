@@ -388,6 +388,7 @@ describe("electron shell bridge", () => {
         sessions: baseline.sessions,
         cursor: baseline.cursor,
         isConnectionSnapshot: true,
+        runtimeGenerations: [],
       },
       transcriptEvent,
     ]);

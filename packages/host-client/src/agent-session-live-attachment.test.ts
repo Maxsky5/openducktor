@@ -122,6 +122,7 @@ test("a direct baseline covers state but keeps transcript content and later orde
       sessions: [],
       cursor: cursor(3),
       isConnectionSnapshot: true,
+      runtimeGenerations: [],
     },
     { ...output, stateCovered: true },
     later,

@@ -104,9 +104,8 @@ export const createAgentSessionLiveAttachment = (
         sessions: baseline.sessions,
         cursor: baseline.cursor,
         isConnectionSnapshot: true,
+        runtimeGenerations: baseline.runtimeGenerations,
       };
-      if (baseline.runtimeGenerations.length > 0)
-        snapshot.runtimeGenerations = baseline.runtimeGenerations;
       listener(snapshot);
       const runtimeChanges: AgentSessionLiveEnvelope[] = [];
       for (const runtimeKind of changed) {

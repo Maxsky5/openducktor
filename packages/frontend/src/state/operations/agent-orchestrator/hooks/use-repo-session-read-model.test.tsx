@@ -11,7 +11,11 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createSessionHistoryReadGeneration } from "../history/session-history-read-generation";
 import { createSessionMessagesState } from "../support/messages";
 import { CODEX_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import type { AgentRuntimeCatalog, AgentSessionHistoryMessage } from "@openducktor/core";
+import type {
+  AgentEnginePort,
+  AgentRuntimeCatalog,
+  AgentSessionHistoryMessage,
+} from "@openducktor/core";
 import type {
   AgentSessionLiveEnvelope,
   AgentSessionLiveRefreshInput,
@@ -2364,6 +2368,81 @@ describe("useRepoSessionReadModel", () => {
       );
     } finally {
       await state.harness.unmount();
+    }
+  });
+
+  test("a fresh attachment clears the stopped runtime generation before history revalidation", async () => {
+    const state = createState((emit, index) => {
+      const attachment = createAgentSessionLiveAttachment("/repo", emit);
+      attachment.install({
+        repoPath: "/repo",
+        sessions: index === 1 ? [snapshot()] : [],
+        runtimeGenerations:
+          index === 1 ? [{ runtimeKind: "codex", generation: "stopped-runtime" }] : [],
+        cursor: { hostEpoch: "host", sequence: index },
+        complete: true,
+        failures: [],
+      });
+    });
+    const adapter = {
+      loadSessionHistory: mock(
+        async (_input: Parameters<AgentEnginePort["loadSessionHistory"]>[0]) => [
+          {
+            messageId: "saved-message",
+            role: "assistant" as const,
+            timestamp: record.startedAt,
+            text: "Saved history",
+            parts: [],
+          },
+        ],
+      ),
+    };
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(state.getSession()?.runtimeGeneration).toBe("stopped-runtime");
+      await state.harness.run(() => {
+        state.updateSession(snapshot().ref, (session) => ({
+          ...session,
+          historyLoadState: "loaded",
+          historyCompleteness: "complete",
+          messages: createSessionMessagesState(record.externalSessionId, [
+            {
+              id: "saved-message",
+              role: "assistant",
+              content: "Old history",
+              timestamp: record.startedAt,
+            },
+          ]),
+        }));
+      });
+      await state.harness.unmount();
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(state.getSession()).not.toBeNull();
+      expect(state.getSession()?.runtimeGeneration).toBeUndefined();
+      await state.harness.run(async () => {
+        await reloadSessionHistoryIntoStore({
+          repoPath: "/repo",
+          adapter,
+          identity: snapshot().ref,
+          readSessionSnapshot: state.getStoredSession,
+          updateSession: state.updateSession,
+          isStaleRepoOperation: () => false,
+          historyReadGeneration: createSessionHistoryReadGeneration(),
+          loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+        });
+      });
+      expect(adapter.loadSessionHistory).toHaveBeenCalledTimes(1);
+      expect(adapter.loadSessionHistory.mock.calls[0]?.[0]).not.toHaveProperty(
+        "expectedRuntimeGeneration",
+      );
+      expect(sessionMessagesToArray(state.getSession()!).map((message) => message.content)).toEqual(
+        ["Saved history"],
+      );
+    } finally {
+      await state.harness.unmount();
+      state.queryClient.clear();
     }
   });
 
