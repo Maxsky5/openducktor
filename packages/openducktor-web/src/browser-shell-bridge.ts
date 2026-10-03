@@ -23,6 +23,7 @@ import {
   subscribeLocalHostAzureDevOpsConnectionUpdates,
   subscribeLocalHostDevServerEvents,
   subscribeLocalHostRunEvents,
+  subscribeLocalHostNotificationStream,
   subscribeLocalHostTaskStream,
   subscribeLocalHostWorkspaceSessionUpdates,
 } from "./local-host-transport";
@@ -95,6 +96,7 @@ export const createBrowserShellBridge = (): ShellBridge => {
     subscribeAzureDevOpsConnectionUpdates: subscribeLocalHostAzureDevOpsConnectionUpdates,
     subscribeDevServerEvents: subscribeLocalHostDevServerEvents,
     observeAgentSessionLive: observeLocalHostAgentSessions,
+    subscribeNotificationStream: subscribeLocalHostNotificationStream,
     subscribeTaskStream: subscribeLocalHostTaskStream,
     openExternalUrl: (url) => runWebBoundary(openExternalUrlEffect(url)),
     resolveLocalAttachmentPreviewSrc: (path) =>

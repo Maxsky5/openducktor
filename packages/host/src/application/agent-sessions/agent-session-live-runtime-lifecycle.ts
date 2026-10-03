@@ -11,6 +11,7 @@ import { type HostError, HostOperationError } from "../../effect/host-errors";
 import {
   AgentSessionLiveRegistration,
   type AgentSessionLiveAdapterChange,
+  type AgentSessionLiveAdapterPort,
   type AgentSessionLiveAdapterRegistryPort,
 } from "../../ports/agent-session-live-adapter-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
@@ -29,6 +30,7 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
   publishChanges,
   publishEnvelope,
   listSnapshots,
+  refreshSnapshots,
 }: {
   readonly adapterRegistry: AgentSessionLiveAdapterRegistryPort;
   readonly coordinator: LiveStateCoordinator;
@@ -39,6 +41,9 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
   readonly listSnapshots: (
     repoPath: string,
   ) => Effect.Effect<ReadonlyArray<AgentSessionLiveSnapshot>, HostError>;
+  readonly refreshSnapshots: (
+    adapter: AgentSessionLiveAdapterPort,
+  ) => Effect.Effect<void, HostError>;
 }): LiveRuntimeLifecycle => {
   const detachedBindings = new WeakSet<AgentSessionLiveRegistration>();
   const activeRegistrations = new WeakSet<AgentSessionLiveRegistration>();
@@ -69,7 +74,7 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
             ),
           ),
         );
-        yield* adapter.refreshSnapshots?.(adapter.binding.repoPath) ?? Effect.void;
+        yield* refreshSnapshots(adapter);
         yield* coordinator.run(
           Effect.gen(function* () {
             yield* requireAttached(adapter.binding);
@@ -85,6 +90,7 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
               validatedSnapshots.map((snapshot) => ({
                 type: "session_upsert" as const,
                 snapshot,
+                provenance: "baseline" as const,
               })),
             );
           }),

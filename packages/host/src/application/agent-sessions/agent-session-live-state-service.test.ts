@@ -155,6 +155,53 @@ const expectHostFailure = async <Success>(
 };
 
 describe("createAgentSessionLiveStateService", () => {
+  test("does not read saved roots when the adapter has no snapshot refresh", async () => {
+    const events: AgentSessionLiveEnvelope[] = [];
+    const service = createAgentSessionLiveStateService({
+      adapterRegistry: createLiveSessionAdapterRegistry(),
+      readSessionRootRefs: () => Effect.dieMessage("Unexpected saved root read."),
+      faultLog: () => Effect.void,
+      publish: (event) => events.push(event),
+    });
+    const snapshot = liveSnapshot("session-1");
+    await Effect.runPromise(
+      service.registerRuntimeAdapter(
+        fakeAdapter({
+          runtimeId: "runtime-1",
+          snapshots: () => [snapshot],
+        }),
+      ),
+    );
+    expect(events).toMatchObject([{ type: "session_upsert", session: snapshot }]);
+  });
+
+  test.each(["roots", "snapshots"])(
+    "failed %s reads reject runtime registration",
+    async (source) => {
+      const failure = new HostOperationError({
+        operation: `test.${source}`,
+        message: `Cannot read ${source}.`,
+      });
+      const adapterRegistry = createLiveSessionAdapterRegistry();
+      const events: AgentSessionLiveEnvelope[] = [];
+      const service = createAgentSessionLiveStateService({
+        adapterRegistry,
+        readSessionRootRefs: () => (source === "roots" ? Effect.fail(failure) : Effect.succeed([])),
+        faultLog: () => Effect.void,
+        publish: (event) => events.push(event),
+      });
+      const adapter = fakeAdapter({
+        runtimeId: "runtime-1",
+        snapshots: () => [liveSnapshot("session-1")],
+        refreshEffect: () => (source === "snapshots" ? Effect.fail(failure) : Effect.void),
+      });
+
+      expect(await expectHostFailure(service.registerRuntimeAdapter(adapter))).toBe(failure);
+      expect(adapterRegistry.listForRepo("/repo")).toEqual([]);
+      expect(events).toEqual([]);
+    },
+  );
+
   test("rejects a session start for a blocked workspace before resolving an adapter", async () => {
     const withProcessStartAdmission: WithProcessStartAdmission = (repoPath) =>
       Effect.fail(

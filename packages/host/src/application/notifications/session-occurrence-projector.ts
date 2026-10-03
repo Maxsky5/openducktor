@@ -1,27 +1,22 @@
-import { normalizeSessionErrorMessage } from "@/lib/session-error-message";
 import type {
   AgentSessionLiveEnvelope,
-  AgentSessionLivePendingApprovalRequest,
   AgentSessionLivePendingQuestionRequest,
   AgentSessionLiveSnapshot,
   AgentSessionTranscriptEvent,
   AgentSessionScope,
-  NotificationNavigationTarget,
   NotificationOccurrence,
-  NotificationSessionIdentity,
 } from "@openducktor/contracts";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { pendingInputIdentity } from "@/lib/pending-input-identity";
-
-type NotificationTaskIdentity = {
-  id: string;
-  title?: string;
-};
+import { agentSessionRefKey, normalizeSessionErrorMessage } from "@openducktor/core";
+import { pendingInputIdentity } from "./pending-input-identity";
+import {
+  createSessionNotificationBuilder,
+  toNotificationStatus,
+} from "./session-notification-builder";
 
 type CreateSessionOccurrenceProjectorOptions = {
   repositoryLabel: string;
   resolveAssociation(ref: AgentSessionLiveSnapshot["ref"]): AgentSessionScope | null;
-  resolveTask(taskId: string): NotificationTaskIdentity | null;
+  resolveTask(taskId: string): { id: string; title?: string } | null;
 };
 
 type SessionProjection = {
@@ -30,12 +25,13 @@ type SessionProjection = {
   executionEpisodeId: string | undefined;
   errorNotified: boolean;
   idleNotified: boolean;
-  isSubagent: boolean;
   lastAssistantMessage: { id: string; text: string } | null;
   pendingApprovals: Set<string>;
   pendingQuestions: Set<string>;
   running: boolean;
-  ref: AgentSessionLiveSnapshot["ref"];
+  unownedInputs: UnownedPendingInputs | null;
+  unownedTerminals: Map<string, NotificationOccurrence>;
+  childQuestions: Map<string, AgentSessionLivePendingQuestionRequest>;
 };
 
 type UnownedPendingInputs = {
@@ -45,93 +41,29 @@ type UnownedPendingInputs = {
   liveQuestions: Set<string>;
 };
 
-const toSessionIdentity = (ref: AgentSessionLiveSnapshot["ref"]): NotificationSessionIdentity => ({
-  externalSessionId: ref.externalSessionId,
-  runtimeKind: ref.runtimeKind,
-  workingDirectory: ref.workingDirectory,
-});
-
-const createProjection = (
-  snapshot: AgentSessionLiveSnapshot,
-  association: AgentSessionScope | null,
-): SessionProjection => ({
-  association,
-  snapshot,
-  executionEpisodeId: snapshot.executionEpisodeId,
-  errorNotified: false,
-  idleNotified: false,
-  isSubagent: snapshot.parentExternalSessionId !== undefined,
-  lastAssistantMessage: null,
-  pendingApprovals: new Set(snapshot.pendingApprovals.map(pendingInputIdentity)),
-  pendingQuestions: new Set(snapshot.pendingQuestions.map(pendingInputIdentity)),
-  running: snapshot.activity !== "idle",
-  ref: snapshot.ref,
-});
-
-const isExpectedUserStop = (
-  event: Extract<AgentSessionTranscriptEvent, { type: "session_finished" }>,
-): boolean => {
-  const message = event.message.trim().toLowerCase();
-  return message === "session stopped" || message === "runtime stopped";
-};
-
-const toNotificationStatus = (message: string): string =>
-  message.trim().replace(/\s+/g, " ").slice(0, 240);
-
-const pendingRequestsByIdentity = <Request extends { requestId: string }>(requests: Request[]) =>
-  new Map(requests.map((request) => [pendingInputIdentity(request), request]));
-
-const permissionStatus = (request: AgentSessionLivePendingApprovalRequest): string => {
-  const summary = request.summary?.trim() || request.title.trim();
-  const action =
-    request.command?.command ??
-    request.action?.description ??
-    request.action?.name ??
-    request.tool?.title ??
-    request.tool?.name;
-  return (
-    toNotificationStatus([summary, action].filter(Boolean).join(": ")) ||
-    "Approval is needed to continue."
-  );
-};
-
-const questionStatus = (request: AgentSessionLivePendingQuestionRequest): string => {
-  const question = request.questions[0]?.question.trim() || "Your answer is needed to continue.";
-  const remaining = request.questions.length - 1;
-  const suffix = remaining > 0 ? ` +${remaining} more question${remaining === 1 ? "" : "s"}` : "";
-  return `${toNotificationStatus(question).slice(0, 240 - suffix.length)}${suffix}`;
-};
-
-const executionEpisodeId = (projection: SessionProjection): string => {
-  if (!projection.executionEpisodeId) {
-    throw new Error("The live Agent Session has no execution episode ID. Reload to reconnect.");
-  }
-  return projection.executionEpisodeId;
-};
-
+/**
+ * Keep live requests until their session has an owner. Baselines seed state without
+ * new alerts, and execution episode IDs prevent repeated idle and error alerts.
+ */
 export const createSessionOccurrenceProjector = ({
   repositoryLabel,
   resolveAssociation,
   resolveTask,
 }: CreateSessionOccurrenceProjectorOptions) => {
+  const { sessionOccurrence, sessionTarget, projectPendingInput, setRepositoryLabel } =
+    createSessionNotificationBuilder({ repositoryLabel, resolveTask });
   const sessions = new Map<string, SessionProjection>();
-  const unownedInputs = new Map<string, UnownedPendingInputs>();
-  const unownedTerminals = new Map<string, Map<string, NotificationOccurrence>>();
-  const deferredChildQuestions = new Map<
-    string,
-    Map<string, AgentSessionLivePendingQuestionRequest>
-  >();
 
-  const observeUnownedInputs = (snapshot: AgentSessionLiveSnapshot, live: boolean): void => {
-    const key = agentSessionIdentityKey(snapshot.ref);
+  const observeUnownedInputs = (projection: SessionProjection, live: boolean): void => {
+    const { snapshot } = projection;
     if (snapshot.parentExternalSessionId !== undefined) {
-      unownedInputs.delete(key);
+      projection.unownedInputs = null;
       return;
     }
-    const previous = unownedInputs.get(key);
+    const previous = projection.unownedInputs;
     const approvals = new Set(snapshot.pendingApprovals.map(pendingInputIdentity));
     const questions = new Set(snapshot.pendingQuestions.map(pendingInputIdentity));
-    unownedInputs.set(key, {
+    projection.unownedInputs = {
       approvals,
       questions,
       liveApprovals: new Set(
@@ -144,47 +76,7 @@ export const createSessionOccurrenceProjector = ({
           (id) => previous?.liveQuestions.has(id) || (live && !previous?.questions.has(id)),
         ),
       ),
-    });
-  };
-
-  const sessionOccurrence = (
-    projection: SessionProjection,
-    input: {
-      kind:
-        | "agent.permission_requested"
-        | "agent.question_asked"
-        | "agent.session_error"
-        | "agent.session_idle";
-      suffix: string;
-      status: string;
-      navigationTarget: NotificationNavigationTarget;
-    },
-  ): NotificationOccurrence => {
-    const occurrence: NotificationOccurrence = {
-      occurrenceId: `${input.kind}:${agentSessionIdentityKey(projection.ref)}:${input.suffix}`,
-      kind: input.kind,
-      repoPath: projection.ref.repoPath,
-      repositoryLabel,
-      status: input.status,
-      navigationTarget: input.navigationTarget,
     };
-    if (projection.association?.kind === "workflow") {
-      const taskId = projection.association.taskId;
-      occurrence.task = resolveTask(taskId) ?? { id: taskId };
-      occurrence.role = projection.association.role;
-    }
-    return occurrence;
-  };
-
-  const sessionTarget = (
-    projection: SessionProjection,
-  ): Omit<Extract<NotificationNavigationTarget, { type: "agent_session" }>, "type"> => {
-    const target: Omit<Extract<NotificationNavigationTarget, { type: "agent_session" }>, "type"> = {
-      repoPath: projection.ref.repoPath,
-      session: toSessionIdentity(projection.ref),
-    };
-    if (projection.association?.kind === "workflow") target.taskId = projection.association.taskId;
-    return target;
   };
 
   const publishTerminal = (
@@ -192,31 +84,23 @@ export const createSessionOccurrenceProjector = ({
     occurrence: NotificationOccurrence,
   ): NotificationOccurrence[] => {
     if (projection.association) return [occurrence];
-    const key = agentSessionIdentityKey(projection.ref);
-    let terminals = unownedTerminals.get(key);
-    if (!terminals) {
-      terminals = new Map();
-      unownedTerminals.set(key, terminals);
-    }
     // One entry per episode also lets an error replace a deferred idle notice.
-    terminals.set(executionEpisodeId(projection), occurrence);
+    projection.unownedTerminals.set(executionEpisodeId(projection), occurrence);
     return [];
   };
 
-  const reconcileTerminalOwnership = (projection: SessionProjection): NotificationOccurrence[] => {
-    const key = agentSessionIdentityKey(projection.ref);
-    if (projection.isSubagent) {
-      unownedInputs.delete(key);
-      unownedTerminals.delete(key);
+  const flushOwnedTerminals = (projection: SessionProjection): NotificationOccurrence[] => {
+    if (projection.snapshot.parentExternalSessionId !== undefined) {
+      projection.unownedInputs = null;
+      projection.unownedTerminals.clear();
       return [];
     }
     if (!projection.association) return [];
-    const terminals = unownedTerminals.get(key);
-    unownedTerminals.delete(key);
-    if (!terminals) return [];
-    if (projection.association.kind === "repository") return [...terminals.values()];
+    const terminals = [...projection.unownedTerminals.values()];
+    projection.unownedTerminals.clear();
+    if (projection.association.kind === "repository") return terminals;
     const { taskId, role } = projection.association;
-    return [...terminals.values()].map((occurrence) => ({
+    return terminals.map((occurrence) => ({
       ...occurrence,
       task: resolveTask(taskId) ?? { id: taskId },
       role,
@@ -264,39 +148,13 @@ export const createSessionOccurrenceProjector = ({
     );
   };
 
-  const projectPendingInput = (
-    projection: SessionProjection,
-    input:
-      | { inputKind: "permission"; request: AgentSessionLivePendingApprovalRequest }
-      | { inputKind: "question"; request: AgentSessionLivePendingQuestionRequest },
-  ): NotificationOccurrence => {
-    const requestIdentity = pendingInputIdentity(input.request);
-    const kind =
-      input.inputKind === "permission" ? "agent.permission_requested" : "agent.question_asked";
-    const status =
-      input.inputKind === "permission"
-        ? permissionStatus(input.request)
-        : questionStatus(input.request);
-    return sessionOccurrence(projection, {
-      kind,
-      suffix: requestIdentity,
-      status,
-      navigationTarget: {
-        type: "pending_input",
-        ...sessionTarget(projection),
-        inputKind: input.inputKind,
-        requestId: requestIdentity,
-      },
-    });
-  };
-
   const findOwnedAncestor = (snapshot: AgentSessionLiveSnapshot): SessionProjection | null => {
     let parentExternalSessionId = snapshot.parentExternalSessionId;
     const visited = new Set([snapshot.ref.externalSessionId]);
     while (parentExternalSessionId && !visited.has(parentExternalSessionId)) {
       visited.add(parentExternalSessionId);
       const parent = sessions.get(
-        agentSessionIdentityKey({
+        agentSessionRefKey({
           ...snapshot.ref,
           externalSessionId: parentExternalSessionId,
         }),
@@ -309,13 +167,13 @@ export const createSessionOccurrenceProjector = ({
   };
 
   const projectChildBackgroundQuestions = (
-    snapshot: AgentSessionLiveSnapshot,
+    projection: SessionProjection,
     previousQuestions: ReadonlySet<string>,
   ): NotificationOccurrence[] => {
+    const { snapshot } = projection;
     if (!snapshot.parentExternalSessionId) return [];
-    const childKey = agentSessionIdentityKey(snapshot.ref);
     const pending = pendingRequestsByIdentity(snapshot.pendingQuestions);
-    const deferred = deferredChildQuestions.get(childKey) ?? new Map();
+    const deferred = projection.childQuestions;
     for (const identity of deferred.keys()) {
       const request = pending.get(identity);
       if (!request || request.blocking !== false) deferred.delete(identity);
@@ -325,72 +183,68 @@ export const createSessionOccurrenceProjector = ({
         deferred.set(identity, request);
       }
     }
-    if (deferred.size === 0) {
-      deferredChildQuestions.delete(childKey);
-      return [];
-    }
+    if (deferred.size === 0) return [];
     const owner = findOwnedAncestor(snapshot);
-    if (!owner) {
-      deferredChildQuestions.set(childKey, deferred);
-      return [];
-    }
+    if (!owner) return [];
 
-    deferredChildQuestions.delete(childKey);
-    return [...deferred.values()].map((request) =>
+    const requests = [...deferred.values()];
+    deferred.clear();
+    return requests.map((request) =>
       projectPendingInput(owner, { inputKind: "question", request }),
     );
   };
 
   const projectDeferredChildQuestions = (): NotificationOccurrence[] => {
     const occurrences: NotificationOccurrence[] = [];
-    for (const childKey of deferredChildQuestions.keys()) {
-      const child = sessions.get(childKey);
-      if (!child) {
-        deferredChildQuestions.delete(childKey);
-        continue;
-      }
-      occurrences.push(...projectChildBackgroundQuestions(child.snapshot, child.pendingQuestions));
+    for (const child of sessions.values()) {
+      if (child.childQuestions.size > 0)
+        occurrences.push(...projectChildBackgroundQuestions(child, child.pendingQuestions));
     }
     return occurrences;
   };
 
-  const applyUpsert = (snapshot: AgentSessionLiveSnapshot): NotificationOccurrence[] => {
-    const key = agentSessionIdentityKey(snapshot.ref);
+  const applyUpsert = (
+    snapshot: AgentSessionLiveSnapshot,
+    live = true,
+  ): NotificationOccurrence[] => {
+    const key = agentSessionRefKey(snapshot.ref);
     const association = resolveAssociation(snapshot.ref);
+    const previous = sessions.get(key);
+    const projection = previous ?? createProjection(snapshot, association);
+    projection.snapshot = snapshot;
     if (!association) {
-      const previous = sessions.get(key);
       if (previous?.association) {
-        unownedInputs.set(key, {
+        projection.unownedInputs = {
           approvals: previous.pendingApprovals,
           questions: previous.pendingQuestions,
           liveApprovals: new Set(),
           liveQuestions: new Set(),
-        });
+        };
       }
-      observeUnownedInputs(snapshot, true);
+      observeUnownedInputs(projection, live);
     }
-    const projection = sessions.get(key);
-    if (!projection) {
-      if (unownedInputs.has(key)) observeUnownedInputs(snapshot, true);
-      const owned = createProjection(snapshot, association);
-      sessions.set(key, owned);
-      if (owned.isSubagent) {
+    if (!previous) {
+      sessions.set(key, projection);
+      if (!live) return projectDeferredChildQuestions();
+      if (association && snapshot.parentExternalSessionId === undefined) {
+        projection.pendingApprovals.clear();
+        projection.pendingQuestions.clear();
+        return applyUpsert(snapshot);
+      }
+      if (snapshot.parentExternalSessionId !== undefined) {
         return [
-          ...projectChildBackgroundQuestions(snapshot, new Set()),
+          ...projectChildBackgroundQuestions(projection, new Set()),
           ...projectDeferredChildQuestions(),
         ];
       }
       return [
-        ...(association ? reconcilePendingOwnership(owned, snapshot) : []),
+        ...(association ? flushOwnedInputs(projection) : []),
         ...projectDeferredChildQuestions(),
       ];
     }
 
     const ownershipResolved = !projection.association && association !== null;
     projection.association = association;
-    projection.snapshot = snapshot;
-    projection.isSubagent = snapshot.parentExternalSessionId !== undefined;
-    projection.ref = snapshot.ref;
     if (projection.executionEpisodeId !== snapshot.executionEpisodeId) {
       projection.executionEpisodeId = snapshot.executionEpisodeId;
       projection.errorNotified = false;
@@ -398,10 +252,19 @@ export const createSessionOccurrenceProjector = ({
       projection.lastAssistantMessage = null;
       projection.running = false;
     }
-    if (projection.isSubagent) {
-      unownedInputs.delete(key);
-      unownedTerminals.delete(key);
-      const occurrences = projectChildBackgroundQuestions(snapshot, projection.pendingQuestions);
+    if (!live) {
+      projection.pendingApprovals = new Set(snapshot.pendingApprovals.map(pendingInputIdentity));
+      projection.pendingQuestions = new Set(snapshot.pendingQuestions.map(pendingInputIdentity));
+      return [
+        ...flushOwnedInputs(projection),
+        ...flushOwnedTerminals(projection),
+        ...projectDeferredChildQuestions(),
+      ];
+    }
+    if (projection.snapshot.parentExternalSessionId !== undefined) {
+      projection.unownedInputs = null;
+      projection.unownedTerminals.clear();
+      const occurrences = projectChildBackgroundQuestions(projection, projection.pendingQuestions);
       projection.pendingApprovals = new Set(snapshot.pendingApprovals.map(pendingInputIdentity));
       projection.pendingQuestions = new Set(snapshot.pendingQuestions.map(pendingInputIdentity));
       return [...occurrences, ...projectDeferredChildQuestions()];
@@ -409,10 +272,10 @@ export const createSessionOccurrenceProjector = ({
 
     const occurrences: NotificationOccurrence[] = [];
     if (ownershipResolved) {
-      observeUnownedInputs(snapshot, true);
+      observeUnownedInputs(projection, live);
       projection.pendingApprovals = new Set(snapshot.pendingApprovals.map(pendingInputIdentity));
       projection.pendingQuestions = new Set(snapshot.pendingQuestions.map(pendingInputIdentity));
-      occurrences.push(...reconcilePendingOwnership(projection, snapshot));
+      occurrences.push(...flushOwnedInputs(projection));
     }
     const nextApprovals = pendingRequestsByIdentity(snapshot.pendingApprovals);
     const nextQuestions = pendingRequestsByIdentity(snapshot.pendingQuestions);
@@ -432,21 +295,15 @@ export const createSessionOccurrenceProjector = ({
     if (snapshot.activity !== "idle" && !projection.errorNotified && !projection.idleNotified) {
       projection.running = true;
     }
-    return [
-      ...reconcileTerminalOwnership(projection),
-      ...occurrences,
-      ...projectDeferredChildQuestions(),
-    ];
+    return [...flushOwnedTerminals(projection), ...occurrences, ...projectDeferredChildQuestions()];
   };
 
-  const reconcilePendingOwnership = (
-    projection: SessionProjection,
-    snapshot: AgentSessionLiveSnapshot,
-  ): NotificationOccurrence[] => {
-    const key = agentSessionIdentityKey(projection.ref);
-    const pending = unownedInputs.get(key);
-    unownedInputs.delete(key);
-    if (!pending || projection.isSubagent) return [];
+  const flushOwnedInputs = (projection: SessionProjection): NotificationOccurrence[] => {
+    const { snapshot } = projection;
+    if (!projection.association) return [];
+    const pending = projection.unownedInputs;
+    projection.unownedInputs = null;
+    if (!pending || projection.snapshot.parentExternalSessionId !== undefined) return [];
     const occurrences: NotificationOccurrence[] = [];
     for (const [identity, request] of pendingRequestsByIdentity(snapshot.pendingApprovals)) {
       if (pending.liveApprovals.has(identity)) {
@@ -462,8 +319,8 @@ export const createSessionOccurrenceProjector = ({
   };
 
   const applyTranscriptEvent = (event: AgentSessionTranscriptEvent): NotificationOccurrence[] => {
-    const projection = sessions.get(agentSessionIdentityKey(event.sessionRef));
-    if (!projection || projection.isSubagent) {
+    const projection = sessions.get(agentSessionRefKey(event.sessionRef));
+    if (!projection || projection.snapshot.parentExternalSessionId !== undefined) {
       return [];
     }
 
@@ -505,25 +362,58 @@ export const createSessionOccurrenceProjector = ({
   };
 
   return {
-    reconcileAssociations(): NotificationOccurrence[] {
-      return [...sessions.values()].flatMap((projection) => applyUpsert(projection.snapshot));
-    },
-    accept(envelope: AgentSessionLiveEnvelope): NotificationOccurrence[] {
-      if (envelope.type === "snapshot") {
-        if (envelope.isConnectionSnapshot) {
-          unownedInputs.clear();
-          unownedTerminals.clear();
+    invalidateOwnership(rootKey: string) {
+      const removed = new Set([rootKey]);
+      for (const [key, projection] of sessions) {
+        let parent = projection.snapshot.parentExternalSessionId;
+        const visited = new Set<string>();
+        while (parent && !visited.has(parent)) {
+          visited.add(parent);
+          const parentKey = agentSessionRefKey({
+            ...projection.snapshot.ref,
+            externalSessionId: parent,
+          });
+          if (parentKey === rootKey) {
+            removed.add(key);
+            break;
+          }
+          parent = sessions.get(parentKey)?.snapshot.parentExternalSessionId;
         }
+      }
+      for (const key of removed) {
+        const projection = sessions.get(key);
+        if (projection) {
+          clearDeferred(projection);
+          projection.association = null;
+        }
+      }
+    },
+    setRepositoryLabel,
+    reconcileAssociations(): NotificationOccurrence[] {
+      return [...sessions.values()].flatMap((projection) =>
+        applyUpsert(projection.snapshot, false),
+      );
+    },
+    accept(
+      envelope: AgentSessionLiveEnvelope,
+      provenance: "live" | "baseline" = "live",
+    ): NotificationOccurrence[] {
+      if (envelope.type === "snapshot") {
         const previousSessions = new Map(sessions);
         sessions.clear();
-        const retained = new Set<string>();
         const occurrences: NotificationOccurrence[] = [];
         for (const snapshot of envelope.sessions) {
-          const key = agentSessionIdentityKey(snapshot.ref);
-          retained.add(key);
+          const key = agentSessionRefKey(snapshot.ref);
           const association = resolveAssociation(snapshot.ref);
           const projection = createProjection(snapshot, association);
           const previous = previousSessions.get(key);
+          if (previous) {
+            projection.childQuestions = previous.childQuestions;
+            if (!envelope.isConnectionSnapshot) {
+              projection.unownedInputs = previous.unownedInputs;
+              projection.unownedTerminals = previous.unownedTerminals;
+            }
+          }
           if (
             !envelope.isConnectionSnapshot &&
             previous &&
@@ -536,36 +426,69 @@ export const createSessionOccurrenceProjector = ({
           }
           sessions.set(key, projection);
           if (association) {
-            occurrences.push(...reconcilePendingOwnership(projection, snapshot));
+            occurrences.push(...flushOwnedInputs(projection));
           } else {
-            observeUnownedInputs(snapshot, false);
+            observeUnownedInputs(projection, false);
           }
-          occurrences.push(...reconcileTerminalOwnership(projection));
-        }
-        for (const key of unownedInputs.keys()) {
-          if (!retained.has(key)) unownedInputs.delete(key);
-        }
-        for (const key of unownedTerminals.keys()) {
-          if (!retained.has(key)) unownedTerminals.delete(key);
+          occurrences.push(...flushOwnedTerminals(projection));
         }
         occurrences.push(...projectDeferredChildQuestions());
         return occurrences;
       }
       if (envelope.type === "session_upsert") {
-        return applyUpsert(envelope.session);
+        return applyUpsert(envelope.session, provenance === "live");
       }
       if (envelope.type === "session_removed") {
-        const key = agentSessionIdentityKey(envelope.ref);
+        // A runtime can return later. Keep live child questions until their ancestor returns.
+        const key = agentSessionRefKey(envelope.ref);
         sessions.delete(key);
-        unownedInputs.delete(key);
-        unownedTerminals.delete(key);
-        deferredChildQuestions.delete(key);
         return [];
       }
       if (envelope.type === "transcript_event") {
-        return applyTranscriptEvent(envelope.event);
+        return provenance === "live" ? applyTranscriptEvent(envelope.event) : [];
       }
       return [];
     },
   };
+};
+
+const createProjection = (
+  snapshot: AgentSessionLiveSnapshot,
+  association: AgentSessionScope | null,
+): SessionProjection => ({
+  association,
+  snapshot,
+  executionEpisodeId: snapshot.executionEpisodeId,
+  errorNotified: false,
+  idleNotified: false,
+  lastAssistantMessage: null,
+  pendingApprovals: new Set(snapshot.pendingApprovals.map(pendingInputIdentity)),
+  pendingQuestions: new Set(snapshot.pendingQuestions.map(pendingInputIdentity)),
+  running: snapshot.activity !== "idle",
+  unownedInputs: null,
+  unownedTerminals: new Map(),
+  childQuestions: new Map(),
+});
+
+const clearDeferred = (projection: SessionProjection): void => {
+  projection.unownedInputs = null;
+  projection.unownedTerminals.clear();
+  projection.childQuestions.clear();
+};
+
+const isExpectedUserStop = (
+  event: Extract<AgentSessionTranscriptEvent, { type: "session_finished" }>,
+): boolean => {
+  const message = event.message.trim().toLowerCase();
+  return message === "session stopped" || message === "runtime stopped";
+};
+
+const pendingRequestsByIdentity = <Request extends { requestId: string }>(requests: Request[]) =>
+  new Map(requests.map((request) => [pendingInputIdentity(request), request]));
+
+const executionEpisodeId = (projection: SessionProjection): string => {
+  if (!projection.executionEpisodeId) {
+    throw new Error("The live Agent Session has no execution episode ID. Reload to reconnect.");
+  }
+  return projection.executionEpisodeId;
 };

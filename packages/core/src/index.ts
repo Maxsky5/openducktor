@@ -28,3 +28,7 @@ export * from "./types/planner";
 export type { AgentSessionQueryParentPort } from "./ports/agent-session-query-parent";
 
 export * from "./ports/runtime-session-import";
+
+export * from "./notifications/notification-occurrence";
+export * from "./notifications/notification-replay-reason";
+export * from "./notifications/session-error-message";

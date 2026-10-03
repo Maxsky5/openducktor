@@ -43,7 +43,6 @@ export type NotificationDispatchFailure = {
 };
 
 type CreateNotificationPolicyOptions = {
-  loadSettings(): Promise<NotificationSettings>;
   inApp: InAppNotificationAdapter;
   os: OsNotificationAdapter;
   sound: SoundNotificationAdapter;
@@ -72,7 +71,6 @@ const targetIncludesOs = (
 ): boolean => target === "os" || target === "both";
 
 export const createNotificationPolicy = ({
-  loadSettings,
   inApp,
   os,
   sound,
@@ -96,27 +94,15 @@ export const createNotificationPolicy = ({
     });
   };
 
-  const loadSettingsCandidate = (
-    occurrence: NotificationOccurrence,
-  ): Promise<NotificationSettings | null> =>
-    loadSettings()
-      .then((settings) => {
-        const parsed = notificationSettingsSchema.parse(settings);
-        onSettingsRecovered();
-        return parsed;
-      })
-      .catch((cause: unknown) => {
-        reportFailure(occurrence, "settings", cause);
-        return null;
-      });
-
   const dispatch = async (
     rawOccurrence: NotificationOccurrence,
     context: NotificationDispatchContext,
     settings: NotificationSettings,
   ): Promise<NotificationDispatchResult> => {
     const occurrence = notificationOccurrenceSchema.parse(rawOccurrence);
-    const kindSettings = settings.kinds[occurrence.kind];
+    const selectedSettings = notificationSettingsSchema.removeDefault().parse(settings);
+    onSettingsRecovered();
+    const kindSettings = selectedSettings.kinds[occurrence.kind];
     if (!kindSettings.enabled) {
       return { externalPlan: null, inAppDelivered: false };
     }
@@ -176,5 +162,5 @@ export const createNotificationPolicy = ({
     return { externalPlan, inAppDelivered };
   };
 
-  return { dispatch, loadSettingsCandidate };
+  return { dispatch };
 };

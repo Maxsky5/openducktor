@@ -314,7 +314,9 @@ describe("OpenCode host live-session state", () => {
       throw new Error("Expected a live OpenDucktor parent.");
     }
 
-    expect(applySources(state, [])).toEqual([{ type: "session_removed", ref: parentRef }]);
+    expect(applySources(state, [])).toEqual([
+      { type: "session_removed", ref: parentRef, provenance: "baseline" },
+    ]);
     expect(state.listSnapshots()).toEqual([]);
   });
 
@@ -340,7 +342,7 @@ describe("OpenCode host live-session state", () => {
     });
 
     expect(state.applySessionSources({ sources: [], failures: [] }, readVersions)).toEqual([
-      { type: "session_removed", ref: parentRef },
+      { type: "session_removed", ref: parentRef, provenance: "baseline" },
     ]);
     const child = state.listSnapshots()[0]!;
     expect(child.ref.externalSessionId).toBe("child");
@@ -385,6 +387,7 @@ describe("OpenCode host live-session state", () => {
         type: "fault",
         repoPath: runtime.repoPath,
         ref: parentRef,
+        provenance: "baseline",
         operation: "opencode-live-session.refresh-session",
         message: `Failed to refresh OpenCode session 'parent' in '${parentRef.workingDirectory}': status failed`,
       },

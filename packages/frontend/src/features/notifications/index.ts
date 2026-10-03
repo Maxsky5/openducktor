@@ -5,8 +5,4 @@ export * from "./notification-policy";
 export * from "./notification-runtime";
 export * from "./notification-sound";
 export * from "./notification-navigation";
-export * from "./notification-task-observer";
-export * from "./notification-workspace-observer";
-export * from "./session-occurrence-projector";
 export * from "./session-start-occurrences";
-export * from "./task-occurrence-projector";

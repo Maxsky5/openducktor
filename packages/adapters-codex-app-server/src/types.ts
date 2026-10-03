@@ -250,17 +250,17 @@ type CodexAppServerRequestOnlyOptions = {
 export type CodexAppServerAdapterOptions = CodexAppServerAdapterBaseOptions &
   (CodexAppServerStreamingOptions | CodexAppServerRequestOnlyOptions);
 
-export type CodexLiveSessionMutation = (
+export type CodexLiveSessionMutation = { provenance?: "baseline" | "live" } & (
   | { snapshotMode: "full"; removedRefs?: never }
   | { snapshotMode: "delta"; removedRefs: AgentSessionLiveRef[] }
 ) & {
-  runtimeId: string;
-  snapshots: AgentSessionLiveSnapshot[];
-  transcriptEvents: AgentEvent[];
-  catalogInvalidated: boolean;
-  fault?: string;
-  faultRef?: AgentSessionLiveRef;
-};
+    runtimeId: string;
+    snapshots: AgentSessionLiveSnapshot[];
+    transcriptEvents: AgentEvent[];
+    catalogInvalidated: boolean;
+    fault?: string;
+    faultRef?: AgentSessionLiveRef;
+  };
 
 export type {
   AgentEvent,

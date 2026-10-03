@@ -89,7 +89,6 @@ describe("session-start notifications", () => {
       });
       const deliverOs = mock(async () => {});
       const policy = createNotificationPolicy({
-        loadSettings: async () => settings,
         inApp: { deliver: deliverInApp },
         os: { deliver: deliverOs },
         sound: { play: async () => {} },
@@ -351,7 +350,6 @@ describe("session-start notifications", () => {
     settings.kinds["agent.session_error"].target = "in_app";
     const deliver = mock(async () => {});
     const policy = createNotificationPolicy({
-      loadSettings: async () => settings,
       inApp: { deliver },
       os: { deliver: async () => {} },
       sound: { play: async () => {} },

@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { type RuntimeInstanceSummary, runtimeInstanceSummarySchema } from "@openducktor/contracts";
-import { Cause, Deferred, Effect, Exit, Scope } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, Scope } from "effect";
 import { resolveSavedRuntimeExecutableConfig } from "../../application/runtimes/saved-runtime-executable";
 import {
   HostOperationError,
@@ -92,6 +92,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
     let scope: Parameters<typeof Scope.close>[0] | null = null;
     let startupCleanup: Effect.Effect<void, HostOperationErrorAggregate> = Effect.void;
     let fatalError: Error | null = null;
+    let reporting: Fiber.RuntimeFiber<void, never> | null = null;
     return Effect.gen(function* () {
       if (input.runtimeKind !== "codex") {
         return yield* Effect.fail(
@@ -282,7 +283,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
         (error) => {
           fatalError = error;
           stopping = true;
-          Effect.runFork(
+          reporting = Effect.runFork(
             Effect.gen(function* () {
               const result = yield* Effect.either(closeRuntime);
               if (!startupComplete) return;
@@ -403,6 +404,9 @@ export const createCodexWorkspaceRuntimeStarter = ({
         },
         stop() {
           return closeRuntime.pipe(
+            Effect.ensuring(
+              Effect.suspend(() => (reporting ? Fiber.join(reporting) : Effect.void)),
+            ),
             Effect.ensuring(Scope.close(runtimeScope, Exit.succeed(undefined)).pipe(Effect.ignore)),
             Effect.mapError((cause) => toHostOperationError(cause, "codexWorkspaceRuntime.stop")),
           );

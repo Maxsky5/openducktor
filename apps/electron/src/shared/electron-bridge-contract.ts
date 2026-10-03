@@ -1,3 +1,4 @@
+import type { NotificationCursor, NotificationStreamFrame } from "@openducktor/contracts";
 import type {
   AppPlatform,
   AppUpdateCheckInput,
@@ -211,6 +212,13 @@ export type OpenDucktorElectronApi = {
   resolveLocalAttachmentPreviewSrc(path: string): Promise<string>;
   terminals: OpenDucktorElectronTerminalApi;
   taskStream: OpenDucktorElectronTaskStreamApi;
+  notificationStream: {
+    subscribe(
+      input: { cursor: NotificationCursor | null },
+      onFrame: (frame: NotificationStreamFrame) => void,
+      onFailure: (cause: unknown) => void,
+    ): Promise<() => void>;
+  };
   editorClipboard: {
     readText(type?: EditorClipboardReadType): Promise<string>;
   };

@@ -84,11 +84,13 @@ The live module owns runtime registration and ordered publication. Its internal 
 
 ## Workspace metadata and notifications
 
-Files: `state/queries/workspace-sessions.ts`, `state/queries/workspace-session-updates.ts`, `state/queries/agent-session-association.ts`, and `features/notifications/notification-workspace-observer.ts`.
+Files: `state/queries/workspace-sessions.ts`, `state/queries/workspace-session-updates.ts`, and `state/queries/agent-session-association.ts`.
 
 One metadata subscription updates each shared query cache. Keep events that arrive during a record read until its cache commit. Discard a cancelled read's buffer once. Do not cancel a cold baseline or publish an incomplete baseline to apply an event.
 
-Notifications use task and workspace record caches to prove ownership, including in inactive workspaces. Their occurrence deduplication does not own live session state. A later record update can resolve a pending occurrence without a new native event. Workspace navigation requires an exact stored runtime kind, external session ID, and working directory.
+Workspace navigation requires an exact stored runtime kind, external session ID, and working directory.
+
+The host detects shared notifications for all open workspaces. Shells deliver the selected occurrences.
 
 ## Runtime readiness
 

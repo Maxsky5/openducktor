@@ -1,3 +1,4 @@
+import { createCombinedHostSseResponse } from "./combined-host-event-http-server";
 import { createReadStream, type Stats } from "node:fs";
 import { stat } from "node:fs/promises";
 import path from "node:path";
@@ -638,6 +639,7 @@ const routeCorsRequest = ({
   hostCommandRouter,
   taskAssetReadService,
   taskEventLeaseManager,
+  notificationStream,
   localAttachments,
   logger,
   request,
@@ -655,6 +657,7 @@ const routeCorsRequest = ({
   eventBus: BufferedHostEventBus;
   hostCommandRouter: EffectHostCommandRouter;
   taskAssetReadService: TaskAssetReadService;
+  notificationStream?: EffectNodeHostCommandRouter["notificationStream"];
   taskEventLeaseManager?: TaskEventLeaseManager;
   localAttachments: ReturnType<typeof createLocalAttachmentAdapter>;
   logger: WebLogger;
@@ -743,6 +746,25 @@ const routeCorsRequest = ({
         );
       }
       requestTimeouts?.timeout(requestTimeoutSource ?? request, 0);
+      if (requestUrl.searchParams.get("notifications") === "1") {
+        if (!notificationStream)
+          return yield* rejectWebHostRequest(
+            "Notification stream is unavailable. Restart the host.",
+            503,
+          );
+        return yield* createCombinedHostSseResponse(
+          request,
+          eventBus.stream(),
+          notificationStream,
+          corsHeaders,
+          (cause) =>
+            scheduleNonFatalWebEventFailure(
+              logger,
+              "Failed to enqueue a combined host event.",
+              cause,
+            ),
+        );
+      }
       return createSseResponse(
         eventBus.stream(),
         yield* parseLastEventId(request),
@@ -816,6 +838,7 @@ export const handleTypescriptHostBackendRequest = ({
   hostCommandRouter,
   taskAssetReadService,
   taskEventLeaseManager,
+  notificationStream,
   localAttachments,
   logger,
   request,
@@ -833,6 +856,7 @@ export const handleTypescriptHostBackendRequest = ({
   eventBus: BufferedHostEventBus;
   hostCommandRouter: EffectHostCommandRouter;
   taskAssetReadService: TaskAssetReadService;
+  notificationStream?: EffectNodeHostCommandRouter["notificationStream"];
   taskEventLeaseManager?: TaskEventLeaseManager;
   localAttachments: ReturnType<typeof createLocalAttachmentAdapter>;
   logger: WebLogger;
@@ -872,6 +896,7 @@ export const handleTypescriptHostBackendRequest = ({
       beginShutdown,
       stop,
     };
+    if (notificationStream) routeInput.notificationStream = notificationStream;
     if (taskEventLeaseManager) {
       routeInput.taskEventLeaseManager = taskEventLeaseManager;
     }
@@ -1093,6 +1118,7 @@ export const startTypescriptHostBackendEffect = ({
                   eventBus,
                   hostCommandRouter,
                   taskAssetReadService: hostCommandRouter.taskAssetReadService,
+                  notificationStream: hostCommandRouter.notificationStream,
                   taskEventLeaseManager,
                   localAttachments,
                   logger,

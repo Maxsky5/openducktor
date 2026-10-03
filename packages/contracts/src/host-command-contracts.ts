@@ -69,6 +69,7 @@ export const HOST_COMMAND_NAMES = [
   "issue_item_get",
   "issue_items_import",
   "issue_items_list",
+  "notification_publish_action",
   "open_external_url",
   "plan_get",
   "plan_save_document",

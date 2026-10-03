@@ -100,6 +100,8 @@ export const createElectronShellBridge = (): ShellBridge => {
       }
       return unsubscribe;
     },
+    subscribeNotificationStream: (input, onFrame, onFailure) =>
+      electronApi.notificationStream.subscribe(input, onFrame, onFailure),
     subscribeTaskStream: (input, onFrame, onTerminalFailure) =>
       electronApi.taskStream.subscribe(input, onFrame, onTerminalFailure),
     appUpdates: {

@@ -40,7 +40,7 @@ export type AgentSessionCatalogInvalidation = {
   readonly workingDirectory?: string;
 };
 
-export type AgentSessionLiveAdapterChange =
+export type AgentSessionLiveAdapterChange = { readonly provenance?: "baseline" | "live" } & (
   | {
       readonly type: "session_upsert";
       readonly snapshot: AgentSessionLiveSnapshot;
@@ -67,7 +67,8 @@ export type AgentSessionLiveAdapterChange =
       readonly message: string;
       readonly operation?: string;
       readonly ref?: AgentSessionLiveRef;
-    };
+    }
+);
 
 export type AgentSessionLiveAdapterMutation<Success> = {
   readonly value: Success;

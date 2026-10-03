@@ -1,3 +1,4 @@
+import { baselineLiveSessionChanges } from "../../application/agent-sessions/baseline-live-session-changes";
 import { createClaudeSessionImportAdapter } from "./claude-session-import";
 import { createClaudeRuntimeQueryAdapter } from "./claude-runtime-query-adapter";
 import {
@@ -215,7 +216,10 @@ export const createClaudeLiveSessionAdapterPreparer =
         retainSummary: (operation, summary, options) =>
           commit(`${operation}.retain-summary`, () => ({
             value: summary,
-            changes: state.applyControlSummary(summary, options),
+            changes:
+              operation === "claude-live-session.import"
+                ? baselineLiveSessionChanges(state.applyControlSummary(summary, options))
+                : state.applyControlSummary(summary, options),
           })),
         reportProjectionFailure: createClaudeProjectionFailureReporter({
           commit,

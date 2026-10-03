@@ -928,6 +928,7 @@ export class CodexAppServerAdapter
     this.asyncQuestions.loadHistory(runtime.runtimeId, input.externalSessionId, history);
     if (session && this.options.onLiveSessionMutation) {
       await this.options.onLiveSessionMutation({
+        provenance: "baseline",
         runtimeId: runtime.runtimeId,
         snapshotMode: "delta",
         removedRefs: [],

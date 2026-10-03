@@ -59,7 +59,12 @@ test.each(["in_app", "both", "os", "disabled"] as const)(
     };
     const runtime = createNotificationRuntime({
       bridge,
-      loadSettings: async () => settings,
+      publishAction: async (occurrence) => ({
+        occurrence,
+        settings: settings,
+        preferenceRevision: 1,
+      }),
+      subscribeStream: async () => () => {},
       navigate: async () => {},
       onFailure: () => {},
       onCoordinationRecovered: () => {},

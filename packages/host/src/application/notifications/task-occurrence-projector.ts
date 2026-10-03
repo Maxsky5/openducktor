@@ -12,6 +12,71 @@ type WorkflowNotification = {
   preferredRole?: AgentRole;
 };
 
+type TaskProjection = {
+  accepted: boolean;
+  occurrences: NotificationOccurrence[];
+};
+
+export const createTaskOccurrenceProjector = ({
+  repoPath,
+  repositoryLabel,
+}: {
+  repoPath: string;
+  repositoryLabel: string;
+}) => {
+  let currentRepositoryLabel = repositoryLabel;
+  const processedEvents = new Set<string>();
+
+  const projectChange = (
+    event: Extract<ExternalTaskSyncEvent, { kind: "tasks_updated" }>,
+  ): TaskProjection => {
+    if (processedEvents.has(event.eventId)) return { accepted: false, occurrences: [] };
+    processedEvents.add(event.eventId);
+    const occurrences: NotificationOccurrence[] = [];
+
+    for (const [
+      index,
+      { task: current, previousStatus, sourceRole },
+    ] of event.statusChanges.entries()) {
+      if (previousStatus === current.status) {
+        continue;
+      }
+      const notification = workflowNotification(current.status, sourceRole);
+      if (!notification) {
+        continue;
+      }
+      const { kind, status, preferredRole } = notification;
+      let navigationTarget: NotificationOccurrence["navigationTarget"];
+      if (current.status === "closed") {
+        navigationTarget = { type: "kanban_task", repoPath, taskId: current.id };
+      } else {
+        navigationTarget = { type: "agent_studio_task", repoPath, taskId: current.id };
+        if (preferredRole) navigationTarget.preferredRole = preferredRole;
+      }
+      const occurrence: NotificationOccurrence = {
+        occurrenceId: `${kind}:${repoPath}:${current.id}:${event.eventId}:${index}`,
+        kind,
+        repoPath,
+        repositoryLabel: currentRepositoryLabel,
+        task: { id: current.id, title: current.title },
+        status,
+        navigationTarget,
+      };
+      if (preferredRole) occurrence.role = preferredRole;
+      occurrences.push(occurrence);
+    }
+
+    return { accepted: true, occurrences };
+  };
+
+  return {
+    projectChange,
+    setRepositoryLabel(label: string) {
+      currentRepositoryLabel = label;
+    },
+  };
+};
+
 const workflowNotification = (
   status: TaskStatus,
   sourceRole?: AgentRole,
@@ -58,58 +123,4 @@ const workflowNotification = (
     case "closed":
       return { kind: "workflow.closed", status: "Task moved to Closed." };
   }
-};
-
-export const createTaskOccurrenceProjector = ({
-  repoPath,
-  repositoryLabel,
-}: {
-  repoPath: string;
-  repositoryLabel: string;
-}) => {
-  const processedEvents = new Set<string>();
-
-  const projectChange = (
-    event: Extract<ExternalTaskSyncEvent, { kind: "tasks_updated" }>,
-  ): NotificationOccurrence[] => {
-    if (processedEvents.has(event.eventId)) return [];
-    processedEvents.add(event.eventId);
-    const occurrences: NotificationOccurrence[] = [];
-
-    for (const [
-      index,
-      { task: current, previousStatus, sourceRole },
-    ] of event.statusChanges.entries()) {
-      if (previousStatus === current.status) {
-        continue;
-      }
-      const notification = workflowNotification(current.status, sourceRole);
-      if (!notification) {
-        continue;
-      }
-      const { kind, status, preferredRole } = notification;
-      let navigationTarget: NotificationOccurrence["navigationTarget"];
-      if (current.status === "closed") {
-        navigationTarget = { type: "kanban_task", repoPath, taskId: current.id };
-      } else {
-        navigationTarget = { type: "agent_studio_task", repoPath, taskId: current.id };
-        if (preferredRole) navigationTarget.preferredRole = preferredRole;
-      }
-      const occurrence: NotificationOccurrence = {
-        occurrenceId: `${kind}:${repoPath}:${current.id}:${event.eventId}:${index}`,
-        kind,
-        repoPath,
-        repositoryLabel,
-        task: { id: current.id, title: current.title },
-        status,
-        navigationTarget,
-      };
-      if (preferredRole) occurrence.role = preferredRole;
-      occurrences.push(occurrence);
-    }
-
-    return occurrences;
-  };
-
-  return { projectChange };
 };

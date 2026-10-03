@@ -36,7 +36,6 @@ const createHarness = (target: "in_app" | "os" | "both", enabled = true) => {
   const sound = mock(async () => {});
   const onFailure = mock(() => {});
   const policy = createNotificationPolicy({
-    loadSettings: async () => settings,
     inApp: { deliver: inApp },
     os: { deliver: os },
     sound: { play: sound },
@@ -151,36 +150,6 @@ describe("notification policy", () => {
     expect(harness.sound).not.toHaveBeenCalled();
   });
 
-  test("delivers local once and external once when leadership replays an occurrence", async () => {
-    const harness = createHarness("both");
-
-    await harness.policy.dispatch(occurrence, { phase: "local" }, harness.settings);
-    await harness.policy.dispatch(
-      occurrence,
-      { phase: "external", appFocused: false },
-      harness.settings,
-    );
-
-    expect(harness.inApp).toHaveBeenCalledTimes(1);
-    expect(harness.os).toHaveBeenCalledTimes(1);
-    expect(harness.sound).toHaveBeenCalledTimes(1);
-  });
-
-  test("uses the current focus state when leadership changes", async () => {
-    const harness = createHarness("both");
-
-    await harness.policy.dispatch(occurrence, { phase: "local" }, harness.settings);
-    await harness.policy.dispatch(
-      occurrence,
-      { phase: "external", appFocused: true },
-      harness.settings,
-    );
-
-    expect(harness.inApp).toHaveBeenCalledTimes(1);
-    expect(harness.os).not.toHaveBeenCalled();
-    expect(harness.sound).not.toHaveBeenCalled();
-  });
-
   test("deduplicates each semantic occurrence", async () => {
     const harness = createHarness("both");
     await dispatchAsOwner(harness);
@@ -213,31 +182,4 @@ test("reserves each delivery before overlapping dispatches run", async () => {
   expect(harness.inApp).toHaveBeenCalledTimes(1);
   expect(harness.os).toHaveBeenCalledTimes(1);
   expect(harness.sound).toHaveBeenCalledTimes(1);
-});
-
-test("reports settings failure and recovery without replacing preferences", async () => {
-  let fail = true;
-  const onFailure = mock(() => {});
-  const onSettingsRecovered = mock(() => {});
-  const deliver = mock(async () => {});
-  const policy = createNotificationPolicy({
-    loadSettings: async () => {
-      if (fail) throw new Error("Config read failed");
-      return createDefaultNotificationSettings();
-    },
-    inApp: { deliver },
-    os: { deliver },
-    sound: { play: async () => {} },
-    onFailure,
-    onSettingsRecovered,
-  });
-  expect(await policy.loadSettingsCandidate(occurrence)).toBeNull();
-  expect(onFailure).toHaveBeenCalledWith(expect.objectContaining({ channel: "settings" }));
-  expect(onSettingsRecovered).not.toHaveBeenCalled();
-  expect(deliver).not.toHaveBeenCalled();
-  fail = false;
-  expect(await policy.loadSettingsCandidate(occurrence)).toEqual(
-    createDefaultNotificationSettings(),
-  );
-  expect(onSettingsRecovered).toHaveBeenCalledTimes(1);
 });

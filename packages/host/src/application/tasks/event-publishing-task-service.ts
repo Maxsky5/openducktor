@@ -140,7 +140,13 @@ export const createEventPublishingTaskService = ({
         Effect.flatMap(({ updated, publish }) => publish.pipe(Effect.as(updated))),
       ),
     agentSessionUpdateModelDeferredPublication,
-    agentSessionDelete: (input) => taskService.agentSessionDelete(input),
+    agentSessionDelete: (input) =>
+      publishAfterMutation(
+        "agent-session-delete",
+        input.repoPath,
+        changeForTask(input.taskId),
+        taskService.agentSessionDelete(input),
+      ),
     getApprovalContext: (input) => taskService.getApprovalContext(input),
     detectPullRequest: (input) =>
       publishAfterConditionalMutation(

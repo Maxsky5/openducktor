@@ -1,5 +1,4 @@
 import type { NotificationNavigationTarget, WorkspaceRecord } from "@openducktor/contracts";
-import { useQueryClient } from "@tanstack/react-query";
 import {
   type PropsWithChildren,
   type ReactElement,
@@ -30,28 +29,12 @@ import {
   recordNotificationFailure,
   selectNotificationFailure,
 } from "@/features/notifications/notification-failure-state";
-import {
-  createNotificationTaskObserver,
-  type NotificationProducerFailure,
-} from "@/features/notifications/notification-task-observer";
-import { createNotificationWorkspaceObserver } from "@/features/notifications/notification-workspace-observer";
 import type {
   SessionStartNotificationInput,
   SessionStartNotificationPublisher,
 } from "@/features/session-start/session-start-orchestration";
 import { hostBridge } from "@/lib/host-client";
 import { getShellBridge } from "@/lib/shell-bridge";
-import { loadAgentSessionListsFromQuery } from "@/state/queries/agent-sessions";
-import {
-  workspaceSessionListQueryOptions,
-  workspaceSessionQueryKeys,
-} from "@/state/queries/workspace-sessions";
-import { observeWorkspaceSessionRecords } from "@/state/queries/workspace-session-updates";
-import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
-import { readCachedAgentSessionAssociation } from "@/state/queries/agent-session-association";
-import { getProductionTaskViewSync } from "@/state/queries/task-view-sync";
-import { type RepoTaskData, taskQueryKeys } from "@/state/queries/tasks";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { useWorkspaceStateContext } from "../app-state-contexts";
 import {
   NotificationContext,
@@ -59,53 +42,7 @@ import {
   type NotificationNavigator,
 } from "../notifications/notification-context";
 
-const toNotificationWorkspace = (workspace: WorkspaceRecord) => ({
-  repoPath: workspace.repoPath,
-  repositoryLabel: workspace.workspaceName,
-});
-
-const reportProducerFailure = (failure: NotificationProducerFailure): void => {
-  console.error("Notification producer failed.", {
-    repoPath: failure.repoPath,
-    source: failure.source,
-  });
-  toast.error("Agent notification observation failed", {
-    id: `notification-producer-failure:${failure.repoPath}:${failure.source}`,
-    description: "OpenDucktor could not read live notification data. Reload to reconnect.",
-    action: { label: "Reload", onClick: () => window.location.reload() },
-  });
-};
-
-const unavailableNotificationNavigator: NotificationNavigator = async () => {
-  toast.error("Notification target unavailable", {
-    description: "OpenDucktor could not open this notification target.",
-  });
-};
-
-type NotificationFailureAction =
-  | { type: "reported"; failure: NotificationDispatchFailure }
-  | { type: "os-shown" }
-  | { type: "settings-recovered" }
-  | { type: "sound-played" }
-  | { type: "coordination-recovered" };
-
-const reduceNotificationFailureState = (
-  state: NotificationFailureState,
-  action: NotificationFailureAction,
-): NotificationFailureState => {
-  if (action.type === "reported") {
-    return recordNotificationFailure(state, action.failure);
-  }
-  if (action.type === "settings-recovered") return clearSettingsNotificationFailure(state);
-  if (action.type === "sound-played") return clearSoundNotificationFailure(state);
-  if (action.type === "os-shown") {
-    return clearOsNotificationFailure(state);
-  }
-  return clearCoordinationNotificationFailure(state);
-};
-
 export function NotificationProvider({ children }: PropsWithChildren): ReactElement {
-  const queryClient = useQueryClient();
   const { workspaces } = useWorkspaceStateContext();
   const shellNotifications = getShellBridge().notifications;
   const [failureState, updateFailureState] = useReducer(
@@ -123,14 +60,23 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
     const navigate: NotificationNavigator = (target) => navigatorRef.current(target);
     return createNotificationRuntime({
       bridge: shellNotifications,
-      loadSettings: async () => {
-        const options = settingsSnapshotQueryOptions();
-        const snapshot = await queryClient.fetchQuery({ ...options, staleTime: 0 });
-        return snapshot.notifications;
-      },
+      publishAction: hostBridge.client.notificationPublishAction,
+      subscribeStream: hostBridge.subscribeNotificationStream,
       navigate,
       inApp: createSonnerNotificationAdapter({ navigate }),
       sound: createCuelumeNotificationSoundAdapter(),
+      onObservationHealth: (health) => {
+        const id = `notification-observation:${health.scope}:${health.source}`;
+        if (health.message === null) {
+          toast.dismiss(id);
+          return;
+        }
+        toast.error("Notification observation failed", {
+          id,
+          description: `${health.scope}: ${health.message}`,
+          action: { label: "Reload", onClick: () => window.location.reload() },
+        });
+      },
       onFailure: (failure) => {
         console.error("Notification delivery failed.", {
           channel: failure.channel,
@@ -138,6 +84,9 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
           occurrenceId: failure.occurrenceId,
           repoPath: failure.repoPath,
         });
+        if (failure.channel === "in_app") {
+          toast.error("In-app notification failed", { description: failure.message });
+        }
         if (
           failure.channel === "os" ||
           failure.channel === "coordination" ||
@@ -152,90 +101,11 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
       onSettingsRecovered: () => updateFailureState({ type: "settings-recovered" }),
       onSoundPlayed: () => updateFailureState({ type: "sound-played" }),
     });
-  }, [queryClient, shellNotifications]);
-
-  const taskObserver = useMemo(
-    () =>
-      createNotificationTaskObserver({
-        loadTasks: async (repoPath) => {
-          await getProductionTaskViewSync(queryClient).loadWorkspace(repoPath, {
-            forceFresh: true,
-          });
-          const taskData = queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData(repoPath));
-          if (!taskData) {
-            throw new Error("Task notification data is unavailable. Reload to reconnect.");
-          }
-          return taskData.tasks;
-        },
-        loadSessionRecords: (repoPath, taskIds) =>
-          loadAgentSessionListsFromQuery(queryClient, repoPath, taskIds),
-        resolveSessionAssociation: (ref) => readCachedAgentSessionAssociation(queryClient, ref),
-        publish: runtime.publish,
-        onFailure: reportProducerFailure,
-      }),
-    [queryClient, runtime.publish],
-  );
-
-  const workspaceObserver = useMemo(
-    () =>
-      createNotificationWorkspaceObserver({
-        observe: hostBridge.observeAgentSessionLive,
-        taskObserver,
-        sessionRecords: {
-          load: async (repoPath) => {
-            const workspace = workspacesRef.current.find((entry) => entry.repoPath === repoPath);
-            if (!workspace) throw new Error("The notification workspace is unavailable.");
-            await queryClient.fetchQuery({
-              ...workspaceSessionListQueryOptions(workspace.workspaceId),
-              staleTime: Number.POSITIVE_INFINITY,
-            });
-          },
-          resolve: (ref) =>
-            readCachedAgentSessionAssociation(
-              queryClient,
-              ref,
-              workspacesRef.current.find((entry) => entry.repoPath === ref.repoPath)?.workspaceId ??
-                null,
-            ),
-          subscribe: (onChange) =>
-            queryClient.getQueryCache().subscribe((event) => {
-              if (event.type !== "updated" || event.action.type !== "success") return;
-              const root = event.query.queryKey[0];
-              if (
-                root === agentSessionQueryKeys.all[0] ||
-                root === workspaceSessionQueryKeys.all[0]
-              )
-                onChange();
-            }),
-        },
-        publish: runtime.publish,
-        onFailure: reportProducerFailure,
-      }),
-    [queryClient, runtime.publish, taskObserver],
-  );
+  }, [shellNotifications]);
 
   useEffect(() => runtime.subscribe(), [runtime]);
 
   useEffect(() => installCuelumeGestureUnlock(), []);
-
-  useEffect(
-    () =>
-      observeWorkspaceSessionRecords(queryClient, (message) => {
-        if (message)
-          reportProducerFailure({
-            repoPath: "workspace-sessions",
-            source: "session",
-            cause: new Error(message),
-          });
-      }),
-    [queryClient],
-  );
-
-  useEffect(() => {
-    void workspaceObserver.syncWorkspaces(workspaces.map(toNotificationWorkspace));
-  }, [workspaces, workspaceObserver]);
-
-  useEffect(() => () => workspaceObserver.dispose(), [workspaceObserver]);
 
   const sessionStartNotifications = useMemo<SessionStartNotificationPublisher>(() => {
     const resolveWorkspace = (input: SessionStartNotificationInput) => {
@@ -285,10 +155,42 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
         };
       },
       sessionStartNotifications,
-      taskStreamSink: taskObserver.sink,
     }),
-    [failureState, runtime, sessionStartNotifications, taskObserver.sink],
+    [failureState, runtime, sessionStartNotifications],
   );
 
   return <NotificationContext.Provider value={value}>{children}</NotificationContext.Provider>;
 }
+
+const toNotificationWorkspace = (workspace: WorkspaceRecord) => ({
+  repoPath: workspace.repoPath,
+  repositoryLabel: workspace.workspaceName,
+});
+
+const unavailableNotificationNavigator: NotificationNavigator = async () => {
+  toast.error("Notification target unavailable", {
+    description: "OpenDucktor could not open this notification target.",
+  });
+};
+
+type NotificationFailureAction =
+  | { type: "reported"; failure: NotificationDispatchFailure }
+  | { type: "os-shown" }
+  | { type: "settings-recovered" }
+  | { type: "sound-played" }
+  | { type: "coordination-recovered" };
+
+const reduceNotificationFailureState = (
+  state: NotificationFailureState,
+  action: NotificationFailureAction,
+): NotificationFailureState => {
+  if (action.type === "reported") {
+    return recordNotificationFailure(state, action.failure);
+  }
+  if (action.type === "settings-recovered") return clearSettingsNotificationFailure(state);
+  if (action.type === "sound-played") return clearSoundNotificationFailure(state);
+  if (action.type === "os-shown") {
+    return clearOsNotificationFailure(state);
+  }
+  return clearCoordinationNotificationFailure(state);
+};

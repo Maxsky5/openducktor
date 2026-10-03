@@ -35,12 +35,6 @@ const createNotificationContext = (
     publishSessionError: async () => true,
     reportFailure: () => {},
   },
-  taskStreamSink: {
-    onChange: async () => {},
-    onSnapshot: async () => {},
-    onSnapshotFailed: () => {},
-    onFailure: () => {},
-  },
   ...overrides,
 });
 

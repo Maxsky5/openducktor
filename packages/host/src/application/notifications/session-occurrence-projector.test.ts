@@ -5,7 +5,6 @@ import {
   type AgentSessionLiveSnapshot,
   type AgentSessionTranscriptEvent,
 } from "@openducktor/contracts";
-import { buildNotificationCopy } from "./notification-copy";
 import { createSessionOccurrenceProjector } from "./session-occurrence-projector";
 
 const ref = {
@@ -76,8 +75,6 @@ describe("session occurrence projector", () => {
       }),
     });
     expect(occurrence?.status).toBe(expected);
-    if (!occurrence) throw new Error("Expected error occurrence.");
-    expect(buildNotificationCopy(occurrence).body).toBe(expected);
   });
 
   test("uses live question and permission details and keeps request identity", () => {
@@ -118,11 +115,16 @@ describe("session occurrence projector", () => {
     next.pendingApprovals.push(...next.pendingApprovals);
     next.pendingQuestions.push(...next.pendingQuestions);
     const occurrences = projector.accept({ type: "session_upsert", session: next });
-    expect(occurrences.map(buildNotificationCopy)).toEqual([
-      { title: "Builder - Build notifications", body: "Install dependencies: bun install" },
+    expect(occurrences).toMatchObject([
       {
-        title: "Builder - Build notifications",
-        body: "Which providers should we support? +1 more question",
+        role: "build",
+        task: { id: "task-1", title: "Build notifications" },
+        status: "Install dependencies: bun install",
+      },
+      {
+        role: "build",
+        task: { id: "task-1", title: "Build notifications" },
+        status: "Which **providers** should we support? +1 more question",
       },
     ]);
     expect(occurrences.map((item) => item.navigationTarget)).toMatchObject([
@@ -336,10 +338,10 @@ describe("session occurrence projector", () => {
         type === "snapshot"
           ? { type, repoPath: "/repo", sessions: [pending] }
           : { type, session: pending };
-      expect(projector.accept(event).map(buildNotificationCopy)).toEqual([
-        { title: "Builder", body: "Allow command: bun install" },
-        { title: "Builder", body: "Which providers should we support?" },
-        { title: "Builder", body: "Which runtime should we use?" },
+      expect(projector.accept(event)).toMatchObject([
+        { role: "build", task: { id: "task-1" }, status: "Allow command: bun install" },
+        { role: "build", task: { id: "task-1" }, status: "Which providers should we support?" },
+        { role: "build", task: { id: "task-1" }, status: "Which runtime should we use?" },
       ]);
       expect(projector.accept(event)).toEqual([]);
       expect(projector.accept({ type: "session_upsert", session: pending })).toEqual([]);
@@ -457,7 +459,7 @@ describe("session occurrence projector", () => {
 
     expect(occurrence).toBeDefined();
     if (!occurrence) throw new Error("Expected a permission notification occurrence.");
-    expect(buildNotificationCopy(occurrence).body).not.toContain(secretTitle);
+    expect(JSON.stringify(occurrence)).not.toContain(secretTitle);
   });
 
   test("uses snapshots and existing pending inputs only as a baseline", () => {
@@ -826,7 +828,7 @@ describe("session occurrence projector", () => {
     ]);
   });
 
-  test("uses the last completed assistant message in idle notification copy", () => {
+  test("uses the last completed assistant message in the idle occurrence", () => {
     const projector = createProjector();
     projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
     projector.accept({
@@ -855,10 +857,10 @@ describe("session occurrence projector", () => {
 
     expect(occurrence).toBeDefined();
     if (!occurrence) throw new Error("Expected an idle notification occurrence.");
-    expect(buildNotificationCopy(occurrence).body).toBe("Work is complete. The checks pass.");
+    expect(occurrence.status).toBe("Work is complete. The checks pass.");
   });
 
-  test("does not use a retracted assistant message in idle notification copy", () => {
+  test("does not use a retracted assistant message in the idle occurrence", () => {
     const projector = createProjector();
     projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
     projector.accept({

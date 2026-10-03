@@ -65,6 +65,7 @@ export type TaskEventPublicationReporter = {
 };
 export type CreateTaskSyncServiceInput = {
   eventIdFactory?: () => string;
+  acceptNotificationInput?: ((event: ExternalTaskSyncEvent) => void) | undefined;
   intervalMs?: number;
   logger?: TaskSyncLifecycleLogger;
   onBackgroundFailure(failure: HostOperationError): Effect.Effect<void, never>;
@@ -101,7 +102,7 @@ const buildTasksUpdatedEvent = (
   taskSnapshots: readonly TaskEventTaskSnapshot[],
   statusChanges: readonly TaskEventStatusChange[],
   operation: string,
-): ExternalTaskSyncEvent => ({
+): Extract<ExternalTaskSyncEvent, { kind: "tasks_updated" }> => ({
   eventId: eventIdFactory(),
   kind: "tasks_updated",
   repoPath,
@@ -130,6 +131,7 @@ const taskSnapshotsForChanges = (
 };
 export const createTaskSyncService = ({
   eventIdFactory = () => crypto.randomUUID(),
+  acceptNotificationInput,
   intervalMs = DEFAULT_PULL_REQUEST_SYNC_INTERVAL_MS,
   logger = defaultTaskSyncLifecycleLogger,
   onBackgroundFailure,
@@ -185,12 +187,14 @@ export const createTaskSyncService = ({
       }
     });
   const publishExternalTaskCreated = (repoPath: string, taskSnapshot: TaskEventTaskSnapshot) =>
-    publish(
-      buildExternalTaskCreatedEvent(eventIdFactory, repoPath, taskSnapshot),
-      "create-task",
-      repoPath,
-      { taskIds: [taskSnapshot.id], removedTaskIds: [] },
-    );
+    Effect.suspend(() => {
+      const event = buildExternalTaskCreatedEvent(eventIdFactory, repoPath, taskSnapshot);
+      acceptNotificationInput?.(event);
+      return publish(event, "create-task", repoPath, {
+        taskIds: [taskSnapshot.id],
+        removedTaskIds: [],
+      });
+    });
   const publishTasksUpdated = (
     repoPath: string,
     changes: TaskChangeSet,
@@ -199,6 +203,15 @@ export const createTaskSyncService = ({
     mutationFailure?: TaskServiceError,
   ): Effect.Effect<void, HostOperationErrorAggregate> =>
     Effect.gen(function* () {
+      const event = buildTasksUpdatedEvent(
+        eventIdFactory,
+        repoPath,
+        changes,
+        [],
+        statusChanges,
+        operation,
+      );
+      acceptNotificationInput?.(event);
       const tasks = yield* Effect.either(taskService.listTasks({ repoPath }));
       if (tasks._tag === "Left") {
         yield* publicationReporter.report({
@@ -220,19 +233,8 @@ export const createTaskSyncService = ({
         });
       }
       const taskSnapshots = taskSnapshotsForChanges(tasks.right, changes);
-      yield* publish(
-        buildTasksUpdatedEvent(
-          eventIdFactory,
-          repoPath,
-          changes,
-          taskSnapshots,
-          statusChanges,
-          operation,
-        ),
-        operation,
-        repoPath,
-        changes,
-      );
+      acceptNotificationInput?.({ ...event, taskSnapshots });
+      yield* publish({ ...event, taskSnapshots }, operation, repoPath, changes);
     });
   const syncRepoPullRequests = (
     repoPath: string,

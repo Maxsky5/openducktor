@@ -36,6 +36,7 @@ const createTestShellBridge = (): ShellBridge =>
       transportEpoch: "test:0",
       unsubscribe: () => {},
     }),
+    subscribeNotificationStream: async () => () => {},
     subscribeTaskStream: async () => ({
       subscriptionId: "test-subscription",
       acknowledge: async () => {},

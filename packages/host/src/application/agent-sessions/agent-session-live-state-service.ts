@@ -132,6 +132,10 @@ export type CreateAgentSessionLiveStateServiceInput = {
   readonly withProcessStartAdmission?: WithProcessStartAdmission | undefined;
   readonly faultLog: AgentSessionLiveFaultLogger;
   readonly publish: AgentSessionLiveEnvelopePublisher;
+  readonly observeNotificationInput?: (
+    envelope: AgentSessionLiveEnvelope,
+    provenance: "baseline" | "live",
+  ) => void;
   readonly coordinator?: LiveStateCoordinator;
 };
 
@@ -141,6 +145,7 @@ export const createAgentSessionLiveStateService = ({
   withProcessStartAdmission,
   faultLog,
   publish,
+  observeNotificationInput,
   coordinator = createLiveStateCoordinator(),
   persistence,
 }: CreateAgentSessionLiveStateServiceInput): AgentSessionLiveStateService => {
@@ -174,9 +179,9 @@ export const createAgentSessionLiveStateService = ({
     Effect.gen(function* () {
       let faultLogFailure: HostError | null = null;
       for (const change of changes) {
-        const result = yield* publishEnvelopeResult(
-          executionEpisodes.accept(toAgentSessionLiveEnvelope(change)),
-        );
+        const envelope = executionEpisodes.accept(toAgentSessionLiveEnvelope(change));
+        observeNotificationInput?.(envelope, change.provenance ?? "live");
+        const result = yield* publishEnvelopeResult(envelope);
         if (faultLogFailure === null && result) {
           faultLogFailure = result;
         }
@@ -211,12 +216,32 @@ export const createAgentSessionLiveStateService = ({
       return executionEpisodes.replaceSnapshots(repoPath, flattened);
     });
 
+  const refreshAdapters = (
+    repoPath: string,
+    adapters: ReadonlyArray<AgentSessionLiveAdapterPort>,
+  ): Effect.Effect<void, HostError> =>
+    Effect.gen(function* () {
+      const roots = readSessionRootRefs ? yield* readSessionRootRefs(repoPath) : [];
+      yield* Effect.forEach(
+        adapters,
+        (adapter) =>
+          adapter.refreshSnapshots?.(
+            repoPath,
+            roots.filter((root) => root.runtimeKind === adapter.binding.runtimeKind),
+          ) ?? Effect.void,
+      );
+    });
+
   const lifecycle = createAgentSessionLiveRuntimeLifecycle({
     adapterRegistry,
     coordinator,
     publishChanges,
     publishEnvelope,
     listSnapshots,
+    refreshSnapshots: (adapter) =>
+      adapter.refreshSnapshots
+        ? refreshGate.run(refreshAdapters(adapter.binding.repoPath, [adapter]))
+        : Effect.void,
   });
 
   const continuationSessionRef = (
@@ -271,15 +296,7 @@ export const createAgentSessionLiveStateService = ({
     refresh: (input) =>
       refreshGate.run(
         Effect.gen(function* () {
-          const roots = readSessionRootRefs ? yield* readSessionRootRefs(input.repoPath) : [];
-          yield* Effect.forEach(
-            adapterRegistry.listForRepo(input.repoPath),
-            (adapter) =>
-              adapter.refreshSnapshots?.(
-                input.repoPath,
-                roots.filter((root) => root.runtimeKind === adapter.binding.runtimeKind),
-              ) ?? Effect.void,
-          );
+          yield* refreshAdapters(input.repoPath, adapterRegistry.listForRepo(input.repoPath));
           yield* coordinator.run(
             Effect.gen(function* () {
               const snapshots = yield* listSnapshots(input.repoPath);
