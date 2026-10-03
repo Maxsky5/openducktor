@@ -87,6 +87,76 @@ test("one response carries host and notification frames with independent resume 
   expect(failures).not.toHaveBeenCalled();
 });
 
+test("a reconnect queues both full replay buffers with a host gap warning", async () => {
+  const host = new BufferedHostEventStream(256);
+  const notifications = createNotificationStream();
+  const failures = mock<(cause: unknown) => void>(() => {});
+  const initial = await Effect.runPromise(
+    Stream.runHead(notifications.subscribe({ cursor: null })).pipe(Effect.timeout("500 millis")),
+  );
+  if (initial._tag === "None") throw new Error("Expected an initial notification attachment");
+  for (let index = 0; index < 257; index++)
+    host.emit({ channel: "openducktor://run-event", payload: { index } }, failures);
+  for (let index = 0; index < 256; index++)
+    notifications.publishHealth({ scope: "/repo", source: "session", message: null });
+
+  const replayed = Effect.runSync(Deferred.make<void>());
+  const subscribe = notifications.subscribe.bind(notifications);
+  const notificationSpy = spyOn(notifications, "subscribe").mockImplementation((input) =>
+    subscribe(input).pipe(Stream.take(257), Stream.ensuring(Deferred.succeed(replayed, undefined))),
+  );
+  const response = await Effect.runPromise(
+    createCombinedHostSseResponse(
+      new Request("http://localhost/events", {
+        headers: {
+          "last-event-id": JSON.stringify({
+            hostEventId: 0,
+            notificationCursor: initial.value.cursor,
+          }),
+        },
+      }),
+      host,
+      notifications,
+      {},
+      failures,
+    ),
+  );
+  const reader = response.body!.getReader();
+  try {
+    // Fill the response with replay before the reader frees queue space.
+    await Effect.runPromise(Deferred.await(replayed).pipe(Effect.timeout("500 millis")));
+    expect(failures.mock.calls.map(([cause]) => String(cause))).toEqual([]);
+    await Effect.runPromise(
+      Effect.tryPromise(async () => {
+        expect(decode((await reader.read()).value)).toContain(": openducktor-ready");
+        expect(decode((await reader.read()).value)).toContain(
+          "event: stream-warning\ndata: Host event stream skipped 1 events;",
+        );
+        const hostIds: number[] = [];
+        for (let index = 0; index < 256; index++) {
+          const frame = decode((await reader.read()).value);
+          expect(frame).toContain("event: message");
+          hostIds.push(readCursor(frame).hostEventId);
+        }
+        expect(hostIds).toEqual(Array.from({ length: 256 }, (_, index) => index + 2));
+        const attached = decode((await reader.read()).value);
+        expect(attached).toContain('"reason":"replay"');
+        const sequences: number[] = [];
+        for (let index = 0; index < 256; index++) {
+          const frame = decode((await reader.read()).value);
+          expect(frame).toContain("event: notification-frame");
+          sequences.push(readCursor(frame).notificationCursor!.sequence);
+        }
+        expect(sequences).toEqual(Array.from({ length: 256 }, (_, index) => index + 1));
+      }).pipe(Effect.timeout("500 millis")),
+    );
+  } finally {
+    await reader.cancel().catch(() => {});
+    await Effect.runPromise(notifications.dispose());
+    notificationSpy.mockRestore();
+  }
+});
+
 test.each([
   "garbage",
   "42",

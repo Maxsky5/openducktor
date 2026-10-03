@@ -100,8 +100,8 @@ export const createCombinedHostSseResponse = (
           },
           cancel: stop,
         },
-        { highWaterMark: 514 },
-      ); // Two 256-frame replays, readiness, and notification attachment.
+        { highWaterMark: 515 },
+      ); // Two 256-frame replays, readiness, a gap warning, and notification attachment.
       return new Response(body, {
         headers: {
           ...corsHeaders,
