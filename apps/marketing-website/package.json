@@ -32,7 +32,7 @@
     "stylelint": "^17.15.0",
     "stylelint-config-recommended": "^18.0.0",
     "typescript": "^6.0.0",
-    "wrangler": "4.144.0",
+    "wrangler": "4.145.0",
     "zod": "^4.6.5"
   }
 }
