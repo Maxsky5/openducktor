@@ -17,6 +17,7 @@ import {
   type AgentSessionLiveReadInput,
   type AgentSessionLiveReadResult,
   type AgentSessionLiveRef,
+  type AgentSessionAuthorizedRoot,
   type AgentSessionLiveRefreshInput,
   type AgentSessionLiveReplyApprovalInput,
   type AgentSessionLiveReplyQuestionInput,
@@ -125,7 +126,7 @@ export type AgentSessionLiveStateService = {
 export type CreateAgentSessionLiveStateServiceInput = {
   readonly readSessionRootRefs?: (
     repoPath: string,
-  ) => Effect.Effect<AgentSessionLiveRef[], HostError>;
+  ) => Effect.Effect<AgentSessionAuthorizedRoot[], HostError>;
   readonly persistence?: AgentSessionPersistencePort;
   readonly adapterRegistry: AgentSessionLiveAdapterRegistryPort;
   readonly withProcessStartAdmission?: WithProcessStartAdmission | undefined;

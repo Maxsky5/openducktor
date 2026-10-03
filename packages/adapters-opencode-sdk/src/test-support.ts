@@ -4,6 +4,7 @@ import { ODT_MCP_TOOL_NAMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/co
 import type { AgentRole, PolicyBoundSessionRef, SessionRef } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
 import { OpencodeSdkAdapter as BaseOpencodeSdkAdapter } from "./index";
+import type { OpencodePermissionRule } from "./workflow-tool-permissions";
 import type { ParsedOpencodeMessage } from "./opencode-ingress";
 import type { ParsedOpencodeGlobalEventPayload } from "./opencode-global-event-ingress";
 import { buildQueuedRequestSignature } from "./user-message-signatures";
@@ -165,7 +166,7 @@ export type MockSession = {
 };
 
 export type SessionUpdateMockResult = {
-  data?: { id: string };
+  data?: unknown;
   error?: MockApiError;
 };
 
@@ -256,6 +257,7 @@ export type MakeMockClientInput = {
   pendingApproval?: boolean;
   pendingQuestion?: boolean;
   sessionUpdateResult?: SessionUpdateMockResult;
+  sessionPermissions?: OpencodePermissionRule[];
   promptAsyncResult?: PromptAsyncMockResult;
   commandResult?: CommandMockResult;
   streamEvents?: OpencodeEventFixtureInput[];
@@ -275,7 +277,8 @@ export const makeMockClient = ({
   sessionStatus = "idle",
   pendingApproval = false,
   pendingQuestion = false,
-  sessionUpdateResult = { data: { id: sessionId }, error: undefined },
+  sessionUpdateResult = {},
+  sessionPermissions = [],
   promptAsyncResult = { mode: "success" },
   commandResult = { mode: "success" },
   streamEvents = [],
@@ -330,13 +333,29 @@ export const makeMockClient = ({
   const queuedSessionIds = [...(sessionIds ?? [sessionId])];
   const baseClient = createOpencodeClient({ baseUrl: defaultRuntimeConnection.endpoint });
 
+  const nativeRules = new Map<string, OpencodePermissionRule[]>([[sessionId, sessionPermissions]]);
+  const detail = (id: string, directory = defaultRuntimeConnection.workingDirectory) => ({
+    id,
+    directory,
+    projectID: "project-1",
+    slug: id,
+    title: "OpenDucktor test session",
+    version: "1.18.31",
+    time: {
+      created: Date.parse("2026-02-17T12:00:00Z"),
+      updated: Date.parse("2026-02-17T12:00:00Z"),
+    },
+    permission: nativeRules.get(id) ?? [],
+  });
   const client: OpencodeClient = {
     ...baseClient,
     session: {
       ...baseClient.session,
       create: async (input: ClientMethodInput<"session", "create">) => {
         session.createCalls.push(input);
-        return { data: { id: queuedSessionIds.shift() ?? sessionId }, error: undefined };
+        const id = queuedSessionIds.shift() ?? sessionId;
+        nativeRules.set(id, input?.permission ?? []);
+        return { data: detail(id, input?.directory), error: undefined };
       },
       promptAsync: async (input: ClientMethodInput<"session", "promptAsync">) => {
         session.promptAsyncCalls.push(input);
@@ -380,29 +399,25 @@ export const makeMockClient = ({
       },
       get: async (input: ClientMethodInput<"session", "get">) => {
         session.getCalls.push(input);
-        return {
-          data: {
-            directory: defaultRuntimeConnection.workingDirectory,
-            id: sessionId,
-            projectID: "project-1",
-            slug: sessionId,
-            time: {
-              created: Date.parse("2026-02-17T12:00:00Z"),
-              updated: Date.parse("2026-02-17T12:00:00Z"),
-            },
-            title: "OpenDucktor test session",
-            version: "1.18.18",
-          },
-          error: undefined,
-        };
+        return { data: detail(input.sessionID, input.directory), error: undefined };
       },
       update: async (input: ClientMethodInput<"session", "update">) => {
         session.updateCalls.push(input);
-        return session.updateResult;
+        if (session.updateResult.error || session.updateResult.data !== undefined)
+          return session.updateResult;
+        if (input.permission)
+          nativeRules.set(input.sessionID, [
+            ...(nativeRules.get(input.sessionID) ?? []),
+            ...input.permission,
+          ]);
+        const data = detail(input.sessionID, input.directory);
+        if (input.title !== undefined) data.title = input.title;
+        return { data, error: undefined };
       },
       fork: async (input: ClientMethodInput<"session", "fork">) => {
         session.forkCalls.push(input);
-        return { data: { id: forkSessionId }, error: undefined };
+        nativeRules.set(forkSessionId, []);
+        return { data: detail(forkSessionId, input.directory), error: undefined };
       },
       delete: async (input: ClientMethodInput<"session", "delete">) => {
         session.deleteCalls.push(input);

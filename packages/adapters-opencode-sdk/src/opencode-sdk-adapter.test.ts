@@ -243,11 +243,29 @@ const makeMockClient = (
   const mcpConnectCalls: unknown[] = [];
   const toolIdCalls: unknown[] = [];
 
+  const rulesById = new Map<
+    string,
+    NonNullable<ClientMethodInput<"session", "create">["permission"]>
+  >();
+  const nativeDetail = (id: string, directory = "/repo") => ({
+    id,
+    directory,
+    projectID: "project-1",
+    slug: id,
+    title: "BUILD task-1",
+    version: "1.18.31",
+    time: {
+      created: Date.parse("2026-02-22T12:00:00.000Z"),
+      updated: Date.parse("2026-02-22T12:00:00.000Z"),
+    },
+    permission: rulesById.get(id) ?? [],
+  });
   const client: OpencodeClient = {
     session: {
       create: async (input?: ClientMethodInput<"session", "create">) => {
         createCalls.push(input);
-        return { data: { id: "external-session-1" }, error: undefined };
+        rulesById.set("external-session-1", input?.permission ?? []);
+        return { data: nativeDetail("external-session-1", input?.directory), error: undefined };
       },
       abort: async (input?: ClientMethodInput<"session", "abort">) => {
         abortCalls.push(input);
@@ -256,29 +274,16 @@ const makeMockClient = (
       get: async (input?: ClientMethodInput<"session", "get">) => {
         getCalls.push(input);
         return {
-          data: {
-            directory: "/repo",
-            id: "external-session-1",
-            projectID: "project-1",
-            slug: "external-session-1",
-            time: {
-              created: Date.parse("2026-02-22T12:00:00.000Z"),
-              updated: Date.parse("2026-02-22T12:00:00.000Z"),
-            },
-            title: "BUILD task-1",
-            version: "1.18.18",
-          },
+          data: nativeDetail(input?.sessionID ?? "external-session-1", input?.directory),
           error: undefined,
         };
       },
       update: async (input?: ClientMethodInput<"session", "update">) => {
         updateCalls.push(input);
-        return (
-          options.sessionUpdateResult ?? {
-            data: { id: "external-session-1" },
-            error: undefined,
-          }
-        );
+        if (options.sessionUpdateResult) return options.sessionUpdateResult;
+        const id = input?.sessionID ?? "external-session-1";
+        if (input?.permission) rulesById.set(id, input.permission);
+        return { data: nativeDetail(id, input?.directory), error: undefined };
       },
       fork: async (input?: ClientMethodInput<"session", "fork">) => {
         forkCalls.push(input);
@@ -709,7 +714,7 @@ describe("opencode-sdk-adapter", () => {
     ]);
   });
 
-  test("checks same-directory MCP health before returning cached workflow tool selection", async () => {
+  test("checks same-directory MCP health without tool discovery", async () => {
     const mock = makeMockClient();
     const statusCalls: Array<{ directory: string }> = [];
     const connectCalls: Array<{ directory: string; name: string }> = [];
@@ -781,6 +786,7 @@ describe("opencode-sdk-adapter", () => {
       { directory: "/repo/.openducktor/worktrees/task-1" },
       { directory: "/repo/.openducktor/worktrees/task-1" },
       { directory: "/repo/.openducktor/worktrees/task-1" },
+      { directory: "/repo/.openducktor/worktrees/task-1" },
     ]);
     expect(connectCalls).toEqual([
       {
@@ -788,7 +794,7 @@ describe("opencode-sdk-adapter", () => {
         name: "openducktor",
       },
     ]);
-    expect(toolIdCalls).toEqual([{ directory: "/repo/.openducktor/worktrees/task-1" }]);
+    expect(toolIdCalls).toEqual([]);
     const reconnectEvents = events.filter(({ type }) => type === "mcp_reconnect_started");
     expect(reconnectEvents).toEqual([
       expect.objectContaining({

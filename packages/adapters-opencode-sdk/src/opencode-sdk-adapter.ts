@@ -5,6 +5,7 @@ import {
   type RuntimeDescriptor,
   type RuntimeKind,
 } from "@openducktor/contracts";
+import type { Session } from "@opencode-ai/sdk/v2/client";
 import type {
   AcceptedAgentUserMessage,
   AgentCatalogPort,
@@ -47,6 +48,7 @@ import {
   withAgentSessionRef,
 } from "@openducktor/core";
 import { loadRuntimeCatalog, searchFiles } from "./catalog-and-mcp";
+import { addPermissionRules } from "./workflow-tool-permissions";
 import { buildDefaultFactory, nowIso } from "./client-factory";
 import { unwrapData } from "./data-utils";
 import {
@@ -70,19 +72,21 @@ import { loadSessionHistory, loadSessionTodos } from "./message-ops";
 import { normalizeModelInput } from "./payload-mappers";
 import { createOpenCodeMessageId } from "./opencode-message-id";
 import {
-  applyRuntimeContextToSession,
-  applySessionPolicy,
-  assertOpencodeSessionRef,
-  assertRuntimeContextCompatibleWithSession,
-  reconcileSessionTitle,
-  requireOpencodeSessionPolicyRuntime,
-  resolveOpencodePolicyBoundSession,
-  synchronizeOpencodeSessionPolicy,
+  applySessionContext,
+  assertSessionRef,
+  assertSessionScope,
+  setSessionTitle,
+  getBoundSession,
+  restoreSessionPolicy,
 } from "./opencode-session-binding";
 import {
-  resolveOpencodeSessionPolicy,
-  type OpencodeSessionPolicy,
-} from "./opencode-session-policy";
+  restoreSessionPermissions,
+  readPermissionSession,
+  appendSessionPermissions,
+  checkSessionPermissions,
+  assertTurnPermissionsReady,
+} from "./opencode-session-permissions";
+import { resolveOpencodeSessionPolicy } from "./opencode-session-policy";
 import {
   beginOpencodeUserMessageSend,
   completeOpencodeUserMessageSend,
@@ -115,13 +119,8 @@ import type {
   SessionInput,
   SessionRecord,
 } from "./types";
-import { WORKFLOW_TOOL_CACHE_TTL_MS } from "./types";
 import { waitForUserMessageAdmission } from "./user-message-admission";
-import {
-  ensureTrustedOdtMcpServerConnected,
-  resolveRepositoryToolSelection,
-  resolveWorkflowToolSelection,
-} from "./workflow-tool-selection";
+import { ensureTrustedOdtMcpServerConnected } from "./opencode-mcp-readiness";
 
 const toExistingSessionInput = (input: PolicyBoundSessionRef): SessionInput => {
   return toSessionInput(input);
@@ -175,18 +174,14 @@ export class OpencodeSdkAdapter
    * Resolves a session client without registering the session, so the continuation probe
    * can refuse an ineligible turn before the adapter attaches to the runtime session.
    */
-  private async resolveContinuationProbeClient(
-    input: ContinueInterruptedAgentTurnInput,
-    policy: OpencodeSessionPolicy,
-  ) {
+  private async resolveContinuationProbeClient(input: ContinueInterruptedAgentTurnInput) {
     const runtimeClientInput = await this.resolveRuntimeClientInput(
       input,
       "continue OpenCode turn",
     );
     const client = this.createClient(runtimeClientInput);
-    await requireOpencodeSessionPolicyRuntime({
+    await ensureTrustedOdtMcpServerConnected({
       client,
-      policy,
       workingDirectory: input.workingDirectory,
     });
     return client;
@@ -210,9 +205,8 @@ export class OpencodeSdkAdapter
     );
     const runtimeClientInput = await this.resolveRuntimeClientInput(input, "start session");
     const client = this.createClient(runtimeClientInput);
-    await requireOpencodeSessionPolicyRuntime({
+    await ensureTrustedOdtMcpServerConnected({
       client,
-      policy,
       workingDirectory: input.workingDirectory,
     });
     const createRequest: Parameters<typeof client.session.create>[0] = {
@@ -222,9 +216,36 @@ export class OpencodeSdkAdapter
     if (policy.title !== undefined) {
       createRequest.title = policy.title;
     }
-    const created = await client.session.create(createRequest);
-    const createdData = unwrapData(created, "create session");
-    const externalSessionId = createdData.id;
+    const createAction = `create permissions for OpenCode session in '${input.workingDirectory}'. Reconnect the selected OpenCode runtime and retry; update OpenCode if its permission API is unsupported`;
+    let created: Session;
+    try {
+      created = unwrapData(await client.session.create(createRequest), createAction);
+    } catch (error) {
+      throw toOpenCodeRequestError(createAction, error);
+    }
+    const id = opencodeSessionDetailPayloadSchema.shape.id
+      .refine((value) => value.trim().length > 0)
+      .safeParse(created.id);
+    if (!id.success) {
+      throw toOpenCodeRequestError(
+        createAction,
+        new Error("The native create response has no usable session ID."),
+      );
+    }
+    const externalSessionId = id.data;
+    try {
+      checkSessionPermissions(
+        created,
+        input.workingDirectory,
+        externalSessionId,
+        policy.permission,
+      );
+    } catch (error) {
+      return this.deleteUnregisteredSession(
+        { client, externalSessionId, workingDirectory: input.workingDirectory },
+        toOpenCodeRequestError(createAction, error),
+      );
+    }
     const sessionInput = toSessionInput(input);
 
     const registrationInput: Parameters<typeof registerSession>[0] = {
@@ -237,7 +258,7 @@ export class OpencodeSdkAdapter
       sessionInput,
       client,
       startedAt: this.now(),
-      startedMessage: `Started ${policy.activityLabel} session`,
+      startedMessage: `Started ${policy.scope.kind === "workflow" ? policy.scope.role : "repository"} session`,
       now: this.now,
       emit: this.emit.bind(this),
     };
@@ -263,7 +284,7 @@ export class OpencodeSdkAdapter
           `Cannot resume OpenCode session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
         );
       }
-      await synchronizeOpencodeSessionPolicy({
+      await restoreSessionPolicy({
         action: "resume session",
         policy,
         request: input,
@@ -274,34 +295,28 @@ export class OpencodeSdkAdapter
 
     const runtimeClientInput = await this.resolveRuntimeClientInput(input, "resume session");
     const client = this.createClient(runtimeClientInput);
-    await requireOpencodeSessionPolicyRuntime({
+    await ensureTrustedOdtMcpServerConnected({
       client,
-      policy,
       workingDirectory: input.workingDirectory,
     });
-    const detail = await client.session.get({
-      directory: input.workingDirectory,
-      sessionID: input.externalSessionId,
+    const detailRecord = await readPermissionSession({
+      client,
+      workingDirectory: input.workingDirectory,
+      externalSessionId: input.externalSessionId,
     });
-    const detailData = unwrapData(detail, "get session");
-    const preserveNativeSettings = input.sessionScope?.kind === "repository" && !input.systemPrompt;
-    if (!preserveNativeSettings) {
-      await applySessionPolicy({
-        client,
-        externalSessionId: input.externalSessionId,
-        policy,
-        workingDirectory: input.workingDirectory,
-      });
-    }
-    const reconciledTitle = preserveNativeSettings
-      ? await reconcileSessionTitle({
-          client,
-          externalSessionId: input.externalSessionId,
-          title: policy.title,
-          workingDirectory: input.workingDirectory,
-        })
-      : null;
-    const detailRecord = opencodeSessionDetailPayloadSchema.parse(detailData);
+    await restoreSessionPermissions({
+      client,
+      externalSessionId: input.externalSessionId,
+      policy,
+      workingDirectory: input.workingDirectory,
+      detail: detailRecord,
+    });
+    const title = await setSessionTitle({
+      client,
+      externalSessionId: input.externalSessionId,
+      title: policy.title,
+      workingDirectory: input.workingDirectory,
+    });
     const startedAt = toIsoFromEpoch(detailRecord.time.created, this.now);
     const sessionInput = toSessionInput(input);
     const registrationInput: Parameters<typeof registerSession>[0] = {
@@ -314,7 +329,7 @@ export class OpencodeSdkAdapter
       sessionInput,
       client,
       startedAt,
-      startedMessage: `Resumed ${policy.activityLabel} session`,
+      startedMessage: `Resumed ${policy.scope.kind === "workflow" ? policy.scope.role : "repository"} session`,
       now: this.now,
       emit: this.emit.bind(this),
     };
@@ -322,7 +337,7 @@ export class OpencodeSdkAdapter
       registrationInput.logEvent = this.logEvent;
     }
     const summary = registerSession(registrationInput);
-    if (preserveNativeSettings) summary.title = reconciledTitle ?? detailRecord.title;
+    summary.title = title ?? detailRecord.title;
     return summary;
   }
 
@@ -330,7 +345,7 @@ export class OpencodeSdkAdapter
     input: ContinueInterruptedAgentTurnInput,
   ): Promise<AgentSessionSummary> {
     assertOpenCodeRuntimePolicyBinding(input, "continue OpenCode turn");
-    const policy = resolveOpencodeSessionPolicy(
+    resolveOpencodeSessionPolicy(
       input.sessionScope,
       this.getRuntimeDefinition(),
       "continue OpenCode turn",
@@ -344,18 +359,15 @@ export class OpencodeSdkAdapter
           message: `OpenCode session '${input.externalSessionId}' is registered to repo '${registeredRef.repoPath}' and working directory '${registeredRef.workingDirectory}'.`,
         });
       }
-      assertRuntimeContextCompatibleWithSession(
-        registered,
-        input,
-        "continue OpenCode turn",
-        (message) => interruptedTurnResumeError({ reason: "identity_mismatch", message }),
+      assertSessionScope(registered, input, "continue OpenCode turn", (message) =>
+        interruptedTurnResumeError({ reason: "identity_mismatch", message }),
       );
     }
     // Probe with an unregistered session client so an ineligible turn never registers,
     // subscribes, or emits a started event for the session.
     const probeClient = registered
       ? registered.client
-      : await this.resolveContinuationProbeClient(input, policy);
+      : await this.resolveContinuationProbeClient(input);
 
     let probe: Awaited<ReturnType<typeof probeOpencodeInterruptedTurn>>;
     try {
@@ -403,14 +415,14 @@ export class OpencodeSdkAdapter
     });
     this.emit(input.externalSessionId, begunSend.runningEvent);
     try {
-      const tools = await this.resolveSessionToolSelection(session);
+      await this.ensureSessionMcpReady(session);
+      assertTurnPermissionsReady(session);
       const modelInput = normalizeModelInput(input.model ?? session.input.model);
       const continuationInput = {
         client: session.client,
         workingDirectory: input.workingDirectory,
         externalSessionId: input.externalSessionId,
         modelInput,
-        tools,
       };
       await continueOpencodeInterruptedTurn(
         session.input.systemPrompt.trim().length > 0
@@ -470,7 +482,7 @@ export class OpencodeSdkAdapter
         );
       }
       if (input.sessionScope) {
-        await synchronizeOpencodeSessionPolicy({
+        await restoreSessionPolicy({
           action: "ensure session state",
           policy: resolveOpencodeSessionPolicy(
             input.sessionScope,
@@ -481,7 +493,7 @@ export class OpencodeSdkAdapter
           session: existing,
         });
       } else {
-        applyRuntimeContextToSession(existing, input, "ensure session state");
+        applySessionContext(existing, input, "ensure session state");
       }
       return existing.summary;
     }
@@ -496,9 +508,8 @@ export class OpencodeSdkAdapter
         )
       : null;
     if (policy) {
-      await requireOpencodeSessionPolicyRuntime({
+      await ensureTrustedOdtMcpServerConnected({
         client,
-        policy,
         workingDirectory: input.workingDirectory,
       });
     }
@@ -514,30 +525,29 @@ export class OpencodeSdkAdapter
       }
       detailRecord = knownDetail;
     } else {
-      const detail = await client.session.get({
-        directory: input.workingDirectory,
-        sessionID: input.externalSessionId,
+      detailRecord = await readPermissionSession({
+        client,
+        workingDirectory: input.workingDirectory,
+        externalSessionId: input.externalSessionId,
       });
-      detailRecord = opencodeSessionDetailPayloadSchema.parse(unwrapData(detail, "get session"));
     }
-    const preserveNativeSettings = input.sessionScope?.kind === "repository" && !input.systemPrompt;
-    if (policy && !preserveNativeSettings) {
-      await applySessionPolicy({
+    if (policy) {
+      await restoreSessionPermissions({
         client,
         externalSessionId: input.externalSessionId,
         policy,
         workingDirectory: input.workingDirectory,
+        detail: detailRecord,
       });
     }
-    const reconciledTitle =
-      policy && preserveNativeSettings
-        ? await reconcileSessionTitle({
-            client,
-            externalSessionId: input.externalSessionId,
-            title: policy.title,
-            workingDirectory: input.workingDirectory,
-          })
-        : null;
+    const title = policy
+      ? await setSessionTitle({
+          client,
+          externalSessionId: input.externalSessionId,
+          title: policy.title,
+          workingDirectory: input.workingDirectory,
+        })
+      : null;
     const startedAt = toIsoFromEpoch(detailRecord.time.created, this.now);
     const sessionInput = toExistingSessionInput(input);
 
@@ -560,7 +570,7 @@ export class OpencodeSdkAdapter
       registrationInput.logEvent = this.logEvent;
     }
     const summary = registerSession(registrationInput);
-    if (preserveNativeSettings) summary.title = reconciledTitle ?? detailRecord.title;
+    summary.title = title ?? detailRecord.title;
 
     try {
       const subscriptionInput: Parameters<typeof subscribeSessionToRuntimeEvents>[0] = {
@@ -593,7 +603,7 @@ export class OpencodeSdkAdapter
     input: PolicyBoundSessionRef,
     action: string,
   ): SessionRecord | Promise<SessionRecord> {
-    return resolveOpencodePolicyBoundSession({
+    return getBoundSession({
       request: input,
       action,
       session: this.sessions.get(input.externalSessionId),
@@ -630,9 +640,13 @@ export class OpencodeSdkAdapter
     );
     const runtimeClientInput = await this.resolveRuntimeClientInput(input, "fork session");
     const client = this.createClient(runtimeClientInput);
-    await requireOpencodeSessionPolicyRuntime({
+    await ensureTrustedOdtMcpServerConnected({
       client,
-      policy,
+      workingDirectory: input.workingDirectory,
+    });
+    const source = await readPermissionSession({
+      client,
+      externalSessionId: input.parentExternalSessionId,
       workingDirectory: input.workingDirectory,
     });
     const forkRequest: Parameters<typeof client.session.fork>[0] = {
@@ -645,33 +659,32 @@ export class OpencodeSdkAdapter
     const forked = await client.session.fork(forkRequest);
     const forkedData = unwrapData(forked, "fork session");
     const externalSessionId = forkedData.id;
+    if (!externalSessionId)
+      throw toOpenCodeRequestError(
+        `fork OpenCode session '${input.parentExternalSessionId}' in '${input.workingDirectory}'. Reconnect the selected OpenCode runtime and retry`,
+        new Error("The native fork response has no session ID."),
+      );
     try {
-      await applySessionPolicy({
+      const detail = checkSessionPermissions(forkedData, input.workingDirectory, externalSessionId);
+      await appendSessionPermissions({
+        client,
+        detail,
+        permission: addPermissionRules(source.permission ?? [], policy.permission),
+      });
+      await setSessionTitle({
         client,
         externalSessionId,
-        policy,
         workingDirectory: input.workingDirectory,
+        title: policy.title,
       });
     } catch (policyError) {
-      try {
-        const deleted = await client.session.delete({
-          directory: input.workingDirectory,
-          sessionID: externalSessionId,
-        });
-        if (deleted.data !== true) {
-          throw toOpenCodeRequestError(
-            `delete unregistered fork '${externalSessionId}'`,
-            deleted.error,
-            deleted.response,
-          );
-        }
-      } catch (cleanupError) {
-        throw new AggregateError(
-          [policyError, cleanupError],
-          `Failed to apply ${policy.toolSelection.kind} policy to forked OpenCode session '${externalSessionId}' and delete the unregistered fork.`,
-        );
-      }
-      throw policyError;
+      return this.deleteUnregisteredSession(
+        { client, externalSessionId, workingDirectory: input.workingDirectory },
+        toOpenCodeRequestError(
+          `apply ${policy.scope.kind} policy to forked OpenCode session '${externalSessionId}' in '${input.workingDirectory}'`,
+          policyError,
+        ),
+      );
     }
     const sessionInput = toSessionInput(input);
 
@@ -685,7 +698,7 @@ export class OpencodeSdkAdapter
       sessionInput,
       client,
       startedAt: this.now(),
-      startedMessage: `Forked ${policy.activityLabel} session`,
+      startedMessage: `Forked ${policy.scope.kind === "workflow" ? policy.scope.role : "repository"} session`,
       now: this.now,
       emit: this.emit.bind(this),
     };
@@ -769,6 +782,12 @@ export class OpencodeSdkAdapter
     } catch (error) {
       throw toOpenCodeRequestError("compact session", error);
     }
+    const existing = this.sessions.get(input.externalSessionId);
+    if (existing?.permissionSetupError || existing?.permissionSetupInFlight) {
+      assertSessionRef(existing, input, "send");
+      assertSessionScope(existing, input, "send");
+      assertTurnPermissionsReady(existing);
+    }
     const session = this.policyBoundSessionState(input, "send");
     return session instanceof Promise
       ? session.then((boundSession) =>
@@ -795,14 +814,12 @@ export class OpencodeSdkAdapter
     });
     this.emit(input.externalSessionId, begunSend.runningEvent);
     try {
-      const tools =
-        systemInvocation.kind === "manual_session_compaction"
-          ? {}
-          : await this.resolveSessionToolSelection(session);
+      if (systemInvocation.kind !== "manual_session_compaction") {
+        await this.ensureSessionMcpReady(session);
+      }
       const sendInput: Parameters<typeof sendUserMessage>[0] = {
         session,
         request: input,
-        tools,
       };
       if (messageId) {
         sendInput.messageId = messageId;
@@ -858,8 +875,6 @@ export class OpencodeSdkAdapter
       delete nextInput.model;
     }
     session.input = nextInput;
-    delete session.workflowToolSelectionCache;
-    delete session.workflowToolSelectionCachedAt;
   }
 
   async updateSessionTitle(
@@ -869,7 +884,7 @@ export class OpencodeSdkAdapter
     if (!session) {
       return { status: "not_attached" };
     }
-    assertOpencodeSessionRef(session, input, "rename");
+    assertSessionRef(session, input, "rename");
     const action = `rename OpenCode session '${input.externalSessionId}'`;
     try {
       const updated = await session.client.session.update({
@@ -962,6 +977,36 @@ export class OpencodeSdkAdapter
     );
   }
 
+  /** Delete a new session before returning its setup failure. Keep both errors if cleanup fails. */
+  private async deleteUnregisteredSession(
+    input: {
+      client: SessionRecord["client"];
+      externalSessionId: string;
+      workingDirectory: string;
+    },
+    setupError: Error,
+  ): Promise<never> {
+    try {
+      const deleted = await input.client.session.delete({
+        directory: input.workingDirectory,
+        sessionID: input.externalSessionId,
+      });
+      if (deleted.error || deleted.data !== true) {
+        throw toOpenCodeRequestError(
+          `delete unregistered OpenCode session '${input.externalSessionId}' in '${input.workingDirectory}'`,
+          deleted.error,
+          deleted.response,
+        );
+      }
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [setupError, cleanupError],
+        `OpenCode session '${input.externalSessionId}' in '${input.workingDirectory}' failed setup and could not be deleted: ${String(setupError)}; ${String(cleanupError)}. Delete the unused session in OpenCode before retrying.`,
+      );
+    }
+    throw setupError;
+  }
+
   private emit(externalSessionId: string, event: AgentEvent): void {
     const session = this.sessions.get(externalSessionId);
     if (!session) {
@@ -996,24 +1041,7 @@ export class OpencodeSdkAdapter
     }
   }
 
-  private async resolveSessionToolSelection(
-    session: SessionRecord,
-  ): Promise<Record<string, boolean>> {
-    const policy = resolveOpencodeSessionPolicy(
-      session.input.sessionScope,
-      this.getRuntimeDefinition(),
-      `resolve tools for session ${session.externalSessionId}`,
-    );
-    if (policy.toolSelection.kind === "repository") {
-      await requireOpencodeSessionPolicyRuntime({
-        client: session.client,
-        policy,
-        workingDirectory: session.input.workingDirectory,
-      });
-      return resolveRepositoryToolSelection(this.getRuntimeDefinition());
-    }
-
-    const nowMs = Date.now();
+  private async ensureSessionMcpReady(session: SessionRecord): Promise<void> {
     await ensureTrustedOdtMcpServerConnected({
       client: session.client,
       workingDirectory: session.input.workingDirectory,
@@ -1032,26 +1060,6 @@ export class OpencodeSdkAdapter
         this.emit(session.summary.externalSessionId, reconnectEvent);
       },
     });
-
-    if (
-      session.workflowToolSelectionCache &&
-      session.workflowToolSelectionCachedAt !== undefined &&
-      nowMs - session.workflowToolSelectionCachedAt < WORKFLOW_TOOL_CACHE_TTL_MS
-    ) {
-      return session.workflowToolSelectionCache;
-    }
-
-    const selection = await resolveWorkflowToolSelection({
-      client: session.client,
-      role: policy.toolSelection.role,
-      runtimeDescriptor: this.getRuntimeDefinition(),
-      workingDirectory: session.input.workingDirectory,
-      skipMcpConnectionCheck: true,
-    });
-
-    session.workflowToolSelectionCache = selection;
-    session.workflowToolSelectionCachedAt = nowMs;
-    return selection;
   }
 
   private async querySession(

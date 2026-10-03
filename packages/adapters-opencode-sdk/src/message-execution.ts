@@ -16,6 +16,7 @@ import { normalizeModelInput, resolveAssistantResponseMessageId } from "./payloa
 import { toOpenCodeRequestError } from "./request-errors";
 import type { QueuedUserMessageSend, SessionRecord } from "./types";
 import { fetchOpenCodeCommand } from "./opencode-command-fetch";
+import { assertTurnPermissionsReady } from "./opencode-session-permissions";
 import {
   buildQueuedRequestAttachmentIdentitySignature,
   buildQueuedRequestSignature,
@@ -31,7 +32,6 @@ type PreparedUserSend = {
     session: SessionRecord;
     messageId: string;
     modelInput: ReturnType<typeof normalizeModelInput>;
-    tools: Record<string, boolean>;
   }) => Promise<{ assistantMessageId: string | null }>;
 };
 
@@ -41,6 +41,105 @@ export type AdmittedUserMessage = {
   parts: AgentUserMessageDisplayPart[];
   state: AgentUserMessageState;
   model?: AgentModelSelection;
+};
+
+export const sendUserMessage = async (input: {
+  session: SessionRecord;
+  request: SendAgentUserMessageInput;
+  messageId?: string;
+  admission?: Promise<void>;
+}): Promise<AdmittedUserMessage> => {
+  const model = input.request.model ?? input.session.input.model;
+  const modelInput = normalizeModelInput(model);
+  let systemInvocation: ReturnType<typeof classifySystemSlashCommandInvocation>;
+  try {
+    systemInvocation = classifySystemSlashCommandInvocation(input.request.parts);
+  } catch (error) {
+    throw toOpenCodeRequestError("compact session", error);
+  }
+  const slashCommandRequest =
+    systemInvocation.kind === "not_system"
+      ? toSlashCommandExecutionRequest(input.request.parts)
+      : null;
+  const isManualSessionCompaction = systemInvocation.kind === "manual_session_compaction";
+  let preparedSend: PreparedUserSend;
+  if (isManualSessionCompaction) {
+    preparedSend = prepareManualSessionCompactionSend();
+  } else if (slashCommandRequest) {
+    preparedSend = prepareSlashCommandSend(input.request, slashCommandRequest);
+  } else {
+    preparedSend = preparePromptSend(input.request);
+  }
+  const messageId = input.messageId ?? createOpenCodeMessageId();
+  const pendingQueuedUserMessages = input.session.pendingQueuedUserMessages ?? [];
+  input.session.pendingQueuedUserMessages = pendingQueuedUserMessages;
+  const queuedAttachmentParts = readQueuedAttachmentDisplayParts(input.request.parts);
+  const isQueuedBehindActiveAssistant = input.session.activeAssistantMessageId !== null;
+  const shouldTrackPendingSend =
+    !isManualSessionCompaction &&
+    normalizeAgentUserMessageParts(input.request.parts).length > 0 &&
+    (isQueuedBehindActiveAssistant || queuedAttachmentParts.length > 0);
+  let queuedEntry: QueuedUserMessageSend | null = null;
+  if (shouldTrackPendingSend) {
+    queuedEntry = {
+      messageId,
+      signature: buildQueuedRequestSignature(input.request.parts, model ?? undefined),
+    };
+    if (queuedAttachmentParts.length > 0) {
+      queuedEntry.attachmentIdentitySignature = buildQueuedRequestAttachmentIdentitySignature(
+        input.request.parts,
+        model ?? undefined,
+      );
+      queuedEntry.attachmentParts = queuedAttachmentParts;
+    }
+  }
+
+  if (queuedEntry) {
+    pendingQueuedUserMessages.push(queuedEntry);
+  }
+
+  try {
+    assertTurnPermissionsReady(input.session);
+    const execution = preparedSend.execute({
+      session: input.session,
+      messageId,
+      modelInput,
+    });
+    let assistantMessageId: string | null = null;
+    if (input.admission) {
+      const executionFailure = new Promise<never>((_, reject) => {
+        void execution.then(() => undefined, reject);
+      });
+      await Promise.race([input.admission, executionFailure]);
+    } else {
+      ({ assistantMessageId } = await execution);
+    }
+    if (assistantMessageId) {
+      input.session.activeAssistantMessageId = assistantMessageId;
+    }
+    const parts = toAdmittedUserDisplayParts(input.request.parts);
+    const admittedMessage: AdmittedUserMessage = {
+      messageId,
+      message: readVisibleUserTextFromDisplayParts(parts),
+      parts,
+      state: isQueuedBehindActiveAssistant && !isManualSessionCompaction ? "queued" : "read",
+    };
+    if (model) {
+      admittedMessage.model = model;
+    }
+    return admittedMessage;
+  } catch (error) {
+    if (queuedEntry) {
+      const queuedEntryIndex = pendingQueuedUserMessages.indexOf(queuedEntry);
+      if (queuedEntryIndex >= 0) {
+        pendingQueuedUserMessages.splice(queuedEntryIndex, 1);
+      }
+    }
+    if (error instanceof Error && error.message.startsWith("OpenCode request failed:")) {
+      throw error;
+    }
+    throw toOpenCodeRequestError("prompt session", error);
+  }
 };
 
 type OpenCodePromptPart =
@@ -231,13 +330,12 @@ export const usesPromptAsyncTransport = (parts: SendAgentUserMessageInput["parts
 
 const preparePromptSend = (request: SendAgentUserMessageInput): PreparedUserSend => {
   return {
-    execute: async ({ session, messageId, modelInput, tools }) => {
+    execute: async ({ session, messageId, modelInput }) => {
       const promptParts = toPromptParts(request.parts, session.input.workingDirectory);
       const promptRequest: Parameters<typeof session.client.session.promptAsync>[0] = {
         sessionID: session.externalSessionId,
         directory: session.input.workingDirectory,
         messageID: messageId,
-        tools,
         parts: promptParts,
       };
       if (session.input.systemPrompt.trim().length > 0) {
@@ -368,104 +466,4 @@ const readQueuedAttachmentDisplayParts = (
 
     return [{ kind: "attachment", attachment: part.attachment }];
   });
-};
-
-export const sendUserMessage = async (input: {
-  session: SessionRecord;
-  request: SendAgentUserMessageInput;
-  tools: Record<string, boolean>;
-  messageId?: string;
-  admission?: Promise<void>;
-}): Promise<AdmittedUserMessage> => {
-  const model = input.request.model ?? input.session.input.model;
-  const modelInput = normalizeModelInput(model);
-  let systemInvocation: ReturnType<typeof classifySystemSlashCommandInvocation>;
-  try {
-    systemInvocation = classifySystemSlashCommandInvocation(input.request.parts);
-  } catch (error) {
-    throw toOpenCodeRequestError("compact session", error);
-  }
-  const slashCommandRequest =
-    systemInvocation.kind === "not_system"
-      ? toSlashCommandExecutionRequest(input.request.parts)
-      : null;
-  const isManualSessionCompaction = systemInvocation.kind === "manual_session_compaction";
-  let preparedSend: PreparedUserSend;
-  if (isManualSessionCompaction) {
-    preparedSend = prepareManualSessionCompactionSend();
-  } else if (slashCommandRequest) {
-    preparedSend = prepareSlashCommandSend(input.request, slashCommandRequest);
-  } else {
-    preparedSend = preparePromptSend(input.request);
-  }
-  const messageId = input.messageId ?? createOpenCodeMessageId();
-  const pendingQueuedUserMessages = input.session.pendingQueuedUserMessages ?? [];
-  input.session.pendingQueuedUserMessages = pendingQueuedUserMessages;
-  const queuedAttachmentParts = readQueuedAttachmentDisplayParts(input.request.parts);
-  const isQueuedBehindActiveAssistant = input.session.activeAssistantMessageId !== null;
-  const shouldTrackPendingSend =
-    !isManualSessionCompaction &&
-    normalizeAgentUserMessageParts(input.request.parts).length > 0 &&
-    (isQueuedBehindActiveAssistant || queuedAttachmentParts.length > 0);
-  let queuedEntry: QueuedUserMessageSend | null = null;
-  if (shouldTrackPendingSend) {
-    queuedEntry = {
-      messageId,
-      signature: buildQueuedRequestSignature(input.request.parts, model ?? undefined),
-    };
-    if (queuedAttachmentParts.length > 0) {
-      queuedEntry.attachmentIdentitySignature = buildQueuedRequestAttachmentIdentitySignature(
-        input.request.parts,
-        model ?? undefined,
-      );
-      queuedEntry.attachmentParts = queuedAttachmentParts;
-    }
-  }
-
-  if (queuedEntry) {
-    pendingQueuedUserMessages.push(queuedEntry);
-  }
-
-  try {
-    const execution = preparedSend.execute({
-      session: input.session,
-      messageId,
-      tools: input.tools,
-      modelInput,
-    });
-    let assistantMessageId: string | null = null;
-    if (input.admission) {
-      const executionFailure = new Promise<never>((_, reject) => {
-        void execution.then(() => undefined, reject);
-      });
-      await Promise.race([input.admission, executionFailure]);
-    } else {
-      ({ assistantMessageId } = await execution);
-    }
-    if (assistantMessageId) {
-      input.session.activeAssistantMessageId = assistantMessageId;
-    }
-    const parts = toAdmittedUserDisplayParts(input.request.parts);
-    const admittedMessage: AdmittedUserMessage = {
-      messageId,
-      message: readVisibleUserTextFromDisplayParts(parts),
-      parts,
-      state: isQueuedBehindActiveAssistant && !isManualSessionCompaction ? "queued" : "read",
-    };
-    if (model) {
-      admittedMessage.model = model;
-    }
-    return admittedMessage;
-  } catch (error) {
-    if (queuedEntry) {
-      const queuedEntryIndex = pendingQueuedUserMessages.indexOf(queuedEntry);
-      if (queuedEntryIndex >= 0) {
-        pendingQueuedUserMessages.splice(queuedEntryIndex, 1);
-      }
-    }
-    if (error instanceof Error && error.message.startsWith("OpenCode request failed:")) {
-      throw error;
-    }
-    throw toOpenCodeRequestError("prompt session", error);
-  }
 };

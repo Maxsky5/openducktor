@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { ODT_MCP_TOOL_NAMES, toOpencodeExposedOdtToolIds } from "@openducktor/contracts";
 import { workflowAgentSessionScope } from "@openducktor/core";
 import { makeMockClient, OpencodeSdkAdapter, sessionRef, sessionRuntimeRef } from "./test-support";
 
@@ -12,7 +11,7 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     const get = mock.client.session.get;
     mock.client.session.get = async (...args) => {
       const result = await get(...args);
-      return { ...result, data: { ...result.data!, parentID: "root" } };
+      return { ...result, data: { ...result.data!, id: "child", parentID: "root" } };
     };
     const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
     await expect(adapter.resolveSessionParent(sessionRef("child"))).resolves.toBe("root");
@@ -71,7 +70,7 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     await adapter.releaseSession(input);
   });
 
-  test("reconciles the durable title when an attached role-less repository session resumes", async () => {
+  test("sets the saved title when an attached role-less repository session resumes", async () => {
     const mock = makeMockClient({ sessionId: "repository-resume" });
     const get = mock.client.session.get;
     mock.client.session.get = async (...args) => {
@@ -134,6 +133,7 @@ describe("OpencodeSdkAdapter repository sessions", () => {
       runtimePolicy,
       systemPrompt: "repository system",
     });
+    expect(mock.session.deleteCalls).toEqual([]);
     await adapter.sendUserMessage({
       ...sessionRuntimeRef(started.externalSessionId, { sessionScope: repositoryScope }),
       parts: [{ kind: "text", text: "Inspect the repository" }],
@@ -178,7 +178,6 @@ describe("OpencodeSdkAdapter repository sessions", () => {
         { permission: "odt_read_task", pattern: "*", action: "allow" },
         { permission: "odt_create_task", pattern: "*", action: "allow" },
         { permission: "odt_search_tasks", pattern: "*", action: "allow" },
-        { permission: "task", pattern: "*", action: "allow" },
       ]),
     });
     expect(mock.session.promptAsyncCalls[0]).toMatchObject({ directory: "/repo" });
@@ -186,33 +185,19 @@ describe("OpencodeSdkAdapter repository sessions", () => {
       expect.arrayContaining([
         expect.objectContaining({
           sessionID: "repository-fork",
-          title: "Fairnest",
           permission: expect.arrayContaining([
             { permission: "odt_create_task", pattern: "*", action: "allow" },
           ]),
         }),
-        expect.objectContaining({
-          sessionID: "repository-resume",
-          title: "Fairnest",
-          permission: expect.arrayContaining([
-            { permission: "odt_create_task", pattern: "*", action: "allow" },
-          ]),
-        }),
+        expect.objectContaining({ sessionID: "repository-resume", title: "Fairnest" }),
       ]),
     );
-    const promptTools = mock.session.promptAsyncCalls[0]?.tools;
-    if (!promptTools) {
-      throw new Error("Expected repository session prompt tools.");
-    }
-    const missingToolIds = ODT_MCP_TOOL_NAMES.flatMap((toolName) =>
-      toOpencodeExposedOdtToolIds(toolName),
-    ).filter((toolId) => promptTools[toolId] !== true);
-    expect(missingToolIds).toEqual([]);
-    expect(promptTools).toMatchObject({
-      "openducktor_*": false,
-      task: true,
-      subtask: false,
-    });
+    expect(
+      mock.session.updateCalls
+        .filter((call) => call.sessionID === "repository-resume")
+        .every((call) => call.permission === undefined),
+    ).toBe(true);
+    expect(mock.session.promptAsyncCalls[0]).not.toHaveProperty("tools");
     expect(mock.mcp.statusCalls).toHaveLength(4);
     expect(mock.mcp.statusCalls).toEqual(
       expect.arrayContaining([expect.objectContaining({ directory: "/repo" })]),
@@ -297,7 +282,7 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     expect(mock.session.updateCalls).toHaveLength(updateCallCount);
   });
 
-  test("applies repository policy before sending from a retained unbound session", async () => {
+  test("preserves native policy when sending from a retained unbound repository session", async () => {
     const mock = makeMockClient();
     const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
     const unsubscribe = await adapter.subscribeEvents(
@@ -315,10 +300,6 @@ describe("OpencodeSdkAdapter repository sessions", () => {
       expect.objectContaining({
         sessionID: "session-opencode-1",
         title: "Fairnest",
-        permission: expect.arrayContaining([
-          { permission: "odt_create_task", pattern: "*", action: "allow" },
-          { permission: "odt_search_tasks", pattern: "*", action: "allow" },
-        ]),
       }),
     );
     expect(mock.session.promptAsyncCalls).toHaveLength(1);
@@ -359,7 +340,7 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     unsubscribe();
   });
 
-  test("applies repository policy before subscribing to a retained unbound session", async () => {
+  test("preserves native policy when subscribing to a retained unbound repository session", async () => {
     const mock = makeMockClient();
     const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
     const unsubscribeUnbound = await adapter.subscribeEvents(
@@ -376,10 +357,6 @@ describe("OpencodeSdkAdapter repository sessions", () => {
       expect.objectContaining({
         sessionID: "session-opencode-1",
         title: "Fairnest",
-        permission: expect.arrayContaining([
-          { permission: "odt_create_task", pattern: "*", action: "allow" },
-          { permission: "odt_search_tasks", pattern: "*", action: "allow" },
-        ]),
       }),
     );
     unsubscribeRepository();
@@ -442,17 +419,19 @@ describe("OpencodeSdkAdapter repository sessions", () => {
       error: new Error("permission update rejected"),
     };
     const repositorySessionRef = sessionRuntimeRef("session-opencode-1", {
-      sessionScope: repositoryScope,
+      sessionScope: workflowAgentSessionScope("task-1", "build"),
     });
 
     await expect(adapter.subscribeEvents(repositorySessionRef, () => {})).rejects.toThrow(
-      "update repository session policy",
+      "install permissions",
     );
 
-    mock.session.updateResult = { data: { id: "session-opencode-1" }, error: undefined };
+    mock.session.updateResult = {};
     const unsubscribeRepository = await adapter.subscribeEvents(repositorySessionRef, () => {});
 
-    expect(mock.session.updateCalls).toHaveLength(2);
+    expect(mock.session.updateCalls.filter((call) => call.permission !== undefined)).toHaveLength(
+      2,
+    );
     unsubscribeRepository();
     unsubscribeUnbound();
   });
@@ -469,20 +448,22 @@ describe("OpencodeSdkAdapter repository sessions", () => {
       error: new Error("permission update rejected"),
     };
     const replyInput = {
-      ...sessionRuntimeRef("session-opencode-1", { sessionScope: repositoryScope }),
+      ...sessionRuntimeRef("session-opencode-1", {
+        sessionScope: workflowAgentSessionScope("task-1", "build"),
+      }),
       requestId: "permission-1",
       outcome: "approve_once" as const,
     };
 
-    await expect(adapter.replyApproval(replyInput)).rejects.toThrow(
-      "update repository session policy",
-    );
+    await expect(adapter.replyApproval(replyInput)).rejects.toThrow("install permissions");
     expect(mock.permission.replyCalls).toHaveLength(0);
 
-    mock.session.updateResult = { data: { id: "session-opencode-1" }, error: undefined };
+    mock.session.updateResult = {};
     await adapter.replyApproval(replyInput);
 
-    expect(mock.session.updateCalls).toHaveLength(2);
+    expect(mock.session.updateCalls.filter((call) => call.permission !== undefined)).toHaveLength(
+      2,
+    );
     expect(mock.permission.replyCalls).toHaveLength(1);
     unsubscribe();
   });
@@ -698,7 +679,6 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     expect(mock.session.updateCalls).toContainEqual(
       expect.objectContaining({
         sessionID: "session-opencode-fork",
-        title: "BUILD task-1",
         permission: expect.arrayContaining([
           { permission: "odt_build_completed", pattern: "*", action: "allow" },
           { permission: "odt_set_spec", pattern: "*", action: "deny" },
@@ -707,23 +687,18 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     );
   });
 
-  test("propagates repository session policy update failures", async () => {
+  test("preserves imported permissions even when the permission update API would fail", async () => {
     const mock = makeMockClient({
-      sessionUpdateResult: { data: undefined, error: new Error("permission update rejected") },
+      sessionUpdateResult: { error: new Error("permission update rejected") },
     });
     const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
-
-    await expect(
-      adapter.resumeSession({
-        ...sessionRef("repository-resume"),
-        sessionScope: repositoryScope,
-        runtimePolicy,
-        systemPrompt: "repository system",
-      }),
-    ).rejects.toMatchObject({
-      message:
-        "OpenCode request failed: update repository session policy for session 'repository-resume': permission update rejected",
+    await adapter.resumeSession({
+      ...sessionRef("repository-resume"),
+      sessionScope: { kind: "repository" },
+      runtimePolicy,
+      systemPrompt: "repository system",
     });
+    expect(mock.session.updateCalls).toEqual([]);
   });
 
   test("propagates workflow fork policy update failures", async () => {
@@ -750,9 +725,7 @@ describe("OpencodeSdkAdapter repository sessions", () => {
         runtimePolicy,
         systemPrompt: "system",
       }),
-    ).rejects.toThrow(
-      "OpenCode request failed: update workflow session policy for session 'session-opencode-fork'",
-    );
+    ).rejects.toThrow("install permissions for OpenCode session 'session-opencode-fork'");
   });
 
   test("deletes a fork when applying its workflow policy fails", async () => {
@@ -779,7 +752,7 @@ describe("OpencodeSdkAdapter repository sessions", () => {
         runtimePolicy,
         systemPrompt: "system",
       }),
-    ).rejects.toThrow("update workflow session policy");
+    ).rejects.toThrow("install permissions");
     expect(mock.session.deleteCalls).toEqual([
       { directory: "/repo", sessionID: "session-opencode-fork" },
     ]);
@@ -792,12 +765,17 @@ describe("OpencodeSdkAdapter repository sessions", () => {
       repoPath: "/repo",
       workingDirectory: "/repo",
       runtimeKind: "opencode",
-      sessionScope: repositoryScope,
+      sessionScope: workflowAgentSessionScope("task-1", "build"),
       runtimePolicy,
       systemPrompt: "original system prompt",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
     mock.session.updateCalls.length = 0;
+    await mock.client.session.update({
+      sessionID: started.externalSessionId,
+      directory: "/repo",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    });
     mock.session.updateResult = {
       data: undefined,
       error: new Error("permission update rejected"),
@@ -806,16 +784,22 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     await expect(
       adapter.resumeSession({
         ...sessionRef(started.externalSessionId),
-        sessionScope: repositoryScope,
+        sessionScope: workflowAgentSessionScope("task-1", "build"),
         runtimePolicy,
         systemPrompt: "replacement system prompt",
         model: { providerId: "openai", modelId: "gpt-5", variant: "high" },
       }),
-    ).rejects.toThrow("update repository session policy");
-    mock.session.updateResult = { data: { id: started.externalSessionId }, error: undefined };
+    ).rejects.toThrow("install permissions");
+    mock.session.updateResult = {};
+    await adapter.resumeSession({
+      ...sessionRuntimeRef(started.externalSessionId, {
+        sessionScope: workflowAgentSessionScope("task-1", "build"),
+        systemPrompt: undefined,
+      }),
+    });
     await adapter.sendUserMessage({
       ...sessionRuntimeRef(started.externalSessionId, {
-        sessionScope: repositoryScope,
+        sessionScope: workflowAgentSessionScope("task-1", "build"),
         systemPrompt: undefined,
       }),
       parts: [{ kind: "text", text: "Continue" }],

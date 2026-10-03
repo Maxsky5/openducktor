@@ -106,7 +106,6 @@ export type ContinueOpencodeInterruptedTurnInput = ProbeOpencodeInterruptedTurnI
     readonly variant?: string;
     readonly agent?: string;
   };
-  readonly tools?: Record<string, boolean>;
   readonly systemPrompt?: string;
 };
 
@@ -131,9 +130,6 @@ export const continueOpencodeInterruptedTurn = async (
   }
   if (modelInput?.agent) {
     request.agent = modelInput.agent;
-  }
-  if (input.tools) {
-    request.tools = input.tools;
   }
   if (input.systemPrompt && input.systemPrompt.trim().length > 0) {
     request.system = input.systemPrompt;

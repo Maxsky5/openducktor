@@ -95,7 +95,6 @@ describe("message-execution", () => {
     const result = await sendUserMessage({
       session,
       request: { externalSessionId: "session-1", parts: [{ kind: "text", text }] },
-      tools: {},
     });
     expect(promptAsync).toHaveBeenCalledTimes(1);
     expect(promptAsync).toHaveBeenCalledWith(
@@ -123,7 +122,6 @@ describe("message-execution", () => {
           profileId: "hephaestus",
         },
       },
-      tools: {},
     });
 
     expect(command).toHaveBeenCalledWith(
@@ -152,7 +150,6 @@ describe("message-execution", () => {
         parts: [{ kind: "slash_command", command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND }],
         model: { providerId: "openai", modelId: "gpt-5" },
       },
-      tools: {},
     });
 
     expect(summarize).toHaveBeenCalledTimes(1);
@@ -172,7 +169,6 @@ describe("message-execution", () => {
         externalSessionId: "session-opencode-1",
         parts: [{ kind: "text", text: "continue" }],
       },
-      tools: {},
     });
     expect(promptAsync).toHaveBeenCalledTimes(1);
   });
@@ -198,7 +194,6 @@ describe("message-execution", () => {
         parts: [{ kind: "slash_command", command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND }],
         model: { providerId: "openai", modelId: "gpt-5" },
       },
-      tools: {},
     });
 
     expect(sdkSessionClient.summarizeCalls).toEqual([
@@ -222,7 +217,6 @@ describe("message-execution", () => {
         parts: [{ kind: "slash_command", command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND }],
         model: { providerId: "openai", modelId: "gpt-5" },
       },
-      tools: {},
     });
 
     expect(summarize).toHaveBeenCalledTimes(1);
@@ -242,7 +236,6 @@ describe("message-execution", () => {
           externalSessionId: "session-opencode-1",
           parts: [{ kind: "slash_command", command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND }],
         },
-        tools: {},
       }),
     ).rejects.toThrow(
       "compact session: OpenCode session compaction requires a selected provider and model",
@@ -267,7 +260,6 @@ describe("message-execution", () => {
           parts: [{ kind: "slash_command", command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND }],
           model: { providerId: "openai", modelId: "gpt-5" },
         },
-        tools: {},
       }),
     ).rejects.toThrow("OpenCode request failed: compact session: connection closed");
   });
@@ -285,7 +277,6 @@ describe("message-execution", () => {
           { kind: "text", text: " summarize latest session" },
         ],
       },
-      tools: {},
     });
 
     expect(session.pendingQueuedUserMessages).toEqual([
@@ -314,7 +305,6 @@ describe("message-execution", () => {
         externalSessionId: "session-1",
         parts: [{ kind: "file_reference", file: FILE_REFERENCE }],
       },
-      tools: {},
     });
 
     expect(session.pendingQueuedUserMessages).toEqual([
@@ -377,7 +367,6 @@ describe("message-execution", () => {
             { kind: "text", text: " summarize latest session" },
           ],
         },
-        tools: {},
       }),
     ).rejects.toThrow();
 
@@ -402,7 +391,6 @@ describe("message-execution", () => {
         externalSessionId: "session-1",
         parts: [{ kind: "slash_command", command: COMMAND }],
       },
-      tools: {},
     });
 
     expect(session.activeAssistantMessageId).toBe("msg-assistant-1");
@@ -417,14 +405,12 @@ describe("message-execution", () => {
         externalSessionId: "session-1",
         parts: [{ kind: "text", text: "plain follow-up" }],
       },
-      tools: {},
     });
 
     expect(promptAsync).toHaveBeenCalledWith({
       sessionID: "session-opencode-1",
       directory: "/repo",
       messageID: expect.stringMatching(OPENCODE_MESSAGE_ID_PATTERN),
-      tools: {},
       parts: [{ type: "text", text: "plain follow-up" }],
     });
     expect(command).not.toHaveBeenCalled();
@@ -443,14 +429,12 @@ describe("message-execution", () => {
           { kind: "text", text: " please" },
         ],
       },
-      tools: {},
     });
 
     expect(promptAsync).toHaveBeenCalledWith({
       sessionID: "session-opencode-1",
       directory: "/repo",
       messageID: expect.stringMatching(OPENCODE_MESSAGE_ID_PATTERN),
-      tools: {},
       parts: [
         { type: "text", text: "check @src/main.ts please" },
         {
@@ -485,14 +469,12 @@ describe("message-execution", () => {
           { kind: "attachment", attachment: IMAGE_ATTACHMENT },
         ],
       },
-      tools: {},
     });
 
     expect(promptAsync).toHaveBeenCalledWith({
       sessionID: "session-opencode-1",
       directory: "/repo",
       messageID: expect.stringMatching(OPENCODE_MESSAGE_ID_PATTERN),
-      tools: {},
       parts: [
         { type: "text", text: "describe this" },
         {
@@ -527,14 +509,12 @@ describe("message-execution", () => {
           { kind: "text", text: " to review" },
         ],
       },
-      tools: {},
     });
 
     expect(promptAsync).toHaveBeenCalledWith({
       sessionID: "session-opencode-1",
       directory: "/repo",
       messageID: expect.stringMatching(OPENCODE_MESSAGE_ID_PATTERN),
-      tools: {},
       parts: [
         { type: "text", text: "ask @reviewer to review" },
         {
@@ -565,14 +545,12 @@ describe("message-execution", () => {
           { kind: "file_reference", file: FILE_REFERENCE },
         ],
       },
-      tools: {},
     });
 
     expect(promptAsync).toHaveBeenCalledWith({
       sessionID: "session-opencode-1",
       directory: "/repo",
       messageID: expect.stringMatching(OPENCODE_MESSAGE_ID_PATTERN),
-      tools: {},
       parts: [
         { type: "text", text: "review with @src/main.ts" },
         {
@@ -618,7 +596,6 @@ describe("message-execution", () => {
         externalSessionId: "session-1",
         parts: [{ kind: "attachment", attachment: IMAGE_ATTACHMENT }],
       },
-      tools: {},
     });
 
     expect(session.pendingQueuedUserMessages).toEqual([
@@ -646,7 +623,6 @@ describe("message-execution", () => {
         externalSessionId: "session-1",
         parts: [{ kind: "attachment", attachment: IMAGE_ATTACHMENT }],
       },
-      tools: {},
     });
 
     const promptRequest: { parts?: Array<{ type: string; source?: unknown }> } | undefined =
@@ -684,7 +660,6 @@ describe("message-execution", () => {
           },
         ],
       },
-      tools: {},
     });
 
     const promptRequest:
@@ -723,7 +698,6 @@ describe("message-execution", () => {
           },
         ],
       },
-      tools: {},
     });
 
     expect(promptAsync).toHaveBeenCalledWith(
@@ -753,14 +727,12 @@ describe("message-execution", () => {
           { kind: "file_reference", file: VIDEO_FILE_REFERENCE },
         ],
       },
-      tools: {},
     });
 
     expect(promptAsync).toHaveBeenCalledWith({
       sessionID: "session-opencode-1",
       directory: "/repo",
       messageID: expect.stringMatching(OPENCODE_MESSAGE_ID_PATTERN),
-      tools: {},
       parts: [
         { type: "text", text: "@assets/diagram.svg and @recordings/demo.mov" },
         {
@@ -810,7 +782,6 @@ describe("message-execution", () => {
             { kind: "file_reference", file: FILE_REFERENCE },
           ],
         },
-        tools: {},
       }),
     ).rejects.toThrow(
       "OpenCode request failed: run slash command: OpenCode slash commands do not support structured attachments, file references, skill references, or subagent references.",
@@ -830,7 +801,6 @@ describe("message-execution", () => {
             { kind: "attachment", attachment: IMAGE_ATTACHMENT },
           ],
         },
-        tools: {},
       }),
     ).rejects.toThrow(
       "OpenCode request failed: run slash command: OpenCode slash commands do not support structured attachments, file references, skill references, or subagent references.",
@@ -857,7 +827,6 @@ describe("message-execution", () => {
             },
           ],
         },
-        tools: {},
       }),
     ).rejects.toThrow(
       "OpenCode request failed: run slash command: OpenCode slash commands do not support structured attachments, file references, skill references, or subagent references.",
@@ -877,7 +846,6 @@ describe("message-execution", () => {
             { kind: "subagent_reference", subagent: SUBAGENT_REFERENCE },
           ],
         },
-        tools: {},
       }),
     ).rejects.toThrow(
       "OpenCode request failed: run slash command: OpenCode slash commands do not support structured attachments, file references, skill references, or subagent references.",
@@ -897,7 +865,6 @@ describe("message-execution", () => {
             { kind: "slash_command", command: COMMAND },
           ],
         },
-        tools: {},
       }),
     ).rejects.toThrow("OpenCode slash commands must be the first meaningful message segment.");
   });
@@ -918,7 +885,6 @@ describe("message-execution", () => {
             },
           ],
         },
-        tools: {},
       }),
     ).rejects.toThrow("OpenCode supports only one slash command token per message.");
   });
@@ -937,7 +903,6 @@ describe("message-execution", () => {
           externalSessionId: "session-1",
           parts: [{ kind: "slash_command", command: COMMAND }],
         },
-        tools: {},
       }),
     ).rejects.toThrow(
       "OpenCode request failed: run slash command (400 Bad Request): bad command payload",

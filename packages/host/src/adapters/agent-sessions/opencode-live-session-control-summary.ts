@@ -56,6 +56,8 @@ export const toOpenCodeLiveSession = ({
     runtimeActivity,
     snapshot: parseOpenCodeLiveSnapshot(snapshotInput, "opencode-live-session.control-summary"),
   };
+  if (summary.sessionAssociation.kind !== "unbound")
+    session.sessionScope = summary.sessionAssociation;
   session.snapshot = parseOpenCodeLiveSnapshot(
     { ...session.snapshot, activity: openCodeActivityForPending(session) },
     "opencode-live-session.control-activity",

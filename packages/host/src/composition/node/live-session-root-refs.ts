@@ -33,6 +33,7 @@ export const createLiveSessionRootRefsReader =
             ? []
             : [
                 {
+                  sessionScope: { kind: "repository" as const },
                   repoPath,
                   runtimeKind: chat.runtimeKind,
                   externalSessionId: chat.externalSessionId,
@@ -42,6 +43,7 @@ export const createLiveSessionRootRefsReader =
         ),
         ...records.flatMap((task) =>
           task.agentSessions.map((session) => ({
+            sessionScope: { kind: "workflow" as const, taskId: task.taskId, role: session.role },
             repoPath,
             runtimeKind: session.runtimeKind,
             externalSessionId: session.externalSessionId,

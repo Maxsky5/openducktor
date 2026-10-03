@@ -124,6 +124,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "workspaceSessionWorktreeInputSchema",
   "workspaceSessionWorktreeNameSchema",
   "agentSessionAssociationSchema",
+  "agentSessionAuthorizedRootSchema",
   "agentSessionApprovalMutationSchema",
   "agentSessionApprovalRequestSchema",
   "agentSessionContextUsageSchema",

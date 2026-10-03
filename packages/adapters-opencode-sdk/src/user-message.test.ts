@@ -244,7 +244,7 @@ describe("OpencodeSdkAdapter user message", () => {
     expect(summarizeCalls).toEqual([]);
   });
 
-  test("sendUserMessage forwards selected model with openducktor role-scoped tools", async () => {
+  test("sendUserMessage forwards the selected model without deprecated tool controls", async () => {
     const mock = makeMockClient({});
     const adapter = new OpencodeSdkAdapter({
       createClient: () => mock.client,
@@ -281,30 +281,10 @@ describe("OpencodeSdkAdapter user message", () => {
       },
       variant: "high",
       agent: "hephaestus",
-      tools: {
-        edit: false,
-        write: false,
-        apply_patch: false,
-        ast_grep_replace: false,
-        lsp_rename: false,
-        odt_create_task: true,
-        odt_search_tasks: true,
-        odt_get_workspaces: false,
-        openducktor_odt_read_task: true,
-        openducktor_odt_read_task_documents: true,
-        openducktor_odt_set_spec: true,
-        openducktor_odt_set_plan: false,
-        openducktor_odt_build_blocked: false,
-        openducktor_odt_build_resumed: false,
-        openducktor_odt_build_completed: false,
-        openducktor_odt_set_pull_request: false,
-        openducktor_odt_qa_approved: false,
-        openducktor_odt_qa_rejected: false,
-      },
       parts: [{ type: "text", text: "Write and persist spec" }],
     });
-    expect(mock.tool.idsCalls).toEqual([{ directory: "/repo" }]);
-    expect(mock.mcp.statusCalls).toEqual([{ directory: "/repo" }]);
+    expect(mock.tool.idsCalls).toEqual([]);
+    expect(mock.mcp.statusCalls).toEqual([{ directory: "/repo" }, { directory: "/repo" }]);
     expect(events.some((event) => event.type === "assistant_message")).toBe(false);
     expect(events.some((event) => event.type === "session_idle")).toBe(false);
   });
@@ -946,7 +926,7 @@ describe("OpencodeSdkAdapter user message", () => {
     });
   });
 
-  test("sendUserMessage caches workflow tool discovery but checks MCP health for each prompt", async () => {
+  test("sendUserMessage retains session permissions while checking MCP health for each prompt", async () => {
     const mock = makeMockClient({});
     const adapter = new OpencodeSdkAdapter({
       createClient: () => mock.client,
@@ -972,13 +952,13 @@ describe("OpencodeSdkAdapter user message", () => {
       model: selectedModel,
     });
 
-    expect(mock.tool.idsCalls).toEqual([{ directory: "/repo" }]);
-    expect(mock.mcp.statusCalls).toEqual([{ directory: "/repo" }, { directory: "/repo" }]);
+    expect(mock.tool.idsCalls).toEqual([]);
+    expect(mock.mcp.statusCalls).toHaveLength(3);
     expect(mock.session.promptCalls).toHaveLength(0);
     expect(mock.session.promptAsyncCalls).toHaveLength(2);
   });
 
-  test("sendUserMessage uses global workflow tool discovery even when the session has a selected model", async () => {
+  test("sendUserMessage keeps session permissions independent of selected-model tool discovery", async () => {
     const mock = makeMockClient({
       toolIdsResponse: ["bash", "read", "glob"],
     });
@@ -1002,20 +982,7 @@ describe("OpencodeSdkAdapter user message", () => {
     expect(mock.session.promptCalls).toHaveLength(0);
     const promptAsyncCall: { tools?: Record<string, boolean> } | undefined =
       mock.session.promptAsyncCalls[0];
-    expect(promptAsyncCall?.tools).toMatchObject({
-      edit: false,
-      write: false,
-      apply_patch: false,
-      ast_grep_replace: false,
-      lsp_rename: false,
-      odt_create_task: true,
-      odt_search_tasks: true,
-      odt_get_workspaces: false,
-      odt_read_task: true,
-      odt_read_task_documents: true,
-      odt_set_spec: true,
-      odt_set_plan: false,
-    });
+    expect(promptAsyncCall?.tools).toBeUndefined();
   });
 
   test("sendUserMessage wraps promptAsync API errors with response details", async () => {

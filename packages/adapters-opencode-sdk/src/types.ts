@@ -20,12 +20,6 @@ import type { ParsedOpencodeEvent as Event } from "./opencode-global-event-ingre
 import type { ParsedOpencodePart } from "./opencode-ingress";
 import type { RuntimeEventSubscribers } from "./runtime-event-subscribers";
 
-/**
- * Cache TTL for workflow tool selection (5 minutes).
- * Tool IDs change only when MCP servers connect/disconnect.
- */
-export const WORKFLOW_TOOL_CACHE_TTL_MS = 5 * 60 * 1000;
-
 export type SessionInput = RuntimeWorkingDirectoryRef &
   AgentRuntimePolicyBinding & {
     sessionScope?: AgentSessionScope;
@@ -59,6 +53,10 @@ export type SessionRecord = {
   client: OpencodeClient;
   externalSessionId: string;
   runtimeId: string;
+  /** Keep failed setup blocked until a later attach confirms the rules. */
+  permissionSetupError?: Error;
+  /** Count all pending attaches so one cannot unblock another. */
+  permissionSetupInFlight?: number;
   streamTurnStatus: SessionStreamTurnStatus;
   isSendingUserMessage: boolean;
   isAwaitingRuntimeTurnStart: boolean;
@@ -89,10 +87,6 @@ export type SessionRecord = {
   pendingSubagentPartEmissionsByExternalSessionId: Map<string, PendingSubagentPartEmission[]>;
   pendingSubagentInputEventsByExternalSessionId: Map<string, PendingSubagentInputEvent[]>;
   pendingBackgroundTaskResultsByExternalSessionId: Map<string, PendingBackgroundTaskResult[]>;
-  /** Cached workflow tool selection (toolId -> enabled). */
-  workflowToolSelectionCache?: Record<string, boolean>;
-  /** Timestamp when cache was last populated. */
-  workflowToolSelectionCachedAt?: number;
 };
 
 export type EventStreamSubscriber = {

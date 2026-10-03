@@ -10,9 +10,8 @@ import {
 export type OpencodeSessionPolicy = {
   /** Runtime session title. `undefined` keeps the current title. */
   title?: string;
-  activityLabel: string;
   permission: OpencodePermissionRule[];
-  toolSelection:
+  scope:
     | { kind: "workflow"; role: Extract<AgentSessionScope, { kind: "workflow" }>["role"] }
     | { kind: "repository" };
 };
@@ -28,17 +27,15 @@ export const resolveOpencodeSessionPolicy = (
   const policy: OpencodeSessionPolicy =
     sessionScope.kind === "workflow"
       ? {
-          activityLabel: sessionScope.role,
           permission: buildRoleScopedPermissionRules({
             role: sessionScope.role,
             runtimeDescriptor,
           }),
-          toolSelection: { kind: "workflow", role: sessionScope.role },
+          scope: { kind: "workflow", role: sessionScope.role },
         }
       : {
-          activityLabel: "repository",
           permission: buildRepositoryScopedPermissionRules(runtimeDescriptor),
-          toolSelection: { kind: "repository" },
+          scope: { kind: "repository" },
         };
   return withAgentSessionTitle(policy, sessionScope);
 };
