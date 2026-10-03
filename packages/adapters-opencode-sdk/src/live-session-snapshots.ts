@@ -1,4 +1,5 @@
 import type { AgentSessionScope } from "@openducktor/contracts";
+import { agentSessionScopesEqual, describeAgentSessionScope } from "@openducktor/core";
 import type {
   SessionRef,
   AgentPendingApprovalRequest,
@@ -313,7 +314,31 @@ const readOwnedSessions = async (
 ): Promise<{ sessions: OwnedSession[]; failures: OpencodeRuntimeSnapshotFailure[] }> => {
   const sessions = new Map<string, OwnedSession>();
   const failures: OpencodeRuntimeSnapshotFailure[] = [];
+  const scopes = new Map<string, AgentSessionScope>();
+  const conflicts = new Map<string, string>();
+  // Check all owners before attachment can write permissions for any root.
   for (const root of roots) {
+    if (!root.sessionScope) continue;
+    const previous = scopes.get(root.externalSessionId);
+    if (previous && !agentSessionScopesEqual(previous, root.sessionScope)) {
+      conflicts.set(
+        root.externalSessionId,
+        `Conflicting owners for OpenCode session '${root.externalSessionId}': ${describeAgentSessionScope(previous)} and ${describeAgentSessionScope(root.sessionScope)}. Remove the conflicting session reference before retrying.`,
+      );
+    } else {
+      scopes.set(root.externalSessionId, root.sessionScope);
+    }
+  }
+  for (const root of roots) {
+    const conflict = conflicts.get(root.externalSessionId);
+    if (conflict) {
+      failures.push({
+        externalSessionId: root.externalSessionId,
+        workingDirectory: root.workingDirectory,
+        message: conflict,
+      });
+      continue;
+    }
     if (sessions.has(root.externalSessionId)) continue;
     const tree = new Map<string, OwnedSession>();
     const visit = async (id: string, directory: string, parent?: string): Promise<void> => {

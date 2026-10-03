@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { AgentSessionScope } from "@openducktor/contracts";
 import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { listOpencodeRuntimeSnapshotSources } from "./live-session-snapshots";
 import { createOpencodeSessionFixture } from "./opencode-protocol-test-fixtures";
@@ -117,6 +118,99 @@ describe("OpenCode live session snapshots", () => {
     });
     expect(result).toEqual({ sources: [], failures: [] });
     expect(calls).toEqual([]);
+  });
+
+  test.each<{
+    name: string;
+    scopes: [AgentSessionScope, AgentSessionScope];
+    owners: [string, string];
+  }>([
+    {
+      name: "tasks",
+      scopes: [
+        { kind: "workflow", taskId: "task-a", role: "builder" },
+        { kind: "workflow", taskId: "task-b", role: "builder" },
+      ],
+      owners: ["task 'task-a'", "task 'task-b'"],
+    },
+    {
+      name: "roles",
+      scopes: [
+        { kind: "workflow", taskId: "task-a", role: "qa" },
+        { kind: "workflow", taskId: "task-a", role: "builder" },
+      ],
+      owners: ["role 'qa'", "role 'builder'"],
+    },
+    {
+      name: "repository and workflow scopes",
+      scopes: [{ kind: "repository" }, { kind: "workflow", taskId: "task-a", role: "builder" }],
+      owners: ["repository scope", "task 'task-a'"],
+    },
+  ])("rejects conflicting $name before attachment in either order", async ({ scopes, owners }) => {
+    for (const orderedScopes of [scopes, [...scopes].reverse()]) {
+      const attached: string[] = [];
+      const result = await listOpencodeRuntimeSnapshotSources({
+        createClient: () => makeClient([]),
+        runtimeEndpoint: "http://runtime-1",
+        roots: [
+          ...orderedScopes.map((sessionScope) => ({
+            repoPath: "/worktree",
+            runtimeKind: "opencode" as const,
+            externalSessionId: "conflicting-session",
+            workingDirectory: "/worktree",
+            sessionScope,
+          })),
+          {
+            repoPath: "/worktree",
+            runtimeKind: "opencode",
+            externalSessionId: "healthy-session",
+            workingDirectory: "/worktree",
+            sessionScope: { kind: "repository" },
+          },
+        ],
+        attachSession: async (session) => {
+          attached.push(session.id);
+        },
+        now: () => "2026-07-16T10:02:00.000Z",
+        readDirectory: async (_directory, read) => read(),
+      });
+      expect(attached).toEqual(["healthy-session"]);
+      expect(result.sources).toEqual([
+        expect.objectContaining({ externalSessionId: "healthy-session" }),
+      ]);
+      expect(result.failures).toHaveLength(2);
+      for (const failure of result.failures) {
+        expect(failure.externalSessionId).toBe("conflicting-session");
+        expect(failure.message).toContain("Conflicting owners");
+        for (const owner of owners) expect(failure.message).toContain(owner);
+      }
+    }
+  });
+
+  test("attaches matching duplicate roots once", async () => {
+    const attached: string[] = [];
+    const root = {
+      repoPath: "/worktree",
+      runtimeKind: "opencode" as const,
+      externalSessionId: "session-1",
+      workingDirectory: "/worktree",
+      sessionScope: { kind: "workflow" as const, taskId: "task-a", role: "qa" as const },
+    };
+    const result = await listOpencodeRuntimeSnapshotSources({
+      createClient: () => makeClient([]),
+      runtimeEndpoint: "http://runtime-1",
+      roots: [root, { ...root, sessionScope: { ...root.sessionScope } }],
+      attachSession: async (session) => {
+        attached.push(session.id);
+      },
+      now: () => "2026-07-16T10:02:00.000Z",
+      readDirectory: async (_directory, read) => read(),
+    });
+    expect(attached).toEqual(["session-1"]);
+    expect(result.sources).toEqual([
+      expect.objectContaining({ sessionAssociation: root.sessionScope }),
+    ]);
+    expect(result.failures).toEqual([]);
   });
 
   test("keeps the directory guard until all started calls settle", async () => {
