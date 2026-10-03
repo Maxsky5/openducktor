@@ -1,3 +1,4 @@
+import { useSettingsModalClaudePolicy } from "./use-settings-modal-claude-policy";
 import type {
   AgentPromptTemplateId,
   AgentRuntimes,
@@ -106,6 +107,10 @@ export type SettingsModalController = {
   runtimeAvailabilityValidationState: RuntimeAvailabilityValidationState;
   hasRuntimeAvailabilityErrors: boolean;
   hasUnacknowledgedCodexDangerousSettings: boolean;
+  claudeSettingsSaveError: string | null;
+  requiresClaudeDangerAcknowledgement: boolean;
+  isClaudeDangerAcknowledged: boolean;
+  setClaudeDangerAcknowledged: (value: boolean) => void;
   requiresCodexDangerAcknowledgement: boolean;
   isCodexDangerAcknowledged: boolean;
   selectedRepoRuntimeAvailabilityErrors: string[];
@@ -325,11 +330,12 @@ export const useSettingsModalController = ({
     requiresCodexDangerAcknowledgement,
     isCodexDangerAcknowledged,
     setCodexDangerAcknowledged,
-  } = useCodexDangerState({
-    open,
-    baseline: loadedSnapshot?.agentRuntimes.codex ?? null,
-    draft: snapshotDraft?.agentRuntimes.codex ?? null,
-  });
+    requiresClaudeDangerAcknowledgement,
+    isClaudeDangerAcknowledged,
+    setClaudeDangerAcknowledged,
+    claudeSettingsSaveError,
+    claudeValidationError,
+  } = useRuntimePolicyState({ open, loadedSnapshot, snapshotDraft });
   const selectedRepoRuntimeAvailabilityErrorCount = selectedRepoRuntimeAvailabilityErrors.length;
   const {
     updateSelectedRepoConfig: applySelectedRepoConfigUpdate,
@@ -469,6 +475,10 @@ export const useSettingsModalController = ({
         invalidKind: invalidRuntimeKind,
       },
       hasUnacknowledgedCodexDangerousSettings,
+      claude: {
+        error: claudeValidationError,
+        unacknowledged: requiresClaudeDangerAcknowledgement && !isClaudeDangerAcknowledged,
+      },
       repoScripts: {
         hasErrors: hasRepoScriptValidationErrors,
         errorCount: repoScriptValidationErrorCount,
@@ -614,6 +624,10 @@ export const useSettingsModalController = ({
     runtimeAvailabilityValidationState,
     hasRuntimeAvailabilityErrors,
     hasUnacknowledgedCodexDangerousSettings,
+    claudeSettingsSaveError,
+    requiresClaudeDangerAcknowledgement,
+    isClaudeDangerAcknowledged,
+    setClaudeDangerAcknowledged,
     requiresCodexDangerAcknowledgement,
     isCodexDangerAcknowledged,
     selectedRepoRuntimeAvailabilityErrors,
@@ -774,4 +788,26 @@ const useRuntimeState = ({
     invalidRuntimeKind,
     selectedRepoRuntimeAvailabilityErrors,
   };
+};
+
+const useRuntimePolicyState = ({
+  open,
+  loadedSnapshot,
+  snapshotDraft,
+}: {
+  open: boolean;
+  loadedSnapshot: SettingsSnapshot | null;
+  snapshotDraft: SettingsSnapshot | null;
+}) => {
+  const codex = useCodexDangerState({
+    open,
+    baseline: loadedSnapshot?.agentRuntimes.codex ?? null,
+    draft: snapshotDraft?.agentRuntimes.codex ?? null,
+  });
+  const claude = useSettingsModalClaudePolicy({
+    open,
+    baseline: loadedSnapshot?.agentRuntimes.claude ?? null,
+    draft: snapshotDraft?.agentRuntimes.claude ?? null,
+  });
+  return { ...codex, ...claude };
 };

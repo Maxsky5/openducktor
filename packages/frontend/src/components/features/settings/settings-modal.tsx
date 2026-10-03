@@ -285,6 +285,7 @@ function SettingsDialog({
             reusablePromptFieldErrorCount: controller.reusablePromptValidationState.totalErrorCount,
             runtimeAvailabilityErrorCount:
               controller.runtimeAvailabilityValidationState.totalErrorCount,
+            claudeSettingsError: controller.claudeSettingsSaveError,
             hasUnacknowledgedCodexDangerousSettings:
               controller.hasUnacknowledgedCodexDangerousSettings,
             repoScriptFieldErrorCount: controller.repoScriptValidationErrorCount,

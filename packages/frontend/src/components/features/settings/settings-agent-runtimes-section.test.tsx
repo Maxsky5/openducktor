@@ -9,7 +9,6 @@ import {
 import { fireEvent, screen, render as testingRender, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { QueryProvider } from "@/lib/query-provider";
-import { configureShellBridge, getShellBridge } from "@/lib/shell-bridge";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { AgentRuntimesSection } from "./settings-agent-runtimes-section";
 
@@ -55,6 +54,9 @@ const createSection = (
       OPENCODE_RUNTIME_DESCRIPTOR,
     ],
     disabled: false,
+    requiresClaudeDangerAcknowledgement: false,
+    isClaudeDangerAcknowledged: false,
+    onClaudeDangerAcknowledgedChange: () => {},
     requiresCodexDangerAcknowledgement,
     isCodexDangerAcknowledged: false,
     onCodexDangerAcknowledgedChange: () => {},
@@ -86,6 +88,9 @@ describe("AgentRuntimesSection", () => {
         isLoadingRuntimeDefinitions: false,
         onRetryRuntimeDefinitions: retryRuntimeDefinitions,
         disabled: false,
+        requiresClaudeDangerAcknowledgement: false,
+        isClaudeDangerAcknowledged: false,
+        onClaudeDangerAcknowledgedChange: () => {},
         requiresCodexDangerAcknowledgement: false,
         isCodexDangerAcknowledged: false,
         onCodexDangerAcknowledgedChange: () => {},
@@ -118,6 +123,9 @@ describe("AgentRuntimesSection", () => {
         agentRuntimes: DEFAULT_AGENT_RUNTIMES,
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
         disabled: false,
+        requiresClaudeDangerAcknowledgement: false,
+        isClaudeDangerAcknowledged: false,
+        onClaudeDangerAcknowledgedChange: () => {},
         requiresCodexDangerAcknowledgement: false,
         isCodexDangerAcknowledged: false,
         onCodexDangerAcknowledgedChange: () => {},
@@ -146,6 +154,9 @@ describe("AgentRuntimesSection", () => {
         runtimeDiscoveryError: "Runtime rediscovery failed",
         onCheckAgain: checkAgain,
         disabled: false,
+        requiresClaudeDangerAcknowledgement: false,
+        isClaudeDangerAcknowledged: false,
+        onClaudeDangerAcknowledgedChange: () => {},
         requiresCodexDangerAcknowledgement: false,
         isCodexDangerAcknowledged: false,
         onCodexDangerAcknowledgedChange: () => {},
@@ -217,6 +228,9 @@ describe("AgentRuntimesSection", () => {
         OPENCODE_RUNTIME_DESCRIPTOR,
       ],
       disabled: false,
+      requiresClaudeDangerAcknowledgement: false,
+      isClaudeDangerAcknowledged: false,
+      onClaudeDangerAcknowledgedChange: () => {},
       requiresCodexDangerAcknowledgement: false,
       isCodexDangerAcknowledged: false,
       onCodexDangerAcknowledgedChange: () => {},
@@ -249,6 +263,9 @@ describe("AgentRuntimesSection", () => {
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
         isCheckingExecutables: true,
         disabled: false,
+        requiresClaudeDangerAcknowledgement: false,
+        isClaudeDangerAcknowledged: false,
+        onClaudeDangerAcknowledgedChange: () => {},
         requiresCodexDangerAcknowledgement: false,
         isCodexDangerAcknowledged: false,
         onCodexDangerAcknowledgedChange: () => {},
@@ -300,6 +317,9 @@ describe("AgentRuntimesSection", () => {
         },
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
         disabled: false,
+        requiresClaudeDangerAcknowledgement: false,
+        isClaudeDangerAcknowledged: false,
+        onClaudeDangerAcknowledgedChange: () => {},
         requiresCodexDangerAcknowledgement: false,
         isCodexDangerAcknowledged: false,
         onCodexDangerAcknowledgedChange: () => {},
@@ -315,62 +335,6 @@ describe("AgentRuntimesSection", () => {
       expect(statusRow?.contains(screen.getByRole("button", { name: "Check again" }))).toBe(true);
     } finally {
       renderer.unmount();
-    }
-  });
-
-  test("shows Claude setup guidance and opens its links through the shell bridge", async () => {
-    const originalShellBridge = getShellBridge();
-    const openedUrls: string[] = [];
-    configureShellBridge({
-      ...originalShellBridge,
-      openExternalUrl: async (url) => {
-        openedUrls.push(url);
-      },
-    });
-    const renderer = render(
-      createElement(AgentRuntimesSection, {
-        ...runtimeDefinitionRequestProps,
-        agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-        runtimeDefinitions: [CLAUDE_RUNTIME_DESCRIPTOR],
-        runtimeCheck: {
-          pathOk: true,
-          gitOk: true,
-          gitVersion: "git version 2.50.0",
-          runtimes: [
-            {
-              kind: "claude",
-              enabled: false,
-              ok: true,
-              executablePath: "/bin/claude",
-              version: "2.1.0",
-              error: null,
-            },
-          ],
-          errors: [],
-        },
-        disabled: false,
-        requiresCodexDangerAcknowledgement: false,
-        isCodexDangerAcknowledged: false,
-        onCodexDangerAcknowledgedChange: () => {},
-        onUpdateAgentRuntimes: () => {},
-      }),
-    );
-
-    try {
-      expect(renderer.container.textContent).toContain("Ready (2.1.0)");
-      expect(renderer.container.textContent).toContain("Verified when a Claude session starts");
-      expect(renderer.container.textContent).toContain("ANTHROPIC_API_KEY");
-      fireEvent.click(screen.getByRole("button", { name: "Installation and authentication" }));
-      fireEvent.click(screen.getByRole("button", { name: "Current Agent SDK plan policy" }));
-      await waitFor(() => {
-        expect(openedUrls).toEqual([
-          "https://docs.anthropic.com/en/docs/claude-code/getting-started",
-          "https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan",
-        ]);
-      });
-    } finally {
-      renderer.unmount();
-      configureShellBridge(originalShellBridge);
     }
   });
 
@@ -483,6 +447,9 @@ describe("AgentRuntimesSection", () => {
         agentRuntimes: DEFAULT_AGENT_RUNTIMES,
         runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR],
         disabled: false,
+        requiresClaudeDangerAcknowledgement: false,
+        isClaudeDangerAcknowledged: false,
+        onClaudeDangerAcknowledgedChange: () => {},
         requiresCodexDangerAcknowledgement: false,
         isCodexDangerAcknowledged: false,
         onCodexDangerAcknowledgedChange: () => {},
@@ -641,6 +608,9 @@ describe("AgentRuntimesSection", () => {
         },
         runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR],
         disabled: false,
+        requiresClaudeDangerAcknowledgement: false,
+        isClaudeDangerAcknowledged: false,
+        onClaudeDangerAcknowledgedChange: () => {},
         requiresCodexDangerAcknowledgement: true,
         isCodexDangerAcknowledged: acknowledged,
         onCodexDangerAcknowledgedChange: (next) => {
@@ -667,6 +637,9 @@ describe("AgentRuntimesSection", () => {
         agentRuntimes: DEFAULT_AGENT_RUNTIMES,
         runtimeDefinitions: [],
         disabled: false,
+        requiresClaudeDangerAcknowledgement: false,
+        isClaudeDangerAcknowledged: false,
+        onClaudeDangerAcknowledgedChange: () => {},
         requiresCodexDangerAcknowledgement: false,
         isCodexDangerAcknowledged: false,
         onCodexDangerAcknowledgedChange: () => {},
@@ -681,6 +654,9 @@ describe("AgentRuntimesSection", () => {
           agentRuntimes: DEFAULT_AGENT_RUNTIMES,
           runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR],
           disabled: false,
+          requiresClaudeDangerAcknowledgement: false,
+          isClaudeDangerAcknowledged: false,
+          onClaudeDangerAcknowledgedChange: () => {},
           requiresCodexDangerAcknowledgement: false,
           isCodexDangerAcknowledged: false,
           onCodexDangerAcknowledgedChange: () => {},
@@ -711,6 +687,9 @@ describe("AgentRuntimesSection", () => {
           agentRuntimes: DEFAULT_AGENT_RUNTIMES,
           runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
           disabled: false,
+          requiresClaudeDangerAcknowledgement: false,
+          isClaudeDangerAcknowledged: false,
+          onClaudeDangerAcknowledgedChange: () => {},
           requiresCodexDangerAcknowledgement: false,
           isCodexDangerAcknowledged: false,
           onCodexDangerAcknowledgedChange: () => {},

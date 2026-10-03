@@ -115,6 +115,7 @@ export type SettingsSaveValidation = {
     errorCount: number;
     invalidKind: RuntimeKind | null;
   };
+  claude?: { error: string | null; unacknowledged: boolean };
   hasUnacknowledgedCodexDangerousSettings: boolean;
   repoScripts: {
     hasErrors: boolean;
@@ -183,6 +184,16 @@ export const getSettingsSaveBlocker = (
       },
     );
   }
+  if (validation.claude?.error)
+    return saveBlocker(`Fix Claude settings before saving: ${validation.claude.error}`, {
+      runtimeKind: "claude",
+      showRepoScriptErrors: false,
+    });
+  if (validation.claude?.unacknowledged)
+    return saveBlocker("Confirm the Claude safety acknowledgement before saving.", {
+      runtimeKind: "claude",
+      showRepoScriptErrors: false,
+    });
   if (validation.hasUnacknowledgedCodexDangerousSettings) {
     return saveBlocker(buildCodexDangerousSettingsSaveError());
   }

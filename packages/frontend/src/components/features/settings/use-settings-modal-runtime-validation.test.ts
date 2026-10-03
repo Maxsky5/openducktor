@@ -15,7 +15,7 @@ const createSnapshot = (): SettingsSnapshot =>
     agentRuntimes: {
       opencode: { enabled: true, executablePath: "/bin/opencode" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false },
-      claude: { enabled: false, executablePath: "" },
+      claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     },
     workspaces: {
       repo: {
