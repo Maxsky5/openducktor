@@ -1687,6 +1687,72 @@ test("one replay boundary coalesces state and transcript losses without stale ba
   }
 });
 
+test("a delivered transcript gap does not return after reopening with a persist fault", async () => {
+  const { observeLocalHostAgentSessions, subscribeLocalHostRunEvents } =
+    await loadLocalHostTransport();
+  const fault = {
+    operation: "agent-session.persist",
+    message: "Session metadata could not be saved.",
+  };
+  const baseline = { ...liveBaseline(10), complete: false, failures: [fault] };
+  let recoveries = 0;
+  globalThis.fetch = createFetchFixture(
+    mock(async (url: string | URL | Request) => {
+      if (!url.toString().includes("/invoke/")) return new Response(JSON.stringify({ ok: true }));
+      if (url.toString().includes("agent_session_live_recover")) recoveries += 1;
+      return new Response(JSON.stringify(baseline));
+    }),
+  );
+  const runSubscription = subscribeLocalHostRunEvents(() => {});
+  const source = await waitForEventSourceInstance();
+  source.emit("open", "");
+  const stopRuns = await runSubscription;
+  const received: AgentSessionLiveEnvelope[] = [];
+  const stop = await observeLocalHostAgentSessions(
+    { repoPath: "/repo" },
+    (event: AgentSessionLiveEnvelope) => received.push(event),
+  );
+  let stopReplacement: (() => void) | undefined;
+  try {
+    const boundary = {
+      hostEpoch: TEST_HOST_EPOCH,
+      sequence: 10,
+      hostChanged: false,
+      losses: [
+        {
+          channel: "openducktor://agent-session-live-event",
+          repoPath: "/repo",
+          facet: "transcript",
+          refs: [baseline.sessions[0]!.ref],
+        },
+      ],
+    };
+    source.emit("replay-start", JSON.stringify(boundary));
+    for (let turn = 0; turn < 100; turn++) await Promise.resolve();
+    source.emit("replay-complete", JSON.stringify(boundary));
+    expect(
+      received.filter((event) => event.type === "transcript_gap" && !event.replayPending),
+    ).toHaveLength(1);
+    expect(received).toContainEqual({ type: "fault", repoPath: "/repo", ...fault });
+    expect(recoveries).toBe(1);
+    stop();
+
+    const reopened: AgentSessionLiveEnvelope[] = [];
+    stopReplacement = await observeLocalHostAgentSessions(
+      { repoPath: "/repo" },
+      (event: AgentSessionLiveEnvelope) => reopened.push(event),
+    );
+    for (let turn = 0; turn < 100; turn++) await Promise.resolve();
+    expect(reopened.some((event) => event.type === "transcript_gap")).toBe(false);
+    expect(reopened).toContainEqual({ type: "fault", repoPath: "/repo", ...fault });
+    expect(recoveries).toBe(1);
+  } finally {
+    stop();
+    stopReplacement?.();
+    stopRuns();
+  }
+});
+
 test("a new loss during recovery keeps replay buffered until the last baseline", async () => {
   const { observeLocalHostAgentSessions } = await loadLocalHostTransport();
   const finishes = [Promise.withResolvers<Response>(), Promise.withResolvers<Response>()];

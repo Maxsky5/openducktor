@@ -799,11 +799,10 @@ export const observeLocalHostAgentSessions = async (
             "The host changed during attachment. Reconnect to the configured host to restore observation.",
           );
         attachment.install(baseline);
-        if (baseline.complete) {
-          pendingTranscriptRepairs.delete(repairOwner);
-          repairOwner.losses = [];
-          for (const owner of inherited) pendingTranscriptRepairs.delete(owner);
-        }
+        // Baseline faults do not keep a delivered gap pending.
+        pendingTranscriptRepairs.delete(repairOwner);
+        repairOwner.losses = [];
+        for (const owner of inherited) pendingTranscriptRepairs.delete(owner);
       };
       const reportRefreshFailure = (cause: unknown): void => {
         if (!repairOwner.closed)
