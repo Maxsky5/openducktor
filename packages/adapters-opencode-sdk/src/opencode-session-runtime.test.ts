@@ -1182,15 +1182,16 @@ describe("OpenCode session runtime connection", () => {
 });
 
 test("restores workflow roots and descendant denies before publishing reload sources", async () => {
+  const children = ["child-session"];
   const harness = createLiveClientHarness({
     externalSessionIds: ["session-1", "child-session"],
-    childSessionIdsByParent: { "session-1": ["child-session"] },
+    childSessionIdsByParent: { "session-1": children },
   });
   const native = [
     { permission: "bash", pattern: "git *", action: "ask" as const },
     { permission: "task", pattern: "*", action: "deny" as const },
   ];
-  const rules = new Map([
+  const rules = new Map<string, OpencodePermissionRule[]>([
     ["session-1", native],
     ["child-session", [...native]],
   ]);
@@ -1247,6 +1248,49 @@ test("restores workflow roots and descendant denies before publishing reload sou
     await prepared.connection.readSessionSources();
     await prepared.queries.loadSessionHistory({ ...root, runtimePolicy: { kind: "opencode" } });
     expect(updates).toHaveLength(count);
+
+    const lateNative: OpencodePermissionRule[] = [
+      { permission: "bash", pattern: "git status", action: "allow" },
+    ];
+    children.push("late-child");
+    rules.set("late-child", lateNative);
+    const update = harness.client.session.update;
+    harness.client.session.update = async () => ({
+      data: undefined,
+      error: new Error("late child permission update rejected"),
+    });
+    const failed = await prepared.connection.readSessionSources();
+    expect(failed.sources).toEqual([]);
+    expect(failed.failures).toEqual([
+      expect.objectContaining({
+        externalSessionId: root.externalSessionId,
+        message: expect.stringContaining("late child permission update rejected"),
+      }),
+    ]);
+    expect(failed.failures[0]?.message).toContain("late-child");
+    await expect(
+      prepared.connection.sendUserMessage({
+        ...root,
+        runtimePolicy: { kind: "opencode" },
+        parts: [{ kind: "text", text: "blocked" }],
+      }),
+    ).rejects.toThrow("permissions");
+    expect(harness.promptCalls).toEqual([]);
+
+    harness.client.session.update = update;
+    const recovered = await prepared.connection.readSessionSources([root]);
+    expect(recovered.failures).toEqual([]);
+    expect(recovered.sources).toHaveLength(3);
+    expect(
+      recovered.sources.find((source) => source.externalSessionId === "late-child"),
+    ).toMatchObject({ sessionAssociation: root.sessionScope });
+    const lateRules = rules.get("late-child")!;
+    expect(lateRules.slice(0, lateNative.length)).toEqual(lateNative);
+    expect(lateRules).toContainEqual({ permission: "edit", pattern: "*", action: "deny" });
+    expect(lateRules.slice(lateNative.length).every((rule) => rule.action === "deny")).toBe(true);
+    expect(updates).toHaveLength(count + 1);
+    await prepared.connection.readSessionSources();
+    expect(updates).toHaveLength(count + 1);
   } finally {
     await prepared.release();
   }

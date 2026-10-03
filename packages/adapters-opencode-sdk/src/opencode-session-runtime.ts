@@ -327,8 +327,8 @@ export const createPrepareOpencodeSessionRuntime = (
                   },
                   "attach session",
                 );
-              if (!roots) {
-                if (existing?.permissionSetupError) throw existing.permissionSetupError;
+              if (!roots && existing) {
+                if (existing.permissionSetupError) throw existing.permissionSetupError;
                 return;
               }
               if (scope?.kind !== "workflow") return;
