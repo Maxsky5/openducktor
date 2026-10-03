@@ -1616,8 +1616,8 @@ describe("continueInterruptedTurn eligibility", () => {
     ).resolves.toBe("ineligible_turn_state");
   });
 
-  test("keeps the attached session when the replacement continuation cannot start", async () => {
-    const sessionStore = createClaudeAgentSdkSessionStore({
+  test("accepts a new message after Resume fails", async () => {
+    const store = createClaudeAgentSdkSessionStore({
       now: () => "2026-06-25T20:00:00.000Z",
     });
     const attached = createSession({
@@ -1630,18 +1630,60 @@ describe("continueInterruptedTurn eligibility", () => {
         },
       ],
     });
-    const closeSession = mock((target: ClaudeSession) => sessionStore.close(target));
-    const service = createService(attached, undefined, {
-      ...sessionStore,
-      close: closeSession,
-    });
-
-    await expect(
-      Effect.runPromise(service.continueInterruptedTurn(continuationInput, "runtime-claude")),
-    ).rejects.toThrow();
-
-    expect(closeSession).not.toHaveBeenCalled();
-    expect(sessionStore.get("session-1")).toBe(attached);
+    const close = mock((target: ClaudeSession) => store.close(target));
+    const replacement = createSession();
+    const loadTodos = spyOn(todos, "loadClaudeTodos").mockResolvedValue([]);
+    const start = spyOn(sessionFactory, "createClaudeAgentSdkSession").mockImplementation(
+      async ({ sessionStore }) => {
+        sessionStore.set(replacement);
+        sessionStore.close(replacement);
+        throw new HostOperationError({
+          operation: "claudeRuntime.createSession",
+          message: "Claude did not admit the continuation.",
+          cause: new InterruptedTurnResumeError({
+            reason: "continuation_failed",
+            message: "Claude did not admit the continuation.",
+          }),
+        });
+      },
+    );
+    const service = createService(
+      attached,
+      undefined,
+      { ...store, close },
+      {
+        randomId: () => "00000000-0000-4000-8000-000000000001",
+        resolveMcpBridgeConnection: () =>
+          Effect.succeed({
+            workspaceId: "workspace-1",
+            hostUrl: "http://127.0.0.1:1",
+            hostToken: "test-token",
+          }),
+      },
+    );
+    try {
+      expect(
+        await resumeFailureReason(service.continueInterruptedTurn(continuationInput, "runtime-1")),
+      ).toBe("continuation_failed");
+      expect(close).not.toHaveBeenCalledWith(attached);
+      expect(store.get("session-1")).toBe(attached);
+      expect(
+        await Effect.runPromise(
+          service.sendUserMessage(
+            {
+              ...continuationInput,
+              parts: [{ kind: "text", text: "Continue with this message." }],
+            },
+            "runtime-1",
+          ),
+        ),
+      ).toMatchObject({ state: "read", message: "Continue with this message." });
+    } finally {
+      service.dispose();
+      store.close(attached);
+      start.mockRestore();
+      loadTodos.mockRestore();
+    }
   });
 
   test("drops an attached stopped session when the replacement continuation cannot start", async () => {

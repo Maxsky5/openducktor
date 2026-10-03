@@ -43,6 +43,9 @@ export type ClaudeAgentSdkOptionsDependencies = {
  */
 export const CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV = "CLAUDE_CODE_RESUME_INTERRUPTED_TURN";
 
+export const CLAUDE_CODE_RESUME_INTERRUPTED_TURN_MAX_AGE_MS_ENV =
+  "CLAUDE_CODE_RESUME_INTERRUPTED_TURN_MAX_AGE_MS";
+
 /**
  * Private bundled CLI switch that makes the CLI emit `session_state_changed` frames.
  * The continuation admission waits for the running state, so the continuation launch
@@ -83,6 +86,7 @@ export const buildClaudeAgentSdkBaseOptions = ({
   // would start a hidden continuation for a session that is not a continuation.
   delete inheritedEnv[CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV];
   delete inheritedEnv[CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV];
+  delete inheritedEnv[CLAUDE_CODE_RESUME_INTERRUPTED_TURN_MAX_AGE_MS_ENV];
   const env = {
     ...inheritedEnv,
     CLAUDE_AGENT_SDK_CLIENT_APP: "openducktor",
@@ -94,6 +98,9 @@ export const buildClaudeAgentSdkBaseOptions = ({
           ...env,
           [CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV]: "1",
           [CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV]: "1",
+          // Explicit Resume must work after the CLI's six-hour API-error limit.
+          // Zero keeps the default limit.
+          [CLAUDE_CODE_RESUME_INTERRUPTED_TURN_MAX_AGE_MS_ENV]: String(Number.MAX_SAFE_INTEGER),
         }
       : env,
     skills: "all",
