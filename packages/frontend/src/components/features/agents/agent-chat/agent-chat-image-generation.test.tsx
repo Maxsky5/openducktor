@@ -815,15 +815,33 @@ test("saved metadata survives scrolling and refreshes after offscreen invalidati
     expect(describe).toHaveBeenCalledTimes(1);
     expect(read.mock.calls[1]?.[0].revision).toBe("saved-first");
     await act(async () => observers[0]!.show(false));
+    await waitFor(() =>
+      expect(
+        client.getQueryCache().findAll({ queryKey: agentGeneratedImageQueryKeys.all }),
+      ).toHaveLength(0),
+    );
     revision = "saved-replaced";
     await act(async () => {
       await client.invalidateQueries({ queryKey: ["agent-generated-image-metadata"] });
     });
     expect(describe).toHaveBeenCalledTimes(1);
+    let finishRefresh!: () => void;
+    // Cached bytes can load before the new metadata arrives.
+    describe.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishRefresh = () => resolve({ ref, images: [{ ...saved, output: { revision } }] });
+        }),
+    );
     await act(async () => observers[0]!.show(true));
     await loadImage(2);
     expect(describe).toHaveBeenCalledTimes(2);
-    expect(read.mock.calls[2]?.[0].revision).toBe("saved-replaced");
+    expect(screen.getByRole("img").getAttribute("src")).toBe("blob:image-3");
+    await act(async () => finishRefresh());
+    await loadImage(3);
+    expect(read.mock.lastCall?.[0].revision).toBe("saved-replaced");
+    expect(screen.getByRole("img").getAttribute("src")).toBe("blob:image-4");
+    expect(revokeUrl).toHaveBeenCalledWith("blob:image-3");
   } finally {
     view.unmount();
     client.clear();

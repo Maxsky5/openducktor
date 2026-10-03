@@ -20,6 +20,7 @@ import {
 import { SettingsModal, SettingsModalProvider } from "./settings-modal";
 
 for (const shared of [true, false]) {
+  // Two full dialog opens and prompt editor loads exceed the CI unit-test budget.
   test(`${shared ? "shared" : "local"} settings keeps the prompt tab after cancel`, async () => {
     const settings = renderSettings(shared);
     try {
@@ -38,7 +39,7 @@ for (const shared of [true, false]) {
     } finally {
       settings.unmount();
     }
-  });
+  }, 2000);
 
   test(`${shared ? "shared" : "local"} settings keeps navigation after saving edits`, async () => {
     const settings = renderSettings(shared);

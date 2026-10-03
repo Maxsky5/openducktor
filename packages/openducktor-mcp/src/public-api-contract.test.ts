@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import packageJson from "../package.json" with { type: "json" };
+import * as api from "./index";
 
 describe("public API contract", () => {
-  test("package root stays intentionally empty", async () => {
-    const api = await import("./index");
+  test("package root stays intentionally empty", () => {
     expect(Object.keys(api)).toEqual([]);
   });
 
