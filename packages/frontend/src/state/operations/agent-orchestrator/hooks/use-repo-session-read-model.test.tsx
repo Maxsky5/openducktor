@@ -1253,6 +1253,71 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
+  test.each([false, true])(
+    "keeps a connection failure through the initial baseline, task records pending=%s",
+    async (recordsPending) => {
+      const deferredRecords = createDeferred<TaskSessionRecordBatch>();
+      const state = createState(
+        (emit) =>
+          emit({
+            type: "connection_state",
+            repoPath: "/repo",
+            state: "uncertain",
+            message: "Host connection interrupted.",
+          }),
+        record,
+        {
+          agentSessionsList: async () => [],
+          agentSessionsListForTasks: () => deferredRecords.promise,
+        },
+      );
+      const failure = {
+        kind: "failed",
+        workspaceRepoPath: "/repo",
+        source: "live-stream",
+        message: "Host connection interrupted.",
+      } as const;
+      try {
+        await state.harness.mount();
+        await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+        if (recordsPending) await state.harness.update({ ...state.props, taskIds: ["task-2"] });
+        await state.harness.run(() =>
+          state.emit({
+            type: "snapshot",
+            repoPath: "/repo",
+            sessions: [snapshot({ activity: "running" })],
+          }),
+        );
+        expect(state.harness.getLatest().sessionReadModelLoadState).toEqual(failure);
+        if (!recordsPending) expect(state.getSession()?.status).toBe("running");
+        await state.harness.run(() =>
+          state.emit({
+            type: "connection_state",
+            repoPath: "/repo",
+            state: "uncertain",
+            message: "Host replay is incomplete.",
+          }),
+        );
+        expect(state.harness.getLatest().sessionReadModelLoadState).toEqual({
+          ...failure,
+          message: "Host replay is incomplete.",
+        });
+        await state.harness.run(() =>
+          state.emit({ type: "connection_state", repoPath: "/repo", state: "ready" }),
+        );
+        if (recordsPending) {
+          expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("loading");
+          deferredRecords.resolve([{ taskId: "task-2", agentSessions: [] }]);
+        }
+        await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      } finally {
+        deferredRecords.resolve([]);
+        await state.harness.unmount();
+        state.queryClient.clear();
+      }
+    },
+  );
+
   test("keeps a live-stream failure failed across record recovery until the stream recovers", async () => {
     const state = createState((emit) => {
       emit({
@@ -2765,6 +2830,26 @@ describe("useRepoSessionReadModel", () => {
         message: "Live-session observation failed: The observation stream stopped.",
         source: "live-stream",
       });
+      await state.harness.run(() => {
+        state.emit({ type: "connection_state", repoPath: "/repo", state: "uncertain" });
+        state.emit({ type: "connection_state", repoPath: "/repo", state: "ready" });
+      });
+      expect(state.harness.getLatest().sessionReadModelLoadState).toMatchObject({
+        kind: "failed",
+        message: "Live-session observation failed: The observation stream stopped.",
+      });
+      await state.harness.run(() => {
+        state.emit({ type: "connection_state", repoPath: "/repo", state: "uncertain" });
+        state.emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      });
+      expect(state.harness.getLatest().sessionReadModelLoadState).toMatchObject({
+        kind: "failed",
+        message: "Host connection interrupted. Reconnect to the host.",
+      });
+      await state.harness.run(() =>
+        state.emit({ type: "connection_state", repoPath: "/repo", state: "ready" }),
+      );
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
     } finally {
       await state.harness.unmount();
     }

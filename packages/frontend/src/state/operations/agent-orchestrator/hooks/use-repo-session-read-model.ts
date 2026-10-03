@@ -194,8 +194,7 @@ export const useRepoSessionReadModel = ({
   // Marks a loading window created by demoting a stale-scope failure, so its
   // own success can end it without promoting unrelated loading windows.
   const demotedStaleFailureRef = useRef(false);
-  // Marks a loading window created when a healthy snapshot clears a public
-  // live failure before the current task-record scope finishes hydrating.
+  // Keep the read state loading when live recovery finishes before task records arrive.
   const recoveredLiveFailureRef = useRef(false);
   const initialLiveSnapshotReceivedRef = useRef(false);
   const taskIdsKey = taskIdsScopeKey(taskIds);
@@ -475,11 +474,9 @@ export const useRepoSessionReadModel = ({
     if (!applied) {
       return;
     }
-    // Current-scope records loaded: a prior task-record failure no longer
-    // describes this read model. An unresolved live-stream failure still does
-    // until the stream itself recovers through a fresh snapshot. A loading
-    // window created by a stale-scope or recovered live failure ends with this
-    // success.
+    // Current task records clear a fault from an older task set.
+    // A live failure stays visible until its own recovery finishes.
+    // End loading when the fault that caused it clears.
     const liveMessage = liveStreamFailureRef.current;
     const staleFailureWasDemoted = demotedStaleFailureRef.current;
     const liveFailureWasRecovered = recoveredLiveFailureRef.current;
@@ -748,10 +745,18 @@ export const useRepoSessionReadModel = ({
       if (isStaleRepoOperation()) {
         return;
       }
-      // Any fresh authoritative snapshot proves the stream recovered.
+      // An HTTP baseline can arrive while the event stream is disconnected.
+      if (connectionFailure) {
+        failObservation(connectionFailure);
+        return;
+      }
+      clearLiveFailure();
+    };
+    /** Clear the live failure without bypassing snapshot or task-record readiness. */
+    const clearLiveFailure = (): void => {
       const recoveredLiveFailure = liveStreamFailureRef.current !== null;
       liveStreamFailureRef.current = null;
-      if (readLoadedWorkflowRecords()) {
+      if (initialLiveSnapshotReceivedRef.current && readLoadedWorkflowRecords()) {
         setSessionReadModelLoadState(readyAgentSessionReadModelLoadState(repoPath));
         return;
       }
@@ -788,14 +793,15 @@ export const useRepoSessionReadModel = ({
       }
       if (envelope.type === "connection_state") {
         if (envelope.state === "uncertain") {
+          const previous = connectionFailure;
           connectionFailure =
             envelope.message ?? "Host connection interrupted. Reconnect to the host.";
-          if (liveStreamFailureRef.current === null) failObservation(connectionFailure);
-        } else if (connectionFailure && liveStreamFailureRef.current === connectionFailure) {
-          liveStreamFailureRef.current = null;
-          if (initialLiveSnapshotReceivedRef.current && readLoadedWorkflowRecords())
-            setSessionReadModelLoadState(readyAgentSessionReadModelLoadState(repoPath));
+          if (liveStreamFailureRef.current === null || liveStreamFailureRef.current === previous)
+            failObservation(connectionFailure);
+        } else {
+          const recovered = connectionFailure && liveStreamFailureRef.current === connectionFailure;
           connectionFailure = null;
+          if (recovered) clearLiveFailure();
         }
         return;
       }

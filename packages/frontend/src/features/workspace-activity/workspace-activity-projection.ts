@@ -90,7 +90,7 @@ export const applyWorkspaceActivityEnvelope = (
       const key = sessionKey(snapshot.ref);
       sessions.set(key, toActivitySession(snapshot, current.sessions.get(key)));
     }
-    return { sessions, hasSnapshot: true, unavailableReason: null };
+    return { ...current, sessions, hasSnapshot: true, unavailableReason: null };
   }
 
   if (envelope.type === "session_upsert") {

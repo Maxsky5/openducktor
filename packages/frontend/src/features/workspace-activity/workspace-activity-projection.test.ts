@@ -412,7 +412,14 @@ for (const failed of [false, true]) {
       failures: [],
       cursor: { hostEpoch: "host", sequence: 1 },
     };
+    attachment.accept({
+      type: "connection_state",
+      repoPath,
+      state: "uncertain",
+      message: "Host connection interrupted.",
+    });
     attachment.install(baseline);
+    expect(projection.connectionFailure).toBe("Host connection interrupted.");
     attachment.restart();
     attachment.accept({
       type: "transcript_gap",
@@ -431,7 +438,9 @@ for (const failed of [false, true]) {
       session: snapshot("a", { activity: "running" }),
       cursor: { hostEpoch: "host", sequence: 3 },
     });
+    expect(projection.connectionFailure).toBe("Host connection interrupted.");
     attachment.accept({ type: "connection_state", repoPath, state: "ready" });
+    expect(projection.connectionFailure).toBeNull();
     expect(projection.unavailableReason).toBe(failed ? "Source unavailable" : null);
     expect(badges(projection).active).toBe(true);
   });
