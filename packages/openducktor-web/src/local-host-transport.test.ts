@@ -1,6 +1,7 @@
 import { liveSessionStreamEventName } from "./host-event-stream-name";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { AgentSessionLiveBaseline, AgentSessionLiveEnvelope } from "@openducktor/contracts";
+import type { AzureDevOpsConnectionUpdateListener } from "@openducktor/frontend/lib/shell-bridge";
 import { Effect } from "effect";
 import type { JSONType } from "zod";
 import { configureBrowserRuntimeConfig } from "./browser-config";
@@ -1839,9 +1840,14 @@ test("a new loss during recovery keeps replay buffered until the last baseline",
   }
 });
 
-for (const timing of ["before", "after"] as const) {
-  test(`state recovery arriving ${timing} retained replay preserves transcript content exactly once`, async () => {
-    const { observeLocalHostAgentSessions } = await loadLocalHostTransport();
+for (const { timing, fails } of [
+  { timing: "before", fails: false },
+  { timing: "after", fails: false },
+  { timing: "after", fails: true },
+] as const) {
+  test(`state recovery ${fails ? "failing" : "arriving"} ${timing} replay completion keeps readiness and transcript delivery in order`, async () => {
+    const { observeLocalHostAgentSessions, subscribeLocalHostAzureDevOpsConnectionUpdates } =
+      await loadLocalHostTransport();
     const finish = Promise.withResolvers<Response>();
     const started = Promise.withResolvers<void>();
     const baseline = liveBaseline;
@@ -1866,6 +1872,14 @@ for (const timing of ["before", "after"] as const) {
     const source = await waitForEventSourceInstance();
     source.emit("open", "");
     const stop = await observing;
+    const reconnected = mock(() => {});
+    const stopAzure = await subscribeLocalHostAzureDevOpsConnectionUpdates(
+      (event: Parameters<AzureDevOpsConnectionUpdateListener>[0]) => {
+        if ("kind" in event && event.kind === "reconnected") reconnected();
+      },
+    );
+    const connectionStates = () =>
+      received.flatMap((event) => (event.type === "connection_state" ? [event.state] : []));
     const publish = (payload: AgentSessionLiveEnvelope) =>
       source.emit(
         liveSessionStreamEventName("/repo"),
@@ -1884,9 +1898,9 @@ for (const timing of ["before", "after"] as const) {
       },
     });
     const resolveRecovery = async () => {
-      finish.resolve(new Response(JSON.stringify(baseline(10))));
+      if (fails) finish.reject(new Error("Recovery unavailable"));
+      else finish.resolve(new Response(JSON.stringify(baseline(10))));
       for (let turn = 0; turn < 100; turn += 1) await Promise.resolve();
-      expect(received.filter((event) => event.type === "snapshot")).toHaveLength(2);
     };
     try {
       publish(message("prior", 2));
@@ -1901,6 +1915,8 @@ for (const timing of ["before", "after"] as const) {
       source.emit("replay-start", JSON.stringify(boundary));
       await started.promise;
       if (timing === "before") await resolveRecovery();
+      expect(connectionStates()).toEqual(["uncertain"]);
+      expect(received.filter((event) => event.type === "snapshot")).toHaveLength(1);
       publish(message("prior", 2));
       publish({
         type: "session_upsert",
@@ -1920,8 +1936,33 @@ for (const timing of ["before", "after"] as const) {
       });
       publish(message("retained", 9));
       publish(message("retained", 9));
-      if (timing === "after") await resolveRecovery();
       source.emit("replay-complete", JSON.stringify(boundary));
+      expect(reconnected).toHaveBeenCalledTimes(1);
+      if (timing === "after") {
+        expect(connectionStates()).toEqual(["uncertain"]);
+        expect(received.filter((event) => event.type === "snapshot")).toHaveLength(1);
+        await resolveRecovery();
+      }
+      if (fails) {
+        expect(connectionStates()).toEqual(["uncertain"]);
+        expect(received.filter((event) => event.type === "snapshot")).toHaveLength(1);
+        expect(received).toContainEqual(
+          expect.objectContaining({
+            type: "fault",
+            operation: "agent-session-live.refresh",
+            message: expect.stringContaining("Recovery unavailable"),
+          }),
+        );
+        expect(reads).toBe(2);
+        return;
+      }
+      expect(connectionStates()).toEqual(["uncertain", "ready"]);
+      const snapshot = received.filter((event) => event.type === "snapshot").at(-1)!;
+      expect(snapshot.cursor?.sequence).toBe(10);
+      const ready = received.find(
+        (event) => event.type === "connection_state" && event.state === "ready",
+      )!;
+      expect(received.indexOf(snapshot)).toBeLessThan(received.indexOf(ready));
       publish(message("retained", 9));
       publish(message("later", 11));
       publish(message("later", 11));
@@ -1936,6 +1977,7 @@ for (const timing of ["before", "after"] as const) {
     } finally {
       finish.resolve(new Response(JSON.stringify(baseline(10))));
       stop();
+      stopAzure();
     }
   });
 }

@@ -789,7 +789,7 @@ export const observeLocalHostAgentSessions = async (
       };
       let refreshTail = Promise.resolve();
       let refreshQueued = false;
-      let waitingForReplay = false;
+      let recovering = false;
       let pendingBaseline: AgentSessionLiveBaseline | null = null;
       let initialAttachmentSuperseded = false;
       const attachment = createAgentSessionLiveAttachment(input.repoPath, listener);
@@ -813,14 +813,23 @@ export const observeLocalHostAgentSessions = async (
             message: errorMessage(cause),
           });
       };
-      const installPendingBaseline = (): void => {
-        if (repairOwner.closed || waitingForReplay || refreshQueued || !pendingBaseline) return;
+      const installPendingBaseline = (): boolean => {
+        if (
+          repairOwner.closed ||
+          sseChannel?.readReplayPending() ||
+          refreshQueued ||
+          !pendingBaseline
+        )
+          return false;
         const baseline = pendingBaseline;
         pendingBaseline = null;
         installBaseline(baseline);
+        recovering = false;
+        return true;
       };
       const refresh = (): void => {
         initialAttachmentSuperseded = true;
+        recovering = true;
         attachment.restart();
         pendingBaseline = null;
         // Losses from one replay boundary share the queued recovery read.
@@ -835,7 +844,8 @@ export const observeLocalHostAgentSessions = async (
               // Keep replay buffered when a later loss requires another baseline.
               if (!repairOwner.closed && !refreshQueued) {
                 pendingBaseline = baseline;
-                installPendingBaseline();
+                if (installPendingBaseline())
+                  listener({ type: "connection_state", repoPath: input.repoPath, state: "ready" });
               }
             }
           })
@@ -847,8 +857,6 @@ export const observeLocalHostAgentSessions = async (
           repairOwner.losses.push(loss);
           pendingTranscriptRepairs.add(repairOwner);
         }
-        if ((!loss || loss.facet === "transcript") && sseChannel?.readReplayPending())
-          waitingForReplay = true;
         refresh();
         if (!loss || loss.facet === "transcript") {
           const gap: Extract<AgentSessionLiveEnvelope, { type: "transcript_gap" }> = {
@@ -882,6 +890,8 @@ export const observeLocalHostAgentSessions = async (
               });
             }
             if (event.kind === BROWSER_LIVE_RECONNECTED_EVENT_KIND) {
+              // Replay can finish before the recovery request.
+              if (recovering) return;
               listener({ type: "connection_state", repoPath: input.repoPath, state: "ready" });
             } else {
               listener({
@@ -900,7 +910,6 @@ export const observeLocalHostAgentSessions = async (
         recoverLoss,
         liveSessionStreamEventName(input.repoPath),
         () => {
-          waitingForReplay = false;
           try {
             installPendingBaseline();
           } catch (cause) {
