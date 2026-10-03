@@ -289,43 +289,38 @@ describe("CodexAppServerAdapter interrupted-turn continuation", () => {
     expect(methodsOf(calls)).not.toContain("turn/start");
   });
 
-  test("classifies a system-error thread as a probe failure instead of a live turn", async () => {
-    const { adapter, calls } = createContinuationAdapter({
-      threadStatus: { type: "systemError" },
-      latestTurnStatus: "interrupted",
-    });
+  test.each(["idle", "systemError"] as const)(
+    "refuses a completed turn with status %s",
+    async (type) => {
+      const { adapter, calls } = createContinuationAdapter({
+        threadStatus: { type },
+        latestTurnStatus: "completed",
+      });
 
-    await expect(adapter.continueInterruptedTurn(continuationInput())).rejects.toMatchObject({
-      reason: "probe_failed",
-      message: expect.stringContaining("Restart the Codex runtime"),
-    });
-    expect(methodsOf(calls)).not.toContain("thread/resume");
-    expect(methodsOf(calls)).not.toContain("turn/start");
-  });
+      await expect(adapter.continueInterruptedTurn(continuationInput())).rejects.toMatchObject({
+        reason: "completed_turn",
+      });
+      expect(methodsOf(calls)).not.toContain("turn/start");
+    },
+  );
 
-  test("refuses a completed latest turn without starting a turn", async () => {
-    const { adapter, calls } = createContinuationAdapter({
-      threadStatus: { type: "idle" },
-      latestTurnStatus: "completed",
-    });
+  test.each(["idle", "systemError"] as const)(
+    "continues a failed turn with status %s",
+    async (type) => {
+      const { adapter, calls } = createContinuationAdapter({
+        threadStatus: { type },
+        latestTurnStatus: "failed",
+      });
 
-    await expect(adapter.continueInterruptedTurn(continuationInput())).rejects.toMatchObject({
-      reason: "completed_turn",
-    });
-    expect(methodsOf(calls)).not.toContain("turn/start");
-  });
+      const summary = await adapter.continueInterruptedTurn(continuationInput());
 
-  test("continues a failed latest turn instead of refusing it", async () => {
-    const { adapter, calls } = createContinuationAdapter({
-      threadStatus: { type: "idle" },
-      latestTurnStatus: "failed",
-    });
-
-    const summary = await adapter.continueInterruptedTurn(continuationInput());
-
-    expect(summary).toMatchObject({ externalSessionId: "thread-1", runtimeKind: "codex" });
-    expect(methodsOf(calls)).toContain("turn/start");
-  });
+      expect(summary).toMatchObject({ externalSessionId: "thread-1", runtimeKind: "codex" });
+      expect(calls.find((call) => call.method === "turn/start")?.params).toMatchObject({
+        threadId: "thread-1",
+        input: [],
+      });
+    },
+  );
 
   test("refuses a thread that does not match the stored working directory", async () => {
     const { adapter, calls } = createContinuationAdapter({
@@ -340,21 +335,24 @@ describe("CodexAppServerAdapter interrupted-turn continuation", () => {
     expect(methodsOf(calls)).not.toContain("turn/start");
   });
 
-  test("reports a typed continuation failure when turn/start rejects", async () => {
-    const { adapter, calls } = createContinuationAdapter({
-      threadStatus: { type: "idle" },
-      latestTurnStatus: "interrupted",
-      turnStartError: new Error("turn start rejected"),
-    });
+  test.each(["idle", "systemError"] as const)(
+    "keeps a turn/start failure with thread status %s",
+    async (type) => {
+      const message = "Selected model is at capacity. Please try a different model.";
+      const { adapter, calls } = createContinuationAdapter({
+        threadStatus: { type },
+        latestTurnStatus: "failed",
+        turnStartError: new Error(message),
+      });
 
-    await expect(adapter.continueInterruptedTurn(continuationInput())).rejects.toMatchObject({
-      reason: "continuation_failed",
-      message:
-        "Codex could not continue the interrupted turn for session 'thread-1': turn start rejected",
-    });
-    expect(methodsOf(calls)).toContain("turn/start");
-    expect(adapter.listLiveSessionSnapshots("runtime-live")[0]?.activity).toBe("idle");
-  });
+      await expect(adapter.continueInterruptedTurn(continuationInput())).rejects.toMatchObject({
+        reason: "continuation_failed",
+        message: `Codex could not continue the interrupted turn for session 'thread-1': ${message}`,
+      });
+      expect(methodsOf(calls)).toContain("turn/start");
+      expect(adapter.listLiveSessionSnapshots("runtime-live")[0]?.activity).toBe("idle");
+    },
+  );
 
   test("reports a typed continuation failure when turn/start ends the turn at once", async () => {
     const { adapter } = createContinuationAdapter({

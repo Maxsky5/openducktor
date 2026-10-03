@@ -559,7 +559,7 @@ const timestampFromCodexNotification = (notification: CodexNotificationRecord): 
 };
 
 const isCodexIdleThreadStatus = (status: CodexAppServerThreadStatus): boolean =>
-  status.type === "idle";
+  status.type === "idle" || status.type === "systemError";
 
 const receivedAtMsFromCodexNotification = (receivedAt: string): number => {
   const receivedAtMs = Date.parse(receivedAt);
