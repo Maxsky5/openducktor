@@ -128,14 +128,14 @@ test("stalled renderer delivery fails after the bounded unacknowledged window", 
   for (let index = 0; index < 1001; index++) await h.emit(attachedFrame());
   expect(
     h.frame.send.mock.calls.filter(([channel]) => channel === NOTIFICATION_STREAM_FRAME),
-  ).toHaveLength(257);
+  ).toHaveLength(514);
   expect(
     h.frame.send.mock.calls.filter(([channel]) => channel === NOTIFICATION_STREAM_FAILURE),
   ).toHaveLength(1);
   expect(h.reportDeliveryFailure).toHaveBeenCalledTimes(1);
   await flush();
   expect(h.stop).toHaveBeenCalledTimes(1);
-  for (let deliveryId = 1; deliveryId <= 257; deliveryId++) {
+  for (let deliveryId = 1; deliveryId <= 514; deliveryId++) {
     expect(() =>
       h.handlers.get(NOTIFICATION_STREAM_ACKNOWLEDGE)!(h.event, { ...response, deliveryId }),
     ).not.toThrow();

@@ -7,6 +7,7 @@ import type { z } from "zod";
 import { createNotificationStream } from "../../../../packages/host/src/application/notifications/notification-stream";
 import { createElectronNotificationStreamApi } from "../preload/electron-notification-stream-ipc";
 import {
+  NOTIFICATION_STREAM_SUBSCRIBE,
   notificationFrameEnvelopeSchema,
   notificationFailureEnvelopeSchema,
 } from "../shared/electron-notification-stream-contract";
@@ -20,29 +21,29 @@ test("a stalled renderer fails without interrupting another renderer's delivery"
   const stopStalled = await stalled.attach();
   try {
     stalled.pause();
-    for (let sequence = 1; sequence <= 500; sequence++) {
+    for (let sequence = 1; sequence <= 600; sequence++) {
       h.stream.publishHealth({ scope: "/repo", source: "session", message: null });
       // Let the host drain each batch so this tests renderer acknowledgement capacity.
       await new Promise((resolve) => setImmediate(resolve));
     }
-    expect(healthy.frames).toHaveLength(501);
+    expect(healthy.frames).toHaveLength(601);
     expect(healthy.failures).toEqual([]);
     expect(stalled.frames).toHaveLength(1);
-    expect(stalled.pending()).toBe(258);
+    expect(stalled.pending()).toBe(515);
     expect(h.active()).toBe(1);
     expect(h.deliveryFailure).toHaveBeenCalledTimes(1);
 
     stalled.resume();
     await new Promise((resolve) => setImmediate(resolve));
-    expect(stalled.frames).toHaveLength(258);
+    expect(stalled.frames).toHaveLength(515);
     expect(stalled.failures).toHaveLength(1);
     expect(String(stalled.failures[0])).toContain("renderer cannot keep up");
     expect(stalled.listeners()).toBe(0);
 
     h.stream.publishHealth({ scope: "/repo", source: "session", message: null });
     await new Promise((resolve) => setImmediate(resolve));
-    expect(healthy.frames).toHaveLength(502);
-    expect(stalled.frames).toHaveLength(258);
+    expect(healthy.frames).toHaveLength(602);
+    expect(stalled.frames).toHaveLength(515);
     stopHealthy();
     stopHealthy();
     await new Promise((resolve) => setImmediate(resolve));
@@ -54,7 +55,7 @@ test("a stalled renderer fails without interrupting another renderer's delivery"
   }
 });
 
-test("a full retained replay crosses main IPC and preload before live delivery resumes", async () => {
+test("full replay and queued live frames survive a delayed IPC response and acknowledgements", async () => {
   const h = harness();
   const first = h.renderer();
   const stopFirst = await first.attach();
@@ -62,19 +63,29 @@ test("a full retained replay crosses main IPC and preload before live delivery r
   stopFirst();
   for (let sequence = 1; sequence <= 256; sequence++)
     h.stream.publishHealth({ scope: "/repo", source: "session", message: null });
-  const replay = h.renderer();
-  const stopReplay = await replay.attach(cursor);
+  const response = Promise.withResolvers<void>();
+  const replay = h.renderer(response.promise);
+  const pending = replay.attach(cursor);
   try {
-    expect(replay.frames).toHaveLength(257);
+    await new Promise((resolve) => setImmediate(resolve));
+    for (let sequence = 1; sequence <= 257; sequence++)
+      h.stream.publishHealth({ scope: "/repo", source: "session", message: null });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(h.deliveryFailure).not.toHaveBeenCalled();
+    expect(replay.failures).toEqual([]);
+    expect(replay.frames).toEqual([]);
+    response.resolve();
+    const stopReplay = await pending;
+    expect(replay.frames).toHaveLength(514);
     expect(replay.frames[0]).toMatchObject({ type: "attached", reason: "replay", cursor });
     expect(replay.frames.slice(1).map((frame) => frame.cursor.sequence)).toEqual(
-      Array.from({ length: 256 }, (_, index) => index + 1),
+      Array.from({ length: 513 }, (_, index) => index + 1),
     );
     expect(replay.failures).toEqual([]);
     h.stream.publishHealth({ scope: "/repo", source: "session", message: null });
     await new Promise((resolve) => setImmediate(resolve));
-    expect(replay.frames.at(-1)?.cursor.sequence).toBe(257);
-    expect(replay.frames).toHaveLength(258);
+    expect(replay.frames.at(-1)?.cursor.sequence).toBe(514);
+    expect(replay.frames).toHaveLength(515);
     expect(first.frames).toHaveLength(1);
     expect(h.deliveryFailure).not.toHaveBeenCalled();
     stopReplay();
@@ -82,7 +93,11 @@ test("a full retained replay crosses main IPC and preload before live delivery r
     expect(h.active()).toBe(0);
     expect(replay.listeners()).toBe(0);
   } finally {
-    stopReplay();
+    response.resolve();
+    await pending.then(
+      (stop) => stop(),
+      () => {},
+    );
     await Effect.runPromise(h.stream.dispose());
   }
 });
@@ -146,7 +161,7 @@ const harness = () => {
     stream,
     deliveryFailure,
     active: () => active,
-    renderer() {
+    renderer(response?: Promise<void>) {
       const listeners = new EventEmitter();
       const pending: Array<() => void> = [];
       const frames: NotificationStreamFrame[] = [];
@@ -178,7 +193,9 @@ const harness = () => {
         async invoke(channel: string, ...args: unknown[]) {
           const handler = handlers.get(channel);
           if (!handler) throw new Error(`No test IPC handler for ${channel}`);
-          return handler(event, ...args);
+          const result = handler(event, ...args);
+          if (channel === NOTIFICATION_STREAM_SUBSCRIBE && response) await response;
+          return result;
         },
         on(channel: string, listener: Parameters<IpcRenderer["on"]>[1]) {
           listeners.on(channel, listener);

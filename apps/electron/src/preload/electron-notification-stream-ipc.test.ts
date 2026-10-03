@@ -2,6 +2,7 @@ import { expect, mock, test } from "bun:test";
 import { createElectronNotificationStreamApi } from "./electron-notification-stream-ipc";
 import {
   NOTIFICATION_STREAM_FRAME,
+  NOTIFICATION_STREAM_FAILURE,
   NOTIFICATION_STREAM_ACKNOWLEDGE,
   NOTIFICATION_STREAM_UNSUBSCRIBE,
 } from "../shared/electron-notification-stream-contract";
@@ -47,6 +48,8 @@ const harness = () => {
     listeners,
     emit: (raw: { subscriptionId: string; frame: unknown; deliveryId?: number }) =>
       listeners.get(NOTIFICATION_STREAM_FRAME)?.({}, { deliveryId: 1, ...raw }),
+    fail: (message: string) =>
+      listeners.get(NOTIFICATION_STREAM_FAILURE)?.({}, { subscriptionId: id, message }),
   };
 };
 test("preload attaches before the IPC response, filters ownership, and disposes once", async () => {
@@ -98,7 +101,7 @@ test("attachment overflow is bounded and releases the eventual host subscription
     mock(() => {}),
     failure,
   );
-  for (let index = 0; index < 258; index++) h.emit({ subscriptionId: id, frame });
+  for (let index = 0; index < 516; index++) h.emit({ subscriptionId: id, frame });
   h.resolve({ subscriptionId: id });
   await expect(pending).rejects.toThrow("buffer is full");
   expect(failure).toHaveBeenCalledTimes(1);
@@ -106,6 +109,26 @@ test("attachment overflow is bounded and releases the eventual host subscription
   expect(h.invoke).toHaveBeenLastCalledWith(NOTIFICATION_STREAM_UNSUBSCRIBE, {
     subscriptionId: id,
   });
+});
+
+test("a full attachment buffer preserves the terminal failure before the IPC response", async () => {
+  const h = harness();
+  const received = mock(() => {});
+  const failure = mock<Parameters<typeof h.api.subscribe>[2]>(() => {});
+  const pending = h.api.subscribe({ cursor: null }, received, failure);
+  for (let deliveryId = 1; deliveryId <= 514; deliveryId++)
+    h.emit({ subscriptionId: id, frame, deliveryId });
+  h.fail("Notification renderer cannot keep up. Reload to reconnect.");
+  h.resolve({ subscriptionId: id });
+  const stop = await pending;
+  expect(received).toHaveBeenCalledTimes(514);
+  expect(failure).toHaveBeenCalledTimes(1);
+  expect(String(failure.mock.calls[0]?.[0])).toContain("renderer cannot keep up");
+  expect(h.listeners.size).toBe(0);
+  stop();
+  expect(
+    h.invoke.mock.calls.filter(([channel]) => channel === NOTIFICATION_STREAM_UNSUBSCRIBE),
+  ).toHaveLength(1);
 });
 
 test("preload acknowledges only after consumption and fails a throwing consumer", async () => {

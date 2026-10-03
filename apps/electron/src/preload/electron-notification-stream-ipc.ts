@@ -3,6 +3,7 @@ import { notificationStreamSubscribeSchema } from "@openducktor/contracts";
 import type { IpcRenderer, IpcRendererEvent } from "electron";
 import type { OpenDucktorElectronApi } from "../shared/electron-bridge-contract";
 import {
+  NOTIFICATION_STREAM_DELIVERY_LIMIT,
   NOTIFICATION_STREAM_SUBSCRIBE,
   NOTIFICATION_STREAM_UNSUBSCRIBE,
   NOTIFICATION_STREAM_FRAME,
@@ -39,10 +40,11 @@ export const createElectronNotificationStreamApi = (
       stop();
       onFailure(attachmentFailure);
     };
+    // Main can send one terminal failure after its delivery window fills.
     const receiveOrBuffer = (deliver: () => void) => {
       if (disposed) return;
       if (subscriptionId) deliver();
-      else if (buffered.length < 257) buffered.push(deliver);
+      else if (buffered.length < NOTIFICATION_STREAM_DELIVERY_LIMIT + 1) buffered.push(deliver);
       else reportFailure(new Error("Notification attachment buffer is full. Reload to reconnect."));
     };
     const receive = (

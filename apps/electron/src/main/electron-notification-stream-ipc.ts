@@ -4,6 +4,7 @@ import { notificationStreamSubscribeSchema } from "@openducktor/contracts";
 import type { EffectNodeHostCommandRouter } from "@openducktor/host";
 import type { IpcMain, IpcMainInvokeEvent } from "electron";
 import {
+  NOTIFICATION_STREAM_DELIVERY_LIMIT,
   NOTIFICATION_STREAM_SUBSCRIBE,
   NOTIFICATION_STREAM_UNSUBSCRIBE,
   NOTIFICATION_STREAM_FRAME,
@@ -12,9 +13,6 @@ import {
   NOTIFICATION_STREAM_FAILURE,
   notificationSubscriptionSchema,
 } from "../shared/electron-notification-stream-contract";
-
-// One attachment frame plus the host's 256 retained frames must fit before acknowledgements.
-const MAX_UNACKNOWLEDGED_FRAMES = 257;
 
 export const registerElectronNotificationStreamIpc = (
   ipcMain: IpcMain,
@@ -67,7 +65,7 @@ export const registerElectronNotificationStreamIpc = (
                 release();
                 return;
               }
-              if (sent - acknowledged >= MAX_UNACKNOWLEDGED_FRAMES) {
+              if (sent - acknowledged >= NOTIFICATION_STREAM_DELIVERY_LIMIT) {
                 failDelivery(
                   new Error("Notification renderer cannot keep up. Reload to reconnect."),
                 );
