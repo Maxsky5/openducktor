@@ -1,54 +1,44 @@
 import { describe, expect, test } from "bun:test";
-import {
-  INITIAL_SETTINGS_MODAL_NAVIGATION,
-  resolveSettingsModalOpenState,
-} from "./settings-modal-open-state";
+import { INITIAL_NAVIGATION, getOpenState } from "./settings-modal-open-state";
 
-describe("resolveSettingsModalOpenState", () => {
-  test("opens notifications from an operational error action", () => {
+describe("getOpenState", () => {
+  test("opens notifications", () => {
     expect(
-      resolveSettingsModalOpenState({ kind: "global", section: "notifications" }).navigation
+      getOpenState({ kind: "global", section: "notifications" }, INITIAL_NAVIGATION).navigation
         .section,
     ).toBe("notifications");
   });
 
-  test("opens a repository deep link at its complete destination", () => {
+  test("opens scripts for the requested repository", () => {
     expect(
-      resolveSettingsModalOpenState({
-        kind: "repository-dev-servers",
-        repositoryPath: "/repo-two",
-      }),
-    ).toEqual({
-      deepLinkResolution: {
-        scope: "repository",
-        navigation: {
-          section: "repositories",
-          repositorySection: "scripts",
-        },
-        workspaceSelectionPolicy: {
-          kind: "required",
-          repoPath: "/repo-two",
-        },
-        contentFocus: {
+      getOpenState(
+        {
           kind: "repository-dev-servers",
+          repositoryPath: "/repo-two",
         },
+        INITIAL_NAVIGATION,
+      ),
+    ).toEqual({
+      workspaceSelectionPolicy: {
+        kind: "required",
+        repoPath: "/repo-two",
       },
       navigation: {
-        ...INITIAL_SETTINGS_MODAL_NAVIGATION,
+        ...INITIAL_NAVIGATION,
         section: "repositories",
         repositorySection: "scripts",
       },
-      contentFocusRequest: {
+      focusRequest: {
         kind: "repository-dev-servers",
       },
     });
   });
 
-  test("resets ordinary opens to the initial navigation state", () => {
-    expect(resolveSettingsModalOpenState(undefined)).toEqual({
-      deepLinkResolution: null,
-      navigation: INITIAL_SETTINGS_MODAL_NAVIGATION,
-      contentFocusRequest: null,
+  test("opens at the initial section", () => {
+    expect(getOpenState(undefined, INITIAL_NAVIGATION)).toEqual({
+      navigation: INITIAL_NAVIGATION,
+      workspaceSelectionPolicy: undefined,
+      focusRequest: null,
     });
   });
 });

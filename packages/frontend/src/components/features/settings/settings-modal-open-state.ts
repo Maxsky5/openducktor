@@ -2,15 +2,39 @@ import {
   resolveSettingsDeepLink,
   type SettingsContentFocusRequest,
   type SettingsDeepLink,
-  type SettingsDeepLinkResolution,
 } from "./settings-deep-link";
 import type {
   PromptRoleTabId,
   RepositorySectionId,
   SettingsSectionId,
 } from "./settings-modal-constants";
+import type { SettingsWorkspaceSelectionPolicy } from "./settings-workspace-selection";
 
-export type SettingsModalNavigationState = {
+export function getOpenState(
+  deepLink: SettingsDeepLink | undefined,
+  navigation: Navigation,
+): OpenState {
+  if (!deepLink) {
+    return {
+      navigation,
+      workspaceSelectionPolicy: undefined,
+      focusRequest: null,
+    };
+  }
+
+  const target = resolveSettingsDeepLink(deepLink);
+  return {
+    navigation: {
+      ...navigation,
+      ...target.navigation,
+    },
+    workspaceSelectionPolicy:
+      target.scope === "repository" ? target.workspaceSelectionPolicy : undefined,
+    focusRequest: target.scope === "repository" ? (target.contentFocus ?? null) : null,
+  };
+}
+
+export type Navigation = {
   section: SettingsSectionId;
   repositorySection: RepositorySectionId;
   globalPromptRoleTab: PromptRoleTabId;
@@ -19,7 +43,7 @@ export type SettingsModalNavigationState = {
   selectedCustomAgentRoleId: string | null;
 };
 
-export const INITIAL_SETTINGS_MODAL_NAVIGATION: SettingsModalNavigationState = {
+export const INITIAL_NAVIGATION: Navigation = {
   section: "repositories",
   repositorySection: "configuration",
   globalPromptRoleTab: "shared",
@@ -28,31 +52,8 @@ export const INITIAL_SETTINGS_MODAL_NAVIGATION: SettingsModalNavigationState = {
   selectedCustomAgentRoleId: null,
 };
 
-type SettingsModalOpenState = {
-  deepLinkResolution: SettingsDeepLinkResolution | null;
-  navigation: SettingsModalNavigationState;
-  contentFocusRequest: SettingsContentFocusRequest | null;
-};
-
-export const resolveSettingsModalOpenState = (
-  deepLink: SettingsDeepLink | undefined,
-): SettingsModalOpenState => {
-  if (!deepLink) {
-    return {
-      deepLinkResolution: null,
-      navigation: INITIAL_SETTINGS_MODAL_NAVIGATION,
-      contentFocusRequest: null,
-    };
-  }
-
-  const deepLinkResolution = resolveSettingsDeepLink(deepLink);
-  return {
-    deepLinkResolution,
-    navigation: {
-      ...INITIAL_SETTINGS_MODAL_NAVIGATION,
-      ...deepLinkResolution.navigation,
-    },
-    contentFocusRequest:
-      deepLinkResolution.scope === "repository" ? (deepLinkResolution.contentFocus ?? null) : null,
-  };
+type OpenState = {
+  navigation: Navigation;
+  workspaceSelectionPolicy: SettingsWorkspaceSelectionPolicy | undefined;
+  focusRequest: SettingsContentFocusRequest | null;
 };
