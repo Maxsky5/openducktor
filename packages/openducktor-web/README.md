@@ -22,7 +22,7 @@ Workspace mode lets the OS assign frontend and backend ports, prints both resolv
 
 ## Response compression and asset caching
 
-The Node HTTP server streams eligible text responses through gzip when the client accepts it. This includes application assets and host JSON responses. Responses retain their content type and status. `Vary: Accept-Encoding` keeps compressed and uncompressed cache entries separate. Compressed responses use weak ETags because compression changes the bytes.
+The Node HTTP server streams eligible text responses of at least 1 KiB through gzip when the client accepts it. This includes application assets and host JSON responses. It uses the declared content length when present. Otherwise, it reads only enough bytes to choose gzip or send the complete small body without compression. Responses retain their content type and status. `Vary: Accept-Encoding` keeps compressed and uncompressed cache entries separate. Compressed responses use weak ETags because compression changes the bytes.
 
 Live event streams, binary files, responses that already have a content encoding, partial responses, and responses with `Cache-Control: no-transform` bypass compression. Clients that do not advertise gzip support receive uncompressed content.
 

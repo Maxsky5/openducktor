@@ -2,9 +2,12 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { type AddressInfo } from "node:net";
 import { Readable, type Duplex } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { createGzip } from "node:zlib";
 import { WebSocket, WebSocketServer, type RawData } from "ws";
 import { nodeReadableStream } from "./node-readable-stream";
+
+const MIN_GZIP_BYTES = 1024;
 
 export type NodeServerSocket<Data> = {
   data: Data;
@@ -212,7 +215,22 @@ const writeResponse = async (
 ): Promise<void> => {
   const headers = new Headers(Object.fromEntries(response.headers.entries()));
   const eligible = canCompress(response);
-  const gzip = eligible && acceptsGzip(request);
+  const length = headers.get("content-length");
+  let gzip =
+    eligible && acceptsGzip(request) && (length === null || Number(length) >= MIN_GZIP_BYTES);
+  // SAFETY: Node uses the standard stream API; Bun adds unused helper types.
+  let body =
+    request.method !== "HEAD" && response.body
+      ? Readable.fromWeb(response.body as typeof response.body & NodeReadableStream<Uint8Array>, {
+          signal: request.signal,
+        })
+      : null;
+  if (gzip && body && length === null) {
+    const prefix = await readPrefix(body);
+    gzip = prefix.size >= MIN_GZIP_BYTES;
+    body = prefix.body;
+    if (!gzip) headers.set("content-length", String(prefix.size));
+  }
   if (eligible) {
     const vary = headers.get("vary");
     const fields = vary?.split(",").map((field) => field.trim().toLowerCase()) ?? [];
@@ -228,14 +246,35 @@ const writeResponse = async (
     if (etag && !etag.startsWith("W/")) headers.set("etag", `W/${etag}`);
   }
   outgoing.writeHead(response.status, Object.fromEntries(headers.entries()));
-  if (request.method === "HEAD" || !response.body) {
+  if (!body) {
     await response.body?.cancel();
     outgoing.end();
     return;
   }
-  const body = Readable.from(response.body);
   if (gzip) await pipeline(body, createGzip(), outgoing);
   else await pipeline(body, outgoing);
+};
+
+// Stop once gzip is worth considering instead of buffering the whole response.
+const readPrefix = async (body: Readable): Promise<{ size: number; body: Readable }> => {
+  const iterator = body[Symbol.asyncIterator]();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (size < MIN_GZIP_BYTES) {
+    const next = await iterator.next();
+    if (next.done) break;
+    chunks.push(next.value);
+    size += next.value.byteLength;
+  }
+  async function* replay(): AsyncGenerator<Uint8Array> {
+    try {
+      yield* chunks;
+      yield* iterator;
+    } finally {
+      body.destroy();
+    }
+  }
+  return { size, body: Readable.from(replay(), { objectMode: false }) };
 };
 
 const writeUpgradeResponse = async (socket: Duplex, response: Response): Promise<void> => {

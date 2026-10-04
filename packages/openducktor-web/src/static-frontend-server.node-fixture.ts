@@ -66,21 +66,28 @@ test("validates HTML and unhashed files against their current bytes", () =>
       "/favicon.svg",
       "/assets/page-Ab_c-D12.html",
     ]) {
-      const first = await request(filePath);
+      const first = await request(filePath, { "Accept-Encoding": "gzip" });
       assert.equal(first.status, 200);
+      assert.equal(first.headers["content-encoding"], undefined);
       assert.equal(first.headers["cache-control"], "public, max-age=0, must-revalidate");
       assert.ok(first.headers.etag);
       for (const condition of [first.headers.etag, `"other,tag", W/${first.headers.etag}`, "*"]) {
-        const validated = await request(filePath, { "If-None-Match": condition });
+        const validated = await request(filePath, {
+          "If-None-Match": condition,
+          "Accept-Encoding": "gzip",
+        });
         assert.equal(validated.status, 304);
         assert.equal(validated.body.length, 0);
         assert.equal(validated.headers.etag, first.headers.etag);
+        assert.equal(validated.headers["content-encoding"], first.headers["content-encoding"]);
+        assert.equal(validated.headers["content-length"], first.headers["content-length"]);
         assert.equal(validated.headers["cache-control"], first.headers["cache-control"]);
       }
-      const head = await request(filePath, {}, "HEAD");
+      const head = await request(filePath, { "Accept-Encoding": "gzip" }, "HEAD");
       assert.equal(head.status, 200);
       assert.equal(head.body.length, 0);
       assert.equal(head.headers.etag, first.headers.etag);
+      assert.equal(head.headers["content-encoding"], first.headers["content-encoding"]);
       assert.equal(Number(head.headers["content-length"]), first.body.length);
       assert.equal((await request(filePath, { "If-None-Match": '"missing"' })).status, 200);
     }
@@ -159,6 +166,7 @@ test("keeps config fresh and rejects hosts and paths before cache validation", (
     assert.equal(changed.status, 200);
     assert.equal(changed.headers["cache-control"], "no-store");
     assert.equal(changed.headers.etag, undefined);
+    assert.equal(changed.headers["content-encoding"], undefined);
     assert.equal(JSON.parse(decodedBody(changed).toString()).appToken, "second");
     for (const filePath of ["/", scriptPath, RUNTIME_CONFIG_PATH]) {
       assert.equal(
@@ -194,7 +202,7 @@ test("loads changed hashes after a build and reports broken asset reads", () =>
     await writeFile(path.join(staticRoot, nextPath), nextScript);
     await writeFile(
       path.join(staticRoot, "index.html"),
-      `<html><script src="${nextPath}"></script></html>`,
+      `<html><script src="${nextPath}"></script><body>${"page content ".repeat(100)}</body></html>`,
     );
     fixture.server = await runWebBoundary(
       startStaticFrontendServerEffect(
@@ -209,6 +217,16 @@ test("loads changed hashes after a build and reports broken asset reads", () =>
     assert.equal(nextHtml.status, 200);
     assert.notEqual(nextHtml.headers.etag, firstHtml.headers.etag);
     assert.ok(decodedBody(nextHtml).toString().includes(nextPath));
+    assert.equal(nextHtml.headers["content-encoding"], "gzip");
+    const unchangedHtml = await request("/", {
+      "If-None-Match": nextHtml.headers.etag ?? "",
+      "Accept-Encoding": "gzip",
+    });
+    assert.equal(unchangedHtml.status, 304);
+    assert.equal(unchangedHtml.body.length, 0);
+    assert.equal(unchangedHtml.headers.etag, nextHtml.headers.etag);
+    assert.equal(unchangedHtml.headers["content-encoding"], nextHtml.headers["content-encoding"]);
+    assert.equal(unchangedHtml.headers["content-length"], nextHtml.headers["content-length"]);
     const next = await request(nextPath, {
       "If-None-Match": first.headers.etag ?? "",
       "Accept-Encoding": "gzip",
