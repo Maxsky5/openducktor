@@ -291,6 +291,9 @@ describe("runtime registry lifecycle", () => {
     await expect(Effect.runPromise(registry.reserve(["opencode"]))).rejects.toThrow(
       "OpenDucktor is shutting down.",
     );
+    await expect(Effect.runPromise(registry.requireReady("opencode"))).rejects.toThrow(
+      "OpenDucktor is shutting down. The OpenCode runtime does not accept work. Start OpenDucktor again.",
+    );
   });
 
   test("records a configuration failure for a kind without starting it", async () => {

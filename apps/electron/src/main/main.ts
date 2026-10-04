@@ -709,6 +709,7 @@ const registerIpcHandlers = (
         `OpenDucktor notification delivery failed for subscription '${subscriptionId}'.`,
         cause,
       ),
+    shutdownController.isHostShutdownStarted,
   );
   registerElectronEditorClipboardIpc({ clipboard, ipcMain });
   registerElectronTaskStreamIpc({
@@ -1071,6 +1072,12 @@ app.on("before-quit", (event) => {
   runElectronMainTask(() => shutdownController.shutdownHostAndQuit({ reason: "before-quit" }));
 });
 
-process.once("SIGINT", shutdownHostForSignal);
-process.once("SIGTERM", shutdownHostForSignal);
-process.once("SIGHUP", shutdownHostForSignal);
+// Electron installs its own SIGINT, SIGTERM, and SIGHUP handlers during startup. They quit the app
+// on the first signal and then restore the default action, so a second signal kills Electron before
+// the host stops the detached runtimes. Node handlers that start after `ready` replace them, and stay
+// for the whole process life, so a repeated signal cannot interrupt shutdown.
+void app.whenReady().then(() => {
+  process.on("SIGINT", shutdownHostForSignal);
+  process.on("SIGTERM", shutdownHostForSignal);
+  process.on("SIGHUP", shutdownHostForSignal);
+});

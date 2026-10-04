@@ -1,5 +1,6 @@
 import type { ServerOptions as ViteServerOptions } from "vite";
 import { randomUUID } from "node:crypto";
+import { createServer as createHttpServer } from "node:http";
 import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { OPENDUCKTOR_DEV_INSTANCE_ENV } from "@openducktor/contracts";
@@ -357,11 +358,16 @@ const startViteServerEffect = (
     });
     return yield* Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
+        // The launcher owns the HTTP server and runs Vite in middleware mode. A Vite server with
+        // its own HTTP server installs a SIGTERM handler that exits the process before the host
+        // can stop its runtimes.
+        const httpServer = createHttpServer();
         const server = yield* Effect.tryPromise({
           try: () =>
             createServer({
               root: options.packageRoot,
               configFile: path.join(options.packageRoot, "vite.config.ts"),
+              appType: "spa",
               plugins: [
                 {
                   name: "openducktor-runtime-config",
@@ -378,6 +384,8 @@ const startViteServerEffect = (
               ],
               server: {
                 ...viteServerOptions(options),
+                middlewareMode: true,
+                ws: { server: httpServer },
               },
             }),
           catch: (cause) =>
@@ -389,31 +397,21 @@ const startViteServerEffect = (
               details: { frontendPort: options.frontendPort },
             }),
         });
-        const httpServer = server.httpServer;
-        if (
-          !httpServer ||
-          !("closeAllConnections" in httpServer) ||
-          httpServer.closeAllConnections === undefined
-        ) {
-          return yield* Effect.fail(
-            new WebDependencyError({
-              dependency: "vite",
-              operation: "create-server",
-              message: "Vite did not create the expected HTTP/1 server.",
-              details: { frontendPort: options.frontendPort },
-            }),
-          );
-        }
+        httpServer.on("request", server.middlewares);
         const close = (): Promise<void> =>
-          closeViteFrontendServer({
-            close: () => server.close(),
-            httpServer,
-          });
+          closeViteFrontendServer({ close: () => server.close(), httpServer });
         const startedServer = { close };
 
         yield* restore(
           Effect.tryPromise({
-            try: () => server.listen(options.frontendPort),
+            try: () =>
+              new Promise<void>((resolve, reject) => {
+                httpServer.once("error", reject);
+                httpServer.listen(options.frontendPort, options.host?.trim() || LOCALHOST, () => {
+                  httpServer.off("error", reject);
+                  resolve();
+                });
+              }),
             catch: (cause) =>
               new WebDependencyError({
                 dependency: "vite",
@@ -445,18 +443,14 @@ const startViteServerEffect = (
             new WebDependencyError({
               dependency: "vite",
               operation: "resolve-listening-port",
-              message: "Vite did not expose its listening TCP port.",
+              message: "The frontend server did not expose its listening TCP port.",
               details: { frontendPort: options.frontendPort },
             }),
             closeFrontendServerEffect(startedServer),
             logger,
           );
         }
-        return {
-          close,
-          httpServer: server.httpServer,
-          port: address.data.port,
-        };
+        return { close, httpServer, port: address.data.port };
       }),
     );
   });
@@ -597,17 +591,23 @@ const runWithLauncherSignalsEffect = <Success, Failure>(
   const handleSigterm = (): void => {
     void owner.handleTermination("SIGTERM", 143);
   };
+  // A closed terminal sends SIGHUP. Without a handler, Node exits before the host stops runtimes.
+  const handleSighup = (): void => {
+    void owner.handleTermination("SIGHUP", 129);
+  };
 
   return Effect.acquireUseRelease(
     Effect.sync(() => {
       process.on("SIGINT", handleSigint);
       process.on("SIGTERM", handleSigterm);
+      process.on("SIGHUP", handleSighup);
     }),
     () => operation,
     () =>
       Effect.gen(function* () {
         process.off("SIGINT", handleSigint);
         process.off("SIGTERM", handleSigterm);
+        process.off("SIGHUP", handleSighup);
         yield* owner.release();
       }),
   );

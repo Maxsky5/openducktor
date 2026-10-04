@@ -89,7 +89,7 @@ export const createRuntimeRegistry = <E>({
 
   const label = (kind: RuntimeKind) => drivers[kind].descriptor.label;
   const unavailable = (slot: Slot) =>
-    describeUnavailableRuntime(label(slot.kind), slot.state, slot.failure);
+    describeUnavailableRuntime(label(slot.kind), slot.state, slot.failure, shuttingDown);
   /** A ready runtime accepts work unless a lifecycle action or shutdown owns it. */
   const accepting = (slot: Slot) => slot.state === "ready" && !slot.reserved && !shuttingDown;
   const syncAdmission = (slot: Slot) => {

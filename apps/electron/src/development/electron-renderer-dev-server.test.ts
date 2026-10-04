@@ -1,80 +1,39 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
-import { closeRendererServerEffect, resolveRendererDevUrl } from "./electron-renderer-dev-server";
+import { closeRendererServerEffect } from "./electron-renderer-dev-server";
+
+const createRendererServer = (events: string[], closeError?: Error) => ({
+  close: async () => {
+    events.push("close-vite");
+  },
+  httpServer: {
+    closeAllConnections: () => {
+      events.push("close-connections");
+    },
+    close(callback: (error?: Error) => void) {
+      events.push("close-http-server");
+      callback(closeError);
+      return this;
+    },
+  },
+});
 
 describe("Electron renderer dev server", () => {
-  test("resolves the URL that Vite reports for its assigned port", () => {
-    const url = resolveRendererDevUrl({
-      close: async () => {},
-      resolvedUrls: { local: ["http://127.0.0.1:49152/"] },
-      watcher: { add() {}, on() {} },
-    });
+  test("stops the HTTP server that the dev script owns, ends its connections, then closes Vite", async () => {
+    const events: string[] = [];
 
-    expect(url).toBe("http://127.0.0.1:49152");
+    await Effect.runPromise(closeRendererServerEffect(createRendererServer(events)));
+
+    expect(events).toEqual(["close-http-server", "close-connections", "close-vite"]);
   });
 
-  test("forces open renderer connections while closing Vite", async () => {
-    let closeAllConnectionsCalls = 0;
-    let closeIdleConnectionsCalls = 0;
-    let closeCalls = 0;
-    let resolveClose: () => void = () => {};
-    const closePromise = new Promise<void>((resolve) => {
-      resolveClose = resolve;
-    });
-    const rendererServer = {
-      httpServer: {
-        closeAllConnections: () => {
-          closeAllConnectionsCalls += 1;
-          resolveClose();
-        },
-        closeIdleConnections: () => {
-          closeIdleConnectionsCalls += 1;
-        },
-      },
-      close: () => {
-        closeCalls += 1;
-        return closePromise;
-      },
-    };
+  test("fails when the HTTP server cannot close", async () => {
+    const events: string[] = [];
 
-    await Effect.runPromise(closeRendererServerEffect(rendererServer));
-
-    expect(closeCalls).toBe(1);
-    expect(closeIdleConnectionsCalls).toBe(1);
-    expect(closeAllConnectionsCalls).toBe(1);
-  });
-
-  test("forces open renderer connections when close throws", async () => {
-    let closeAllConnectionsCalls = 0;
-    let closeIdleConnectionsCalls = 0;
-    const rendererServer = {
-      httpServer: {
-        closeAllConnections: () => {
-          closeAllConnectionsCalls += 1;
-        },
-        closeIdleConnections: () => {
-          closeIdleConnectionsCalls += 1;
-        },
-      },
-      close: () => {
-        throw new Error("renderer close failed");
-      },
-    };
-
-    await expect(Effect.runPromise(closeRendererServerEffect(rendererServer))).rejects.toThrow(
-      "renderer close failed",
-    );
-    expect(closeIdleConnectionsCalls).toBe(1);
-    expect(closeAllConnectionsCalls).toBe(1);
-  });
-
-  test("fails when Vite does not report the local renderer URL", () => {
-    expect(() =>
-      resolveRendererDevUrl({
-        close: async () => {},
-        resolvedUrls: { local: [] },
-        watcher: { add() {}, on() {} },
-      }),
-    ).toThrow("Vite renderer dev server did not report a local URL");
+    await expect(
+      Effect.runPromise(
+        closeRendererServerEffect(createRendererServer(events, new Error("close failed"))),
+      ),
+    ).rejects.toThrow("close failed");
   });
 });

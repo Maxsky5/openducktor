@@ -314,55 +314,62 @@ describe("electron dev script", () => {
     ).toBe(false);
   });
 
-  test("closes Electron and the renderer when the lifecycle receives SIGTERM", async () => {
-    const fakeProcessHandlers = createFakeProcessHandlers();
-    const killSignals: Array<NodeJS.Signals | number | undefined> = [];
-    let closeCalls = 0;
-    let markStarted: () => void = () => {};
-    let resolveElectronExit: (exitCode: number) => void = () => {};
-    const started = new Promise<void>((resolve) => {
-      markStarted = resolve;
-    });
-    const electronExited = new Promise<number>((resolve) => {
-      resolveElectronExit = resolve;
-    });
-    const renderer = createFakeRenderer({
-      close: () =>
-        Effect.sync(() => {
-          closeCalls += 1;
+  test.each([
+    ["SIGINT", 130],
+    ["SIGTERM", 143],
+    ["SIGHUP", 129],
+  ] as const)(
+    "closes Electron and the renderer when the lifecycle receives %s",
+    async (signal, exitCode) => {
+      const fakeProcessHandlers = createFakeProcessHandlers();
+      const killSignals: Array<NodeJS.Signals | number | undefined> = [];
+      let closeCalls = 0;
+      let markStarted: () => void = () => {};
+      let resolveElectronExit: (exitCode: number) => void = () => {};
+      const started = new Promise<void>((resolve) => {
+        markStarted = resolve;
+      });
+      const electronExited = new Promise<number>((resolve) => {
+        resolveElectronExit = resolve;
+      });
+      const renderer = createFakeRenderer({
+        close: () =>
+          Effect.sync(() => {
+            closeCalls += 1;
+          }),
+      });
+
+      const lifecycle = runElectronEffect(
+        runElectronDevLifecycleEffect({
+          buildBundles: () => Effect.void,
+          electronExecutablePath: "/repo/node_modules/electron/dist/Electron",
+          processHandlers: fakeProcessHandlers.processHandlers,
+          renderer,
+          startElectronProcess: () => {
+            markStarted();
+            return {
+              exited: electronExited,
+              kill(signal?: NodeJS.Signals | number) {
+                killSignals.push(signal);
+                resolveElectronExit(0);
+              },
+            };
+          },
         }),
-    });
+      );
+      await started;
 
-    const lifecycle = runElectronEffect(
-      runElectronDevLifecycleEffect({
-        buildBundles: () => Effect.void,
-        electronExecutablePath: "/repo/node_modules/electron/dist/Electron",
-        processHandlers: fakeProcessHandlers.processHandlers,
-        renderer,
-        startElectronProcess: () => {
-          markStarted();
-          return {
-            exited: electronExited,
-            kill(signal?: NodeJS.Signals | number) {
-              killSignals.push(signal);
-              resolveElectronExit(0);
-            },
-          };
-        },
-      }),
-    );
-    await started;
+      const shutdownHandler = fakeProcessHandlers.registered.find(({ event }) => event === signal);
+      if (!shutdownHandler) {
+        throw new Error(`Expected the Electron dev lifecycle to register ${signal}.`);
+      }
+      shutdownHandler.listener();
 
-    const shutdownHandler = fakeProcessHandlers.registered.find(({ event }) => event === "SIGTERM");
-    if (!shutdownHandler) {
-      throw new Error("Expected the Electron dev lifecycle to register SIGTERM.");
-    }
-    shutdownHandler.listener();
-
-    expect(await lifecycle).toBe(143);
-    expect(killSignals).toEqual([electronGracefulShutdownSignal(process.platform)]);
-    expect(closeCalls).toBe(1);
-  });
+      expect(await lifecycle).toBe(exitCode);
+      expect(killSignals).toEqual([electronGracefulShutdownSignal(process.platform)]);
+      expect(closeCalls).toBe(1);
+    },
+  );
 
   test("fails when Electron does not exit after forced shutdown", async () => {
     const signals: Array<NodeJS.Signals | number | undefined> = [];
@@ -461,10 +468,12 @@ describe("electron dev script", () => {
     expect(fakeProcessHandlers.registered.map(({ event }) => event)).toEqual([
       "SIGINT",
       "SIGTERM",
+      "SIGHUP",
       "exit",
     ]);
     expect(fakeProcessHandlers.removed.map(({ event }) => event)).toEqual([
       "exit",
+      "SIGHUP",
       "SIGTERM",
       "SIGINT",
     ]);
@@ -1060,6 +1069,7 @@ describe("electron dev script", () => {
     expect(killSignals).toEqual([electronGracefulShutdownSignal(process.platform)]);
     expect(closeCalls).toBe(1);
     expect(fakeProcessHandlers.removed.map(({ event }) => event)).toEqual([
+      "SIGHUP",
       "SIGTERM",
       "SIGINT",
       "exit",
@@ -1098,7 +1108,11 @@ describe("electron dev script", () => {
     }
 
     expect(failureOption.value).toBe(setupError);
-    expect(fakeProcessHandlers.removed.map(({ event }) => event)).toEqual(["SIGTERM", "SIGINT"]);
+    expect(fakeProcessHandlers.removed.map(({ event }) => event)).toEqual([
+      "SIGHUP",
+      "SIGTERM",
+      "SIGINT",
+    ]);
   });
 
   test("does not launch Electron when shutdown starts during bundle build", async () => {

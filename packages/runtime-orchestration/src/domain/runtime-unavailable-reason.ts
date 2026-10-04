@@ -10,7 +10,15 @@ export const describeUnavailableRuntime = (
   label: string,
   state: HostRuntimeLifecycleState,
   failure: HostRuntimeFailure | null,
+  shuttingDown: boolean,
 ): RuntimeUnavailableReason => {
+  // Shutdown stops every runtime. Its state then no longer explains why it rejects work.
+  if (shuttingDown) {
+    return {
+      message: `OpenDucktor is shutting down. The ${label} runtime does not accept work.`,
+      nextAction: "Start OpenDucktor again.",
+    };
+  }
   switch (state) {
     case "disabled":
       return {
