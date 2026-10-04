@@ -137,6 +137,53 @@ describe("watchRuntimeImpact", () => {
     harness.owner.stop();
   });
 
+  test("a paused review neither reads nor changes state while the action runs", async () => {
+    const harness = createHarness();
+    const watch = harness.open();
+    await harness.resolveRead(0, impact("token-1"));
+    const shownBeforeAction = harness.latest();
+
+    watch.pause();
+    for (const [state, revision] of [
+      ["restarting", 2],
+      ["stopping", 3],
+      ["starting", 4],
+    ] as const) {
+      harness.emit({
+        type: "runtime_changed",
+        hostInstanceId: "host-1",
+        status: createHostRuntimeStatusFixture({ kind: "opencode", state, revision }),
+      });
+    }
+    harness.emit({ type: "runtime_impact_changed", runtimeKinds: ["opencode"] });
+
+    expect(harness.reads).toHaveLength(1);
+    expect(harness.latest()).toBe(shownBeforeAction);
+
+    // A failed action resumes the review, which then reads the changed impact once.
+    watch.resume();
+    expect(harness.reads).toHaveLength(2);
+    await harness.resolveRead(1, impact("token-2"));
+    expect(harness.latest()).toEqual({ impact: impact("token-2"), isLoading: false, error: null });
+    watch.close();
+    harness.owner.stop();
+  });
+
+  test("a resumed review without changes shows the impact that replaced it", async () => {
+    const harness = createHarness();
+    const watch = harness.open();
+    await harness.resolveRead(0, impact("token-1"));
+
+    watch.pause();
+    watch.replace(impact("token-2"));
+    watch.resume();
+
+    expect(harness.reads).toHaveLength(1);
+    expect(harness.latest()).toEqual({ impact: impact("token-2"), isLoading: false, error: null });
+    watch.close();
+    harness.owner.stop();
+  });
+
   test("a review that opens during a stream failure stays blocked until recovery", async () => {
     // The transport reports the current connection failure before the subscription is ready.
     const harness = createHarness({ onSubscribe: (listener) => listener(streamWarning) });

@@ -100,10 +100,11 @@ export function RuntimeImpactDialog({
               {notice}
             </p>
           ) : null}
-          {isLoadingImpact ? (
+          {/* A later read keeps the shown sessions in place. Only the confirm button waits. */}
+          {isLoadingImpact && impact === null ? (
             <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
               <LoaderCircle className="size-4 animate-spin" />
-              {impact === null ? "Loading affected sessions." : "Updating affected sessions."}
+              Loading affected sessions.
             </p>
           ) : null}
           {impactError !== null ? (

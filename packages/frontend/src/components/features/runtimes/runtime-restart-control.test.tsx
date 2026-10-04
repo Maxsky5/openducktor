@@ -185,6 +185,39 @@ describe("RuntimeRestartControl", () => {
     view.unmount();
   });
 
+  test("keeps the reviewed sessions in place while the restart runs", async () => {
+    const readImpact = mock(async () => impactWithSession("confirm-1"));
+    const restartResult = Promise.withResolvers<RuntimeRestartResult>();
+    const events = startHostRuntimeEventsHarness();
+    const view = renderControl(
+      { runtimeRestartImpact: readImpact, runtimeRestart: () => restartResult.promise },
+      events,
+    );
+    fireEvent.click(view.getByRole("button", { name: "Restart OpenCode runtime" }));
+    await view.findByText("Build login");
+    fireEvent.click(await getConfirmButton(view));
+
+    // The restart changes the runtime and releases its sessions. The review reads nothing then.
+    act(() => {
+      events.emit({
+        type: "runtime_changed",
+        hostInstanceId: "host-1",
+        status: createHostRuntimeStatusFixture({ kind: "opencode", state: "restarting" }),
+      });
+      events.emit({ type: "runtime_impact_changed", runtimeKinds: ["opencode"] });
+    });
+    expect(readImpact).toHaveBeenCalledTimes(1);
+    expect(view.getByText("Build login")).toBeDefined();
+
+    // A failed restart resumes the review, which reads the changed sessions once.
+    await act(async () => {
+      restartResult.reject(new Error("The runtime did not stop."));
+    });
+    await view.findByText("The runtime did not stop.");
+    await waitFor(() => expect(readImpact).toHaveBeenCalledTimes(2));
+    view.unmount();
+  });
+
   test("shows a failed impact read and prevents confirmation", async () => {
     const restart = mock(async (): Promise<RuntimeRestartResult> => ({
       type: "completed",

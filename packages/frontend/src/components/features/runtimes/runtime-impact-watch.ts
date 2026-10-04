@@ -17,6 +17,13 @@ const INITIAL_STATE: RuntimeImpactState = { impact: null, isLoading: true, error
 export type RuntimeImpactWatch = {
   /** Shows an impact that the host returned with a rejected confirmation. */
   replace: (impact: RuntimeLifecycleImpact) => void;
+  /**
+   * Stops reads and state changes while the reviewed action runs. The action changes the runtime
+   * and its sessions, so reads during it only show passing states.
+   */
+  pause: () => void;
+  /** Shows the latest state again, and reads again when a change arrived during the pause. */
+  resume: () => void;
   close: () => void;
 };
 
@@ -38,6 +45,8 @@ export const watchRuntimeImpact = ({
   onState: (state: RuntimeImpactState) => void;
 }): RuntimeImpactWatch => {
   let closed = false;
+  let paused = false;
+  let changedWhilePaused = false;
   let reading = false;
   let readAgain = false;
   let impact: RuntimeLifecycleImpact | null = null;
@@ -49,12 +58,16 @@ export const watchRuntimeImpact = ({
   let streamFailure = events.getStreamHealth().error;
 
   const publish = (): void => {
-    if (closed) return;
+    if (closed || paused) return;
     onState({ impact, isLoading, error: streamFailure ?? readError });
   };
 
   // One read at a time. A change during a read starts one more read after it.
   const read = async (): Promise<void> => {
+    if (paused) {
+      changedWhilePaused = true;
+      return;
+    }
     if (reading) {
       readAgain = true;
       return;
@@ -114,6 +127,19 @@ export const watchRuntimeImpact = ({
       impact = next;
       publish();
     },
+    pause: () => {
+      paused = true;
+    },
+    resume: () => {
+      if (!paused) return;
+      paused = false;
+      if (changedWhilePaused) {
+        changedWhilePaused = false;
+        void read();
+        return;
+      }
+      publish();
+    },
     close: () => {
       closed = true;
       unsubscribe();
@@ -129,10 +155,13 @@ export const useRuntimeImpactWatch = ({
   reviewKey,
   kinds,
   readImpact,
+  paused,
 }: {
   reviewKey: number | null;
   kinds: ReadonlyArray<RuntimeKind>;
   readImpact: () => Promise<RuntimeLifecycleImpact>;
+  /** True while the reviewed action runs. */
+  paused: boolean;
 }): RuntimeImpactState & { replace: (impact: RuntimeLifecycleImpact) => void } => {
   const { runtimeEvents } = useHostRuntimeStatusContext();
   const [watched, setWatched] = useState<{ reviewKey: number; state: RuntimeImpactState } | null>(
@@ -156,6 +185,11 @@ export const useRuntimeImpactWatch = ({
       if (watchRef.current === watch) watchRef.current = null;
     };
   }, [reviewKey, runtimeEvents]);
+
+  useEffect(() => {
+    if (paused) watchRef.current?.pause();
+    else watchRef.current?.resume();
+  }, [paused]);
 
   const replace = useCallback((impact: RuntimeLifecycleImpact) => {
     watchRef.current?.replace(impact);

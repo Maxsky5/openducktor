@@ -91,6 +91,7 @@ export const useRuntimeImpactReview = ({
       if (openReview === null) throw new Error("No runtime review is open.");
       return openReview.readImpact();
     },
+    paused: openReview?.isPending ?? false,
   });
   const { replace } = watch;
   const currentImpact = watch.isLoading || watch.error !== null ? null : watch.impact;
