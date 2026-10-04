@@ -120,26 +120,18 @@ export const createWorkspaceLifecycleService = ({
       return repoConfig;
     });
 
-  const assertNoBlockingActivity = (repoPath: string) =>
+  const assertNoBlockingActivity = (configuredRepoPath: string, lifecycleRepoPath: string) =>
     Effect.gen(function* () {
-      const blockers = yield* activity.inspect(repoPath);
+      const blockers = yield* activity.inspect({ configuredRepoPath, lifecycleRepoPath });
       if (blockers.length > 0) {
         return yield* Effect.fail(
           new HostValidationError({
             message: blockingActivityMessage(blockers),
             field: "workspaceId",
-            details: { blockers, repoPath },
+            details: { blockers, repoPath: configuredRepoPath },
           }),
         );
       }
-    });
-
-  const resolveWorkspaceLifecyclePath = (repoPath: string) =>
-    Effect.gen(function* () {
-      if (!(yield* settingsConfig.pathExists(repoPath))) {
-        return repoPath;
-      }
-      return yield* gitPort.canonicalizePath(repoPath);
     });
 
   const persistProgress = (
@@ -180,7 +172,7 @@ export const createWorkspaceLifecycleService = ({
     lifecycleRepoPath: string,
   ) =>
     Effect.gen(function* () {
-      yield* assertNoBlockingActivity(lifecycleRepoPath);
+      yield* assertNoBlockingActivity(repoConfig.repoPath, lifecycleRepoPath);
       const startedRecord = yield* workspaceSettingsService.beginWorkspaceRemoval({
         workspaceId: input.workspaceId,
         expectedRepoPath: input.expectedRepoPath,
@@ -308,7 +300,9 @@ export const createWorkspaceLifecycleService = ({
         if (repoConfig.closed) {
           return yield* workspaceSettingsService.getWorkspaceCatalog();
         }
-        const lifecycleRepoPath = yield* resolveWorkspaceLifecyclePath(repoConfig.repoPath);
+        const lifecycleRepoPath = yield* settingsConfig.resolveWorkspaceLifecyclePath(
+          repoConfig.repoPath,
+        );
         return yield* taskSessionLifecycleCoordinator.runWorkspaceLifecycle(
           lifecycleRepoPath,
           "close",
@@ -320,7 +314,7 @@ export const createWorkspaceLifecycleService = ({
             },
             () =>
               Effect.gen(function* () {
-                yield* assertNoBlockingActivity(lifecycleRepoPath);
+                yield* assertNoBlockingActivity(repoConfig.repoPath, lifecycleRepoPath);
                 const catalog = yield* workspaceSettingsService.closeWorkspace(
                   input.workspaceId,
                   input.expectedRepoPath,
@@ -363,7 +357,9 @@ export const createWorkspaceLifecycleService = ({
     removeWorkspace(input) {
       return Effect.gen(function* () {
         const repoConfig = yield* requireTarget(input.workspaceId, input.expectedRepoPath);
-        const lifecycleRepoPath = yield* resolveWorkspaceLifecyclePath(repoConfig.repoPath);
+        const lifecycleRepoPath = yield* settingsConfig.resolveWorkspaceLifecyclePath(
+          repoConfig.repoPath,
+        );
         return yield* taskSessionLifecycleCoordinator.runWorkspaceLifecycle(
           lifecycleRepoPath,
           "remove",

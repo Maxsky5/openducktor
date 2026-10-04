@@ -114,6 +114,7 @@ const harness = (
     defaultWorktreeBasePath: (id) => `/${id}/worktrees`,
     defaultRepoWorktreeBasePath: (path) => `${path}/worktrees`,
     resolveConfiguredPath: (path) => path,
+    resolveWorkspaceLifecyclePath: () => Effect.die("Unused workspace lifecycle path resolver"),
     canonicalizePath: (path) => Effect.succeed(path),
     pathExists: () => Effect.succeed(true),
     join: (...parts) => parts.join("/"),

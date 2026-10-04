@@ -61,6 +61,7 @@ const createSettingsConfig = ({
     writeConfig() {
       return Effect.succeed(undefined);
     },
+    resolveWorkspaceLifecyclePath: () => Effect.die("Unused workspace lifecycle path resolver"),
     canonicalizePath(path) {
       return Effect.succeed(canonicalPaths[path] ?? path);
     },

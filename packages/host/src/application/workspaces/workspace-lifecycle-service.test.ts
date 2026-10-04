@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { mkdtemp, realpath, rm, symlink } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -13,11 +13,7 @@ import {
   type WorkspaceRemovalRecord,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import {
-  HostOperationError,
-  HostPathAccessError,
-  HostValidationError,
-} from "../../effect/host-errors";
+import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { createSettingsConfigAdapter } from "../../adapters/settings/settings-config-adapter";
 import { TaskAssetError } from "../../effect/task-asset-error";
 import type { GitPort } from "../../ports/git-port";
@@ -34,6 +30,11 @@ import {
   createWorkspaceActivityInspector,
   type WorkspaceActivityPort,
 } from "./workspace-activity-inspector";
+import { createDevServerRuntimeResolver } from "../dev-servers/dev-server-runtime-resolver";
+import {
+  inspectDevServerWorkspaceActivity,
+  type DevServerGroupRuntime,
+} from "../dev-servers/dev-server-state";
 import type { WorkspaceAdmissionService } from "./workspace-admission-service";
 import {
   createWorkspaceLifecycleService,
@@ -159,6 +160,7 @@ const createService = ({
   removeWorktree = () => Effect.void,
   canonicalizePath = (path: string) => Effect.succeed(path),
   pathExists = () => Effect.succeed(true),
+  resolveWorkspaceLifecyclePath = (path: string) => Effect.succeed(path),
   resolvedPathKind = "descendant" as const,
 }: {
   activity?: WorkspaceActivityPort;
@@ -188,6 +190,7 @@ const createService = ({
   removeWorktree?: GitPort["removeWorktree"];
   canonicalizePath?: GitPort["canonicalizePath"];
   pathExists?: SettingsConfigPort["pathExists"];
+  resolveWorkspaceLifecyclePath?: SettingsConfigPort["resolveWorkspaceLifecyclePath"];
   resolvedPathKind?: "descendant" | "outside";
 } = {}) => {
   const storage: WorkspaceStoragePort = {
@@ -209,6 +212,7 @@ const createService = ({
       defaultWorktreeBasePath: (workspaceId) => `/managed/${workspaceId}`,
       join: (...paths) => paths.join("/").replaceAll(/\/+/g, "/"),
       pathExists,
+      resolveWorkspaceLifecyclePath,
       readConfig: () => Effect.succeed(null),
       resolveConfiguredPath: (path) => path,
     }),
@@ -256,6 +260,7 @@ describe("workspace lifecycle service", () => {
         getRepoConfig: () => Effect.succeed(repoConfig({ repoPath })),
         pathExists: settingsConfig.pathExists,
         canonicalizePath: settingsConfig.canonicalizePath,
+        resolveWorkspaceLifecyclePath: settingsConfig.resolveWorkspaceLifecyclePath,
         closeWorkspace,
         removeWorkspaceRegistration,
         removeWorkspaceTaskAssets,
@@ -279,15 +284,43 @@ describe("workspace lifecycle service", () => {
     },
   );
 
-  test.each(["close", "remove"] as const)(
-    "%s preserves terminal activity guards for a symlink workspace",
-    async (operation) => {
+  test.each([
+    ["close", "existing"],
+    ["remove", "existing"],
+    ["close", "deleted"],
+    ["remove", "deleted"],
+  ] as const)(
+    "%s preserves activity guards for a symlink workspace with target %s",
+    async (operation, targetState) => {
       const directory = await mkdtemp(join(tmpdir(), "odt-workspace-alias-"));
       const alias = join(directory, "alias");
       try {
-        await symlink(directory, alias);
-        const canonicalRepoPath = await realpath(directory);
-        let terminalActivity: "active" | "unknown" | "idle" = "active";
+        const repository = join(directory, "repository");
+        await mkdir(repository);
+        await symlink(repository, alias, "junction");
+        const canonicalRepoPath = await realpath(repository);
+        if (targetState === "deleted") await rm(repository, { recursive: true });
+        const config = repoConfig({
+          repoPath: alias,
+          devServers: [{ id: "web", name: "Web", command: "bun run dev" }],
+        });
+        const groups = new Map<string, Map<string, DevServerGroupRuntime>>();
+        const resolveRuntime = createDevServerRuntimeResolver({
+          groups,
+          retiredOrder: { revision: null },
+          taskWorktreeService: undefined,
+          workspaceSessions: undefined,
+          workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({}),
+        });
+        const { runtime } = await Effect.runPromise(
+          resolveRuntime(
+            { repoPath: alias, owner: { kind: "task", taskId: "task-1" } },
+            false,
+            config,
+          ),
+        );
+        runtime.unresolvedStops.add("web");
+        let terminalActivity: "active" | "unknown" | "idle" = "idle";
         const releaseSessions = mock(() => Effect.void);
         const activity = createWorkspaceActivityInspector({
           agentSessionLiveStateService: {
@@ -295,7 +328,8 @@ describe("workspace lifecycle service", () => {
             releaseSession: () => Effect.void,
           },
           devServerService: {
-            inspectWorkspaceActivity: () => Effect.succeed({ activeOwners: [] }),
+            inspectWorkspaceActivity: ({ repoPath }) =>
+              Effect.succeed(inspectDevServerWorkspaceActivity(groups, repoPath)),
           },
           terminalService: {
             inspectWorkspaceActivity: (repoPath) =>
@@ -316,8 +350,9 @@ describe("workspace lifecycle service", () => {
         const settingsConfig = createSettingsConfigAdapter();
         const service = createService({
           activity: { ...activity, releaseSessions },
-          getRepoConfig: () => Effect.succeed(repoConfig({ repoPath: alias })),
+          getRepoConfig: () => Effect.succeed(config),
           canonicalizePath: settingsConfig.canonicalizePath,
+          resolveWorkspaceLifecyclePath: settingsConfig.resolveWorkspaceLifecyclePath,
           pathExists: settingsConfig.pathExists,
           closeWorkspace,
           removeWorkspaceRegistration,
@@ -328,6 +363,11 @@ describe("workspace lifecycle service", () => {
             ? service.closeWorkspace(input).pipe(Effect.asVoid)
             : service.removeWorkspace({ ...input, removeTaskWorktrees: false }).pipe(Effect.asVoid);
 
+        await expect(Effect.runPromise(lifecycle)).rejects.toThrow(
+          "dev server for task task-1 is active",
+        );
+        groups.clear();
+        terminalActivity = "active";
         await expect(Effect.runPromise(lifecycle)).rejects.toThrow(
           "terminal terminal-1 is running a command",
         );
@@ -354,48 +394,37 @@ describe("workspace lifecycle service", () => {
   );
 
   test.each(["close", "remove"] as const)(
-    "%s propagates path lookup and canonicalization failures before changing workspace data",
+    "%s propagates path resolution errors before changing workspace data",
     async (operation) => {
-      const accessError = new HostPathAccessError({
-        operation: "settings.pathExists",
-        path: "/repos/ws",
-        message: "Permission denied. Restore access and retry.",
+      const failure = new HostOperationError({
+        operation: "settingsConfig.resolveWorkspaceLifecyclePath",
+        message: "Permission denied. Restore path access and retry.",
       });
-      const canonicalizationError = new HostOperationError({
-        operation: "git.canonicalizePath",
-        message: "Cannot resolve the repository path. Restore access and retry.",
+      const closeWorkspace = mock(() => Effect.succeed(catalog()));
+      const beginWorkspaceRemoval = mock(() => Effect.succeed(removalRecord()));
+      const removeWorkspaceTaskAssets = mock(() => Effect.void);
+      const service = createService({
+        resolveWorkspaceLifecyclePath: () => Effect.fail(failure),
+        closeWorkspace,
+        beginWorkspaceRemoval,
+        removeWorkspaceTaskAssets,
       });
-      for (const failure of [accessError, canonicalizationError]) {
-        const closeWorkspace = mock(() => Effect.succeed(catalog()));
-        const beginWorkspaceRemoval = mock(() => Effect.succeed(removalRecord()));
-        const removeWorkspaceTaskAssets = mock(() => Effect.void);
-        const service = createService({
-          pathExists: () =>
-            failure === accessError ? Effect.fail(accessError) : Effect.succeed(true),
-          canonicalizePath: () => Effect.fail(canonicalizationError),
-          closeWorkspace,
-          beginWorkspaceRemoval,
-          removeWorkspaceTaskAssets,
-        });
-        const input = { workspaceId: "ws", expectedRepoPath: "/repos/ws" };
-        const result = await Effect.runPromise(
-          Effect.either(
-            operation === "close"
-              ? service.closeWorkspace(input).pipe(Effect.asVoid)
-              : service
-                  .removeWorkspace({ ...input, removeTaskWorktrees: false })
-                  .pipe(Effect.asVoid),
-          ),
-        );
+      const input = { workspaceId: "ws", expectedRepoPath: "/repos/ws" };
+      const result = await Effect.runPromise(
+        Effect.either(
+          operation === "close"
+            ? service.closeWorkspace(input).pipe(Effect.asVoid)
+            : service.removeWorkspace({ ...input, removeTaskWorktrees: false }).pipe(Effect.asVoid),
+        ),
+      );
 
-        expect(result._tag).toBe("Left");
-        if (result._tag === "Left") {
-          expect(result.left).toBe(failure);
-        }
-        expect(closeWorkspace).not.toHaveBeenCalled();
-        expect(beginWorkspaceRemoval).not.toHaveBeenCalled();
-        expect(removeWorkspaceTaskAssets).not.toHaveBeenCalled();
+      expect(result._tag).toBe("Left");
+      if (result._tag === "Left") {
+        expect(result.left).toBe(failure);
       }
+      expect(closeWorkspace).not.toHaveBeenCalled();
+      expect(beginWorkspaceRemoval).not.toHaveBeenCalled();
+      expect(removeWorkspaceTaskAssets).not.toHaveBeenCalled();
     },
   );
 
@@ -443,14 +472,22 @@ describe("workspace lifecycle service", () => {
     });
   });
 
-  test.each(["close", "remove"] as const)(
-    "%s rejects canonical task lifecycle work for a symlink workspace",
-    async (operation) => {
+  test.each([
+    ["close", "existing"],
+    ["remove", "existing"],
+    ["close", "deleted"],
+    ["remove", "deleted"],
+  ] as const)(
+    "%s rejects canonical task lifecycle work with symlink target %s",
+    async (operation, targetState) => {
       const directory = await mkdtemp(join(tmpdir(), "odt-workspace-alias-"));
       const alias = join(directory, "alias");
       try {
-        await symlink(directory, alias);
-        const canonicalRepoPath = await realpath(directory);
+        const repository = join(directory, "repository");
+        await mkdir(repository);
+        await symlink(repository, alias, "junction");
+        const canonicalRepoPath = await realpath(repository);
+        if (targetState === "deleted") await rm(repository, { recursive: true });
         const taskSessionLifecycleCoordinator = createTaskSessionLifecycleCoordinator();
         const closeWorkspace = mock(() => Effect.succeed(catalog()));
         const beginWorkspaceRemoval = mock(() => Effect.succeed(removalRecord()));
@@ -458,6 +495,7 @@ describe("workspace lifecycle service", () => {
         const service = createService({
           getRepoConfig: () => Effect.succeed(repoConfig({ repoPath: alias })),
           canonicalizePath: settingsConfig.canonicalizePath,
+          resolveWorkspaceLifecyclePath: settingsConfig.resolveWorkspaceLifecyclePath,
           pathExists: settingsConfig.pathExists,
           closeWorkspace,
           beginWorkspaceRemoval,

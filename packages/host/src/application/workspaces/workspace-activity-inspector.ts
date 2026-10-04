@@ -10,7 +10,10 @@ export type WorkspaceActivityBlocker = {
 };
 
 export type WorkspaceActivityPort = {
-  inspect(repoPath: string): Effect.Effect<WorkspaceActivityBlocker[], HostOperationErrorAggregate>;
+  inspect(paths: {
+    configuredRepoPath: string;
+    lifecycleRepoPath: string;
+  }): Effect.Effect<WorkspaceActivityBlocker[], HostOperationErrorAggregate>;
   releaseSessions(repoPath: string): Effect.Effect<void, HostOperationErrorAggregate>;
 };
 
@@ -30,7 +33,7 @@ export const createWorkspaceActivityInspector = ({
   devServerService: Pick<DevServerService, "inspectWorkspaceActivity">;
   terminalService: Pick<TerminalService, "inspectWorkspaceActivity">;
 }): WorkspaceActivityPort => ({
-  inspect: (repoPath) =>
+  inspect: ({ configuredRepoPath, lifecycleRepoPath: repoPath }) =>
     Effect.gen(function* () {
       const blockers: WorkspaceActivityBlocker[] = [];
       const sessions = yield* agentSessionLiveStateService
@@ -54,12 +57,12 @@ export const createWorkspaceActivityInspector = ({
       }
 
       const devServerActivity = yield* devServerService
-        .inspectWorkspaceActivity({ repoPath })
+        .inspectWorkspaceActivity({ repoPath: configuredRepoPath })
         .pipe(
           Effect.mapError((cause) =>
             toHostOperationError(
               "workspace.inspectDevServers",
-              `Failed to inspect dev servers for ${repoPath}. Stop the running work and retry.`,
+              `Failed to inspect dev servers for ${configuredRepoPath}. Stop the running work and retry.`,
               cause,
             ),
           ),

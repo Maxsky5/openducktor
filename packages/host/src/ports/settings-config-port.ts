@@ -24,6 +24,10 @@ export type SettingsConfigPort = {
   defaultRepoWorktreeBasePath(repoPath: string): string;
   resolveConfiguredPath(rawPath: string): string;
   canonicalizePath(rawPath: string): Effect.Effect<string, HostOperationErrorAggregate>;
+  // Resolve remaining symlinks and missing segments for lifecycle guards.
+  resolveWorkspaceLifecyclePath(
+    repoPath: string,
+  ): Effect.Effect<string, HostOperationErrorAggregate>;
   pathExists(path: string): Effect.Effect<boolean, HostPathAccessErrorAggregate>;
   join(...paths: string[]): string;
 };
