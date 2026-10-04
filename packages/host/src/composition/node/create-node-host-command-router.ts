@@ -24,10 +24,8 @@ import { createDevServerService } from "../../application/dev-servers/dev-server
 import { createSystemDiagnosticsService } from "../../application/diagnostics/system-diagnostics-service";
 import { createFilesystemService } from "../../application/filesystem/filesystem-service";
 import { createWorkspaceFilesService } from "../../application/filesystem/workspace-files-service";
-import {
-  createWorkspaceActivityInspector,
-  createWorkspaceLifecycleService,
-} from "../../application/workspaces/workspace-lifecycle-service";
+import { createWorkspaceActivityInspector } from "../../application/workspaces/workspace-activity-inspector";
+import { createWorkspaceLifecycleService } from "../../application/workspaces/workspace-lifecycle-service";
 import { createGitService } from "../../application/git/git-service";
 import { createOdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import { createPullRequestReviewService } from "../../application/pull-requests/pull-request-review-service";
