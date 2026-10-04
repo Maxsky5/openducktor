@@ -100,6 +100,7 @@ export const buildRepoScriptValidationSaveError = ({
 };
 
 export type SettingsSaveValidation = {
+  openCodePermissions: readonly string[];
   azureDevOps: {
     hasErrors: boolean;
     errorCount: number;
@@ -142,6 +143,12 @@ const saveBlocker = (
 export const getSettingsSaveBlocker = (
   validation: SettingsSaveValidation,
 ): SettingsSaveBlocker | null => {
+  if (validation.openCodePermissions.length > 0) {
+    return saveBlocker(
+      `Fix OpenCode permissions before saving. ${validation.openCodePermissions[0]}`,
+      { runtimeKind: "opencode", showRepoScriptErrors: false },
+    );
+  }
   if (validation.azureDevOps.hasErrors) {
     const count = validation.azureDevOps.errorCount;
     const workspaceSummary = validation.azureDevOps.invalidWorkspaceIds

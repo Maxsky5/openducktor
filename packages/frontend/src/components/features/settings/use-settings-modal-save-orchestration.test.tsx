@@ -38,6 +38,7 @@ const createSnapshot = (): SettingsSnapshot =>
 const createValidation = (
   overrides: Partial<SettingsSaveValidation> = {},
 ): SettingsSaveValidation => ({
+  openCodePermissions: [],
   azureDevOps: {
     hasErrors: false,
     errorCount: 0,

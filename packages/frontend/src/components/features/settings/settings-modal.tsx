@@ -279,6 +279,7 @@ function SettingsDialog({
               controller.isLoadingRuntimeDefinitions || controller.isLoadingRuntimeExecutables,
           }}
           validationSummary={{
+            openCodePermissionErrorCount: controller.openCodePermissionErrorCount,
             customAgentRoleFieldErrorCount:
               controller.customAgentRoleValidationState.totalErrorCount,
             promptPlaceholderErrorCount: controller.promptValidationState.totalErrorCount,

@@ -79,6 +79,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
     repoTotalErrorCount: 0,
     totalErrorCount: 0,
   },
+  openCodePermissionErrorCount: 0,
   hasPromptValidationErrors: false,
   reusablePromptValidationState: { errorsById: {}, totalErrorCount: 0 },
   hasReusablePromptValidationErrors: false,

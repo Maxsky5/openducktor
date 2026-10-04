@@ -103,37 +103,54 @@ describe("settings-modal-save-policy", () => {
     ).toBe("Fix 2 dev server field errors in the selected repository, `repo-two` before saving.");
   });
 
-  test("selects the first settings save blocker and its required UI action", () => {
-    const blocker = getSettingsSaveBlocker({
-      azureDevOps: {
-        hasErrors: false,
-        errorCount: 0,
-        invalidWorkspaceIds: [],
-        selectedWorkspaceId: "repo",
-      },
-      prompt: { hasErrors: true, errorCount: 2 },
-      customAgentRoles: { hasErrors: false, errorCount: 0 },
-      reusablePrompts: { hasErrors: true, errorCount: 3 },
-      runtimeRequest: { isPending: true, error: "request failed" },
-      runtimeAvailability: { hasErrors: true, errorCount: 1, invalidKind: "claude" },
-      hasUnacknowledgedCodexDangerousSettings: true,
-      repoScripts: {
-        hasErrors: true,
-        errorCount: 1,
-        invalidRepoPaths: ["repo"],
-        selectedWorkspaceId: "repo",
-      },
-    });
-
-    expect(blocker).toEqual({
+  test.each([
+    {
+      openCodePermissions: [],
       reason: "Fix 2 prompt placeholder errors before saving.",
       runtimeKind: null,
-      showRepoScriptErrors: false,
-    });
-  });
+    },
+    {
+      openCodePermissions: ["Defaults rule 2: Enter a pattern; use * to match all inputs."],
+      reason:
+        "Fix OpenCode permissions before saving. Defaults rule 2: Enter a pattern; use * to match all inputs.",
+      runtimeKind: "opencode",
+    },
+  ])(
+    "selects the first settings save blocker and its required UI action: %j",
+    ({ openCodePermissions, reason, runtimeKind }) => {
+      const blocker = getSettingsSaveBlocker({
+        openCodePermissions,
+        azureDevOps: {
+          hasErrors: false,
+          errorCount: 0,
+          invalidWorkspaceIds: [],
+          selectedWorkspaceId: "repo",
+        },
+        prompt: { hasErrors: true, errorCount: 2 },
+        customAgentRoles: { hasErrors: false, errorCount: 0 },
+        reusablePrompts: { hasErrors: true, errorCount: 3 },
+        runtimeRequest: { isPending: true, error: "request failed" },
+        runtimeAvailability: { hasErrors: true, errorCount: 1, invalidKind: "claude" },
+        hasUnacknowledgedCodexDangerousSettings: true,
+        repoScripts: {
+          hasErrors: true,
+          errorCount: 1,
+          invalidRepoPaths: ["repo"],
+          selectedWorkspaceId: "repo",
+        },
+      });
+
+      expect(blocker).toEqual({
+        reason,
+        runtimeKind,
+        showRepoScriptErrors: false,
+      });
+    },
+  );
 
   test("blocks save when Azure DevOps fields are invalid", () => {
     const blocker = getSettingsSaveBlocker({
+      openCodePermissions: [],
       azureDevOps: {
         hasErrors: true,
         errorCount: 2,
@@ -159,6 +176,7 @@ describe("settings-modal-save-policy", () => {
 
   test("returns runtime focus metadata for an executable blocker", () => {
     const blocker = getSettingsSaveBlocker({
+      openCodePermissions: [],
       azureDevOps: {
         hasErrors: false,
         errorCount: 0,
@@ -189,6 +207,7 @@ describe("settings-modal-save-policy", () => {
   test("returns no blocker for valid settings", () => {
     expect(
       getSettingsSaveBlocker({
+        openCodePermissions: [],
         azureDevOps: {
           hasErrors: false,
           errorCount: 0,

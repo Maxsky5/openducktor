@@ -14,6 +14,7 @@ type SettingsModalFooterValidationSummary = {
   reusablePromptFieldErrorCount: number;
   runtimeAvailabilityErrorCount: number;
   claudeSettingsError?: string | null | undefined;
+  openCodePermissionErrorCount: number;
   hasUnacknowledgedCodexDangerousSettings: boolean;
   repoScriptFieldErrorCount: number;
 };
@@ -40,6 +41,7 @@ const fieldErrors = (count: number, label: string): string | null =>
   count > 0 ? `${count} ${label} error${count > 1 ? "s" : ""}.` : null;
 
 const validationMessage = (summary: SettingsModalFooterValidationSummary): string | null =>
+  fieldErrors(summary.openCodePermissionErrorCount, "OpenCode permission field") ??
   fieldErrors(summary.promptPlaceholderErrorCount, "prompt placeholder") ??
   fieldErrors(summary.reusablePromptFieldErrorCount, "reusable prompt field") ??
   fieldErrors(summary.runtimeAvailabilityErrorCount, "runtime executable") ??
@@ -62,6 +64,7 @@ export function resolveSettingsModalFooter({
     saveState.isLoadingRuntimeConfiguration ||
     Boolean(errors.catalogError) ||
     Boolean(errors.runtimeExecutablesError) ||
+    validationSummary.openCodePermissionErrorCount > 0 ||
     validationSummary.promptPlaceholderErrorCount > 0 ||
     validationSummary.reusablePromptFieldErrorCount > 0 ||
     validationSummary.customAgentRoleFieldErrorCount > 0 ||

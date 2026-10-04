@@ -34,7 +34,12 @@ const createSettingsSnapshot = (): SettingsSnapshot =>
     autopilot: createDefaultAutopilotSettings(),
     agentRuntimes: {
       ...DEFAULT_AGENT_RUNTIMES,
-      opencode: { enabled: true, executablePath: "/tools/opencode" },
+      opencode: {
+        defaults: { rules: [] },
+        roleOverrides: {},
+        enabled: true,
+        executablePath: "/tools/opencode",
+      },
     },
     workspaces: {
       repo: {
@@ -422,7 +427,12 @@ describe("useSettingsModalController", () => {
         ...snapshot,
         agentRuntimes: {
           ...snapshot.agentRuntimes,
-          opencode: { enabled: true, executablePath: initialPath },
+          opencode: {
+            defaults: { rules: [] },
+            roleOverrides: {},
+            enabled: true,
+            executablePath: initialPath,
+          },
           codex: { ...snapshot.agentRuntimes.codex, enabled: false },
           claude: { ...snapshot.agentRuntimes.claude, enabled: false },
         },
@@ -1171,6 +1181,62 @@ describe("useSettingsModalController", () => {
       });
       expect(harness.getLatest().saveError).toBe("Settings write failed");
       expect(harness.getLatest().snapshotDraft?.customAgentRoles).toEqual([role]);
+      expect(harness.getLatest().isSaving).toBe(false);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("blocks invalid OpenCode drafts and retains ordered rules after a failed save", async () => {
+    saveSettingsSnapshot = mock(async () => {
+      throw new Error("Config write failed");
+    });
+    const harness = createHookHarness(true);
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.snapshotDraft !== null);
+      await harness.run((state) =>
+        state.updateAgentRuntimes((current) => ({
+          ...current,
+          opencode: {
+            ...current.opencode,
+            defaults: {
+              rules: [
+                { permission: "bash", pattern: "*", action: "deny" },
+                { permission: "bash", pattern: " ", action: "allow" },
+              ],
+            },
+          },
+        })),
+      );
+      expect(harness.getLatest().openCodePermissionErrorCount).toBe(1);
+      await harness.run(async (state) => {
+        expect(await state.submit()).toBe(false);
+      });
+      expect(saveSettingsSnapshot).not.toHaveBeenCalled();
+      expect(harness.getLatest().saveError).toContain("Defaults rule 2");
+      await harness.run((state) =>
+        state.updateAgentRuntimes((current) => ({
+          ...current,
+          opencode: {
+            ...current.opencode,
+            defaults: {
+              rules: current.opencode.defaults.rules.map((rule, index) =>
+                index === 1 ? { ...rule, pattern: "git *" } : rule,
+              ),
+            },
+          },
+        })),
+      );
+      expect(harness.getLatest().openCodePermissionErrorCount).toBe(0);
+      await harness.run(async (state) => {
+        expect(await state.submit()).toBe(false);
+      });
+      expect(harness.getLatest().saveError).toBe("Config write failed");
+      expect(harness.getLatest().snapshotDraft?.agentRuntimes.opencode.defaults.rules).toEqual([
+        { permission: "bash", pattern: "*", action: "deny" },
+        { permission: "bash", pattern: "git *", action: "allow" },
+      ]);
       expect(harness.getLatest().isSaving).toBe(false);
     } finally {
       await harness.unmount();

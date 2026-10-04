@@ -205,7 +205,11 @@ describe("AgentRuntimesSection", () => {
         "OpenDucktor uses these exact paths for checks and agent sessions.",
       );
       expect(renderer.container.innerHTML).not.toContain("Supports workspace, task, build");
-      expect(renderer.container.innerHTML).not.toContain("Role override");
+      expect(
+        screen
+          .getByRole("switch", { name: "Enable OpenCode permissions role overrides" })
+          .getAttribute("aria-checked"),
+      ).toBe("false");
       expect(renderer.container.innerHTML).not.toContain("Sandbox mode");
 
       fireEvent.click(screen.getByRole("tab", { name: /Codex/i }));
@@ -258,7 +262,12 @@ describe("AgentRuntimesSection", () => {
         ...runtimeDefinitionRequestProps,
         agentRuntimes: {
           ...DEFAULT_AGENT_RUNTIMES,
-          opencode: { enabled: true, executablePath: "/opt/homebrew/bin/opencode" },
+          opencode: {
+            defaults: { rules: [] },
+            roleOverrides: {},
+            enabled: true,
+            executablePath: "/opt/homebrew/bin/opencode",
+          },
         },
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
         isCheckingExecutables: true,
@@ -313,7 +322,12 @@ describe("AgentRuntimesSection", () => {
         },
         agentRuntimes: {
           ...DEFAULT_AGENT_RUNTIMES,
-          opencode: { enabled: true, executablePath: "/opt/homebrew/bin/opencode" },
+          opencode: {
+            defaults: { rules: [] },
+            roleOverrides: {},
+            enabled: true,
+            executablePath: "/opt/homebrew/bin/opencode",
+          },
         },
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
         disabled: false,
@@ -342,7 +356,12 @@ describe("AgentRuntimesSection", () => {
     const renderer = render(
       createSection({
         ...DEFAULT_AGENT_RUNTIMES,
-        opencode: { enabled: false, executablePath: "" },
+        opencode: {
+          defaults: { rules: [] },
+          roleOverrides: {},
+          enabled: false,
+          executablePath: "",
+        },
       }),
     );
 

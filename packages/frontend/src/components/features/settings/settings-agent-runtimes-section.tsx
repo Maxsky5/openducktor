@@ -32,6 +32,7 @@ import { errorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import type { RuntimeExecutableValidationState } from "@/state/queries/use-runtime-executable-validation";
 import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
+import { OpenCodePermissionsSettings } from "./settings-opencode-permissions";
 import { RuntimeExecutablePanel } from "./runtime-executable-panel";
 import type { SettingsContentFocusRequest } from "./settings-deep-link";
 
@@ -827,6 +828,18 @@ export function AgentRuntimesSection({
                   onChange={(next) => onUpdateAgentRuntimes(() => next)}
                   onCheckAgain={() => void onCheckAgain()}
                 />
+                {selectedDefinition.kind === "opencode" ? (
+                  <OpenCodePermissionsSettings
+                    config={agentRuntimes.opencode}
+                    disabled={disabled}
+                    onUpdate={(updater) =>
+                      onUpdateAgentRuntimes((current) => ({
+                        ...current,
+                        opencode: updater(current.opencode),
+                      }))
+                    }
+                  />
+                ) : null}
                 {selectedDefinition.kind === "codex" ? (
                   <CodexSettings
                     config={codexConfigWithDefaults(agentRuntimes.codex)}
