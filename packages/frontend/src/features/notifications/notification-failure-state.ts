@@ -27,7 +27,7 @@ export const recordNotificationFailure = (
     return { ...state, coordination: failure };
   }
   if (failure.channel === "os") {
-    if (state.os) return state;
+    if (state.os && state.os.osStatus === failure.osStatus) return state;
     return { ...state, os: failure };
   }
   if (failure.channel === "sound") {
@@ -53,8 +53,10 @@ export const clearCoordinationNotificationFailure = (
 
 export const selectNotificationFailure = (
   state: NotificationFailureState,
-): NotificationDispatchFailure | null =>
-  state.settings ?? state.coordination ?? state.os ?? state.sound;
+): NotificationDispatchFailure | null => {
+  const osError = state.os?.osStatus === "denied" ? null : state.os;
+  return state.settings ?? state.coordination ?? osError ?? state.sound ?? state.os;
+};
 
 export const clearSoundNotificationFailure = (
   state: NotificationFailureState,

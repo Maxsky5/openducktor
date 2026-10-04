@@ -41,6 +41,41 @@ test("replaces coordination recovery with OS recovery for the same occurrence", 
 });
 
 describe("NotificationFailurePrompt", () => {
+  test("shows permission denial as information with an action to open settings", async () => {
+    await withMockedToast(async ({ toastErrorMock, toastInfoMock }) => {
+      const onOpenSettings = mock(() => {});
+      const view = render(
+        <NotificationFailurePrompt
+          failure={{ ...failure("permission-required"), osStatus: "denied" }}
+          onOpenSettings={onOpenSettings}
+          onReload={() => {}}
+        />,
+      );
+
+      expect(toastErrorMock).not.toHaveBeenCalled();
+      expect(toastInfoMock).toHaveBeenCalledWith(
+        "OS notifications are not allowed",
+        expect.objectContaining({
+          description: "Native notifications are unavailable.",
+          action: { label: "Open settings", onClick: onOpenSettings },
+        }),
+      );
+      // SAFETY: The assertion above checks that the toast options contain this action.
+      const options = toastInfoMock.mock.calls[0]?.[1] as { action: { onClick(): void } };
+      options.action.onClick();
+      expect(onOpenSettings).toHaveBeenCalledTimes(1);
+
+      view.rerender(
+        <NotificationFailurePrompt
+          failure={{ ...failure("permission-required"), osStatus: "failed" }}
+          onOpenSettings={onOpenSettings}
+          onReload={() => {}}
+        />,
+      );
+      expect(toastErrorMock).toHaveBeenCalledWith("OS notification failed", expect.anything());
+    });
+  });
+
   test("shows one actionable toast for each OS failure occurrence", async () => {
     await withMockedToast(async ({ toastErrorMock }) => {
       const onOpenSettings = mock(() => {});

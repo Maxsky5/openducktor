@@ -1,5 +1,6 @@
 import type {
   NotificationCue,
+  NotificationDeliveryResult,
   NotificationNavigationTarget,
   NotificationOccurrence,
 } from "@openducktor/contracts";
@@ -71,7 +72,10 @@ export const createShellOsNotificationAdapter = (
   bridge: NotificationBridge,
   onShown: () => void = () => {},
 ) => ({
-  async deliver(copy: NotificationCopy, occurrence: NotificationOccurrence): Promise<void> {
+  async deliver(
+    copy: NotificationCopy,
+    occurrence: NotificationOccurrence,
+  ): Promise<NotificationDeliveryResult> {
     const result = await bridge.showOsNotification({
       occurrenceId: occurrence.occurrenceId,
       title: copy.title,
@@ -79,10 +83,8 @@ export const createShellOsNotificationAdapter = (
       silent: true,
       navigationTarget: occurrence.navigationTarget,
     });
-    if (result.status !== "shown") {
-      throw new Error(result.message);
-    }
-    onShown();
+    if (result.status === "shown") onShown();
+    return result;
   },
 });
 

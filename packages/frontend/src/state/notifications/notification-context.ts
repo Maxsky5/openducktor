@@ -14,6 +14,7 @@ export type NotificationNavigator = (target: NotificationNavigationTarget) => Pr
 export type NotificationContextValue = {
   deliveryFailure: NotificationDispatchFailure | null;
   getCapability(): Promise<NotificationOsCapability>;
+  requestPermission(): Promise<NotificationOsCapability>;
   openSystemSettings(): Promise<void>;
   previewCue(cue: NotificationCue, volumePercent: number): Promise<void>;
   testInApp(settings: NotificationSettings): Promise<void>;

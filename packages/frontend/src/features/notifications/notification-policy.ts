@@ -3,6 +3,7 @@ import {
   notificationOccurrenceSchema,
   notificationSettingsSchema,
   type NotificationCue,
+  type NotificationDeliveryResult,
   type NotificationOccurrence,
   type NotificationSettings,
 } from "@openducktor/contracts";
@@ -18,7 +19,10 @@ type InAppNotificationAdapter = {
 };
 
 type OsNotificationAdapter = {
-  deliver(copy: NotificationCopy, occurrence: NotificationOccurrence): Promise<void>;
+  deliver(
+    copy: NotificationCopy,
+    occurrence: NotificationOccurrence,
+  ): Promise<NotificationDeliveryResult>;
 };
 
 type SoundNotificationAdapter = {
@@ -40,6 +44,7 @@ export type NotificationDispatchFailure = {
   occurrenceId: string;
   repoPath: string;
   message: string;
+  osStatus?: Exclude<NotificationDeliveryResult["status"], "shown">;
 };
 
 type CreateNotificationPolicyOptions = {
@@ -57,19 +62,6 @@ type PendingDelivery = {
   run(): Promise<void>;
 };
 
-const errorMessage = (cause: unknown): string => {
-  const message = cause instanceof Error ? cause.message : String(cause);
-  return message.slice(0, 500);
-};
-
-const targetIncludesInApp = (
-  target: NotificationSettings["kinds"][NotificationOccurrence["kind"]]["target"],
-): boolean => target === "in_app" || target === "both";
-
-const targetIncludesOs = (
-  target: NotificationSettings["kinds"][NotificationOccurrence["kind"]]["target"],
-): boolean => target === "os" || target === "both";
-
 export const createNotificationPolicy = ({
   inApp,
   os,
@@ -82,15 +74,13 @@ export const createNotificationPolicy = ({
 
   const reportFailure = (
     occurrence: NotificationOccurrence,
-    channel: NotificationDispatchFailure["channel"],
-    cause: unknown,
+    failure: Pick<NotificationDispatchFailure, "channel" | "message" | "osStatus">,
   ): void => {
     onFailure({
-      channel,
+      ...failure,
       kind: occurrence.kind,
       occurrenceId: occurrence.occurrenceId,
       repoPath: occurrence.repoPath,
-      message: errorMessage(cause),
     });
   };
 
@@ -124,7 +114,19 @@ export const createNotificationPolicy = ({
     if (context.phase === "external" && !externalOccurrences.has(occurrence.occurrenceId)) {
       externalOccurrences.add(occurrence.occurrenceId);
       if (osSelected && (settings.osFocus === "always_send" || context.appFocused === false)) {
-        deliveries.push({ channel: "os", run: () => os.deliver(copy, occurrence) });
+        deliveries.push({
+          channel: "os",
+          run: async () => {
+            const result = await os.deliver(copy, occurrence);
+            if (result.status !== "shown") {
+              reportFailure(occurrence, {
+                channel: "os",
+                message: result.message,
+                osStatus: result.status,
+              });
+            }
+          },
+        });
       }
       if (
         soundSelected &&
@@ -143,7 +145,10 @@ export const createNotificationPolicy = ({
       }
       if (result.status === "rejected") {
         if (delivery) {
-          reportFailure(occurrence, delivery.channel, result.reason);
+          reportFailure(occurrence, {
+            channel: delivery.channel,
+            message: errorMessage(result.reason),
+          });
         }
       }
     }
@@ -164,3 +169,16 @@ export const createNotificationPolicy = ({
 
   return { dispatch };
 };
+
+const errorMessage = (cause: unknown): string => {
+  const message = cause instanceof Error ? cause.message : String(cause);
+  return message.slice(0, 500);
+};
+
+const targetIncludesInApp = (
+  target: NotificationSettings["kinds"][NotificationOccurrence["kind"]]["target"],
+): boolean => target === "in_app" || target === "both";
+
+const targetIncludesOs = (
+  target: NotificationSettings["kinds"][NotificationOccurrence["kind"]]["target"],
+): boolean => target === "os" || target === "both";

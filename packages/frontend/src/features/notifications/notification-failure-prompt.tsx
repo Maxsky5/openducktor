@@ -25,7 +25,10 @@ export function NotificationFailurePrompt({
       action = { label: "Reload", onClick: onReload };
     }
     if (failure.channel === "sound") title = "Notification sound failed";
-    toast.error(title, {
+    const osDenied = failure.channel === "os" && failure.osStatus === "denied";
+    if (osDenied) title = "OS notifications are not allowed";
+    const showToast = osDenied ? toast.info : toast.error;
+    showToast(title, {
       id,
       description: failure.message,
       action,

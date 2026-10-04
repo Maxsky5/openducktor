@@ -3,9 +3,12 @@ import type {
   NotificationOsCapability,
   NotificationSettings,
 } from "@openducktor/contracts";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
-import { notificationOsCapabilityQueryOptions } from "@/state/queries/notifications";
+import {
+  notificationOsCapabilityQueryOptions,
+  notificationQueryKeys,
+} from "@/state/queries/notifications";
 import { useNotificationContext } from "./notification-context";
 
 const errorMessage = (cause: unknown): string =>
@@ -27,6 +30,9 @@ export const describeNotificationOsCapability = (
     return "OS notifications are disabled in system settings. Allow OpenDucktor notifications to receive alerts outside the app.";
   }
   if (capability.permission === "prompt") {
+    if (capability.platform === "browser") {
+      return "Allow notifications to receive alerts outside the app.";
+    }
     return "OS notifications are not enabled yet. Test OS to choose whether to allow them.";
   }
   if (capability.failureMessage) return capability.failureMessage;
@@ -38,10 +44,30 @@ export const describeNotificationOsCapability = (
 
 export const useNotificationTestControls = (settings: NotificationSettings | null) => {
   const runtime = useNotificationContext();
+  const queryClient = useQueryClient();
   const capabilityQuery = useQuery(notificationOsCapabilityQueryOptions(runtime.getCapability));
   const [status, setStatus] = useState<string | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [isOpeningSettings, setIsOpeningSettings] = useState(false);
+  const [isRequestingPermission, setIsRequestingPermission] = useState(false);
+
+  const requestPermission = async (): Promise<void> => {
+    setIsRequestingPermission(true);
+    setStatus(null);
+    try {
+      const capability = await runtime.requestPermission();
+      queryClient.setQueryData(notificationQueryKeys.osCapability(), capability);
+      if (capability.failureMessage) {
+        setStatus(capability.failureMessage);
+      } else if (capability.permission === "prompt") {
+        setStatus("Notification permission was not changed.");
+      }
+    } catch (cause) {
+      setStatus(errorMessage(cause));
+    } finally {
+      setIsRequestingPermission(false);
+    }
+  };
 
   const testNotification = async (target: "in_app" | "os"): Promise<void> => {
     if (!settings) {
@@ -103,6 +129,8 @@ export const useNotificationTestControls = (settings: NotificationSettings | nul
     ),
     isTesting,
     isOpeningSettings,
+    isRequestingPermission,
+    requestPermission,
     openSystemSettings,
     status,
     testNotification,

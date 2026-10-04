@@ -12,7 +12,7 @@ import {
   type WorkspaceSession,
 } from "@openducktor/contracts";
 import { Stream, Effect } from "effect";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, HostPathAccessError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import { withNotificationConfigCommit } from "../../adapters/config/notification-settings-config";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
@@ -709,6 +709,117 @@ test("workspace failure is scoped; removal discards late work and re-entry seeds
     expect(occurrences(h.frames)).toHaveLength(1);
   } finally {
     gate.resolve();
+    await Effect.runPromise(h.service.dispose());
+  }
+});
+
+test.each(["missing folder", "permission denied"])(
+  "workspace initialization reports %s and recovers without stopping other workspaces",
+  async (reason) => {
+    const h = harness();
+    let restored = false;
+    const error =
+      reason === "missing folder"
+        ? new HostOperationError({
+            operation: "settingsConfig.canonicalizePath",
+            message: "ENOENT: no such file or directory, realpath '/beta'",
+          })
+        : new HostPathAccessError({
+            path: "/beta",
+            operation: "taskStore.listTasks",
+            message: "Permission denied for /beta",
+          });
+    h.port.pathExists = (path) =>
+      Effect.succeed(path !== "/beta" || reason !== "missing folder" || restored);
+    h.listTasks.mockImplementation(({ repoPath }) =>
+      repoPath === "/beta" && !restored ? Effect.fail(error) : Effect.succeed([]),
+    );
+    try {
+      await Effect.runPromise(h.service.initialize());
+      await flush();
+      h.service.acceptTask(transition("missing", "/beta"));
+      h.service.acceptTask(transition("present"));
+      await flush();
+      const failures = h.frames.flatMap((frame) =>
+        frame.type === "health" && frame.health.message ? [frame.health] : [],
+      );
+      expect(failures).toMatchObject([{ scope: "/beta", source: "initialization" }]);
+      expect(failures[0]?.message).toContain(error.message);
+      expect(failures[0]?.message).toContain("close and reopen the workspace");
+      expect(occurrences(h.frames).map((frame) => frame.selected.occurrence.repoPath)).toEqual([
+        "/alpha",
+      ]);
+      restored = true;
+      await Effect.runPromise(h.service.configCommitted(h.config));
+      await flush();
+      h.service.acceptTask(transition("restored", "/beta"));
+      await flush();
+      expect(occurrences(h.frames).map((frame) => frame.selected.occurrence.repoPath)).toEqual([
+        "/alpha",
+        "/beta",
+      ]);
+      expect(
+        h.frames
+          .filter((frame) => frame.type === "health" && frame.health.scope === "/beta")
+          .at(-1),
+      ).toMatchObject({
+        health: { scope: "/beta", source: "initialization", message: null },
+      });
+    } finally {
+      await Effect.runPromise(h.service.dispose());
+    }
+  },
+);
+
+test("closing a workspace clears its initialization failure", async () => {
+  const h = harness();
+  h.listTasks.mockImplementation(({ repoPath }) =>
+    repoPath === "/beta"
+      ? Effect.fail(
+          new HostPathAccessError({
+            path: repoPath,
+            operation: "taskStore.listTasks",
+            message: "Permission denied for /beta",
+          }),
+        )
+      : Effect.succeed([]),
+  );
+  try {
+    await Effect.runPromise(h.service.initialize());
+    await flush();
+    h.service.acceptTask(transition("present"));
+    await flush();
+    expect(occurrences(h.frames).map((frame) => frame.selected.occurrence.repoPath)).toEqual([
+      "/alpha",
+    ]);
+    expect(
+      h.frames.filter((frame) => frame.type === "health" && frame.health.message),
+    ).toMatchObject([
+      {
+        health: {
+          scope: "/beta",
+          source: "initialization",
+          message: expect.stringContaining("Permission denied"),
+        },
+      },
+    ]);
+    const removed = structuredClone(h.config);
+    delete removed.workspaces.beta;
+    await Effect.runPromise(h.service.configCommitted(removed));
+    await flush();
+    expect(
+      h.frames
+        .filter(
+          (frame) =>
+            frame.type === "health" &&
+            frame.health.scope === "/beta" &&
+            frame.health.source === "initialization",
+        )
+        .at(-1),
+    ).toMatchObject({
+      health: { scope: "/beta", source: "initialization", message: null },
+    });
+  } finally {
     await Effect.runPromise(h.service.dispose());
   }
 });

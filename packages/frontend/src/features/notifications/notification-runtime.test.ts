@@ -11,6 +11,54 @@ import {
 } from "./notification-runtime.test-support";
 
 describe("notification delivery and previews", () => {
+  test.each(["denied", "failed", "unsupported"] as const)(
+    "preserves the %s OS result while local notifications and sound continue",
+    async (status) => {
+      const delivery = createDeliveryAdapters();
+      const settings = createDefaultNotificationSettings();
+      settings.kinds["workflow.closed"].target = "both";
+      const onFailure = mock(() => {});
+      const onOsShown = mock(() => {});
+      const requestPermission = mock(createBridge().requestPermission);
+      let blocked = true;
+      const runtime = createNotificationRuntime({
+        bridge: createBridge({
+          requestPermission,
+          showOsNotification: async () =>
+            blocked
+              ? { status, message: "OS notification delivery is blocked." }
+              : { status: "shown" },
+        }),
+        selectSettings: async () => settings,
+        navigate: async () => {},
+        onFailure,
+        onOsShown,
+        inApp: delivery.inApp,
+        sound: delivery.sound,
+      });
+
+      await runtime.publishAndWait(workflowClosedOccurrence("blocked-os"));
+
+      expect(onFailure).toHaveBeenCalledTimes(1);
+      expect(onFailure).toHaveBeenCalledWith(
+        expect.objectContaining({
+          channel: "os",
+          osStatus: status,
+          message: "OS notification delivery is blocked.",
+        }),
+      );
+      expect(delivery.deliverInApp).toHaveBeenCalledTimes(1);
+      expect(delivery.playSound).toHaveBeenCalledTimes(1);
+      expect(onOsShown).not.toHaveBeenCalled();
+      expect(requestPermission).not.toHaveBeenCalled();
+
+      blocked = false;
+      await runtime.publishAndWait(workflowClosedOccurrence("restored-os"));
+      expect(onOsShown).toHaveBeenCalledTimes(1);
+      expect(onFailure).toHaveBeenCalledTimes(1);
+    },
+  );
+
   test("reports sound failures independently and signals recovery after a preview", async () => {
     const onFailure = mock(() => {});
     const onSoundPlayed = mock(() => {});
@@ -158,7 +206,7 @@ describe("notification delivery and previews", () => {
     );
   });
 
-  test("requests permission only from the explicit OS test", async () => {
+  test("requests permission only from explicit permission and OS test actions", async () => {
     const requestPermission = mock(async () => ({
       platform: "browser" as const,
       supported: true,
@@ -181,9 +229,12 @@ describe("notification delivery and previews", () => {
     await runtime.getCapability();
     expect(requestPermission).not.toHaveBeenCalled();
     expect(showOsNotification).not.toHaveBeenCalled();
+    expect((await runtime.requestPermission()).permission).toBe("granted");
+    expect(requestPermission).toHaveBeenCalledTimes(1);
+    expect(showOsNotification).not.toHaveBeenCalled();
     await runtime.testOs(settings);
 
-    expect(requestPermission).toHaveBeenCalledTimes(1);
+    expect(requestPermission).toHaveBeenCalledTimes(2);
     expect(showOsNotification).toHaveBeenCalledTimes(1);
     expect(showOsNotification.mock.calls[0]?.[0].silent).toBe(true);
   });

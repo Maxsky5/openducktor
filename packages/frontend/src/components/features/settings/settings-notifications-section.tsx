@@ -4,11 +4,10 @@ import {
   notificationSoundSchema,
   type NotificationCue,
   type NotificationKind,
-  type NotificationOsCapability,
   type NotificationSettings,
   type NotificationTarget,
 } from "@openducktor/contracts";
-import { Bell, BellRing, CircleAlert, CircleCheck, Settings } from "lucide-react";
+import { Bell, BellRing } from "lucide-react";
 import { memo, useCallback, type ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -21,6 +20,7 @@ import {
 } from "@/features/notifications/catalogue";
 import { useNotificationContext } from "@/state/notifications/notification-context";
 import { useNotificationTestControls } from "@/state/notifications/use-notification-test-controls";
+import { NotificationPermissionNotice } from "./notification-permission-notice";
 import {
   createNotificationSoundOptions,
   notificationCueOptions,
@@ -54,70 +54,6 @@ const deliveryFailureLabels = {
   sound: "Last sound error",
   settings: "Last notification settings error",
   coordination: "Last browser notification coordination error",
-};
-
-type PermissionNoticePresentation = {
-  title: string;
-  className: string;
-  iconClassName: string;
-  icon: typeof BellRing;
-  role: "alert" | "status";
-};
-
-const getPermissionNoticePresentation = (
-  capability: NotificationOsCapability | undefined,
-): PermissionNoticePresentation => {
-  if (capability?.supported && capability.permission === "granted") {
-    return {
-      title: "OS notifications are on",
-      className: "border-success-border bg-success-surface text-success-surface-foreground",
-      iconClassName:
-        "border-success-border bg-background/60 text-success-muted dark:bg-background/30",
-      icon: CircleCheck,
-      role: "status",
-    };
-  }
-
-  if (capability?.permission === "denied") {
-    return {
-      title: "OS notifications are off",
-      className: "border-warning-border bg-warning-surface text-warning-surface-foreground",
-      iconClassName:
-        "border-warning-border bg-background/60 text-warning-muted dark:bg-background/30",
-      icon: CircleAlert,
-      role: "alert",
-    };
-  }
-
-  if (capability?.supported === false) {
-    return {
-      title: "OS notifications are unavailable",
-      className: "border-warning-border bg-warning-surface text-warning-surface-foreground",
-      iconClassName:
-        "border-warning-border bg-background/60 text-warning-muted dark:bg-background/30",
-      icon: CircleAlert,
-      role: "alert",
-    };
-  }
-
-  if (capability?.permission === "prompt") {
-    return {
-      title: "Turn on OS notifications",
-      className: "border-warning-border bg-warning-surface text-warning-surface-foreground",
-      iconClassName:
-        "border-warning-border bg-background/60 text-warning-muted dark:bg-background/30",
-      icon: BellRing,
-      role: "status",
-    };
-  }
-
-  return {
-    title: capability ? "OS notifications are available" : "Checking OS notifications",
-    className: "border-border bg-muted/40 text-foreground",
-    iconClassName: "border-border bg-background text-muted-foreground",
-    icon: BellRing,
-    role: "status",
-  };
 };
 
 const AGENT_KINDS = NOTIFICATION_KIND_VALUES.filter((kind) => kind.startsWith("agent."));
@@ -333,16 +269,18 @@ export function SettingsNotificationsSection({
     capability,
     capabilityDescription,
     isOpeningSettings,
+    isRequestingPermission,
     isTesting,
     openSystemSettings,
+    requestPermission,
     status: testStatus,
     testNotification,
     previewCue: previewNotificationCue,
   } = useNotificationTestControls(notifications);
-  const canOpenSystemSettings = capability?.canOpenSystemSettings === true;
   const isOsTestDisabled = capability?.supported === false;
-  const permissionNotice = getPermissionNoticePresentation(capability);
-  const PermissionIcon = permissionNotice.icon;
+  const actionsDisabled = disabled || isOpeningSettings || isTesting || isRequestingPermission;
+  const deliveryFailure = notificationRuntime.deliveryFailure;
+  const osDenied = deliveryFailure?.channel === "os" && deliveryFailure.osStatus === "denied";
   const previewCue = useCallback(
     (cue: NotificationCue): void => {
       void previewNotificationCue(cue);
@@ -360,43 +298,18 @@ export function SettingsNotificationsSection({
         </p>
       </div>
 
-      <div
-        className={`flex flex-col gap-4 rounded-md border px-4 py-4 sm:flex-row sm:items-center sm:justify-between ${permissionNotice.className}`}
-        role={permissionNotice.role}
-      >
-        <div className="flex min-w-0 items-start gap-3">
-          <div
-            className={`mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md border ${permissionNotice.iconClassName}`}
-          >
-            <PermissionIcon className="size-4" aria-hidden="true" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-semibold">{permissionNotice.title}</p>
-            <p className="mt-1 text-sm leading-5">{capabilityDescription}</p>
-            {capability?.supported && !capability.canGuaranteeSilent ? (
-              <p className="mt-1 text-sm leading-5">
-                This platform cannot guarantee silent OS delivery.
-              </p>
-            ) : null}
-          </div>
-        </div>
-        {canOpenSystemSettings ? (
-          <Button
-            type="button"
-            variant="outline"
-            className="shrink-0 self-start sm:self-center"
-            disabled={disabled || isOpeningSettings || isTesting}
-            onClick={() => void openSystemSettings()}
-          >
-            <Settings data-icon="inline-start" /> Open system settings
-          </Button>
-        ) : null}
-      </div>
+      <NotificationPermissionNotice
+        capability={capability}
+        description={capabilityDescription}
+        disabled={actionsDisabled}
+        isRequestingPermission={isRequestingPermission}
+        onRequestPermission={requestPermission}
+        onOpenSystemSettings={openSystemSettings}
+      />
 
-      {notificationRuntime.deliveryFailure ? (
+      {deliveryFailure && !osDenied ? (
         <p className="text-sm text-destructive" role="alert">
-          {deliveryFailureLabels[notificationRuntime.deliveryFailure.channel]}:{" "}
-          {notificationRuntime.deliveryFailure.message}
+          {deliveryFailureLabels[deliveryFailure.channel]}: {deliveryFailure.message}
         </p>
       ) : null}
 
@@ -412,7 +325,7 @@ export function SettingsNotificationsSection({
             <Button
               type="button"
               variant="outline"
-              disabled={disabled || isOpeningSettings || isTesting}
+              disabled={actionsDisabled}
               onClick={() => void testNotification("in_app")}
             >
               <Bell data-icon="inline-start" /> Test in-app
@@ -420,7 +333,7 @@ export function SettingsNotificationsSection({
             <Button
               type="button"
               variant="outline"
-              disabled={disabled || isOpeningSettings || isTesting || isOsTestDisabled}
+              disabled={actionsDisabled || isOsTestDisabled}
               onClick={() => void testNotification("os")}
             >
               <BellRing data-icon="inline-start" /> Test OS

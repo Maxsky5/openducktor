@@ -87,7 +87,7 @@ describe("session-start notifications", () => {
       const deliverInApp = mock(async () => {
         if (scenario === "delivery_failed") throw new Error("Toast delivery failed");
       });
-      const deliverOs = mock(async () => {});
+      const deliverOs = mock(async () => ({ status: "shown" as const }));
       const policy = createNotificationPolicy({
         inApp: { deliver: deliverInApp },
         os: { deliver: deliverOs },
@@ -351,7 +351,7 @@ describe("session-start notifications", () => {
     const deliver = mock(async () => {});
     const policy = createNotificationPolicy({
       inApp: { deliver },
-      os: { deliver: async () => {} },
+      os: { deliver: async () => ({ status: "shown" }) },
       sound: { play: async () => {} },
       onFailure: () => {},
     });

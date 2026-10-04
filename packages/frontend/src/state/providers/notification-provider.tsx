@@ -78,14 +78,19 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
         });
       },
       onFailure: (failure) => {
-        console.error("Notification delivery failed.", {
-          channel: failure.channel,
-          kind: failure.kind,
-          occurrenceId: failure.occurrenceId,
-          repoPath: failure.repoPath,
-        });
+        const osDenied = failure.channel === "os" && failure.osStatus === "denied";
+        if (!osDenied) {
+          console.error("Notification delivery failed.", {
+            channel: failure.channel,
+            kind: failure.kind,
+            occurrenceId: failure.occurrenceId,
+            repoPath: failure.repoPath,
+          });
+        }
         if (failure.channel === "in_app") {
-          toast.error("In-app notification failed", { description: failure.message });
+          toast.error("In-app notification failed", {
+            description: failure.message,
+          });
         }
         if (
           failure.channel === "os" ||
@@ -97,6 +102,7 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
         }
       },
       onCoordinationRecovered: () => updateFailureState({ type: "coordination-recovered" }),
+      onPermissionGranted: () => updateFailureState({ type: "os-permission-granted" }),
       onOsShown: () => updateFailureState({ type: "os-shown" }),
       onSettingsRecovered: () => updateFailureState({ type: "settings-recovered" }),
       onSoundPlayed: () => updateFailureState({ type: "sound-played" }),
@@ -142,6 +148,7 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
     () => ({
       deliveryFailure: selectNotificationFailure(failureState),
       getCapability: runtime.getCapability,
+      requestPermission: runtime.requestPermission,
       openSystemSettings: runtime.openSystemSettings,
       previewCue: runtime.previewCue,
       testInApp: runtime.testInApp,
@@ -176,6 +183,7 @@ const unavailableNotificationNavigator: NotificationNavigator = async () => {
 type NotificationFailureAction =
   | { type: "reported"; failure: NotificationDispatchFailure }
   | { type: "os-shown" }
+  | { type: "os-permission-granted" }
   | { type: "settings-recovered" }
   | { type: "sound-played" }
   | { type: "coordination-recovered" };
@@ -189,6 +197,9 @@ const reduceNotificationFailureState = (
   }
   if (action.type === "settings-recovered") return clearSettingsNotificationFailure(state);
   if (action.type === "sound-played") return clearSoundNotificationFailure(state);
+  if (action.type === "os-permission-granted") {
+    return state.os?.osStatus === "denied" ? clearOsNotificationFailure(state) : state;
+  }
   if (action.type === "os-shown") {
     return clearOsNotificationFailure(state);
   }

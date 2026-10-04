@@ -253,10 +253,20 @@ export const createWorkspaceNotificationObserver = ({
           state.fiber = yield* Effect.forkDaemon(
             initialize().pipe(
               Effect.catchAll((cause) =>
-                Effect.sync(() => failure(record.repoPath, "initialization", cause)),
+                Effect.sync(() => {
+                  // A failed baseline cannot observe changes. A config commit can create a fresh observer.
+                  state.active = false;
+                  failure(state.record.repoPath, "initialization", cause);
+                }),
               ),
               Effect.zipRight(
-                Effect.forever(Queue.take(queue).pipe(Effect.flatMap((input) => consume(input)))),
+                Effect.suspend(() =>
+                  state.active
+                    ? Effect.forever(
+                        Queue.take(queue).pipe(Effect.flatMap((input) => consume(input))),
+                      )
+                    : Effect.void,
+                ),
               ),
               Effect.interruptible,
             ),

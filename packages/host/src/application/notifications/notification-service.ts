@@ -59,10 +59,14 @@ export const createNotificationService = ({
     cause: unknown,
   ) => {
     const message = cause instanceof Error ? cause.message : String(cause);
+    const recovery =
+      source === "initialization"
+        ? "Fix the reported workspace error, then close and reopen the workspace or restart the host."
+        : "Restart the host to restore notification observation.";
     stream.publishHealth({
       scope,
       source,
-      message: `${message.slice(0, 850)} Restart the host to restore notification observation.`,
+      message: `${message.slice(0, 850)} ${recovery}`,
     });
   };
   const captureStartup = (repoPath: string, input: WorkspaceNotificationInput) => {
@@ -124,11 +128,12 @@ export const createNotificationService = ({
       for (const { observer } of removed) yield* observer.dispose();
       for (const record of records) {
         const existing = workspaces.get(record.repoPath);
-        if (existing) {
+        if (existing?.observer.isActive()) {
           existing.record = record;
           existing.observer.updateRecord(record);
           continue;
         }
+        if (existing) yield* existing.observer.dispose();
         const observer = yield* createWorkspaceNotificationObserver({
           record,
           tasks,
