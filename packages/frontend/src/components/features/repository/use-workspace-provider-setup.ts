@@ -111,9 +111,6 @@ export function useWorkspaceProviderSetup(bridge = hostBridge) {
       stopListening();
       if (connection.status === "pending") setConnection({ status: "disconnected" });
     }
-    void run("Update provider configuration", async () => {
-      await sendSelection(parseWorkspaceProviderDraft(next).selection);
-    });
   };
   const sendSelection = async (
     selection = parseWorkspaceProviderDraft(draftRef.current).selection,

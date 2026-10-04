@@ -1,4 +1,6 @@
 import {
+  workspaceProviderSetupSetSchema,
+  workspaceProviderSetupCommitSchema,
   type HostCommandArgs,
   type HostCommandName,
   OPENCODE_RUNTIME_DESCRIPTOR,
@@ -88,6 +90,64 @@ const createClient = (
 };
 
 describe("HostClient", () => {
+  test.each(["set", "cancel_sign_in", "pat", "commit"] as const)(
+    "projects session-derived %s requests to the strict host contract",
+    async (action) => {
+      const session = { setupId: crypto.randomUUID(), revision: 2, repoPath: "/new-repo" };
+      const attemptId = crypto.randomUUID();
+      const model = { runtimeKind: "opencode" as const, providerId: "provider", modelId: "model" };
+      const details = {
+        workspaceId: "new-repo",
+        workspaceName: "New repo",
+        abbreviation: "NR",
+        tileColor: "#ef4444",
+        defaultModel: model,
+        agentDefaults: { build: model },
+      };
+      const { client, calls } = createClient((command, args) => {
+        switch (command) {
+          case "workspace_provider_setup_set":
+            expect(workspaceProviderSetupSetSchema.parse(args).selection).toEqual({ kind: "none" });
+            return session;
+          case "workspace_provider_setup_cancel_sign_in":
+            expect(args).toEqual({ setupId: session.setupId, revision: 2, attemptId });
+            return undefined;
+          case "workspace_provider_setup_pat":
+            expect(args).toEqual({ setupId: session.setupId, revision: 2, pat: "token" });
+            return { status: "connected", account: "user" };
+          case "workspace_provider_setup_commit":
+            expect(workspaceProviderSetupCommitSchema.parse(args)).toMatchObject(details);
+            return {
+              workspace: null,
+              registrationSaved: false,
+              settingsSaved: false,
+              credentialsSaved: false,
+              phase: "validate",
+              error: null,
+            };
+          default:
+            throw new Error(`Unexpected command ${command}`);
+        }
+      });
+      switch (action) {
+        case "set":
+          await client.workspaceProviderSetupSet({ ...session, selection: { kind: "none" } });
+          break;
+        case "cancel_sign_in":
+          await client.workspaceProviderSetupCancelSignIn({ ...session, attemptId });
+          break;
+        case "pat":
+          await client.workspaceProviderSetupPat({ ...session, pat: "token" });
+          break;
+        case "commit":
+          await client.workspaceProviderSetupCommit({
+            ...session,
+            ...details,
+          });
+      }
+      expect(calls[0]?.args).not.toHaveProperty("repoPath");
+    },
+  );
   test("projects a full setup session to the strict read reference contract", async () => {
     const session = { setupId: crypto.randomUUID(), revision: 2, repoPath: "/new-repo" };
     const { client, calls } = createClient((command) => {

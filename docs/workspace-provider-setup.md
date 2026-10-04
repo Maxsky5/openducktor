@@ -20,7 +20,7 @@ The work item area is optional for workspace creation. Work item imports need an
 
 ## Saving and cancellation
 
-Provider setup does not register a workspace. The host holds the setup session, staged credentials, and Microsoft token cache in memory. Cancel, skip, disable, or an identity change releases the connection owned by that setup. A cleanup failure keeps setup open for retry.
+Provider setup does not register a workspace. Edits stay in the form until a provider action or final submission sends the latest selection to the host. The host holds the setup session, staged credentials, and Microsoft token cache in memory. Cancel or skip releases the connection owned by that setup. A disabled provider or changed identity releases the previous connection when the next action sends the selection. A cleanup failure keeps setup open for retry.
 
 The final action saves workspace details, provider settings, and model defaults together through the existing settings service. It then transfers accepted Azure credentials to the existing protected workspace scope. It does not replace credentials that already exist in that scope.
 

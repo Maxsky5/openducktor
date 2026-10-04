@@ -189,6 +189,37 @@ async function chooseAzure(f: ReturnType<typeof fixture>) {
   await f.h.waitFor((state) => state.pending === null);
 }
 describe("workspace provider draft ownership", () => {
+  test("keeps provider fields editable until an action sends the latest draft", async () => {
+    const f = fixture(undefined, { readStatus: async () => ready });
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <ProviderSetup bridge={f.bridge} />
+      </QueryProvider>,
+    );
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Choose repo" }));
+      await screen.findByLabelText("Selected repository path");
+      fireEvent.click(screen.getByRole("radio", { name: "GitHub" }));
+      const owner = screen.getByLabelText<HTMLInputElement>("Owner");
+      const repository = screen.getByLabelText<HTMLInputElement>("Repository");
+      for (const value of ["o", "ow", "owner"]) {
+        expect(owner.disabled).toBe(false);
+        fireEvent.change(owner, { target: { value } });
+      }
+      expect(repository.disabled).toBe(false);
+      fireEvent.change(repository, { target: { value: "repo" } });
+      expect(owner.value).toBe("owner");
+      expect(f.selections).toEqual([]);
+      fireEvent.click(screen.getByRole("button", { name: "Check provider readiness" }));
+      await waitFor(() => expect(f.selections).toHaveLength(1));
+      expect(f.selections[0]).toMatchObject({
+        kind: "configured",
+        config: { repository: { owner: "owner", name: "repo" } },
+      });
+    } finally {
+      view.unmount();
+    }
+  });
   test("clears readiness when sign-in starts and when sign-in is cancelled", async () => {
     const f = fixture(undefined, {
       readStatus: async () => ({
@@ -245,7 +276,9 @@ describe("workspace provider draft ownership", () => {
               github: { ...draft.github, owner: "old", name: "repo" },
             })),
           );
-          await f.h.waitFor((state) => state.pending === null);
+          await f.h.run(async (state) => {
+            await state.check();
+          });
         }
         f.loseNextReply();
         await f.h.run((state) =>
@@ -255,7 +288,9 @@ describe("workspace provider draft ownership", () => {
             github: { ...draft.github, owner: "edited", name: "repo" },
           })),
         );
-        await f.h.waitFor((state) => state.pending === null);
+        await f.h.run(async (state) => {
+          await state.check();
+        });
         expect(f.h.getLatest().error).toContain("Configuration reply lost");
         const draft = f.h.getLatest().draft;
         await f.h.run(async (state) => {
@@ -335,20 +370,9 @@ describe("workspace provider draft ownership", () => {
   test("offers recovery on the provider screen and disables it during the read", async () => {
     const progress = Promise.withResolvers<void>();
     const f = fixture(undefined, { progress: () => progress.promise });
-    function Setup() {
-      const provider = useWorkspaceProviderSetup(f.bridge);
-      return (
-        <>
-          <button type="button" onClick={() => void provider.begin("/repo")}>
-            Choose repo
-          </button>
-          <WorkspaceProviderFields provider={provider} disabled={false} />
-        </>
-      );
-    }
     const view = render(
       <QueryProvider useIsolatedClient>
-        <Setup />
+        <ProviderSetup bridge={f.bridge} />
       </QueryProvider>,
     );
     try {
@@ -358,10 +382,12 @@ describe("workspace provider draft ownership", () => {
       );
       f.loseNextReply();
       fireEvent.click(screen.getByRole("radio", { name: "GitHub" }));
+      fireEvent.click(screen.getByRole("button", { name: "Check provider readiness" }));
       await screen.findByText(/Configuration reply lost/);
       fireEvent.change(screen.getByLabelText("Owner"), {
         target: { value: "kept" },
       });
+      fireEvent.click(screen.getByRole("button", { name: "Check provider readiness" }));
       await screen.findByText(/Workspace setup changed/);
       const recover = screen.getByRole<HTMLButtonElement>("button", { name: "Read setup state" });
       await act(async () => {
@@ -440,10 +466,6 @@ describe("workspace provider draft ownership", () => {
       fireEvent.click(screen.getByRole("button", { name: "Clear area" }));
       await waitFor(() => expect(picker.textContent).toContain("Choose an area path"));
       expect(view.queryByRole("button", { name: "Clear area" })).toBeNull();
-      const last = f.selections.at(-1);
-      expect(
-        last?.kind === "configured" ? last.config.settings?.areaPath : undefined,
-      ).toBeUndefined();
     } finally {
       view.unmount();
     }
@@ -645,7 +667,7 @@ describe("workspace provider draft ownership", () => {
       await failed.h.unmount();
     }
   });
-  test("accepts incomplete raw changes instead of keeping the last valid provider snapshot", async () => {
+  test("sends incomplete input before an action can use the last valid provider snapshot", async () => {
     const f = fixture();
     await f.h.mount();
     try {
@@ -659,17 +681,19 @@ describe("workspace provider draft ownership", () => {
           github: { host: "github.com", owner: "owner", name: "repo" },
         })),
       );
-      await f.h.waitFor((state) => state.pending === null);
+      await f.h.run(async (state) => {
+        await state.check();
+      });
+      expect(f.selections.at(-1)?.kind).toBe("configured");
       await f.h.run((state) =>
         state.update((draft) => ({ ...draft, github: { ...draft.github, name: "" } })),
       );
-      await f.h.waitFor((state) => state.pending === null);
-      expect(f.selections.at(-1)).toEqual({ kind: "incomplete", providerId: "github" });
       expect(f.h.getLatest().draft.github.name).toBe("");
       expect(f.h.getLatest().errors["repository.name"]).toBeTruthy();
       await f.h.run(async (state) => {
         await state.check();
       });
+      expect(f.selections.at(-1)).toEqual({ kind: "incomplete", providerId: "github" });
       expect(f.h.getLatest().error).toContain("Correct the provider fields");
     } finally {
       await f.h.unmount();
@@ -748,6 +772,21 @@ function AzureSetup({ bridge }: { bridge: typeof hostBridge }) {
         }}
       >
         Choose repo
+      </button>
+      <WorkspaceProviderFields provider={provider} disabled={false} />
+    </>
+  );
+}
+
+function ProviderSetup({ bridge }: { bridge: typeof hostBridge }) {
+  const provider = useWorkspaceProviderSetup(bridge);
+  return (
+    <>
+      <button type="button" onClick={() => void provider.begin("/repo")}>
+        Choose repo
+      </button>
+      <button type="button" onClick={() => void provider.check()}>
+        Check provider readiness
       </button>
       <WorkspaceProviderFields provider={provider} disabled={false} />
     </>

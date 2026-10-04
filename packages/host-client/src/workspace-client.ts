@@ -298,7 +298,7 @@ export class HostWorkspaceClient {
   ) {
     return this.invokeFn(
       "workspace_provider_setup_set",
-      input,
+      { setupId: input.setupId, revision: input.revision, selection: input.selection },
       workspaceProviderSetupSessionSchema,
     );
   }
@@ -338,10 +338,18 @@ export class HostWorkspaceClient {
     );
   }
   workspaceProviderSetupCancelSignIn(input: WorkspaceProviderSetupRef & { attemptId: string }) {
-    return this.invokeFn("workspace_provider_setup_cancel_sign_in", input, voidResultSchema);
+    return this.invokeFn(
+      "workspace_provider_setup_cancel_sign_in",
+      { setupId: input.setupId, revision: input.revision, attemptId: input.attemptId },
+      voidResultSchema,
+    );
   }
   workspaceProviderSetupPat(input: WorkspaceProviderSetupRef & { pat: string }) {
-    return this.invokeFn("workspace_provider_setup_pat", input, azureDevOpsConnectionStateSchema);
+    return this.invokeFn(
+      "workspace_provider_setup_pat",
+      { setupId: input.setupId, revision: input.revision, pat: input.pat },
+      azureDevOpsConnectionStateSchema,
+    );
   }
   workspaceProviderSetupDisconnect(input: WorkspaceProviderSetupRef) {
     return this.invokeFn(
@@ -353,7 +361,16 @@ export class HostWorkspaceClient {
   workspaceProviderSetupCommit(input: WorkspaceProviderSetupCommit) {
     return this.invokeFn(
       "workspace_provider_setup_commit",
-      input,
+      {
+        setupId: input.setupId,
+        revision: input.revision,
+        workspaceId: input.workspaceId,
+        workspaceName: input.workspaceName,
+        abbreviation: input.abbreviation,
+        tileColor: input.tileColor,
+        defaultModel: input.defaultModel,
+        agentDefaults: input.agentDefaults,
+      },
       workspaceProviderSetupProgressSchema,
     );
   }
