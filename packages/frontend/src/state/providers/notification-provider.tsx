@@ -88,7 +88,9 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
           });
         }
         if (failure.channel === "in_app") {
-          toast.error("In-app notification failed", { description: failure.message });
+          toast.error("In-app notification failed", {
+            description: failure.message,
+          });
         }
         if (
           failure.channel === "os" ||
@@ -145,7 +147,13 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
     () => ({
       deliveryFailure: selectNotificationFailure(failureState),
       getCapability: runtime.getCapability,
-      requestPermission: runtime.requestPermission,
+      async requestPermission() {
+        const capability = await runtime.requestPermission();
+        if (capability.permission === "granted") {
+          updateFailureState({ type: "os-permission-granted" });
+        }
+        return capability;
+      },
       openSystemSettings: runtime.openSystemSettings,
       previewCue: runtime.previewCue,
       testInApp: runtime.testInApp,
@@ -180,6 +188,7 @@ const unavailableNotificationNavigator: NotificationNavigator = async () => {
 type NotificationFailureAction =
   | { type: "reported"; failure: NotificationDispatchFailure }
   | { type: "os-shown" }
+  | { type: "os-permission-granted" }
   | { type: "settings-recovered" }
   | { type: "sound-played" }
   | { type: "coordination-recovered" };
@@ -193,6 +202,9 @@ const reduceNotificationFailureState = (
   }
   if (action.type === "settings-recovered") return clearSettingsNotificationFailure(state);
   if (action.type === "sound-played") return clearSoundNotificationFailure(state);
+  if (action.type === "os-permission-granted") {
+    return state.os?.osStatus === "denied" ? clearOsNotificationFailure(state) : state;
+  }
   if (action.type === "os-shown") {
     return clearOsNotificationFailure(state);
   }
