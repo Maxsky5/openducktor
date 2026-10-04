@@ -43,7 +43,7 @@ export type TerminalService = TerminalOutputSourcePort & {
   create(input: TerminalCreateRequest): Effect.Effect<TerminalCreateResponse, TerminalServiceError>;
   list(filter: TerminalListFilter): Effect.Effect<TerminalListResponse, TerminalServiceError>;
   inspectWorkspaceActivity(
-    repoPath: string,
+    canonicalRepoPath: string,
   ): Effect.Effect<TerminalWorkspaceActivity, TerminalServiceError>;
   preparePathInput(
     input: TerminalPreparePathInputRequest,
@@ -228,11 +228,8 @@ export const createTerminalService = ({
               : filter;
           return { hostInstanceId, terminals: engine.list(canonicalFilter) };
         }),
-      inspectWorkspaceActivity: (repoPath) =>
-        Effect.gen(function* () {
-          const canonicalRepoPath = yield* canonicalizeRepositoryPath(repoPath, "list");
-          return yield* engine.inspectWorkspaceActivity(canonicalRepoPath);
-        }),
+      inspectWorkspaceActivity: (canonicalRepoPath) =>
+        engine.inspectWorkspaceActivity(canonicalRepoPath),
       preparePathInput: (rawInput) =>
         Effect.gen(function* () {
           const input = terminalPreparePathInputRequestSchema.parse(rawInput);

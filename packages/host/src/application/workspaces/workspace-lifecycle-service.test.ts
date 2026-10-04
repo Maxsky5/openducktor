@@ -1,4 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
+import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   agentSessionRecordSchema,
   repoConfigSchema,
@@ -174,7 +177,7 @@ const createService = ({
   listWorktrees?: GitPort["listWorktrees"];
   isRegisteredWorktree?: () => Effect.Effect<boolean, never>;
   removeWorktree?: GitPort["removeWorktree"];
-  canonicalizePath?: (path: string) => Effect.Effect<string, never>;
+  canonicalizePath?: GitPort["canonicalizePath"];
   pathExists?: (path: string) => Effect.Effect<boolean, never>;
   resolvedPathKind?: "descendant" | "outside";
 } = {}) => {
@@ -228,6 +231,52 @@ const createService = ({
 };
 
 describe("workspace lifecycle service", () => {
+  test.each(["close", "remove"] as const)(
+    "%s succeeds after the workspace directory is deleted",
+    async (operation) => {
+      const directory = await mkdtemp(join(tmpdir(), "odt-workspace-lifecycle-"));
+      const repoPath = await realpath(directory);
+      await rm(directory, { recursive: true });
+      const expected = catalog();
+      const closeWorkspace = mock(() => Effect.succeed(expected));
+      const removeWorkspaceRegistration = mock(() => Effect.succeed(expected));
+      const removeWorkspaceTaskAssets = mock(() => Effect.void);
+      const removeWorkspaceTaskStore = mock(() => Effect.void);
+      const service = createService({
+        getRepoConfig: () => Effect.succeed(repoConfig({ repoPath })),
+        canonicalizePath: (path) =>
+          Effect.tryPromise({
+            try: () => realpath(path),
+            catch: (cause) =>
+              new HostOperationError({
+                operation: "git.canonicalizePath",
+                message: String(cause),
+                cause,
+              }),
+          }),
+        closeWorkspace,
+        removeWorkspaceRegistration,
+        removeWorkspaceTaskAssets,
+        removeWorkspaceTaskStore,
+      });
+      const input = { workspaceId: "ws", expectedRepoPath: repoPath };
+
+      if (operation === "close") {
+        expect(await Effect.runPromise(service.closeWorkspace(input))).toEqual(expected);
+        expect(closeWorkspace).toHaveBeenCalledWith("ws", repoPath);
+      } else {
+        expect(
+          await Effect.runPromise(
+            service.removeWorkspace({ ...input, removeTaskWorktrees: false }),
+          ),
+        ).toEqual({ catalog: expected, result: { removedWorktrees: [] } });
+        expect(removeWorkspaceTaskAssets).toHaveBeenCalledWith("ws");
+        expect(removeWorkspaceTaskStore).toHaveBeenCalledWith("ws");
+        expect(removeWorkspaceRegistration).toHaveBeenCalledWith("ws", repoPath);
+      }
+    },
+  );
+
   test("closeWorkspace rejects while work is running and does not persist", async () => {
     const closeWorkspace = mock(() => Effect.succeed(catalog()));
     const blockWorkspace = mock(() => {});

@@ -17,7 +17,11 @@ import {
 } from "../../ports/terminal-pty-port";
 import { TERMINAL_LIMITS } from "./terminal-limits";
 import { TerminalScreenState } from "./terminal-screen-state";
-import { HostResourceError, HostValidationError } from "../../effect/host-errors";
+import {
+  HostOperationError,
+  HostResourceError,
+  HostValidationError,
+} from "../../effect/host-errors";
 import { createGitPortTestDouble } from "../../test-support/service-test-doubles";
 import { createTerminalService } from "./terminal-service";
 import type { WithProcessStartAdmission } from "../workspaces/workspace-admission-service";
@@ -705,39 +709,39 @@ describe("TerminalService", () => {
     expect(pty.operations).not.toContain("write:ls");
   });
 
-  test("reports an idle live terminal as unknown activity", async () => {
-    const idle = await makeService(makePty(true, false));
-    await Effect.runPromise(
-      idle.service.create({
-        workingDir: "/repo",
-        context: { repoPath: "/repo", taskId: "task-1" },
-      }),
-    );
+  test.each([false, true])(
+    "inspects terminal activity after its repository becomes inaccessible, child processes: %s",
+    async (hasChildProcesses) => {
+      let accessible = true;
+      const { service } = await makeService(makePty(true, hasChildProcesses), undefined, {
+        ...filesystem,
+        canonicalize: (path) =>
+          accessible
+            ? filesystem.canonicalize(path)
+            : Effect.fail(
+                new HostOperationError({
+                  operation: "filesystem.canonicalize",
+                  message: "Repository directory was deleted",
+                }),
+              ),
+      });
+      try {
+        await Effect.runPromise(
+          service.create({ workingDir: "/repo", context: { repoPath: "/repo", taskId: "task-1" } }),
+        );
+        accessible = false;
 
-    await expect(
-      Effect.runPromise(idle.service.inspectWorkspaceActivity("/repo")),
-    ).resolves.toEqual({
-      activeTerminalIds: [],
-      unknownTerminalIds: ["terminal-1"],
-    });
-  });
-
-  test("reports a terminal with a child process as active activity", async () => {
-    const busy = await makeService(makePty(true, true));
-    await Effect.runPromise(
-      busy.service.create({
-        workingDir: "/repo",
-        context: { repoPath: "/repo", taskId: "task-1" },
-      }),
-    );
-
-    await expect(
-      Effect.runPromise(busy.service.inspectWorkspaceActivity("/repo")),
-    ).resolves.toEqual({
-      activeTerminalIds: ["terminal-1"],
-      unknownTerminalIds: [],
-    });
-  });
+        expect(
+          await Effect.runPromise(service.inspectWorkspaceActivity("/canonical/repo")),
+        ).toEqual({
+          activeTerminalIds: hasChildProcesses ? ["terminal-1"] : [],
+          unknownTerminalIds: hasChildProcesses ? [] : ["terminal-1"],
+        });
+      } finally {
+        await Effect.runPromise(service.dispose());
+      }
+    },
+  );
 
   test("retains PTY failure details for live attachments and attachments after exit", async () => {
     const { service, pty } = await makeService();

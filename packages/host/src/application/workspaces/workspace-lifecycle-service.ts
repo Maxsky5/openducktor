@@ -423,9 +423,8 @@ export const createWorkspaceLifecycleService = ({
         if (repoConfig.closed) {
           return yield* workspaceSettingsService.getWorkspaceCatalog();
         }
-        const canonicalRepoPath = yield* gitPort.canonicalizePath(repoConfig.repoPath);
         return yield* taskSessionLifecycleCoordinator.runWorkspaceLifecycle(
-          canonicalRepoPath,
+          repoConfig.repoPath,
           "close",
           runUnderReservation(
             {
@@ -478,9 +477,8 @@ export const createWorkspaceLifecycleService = ({
     removeWorkspace(input) {
       return Effect.gen(function* () {
         const repoConfig = yield* requireTarget(input.workspaceId, input.expectedRepoPath);
-        const canonicalRepoPath = yield* gitPort.canonicalizePath(repoConfig.repoPath);
         return yield* taskSessionLifecycleCoordinator.runWorkspaceLifecycle(
-          canonicalRepoPath,
+          repoConfig.repoPath,
           "remove",
           runUnderReservation(
             {
