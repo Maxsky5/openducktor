@@ -228,8 +228,7 @@ export const createTerminalService = ({
               : filter;
           return { hostInstanceId, terminals: engine.list(canonicalFilter) };
         }),
-      inspectWorkspaceActivity: (canonicalRepoPath) =>
-        engine.inspectWorkspaceActivity(canonicalRepoPath),
+      inspectWorkspaceActivity: engine.inspectWorkspaceActivity,
       preparePathInput: (rawInput) =>
         Effect.gen(function* () {
           const input = terminalPreparePathInputRequestSchema.parse(rawInput);

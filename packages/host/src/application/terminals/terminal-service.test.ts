@@ -24,6 +24,7 @@ import {
 } from "../../effect/host-errors";
 import { createGitPortTestDouble } from "../../test-support/service-test-doubles";
 import { createTerminalService } from "./terminal-service";
+import type { TerminalWorkspaceActivity } from "./terminal-session-engine";
 import type { WithProcessStartAdmission } from "../workspaces/workspace-admission-service";
 import type { TaskWorktreeService } from "../tasks/worktrees/task-worktree-service";
 import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler";
@@ -709,9 +710,24 @@ describe("TerminalService", () => {
     expect(pty.operations).not.toContain("write:ls");
   });
 
-  test.each([false, true])(
-    "inspects terminal activity after its repository becomes inaccessible, child processes: %s",
-    async (hasChildProcesses) => {
+  test.each<{
+    activity: string;
+    hasChildProcesses: boolean;
+    expected: TerminalWorkspaceActivity;
+  }>([
+    {
+      activity: "unknown",
+      hasChildProcesses: false,
+      expected: { activeTerminalIds: [], unknownTerminalIds: ["terminal-1"] },
+    },
+    {
+      activity: "active",
+      hasChildProcesses: true,
+      expected: { activeTerminalIds: ["terminal-1"], unknownTerminalIds: [] },
+    },
+  ])(
+    "reports $activity terminal activity after its repository becomes inaccessible",
+    async ({ hasChildProcesses, expected }) => {
       let accessible = true;
       const { service } = await makeService(makePty(true, hasChildProcesses), undefined, {
         ...filesystem,
@@ -733,10 +749,7 @@ describe("TerminalService", () => {
 
         expect(
           await Effect.runPromise(service.inspectWorkspaceActivity("/canonical/repo")),
-        ).toEqual({
-          activeTerminalIds: hasChildProcesses ? ["terminal-1"] : [],
-          unknownTerminalIds: hasChildProcesses ? [] : ["terminal-1"],
-        });
+        ).toEqual(expected);
       } finally {
         await Effect.runPromise(service.dispose());
       }
