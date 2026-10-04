@@ -32,7 +32,7 @@ const createHarness = (target: "in_app" | "os" | "both", enabled = true) => {
   const settings = createDefaultNotificationSettings();
   settings.kinds[occurrence.kind] = { enabled, target, sound: "inherit" };
   const inApp = mock(async () => {});
-  const os = mock(async () => {});
+  const os = mock(async () => ({ status: "shown" as const }));
   const sound = mock(async () => {});
   const onFailure = mock(() => {});
   const policy = createNotificationPolicy({

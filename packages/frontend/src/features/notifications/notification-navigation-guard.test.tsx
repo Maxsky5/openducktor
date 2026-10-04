@@ -105,6 +105,9 @@ test("notification workspace selection keeps the draft on cancel and failure", a
       canGuaranteeSilent: false,
       canOpenSystemSettings: false,
     }),
+    requestPermission: async () => {
+      throw new Error("Unexpected notification permission request.");
+    },
     openSystemSettings: async () => {},
     previewCue: async () => {},
     testInApp: async () => {},

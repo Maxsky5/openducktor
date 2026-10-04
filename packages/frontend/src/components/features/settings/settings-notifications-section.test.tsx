@@ -2,6 +2,7 @@ import { afterEach, describe, expect, mock, test } from "bun:test";
 import {
   createDefaultNotificationSettings,
   NOTIFICATION_KIND_VALUES,
+  type NotificationOsCapability,
 } from "@openducktor/contracts";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { act, type ReactElement, useState } from "react";
@@ -25,6 +26,9 @@ const createNotificationContext = (
     canGuaranteeSilent: true,
     canOpenSystemSettings: false,
   }),
+  requestPermission: async () => {
+    throw new Error("Unexpected notification permission request.");
+  },
   openSystemSettings: async () => {},
   previewCue: async () => {},
   testInApp: async () => {},
@@ -54,6 +58,116 @@ function NotificationsHarness({ context }: { context: NotificationContextValue }
 }
 
 describe("SettingsNotificationsSection", () => {
+  test.each(["prompt", "denied"] as const)(
+    "shows %s permission guidance without a last OS error",
+    async (permission) => {
+      render(
+        <NotificationsHarness
+          context={createNotificationContext({
+            getCapability: async () => ({
+              platform: "browser",
+              supported: true,
+              permission,
+              canGuaranteeSilent: true,
+              canOpenSystemSettings: false,
+            }),
+            deliveryFailure: {
+              channel: "os",
+              osStatus: "denied",
+              kind: "agent.session_error",
+              occurrenceId: "permission-required",
+              repoPath: "/repo",
+              message: "Allow browser notifications.",
+            },
+          })}
+        />,
+      );
+
+      expect(screen.queryByText(/Last OS error/)).toBeNull();
+      await screen.findByText(
+        permission === "prompt" ? "Turn on OS notifications" : "OS notifications are off",
+      );
+      expect(screen.getByRole("button", { name: "Test OS" }).hasAttribute("disabled")).toBe(false);
+      expect(screen.queryByRole("button", { name: "Allow notifications" }) !== null).toBe(
+        permission === "prompt",
+      );
+    },
+  );
+
+  // This flow renders the full form while the browser permission request settles.
+  test.each(["granted", "denied", "prompt"] as const)(
+    "requests browser permission without a test notification and shows the %s result",
+    async (permission) => {
+      const pending = Promise.withResolvers<NotificationOsCapability>();
+      const requestPermission = mock(() => pending.promise);
+      const testOs = mock(async () => ({ status: "shown" as const }));
+      render(
+        <NotificationsHarness context={createNotificationContext({ requestPermission, testOs })} />,
+      );
+      const button = await screen.findByRole("button", { name: "Allow notifications" });
+      expect(requestPermission).not.toHaveBeenCalled();
+      fireEvent.click(button);
+      expect(requestPermission).toHaveBeenCalledTimes(1);
+      expect(button.hasAttribute("disabled")).toBe(true);
+      expect(screen.getByRole("button", { name: "Test OS" }).hasAttribute("disabled")).toBe(true);
+      expect(screen.getByRole("button", { name: "Test in-app" }).hasAttribute("disabled")).toBe(
+        true,
+      );
+      expect(button.textContent).toContain("Waiting for permission");
+      await act(async () => {
+        pending.resolve({
+          platform: "browser",
+          supported: true,
+          permission,
+          canGuaranteeSilent: true,
+          canOpenSystemSettings: false,
+        });
+        await pending.promise;
+      });
+      const title = {
+        granted: "OS notifications are on",
+        denied: "OS notifications are off",
+        prompt: "Turn on OS notifications",
+      };
+      await screen.findByText(title[permission]);
+      if (permission === "prompt")
+        await screen.findByText("Notification permission was not changed.");
+      expect(screen.queryByRole("button", { name: "Allow notifications" }) !== null).toBe(
+        permission === "prompt",
+      );
+      expect(testOs).not.toHaveBeenCalled();
+      expect(screen.getByRole("button", { name: "Test OS" }).hasAttribute("disabled")).toBe(false);
+    },
+    2_500,
+  );
+
+  // This flow renders the full form and retries a failed browser permission request.
+  test.each(["throw", "report"])(
+    "shows a %s permission failure and lets the user try again",
+    async (mode) => {
+      const requestPermission = mock(async () => {
+        if (mode === "throw") throw new Error("Browser permission request failed.");
+        return {
+          platform: "browser" as const,
+          supported: true,
+          permission: "prompt" as const,
+          canGuaranteeSilent: true,
+          canOpenSystemSettings: false,
+          failureMessage: "Browser permission request failed.",
+        };
+      });
+      render(<NotificationsHarness context={createNotificationContext({ requestPermission })} />);
+      fireEvent.click(await screen.findByRole("button", { name: "Allow notifications" }));
+      await screen.findByText("Browser permission request failed.");
+      const button = screen.getByRole("button", { name: "Allow notifications" });
+      expect(button.hasAttribute("disabled")).toBe(false);
+      fireEvent.click(button);
+      await waitFor(() => expect(requestPermission).toHaveBeenCalledTimes(2));
+      await screen.findByText("Browser permission request failed.");
+    },
+    2_500,
+  );
+
   test.each([
     ["sound", "Last sound error"],
     ["settings", "Last notification settings error"],
@@ -131,12 +245,11 @@ describe("SettingsNotificationsSection", () => {
     );
     fireEvent.click(await screen.findByRole("button", { name: "Open system settings" }));
     await waitFor(() => expect(openSystemSettings).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("button", { name: "Allow notifications" })).toBeNull();
   }, 2_500);
   test("renders every notification kind and retains disabled row choices", async () => {
     render(<NotificationsHarness context={createNotificationContext()} />);
-    await screen.findByText(
-      "OS notifications are not enabled yet. Test OS to choose whether to allow them.",
-    );
+    await screen.findByText("Allow notifications to receive alerts outside the app.");
 
     const sectionText = document.body.textContent ?? "";
     expect(sectionText).not.toContain("Status and tests");
@@ -295,9 +408,7 @@ describe("SettingsNotificationsSection", () => {
     const previewCue = mock(async () => {});
     render(<NotificationsHarness context={createNotificationContext({ previewCue })} />);
 
-    await screen.findByText(
-      "OS notifications are not enabled yet. Test OS to choose whether to allow them.",
-    );
+    await screen.findByText("Allow notifications to receive alerts outside the app.");
     const soundPicker = screen.getByRole("button", { name: "Sound for Permission Prompt" });
     expect(soundPicker.textContent).toContain("Bloom");
 

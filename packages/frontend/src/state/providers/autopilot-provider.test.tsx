@@ -86,6 +86,9 @@ const createNotificationContext = (
     canGuaranteeSilent: true,
     canOpenSystemSettings: false,
   }),
+  requestPermission: async () => {
+    throw new Error("Unexpected notification permission request.");
+  },
   openSystemSettings: async () => {},
   previewCue: async () => {},
   testInApp: async () => {},

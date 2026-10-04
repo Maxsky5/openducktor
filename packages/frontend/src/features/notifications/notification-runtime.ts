@@ -279,6 +279,7 @@ export const createNotificationRuntime = ({
       };
     },
     getCapability: () => bridge.getCapability(),
+    requestPermission: () => bridge.requestPermission(),
     openSystemSettings: () => bridge.openSystemSettings(),
     previewCue(cue: NotificationCue, volumePercent: number): Promise<void> {
       return playSound(cue, volumePercent);

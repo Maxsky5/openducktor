@@ -21,6 +21,29 @@ const failure = (
 });
 
 describe("notification failure state", () => {
+  test("keeps a sound error visible while OS permission is missing", () => {
+    const permission = { ...failure("permission"), osStatus: "denied" as const };
+    const sound = { ...failure("sound"), channel: "sound" as const };
+    const state = recordNotificationFailure(
+      recordNotificationFailure(createNotificationFailureState(), permission),
+      sound,
+    );
+
+    expect(selectNotificationFailure(state)).toBe(sound);
+    expect(selectNotificationFailure(clearSoundNotificationFailure(state))).toBe(permission);
+  });
+
+  test.each([
+    ["denied", "failed"],
+    ["failed", "denied"],
+  ] as const)("replaces OS status %s with %s without waiting for success", (before, after) => {
+    const current = { ...failure("before"), osStatus: before };
+    const next = { ...failure("after"), osStatus: after };
+    const state = recordNotificationFailure(createNotificationFailureState(), current);
+
+    expect(selectNotificationFailure(recordNotificationFailure(state, next))).toBe(next);
+  });
+
   test("keeps sound failures until sound succeeds without clearing OS failures", () => {
     const sound = { ...failure("sound-failed"), channel: "sound" as const };
     const state = recordNotificationFailure(createNotificationFailureState(), sound);

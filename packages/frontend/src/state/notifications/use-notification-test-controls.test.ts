@@ -136,7 +136,7 @@ describe("notification OS capability description", () => {
       "OS notifications are enabled. OpenDucktor can send alerts outside the app.",
     );
     expect(describeNotificationOsCapability(capability({ permission: "prompt" }), null)).toBe(
-      "OS notifications are not enabled yet. Test OS to choose whether to allow them.",
+      "Allow notifications to receive alerts outside the app.",
     );
   });
 
