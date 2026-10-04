@@ -30,11 +30,7 @@ import { createSessionHistoryReadGeneration } from "./history/session-history-re
 import { createWorkflowSessionHistoryPromptPolicy } from "./history/workflow-session-history-policy";
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
 import { useRepoSessionReadModel } from "./hooks/use-repo-session-read-model";
-import {
-  createEnsureExistingSessionRuntime,
-  loadRepoPromptOverrides,
-  loadTaskDocuments,
-} from "./runtime/runtime";
+import { loadRepoPromptOverrides, loadTaskDocuments } from "./runtime/runtime";
 import {
   closeProjectedBackgroundQuestions,
   toContextUsage,
@@ -231,10 +227,6 @@ export function useAgentOrchestratorOperations({
     queryClient,
     sessionReadPort: hostPort,
   });
-  const ensureExistingSessionRuntime = useMemo(
-    () => createEnsureExistingSessionRuntime(runtimeHostPort),
-    [runtimeHostPort],
-  );
   const sessionActions = useMemo(
     () =>
       createAgentSessionActions({
@@ -263,7 +255,6 @@ export function useAgentOrchestratorOperations({
             });
           }
         },
-        ensureExistingSessionRuntime,
         loadTaskDocuments: (repoPath, taskId) =>
           loadTaskDocuments(repoPath, taskId, hostPort.taskMetadataGet),
         loadRepoPromptOverrides: queryBackedPromptOverrides,
@@ -279,7 +270,6 @@ export function useAgentOrchestratorOperations({
       agentEngine,
       currentWorkspaceRepoPathRef,
       closeBackgroundQuestions,
-      ensureExistingSessionRuntime,
       hostPort,
       invalidateSessionStopQueries,
       loadSourceSession,

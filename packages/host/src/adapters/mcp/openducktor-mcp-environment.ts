@@ -14,6 +14,20 @@ export type OpenDucktorMcpBridgeEnvironment = Record<
   string
 >;
 
+/**
+ * Removes the workspace binding of the OpenDucktor MCP server from a shared runtime process.
+ * One shared runtime serves every workspace, so each session receives its own binding.
+ */
+export const withoutOpenDucktorMcpEnvironment = (
+  processEnv: NodeJS.ProcessEnv,
+): NodeJS.ProcessEnv => {
+  const env = { ...processEnv };
+  for (const name of OPENDUCKTOR_MCP_ENV_VAR_NAMES) {
+    delete env[name];
+  }
+  return env;
+};
+
 export type OpenDucktorMcpBridgeConnection = {
   workspaceId: string;
   hostUrl: string;

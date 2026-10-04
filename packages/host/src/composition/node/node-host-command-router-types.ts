@@ -7,7 +7,7 @@ import type { TaskEventPublicationReporter } from "../../application/tasks/sync/
 import type { HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { HostEventBusPort } from "../../events/host-event-bus";
 import type { EffectHostCommandRouter } from "../../interface/router/host-command-router";
-import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
+import type { RuntimeStarterPort } from "../../ports/runtime-registry-port";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import type { HostLifecycleLogger } from "../host-lifecycle";
 import type { CreateNodeHostDefaultPortsInput } from "./node-host-default-ports";
@@ -21,7 +21,8 @@ export type CreateNodeHostCommandRouterInput = CreateNodeHostDefaultPortsInput &
   mcpHostBridge?: McpHostBridgeServer;
   onBackgroundFailure(failure: HostOperationErrorAggregate): Effect.Effect<void, never>;
   taskEventPublicationReporter: TaskEventPublicationReporter;
-  runtimeRegistry?: RuntimeRegistryPort;
+  /** Replaces the native runtime starters, for example in tests. */
+  runtimeStarter?: RuntimeStarterPort;
   taskStore?: TaskStorePort;
 };
 

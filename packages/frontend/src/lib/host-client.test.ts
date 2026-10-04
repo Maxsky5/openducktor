@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeInstanceSummary } from "@openducktor/contracts";
+import type { HostRuntimeSnapshot } from "@openducktor/contracts";
 import { createHostClientFixture } from "@/test-utils/focused-fixture";
 import {
   configureShellBridge,
@@ -8,24 +8,15 @@ import {
   type ShellBridge,
 } from "./shell-bridge";
 
-const createRuntimeInstanceSummary = (runtimeId: string): RuntimeInstanceSummary => ({
-  kind: "opencode",
-  runtimeId,
-  repoPath: "/repo",
-  taskId: null,
-  role: "workspace",
-  workingDirectory: "/repo",
-  runtimeRoute: {
-    type: "local_http",
-    endpoint: "http://127.0.0.1:4555",
-  },
-  startedAt: "2026-02-22T08:00:00.000Z",
-  descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+const createRuntimeSnapshot = (hostInstanceId: string): HostRuntimeSnapshot => ({
+  hostInstanceId,
+  runtimes: [],
 });
 
 const createTestShellBridge = (overrides: Partial<ShellBridge> = {}): ShellBridge => ({
   client: createHostClientFixture({}),
   subscribeWorkspaceSessionUpdates: async () => () => {},
+  subscribeRuntimeChanges: async () => () => {},
   subscribeRunEvents: async () => () => {},
   subscribeWorkspaceProviderSetupUpdates: async () => () => {},
   subscribeAzureDevOpsConnectionUpdates: async () => () => {},
@@ -107,61 +98,59 @@ describe("host-client", () => {
   });
 
   test("hostClient proxies calls to the currently configured shell client", async () => {
-    const firstRuntimeEnsure = mock(async () => createRuntimeInstanceSummary("runtime-1"));
-    const secondRuntimeEnsure = mock(async () => createRuntimeInstanceSummary("runtime-2"));
+    const firstRuntimeStatus = mock(async () => createRuntimeSnapshot("runtime-1"));
+    const secondRuntimeStatus = mock(async () => createRuntimeSnapshot("runtime-2"));
 
     configureShellBridge(
       createTestShellBridge({
-        client: createHostClientFixture({ runtimeEnsure: firstRuntimeEnsure }),
+        client: createHostClientFixture({ runtimeStatus: firstRuntimeStatus }),
       }),
     );
 
     const { hostClient } = await import("./host-client");
 
-    await expect(hostClient.runtimeEnsure("/repo", "opencode")).resolves.toMatchObject({
-      runtimeId: "runtime-1",
+    await expect(hostClient.runtimeStatus()).resolves.toMatchObject({
+      hostInstanceId: "runtime-1",
     });
 
     configureShellBridge(
       createTestShellBridge({
-        client: createHostClientFixture({ runtimeEnsure: secondRuntimeEnsure }),
+        client: createHostClientFixture({ runtimeStatus: secondRuntimeStatus }),
       }),
     );
 
-    await expect(hostClient.runtimeEnsure("/repo", "opencode")).resolves.toMatchObject({
-      runtimeId: "runtime-2",
+    await expect(hostClient.runtimeStatus()).resolves.toMatchObject({
+      hostInstanceId: "runtime-2",
     });
-    expect(firstRuntimeEnsure).toHaveBeenCalledTimes(1);
-    expect(secondRuntimeEnsure).toHaveBeenCalledTimes(1);
+    expect(firstRuntimeStatus).toHaveBeenCalledTimes(1);
+    expect(secondRuntimeStatus).toHaveBeenCalledTimes(1);
   });
 
   test("hostClient allows scoped method overrides for tests", async () => {
-    const shellRuntimeEnsure = mock(async () => createRuntimeInstanceSummary("runtime-shell"));
-    const overrideRuntimeEnsure = mock(async () =>
-      createRuntimeInstanceSummary("runtime-override"),
-    );
+    const shellRuntimeStatus = mock(async () => createRuntimeSnapshot("runtime-shell"));
+    const overrideRuntimeStatus = mock(async () => createRuntimeSnapshot("runtime-override"));
     configureShellBridge(
       createTestShellBridge({
-        client: createHostClientFixture({ runtimeEnsure: shellRuntimeEnsure }),
+        client: createHostClientFixture({ runtimeStatus: shellRuntimeStatus }),
       }),
     );
 
     const { hostClient } = await import("./host-client");
-    const originalRuntimeEnsure = hostClient.runtimeEnsure;
+    const originalRuntimeStatus = hostClient.runtimeStatus;
 
-    hostClient.runtimeEnsure = overrideRuntimeEnsure;
+    hostClient.runtimeStatus = overrideRuntimeStatus;
     try {
-      await expect(hostClient.runtimeEnsure("/repo", "opencode")).resolves.toMatchObject({
-        runtimeId: "runtime-override",
+      await expect(hostClient.runtimeStatus()).resolves.toMatchObject({
+        hostInstanceId: "runtime-override",
       });
     } finally {
-      hostClient.runtimeEnsure = originalRuntimeEnsure;
+      hostClient.runtimeStatus = originalRuntimeStatus;
     }
 
-    await expect(hostClient.runtimeEnsure("/repo", "opencode")).resolves.toMatchObject({
-      runtimeId: "runtime-shell",
+    await expect(hostClient.runtimeStatus()).resolves.toMatchObject({
+      hostInstanceId: "runtime-shell",
     });
-    expect(overrideRuntimeEnsure).toHaveBeenCalledTimes(1);
-    expect(shellRuntimeEnsure).toHaveBeenCalledTimes(1);
+    expect(overrideRuntimeStatus).toHaveBeenCalledTimes(1);
+    expect(shellRuntimeStatus).toHaveBeenCalledTimes(1);
   });
 });

@@ -2,7 +2,9 @@ import {
   agentModelFavoritesSchema,
   globalConfigSchema,
   repoConfigSchema,
+  type SettingsSnapshotSaveInput,
   settingsSnapshotSaveInputSchema,
+  type WorkspaceRecord,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { configValidationMessage } from "../../config/config-validation-message";
@@ -29,12 +31,14 @@ import {
   findRepoConfigByRepoPath,
   loadGlobalConfig,
   normalizeSnapshotWorkspaces,
+  type PreparedSettingsSnapshot,
   requireConfiguredWorkspace,
   saveAndReturnWorkspaceRecord,
   toSettingsSnapshot,
   touchRecentWorkspace,
   validateAndNormalizeRepoConfig,
   type RepoConfigDraft,
+  type WorkspaceSettingsError,
   type WorkspaceSettingsService,
 } from "./workspace-settings-model";
 
@@ -354,54 +358,11 @@ const createUnserializedWorkspaceSettingsService = (
       });
     });
   },
-  saveSettingsSnapshot(rawSnapshot) {
-    return Effect.gen(function* () {
-      const config = yield* loadGlobalConfig(settingsConfig);
-      const snapshot = yield* parseConfig(settingsSnapshotSaveInputSchema, rawSnapshot);
-      if (!areAgentModelFavoritesEqual(snapshot.agentModelFavorites, config.agentModelFavorites)) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            message:
-              "Model favorites changed since settings were loaded. Reload settings and retry.",
-            field: "agentModelFavorites",
-          }),
-        );
-      }
-      const workspaces = yield* normalizeSnapshotWorkspaces(
-        settingsConfig,
-        config,
-        snapshot.workspaces,
-      );
-      const payload = {
-        ...config,
-        git: snapshot.git,
-        general: snapshot.general,
-        system: snapshot.system,
-        appearance: snapshot.appearance,
-        chat: snapshot.chat,
-        reusablePrompts: snapshot.reusablePrompts,
-        kanban: snapshot.kanban,
-        autopilot: snapshot.autopilot,
-        notifications: snapshot.notifications,
-        agentRuntimes: snapshot.agentRuntimes,
-        agentModelFavorites: config.agentModelFavorites,
-        workspaces,
-        globalPromptOverrides: snapshot.globalPromptOverrides,
-      };
-      if (snapshot.customAgentRoles !== undefined)
-        payload.customAgentRoles = snapshot.customAgentRoles;
-      const nextConfig = yield* parseConfig(globalConfigSchema, payload);
-
-      yield* settingsConfig.writeConfig(nextConfig);
-      return yield* Effect.try({
-        try: () => openWorkspaceRecordsInEffectiveOrder(settingsConfig, nextConfig),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
-    });
+  saveSettingsSnapshotWith(rawSnapshot, commit) {
+    return saveSettingsSnapshotWith(settingsConfig, rawSnapshot, commit);
+  },
+  prepareSettingsSnapshot(rawSnapshot) {
+    return prepareSettingsSnapshot(settingsConfig, rawSnapshot);
   },
   updateAgentModelFavorites(rawFavorites) {
     return Effect.gen(function* () {
@@ -460,3 +421,71 @@ export const createWorkspaceSettingsService = (
   settingsConfig: SettingsConfigPort,
 ): WorkspaceSettingsService =>
   withSerializedConfigWrites(createUnserializedWorkspaceSettingsService(settingsConfig));
+
+const prepareSettingsSnapshot = (
+  settingsConfig: SettingsConfigPort,
+  rawSnapshot: SettingsSnapshotSaveInput,
+): Effect.Effect<PreparedSettingsSnapshot, WorkspaceSettingsError> =>
+  Effect.gen(function* () {
+    const config = yield* loadGlobalConfig(settingsConfig);
+    const snapshot = yield* parseConfig(settingsSnapshotSaveInputSchema, rawSnapshot);
+    if (!areAgentModelFavoritesEqual(snapshot.agentModelFavorites, config.agentModelFavorites)) {
+      return yield* Effect.fail(
+        new HostValidationError({
+          message: "Model favorites changed since settings were loaded. Reload settings and retry.",
+          field: "agentModelFavorites",
+        }),
+      );
+    }
+    const workspaces = yield* normalizeSnapshotWorkspaces(
+      settingsConfig,
+      config,
+      snapshot.workspaces,
+    );
+    const payload = {
+      ...config,
+      git: snapshot.git,
+      general: snapshot.general,
+      system: snapshot.system,
+      appearance: snapshot.appearance,
+      chat: snapshot.chat,
+      reusablePrompts: snapshot.reusablePrompts,
+      kanban: snapshot.kanban,
+      autopilot: snapshot.autopilot,
+      notifications: snapshot.notifications,
+      agentRuntimes: snapshot.agentRuntimes,
+      agentModelFavorites: config.agentModelFavorites,
+      workspaces,
+      globalPromptOverrides: snapshot.globalPromptOverrides,
+    };
+    if (snapshot.customAgentRoles !== undefined)
+      payload.customAgentRoles = snapshot.customAgentRoles;
+    const next = yield* parseConfig(globalConfigSchema, payload);
+    return { current: config, next };
+  });
+
+const saveSettingsSnapshotWith = <A, E>(
+  settingsConfig: SettingsConfigPort,
+  rawSnapshot: SettingsSnapshotSaveInput,
+  commit: (
+    prepared: PreparedSettingsSnapshot,
+    write: Effect.Effect<WorkspaceRecord[], WorkspaceSettingsError>,
+  ) => Effect.Effect<A, E>,
+): Effect.Effect<A, E | WorkspaceSettingsError> =>
+  Effect.gen(function* () {
+    const prepared = yield* prepareSettingsSnapshot(settingsConfig, rawSnapshot);
+    return yield* commit(
+      prepared,
+      Effect.gen(function* () {
+        yield* settingsConfig.writeConfig(prepared.next);
+        return yield* Effect.try({
+          try: () => openWorkspaceRecordsInEffectiveOrder(settingsConfig, prepared.next),
+          catch: (cause) =>
+            new HostValidationError({
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        });
+      }),
+    );
+  });

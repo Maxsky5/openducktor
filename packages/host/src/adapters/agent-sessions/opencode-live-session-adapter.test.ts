@@ -21,6 +21,8 @@ import {
   createRuntimeHarness,
   ref,
   runtime,
+  ignoreObservationLoss,
+  unexpectedMcpStatusProbe,
 } from "./opencode-live-session-adapter.test-support";
 
 describe("createOpenCodeLiveSessionAdapterPreparer", () => {
@@ -28,6 +30,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     const harness = createRuntimeHarness({
       sessionSources: [
         {
+          repoPath: ref.repoPath,
           externalSessionId: ref.externalSessionId,
           workingDirectory: ref.workingDirectory,
           sessionAssociation: { kind: "unbound" },
@@ -49,7 +52,8 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),
         prepareRuntime: harness.prepareRuntime,
-      })(runtime),
+        probeMcpStatus: unexpectedMcpStatusProbe,
+      })(runtime, ignoreObservationLoss),
     );
 
     const refreshSnapshots = prepared.adapter.refreshSnapshots;
@@ -59,7 +63,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     await Effect.runPromise(refreshSnapshots(ref.repoPath));
 
     expect(harness.sessionSourceReadCalls).toBe(1);
-    await expect(Effect.runPromise(prepared.adapter.listSnapshots("/repo"))).resolves.toEqual([
+    await expect(Effect.runPromise(prepared.adapter.listSnapshots())).resolves.toEqual([
       expect.objectContaining({
         ref,
         activity: "waiting_for_permission",
@@ -75,7 +79,8 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
-      })(runtime),
+        probeMcpStatus: unexpectedMcpStatusProbe,
+      })(runtime, ignoreObservationLoss),
     );
     await Effect.runPromise(
       prepared.adapter.resumeSession({
@@ -88,9 +93,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
 
     await harness.emit({ type: "session_removed", externalSessionId: ref.externalSessionId });
 
-    await expect(Effect.runPromise(prepared.adapter.listSnapshots(ref.repoPath))).resolves.toEqual(
-      [],
-    );
+    await expect(Effect.runPromise(prepared.adapter.listSnapshots())).resolves.toEqual([]);
     expect(publishedChanges).toContainEqual({ type: "session_removed", ref });
   });
 
@@ -101,7 +104,8 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
-      })(runtime),
+        probeMcpStatus: unexpectedMcpStatusProbe,
+      })(runtime, ignoreObservationLoss),
     );
     const adapter = prepared.adapter;
     await Effect.runPromise(
@@ -150,7 +154,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       },
     });
 
-    const snapshots = await Effect.runPromise(adapter.listSnapshots("/repo"));
+    const snapshots = await Effect.runPromise(adapter.listSnapshots());
     expect(snapshots).toEqual([
       {
         ref,
@@ -264,7 +268,8 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
-      })(runtime),
+        probeMcpStatus: unexpectedMcpStatusProbe,
+      })(runtime, ignoreObservationLoss),
     );
     const adapter = prepared.adapter;
     await Effect.runPromise(
@@ -342,6 +347,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     const harness = createRuntimeHarness({
       sessionSources: [
         {
+          repoPath: ref.repoPath,
           externalSessionId: ref.externalSessionId,
           workingDirectory: ref.workingDirectory,
           sessionAssociation: { kind: "unbound" },
@@ -368,10 +374,10 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
         ...prepared,
         connection: {
           ...prepared.connection,
-          readSessionSources: async () => {
+          readSessionSources: async (repoPath, roots) => {
             markReadStarted();
             await readGate;
-            return prepared.connection.readSessionSources();
+            return prepared.connection.readSessionSources(repoPath, roots);
           },
         },
       };
@@ -380,7 +386,8 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),
         prepareRuntime,
-      })(runtime),
+        probeMcpStatus: unexpectedMcpStatusProbe,
+      })(runtime, ignoreObservationLoss),
     );
     await Effect.runPromise(
       prepared.adapter.resumeSession({
@@ -436,7 +443,8 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),
         prepareRuntime,
-      })(runtime),
+        probeMcpStatus: unexpectedMcpStatusProbe,
+      })(runtime, ignoreObservationLoss),
     );
     const adapter = prepared.adapter;
 
@@ -456,7 +464,8 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),
         prepareRuntime: harness.prepareRuntime,
-      })(runtime),
+        probeMcpStatus: unexpectedMcpStatusProbe,
+      })(runtime, ignoreObservationLoss),
     );
 
     await expect(Effect.runPromise(prepared.adapter.loadContext(ref))).resolves.toEqual({
@@ -465,7 +474,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       modelId: "gpt-5.1",
     });
     expect(harness.contextLoadCalls).toEqual(["session-1"]);
-    await expect(Effect.runPromise(prepared.adapter.listSnapshots("/repo"))).resolves.toEqual([]);
+    await expect(Effect.runPromise(prepared.adapter.listSnapshots())).resolves.toEqual([]);
   });
 
   test("keeps pending replies usable after context or native reply failures", async () => {
@@ -495,7 +504,8 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),
         prepareRuntime,
-      })(runtime),
+        probeMcpStatus: unexpectedMcpStatusProbe,
+      })(runtime, ignoreObservationLoss),
     );
     const adapter = prepared.adapter;
     await Effect.runPromise(
@@ -565,10 +575,11 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
         input.runtimeId === runtime.runtimeId
           ? firstHarness.prepareRuntime(input)
           : secondHarness.prepareRuntime(input),
+      probeMcpStatus: unexpectedMcpStatusProbe,
     });
 
-    const first = await Effect.runPromise(prepareAdapter(runtime));
-    const second = await Effect.runPromise(prepareAdapter(secondRuntime));
+    const first = await Effect.runPromise(prepareAdapter(runtime, ignoreObservationLoss));
+    const second = await Effect.runPromise(prepareAdapter(secondRuntime, ignoreObservationLoss));
     const firstAdapter = first.adapter;
     const secondAdapter = second.adapter;
     const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
@@ -636,6 +647,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     const harness = createRuntimeHarness({
       sessionSources: [
         {
+          repoPath: ref.repoPath,
           externalSessionId: ref.externalSessionId,
           workingDirectory: ref.workingDirectory,
           sessionAssociation: { kind: "unbound" },
@@ -651,13 +663,15 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     const service = createAgentSessionLiveStateService({
       adapterRegistry: createLiveSessionAdapterRegistry(),
       faultLog: () => Effect.void,
+      runtimeAdmission: { admit: (_runtimeKind, effect) => effect },
       publish: (envelope) => envelopes.push(envelope),
     });
     const prepared = await Effect.runPromise(
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: service,
         prepareRuntime: harness.prepareRuntime,
-      })(runtime),
+        probeMcpStatus: unexpectedMcpStatusProbe,
+      })(runtime, ignoreObservationLoss),
     );
     await Effect.runPromise(service.registerRuntimeAdapter(prepared.adapter));
     await Effect.runPromise(
@@ -687,10 +701,10 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       describeGeneratedImages: () => Effect.dieMessage("Unexpected describeGeneratedImages"),
       resolveGeneratedImageSource: () => Effect.dieMessage("Unexpected generated image read"),
       binding: new AgentSessionLiveRegistration(
-        { runtimeId: "runtime-2", runtimeKind: "codex", repoPath: "/repo" },
+        { runtimeId: "runtime-2", runtimeKind: "codex" },
         (mutation) => Effect.map(mutation, ({ value }) => value),
       ),
-      listSnapshots: (repoPath) => Effect.succeed(repoPath === "/repo" ? [otherSnapshot] : []),
+      listSnapshots: () => Effect.succeed([otherSnapshot]),
       readSnapshot: (candidate) =>
         Effect.succeed(
           candidate.externalSessionId === otherRef.externalSessionId
@@ -738,6 +752,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     const basePrepare = harness.prepareRuntime;
     const readSources = () => ({
       sources: [ref, nextRef].map((candidate) => ({
+        repoPath: candidate.repoPath,
         externalSessionId: candidate.externalSessionId,
         workingDirectory: candidate.workingDirectory,
         sessionAssociation: { kind: "unbound" as const },
@@ -770,6 +785,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     const service = createAgentSessionLiveStateService({
       adapterRegistry,
       faultLog: () => Effect.void,
+      runtimeAdmission: { admit: (_runtimeKind, effect) => effect },
       publish: () => undefined,
     });
     let watchCommit = false;
@@ -792,7 +808,8 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
           },
         },
         prepareRuntime,
-      })(runtime),
+        probeMcpStatus: unexpectedMcpStatusProbe,
+      })(runtime, ignoreObservationLoss),
     );
     await Effect.runPromise(service.registerRuntimeAdapter(prepared.adapter));
     await Effect.runPromise(

@@ -12,6 +12,7 @@ import {
   createOnboardingTestHarness,
   enterRuntimeStage,
 } from "./onboarding-page.test-support";
+import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 
 const { cleanup, renderOnboarding } = createOnboardingTestHarness();
 afterEach(cleanup);
@@ -57,7 +58,9 @@ describe("onboarding notifications", () => {
   });
 
   test("saves notification changes before opening the workspace step", async () => {
-    const saveSettingsSnapshot = mock(async (_snapshot: SettingsSnapshotSaveInput) => {});
+    const saveSettingsSnapshot = mock(async (_snapshot: SettingsSnapshotSaveInput) =>
+      savedSettingsResult(),
+    );
     const originalCheck = host.runtimeExecutablesCheck;
     host.runtimeExecutablesCheck = mock(async () => createCheck(runtimes, true));
 
@@ -85,6 +88,7 @@ describe("onboarding notifications", () => {
     const saveSettingsSnapshot = mock(async () => {
       saveCalls += 1;
       if (saveCalls === 2) throw new Error("Notification settings write failed");
+      return savedSettingsResult();
     });
     const originalCheck = host.runtimeExecutablesCheck;
     host.runtimeExecutablesCheck = mock(async () => createCheck(runtimes, true));
@@ -118,6 +122,7 @@ describe("onboarding notifications", () => {
     const saveSettingsSnapshot = mock(async (_snapshot: SettingsSnapshotSaveInput) => {
       saveCalls += 1;
       if (saveCalls === 2) await pendingSave.promise;
+      return savedSettingsResult();
     });
     const originalCheck = host.runtimeExecutablesCheck;
     host.runtimeExecutablesCheck = mock(async () => createCheck(runtimes, true));

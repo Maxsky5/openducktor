@@ -6,6 +6,7 @@ import type {
   AgentSessionRuntimeAdapterPort,
 } from "../../ports/agent-session-live-adapter-port";
 
+/** Holds at most one shared live adapter for each runtime kind. */
 export const createLiveSessionAdapterRegistry = (): AgentSessionLiveAdapterRegistryPort => {
   const adaptersByRuntimeId = new Map<string, AgentSessionLiveAdapterPort>();
   const requireControlAdapter = (
@@ -26,20 +27,20 @@ export const createLiveSessionAdapterRegistry = (): AgentSessionLiveAdapterRegis
       }),
     );
   };
+  const findForKind = (runtimeKind: string) =>
+    [...adaptersByRuntimeId.values()].find(
+      (adapter) => adapter.binding.runtimeKind === runtimeKind,
+    );
 
   const resolveForScope: AgentSessionLiveAdapterRegistryPort["resolveForScope"] = (scope) =>
     Effect.gen(function* () {
-      const adapter = [...adaptersByRuntimeId.values()].find(
-        (adapter) =>
-          adapter.binding.repoPath === scope.repoPath &&
-          adapter.binding.runtimeKind === scope.runtimeKind,
-      );
+      const adapter = findForKind(scope.runtimeKind);
       if (!adapter) {
         return yield* Effect.fail(
           new HostResourceError({
             resource: "agent_session_live_adapter",
             operation: "resolveForScope",
-            message: `No live ${scope.runtimeKind} runtime owns repo '${scope.repoPath}'.`,
+            message: `The ${scope.runtimeKind} runtime is not running. Check Diagnostics, then restart the runtime.`,
             details: { scope },
           }),
         );
@@ -60,18 +61,13 @@ export const createLiveSessionAdapterRegistry = (): AgentSessionLiveAdapterRegis
             }),
           );
         }
-        const existing = [...adaptersByRuntimeId.values()].find(
-          (candidate) =>
-            candidate.binding.repoPath === adapter.binding.repoPath &&
-            candidate.binding.runtimeKind === adapter.binding.runtimeKind,
-        );
+        const existing = findForKind(adapter.binding.runtimeKind);
         if (existing) {
           return yield* Effect.fail(
             new HostInvariantError({
-              invariant: "agent_session_live_scope_registered_once",
-              message: `Repo '${adapter.binding.repoPath}' already has a ${adapter.binding.runtimeKind} live runtime.`,
+              invariant: "agent_session_live_kind_registered_once",
+              message: `A ${adapter.binding.runtimeKind} live runtime is already registered.`,
               details: {
-                repoPath: adapter.binding.repoPath,
                 runtimeKind: adapter.binding.runtimeKind,
                 currentRuntimeId: existing.binding.runtimeId,
                 rejectedRuntimeId: runtimeId,
@@ -87,8 +83,7 @@ export const createLiveSessionAdapterRegistry = (): AgentSessionLiveAdapterRegis
         adaptersByRuntimeId.delete(runtimeId);
         return adapter;
       }),
-    listForRepo: (repoPath) =>
-      [...adaptersByRuntimeId.values()].filter((adapter) => adapter.binding.repoPath === repoPath),
+    list: () => [...adaptersByRuntimeId.values()],
     resolveForScope,
     resolveControlForScope: (scope) =>
       resolveForScope(scope).pipe(Effect.flatMap(requireControlAdapter)),

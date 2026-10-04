@@ -129,6 +129,10 @@ export const createClaudeLiveSessionEventCoordinator = ({
   ): Effect.Effect<Value, HostError> =>
     operationSemaphore.withPermits(1)(
       Effect.gen(function* () {
+        // A control that waited while the runtime was released must not reach the native service.
+        if (released) {
+          return yield* Effect.fail(runtimeReleasedError());
+        }
         yield* takeForwardingFailure();
         yield* drainQueuedEvents;
         yield* takeForwardingFailure();

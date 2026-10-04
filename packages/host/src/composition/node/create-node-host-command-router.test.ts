@@ -2,47 +2,80 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { mcpBridgeDiscoveryFileSchema } from "@openducktor/contracts";
+import {
+  type HostEventEnvelope,
+  hostRuntimeSnapshotSchema,
+  mcpBridgeDiscoveryFileSchema,
+} from "@openducktor/contracts";
 import { Cause, Effect } from "effect";
 import type { McpHostBridgeServer } from "../../adapters/mcp/mcp-host-bridge-server";
 import { createSourceRuntimeDistribution } from "../../adapters/runtimes/runtime-distribution";
 import { HostOperationError } from "../../effect/host-errors";
 import { parseJson } from "../../effect/json";
 import type { HostEventBusPort } from "../../events/host-event-bus";
-import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
+import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
+import type { RuntimeStartInput, RuntimeStarterPort } from "../../ports/runtime-registry-port";
+import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import type { TerminalPtyPort } from "../../ports/terminal-pty-port";
 import type { HostLifecycleLogger } from "../host-lifecycle";
 import { createNodeEffectHostCommandRouter } from "./create-node-effect-host-command-router";
 import { createNodeHostCommandRouter } from "./create-node-host-command-router-promise";
-import type { CreateNodeHostCommandRouterInput } from "./node-host-command-router-types";
+import type {
+  CreateNodeHostCommandRouterInput,
+  EffectNodeHostCommandRouter,
+} from "./node-host-command-router-types";
 import { createLiveSessionFaultLogger } from "./node-host-lifecycle-logger";
 
 const createRuntimeDistribution = () =>
   createSourceRuntimeDistribution(path.resolve(import.meta.dir, "../../../../.."));
 
-const createRuntimeRegistry = (
-  stopAllRuntimes: RuntimeRegistryPort["stopAllRuntimes"] = () => Effect.succeed([]),
-): RuntimeRegistryPort => ({
-  ensureWorkspaceRuntime: () => Effect.die("unused"),
-  findRuntimeById: () => Effect.succeed(null),
-  findWorkspaceRuntime: () => Effect.succeed(null),
-  listRuntimes: () => Effect.succeed([]),
-  listRuntimesByRepo: () => Effect.succeed([]),
-  stopRuntime: () => Effect.succeed(false),
-  stopAllRuntimes,
-  stopSession: () => Effect.void,
-  probeSessionStatus: () => Effect.succeed({ supported: false, hasLiveSession: false }),
-  probeMcpStatus: () =>
-    Effect.succeed({
-      supported: false,
-      connected: false,
-      serverStatus: null,
-      toolIds: [],
-      detail: null,
-      failureKind: null,
-    }),
-});
+type FakeRuntimeStarter = RuntimeStarterPort & {
+  starts: RuntimeStartInput[];
+  stops: string[];
+};
+
+/** Starts an in-memory runtime of each requested kind. */
+const createRuntimeStarter = (
+  stop: (runtimeId: string) => Effect.Effect<void, HostOperationError> = () => Effect.void,
+): FakeRuntimeStarter => {
+  const starts: RuntimeStartInput[] = [];
+  const stops: string[] = [];
+  return {
+    starts,
+    stops,
+    startRuntime: (input) =>
+      Effect.sync(() => {
+        starts.push(input);
+        const runtimeId = `${input.runtimeKind}-${starts.length}`;
+        return {
+          runtime: {
+            kind: input.runtimeKind,
+            runtimeId,
+            runtimeRoute: { type: "host_service" as const, identity: runtimeId },
+            startedAt: "2026-10-03T10:00:00.000Z",
+            descriptor: input.descriptor,
+          },
+          configuredExecutablePath: input.runtimeKind,
+          effectiveExecutablePath: `/bin/${input.runtimeKind}`,
+          stop: () =>
+            Effect.suspend(() => {
+              stops.push(runtimeId);
+              return stop(runtimeId);
+            }),
+        };
+      }),
+  };
+};
+
+const unusedRuntimeStarter: RuntimeStarterPort = {
+  startRuntime: () => Effect.die("No runtime is enabled in this composition test."),
+};
+
+const runtimeHealth: RuntimeHealthPort = {
+  getRuntimeHealth: () =>
+    Effect.fail(new HostOperationError({ operation: "test.health", message: "not probed" })),
+};
 
 const createMcpHostBridge = (): McpHostBridgeServer =>
   ({
@@ -57,6 +90,13 @@ const createMcpHostBridge = (): McpHostBridgeServer =>
         workspaceId: "workspace-1",
         hostUrl: "http://127.0.0.1:5000",
         hostToken: "test-token",
+      }),
+    checkReady: () =>
+      Effect.succeed({
+        state: "ready" as const,
+        hostUrl: "http://127.0.0.1:5000",
+        checkedAt: "2026-10-03T10:00:00.000Z",
+        detail: null,
       }),
     close: () => Effect.succeed({ baseUrl: null, closed: false }),
   }) satisfies McpHostBridgeServer;
@@ -104,7 +144,7 @@ const createAssemblyFailingRouterInput = (): CreateNodeHostCommandRouterInput =>
   mcpBridgeDiscoveryMode: "production",
   onBackgroundFailure: () => Effect.void,
   runtimeDistribution: createRuntimeDistribution(),
-  runtimeRegistry: createRuntimeRegistry(),
+  runtimeStarter: unusedRuntimeStarter,
   taskEventPublicationReporter: { report: () => Effect.void },
   taskStore: createTaskStoreTestDouble({}),
   terminalPty,
@@ -114,21 +154,27 @@ const createRouter = (input: {
   eventBus?: HostEventBusPort;
   logger: HostLifecycleLogger;
   onBackgroundFailure?: CreateNodeHostCommandRouterInput["onBackgroundFailure"];
-  runtimeRegistry?: RuntimeRegistryPort;
+  /** Enables OpenCode in saved settings and starts it with this starter. */
+  runtimeStarter?: RuntimeStarterPort;
+  mcpHostBridge?: McpHostBridgeServer;
 }) => {
   const routerInput: Parameters<typeof createNodeEffectHostCommandRouter>[0] = {
     configDirScope: "test",
     lifecycleLogger: input.logger,
     mcpBridgeDiscoveryMode: "production",
-    mcpHostBridge: createMcpHostBridge(),
+    mcpHostBridge: input.mcpHostBridge ?? createMcpHostBridge(),
     onBackgroundFailure: input.onBackgroundFailure ?? (() => Effect.void),
     processEnv: { ...process.env },
     taskEventPublicationReporter: { report: () => Effect.void },
     runtimeDistribution: createRuntimeDistribution(),
-    runtimeRegistry: input.runtimeRegistry ?? createRuntimeRegistry(),
+    runtimeHealth,
+    runtimeStarter: input.runtimeStarter ?? unusedRuntimeStarter,
     taskStore: createTaskStoreTestDouble({}),
     terminalPty,
   };
+  if (input.runtimeStarter) {
+    routerInput.settingsConfig = createFixedRuntimeSettingsConfig("opencode", "opencode");
+  }
   if (input.eventBus) {
     routerInput.eventBus = input.eventBus;
   }
@@ -216,7 +262,7 @@ describe("createNodeEffectHostCommandRouter", () => {
           OPENDUCKTOR_DEV_INSTANCE: "browser-0123456789ab",
         },
         runtimeDistribution: createRuntimeDistribution(),
-        runtimeRegistry: createRuntimeRegistry(),
+        runtimeStarter: unusedRuntimeStarter,
         taskEventPublicationReporter: { report: () => Effect.void },
         taskStore: createTaskStoreTestDouble({}),
         terminalPty,
@@ -294,23 +340,81 @@ describe("createNodeEffectHostCommandRouter", () => {
     expect(infos).toContain("Stopped pull request sync loop");
   });
 
+  test("starts enabled runtimes when the MCP host bridge fails to start", async () => {
+    const { errors, logger } = createLogger();
+    const starter = createRuntimeStarter();
+    const router = await createRouter({
+      logger,
+      runtimeStarter: starter,
+      mcpHostBridge: {
+        ...createMcpHostBridge(),
+        ensureExternalDiscoveryReady: () =>
+          Effect.fail(
+            new HostOperationError({ operation: "test.bridge", message: "EACCES: discovery file" }),
+          ),
+      },
+    });
+    try {
+      await Effect.runPromise(router.initialize());
+      await waitForRuntimeState(router, "opencode", "ready");
+
+      expect(starter.starts.map((input) => input.runtimeKind)).toEqual(["opencode"]);
+      expect(errors).toContain(
+        "The OpenDucktor MCP host bridge did not start: EACCES: discovery file",
+      );
+    } finally {
+      await Effect.runPromise(router.dispose());
+    }
+  });
+
+  test("starts enabled runtimes at host initialization and publishes their status", async () => {
+    const { logger } = createLogger();
+    const published: HostEventEnvelope[] = [];
+    const starter = createRuntimeStarter();
+    const router = await createRouter({
+      eventBus: { ...createEventBus(), publish: (envelope) => void published.push(envelope) },
+      logger,
+      runtimeStarter: starter,
+    });
+    try {
+      await Effect.runPromise(router.initialize());
+      await waitForRuntimeState(router, "opencode", "ready");
+
+      expect(starter.starts.map((input) => input.runtimeKind)).toEqual(["opencode"]);
+      expect(
+        published
+          .filter((envelope) => envelope.channel === "openducktor://runtime-changed")
+          .map((envelope) => envelope.payload),
+      ).toContainEqual({
+        type: "runtime_changed",
+        hostInstanceId: expect.any(String),
+        status: expect.objectContaining({
+          kind: "opencode",
+          state: "ready",
+          trigger: "host_startup",
+          runtimeId: "opencode-1",
+        }),
+      });
+      await expect(
+        Effect.runPromise(router.invoke("runtime_require", { runtimeKind: "opencode" })),
+      ).resolves.toMatchObject({ kind: "opencode", runtimeId: "opencode-1" });
+    } finally {
+      await Effect.runPromise(router.dispose());
+    }
+    expect(starter.stops).toEqual(["opencode-1"]);
+  });
+
   test("disposes host resources when the lifecycle logger rejects", async () => {
     const persistenceError = new Error(
       "openducktor.logs.append failed for /tmp/openducktor-host.log",
     );
-    let stopRuntimeCalls = 0;
     const logger: HostLifecycleLogger = {
       error: () => Effect.fail(persistenceError),
       info: () => Effect.fail(persistenceError),
     };
-    const runtimeRegistry = createRuntimeRegistry(() =>
-      Effect.sync(() => {
-        stopRuntimeCalls += 1;
-        return [];
-      }),
-    );
+    const starter = createRuntimeStarter();
+    const router = await startRouterWithRuntime(logger, starter);
 
-    const router = await createRouter({ logger, runtimeRegistry });
     const exit = await Effect.runPromiseExit(router.dispose());
 
     expect(exit._tag).toBe("Failure");
@@ -320,24 +424,13 @@ describe("createNodeEffectHostCommandRouter", () => {
         cause: persistenceError,
       });
     }
-
-    expect(stopRuntimeCalls).toBe(1);
+    expect(starter.stops).toEqual(["opencode-1"]);
   });
 
   test("does not log successful disposal when a shutdown step fails", async () => {
     const { infos, logger } = createLogger();
-    const runtimeFailure = new Error("runtime child is still running");
-    const runtimeRegistry = createRuntimeRegistry(() =>
-      Effect.fail(
-        new HostOperationError({
-          operation: "runtimeRegistry.stopAllRuntimes",
-          message: runtimeFailure.message,
-          cause: runtimeFailure,
-        }),
-      ),
-    );
+    const router = await startRouterWithRuntime(logger, createFailingStopStarter());
 
-    const router = await createRouter({ logger, runtimeRegistry });
     const exit = await Effect.runPromiseExit(router.dispose());
 
     expect(exit._tag).toBe("Failure");
@@ -346,17 +439,12 @@ describe("createNodeEffectHostCommandRouter", () => {
 
   test("preserves shutdown and lifecycle logging failures together", async () => {
     const persistenceError = new Error("openducktor.logs.append failed");
-    const runtimeFailure = new HostOperationError({
-      operation: "runtimeRegistry.stopAllRuntimes",
-      message: "runtime child is still running",
-    });
     const logger: HostLifecycleLogger = {
       error: () => Effect.fail(persistenceError),
       info: () => Effect.fail(persistenceError),
     };
-    const runtimeRegistry = createRuntimeRegistry(() => Effect.fail(runtimeFailure));
+    const router = await startRouterWithRuntime(logger, createFailingStopStarter());
 
-    const router = await createRouter({ logger, runtimeRegistry });
     const exit = await Effect.runPromiseExit(router.dispose());
 
     expect(exit._tag).toBe("Failure");
@@ -365,10 +453,52 @@ describe("createNodeEffectHostCommandRouter", () => {
         _tag: "HostOperationError",
         operation: "host.dispose",
         details: {
-          shutdownFailure: expect.objectContaining({ operation: "host.shutdown" }),
+          shutdownFailure: expect.objectContaining({
+            operation: "host.shutdown",
+            message: expect.stringContaining("runtime child is still running"),
+          }),
           loggingFailures: [expect.objectContaining({ cause: persistenceError })],
         },
       });
     }
   });
 });
+
+const createFailingStopStarter = () =>
+  createRuntimeStarter(() =>
+    Effect.fail(
+      new HostOperationError({
+        operation: "test.runtime.stop",
+        message: "runtime child is still running",
+      }),
+    ),
+  );
+
+const waitForRuntimeState = async (
+  router: EffectNodeHostCommandRouter,
+  kind: string,
+  state: string,
+): Promise<void> => {
+  const deadline = Date.now() + 1_000;
+  while (Date.now() < deadline) {
+    const snapshot = hostRuntimeSnapshotSchema.parse(
+      await Effect.runPromise(router.invoke("runtime_status")),
+    );
+    if (snapshot.runtimes.some((runtime) => runtime.kind === kind && runtime.state === state)) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error(`Timed out waiting for the ${kind} runtime to become ${state}.`);
+};
+
+/** Creates a router whose saved settings enable OpenCode, then waits for the startup runtime. */
+const startRouterWithRuntime = async (
+  logger: HostLifecycleLogger,
+  runtimeStarter: RuntimeStarterPort,
+): Promise<EffectNodeHostCommandRouter> => {
+  const router = await createRouter({ logger, runtimeStarter });
+  await Effect.runPromise(router.initialize().pipe(Effect.ignore));
+  await waitForRuntimeState(router, "opencode", "ready");
+  return router;
+};

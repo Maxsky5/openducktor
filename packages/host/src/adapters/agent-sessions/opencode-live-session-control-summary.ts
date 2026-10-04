@@ -11,12 +11,15 @@ import {
 
 export const toOpenCodeLiveSession = ({
   runtime,
+  repoPath,
   summary,
   previous,
   contextUsage,
   keepActivity,
 }: {
   runtime: OpenCodeRuntimeInstance;
+  /** The request repository. A native summary does not name it. */
+  repoPath: string;
   summary: AgentSessionSummary;
   previous: OpenCodeLiveSession | undefined;
   contextUsage: AgentSessionContextUsage | undefined;
@@ -30,7 +33,7 @@ export const toOpenCodeLiveSession = ({
     });
   }
   const ref: AgentSessionLiveRef = {
-    repoPath: runtime.repoPath,
+    repoPath,
     runtimeKind: "opencode",
     workingDirectory: summary.workingDirectory,
     externalSessionId: summary.externalSessionId,

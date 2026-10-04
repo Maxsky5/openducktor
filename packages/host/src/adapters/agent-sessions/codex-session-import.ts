@@ -7,20 +7,18 @@ import type {
 import { createRuntimeSessionImportAdapter } from "./runtime-session-import-adapter";
 export const createCodexSessionImportAdapter = (
   controller: CodexSessionController,
-  repoPath: string,
+  runtimeId: string,
   resolvePolicy: CreateCodexLiveSessionAdapterPreparerInput["resolveRuntimePolicy"],
   publish: () => Effect.Effect<void, HostError>,
 ) =>
   createRuntimeSessionImportAdapter({
-    scanSessions: async function* (signal) {
+    // Codex `thread/list` has no directory filter. The import service keeps the repository scope.
+    scanSessions: async function* ({ signal }) {
       let pageToken: string | undefined;
       const seen = new Set<string>();
       do {
         const request: Parameters<CodexSessionController["listSessionMetadataPage"]>[0] = {
-          repoPath,
-          runtimeKind: "codex",
-          workingDirectory: repoPath,
-          externalSessionId: "discovery",
+          runtimeId,
           signal,
         };
         if (pageToken) request.pageToken = pageToken;

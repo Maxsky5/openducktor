@@ -1,21 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import {
-  createRepoRuntimeHealthFixture,
-  type RepoRuntimeHealthFixtureOverrides,
-} from "@/test-utils/shared-test-fixtures";
-import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
+import { createObservedCheckFixture } from "@/test-utils/shared-test-fixtures";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   buildDiagnosticsToastIssues,
   buildRuntimeCheckErrorState,
   buildTaskStoreCheckErrorState,
 } from "./check-diagnostics";
-
-const makeRepoHealth = (
-  overrides: RepoRuntimeHealthFixtureOverrides = {},
-): RepoRuntimeHealthCheck =>
-  createRepoRuntimeHealthFixture({ checkedAt: "2026-02-22T08:00:00.000Z" }, overrides);
 
 const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
   workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
@@ -58,128 +49,33 @@ describe("check-diagnostics helpers", () => {
   test("builds toast issues only for hard failures", () => {
     const issues = buildDiagnosticsToastIssues({
       activeWorkspace: createActiveWorkspace("/repo"),
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-      runtimeCheck: null,
-      runtimeCheckError: "Timed out after 15000ms",
-      runtimeCheckFailureKind: "timeout",
-      taskStoreCheck: null,
-      taskStoreCheckError: "task store offline",
-      taskStoreCheckFailureKind: "error",
-      runtimeHealthByRuntime: {
-        opencode: makeRepoHealth({
-          status: "error",
-          runtime: {
-            status: "error",
-            stage: "startup_failed",
-            observation: null,
-            instance: null,
-            startedAt: null,
-            updatedAt: "2026-02-22T08:00:00.000Z",
-            elapsedMs: null,
-            attempts: null,
-            detail: "Timed out waiting for OpenCode runtime startup readiness",
-            failureKind: "timeout",
-            failureReason: null,
-          },
-        }),
-      },
+      runtimeCheck: createObservedCheckFixture({
+        error: "Timed out after 15000ms",
+        failureKind: "timeout",
+      }),
+      taskStoreCheck: createObservedCheckFixture({
+        error: "task store offline",
+        failureKind: "error",
+      }),
     });
 
     expect(issues).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: "diagnostics:task-store", severity: "error" }),
-        expect.objectContaining({ id: "diagnostics:runtime:opencode", severity: "error" }),
       ]),
     );
-    expect(issues).toHaveLength(2);
-  });
-
-  test("does not toast passive runtime startup observations", () => {
-    const issues = buildDiagnosticsToastIssues({
-      activeWorkspace: createActiveWorkspace("/repo"),
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-      runtimeCheck: null,
-      runtimeCheckError: null,
-      runtimeCheckFailureKind: null,
-      taskStoreCheck: null,
-      taskStoreCheckError: null,
-      taskStoreCheckFailureKind: null,
-      runtimeHealthByRuntime: {
-        opencode: makeRepoHealth({
-          status: "error",
-          runtime: {
-            status: "not_started",
-            stage: "idle",
-            observation: null,
-            instance: null,
-            startedAt: null,
-            updatedAt: "2026-02-22T08:00:00.000Z",
-            elapsedMs: null,
-            attempts: null,
-            detail: "Runtime has not been started yet.",
-            failureKind: "error",
-            failureReason: null,
-          },
-          mcp: {
-            supported: true,
-            status: "waiting_for_runtime",
-            serverName: "openducktor",
-            serverStatus: null,
-            toolIds: [],
-            detail: null,
-            failureKind: null,
-          },
-        }),
-      },
-    });
-
-    expect(issues).toEqual([]);
-  });
-
-  test("does not toast transient MCP timeout observations", () => {
-    const issues = buildDiagnosticsToastIssues({
-      activeWorkspace: createActiveWorkspace("/repo"),
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-      runtimeCheck: null,
-      runtimeCheckError: null,
-      runtimeCheckFailureKind: null,
-      taskStoreCheck: null,
-      taskStoreCheckError: null,
-      taskStoreCheckFailureKind: null,
-      runtimeHealthByRuntime: {
-        opencode: makeRepoHealth({
-          status: "checking",
-          runtime: {
-            status: "ready",
-            stage: "runtime_ready",
-          },
-          mcp: {
-            supported: true,
-            status: "reconnecting",
-            serverName: "openducktor",
-            serverStatus: null,
-            toolIds: [],
-            detail: "The operation was aborted due to timeout",
-            failureKind: "timeout",
-          },
-        }),
-      },
-    });
-
-    expect(issues).toEqual([]);
+    expect(issues).toHaveLength(1);
   });
 
   test("restores unhealthy cli and task-store payload toasts even without query failures", () => {
     const issues = buildDiagnosticsToastIssues({
       activeWorkspace: createActiveWorkspace("/repo"),
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-      runtimeCheck: buildRuntimeCheckErrorState([OPENCODE_RUNTIME_DESCRIPTOR], "git missing"),
-      runtimeCheckError: null,
-      runtimeCheckFailureKind: null,
-      taskStoreCheck: buildTaskStoreCheckErrorState("task store offline"),
-      taskStoreCheckError: null,
-      taskStoreCheckFailureKind: null,
-      runtimeHealthByRuntime: {},
+      runtimeCheck: createObservedCheckFixture({
+        data: buildRuntimeCheckErrorState([OPENCODE_RUNTIME_DESCRIPTOR], "git missing"),
+      }),
+      taskStoreCheck: createObservedCheckFixture({
+        data: buildTaskStoreCheckErrorState("task store offline"),
+      }),
     });
 
     expect(issues).toEqual(
@@ -201,22 +97,18 @@ describe("check-diagnostics helpers", () => {
   test("does not add a CLI issue when Git is healthy", () => {
     const issues = buildDiagnosticsToastIssues({
       activeWorkspace: createActiveWorkspace("/repo"),
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-      runtimeCheck: {
-        pathOk: true,
-        gitOk: true,
-        gitVersion: "git version 2.50.1",
-        runtimes: [
-          { kind: "opencode", ok: true, executablePath: "/bin/opencode", version: "1.2.9" },
-        ],
-        errors: [],
-      },
-      runtimeCheckError: null,
-      runtimeCheckFailureKind: null,
-      taskStoreCheck: null,
-      taskStoreCheckError: null,
-      taskStoreCheckFailureKind: null,
-      runtimeHealthByRuntime: {},
+      runtimeCheck: createObservedCheckFixture({
+        data: {
+          pathOk: true,
+          gitOk: true,
+          gitVersion: "git version 2.50.1",
+          runtimes: [
+            { kind: "opencode", ok: true, executablePath: "/bin/opencode", version: "1.2.9" },
+          ],
+          errors: [],
+        },
+      }),
+      taskStoreCheck: createObservedCheckFixture(),
     });
 
     expect(issues).toEqual([]);
@@ -226,22 +118,18 @@ describe("check-diagnostics helpers", () => {
     const pathError = "Failed to resolve PATH from interactive login shell /bin/zsh.";
     const issues = buildDiagnosticsToastIssues({
       activeWorkspace: createActiveWorkspace("/repo"),
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-      runtimeCheck: {
-        pathOk: false,
-        gitOk: true,
-        gitVersion: "git version 2.50.1",
-        runtimes: [
-          { kind: "opencode", ok: false, executablePath: null, version: null, error: null },
-        ],
-        errors: [pathError],
-      },
-      runtimeCheckError: null,
-      runtimeCheckFailureKind: null,
-      taskStoreCheck: null,
-      taskStoreCheckError: null,
-      taskStoreCheckFailureKind: null,
-      runtimeHealthByRuntime: {},
+      runtimeCheck: createObservedCheckFixture({
+        data: {
+          pathOk: false,
+          gitOk: true,
+          gitVersion: "git version 2.50.1",
+          runtimes: [
+            { kind: "opencode", ok: false, executablePath: null, version: null, error: null },
+          ],
+          errors: [pathError],
+        },
+      }),
+      taskStoreCheck: createObservedCheckFixture(),
     });
 
     expect(issues).toContainEqual(

@@ -1,12 +1,10 @@
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { spyOn } from "bun:test";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { host } from "../shared/host";
-import { createWorktreeRuntimeFixture } from "./use-agent-orchestrator-operations.test-fixtures";
 
 Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {
   configurable: true,
@@ -30,20 +28,6 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
     agentStudioState: { openTaskIds: [] },
     agentDefaults: {},
   };
-  const runtimeEnsure: typeof host.runtimeEnsure = async (repoPath, runtimeKind) => ({
-    kind: runtimeKind,
-    runtimeId: "runtime-1",
-    repoPath,
-    taskId: null,
-    role: "workspace",
-    workingDirectory: repoPath,
-    runtimeRoute: {
-      type: "local_http",
-      endpoint: "http://127.0.0.1:4444",
-    },
-    startedAt: "2026-02-22T08:00:00.000Z",
-    descriptor: { ...OPENCODE_RUNTIME_DESCRIPTOR, kind: runtimeKind },
-  });
   configureShellBridge(
     createShellBridgeFixture({
       bridge: { subscribeWorkspaceSessionUpdates: async () => () => {} },
@@ -52,9 +36,6 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
         taskWorktreeGet: async () => ({ workingDirectory: "/tmp/repo/worktree" }),
         workspaceGetRepoConfig: async () => repoConfig,
         workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
-        runtimeList: async () => [createWorktreeRuntimeFixture()],
-        runtimeEnsure,
-        runtimeRequire: runtimeEnsure,
         agentSessionWorkflowStart: async (input) => ({
           externalSessionId: "session-1",
           runtimeKind: input.runtimeKind,

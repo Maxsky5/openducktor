@@ -30,6 +30,10 @@ export type WorkspaceProviderSetupUpdateListener = (
 export type WorkspaceSessionUpdateListener = (
   payload: HostEventPayload<"openducktor://workspace-session-updated"> | BrowserLiveControlEvent,
 ) => void;
+/** Host runtime lifecycle changes. Browser control events report stream loss and reconnects. */
+export type RuntimeChangeListener = (
+  payload: HostEventPayload<"openducktor://runtime-changed"> | BrowserLiveControlEvent,
+) => void;
 export type DevServerEventListener = (
   payload: HostEventPayload<"openducktor://dev-server-event"> | BrowserLiveControlEvent,
 ) => void;
@@ -55,6 +59,7 @@ export type HostBridge = {
   subscribeWorkspaceSessionUpdates: (
     listener: WorkspaceSessionUpdateListener,
   ) => Promise<() => void>;
+  subscribeRuntimeChanges: (listener: RuntimeChangeListener) => Promise<() => void>;
   subscribeRunEvents: (listener: RunEventListener) => Promise<() => void>;
   subscribeAzureDevOpsConnectionUpdates: (
     listener: AzureDevOpsConnectionUpdateListener,
@@ -197,6 +202,7 @@ export const createUnavailableShellBridge = (): ShellBridge => ({
   subscribeWorkspaceProviderSetupUpdates: failUnavailable,
   client: createHostClient(unavailable),
   subscribeWorkspaceSessionUpdates: failUnavailable,
+  subscribeRuntimeChanges: failUnavailable,
   subscribeRunEvents: failUnavailable,
   subscribeAzureDevOpsConnectionUpdates: failUnavailable,
   subscribeDevServerEvents: failUnavailable,

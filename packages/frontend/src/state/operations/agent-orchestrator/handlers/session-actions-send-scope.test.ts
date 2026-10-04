@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentUserMessagePart } from "@openducktor/core";
-import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
+import {
+  createOpenCodeAgentEngineTestAdapter,
+  createTestOpencodeSdkAdapter,
+} from "./opencode-agent-engine.test-support";
 import { acceptedUserMessage } from "./session-actions-send.test-support";
 import {
   buildSession,
@@ -31,11 +33,7 @@ describe("agent-orchestrator/handlers/session-actions send scope", () => {
   test.each(repositorySendCases)(
     "routes repository $label without workflow side effects",
     async ({ parts }) => {
-      const adapter = createOpenCodeAgentEngineTestAdapter(
-        new OpencodeSdkAdapter({
-          resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-        }),
-      );
+      const adapter = createOpenCodeAgentEngineTestAdapter(createTestOpencodeSdkAdapter());
       const sendInputs: Parameters<typeof adapter.sendUserMessage>[0][] = [];
       adapter.sendUserMessage = async (input) => {
         sendInputs.push(input);
@@ -54,9 +52,6 @@ describe("agent-orchestrator/handlers/session-actions send scope", () => {
         workspaceRepoPath: "/tmp/active-workspace",
         currentWorkspaceRepoPathRef: { current: "/tmp/active-workspace" },
         taskRef: { current: [] },
-        ensureExistingSessionRuntime: async () => {
-          throw new Error("repository sends must not ensure a workflow runtime");
-        },
         loadRepoPromptOverrides: async () => {
           throw new Error("repository sends must not load workflow prompts");
         },
@@ -83,9 +78,7 @@ describe("agent-orchestrator/handlers/session-actions send scope", () => {
   );
 
   test("rejects sends to stopped unbound sessions before runtime or workflow work", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     let sendCalls = 0;
     adapter.sendUserMessage = async (input) => {
       sendCalls += 1;
@@ -97,9 +90,6 @@ describe("agent-orchestrator/handlers/session-actions send scope", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      ensureExistingSessionRuntime: async () => {
-        throw new Error("stopped sends must not prepare a runtime");
-      },
     });
 
     await expect(
@@ -111,9 +101,7 @@ describe("agent-orchestrator/handlers/session-actions send scope", () => {
   });
 
   test("rejects unbound sends with a clear context error", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     let sendCalls = 0;
     adapter.sendUserMessage = async (input) => {
       sendCalls += 1;
@@ -133,9 +121,7 @@ describe("agent-orchestrator/handlers/session-actions send scope", () => {
   });
 
   test("uses the requested workflow scope for an unbound child send", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const sendInputs: Parameters<typeof adapter.sendUserMessage>[0][] = [];
     adapter.sendUserMessage = async (input) => {
       sendInputs.push(input);
@@ -161,9 +147,7 @@ describe("agent-orchestrator/handlers/session-actions send scope", () => {
   });
 
   test("rejects a requested scope that conflicts with the registered scope", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     let sendCalls = 0;
     adapter.sendUserMessage = async (input) => {
       sendCalls += 1;
@@ -185,9 +169,7 @@ describe("agent-orchestrator/handlers/session-actions send scope", () => {
   });
 
   test("rejects a missing association before calling the runtime", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     let sendCalls = 0;
     adapter.sendUserMessage = async (input) => {
       sendCalls += 1;
@@ -209,11 +191,7 @@ describe("agent-orchestrator/handlers/session-actions send scope", () => {
   test.each(["opencode", "codex", "claude"] as const)(
     "uses the same repository send handler for %s",
     async (runtimeKind) => {
-      const baseAdapter = createOpenCodeAgentEngineTestAdapter(
-        new OpencodeSdkAdapter({
-          resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-        }),
-      );
+      const baseAdapter = createOpenCodeAgentEngineTestAdapter(createTestOpencodeSdkAdapter());
       const sendInputs: Parameters<AgentEnginePort["sendUserMessage"]>[0][] = [];
       const adapter: AgentEnginePort = {
         ...baseAdapter,

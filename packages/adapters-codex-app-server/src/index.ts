@@ -20,7 +20,6 @@ export type {
   CodexModelListResponse,
   CodexModelSelectionPayload,
   CodexPolicyLogEntry,
-  CodexRepoRuntimeResolverPort,
   CodexServerRequestRecord,
   CodexServerRequestResponder,
   CodexSessionContextUsage,

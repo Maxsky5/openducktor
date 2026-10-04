@@ -17,7 +17,7 @@ import { QueryProvider } from "@/lib/query-provider";
 import {
   ChecksOperationsContext,
   ChecksStateContext,
-  RepoRuntimeHealthContext,
+  HostRuntimeStatusContext,
   RuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/shared/host";
@@ -31,7 +31,7 @@ import {
   createAgentSessionSummaryFixture,
   createChecksStateContextValue,
   createDeferred,
-  createRepoRuntimeHealthContextValue,
+  createHostRuntimeStatusContextValue,
   createTaskCardFixture,
   createTaskStoreCheckFixture,
   enableReactActEnvironment,
@@ -129,7 +129,6 @@ const createHookHarness = (initialProps: HookArgs) => {
           }),
           refreshTaskStoreCheckForRepo: async () => createTaskStoreCheckFixture(),
           clearActiveTaskStoreCheck: () => {},
-          setIsLoadingChecks: () => {},
           hasRuntimeCheck: () => false,
           hasCachedTaskStoreCheck: () => false,
         },
@@ -138,9 +137,9 @@ const createHookHarness = (initialProps: HookArgs) => {
         QueryProvider,
         { useIsolatedClient: true },
         createElement(
-          RepoRuntimeHealthContext.Provider,
+          HostRuntimeStatusContext.Provider,
           {
-            value: createRepoRuntimeHealthContextValue(),
+            value: createHostRuntimeStatusContextValue(),
           },
           createElement(
             ChecksStateContext.Provider,

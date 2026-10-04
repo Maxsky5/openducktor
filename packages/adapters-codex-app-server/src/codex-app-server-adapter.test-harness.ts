@@ -1,3 +1,4 @@
+import type { ManagedMcpServer } from "@openducktor/core";
 import { expect, mock } from "bun:test";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
@@ -29,10 +30,6 @@ import { extractStringField, isPlainObject } from "./codex-app-server-shared";
 export const makeRuntimeSummary = (runtimeId: string): RuntimeInstanceSummary => ({
   kind: "codex",
   runtimeId,
-  repoPath: "/repo",
-  taskId: null,
-  role: "workspace",
-  workingDirectory: "/repo",
   runtimeRoute: { type: "stdio", identity: runtimeId },
   startedAt: "2026-05-07T00:00:00.000Z",
   descriptor: CODEX_RUNTIME_DESCRIPTOR,
@@ -568,14 +565,38 @@ export const defaultCodexEffectivePolicy = (): CodexEffectivePolicy => ({
   approvalsReviewerApplies: true,
 });
 
+/** Fake managed MCP server whose workspace identity comes from the repository path. */
+export const testManagedMcpServer = async (repoPath: string): Promise<ManagedMcpServer> => ({
+  command: ["odt-mcp", "--stdio"],
+  environment: {
+    ODT_WORKSPACE_ID: `workspace:${repoPath}`,
+    ODT_HOST_URL: "http://127.0.0.1:4000",
+    ODT_HOST_TOKEN: "host-token",
+  },
+});
+
+/** Thread config that `testManagedMcpServer` produces for one repository and tool list. */
+export const expectedThreadConfig = (repoPath: string, enabledTools: readonly string[]) => ({
+  "mcp_servers.openducktor.command": "odt-mcp",
+  "mcp_servers.openducktor.args": ["--stdio"],
+  "mcp_servers.openducktor.env": {
+    ODT_WORKSPACE_ID: `workspace:${repoPath}`,
+    ODT_HOST_URL: "http://127.0.0.1:4000",
+    ODT_HOST_TOKEN: "host-token",
+  },
+  "mcp_servers.openducktor.enabled": true,
+  "mcp_servers.openducktor.required": true,
+  "mcp_servers.openducktor.default_tools_approval_mode": "prompt",
+  "mcp_servers.openducktor.enabled_tools": [...enabledTools],
+});
+
 export const createAdapterWithTransport = (
   transport: CodexJsonRpcTransport,
   overrides: Partial<CodexAppServerAdapterOptions> = {},
 ) =>
   new CodexAppServerAdapter({
-    repoRuntimeResolver: {
-      requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
-    },
+    runtime: makeRuntimeSummary("runtime-live"),
+    resolveManagedMcpServer: testManagedMcpServer,
     transportFactory: () => transport,
     onRuntimeEventQueueFailure: () => {
       return undefined;
@@ -599,18 +620,11 @@ export const createHarness = (
     transports.set(runtimeId, transport);
     return transport;
   });
-  const requireRepoRuntime = mock(async ({ repoPath, runtimeKind }) => ({
-    ...makeRuntimeSummary("runtime-live"),
-    repoPath,
-    kind: runtimeKind,
-    runtimeId: "runtime-live",
-  }));
   const respondServerRequest = mock(async () => {});
 
   const adapter = new CodexAppServerAdapter({
-    repoRuntimeResolver: {
-      requireRepoRuntime,
-    },
+    runtime: makeRuntimeSummary("runtime-live"),
+    resolveManagedMcpServer: testManagedMcpServer,
     transportFactory,
     onRuntimeEventQueueFailure: () => {
       return undefined;
@@ -624,7 +638,6 @@ export const createHarness = (
     adapter,
     transports,
     transportFactory,
-    requireRepoRuntime,
     respondServerRequest,
   };
 };

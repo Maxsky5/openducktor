@@ -1,7 +1,5 @@
-import type { RepoRuntimeRef, RepoRuntimeRouteResolution } from "@openducktor/core";
+import type { BoundRuntimeRoute, RepoRuntimeRef } from "@openducktor/core";
 import { requireRepoRuntimeRef, requireSessionWorkingDirectory } from "@openducktor/core";
-import { normalizePathForComparison } from "@openducktor/path-support";
-import type { RepoRuntimeResolverPort } from "./types";
 
 export type OpencodeRuntimeClientInput = {
   runtimeEndpoint: string;
@@ -17,13 +15,13 @@ export type OpencodeRuntimeResolutionInput = RepoRuntimeRef & {
 };
 
 export type ResolveOpencodeRuntimeClientInputRequest = {
-  repoRuntimeResolver: RepoRuntimeResolverPort | undefined;
+  runtime: BoundRuntimeRoute;
   input: OpencodeRuntimeResolutionInput;
   action: string;
 };
 
 const requireOpencodeRuntimeEndpoint = (
-  runtime: RepoRuntimeRouteResolution,
+  runtime: BoundRuntimeRoute,
   input: RepoRuntimeRef,
   action: string,
 ): string => {
@@ -31,11 +29,6 @@ const requireOpencodeRuntimeEndpoint = (
   if (runtime.kind !== ref.runtimeKind) {
     throw new Error(
       `Resolved runtime kind '${runtime.kind}' cannot be used to ${action}; '${ref.runtimeKind}' was requested for repo '${ref.repoPath}'.`,
-    );
-  }
-  if (normalizePathForComparison(runtime.repoPath) !== normalizePathForComparison(ref.repoPath)) {
-    throw new Error(
-      `Resolved runtime repo '${runtime.repoPath}' cannot be used to ${action}; repo '${ref.repoPath}' was requested.`,
     );
   }
   if (runtime.runtimeRoute.type !== "local_http") {
@@ -55,7 +48,7 @@ const requireOpencodeRuntimeEndpoint = (
 };
 
 const toOpencodeRuntimeClientInput = (input: {
-  runtime: RepoRuntimeRouteResolution;
+  runtime: BoundRuntimeRoute;
   repoPath: RepoRuntimeRef["repoPath"];
   runtimeKind: RepoRuntimeRef["runtimeKind"];
   workingDirectory: string;
@@ -65,20 +58,12 @@ const toOpencodeRuntimeClientInput = (input: {
   workingDirectory: requireSessionWorkingDirectory(input.workingDirectory, input.action),
 });
 
-export const resolveOpencodeRuntimeClientInput = async ({
-  repoRuntimeResolver,
+export const resolveOpencodeRuntimeClientInput = ({
+  runtime,
   input,
   action,
-}: ResolveOpencodeRuntimeClientInputRequest): Promise<ResolvedOpencodeRuntimeClientInput> => {
-  if (!repoRuntimeResolver) {
-    throw new Error(
-      `OpenCode runtime '<unresolved>' is missing required route contract 'local_http' for repo '${input.repoPath}' while attempting to ${action}; repo runtime resolver is unavailable.`,
-    );
-  }
-
+}: ResolveOpencodeRuntimeClientInputRequest): ResolvedOpencodeRuntimeClientInput => {
   const runtimeRef = requireRepoRuntimeRef(input, action);
-  const runtime = await repoRuntimeResolver.requireRepoRuntime(runtimeRef);
-
   return {
     ...toOpencodeRuntimeClientInput({
       runtime,

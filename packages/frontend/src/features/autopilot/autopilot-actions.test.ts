@@ -6,7 +6,6 @@ import type {
   TaskCard,
   WorkspaceRecord,
 } from "@openducktor/contracts";
-import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentModelCatalog, AgentRuntimeCatalog } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
 import { executeAutopilotAction } from "@/features/autopilot/autopilot-actions";
@@ -38,6 +37,7 @@ import {
 import { repositoryGitProviderContextQueryOptions } from "@/state/queries/git-provider-context";
 import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import { createTestOpencodeSdkAdapter } from "@/state/operations/agent-orchestrator/handlers/opencode-agent-engine.test-support";
 
 const runSessionStartWorkflowMock = mock(
   async (_input: Parameters<RunSessionStartWorkflow>[0]): Promise<SessionStartWorkflowResult> => ({
@@ -596,9 +596,7 @@ describe("autopilot feature helpers", () => {
       createSettingsSnapshotFixture(),
     );
 
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const releaseStarts = createDeferred<void>();
     const firstKickoffStarted = createDeferred<void>();
     const releaseFirstKickoff = createDeferred<void>();

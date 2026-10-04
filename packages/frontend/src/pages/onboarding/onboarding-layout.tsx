@@ -34,12 +34,18 @@ const ONBOARDING_STAGES = [
 
 type OnboardingLayoutProps = {
   stage: OnboardingStage;
+  /** Extra header controls, such as the diagnostics trigger. */
+  headerActions?: ReactNode;
   children: ReactNode;
 };
 
 const themeLabelId = "onboarding-theme-label";
 
-export function OnboardingLayout({ stage, children }: OnboardingLayoutProps): ReactElement {
+export function OnboardingLayout({
+  stage,
+  headerActions,
+  children,
+}: OnboardingLayoutProps): ReactElement {
   const currentStageIndex = ONBOARDING_STAGES.findIndex((item) => item.id === stage);
   const scrollContainerRef = useRef<HTMLElement>(null);
 
@@ -73,6 +79,7 @@ export function OnboardingLayout({ stage, children }: OnboardingLayoutProps): Re
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {headerActions}
             <span id={themeLabelId} className="sr-only">
               Theme
             </span>

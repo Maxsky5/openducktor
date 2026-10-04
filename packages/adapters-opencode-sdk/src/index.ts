@@ -4,6 +4,7 @@ export type {
   OpencodeRuntimeSnapshotSource,
 } from "./live-session-snapshots";
 export { OpencodeSdkAdapter } from "./opencode-sdk-adapter";
+export type { OpencodeMcpBinding } from "./opencode-mcp-bindings";
 export { loadOpencodeModelCatalogFromEndpoint } from "./model-catalog-preview";
 export type {
   OpencodeNativeApprovalReply,

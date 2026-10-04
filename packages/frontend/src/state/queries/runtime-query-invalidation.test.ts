@@ -1,13 +1,10 @@
 import { expect, mock, test } from "bun:test";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { waitFor } from "@testing-library/react";
-import {
-  invalidateRuntimeQueries,
-  invalidateRuntimeSessionQueries,
-} from "./runtime-query-invalidation";
+import { invalidateRuntimeKindQueries } from "./runtime-query-invalidation";
 
 const repoCatalogKey = ["runtime-catalog", "catalog", "/repo", "opencode", "/repo"];
-const worktreeCatalogKey = ["runtime-catalog", "catalog", "/repo", "opencode", "/repo/worktree"];
+const otherWorkspaceCatalogKey = ["runtime-catalog", "catalog", "/other", "opencode", "/other/wt"];
 const fileSearchKey = [
   "runtime-catalog",
   "file-search",
@@ -18,31 +15,44 @@ const fileSearchKey = [
 ];
 const sessionKeys = [
   ["agent-session-todos", "/repo", "opencode", "/repo/worktree", "session"],
-  ["agent-session-history", "/repo", "opencode", "/repo/worktree", "session"],
+  ["agent-session-history", "/other", "opencode", "/other", "session"],
+  ["agent-session-context", "/repo", "opencode", "/repo", "session", null, null, null],
 ];
+const importKey = ["workspace-session-external", "workspace-1", "opencode", "catalog-1", "", null];
+const mcpCheckKey = ["checks", "workspace-runtime-mcp", "/other"];
 
-test("a stopped runtime invalidates session and catalog reads and cancels the old read", async () => {
+test("a stopped kind invalidates its reads in every workspace and cancels the old read", async () => {
   const client = new QueryClient();
-  for (const key of [...sessionKeys, repoCatalogKey, worktreeCatalogKey, fileSearchKey]) {
+  for (const key of [...sessionKeys, repoCatalogKey, otherWorkspaceCatalogKey, fileSearchKey]) {
     client.setQueryData(key, ["cached"]);
   }
+  client.setQueryData(importKey, ["cached"]);
+  client.setQueryData(mcpCheckKey, ["connected on the old runtime"]);
+  client.setQueryData(["checks", "task-store", "/repo"], ["cached"]);
   const oldRead = Promise.withResolvers<string[]>();
   const pending = client
     .fetchQuery({ queryKey: sessionKeys[0]!, queryFn: () => oldRead.promise })
     .catch(() => undefined);
 
-  await invalidateRuntimeQueries(client, { repoPath: "/repo", runtimeKind: "opencode" }, "stopped");
+  await invalidateRuntimeKindQueries(client, "opencode", "stopped");
   oldRead.resolve(["obsolete"]);
 
   expect(await pending).toEqual(["cached"]);
-  for (const key of [...sessionKeys, repoCatalogKey, worktreeCatalogKey]) {
+  for (const key of [
+    ...sessionKeys,
+    repoCatalogKey,
+    otherWorkspaceCatalogKey,
+    importKey,
+    mcpCheckKey,
+  ]) {
     expect(client.getQueryState(key)?.isInvalidated).toBe(true);
   }
+  expect(client.getQueryState(["checks", "task-store", "/repo"])?.isInvalidated).toBe(false);
   expect(client.getQueryData<string[]>(repoCatalogKey)).toEqual(["cached"]);
   expect(client.getQueryState(fileSearchKey)?.isInvalidated).toBe(false);
 });
 
-test("a ready runtime refetches an active catalog read", async () => {
+test("a ready kind refetches an active catalog read", async () => {
   const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
   client.setQueryData(repoCatalogKey, ["cached"]);
   const readCatalog = mock(async () => ["replacement"]);
@@ -50,7 +60,7 @@ test("a ready runtime refetches an active catalog read", async () => {
   const unsubscribe = observer.subscribe(() => {});
 
   try {
-    await invalidateRuntimeQueries(client, { repoPath: "/repo", runtimeKind: "opencode" }, "ready");
+    await invalidateRuntimeKindQueries(client, "opencode", "ready");
 
     await waitFor(() => expect(readCatalog).toHaveBeenCalledTimes(1));
     await waitFor(() =>
@@ -62,41 +72,16 @@ test("a ready runtime refetches an active catalog read", async () => {
   }
 });
 
-test("a runtime change leaves another runtime and its catalogs untouched", async () => {
+test("a change of one kind leaves the reads of another kind untouched", async () => {
   const client = new QueryClient();
-  const otherCatalogKey = ["runtime-catalog", "catalog", "/repo", "codex", "/repo"];
-  const otherSessionKey = ["agent-session-todos", "/repo", "codex", "/repo", "session"];
-  for (const key of [otherCatalogKey, otherSessionKey]) client.setQueryData(key, ["cached"]);
+  const otherKeys = [
+    ["runtime-catalog", "catalog", "/repo", "codex", "/repo"],
+    ["agent-session-todos", "/repo", "codex", "/repo", "session"],
+    ["workspace-session-external", "workspace-1", "codex", "catalog-1", "", null],
+  ];
+  for (const key of otherKeys) client.setQueryData(key, ["cached"]);
 
-  await invalidateRuntimeQueries(client, { repoPath: "/repo", runtimeKind: "opencode" }, "ready");
+  await invalidateRuntimeKindQueries(client, "opencode", "stopped");
 
-  expect(client.getQueryState(otherCatalogKey)?.isInvalidated).toBe(false);
-  expect(client.getQueryState(otherSessionKey)?.isInvalidated).toBe(false);
-});
-
-test("the runtime ensure callback invalidates session reads and keeps catalogs cached", async () => {
-  const client = new QueryClient();
-  const catalogKeys = [repoCatalogKey, worktreeCatalogKey];
-  for (const key of [...catalogKeys, ...sessionKeys]) client.setQueryData(key, ["cached"]);
-
-  await invalidateRuntimeSessionQueries(
-    client,
-    { repoPath: "/repo", runtimeKind: "opencode" },
-    "stopped",
-  );
-
-  for (const key of sessionKeys) expect(client.getQueryState(key)?.isInvalidated).toBe(true);
-  for (const key of catalogKeys) {
-    expect(client.getQueryState(key)?.isInvalidated).toBe(false);
-    expect(client.getQueryData<string[]>(key)).toEqual(["cached"]);
-  }
-
-  await invalidateRuntimeSessionQueries(
-    client,
-    { repoPath: "/repo", runtimeKind: "opencode" },
-    "ready",
-  );
-  await expect(
-    client.fetchQuery({ queryKey: sessionKeys[1]!, queryFn: async () => ["replacement"] }),
-  ).resolves.toEqual(["replacement"]);
+  for (const key of otherKeys) expect(client.getQueryState(key)?.isInvalidated).toBe(false);
 });

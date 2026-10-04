@@ -6,6 +6,7 @@ import type { JSONType } from "zod";
 import { configureBrowserRuntimeConfig } from "./browser-config";
 import { WebDependencyError } from "./effect/web-errors";
 import { createFetchFixture } from "./test-support";
+import type { RuntimeChangeListener } from "@openducktor/frontend/lib/shell-bridge";
 
 class FakeEventSource {
   static instances: FakeEventSource[] = [];
@@ -209,7 +210,7 @@ describe("createLocalHostClient", () => {
     });
   });
 
-  test("preserves structured timeout metadata through local web runtimeEnsure", async () => {
+  test("preserves structured timeout metadata through local web runtime status", async () => {
     const { createLocalHostClient } = await loadLocalHostTransport();
     const fetchMock = mock(async (url: string | URL | Request, _init?: RequestInit) => {
       if (url.toString().endsWith("/session")) {
@@ -235,14 +236,14 @@ describe("createLocalHostClient", () => {
     const client = createLocalHostClient();
     let error: unknown;
     try {
-      await client.runtimeEnsure("/repo", "opencode");
+      await client.runtimeStatus();
     } catch (cause) {
       error = cause;
     }
 
     expect(error instanceof Error).toBe(true);
     if (!(error instanceof Error)) {
-      throw new Error("Expected runtimeEnsure to reject with an Error");
+      throw new Error("Expected runtimeStatus to reject with an Error");
     }
     expect(error.message).toBe("OpenCode runtime is still starting");
     expect(error).toMatchObject({ failureKind: "timeout" });
@@ -260,7 +261,7 @@ describe("createLocalHostClient", () => {
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://127.0.0.1:14327/invoke/runtime_ensure",
+      "http://127.0.0.1:14327/invoke/runtime_status",
       expect.objectContaining({
         method: "POST",
         credentials: "include",
@@ -268,7 +269,7 @@ describe("createLocalHostClient", () => {
           "content-type": "application/json",
           "x-openducktor-app-token": "app-token",
         },
-        body: JSON.stringify({ repoPath: "/repo", runtimeKind: "opencode" }),
+        body: JSON.stringify({}),
       }),
     );
   });
@@ -693,6 +694,50 @@ describe("local host SSE subscriptions", () => {
     unsubscribe();
   });
 
+  test("delivers host runtime changes and connection control events", async () => {
+    const { subscribeLocalHostRuntimeChanges } = await loadLocalHostTransport();
+    globalThis.fetch = createFetchFixture(
+      mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })),
+    );
+    const listener = mock(() => {});
+    const subscription = subscribeLocalHostRuntimeChanges(listener);
+    const eventSource = await waitForEventSourceInstance();
+    eventSource.emit("open", "");
+    const unsubscribe = await subscription;
+    const payload = {
+      type: "runtime_changed",
+      hostInstanceId: "host-1",
+      status: {
+        kind: "opencode",
+        enabled: true,
+        configuredExecutablePath: "",
+        effectiveExecutablePath: null,
+        version: null,
+        state: "starting",
+        trigger: "host_startup",
+        runtimeId: null,
+        startedAt: null,
+        updatedAt: "2026-02-22T08:00:00.000Z",
+        failure: null,
+        revision: 1,
+      },
+    };
+
+    eventSource.emit(
+      "message",
+      JSON.stringify({ channel: "openducktor://runtime-changed", payload }),
+    );
+    eventSource.emit("open", "");
+
+    expect(listener).toHaveBeenNthCalledWith(1, payload);
+    expect(listener).toHaveBeenNthCalledWith(2, {
+      __openducktorBrowserLive: true,
+      kind: "reconnected",
+      transportEpoch: "events:1",
+    });
+    unsubscribe();
+  });
+
   test("delivers reconnect once to a listener removed by a failing earlier listener", async () => {
     const { subscribeLocalHostDevServerEvents } = await loadLocalHostTransport();
     globalThis.fetch = createFetchFixture(
@@ -926,10 +971,47 @@ describe("local host SSE subscriptions", () => {
     expect(eventSource.closed).toBe(false);
 
     eventSource.emit("open", "");
+    // The first open recovers the reported failure, so consumers can read a current baseline.
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(listener).toHaveBeenLastCalledWith({
+      __openducktorBrowserLive: true,
+      kind: "reconnected",
+      transportEpoch: "events:0",
+    });
     const { transportEpoch, unsubscribe } = await subscription;
     expect(transportEpoch).toBe("events:0");
     unsubscribe();
     expect(eventSource.closed).toBe(true);
+  });
+
+  test("a runtime subscriber sees the recovery of a failure before the first open", async () => {
+    const { subscribeLocalHostRuntimeChanges } = await loadLocalHostTransport();
+    globalThis.fetch = createFetchFixture(
+      mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })),
+    );
+    const listener = mock<RuntimeChangeListener>(() => {});
+    const subscription = subscribeLocalHostRuntimeChanges(listener);
+    const eventSource = await waitForEventSourceInstance();
+
+    eventSource.emit("error", "failed");
+    eventSource.emit("open", "");
+    const unsubscribe = await subscription;
+
+    expect(listener.mock.calls.map(([event]) => event)).toEqual([
+      {
+        __openducktorBrowserLive: true,
+        kind: "stream-warning",
+        message: "EventSource events reported an error before opening.",
+      },
+      { __openducktorBrowserLive: true, kind: "reconnected", transportEpoch: "events:0" },
+    ]);
+
+    // A subscriber that joins after this recovery gets no old warning.
+    const late = mock<RuntimeChangeListener>(() => {});
+    const unsubscribeLate = await subscribeLocalHostRuntimeChanges(late);
+    expect(late).not.toHaveBeenCalled();
+    unsubscribe();
+    unsubscribeLate();
   });
 
   test("emits a stream-warning control payload when dev-server EventSource errors after opening", async () => {
@@ -970,6 +1052,49 @@ describe("local host SSE subscriptions", () => {
     });
 
     unsubscribe();
+  });
+
+  test("gives a runtime subscriber that joins during a connection failure the current warning", async () => {
+    const { subscribeLocalHostRuntimeChanges } = await loadLocalHostTransport();
+    globalThis.fetch = createFetchFixture(
+      mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })),
+    );
+    const existing = mock<RuntimeChangeListener>(() => {});
+    const subscription = subscribeLocalHostRuntimeChanges(existing);
+    const eventSource = await waitForEventSourceInstance();
+    eventSource.emit("open", "");
+    const stopExisting = await subscription;
+    eventSource.emit("error", "lost connection");
+
+    const late = mock<RuntimeChangeListener>(() => {});
+    const stopLate = await subscribeLocalHostRuntimeChanges(late);
+
+    const warning = {
+      __openducktorBrowserLive: true,
+      kind: "stream-warning",
+      message: "EventSource events reported an error after opening.",
+    };
+    expect(existing).toHaveBeenCalledTimes(1);
+    expect(existing).toHaveBeenCalledWith(warning);
+    expect(late).toHaveBeenCalledTimes(1);
+    expect(late).toHaveBeenCalledWith(warning);
+
+    eventSource.emit("open", "");
+    const reconnected = {
+      __openducktorBrowserLive: true,
+      kind: "reconnected",
+      transportEpoch: "events:1",
+    };
+    expect(late).toHaveBeenLastCalledWith(reconnected);
+
+    // A subscriber that joins after the reconnect gets no old warning.
+    const afterRecovery = mock<RuntimeChangeListener>(() => {});
+    const stopAfterRecovery = await subscribeLocalHostRuntimeChanges(afterRecovery);
+    expect(afterRecovery).not.toHaveBeenCalled();
+
+    stopExisting();
+    stopLate();
+    stopAfterRecovery();
   });
 
   test("isolates post-open dev-server stream-warning listener failures", async () => {

@@ -284,7 +284,8 @@ describe("OpencodeSdkAdapter user message", () => {
       parts: [{ type: "text", text: "Write and persist spec" }],
     });
     expect(mock.tool.idsCalls).toEqual([]);
-    expect(mock.mcp.statusCalls).toEqual([{ directory: "/repo" }, { directory: "/repo" }]);
+    expect(mock.mcp.addCalls).toEqual([expect.objectContaining({ directory: "/repo" })]);
+    expect(mock.mcp.statusCalls).toEqual([{ directory: "/repo" }]);
     expect(events.some((event) => event.type === "assistant_message")).toBe(false);
     expect(events.some((event) => event.type === "session_idle")).toBe(false);
   });
@@ -953,7 +954,8 @@ describe("OpencodeSdkAdapter user message", () => {
     });
 
     expect(mock.tool.idsCalls).toEqual([]);
-    expect(mock.mcp.statusCalls).toHaveLength(3);
+    expect(mock.mcp.addCalls).toHaveLength(1);
+    expect(mock.mcp.statusCalls).toHaveLength(2);
     expect(mock.session.promptCalls).toHaveLength(0);
     expect(mock.session.promptAsyncCalls).toHaveLength(2);
   });

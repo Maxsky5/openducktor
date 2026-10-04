@@ -34,6 +34,7 @@ import type {
   HostOperationErrorAggregate,
   HostValidationErrorAggregate,
 } from "../../effect/host-errors";
+import type { RuntimeSessionTarget } from "../../ports/runtime-registry-port";
 
 export type ClaudeAgentSdkServiceError = HostOperationErrorAggregate | HostValidationErrorAggregate;
 
@@ -107,8 +108,9 @@ export type ClaudeAgentSdkService = {
   prepareQuestionReply(
     input: ReplyQuestionInput,
   ): Effect.Effect<ClaudePendingInputResolution, ClaudeAgentSdkServiceError>;
-  stopSession(input: SessionRef): Effect.Effect<void, ClaudeAgentSdkServiceError>;
-  probeSessionStatus(input: SessionRef): Effect.Effect<
+  /** Finds the session by runtime kind, external session ID, and working directory. */
+  stopSession(input: RuntimeSessionTarget): Effect.Effect<void, ClaudeAgentSdkServiceError>;
+  probeSessionStatus(input: RuntimeSessionTarget): Effect.Effect<
     {
       supported: boolean;
       hasLiveSession: boolean;

@@ -67,6 +67,11 @@ describe("types", () => {
       pendingBackgroundTaskResultsByExternalSessionId: new Map(),
     };
     const options: OpencodeSdkAdapterOptions = {
+      runtime: {
+        kind: "opencode",
+        runtimeId: "runtime-opencode-1",
+        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:12345" },
+      },
       now: () => "2026-02-22T12:00:00.000Z",
       createClient,
       logEvent: () => undefined,

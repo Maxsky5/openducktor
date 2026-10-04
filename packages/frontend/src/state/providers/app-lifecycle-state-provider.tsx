@@ -1,4 +1,3 @@
-import type { RuntimeInstanceSummary, RuntimeKind } from "@openducktor/contracts";
 import { type PropsWithChildren, type ReactElement, useMemo } from "react";
 import { hostBridge, hostClient } from "@/lib/host-client";
 import { useRuntimeCatalogBootstrap } from "@/state/lifecycle/use-runtime-catalog-bootstrap";
@@ -8,7 +7,7 @@ import { createTaskStreamController } from "@/state/tasks/task-stream-controller
 import {
   useAgentSessionsContext,
   useChecksOperationsContext,
-  useRepoRuntimeHealthContext,
+  useHostRuntimeStatusContext,
   useRequiredContext,
   useRuntimeAvailabilityContext,
   useTaskControlContext,
@@ -37,21 +36,14 @@ const createProductionTaskStreamController =
       onSnapshotStarted,
     });
 
-type AppLifecycleStateProviderProps = PropsWithChildren<{
-  startRepoRuntime: (repoPath: string, runtimeKind: RuntimeKind) => Promise<RuntimeInstanceSummary>;
-}>;
-
-export function AppLifecycleStateProvider({
-  children,
-  startRepoRuntime,
-}: AppLifecycleStateProviderProps): ReactElement {
+export function AppLifecycleStateProvider({ children }: PropsWithChildren): ReactElement {
   const { activeWorkspace } = useRequiredContext(
     WorkspaceStateContext,
     "AppLifecycleStateProvider",
   );
   const { refreshBranches, clearBranchData } = useWorkspaceOperationsContext();
   const { availableRuntimeDefinitions, loadRepoRuntimeCatalog } = useRuntimeAvailabilityContext();
-  const { refreshRepoRuntimeHealth, runtimeHealthByRuntime } = useRepoRuntimeHealthContext();
+  const runtimeStatus = useHostRuntimeStatusContext();
   const { refreshTaskStoreCheckForRepo } = useChecksOperationsContext();
   const { loadWorkspaceTasks } = useTaskControlContext();
   const sessionStore = useAgentSessionsContext();
@@ -77,18 +69,15 @@ export function AppLifecycleStateProvider({
   useRuntimeCatalogBootstrap({
     activeWorkspace,
     availableRuntimeDefinitions,
-    runtimeHealthByRuntime,
+    runtimeStatus,
     loadRepoRuntimeCatalog,
   });
 
   useAppLifecycle({
     activeWorkspace,
-    runtimeDefinitions: availableRuntimeDefinitions,
     refreshBranches,
-    refreshRepoRuntimeHealth,
     refreshTaskStoreCheckForRepo,
     loadWorkspaceTasks,
-    startRepoRuntime,
     clearBranchData,
     taskStreamControllerFactory,
   });

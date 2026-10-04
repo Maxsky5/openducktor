@@ -7,7 +7,7 @@ import type {
 } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
+import type { RuntimeReadinessState } from "@/lib/runtime-readiness";
 import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
 import {
   sessionTodosQueryOptions,
@@ -38,7 +38,7 @@ type UseSessionRuntimeDataArgs = {
   selectedSession: SessionRuntimeDataTarget | null;
   sessionState?: AgentSessionState | null;
   runtimeDefinitions: RuntimeDescriptor[];
-  repoReadinessState: RepoRuntimeReadinessState;
+  runtimeReadinessState: RuntimeReadinessState;
   loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
   readSessionTodos: (session: PolicyBoundSessionRef) => Promise<AgentSessionTodoItem[]>;
 };
@@ -48,7 +48,7 @@ export const useSessionRuntimeData = ({
   selectedSession,
   sessionState,
   runtimeDefinitions,
-  repoReadinessState,
+  runtimeReadinessState,
   loadRuntimeCatalog,
   readSessionTodos,
 }: UseSessionRuntimeDataArgs): SelectedSessionRuntimeData => {
@@ -144,7 +144,7 @@ export const useSessionRuntimeData = ({
       runtimeDefinitions,
     });
   }, [repoPath, runtimeDefinitions, runtimePolicy, stableSelectedSession]);
-  const isRuntimeReady = repoReadinessState === "ready";
+  const isRuntimeReady = runtimeReadinessState === "ready";
   const catalogRef = runtimeDataRefs.kind === "available" ? runtimeDataRefs.catalogRef : null;
   const todosRef = runtimeDataRefs.kind === "available" ? runtimeDataRefs.todosRef : null;
   const ownsFreshCodexEmptyState = isMatchingFreshCodexSessionAwaitingKickoff(

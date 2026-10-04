@@ -12,6 +12,7 @@ import type {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
+import { createRuntimeAdmissionGate } from "../../adapters/runtimes/runtime-admission";
 import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
 import type { LocalAttachmentService } from "../../application/attachments/local-attachment-service";
 import { HostValidationError } from "../../effect/host-errors";
@@ -62,7 +63,7 @@ const createHarness = async (
     describeGeneratedImages: () => Effect.dieMessage("Unexpected describeGeneratedImages"),
     resolveGeneratedImageSource: () => Effect.dieMessage("Unexpected generated image read"),
     binding: new AgentSessionLiveRegistration(
-      { runtimeId: "runtime-1", runtimeKind: "opencode", repoPath: "/repo" },
+      { runtimeId: "runtime-1", runtimeKind: "opencode" },
       (mutation) => Effect.map(mutation, ({ value }) => value),
     ),
     listSnapshots: () => Effect.succeed(snapshots),
@@ -141,8 +142,11 @@ const createHarness = async (
     stopSession: () => Effect.dieMessage("unexpected stop"),
     releaseSession: () => Effect.dieMessage("unexpected release"),
   };
+  const runtimeAdmission = createRuntimeAdmissionGate();
+  runtimeAdmission.open("opencode");
   const service = createAgentSessionLiveStateService({
     adapterRegistry: createLiveSessionAdapterRegistry(),
+    runtimeAdmission,
     faultLog: () => Effect.void,
     publish: (envelope) => envelopes.push(envelope),
   });

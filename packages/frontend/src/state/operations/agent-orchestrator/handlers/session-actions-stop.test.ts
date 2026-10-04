@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
+import type { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { SessionRef } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
@@ -19,13 +19,12 @@ import {
   createSessionTurnStateFixture,
   getSession,
 } from "./session-actions.test-helpers";
+import { createTestOpencodeSdkAdapter } from "./opencode-agent-engine.test-support";
 describe("agent-orchestrator/handlers/session-actions stop", () => {
   test("an old stop result does not stop a new execution episode", async () => {
     const entered = Promise.withResolvers<void>();
     const finish = Promise.withResolvers<void>();
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     adapter.stopSession = () => {
       entered.resolve();
       return finish.promise;
@@ -51,9 +50,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     });
   });
   test("stops a workspace-scoped planner session and clears pending state", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const stopTargets: SessionRef[] = [];
     adapter.stopSession = async (target) => {
       stopTargets.push(target);
@@ -117,9 +114,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("keeps session active when authoritative session stop fails", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const originalStopSession = adapter.stopSession;
     let localStopCalls = 0;
     adapter.stopSession = async () => {
@@ -187,9 +182,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("keeps terminal event state when the host stop later fails", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const session = buildSession();
     const sessionsRef = createSessionsRef([session]);
     const sessionsStore = createAgentSessionsStore("/tmp/repo");
@@ -217,9 +210,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("records stop intent before awaiting authoritative session stop", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const stopDeferred = createDeferred<void>();
     adapter.stopSession = async () => {
       await stopDeferred.promise;
@@ -249,9 +240,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("preserves the user-stopped notice when local stop emits session_finished", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const originalSubscribeEvents = adapter.subscribeEvents;
     const originalStopSession = adapter.stopSession;
     let sessionEventListener: Parameters<OpencodeSdkAdapter["subscribeEvents"]>[1] | null = null;
@@ -389,9 +378,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("appends the user-stopped notice when authoritative stop has no local runtime event", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const originalStopSession = adapter.stopSession;
     let localStopCalls = 0;
     adapter.stopSession = async () => {
@@ -457,9 +444,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("clears renderer turn state after the host stop succeeds", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const callOrder: string[] = [];
     adapter.stopSession = async () => {
       callOrder.push("host-stop");
@@ -488,9 +473,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("stops shared-runtime qa sessions authoritatively without runId", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     let buildStopCalls = 0;
     adapter.stopSession = async (target) => {
       buildStopCalls += 1;
@@ -519,9 +502,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("refreshes task-owned state after the host stops the session", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
 
     const callOrder: string[] = [];
     adapter.stopSession = async () => {
@@ -596,9 +577,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("refreshes task-owned state after successful authoritative stop", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const refreshTaskDataCalls: Array<[string, string | string[] | undefined]> = [];
     let loadSourceSessionCalls = 0;
     let stopCalls = 0;
@@ -643,9 +622,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("does not refresh task state for a repository session", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const stopTargets: SessionRef[] = [];
     adapter.stopSession = async (target) => {
       stopTargets.push(target);
@@ -683,9 +660,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("stops an unbound live session without task side effects", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const stopTargets: SessionRef[] = [];
     adapter.stopSession = async (target) => {
       stopTargets.push(target);
@@ -723,9 +698,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("rejects a missing association before stopping the runtime", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     let stopCalls = 0;
     adapter.stopSession = async () => {
       stopCalls += 1;
@@ -742,9 +715,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("reports workflow stop refresh failure", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     adapter.stopSession = async () => {};
     const taskCalls: string[] = [];
     const sessionsRef = createSessionsRef([buildSession()]);
@@ -769,9 +740,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("rejects stop without an active workspace", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const stopTargets: SessionRef[] = [];
     adapter.stopSession = async (target) => {
       stopTargets.push(target);
@@ -791,9 +760,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("allows stopping a running session even when role is unavailable", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     let stopCalls = 0;
     adapter.stopSession = async () => {
       stopCalls += 1;

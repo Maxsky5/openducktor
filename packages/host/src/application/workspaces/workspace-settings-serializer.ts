@@ -41,7 +41,8 @@ export const withSerializedConfigWrites = (
     saveRepoSettings: (workspaceId, settings) =>
       serialize(service.saveRepoSettings(workspaceId, settings)),
     updateRepoHooks: (workspaceId, hooks) => serialize(service.updateRepoHooks(workspaceId, hooks)),
-    saveSettingsSnapshot: (snapshot) => serialize(service.saveSettingsSnapshot(snapshot)),
+    saveSettingsSnapshotWith: (snapshot, commit) =>
+      serialize(service.saveSettingsSnapshotWith(snapshot, commit)),
     updateAgentModelFavorites: (favorites) =>
       serialize(service.updateAgentModelFavorites(favorites)),
     updateKanbanTaskCardView: (taskCardView) =>

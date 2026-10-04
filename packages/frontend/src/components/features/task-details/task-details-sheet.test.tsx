@@ -67,7 +67,13 @@ const createWorkspaceStateValue = (): WorkspaceStateContextValue => ({
   },
   detectGithubRepository: async () => null,
   saveGlobalGitConfig: async () => {},
-  saveSettingsSnapshot: async () => {},
+  previewSettingsSnapshotRuntime: async () => ({ impact: null }),
+  saveSettingsSnapshot: async () => ({
+    type: "saved" as const,
+    workspaces: [],
+    runtimeApplications: [],
+    refreshError: null,
+  }),
   saveAgentModelFavorites: async () => {
     throw new Error("saveAgentModelFavorites is not used in this test");
   },

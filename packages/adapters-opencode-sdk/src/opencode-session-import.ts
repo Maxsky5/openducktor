@@ -51,7 +51,7 @@ export const createOpenCodeSessionImportPort = (input: {
     return row;
   };
   return {
-    scanSessions: async function* (signal) {
+    scanSessions: async function* ({ signal }) {
       if (!client.v2?.session)
         throw new Error("Update OpenCode to a version with the V2 session listing API.");
       let cursor: string | null = null;

@@ -86,6 +86,7 @@ export const createOpenCodeSessionControlAdapter = ({
 
   const runSummary = (
     operation: string,
+    repoPath: string,
     run: () => Promise<AgentSessionSummary>,
   ): Effect.Effect<AgentSessionControlSummary, HostError> =>
     serializeRuntime(
@@ -99,7 +100,7 @@ export const createOpenCodeSessionControlAdapter = ({
         Effect.flatMap((summary) =>
           commit(`${operation}.commit`, () => ({
             value: summary,
-            changes: state.applyControlSummary(summary),
+            changes: state.applyControlSummary(repoPath, summary),
           })),
         ),
         Effect.flatMap((summary) => toAgentSessionControlSummary(summary, operation)),
@@ -125,7 +126,7 @@ export const createOpenCodeSessionControlAdapter = ({
             (summary) =>
               commit(`${operation}.commit`, () => ({
                 value: summary,
-                changes: state.applyControlSummary(summary, { keepActivity: true }),
+                changes: state.applyControlSummary(ref.repoPath, summary, { keepActivity: true }),
               })),
             (failure) =>
               commit(`${operation}.report-projection-failure`, () => ({
@@ -133,7 +134,7 @@ export const createOpenCodeSessionControlAdapter = ({
                 changes: [
                   {
                     type: "fault",
-                    repoPath: runtime.repoPath,
+                    repoPath: ref.repoPath,
                     ref,
                     operation,
                     message: failure.message,
@@ -158,7 +159,7 @@ export const createOpenCodeSessionControlAdapter = ({
       if (input.model) {
         request.model = input.model;
       }
-      return runSummary("opencode-live-session.start-session", () =>
+      return runSummary("opencode-live-session.start-session", input.repoPath, () =>
         connection.startSession(request),
       );
     },
@@ -175,7 +176,7 @@ export const createOpenCodeSessionControlAdapter = ({
       if (input.systemPrompt) {
         request.systemPrompt = input.systemPrompt;
       }
-      return runSummary("opencode-live-session.resume-session", () =>
+      return runSummary("opencode-live-session.resume-session", input.repoPath, () =>
         connection.resumeSession(request),
       );
     },
@@ -195,7 +196,7 @@ export const createOpenCodeSessionControlAdapter = ({
       }
       return serializeSessionSend(
         refKey(sessionRef),
-        runSummary("opencode-live-session.continue-interrupted-turn", () =>
+        runSummary("opencode-live-session.continue-interrupted-turn", input.repoPath, () =>
           connection.continueInterruptedTurn(request),
         ),
       ).pipe(
@@ -224,7 +225,7 @@ export const createOpenCodeSessionControlAdapter = ({
       if (input.model) {
         request.model = input.model;
       }
-      return runSummary("opencode-live-session.fork-session", () =>
+      return runSummary("opencode-live-session.fork-session", input.repoPath, () =>
         connection.forkSession(request),
       );
     },

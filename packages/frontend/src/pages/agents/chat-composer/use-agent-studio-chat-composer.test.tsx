@@ -51,7 +51,7 @@ type BasePropsOverrides = Partial<Omit<HookArgs, "selectedSession">> & {
   selectedSessionIdentity?: AgentSessionIdentity | null;
   selectedSessionModel?: AgentSessionState["selectedModel"];
   sessionRuntimeData?: HookArgs["selectedSession"]["runtimeData"];
-  repoReadinessState?: HookArgs["selectedSession"]["runtimeReadiness"]["state"];
+  runtimeReadinessState?: HookArgs["selectedSession"]["runtimeReadiness"]["state"];
   selectedSessionSummary?: AgentSessionSummary | null;
 };
 
@@ -340,7 +340,7 @@ const createBaseProps = (overrides: BasePropsOverrides = {}): HookArgs => {
     selectedSessionIdentity: selectedSessionIdentityOverride,
     selectedSessionModel: selectedSessionModelOverride,
     sessionRuntimeData: sessionRuntimeDataOverride,
-    repoReadinessState,
+    runtimeReadinessState,
     selectedSessionSummary: selectedSessionSummaryOverride,
     role: roleOverride,
     ...hookOverrides
@@ -369,7 +369,7 @@ const createBaseProps = (overrides: BasePropsOverrides = {}): HookArgs => {
       loadedSession,
       runtimeData: sessionRuntimeDataOverride ?? createSessionRuntimeData(),
       runtimeReadiness: {
-        state: repoReadinessState ?? "ready",
+        state: runtimeReadinessState ?? "ready",
         message: null,
         isLoadingChecks: false,
         refreshChecks: async () => {},
@@ -498,7 +498,7 @@ describe("useAgentStudioChatComposer", () => {
     } satisfies AgentModelSelection;
     const harness = createHookHarness(
       createBaseProps({
-        repoReadinessState: "checking",
+        runtimeReadinessState: "checking",
         repoSettings: createRepoSettings(expectedSelection),
         loadCatalog,
       }),
@@ -1031,7 +1031,7 @@ describe("useAgentStudioChatComposer", () => {
     const loadFileSearch = mock(async () => FILE_SEARCH_RESULTS);
     const harness = createHookHarness(
       createBaseProps({
-        repoReadinessState: "checking",
+        runtimeReadinessState: "checking",
         loadFileSearch,
       }),
       {

@@ -17,6 +17,7 @@ import { createQueryClient } from "@/lib/query-client";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import {
   ChecksStateContext,
+  HostRuntimeStatusContext,
   RuntimeDefinitionsContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
@@ -24,8 +25,14 @@ import { host } from "@/state/operations/host";
 import { repoBranchesQueryOptions } from "@/state/queries/git";
 import { runtimeExecutableQueryOptions } from "@/state/queries/runtime";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
-import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createChecksStateFixture,
+  createDeferred,
+  createHostRuntimeStatusContextValue,
+  createSettingsSnapshotFixture,
+} from "@/test-utils/shared-test-fixtures";
 import { useSettingsModalController } from "./use-settings-modal-controller";
+import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 
 enableReactActEnvironment();
 
@@ -78,7 +85,9 @@ const loadSettingsSnapshot = mock(async (): Promise<SettingsSnapshot> => setting
 
 let refreshChecks = mock(async () => {});
 let saveGlobalGitConfig = mock(async () => {});
-let saveSettingsSnapshot = mock(async (_snapshot: SettingsSnapshotSaveInput) => {});
+let saveSettingsSnapshot = mock(async (_snapshot: SettingsSnapshotSaveInput) =>
+  savedSettingsResult(),
+);
 let workspaceRecords: WorkspaceRecord[] = [
   {
     workspaceId: "repo",
@@ -176,18 +185,12 @@ const createHookHarness = (
     loadSettingsSnapshot,
     detectGithubRepository: async () => null,
     saveGlobalGitConfig,
+    previewSettingsSnapshotRuntime: async () => ({ impact: null }),
     saveSettingsSnapshot,
     saveAgentModelFavorites: async () => loadSettingsSnapshot(),
   } satisfies React.ComponentProps<typeof WorkspaceStateContext.Provider>["value"];
 
-  const checksState = {
-    runtimeCheck: null,
-    taskStoreCheck: null,
-    runtimeCheckFailureKind: null,
-    taskStoreCheckFailureKind: null,
-    isLoadingChecks: false,
-    refreshChecks,
-  } satisfies React.ComponentProps<typeof ChecksStateContext.Provider>["value"];
+  const checksState = createChecksStateFixture({ refreshChecks });
 
   const runtimeDefinitionsContext = {
     runtimeDefinitions,
@@ -213,7 +216,9 @@ const createHookHarness = (
       <ChecksStateContext.Provider value={checksState}>
         <QueryClientProvider client={queryClient}>
           <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsContext}>
-            {children}
+            <HostRuntimeStatusContext.Provider value={createHostRuntimeStatusContextValue()}>
+              {children}
+            </HostRuntimeStatusContext.Provider>
           </RuntimeDefinitionsContext.Provider>
         </QueryClientProvider>
       </ChecksStateContext.Provider>
@@ -280,7 +285,7 @@ describe("useSettingsModalController", () => {
   test("does not refresh diagnostics when the modal opens", async () => {
     refreshChecks = mock(async () => {});
     saveGlobalGitConfig = mock(async () => {});
-    saveSettingsSnapshot = mock(async () => {});
+    saveSettingsSnapshot = mock(async () => savedSettingsResult());
     loadSettingsSnapshot.mockClear();
 
     const harness = createHookHarness(true);
@@ -523,6 +528,7 @@ describe("useSettingsModalController", () => {
       if (repo) {
         savedWorkspaces.push(repo);
       }
+      return savedSettingsResult();
     });
     const harness = createHookHarness(true);
 
@@ -554,7 +560,7 @@ describe("useSettingsModalController", () => {
   });
 
   test("an unchanged repository does not reach the settings save payload", async () => {
-    saveSettingsSnapshot = mock(async () => {});
+    saveSettingsSnapshot = mock(async () => savedSettingsResult());
     const harness = createHookHarness(true);
 
     try {
@@ -574,7 +580,7 @@ describe("useSettingsModalController", () => {
   });
 
   test("fails closed when runtime definitions cannot load", async () => {
-    saveSettingsSnapshot = mock(async () => {});
+    saveSettingsSnapshot = mock(async () => savedSettingsResult());
     const harness = createHookHarness(true, false, {
       runtimeDefinitionsError: "Definitions failed",
     });
@@ -626,7 +632,7 @@ describe("useSettingsModalController", () => {
         ? initialValidationByKind[kind].promise
         : repeatedValidationByKind[kind].promise;
     });
-    saveSettingsSnapshot = mock(async () => {});
+    saveSettingsSnapshot = mock(async () => savedSettingsResult());
     const harness = createHookHarness(true, false, { prefillExecutableCheck: false });
 
     try {
@@ -676,7 +682,7 @@ describe("useSettingsModalController", () => {
         runtimes: [{ kind, path, ok: true, version: "1.0.0", error: null }],
       };
     });
-    saveSettingsSnapshot = mock(async () => {});
+    saveSettingsSnapshot = mock(async () => savedSettingsResult());
     const harness = createHookHarness(true, false, { prefillExecutableCheck: false });
 
     try {
@@ -719,7 +725,7 @@ describe("useSettingsModalController", () => {
         runtimes: [{ kind, path, ok: true, version: "1.0.0", error: null }],
       };
     });
-    saveSettingsSnapshot = mock(async () => {});
+    saveSettingsSnapshot = mock(async () => savedSettingsResult());
     const harness = createHookHarness(true, false, { prefillExecutableCheck: false });
 
     try {
@@ -812,7 +818,7 @@ describe("useSettingsModalController", () => {
 
   for (const enabled of [true, false]) {
     test(`blocks an invalid Azure mapping after switching workspaces when enabled is ${enabled}`, async () => {
-      saveSettingsSnapshot = mock(async () => {});
+      saveSettingsSnapshot = mock(async () => savedSettingsResult());
       const harness = createHookHarness(true);
       try {
         await harness.mount();
@@ -1113,7 +1119,7 @@ describe("useSettingsModalController", () => {
   });
 
   test("keeps role edits local until Save Settings and discards them when settings close", async () => {
-    saveSettingsSnapshot = mock(async () => {});
+    saveSettingsSnapshot = mock(async () => savedSettingsResult());
     const harness = createHookHarness(true);
     const role = { id: "review", name: "Reviewer", systemPrompt: "Review code." };
     try {
@@ -1134,6 +1140,7 @@ describe("useSettingsModalController", () => {
       expect(saved).toBe(true);
       expect(saveSettingsSnapshot).toHaveBeenCalledWith(
         expect.objectContaining({ customAgentRoles: [role] }),
+        undefined,
       );
     } finally {
       await harness.unmount();
@@ -1143,7 +1150,7 @@ describe("useSettingsModalController", () => {
   test("discards a confirmed role deletion when Settings closes without saving", async () => {
     const role = { id: "review", name: "Reviewer", systemPrompt: "Review code." };
     settingsSnapshotFactory = () => ({ ...createSettingsSnapshot(), customAgentRoles: [role] });
-    saveSettingsSnapshot = mock(async () => {});
+    saveSettingsSnapshot = mock(async () => savedSettingsResult());
     const harness = createHookHarness(true);
     try {
       await harness.mount();
@@ -1249,7 +1256,7 @@ describe("useSettingsModalController", () => {
   test("saves chat-only edits through the settings snapshot query path", async () => {
     refreshChecks = mock(async () => {});
     saveGlobalGitConfig = mock(async () => {});
-    saveSettingsSnapshot = mock(async () => {});
+    saveSettingsSnapshot = mock(async () => savedSettingsResult());
     loadSettingsSnapshot.mockClear();
 
     const harness = createHookHarness(true);
@@ -1279,18 +1286,21 @@ describe("useSettingsModalController", () => {
     expect(expectedTheme).toBe("light");
     expect(saveGlobalGitConfig).toHaveBeenCalledTimes(0);
     expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
-    expect(saveSettingsSnapshot).toHaveBeenCalledWith({
-      ...expectedSnapshotUpdate,
-      chat: {
-        ...expectedSnapshot.chat,
-        showThinkingMessages: true,
+    expect(saveSettingsSnapshot).toHaveBeenCalledWith(
+      {
+        ...expectedSnapshotUpdate,
+        chat: {
+          ...expectedSnapshot.chat,
+          showThinkingMessages: true,
+        },
+        appearance: {
+          horizontalScrollbarVisibility: "hide",
+        },
+        reusablePrompts: [],
+        agentRuntimes: expectedSnapshot.agentRuntimes,
       },
-      appearance: {
-        horizontalScrollbarVisibility: "hide",
-      },
-      reusablePrompts: [],
-      agentRuntimes: expectedSnapshot.agentRuntimes,
-    });
+      undefined,
+    );
 
     await harness.unmount();
   });
@@ -1341,7 +1351,7 @@ describe("useSettingsModalController", () => {
   });
 
   test("blocks saving when a dev server draft has blank required fields", async () => {
-    saveSettingsSnapshot = mock(async () => {});
+    saveSettingsSnapshot = mock(async () => savedSettingsResult());
 
     const harness = createHookHarness(true);
 
@@ -1392,7 +1402,7 @@ describe("useSettingsModalController", () => {
   });
 
   test("surfaces agent default runtime validation errors before saving", async () => {
-    saveSettingsSnapshot = mock(async () => {});
+    saveSettingsSnapshot = mock(async () => savedSettingsResult());
 
     const harness = createHookHarness(true);
 

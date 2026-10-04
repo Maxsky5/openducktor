@@ -28,6 +28,7 @@ import type {
 } from "@openducktor/core";
 import { Effect } from "effect";
 import { HostValidationError, toHostOperationError } from "../../effect/host-errors";
+import type { RuntimeSessionTarget } from "../../ports/runtime-registry-port";
 import { resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
 import { loadClaudeHistory, loadClaudeRuntimeCatalog } from "./claude-agent-sdk-catalog";
 import {
@@ -360,11 +361,11 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     });
   }
 
-  stopSession(input: SessionRef) {
+  stopSession(input: RuntimeSessionTarget) {
     return this.sessionStore.stopSession(input);
   }
 
-  probeSessionStatus(input: SessionRef) {
+  probeSessionStatus(input: RuntimeSessionTarget) {
     return this.sessionStore.probeSessionStatus(input);
   }
 

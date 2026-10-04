@@ -1,9 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import {
-  OPENCODE_RUNTIME_DESCRIPTOR,
-  type RuntimeInstanceSummary,
-  type TaskStoreCheck,
-} from "@openducktor/contracts";
+import type { TaskStoreCheck } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import { waitFor } from "@testing-library/react";
 import { StrictMode, useMemo } from "react";
@@ -21,28 +17,13 @@ interface FactoryStateContract {
   queryClient: QueryClient | null;
 }
 
-const createRuntime = (): RuntimeInstanceSummary => ({
-  kind: "opencode",
-  runtimeId: "runtime-1",
-  repoPath: "/repo",
-  taskId: null,
-  role: "workspace",
-  workingDirectory: "/repo",
-  runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4096" },
-  startedAt: "2026-05-10T10:00:00.000Z",
-  descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-});
-
 const makeTaskStoreCheck = (): TaskStoreCheck => createTaskStoreCheckFixture();
 
 const lifecycleArgs = {
   activeWorkspace: null,
-  runtimeDefinitions: [],
   refreshBranches: async () => {},
-  refreshRepoRuntimeHealth: async () => ({}),
   refreshTaskStoreCheckForRepo: async () => makeTaskStoreCheck(),
   loadWorkspaceTasks: async () => {},
-  startRepoRuntime: async () => createRuntime(),
   clearBranchData: () => {},
 };
 

@@ -22,7 +22,7 @@ describe("resolveChatComposerPromptInputRuntime", () => {
   test("uses the loaded session working directory for session-scoped prompt inputs", () => {
     const runtime = resolveChatComposerPromptInputRuntime({
       workspaceRepoPath: "/repo",
-      repoReadinessState: "ready",
+      runtimeReadinessState: "ready",
       source: sessionSource(),
     });
 
@@ -40,12 +40,12 @@ describe("resolveChatComposerPromptInputRuntime", () => {
   test("waits for selected-session prompt inputs until the selected runtime is ready", () => {
     const checkingRuntime = resolveChatComposerPromptInputRuntime({
       workspaceRepoPath: "/repo",
-      repoReadinessState: "checking",
+      runtimeReadinessState: "checking",
       source: sessionSource(),
     });
     const blockedRuntime = resolveChatComposerPromptInputRuntime({
       workspaceRepoPath: "/repo",
-      repoReadinessState: "blocked",
+      runtimeReadinessState: "blocked",
       source: sessionSource(),
     });
 
@@ -64,7 +64,7 @@ describe("resolveChatComposerPromptInputRuntime", () => {
   test("keeps waiting-input sessions usable even when their raw status is starting", () => {
     const runtime = resolveChatComposerPromptInputRuntime({
       workspaceRepoPath: "/repo",
-      repoReadinessState: "ready",
+      runtimeReadinessState: "ready",
       source: sessionSource(),
     });
 
@@ -82,7 +82,7 @@ describe("resolveChatComposerPromptInputRuntime", () => {
   test("reports invalid selected session runtime context as unavailable", () => {
     const runtime = resolveChatComposerPromptInputRuntime({
       workspaceRepoPath: null,
-      repoReadinessState: "ready",
+      runtimeReadinessState: "ready",
       source: sessionSource(),
     });
 
@@ -97,7 +97,7 @@ describe("resolveChatComposerPromptInputRuntime", () => {
     expect(() =>
       resolveChatComposerPromptInputRuntime({
         workspaceRepoPath: "/repo",
-        repoReadinessState: "ready",
+        runtimeReadinessState: "ready",
         source: sessionSource({
           ...sessionIdentity(),
           workingDirectory: "",
@@ -109,7 +109,7 @@ describe("resolveChatComposerPromptInputRuntime", () => {
   test("uses repo runtime inputs before a session exists", () => {
     const runtime = resolveChatComposerPromptInputRuntime({
       workspaceRepoPath: "/repo",
-      repoReadinessState: "ready",
+      runtimeReadinessState: "ready",
       source: repoSource(),
     });
 
@@ -127,7 +127,7 @@ describe("resolveChatComposerPromptInputRuntime", () => {
   test("waits for repo-scoped prompt inputs until the selected runtime is ready", () => {
     const runtime = resolveChatComposerPromptInputRuntime({
       workspaceRepoPath: "/repo",
-      repoReadinessState: "checking",
+      runtimeReadinessState: "checking",
       source: repoSource(),
     });
 
@@ -141,12 +141,12 @@ describe("resolveChatComposerPromptInputRuntime", () => {
   test("reports missing repo and runtime as unavailable runtime input", () => {
     const missingRepoRuntime = resolveChatComposerPromptInputRuntime({
       workspaceRepoPath: null,
-      repoReadinessState: "ready",
+      runtimeReadinessState: "ready",
       source: repoSource(),
     });
     const missingRuntime = resolveChatComposerPromptInputRuntime({
       workspaceRepoPath: "/repo",
-      repoReadinessState: "ready",
+      runtimeReadinessState: "ready",
       source: repoSource(null),
     });
 

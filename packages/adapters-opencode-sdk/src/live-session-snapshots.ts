@@ -27,18 +27,22 @@ export type ListOpencodeRuntimeSnapshotSourcesInput = {
     session: ParsedOpencodeSession,
     scope: AgentSessionScope | undefined,
     descendant: boolean,
+    repoPath: string,
   ) => Promise<void>;
   readDirectory: ReadOpencodeDirectory;
   now: () => string;
 };
 
+/** One live session source. `repoPath` names the repository whose root owns the session tree. */
 export type OpencodeRuntimeSnapshotSource = AgentSessionRuntimeSnapshotSource & {
+  repoPath: string;
   externalSessionId: string;
   sessionAssociation: AgentSessionAssociation;
   workingDirectory: string;
 };
 
 export type OpencodeRuntimeSnapshotFailure = {
+  repoPath: string;
   externalSessionId: string;
   workingDirectory: string;
   message: string;
@@ -123,6 +127,7 @@ export const listOpencodeRuntimeSnapshotSources = async ({
     return filteredSessions
       .filter((session) => requireSessionDirectory(session.directory, session.id) === directory)
       .map((session) => ({
+        repoPath: session.repoPath,
         externalSessionId: session.id,
         workingDirectory: directory,
         message,
@@ -147,6 +152,7 @@ export const listOpencodeRuntimeSnapshotSources = async ({
     const directoryStatuses = statusesByDirectory.get(normalizedDirectory);
     const parentExternalSessionId = readParentExternalSessionId(session);
     const snapshot: OpencodeRuntimeSnapshotSource = {
+      repoPath: session.repoPath,
       externalSessionId: session.id,
       sessionAssociation: session.sessionAssociation,
       title: session.title,
@@ -303,6 +309,7 @@ const mergeOpencodePendingInputBySession = (
 };
 
 type OwnedSession = ParsedOpencodeSession & {
+  repoPath: string;
   sessionAssociation: AgentSessionAssociation;
 };
 
@@ -333,6 +340,7 @@ const readOwnedSessions = async (
     const conflict = conflicts.get(root.externalSessionId);
     if (conflict) {
       failures.push({
+        repoPath: root.repoPath,
         externalSessionId: root.externalSessionId,
         workingDirectory: root.workingDirectory,
         message: conflict,
@@ -350,8 +358,12 @@ const readOwnedSessions = async (
       });
       if (parent ? row.parentID !== parent : Boolean(row.parentID))
         throw new Error(`Invalid parent for OpenCode session ${id}.`);
-      await attachSession?.(row, root.sessionScope, parent !== undefined);
-      tree.set(id, { ...row, sessionAssociation: root.sessionScope ?? { kind: "unbound" } });
+      await attachSession?.(row, root.sessionScope, parent !== undefined, root.repoPath);
+      tree.set(id, {
+        ...row,
+        repoPath: root.repoPath,
+        sessionAssociation: root.sessionScope ?? { kind: "unbound" },
+      });
       const children = parseOpencodeSessionListPayload(
         unwrapData(
           await client.session.children({ sessionID: id, directory }),
@@ -371,6 +383,7 @@ const readOwnedSessions = async (
       });
     } catch (cause) {
       failures.push({
+        repoPath: root.repoPath,
         externalSessionId: root.externalSessionId,
         workingDirectory: root.workingDirectory,
         message: cause instanceof Error ? cause.message : String(cause),

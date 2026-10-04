@@ -3,7 +3,7 @@ import type { AgentEnginePort } from "@openducktor/core";
 import type { SessionStartGate } from "@/features/session-start/session-start-gate";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
-import type { EnsureExistingSessionRuntime, TaskDocuments } from "../runtime/runtime";
+import type { TaskDocuments } from "../runtime/runtime";
 import type { LoadSourceSession } from "../session-read-model/source-session-loader";
 import type { LoadSettingsSnapshotForRuntimePolicy } from "../support/session-runtime-policy";
 import type { SessionTurnState } from "../support/session-turn-state";
@@ -33,7 +33,6 @@ type SessionActionsDependencies = {
   closeBackgroundQuestions: PendingInputActionDependencies["closeBackgroundQuestions"];
   canonicalizePath: RuntimeDependencies["canonicalizePath"];
   startWorkflowSession: RuntimeDependencies["startWorkflowSession"];
-  ensureExistingSessionRuntime: EnsureExistingSessionRuntime;
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
   loadSettingsSnapshot: LoadSettingsSnapshotForRuntimePolicy;
@@ -60,7 +59,6 @@ export const createAgentSessionActions = ({
   closeBackgroundQuestions,
   canonicalizePath,
   startWorkflowSession,
-  ensureExistingSessionRuntime,
   loadTaskDocuments,
   loadRepoPromptOverrides,
   loadSettingsSnapshot,
@@ -77,7 +75,6 @@ export const createAgentSessionActions = ({
     repoEpochRef,
     currentWorkspaceRepoPathRef,
     taskRef,
-    ensureExistingSessionRuntime,
     loadRepoPromptOverrides,
   });
 

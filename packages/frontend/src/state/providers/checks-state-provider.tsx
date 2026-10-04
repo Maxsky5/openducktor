@@ -5,7 +5,7 @@ import {
   type ChecksOperationsContextValue,
   ChecksStateContext,
   useActiveWorkspaceContext,
-  useRepoRuntimeHealthContext,
+  useHostRuntimeStatusContext,
   useRuntimeAvailabilityContext,
 } from "../app-state-contexts";
 import { useChecks } from "../operations/workspace/use-checks";
@@ -15,18 +15,14 @@ type ChecksStateProviderProps = PropsWithChildren;
 export function ChecksStateProvider({ children }: ChecksStateProviderProps): ReactElement {
   const { activeWorkspace } = useActiveWorkspaceContext();
   const { availableRuntimeDefinitions } = useRuntimeAvailabilityContext();
-  const {
-    runtimeHealthByRuntime: repoRuntimeHealthByRuntime,
-    isLoadingRepoRuntimeHealth,
-    refreshRepoRuntimeHealth,
-  } = useRepoRuntimeHealthContext();
+  const { refresh: refreshHostRuntimeStatus } = useHostRuntimeStatusContext();
   const {
     runtimeCheck,
-    runtimeCheckFailureKind,
-    activeTaskStoreCheck,
-    taskStoreCheckFailureKind,
-    isLoadingChecks,
-    setIsLoadingChecks,
+    hostMcpBridgeCheck,
+    checksRepoPath,
+    taskStoreCheck,
+    workspaceRuntimeMcpCheck,
+    isRefreshingChecks,
     refreshRuntimeCheck,
     refreshTaskStoreCheckForRepo,
     refreshChecks,
@@ -36,28 +32,28 @@ export function ChecksStateProvider({ children }: ChecksStateProviderProps): Rea
   } = useChecks({
     activeWorkspace,
     runtimeDefinitions: availableRuntimeDefinitions,
-    runtimeHealthByRuntime: repoRuntimeHealthByRuntime,
-    isLoadingRepoRuntimeHealth,
-    refreshRepoRuntimeHealth,
+    refreshHostRuntimeStatus,
   });
 
   const checksStateValue = useMemo(
     () =>
       buildChecksStateValue({
         runtimeCheck,
-        taskStoreCheck: activeTaskStoreCheck,
-        runtimeCheckFailureKind,
-        taskStoreCheckFailureKind,
-        isLoadingChecks,
+        hostMcpBridgeCheck,
+        checksRepoPath,
+        taskStoreCheck,
+        workspaceRuntimeMcpCheck,
+        isRefreshingChecks,
         refreshChecks,
       }),
     [
-      activeTaskStoreCheck,
-      taskStoreCheckFailureKind,
-      isLoadingChecks,
+      checksRepoPath,
+      hostMcpBridgeCheck,
+      isRefreshingChecks,
       refreshChecks,
-      runtimeCheckFailureKind,
       runtimeCheck,
+      taskStoreCheck,
+      workspaceRuntimeMcpCheck,
     ],
   );
 
@@ -66,7 +62,6 @@ export function ChecksStateProvider({ children }: ChecksStateProviderProps): Rea
       refreshRuntimeCheck,
       refreshTaskStoreCheckForRepo,
       clearActiveTaskStoreCheck,
-      setIsLoadingChecks,
       hasRuntimeCheck,
       hasCachedTaskStoreCheck,
     }),
@@ -76,7 +71,6 @@ export function ChecksStateProvider({ children }: ChecksStateProviderProps): Rea
       hasRuntimeCheck,
       refreshTaskStoreCheckForRepo,
       refreshRuntimeCheck,
-      setIsLoadingChecks,
     ],
   );
 

@@ -1,10 +1,11 @@
-import type { CodexAppServerThread } from "@openducktor/contracts";
+import { type CodexAppServerThread, ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import {
   createAdapterWithTransport,
   RecordingTransport,
   codexThreadFixture,
   defaultCodexEffectivePolicy,
+  expectedThreadConfig,
 } from "./codex-app-server-adapter.test-harness";
 
 // Codex 0.155 filters.rs has no source kind that matches SessionSource::Custom.
@@ -63,7 +64,7 @@ describe("external Codex sessions", () => {
     const transport = new CatalogTransport("runtime-live", false);
     const adapter = createAdapterWithTransport(transport);
     const signal = new AbortController().signal;
-    const first = await adapter.listSessionMetadataPage({ ...ref, signal });
+    const first = await adapter.listSessionMetadataPage({ runtimeId: "runtime-live", signal });
     expect(first.sessions.map((row) => row.externalSessionId)).toEqual([
       "archived",
       "first",
@@ -106,14 +107,14 @@ describe("external Codex sessions", () => {
     const transport = new PagedTransport("runtime-live", false);
     const adapter = createAdapterWithTransport(transport);
     const signal = new AbortController().signal;
-    const first = await adapter.listSessionMetadataPage({ ...ref, signal });
+    const first = await adapter.listSessionMetadataPage({ runtimeId: "runtime-live", signal });
     expect(first.sessions.map((row) => row.externalSessionId)).toEqual(
       Array.from({ length: 100 }, (_, index) => String(2000 - index)),
     );
     expect(transport.calls).toHaveLength(2);
     if (!first.nextPageToken) throw new Error("Expected another metadata page");
     const second = await adapter.listSessionMetadataPage({
-      ...ref,
+      runtimeId: "runtime-live",
       signal,
       pageToken: first.nextPageToken,
     });
@@ -166,7 +167,7 @@ describe("external Codex sessions", () => {
       const transport = new SourceTransport("runtime-live", false);
       const adapter = createAdapterWithTransport(transport);
       const page = await adapter.listSessionMetadataPage({
-        ...ref,
+        runtimeId: "runtime-live",
         signal: new AbortController().signal,
       });
       expect(page.sessions.map((session) => session.externalSessionId)).toEqual(
@@ -199,7 +200,11 @@ describe("external Codex sessions", () => {
     expect(adapter.listLiveSessionSnapshots("runtime-live")).toEqual([]);
     expect(transport.calls.map((call) => call.method)).toEqual(["thread/read", "thread/resume"]);
     expect(transport.calls[0]?.params).toEqual({ threadId: "native", includeTurns: false });
-    expect(transport.calls[1]?.params).toEqual({ threadId: "native", excludeTurns: true });
+    expect(transport.calls[1]?.params).toEqual({
+      config: expectedThreadConfig("/repo", ODT_MCP_TOOL_NAMES),
+      threadId: "native",
+      excludeTurns: true,
+    });
     await prepared.attach();
     expect(adapter.listLiveSessionSnapshots("runtime-live")).toHaveLength(1);
     await adapter.sendUserMessage({
@@ -231,7 +236,14 @@ describe("external Codex sessions", () => {
       transport.calls.length = 0;
       await adapter.loadSessionContextUsage(binding);
       expect(transport.calls.filter((call) => call.method === "thread/resume")).toEqual([
-        { method: "thread/resume", params: { threadId: "native", excludeTurns: false } },
+        {
+          method: "thread/resume",
+          params: {
+            config: expectedThreadConfig("/repo", ODT_MCP_TOOL_NAMES),
+            threadId: "native",
+            excludeTurns: false,
+          },
+        },
       ]);
       await adapter.sendUserMessage({
         ...binding,

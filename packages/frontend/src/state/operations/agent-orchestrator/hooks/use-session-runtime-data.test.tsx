@@ -113,7 +113,7 @@ describe("useSessionRuntimeData", () => {
         repoPath: "/repo",
         selectedSession: null,
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
-        repoReadinessState: "ready",
+        runtimeReadinessState: "ready",
         loadRuntimeCatalog,
         readSessionTodos,
       },
@@ -150,7 +150,7 @@ describe("useSessionRuntimeData", () => {
         repoPath: "/repo",
         selectedSession: sessionTarget(),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: false }),
-        repoReadinessState: "ready",
+        runtimeReadinessState: "ready",
         loadRuntimeCatalog,
         readSessionTodos,
       },
@@ -175,7 +175,7 @@ describe("useSessionRuntimeData", () => {
     }
   });
 
-  test("waits for repo runtime readiness before reading session runtime data", async () => {
+  test("waits for runtime readiness before reading session runtime data", async () => {
     const loadRuntimeCatalog = mock(async () => {
       throw new Error("model catalog should not be queried");
     });
@@ -188,7 +188,7 @@ describe("useSessionRuntimeData", () => {
         repoPath: "/repo",
         selectedSession: sessionTarget(),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
-        repoReadinessState: "checking",
+        runtimeReadinessState: "checking",
         loadRuntimeCatalog,
         readSessionTodos,
       },
@@ -223,7 +223,7 @@ describe("useSessionRuntimeData", () => {
       repoPath: "/repo",
       selectedSession: sessionTarget(),
       runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
-      repoReadinessState: "ready",
+      runtimeReadinessState: "ready",
       loadRuntimeCatalog,
       readSessionTodos,
     };
@@ -236,7 +236,7 @@ describe("useSessionRuntimeData", () => {
 
       await harness.update({
         ...readyProps,
-        repoReadinessState: "checking",
+        runtimeReadinessState: "checking",
       });
 
       expect(loadRuntimeCatalog).toHaveBeenCalledTimes(1);
@@ -263,7 +263,7 @@ describe("useSessionRuntimeData", () => {
       repoPath: "/repo",
       selectedSession: sessionTarget(),
       runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: false }),
-      repoReadinessState: "ready",
+      runtimeReadinessState: "ready",
       loadRuntimeCatalog,
       readSessionTodos: mock(async () => []),
     };
@@ -277,7 +277,7 @@ describe("useSessionRuntimeData", () => {
 
       await harness.update({
         ...readyProps,
-        repoReadinessState: "checking",
+        runtimeReadinessState: "checking",
       });
       await harness.run(({ queryClient }) =>
         queryClient.invalidateQueries({
@@ -293,7 +293,7 @@ describe("useSessionRuntimeData", () => {
 
       await harness.update({
         ...readyProps,
-        repoReadinessState: "ready",
+        runtimeReadinessState: "ready",
       });
       await harness.waitFor(() => loadRuntimeCatalog.mock.calls.length === 2, 2000);
       expect(loadRuntimeCatalog).toHaveBeenCalledTimes(2);
@@ -312,7 +312,7 @@ describe("useSessionRuntimeData", () => {
         repoPath: "/repo",
         selectedSession: sessionTarget(),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
-        repoReadinessState: "ready" as const,
+        runtimeReadinessState: "ready" as const,
         loadRuntimeCatalog,
         readSessionTodos,
       },
@@ -347,7 +347,7 @@ describe("useSessionRuntimeData", () => {
         repoPath: "/repo",
         selectedSession: sessionTarget(),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
-        repoReadinessState: "ready",
+        runtimeReadinessState: "ready",
         loadRuntimeCatalog,
         readSessionTodos,
       },
@@ -410,7 +410,7 @@ describe("useSessionRuntimeData", () => {
         repoPath: "/repo",
         selectedSession: sessionTarget(),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: false }),
-        repoReadinessState: "ready",
+        runtimeReadinessState: "ready",
         loadRuntimeCatalog,
         readSessionTodos,
       },
@@ -481,7 +481,7 @@ describe("useSessionRuntimeData", () => {
         repoPath: "/repo",
         selectedSession: sessionTarget(),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: false }),
-        repoReadinessState: "ready",
+        runtimeReadinessState: "ready",
         loadRuntimeCatalog,
         readSessionTodos: mock(async () => []),
       },
@@ -539,7 +539,7 @@ describe("useSessionRuntimeData", () => {
         repoPath: "/repo",
         selectedSession: sessionTarget(),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: false }),
-        repoReadinessState: "ready",
+        runtimeReadinessState: "ready",
         loadRuntimeCatalog,
         readSessionTodos: mock(async () => []),
       },
@@ -590,7 +590,7 @@ describe("useSessionRuntimeData", () => {
         repoPath: "/repo",
         selectedSession: sessionTarget(),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
-        repoReadinessState: "ready",
+        runtimeReadinessState: "ready",
         loadRuntimeCatalog,
         readSessionTodos,
       },
@@ -635,7 +635,7 @@ describe("useSessionRuntimeData", () => {
         repoPath: "/repo",
         selectedSession: sessionTarget(sessionState({ runtimeKind: "codex" })),
         runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR],
-        repoReadinessState: "ready",
+        runtimeReadinessState: "ready",
         loadRuntimeCatalog,
         readSessionTodos,
       },
@@ -680,7 +680,7 @@ describe("useSessionRuntimeData", () => {
         selectedSession: sessionTarget(starting),
         sessionState: starting,
         runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR],
-        repoReadinessState: "ready",
+        runtimeReadinessState: "ready",
         loadRuntimeCatalog: mock(async () =>
           availableRuntimeCatalog({ ...emptyCatalog, runtime: CODEX_RUNTIME_DESCRIPTOR }),
         ),
@@ -732,7 +732,7 @@ describe("useSessionRuntimeData", () => {
       repoPath: "/repo",
       selectedSession: sessionTarget(),
       runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
-      repoReadinessState: "ready",
+      runtimeReadinessState: "ready",
       loadRuntimeCatalog,
       readSessionTodos,
     };
@@ -763,7 +763,7 @@ describe("useSessionRuntimeData", () => {
       repoPath: "/repo",
       selectedSession: sessionTarget(),
       runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
-      repoReadinessState: "ready",
+      runtimeReadinessState: "ready",
       loadRuntimeCatalog,
       readSessionTodos,
     };
@@ -796,7 +796,7 @@ describe("useSessionRuntimeData", () => {
         repoPath: null,
         selectedSession: identityTarget(),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
-        repoReadinessState: "ready",
+        runtimeReadinessState: "ready",
         loadRuntimeCatalog,
         readSessionTodos,
       },
@@ -825,7 +825,7 @@ describe("useSessionRuntimeData", () => {
         repoPath: "/repo",
         selectedSession: sessionTarget(sessionState({ workingDirectory: "" })),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
-        repoReadinessState: "ready",
+        runtimeReadinessState: "ready",
         loadRuntimeCatalog,
         readSessionTodos,
       },

@@ -7,8 +7,9 @@ import {
   type WorkspaceSessionImportResult,
   type WorkspaceSessionExecutionTarget,
 } from "@openducktor/contracts";
-import { Cause, Clock, Deferred, Effect, Exit, Fiber, FiberId } from "effect";
+import { Clock, Deferred, Effect, Exit, Fiber, FiberId } from "effect";
 import {
+  causeMessage,
   type HostError,
   toHostOperationError,
   HostValidationError,
@@ -16,10 +17,13 @@ import {
   hasNestedNodeErrorCode,
 } from "../../effect/host-errors";
 import type { AgentSessionLiveAdapterRegistryPort } from "../../ports/agent-session-live-adapter-port";
+import type { RuntimeAdmissionPort } from "../../ports/runtime-admission-port";
 import type { RuntimeSessionImportPort } from "../../ports/runtime-session-import-port";
 import type { WorkspaceSessionServiceDependencies } from "./workspace-session-service";
 import type { WorkspaceSessionUpdatedPublisher } from "./workspace-session-runtime-persistence";
 import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
+import type { WorkspaceSettingsService } from "./workspace-settings-model";
+import { createOtherWorkspaceOwnersReader, ownerKey } from "./workspace-session-import-owners";
 
 const MAX_CATALOGS = 8;
 const MAX_RECORDS = 100_000;
@@ -52,14 +56,17 @@ type Catalog = {
   };
 };
 type Dependencies = Pick<WorkspaceSessionServiceDependencies, "store" | "runtime" | "git"> & {
-  settings: Pick<WorkspaceSessionServiceDependencies["settings"], "getRepoConfig">;
+  settings: Pick<WorkspaceSettingsService, "getRepoConfig" | "getWorkspaceCatalog">;
   registry: AgentSessionLiveAdapterRegistryPort;
   publishUpdated: WorkspaceSessionUpdatedPublisher;
   lifecycle: TaskSessionLifecycleCoordinator;
+  /** Admits the attachment like any session control, so a lifecycle action waits for it. */
+  runtimeAdmission: RuntimeAdmissionPort;
 };
 
 export const createWorkspaceSessionImportService = (dependencies: Dependencies) => {
-  const { settings, runtime, git, registry, publishUpdated, lifecycle } = dependencies;
+  const { settings, runtime, git, registry, publishUpdated, lifecycle, runtimeAdmission } =
+    dependencies;
   const store = {
     listRuntimeOwners: (input: Parameters<Dependencies["store"]["listRuntimeOwners"]>[0]) =>
       dependencies.store
@@ -146,6 +153,12 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
         );
       }),
     );
+  const otherWorkspaceOwners = createOtherWorkspaceOwnersReader({
+    settings,
+    git,
+    candidateDirectory,
+    listRuntimeOwners: store.listRuntimeOwners,
+  });
   const collect = (
     entry: Catalog,
     adapter: Parameters<AgentSessionLiveAdapterRegistryPort["register"]>[0],
@@ -159,8 +172,12 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
           workspaceId: entry.workspaceId,
           repoPath: entry.repoPath,
         });
+        const foreign = yield* otherWorkspaceOwners({
+          workspaceId: entry.workspaceId,
+          repoPath: entry.repoPath,
+        });
         const owned = new Set(
-          owners
+          [...owners, ...[...foreign.values()].map(({ owner }) => owner)]
             .filter((owner) => owner.runtimeKind === entry.runtimeKind)
             .map((owner) => owner.externalSessionId),
         );
@@ -175,7 +192,10 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
           allowed,
           eligibleDirectories: new Map(),
           records: new Map(),
-          reader: adapter.sessionImport.scanSessions(entry.controller.signal),
+          reader: adapter.sessionImport.scanSessions({
+            repoPath: entry.repoPath,
+            signal: entry.controller.signal,
+          }),
           done: false,
           bytes: 0,
           scanned: 0,
@@ -255,13 +275,7 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
         const discover = Effect.gen(function* () {
           const scope = yield* scopeFor(input.workspaceId);
           selected.repoPath = scope.repoPath;
-          yield* runtime
-            .runtimeEnsure({ repoPath: scope.repoPath, runtimeKind: input.runtimeKind })
-            .pipe(
-              Effect.mapError((cause) =>
-                toHostOperationError(cause, "workspaceSessionImport.runtime"),
-              ),
-            );
+          yield* runtime.requireReady(input.runtimeKind);
           const adapter = yield* registry.resolveForScope({
             repoPath: scope.repoPath,
             runtimeKind: input.runtimeKind,
@@ -362,78 +376,101 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
             return yield* invalid(
               `This conversation belongs to task ${task.taskId} (${task.role}).`,
             );
-          yield* runtime
-            .runtimeEnsure({ repoPath: scope.repoPath, runtimeKind: input.runtimeKind })
-            .pipe(
-              Effect.mapError((cause) =>
-                toHostOperationError(cause, "workspaceSessionImport.runtime"),
-              ),
+          const foreign = (yield* otherWorkspaceOwners(scope)).get(
+            ownerKey(input.runtimeKind, input.externalSessionId),
+          );
+          if (foreign)
+            return yield* invalid(
+              `This conversation belongs to workspace ${foreign.workspaceName}. Open it from that workspace.`,
             );
-          const adapter = yield* registry.resolveForScope({
-            repoPath: scope.repoPath,
-            runtimeKind: input.runtimeKind,
-          });
-          const canonical = yield* git.canonicalizePath(input.workingDirectory);
-          const ref = {
-            repoPath: scope.repoPath,
-            runtimeKind: input.runtimeKind,
-            externalSessionId: input.externalSessionId,
-            workingDirectory: input.workingDirectory,
-          };
-          const { source, saved } = yield* lifecycle.runWorktreeRead(
-            canonical,
+          // The import runs as one admitted control. A restart or disable waits for it, then
+          // reviews its session, so the runtime generation cannot change inside the import.
+          return yield* runtimeAdmission.admit(
+            input.runtimeKind,
             Effect.gen(function* () {
-              const source = yield* adapter.sessionImport.inspectSession(ref);
+              // Import only from the live discovery of the current runtime generation.
+              const catalog = catalogs.get(input.catalogRequestId);
               if (
-                source.metadata.externalSessionId !== input.externalSessionId ||
-                source.metadata.workingDirectory !== input.workingDirectory ||
-                source.metadata.runtimeKind !== input.runtimeKind
+                !catalog ||
+                catalog.workspaceId !== input.workspaceId ||
+                catalog.runtimeKind !== input.runtimeKind ||
+                !catalog.discovery?.records.has(input.externalSessionId)
               )
-                return yield* invalid("The source conversation changed. Reload sessions.");
-              const current = yield* registry.resolveForScope(ref);
-              if (current.binding !== adapter.binding)
-                return yield* invalid("The selected runtime restarted. Reload sessions.");
-              const target = yield* targetFor(scope.repoPath, input.workingDirectory);
-              const now = yield* Clock.currentTimeMillis;
-              const saved = yield* store.importSession({
-                ...scope,
-                session: {
-                  id: crypto.randomUUID(),
-                  runtimeKind: input.runtimeKind,
-                  externalSessionId: input.externalSessionId,
-                  executionTarget: target,
-                  manualTitle: source.metadata.title || null,
-                  generatedTitle: null,
-                  roleSnapshot: null,
-                  selectedModel: source.selectedModel ?? null,
-                  createdAt: now,
-                  updatedAt: now,
-                  archivedAt: null,
-                },
+                return yield* invalid("This session list is no longer current. Reload sessions.");
+              const adapter = yield* registry.resolveForScope({
+                repoPath: scope.repoPath,
+                runtimeKind: input.runtimeKind,
               });
-              return { source, saved };
+              if (adapter.binding.runtimeId !== catalog.runtimeId)
+                return yield* invalid("The runtime restarted. Reload sessions.");
+              const canonical = yield* git.canonicalizePath(input.workingDirectory);
+              const ref = {
+                repoPath: scope.repoPath,
+                runtimeKind: input.runtimeKind,
+                externalSessionId: input.externalSessionId,
+                workingDirectory: input.workingDirectory,
+              };
+              const { source, saved } = yield* lifecycle.runWorktreeRead(
+                canonical,
+                Effect.gen(function* () {
+                  const source = yield* adapter.sessionImport.inspectSession(ref);
+                  if (
+                    source.metadata.externalSessionId !== input.externalSessionId ||
+                    source.metadata.workingDirectory !== input.workingDirectory ||
+                    source.metadata.runtimeKind !== input.runtimeKind
+                  )
+                    return yield* invalid("The source conversation changed. Reload sessions.");
+                  const target = yield* targetFor(scope.repoPath, input.workingDirectory);
+                  const now = yield* Clock.currentTimeMillis;
+                  const saved = yield* store.importSession({
+                    ...scope,
+                    session: {
+                      id: crypto.randomUUID(),
+                      runtimeKind: input.runtimeKind,
+                      externalSessionId: input.externalSessionId,
+                      executionTarget: target,
+                      manualTitle: source.metadata.title || null,
+                      generatedTitle: null,
+                      roleSnapshot: null,
+                      selectedModel: source.selectedModel ?? null,
+                      createdAt: now,
+                      updatedAt: now,
+                      archivedAt: null,
+                    },
+                  });
+                  return { source, saved };
+                }),
+              );
+              if (!saved.created) return { ...saved, openError: null };
+              const opened = yield* Effect.exit(
+                source.attach.pipe(
+                  Effect.zipRight(publishUpdated(input.workspaceId, saved.session)),
+                ),
+              );
+              return {
+                ...saved,
+                openError: Exit.isFailure(opened)
+                  ? `The chat was saved, but opening failed: ${causeMessage(opened.cause)}. Open the saved chat to retry.`
+                  : null,
+              };
             }),
           );
-          if (!saved.created) return { ...saved, openError: null };
-          const opened = yield* Effect.exit(
-            source.attach.pipe(Effect.zipRight(publishUpdated(input.workspaceId, saved.session))),
-          );
-          return {
-            ...saved,
-            openError: Exit.isFailure(opened)
-              ? `The chat was saved, but opening failed: ${Cause.pretty(opened.cause)}. Open the saved chat to retry.`
-              : null,
-          };
         }),
       );
     });
   return {
     list,
     release,
-    releaseRuntime: (repoPath: string, runtimeKind: string) =>
+    /**
+     * Drops the discovery catalogs of `runtimeKind` that a runtime other than `runtimeId` made.
+     * A catalog with no runtime yet stays. A null `runtimeId` drops every catalog of the kind.
+     */
+    releaseRuntime: (runtimeKind: string, runtimeId: string | null) =>
       Effect.forEach(
         [...catalogs.entries()].filter(
-          ([, entry]) => entry.repoPath === repoPath && entry.runtimeKind === runtimeKind,
+          ([, entry]) =>
+            entry.runtimeKind === runtimeKind &&
+            (runtimeId === null || (entry.runtimeId !== "" && entry.runtimeId !== runtimeId)),
         ),
         ([catalogRequestId, entry]) =>
           release({ workspaceId: entry.workspaceId, catalogRequestId }),

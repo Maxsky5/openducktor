@@ -236,11 +236,11 @@ export function useAgentStudioSelectionController({
   });
   useSelectedSessionHistoryLoad({
     session: selectedSessionView.selectedSession.loadedSession,
-    repoReadinessState: selectedSessionView.selectedSession.runtimeReadiness.state,
+    runtimeReadinessState: selectedSessionView.selectedSession.runtimeReadiness.state,
   });
   const contextLoadError = useSelectedSessionContextLoad({
     session: selectedSessionView.selectedSession.loadedSession,
-    repoReadinessState: selectedSessionView.selectedSession.runtimeReadiness.state,
+    runtimeReadinessState: selectedSessionView.selectedSession.runtimeReadiness.state,
   });
   const selectedSessionViewWithContextError = useMemo<AgentStudioSelectedSessionView>(() => {
     if (contextLoadError === null) {

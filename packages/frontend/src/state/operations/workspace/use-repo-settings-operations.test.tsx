@@ -5,6 +5,8 @@ import {
   type RepositoryGitProviderContext,
   type SettingsSnapshot,
   type SettingsSnapshotSaveInput,
+  type SettingsSnapshotSaveResult,
+  type WorkspaceRecord,
   type DevServerOwner,
 } from "@openducktor/contracts";
 import { type QueryClient, QueryObserver, useQueryClient } from "@tanstack/react-query";
@@ -33,6 +35,12 @@ import { settingsSnapshotQueryOptions, workspaceQueryKeys } from "../../queries/
 import { customAgentRolesQueryOptions } from "../../queries/workspace-sessions";
 import { host } from "../shared/host";
 import { useRepoSettingsOperations } from "./use-repo-settings-operations";
+
+const savedResult = (workspaces: WorkspaceRecord[]): SettingsSnapshotSaveResult => ({
+  type: "saved",
+  workspaces,
+  runtimeApplications: [],
+});
 
 const reactActEnvironment: typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -141,7 +149,7 @@ const startSettingsSave = async ({
     if (saveError !== undefined) {
       throw saveError;
     }
-    return [createWorkspaceRecord()];
+    return savedResult([createWorkspaceRecord()]);
   });
   host.workspaceGetSettingsSnapshot = mock(async () => normalizedSnapshot);
   const applyWorkspaceRecords = mock(() => {});
@@ -886,7 +894,7 @@ describe("use-repo-settings-operations", () => {
       saveGit: host.workspaceUpdateGlobalGitConfig,
     };
     host.workspaceGetSettingsSnapshot = async () => saved;
-    host.workspaceSaveSettingsSnapshot = async () => [];
+    host.workspaceSaveSettingsSnapshot = async () => savedResult([]);
     host.workspaceUpdateGlobalGitConfig = async () => {};
     const harness = createHookHarness({
       activeWorkspace: createWorkspaceRecord(),
@@ -903,7 +911,9 @@ describe("use-repo-settings-operations", () => {
       unsubscribe = observer.subscribe((result) => {
         if (result.data) observed = result.data;
       });
-      await harness.run((operations) => save(operations, saved));
+      await harness.run(async (operations) => {
+        await save(operations, saved);
+      });
       expect(observed.system).toEqual(saved.system);
     } finally {
       unsubscribe();
@@ -917,9 +927,9 @@ describe("use-repo-settings-operations", () => {
   test("saves settings snapshot atomically and refreshes normalized snapshot from the host", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
-    const workspaceSaveSettingsSnapshot = mock(async (_snapshot: SettingsSnapshotSaveInput) => [
-      createWorkspaceRecord(),
-    ]);
+    const workspaceSaveSettingsSnapshot = mock(async (_snapshot: SettingsSnapshotSaveInput) =>
+      savedResult([createWorkspaceRecord()]),
+    );
     const explicitChatSettings = {
       showThinkingMessages: true,
       expandFileDiffsByDefault: false,
@@ -992,9 +1002,7 @@ describe("use-repo-settings-operations", () => {
         .setQueryData(workspaceQueryKeys.settingsSnapshot(), createSettingsSnapshot());
       harness.getQueryClient().setQueryData(taskQueryKeys.repoData("/repo-a"), { tasks: [] });
       await harness.getLatest().saveSettingsSnapshot(snapshot);
-      expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledWith({
-        ...snapshot,
-      });
+      expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledWith({ ...snapshot }, undefined);
       expect(workspaceSaveSettingsSnapshot.mock.calls[0]?.[0]?.chat).toEqual(explicitChatSettings);
       expect(
         workspaceSaveSettingsSnapshot.mock.calls[0]?.[0]?.autopilot.alwaysStartQaReviewsFresh,
@@ -1035,7 +1043,7 @@ describe("use-repo-settings-operations", () => {
       return refreshedTasks;
     });
     const normalizedSnapshot = createSettingsSnapshotFixture({ kanban: { doneVisibleDays: 7 } });
-    const workspaceSaveSettingsSnapshot = mock(async () => [createWorkspaceRecord()]);
+    const workspaceSaveSettingsSnapshot = mock(async () => savedResult([createWorkspaceRecord()]));
     const workspaceGetSettingsSnapshot = mock(async () => normalizedSnapshot);
     const original = {
       tasksList: host.tasksList,
@@ -1087,7 +1095,7 @@ describe("use-repo-settings-operations", () => {
   test("keeps a committed settings save successful when the task refresh fails", async () => {
     const taskRefreshFailure = new Error("task refresh failed");
     const normalizedSnapshot = createSettingsSnapshotFixture({ kanban: { doneVisibleDays: 7 } });
-    const workspaceSaveSettingsSnapshot = mock(async () => [createWorkspaceRecord()]);
+    const workspaceSaveSettingsSnapshot = mock(async () => savedResult([createWorkspaceRecord()]));
     const workspaceGetSettingsSnapshot = mock(async () => normalizedSnapshot);
     const tasksList = mock(async () => {
       throw taskRefreshFailure;
@@ -1114,7 +1122,7 @@ describe("use-repo-settings-operations", () => {
 
       await expect(
         harness.getLatest().saveSettingsSnapshot(normalizedSnapshot),
-      ).resolves.toBeUndefined();
+      ).resolves.toMatchObject({ type: "saved" });
 
       expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledTimes(1);
       expect(
@@ -1128,6 +1136,51 @@ describe("use-repo-settings-operations", () => {
     } finally {
       await harness.unmount();
       host.tasksList = original.tasksList;
+      host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;
+      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
+    }
+  });
+
+  test("keeps the committed save and runtime results when the settings reload fails", async () => {
+    const workspaces = [createWorkspaceRecord()];
+    const workspaceSaveSettingsSnapshot = mock(async (): Promise<SettingsSnapshotSaveResult> => ({
+      type: "saved",
+      workspaces,
+      runtimeApplications: [
+        { kind: "opencode", effect: "replace", outcome: "failed", message: "missing binary" },
+      ],
+    }));
+    const workspaceGetSettingsSnapshot = mock(async () => {
+      throw new Error("settings read failed");
+    });
+    const applyWorkspaceRecords = mock(() => {});
+    const original = {
+      workspaceSaveSettingsSnapshot: host.workspaceSaveSettingsSnapshot,
+      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
+    };
+    host.workspaceSaveSettingsSnapshot = workspaceSaveSettingsSnapshot;
+    host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
+    const harness = createHookHarness({
+      activeWorkspace: createWorkspaceRecord(),
+      applyWorkspaceRecords,
+      applyWorkspaceRecord: mock(() => {}),
+    });
+
+    try {
+      await harness.mount();
+      const outcome = await harness.getLatest().saveSettingsSnapshot(createSettingsSnapshot());
+
+      expect(outcome).toMatchObject({
+        type: "saved",
+        refreshError: "settings read failed",
+        runtimeApplications: [{ kind: "opencode", outcome: "failed" }],
+      });
+      expect(applyWorkspaceRecords).toHaveBeenCalledWith(workspaces);
+      expect(
+        harness.getQueryClient().getQueryData<WorkspaceRecord[]>(workspaceQueryKeys.list()),
+      ).toEqual(workspaces);
+    } finally {
+      await harness.unmount();
       host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;
       host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
     }
@@ -1149,7 +1202,7 @@ describe("use-repo-settings-operations", () => {
         },
       },
     });
-    const workspaceSaveSettingsSnapshot = mock(async () => [reboundWorkspace]);
+    const workspaceSaveSettingsSnapshot = mock(async () => savedResult([reboundWorkspace]));
     const workspaceGetSettingsSnapshot = mock(async () => normalizedSnapshot);
     const tasksList = mock(async () => {
       throw taskRefreshFailure;
@@ -1176,7 +1229,7 @@ describe("use-repo-settings-operations", () => {
 
       await expect(
         harness.getLatest().saveSettingsSnapshot(normalizedSnapshot),
-      ).resolves.toBeUndefined();
+      ).resolves.toMatchObject({ type: "saved" });
 
       expect(tasksList).toHaveBeenCalledTimes(1);
       expect(tasksList).toHaveBeenCalledWith("/repo-b");
@@ -1286,7 +1339,7 @@ describe("use-repo-settings-operations", () => {
     host.devServerGetState = mock(async (repoPath, stateOwner) =>
       buildState({ repoPath, owner: stateOwner, scripts: [buildScript()] }),
     );
-    host.workspaceSaveSettingsSnapshot = mock(async () => [createWorkspaceRecord()]);
+    host.workspaceSaveSettingsSnapshot = mock(async () => savedResult([createWorkspaceRecord()]));
     host.workspaceGetSettingsSnapshot = mock(async () => normalizedSnapshot);
     const harness = createHookHarness({
       activeWorkspace: createWorkspaceRecord(),
@@ -1310,7 +1363,9 @@ describe("use-repo-settings-operations", () => {
       unsubscribeA = repoAObserver.subscribe(() => {});
       unsubscribeB = repoBObserver.subscribe(() => {});
       expect(repoAObserver.getCurrentResult().data?.scripts).toEqual([]);
-      await harness.run((operations) => operations.saveSettingsSnapshot(normalizedSnapshot));
+      await harness.run(async (operations) => {
+        await operations.saveSettingsSnapshot(normalizedSnapshot);
+      });
 
       expect(repoAObserver.getCurrentResult().data?.scripts).toEqual([buildScript()]);
       expect(repoBObserver.getCurrentResult().data?.scripts).toEqual([]);
@@ -1468,7 +1523,8 @@ describe("use-repo-settings-operations", () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
     const workspaceSaveSettingsSnapshot = mock(
-      async (_snapshotArg: Parameters<typeof host.workspaceSaveSettingsSnapshot>[0]) => [],
+      async (_snapshotArg: Parameters<typeof host.workspaceSaveSettingsSnapshot>[0]) =>
+        savedResult([]),
     );
     const workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshot());
 
@@ -1527,9 +1583,7 @@ describe("use-repo-settings-operations", () => {
     try {
       await harness.mount();
       await harness.getLatest().saveSettingsSnapshot(snapshot);
-      expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledWith({
-        ...snapshot,
-      });
+      expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledWith({ ...snapshot }, undefined);
       const savedSnapshot = workspaceSaveSettingsSnapshot.mock.calls[0]?.[0];
       if (savedSnapshot === undefined) {
         throw new Error("Expected settings snapshot to be forwarded.");

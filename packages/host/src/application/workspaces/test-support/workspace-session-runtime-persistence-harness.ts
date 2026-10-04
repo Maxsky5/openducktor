@@ -196,6 +196,7 @@ export const createPersistenceHarness = async (
   });
   const live = createAgentSessionLiveStateService({
     adapterRegistry: createLiveSessionAdapterRegistry(),
+    runtimeAdmission: { admit: (_runtimeKind, effect) => effect },
     persistence,
     faultLog: () => Effect.void,
     publish: (event) => {
@@ -206,14 +207,11 @@ export const createPersistenceHarness = async (
   const registration = live.createRuntimeRegistration({
     runtimeId: "runtime",
     runtimeKind,
-    repoPath: database.repoPath,
   });
   await Effect.runPromise(
     live.registerRuntimeAdapter(
       createAgentSessionRuntimeAdapterTestDouble(registration, {
-        matches: () => true,
         listSnapshots: () => Effect.succeed([]),
-        listRetainedSnapshots: () => Effect.succeed([]),
         resumeSession: (input) =>
           state.beforeControl.pipe(
             Effect.zipRight(
@@ -341,7 +339,7 @@ export const createPersistenceHarness = async (
         getRepoConfig: () => Effect.succeed(config),
         listCustomAgentRoles: () => Effect.succeed([]),
       },
-      runtime: { runtimeEnsure: () => Effect.dieMessage("unexpected runtime ensure") },
+      runtime: { requireReady: () => Effect.dieMessage("unexpected runtime readiness check") },
       live: { ...live, ...commands },
       git: createGitPortTestDouble({ canonicalizePath: (value) => Effect.succeed(value) }),
       settingsConfig: createSettingsConfigTestDouble({}),

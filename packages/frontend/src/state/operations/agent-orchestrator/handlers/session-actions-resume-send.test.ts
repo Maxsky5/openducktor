@@ -1,12 +1,14 @@
 import { expect, test } from "bun:test";
-import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentSessionLiveSnapshot } from "@openducktor/contracts";
 import { replaceAgentSession } from "@/state/agent-session-collection";
 import {
   applyAgentSessionLiveDelta,
   buildAgentSessionLiveCollection,
 } from "../session-read-model/agent-session-live-projection";
-import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
+import {
+  createOpenCodeAgentEngineTestAdapter,
+  createTestOpencodeSdkAdapter,
+} from "./opencode-agent-engine.test-support";
 import { acceptedUserMessage } from "./session-actions-send.test-support";
 import {
   buildSession,
@@ -28,11 +30,7 @@ test.each(["opencode", "codex", "claude"] as const)(
       });
       const sessionsRef = createSessionsRef([session]);
       const calls: string[] = [];
-      const adapter = createOpenCodeAgentEngineTestAdapter(
-        new OpencodeSdkAdapter({
-          resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-        }),
-      );
+      const adapter = createOpenCodeAgentEngineTestAdapter(createTestOpencodeSdkAdapter());
       adapter.stopSession = async () => {
         calls.push("stop");
       };
@@ -95,9 +93,7 @@ test.each(["opencode", "codex", "claude"] as const)(
     });
     const sessionsRef = createSessionsRef([session]);
     const calls: string[] = [];
-    const adapter = createOpenCodeAgentEngineTestAdapter(
-      new OpencodeSdkAdapter({ resolveCreationSettings: async () => ({ defaults: [], role: [] }) }),
-    );
+    const adapter = createOpenCodeAgentEngineTestAdapter(createTestOpencodeSdkAdapter());
     adapter.resumeSession = async (input) => {
       calls.push("resume");
       expect(input).toEqual({
@@ -126,9 +122,7 @@ test.each(["opencode", "codex", "claude"] as const)(
 test("does not send or erase the stopped state when resume fails", async () => {
   const session = buildSession({ status: "stopped", sessionAssociation: { kind: "repository" } });
   const sessionsRef = createSessionsRef([session]);
-  const adapter = createOpenCodeAgentEngineTestAdapter(
-    new OpencodeSdkAdapter({ resolveCreationSettings: async () => ({ defaults: [], role: [] }) }),
-  );
+  const adapter = createOpenCodeAgentEngineTestAdapter(createTestOpencodeSdkAdapter());
   adapter.resumeSession = async () => {
     throw new Error("Resume failed");
   };
@@ -152,9 +146,7 @@ test("does not overwrite a newer question that arrives during resume", async () 
     sessionAssociation: { kind: "repository" },
   });
   const sessionsRef = createSessionsRef([session]);
-  const adapter = createOpenCodeAgentEngineTestAdapter(
-    new OpencodeSdkAdapter({ resolveCreationSettings: async () => ({ defaults: [], role: [] }) }),
-  );
+  const adapter = createOpenCodeAgentEngineTestAdapter(createTestOpencodeSdkAdapter());
   adapter.resumeSession = async () => {
     sessionsRef.current = replaceAgentSession(sessionsRef.current, {
       ...getSession(sessionsRef),
@@ -187,9 +179,7 @@ test.each(["workspace-change", "wrong-session", "still-stopped"] as const)(
     const session = buildSession({ status: "stopped", sessionAssociation: { kind: "repository" } });
     const sessionsRef = createSessionsRef([session]);
     const repoEpochRef = { current: 1 };
-    const adapter = createOpenCodeAgentEngineTestAdapter(
-      new OpencodeSdkAdapter({ resolveCreationSettings: async () => ({ defaults: [], role: [] }) }),
-    );
+    const adapter = createOpenCodeAgentEngineTestAdapter(createTestOpencodeSdkAdapter());
     adapter.resumeSession = async () => {
       if (outcome === "workspace-change") repoEpochRef.current++;
       return {

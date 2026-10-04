@@ -1,4 +1,4 @@
-import { type ReactElement, useCallback, useState } from "react";
+import { type ReactElement, type ReactNode, useCallback, useState } from "react";
 import { flushSync } from "react-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,9 +22,10 @@ import { useOnboardingWorkspaceCompletion } from "./use-onboarding-workspace-com
 
 type OnboardingPageProps = {
   onComplete: () => void;
+  headerActions?: ReactNode;
 };
 
-export function OnboardingPage({ onComplete }: OnboardingPageProps): ReactElement {
+export function OnboardingPage({ onComplete, headerActions }: OnboardingPageProps): ReactElement {
   const [stage, setStage] = useState<OnboardingStage>("welcome");
   const changeStage = useCallback((nextStage: OnboardingStage): void => {
     if (!document.startViewTransition) {
@@ -58,7 +59,7 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps): ReactElemen
   });
 
   return (
-    <OnboardingLayout stage={stage}>
+    <OnboardingLayout stage={stage} headerActions={headerActions}>
       {stage === "welcome" ? <WelcomeStage onContinue={() => changeStage("runtimes")} /> : null}
       {stage === "runtimes" ? (
         <RuntimeStage

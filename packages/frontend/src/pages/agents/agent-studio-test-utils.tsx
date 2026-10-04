@@ -19,7 +19,7 @@ import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import {
   ChecksOperationsContext,
   ChecksStateContext,
-  RepoRuntimeHealthContext,
+  HostRuntimeStatusContext,
   RuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
 import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
@@ -31,20 +31,19 @@ import {
   createSettingsSnapshotFixture,
   createAgentSessionFixture as createSharedAgentSessionFixture,
   createDeferred as createSharedDeferred,
-  createRepoRuntimeHealthFixture as createSharedRepoRuntimeHealthFixture,
+  createChecksStateFixture,
+  createHostRuntimeStatusContextValue,
   createTaskCardFixture as createSharedTaskCardFixture,
   createTaskStoreCheckFixture as createSharedTaskStoreCheckFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { HostRuntimeStatusContextValue } from "@/types/state-slices";
 
 type RuntimeDefinitionsContextValue = NonNullable<
   ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"]
 >;
 type ChecksStateContextValue = NonNullable<
   ComponentProps<typeof ChecksStateContext.Provider>["value"]
->;
-type RepoRuntimeHealthContextValue = NonNullable<
-  ComponentProps<typeof RepoRuntimeHealthContext.Provider>["value"]
 >;
 
 type HookHarnessOptions = {
@@ -53,8 +52,8 @@ type HookHarnessOptions = {
   runtimeDefinitionsContextRef?: { current: RuntimeDefinitionsContextValue };
   checksStateContext?: ChecksStateContextValue;
   checksStateContextRef?: { current: ChecksStateContextValue };
-  repoRuntimeHealthContext?: RepoRuntimeHealthContextValue;
-  repoRuntimeHealthContextRef?: { current: RepoRuntimeHealthContextValue };
+  hostRuntimeStatusContext?: HostRuntimeStatusContextValue;
+  hostRuntimeStatusContextRef?: { current: HostRuntimeStatusContextValue };
   seedSettingsSnapshot?: boolean;
   wrapper?: (props: PropsWithChildren) => ReactElement;
 };
@@ -175,32 +174,9 @@ export const createRuntimeDefinitionsContextValue = (
   };
 };
 
-export const createChecksStateContextValue = (
-  overrides: Partial<ChecksStateContextValue> = {},
-): ChecksStateContextValue => ({
-  runtimeCheck: null,
-  taskStoreCheck: null,
-  runtimeCheckFailureKind: null,
-  taskStoreCheckFailureKind: null,
-  isLoadingChecks: false,
-  refreshChecks: async () => undefined,
-  ...overrides,
-});
+export const createChecksStateContextValue = createChecksStateFixture;
 
-export const createRepoRuntimeHealthContextValue = (
-  overrides: Partial<RepoRuntimeHealthContextValue> = {},
-): RepoRuntimeHealthContextValue => {
-  const runtimeHealthByRuntime = overrides.runtimeHealthByRuntime ?? {
-    opencode: createSharedRepoRuntimeHealthFixture(),
-  };
-
-  return {
-    runtimeHealthByRuntime,
-    isLoadingRepoRuntimeHealth: false,
-    refreshRepoRuntimeHealth: async () => runtimeHealthByRuntime,
-    ...overrides,
-  };
-};
+export { createHostRuntimeStatusContextValue };
 
 const TEST_CHECKS_OPERATIONS_CONTEXT = {
   refreshRuntimeCheck: async () => ({
@@ -216,7 +192,6 @@ const TEST_CHECKS_OPERATIONS_CONTEXT = {
       { taskStorePath: "/repo/task-stores/workspace/database.sqlite" },
     ),
   clearActiveTaskStoreCheck: () => {},
-  setIsLoadingChecks: () => {},
   hasRuntimeCheck: () => false,
   hasCachedTaskStoreCheck: () => false,
 } satisfies ComponentProps<typeof ChecksOperationsContext.Provider>["value"];
@@ -249,8 +224,8 @@ export const createHookHarness = <Props, State>(
   const checksStateContextRef = options?.checksStateContextRef ?? {
     current: options?.checksStateContext ?? createChecksStateContextValue(),
   };
-  const repoRuntimeHealthContextRef = options?.repoRuntimeHealthContextRef ?? {
-    current: options?.repoRuntimeHealthContext ?? createRepoRuntimeHealthContextValue(),
+  const hostRuntimeStatusContextRef = options?.hostRuntimeStatusContextRef ?? {
+    current: options?.hostRuntimeStatusContext ?? createHostRuntimeStatusContextValue(),
   };
   const queryClient = options?.queryClient ?? createQueryClient();
   if (options?.seedSettingsSnapshot !== false) {
@@ -277,8 +252,8 @@ export const createHookHarness = <Props, State>(
       { value: checksOperationsContext },
       renderQueryProvider(
         createElement(
-          RepoRuntimeHealthContext.Provider,
-          { value: repoRuntimeHealthContextRef.current },
+          HostRuntimeStatusContext.Provider,
+          { value: hostRuntimeStatusContextRef.current },
           createElement(
             ChecksStateContext.Provider,
             { value: checksStateContextRef.current },

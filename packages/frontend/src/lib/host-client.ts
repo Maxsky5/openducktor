@@ -66,6 +66,7 @@ export const hostBridge: HostBridge = {
   client: hostClientProxy,
   subscribeWorkspaceSessionUpdates: (listener) =>
     getShellBridge().subscribeWorkspaceSessionUpdates(listener),
+  subscribeRuntimeChanges: (listener) => getShellBridge().subscribeRuntimeChanges(listener),
   subscribeRunEvents: (listener) => getShellBridge().subscribeRunEvents(listener),
   subscribeAzureDevOpsConnectionUpdates: (listener) =>
     getShellBridge().subscribeAzureDevOpsConnectionUpdates(listener),

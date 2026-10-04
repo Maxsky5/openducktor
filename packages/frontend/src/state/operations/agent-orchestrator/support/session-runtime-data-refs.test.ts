@@ -73,7 +73,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
     });
   });
 
-  test("returns stable refs without depending on repo runtime readiness", () => {
+  test("returns stable refs without depending on runtime readiness", () => {
     expect(
       resolveSessionRuntimeDataRefs({
         repoPath: "/repo",

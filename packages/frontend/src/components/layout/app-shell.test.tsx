@@ -28,7 +28,7 @@ import {
   ActiveWorkspaceContext,
   AgentSessionsContext,
   ChecksStateContext,
-  RepoRuntimeHealthContext,
+  HostRuntimeStatusContext,
   RuntimeDefinitionsContext,
   TasksStateContext,
   WorkspaceBranchStateContext,
@@ -47,9 +47,12 @@ import {
 import { platformQueryOptions } from "@/state/queries/system";
 import { repoTaskDataQueryOptions } from "@/state/queries/tasks";
 import { repoConfigQueryOptions, settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { DiagnosticsAutoOpenProvider } from "@/state/providers/diagnostics-auto-open-provider";
 import { WorkspaceActivityContext } from "@/state/workspace-activity/workspace-activity-context";
 import {
+  createChecksStateFixture,
   createDeferred,
+  createHostRuntimeStatusContextValue,
   createSettingsSnapshotFixture,
   createWorkspaceActivityObserverStub,
 } from "@/test-utils/shared-test-fixtures";
@@ -211,7 +214,13 @@ const createWorkspaceState = (
   loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
   detectGithubRepository: async () => null,
   saveGlobalGitConfig: async () => undefined,
-  saveSettingsSnapshot: async () => undefined,
+  previewSettingsSnapshotRuntime: async () => ({ impact: null }),
+  saveSettingsSnapshot: async () => ({
+    type: "saved" as const,
+    workspaces: [],
+    runtimeApplications: [],
+    refreshError: null,
+  }),
   saveAgentModelFavorites: async () => {
     throw new Error("saveAgentModelFavorites is not used in this test");
   },
@@ -250,14 +259,7 @@ function CurrentRoute(): ReactElement {
   return <div data-testid="current-route">{location.pathname}</div>;
 }
 
-const createChecksState = (): ChecksStateContextValue => ({
-  runtimeCheck: null,
-  taskStoreCheck: null,
-  runtimeCheckFailureKind: null,
-  taskStoreCheckFailureKind: null,
-  isLoadingChecks: false,
-  refreshChecks: async () => undefined,
-});
+const createChecksState = (): ChecksStateContextValue => createChecksStateFixture();
 
 const createTasksState = (): TasksStateContextValue => ({
   tasksAreCurrent: true,
@@ -384,37 +386,37 @@ function AppShellTestEnvironment({
                       },
                     }}
                   >
-                    <RepoRuntimeHealthContext.Provider
-                      value={{
-                        runtimeHealthByRuntime: {},
-                        isLoadingRepoRuntimeHealth: false,
-                        refreshRepoRuntimeHealth: async () => ({}),
-                      }}
+                    <HostRuntimeStatusContext.Provider
+                      value={createHostRuntimeStatusContextValue({ statusByKind: {} })}
                     >
-                      <ChecksStateContext.Provider value={createChecksState()}>
-                        <TasksStateContext.Provider value={createTasksState()}>
-                          <AgentSessionsContext.Provider value={createAgentSessionsStore("/repo")}>
-                            <NotificationContext.Provider value={notificationContextValue}>
-                              <WorkspaceActivityContext.Provider
-                                value={createWorkspaceActivityObserverStub()}
-                              >
-                                <WorkspacePreviewTransitionGuardProvider>
-                                  <Routes>
-                                    <Route element={<AppShell />}>
-                                      <Route path="/kanban" element={<main>Kanban</main>} />
-                                      <Route
-                                        path="/onboarding"
-                                        element={<Navigate to="/kanban" replace />}
-                                      />
-                                    </Route>
-                                  </Routes>
-                                </WorkspacePreviewTransitionGuardProvider>
-                              </WorkspaceActivityContext.Provider>
-                            </NotificationContext.Provider>
-                          </AgentSessionsContext.Provider>
-                        </TasksStateContext.Provider>
-                      </ChecksStateContext.Provider>
-                    </RepoRuntimeHealthContext.Provider>
+                      <DiagnosticsAutoOpenProvider>
+                        <ChecksStateContext.Provider value={createChecksState()}>
+                          <TasksStateContext.Provider value={createTasksState()}>
+                            <AgentSessionsContext.Provider
+                              value={createAgentSessionsStore("/repo")}
+                            >
+                              <NotificationContext.Provider value={notificationContextValue}>
+                                <WorkspaceActivityContext.Provider
+                                  value={createWorkspaceActivityObserverStub()}
+                                >
+                                  <WorkspacePreviewTransitionGuardProvider>
+                                    <Routes>
+                                      <Route element={<AppShell />}>
+                                        <Route path="/kanban" element={<main>Kanban</main>} />
+                                        <Route
+                                          path="/onboarding"
+                                          element={<Navigate to="/kanban" replace />}
+                                        />
+                                      </Route>
+                                    </Routes>
+                                  </WorkspacePreviewTransitionGuardProvider>
+                                </WorkspaceActivityContext.Provider>
+                              </NotificationContext.Provider>
+                            </AgentSessionsContext.Provider>
+                          </TasksStateContext.Provider>
+                        </ChecksStateContext.Provider>
+                      </DiagnosticsAutoOpenProvider>
+                    </HostRuntimeStatusContext.Provider>
                   </RuntimeDefinitionsContext.Provider>
                 </WorkspaceBranchStateContext.Provider>
               </WorkspaceStateContext.Provider>

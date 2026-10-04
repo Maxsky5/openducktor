@@ -19,8 +19,6 @@ import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-s
 
 type CodexProjectionRuntime = {
   readonly runtimeId: string;
-  readonly repoPath: string;
-  readonly workingDirectory: string;
 };
 
 type QueuedMutation = {
@@ -53,7 +51,6 @@ export const createCodexLiveSessionProjection = ({
   const binding = liveSessionLifecycle.createRuntimeRegistration({
     runtimeId: runtime.runtimeId,
     runtimeKind: "codex" as const,
-    repoPath: runtime.repoPath,
   });
   const queuedMutations: QueuedMutation[] = [];
   let forwarding = false;
@@ -95,21 +92,28 @@ export const createCodexLiveSessionProjection = ({
             for (const event of parsed.transcriptEvents) {
               changes.push({ type: "transcript_event", event });
             }
+            // The shared runtime serves many repositories. A runtime-wide change goes to
+            // each repository that has a live session.
+            const liveRepoPaths = new Set(
+              [...snapshotsByRef.values()].map((snapshot) => snapshot.ref.repoPath),
+            );
             if (parsed.catalogInvalidated) {
-              changes.push({
-                type: "catalog_invalidated",
-                repoPath: runtime.repoPath,
-                runtimeKind: "codex",
-              });
+              for (const repoPath of liveRepoPaths) {
+                changes.push({ type: "catalog_invalidated", repoPath, runtimeKind: "codex" });
+              }
             }
             if (parsed.fault) {
               const fault = {
                 type: "fault",
-                repoPath: runtime.repoPath,
                 operation: "codex-live-session.process-event",
                 message: parsed.fault,
-              } satisfies AgentSessionLiveAdapterChange;
-              changes.push(parsed.faultRef ? { ...fault, ref: parsed.faultRef } : fault);
+              } as const;
+              if (parsed.faultRef) {
+                const ref = parsed.faultRef;
+                changes.push({ ...fault, repoPath: ref.repoPath, ref });
+              } else {
+                for (const repoPath of liveRepoPaths) changes.push({ ...fault, repoPath });
+              }
             }
             return {
               value: undefined,
@@ -129,12 +133,12 @@ export const createCodexLiveSessionProjection = ({
         "codex-live-session.normalize-snapshot",
       ).pipe(
         Effect.flatMap((parsed) =>
-          parsed.ref.runtimeKind === "codex" && parsed.ref.repoPath === runtime.repoPath
+          parsed.ref.runtimeKind === "codex"
             ? Effect.succeed(parsed)
             : Effect.fail(
                 new HostValidationError({
                   field: "snapshot.ref",
-                  message: `Codex runtime '${runtime.runtimeId}' produced a snapshot outside repo '${runtime.repoPath}'.`,
+                  message: `Codex runtime '${runtime.runtimeId}' produced a snapshot outside the Codex runtime.`,
                   details: { runtimeId: runtime.runtimeId, ref: parsed.ref },
                 }),
               ),
@@ -149,15 +153,6 @@ export const createCodexLiveSessionProjection = ({
       `codex-live-session.normalize-${field}`,
     ).pipe(
       Effect.flatMap((parsed) => {
-        if (parsed.repoPath !== runtime.repoPath) {
-          return Effect.fail(
-            new HostValidationError({
-              field: `${field}.repoPath`,
-              message: `Codex runtime '${runtime.runtimeId}' produced ${field} outside repo '${runtime.repoPath}'.`,
-              details: { runtimeId: runtime.runtimeId, ref: parsed },
-            }),
-          );
-        }
         if (parsed.runtimeKind !== "codex") {
           return Effect.fail(
             new HostValidationError({
@@ -251,16 +246,15 @@ export const createCodexLiveSessionProjection = ({
     applyMutation,
     enqueueMutation,
     hasSnapshot: (ref: AgentSessionLiveRef): boolean => snapshotsByRef.has(refKey(ref)),
-    listSnapshots: (repoPath: string) =>
-      repoPath === runtime.repoPath
-        ? Effect.forEach([...snapshotsByRef.values()], (snapshot) =>
-            parseProjectionValue(
-              agentSessionLiveSnapshotSchema,
-              snapshot,
-              "codex-live-session.clone-snapshot",
-            ),
-          )
-        : Effect.succeed([]),
+    /** Lists the live sessions of every repository on this runtime. */
+    listSnapshots: () =>
+      Effect.forEach([...snapshotsByRef.values()], (snapshot) =>
+        parseProjectionValue(
+          agentSessionLiveSnapshotSchema,
+          snapshot,
+          "codex-live-session.clone-snapshot",
+        ),
+      ),
     readSnapshot: (ref: AgentSessionLiveRef) => {
       const snapshot = snapshotsByRef.get(refKey(ref));
       return Effect.succeed(

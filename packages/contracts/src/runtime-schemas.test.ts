@@ -37,7 +37,6 @@ import {
   repoConfigSchema,
   runtimeDescriptorSchema,
   runtimeInstanceRefSchema,
-  runtimeInstanceSummaryRoleSchema,
   runtimeInstanceSummarySchema,
   runtimeTransportSchema,
   slashCommandCatalogSchema,
@@ -925,10 +924,6 @@ describe("runtime schemas", () => {
     const parsed = runtimeInstanceSummarySchema.parse({
       kind: "opencode",
       runtimeId: "runtime-1",
-      repoPath: "/repo",
-      taskId: null,
-      role: "workspace",
-      workingDirectory: "/repo",
       runtimeRoute: {
         type: "local_http",
         endpoint: "http://127.0.0.1:4100",
@@ -985,10 +980,6 @@ describe("runtime schemas", () => {
     const result = runtimeInstanceSummarySchema.safeParse({
       kind: "opencode",
       runtimeId: "runtime-1",
-      repoPath: "/repo",
-      taskId: null,
-      role: "workspace",
-      workingDirectory: "/repo",
       runtimeRoute: {
         type: "local_http",
         endpoint: "http://127.0.0.1:4100",
@@ -1207,10 +1198,6 @@ describe("runtime schemas", () => {
       runtimeInstanceSummarySchema.parse({
         kind: "opencode",
         runtimeId: "runtime-stdio",
-        repoPath: "/repo",
-        taskId: null,
-        role: "workspace",
-        workingDirectory: "/repo",
         runtimeRoute: {
           type: "stdio",
           identity: " runtime-stdio ",
@@ -1238,10 +1225,6 @@ describe("runtime schemas", () => {
       runtimeInstanceSummarySchema.parse({
         kind: "claude",
         runtimeId: "runtime-claude",
-        repoPath: "/repo",
-        taskId: null,
-        role: "workspace",
-        workingDirectory: "/repo",
         runtimeRoute: {
           type: "host_service",
           identity: " runtime-claude ",
@@ -1256,10 +1239,6 @@ describe("runtime schemas", () => {
     const baseSummary = {
       kind: "opencode",
       runtimeId: "runtime-stdio",
-      repoPath: "/repo",
-      taskId: null,
-      role: "workspace",
-      workingDirectory: "/repo",
       startedAt: "2026-01-01T00:00:00.000Z",
       descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
     } as const;
@@ -1742,9 +1721,7 @@ describe("runtime schemas", () => {
     ).toThrow("Duplicate slash command id: review");
   });
 
-  test("agent runtime role and task worktree schemas enforce boundaries", () => {
-    expect(runtimeInstanceSummaryRoleSchema.parse("workspace")).toBe("workspace");
-    expect(() => runtimeInstanceSummaryRoleSchema.parse("planner")).toThrow();
+  test("task worktree schema enforces boundaries", () => {
     expect(
       taskWorktreeSummarySchema.parse({
         workingDirectory: "/repo/worktrees/task-1",

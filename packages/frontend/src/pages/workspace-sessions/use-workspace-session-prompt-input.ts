@@ -15,15 +15,15 @@ export function useWorkspaceSessionPromptInput({
   repoPath,
   record,
   identity,
-  repoReadinessState,
+  runtimeReadinessState,
   reusablePrompts,
 }: {
   repoPath: string;
   record: WorkspaceSession;
   identity: AgentSessionIdentity | null;
-  repoReadinessState: Parameters<
+  runtimeReadinessState: Parameters<
     typeof resolveChatComposerPromptInputRuntime
-  >[0]["repoReadinessState"];
+  >[0]["runtimeReadinessState"];
   reusablePrompts: ReusablePrompt[];
 }) {
   const runtime = useRuntimeAvailabilityContext();
@@ -31,7 +31,7 @@ export function useWorkspaceSessionPromptInput({
   const promptInputRuntime = useMemo(() => {
     const resolved = resolveChatComposerPromptInputRuntime({
       workspaceRepoPath: repoPath,
-      repoReadinessState: repoReadinessState,
+      runtimeReadinessState,
       source: identity
         ? { kind: "session", session: identity }
         : { kind: "repo", runtimeKind: record.runtimeKind },
@@ -46,7 +46,7 @@ export function useWorkspaceSessionPromptInput({
     };
   }, [
     identity,
-    repoReadinessState,
+    runtimeReadinessState,
     repoPath,
     record.runtimeKind,
     record.executionTarget.workingDirectory,

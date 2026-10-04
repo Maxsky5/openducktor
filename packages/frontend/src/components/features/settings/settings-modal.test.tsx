@@ -7,17 +7,21 @@ import { createQueryClient } from "@/lib/query-client";
 import { IssueImportDialog } from "@/pages/kanban/issue-import-dialog";
 import {
   ChecksStateContext,
+  HostRuntimeStatusContext,
   RuntimeDefinitionsContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
 import { runtimeExecutableQueryOptions } from "@/state/queries/runtime";
 import { repoBranchesQueryOptions } from "@/state/queries/git";
 import {
+  createChecksStateFixture,
   createGitProviderContextFixture,
+  createHostRuntimeStatusContextValue,
   createSettingsSnapshotFixture,
   createRepoSettingsConfigFixture,
 } from "@/test-utils/shared-test-fixtures";
 import { SettingsModal, SettingsModalProvider } from "./settings-modal";
+import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 
 for (const shared of [true, false]) {
   // Two full dialog opens and prompt editor loads exceed the CI unit-test budget.
@@ -57,6 +61,7 @@ for (const shared of [true, false]) {
       expect(settings.saveSettingsSnapshot).toHaveBeenCalledTimes(1);
       expect(settings.saveSettingsSnapshot).toHaveBeenCalledWith(
         expect.objectContaining({ chat: expect.objectContaining({ showThinkingMessages: true }) }),
+        undefined,
       );
       content = await settings.open();
       expect(content.getByRole("heading", { name: "Chat Settings" })).toBeDefined();
@@ -138,7 +143,7 @@ function renderSettings(shared: boolean) {
       repo: createRepoSettingsConfigFixture("repo", "/repo"),
     },
   });
-  const saveSettingsSnapshot = mock(async () => {});
+  const saveSettingsSnapshot = mock(async () => savedSettingsResult());
   const queryClient = createQueryClient();
   for (const workspace of Object.values(snapshot.workspaces)) {
     queryClient.setQueryData(repoBranchesQueryOptions(workspace.repoPath).queryKey, []);
@@ -197,17 +202,11 @@ function renderSettings(shared: boolean) {
     loadSettingsSnapshot: async () => structuredClone(snapshot),
     detectGithubRepository: async () => null,
     saveGlobalGitConfig: async () => {},
+    previewSettingsSnapshotRuntime: async () => ({ impact: null }),
     saveSettingsSnapshot,
     saveAgentModelFavorites: async () => structuredClone(snapshot),
   } satisfies React.ComponentProps<typeof WorkspaceStateContext.Provider>["value"];
-  const checksState = {
-    runtimeCheck: null,
-    taskStoreCheck: null,
-    runtimeCheckFailureKind: null,
-    taskStoreCheckFailureKind: null,
-    isLoadingChecks: false,
-    refreshChecks: async () => {},
-  } satisfies React.ComponentProps<typeof ChecksStateContext.Provider>["value"];
+  const checksState = createChecksStateFixture();
   const runtimeState = {
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
@@ -246,7 +245,9 @@ function renderSettings(shared: boolean) {
         <WorkspaceStateContext.Provider value={workspaceState}>
           <ChecksStateContext.Provider value={checksState}>
             <RuntimeDefinitionsContext.Provider value={runtimeState}>
-              {children}
+              <HostRuntimeStatusContext.Provider value={createHostRuntimeStatusContextValue()}>
+                {children}
+              </HostRuntimeStatusContext.Provider>
             </RuntimeDefinitionsContext.Provider>
           </ChecksStateContext.Provider>
         </WorkspaceStateContext.Provider>
@@ -283,6 +284,7 @@ function renderSettings(shared: boolean) {
   return {
     open,
     close,
+    previewSettingsSnapshotRuntime: async () => ({ impact: null }),
     saveSettingsSnapshot,
     unmount: () => {
       view.unmount();

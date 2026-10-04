@@ -39,47 +39,13 @@ const registry = ({
   stopError?: string | null;
   stopErrorSessionId?: string | null;
 } = {}): RuntimeRegistryPort => ({
-  ensureWorkspaceRuntime() {
-    return Effect.tryPromise({
-      try: async () => {
-        throw new Error("unexpected runtime ensure");
-      },
-      catch: (cause) =>
-        new HostOperationError({
-          operation: "test.effect",
-          message: cause instanceof Error ? cause.message : String(cause),
-          cause: cause,
-        }),
-    });
-  },
-  listRuntimes() {
-    return Effect.succeed([]);
-  },
-  findRuntimeById() {
-    return Effect.succeed(null);
-  },
-  findWorkspaceRuntime() {
-    return Effect.succeed(null);
-  },
-  listRuntimesByRepo() {
-    return Effect.succeed([]);
-  },
-  stopRuntime() {
-    return Effect.tryPromise({
-      try: async () => {
-        throw new Error("unexpected runtime stop");
-      },
-      catch: (cause) =>
-        new HostOperationError({
-          operation: "test.effect",
-          message: cause instanceof Error ? cause.message : String(cause),
-          cause: cause,
-        }),
-    });
-  },
-  stopAllRuntimes() {
-    return Effect.succeed([]);
-  },
+  status: () => Effect.dieMessage("unexpected runtime status"),
+  statuses: () => Effect.dieMessage("unexpected runtime statuses"),
+  configure: () => Effect.dieMessage("unexpected runtime configure"),
+  recordConfigurationFailure: () => Effect.dieMessage("unexpected runtime configuration failure"),
+  reserve: () => Effect.dieMessage("unexpected runtime reservation"),
+  requireReady: () => Effect.dieMessage("unexpected runtime readiness check"),
+  stopAllRuntimes: () => Effect.dieMessage("unexpected runtime shutdown"),
   stopSession(input) {
     return Effect.tryPromise({
       try: async () => {
@@ -111,16 +77,6 @@ const registry = ({
           message: cause instanceof Error ? cause.message : String(cause),
           cause: cause,
         }),
-    });
-  },
-  probeMcpStatus() {
-    return Effect.succeed({
-      supported: false,
-      connected: false,
-      serverStatus: null,
-      toolIds: [],
-      detail: null,
-      failureKind: null,
     });
   },
 });
@@ -234,7 +190,6 @@ describe("createRuntimeTaskActivityGuard", () => {
     expect(probeCalls).toEqual([
       {
         runtimeKind: "opencode",
-        repoPath: "/repo",
         externalSessionId: "external-build-session",
         workingDirectory: "/repo/worktree",
       },

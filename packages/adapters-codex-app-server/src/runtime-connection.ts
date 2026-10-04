@@ -1,9 +1,8 @@
-import type { RepoRuntimeRef, RepoRuntimeRouteResolution } from "@openducktor/core";
+import type { BoundRuntimeRoute, RepoRuntimeRef } from "@openducktor/core";
 import { requireRepoRuntimeRef } from "@openducktor/core";
-import { normalizePathForComparison } from "@openducktor/path-support";
 
 export const resolveCodexRuntimeClientInput = (
-  runtime: RepoRuntimeRouteResolution,
+  runtime: BoundRuntimeRoute,
   input: RepoRuntimeRef,
   action: string,
 ) => {
@@ -14,11 +13,6 @@ export const resolveCodexRuntimeClientInput = (
   if (runtime.kind !== "codex") {
     throw new Error(
       `Resolved runtime kind '${runtime.kind}' cannot be used to ${action}; 'codex' was requested for repo '${ref.repoPath}'.`,
-    );
-  }
-  if (normalizePathForComparison(runtime.repoPath) !== normalizePathForComparison(ref.repoPath)) {
-    throw new Error(
-      `Resolved runtime repo '${runtime.repoPath}' cannot be used to ${action}; repo '${ref.repoPath}' was requested.`,
     );
   }
   if (runtime.runtimeRoute.type !== "stdio") {

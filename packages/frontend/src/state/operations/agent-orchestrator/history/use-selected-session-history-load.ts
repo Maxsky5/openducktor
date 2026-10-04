@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
+import type { RuntimeReadinessState } from "@/lib/runtime-readiness";
 import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
 import { useAgentSessionHistoryLoadContext } from "@/state/app-state-contexts";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
@@ -15,12 +15,12 @@ type SelectedSessionHistoryAction = {
 
 const resolveSelectedSessionHistoryAction = ({
   session,
-  repoReadinessState,
+  runtimeReadinessState,
 }: {
   session: AgentSessionState | null;
-  repoReadinessState: RepoRuntimeReadinessState;
+  runtimeReadinessState: RuntimeReadinessState;
 }): SelectedSessionHistoryAction | null => {
-  if (session === null || repoReadinessState !== "ready") {
+  if (session === null || runtimeReadinessState !== "ready") {
     return null;
   }
 
@@ -41,16 +41,16 @@ const resolveSelectedSessionHistoryAction = ({
 
 export const useSelectedSessionHistoryLoad = ({
   session,
-  repoReadinessState,
+  runtimeReadinessState,
 }: {
   session: AgentSessionState | null;
-  repoReadinessState: RepoRuntimeReadinessState;
+  runtimeReadinessState: RuntimeReadinessState;
 }): void => {
   const { loadSelectedSessionBaselineHistory, revalidateAgentSessionHistory } =
     useAgentSessionHistoryLoadContext();
   const action = resolveSelectedSessionHistoryAction({
     session,
-    repoReadinessState,
+    runtimeReadinessState,
   });
   const stableTarget = useStableAgentSessionIdentity(action?.identity ?? null);
   const previousTargetKeyRef = useRef<string | null>(null);

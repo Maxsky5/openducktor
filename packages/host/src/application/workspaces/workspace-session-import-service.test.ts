@@ -2,12 +2,15 @@ import { afterEach, describe, expect, test } from "bun:test";
 import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   repoConfigSchema,
+  type WorkspaceRecord,
   type WorkspaceSessionExternal,
 } from "@openducktor/contracts";
+import type { RuntimeSessionOwner } from "../../ports/workspace-session-store-port";
 import { Deferred, Effect, Fiber } from "effect";
 import { createSqliteTaskStoreHarness } from "../../adapters/sqlite/sqlite-task-store-test-support";
 import { createSqliteWorkspaceSessionStore } from "../../adapters/sqlite/sqlite-workspace-session-store";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
+import { createRuntimeAdmissionGate } from "../../adapters/runtimes/runtime-admission";
 import {
   createAgentSessionRuntimeAdapterTestDouble,
   createGitPortTestDouble,
@@ -34,7 +37,13 @@ const setup = async () => {
     detached: boolean;
     rows: WorkspaceSessionExternal[];
     signal: AbortSignal | null;
+    scannedRepoPath: string | null;
+    readyRuntimeId: string;
     directoryErrors: Map<string, HostOperationError>;
+    otherWorkspaces: WorkspaceRecord[];
+    otherOwners: RuntimeSessionOwner[];
+    /** Holds the save open until the test releases it. */
+    saveGate: Deferred.Deferred<void> | null;
   };
   const state: ImportTestState = {
     failOpen: false,
@@ -43,7 +52,12 @@ const setup = async () => {
     detached: false,
     rows: [],
     signal: null,
+    scannedRepoPath: null,
+    readyRuntimeId: "runtime-1",
     directoryErrors: new Map(),
+    otherWorkspaces: [],
+    otherOwners: [],
+    saveGate: null,
   };
   const row = (id: string, directory = "/repo"): WorkspaceSessionExternal => ({
     externalSessionId: id,
@@ -52,54 +66,70 @@ const setup = async () => {
     title: `Native ${id}`,
     updatedAt: 123,
   });
-  const adapter = createAgentSessionRuntimeAdapterTestDouble(
-    { runtimeId: "runtime-1", repoPath: "/repo", runtimeKind: "opencode" },
-    {
-      sessionImport: {
-        scanSessions: (signal) => {
-          state.signal = signal;
-          let offset = 0;
-          return {
-            next: () =>
-              Effect.sync(() => {
-                calls.push("scanSessions.next");
-                if (offset >= state.rows.length) return { done: true as const, value: undefined };
-                const value = state.rows.slice(offset, offset + 100);
-                offset += 100;
-                return { done: false as const, value };
-              }),
-          };
+  const createAdapter = (runtimeId: string) =>
+    createAgentSessionRuntimeAdapterTestDouble(
+      { runtimeId, runtimeKind: "opencode" },
+      {
+        sessionImport: {
+          scanSessions: ({ repoPath, signal }) => {
+            state.signal = signal;
+            state.scannedRepoPath = repoPath;
+            let offset = 0;
+            return {
+              next: () =>
+                Effect.sync(() => {
+                  calls.push("scanSessions.next");
+                  if (offset >= state.rows.length) return { done: true as const, value: undefined };
+                  const value = state.rows.slice(offset, offset + 100);
+                  offset += 100;
+                  return { done: false as const, value };
+                }),
+            };
+          },
+          inspectSession: (ref) =>
+            Effect.suspend(() => {
+              calls.push("inspectSession");
+              if (state.failOpen) return Effect.fail(failure("opening source failed"));
+              return Effect.succeed({
+                metadata: {
+                  ...row(ref.externalSessionId, ref.workingDirectory),
+                  title: "Native title ".repeat(30),
+                },
+                selectedModel: null,
+                attach: Effect.suspend(() => {
+                  calls.push("attach");
+                  return state.failRegistration
+                    ? Effect.fail(failure("publication failed"))
+                    : Effect.void;
+                }),
+              });
+            }),
         },
-        inspectSession: (ref) =>
-          Effect.suspend(() => {
-            calls.push("inspectSession");
-            if (state.failOpen) return Effect.fail(failure("opening source failed"));
-            return Effect.succeed({
-              metadata: {
-                ...row(ref.externalSessionId, ref.workingDirectory),
-                title: "Native title ".repeat(30),
-              },
-              selectedModel: null,
-              attach: Effect.suspend(() => {
-                calls.push("attach");
-                return state.failRegistration
-                  ? Effect.fail(failure("publication failed"))
-                  : Effect.void;
-              }),
-            });
-          }),
       },
-    },
-  );
+    );
+  const adapter = createAdapter("runtime-1");
   await Effect.runPromise(registry.register(adapter));
   const lifecycle = createTaskSessionLifecycleCoordinator();
+  const admission = createRuntimeAdmissionGate();
+  admission.open("opencode");
   const service = createWorkspaceSessionImportService({
     store: {
       ...store,
+      listRuntimeOwners: (input) =>
+        input.workspaceId === "fairnest"
+          ? store.listRuntimeOwners(input)
+          : Effect.sync(() => {
+              calls.push(`owners:${input.workspaceId}`);
+              return state.otherOwners;
+            }),
       importSession: (input) =>
         Effect.suspend(() => {
           calls.push("save");
-          return state.failSave ? Effect.fail(failure("save failed")) : store.importSession(input);
+          if (state.failSave) return Effect.fail(failure("save failed"));
+          const gate = state.saveGate;
+          return gate
+            ? Deferred.await(gate).pipe(Effect.zipRight(store.importSession(input)))
+            : store.importSession(input);
         }),
     },
     settings: {
@@ -111,16 +141,18 @@ const setup = async () => {
             repoPath: "/repo",
           }),
         ),
+      getWorkspaceCatalog: () =>
+        Effect.sync(() => ({
+          openWorkspaces: [],
+          closedWorkspaces: state.otherWorkspaces,
+          incompleteRemovals: [],
+        })),
     },
     runtime: {
-      runtimeEnsure: () =>
+      requireReady: () =>
         Effect.succeed({
           kind: "opencode",
-          runtimeId: "runtime-1",
-          repoPath: "/repo",
-          taskId: null,
-          role: "workspace",
-          workingDirectory: "/repo",
+          runtimeId: state.readyRuntimeId,
           runtimeRoute: { type: "local_http", endpoint: "http://localhost:1234" },
           startedAt: "2026-09-20T00:00:00Z",
           descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -143,18 +175,13 @@ const setup = async () => {
     }),
     registry,
     lifecycle,
+    runtimeAdmission: admission,
     publishUpdated: () =>
       Effect.sync(() => {
         calls.push("publish");
       }),
   });
   cleanups.push(() => Effect.runPromise(service.shutdown()));
-  const input = {
-    workspaceId: "fairnest",
-    runtimeKind: "opencode" as const,
-    externalSessionId: "native",
-    workingDirectory: "/repo",
-  };
   const list = {
     workspaceId: "fairnest",
     runtimeKind: "opencode" as const,
@@ -162,7 +189,43 @@ const setup = async () => {
     search: "",
     pageSize: 50,
   };
-  return { service, store, state, row, calls, input, list, registry, adapter, lifecycle };
+  const input = {
+    workspaceId: "fairnest",
+    catalogRequestId: list.catalogRequestId,
+    runtimeKind: "opencode" as const,
+    externalSessionId: "native",
+    workingDirectory: "/repo",
+  };
+  /** Opens the live catalog that an import must come from. */
+  const discover = async (rows: WorkspaceSessionExternal[] = [row("native")]) => {
+    state.rows = rows;
+    const result = await Effect.runPromise(service.list(list));
+    calls.length = 0;
+    return result;
+  };
+  /** Replaces the shared runtime of the kind with a new generation. */
+  const restartRuntime = async (runtimeId: string) => {
+    await Effect.runPromise(registry.remove(adapter.binding.runtimeId));
+    const replacement = createAdapter(runtimeId);
+    await Effect.runPromise(registry.register(replacement));
+    state.readyRuntimeId = runtimeId;
+    return replacement;
+  };
+  return {
+    service,
+    store,
+    state,
+    row,
+    calls,
+    input,
+    list,
+    registry,
+    adapter,
+    lifecycle,
+    admission,
+    discover,
+    restartRuntime,
+  };
 };
 
 describe("external workspace session import", () => {
@@ -188,6 +251,7 @@ describe("external workspace session import", () => {
     expect(
       (await Effect.runPromise(h.service.list({ ...h.list, search: "other" }))).sessions,
     ).toEqual([]);
+    expect(h.state.scannedRepoPath).toBe("/repo");
     expect(h.calls).not.toContain("inspectSession");
     expect(h.calls.filter((call) => call === "scanSessions.next")).toHaveLength(32);
     await expect(
@@ -264,6 +328,7 @@ describe("external workspace session import", () => {
 
   test("saves original metadata before live admission and deduplicates concurrent imports", async () => {
     const h = await setup();
+    await h.discover();
     const [first, second] = await Promise.all([
       Effect.runPromise(h.service.importSession(h.input)),
       Effect.runPromise(h.service.importSession(h.input)),
@@ -292,6 +357,7 @@ describe("external workspace session import", () => {
 
   test.each(["failOpen", "failSave"] as const)("does not admit or persist on %s", async (flag) => {
     const h = await setup();
+    await h.discover();
     h.state[flag] = true;
     await expect(Effect.runPromise(h.service.importSession(h.input))).rejects.toThrow();
     expect(
@@ -302,6 +368,7 @@ describe("external workspace session import", () => {
 
   test("keeps the saved record after live publication fails", async () => {
     const h = await setup();
+    await h.discover();
     h.state.failRegistration = true;
     const result = await Effect.runPromise(h.service.importSession(h.input));
     expect(result.openError).toContain("publication failed");
@@ -311,8 +378,47 @@ describe("external workspace session import", () => {
     expect(h.calls.filter((call) => call === "save")).toHaveLength(1);
   });
 
+  test("a restart waits for an import in progress, which attaches before the drain ends", async () => {
+    const h = await setup();
+    await h.discover();
+    h.state.saveGate = Deferred.unsafeMake<void>(Effect.runSync(Effect.fiberId));
+    const importing = Effect.runPromise(h.service.importSession(h.input));
+    while (!h.calls.includes("save")) await Effect.runPromise(Effect.yieldNow());
+
+    // A restart closes admission and drains admitted controls while the save is still open.
+    h.admission.close("opencode", {
+      state: "restarting",
+      message: "The OpenCode runtime is restarting.",
+      nextAction: "Wait for the restart to finish.",
+    });
+    const draining = Effect.runFork(h.admission.drain("opencode"));
+    await Effect.runPromise(Effect.yieldNow());
+    expect(draining.unsafePoll()).toBeNull();
+    await Effect.runPromise(Deferred.succeed(h.state.saveGate, undefined));
+    await Effect.runPromise(Fiber.join(draining));
+
+    const result = await importing;
+    expect(result.created).toBe(true);
+    expect(result.openError).toBeNull();
+    expect(h.calls).toEqual(["inspectSession", "save", "attach", "publish"]);
+  });
+
+  test("a cancelled import fails with the reason of the lifecycle action", async () => {
+    const h = await setup();
+    await h.discover();
+    h.state.saveGate = Deferred.unsafeMake<void>(Effect.runSync(Effect.fiberId));
+    const importing = Effect.runPromise(h.service.importSession(h.input));
+    while (!h.calls.includes("save")) await Effect.runPromise(Effect.yieldNow());
+
+    await Effect.runPromise(h.admission.cancel("opencode", "The OpenCode runtime restarted."));
+
+    await expect(importing).rejects.toThrow("The OpenCode runtime restarted.");
+    expect(h.calls).not.toContain("attach");
+  });
+
   test("imports a detached worktree and preserves its native alias", async () => {
     const h = await setup();
+    await h.discover([h.row("native", "/alias")]);
     h.state.detached = true;
     const result = await Effect.runPromise(
       h.service.importSession({ ...h.input, workingDirectory: "/alias" }),
@@ -328,7 +434,7 @@ describe("external workspace session import", () => {
   test("release interrupts an in-flight catalog without admitting a session", async () => {
     const h = await setup();
     const entered = Effect.runSync(Deferred.make<void>());
-    h.adapter.sessionImport.scanSessions = (signal) => {
+    h.adapter.sessionImport.scanSessions = ({ signal }) => {
       h.state.signal = signal;
       return {
         next: () => Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Effect.never)),
@@ -344,6 +450,7 @@ describe("external workspace session import", () => {
 
 test("import releases the directory guard before runtime admission reads the same directory", async () => {
   const h = await setup();
+  await h.discover();
   const inspectSession = h.adapter.sessionImport.inspectSession;
   h.adapter.sessionImport.inspectSession = (ref) =>
     inspectSession(ref).pipe(
@@ -372,6 +479,7 @@ test("returns the first import page without draining native history", async () =
 
 test("persists native model, profile and effort from the opened source", async () => {
   const h = await setup();
+  await h.discover();
   const inspectSession = h.adapter.sessionImport.inspectSession;
   const selectedModel = {
     runtimeKind: "opencode" as const,
@@ -384,4 +492,146 @@ test("persists native model, profile and effort from the opened source", async (
     inspectSession(ref).pipe(Effect.map((source) => ({ ...source, selectedModel })));
   const imported = await Effect.runPromise(h.service.importSession(h.input));
   expect(imported.session.selectedModel).toEqual(selectedModel);
+});
+
+describe("import admission from the live catalog", () => {
+  const STALE_CATALOG = "This session list is no longer current. Reload sessions.";
+  const RUNTIME_RESTARTED = "The runtime restarted. Reload sessions.";
+  const expectNothingImported = async (h: Awaited<ReturnType<typeof setup>>) => {
+    expect(h.calls).not.toContain("inspectSession");
+    expect(h.calls).not.toContain("save");
+    expect(
+      await Effect.runPromise(h.store.listActive({ workspaceId: "fairnest", repoPath: "/repo" })),
+    ).toEqual([]);
+  };
+
+  test("rejects an import without a live catalog", async () => {
+    const h = await setup();
+    await expect(Effect.runPromise(h.service.importSession(h.input))).rejects.toThrow(
+      STALE_CATALOG,
+    );
+    await expectNothingImported(h);
+  });
+
+  test("rejects a candidate that the catalog did not discover", async () => {
+    const h = await setup();
+    await h.discover([h.row("native"), h.row("outside", "/other")]);
+    await expect(
+      Effect.runPromise(h.service.importSession({ ...h.input, externalSessionId: "unknown" })),
+    ).rejects.toThrow(STALE_CATALOG);
+    // A row outside the workspace roots is filtered out of the catalog and cannot be imported.
+    await expect(
+      Effect.runPromise(
+        h.service.importSession({
+          ...h.input,
+          externalSessionId: "outside",
+          workingDirectory: "/other",
+        }),
+      ),
+    ).rejects.toThrow(STALE_CATALOG);
+    await expectNothingImported(h);
+  });
+
+  test("rejects an import after a released catalog", async () => {
+    const h = await setup();
+    await h.discover();
+    await Effect.runPromise(h.service.release(h.list));
+    await expect(Effect.runPromise(h.service.importSession(h.input))).rejects.toThrow(
+      STALE_CATALOG,
+    );
+    await expectNothingImported(h);
+  });
+
+  test("rejects list and import after a runtime generation change", async () => {
+    const h = await setup();
+    await h.discover();
+    const replacement = await h.restartRuntime("runtime-2");
+    await expect(Effect.runPromise(h.service.list(h.list))).rejects.toThrow(RUNTIME_RESTARTED);
+    await expect(Effect.runPromise(h.service.importSession(h.input))).rejects.toThrow(
+      RUNTIME_RESTARTED,
+    );
+    await expectNothingImported(h);
+
+    // A new catalog of the new generation admits the same conversation.
+    const catalogRequestId = crypto.randomUUID();
+    await Effect.runPromise(h.service.list({ ...h.list, catalogRequestId }));
+    const imported = await Effect.runPromise(
+      h.service.importSession({ ...h.input, catalogRequestId }),
+    );
+    expect(imported.created).toBe(true);
+    expect(replacement.binding.runtimeId).toBe("runtime-2");
+  });
+
+  test("releaseRuntime keeps catalogs of the current generation and of other kinds", async () => {
+    const h = await setup();
+    await h.discover();
+    await Effect.runPromise(h.service.releaseRuntime("opencode", "runtime-1"));
+    await Effect.runPromise(h.service.releaseRuntime("codex", null));
+    expect(h.state.signal?.aborted).toBe(false);
+    const imported = await Effect.runPromise(h.service.importSession(h.input));
+    expect(imported.created).toBe(true);
+  });
+
+  test.each([
+    ["another generation", "runtime-2"],
+    ["every generation", null],
+  ] as const)(
+    "releaseRuntime for %s drops the catalog and rejects a later import",
+    async (_label, runtimeId) => {
+      const h = await setup();
+      await h.discover();
+      await Effect.runPromise(h.service.releaseRuntime("opencode", runtimeId));
+      expect(h.state.signal?.aborted).toBe(true);
+      await expect(Effect.runPromise(h.service.importSession(h.input))).rejects.toThrow(
+        STALE_CATALOG,
+      );
+      await expect(
+        Effect.runPromise(h.service.list({ ...h.list, cursor: "stale-cursor" })),
+      ).rejects.toThrow("This session catalog expired. Reload sessions.");
+      await expectNothingImported(h);
+    },
+  );
+  const otherWorkspace = (): WorkspaceRecord => ({
+    workspaceId: "other",
+    workspaceName: "Other",
+    abbreviation: null,
+    tileColor: null,
+    repoPath: "/tree",
+    isActive: false,
+    hasConfig: true,
+    configuredWorktreeBasePath: null,
+    defaultWorktreeBasePath: null,
+    effectiveWorktreeBasePath: null,
+  });
+  const ownedByOther: RuntimeSessionOwner = {
+    runtimeKind: "opencode",
+    externalSessionId: "native",
+    kind: "workspace",
+    sessionId: "other-session",
+    archived: false,
+  };
+
+  test("discovery hides a conversation that another workspace of the repository owns", async () => {
+    const h = await setup();
+    h.state.otherWorkspaces = [otherWorkspace()];
+    h.state.otherOwners = [ownedByOther];
+    h.state.rows = [h.row("native", "/tree"), h.row("free", "/tree")];
+
+    const result = await Effect.runPromise(h.service.list(h.list));
+
+    expect(result.sessions.map((session) => session.externalSessionId)).toEqual(["free"]);
+    expect(h.calls).toContain("owners:other");
+  });
+
+  test("import rechecks owners in the other workspaces of the repository", async () => {
+    const h = await setup();
+    h.state.otherWorkspaces = [otherWorkspace()];
+    await h.discover();
+    h.state.otherOwners = [ownedByOther];
+
+    await expect(Effect.runPromise(h.service.importSession(h.input))).rejects.toThrow(
+      "This conversation belongs to workspace Other. Open it from that workspace.",
+    );
+    await expectNothingImported(h);
+  });
 });

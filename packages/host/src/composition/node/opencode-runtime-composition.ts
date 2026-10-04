@@ -1,41 +1,41 @@
+import type { ManagedMcpServerResolver } from "@openducktor/core";
 import { createOpenCodeCreationSettings } from "../../application/workspaces/opencode-creation-settings";
 import {
   createPrepareOpencodeSessionRuntime,
   type ReadOpencodeDirectory,
 } from "@openducktor/adapters-opencode-sdk";
-import { Effect } from "effect";
+import { Effect, Exit } from "effect";
 import { createOpenCodeLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/opencode-live-session-adapter";
-import {
-  createOpenCodeWorkspaceRuntimeStarter,
-  type OpenCodeMcpBridgeConnectionResolver,
-} from "../../adapters/opencode/opencode-workspace-runtime-starter";
-import type { HostRuntimeDistribution } from "../../adapters/runtimes/runtime-distribution";
+import type { OpenDucktorMcpServerConfigResolver } from "../../adapters/mcp/openducktor-mcp-server-config";
+import { createOpenCodeRuntimeStarter } from "../../adapters/opencode/opencode-runtime-starter";
+import { probeOpenCodeMcpStatus } from "../../adapters/runtimes/runtime-registry-probes";
 import type { TaskSessionLifecycleCoordinator } from "../../application/tasks/worktrees/task-session-lifecycle-coordinator";
-import { toHostOperationError } from "../../effect/host-errors";
+import { causeToHostBoundaryError, toHostOperationError } from "../../effect/host-errors";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
-import type { RuntimeWorkspaceStarterPort } from "../../ports/runtime-registry-port";
+import type { RuntimeStarterPort } from "../../ports/runtime-registry-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 
 export type CreateOpenCodeRuntimeCompositionInput = {
+  /** Process working directory of the shared OpenCode server, such as the user home directory. */
+  launchDirectory: string;
   liveSessionLifecycle: RuntimeLiveSessionLifecyclePort;
   processEnv: NodeJS.ProcessEnv;
-  resolveMcpBridgeConnection: OpenCodeMcpBridgeConnectionResolver;
-  runtimeDistribution: HostRuntimeDistribution;
+  resolveMcpServerConfig: OpenDucktorMcpServerConfigResolver;
   settingsConfig: SettingsConfigPort;
   taskSessionLifecycleCoordinator: TaskSessionLifecycleCoordinator;
   toolDiscovery: ToolDiscoveryPort;
 };
 
 export const createOpenCodeRuntimeComposition = ({
+  launchDirectory,
   liveSessionLifecycle,
   processEnv,
-  resolveMcpBridgeConnection,
-  runtimeDistribution,
+  resolveMcpServerConfig,
   settingsConfig,
   taskSessionLifecycleCoordinator,
   toolDiscovery,
-}: CreateOpenCodeRuntimeCompositionInput): RuntimeWorkspaceStarterPort => {
+}: CreateOpenCodeRuntimeCompositionInput): RuntimeStarterPort => {
   const creationSettings = createOpenCodeCreationSettings(settingsConfig);
   const readDirectory: ReadOpencodeDirectory = (directory, read) =>
     Effect.runPromise(
@@ -53,20 +53,25 @@ export const createOpenCodeRuntimeComposition = ({
         }),
       ),
     );
+  const resolveOpencodeMcpServerConfig: ManagedMcpServerResolver = async (repoPath) => {
+    const exit = await Effect.runPromiseExit(resolveMcpServerConfig(repoPath));
+    if (Exit.isSuccess(exit)) return exit.value;
+    throw causeToHostBoundaryError(exit.cause);
+  };
 
-  return createOpenCodeWorkspaceRuntimeStarter({
+  return createOpenCodeRuntimeStarter({
     toolDiscovery,
-    settingsConfig,
     processEnv,
-    runtimeDistribution,
+    launchDirectory,
     liveSessionLifecycle,
     prepareLiveSessionAdapter: createOpenCodeLiveSessionAdapterPreparer({
       liveSessionLifecycle,
       prepareRuntime: createPrepareOpencodeSessionRuntime({
         readDirectory,
         resolveCreationSettings: (scope) => Effect.runPromise(creationSettings.resolve(scope)),
+        resolveMcpServerConfig: resolveOpencodeMcpServerConfig,
       }),
+      probeMcpStatus: probeOpenCodeMcpStatus,
     }),
-    resolveMcpBridgeConnection,
   });
 };

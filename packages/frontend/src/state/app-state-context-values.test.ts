@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createObservedCheckFixture,
+  createSettingsSnapshotFixture,
+} from "@/test-utils/shared-test-fixtures";
 import type {
   ChecksStateContextValue,
   DelegationStateContextValue,
@@ -74,7 +77,13 @@ describe("app-state-context-values", () => {
       loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
       detectGithubRepository: async () => null,
       saveGlobalGitConfig: async () => {},
-      saveSettingsSnapshot: async () => {},
+      previewSettingsSnapshotRuntime: async () => ({ impact: null }),
+      saveSettingsSnapshot: async () => ({
+        type: "saved" as const,
+        workspaces: [],
+        runtimeApplications: [],
+        refreshError: null,
+      }),
       saveAgentModelFavorites: async () => {
         throw new Error("saveAgentModelFavorites is not used in this test");
       },
@@ -85,11 +94,12 @@ describe("app-state-context-values", () => {
 
   test("returns identity for other context builders", () => {
     const checksValue: ChecksStateContextValue = {
-      runtimeCheck: null,
-      taskStoreCheck: null,
-      runtimeCheckFailureKind: null,
-      taskStoreCheckFailureKind: null,
-      isLoadingChecks: false,
+      runtimeCheck: createObservedCheckFixture(),
+      hostMcpBridgeCheck: { data: null, error: null },
+      checksRepoPath: null,
+      taskStoreCheck: createObservedCheckFixture(),
+      workspaceRuntimeMcpCheck: { data: null, error: null },
+      isRefreshingChecks: false,
       refreshChecks: async () => {},
     };
     const tasksValue: TasksStateContextValue = {

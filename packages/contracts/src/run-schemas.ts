@@ -4,7 +4,6 @@ import {
   runtimeKindSchema,
   stdioRuntimeIdentitySchema,
 } from "./agent-runtime-schemas";
-import { failureKindSchema } from "./failure-schemas";
 
 export const runtimeHealthSchema = z.object({
   kind: runtimeKindSchema,
@@ -141,111 +140,19 @@ export const buildSessionBootstrapSchema = z.object({
 });
 export type BuildSessionBootstrap = z.infer<typeof buildSessionBootstrapSchema>;
 
-export const runtimeInstanceSummaryRoleSchema = z.literal("workspace");
-export type RuntimeInstanceSummaryRole = z.infer<typeof runtimeInstanceSummaryRoleSchema>;
-
 export const taskWorktreeSummarySchema = z.object({
   workingDirectory: z.string().trim().min(1),
 });
 export type TaskWorktreeSummary = z.infer<typeof taskWorktreeSummarySchema>;
 
+/** One running shared runtime instance. A replacement receives a new runtime ID. */
 export const runtimeInstanceSummarySchema = z
   .object({
     kind: runtimeKindSchema,
     runtimeId: z.string(),
-    repoPath: z.string(),
-    taskId: z.string().nullable(),
-    role: runtimeInstanceSummaryRoleSchema,
-    workingDirectory: z.string(),
     runtimeRoute: runtimeRouteSchema,
     startedAt: z.string(),
     descriptor: runtimeDescriptorSchema,
   })
   .strict();
 export type RuntimeInstanceSummary = z.infer<typeof runtimeInstanceSummarySchema>;
-
-export const repoRuntimeStartupStageSchema = z.enum([
-  "idle",
-  "startup_requested",
-  "waiting_for_runtime",
-  "runtime_ready",
-  "startup_failed",
-]);
-export type RepoRuntimeStartupStage = z.infer<typeof repoRuntimeStartupStageSchema>;
-
-export const repoRuntimeStartupStatusSchema = z.object({
-  runtimeKind: runtimeKindSchema,
-  repoPath: z.string(),
-  stage: repoRuntimeStartupStageSchema,
-  runtime: runtimeInstanceSummarySchema.nullable(),
-  startedAt: z.string().nullable(),
-  updatedAt: z.string(),
-  elapsedMs: z.number().int().nonnegative().nullable(),
-  attempts: z.number().int().nonnegative().nullable(),
-  failureKind: failureKindSchema.nullable(),
-  failureReason: z.string().nullable(),
-  detail: z.string().nullable(),
-});
-export type RepoRuntimeStartupStatus = z.infer<typeof repoRuntimeStartupStatusSchema>;
-
-export const repoRuntimeHealthStateSchema = z.enum([
-  "disabled",
-  "not_started",
-  "checking",
-  "ready",
-  "error",
-]);
-export type RepoRuntimeHealthState = z.infer<typeof repoRuntimeHealthStateSchema>;
-
-export const repoRuntimeHealthObservationSchema = z.enum([
-  "observed_existing_runtime",
-  "observing_existing_startup",
-  "started_by_diagnostics",
-  "restarted_for_mcp",
-  "restart_skipped_active_session",
-]);
-export type RepoRuntimeHealthObservation = z.infer<typeof repoRuntimeHealthObservationSchema>;
-
-export const repoRuntimeMcpStatusSchema = z.enum([
-  "waiting_for_runtime",
-  "checking",
-  "reconnecting",
-  "connected",
-  "error",
-  "unsupported",
-]);
-export type RepoRuntimeMcpStatus = z.infer<typeof repoRuntimeMcpStatusSchema>;
-
-export const repoRuntimeHealthRuntimeSchema = z.object({
-  status: repoRuntimeHealthStateSchema,
-  stage: repoRuntimeStartupStageSchema,
-  observation: repoRuntimeHealthObservationSchema.nullable(),
-  instance: runtimeInstanceSummarySchema.nullable(),
-  startedAt: z.string().nullable(),
-  updatedAt: z.string(),
-  elapsedMs: z.number().int().nonnegative().nullable(),
-  attempts: z.number().int().nonnegative().nullable(),
-  detail: z.string().nullable(),
-  failureKind: failureKindSchema.nullable(),
-  failureReason: z.string().nullable(),
-});
-export type RepoRuntimeHealthRuntime = z.infer<typeof repoRuntimeHealthRuntimeSchema>;
-
-export const repoRuntimeHealthMcpSchema = z.object({
-  supported: z.boolean(),
-  status: repoRuntimeMcpStatusSchema,
-  serverName: z.string(),
-  serverStatus: z.string().nullable(),
-  toolIds: z.array(z.string()),
-  detail: z.string().nullable(),
-  failureKind: failureKindSchema.nullable(),
-});
-export type RepoRuntimeHealthMcp = z.infer<typeof repoRuntimeHealthMcpSchema>;
-
-export const repoRuntimeHealthCheckSchema = z.object({
-  status: repoRuntimeHealthStateSchema,
-  checkedAt: z.string(),
-  runtime: repoRuntimeHealthRuntimeSchema,
-  mcp: repoRuntimeHealthMcpSchema.nullable(),
-});
-export type RepoRuntimeHealthCheck = z.infer<typeof repoRuntimeHealthCheckSchema>;

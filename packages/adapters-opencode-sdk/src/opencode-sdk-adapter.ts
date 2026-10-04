@@ -8,6 +8,7 @@ import {
 import type { Session } from "@opencode-ai/sdk/v2/client";
 import type {
   AcceptedAgentUserMessage,
+  BoundRuntimeRoute,
   AgentCatalogPort,
   AgentEvent,
   AgentFileSearchResult,
@@ -117,13 +118,15 @@ import type {
   ClientFactory,
   OpencodeEventLogger,
   OpencodeSdkAdapterOptions,
-  RepoRuntimeResolverPort,
   RuntimeEventTransportRecord,
   SessionInput,
   SessionRecord,
 } from "./types";
 import { waitForUserMessageAdmission } from "./user-message-admission";
-import { ensureTrustedOdtMcpServerConnected } from "./opencode-mcp-readiness";
+import type {
+  OpencodeMcpDirectoryBindings,
+  OpencodeMcpReconnectEvent,
+} from "./opencode-mcp-bindings";
 
 const toExistingSessionInput = (input: PolicyBoundSessionRef): SessionInput => {
   return toSessionInput(input);
@@ -149,7 +152,8 @@ export class OpencodeSdkAdapter
   private readonly listeners: SessionEventListeners = new Map();
   private readonly now: () => string;
   private readonly createClient: ClientFactory;
-  private readonly repoRuntimeResolver: RepoRuntimeResolverPort | undefined;
+  private readonly runtime: BoundRuntimeRoute;
+  private readonly mcpBindings: OpencodeMcpDirectoryBindings | undefined;
   private readonly logEvent: OpencodeEventLogger | undefined;
 
   constructor(
@@ -166,13 +170,14 @@ export class OpencodeSdkAdapter
     this.runtimeEventTransports = runtimeState?.runtimeEventTransports ?? new Map();
     this.now = options.now ?? nowIso;
     this.createClient = options.createClient ?? buildDefaultFactory();
-    this.repoRuntimeResolver = options.repoRuntimeResolver;
+    this.runtime = options.runtime;
+    this.mcpBindings = options.mcpBindings;
     this.logEvent = options.logEvent;
   }
 
-  private async resolveRuntimeClientInput(input: OpencodeRuntimeResolutionInput, action: string) {
+  private resolveRuntimeClientInput(input: OpencodeRuntimeResolutionInput, action: string) {
     return resolveOpencodeRuntimeClientInput({
-      repoRuntimeResolver: this.repoRuntimeResolver,
+      runtime: this.runtime,
       input,
       action,
     });
@@ -183,15 +188,9 @@ export class OpencodeSdkAdapter
    * can refuse an ineligible turn before the adapter attaches to the runtime session.
    */
   private async resolveContinuationProbeClient(input: ContinueInterruptedAgentTurnInput) {
-    const runtimeClientInput = await this.resolveRuntimeClientInput(
-      input,
-      "continue OpenCode turn",
-    );
+    const runtimeClientInput = this.resolveRuntimeClientInput(input, "continue OpenCode turn");
     const client = this.createClient(runtimeClientInput);
-    await ensureTrustedOdtMcpServerConnected({
-      client,
-      workingDirectory: input.workingDirectory,
-    });
+    await this.ensureMcpBinding(client, input);
     return client;
   }
 
@@ -212,12 +211,9 @@ export class OpencodeSdkAdapter
       "start OpenCode session",
     );
     const settings = structuredClone(await this.resolveCreationSettings(input.sessionScope!));
-    const runtimeClientInput = await this.resolveRuntimeClientInput(input, "start session");
+    const runtimeClientInput = this.resolveRuntimeClientInput(input, "start session");
     const client = this.createClient(runtimeClientInput);
-    await ensureTrustedOdtMcpServerConnected({
-      client,
-      workingDirectory: input.workingDirectory,
-    });
+    await this.ensureMcpBinding(client, input);
     const creation = await buildCreationPermissions({
       settings,
       policy,
@@ -308,16 +304,14 @@ export class OpencodeSdkAdapter
         request: input,
         session: existing,
         restorePermissions: this.restorePermissions,
+        ensureMcpBinding: () => this.ensureMcpBinding(existing.client, input),
       });
       return existing.summary;
     }
 
-    const runtimeClientInput = await this.resolveRuntimeClientInput(input, "resume session");
+    const runtimeClientInput = this.resolveRuntimeClientInput(input, "resume session");
     const client = this.createClient(runtimeClientInput);
-    await ensureTrustedOdtMcpServerConnected({
-      client,
-      workingDirectory: input.workingDirectory,
-    });
+    await this.ensureMcpBinding(client, input);
     const detailRecord = await this.restorePermissions({
       client,
       externalSessionId: input.externalSessionId,
@@ -428,7 +422,7 @@ export class OpencodeSdkAdapter
     });
     this.emit(input.externalSessionId, begunSend.runningEvent);
     try {
-      await this.ensureSessionMcpReady(session);
+      await this.ensureSessionMcpBinding(session);
       assertTurnPermissionsReady(session);
       const modelInput = normalizeModelInput(input.model ?? session.input.model);
       const continuationInput = {
@@ -505,6 +499,7 @@ export class OpencodeSdkAdapter
           request: input,
           session: existing,
           restorePermissions: this.restorePermissions,
+          ensureMcpBinding: () => this.ensureMcpBinding(existing.client, input),
         });
       } else {
         applySessionContext(existing, input, "ensure session state");
@@ -512,7 +507,7 @@ export class OpencodeSdkAdapter
       return existing.summary;
     }
 
-    const runtimeClientInput = await this.resolveRuntimeClientInput(input, "ensure session state");
+    const runtimeClientInput = this.resolveRuntimeClientInput(input, "ensure session state");
     const client = this.createClient(runtimeClientInput);
     const policy = input.sessionScope
       ? resolveOpencodeSessionPolicy(
@@ -522,10 +517,7 @@ export class OpencodeSdkAdapter
         )
       : null;
     if (policy) {
-      await ensureTrustedOdtMcpServerConnected({
-        client,
-        workingDirectory: input.workingDirectory,
-      });
+      await this.ensureMcpBinding(client, input);
     }
     if (knownDetail) {
       if (
@@ -653,12 +645,9 @@ export class OpencodeSdkAdapter
       "fork OpenCode session",
     );
     const settings = structuredClone(await this.resolveCreationSettings(input.sessionScope!));
-    const runtimeClientInput = await this.resolveRuntimeClientInput(input, "fork session");
+    const runtimeClientInput = this.resolveRuntimeClientInput(input, "fork session");
     const client = this.createClient(runtimeClientInput);
-    await ensureTrustedOdtMcpServerConnected({
-      client,
-      workingDirectory: input.workingDirectory,
-    });
+    await this.ensureMcpBinding(client, input);
     // The fork uses this source snapshot. Later native permission changes do not alter the captured rules.
     const source = await readPermissionSession({
       client,
@@ -742,7 +731,7 @@ export class OpencodeSdkAdapter
     input: LoadAgentSessionHistoryInput,
   ): Promise<AgentSessionHistoryMessage[]> {
     assertOpenCodeRuntimePolicyBinding(input, "load OpenCode session history");
-    const runtimeClientInput = await this.resolveRuntimeClientInput(input, "load session history");
+    const runtimeClientInput = this.resolveRuntimeClientInput(input, "load session history");
     const session = await this.querySession(input, runtimeClientInput);
     const preservedDisplayPartsByMessageId = new Map(
       [...(session?.messageMetadataById ?? [])].flatMap(([messageId, metadata]) =>
@@ -766,7 +755,7 @@ export class OpencodeSdkAdapter
 
   async loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]> {
     assertOpenCodeRuntimePolicyBinding(input, "load OpenCode session todos");
-    const runtime = await this.resolveRuntimeClientInput(input, "load session todos");
+    const runtime = this.resolveRuntimeClientInput(input, "load session todos");
     await this.querySession(input, runtime);
     return loadSessionTodos(this.createClient, {
       ...runtime,
@@ -775,13 +764,13 @@ export class OpencodeSdkAdapter
   }
 
   async resolveSessionParent(input: SessionRef): Promise<string | null> {
-    const runtime = await this.resolveRuntimeClientInput(input, "read session parent");
+    const runtime = this.resolveRuntimeClientInput(input, "read session parent");
     const target = await this.readSession(input, runtime, "read session parent");
     return target.parentID || null;
   }
 
   async loadRuntimeCatalog(input: LoadAgentRuntimeCatalogInput): Promise<AgentRuntimeCatalogRead> {
-    const runtimeClientInput = await this.resolveRuntimeClientInput(input, "load runtime catalog");
+    const runtimeClientInput = this.resolveRuntimeClientInput(input, "load runtime catalog");
     return loadRuntimeCatalog(this.createClient, {
       ...runtimeClientInput,
       repoPath: input.repoPath,
@@ -790,7 +779,7 @@ export class OpencodeSdkAdapter
 
   async searchFiles(input: SearchAgentFilesInput): Promise<AgentFileSearchResult[]> {
     return searchFiles(this.createClient, {
-      ...(await this.resolveRuntimeClientInput(input, "search files")),
+      ...this.resolveRuntimeClientInput(input, "search files"),
       query: input.query,
     });
   }
@@ -845,7 +834,7 @@ export class OpencodeSdkAdapter
     this.emit(input.externalSessionId, begunSend.runningEvent);
     try {
       if (systemInvocation.kind !== "manual_session_compaction") {
-        await this.ensureSessionMcpReady(session);
+        await this.ensureSessionMcpBinding(session);
       }
       const sendInput: Parameters<typeof sendUserMessage>[0] = {
         session,
@@ -988,7 +977,7 @@ export class OpencodeSdkAdapter
   async loadSessionDiff(
     input: LoadAgentSessionDiffInput,
   ): Promise<import("@openducktor/contracts").FileDiff[]> {
-    const runtime = await this.resolveRuntimeClientInput(input, "load session diff");
+    const runtime = this.resolveRuntimeClientInput(input, "load session diff");
     await this.querySession(input, runtime);
     return loadSessionDiffOp(
       runtime.runtimeEndpoint,
@@ -1002,7 +991,7 @@ export class OpencodeSdkAdapter
     input: LoadAgentFileStatusInput,
   ): Promise<import("@openducktor/contracts").FileStatus[]> {
     return loadFileStatusOp(
-      (await this.resolveRuntimeClientInput(input, "load file status")).runtimeEndpoint,
+      this.resolveRuntimeClientInput(input, "load file status").runtimeEndpoint,
       input.workingDirectory,
     );
   }
@@ -1071,24 +1060,43 @@ export class OpencodeSdkAdapter
     }
   }
 
-  private async ensureSessionMcpReady(session: SessionRecord): Promise<void> {
-    await ensureTrustedOdtMcpServerConnected({
-      client: session.client,
-      workingDirectory: session.input.workingDirectory,
-      onReconnectStart: (event) => {
-        const reconnectEvent: AgentEvent = {
-          type: "mcp_reconnect_started",
-          externalSessionId: session.summary.externalSessionId,
-          timestamp: this.now(),
-          serverName: event.serverName,
-          workingDirectory: event.workingDirectory,
-          status: event.status,
-        };
-        if (event.errorDetails) {
-          reconnectEvent.errorDetails = event.errorDetails;
-        }
-        this.emit(session.summary.externalSessionId, reconnectEvent);
-      },
+  /**
+   * Binds the OpenDucktor MCP server of the owning workspace to the directory. Fails when this
+   * adapter has no MCP bindings, because workflow tools need them.
+   */
+  private async ensureMcpBinding(
+    client: SessionRecord["client"],
+    input: { repoPath: string; workingDirectory: string },
+    onReconnectStart?: (event: OpencodeMcpReconnectEvent) => void,
+  ): Promise<void> {
+    if (!this.mcpBindings) {
+      throw new Error(
+        `ODT workflow tools unavailable for "${input.workingDirectory}": the OpenCode adapter has no OpenDucktor MCP binding. Restart the OpenCode runtime from Diagnostics and retry.`,
+      );
+    }
+    await this.mcpBindings.ensure({
+      client,
+      repoPath: input.repoPath,
+      workingDirectory: input.workingDirectory,
+      onReconnectStart,
+    });
+  }
+
+  /** Binds the session directory and emits `mcp_reconnect_started` when it must reconnect. */
+  private async ensureSessionMcpBinding(session: SessionRecord): Promise<void> {
+    await this.ensureMcpBinding(session.client, session.input, (event) => {
+      const reconnectEvent: AgentEvent = {
+        type: "mcp_reconnect_started",
+        externalSessionId: session.summary.externalSessionId,
+        timestamp: this.now(),
+        serverName: event.serverName,
+        workingDirectory: event.workingDirectory,
+        status: event.status,
+      };
+      if (event.errorDetails) {
+        reconnectEvent.errorDetails = event.errorDetails;
+      }
+      this.emit(session.summary.externalSessionId, reconnectEvent);
     });
   }
 

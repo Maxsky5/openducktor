@@ -94,7 +94,13 @@ test("notification workspace selection keeps the draft on cancel and failure", a
     },
     detectGithubRepository: async () => null,
     saveGlobalGitConfig: async () => {},
-    saveSettingsSnapshot: async () => {},
+    previewSettingsSnapshotRuntime: async () => ({ impact: null }),
+    saveSettingsSnapshot: async () => ({
+      type: "saved" as const,
+      workspaces: [],
+      runtimeApplications: [],
+      refreshError: null,
+    }),
     saveAgentModelFavorites: async () => {
       throw new Error("Not used in this test");
     },

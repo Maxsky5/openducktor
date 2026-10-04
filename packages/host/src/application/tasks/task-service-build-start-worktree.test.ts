@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { Effect, Exit, Fiber } from "effect";
 import { z } from "zod";
-import { HostOperationError, HostValidationError } from "../../effect/host-errors";
+import {
+  HostOperationError,
+  HostResourceError,
+  HostValidationError,
+} from "../../effect/host-errors";
 import { createTaskSessionLifecycleCoordinator } from "./worktrees/task-session-lifecycle-coordinator";
 import {
   createBuildSettingsConfig,
@@ -132,7 +136,7 @@ describe("createTaskService build start worktree handling", () => {
     expect(calls).not.toContainEqual(expect.objectContaining({ type: "removeWorktree" }));
   });
 
-  test("cleans a new worktree once when preparation is interrupted", async () => {
+  test("cleans a new worktree once when preparation is interrupted during a pre-start hook", async () => {
     const calls: unknown[] = [];
     const started = createGate();
     const deps = createDependencies(calls, {
@@ -142,9 +146,14 @@ describe("createTaskService build start worktree handling", () => {
     const service = createTaskService({
       ...deps,
       taskSessionLifecycleCoordinator: coordinator,
-      runtimeRegistry: {
-        ...deps.runtimeRegistry,
-        ensureWorkspaceRuntime: () =>
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { preStart: ["bun install"], postComplete: [] },
+      }),
+      systemCommands: {
+        ...deps.systemCommands,
+        runCommandAllowFailure: () =>
           Effect.sync(started.release).pipe(Effect.zipRight(Effect.never)),
       },
     });
@@ -189,10 +198,10 @@ describe("createTaskService build start worktree handling", () => {
     const service = createTaskService({
       ...deps,
       taskSessionLifecycleCoordinator: coordinator,
-      runtimeRegistry: {
-        ...deps.runtimeRegistry,
-        ensureWorkspaceRuntime: (input) =>
-          deps.runtimeRegistry.ensureWorkspaceRuntime(input).pipe(
+      worktreeFiles: {
+        ...deps.worktreeFiles,
+        copyConfiguredPaths: (repoPath, worktreePath, relativePaths) =>
+          deps.worktreeFiles.copyConfiguredPaths(repoPath, worktreePath, relativePaths).pipe(
             Effect.tap(() =>
               Effect.sync(() => {
                 current = task({ status: "blocked" });
@@ -236,10 +245,10 @@ describe("createTaskService build start worktree handling", () => {
     const deps = createDependencies(calls, taskStore);
     const service = createTaskService({
       ...deps,
-      runtimeRegistry: {
-        ...deps.runtimeRegistry,
-        ensureWorkspaceRuntime: (input) =>
-          deps.runtimeRegistry.ensureWorkspaceRuntime(input).pipe(
+      worktreeFiles: {
+        ...deps.worktreeFiles,
+        copyConfiguredPaths: (repoPath, worktreePath, relativePaths) =>
+          deps.worktreeFiles.copyConfiguredPaths(repoPath, worktreePath, relativePaths).pipe(
             Effect.tap(() =>
               Effect.sync(() => {
                 current = task({ status: "blocked" });
@@ -387,20 +396,23 @@ describe("createTaskService build start worktree handling", () => {
     expect(calls).not.toContainEqual(expect.objectContaining({ type: "createWorktree" }));
   });
 
-  test("removes a new worktree when runtime startup fails", async () => {
+  test("rejects Builder start before worktree setup when the runtime kind is not ready", async () => {
     const calls: unknown[] = [];
     const dependencies = createDependencies(calls, {
       getTask: () => Effect.succeed(task({ status: "ready_for_dev" })),
+      transitionTask: () => Effect.dieMessage("unexpected task transition"),
     });
     const runtimeRegistry: RuntimeRegistryPort = {
       ...dependencies.runtimeRegistry,
-      ensureWorkspaceRuntime(input) {
-        return Effect.sync(() => calls.push({ type: "ensureRuntime", input })).pipe(
+      requireReady(runtimeKind) {
+        return Effect.sync(() => calls.push({ type: "requireRuntime", runtimeKind })).pipe(
           Effect.zipRight(
             Effect.fail(
-              new HostOperationError({
-                operation: "test.ensureRuntime",
-                message: "runtime failed",
+              new HostResourceError({
+                resource: "agent_runtime",
+                operation: "runtime.requireReady",
+                message:
+                  "The OpenCode runtime is not ready. Wait for the runtime to start, or check Diagnostics.",
               }),
             ),
           ),
@@ -416,26 +428,21 @@ describe("createTaskService build start worktree handling", () => {
           runtimeKind: "opencode",
         }),
       ),
-    ).rejects.toThrow("runtime failed");
-    expect(calls).toContainEqual({
-      type: "removeWorktree",
-      repoPath: "/repo",
-      worktreePath: "/worktrees/repo/task-1",
-      force: true,
-    });
-    expect(
-      calls.some((call) => z.object({ type: z.literal("transition") }).safeParse(call).success),
-    ).toBe(false);
+    ).rejects.toThrow("The OpenCode runtime is not ready.");
+    expect(calls).toContainEqual({ type: "requireRuntime", runtimeKind: "opencode" });
+    expect(calls).not.toContainEqual(expect.objectContaining({ type: "ensureDirectory" }));
+    expect(calls).not.toContainEqual(expect.objectContaining({ type: "createWorktree" }));
+    expect(calls).not.toContainEqual(expect.objectContaining({ type: "removeWorktree" }));
   });
 
-  test("waits for an active worktree read before runtime failure rollback", async () => {
+  test("waits for an active worktree read before transition failure rollback", async () => {
     const calls: unknown[] = [];
     const baseCoordinator = createTaskSessionLifecycleCoordinator();
     const readFinished = createGate();
     const readStarted = createGate();
     const rollbackStarted = createGate();
-    const runtimeFailureRequested = createGate();
-    const runtimeStarted = createGate();
+    const transitionFailureRequested = createGate();
+    const transitionStarted = createGate();
     let trackRollbackAcquisition = false;
     const coordinator = {
       ...baseCoordinator,
@@ -449,27 +456,22 @@ describe("createTaskService build start worktree handling", () => {
     };
     const dependencies = createDependencies(calls, {
       getTask: () => Effect.succeed(task({ status: "ready_for_dev" })),
-    });
-    const runtimeRegistry: RuntimeRegistryPort = {
-      ...dependencies.runtimeRegistry,
-      ensureWorkspaceRuntime() {
-        return Effect.sync(runtimeStarted.release).pipe(
-          Effect.zipRight(Effect.promise(() => runtimeFailureRequested.promise)),
+      transitionTask: () =>
+        Effect.sync(transitionStarted.release).pipe(
+          Effect.zipRight(Effect.promise(() => transitionFailureRequested.promise)),
           Effect.zipRight(
             Effect.fail(
               new HostOperationError({
-                operation: "test.ensureRuntime",
-                message: "runtime failed",
+                operation: "test.transitionTask",
+                message: "transition failed",
               }),
             ),
           ),
-        );
-      },
-    };
+        ),
+    });
     const startResult = Effect.runPromise(
       createTaskService({
         ...dependencies,
-        runtimeRegistry,
         taskSessionLifecycleCoordinator: coordinator,
       }).buildStart({
         repoPath: "/repo",
@@ -478,7 +480,7 @@ describe("createTaskService build start worktree handling", () => {
       }),
     );
     const startFailure = startResult.catch((cause: unknown) => cause);
-    await runtimeStarted.promise;
+    await transitionStarted.promise;
     const readResult = Effect.runPromise(
       coordinator.runWorktreeRead(
         "/worktrees/repo/task-1",
@@ -490,13 +492,13 @@ describe("createTaskService build start worktree handling", () => {
     await readStarted.promise;
 
     trackRollbackAcquisition = true;
-    runtimeFailureRequested.release();
+    transitionFailureRequested.release();
     await rollbackStarted.promise;
 
     expect(calls).not.toContainEqual(expect.objectContaining({ type: "removeWorktree" }));
     readFinished.release();
     const [, startCause] = await Promise.all([readResult, startFailure]);
-    expect(String(startCause)).toContain("runtime failed");
+    expect(String(startCause)).toContain("transition failed");
     expect(calls).toContainEqual({
       type: "removeWorktree",
       repoPath: "/repo",

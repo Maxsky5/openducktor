@@ -158,6 +158,59 @@ describe("subscribeElectronHostEvent", () => {
     expect(ipcRenderer.eventNames()).toEqual([]);
   });
 
+  test("delivers host runtime changes without a repository scope", () => {
+    const ipcRenderer = new EventEmitter();
+    const listener = mock(() => {});
+    const report = mock(() => {});
+    const payload: HostEventPayload<"openducktor://runtime-changed"> = {
+      type: "runtime_changed",
+      hostInstanceId: "host-1",
+      status: {
+        kind: "codex",
+        enabled: true,
+        configuredExecutablePath: "",
+        effectiveExecutablePath: null,
+        version: null,
+        state: "error",
+        trigger: "host_startup",
+        runtimeId: null,
+        startedAt: null,
+        updatedAt: "2026-02-22T08:00:00.000Z",
+        failure: {
+          trigger: "host_startup",
+          phase: "start",
+          message: "Codex failed to start.",
+          nextAction: "Fix the executable path in Settings.",
+          occurredAt: "2026-02-22T08:00:00.000Z",
+        },
+        revision: 2,
+      },
+    };
+    const stop = subscribeElectronHostEvent(ipcRenderer, "openducktor://runtime-changed", listener);
+    try {
+      forwardElectronHostEvent(
+        [
+          {
+            isDestroyed: () => false,
+            webContents: {
+              isDestroyed: () => false,
+              send: (channel, event) => {
+                ipcRenderer.emit(channel, {}, event);
+              },
+            },
+          },
+        ],
+        { channel: "openducktor://runtime-changed", payload },
+        report,
+      );
+      expect(listener).toHaveBeenCalledWith(payload);
+      expect(report).not.toHaveBeenCalled();
+    } finally {
+      stop();
+    }
+    expect(ipcRenderer.eventNames()).toEqual([]);
+  });
+
   test("shares validation across duplicate subscriptions and removes the route after the last unsubscribe", () => {
     const ipcRenderer = new EventEmitter();
     const channel = electronHostEventChannel("openducktor://run-event");

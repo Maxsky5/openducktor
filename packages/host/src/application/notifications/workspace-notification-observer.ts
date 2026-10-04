@@ -48,7 +48,7 @@ export const createWorkspaceNotificationObserver = ({
 }: {
   record: WorkspaceRecord;
   tasks: Pick<TaskService, "listTasks" | "agentSessionsListForTasks">;
-  live: Pick<AgentSessionLiveStateService, "list">;
+  live: Pick<AgentSessionLiveStateService, "list" | "refresh">;
   workspaceSessions: Pick<WorkspaceSessionStorePort, "listActive">;
   select(occurrence: NotificationOccurrence): Effect.Effect<void, HostOperationError>;
   failure(scope: string, source: "initialization" | "task" | "session", cause: unknown): void;
@@ -198,6 +198,9 @@ export const createWorkspaceNotificationObserver = ({
         const sessions = yield* workspaceSessions.listActive(state.record);
         if (!state.active) return;
         for (const session of sessions) setWorkspaceSession(session);
+        // Observe the workspace so the shared runtime restores its saved sessions when it starts.
+        yield* live.refresh({ repoPath: state.record.repoPath });
+        if (!state.active) return;
         const snapshots = yield* live.list({ repoPath: state.record.repoPath });
         if (!state.active) return;
         for (const session of snapshots) {

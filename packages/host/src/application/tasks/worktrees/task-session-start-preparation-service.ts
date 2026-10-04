@@ -96,6 +96,8 @@ export const createTaskSessionStartPreparationService = ({
           runtimeKind,
           role,
         );
+        // Fail before worktree setup when the shared runtime of this kind cannot accept work.
+        yield* dependencies.runtimeRegistry.requireReady(descriptor.kind);
         const repoConfig =
           yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(
             canonicalInputRepoPath,
@@ -212,24 +214,6 @@ export const createTaskSessionStartPreparationService = ({
                 }
               }),
             );
-            yield* dependencies.runtimeRegistry
-              .ensureWorkspaceRuntime({
-                runtimeKind: descriptor.kind,
-                repoPath: canonicalRepoPath,
-                workingDirectory: canonicalRepoPath,
-                descriptor,
-              })
-              .pipe(
-                Effect.mapError(
-                  (cause) =>
-                    new HostOperationError({
-                      operation: "task.session_start.ensure_runtime",
-                      message: `${runtimeKind} ${role} runtime failed to start for task ${taskId}`,
-                      cause,
-                      details: { repoPath: canonicalRepoPath, taskId, role, runtimeKind },
-                    }),
-                ),
-              );
             return {
               canonicalRepoPath,
               cleanup,

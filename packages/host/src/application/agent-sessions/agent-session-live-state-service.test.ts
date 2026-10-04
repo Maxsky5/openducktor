@@ -20,6 +20,9 @@ import type {
 } from "../../ports/agent-session-live-adapter-port";
 import { createAgentSessionLiveStateService } from "./agent-session-live-state-service";
 import type { WithProcessStartAdmission } from "../workspaces/workspace-admission-service";
+import type { RuntimeAdmissionPort } from "../../ports/runtime-admission-port";
+
+const passThroughAdmission: RuntimeAdmissionPort = { admit: (_runtimeKind, effect) => effect };
 
 const sessionRef = (
   externalSessionId: string,
@@ -65,7 +68,7 @@ const fakeAdapter = (input: {
     describeGeneratedImages: () => Effect.dieMessage("Unexpected describeGeneratedImages"),
     resolveGeneratedImageSource: () => Effect.dieMessage("Unexpected generated image read"),
     binding: new AgentSessionLiveRegistration(
-      { runtimeId: input.runtimeId, runtimeKind, repoPath: "/repo" },
+      { runtimeId: input.runtimeId, runtimeKind },
       (mutation) => Effect.map(mutation, ({ value }) => value),
     ),
     ...refreshSnapshots,
@@ -120,7 +123,6 @@ const mutateRegisteredAdapter = <A>(
       registration = service.createRuntimeRegistration({
         runtimeId: "runtime-test",
         runtimeKind: "opencode",
-        repoPath: "/repo",
       });
       yield* service.registerRuntimeAdapter({
         ...fakeAdapter({ runtimeId: "runtime-test", runtimeKind: "opencode", snapshots: () => [] }),
@@ -136,6 +138,7 @@ const createHarness = (withProcessStartAdmission?: WithProcessStartAdmission) =>
   const faultLogs: string[] = [];
   const adapterRegistry = createLiveSessionAdapterRegistry();
   const service = createAgentSessionLiveStateService({
+    runtimeAdmission: passThroughAdmission,
     adapterRegistry,
     withProcessStartAdmission,
     faultLog: (message) => Effect.sync(() => faultLogs.push(message)),
@@ -158,6 +161,7 @@ describe("createAgentSessionLiveStateService", () => {
   test("does not read saved roots when the adapter has no snapshot refresh", async () => {
     const events: AgentSessionLiveEnvelope[] = [];
     const service = createAgentSessionLiveStateService({
+      runtimeAdmission: passThroughAdmission,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       readSessionRootRefs: () => Effect.dieMessage("Unexpected saved root read."),
       faultLog: () => Effect.void,
@@ -176,29 +180,46 @@ describe("createAgentSessionLiveStateService", () => {
   });
 
   test.each(["roots", "snapshots"])(
-    "failed %s reads reject runtime registration",
+    "a failed %s read gives its repository a fault and keeps the shared runtime registered",
     async (source) => {
       const failure = new HostOperationError({
         operation: `test.${source}`,
         message: `Cannot read ${source}.`,
       });
+      let failing = false;
       const adapterRegistry = createLiveSessionAdapterRegistry();
       const events: AgentSessionLiveEnvelope[] = [];
       const service = createAgentSessionLiveStateService({
+        runtimeAdmission: passThroughAdmission,
         adapterRegistry,
-        readSessionRootRefs: () => (source === "roots" ? Effect.fail(failure) : Effect.succeed([])),
+        readSessionRootRefs: () =>
+          failing && source === "roots" ? Effect.fail(failure) : Effect.succeed([]),
         faultLog: () => Effect.void,
         publish: (event) => events.push(event),
       });
       const adapter = fakeAdapter({
         runtimeId: "runtime-1",
         snapshots: () => [liveSnapshot("session-1")],
-        refreshEffect: () => (source === "snapshots" ? Effect.fail(failure) : Effect.void),
+        refreshEffect: () =>
+          failing && source === "snapshots" ? Effect.fail(failure) : Effect.void,
       });
+      // Registration reads only repositories that a renderer observed before.
+      await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
+      failing = true;
+      events.length = 0;
 
-      expect(await expectHostFailure(service.registerRuntimeAdapter(adapter))).toBe(failure);
-      expect(adapterRegistry.listForRepo("/repo")).toEqual([]);
-      expect(events).toEqual([]);
+      await Effect.runPromise(service.registerRuntimeAdapter(adapter));
+
+      expect(adapterRegistry.list()).toEqual([adapter]);
+      expect(events).toMatchObject([
+        {
+          type: "fault",
+          repoPath: "/repo",
+          operation: "agent-session-live.restore-runtime-sessions",
+          message: `Cannot restore the ${adapter.binding.runtimeKind} sessions of this repository: Cannot read ${source}.`,
+        },
+        { type: "session_upsert" },
+      ]);
     },
   );
 
@@ -816,6 +837,7 @@ describe("createAgentSessionLiveStateService", () => {
       message: "fault logging failed",
     });
     const service = createAgentSessionLiveStateService({
+      runtimeAdmission: passThroughAdmission,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       faultLog: () =>
         Effect.sync(() => {
@@ -859,6 +881,7 @@ describe("createAgentSessionLiveStateService", () => {
     });
     const snapshot = liveSnapshot("session-1");
     const service = createAgentSessionLiveStateService({
+      runtimeAdmission: passThroughAdmission,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       faultLog: () => Effect.fail(logFailure),
       publish: (event) => events.push(event),
@@ -900,6 +923,7 @@ describe("createAgentSessionLiveStateService", () => {
       message: "fault publication failed",
     });
     const service = createAgentSessionLiveStateService({
+      runtimeAdmission: passThroughAdmission,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       faultLog: () =>
         Effect.sync(() => {
@@ -940,6 +964,7 @@ describe("createAgentSessionLiveStateService", () => {
     });
     const snapshot = liveSnapshot("session-1");
     const service = createAgentSessionLiveStateService({
+      runtimeAdmission: passThroughAdmission,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       faultLog: () => Effect.void,
       publish: (event) => {
@@ -989,6 +1014,7 @@ describe("createAgentSessionLiveStateService", () => {
       message: "fault publication failed",
     });
     const service = createAgentSessionLiveStateService({
+      runtimeAdmission: passThroughAdmission,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       faultLog: () =>
         Effect.sync(() => {
@@ -1283,6 +1309,7 @@ describe("createAgentSessionLiveStateService", () => {
         ),
     } satisfies AgentSessionLiveAdapterPort;
     await Effect.runPromise(service.registerRuntimeAdapter(adapter));
+    await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
     failSnapshotRead = true;
     events.length = 0;
 
@@ -1585,7 +1612,7 @@ describe("createAgentSessionLiveStateService", () => {
     });
   });
 
-  test("fails scoped operations when the workspace has no live runtime", async () => {
+  test("fails scoped operations when the kind has no live runtime", async () => {
     const { service } = createHarness();
     const ref = {
       repoPath: "/repo",
@@ -1597,7 +1624,9 @@ describe("createAgentSessionLiveStateService", () => {
     };
     const expectMissingRoute = async (effect: Effect.Effect<unknown, HostError>) => {
       const error = await expectHostFailure(effect);
-      expect(error.message).toBe("No live codex runtime owns repo '/repo'.");
+      expect(error.message).toBe(
+        "The codex runtime is not running. Check Diagnostics, then restart the runtime.",
+      );
     };
 
     await expectMissingRoute(service.resumeSession(ref));

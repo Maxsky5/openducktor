@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import { HostInvokeError } from "@openducktor/host-client";
 import { replaceAgentSession } from "@/state/agent-session-collection";
 import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
@@ -13,16 +12,17 @@ import {
   createSessionsRef,
   getSession,
 } from "./session-actions.test-helpers";
-import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
+import {
+  createOpenCodeAgentEngineTestAdapter,
+  createTestOpencodeSdkAdapter,
+} from "./opencode-agent-engine.test-support";
 import { acceptedUserMessage } from "./session-actions-send.test-support";
 
 describe("agent-orchestrator/handlers/session-actions send acceptance", () => {
   test.each(["event-first", "response-first"] as const)(
     "does not duplicate accepted queued input in %s order",
     async (order) => {
-      const adapter = new OpencodeSdkAdapter({
-        resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-      });
+      const adapter = createTestOpencodeSdkAdapter();
       const handlers: Parameters<typeof adapter.subscribeEvents>[1][] = [];
       adapter.subscribeEvents = async (_ref, handler) => {
         handlers.push(handler);
@@ -78,11 +78,7 @@ describe("agent-orchestrator/handlers/session-actions send acceptance", () => {
   test.each(["workflow", "repository"] as const)(
     "keeps an accepted %s message and a newer pending question after publication fails",
     async (kind) => {
-      const adapter = createOpenCodeAgentEngineTestAdapter(
-        new OpencodeSdkAdapter({
-          resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-        }),
-      );
+      const adapter = createOpenCodeAgentEngineTestAdapter(createTestOpencodeSdkAdapter());
       const sessionsRef = createSessionsRef([
         buildSession({
           status: "idle",
@@ -119,7 +115,6 @@ describe("agent-orchestrator/handlers/session-actions send acceptance", () => {
       const actions = createSessionActions({
         adapter,
         sessionsRef,
-        ensureExistingSessionRuntime: async () => {},
       });
       await expect(
         actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "Hello" }]),

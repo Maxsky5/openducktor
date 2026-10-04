@@ -29,7 +29,10 @@ import type {
 } from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "../support/messages";
 import { createTaskCardFixture } from "../test-utils";
-import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
+import {
+  createOpenCodeAgentEngineTestAdapter,
+  createTestOpencodeSdkAdapter,
+} from "./opencode-agent-engine.test-support";
 import { createStartAgentSession, type StartSessionDependencies } from "./start-session";
 
 type AgentSessionState = BaseAgentSessionState & { runId?: string | null };
@@ -244,9 +247,7 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
   const {
     activeRepo = "/tmp/repo",
     workspaceId = "workspace-1",
-    adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    }),
+    adapter = createTestOpencodeSdkAdapter(),
     sessionsRef = { current: emptyAgentSessionCollection() },
     taskRef = { current: [] },
     repoEpochRef = { current: 1 },

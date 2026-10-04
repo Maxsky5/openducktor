@@ -11,6 +11,7 @@ import type {
 } from "@openducktor/contracts";
 import type { Effect } from "effect";
 import type { HostError, HostOperationErrorAggregate } from "../../effect/host-errors";
+import type { OpenDucktorMcpServerConfigResolver } from "../mcp/openducktor-mcp-server-config";
 import type { AgentSessionRuntimeAdapterPort } from "../../ports/agent-session-live-adapter-port";
 import type {
   CodexAppServerPort,
@@ -75,5 +76,7 @@ export type CreateCodexLiveSessionAdapterPreparerInput = {
   readonly resolveRuntimePolicy: (
     scope: AgentSessionScope,
   ) => Effect.Effect<CodexEffectivePolicy, HostError>;
+  /** Resolves the managed MCP server of the workspace that owns a session repository. */
+  readonly resolveMcpServerConfig: OpenDucktorMcpServerConfigResolver;
   readonly createController?: (options: CodexAppServerAdapterOptions) => CodexSessionController;
 };

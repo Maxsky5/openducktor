@@ -1,4 +1,4 @@
-import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
+import type { RuntimeReadiness } from "@/lib/use-runtime-readiness";
 import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionActivityState } from "@/types/agent-session-activity";
@@ -10,7 +10,7 @@ export type AgentStudioSelectedSessionState = {
   selectedModel: AgentSessionState["selectedModel"];
   loadedSession: AgentSessionState | null;
   runtimeData: SelectedSessionRuntimeData;
-  runtimeReadiness: RepoRuntimeReadiness;
+  runtimeReadiness: RuntimeReadiness;
   transcriptState: AgentSessionTranscriptState;
   sessionAuxiliaryError: string | null;
 };

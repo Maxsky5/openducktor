@@ -1,5 +1,5 @@
 import { ArrowUpRight, RefreshCcw, ShieldCheck } from "lucide-react";
-import { type ReactElement, useMemo, useRef, useState } from "react";
+import { type ReactElement, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -11,106 +11,71 @@ import {
 import { cn } from "@/lib/utils";
 import { useChecksState, useWorkspaceState } from "@/state";
 import {
-  useRepoRuntimeHealthContext,
+  useHostRuntimeStatusContext,
   useRuntimeAvailabilityContext,
 } from "@/state/app-state-contexts";
+import { useDiagnosticsAutoOpenOwner } from "@/state/providers/diagnostics-auto-open-provider";
 import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
 import { DiagnosticsPanelSections } from "./diagnostics-panel-sections";
 
 type DiagnosticsPanelProps = {
-  autoOpenedByRepo?: Set<string>;
   triggerClassName?: string;
   triggerVariant?: "summary" | "icon";
 };
 
 export function DiagnosticsPanel({
-  autoOpenedByRepo: sharedAutoOpenedByRepo,
   triggerClassName,
   triggerVariant = "summary",
 }: DiagnosticsPanelProps): ReactElement {
-  const { activeWorkspace, isSwitchingWorkspace } = useWorkspaceState();
-  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
+  const { activeWorkspace } = useWorkspaceState();
   const {
     allRuntimeDefinitions: runtimeDefinitions,
     isLoadingRuntimeDefinitions,
     runtimeDefinitionsError,
   } = useRuntimeAvailabilityContext();
-  const {
-    runtimeCheck,
-    taskStoreCheck,
-    runtimeCheckFailureKind,
-    taskStoreCheckFailureKind,
-    refreshChecks,
-    isLoadingChecks,
-  } = useChecksState();
-  const { runtimeHealthByRuntime } = useRepoRuntimeHealthContext();
+  const runtimeStatus = useHostRuntimeStatusContext();
+  const checks = useChecksState();
+  const autoOpenOwner = useDiagnosticsAutoOpenOwner();
   const [isOpen, setOpen] = useState(false);
-  const localAutoOpenedByRepoRef = useRef<Set<string> | null>(null);
-  if (localAutoOpenedByRepoRef.current === null) {
-    localAutoOpenedByRepoRef.current = new Set();
-  }
-  const autoOpenedByRepo = sharedAutoOpenedByRepo ?? localAutoOpenedByRepoRef.current;
 
   const model = useMemo(
     () =>
       buildDiagnosticsPanelModel({
-        workspaceRepoPath: workspaceRepoPath,
-        activeWorkspace,
         runtimeDefinitions,
         isLoadingRuntimeDefinitions,
         runtimeDefinitionsError,
-        runtimeCheck,
-        taskStoreCheck,
-        runtimeCheckFailureKind,
-        taskStoreCheckFailureKind,
-        runtimeHealthByRuntime,
-        isLoadingChecks,
+        runtimeStatus,
+        runtimeCheck: checks.runtimeCheck,
+        hostMcpBridgeCheck: checks.hostMcpBridgeCheck,
+        workspace: activeWorkspace,
+        checksRepoPath: checks.checksRepoPath,
+        taskStoreCheck: checks.taskStoreCheck,
+        workspaceRuntimeMcpCheck: checks.workspaceRuntimeMcpCheck,
       }),
     [
-      workspaceRepoPath,
       activeWorkspace,
-      taskStoreCheck,
-      taskStoreCheckFailureKind,
-      isLoadingChecks,
+      checks,
       isLoadingRuntimeDefinitions,
-      runtimeCheck,
-      runtimeCheckFailureKind,
       runtimeDefinitions,
       runtimeDefinitionsError,
-      runtimeHealthByRuntime,
+      runtimeStatus,
     ],
   );
 
-  const shouldAutoOpen =
-    workspaceRepoPath !== null &&
-    model.criticalReasons.length > 0 &&
-    !autoOpenedByRepo.has(workspaceRepoPath);
-  const sheetOpen = isOpen || shouldAutoOpen;
-
-  const markAutoOpenedForWorkspace = (): boolean => {
-    if (!shouldAutoOpen || workspaceRepoPath === null) {
-      return false;
-    }
-
-    autoOpenedByRepo.add(workspaceRepoPath);
-    return true;
-  };
-
-  const handleSheetOpenAutoFocus = (): void => {
-    if (markAutoOpenedForWorkspace() && !isOpen) {
+  const workspaceId = activeWorkspace?.workspaceId ?? null;
+  const { hasHostBlockingFailure, hasWorkspaceBlockingFailure } = model;
+  useEffect(() => {
+    if (autoOpenOwner.claim({ hasHostBlockingFailure, workspaceId, hasWorkspaceBlockingFailure })) {
       setOpen(true);
     }
-  };
-
-  const handleSheetOpenChange = (nextOpen: boolean): void => {
-    if (!nextOpen) {
-      markAutoOpenedForWorkspace();
-    }
-
-    setOpen(nextOpen);
-  };
+  }, [autoOpenOwner, hasHostBlockingFailure, hasWorkspaceBlockingFailure, workspaceId]);
 
   const iconTriggerLabel = `Open diagnostics: ${model.summaryState.label}`;
+  const summaryIcon = model.isSummaryChecking ? (
+    <RefreshCcw className={cn("size-3.5 animate-spin", model.summaryState.iconClass)} />
+  ) : (
+    <ShieldCheck className={cn("size-3.5", model.summaryState.iconClass)} />
+  );
 
   const trigger =
     triggerVariant === "icon" ? (
@@ -134,11 +99,7 @@ export function DiagnosticsPanel({
         <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card px-2.5 py-2">
           <div className="min-w-0">
             <p className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-              {model.isSummaryChecking ? (
-                <RefreshCcw className={cn("size-3.5 animate-spin", model.summaryState.iconClass)} />
-              ) : (
-                <ShieldCheck className={cn("size-3.5", model.summaryState.iconClass)} />
-              )}
+              {summaryIcon}
               Diagnostics
             </p>
             <p className={cn("truncate text-xs font-medium", model.summaryState.toneClass)}>
@@ -171,12 +132,8 @@ export function DiagnosticsPanel({
   return (
     <>
       {trigger}
-      <Sheet open={sheetOpen} onOpenChange={handleSheetOpenChange}>
-        <SheetContent
-          side="right"
-          className="overflow-y-auto"
-          onOpenAutoFocus={handleSheetOpenAutoFocus}
-        >
+      <Sheet open={isOpen} onOpenChange={setOpen}>
+        <SheetContent side="right" className="overflow-y-auto">
           <SheetHeader className="space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div className="space-y-1">
@@ -184,19 +141,18 @@ export function DiagnosticsPanel({
                   <ShieldCheck className="size-4 text-selected-accent" />
                   Diagnostics
                 </SheetTitle>
-                <SheetDescription>
-                  Setup and runtime diagnostics for{" "}
-                  <span className="font-semibold">{model.repoName}</span>.
-                </SheetDescription>
+                <SheetDescription>Host and workspace checks.</SheetDescription>
               </div>
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
-                disabled={!workspaceRepoPath || isLoadingChecks || isSwitchingWorkspace}
-                onClick={() => void refreshChecks()}
+                disabled={checks.isRefreshingChecks}
+                onClick={() => void checks.refreshChecks()}
               >
-                <RefreshCcw className={cn("size-3.5", isLoadingChecks ? "animate-spin" : "")} />
+                <RefreshCcw
+                  className={cn("size-3.5", checks.isRefreshingChecks ? "animate-spin" : "")}
+                />
                 Refresh Checks
               </Button>
             </div>

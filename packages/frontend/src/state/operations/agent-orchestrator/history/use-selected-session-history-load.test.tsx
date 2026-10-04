@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { PropsWithChildren, ReactElement } from "react";
-import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
+import type { RuntimeReadinessState } from "@/lib/runtime-readiness";
 import { AgentSessionHistoryLoadContext } from "@/state/app-state-contexts";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import {
@@ -37,13 +37,13 @@ const createSession = (overrides: AgentSessionFixtureOverrides = {}): AgentSessi
 
 const createProps = ({
   session = createSession(),
-  repoReadinessState = "ready",
+  runtimeReadinessState = "ready",
 }: {
   session?: AgentSessionState | null;
-  repoReadinessState?: RepoRuntimeReadinessState;
+  runtimeReadinessState?: RuntimeReadinessState;
 } = {}) => ({
   session,
-  repoReadinessState,
+  runtimeReadinessState,
 });
 
 const createHistoryLoadWrapper = (
@@ -335,7 +335,7 @@ describe("useSelectedSessionHistoryLoad", () => {
   test("waits for runtime readiness before loading selected session history", async () => {
     const loadSessionHistory = mock(async () => null);
     const harness = createHistoryLoadHarness(
-      createProps({ repoReadinessState: "checking" }),
+      createProps({ runtimeReadinessState: "checking" }),
       loadSessionHistory,
     );
 
@@ -344,7 +344,7 @@ describe("useSelectedSessionHistoryLoad", () => {
 
       expect(loadSessionHistory).not.toHaveBeenCalled();
 
-      await harness.update(createProps({ repoReadinessState: "ready" }));
+      await harness.update(createProps({ runtimeReadinessState: "ready" }));
 
       expect(loadSessionHistory).toHaveBeenCalledWith(selectedSessionIdentity);
     } finally {

@@ -1,3 +1,5 @@
+import { RuntimeImpactDialog } from "@/components/features/runtimes/runtime-impact-dialog";
+import { runtimeImpactPathChanges } from "./settings-save/runtime-settings-application";
 import {
   useSettingsModalRequests,
   type SettingsModalOpenRequest,
@@ -170,6 +172,7 @@ function SettingsDialog({
     onRuntimeAvailabilityError: handleRuntimeAvailabilityError,
   });
   const isInteractionDisabled = isSettingsInteractionDisabled(controller);
+  const { runtimeReview } = controller;
 
   const handleSectionChange = (section: SettingsSectionId): void => {
     setNavigation((current) => ({ ...current, section }));
@@ -304,6 +307,21 @@ function SettingsDialog({
           onSave={handleSave}
         />
       </DialogContent>
+      <RuntimeImpactDialog
+        open={runtimeReview !== null}
+        title="Apply runtime changes"
+        description="Saving these settings stops or replaces agent runtimes."
+        confirmLabel="Save and apply"
+        impact={runtimeReview?.impact ?? null}
+        isLoadingImpact={runtimeReview?.isLoadingImpact ?? false}
+        impactError={runtimeReview?.impactError ?? null}
+        notice={runtimeReview?.notice ?? null}
+        pathChanges={runtimeReview?.impact ? runtimeImpactPathChanges(runtimeReview.impact) : []}
+        isPending={runtimeReview?.isPending ?? false}
+        error={null}
+        onConfirm={controller.confirmRuntimeReview}
+        onCancel={controller.cancelRuntimeReview}
+      />
     </Dialog>
   );
 }

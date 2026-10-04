@@ -67,7 +67,6 @@ export const createCodexImageSessionHarness = async (runtimeIds = ["runtime-live
     started: PromiseWithResolvers<void>;
     release: PromiseWithResolvers<void>;
   } | null = null;
-  let selectedRuntime = runtimeIds[0]!;
   const consume = (event: AgentSessionTranscriptEvent) => {
     events.push(event);
     sessionsRef.current = applyAgentSessionLiveDelta({
@@ -77,7 +76,8 @@ export const createCodexImageSessionHarness = async (runtimeIds = ["runtime-live
     consumer.handle(event);
   };
   const options = {
-    repoRuntimeResolver: { requireRepoRuntime: async () => imageRuntime(selectedRuntime) },
+    runtime: imageRuntime(runtimeIds[0]!),
+    resolveManagedMcpServer: async () => ({ command: ["odt-mcp"], environment: {} }),
     subscribeEvents: (id, listener) => {
       listeners.set(id, listener);
       return () => {
@@ -133,13 +133,25 @@ export const createCodexImageSessionHarness = async (runtimeIds = ["runtime-live
       },
     }),
   } satisfies CodexAppServerAdapterOptions;
-  const adapter = new CodexAppServerAdapter(options);
+  // Each live adapter controls exactly one runtime.
+  const adapters = new Map(
+    runtimeIds.map((runtimeId) => [
+      runtimeId,
+      new CodexAppServerAdapter({ ...options, runtime: imageRuntime(runtimeId) }),
+    ]),
+  );
+  const requireAdapter = (runtimeId: string) => {
+    const adapter = adapters.get(runtimeId);
+    if (!adapter) throw new Error(`No live adapter for ${runtimeId}`);
+    return adapter;
+  };
   // The renderer history reader and host live adapter do not share transient image state.
   const historyReaders = new Map(
     runtimeIds.map((runtimeId) => [
       runtimeId,
       new CodexAppServerAdapter({
-        repoRuntimeResolver: { requireRepoRuntime: async () => imageRuntime(runtimeId) },
+        runtime: imageRuntime(runtimeId),
+        resolveManagedMcpServer: options.resolveManagedMcpServer,
         transportFactory: options.transportFactory,
       }),
     ]),
@@ -147,18 +159,15 @@ export const createCodexImageSessionHarness = async (runtimeIds = ["runtime-live
   const close = () => {
     pendingHistory?.release.resolve();
     for (const id of runtimeIds) {
-      adapter.releaseRuntime(id);
+      adapters.get(id)?.releaseRuntime(id);
       historyReaders.get(id)?.releaseRuntime(id);
     }
     consumer.close();
   };
   try {
-    // The resolver reads selectedRuntime, so each session must finish starting before the next.
-    for (const id of runtimeIds) {
-      selectedRuntime = id;
-      // react-doctor-disable-next-line react-doctor/async-await-in-loop
-      await adapter.startSession(imageSessionInput(id));
-    }
+    await Promise.all(
+      runtimeIds.map((id) => requireAdapter(id).startSession(imageSessionInput(id))),
+    );
   } catch (error) {
     close();
     throw error;
@@ -274,6 +283,7 @@ export const createCodexImageSessionHarness = async (runtimeIds = ["runtime-live
       updateSession(ref, (session) => applyLoadedSessionHistory(session, loaded));
     },
     failRuntime: (runtimeId: string) => {
+      const adapter = requireAdapter(runtimeId);
       for (const event of adapter.settleGeneratedImages(runtimeId))
         consume(agentSessionTranscriptEventSchema.parse(event));
       adapter.releaseRuntime(runtimeId);

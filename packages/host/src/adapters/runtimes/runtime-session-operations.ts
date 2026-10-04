@@ -7,31 +7,27 @@ import {
 import { Effect } from "effect";
 import { HostResourceError, HostValidationError } from "../../effect/host-errors";
 import type { CodexAppServerPort } from "../../ports/codex-app-server-port";
-import type {
-  RuntimeRegistryError,
-  RuntimeSessionStatusProbeInput,
-  RuntimeSessionStopInput,
-} from "../../ports/runtime-registry-port";
+import type { RuntimeRegistryError, RuntimeSessionTarget } from "../../ports/runtime-registry-port";
 import { probeCodexSessionStatus } from "../codex/codex-session-status-probe";
 import { stopCodexSession } from "../codex/codex-session-stop";
 import { probeOpenCodeSessionStatus, stopOpenCodeSession } from "./runtime-registry-probes";
 
 export type ClaudeRuntimeSessionOperationsPort =
   | {
-      stopSession(input: RuntimeSessionStopInput): Effect.Effect<void, unknown>;
+      stopSession(input: RuntimeSessionTarget): Effect.Effect<void, unknown>;
       probeSessionStatus(
-        input: RuntimeSessionStatusProbeInput,
+        input: RuntimeSessionTarget,
       ): Effect.Effect<{ supported: boolean; hasLiveSession: boolean }, unknown>;
     }
   | undefined;
 
 export type RuntimeSessionOperations = {
   stopSession(
-    input: RuntimeSessionStopInput,
+    input: RuntimeSessionTarget,
     runtime: RuntimeInstanceSummary,
   ): Effect.Effect<void, RuntimeRegistryError>;
   probeSessionStatus(
-    input: RuntimeSessionStatusProbeInput,
+    input: RuntimeSessionTarget,
     runtime: RuntimeInstanceSummary,
   ): Effect.Effect<{ supported: boolean; hasLiveSession: boolean }, RuntimeRegistryError>;
 };
@@ -157,13 +153,13 @@ export const createRuntimeSessionOperations = ({
   }) satisfies RuntimeSessionOperationsByKind;
 
 type StopRuntimeSessionInput = {
-  input: RuntimeSessionStopInput;
+  input: RuntimeSessionTarget;
   runtime: RuntimeInstanceSummary;
   sessionOperations: RuntimeSessionOperationsByKind;
 };
 
 type ProbeRuntimeSessionStatusInput = {
-  input: RuntimeSessionStatusProbeInput;
+  input: RuntimeSessionTarget;
   runtime: RuntimeInstanceSummary | null;
   sessionOperations: RuntimeSessionOperationsByKind;
 };
@@ -257,7 +253,7 @@ const requireCodexRuntimeId = (runtimeRoute: RuntimeRoute) =>
   });
 
 const toSessionRouteTarget = (
-  input: RuntimeSessionStopInput | RuntimeSessionStatusProbeInput,
+  input: RuntimeSessionTarget | RuntimeSessionTarget,
   runtime: RuntimeInstanceSummary,
 ) => ({
   runtimeKind: input.runtimeKind,

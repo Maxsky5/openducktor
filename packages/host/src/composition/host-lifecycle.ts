@@ -33,8 +33,6 @@ export const createStopTerminalsStep = (terminalService: TerminalService): HostS
   run: () => terminalService.dispose(),
 });
 
-const formatRuntimeTaskLabel = (taskId: string | null): string => taskId ?? "workspace";
-
 export const writeHostLifecycleLog = (
   logger: HostLifecycleLogger,
   level: "error" | "info",
@@ -159,12 +157,11 @@ export const createStopRuntimesStep = (
   label: "active agent runtimes",
   run() {
     return Effect.gen(function* () {
-      let loggingFailure: HostOperationError | undefined;
-      loggingFailure = yield* captureHostLifecycleLogFailure(
+      const loggingFailure = yield* captureHostLifecycleLogFailure(
         logger,
         "info",
         "Stopping registered agent runtimes",
-        loggingFailure,
+        undefined,
       );
 
       const stopResult = yield* Effect.either(runtimeRegistry.stopAllRuntimes());
@@ -184,29 +181,7 @@ export const createStopRuntimesStep = (
           }),
         );
       }
-      const stoppedRuntimes = stopResult.right;
-      if (stoppedRuntimes.length === 0) {
-        loggingFailure = yield* captureHostLifecycleLogFailure(
-          logger,
-          "info",
-          "No active agent runtimes are registered",
-          loggingFailure,
-        );
-        if (loggingFailure) {
-          return yield* Effect.fail(loggingFailure);
-        }
-        return;
-      }
-      for (const runtime of stoppedRuntimes) {
-        loggingFailure = yield* captureHostLifecycleLogFailure(
-          logger,
-          "info",
-          `Stopped ${runtime.kind} runtime ${runtime.runtimeId} for task ${formatRuntimeTaskLabel(
-            runtime.taskId,
-          )} (${runtime.role})`,
-          loggingFailure,
-        );
-      }
+      // The runtime status log records the stop of each runtime.
       if (loggingFailure) {
         return yield* Effect.fail(loggingFailure);
       }

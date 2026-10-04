@@ -26,10 +26,6 @@ import {
 const runtime = {
   kind: "claude" as const,
   runtimeId: "runtime-1",
-  repoPath: "/repo",
-  taskId: null,
-  role: "workspace" as const,
-  workingDirectory: "/repo",
   runtimeRoute: { type: "host_service" as const, identity: "runtime-1" },
   startedAt: "2026-07-17T10:00:00.000Z",
   descriptor: RUNTIME_DESCRIPTORS_BY_KIND.claude,
@@ -100,6 +96,54 @@ const session: ClaudeSessionContext = {
   todosById: new Map(),
 };
 
+const otherSummary = {
+  ...summary,
+  externalSessionId: "session-2",
+  workingDirectory: "/other-repo",
+  title: "Other repo session",
+  sessionAssociation: { kind: "repository" },
+} as const satisfies AgentSessionSummary;
+
+const otherSession: ClaudeSessionContext = {
+  ...session,
+  externalSessionId: "session-2",
+  input: {
+    ...session.input,
+    repoPath: "/other-repo",
+    workingDirectory: "/other-repo",
+    sessionScope: { kind: "repository" },
+  },
+  startedAt: otherSummary.startedAt,
+  summary: otherSummary,
+};
+
+const otherStartInput = {
+  repoPath: "/other-repo",
+  runtimeKind: "claude" as const,
+  workingDirectory: "/other-repo",
+  sessionScope: { kind: "repository" as const },
+  systemPrompt: "Help",
+};
+
+const sessionRef = {
+  repoPath: "/repo",
+  runtimeKind: "claude" as const,
+  workingDirectory: "/repo/worktree",
+  externalSessionId: "session-1",
+};
+
+const otherSessionRef = {
+  repoPath: "/other-repo",
+  runtimeKind: "claude" as const,
+  workingDirectory: "/other-repo",
+  externalSessionId: "session-2",
+};
+
+const sessionsById = new Map([
+  [session.externalSessionId, session],
+  [otherSession.externalSessionId, otherSession],
+]);
+
 const startInput = {
   repoPath: "/repo",
   runtimeKind: "claude" as const,
@@ -150,6 +194,8 @@ const createHarness = async (
   let stopSessionsForRuntimeImpl: ClaudeAgentSdkService["stopSessionsForRuntime"] = () =>
     Effect.void;
   let disposeImpl: ClaudeAgentSdkService["dispose"] = () => {};
+  let inspectSessionForImportImpl: ClaudeAgentSdkService["inspectSessionForImport"] = () =>
+    Effect.dieMessage("Unexpected import");
   let failNextMutationAfterApply = false;
   let failMutationEventType: string | undefined;
   let mutationBarrier: MutationBarrier | undefined;
@@ -169,7 +215,10 @@ const createHarness = async (
   };
   const service = {
     ...unexpectedRuntimeQueries,
-    inspectSessionForImport: () => Effect.dieMessage("Unexpected import"),
+    inspectSessionForImport: (
+      input: Parameters<ClaudeAgentSdkService["inspectSessionForImport"]>[0],
+      runtimeId: string,
+    ) => inspectSessionForImportImpl(input, runtimeId),
     startSession: (
       input: Parameters<ClaudeAgentSdkService["startSession"]>[0],
       runtimeId: string,
@@ -249,8 +298,7 @@ const createHarness = async (
     liveSessionLifecycle,
     service,
     sessionStore: {
-      get: (externalSessionId) =>
-        externalSessionId === session.externalSessionId ? session : undefined,
+      get: (externalSessionId) => sessionsById.get(externalSessionId),
     },
     workingDirectoryDependencies: workingDirectoryDependenciesOverride,
   };
@@ -317,6 +365,11 @@ const createHarness = async (
     },
     setDispose: (implementation: ClaudeAgentSdkService["dispose"]) => {
       disposeImpl = implementation;
+    },
+    setInspectSessionForImport: (
+      implementation: ClaudeAgentSdkService["inspectSessionForImport"],
+    ) => {
+      inspectSessionForImportImpl = implementation;
     },
   };
 };
@@ -1906,5 +1959,194 @@ describe("Claude host live-session adapter", () => {
         message: "Publication failed.",
       },
     ]);
+  });
+
+  describe("with sessions from two repositories", () => {
+    const startBothSessions = async (harness: Awaited<ReturnType<typeof createHarness>>) => {
+      harness.setStartSession((input) =>
+        Effect.succeed(input.repoPath === "/other-repo" ? otherSummary : summary),
+      );
+      await Effect.runPromise(harness.adapter.startSession(startInput));
+      await Effect.runPromise(harness.adapter.startSession(otherStartInput));
+    };
+
+    test("lists the sessions of every repository from one runtime adapter", async () => {
+      const harness = await createHarness();
+
+      await startBothSessions(harness);
+
+      expect(harness.adapter.binding).not.toHaveProperty("repoPath");
+      const snapshots = await Effect.runPromise(harness.adapter.listSnapshots());
+      expect(snapshots.map((snapshot) => snapshot.ref)).toEqual([sessionRef, otherSessionRef]);
+      expect(
+        harness.changes.flatMap((change) =>
+          change.type === "session_upsert" ? [change.snapshot.ref] : [],
+        ),
+      ).toEqual([sessionRef, otherSessionRef]);
+    });
+
+    test("publishes runtime events with the repository of their session", async () => {
+      const harness = await createHarness();
+      await startBothSessions(harness);
+      harness.changes.splice(0);
+      const catalog = { commands: [] };
+      harness.setLoadSessionContextUsage(() => Effect.succeed(null));
+
+      harness.eventHub.emit(otherSession, {
+        type: "runtime_slash_commands_changed",
+        externalSessionId: "session-2",
+        timestamp: "2026-07-17T10:05:00.000Z",
+        catalog,
+      });
+      await Effect.runPromise(
+        harness.adapter.loadContext({ ...otherSessionRef, sessionScope: { kind: "repository" } }),
+      );
+
+      expect(harness.changes).toContainEqual({
+        type: "slash_command_catalog_updated",
+        repoPath: "/other-repo",
+        runtimeKind: "claude",
+        workingDirectory: "/other-repo",
+        catalog,
+      });
+    });
+
+    test("reports an event projection fault to the repository of the session", async () => {
+      const harness = await createHarness();
+      await startBothSessions(harness);
+      harness.changes.splice(0);
+      harness.failNextMutationAfterStateApply("session_started");
+
+      harness.eventHub.emit(otherSession, {
+        type: "session_started",
+        externalSessionId: "session-2",
+        timestamp: "2026-07-17T10:05:00.000Z",
+        message: "Started",
+      });
+      harness.setLoadSessionContextUsage(() => Effect.succeed(null));
+      await expect(
+        Effect.runPromise(
+          harness.adapter.loadContext({
+            ...otherSessionRef,
+            sessionScope: { kind: "repository" },
+          }),
+        ),
+      ).rejects.toThrow("Publication failed.");
+
+      expect(harness.changes).toEqual([
+        {
+          type: "fault",
+          repoPath: "/other-repo",
+          operation: "test.publish",
+          message: "Publication failed.",
+        },
+      ]);
+    });
+
+    test("reports a title projection fault to the repository of the request", async () => {
+      const harness = await createHarness();
+      await startBothSessions(harness);
+      harness.setUpdateSessionTitle((input) =>
+        Effect.succeed({
+          status: "renamed" as const,
+          summary: { ...otherSummary, title: input.title },
+        }),
+      );
+      harness.changes.splice(0);
+      harness.failNextMutationAfterStateApply();
+
+      await expect(
+        Effect.runPromise(
+          harness.adapter.updateSessionTitle({ ...otherSessionRef, title: "Renamed" }),
+        ),
+      ).resolves.toEqual({ status: "renamed" });
+
+      expect(harness.changes).toEqual([
+        {
+          type: "fault",
+          repoPath: "/other-repo",
+          operation: "claude-live-session.update-session-title",
+          message: "Publication failed.",
+        },
+      ]);
+    });
+
+    test("retains an imported session under the repository of the import request", async () => {
+      const harness = await createHarness();
+      await startBothSessions(harness);
+      harness.setInspectSessionForImport(() =>
+        Effect.succeed({
+          metadata: {
+            externalSessionId: "session-3",
+            runtimeKind: "claude",
+            workingDirectory: "/other-repo",
+            title: "Imported",
+            updatedAt: null,
+          },
+          selectedModel: null,
+          attach: Effect.succeed({ ...otherSummary, externalSessionId: "session-3" }),
+        }),
+      );
+      const importedRef = { ...otherSessionRef, externalSessionId: "session-3" };
+
+      const source = await Effect.runPromise(
+        harness.adapter.sessionImport.inspectSession(importedRef),
+      );
+      await Effect.runPromise(source.attach);
+
+      const snapshots = await Effect.runPromise(harness.adapter.listSnapshots());
+      expect(snapshots.map((snapshot) => snapshot.ref)).toEqual([
+        sessionRef,
+        otherSessionRef,
+        importedRef,
+      ]);
+    });
+
+    test("removes only the session tree of a stopped session", async () => {
+      const harness = await createHarness();
+      await startBothSessions(harness);
+      const stopped: unknown[] = [];
+      harness.setStopSession((input) =>
+        Effect.sync(() => {
+          stopped.push(input);
+          harness.eventHub.emit(otherSession, {
+            type: "session_finished",
+            externalSessionId: "session-2",
+            timestamp: "2026-07-17T10:06:00.000Z",
+            message: "Session stopped",
+          });
+        }),
+      );
+
+      await Effect.runPromise(harness.adapter.stopSession(otherSessionRef));
+
+      expect(stopped).toEqual([otherSessionRef]);
+      const snapshots = await Effect.runPromise(harness.adapter.listSnapshots());
+      expect(snapshots.map((snapshot) => snapshot.ref)).toEqual([sessionRef]);
+    });
+
+    test("releases the sessions of every repository and disposes the service", async () => {
+      const harness = await createHarness();
+      await startBothSessions(harness);
+      const stoppedRuntimeIds: string[] = [];
+      let disposeCalls = 0;
+      harness.setStopSessionsForRuntime((runtimeId) =>
+        Effect.sync(() => {
+          stoppedRuntimeIds.push(runtimeId);
+        }),
+      );
+      harness.setDispose(() => {
+        disposeCalls += 1;
+      });
+
+      await expect(Effect.runPromise(harness.adapter.releaseRuntime())).resolves.toEqual([
+        sessionRef,
+        otherSessionRef,
+      ]);
+
+      expect(stoppedRuntimeIds).toEqual(["runtime-1"]);
+      expect(disposeCalls).toBe(1);
+      await expect(Effect.runPromise(harness.adapter.listSnapshots())).resolves.toEqual([]);
+    });
   });
 });

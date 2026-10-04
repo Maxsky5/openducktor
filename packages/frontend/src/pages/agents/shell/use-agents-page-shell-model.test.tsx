@@ -33,6 +33,7 @@ import type {
   TasksStateContextValue,
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
+import { createObservedCheckFixture } from "@/test-utils/shared-test-fixtures";
 import { agentStudioChatDraftScopeKey } from "../agent-studio-chat-draft";
 import {
   createAgentSessionFixture,
@@ -236,7 +237,6 @@ let workspaceState: Pick<
   branches: [],
 };
 let checksState = {
-  isLoadingChecks: false,
   refreshChecks: async () => undefined,
 };
 let tasksState: TasksStateContextValue = {
@@ -525,7 +525,13 @@ const workspaceStateValue = (): WorkspaceStateContextValue => ({
   },
   detectGithubRepository: async () => null,
   saveGlobalGitConfig: async () => undefined,
-  saveSettingsSnapshot: async () => undefined,
+  previewSettingsSnapshotRuntime: async () => ({ impact: null }),
+  saveSettingsSnapshot: async () => ({
+    type: "saved" as const,
+    workspaces: [],
+    runtimeApplications: [],
+    refreshError: null,
+  }),
   saveAgentModelFavorites: async () => {
     throw new Error("saveAgentModelFavorites is not used in this test");
   },
@@ -533,10 +539,12 @@ const workspaceStateValue = (): WorkspaceStateContextValue => ({
 });
 
 const checksStateValue = (): ChecksStateContextValue => ({
-  runtimeCheck: null,
-  taskStoreCheck: null,
-  runtimeCheckFailureKind: null,
-  taskStoreCheckFailureKind: null,
+  runtimeCheck: createObservedCheckFixture(),
+  hostMcpBridgeCheck: { data: null, error: null },
+  checksRepoPath: null,
+  taskStoreCheck: createObservedCheckFixture(),
+  workspaceRuntimeMcpCheck: { data: null, error: null },
+  isRefreshingChecks: false,
   ...checksState,
 });
 
@@ -716,7 +724,6 @@ beforeEach(async () => {
     branches: [],
   };
   checksState = {
-    isLoadingChecks: false,
     refreshChecks: async () => undefined,
   };
   tasksState = {

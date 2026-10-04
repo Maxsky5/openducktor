@@ -4,6 +4,7 @@ import type {
   GlobalGitConfig,
   RepoAgentDefaults,
   SettingsSnapshot,
+  SettingsSnapshotRuntimePreview,
   SettingsSnapshotSaveInput,
   WorkspaceRecord,
 } from "@openducktor/contracts";
@@ -13,12 +14,15 @@ import {
   normalizeRepoAgentDefaultForSave,
   normalizeRepoDefaultModelForSave,
 } from "@/lib/repo-agent-defaults";
+import { errorMessage } from "@/lib/errors";
 import { normalizeTargetBranch } from "@/lib/target-branch";
 import { normalizeRepoScripts } from "@/state/read-models/settings-read-model";
 import type {
   RepoAgentDefaultInput,
   RepoSettingsInput,
+  SettingsSaveOutcome,
   WorkspaceModelDefaultsDraft,
+  WorkspaceStateContextValue,
 } from "@/types/state-slices";
 import { checksQueryKeys } from "../../queries/checks";
 import { devServerQueryKeys } from "../../queries/dev-servers";
@@ -52,7 +56,8 @@ type UseRepoSettingsOperationsResult = {
   loadSettingsSnapshot: () => Promise<SettingsSnapshot>;
   detectGithubRepository: (repoPath: string) => Promise<GitProviderRepository | null>;
   saveGlobalGitConfig: (git: GlobalGitConfig) => Promise<void>;
-  saveSettingsSnapshot: (snapshot: SettingsSnapshotSaveInput) => Promise<void>;
+  previewSettingsSnapshotRuntime: WorkspaceStateContextValue["previewSettingsSnapshotRuntime"];
+  saveSettingsSnapshot: WorkspaceStateContextValue["saveSettingsSnapshot"];
   saveAgentModelFavorites: (favorites: AgentModelFavorite[]) => Promise<SettingsSnapshot>;
 };
 
@@ -224,10 +229,15 @@ export function useRepoSettingsOperations({
     [queryClient, settingsSnapshotQueryKey],
   );
 
-  const saveSettingsSnapshot = useCallback(
-    async (snapshot: SettingsSnapshotSaveInput): Promise<void> => {
-      const previousSnapshot = queryClient.getQueryData<SettingsSnapshot>(settingsSnapshotQueryKey);
-      const workspaces = await host.workspaceSaveSettingsSnapshot(snapshot);
+  const previewSettingsSnapshotRuntime = useCallback(
+    (snapshot: SettingsSnapshotSaveInput): Promise<SettingsSnapshotRuntimePreview> =>
+      host.workspacePreviewSettingsSnapshotRuntime(snapshot),
+    [],
+  );
+
+  /** Reloads caches that depend on settings after a written save. */
+  const refreshAfterSettingsSave = useCallback(
+    async (previousSnapshot: SettingsSnapshot | undefined, workspaces: WorkspaceRecord[]) => {
       await queryClient.cancelQueries({ queryKey: settingsSnapshotQueryKey, exact: true });
       const normalizedSnapshot = await queryClient.fetchQuery({
         ...settingsSnapshotQueryOptions(),
@@ -247,8 +257,6 @@ export function useRepoSettingsOperations({
           queryClient.invalidateQueries({ queryKey: devServerQueryKeys.repo(repoPath) }),
         ),
       );
-      queryClient.setQueryData(workspaceQueryKeys.list(), workspaces);
-      applyWorkspaceRecords(workspaces);
       const savedActiveWorkspace = workspaces.find((workspace) => workspace.isActive);
       if (changes.kanbanDoneVisibleDaysChanged) {
         await getProductionTaskViewSync(queryClient).refreshAfterTaskRetentionChange(
@@ -265,7 +273,30 @@ export function useRepoSettingsOperations({
         });
       }
     },
-    [applyWorkspaceRecords, queryClient, settingsSnapshotQueryKey],
+    [queryClient, settingsSnapshotQueryKey],
+  );
+
+  const saveSettingsSnapshot = useCallback(
+    async (
+      snapshot: SettingsSnapshotSaveInput,
+      runtimeConfirmation?: string,
+    ): Promise<SettingsSaveOutcome> => {
+      const previousSnapshot = queryClient.getQueryData<SettingsSnapshot>(settingsSnapshotQueryKey);
+      const saveResult = await host.workspaceSaveSettingsSnapshot(snapshot, runtimeConfirmation);
+      // Nothing was written. The caller shows the changed impact for a new review.
+      if (saveResult.type === "runtime_impact_changed") return saveResult;
+      const { workspaces } = saveResult;
+      queryClient.setQueryData(workspaceQueryKeys.list(), workspaces);
+      applyWorkspaceRecords(workspaces);
+      // The host already wrote the settings and applied runtime changes. A failed reload of
+      // local caches goes into `refreshError` and does not hide that result.
+      const refreshError = await refreshAfterSettingsSave(previousSnapshot, workspaces).then(
+        () => null,
+        errorMessage,
+      );
+      return { ...saveResult, refreshError };
+    },
+    [applyWorkspaceRecords, queryClient, refreshAfterSettingsSave, settingsSnapshotQueryKey],
   );
 
   const saveAgentModelFavorites = useCallback(
@@ -284,6 +315,7 @@ export function useRepoSettingsOperations({
     loadSettingsSnapshot,
     detectGithubRepository,
     saveGlobalGitConfig,
+    previewSettingsSnapshotRuntime,
     saveSettingsSnapshot,
     saveAgentModelFavorites,
   };

@@ -2,6 +2,7 @@ import { unexpectedNativeSessionImport } from "../../test-support/session-import
 import { unexpectedNativeRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
 import type {
+  OpencodeMcpBinding,
   OpencodeNativeApprovalReply,
   OpencodeNativeQuestionReply,
   OpencodeRuntimeSnapshotFailure,
@@ -15,14 +16,12 @@ import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
+import type { OpenCodeLiveSessionObserver } from "./opencode-live-session-adapter";
+import type { OpenCodeMcpStatusProbe } from "./opencode-live-session-mcp";
 
 export const runtime: RuntimeInstanceSummary = {
   kind: "opencode",
   runtimeId: "runtime-1",
-  repoPath: "/repo",
-  taskId: null,
-  role: "workspace",
-  workingDirectory: "/repo",
   runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:43123" },
   startedAt: "2026-07-16T10:00:00.000Z",
   descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
@@ -90,6 +89,7 @@ type RuntimeHarness = {
   readonly releaseCalls: string[];
   readonly contextLoadCalls: string[];
   readonly sessionSourceReadCalls: number;
+  readonly sessionSourceReadRepos: string[];
 };
 
 export const createRuntimeHarness = (
@@ -101,6 +101,10 @@ export const createRuntimeHarness = (
     readonly onSendUserMessage?: () => void;
     readonly sessionFailures?: OpencodeRuntimeSnapshotFailure[];
     readonly sessionSources?: OpencodeRuntimeSnapshotSource[];
+    readonly readSessionSources?: OpencodeSessionRuntimeConnection["readSessionSources"];
+    readonly mcpBindings?: ReadonlyArray<OpencodeMcpBinding>;
+    /** Replaces the native runtime release after it records the call. */
+    readonly release?: () => Promise<void>;
   } = {},
 ): RuntimeHarness => {
   let listener: ((signal: OpencodeSessionRuntimeSignal) => void | Promise<void>) | null = null;
@@ -110,10 +114,15 @@ export const createRuntimeHarness = (
   const releaseCalls: string[] = [];
   const contextLoadCalls: string[] = [];
   let sessionSourceReadCalls = 0;
+  const sessionSourceReadRepos: string[] = [];
 
   const connection: OpencodeSessionRuntimeConnection = {
-    readSessionSources: async () => {
+    readSessionSources: async (repoPath, roots) => {
       sessionSourceReadCalls += 1;
+      sessionSourceReadRepos.push(repoPath);
+      if (options.readSessionSources) {
+        return options.readSessionSources(repoPath, roots);
+      }
       return {
         sources: options.sessionSources ?? [],
         failures: options.sessionFailures ?? [],
@@ -207,8 +216,10 @@ export const createRuntimeHarness = (
       startForwarding: async (nextListener) => {
         listener = nextListener;
       },
+      listMcpBindings: () => options.mcpBindings ?? [],
       release: async () => {
         releaseCalls.push(input.runtimeId);
+        await options.release?.();
         listener = null;
       },
     }),
@@ -226,8 +237,17 @@ export const createRuntimeHarness = (
     get sessionSourceReadCalls() {
       return sessionSourceReadCalls;
     },
+    sessionSourceReadRepos,
   };
 };
+
+export const ignoreObservationLoss: OpenCodeLiveSessionObserver = {
+  onObservationLost: () => undefined,
+  onCleanupFailed: () => undefined,
+};
+
+export const unexpectedMcpStatusProbe: OpenCodeMcpStatusProbe = () =>
+  Effect.die(new Error("Unexpected OpenCode MCP status probe."));
 
 export const createLifecycle = (
   changes: AgentSessionLiveAdapterChange[],

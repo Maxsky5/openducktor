@@ -1,13 +1,7 @@
-import type {
-  RepoStoreHealth,
-  RuntimeInstanceSummary,
-  RuntimeKind,
-  TaskStoreCheck,
-} from "@openducktor/contracts";
+import type { RepoStoreHealth, TaskStoreCheck } from "@openducktor/contracts";
 import { isCancelledError } from "@tanstack/react-query";
 import { errorMessage } from "@/lib/errors";
 import { getBlockingRepoStoreHealth, summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
-import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 
 export const TASK_STORE_PREPARATION_TOAST_DELAY_MS = 1_000;
 
@@ -23,81 +17,6 @@ export type LifecycleNotificationPort = {
 export type LifecycleTimerPort<TimerHandle> = {
   setTimeout: (callback: () => void, delayMs: number) => TimerHandle;
   clearTimeout: (timer: TimerHandle) => void;
-};
-
-type RuntimeStartupInput<TimerHandle> = {
-  repoPath: string;
-  runtimeKinds: RuntimeKind[];
-  isCurrent: () => boolean;
-  startRepoRuntime: (repoPath: string, runtimeKind: RuntimeKind) => Promise<RuntimeInstanceSummary>;
-  onRuntimeReady: (runtime: RuntimeInstanceSummary) => Promise<void>;
-  refreshRepoRuntimeHealth: () => Promise<RepoRuntimeHealthMap>;
-  notifications: LifecycleNotificationPort;
-  timers: LifecycleTimerPort<TimerHandle>;
-};
-
-export const startRepositoryRuntimes = <TimerHandle>({
-  repoPath,
-  runtimeKinds,
-  isCurrent,
-  startRepoRuntime,
-  onRuntimeReady,
-  refreshRepoRuntimeHealth,
-  notifications,
-  timers,
-}: RuntimeStartupInput<TimerHandle>): (() => void) => {
-  let disposed = false;
-  let startupStatusRefreshTimer: TimerHandle | null = null;
-  const isActive = (): boolean => !disposed && isCurrent();
-  const refreshHealth = (): void => {
-    void refreshRepoRuntimeHealth().catch((cause: unknown) => {
-      if (!isActive() || isCancelledError(cause)) {
-        return;
-      }
-      notifications.error("Runtime diagnostics unavailable", errorMessage(cause));
-    });
-  };
-
-  for (const runtimeKind of runtimeKinds) {
-    void startRepoRuntime(repoPath, runtimeKind)
-      .then(
-        (runtime) => {
-          if (!isActive()) return;
-          return onRuntimeReady(runtime).catch((cause: unknown) => {
-            if (isActive()) {
-              notifications.error(
-                `Runtime data refresh failed for ${runtimeKind}`,
-                errorMessage(cause),
-              );
-            }
-          });
-        },
-        (cause: unknown) => {
-          if (isActive()) {
-            notifications.error(`Runtime startup failed for ${runtimeKind}`, errorMessage(cause));
-          }
-        },
-      )
-      .finally(() => {
-        if (isActive()) {
-          refreshHealth();
-        }
-      });
-  }
-
-  startupStatusRefreshTimer = timers.setTimeout(() => {
-    startupStatusRefreshTimer = null;
-    if (isActive()) {
-      refreshHealth();
-    }
-  }, 0);
-
-  return () => {
-    disposed = true;
-    if (startupStatusRefreshTimer !== null) {
-      timers.clearTimeout(startupStatusRefreshTimer);
-    }
-  };
 };
 
 type RepositoryLoadInput<TimerHandle> = {

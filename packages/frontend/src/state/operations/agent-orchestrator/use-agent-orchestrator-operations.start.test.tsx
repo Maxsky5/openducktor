@@ -12,7 +12,6 @@ import {
   createUnavailableBuildTaskFixture,
   host,
   listHarnessSessions,
-  OPENCODE_RUNTIME_DESCRIPTOR,
   OpencodeSdkAdapter,
   persistedSessionFixture,
   setupOrchestratorOperationsTestEnvironment,
@@ -658,7 +657,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
-    const originalRuntimeEnsure = host.runtimeEnsure;
     const originalBuildContinuationTargetGet = host.taskWorktreeGet;
 
     const originalStartSession = OpencodeSdkAdapter.prototype.startSession;
@@ -675,20 +673,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
-    host.runtimeEnsure = async () => ({
-      runtimeId: "runtime-1",
-      kind: "opencode",
-      repoPath: "/tmp/repo",
-      taskId: null,
-      role: "workspace",
-      workingDirectory: "/tmp/repo/worktree",
-      runtimeRoute: {
-        type: "local_http",
-        endpoint: "http://127.0.0.1:4555",
-      },
-      startedAt: "2026-02-22T08:00:00.000Z",
-      descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-    });
     host.taskWorktreeGet = async () => ({
       workingDirectory: "/tmp/repo/worktree",
       source: "active_build_run",
@@ -770,7 +754,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
       host.specGet = originalSpecGet;
       host.planGet = originalPlanGet;
       host.qaGetReport = originalQaGetReport;
-      host.runtimeEnsure = originalRuntimeEnsure;
       host.taskWorktreeGet = originalBuildContinuationTargetGet;
 
       OpencodeSdkAdapter.prototype.startSession = originalStartSession;

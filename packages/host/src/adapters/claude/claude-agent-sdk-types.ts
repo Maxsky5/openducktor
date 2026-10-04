@@ -14,7 +14,6 @@ import type {
   AgentUserMessageDisplayPart,
   ForkAgentSessionInput,
   ResumeAgentSessionInput,
-  SessionRef,
   StartAgentSessionInput,
 } from "@openducktor/core";
 import type { Effect } from "effect";
@@ -28,6 +27,7 @@ import type {
   HostOperationErrorAggregate,
   HostValidationErrorAggregate,
 } from "../../effect/host-errors";
+import type { RuntimeSessionTarget } from "../../ports/runtime-registry-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import type { OpenDucktorMcpBridgeConnection } from "../mcp/openducktor-mcp-environment";
 import type { HostRuntimeDistribution } from "../runtimes/runtime-distribution";
@@ -153,12 +153,12 @@ export type ClaudeSessionStore = {
   close(session: ClaudeSession): void;
   get(externalSessionId: string): ClaudeSession | undefined;
   probeSessionStatus(
-    input: SessionRef,
+    input: RuntimeSessionTarget,
   ): Effect.Effect<{ supported: boolean; hasLiveSession: boolean }, never>;
   set(session: ClaudeSession): void;
   subscribeClose(listener: (session: ClaudeSession) => void): () => void;
   stopSession(
-    input: SessionRef,
+    input: RuntimeSessionTarget,
   ): Effect.Effect<void, HostOperationErrorAggregate | HostValidationErrorAggregate>;
   stopSessionsForRuntime(runtimeId: string): Effect.Effect<void, HostOperationErrorAggregate>;
   values(): IterableIterator<ClaudeSession>;

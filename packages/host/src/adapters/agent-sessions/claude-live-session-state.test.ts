@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import type { AgentEvent, AgentSessionSummary } from "@openducktor/core";
 import { AsyncInputQueue } from "../claude/claude-agent-sdk-queue";
 import { handleClaudeSdkMessage } from "../claude/claude-agent-sdk-events";
@@ -8,18 +7,6 @@ import { emptyClaudeQuery } from "../claude/claude-agent-sdk-session-io.test-sup
 import { claudeSdkMessageFixture } from "../claude/claude-agent-sdk-test-messages";
 import type { ClaudeSession, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
 import { createClaudeLiveSessionState } from "./claude-live-session-state";
-
-const runtime = {
-  kind: "claude" as const,
-  runtimeId: "runtime-1",
-  repoPath: "/repo",
-  taskId: null,
-  role: "workspace" as const,
-  workingDirectory: "/repo",
-  runtimeRoute: { type: "host_service" as const, identity: "runtime-1" },
-  startedAt: "2026-07-17T10:00:00.000Z",
-  descriptor: RUNTIME_DESCRIPTORS_BY_KIND.claude,
-};
 
 const summary = {
   externalSessionId: "session-1",
@@ -75,8 +62,8 @@ const ref = {
 
 describe("Claude host live-session state", () => {
   test("retains permission notices across control summaries until retraction or removal", () => {
-    const state = createClaudeLiveSessionState({ runtime });
-    state.applyControlSummary(summary);
+    const state = createClaudeLiveSessionState();
+    state.applyControlSummary("/repo", summary);
     const notice = {
       type: "session_policy_notice" as const,
       externalSessionId: ref.externalSessionId,
@@ -85,7 +72,7 @@ describe("Claude host live-session state", () => {
       message: "Claude requested auto mode, but reports default mode.",
     };
     state.applyEvent(session, notice);
-    expect(state.listSnapshots(runtime.repoPath)).toMatchObject([
+    expect(state.listSnapshots()).toMatchObject([
       { policyNotice: { message: notice.message, messageId: notice.messageId } },
     ]);
     const applied = {
@@ -93,7 +80,7 @@ describe("Claude host live-session state", () => {
       message: "Claude requested auto mode, but reports acceptEdits mode.",
     };
     state.applyEvent(session, applied);
-    state.applyControlSummary(summary);
+    state.applyControlSummary("/repo", summary);
     expect(state.readSnapshot(ref)).toMatchObject({
       type: "live",
       session: {
@@ -110,7 +97,7 @@ describe("Claude host live-session state", () => {
       timestamp: "2026-10-03T10:00:01Z",
       messageIds: ["unrelated-message"],
     });
-    expect(state.listSnapshots(runtime.repoPath)[0]).toHaveProperty("policyNotice");
+    expect(state.listSnapshots()[0]).toHaveProperty("policyNotice");
     const retraction = {
       type: "transcript_retracted" as const,
       externalSessionId: ref.externalSessionId,
@@ -123,18 +110,18 @@ describe("Claude host live-session state", () => {
       { type: "transcript_event", event: retraction },
     ]);
     expect(changes[0]).not.toHaveProperty("snapshot.policyNotice");
-    state.applyControlSummary(summary);
-    expect(state.listSnapshots(runtime.repoPath)[0]).not.toHaveProperty("policyNotice");
+    state.applyControlSummary("/repo", summary);
+    expect(state.listSnapshots()[0]).not.toHaveProperty("policyNotice");
     state.applyEvent(session, notice);
     state.removeSession(ref);
     expect(state.applyEvent(session, notice)).toEqual([]);
-    state.applyControlSummary(summary);
-    expect(state.listSnapshots(runtime.repoPath)[0]).not.toHaveProperty("policyNotice");
+    state.applyControlSummary("/repo", summary);
+    expect(state.listSnapshots()[0]).not.toHaveProperty("policyNotice");
   });
 
   test("keeps a resumed wake-up turn running in the live snapshot until its result", () => {
-    const state = createClaudeLiveSessionState({ runtime });
-    state.applyControlSummary(summary);
+    const state = createClaudeLiveSessionState();
+    state.applyControlSummary("/repo", summary);
     const wakeSession: ClaudeSession = {
       ...session,
       activeSdkUserTurnCount: 0,
@@ -214,8 +201,8 @@ describe("Claude host live-session state", () => {
   });
 
   test("retains a subagent permission only on the child snapshot", () => {
-    const state = createClaudeLiveSessionState({ runtime });
-    state.applyControlSummary(summary);
+    const state = createClaudeLiveSessionState();
+    state.applyControlSummary("/repo", summary);
     const childExternalSessionId = "session-1::claude-subagent::child-1";
 
     state.applyEvent(session, {
@@ -247,8 +234,8 @@ describe("Claude host live-session state", () => {
   });
 
   test("retains nested subagent ancestry from the emitting transcript", () => {
-    const state = createClaudeLiveSessionState({ runtime });
-    state.applyControlSummary(summary);
+    const state = createClaudeLiveSessionState();
+    state.applyControlSummary("/repo", summary);
     const childExternalSessionId = "session-1::claude-subagent::child-1";
     const grandchildExternalSessionId = `${childExternalSessionId}::claude-subagent::grandchild-1`;
 
@@ -310,8 +297,8 @@ describe("Claude host live-session state", () => {
   });
 
   test("drops late root and subagent events after release until an explicit resume", () => {
-    const state = createClaudeLiveSessionState({ runtime });
-    state.applyControlSummary(summary);
+    const state = createClaudeLiveSessionState();
+    state.applyControlSummary("/repo", summary);
     const childExternalSessionId = "session-1::claude-subagent::child-1";
 
     expect(state.removeSession(ref)).toEqual([{ type: "session_removed", ref }]);
@@ -339,7 +326,7 @@ describe("Claude host live-session state", () => {
     ).toEqual([]);
     expect(state.readSnapshot(ref)).toEqual({ type: "missing", ref });
 
-    expect(state.applyControlSummary({ ...summary, status: "running" })).toContainEqual({
+    expect(state.applyControlSummary("/repo", { ...summary, status: "running" })).toContainEqual({
       type: "session_upsert",
       snapshot: expect.objectContaining({ activity: "running", ref }),
     });
@@ -358,8 +345,8 @@ describe("Claude host live-session state", () => {
   });
 
   test("does not overwrite newer streamed context with an explicit load", () => {
-    const state = createClaudeLiveSessionState({ runtime });
-    state.applyControlSummary(summary);
+    const state = createClaudeLiveSessionState();
+    state.applyControlSummary("/repo", summary);
     const revision = state.contextRevision(ref);
     state.applyEvent(session, {
       type: "session_context_updated",
@@ -376,8 +363,8 @@ describe("Claude host live-session state", () => {
   });
 
   test("advances context revisions only for streamed context events", () => {
-    const state = createClaudeLiveSessionState({ runtime });
-    state.applyControlSummary(summary);
+    const state = createClaudeLiveSessionState();
+    state.applyControlSummary("/repo", summary);
     const revision = state.contextRevision(ref);
 
     state.applyLoadedContext(ref, { totalTokens: 100, contextWindow: 200 }, revision);
@@ -400,7 +387,7 @@ describe("Claude host live-session state", () => {
   });
 
   test("scopes context refresh errors to the affected session", () => {
-    const state = createClaudeLiveSessionState({ runtime });
+    const state = createClaudeLiveSessionState();
 
     expect(
       state.applyEvent(session, {
@@ -421,8 +408,8 @@ describe("Claude host live-session state", () => {
   });
 
   test("ignores late context refresh errors after session removal", () => {
-    const state = createClaudeLiveSessionState({ runtime });
-    state.applyControlSummary(summary);
+    const state = createClaudeLiveSessionState();
+    state.applyControlSummary("/repo", summary);
     state.removeSession(ref);
 
     expect(
@@ -436,8 +423,8 @@ describe("Claude host live-session state", () => {
   });
 
   test("keeps a no-message session idle when its start event arrives", () => {
-    const state = createClaudeLiveSessionState({ runtime });
-    state.applyControlSummary(summary);
+    const state = createClaudeLiveSessionState();
+    state.applyControlSummary("/repo", summary);
 
     expect(
       state.applyEvent(session, {
@@ -459,8 +446,8 @@ describe("Claude host live-session state", () => {
   });
 
   test("keeps current session state after a recoverable turn error", () => {
-    const state = createClaudeLiveSessionState({ runtime });
-    state.applyControlSummary({ ...summary, status: "running" });
+    const state = createClaudeLiveSessionState();
+    state.applyControlSummary("/repo", { ...summary, status: "running" });
 
     expect(
       state.applyEvent(session, {
@@ -487,8 +474,8 @@ describe("Claude host live-session state", () => {
   });
 
   test("removes subagent snapshots owned by a retracted assistant message", () => {
-    const state = createClaudeLiveSessionState({ runtime });
-    state.applyControlSummary(summary);
+    const state = createClaudeLiveSessionState();
+    state.applyControlSummary("/repo", summary);
     const childExternalSessionId = "session-1::claude-subagent::child-1";
     const childRef = { ...ref, externalSessionId: childExternalSessionId };
     const grandchildExternalSessionId = `${childExternalSessionId}::claude-subagent::grandchild-1`;
@@ -565,8 +552,8 @@ describe("Claude host live-session state", () => {
   });
 
   test("removes current session state after a terminal stream finish", () => {
-    const state = createClaudeLiveSessionState({ runtime });
-    state.applyControlSummary({ ...summary, status: "running" });
+    const state = createClaudeLiveSessionState();
+    state.applyControlSummary("/repo", { ...summary, status: "running" });
 
     expect(
       state.applyEvent(session, {
@@ -586,7 +573,7 @@ describe("Claude host live-session state", () => {
   });
 
   test("keeps an independent fork when its source session finishes", () => {
-    const state = createClaudeLiveSessionState({ runtime });
+    const state = createClaudeLiveSessionState();
     const forkExternalSessionId = "session-fork";
     const forkRef = { ...ref, externalSessionId: forkExternalSessionId };
     const childExternalSessionId = "session-1::claude-subagent::child-1";
@@ -598,8 +585,8 @@ describe("Claude host live-session state", () => {
       summary: forkSummary,
     };
 
-    state.applyControlSummary(summary);
-    state.applyControlSummary(forkSummary, { parentExternalSessionId: "session-1" });
+    state.applyControlSummary("/repo", summary);
+    state.applyControlSummary("/repo", forkSummary, { parentExternalSessionId: "session-1" });
     state.applyEvent(session, {
       type: "approval_required",
       externalSessionId: childExternalSessionId,
@@ -641,8 +628,8 @@ describe("Claude host live-session state", () => {
   });
 
   test("replaces stale current context when no newer context update arrives", () => {
-    const state = createClaudeLiveSessionState({ runtime });
-    state.applyControlSummary(summary);
+    const state = createClaudeLiveSessionState();
+    state.applyControlSummary("/repo", summary);
     const firstRevision = state.contextRevision(ref);
     state.applyLoadedContext(ref, { totalTokens: 99, contextWindow: 200 }, firstRevision);
     const refreshRevision = state.contextRevision(ref);
@@ -656,8 +643,8 @@ describe("Claude host live-session state", () => {
   });
 
   test("keeps current context when a direct context read returns null", () => {
-    const state = createClaudeLiveSessionState({ runtime });
-    state.applyControlSummary(summary);
+    const state = createClaudeLiveSessionState();
+    state.applyControlSummary("/repo", summary);
     const firstRevision = state.contextRevision(ref);
     state.applyLoadedContext(ref, { totalTokens: 99, contextWindow: 200 }, firstRevision);
 
@@ -668,8 +655,8 @@ describe("Claude host live-session state", () => {
   });
 
   test("preserves current activity when an already-live session is resumed", () => {
-    const state = createClaudeLiveSessionState({ runtime });
-    state.applyControlSummary({ ...summary, status: "running" });
+    const state = createClaudeLiveSessionState();
+    state.applyControlSummary("/repo", { ...summary, status: "running" });
     state.applyEvent(session, {
       type: "approval_required",
       externalSessionId: "session-1",
@@ -679,7 +666,7 @@ describe("Claude host live-session state", () => {
       title: "Approve Bash",
     });
 
-    state.applyControlSummary(summary, { keepActivity: true });
+    state.applyControlSummary("/repo", summary, { keepActivity: true });
 
     expect(state.readSnapshot(ref)).toMatchObject({
       type: "live",
@@ -691,8 +678,8 @@ describe("Claude host live-session state", () => {
   });
 
   test("publishes assistant duration through the normalized transcript", () => {
-    const state = createClaudeLiveSessionState({ runtime });
-    state.applyControlSummary(summary);
+    const state = createClaudeLiveSessionState();
+    state.applyControlSummary("/repo", summary);
 
     expect(
       state.applyEvent(session, {
@@ -714,7 +701,7 @@ describe("Claude host live-session state", () => {
   });
 
   test("publishes the authoritative slash-command replacement catalog", () => {
-    const state = createClaudeLiveSessionState({ runtime });
+    const state = createClaudeLiveSessionState();
     const catalog = {
       commands: [
         {
@@ -743,5 +730,113 @@ describe("Claude host live-session state", () => {
         catalog,
       },
     ]);
+  });
+
+  describe("with sessions from two repositories", () => {
+    const otherSummary = {
+      ...summary,
+      externalSessionId: "session-2",
+      workingDirectory: "/other-repo",
+      title: "Other repo session",
+      sessionAssociation: { kind: "repository" },
+    } as const satisfies AgentSessionSummary;
+    const otherSession: ClaudeSessionContext = {
+      ...session,
+      externalSessionId: "session-2",
+      input: {
+        ...session.input,
+        repoPath: "/other-repo",
+        workingDirectory: "/other-repo",
+        sessionScope: { kind: "repository" },
+      },
+      startedAt: otherSummary.startedAt,
+      summary: otherSummary,
+    };
+    const otherRef = {
+      repoPath: "/other-repo",
+      runtimeKind: "claude" as const,
+      workingDirectory: "/other-repo",
+      externalSessionId: "session-2",
+    };
+
+    const createTwoRepositoryState = () => {
+      const state = createClaudeLiveSessionState();
+      state.applyControlSummary("/repo", summary);
+      state.applyControlSummary("/other-repo", otherSummary);
+      return state;
+    };
+
+    test("lists the sessions of every repository with their request refs", () => {
+      const state = createTwoRepositoryState();
+
+      expect(state.listSnapshots().map((snapshot) => snapshot.ref)).toEqual([ref, otherRef]);
+      expect(state.readSnapshot(otherRef)).toMatchObject({
+        type: "live",
+        session: {
+          ref: otherRef,
+          title: "Other repo session",
+          repositoryScope: { kind: "repository" },
+        },
+      });
+    });
+
+    test("routes catalog updates and context faults to the repository of the session", () => {
+      const state = createTwoRepositoryState();
+      const catalog = { commands: [] };
+
+      expect(
+        state.applyEvent(otherSession, {
+          type: "runtime_slash_commands_changed",
+          externalSessionId: "session-2",
+          timestamp: "2026-07-17T10:05:00.000Z",
+          catalog,
+        }),
+      ).toEqual([
+        {
+          type: "slash_command_catalog_updated",
+          repoPath: "/other-repo",
+          runtimeKind: "claude",
+          workingDirectory: "/other-repo",
+          catalog,
+        },
+      ]);
+      expect(
+        state.applyEvent(otherSession, {
+          type: "session_context_error",
+          externalSessionId: "session-2",
+          timestamp: "2026-07-17T10:05:01.000Z",
+          message: "Context refresh failed.",
+        }),
+      ).toEqual([
+        {
+          type: "fault",
+          repoPath: "/other-repo",
+          operation: "claude-live-session.load-context",
+          message: "Context refresh failed.",
+          ref: otherRef,
+        },
+      ]);
+    });
+
+    test("settles only the finished session when one Claude process exits", () => {
+      const state = createTwoRepositoryState();
+
+      expect(
+        state.applyEvent(otherSession, {
+          type: "session_finished",
+          externalSessionId: "session-2",
+          timestamp: "2026-07-17T10:06:00.000Z",
+          message: "Claude process exited.",
+        }),
+      ).toContainEqual({ type: "session_removed", ref: otherRef });
+      expect(state.listSnapshots().map((snapshot) => snapshot.ref)).toEqual([ref]);
+    });
+
+    test("releases the sessions of every repository", () => {
+      const state = createTwoRepositoryState();
+
+      expect(state.release()).toEqual([ref, otherRef]);
+      expect(state.listSnapshots()).toEqual([]);
+    });
   });
 });

@@ -7,6 +7,7 @@ import {
   DEFAULT_KANBAN_SETTINGS,
   DEFAULT_NOTIFICATION_SETTINGS,
   GITHUB_PROVIDER_DESCRIPTOR,
+  type HostRuntimeStatus,
   type RepoGitConfig,
   repositoryGitProviderContextSchema,
   type RepositoryGitProviderContext,
@@ -28,7 +29,6 @@ import {
   UNKNOWN_WORKSPACE_ACTIVITY,
   type WorkspaceActivityState,
 } from "@/features/workspace-activity/workspace-activity-state";
-import { deriveRepoRuntimeHealthState } from "@/lib/repo-runtime-health";
 import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
@@ -37,7 +37,8 @@ import type {
   AgentSessionState,
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
-import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
+import type { HostRuntimeStatusMap, ObservedCheck } from "@/types/diagnostics";
+import type { ChecksStateContextValue, HostRuntimeStatusContextValue } from "@/types/state-slices";
 
 export type RuntimeCatalogFixtureSurfaces = {
   models?: AgentModelCatalog;
@@ -85,14 +86,6 @@ type RepoStoreHealthFixtureOverrides = Partial<TaskStoreCheck["repoStoreHealth"]
 
 export type TaskStoreCheckFixtureOverrides = Omit<Partial<TaskStoreCheck>, "repoStoreHealth"> & {
   repoStoreHealth?: RepoStoreHealthFixtureOverrides;
-};
-
-export type RepoRuntimeHealthFixtureOverrides = Omit<
-  Partial<RepoRuntimeHealthCheck>,
-  "runtime" | "mcp"
-> & {
-  runtime?: Partial<RepoRuntimeHealthCheck["runtime"]>;
-  mcp?: Partial<NonNullable<RepoRuntimeHealthCheck["mcp"]>>;
 };
 
 export type ChatSettingsFixtureOverrides = Partial<ChatSettings>;
@@ -157,35 +150,6 @@ const BASE_AGENT_SESSION_FIXTURE: AgentSessionState = {
   pendingApprovals: [],
   pendingQuestions: [],
   selectedModel: null,
-};
-
-const BASE_REPO_RUNTIME_HEALTH_FIXTURE: RepoRuntimeHealthCheck = {
-  status: "ready",
-  checkedAt: "2026-02-22T08:00:00.000Z",
-  runtime: {
-    status: "ready",
-    stage: "runtime_ready",
-    observation: null,
-    instance: null,
-    startedAt: null,
-    updatedAt: "2026-02-22T08:00:00.000Z",
-    elapsedMs: null,
-    attempts: null,
-    detail: null,
-    failureKind: null,
-    failureReason: null,
-  },
-  mcp: null,
-};
-
-const BASE_REPO_RUNTIME_MCP_FIXTURE: NonNullable<RepoRuntimeHealthCheck["mcp"]> = {
-  supported: true,
-  status: "connected",
-  serverName: "openducktor",
-  serverStatus: "connected",
-  toolIds: [],
-  detail: null,
-  failureKind: null,
 };
 
 export const createGitProviderConfigFixture = ({
@@ -473,47 +437,52 @@ export const createAgentSessionSummaryFixture = (
   overrides: AgentSessionFixtureOverrides = {},
 ): AgentSessionSummary => toAgentSessionSummary(createAgentSessionFixture(defaults, overrides));
 
-export const createRepoRuntimeHealthFixture = (
-  defaults: RepoRuntimeHealthFixtureOverrides = {},
-  overrides: RepoRuntimeHealthFixtureOverrides = {},
-): RepoRuntimeHealthCheck => {
-  const checkedAt =
-    overrides.checkedAt ?? defaults.checkedAt ?? BASE_REPO_RUNTIME_HEALTH_FIXTURE.checkedAt;
-  const runtimeDefaults = defaults.runtime ?? {};
-  const runtimeOverrides = overrides.runtime ?? {};
-  const mcpDefaults = defaults.mcp ?? {};
-  const mcpOverrides = overrides.mcp ?? {};
-  const mergedMcp = {
-    ...BASE_REPO_RUNTIME_MCP_FIXTURE,
-    ...mcpDefaults,
-    ...mcpOverrides,
-  };
-  const runtime: RepoRuntimeHealthCheck["runtime"] = {
-    ...BASE_REPO_RUNTIME_HEALTH_FIXTURE.runtime,
-    ...runtimeDefaults,
-    ...runtimeOverrides,
-    updatedAt: runtimeOverrides.updatedAt ?? runtimeDefaults.updatedAt ?? checkedAt,
-  };
-  const mcp: NonNullable<RepoRuntimeHealthCheck["mcp"]> = {
-    supported: mergedMcp.supported ?? BASE_REPO_RUNTIME_MCP_FIXTURE.supported,
-    status: mergedMcp.status ?? BASE_REPO_RUNTIME_MCP_FIXTURE.status,
-    serverName: mergedMcp.serverName ?? BASE_REPO_RUNTIME_MCP_FIXTURE.serverName,
-    serverStatus: mergedMcp.serverStatus ?? BASE_REPO_RUNTIME_MCP_FIXTURE.serverStatus,
-    toolIds: mergedMcp.toolIds ?? BASE_REPO_RUNTIME_MCP_FIXTURE.toolIds,
-    detail: mergedMcp.detail ?? BASE_REPO_RUNTIME_MCP_FIXTURE.detail,
-    failureKind: mergedMcp.failureKind ?? BASE_REPO_RUNTIME_MCP_FIXTURE.failureKind,
-  };
-  const merged = {
-    ...BASE_REPO_RUNTIME_HEALTH_FIXTURE,
-    ...defaults,
+export const createHostRuntimeStatusFixture = (
+  overrides: Partial<HostRuntimeStatus> = {},
+): HostRuntimeStatus =>
+  structuredClone({
+    kind: "opencode",
+    enabled: true,
+    configuredExecutablePath: "",
+    effectiveExecutablePath: null,
+    version: null,
+    state: "ready",
+    trigger: "host_startup",
+    runtimeId: `${overrides.kind ?? "opencode"}-runtime-1`,
+    startedAt: "2026-02-22T08:00:00.000Z",
+    updatedAt: "2026-02-22T08:00:00.000Z",
+    failure: null,
+    revision: 1,
     ...overrides,
-    status: overrides.status ?? defaults.status ?? deriveRepoRuntimeHealthState({ runtime, mcp }),
-    checkedAt,
-    runtime,
-    mcp,
-  } satisfies RepoRuntimeHealthCheck;
+  } satisfies HostRuntimeStatus);
 
-  return structuredClone(merged);
+/** Every known kind is ready unless `statusByKind` replaces the map. */
+export const createHostRuntimeStatusContextValue = (
+  overrides: Partial<HostRuntimeStatusContextValue> = {},
+): HostRuntimeStatusContextValue => {
+  const statusByKind: HostRuntimeStatusMap = overrides.statusByKind ?? {
+    opencode: createHostRuntimeStatusFixture({ kind: "opencode" }),
+    codex: createHostRuntimeStatusFixture({ kind: "codex" }),
+    claude: createHostRuntimeStatusFixture({ kind: "claude" }),
+  };
+  return {
+    snapshot: {
+      hostInstanceId: "host-1",
+      runtimes: Object.values(statusByKind).filter((status) => status !== undefined),
+    },
+    isCurrent: true,
+    isLoading: false,
+    readError: null,
+    streamError: null,
+    isRefreshing: false,
+    refresh: async () => {},
+    runtimeEvents: {
+      subscribeEvents: () => () => {},
+      getStreamHealth: () => ({ error: null, epoch: 0 }),
+    },
+    ...overrides,
+    statusByKind,
+  };
 };
 
 /**
@@ -530,4 +499,27 @@ export const createWorkspaceActivityObserverStub = (
   subscribe: () => () => {},
   getWorkspaceActivity: (workspaceId) => states[workspaceId] ?? UNKNOWN_WORKSPACE_ACTIVITY,
   dispose: () => {},
+});
+
+export const createObservedCheckFixture = <T>(
+  overrides: Partial<ObservedCheck<T>> = {},
+): ObservedCheck<T> => ({
+  data: null,
+  error: null,
+  failureKind: null,
+  observedAt: null,
+  ...overrides,
+});
+
+export const createChecksStateFixture = (
+  overrides: Partial<ChecksStateContextValue> = {},
+): ChecksStateContextValue => ({
+  runtimeCheck: createObservedCheckFixture(),
+  hostMcpBridgeCheck: { data: null, error: null },
+  checksRepoPath: null,
+  taskStoreCheck: createObservedCheckFixture(),
+  workspaceRuntimeMcpCheck: { data: null, error: null },
+  isRefreshingChecks: false,
+  refreshChecks: async () => undefined,
+  ...overrides,
 });

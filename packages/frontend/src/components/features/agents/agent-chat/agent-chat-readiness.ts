@@ -1,5 +1,5 @@
 import type { SessionHistoryFailure } from "@openducktor/contracts";
-import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
+import type { RuntimeReadiness } from "@/lib/use-runtime-readiness";
 import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type {
   AgentChatTranscriptNotice,
@@ -8,7 +8,7 @@ import type {
 
 type DeriveAgentChatReadinessInput = {
   transcriptState: AgentSessionTranscriptState;
-  runtimeReadiness: Pick<RepoRuntimeReadiness, "state" | "message">;
+  runtimeReadiness: Pick<RuntimeReadiness, "state" | "message">;
   runtimeBlockedAction?: AgentChatTranscriptNoticeAction | null;
   failedTranscriptAction?: AgentChatTranscriptNoticeAction | null;
   catalogSurfaceFailure?: {

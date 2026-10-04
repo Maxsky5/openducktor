@@ -540,7 +540,7 @@ describe("Workspace Session persistence through the shared command module", () =
         getRepoConfig: () => Effect.succeed(config),
         listCustomAgentRoles: () => Effect.succeed([]),
       },
-      runtime: { runtimeEnsure: () => Effect.dieMessage("unexpected runtime ensure") },
+      runtime: { requireReady: () => Effect.dieMessage("unexpected runtime readiness check") },
       live: {
         ...h.live,
         read: () =>

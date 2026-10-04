@@ -49,9 +49,13 @@ Environment variables:
 
 ## Host discovery
 
+The host starts the bridge and writes the discovery file during host startup. If this fails, the host logs the cause and continues to start runtimes. Diagnostics shows the cause in the OpenDucktor MCP bridge check. Operations that need the bridge fail with the same cause. The host does not try to start the bridge again. Fix the cause, then restart OpenDucktor.
+
 Production discovery reads `runtime/mcp-bridge.json`. Development discovery requires both `OPENDUCKTOR_CHANNEL=dev` and `OPENDUCKTOR_DEV_INSTANCE`, then reads `runtime/dev-instances/<instanceId>/mcp-bridge.json`.
 
 An empty or unknown channel fails. The MCP process does not try another channel. OpenDucktor-managed runtime sessions get `ODT_HOST_URL` and `ODT_HOST_TOKEN` and do not use discovery files.
+
+A managed session gets its `ODT_WORKSPACE_ID` from the server configuration of that session or directory, not from the shared runtime process. The [runtime integration guide](runtime-integration-guide.md#workspace-binding-of-openducktor-tools) describes the binding for each runtime.
 
 Connect a client to a development server with:
 

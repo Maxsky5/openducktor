@@ -11,7 +11,7 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
-import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
+import type { RuntimeReadinessState } from "@/lib/runtime-readiness";
 import { useStableAgentSessionScope } from "@/lib/use-stable-agent-session-scope";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { useAgentOperations } from "@/state/app-state-provider";
@@ -49,13 +49,13 @@ import { errorMessageFromUnknown } from "./runtime-transcript-error";
 
 const resolveTranscriptCatalogQueryOptions = ({
   emptyReason,
-  repoReadinessState,
+  runtimeReadinessState,
   targetRuntimeKind,
   runtimeRef,
   loadRepoRuntimeCatalog,
 }: {
   emptyReason: AgentSessionTranscriptEmptyReason | null;
-  repoReadinessState: RepoRuntimeReadinessState;
+  runtimeReadinessState: RuntimeReadinessState;
   targetRuntimeKind: RuntimeKind | null;
   runtimeRef: RuntimeWorkingDirectoryRef | null;
   loadRepoRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
@@ -63,7 +63,7 @@ const resolveTranscriptCatalogQueryOptions = ({
   if (emptyReason !== null) {
     return skippedTranscriptCatalogQueryOptions;
   }
-  if (repoReadinessState !== "ready") {
+  if (runtimeReadinessState !== "ready") {
     return skippedTranscriptCatalogQueryOptions;
   }
   if (targetRuntimeKind !== "claude") {
@@ -79,7 +79,7 @@ type UseRuntimeTranscriptSessionHistoryArgs = {
   isOpen: boolean;
   repoPath: string | null;
   target: AgentSessionTranscriptTarget | null;
-  repoReadinessState: RepoRuntimeReadinessState;
+  runtimeReadinessState: RuntimeReadinessState;
   liveSession: AgentSessionState | null;
 };
 
@@ -149,7 +149,7 @@ export function useRuntimeTranscriptSessionHistory({
   isOpen,
   repoPath,
   target,
-  repoReadinessState,
+  runtimeReadinessState,
   liveSession,
 }: UseRuntimeTranscriptSessionHistoryArgs): RuntimeTranscriptSessionHistory {
   const { readSessionHistory, replyAgentApproval, answerAgentQuestion } = useAgentOperations();
@@ -212,7 +212,7 @@ export function useRuntimeTranscriptSessionHistory({
     runtimeSessionRef !== null &&
     matchingSession?.historyLoadState !== "loaded";
   const historyQuery = useQuery(
-    shouldLoadHistory && repoReadinessState === "ready" && runtimeSessionRef !== null
+    shouldLoadHistory && runtimeReadinessState === "ready" && runtimeSessionRef !== null
       ? sessionHistoryQueryOptions(runtimeSessionRef, readSessionHistory)
       : skippedTranscriptHistoryQueryOptions,
   );
@@ -220,7 +220,7 @@ export function useRuntimeTranscriptSessionHistory({
   const skillsQuery = useQuery(
     resolveTranscriptCatalogQueryOptions({
       emptyReason,
-      repoReadinessState,
+      runtimeReadinessState,
       targetRuntimeKind,
       runtimeRef,
       loadRepoRuntimeCatalog,
@@ -258,10 +258,10 @@ export function useRuntimeTranscriptSessionHistory({
     if (emptyReason !== null) {
       return { kind: "empty", reason: emptyReason };
     }
-    if (runtimePolicyError !== null && repoReadinessState === "ready") {
+    if (runtimePolicyError !== null && runtimeReadinessState === "ready") {
       return { kind: "failed", message: runtimePolicyError };
     }
-    if (historyQuery.error && repoReadinessState === "ready") {
+    if (historyQuery.error && runtimeReadinessState === "ready") {
       return {
         kind: "failed",
         message: errorMessageFromUnknown(historyQuery.error, "Failed to load transcript history."),
@@ -269,12 +269,12 @@ export function useRuntimeTranscriptSessionHistory({
     }
     return deriveRuntimeBoundTranscriptLoadingState({
       reason: "history",
-      repoReadinessState,
+      runtimeReadinessState,
     });
   }, [
     emptyReason,
     historyQuery.error,
-    repoReadinessState,
+    runtimeReadinessState,
     runtimePolicyError,
     session,
     scopeResult,

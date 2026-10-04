@@ -22,10 +22,10 @@ const buildWorkflowSession = (overrides: BuildSessionOverrides = {}): WorkflowAg
 const createPrepareSend = (
   overrides: Partial<Parameters<typeof createPrepareSessionSend>[0]> = {},
 ) => {
-  const ensureExistingRuntimeCalls: unknown[] = [];
+  const promptOverrideReads: string[] = [];
 
   return {
-    ensureExistingRuntimeCalls,
+    promptOverrideReads,
     prepareSend: createPrepareSessionSend({
       workspaceRepoPath: "/tmp/repo",
       workspaceId: "workspace-1",
@@ -42,33 +42,34 @@ const createPrepareSend = (
           }),
         ],
       },
-      ensureExistingSessionRuntime: async (...args) => {
-        ensureExistingRuntimeCalls.push(args);
+      loadRepoPromptOverrides: async (workspaceId) => {
+        promptOverrideReads.push(workspaceId);
+        return {};
       },
-      loadRepoPromptOverrides: async () => ({}),
       ...overrides,
     }),
   };
 };
 
 describe("prepare session send", () => {
-  test("ensures the session runtime and builds the durable session prompt", async () => {
-    const { ensureExistingRuntimeCalls, prepareSend } = createPrepareSend();
+  test("builds the durable session prompt without starting a runtime", async () => {
+    const { promptOverrideReads, prepareSend } = createPrepareSend();
 
     const result = await prepareSend(buildWorkflowSession({ status: "idle" }), {
       prepareWorkflowContext: true,
     });
 
     expect(result.systemPrompt).toContain("Build login");
-    expect(ensureExistingRuntimeCalls).toEqual([["/tmp/repo", "opencode"]]);
+    expect(promptOverrideReads).toEqual(["workspace-1"]);
   });
 
-  test("rejects when the workspace changes during runtime preparation", async () => {
+  test("rejects when the workspace changes during prompt preparation", async () => {
     const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
     const { prepareSend } = createPrepareSend({
       currentWorkspaceRepoPathRef,
-      ensureExistingSessionRuntime: async () => {
+      loadRepoPromptOverrides: async () => {
         currentWorkspaceRepoPathRef.current = "/tmp/other";
+        return {};
       },
     });
 
@@ -80,7 +81,7 @@ describe("prepare session send", () => {
   });
 
   test("sends a repository session when the active workspace has changed", async () => {
-    const { ensureExistingRuntimeCalls, prepareSend } = createPrepareSend({
+    const { promptOverrideReads, prepareSend } = createPrepareSend({
       currentWorkspaceRepoPathRef: { current: "/tmp/other" },
     });
 
@@ -89,6 +90,6 @@ describe("prepare session send", () => {
     });
 
     expect(result).toEqual({});
-    expect(ensureExistingRuntimeCalls).toEqual([]);
+    expect(promptOverrideReads).toEqual([]);
   });
 });

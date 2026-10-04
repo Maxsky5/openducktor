@@ -25,10 +25,6 @@ export const imageSessionInput = (runtimeId: string): StartAgentSessionInput => 
 export const imageRuntime = (runtimeId: string): RuntimeInstanceSummary => ({
   kind: "codex",
   runtimeId,
-  repoPath: "/repo",
-  taskId: null,
-  role: "workspace",
-  workingDirectory: "/repo",
   runtimeRoute: { type: "stdio", identity: runtimeId },
   startedAt: "2026-09-06T10:00:00.000Z",
   descriptor: CODEX_RUNTIME_DESCRIPTOR,

@@ -11,6 +11,8 @@ import {
   createRuntimeHarness,
   ref,
   runtime,
+  ignoreObservationLoss,
+  unexpectedMcpStatusProbe,
 } from "./opencode-live-session-adapter.test-support";
 
 describe("OpenCode live session controls", () => {
@@ -21,7 +23,8 @@ describe("OpenCode live session controls", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
-      })(runtime),
+        probeMcpStatus: unexpectedMcpStatusProbe,
+      })(runtime, ignoreObservationLoss),
     );
     await Effect.runPromise(prepared.startForwarding());
     try {
@@ -40,7 +43,7 @@ describe("OpenCode live session controls", () => {
         operation: "fork",
         input: expect.objectContaining({ parentExternalSessionId: "planner-session" }),
       });
-      const snapshots = await Effect.runPromise(prepared.adapter.listSnapshots("/repo"));
+      const snapshots = await Effect.runPromise(prepared.adapter.listSnapshots());
       const fork = snapshots.find(
         (snapshot) => snapshot.ref.externalSessionId === "controlled-session",
       );
@@ -62,7 +65,8 @@ describe("OpenCode live session controls", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),
         prepareRuntime: harness.prepareRuntime,
-      })(runtime),
+        probeMcpStatus: unexpectedMcpStatusProbe,
+      })(runtime, ignoreObservationLoss),
     );
     await Effect.runPromise(prepared.startForwarding());
     try {
@@ -74,7 +78,7 @@ describe("OpenCode live session controls", () => {
           sessionScope: controlSummary.sessionAssociation,
         }),
       );
-      const snapshots = await Effect.runPromise(prepared.adapter.listSnapshots("/repo"));
+      const snapshots = await Effect.runPromise(prepared.adapter.listSnapshots());
       expect(snapshots).toEqual([
         expect.objectContaining({
           ref: expect.objectContaining({ externalSessionId: "controlled-session" }),
@@ -93,7 +97,8 @@ describe("OpenCode live session controls", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),
         prepareRuntime: harness.prepareRuntime,
-      })(runtime),
+        probeMcpStatus: unexpectedMcpStatusProbe,
+      })(runtime, ignoreObservationLoss),
     );
     await Effect.runPromise(prepared.startForwarding());
     const model = {
@@ -134,7 +139,8 @@ describe("OpenCode live session controls", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
-      })(runtime),
+        probeMcpStatus: unexpectedMcpStatusProbe,
+      })(runtime, ignoreObservationLoss),
     );
     const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
 
@@ -176,7 +182,8 @@ describe("OpenCode live session controls", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),
         prepareRuntime: harness.prepareRuntime,
-      })(runtime),
+        probeMcpStatus: unexpectedMcpStatusProbe,
+      })(runtime, ignoreObservationLoss),
     );
     await Effect.runPromise(prepared.startForwarding());
 
@@ -210,7 +217,8 @@ describe("OpenCode live session controls", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
-      })(runtime),
+        probeMcpStatus: unexpectedMcpStatusProbe,
+      })(runtime, ignoreObservationLoss),
     );
     await Effect.runPromise(prepared.startForwarding());
     const adapter = prepared.adapter;
@@ -331,7 +339,8 @@ describe("OpenCode live session controls", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
-      })(runtime),
+        probeMcpStatus: unexpectedMcpStatusProbe,
+      })(runtime, ignoreObservationLoss),
     );
     await Effect.runPromise(prepared.startForwarding());
     const adapter = prepared.adapter;
@@ -464,7 +473,8 @@ describe("OpenCode live session controls", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),
         prepareRuntime: harness.prepareRuntime,
-      })(runtime),
+        probeMcpStatus: unexpectedMcpStatusProbe,
+      })(runtime, ignoreObservationLoss),
     );
     const adapter = prepared.adapter;
     const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
@@ -547,7 +557,8 @@ describe("OpenCode live session controls", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),
         prepareRuntime: harness.prepareRuntime,
-      })(runtime),
+        probeMcpStatus: unexpectedMcpStatusProbe,
+      })(runtime, ignoreObservationLoss),
     );
     const adapter = prepared.adapter;
     const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
@@ -630,7 +641,8 @@ describe("OpenCode live session controls", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
-      })(runtime),
+        probeMcpStatus: unexpectedMcpStatusProbe,
+      })(runtime, ignoreObservationLoss),
     );
     await Effect.runPromise(prepared.startForwarding());
     const adapter = prepared.adapter;
@@ -688,7 +700,8 @@ describe("OpenCode live session controls", () => {
         createOpenCodeLiveSessionAdapterPreparer({
           liveSessionLifecycle: createLifecycle(publishedChanges),
           prepareRuntime: harness.prepareRuntime,
-        })(runtime),
+          probeMcpStatus: unexpectedMcpStatusProbe,
+        })(runtime, ignoreObservationLoss),
       );
       await Effect.runPromise(prepared.startForwarding());
       const adapter = prepared.adapter;
@@ -736,7 +749,7 @@ describe("OpenCode live session controls", () => {
         },
       });
 
-      const snapshots = await Effect.runPromise(adapter.listSnapshots("/repo"));
+      const snapshots = await Effect.runPromise(adapter.listSnapshots());
       expect(snapshots).toEqual(
         expect.arrayContaining([expect.objectContaining({ ref: controlRef })]),
       );
@@ -787,7 +800,8 @@ describe("OpenCode live session controls", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
-      })(runtime),
+        probeMcpStatus: unexpectedMcpStatusProbe,
+      })(runtime, ignoreObservationLoss),
     );
     await Effect.runPromise(prepared.startForwarding());
     const adapter = prepared.adapter;
@@ -856,7 +870,8 @@ describe("OpenCode live session controls", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
-      })(runtime),
+        probeMcpStatus: unexpectedMcpStatusProbe,
+      })(runtime, ignoreObservationLoss),
     );
     await Effect.runPromise(prepared.startForwarding());
     const adapter = prepared.adapter;
@@ -900,7 +915,8 @@ describe("OpenCode live session controls", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
-      })(runtime),
+        probeMcpStatus: unexpectedMcpStatusProbe,
+      })(runtime, ignoreObservationLoss),
     );
     await Effect.runPromise(prepared.startForwarding());
     const adapter = prepared.adapter;

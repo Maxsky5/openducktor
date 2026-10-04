@@ -271,6 +271,7 @@ describe("OpenCode live session snapshots", () => {
       sources: [],
       failures: [
         {
+          repoPath: "/worktree",
           externalSessionId: "session-1",
           workingDirectory: "/worktree",
           message: "status failed",
@@ -330,6 +331,7 @@ describe("OpenCode live session snapshots", () => {
     ]);
     expect(result.failures).toEqual([
       {
+        repoPath: "/healthy",
         externalSessionId: "failed-session",
         workingDirectory: "/failed",
         message: "status failed",

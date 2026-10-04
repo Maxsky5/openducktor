@@ -152,6 +152,7 @@ export type WorkspaceSessionExternalListResult = z.infer<
   typeof workspaceSessionExternalListResultSchema
 >;
 export const workspaceSessionImportInputSchema = workspaceSessionListInputSchema.extend({
+  catalogRequestId: z.string().uuid(),
   runtimeKind: runtimeKindSchema,
   externalSessionId: z.string().min(1),
   workingDirectory: z.string().min(1),

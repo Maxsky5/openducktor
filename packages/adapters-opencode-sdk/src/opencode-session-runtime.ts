@@ -1,3 +1,4 @@
+import type { ManagedMcpServerResolver } from "@openducktor/core";
 import { assertSessionScope } from "./opencode-session-binding";
 import {
   createSessionPermissionRestorer,
@@ -5,6 +6,10 @@ import {
 } from "./opencode-session-permissions";
 import { resolveOpencodeSessionPolicy } from "./opencode-session-policy";
 import { createOpenCodeSessionImportPort } from "./opencode-session-import";
+import {
+  createOpencodeMcpDirectoryBindings,
+  type OpencodeMcpBinding,
+} from "./opencode-mcp-bindings";
 import { agentSessionRefsEqual, agentSessionScopesEqual } from "@openducktor/core";
 import type { RuntimeSessionImportPort } from "@openducktor/core";
 import type {
@@ -60,7 +65,6 @@ import type {
 } from "./types";
 
 export type PrepareOpencodeSessionRuntimeInput = {
-  readonly repoPath: string;
   readonly runtimeId: string;
   readonly runtimeEndpoint: string;
   readonly directories?: string[];
@@ -73,7 +77,12 @@ export type {
 } from "./opencode-session-native-operations";
 
 export type OpencodeSessionRuntimeConnection = {
+  /**
+   * Reads the live sources of one repository. Given roots replace that repository's roots.
+   * Sessions of other repositories stay registered.
+   */
   readonly readSessionSources: (
+    repoPath: string,
     roots?: AgentSessionAuthorizedRoot[],
   ) => Promise<OpencodeRuntimeSnapshotRead>;
   readonly loadContextUsage: (ref: SessionRef) => Promise<OpencodeSessionContextUsage | null>;
@@ -104,6 +113,8 @@ export type PreparedOpencodeSessionRuntime = {
   readonly startForwarding: (
     listener: (signal: OpencodeSessionRuntimeSignal) => void | Promise<void>,
   ) => Promise<void>;
+  /** Lists directories with a connected OpenDucktor MCP binding. It does not call the runtime. */
+  readonly listMcpBindings: () => ReadonlyArray<OpencodeMcpBinding>;
   readonly release: () => Promise<void>;
 };
 
@@ -111,14 +122,18 @@ export type PrepareOpencodeSessionRuntime = (
   input: PrepareOpencodeSessionRuntimeInput,
 ) => Promise<PreparedOpencodeSessionRuntime>;
 
-type PrepareOpencodeSessionRuntimeOptions = OpencodeSdkAdapterOptions & {
+type PrepareOpencodeSessionRuntimeOptions = Omit<
+  OpencodeSdkAdapterOptions,
+  "runtime" | "mcpBindings"
+> & {
   readonly readDirectory: ReadOpencodeDirectory;
+  readonly resolveMcpServerConfig: ManagedMcpServerResolver;
 };
 
 export const createPrepareOpencodeSessionRuntime = (
   options: PrepareOpencodeSessionRuntimeOptions,
 ): PrepareOpencodeSessionRuntime => {
-  const { readDirectory, ...adapterOptions } = options;
+  const { readDirectory, resolveMcpServerConfig, ...adapterOptions } = options;
   const createClient = adapterOptions.createClient ?? buildDefaultFactory();
   const now = adapterOptions.now ?? nowIso;
   const runtimeEventTransports = new Map<string, RuntimeEventTransportRecord>();
@@ -126,16 +141,17 @@ export const createPrepareOpencodeSessionRuntime = (
   return async (input) => {
     const eventSessions = new Map<string, SessionRecord>();
     const restorePermissions = createSessionPermissionRestorer();
+    const mcpBindings = createOpencodeMcpDirectoryBindings({
+      resolveServerConfig: resolveMcpServerConfig,
+    });
     const controlAdapter = new OpencodeSdkAdapter(
       {
         ...adapterOptions,
-        repoRuntimeResolver: {
-          requireRepoRuntime: async () => ({
-            kind: "opencode",
-            runtimeId: input.runtimeId,
-            repoPath: input.repoPath,
-            runtimeRoute: { type: "local_http", endpoint: input.runtimeEndpoint },
-          }),
+        mcpBindings,
+        runtime: {
+          kind: "opencode",
+          runtimeId: input.runtimeId,
+          runtimeRoute: { type: "local_http", endpoint: input.runtimeEndpoint },
         },
       },
       { sessions: eventSessions, runtimeEventTransports, restorePermissions },
@@ -207,6 +223,7 @@ export const createPrepareOpencodeSessionRuntime = (
       return false;
     };
 
+    /** Syncs event bindings of one repository. `bindings` holds only its sessions. */
     const syncEventSessions = async (
       { sources, failures }: OpencodeRuntimeSnapshotRead,
       bindings: ReadonlyMap<string, SessionRecord>,
@@ -261,7 +278,7 @@ export const createPrepareOpencodeSessionRuntime = (
           await releaseSessionRuntime(existing, eventSessions, runtimeEventTransports);
         }
         const sessionInput: SessionRecord["input"] = {
-          repoPath: input.repoPath,
+          repoPath: source.repoPath,
           runtimeKind: "opencode" as const,
           workingDirectory: source.workingDirectory,
           runtimePolicy: { kind: "opencode" as const },
@@ -295,15 +312,28 @@ export const createPrepareOpencodeSessionRuntime = (
     };
 
     let readSessionSourcesTail = Promise.resolve();
-    let authorizedRoots: AgentSessionAuthorizedRoot[] = [];
+    const authorizedRootsByRepo = new Map<string, AgentSessionAuthorizedRoot[]>();
     const admittedRoots = new Map<string, AgentSessionAuthorizedRoot>();
     const readSessionSources = (
+      repoPath: string,
       roots?: AgentSessionAuthorizedRoot[],
     ): Promise<OpencodeRuntimeSnapshotRead> => {
       const read = readSessionSourcesTail.then(async () => {
         requireActive();
-        const rootsToRead = [...(roots ?? authorizedRoots), ...admittedRoots.values()];
-        const bindings = new Map(eventSessions);
+        const foreignRoot = roots?.find((root) => root.repoPath !== repoPath);
+        if (foreignRoot) {
+          throw new Error(
+            `Cannot refresh OpenCode sessions of repository '${repoPath}' with root '${foreignRoot.externalSessionId}' of repository '${foreignRoot.repoPath}'.`,
+          );
+        }
+        const repoRoots = roots ?? authorizedRootsByRepo.get(repoPath) ?? [];
+        const rootsToRead = [
+          ...repoRoots,
+          ...[...admittedRoots.values()].filter((root) => root.repoPath === repoPath),
+        ];
+        const bindings = new Map(
+          [...eventSessions].filter(([, session]) => session.input.repoPath === repoPath),
+        );
         // Block sends until the refresh checks each workflow tree or drops its binding.
         const permissionSessions = roots
           ? [...bindings.values()].filter(
@@ -316,13 +346,13 @@ export const createPrepareOpencodeSessionRuntime = (
             createClient,
             runtimeEndpoint: input.runtimeEndpoint,
             roots: rootsToRead,
-            attachSession: async (detail, scope, descendant) => {
+            attachSession: async (detail, scope, descendant, rootRepoPath) => {
               const existing = eventSessions.get(detail.id);
               if (scope && existing)
                 assertSessionScope(
                   existing,
                   {
-                    repoPath: input.repoPath,
+                    repoPath: rootRepoPath,
                     runtimeKind: "opencode",
                     workingDirectory: detail.directory,
                     externalSessionId: detail.id,
@@ -372,7 +402,12 @@ export const createPrepareOpencodeSessionRuntime = (
                 source.externalSessionId === root.externalSessionId &&
                 source.workingDirectory === root.workingDirectory,
             );
-          authorizedRoots = (roots ?? authorizedRoots).filter(shouldRetainRoot);
+          const retainedRoots = repoRoots.filter(shouldRetainRoot);
+          if (retainedRoots.length > 0) {
+            authorizedRootsByRepo.set(repoPath, retainedRoots);
+          } else {
+            authorizedRootsByRepo.delete(repoPath);
+          }
           for (const root of rootsToRead) {
             if (roots?.includes(root) || !shouldRetainRoot(root))
               admittedRoots.delete(root.externalSessionId);
@@ -443,6 +478,10 @@ export const createPrepareOpencodeSessionRuntime = (
         pendingSessionSignals.push({ type: "session_event", externalSessionId, event });
       },
       observer: async (event) => {
+        if (event.type === "server.instance.disposed") {
+          mcpBindings.forget(event.properties.directory);
+          return;
+        }
         if (initializing) {
           initializationEvents.push(event);
           if (!subscribersReady) {
@@ -499,17 +538,30 @@ export const createPrepareOpencodeSessionRuntime = (
       throw error;
     }
 
+    /** Binds the OpenDucktor MCP server of the owning workspace before work in a directory. */
+    const ensureDirectoryMcpBinding = (ref: { repoPath: string; workingDirectory: string }) =>
+      mcpBindings.ensure({
+        client: createClient({
+          runtimeEndpoint: input.runtimeEndpoint,
+          workingDirectory: ref.workingDirectory,
+        }),
+        repoPath: ref.repoPath,
+        workingDirectory: ref.workingDirectory,
+      });
+
+    const nativeContext = { createClient, runtimeEndpoint: input.runtimeEndpoint };
     const connection: OpencodeSessionRuntimeConnection = {
       readSessionSources,
-      loadContextUsage: (ref) =>
-        readLatestOpencodeContextUsage(
-          { createClient, runtimeEndpoint: input.runtimeEndpoint },
-          ref,
-        ),
-      replyApproval: (reply) =>
-        replyToOpencodeApproval({ createClient, runtimeEndpoint: input.runtimeEndpoint }, reply),
-      replyQuestion: (reply) =>
-        replyToOpencodeQuestion({ createClient, runtimeEndpoint: input.runtimeEndpoint }, reply),
+      loadContextUsage: (ref) => readLatestOpencodeContextUsage(nativeContext, ref),
+      // A reply continues the turn, so its directory needs the workspace binding first.
+      replyApproval: async (reply) => {
+        await ensureDirectoryMcpBinding(reply.ref);
+        await replyToOpencodeApproval(nativeContext, reply);
+      },
+      replyQuestion: async (reply) => {
+        await ensureDirectoryMcpBinding(reply.ref);
+        await replyToOpencodeQuestion(nativeContext, reply);
+      },
       startSession: async (sessionInput) => {
         const summary = await controlAdapter.startSession(sessionInput);
         admittedRoots.set(summary.externalSessionId, {
@@ -552,7 +604,13 @@ export const createPrepareOpencodeSessionRuntime = (
         if (admittedRoot && agentSessionRefsEqual(admittedRoot, ref)) {
           admittedRoots.delete(ref.externalSessionId);
         }
-        authorizedRoots = authorizedRoots.filter((root) => !agentSessionRefsEqual(root, ref));
+        const repoRoots = authorizedRootsByRepo.get(ref.repoPath);
+        if (repoRoots) {
+          authorizedRootsByRepo.set(
+            ref.repoPath,
+            repoRoots.filter((root) => !agentSessionRefsEqual(root, ref)),
+          );
+        }
       },
     };
 
@@ -578,31 +636,37 @@ export const createPrepareOpencodeSessionRuntime = (
       }
     };
 
+    // Release closes the runtime at once. Each cleanup step is final once it succeeds, and a
+    // later release retries only the steps that failed.
+    let eventSessionsReleased = false;
+    let observationReleased = false;
     const release = async (): Promise<void> => {
-      if (released) {
-        return;
-      }
       released = true;
       forwardingListener = null;
+      mcpBindings.clear();
       const failures: Error[] = [];
-      try {
-        await releaseEventSessions(eventSessions, runtimeEventTransports);
-      } catch (error) {
-        failures.push(error instanceof Error ? error : new Error("OpenCode cleanup failed."));
+      if (!eventSessionsReleased) {
+        try {
+          await releaseEventSessions(eventSessions, runtimeEventTransports);
+          eventSessionsReleased = true;
+        } catch (error) {
+          failures.push(error instanceof Error ? error : new Error("OpenCode cleanup failed."));
+        }
       }
-      try {
-        await observation.release();
-      } catch (error) {
-        failures.push(
-          error instanceof Error ? error : new Error("OpenCode observation cleanup failed."),
-        );
-      } finally {
-        eventSessions.clear();
-        pendingSignals.length = 0;
-        pendingSessionSignals.length = 0;
-        eventsBeforeSubscribers.length = 0;
-        initializationEvents.length = 0;
+      if (!observationReleased) {
+        try {
+          await observation.release();
+          observationReleased = true;
+        } catch (error) {
+          failures.push(
+            error instanceof Error ? error : new Error("OpenCode observation cleanup failed."),
+          );
+        }
       }
+      pendingSignals.length = 0;
+      pendingSessionSignals.length = 0;
+      eventsBeforeSubscribers.length = 0;
+      initializationEvents.length = 0;
       if (failures.length > 0) {
         throw new AggregateError(
           failures,
@@ -617,17 +681,21 @@ export const createPrepareOpencodeSessionRuntime = (
       sessionImport: createOpenCodeSessionImportPort({
         createClient,
         runtimeEndpoint: input.runtimeEndpoint,
+        // An imported root gets its workspace binding before it is admitted. A failure leaves
+        // the root out, and the host reports it on the saved association.
         admit: async (ref) => {
+          await ensureDirectoryMcpBinding(ref);
           admittedRoots.set(ref.externalSessionId, {
             ...ref,
             sessionScope: { kind: "repository" },
           });
-          await readSessionSources();
+          await readSessionSources(ref.repoPath);
         },
       }),
       queries: controlAdapter,
       connection,
       startForwarding,
+      listMcpBindings: mcpBindings.list,
       release,
     };
   };

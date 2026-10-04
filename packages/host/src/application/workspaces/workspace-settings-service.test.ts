@@ -1,3 +1,4 @@
+import { saveSettingsSnapshot } from "../../test-support/save-settings-snapshot";
 import { createOpenCodeCreationSettings } from "./opencode-creation-settings";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -168,11 +169,11 @@ describe("createWorkspaceSettingsService", () => {
     const updated = { ...existing, name: "Code reviewer", systemPrompt: "Review the diff." };
     const added = { id: "research", name: "Researcher", systemPrompt: "Cite sources." };
     await Effect.runPromise(
-      service.saveSettingsSnapshot({ ...snapshot, customAgentRoles: [updated, added] }),
+      saveSettingsSnapshot(service, { ...snapshot, customAgentRoles: [updated, added] }),
     );
     expect(await Effect.runPromise(service.listCustomAgentRoles())).toEqual([updated, added]);
     await Effect.runPromise(
-      service.saveSettingsSnapshot({ ...snapshot, customAgentRoles: [added] }),
+      saveSettingsSnapshot(service, { ...snapshot, customAgentRoles: [added] }),
     );
     const fresh = await Effect.runPromise(service.getSettingsSnapshot());
     expect(fresh.customAgentRoles).toEqual([added]);
@@ -192,7 +193,7 @@ describe("createWorkspaceSettingsService", () => {
       [role, { ...role, name: "Researcher" }],
     ]) {
       await expect(
-        Effect.runPromise(service.saveSettingsSnapshot({ ...snapshot, customAgentRoles })),
+        Effect.runPromise(saveSettingsSnapshot(service, { ...snapshot, customAgentRoles })),
       ).rejects.toThrow();
     }
     expect(settingsConfig.writtenConfigs).toEqual([]);
@@ -209,7 +210,7 @@ describe("createWorkspaceSettingsService", () => {
     const service = createWorkspaceSettingsService(settingsConfig);
     const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
     await expect(
-      Effect.runPromise(service.saveSettingsSnapshot({ ...snapshot, customAgentRoles: [] })),
+      Effect.runPromise(saveSettingsSnapshot(service, { ...snapshot, customAgentRoles: [] })),
     ).rejects.toThrow("Disk is full");
     expect((await Effect.runPromise(service.getSettingsSnapshot())).customAgentRoles).toEqual([
       role,
@@ -233,7 +234,7 @@ describe("createWorkspaceSettingsService", () => {
     draft.agentRuntimes.opencode.defaults.rules = [
       { permission: "bash", pattern: "*", action: "allow" },
     ];
-    await expect(Effect.runPromise(service.saveSettingsSnapshot(draft))).rejects.toThrow(
+    await expect(Effect.runPromise(saveSettingsSnapshot(service, draft))).rejects.toThrow(
       "Disk full",
     );
     expect(port.writtenConfigs).toEqual([]);
@@ -268,7 +269,7 @@ describe("createWorkspaceSettingsService", () => {
     const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
 
     await Effect.runPromise(
-      service.saveSettingsSnapshot({
+      saveSettingsSnapshot(service, {
         ...snapshot,
         autopilot: {
           ...snapshot.autopilot,
@@ -291,7 +292,7 @@ describe("createWorkspaceSettingsService", () => {
     const invalid = { preferredOpenInToolId: "unknown" };
     const result = await Effect.runPromise(
       // @ts-expect-error Verify validation for an untyped caller.
-      Effect.either(service.saveSettingsSnapshot({ ...snapshot, system: invalid })),
+      Effect.either(saveSettingsSnapshot(service, { ...snapshot, system: invalid })),
     );
     expect(result._tag).toBe("Left");
     if (result._tag === "Left") expect(result.left._tag).toBe("HostValidationError");
@@ -306,7 +307,7 @@ describe("createWorkspaceSettingsService", () => {
     });
     const failedWrite = await Effect.runPromise(
       Effect.either(
-        failingService.saveSettingsSnapshot({
+        saveSettingsSnapshot(failingService, {
           ...snapshot,
           system: { preferredOpenInToolId: "zed" },
         }),
@@ -340,7 +341,7 @@ describe("createWorkspaceSettingsService", () => {
     const themeWrite = Effect.runPromise(service.setTheme("dark"));
     await writing;
     const preferenceWrite = Effect.runPromise(
-      service.saveSettingsSnapshot({ ...snapshot, system: { preferredOpenInToolId: "zed" } }),
+      saveSettingsSnapshot(service, { ...snapshot, system: { preferredOpenInToolId: "zed" } }),
     );
     release();
     await Promise.all([themeWrite, preferenceWrite]);
@@ -355,7 +356,7 @@ describe("createWorkspaceSettingsService", () => {
     const service = createWorkspaceSettingsService(settingsConfig);
     const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
     await Effect.runPromise(
-      service.saveSettingsSnapshot({
+      saveSettingsSnapshot(service, {
         ...snapshot,
         system: { preferredOpenInToolId: "zed" },
       }),
@@ -363,7 +364,7 @@ describe("createWorkspaceSettingsService", () => {
     expect((await Effect.runPromise(service.getSettingsSnapshot())).system).toEqual({
       preferredOpenInToolId: "zed",
     });
-    await Effect.runPromise(service.saveSettingsSnapshot({ ...snapshot, system: {} }));
+    await Effect.runPromise(saveSettingsSnapshot(service, { ...snapshot, system: {} }));
     expect((await Effect.runPromise(service.getSettingsSnapshot())).system).toEqual({});
   });
 
@@ -374,14 +375,14 @@ describe("createWorkspaceSettingsService", () => {
       const service = createWorkspaceSettingsService(createSettingsConfigAdapter({ configPath }));
       const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
       await Effect.runPromise(
-        service.saveSettingsSnapshot({ ...snapshot, system: { preferredOpenInToolId: "zed" } }),
+        saveSettingsSnapshot(service, { ...snapshot, system: { preferredOpenInToolId: "zed" } }),
       );
       const restarted = createWorkspaceSettingsService(createSettingsConfigAdapter({ configPath }));
       expect((await Effect.runPromise(restarted.getSettingsSnapshot())).system).toEqual({
         preferredOpenInToolId: "zed",
       });
       const loaded = await Effect.runPromise(restarted.getSettingsSnapshot());
-      await Effect.runPromise(restarted.saveSettingsSnapshot({ ...loaded, system: {} }));
+      await Effect.runPromise(saveSettingsSnapshot(restarted, { ...loaded, system: {} }));
       expect(JSON.parse(await readFile(configPath, "utf8")).system).toEqual({});
     } finally {
       await rm(tempDir, { recursive: true, force: true });
@@ -1153,7 +1154,7 @@ describe("createWorkspaceSettingsService", () => {
       horizontalScrollbarVisibility: "show" as const,
     };
     const records = await Effect.runPromise(
-      service.saveSettingsSnapshot({
+      saveSettingsSnapshot(service, {
         ...snapshot,
         appearance: explicitAppearanceSettings,
         chat: explicitChatSettings,
@@ -1253,7 +1254,7 @@ describe("createWorkspaceSettingsService", () => {
     }
 
     const records = await Effect.runPromise(
-      service.saveSettingsSnapshot({
+      saveSettingsSnapshot(service, {
         ...snapshot,
         workspaces: {
           repo: { ...repoSnapshot, abbreviation: "iOS", tileColor: "#F08C00" },
@@ -1286,7 +1287,7 @@ describe("createWorkspaceSettingsService", () => {
 
     const failure = await Effect.runPromise(
       Effect.either(
-        service.saveSettingsSnapshot({
+        saveSettingsSnapshot(service, {
           ...snapshot,
           workspaces: { repo: { ...repoSnapshot, tileColor: "blue" } },
         }),
@@ -1431,7 +1432,7 @@ describe("createWorkspaceSettingsService", () => {
       }),
     );
     await Effect.runPromise(
-      service.saveSettingsSnapshot({
+      saveSettingsSnapshot(service, {
         ...staleSnapshot,
         general: { openAgentStudioTabOnBackgroundSessionStart: false },
       }),
@@ -1462,7 +1463,7 @@ describe("createWorkspaceSettingsService", () => {
       },
     };
 
-    await Effect.runPromise(service.saveSettingsSnapshot({ ...snapshot, notifications }));
+    await Effect.runPromise(saveSettingsSnapshot(service, { ...snapshot, notifications }));
 
     const reloaded = await Effect.runPromise(service.getSettingsSnapshot());
     expect(reloaded.notifications).toEqual(notifications);
@@ -1532,7 +1533,7 @@ describe("createWorkspaceSettingsService", () => {
     const themeWrite = Effect.runPromise(service.setTheme("dark"));
     await themeWriteStarted;
     const settingsWrite = Effect.runPromise(
-      service.saveSettingsSnapshot({
+      saveSettingsSnapshot(service, {
         ...snapshot,
         general: { openAgentStudioTabOnBackgroundSessionStart: false },
       }),
@@ -1577,7 +1578,7 @@ describe("createWorkspaceSettingsService", () => {
     const staleSnapshot = await Effect.runPromise(service.getSettingsSnapshot());
 
     const settingsWrite = Effect.runPromise(
-      service.saveSettingsSnapshot({
+      saveSettingsSnapshot(service, {
         ...staleSnapshot,
         general: { openAgentStudioTabOnBackgroundSessionStart: false },
       }),
@@ -1625,7 +1626,7 @@ describe("createWorkspaceSettingsService", () => {
     const favoriteWrite = Effect.runPromise(service.updateAgentModelFavorites([newFavorite]));
     await favoriteWriteStarted;
     const settingsWrite = Effect.runPromise(
-      service.saveSettingsSnapshot({
+      saveSettingsSnapshot(service, {
         ...staleSnapshot,
         general: { openAgentStudioTabOnBackgroundSessionStart: false },
       }),
@@ -1649,7 +1650,7 @@ describe("createWorkspaceSettingsService", () => {
 
     await expect(
       Effect.runPromise(
-        service.saveSettingsSnapshot({
+        saveSettingsSnapshot(service, {
           ...snapshot,
           agentRuntimes: {
             ...snapshot.agentRuntimes,
@@ -1674,7 +1675,7 @@ describe("createWorkspaceSettingsService", () => {
     const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
     await expect(
       Effect.runPromise(
-        service.saveSettingsSnapshot({
+        saveSettingsSnapshot(service, {
           ...snapshot,
           workspaces: {
             repo: repoConfig("repo", "/repos/repo"),
@@ -1697,7 +1698,7 @@ describe("createWorkspaceSettingsService", () => {
       }),
     );
     const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
-    await expect(Effect.runPromise(service.saveSettingsSnapshot(snapshot))).rejects.toThrow(
+    await expect(Effect.runPromise(saveSettingsSnapshot(service, snapshot))).rejects.toThrow(
       "Workspace is not a git repository: /repos/repo",
     );
   });

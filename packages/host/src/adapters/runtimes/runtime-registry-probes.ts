@@ -1,4 +1,4 @@
-import { ODT_WORKFLOW_AGENT_TOOL_NAMES, type RuntimeRoute } from "@openducktor/contracts";
+import type { RuntimeRoute } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { z, type JSONType } from "zod";
 import {
@@ -9,7 +9,6 @@ import {
 } from "../../effect/host-errors";
 import { parseJson } from "../../effect/json";
 import type {
-  RuntimeMcpStatusProbeInput,
   RuntimeMcpStatusProbeResult,
   RuntimeRegistryError,
 } from "../../ports/runtime-registry-port";
@@ -18,7 +17,6 @@ import { isTimeoutError } from "./runtime-probe-errors";
 const SESSION_REQUEST_TIMEOUT_MS = 2000;
 const MCP_REQUEST_TIMEOUT_MS = 2000;
 const MAX_ABORT_ERROR_BODY_BYTES = 64 * 1024;
-const CODEX_ODT_TOOL_IDS = [...ODT_WORKFLOW_AGENT_TOOL_NAMES];
 const TIMEOUT_RESPONSE_STATUSES = new Set([408, 504]);
 const toolIdsSchema = z.array(z.unknown());
 type RuntimeProbeObject = Record<string, JSONType>;
@@ -431,37 +429,3 @@ export const probeOpenCodeMcpStatus = ({
         : Effect.fail(error),
     ),
   );
-
-export const probeCodexMcpStatus = ({
-  runtimeRoute,
-  serverName,
-}: RuntimeMcpStatusProbeInput): RuntimeMcpStatusProbeResult => {
-  if (runtimeRoute.type !== "stdio") {
-    return {
-      supported: false,
-      connected: false,
-      serverStatus: null,
-      toolIds: [],
-      detail: "Codex MCP status probing requires a host-managed stdio app-server runtime.",
-      failureKind: "error",
-    };
-  }
-  if (serverName !== "openducktor") {
-    return {
-      supported: true,
-      connected: false,
-      serverStatus: null,
-      toolIds: [],
-      detail: `MCP server ${serverName} is not configured for Codex app-server runtimes.`,
-      failureKind: "error",
-    };
-  }
-  return {
-    supported: true,
-    connected: true,
-    serverStatus: "connected",
-    toolIds: CODEX_ODT_TOOL_IDS,
-    detail: null,
-    failureKind: null,
-  };
-};

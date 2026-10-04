@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import { replaceAgentSession } from "@/state/agent-session-collection";
 import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
@@ -11,12 +10,11 @@ import {
   sessionFixture,
   taskFixture,
 } from "./start-session.test-helpers";
+import { createTestOpencodeSdkAdapter } from "./opencode-agent-engine.test-support";
 
 describe("agent-orchestrator/handlers/start-session fork", () => {
   test("rejects forking a legacy repository-root task session", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     let forkCalls = 0;
     adapter.forkSession = async () => {
       forkCalls += 1;
@@ -52,9 +50,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
     expect(forkCalls).toBe(0);
   });
   test("forks from the selected source session for pull request generation", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const originalForkSession = adapter.forkSession;
     const originalLoadSessionHistory = adapter.loadSessionHistory;
     const sessionsRef = createSessionsRef([
@@ -182,9 +178,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
   });
 
   test("starts a workflow fork through the host-controlled operation", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const events: string[] = [];
     let finishPersistence: (() => void) | undefined;
     const persistenceBlocked = new Promise<void>((resolve) => {
@@ -236,9 +230,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
   });
 
   test("does not register a session when the host-controlled fork fails", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const stoppedSessionIds: string[] = [];
     const sessionsRef = createSessionsRef([
       sessionFixture({
@@ -278,9 +270,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
   });
 
   test("reports host fork cleanup failure", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const sessionsRef = createSessionsRef([
       sessionFixture({
         externalSessionId: "source-persistence-stop-failure",
@@ -319,9 +309,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
   });
 
   test("loads stopped source session history before forking", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const originalForkSession = adapter.forkSession;
     const originalLoadSessionHistory = adapter.loadSessionHistory;
     const events: string[] = [];
@@ -437,9 +425,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
   });
 
   test("forks from a loaded source session without live runtime transport", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const originalForkSession = adapter.forkSession;
     const forkCalls: unknown[] = [];
     const sessionsRef = createSessionsRef([
@@ -500,9 +486,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
   });
 
   test("stops the forked session when child history load fails", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const originalForkSession = adapter.forkSession;
     const originalLoadSessionHistory = adapter.loadSessionHistory;
     const originalStopSession = adapter.stopSession;
@@ -562,9 +546,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
   });
 
   test("reports when child-history rollback cannot stop the fork", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const sessionsRef = createSessionsRef([
       sessionFixture({
         externalSessionId: "source-child-history-stop-failure",
@@ -610,9 +592,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
 
   test("stops the forked session when the repo becomes stale after child history load", async () => {
     const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const originalForkSession = adapter.forkSession;
     const originalLoadSessionHistory = adapter.loadSessionHistory;
     const originalStopSession = adapter.stopSession;

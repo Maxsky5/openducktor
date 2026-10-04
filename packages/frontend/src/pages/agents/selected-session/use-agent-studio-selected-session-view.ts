@@ -7,8 +7,8 @@ import {
   type SessionLaunchActionId,
 } from "@/features/session-start";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { inactiveRepoRuntimeReadinessTarget } from "@/lib/repo-runtime-readiness";
-import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
+import { inactiveRuntimeReadinessTarget } from "@/lib/runtime-readiness";
+import { useRuntimeReadiness } from "@/lib/use-runtime-readiness";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import {
@@ -137,7 +137,7 @@ export function useAgentStudioSelectedSessionView({
   const runtimeTarget = useMemo(
     () =>
       isUnresolvedExplicitRouteSession
-        ? inactiveRepoRuntimeReadinessTarget
+        ? inactiveRuntimeReadinessTarget
         : deriveSelectedSessionRuntimeTarget({
             selectedSessionIdentity,
             selectedTask,
@@ -154,11 +154,11 @@ export function useAgentStudioSelectedSessionView({
       selection.role,
     ],
   );
-  const runtimeReadiness = useRepoRuntimeReadiness({
+  const runtimeReadiness = useRuntimeReadiness({
     hasWorkspace: workspaceRepoPath !== null,
     runtimeTarget,
   });
-  const repoReadinessState = runtimeReadiness.state;
+  const runtimeReadinessState = runtimeReadiness.state;
   const selectedSessionViewProjection = useMemo(() => {
     if (isUnresolvedExplicitRouteSession && routeSessionResolution.kind === "pending") {
       return {
@@ -199,10 +199,10 @@ export function useAgentStudioSelectedSessionView({
       selectedTask,
       sessionFault: selectedSessionFault,
       readModelLoadState: sessionReadModelLoadState,
-      repoReadinessState,
+      runtimeReadinessState,
     });
   }, [
-    repoReadinessState,
+    runtimeReadinessState,
     isUnresolvedExplicitRouteSession,
     routeSessionResolution,
     selectedSessionIdentity,
@@ -230,7 +230,7 @@ export function useAgentStudioSelectedSessionView({
       selection.sessionSummary,
     ),
     runtimeDefinitions,
-    repoReadinessState,
+    runtimeReadinessState,
     loadRuntimeCatalog: loadRepoRuntimeCatalog,
     readSessionTodos,
   });

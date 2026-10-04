@@ -1,6 +1,5 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { EnsureExistingSessionRuntime } from "../runtime/runtime";
 import { throwIfRepoStale } from "../support/core";
 import { requireWorkspaceRepoPath } from "../support/session-invariants";
 import { loadSessionPromptContext } from "../support/session-prompt";
@@ -11,7 +10,6 @@ type PrepareSessionSendDependencies = {
   repoEpochRef: { current: number };
   currentWorkspaceRepoPathRef: { current: string | null };
   taskRef: { current: TaskCard[] };
-  ensureExistingSessionRuntime: EnsureExistingSessionRuntime;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
 };
 
@@ -37,7 +35,6 @@ export const createPrepareSessionSend = ({
   repoEpochRef,
   currentWorkspaceRepoPathRef,
   taskRef,
-  ensureExistingSessionRuntime,
   loadRepoPromptOverrides,
 }: PrepareSessionSendDependencies) => {
   return async (
@@ -64,22 +61,19 @@ export const createPrepareSessionSend = ({
     if (association.kind === "repository" || !prepareWorkflowContext) {
       return {};
     }
-    const workflowRepoPath = requireWorkspaceRepoPath(workspaceRepoPathAtStart);
+    requireWorkspaceRepoPath(workspaceRepoPathAtStart);
     throwIfRepoStale(isStale, STALE_SEND_PREPARATION_ERROR);
     if (!workspaceId) {
       throw new Error("Active workspace is required.");
     }
 
     const task = findSessionTask(taskRef.current, association.taskId);
-    const [promptContext] = await Promise.all([
-      loadSessionPromptContext({
-        workspaceId,
-        role: association.role,
-        task,
-        loadRepoPromptOverrides,
-      }),
-      ensureExistingSessionRuntime(workflowRepoPath, session.runtimeKind),
-    ]);
+    const promptContext = await loadSessionPromptContext({
+      workspaceId,
+      role: association.role,
+      task,
+      loadRepoPromptOverrides,
+    });
     throwIfRepoStale(isStale, STALE_SEND_PREPARATION_ERROR);
 
     return {

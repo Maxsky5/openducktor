@@ -6,7 +6,7 @@ import { HostOperationError } from "../../effect/host-errors";
 import type { ProcessTreeTerminator } from "../../infrastructure/process/process-tree";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
-import type { CodexChildProcess } from "./codex-workspace-runtime-cleanup";
+import type { CodexChildProcess } from "./codex-runtime-cleanup";
 import { createCodexModelCatalogPreview } from "./codex-model-catalog-preview";
 
 const executablePath = join(process.cwd(), `missing-codex-preview-${process.pid}`);

@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
 import {
+  AGENT_ROLE_TOOL_POLICY,
   type ContinueInterruptedAgentTurnInput,
   workflowAgentSessionScope,
 } from "@openducktor/core";
@@ -8,7 +10,9 @@ import {
   codexThreadFixture,
   codexThreadStartResultFixture,
   codexTurnFixture,
+  expectedThreadConfig,
   makeRuntimeSummary,
+  testManagedMcpServer,
 } from "./codex-app-server-adapter.test-harness";
 import { CodexAppServerAdapter } from "./index";
 import type {
@@ -65,13 +69,8 @@ const createContinuationAdapter = ({
   const calls: RecordedCall[] = [];
   let resumeCount = 0;
   const adapter = new CodexAppServerAdapter({
-    repoRuntimeResolver: {
-      requireRepoRuntime: async ({ repoPath, runtimeKind }) => ({
-        ...makeRuntimeSummary("runtime-live"),
-        repoPath,
-        kind: runtimeKind,
-      }),
-    },
+    resolveManagedMcpServer: testManagedMcpServer,
+    runtime: makeRuntimeSummary("runtime-live"),
     transportFactory: (): CodexJsonRpcTransport => ({
       async request({ method, params }) {
         calls.push({ method, params });
@@ -165,6 +164,10 @@ describe("CodexAppServerAdapter interrupted-turn continuation", () => {
       workingDirectory: "/repo",
     });
     expect(methodsOf(calls)).toEqual(["model/list", "thread/read", "thread/resume", "turn/start"]);
+    expect(calls.find((call) => call.method === "thread/resume")?.params).toMatchObject({
+      config: expectedThreadConfig("/repo", AGENT_ROLE_TOOL_POLICY.build),
+      cwd: "/repo",
+    });
     const threadRead = calls.find((call) => call.method === "thread/read");
     expect(threadRead?.params).toMatchObject({ threadId: "thread-1", includeTurns: true });
     const turnStart = calls.find((call) => call.method === "turn/start");
@@ -187,7 +190,9 @@ describe("CodexAppServerAdapter interrupted-turn continuation", () => {
 
     await adapter.continueInterruptedTurn(input);
 
+    // Native settings stay unchanged, but the workspace MCP server is still bound.
     expect(calls.find((call) => call.method === "thread/resume")?.params).toEqual({
+      config: expectedThreadConfig("/repo", ODT_MCP_TOOL_NAMES),
       threadId: "thread-1",
       excludeTurns: true,
     });
@@ -374,13 +379,8 @@ describe("CodexAppServerAdapter interrupted-turn continuation", () => {
   test("reports a missing thread as session_not_found without starting a turn", async () => {
     const calls: RecordedCall[] = [];
     const adapter = new CodexAppServerAdapter({
-      repoRuntimeResolver: {
-        requireRepoRuntime: async ({ repoPath, runtimeKind }) => ({
-          ...makeRuntimeSummary("runtime-live"),
-          repoPath,
-          kind: runtimeKind,
-        }),
-      },
+      resolveManagedMcpServer: testManagedMcpServer,
+      runtime: makeRuntimeSummary("runtime-live"),
       transportFactory: (): CodexJsonRpcTransport => ({
         async request({ method, params }) {
           calls.push({ method, params });
@@ -418,13 +418,8 @@ describe("CodexAppServerAdapter interrupted-turn continuation", () => {
   test("reports a failed probe without starting a turn", async () => {
     const calls: RecordedCall[] = [];
     const adapter = new CodexAppServerAdapter({
-      repoRuntimeResolver: {
-        requireRepoRuntime: async ({ repoPath, runtimeKind }) => ({
-          ...makeRuntimeSummary("runtime-live"),
-          repoPath,
-          kind: runtimeKind,
-        }),
-      },
+      resolveManagedMcpServer: testManagedMcpServer,
+      runtime: makeRuntimeSummary("runtime-live"),
       transportFactory: (): CodexJsonRpcTransport => ({
         async request({ method, params }) {
           calls.push({ method, params });

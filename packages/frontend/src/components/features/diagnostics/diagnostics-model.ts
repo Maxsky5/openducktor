@@ -4,25 +4,16 @@ export type DiagnosticsSummary = {
   iconClass: string;
 };
 
+/** Priority: blocking failure, then loading, then setup warning. */
 export const buildDiagnosticsSummary = ({
-  hasActiveWorkspace,
   isChecking,
   hasCriticalIssues,
   hasSetupIssues,
 }: {
-  hasActiveWorkspace: boolean;
   isChecking: boolean;
   hasCriticalIssues: boolean;
   hasSetupIssues: boolean;
 }): DiagnosticsSummary => {
-  if (!hasActiveWorkspace) {
-    return {
-      label: "No repository selected",
-      toneClass: "text-muted-foreground",
-      iconClass: "text-muted-foreground",
-    };
-  }
-
   if (hasCriticalIssues) {
     return {
       label: "Critical issue",

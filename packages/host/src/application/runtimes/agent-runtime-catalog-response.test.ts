@@ -9,10 +9,6 @@ import { toCatalogResponse } from "./agent-runtime-catalog-response";
 const runtime: RuntimeInstanceSummary = {
   runtimeId: "runtime-1",
   kind: "claude",
-  repoPath: "/repo",
-  taskId: null,
-  role: "workspace",
-  workingDirectory: "/repo",
   runtimeRoute: { type: "host_service", identity: "runtime-1" },
   startedAt: "2026-09-17T10:00:00.000Z",
   descriptor: RUNTIME_DESCRIPTORS_BY_KIND.claude,

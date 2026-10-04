@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
+import type { RuntimeReadinessState } from "@/lib/runtime-readiness";
 import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
 import { useStableAgentSessionScope } from "@/lib/use-stable-agent-session-scope";
 import { useAgentOperations } from "@/state/app-state-provider";
@@ -9,12 +9,12 @@ import { runOrchestratorSideEffect } from "../support/async-side-effects";
 
 const missingContextTarget = ({
   session,
-  repoReadinessState,
+  runtimeReadinessState,
 }: {
   session: AgentSessionState | null;
-  repoReadinessState: RepoRuntimeReadinessState;
+  runtimeReadinessState: RuntimeReadinessState;
 }): AgentSessionContextLoadTarget | null => {
-  if (session === null || repoReadinessState !== "ready") {
+  if (session === null || runtimeReadinessState !== "ready") {
     return null;
   }
   const needsCodexModel = session.runtimeKind === "codex" && session.selectedModel === null;
@@ -30,16 +30,16 @@ const missingContextTarget = ({
 
 export const useSelectedSessionContextLoad = ({
   session,
-  repoReadinessState,
+  runtimeReadinessState,
 }: {
   session: AgentSessionState | null;
-  repoReadinessState: RepoRuntimeReadinessState;
+  runtimeReadinessState: RuntimeReadinessState;
 }): string | null => {
   const { loadAgentSessionContext } = useAgentOperations();
   const [loadError, setLoadError] = useState<string | null>(null);
   const target = missingContextTarget({
     session,
-    repoReadinessState,
+    runtimeReadinessState,
   });
   const stableIdentity = useStableAgentSessionIdentity(target);
   const stableSessionScope = useStableAgentSessionScope(target?.sessionScope);

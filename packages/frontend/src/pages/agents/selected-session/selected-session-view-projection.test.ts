@@ -56,7 +56,7 @@ const project = (overrides: ProjectOverrides = {}) => {
     sessionSummary: null,
     sessionFault: null,
     readModelLoadState,
-    repoReadinessState: "ready",
+    runtimeReadinessState: "ready",
     ...projectionOverrides,
     selectedSessionIdentity,
     selectedTask,
@@ -242,9 +242,9 @@ describe("selected-session-view-projection", () => {
     });
     const waitingSelectedTaskProjection = project({
       selectedTask: createTaskCardFixture(),
-      repoReadinessState: "checking",
+      runtimeReadinessState: "checking",
     });
-    const inactiveProjection = project({ repoReadinessState: "checking" });
+    const inactiveProjection = project({ runtimeReadinessState: "checking" });
 
     expect(selectedTaskProjection.transcriptState).toEqual({
       kind: "empty",
@@ -258,12 +258,12 @@ describe("selected-session-view-projection", () => {
     const projection = project({
       selectedTask: createTaskCardFixture(),
       readModelLoadState: loadingAgentSessionReadModelLoadState(repoPath),
-      repoReadinessState: "checking",
+      runtimeReadinessState: "checking",
     });
     const readyProjection = project({
       selectedTask: createTaskCardFixture(),
       readModelLoadState: loadingAgentSessionReadModelLoadState(repoPath),
-      repoReadinessState: "ready",
+      runtimeReadinessState: "ready",
     });
 
     expect(projection.transcriptState).toEqual({ kind: "runtime_waiting" });

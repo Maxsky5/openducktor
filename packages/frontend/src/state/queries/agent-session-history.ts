@@ -1,4 +1,4 @@
-import type { SettingsSnapshot } from "@openducktor/contracts";
+import type { RuntimeKind, SettingsSnapshot } from "@openducktor/contracts";
 import type {
   AgentSessionHistoryMessage,
   AgentSessionScope,
@@ -35,6 +35,9 @@ export const agentSessionHistoryQueryKeys = {
       externalSessionId,
       { sessionScope, limit, systemPromptContext, systemPrompt, model, runtimePolicy },
     ] as const,
+  /** True for a history key of this runtime kind in any workspace or directory. */
+  matchesRuntimeKind: (key: QueryKey, runtimeKind: RuntimeKind): boolean =>
+    key[0] === agentSessionHistoryQueryKeys.all[0] && key[2] === runtimeKind,
 };
 
 type RuntimeSessionHistoryRefInput = AgentSessionIdentity & {

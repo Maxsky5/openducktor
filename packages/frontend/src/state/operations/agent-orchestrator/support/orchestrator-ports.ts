@@ -14,7 +14,6 @@ export type AgentOrchestratorHostPort = AgentSessionReadPort & {
 
 export type AgentOrchestratorRuntimeHostPort = {
   gitCanonicalizePath: typeof host.gitCanonicalizePath;
-  runtimeEnsure: typeof host.runtimeEnsure;
   agentSessionWorkflowStart: typeof host.agentSessionWorkflowStart;
 };
 

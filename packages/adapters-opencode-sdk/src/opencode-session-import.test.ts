@@ -51,7 +51,9 @@ test("OpenCode V2 discovery pages metadata and registers only after import", asy
       admitted.push(input.externalSessionId);
     },
   });
-  const scanner = sessions.scanSessions(new AbortController().signal)[Symbol.asyncIterator]();
+  const scanner = sessions
+    .scanSessions({ repoPath: "/repo", signal: new AbortController().signal })
+    [Symbol.asyncIterator]();
   const first = await scanner.next();
   expect(first.value).toEqual(
     [{ ...ref, title: "Native title", updatedAt: 123 }].map(({ repoPath: _repo, ...row }) => row),
@@ -88,7 +90,9 @@ test.each([null, undefined])("OpenCode accepts terminal cursor %s", async (next)
     runtimeEndpoint: "http://runtime",
     admit: async () => {},
   });
-  const scanner = sessions.scanSessions(new AbortController().signal)[Symbol.asyncIterator]();
+  const scanner = sessions
+    .scanSessions({ repoPath: "/repo", signal: new AbortController().signal })
+    [Symbol.asyncIterator]();
   expect((await scanner.next()).value).toEqual([]);
   expect((await scanner.next()).done).toBe(true);
 });

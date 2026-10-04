@@ -387,7 +387,7 @@ describe("TypeScript web host backend", () => {
         });
         expect(session.status).toBe(200);
         await session.text();
-        const command = await Bun.fetch(`http://127.0.0.1:${port}/api/invoke/runtime_ensure`, {
+        const command = await Bun.fetch(`http://127.0.0.1:${port}/api/invoke/runtime_status`, {
           method: "POST",
           headers: { "x-openducktor-app-token": APP_TOKEN, "content-type": "application/json" },
           body: JSON.stringify({}),
@@ -572,7 +572,7 @@ describe("TypeScript web host backend", () => {
       if (port === undefined) {
         throw new Error("Expected the test server to expose a port.");
       }
-      const response = await Bun.fetch(`http://127.0.0.1:${port}/api/invoke/runtime_ensure`, {
+      const response = await Bun.fetch(`http://127.0.0.1:${port}/api/invoke/runtime_status`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -692,7 +692,7 @@ describe("TypeScript web host backend", () => {
     );
 
     const response = await handleTestRequest(
-      new Request("http://127.0.0.1/invoke/runtime_ensure", {
+      new Request("http://127.0.0.1/invoke/runtime_status", {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -705,9 +705,9 @@ describe("TypeScript web host backend", () => {
 
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({
-      error: "Failed to invoke runtime_ensure.",
+      error: "Failed to invoke runtime_status.",
       failureKind: "timeout",
-      message: "Failed to invoke runtime_ensure.",
+      message: "Failed to invoke runtime_status.",
     });
   });
 
@@ -1574,7 +1574,7 @@ describe("TypeScript web host backend", () => {
     await disposeStarted.promise;
     try {
       const response = await handleTestRequest(
-        new Request("http://127.0.0.1/invoke/runtime_ensure", {
+        new Request("http://127.0.0.1/invoke/runtime_status", {
           method: "POST",
           headers: {
             "content-type": "application/json",

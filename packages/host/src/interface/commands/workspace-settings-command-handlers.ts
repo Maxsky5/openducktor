@@ -14,6 +14,7 @@ import {
   type WorkspaceRepoSettingsInput,
 } from "@openducktor/contracts";
 import { z } from "zod";
+import type { HostRuntimeService } from "../../application/runtimes/host-runtime-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { configValidationError, toPayloadValue } from "../../config/config-validation-message";
 import { HostValidationError } from "../../effect/host-errors";
@@ -90,6 +91,18 @@ const requireParsedInput = <Output>(
   return result.data;
 };
 
+const runtimeConfirmationSchema = z.string().trim().min(1).optional();
+
+const parseRuntimeConfirmation = (record: CommandInputRecord): string | undefined => {
+  const parsed = runtimeConfirmationSchema.safeParse(record.runtimeConfirmation);
+  if (parsed.success) return parsed.data;
+  throw new HostValidationError({
+    message: "workspace_save_settings_snapshot runtimeConfirmation must be a string.",
+    field: "runtimeConfirmation",
+    cause: parsed.error,
+  });
+};
+
 const parseRepoConfigInput = (
   result: z.ZodSafeParseResult<WorkspaceRepoConfigInput>,
 ): WorkspaceRepoConfigInput => {
@@ -137,7 +150,6 @@ export const createWorkspaceSettingsCommandHandlers = (
     | "replaceAgentStudioState"
     | "applyAgentStudioStateAction"
     | "saveRepoSettings"
-    | "saveSettingsSnapshot"
     | "selectWorkspace"
     | "setTheme"
     | "updateAgentModelFavorites"
@@ -146,6 +158,7 @@ export const createWorkspaceSettingsCommandHandlers = (
     | "updateRepoConfig"
     | "updateRepoHooks"
   >,
+  hostRuntimeService: Pick<HostRuntimeService, "previewSettings" | "saveSettings">,
 ) =>
   ({
     custom_agent_role_list: (args) => {
@@ -292,14 +305,21 @@ export const createWorkspaceSettingsCommandHandlers = (
       requireNoArgs("workspace_get_settings_snapshot", args);
       return workspaceSettingsService.getSettingsSnapshot();
     },
-    workspace_save_settings_snapshot: (args) =>
-      workspaceSettingsService.saveSettingsSnapshot(
+    workspace_preview_settings_snapshot_runtime: (args) =>
+      hostRuntimeService.previewSettings(
         requireParsedInput(
           settingsSnapshotSaveInputSchema,
-          requireObjectArgs("workspace_save_settings_snapshot", args, "snapshot"),
+          requireObjectArgs("workspace_preview_settings_snapshot_runtime", args, "snapshot"),
           "snapshot",
         ),
       ),
+    workspace_save_settings_snapshot: (args) => {
+      const record = requireObjectArgs("workspace_save_settings_snapshot", args, "snapshot");
+      return hostRuntimeService.saveSettings({
+        snapshot: requireParsedInput(settingsSnapshotSaveInputSchema, record, "snapshot"),
+        runtimeConfirmation: parseRuntimeConfirmation(record),
+      });
+    },
     workspace_update_agent_model_favorites: (args) =>
       workspaceSettingsService.updateAgentModelFavorites(
         requireParsedInput(

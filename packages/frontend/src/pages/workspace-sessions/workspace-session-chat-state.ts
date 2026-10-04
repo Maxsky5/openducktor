@@ -1,4 +1,4 @@
-import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
+import type { RuntimeReadinessState } from "@/lib/runtime-readiness";
 import type { RuntimeDescriptor, WorkspaceSession } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { workspaceSessionTitle } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
@@ -70,14 +70,14 @@ export function projectWorkspaceSessionChatState({
   identity,
   session,
   readModelLoadState,
-  repoReadinessState,
+  runtimeReadinessState,
   fault,
 }: {
   record: WorkspaceSession;
   identity: AgentSessionIdentity | null;
   session: AgentSessionState | null;
   readModelLoadState: AgentSessionReadModelLoadState;
-  repoReadinessState: RepoRuntimeReadinessState;
+  runtimeReadinessState: RuntimeReadinessState;
   fault: AgentSessionTransientFault | null;
 }) {
   const observationReady = readModelLoadState.kind === "ready";
@@ -89,11 +89,11 @@ export function projectWorkspaceSessionChatState({
   if (!identity) {
     transcriptState = { kind: "empty", reason: "sessionless" };
   } else if (session) {
-    transcriptState = deriveLoadedAgentSessionTranscriptState({ session, repoReadinessState });
+    transcriptState = deriveLoadedAgentSessionTranscriptState({ session, runtimeReadinessState });
   } else {
     transcriptState = derivePendingSelectedSessionTranscriptState({
       readModelLoadState,
-      repoReadinessState,
+      runtimeReadinessState,
     });
   }
   return {

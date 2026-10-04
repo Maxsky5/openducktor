@@ -7,22 +7,21 @@ import {
 import { createClaudeAgentSdkService } from "../../adapters/claude/claude-agent-sdk-service";
 import { createClaudeAgentSdkSessionStore } from "../../adapters/claude/claude-agent-sdk-session-store";
 import type { ClaudeMcpBridgeConnectionResolver } from "../../adapters/claude/claude-agent-sdk-types";
-import { createClaudeWorkspaceRuntimeStarter } from "../../adapters/claude/claude-workspace-runtime-starter";
+import { createClaudeRuntimeStarter } from "../../adapters/claude/claude-runtime-starter";
 import type { HostRuntimeDistribution } from "../../adapters/runtimes/runtime-distribution";
 import type { ClaudeRuntimeSessionOperationsPort } from "../../adapters/runtimes/runtime-session-operations";
 import type { RuntimeWorkingDirectoryDependencies } from "../../application/runtimes/runtime-working-directory";
 import type { HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { RuntimeExecutableProbePort } from "../../ports/runtime-executable-probe-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
-import type { RuntimeWorkspaceStarterPort } from "../../ports/runtime-registry-port";
-import type { SettingsConfigPort } from "../../ports/settings-config-port";
+import type { RuntimeStarterPort } from "../../ports/runtime-registry-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 
 type ClaudeRuntimeSessionOperations = Exclude<ClaudeRuntimeSessionOperationsPort, undefined>;
 
 export type ClaudeRuntimeComposition = {
   sessionOperations: ClaudeRuntimeSessionOperations;
-  workspaceStarter: RuntimeWorkspaceStarterPort;
+  runtimeStarter: RuntimeStarterPort;
 };
 
 export type CreateClaudeRuntimeCompositionInput = {
@@ -32,12 +31,18 @@ export type CreateClaudeRuntimeCompositionInput = {
   resolveMcpBridgeConnection: ClaudeMcpBridgeConnectionResolver;
   runtimeExecutableProbe: RuntimeExecutableProbePort;
   runtimeDistribution: HostRuntimeDistribution;
-  settingsConfig: SettingsConfigPort;
   launchPolicy: ClaudeLaunchPolicyPort;
   toolDiscovery: ToolDiscoveryPort;
   workingDirectoryDependencies: RuntimeWorkingDirectoryDependencies;
 };
 
+/**
+ * Composes the shared Claude runtime of this host.
+ * The session store and event hub live as long as the host.
+ * Each runtime start creates one `ClaudeAgentSdkService` with its own file-search cache.
+ * A runtime release stops every session of that start, in all repositories, and disposes the service.
+ * Each session resolves the MCP bridge from its own repository.
+ */
 export const createClaudeRuntimeComposition = ({
   liveSessionLifecycle,
   onBackgroundFailure,
@@ -45,7 +50,6 @@ export const createClaudeRuntimeComposition = ({
   resolveMcpBridgeConnection,
   runtimeExecutableProbe,
   runtimeDistribution,
-  settingsConfig,
   launchPolicy,
   toolDiscovery,
   workingDirectoryDependencies,
@@ -53,7 +57,7 @@ export const createClaudeRuntimeComposition = ({
   const eventHub = createClaudeAgentSdkEventHub();
   const sessionStore = createClaudeAgentSdkSessionStore({ emit: eventHub.emit });
   const prepareLiveSessionAdapter: Parameters<
-    typeof createClaudeWorkspaceRuntimeStarter
+    typeof createClaudeRuntimeStarter
   >[0]["prepareLiveSessionAdapter"] = (runtime, claudeExecutablePath) => {
     const agentSdkServiceInput: Parameters<typeof createClaudeAgentSdkService>[0] = {
       claudeExecutablePath,
@@ -82,11 +86,10 @@ export const createClaudeRuntimeComposition = ({
       stopSession: sessionStore.stopSession,
       probeSessionStatus: sessionStore.probeSessionStatus,
     },
-    workspaceStarter: createClaudeWorkspaceRuntimeStarter({
+    runtimeStarter: createClaudeRuntimeStarter({
       liveSessionLifecycle,
       prepareLiveSessionAdapter,
       runtimeExecutableProbe,
-      settingsConfig,
       toolDiscovery,
     }),
   };

@@ -17,6 +17,7 @@ import {
   opencodeSection,
   runtimeDefinitions,
 } from "./onboarding-page.test-support";
+import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 
 const { cleanup, renderOnboarding } = createOnboardingTestHarness();
 afterEach(cleanup);
@@ -464,7 +465,7 @@ describe("useOnboardingRuntimeSetup", () => {
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
-    const saveSettingsSnapshot = mock(async () => {});
+    const saveSettingsSnapshot = mock(async () => savedSettingsResult());
     let discoveryAttempts = 0;
     const originalCheck = host.runtimeExecutablesCheck;
     host.runtimeExecutablesCheck = mock(async (input) => {
@@ -732,7 +733,7 @@ describe("useOnboardingRuntimeSetup", () => {
       }
       return createCheck(initialRuntimes, true);
     });
-    const saveSettingsSnapshot = mock(async () => {});
+    const saveSettingsSnapshot = mock(async () => savedSettingsResult());
     const originalCheck = host.runtimeExecutablesCheck;
     host.runtimeExecutablesCheck = runtimeExecutablesCheck;
 
@@ -968,6 +969,7 @@ describe("useOnboardingRuntimeSetup", () => {
     const saveSettingsSnapshot = mock(async () => {
       saveCalls += 1;
       if (saveCalls === 1) throw new Error("Settings write failed");
+      return savedSettingsResult();
     });
     const originalCheck = host.runtimeExecutablesCheck;
     host.runtimeExecutablesCheck = mock(async () => createCheck(runtimes));
@@ -1031,7 +1033,10 @@ describe("useOnboardingRuntimeSetup", () => {
       })),
     };
     const save = createDeferred<void>();
-    const saveSettingsSnapshot = mock(async () => save.promise);
+    const saveSettingsSnapshot = mock(async () => {
+      await save.promise;
+      return savedSettingsResult();
+    });
     const originalCheck = host.runtimeExecutablesCheck;
     host.runtimeExecutablesCheck = mock(async () => availableCheck);
 
@@ -1083,7 +1088,10 @@ describe("useOnboardingRuntimeSetup", () => {
   test("submits the no-runtime confirmation only once while saving", async () => {
     const runtimes = DEFAULT_AGENT_RUNTIMES;
     const save = createDeferred<void>();
-    const saveSettingsSnapshot = mock(async () => save.promise);
+    const saveSettingsSnapshot = mock(async () => {
+      await save.promise;
+      return savedSettingsResult();
+    });
     const originalCheck = host.runtimeExecutablesCheck;
     host.runtimeExecutablesCheck = mock(async () => createCheck(runtimes));
 

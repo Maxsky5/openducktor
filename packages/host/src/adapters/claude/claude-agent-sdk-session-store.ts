@@ -1,17 +1,18 @@
-import type { SessionRef } from "@openducktor/core";
-import { agentSessionRefsEqual } from "@openducktor/core";
 import { Effect } from "effect";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { flushClaudeLiveContextUsageRefresh } from "./claude-agent-sdk-context-usage";
 import { hasActiveClaudeBackgroundTools } from "./claude-agent-sdk-event-session";
-import { assertClaudeSessionRef } from "./claude-agent-sdk-session-shape";
+import type { RuntimeSessionTarget } from "../../ports/runtime-registry-port";
+import {
+  assertClaudeSessionTarget,
+  claudeSessionMatchesTarget,
+} from "./claude-agent-sdk-session-shape";
 import type {
   ClaudeAgentSdkEventEmitter,
   ClaudeSession,
   ClaudeSessionStore,
 } from "./claude-agent-sdk-types";
 import { clearClaudeStreamToolInputTree } from "./claude-agent-sdk-tool-input-stream";
-import { claudeSessionRef } from "./claude-agent-sdk-utils";
 
 export type CreateClaudeAgentSdkSessionStoreInput = {
   emit?: ClaudeAgentSdkEventEmitter;
@@ -101,15 +102,15 @@ export const createClaudeAgentSdkSessionStore = ({
     values: () => sessions.values(),
     probeSessionStatus: (input) => {
       const session = sessions.get(input.externalSessionId);
-      const matchesRef = session ? agentSessionRefsEqual(claudeSessionRef(session), input) : false;
       return Effect.succeed({
         supported: true,
         hasLiveSession: session
-          ? matchesRef && (hasActiveClaudeWork(session) || hasActiveClaudeBackgroundTools(session))
+          ? claudeSessionMatchesTarget(session, input) &&
+            (hasActiveClaudeWork(session) || hasActiveClaudeBackgroundTools(session))
           : false,
       });
     },
-    stopSession: (input: SessionRef) =>
+    stopSession: (input: RuntimeSessionTarget) =>
       Effect.tryPromise({
         try: async () => {
           const session = sessions.get(input.externalSessionId);
@@ -120,7 +121,7 @@ export const createClaudeAgentSdkSessionStore = ({
               details: { externalSessionId: input.externalSessionId },
             });
           }
-          assertClaudeSessionRef(session, input, "stop");
+          assertClaudeSessionTarget(session, input, "stop");
           close(session);
           await flushClaudeLiveContextUsageRefresh(session);
           publishSessionFinished(session, "Session stopped");

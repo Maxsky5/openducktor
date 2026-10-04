@@ -132,4 +132,19 @@ describe("Claude live-session event coordinator", () => {
     );
     expect(coordinator.isReleased()).toBe(true);
   });
+
+  test("rejects a control that reaches it after the runtime is released", async () => {
+    const coordinator = createClaudeLiveSessionEventCoordinator({
+      runtimeId: "runtime-1",
+      processEvent: () => Effect.void,
+    });
+    await Effect.runPromise(coordinator.startForwarding());
+    await Effect.runPromise(coordinator.shutdown(Effect.void));
+    let nativeStarts = 0;
+
+    await expect(
+      Effect.runPromise(coordinator.runControlMutation(Effect.sync(() => (nativeStarts += 1)))),
+    ).rejects.toThrow("Claude runtime 'runtime-1' is already released.");
+    expect(nativeStarts).toBe(0);
+  });
 });

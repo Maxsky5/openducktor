@@ -1,5 +1,7 @@
-import { createOpenCodeAgentEngineTestAdapter } from "./handlers/opencode-agent-engine.test-support";
-import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
+import {
+  createOpenCodeAgentEngineTestAdapter,
+  createTestOpencodeSdkAdapter,
+} from "./handlers/opencode-agent-engine.test-support";
 import {
   type AgentSessionLiveEnvelope,
   type AgentSessionLiveSnapshot,
@@ -14,13 +16,17 @@ import { createElement, type PropsWithChildren, type ReactElement } from "react"
 import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
 import {
   ChecksStateContext,
-  RepoRuntimeHealthContext,
+  HostRuntimeStatusContext,
   RuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
-import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createChecksStateFixture,
+  createHostRuntimeStatusContextValue,
+  createHostRuntimeStatusFixture,
+} from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
+import type { HostRuntimeStatusMap } from "@/types/diagnostics";
 import { host } from "../shared/host";
 import { useAgentOrchestratorOperations } from "./use-agent-orchestrator-operations";
 
@@ -119,7 +125,6 @@ export const createTestDependencies = (
     },
     runtimeHostPort: {
       gitCanonicalizePath: async (path) => path,
-      runtimeEnsure: (...args) => host.runtimeEnsure(...args),
       agentSessionWorkflowStart: (...args) => host.agentSessionWorkflowStart(...args),
       ...runtimeHostOverrides,
     },
@@ -170,21 +175,6 @@ const createDefaultActiveWorkspace = (activeRepo: string | null) =>
 type ActiveWorkspace = ReturnType<typeof createDefaultActiveWorkspace>;
 type OrchestratorHookState = ReturnType<typeof useAgentOrchestratorOperations>;
 
-const createChecksStateContextValue = () => ({
-  runtimeCheck: null,
-  taskStoreCheck: null,
-  runtimeCheckFailureKind: null,
-  taskStoreCheckFailureKind: null,
-  isLoadingChecks: false,
-  refreshChecks: async () => undefined,
-});
-
-const createRepoRuntimeHealthContextValue = (runtimeHealthByRuntime: RepoRuntimeHealthMap) => ({
-  runtimeHealthByRuntime,
-  isLoadingRepoRuntimeHealth: false,
-  refreshRepoRuntimeHealth: async () => runtimeHealthByRuntime,
-});
-
 const createRuntimeDefinitionsContextValue = () => {
   const runtimeDefinitions = [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR];
   return {
@@ -219,7 +209,7 @@ export const createHookHarness = (args: {
   activeWorkspace?: ActiveWorkspace;
   tasks: TaskCard[];
   isLoadingTasks?: boolean;
-  runtimeHealthByRuntime?: RepoRuntimeHealthMap;
+  runtimeStatusByKind?: HostRuntimeStatusMap;
   refreshTaskData: (repoPath: string) => Promise<void>;
   agentEngine?: AgentEnginePort;
   dependencies?: OrchestratorDependencies;
@@ -234,24 +224,17 @@ export const createHookHarness = (args: {
           host.agentSessionsListForTasks(repoPath, taskIds),
         taskWorktreeGet: (repoPath, taskId) => host.taskWorktreeGet(repoPath, taskId),
       },
-      {
-        runtimeEnsure: (...runtimeEnsureArgs) => host.runtimeEnsure(...runtimeEnsureArgs),
-      },
+      {},
     );
   let currentArgs = {
     ...args,
     activeWorkspace: args.activeWorkspace ?? createDefaultActiveWorkspace(args.activeRepo),
     isLoadingTasks: args.isLoadingTasks ?? false,
-    runtimeHealthByRuntime: args.runtimeHealthByRuntime ?? {
-      opencode: createRepoRuntimeHealthFixture(),
+    runtimeStatusByKind: args.runtimeStatusByKind ?? {
+      opencode: createHostRuntimeStatusFixture({ kind: "opencode" }),
     },
     agentEngine:
-      args.agentEngine ??
-      createOpenCodeAgentEngineTestAdapter(
-        new OpencodeSdkAdapter({
-          resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-        }),
-      ),
+      args.agentEngine ?? createOpenCodeAgentEngineTestAdapter(createTestOpencodeSdkAdapter()),
     dependencies,
   };
   const runtimeDefinitionsContextValue = createRuntimeDefinitionsContextValue();
@@ -265,15 +248,13 @@ export const createHookHarness = (args: {
       RuntimeDefinitionsContext.Provider,
       { value: runtimeDefinitionsContextValue },
       createElement(
-        RepoRuntimeHealthContext.Provider,
+        HostRuntimeStatusContext.Provider,
         {
-          value: createRepoRuntimeHealthContextValue(currentArgs.runtimeHealthByRuntime),
+          value: createHostRuntimeStatusContextValue({
+            statusByKind: currentArgs.runtimeStatusByKind,
+          }),
         },
-        createElement(
-          ChecksStateContext.Provider,
-          { value: createChecksStateContextValue() },
-          children,
-        ),
+        createElement(ChecksStateContext.Provider, { value: createChecksStateFixture() }, children),
       ),
     );
 
@@ -299,7 +280,7 @@ export const createHookHarness = (args: {
       activeWorkspace: ActiveWorkspace;
       tasks: TaskCard[];
       isLoadingTasks: boolean;
-      runtimeHealthByRuntime: RepoRuntimeHealthMap;
+      runtimeStatusByKind: HostRuntimeStatusMap;
       refreshTaskData: (repoPath: string) => Promise<void>;
       agentEngine: AgentEnginePort;
       dependencies: OrchestratorDependencies;

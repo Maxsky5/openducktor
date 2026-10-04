@@ -104,6 +104,7 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
     loadSettingsSnapshot,
     detectGithubRepository,
     saveGlobalGitConfig,
+    previewSettingsSnapshotRuntime,
     saveSettingsSnapshot,
     saveAgentModelFavorites,
   } = useRepoSettingsOperations({
@@ -141,6 +142,7 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
         loadSettingsSnapshot,
         detectGithubRepository,
         saveGlobalGitConfig,
+        previewSettingsSnapshotRuntime,
         saveSettingsSnapshot,
         saveAgentModelFavorites,
       }),
@@ -168,6 +170,7 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
       refreshBranches,
       saveRepoSettings,
       saveWorkspaceModelDefaults,
+      previewSettingsSnapshotRuntime,
       saveSettingsSnapshot,
       saveAgentModelFavorites,
       selectWorkspace,

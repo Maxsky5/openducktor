@@ -8,7 +8,6 @@ import { HostDependencyError } from "../../effect/host-errors";
 import type { RuntimeExecutableProbePort } from "../../ports/runtime-executable-probe-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
-import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
 import { createClaudeRuntimeComposition } from "./claude-runtime-composition";
 
 const runtimeExecutableProbe: RuntimeExecutableProbePort = {
@@ -80,10 +79,11 @@ const createLiveSessionLifecycle = (calls: {
       calls.registered += 1;
       calls.adapters.push(adapter);
     }),
-  releaseRuntime: () =>
-    Effect.sync(() => {
+  releaseRuntime: (runtimeId) =>
+    Effect.suspend(() => {
       calls.released += 1;
-      return [];
+      const adapter = calls.adapters.find((entry) => entry.binding.runtimeId === runtimeId);
+      return adapter ? adapter.releaseRuntime() : Effect.succeed([]);
     }),
   createRuntimeRegistration: (binding) =>
     new AgentSessionLiveRegistration(binding, (mutation) =>
@@ -110,7 +110,6 @@ const createComposition = (options: {
     launchPolicy: {
       resolve: () => Effect.succeed({}),
     },
-    settingsConfig: createFixedRuntimeSettingsConfig("claude", process.execPath),
     toolDiscovery: createToolDiscovery(),
     workingDirectoryDependencies,
   };
@@ -119,16 +118,22 @@ const createComposition = (options: {
 
 const startClaudeRuntime = (composition: ReturnType<typeof createComposition>) =>
   Effect.runPromise(
-    composition.workspaceStarter.startWorkspaceRuntime({
+    composition.runtimeStarter.startRuntime({
       runtimeKind: "claude",
-      repoPath: "/repo",
-      workingDirectory: "/repo",
       descriptor: RUNTIME_DESCRIPTORS_BY_KIND.claude,
+      configuredExecutablePath: process.execPath,
+      ownCleanup: () => undefined,
+      onRuntimeExit: () => {
+        throw new Error("Claude has no managed process exit.");
+      },
+      onRuntimeCleanupFailed: () => {
+        throw new Error("Claude has no managed process exit.");
+      },
     }),
   );
 
 describe("createClaudeRuntimeComposition", () => {
-  test("returns a fully initialized workspace starter without a runtime registry", async () => {
+  test("returns a fully initialized runtime starter without a runtime registry", async () => {
     // SAFETY: The lifecycle stub records the adapters the composition registers.
     const calls = { registered: 0, released: 0, adapters: [] as AgentSessionLiveAdapterPort[] };
     const composition = createComposition({ calls });
@@ -146,5 +151,24 @@ describe("createClaudeRuntimeComposition", () => {
 
     await Effect.runPromise(handle.stop());
     expect(calls.released).toBe(1);
+  });
+
+  test("replaces the host-wide Claude service when the runtime restarts", async () => {
+    // SAFETY: The lifecycle stub records the adapters the composition registers.
+    const calls = { registered: 0, released: 0, adapters: [] as AgentSessionLiveAdapterPort[] };
+    const composition = createComposition({ calls });
+
+    const first = await startClaudeRuntime(composition);
+    await Effect.runPromise(first.stop());
+    const replacement = await startClaudeRuntime(composition);
+
+    expect(replacement.runtime.runtimeId).not.toBe(first.runtime.runtimeId);
+    expect(calls.adapters.map((adapter) => adapter.binding.runtimeId)).toEqual([
+      first.runtime.runtimeId,
+      replacement.runtime.runtimeId,
+    ]);
+    expect(calls.adapters[0]?.binding).not.toHaveProperty("repoPath");
+    await Effect.runPromise(replacement.stop());
+    expect(calls.released).toBe(2);
   });
 });

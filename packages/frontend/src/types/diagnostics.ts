@@ -1,54 +1,22 @@
-import type {
-  FailureKind,
-  RepoRuntimeHealthObservation,
-  RepoRuntimeHealthState,
-  RepoRuntimeMcpStatus,
-  RepoRuntimeStartupStatus,
-  RuntimeDescriptor,
-  RuntimeKind,
-  RepoRuntimeHealthCheck as SharedRepoRuntimeHealthCheck,
-  RepoRuntimeHealthMcp as SharedRepoRuntimeHealthMcp,
-  RepoRuntimeHealthRuntime as SharedRepoRuntimeHealthRuntime,
-} from "@openducktor/contracts";
+import type { FailureKind, HostRuntimeStatus, RuntimeKind } from "@openducktor/contracts";
 
-export type RepoRuntimeFailureKind = FailureKind | null;
+export type DiagnosticsFailureKind = FailureKind | null;
 
-export type {
-  RepoRuntimeHealthObservation,
-  RepoRuntimeHealthState,
-  RepoRuntimeMcpStatus,
-  RepoRuntimeStartupStatus,
+export type HostRuntimeStatusMap = Partial<Record<RuntimeKind, HostRuntimeStatus>>;
+
+/** The latest read of one check. A read failure takes priority over a retained `data`. */
+export type CheckRead<T> = {
+  /** The latest observed result. Null when no result was observed. */
+  data: T | null;
+  /** The latest read failure. A retained `data` is then an earlier result. */
+  error: string | null;
 };
 
-export type RepoRuntimeDiagnosticInstance = {
-  kind: RuntimeKind;
-  repoPath: string;
-  taskId: string | null;
-  role: "workspace";
-  workingDirectory: string;
-  startedAt: string;
-  descriptor: RuntimeDescriptor;
+/** A check read that also records the failure kind and the observation time. */
+export type ObservedCheck<T> = CheckRead<T> & {
+  /** The latest observed result, or a failure placeholder when no result was observed. */
+  data: T | null;
+  failureKind: DiagnosticsFailureKind;
+  /** ISO time of the observed `data`. Null for a failure placeholder. */
+  observedAt: string | null;
 };
-
-export type RepoRuntimeHealthRuntime = Omit<
-  SharedRepoRuntimeHealthRuntime,
-  "instance" | "observation"
-> & {
-  observation: RepoRuntimeHealthObservation | null;
-  instance: RepoRuntimeDiagnosticInstance | null;
-};
-
-export type RepoRuntimeHealthMcp = Omit<SharedRepoRuntimeHealthMcp, "status"> & {
-  status: RepoRuntimeMcpStatus;
-};
-
-export type RepoRuntimeHealthCheck = Omit<
-  SharedRepoRuntimeHealthCheck,
-  "status" | "runtime" | "mcp"
-> & {
-  status: RepoRuntimeHealthState;
-  runtime: RepoRuntimeHealthRuntime;
-  mcp: RepoRuntimeHealthMcp | null;
-};
-
-export type RepoRuntimeHealthMap = Record<string, RepoRuntimeHealthCheck | null>;

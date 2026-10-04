@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
+  type SettingsSnapshotSaveResult,
   settingsSnapshotSchema,
   type SystemSettings,
   type SystemOpenInToolInfo,
@@ -38,7 +39,11 @@ describe("OpenInMenu", () => {
   const originalGetSettings = host.workspaceGetSettingsSnapshot;
   const originalSaveSettings = host.workspaceSaveSettingsSnapshot;
   let system: SystemSettings = {};
-  const saveSettings = mock(async () => []);
+  const saveSettings = mock(async (): Promise<SettingsSnapshotSaveResult> => ({
+    type: "saved",
+    workspaces: [],
+    runtimeApplications: [],
+  }));
 
   beforeEach(() => {
     system = {};

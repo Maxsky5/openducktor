@@ -383,13 +383,6 @@ describe("applyWorkspaceActivityEnvelope", () => {
 
     expect(
       applyWorkspaceActivityEnvelope(projection, {
-        type: "runtime_changed",
-        scope: { repoPath, runtimeKind },
-        state: "ready",
-      }),
-    ).toBe(projection);
-    expect(
-      applyWorkspaceActivityEnvelope(projection, {
         type: "session_removed",
         ref: { repoPath, runtimeKind, workingDirectory, externalSessionId: "missing" },
       }),

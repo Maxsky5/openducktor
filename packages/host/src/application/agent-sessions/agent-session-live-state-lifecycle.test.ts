@@ -7,7 +7,10 @@ import {
   createRuntimeHarness,
   runtime,
   ref,
+  ignoreObservationLoss,
+  unexpectedMcpStatusProbe,
 } from "../../adapters/agent-sessions/opencode-live-session-adapter.test-support";
+import { createRuntimeAdmissionGate } from "../../adapters/runtimes/runtime-admission";
 import { createAgentSessionLiveStateService } from "./agent-session-live-state-service";
 
 describe("live runtime registration lifecycle", () => {
@@ -22,7 +25,10 @@ describe("live runtime registration lifecycle", () => {
       const detached = Promise.withResolvers<void>();
       const registry = createLiveSessionAdapterRegistry();
       const events: AgentSessionLiveEnvelope[] = [];
+      const runtimeAdmission = createRuntimeAdmissionGate();
+      runtimeAdmission.open(runtime.kind);
       const service = createAgentSessionLiveStateService({
+        runtimeAdmission,
         adapterRegistry: {
           ...registry,
           remove: (id) =>
@@ -51,7 +57,8 @@ describe("live runtime registration lifecycle", () => {
               },
             };
           },
-        })(runtime),
+          probeMcpStatus: unexpectedMcpStatusProbe,
+        })(runtime, ignoreObservationLoss),
       );
       await Effect.runPromise(service.registerRuntimeAdapter(prepared.adapter));
       const resumed = Effect.runPromiseExit(
@@ -72,14 +79,14 @@ describe("live runtime registration lifecycle", () => {
       if (Exit.isFailure(resumeExit))
         expect(Cause.pretty(resumeExit.cause)).toContain("was released");
       expect(Exit.isSuccess(releaseExit)).toBe(true);
-      expect(await Effect.runPromise(service.list({ repoPath: runtime.repoPath }))).toEqual([]);
+      expect(await Effect.runPromise(service.list({ repoPath: ref.repoPath }))).toEqual([]);
       expect(native.releaseCalls).toHaveLength(1);
       const eventCount = events.length;
       await Effect.runPromise(
         prepared.adapter.binding.runMutation(
           Effect.succeed({
             value: undefined,
-            changes: [{ type: "fault", repoPath: runtime.repoPath, message: "late native event" }],
+            changes: [{ type: "fault", repoPath: ref.repoPath, message: "late native event" }],
           }),
         ),
       );
@@ -89,9 +96,7 @@ describe("live runtime registration lifecycle", () => {
         copiedLease.runMutation(
           Effect.succeed({
             value: undefined,
-            changes: [
-              { type: "fault", repoPath: runtime.repoPath, message: "copied late callback" },
-            ],
+            changes: [{ type: "fault", repoPath: ref.repoPath, message: "copied late callback" }],
           }),
         ),
       );
@@ -101,7 +106,7 @@ describe("live runtime registration lifecycle", () => {
         preparedLease.runMutation(
           Effect.succeed({
             value: undefined,
-            changes: [{ type: "fault", repoPath: runtime.repoPath, message: "not registered" }],
+            changes: [{ type: "fault", repoPath: ref.repoPath, message: "not registered" }],
           }),
         ),
       );

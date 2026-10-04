@@ -15,7 +15,6 @@ import type {
 } from "../../ports/agent-session-live-adapter-port";
 import { isClaudeSubagentTranscriptTarget } from "../claude/claude-agent-sdk-subagent-transcripts";
 import type { ClaudeAgentSdkEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
-import type { ClaudeRuntimeInstance } from "./claude-live-session-adapter-contract";
 import {
   activityForPending,
   activityForStatus,
@@ -98,11 +97,8 @@ const subagentStartedAt = (
   return Number.isNaN(startedAt.getTime()) ? fallback : startedAt.toISOString();
 };
 
-export const createClaudeLiveSessionState = ({
-  runtime,
-}: {
-  readonly runtime: ClaudeRuntimeInstance;
-}) => {
+/** Live projection of every session of one Claude runtime, across all repositories. */
+export const createClaudeLiveSessionState = () => {
   const snapshotsByRef = new Map<string, AgentSessionLiveSnapshot>();
   const contextRevisionsByRef = new Map<string, number>();
   const retiredSessionKeys = new Set<string>();
@@ -271,7 +267,7 @@ export const createClaudeLiveSessionState = ({
       return [
         {
           type: "slash_command_catalog_updated",
-          repoPath: runtime.repoPath,
+          repoPath: session.input.repoPath,
           runtimeKind: "claude",
           workingDirectory: session.input.workingDirectory,
           catalog: event.catalog,
@@ -287,7 +283,7 @@ export const createClaudeLiveSessionState = ({
       return [
         {
           type: "fault",
-          repoPath: runtime.repoPath,
+          repoPath: ref.repoPath,
           operation: "claude-live-session.load-context",
           message: event.message,
           ref,
@@ -421,8 +417,8 @@ export const createClaudeLiveSessionState = ({
     },
     contextRevision: (ref: AgentSessionLiveRef): number =>
       contextRevisionsByRef.get(refKey(ref)) ?? 0,
-    listSnapshots: (repoPath: string): AgentSessionLiveSnapshot[] =>
-      repoPath === runtime.repoPath ? [...snapshotsByRef.values()].map(cloneSnapshot) : [],
+    listSnapshots: (): AgentSessionLiveSnapshot[] =>
+      [...snapshotsByRef.values()].map(cloneSnapshot),
     readSnapshot: (ref: AgentSessionLiveRef) => {
       const snapshot = readSnapshot(ref);
       return snapshot
@@ -441,7 +437,9 @@ export const createClaudeLiveSessionState = ({
       retiredSessionKeys.delete(refKey(ref));
     },
     removeSession: removeSessionTree,
+    /** Summaries carry no repository, so the caller passes the repository of the request. */
     applyControlSummary: (
+      repoPath: string,
       summary: AgentSessionSummary,
       options: {
         readonly parentExternalSessionId?: string;
@@ -449,7 +447,7 @@ export const createClaudeLiveSessionState = ({
       } = {},
     ): AgentSessionLiveAdapterChange[] => {
       const ref: AgentSessionLiveRef = {
-        repoPath: runtime.repoPath,
+        repoPath,
         runtimeKind: "claude",
         workingDirectory: summary.workingDirectory,
         externalSessionId: summary.externalSessionId,

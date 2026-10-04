@@ -1,5 +1,4 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
-import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import {
   createDefaultNotificationSettings,
   type NotificationOccurrence,
@@ -35,6 +34,7 @@ import {
   type SessionStartNotificationPublisher,
   SessionStartWorkflowError,
 } from "./session-start-orchestration";
+import { createTestOpencodeSdkAdapter } from "@/state/operations/agent-orchestrator/handlers/opencode-agent-engine.test-support";
 
 const selection = {
   runtimeKind: "opencode" as const,
@@ -335,13 +335,13 @@ describe("session-start notifications", () => {
   });
 
   test("shows preparation failure details and opens the session without a missing error target", async () => {
-    const detail = "Runtime readiness failed. Start the runtime and try again.";
+    const detail = "Prompt overrides could not be read. Check repository settings and try again.";
     const sessionsRef = createSessionsRef([
       buildSession({ status: "starting", workingDirectory: session.workingDirectory }),
     ]);
     const actions = createSessionActions({
       sessionsRef,
-      ensureExistingSessionRuntime: async () => {
+      loadRepoPromptOverrides: async () => {
         throw new Error(detail);
       },
     });
@@ -405,9 +405,7 @@ describe("session-start notifications", () => {
     const sessionsRef = createSessionsRef([
       buildSession({ status: "starting", workingDirectory: session.workingDirectory }),
     ]);
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     adapter.sendUserMessage = async () => {
       sessionsRef.current = createSessionsRef().current;
       throw new Error("Session disconnected during send");
@@ -415,7 +413,6 @@ describe("session-start notifications", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      ensureExistingSessionRuntime: async () => {},
     });
     const notifications = createPublisher();
     const runner = createSessionStartWorkflowRunner({
@@ -436,9 +433,7 @@ describe("session-start notifications", () => {
   });
 
   test("focuses the exact rendered error after a post-start message failure", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const originalSendUserMessage = adapter.sendUserMessage;
     adapter.sendUserMessage = async () => {
       throw new Error("message failed");
@@ -449,7 +444,6 @@ describe("session-start notifications", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      ensureExistingSessionRuntime: async () => {},
     });
     const occurrences: NotificationOccurrence[] = [];
     const notifications: SessionStartNotificationPublisher = {

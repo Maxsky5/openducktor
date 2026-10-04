@@ -61,6 +61,7 @@ export * from "./git-provider-repository";
 export * from "./git-schemas";
 export * from "./issue-import-schemas";
 export * from "./host-event-schemas";
+export * from "./host-runtime-schemas";
 export * from "./host-command-contracts";
 export * from "./host-invoke-failure-schemas";
 export * from "./mcp-bridge-discovery";

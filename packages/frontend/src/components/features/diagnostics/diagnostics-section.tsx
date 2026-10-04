@@ -1,18 +1,29 @@
 import type { ReactElement, ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
+import type { DiagnosticsHealth, DiagnosticsStatus } from "./diagnostics-panel-model";
+
+const HEALTH_BADGE_VARIANTS = {
+  ok: "success",
+  loading: "secondary",
+  busy: "warning",
+  warning: "warning",
+  failed: "danger",
+  neutral: "secondary",
+} satisfies Record<DiagnosticsHealth, "success" | "warning" | "danger" | "secondary">;
+
+export function DiagnosticsStatusBadge({ status }: { status: DiagnosticsStatus }): ReactElement {
+  return <Badge variant={HEALTH_BADGE_VARIANTS[status.health]}>{status.label}</Badge>;
+}
 
 type DiagnosticsSectionProps = {
   title: string;
-  badge: {
-    label: string;
-    variant: "success" | "warning" | "danger" | "secondary";
-  };
+  status: DiagnosticsStatus;
   children: ReactNode;
 };
 
 export function DiagnosticsSection({
   title,
-  badge,
+  status,
   children,
 }: DiagnosticsSectionProps): ReactElement {
   return (
@@ -21,7 +32,7 @@ export function DiagnosticsSection({
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {title}
         </p>
-        <Badge variant={badge.variant}>{badge.label}</Badge>
+        <DiagnosticsStatusBadge status={status} />
       </div>
       {children}
     </section>

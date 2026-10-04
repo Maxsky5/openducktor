@@ -27,7 +27,6 @@ type LiveSession = {
 const collectLiveSessions = (
   runtimeRegistry: RuntimeRegistryPort,
   settingsConfig: Pick<SettingsConfigPort, "pathExists">,
-  repoPath: string,
   sessions: AgentSessionRecord[],
 ) =>
   Effect.gen(function* () {
@@ -41,8 +40,7 @@ const collectLiveSessions = (
         continue;
       }
       const probe = yield* runtimeRegistry.probeSessionStatus({
-        runtimeKind: session.runtimeKind.trim(),
-        repoPath,
+        runtimeKind: session.runtimeKind,
         externalSessionId,
         workingDirectory: session.workingDirectory,
       });
@@ -82,7 +80,6 @@ const collectTaskLiveSessions = (
       const taskLiveSessions = yield* collectLiveSessions(
         runtimeRegistry,
         settingsConfig,
-        input.repoPath,
         task.sessions,
       ).pipe(
         Effect.mapError(
@@ -114,7 +111,6 @@ const stopLiveSessionRecords = (
       yield* runtimeRegistry
         .stopSession({
           runtimeKind: session.runtimeKind,
-          repoPath,
           externalSessionId: session.externalSessionId,
           workingDirectory: session.workingDirectory,
         })

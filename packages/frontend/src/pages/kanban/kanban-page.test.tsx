@@ -27,7 +27,7 @@ import {
   AgentSessionsContext,
   ChecksStateContext,
   DelegationStateContext,
-  RepoRuntimeHealthContext,
+  HostRuntimeStatusContext,
   RuntimeDefinitionsContext,
   SpecStateContext,
   TasksStateContext,
@@ -44,7 +44,8 @@ import { repositoryGitProviderContextQueryKeys } from "@/state/queries/git-provi
 import { systemQueryKeys } from "@/state/queries/system";
 import { workspaceQueryKeys } from "@/state/queries/workspace";
 import {
-  createRepoRuntimeHealthFixture,
+  createHostRuntimeStatusContextValue,
+  createObservedCheckFixture,
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
@@ -347,7 +348,13 @@ const createWorkspaceStateValue = (
   loadSettingsSnapshot: async () => renderState.settingsSnapshot,
   detectGithubRepository: async () => null,
   saveGlobalGitConfig: async () => {},
-  saveSettingsSnapshot: async () => {},
+  previewSettingsSnapshotRuntime: async () => ({ impact: null }),
+  saveSettingsSnapshot: async () => ({
+    type: "saved" as const,
+    workspaces: [],
+    runtimeApplications: [],
+    refreshError: null,
+  }),
   saveAgentModelFavorites: async () => {
     throw new Error("saveAgentModelFavorites is not used in this test");
   },
@@ -430,19 +437,22 @@ const createTasksStateValue = (
 });
 
 const createChecksStateValue = (): ChecksStateContextValue => ({
-  runtimeCheck: null,
-  taskStoreCheck: createTaskStoreCheckFixture(
-    {},
-    {
-      taskStorePath: "/tmp/task-store/database.sqlite",
-      repoStoreHealth: {
-        databasePath: "/tmp/task-store/database.sqlite",
+  runtimeCheck: createObservedCheckFixture(),
+  hostMcpBridgeCheck: { data: null, error: null },
+  checksRepoPath: null,
+  taskStoreCheck: createObservedCheckFixture({
+    data: createTaskStoreCheckFixture(
+      {},
+      {
+        taskStorePath: "/tmp/task-store/database.sqlite",
+        repoStoreHealth: {
+          databasePath: "/tmp/task-store/database.sqlite",
+        },
       },
-    },
-  ),
-  runtimeCheckFailureKind: null,
-  taskStoreCheckFailureKind: null,
-  isLoadingChecks: false,
+    ),
+  }),
+  workspaceRuntimeMcpCheck: { data: null, error: null },
+  isRefreshingChecks: false,
   refreshChecks: async () => {},
 });
 
@@ -646,21 +656,7 @@ const renderPage = async (
         <WorkspaceStateContext.Provider value={createWorkspaceStateValue(renderState)}>
           <WorkspaceBranchStateContext.Provider value={createWorkspaceBranchStateValue()}>
             <WorkspacePresenceContext.Provider value={createWorkspacePresenceValue()}>
-              <RepoRuntimeHealthContext.Provider
-                value={{
-                  runtimeHealthByRuntime: {
-                    opencode: createRepoRuntimeHealthFixture({
-                      status: "ready",
-                    }),
-                  },
-                  isLoadingRepoRuntimeHealth: false,
-                  refreshRepoRuntimeHealth: async () => ({
-                    opencode: createRepoRuntimeHealthFixture({
-                      status: "ready",
-                    }),
-                  }),
-                }}
-              >
+              <HostRuntimeStatusContext.Provider value={createHostRuntimeStatusContextValue()}>
                 <ChecksStateContext.Provider value={checksStateValue}>
                   <TasksStateContext.Provider value={createTasksStateValue(renderState)}>
                     <DelegationStateContext.Provider value={delegationStateValue}>
@@ -706,7 +702,7 @@ const renderPage = async (
                     </DelegationStateContext.Provider>
                   </TasksStateContext.Provider>
                 </ChecksStateContext.Provider>
-              </RepoRuntimeHealthContext.Provider>
+              </HostRuntimeStatusContext.Provider>
             </WorkspacePresenceContext.Provider>
           </WorkspaceBranchStateContext.Provider>
         </WorkspaceStateContext.Provider>

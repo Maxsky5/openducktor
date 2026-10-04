@@ -18,7 +18,7 @@ import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import {
   ChecksOperationsContext,
   ChecksStateContext,
-  RepoRuntimeHealthContext,
+  HostRuntimeStatusContext,
   RuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/host";
@@ -33,7 +33,7 @@ import {
   createAgentSessionFixture,
   createChecksStateContextValue,
   createDeferred,
-  createRepoRuntimeHealthContextValue,
+  createHostRuntimeStatusContextValue,
   createTaskCardFixture,
   createTaskStoreCheckFixture,
   enableReactActEnvironment,
@@ -157,11 +157,6 @@ const createModalCatalogForRuntime = (runtimeRef: RepoRuntimeRef): AgentRuntimeC
 
 const createInternalModalHookHarness = (initialProps: HookArgs) => {
   const checksStateContextValue = createChecksStateContextValue();
-  const repoRuntimeHealthContextValue = createRepoRuntimeHealthContextValue();
-  const readyRuntimeHealth = repoRuntimeHealthContextValue.runtimeHealthByRuntime.opencode;
-  if (!readyRuntimeHealth) {
-    throw new Error("Expected opencode runtime health fixture");
-  }
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
     createElement(
       ChecksOperationsContext.Provider,
@@ -176,7 +171,6 @@ const createInternalModalHookHarness = (initialProps: HookArgs) => {
           }),
           refreshTaskStoreCheckForRepo: async () => createTaskStoreCheckFixture(),
           clearActiveTaskStoreCheck: () => {},
-          setIsLoadingChecks: () => {},
           hasRuntimeCheck: () => false,
           hasCachedTaskStoreCheck: () => false,
         },
@@ -185,14 +179,9 @@ const createInternalModalHookHarness = (initialProps: HookArgs) => {
         QueryProvider,
         { useIsolatedClient: true },
         createElement(
-          RepoRuntimeHealthContext.Provider,
+          HostRuntimeStatusContext.Provider,
           {
-            value: createRepoRuntimeHealthContextValue({
-              runtimeHealthByRuntime: {
-                opencode: readyRuntimeHealth,
-                claude: readyRuntimeHealth,
-              },
-            }),
+            value: createHostRuntimeStatusContextValue(),
           },
           createElement(
             ChecksStateContext.Provider,

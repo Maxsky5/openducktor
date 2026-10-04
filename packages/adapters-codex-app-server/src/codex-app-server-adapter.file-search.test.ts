@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type {
   CodexAppServerFuzzyFileSearchResponse,
   RuntimeInstanceSummary,
@@ -53,22 +53,12 @@ const createSearchAdapter = (
   transport: CodexJsonRpcTransport,
   runtime: RuntimeInstanceSummary = makeRuntimeSummary("runtime-search"),
 ) => {
-  const requireRepoRuntime = mock(async ({ repoPath, runtimeKind }) => ({
-    ...runtime,
-    repoPath,
-    kind: runtimeKind,
-    runtimeId: runtime.runtimeId,
-  }));
-  const adapter = createAdapterWithTransport(transport, {
-    repoRuntimeResolver: {
-      requireRepoRuntime,
-    },
-  });
-  return { adapter, requireRepoRuntime };
+  const adapter = createAdapterWithTransport(transport, { runtime });
+  return { adapter };
 };
 
 describe("CodexAppServerAdapter file search", () => {
-  test("resolves a live Codex runtime and maps fuzzy file search results", async () => {
+  test("maps fuzzy file search results from the bound Codex runtime", async () => {
     const { calls, transport } = createTransport({
       files: [
         {
@@ -89,7 +79,7 @@ describe("CodexAppServerAdapter file search", () => {
         },
       ],
     });
-    const { adapter, requireRepoRuntime } = createSearchAdapter(transport);
+    const { adapter } = createSearchAdapter(transport);
 
     await expect(
       adapter.searchFiles({
@@ -103,7 +93,6 @@ describe("CodexAppServerAdapter file search", () => {
       { id: "src/components", path: "src/components", name: "components", kind: "directory" },
     ]);
 
-    expect(requireRepoRuntime).toHaveBeenCalledWith({ repoPath: "/repo", runtimeKind: "codex" });
     expect(calls).toEqual([
       {
         method: "fuzzyFileSearch",
@@ -176,9 +165,9 @@ describe("CodexAppServerAdapter file search", () => {
     ).rejects.toThrow("Codex app-server unavailable");
   });
 
-  test("rejects non-Codex runtime inputs before resolving a runtime", async () => {
+  test("rejects non-Codex runtime inputs", async () => {
     const { transport } = createTransport({ files: [] });
-    const { adapter, requireRepoRuntime } = createSearchAdapter(transport);
+    const { adapter } = createSearchAdapter(transport);
 
     await expect(
       adapter.searchFiles({
@@ -188,6 +177,5 @@ describe("CodexAppServerAdapter file search", () => {
         query: "src",
       }),
     ).rejects.toThrow("Codex App Server can only search files for runtime 'codex'.");
-    expect(requireRepoRuntime).not.toHaveBeenCalled();
   });
 });

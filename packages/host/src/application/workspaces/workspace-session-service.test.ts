@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import path from "node:path";
 import {
   OPENCODE_RUNTIME_DESCRIPTOR,
+  RUNTIME_DESCRIPTORS_BY_KIND,
   type AgentSessionControlStartInput,
   type AgentSessionLiveReadResult,
   type WorkspaceSessionCreateInput,
@@ -14,6 +15,7 @@ import {
   repoConfigSchema,
 } from "@openducktor/contracts";
 import { Cause, Deferred, Effect, Exit, Fiber, Option, TestClock, TestContext } from "effect";
+import { createRuntimeAdmissionGate } from "../../adapters/runtimes/runtime-admission";
 import { createRuntimeRegistry } from "../../adapters/runtimes/runtime-registry";
 import {
   createSqliteTaskStoreHarness,
@@ -258,16 +260,12 @@ describe("host-owned Workspace Session lifecycle", () => {
           }),
       },
       runtime: {
-        runtimeEnsure: ({ repoPath }) =>
+        requireReady: () =>
           Effect.sync(() => {
-            calls.push("ensure-runtime");
+            calls.push("require-runtime");
             return {
-              kind: "opencode",
+              kind: "opencode" as const,
               runtimeId: "runtime",
-              repoPath,
-              taskId: null,
-              role: "workspace",
-              workingDirectory: repoPath,
               runtimeRoute: { type: "local_http", endpoint: "http://localhost:1234" },
               startedAt: "2026-09-07T00:00:00Z",
               descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -494,34 +492,61 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect(restored.archivedAt).toBeNull();
   });
 
-  test("first-send startup completes through the real runtime registry cancellation race", async () => {
+  test("first-send startup requires the shared runtime to be ready in the real registry", async () => {
     const h = setup();
-    const runtime = await Effect.runPromise(
-      h.dependencies.runtime.runtimeEnsure({
-        repoPath: database.repoPath,
-        runtimeKind: "opencode",
-      }),
-    );
-    const registry = createRuntimeRegistry({ runtimes: [runtime] });
+    const registry = createRuntimeRegistry({
+      admission: createRuntimeAdmissionGate(),
+      starter: {
+        startRuntime: (request) =>
+          Effect.succeed({
+            runtime: {
+              kind: request.runtimeKind,
+              runtimeId: "shared-opencode",
+              runtimeRoute: { type: "local_http", endpoint: "http://localhost:1234" },
+              startedAt: "2026-09-07T00:00:00Z",
+              descriptor: request.descriptor,
+            },
+            configuredExecutablePath: "opencode",
+            effectiveExecutablePath: "/bin/opencode",
+            stop: () => Effect.void,
+          }),
+      },
+      descriptorFor: (kind) => RUNTIME_DESCRIPTORS_BY_KIND[kind],
+      onStatusChanged: () => {},
+      probeVersion: () => Effect.succeed(null),
+    });
     const service = createWorkspaceSessionService({
       ...h.dependencies,
-      runtime: { runtimeEnsure: registry.ensureWorkspaceRuntime },
+      runtime: { requireReady: registry.requireReady },
     });
     const draft = await Effect.runPromise(service.create(input()));
-    const fiber = Effect.runFork(
-      service.start({ workspaceId: "fairnest", sessionId: draft.session.id }),
-    );
+    const ref = { workspaceId: "fairnest", sessionId: draft.session.id };
     try {
-      const completed = await Effect.runPromise(
-        Fiber.await(fiber).pipe(Effect.timeoutOption("200 millis")),
+      // The frontend never starts a runtime: a disabled kind fails before any live session starts.
+      await expect(Effect.runPromise(service.start(ref))).rejects.toThrow(
+        "The OpenCode runtime is disabled. Enable it in Settings > Runtimes.",
       );
-      expect(Option.isSome(completed)).toBe(true);
-      const created = await Effect.runPromise(Fiber.join(fiber));
+      expect(h.starts).toEqual([]);
+      expect((await Effect.runPromise(service.get(ref))).externalSessionId).toBeNull();
+
+      await Effect.runPromise(
+        Effect.acquireUseRelease(
+          registry.reserve(["opencode"]),
+          (reservation) =>
+            reservation.apply("opencode", {
+              trigger: "host_startup",
+              enabled: true,
+              configuredExecutablePath: "opencode",
+            }),
+          (reservation) => reservation.release(),
+        ),
+      );
+      const created = await Effect.runPromise(service.start(ref));
+      expect(created.session.externalSessionId).toBe("native-1");
+      expect(h.starts).toHaveLength(1);
       expect(await Effect.runPromise(service.listActive("fairnest"))).toEqual([created.session]);
     } finally {
-      // Release the registry's cancellation branch even when the regression deadlocks creation.
       await Effect.runPromise(registry.stopAllRuntimes());
-      await Effect.runPromise(Fiber.await(fiber));
     }
   });
 
@@ -537,7 +562,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       else h.roles.splice(0, 1);
       const ref = { workspaceId: "fairnest", sessionId: created.session.id };
       const started = await Effect.runPromise(h.service.start(ref));
-      expect(h.calls).toEqual(["save", "ensure-runtime", "start", "bind"]);
+      expect(h.calls).toEqual(["save", "require-runtime", "start", "bind"]);
       expect(h.starts[0]).toMatchObject({
         repoPath: database.repoPath,
         workingDirectory: database.repoPath,
@@ -1495,10 +1520,10 @@ describe("host-owned Workspace Session lifecycle", () => {
                   ),
               },
               runtime: {
-                runtimeEnsure: (request) =>
+                requireReady: (kind) =>
                   Deferred.succeed(entered, undefined).pipe(
                     Effect.zipRight(Deferred.await(release)),
-                    Effect.zipRight(h.dependencies.runtime.runtimeEnsure(request)),
+                    Effect.zipRight(h.dependencies.runtime.requireReady(kind)),
                   ),
               },
               worktreeFiles: {
@@ -1548,10 +1573,10 @@ describe("host-owned Workspace Session lifecycle", () => {
             const service = createWorkspaceSessionService({
               ...h.dependencies,
               runtime: {
-                runtimeEnsure: (request) =>
+                requireReady: (kind) =>
                   Deferred.succeed(entered, undefined).pipe(
                     Effect.zipRight(Deferred.await(release)),
-                    Effect.zipRight(h.dependencies.runtime.runtimeEnsure(request)),
+                    Effect.zipRight(h.dependencies.runtime.requireReady(kind)),
                   ),
               },
             });

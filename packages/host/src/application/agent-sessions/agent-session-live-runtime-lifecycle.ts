@@ -2,11 +2,9 @@ import {
   type AgentSessionLiveEnvelope,
   type AgentSessionLiveRef,
   type AgentSessionLiveSnapshot,
-  agentSessionLiveRefSchema,
   agentSessionLiveSnapshotSchema,
 } from "@openducktor/contracts";
-import { agentSessionRefKey } from "@openducktor/core";
-import { Cause, Effect, Exit } from "effect";
+import { Effect } from "effect";
 import { type HostError, HostOperationError } from "../../effect/host-errors";
 import {
   AgentSessionLiveRegistration,
@@ -17,6 +15,8 @@ import {
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import type { LiveStateCoordinator } from "./live-state-coordinator";
 import { parseAdapterOutput } from "./agent-session-live-validation";
+import { createRetryableCleanup } from "../../effect/retryable-cleanup";
+import { createLiveRuntimeRelease, type OpenRelease } from "./agent-session-live-runtime-release";
 
 type LiveRuntimeLifecycle = RuntimeLiveSessionLifecyclePort & {
   readonly requireAttached: (
@@ -31,6 +31,7 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
   publishEnvelope,
   listSnapshots,
   refreshSnapshots,
+  observedRepoPaths,
 }: {
   readonly adapterRegistry: AgentSessionLiveAdapterRegistryPort;
   readonly coordinator: LiveStateCoordinator;
@@ -44,9 +45,16 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
   readonly refreshSnapshots: (
     adapter: AgentSessionLiveAdapterPort,
   ) => Effect.Effect<void, HostError>;
+  /** Repositories whose live state a renderer has observed. */
+  readonly observedRepoPaths: () => ReadonlyArray<string>;
 }): LiveRuntimeLifecycle => {
   const detachedBindings = new WeakSet<AgentSessionLiveRegistration>();
   const activeRegistrations = new WeakSet<AgentSessionLiveRegistration>();
+  /**
+   * One open release per runtime. Concurrent callers share it. A failed native cleanup keeps the
+   * release open until a later call retries the cleanup and it succeeds.
+   */
+  const releases = new Map<string, Effect.Effect<ReadonlyArray<AgentSessionLiveRef>, HostError>>();
   const requireAttached = (binding: AgentSessionLiveRegistration) =>
     detachedBindings.has(binding)
       ? Effect.fail(
@@ -57,6 +65,20 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
           }),
         )
       : Effect.void;
+  const markDetached = (binding: AgentSessionLiveRegistration) => {
+    detachedBindings.add(binding);
+    activeRegistrations.delete(binding);
+  };
+
+  const releaseAttached = createLiveRuntimeRelease({
+    adapterRegistry,
+    coordinator,
+    publishChanges,
+    publishEnvelope,
+    listSnapshots,
+    observedRepoPaths,
+    markDetached: (adapter) => markDetached(adapter.binding),
+  });
 
   return {
     requireAttached,
@@ -78,7 +100,7 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
         yield* coordinator.run(
           Effect.gen(function* () {
             yield* requireAttached(adapter.binding);
-            const snapshots = yield* adapter.listSnapshots(adapter.binding.repoPath);
+            const snapshots = yield* adapter.listSnapshots();
             const validatedSnapshots = yield* Effect.forEach(snapshots, (snapshot) =>
               parseAdapterOutput(
                 agentSessionLiveSnapshotSchema,
@@ -100,9 +122,8 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
           registered
             ? coordinator.run(
                 Effect.gen(function* () {
-                  detachedBindings.add(adapter.binding);
-                  activeRegistrations.delete(adapter.binding);
-                  if (adapterRegistry.listForRepo(adapter.binding.repoPath).includes(adapter)) {
+                  markDetached(adapter.binding);
+                  if (adapterRegistry.list().includes(adapter)) {
                     yield* adapterRegistry.remove(adapter.binding.runtimeId);
                   }
                 }),
@@ -112,141 +133,24 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
       );
     },
     releaseRuntime: (runtimeId) =>
-      Effect.uninterruptible(
-        Effect.gen(function* () {
-          const detached = yield* coordinator.run(
-            Effect.gen(function* () {
-              const adapter = yield* adapterRegistry.remove(runtimeId);
-              if (!adapter) return null;
-              detachedBindings.add(adapter.binding);
-              activeRegistrations.delete(adapter.binding);
-              const snapshots = yield* Effect.exit(
-                adapter
-                  .listSnapshots(adapter.binding.repoPath)
-                  .pipe(
-                    Effect.flatMap((values) =>
-                      Effect.forEach(values, (snapshot) =>
-                        parseAdapterOutput(
-                          agentSessionLiveSnapshotSchema,
-                          snapshot,
-                          "agent-session-live.release-runtime",
-                        ),
-                      ),
-                    ),
-                  ),
-              );
-              const settlement = yield* Effect.exit(
-                Effect.gen(function* () {
-                  if (!adapter.settleRuntimeTranscript) return;
-                  const events = yield* adapter.settleRuntimeTranscript();
-                  yield* publishChanges(
-                    events.map((event) => ({ type: "transcript_event" as const, event })),
-                  );
-                }),
-              );
-              const detachedPublication = Exit.isSuccess(snapshots)
-                ? yield* Effect.exit(
-                    publishChanges(
-                      snapshots.value.map((snapshot) => ({
-                        type: "session_removed" as const,
-                        ref: snapshot.ref,
-                      })),
-                    ),
-                  )
-                : null;
-              return { adapter, snapshots, settlement, detachedPublication };
-            }),
-          );
-          if (!detached) return [];
-          const { adapter, snapshots, settlement, detachedPublication } = detached;
-          // Native cleanup can wait for controls or events that need the live coordinator.
-          const cleanup = yield* Effect.exit(adapter.releaseRuntime());
-          const releasedRefs = Exit.isSuccess(cleanup)
-            ? yield* Effect.exit(
-                Effect.forEach(cleanup.value, (ref) =>
-                  parseAdapterOutput(
-                    agentSessionLiveRefSchema,
-                    ref,
-                    "agent-session-live.release-runtime-refs",
-                  ),
-                ),
-              )
-            : null;
-          return yield* coordinator.run(
-            Effect.gen(function* () {
-              const refsByKey = new Map<string, AgentSessionLiveRef>();
-              if (Exit.isSuccess(snapshots)) {
-                for (const snapshot of snapshots.value)
-                  refsByKey.set(agentSessionRefKey(snapshot.ref), snapshot.ref);
-              }
-              if (releasedRefs && Exit.isSuccess(releasedRefs)) {
-                for (const ref of releasedRefs.value) refsByKey.set(agentSessionRefKey(ref), ref);
-              }
-              const registrations = adapterRegistry.listForRepo(adapter.binding.repoPath);
-              const replacement = registrations.some(
-                (candidate) => candidate.binding.runtimeKind === adapter.binding.runtimeKind,
-              );
-              const refs = [...refsByKey.values()];
-              const detachedKeys = new Set(
-                Exit.isSuccess(snapshots)
-                  ? snapshots.value.map((snapshot) => agentSessionRefKey(snapshot.ref))
-                  : [],
-              );
-              // Known sessions settled at detach, before any replacement could register.
-              const remainingRefs = replacement
-                ? []
-                : refs.filter((ref) => !detachedKeys.has(agentSessionRefKey(ref)));
-              const publication = yield* Effect.exit(
-                publishChanges(
-                  remainingRefs.map((ref) => ({
-                    type: "session_removed" as const,
-                    ref,
-                  })),
-                ),
-              );
-              // A failed detach read cannot identify the old published collection. Reset it,
-              // including when a replacement registered while native cleanup was running.
-              const reset = Exit.isFailure(snapshots)
-                ? yield* Effect.exit(
-                    listSnapshots(adapter.binding.repoPath).pipe(
-                      Effect.flatMap((sessions) =>
-                        publishEnvelope({
-                          type: "snapshot",
-                          repoPath: adapter.binding.repoPath,
-                          sessions: [...sessions],
-                        }),
-                      ),
-                    ),
-                  )
-                : null;
-              const failures: string[] = [];
-              if (Exit.isFailure(settlement))
-                failures.push(`transcript settlement: ${Cause.pretty(settlement.cause)}`);
-              if (Exit.isFailure(snapshots))
-                failures.push(`live snapshots: ${Cause.pretty(snapshots.cause)}`);
-              if (Exit.isFailure(cleanup))
-                failures.push(`adapter cleanup: ${Cause.pretty(cleanup.cause)}`);
-              if (releasedRefs && Exit.isFailure(releasedRefs))
-                failures.push(`released refs: ${Cause.pretty(releasedRefs.cause)}`);
-              if (detachedPublication && Exit.isFailure(detachedPublication))
-                failures.push(
-                  `detached session publication: ${Cause.pretty(detachedPublication.cause)}`,
-                );
-              if (Exit.isFailure(publication))
-                failures.push(`session removal publication: ${Cause.pretty(publication.cause)}`);
-              if (reset && Exit.isFailure(reset))
-                failures.push(`authoritative snapshot: ${Cause.pretty(reset.cause)}`);
-              if (failures.length > 0)
-                return yield* new HostOperationError({
-                  operation: "agent-session-live.release-runtime",
-                  message: failures.join("\n"),
-                  details: { runtimeId },
-                });
-              return refs;
-            }),
-          );
-        }),
-      ),
+      Effect.suspend(() => {
+        const existing = releases.get(runtimeId);
+        if (existing) return existing;
+        // The release exists before detach, so a concurrent caller cannot miss it. It stays
+        // open while a failed native cleanup still owns resources.
+        const open: OpenRelease = { retry: null };
+        const release = createRetryableCleanup(
+          Effect.suspend(() => open.retry ?? releaseAttached(runtimeId, open)).pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                if (open.retry === null) releases.delete(runtimeId);
+              }),
+            ),
+          ),
+        );
+        releases.set(runtimeId, release);
+        return release;
+      }),
     createRuntimeRegistration: (binding) => {
       const registration = new AgentSessionLiveRegistration(binding, (mutation) =>
         coordinator.run(

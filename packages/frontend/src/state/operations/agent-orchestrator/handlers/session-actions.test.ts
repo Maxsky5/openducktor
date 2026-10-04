@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import {
   buildSession,
   createSessionActions,
   createSessionsRef,
   type SessionActionTestOverrides,
 } from "./session-actions.test-helpers";
+import { createTestOpencodeSdkAdapter } from "./opencode-agent-engine.test-support";
 
 describe("agent-orchestrator/handlers/session-actions", () => {
   test("returns action handlers", () => {
@@ -17,9 +17,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
   });
 
   test("uses live workspace refs for session start stale checks", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
     const actions = createSessionActions({
       adapter,
@@ -46,9 +44,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
   });
 
   test("routes fork canonicalization through injected dependencies", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const canonicalizedPaths: string[] = [];
     const sourceSession = buildSession({
       externalSessionId: "source-session",

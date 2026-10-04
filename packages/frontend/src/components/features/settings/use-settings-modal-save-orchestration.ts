@@ -1,11 +1,22 @@
-import type {
-  RuntimeKind,
-  SettingsSnapshot,
-  SettingsSnapshotSaveInput,
+import {
+  knownRuntimeKindValues,
+  type RuntimeKind,
+  type RuntimeLifecycleImpact,
+  type SettingsSnapshot,
+  type SettingsSnapshotRuntimePreview,
+  type SettingsSnapshotSaveInput,
 } from "@openducktor/contracts";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
+import {
+  hasLiveSessions,
+  RUNTIME_IMPACT_CHANGED_NOTICE,
+  type RuntimeImpactActionResult,
+  type RuntimeImpactReviewState,
+  useRuntimeImpactReview,
+} from "@/components/features/runtimes/runtime-impact-review";
 import { errorMessage } from "@/lib/errors";
+import type { SettingsSaveOutcome } from "@/types/state-slices";
 import {
   getSettingsSaveBlocker,
   hasAnyDirtySections,
@@ -14,6 +25,10 @@ import {
   type SettingsSaveValidation,
 } from "./settings-modal-save-policy";
 import { prepareGlobalGitSettingsForSave } from "./settings-save/global-git-settings";
+import {
+  hasRuntimeLifecycleChange,
+  reportSettingsSaveFollowUps,
+} from "./settings-save/runtime-settings-application";
 import { prepareSettingsSnapshotForSave } from "./settings-save/settings-snapshot";
 import type { DirtySections } from "./use-settings-modal-dirty-state";
 
@@ -25,7 +40,13 @@ type UseSettingsModalSaveOrchestrationArgs = {
   validation: SettingsSaveValidation;
   onRuntimeAvailabilityError: (runtimeKind: RuntimeKind) => void;
   saveGlobalGitConfig: (config: SettingsSnapshot["git"]) => Promise<void>;
-  saveSettingsSnapshot: (snapshot: SettingsSnapshotSaveInput) => Promise<void>;
+  previewSettingsSnapshotRuntime: (
+    snapshot: SettingsSnapshotSaveInput,
+  ) => Promise<SettingsSnapshotRuntimePreview>;
+  saveSettingsSnapshot: (
+    snapshot: SettingsSnapshotSaveInput,
+    runtimeConfirmation?: string,
+  ) => Promise<SettingsSaveOutcome>;
   loadSettingsSnapshot: () => Promise<SettingsSnapshot>;
   isAgentModelFavoritesMutationPending: boolean;
   isKanbanTaskCardViewMutationPending: boolean;
@@ -33,6 +54,13 @@ type UseSettingsModalSaveOrchestrationArgs = {
 };
 
 type SettingsModalSaveOrchestration = {
+  /**
+   * Live sessions that a save stops. The user confirms or cancels before anything is written.
+   * Live session events keep the impact current while the review is open.
+   */
+  runtimeReview: RuntimeImpactReviewState | null;
+  confirmRuntimeReview: () => void;
+  cancelRuntimeReview: () => void;
   isSaving: boolean;
   saveError: string | null;
   showRepoScriptValidationErrors: boolean;
@@ -49,6 +77,7 @@ export const useSettingsModalSaveOrchestration = ({
   validation,
   onRuntimeAvailabilityError,
   saveGlobalGitConfig,
+  previewSettingsSnapshotRuntime,
   saveSettingsSnapshot,
   loadSettingsSnapshot,
   isAgentModelFavoritesMutationPending,
@@ -64,6 +93,71 @@ export const useSettingsModalSaveOrchestration = ({
     open,
   });
   const saveInFlightRef = useRef(false);
+  const {
+    review: runtimeReview,
+    open: openRuntimeReview,
+    confirm: confirmRuntimeReview,
+    cancel: cancelRuntimeReview,
+  } = useRuntimeImpactReview({ kinds: knownRuntimeKindValues });
+
+  /**
+   * Saves with the confirmation of `impact`. A changed impact that stops live sessions needs a
+   * new review. Any other changed impact is saved at once.
+   */
+  const saveConfirmed = useCallback(
+    async (
+      snapshot: SettingsSnapshotSaveInput,
+      impact: RuntimeLifecycleImpact | null,
+    ): Promise<Exclude<RuntimeImpactActionResult, { type: "failed" }>> => {
+      let confirmation = impact?.confirmation;
+      for (;;) {
+        const result = await saveSettingsSnapshot(snapshot, confirmation);
+        if (result.type !== "runtime_impact_changed") {
+          reportSettingsSaveFollowUps(result, (title, description) =>
+            toast.warning(title, { description }),
+          );
+          return { type: "completed" };
+        }
+        if (hasLiveSessions(result.impact)) {
+          return { type: "impact_changed", impact: result.impact };
+        }
+        confirmation = result.impact.confirmation;
+      }
+    },
+    [saveSettingsSnapshot],
+  );
+
+  /**
+   * Saves the snapshot. When the save stops live sessions, the user reviews them first.
+   * A changed impact opens the review again. Cancel keeps the draft and writes nothing.
+   */
+  const saveWithRuntimeReview = useCallback(
+    async (snapshot: SettingsSnapshotSaveInput, latest: SettingsSnapshot): Promise<boolean> => {
+      const impact = hasRuntimeLifecycleChange(latest.agentRuntimes, snapshot.agentRuntimes)
+        ? (await previewSettingsSnapshotRuntime(snapshot)).impact
+        : null;
+      let notice: string | null = null;
+      if (impact === null || !hasLiveSessions(impact)) {
+        const result = await saveConfirmed(snapshot, impact);
+        if (result.type === "completed") return true;
+        notice = RUNTIME_IMPACT_CHANGED_NOTICE;
+      }
+      return openRuntimeReview({
+        readImpact: async () => {
+          const { impact: current } = await previewSettingsSnapshotRuntime(snapshot);
+          if (!current) {
+            throw new Error(
+              "These settings no longer change a running runtime. Cancel, then save again.",
+            );
+          }
+          return current;
+        },
+        run: (reviewed) => saveConfirmed(snapshot, reviewed),
+        notice,
+      });
+    },
+    [openRuntimeReview, previewSettingsSnapshotRuntime, saveConfirmed],
+  );
 
   const clearSaveError = useCallback((): void => {
     setSaveError(null);
@@ -87,6 +181,7 @@ export const useSettingsModalSaveOrchestration = ({
     if (!open) {
       setSaveError(null);
       setHasAttemptedRepoScriptSubmit(false);
+      cancelRuntimeReview();
     }
 
     if (!validation.repoScripts.hasErrors) {
@@ -169,7 +264,7 @@ export const useSettingsModalSaveOrchestration = ({
           },
           { saveCustomAgentRoles: dirtySections.customAgentRoles },
         );
-        await saveSettingsSnapshot(saveReadySnapshot);
+        return await saveWithRuntimeReview(saveReadySnapshot, latestSnapshot);
       }
 
       return true;
@@ -192,13 +287,16 @@ export const useSettingsModalSaveOrchestration = ({
     loadedSnapshot,
     onRuntimeAvailabilityError,
     saveGlobalGitConfig,
-    saveSettingsSnapshot,
+    saveWithRuntimeReview,
     snapshotDraft,
     validation,
     wasKanbanTaskCardViewEdited,
   ]);
 
   return {
+    runtimeReview,
+    confirmRuntimeReview,
+    cancelRuntimeReview,
     isSaving,
     saveError,
     showRepoScriptValidationErrors:

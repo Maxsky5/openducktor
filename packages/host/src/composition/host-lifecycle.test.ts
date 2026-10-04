@@ -1,3 +1,4 @@
+import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import { Cause, Effect } from "effect";
 import { HostOperationError } from "../effect/host-errors";
 import type { RuntimeRegistryPort } from "../ports/runtime-registry-port";
@@ -22,24 +23,15 @@ const createLogger = (): HostLifecycleLogger & { infos: string[]; errors: string
 const createRuntimeRegistry = (
   stopAllRuntimes: RuntimeRegistryPort["stopAllRuntimes"],
 ): RuntimeRegistryPort => ({
-  ensureWorkspaceRuntime: () => Effect.die("unused"),
-  findRuntimeById: () => Effect.succeed(null),
-  findWorkspaceRuntime: () => Effect.succeed(null),
-  listRuntimes: () => Effect.succeed([]),
-  listRuntimesByRepo: () => Effect.succeed([]),
-  stopRuntime: () => Effect.succeed(false),
+  status: () => Effect.die("unused"),
+  statuses: () => Effect.die("unused"),
+  configure: () => Effect.die("unused"),
+  recordConfigurationFailure: () => Effect.die("unused"),
+  reserve: () => Effect.die("unused"),
+  requireReady: () => Effect.die("unused"),
   stopAllRuntimes,
-  stopSession: () => Effect.void,
-  probeSessionStatus: () => Effect.succeed({ supported: false, hasLiveSession: false }),
-  probeMcpStatus: () =>
-    Effect.succeed({
-      supported: false,
-      connected: false,
-      serverStatus: null,
-      toolIds: [],
-      detail: null,
-      failureKind: null,
-    }),
+  stopSession: () => Effect.die("unused"),
+  probeSessionStatus: () => Effect.die("unused"),
 });
 
 describe("host lifecycle shutdown", () => {
@@ -177,6 +169,36 @@ describe("host lifecycle shutdown", () => {
     }
   });
 
+  test("leaves the stop of each runtime to the runtime status log", async () => {
+    const logger = createLogger();
+    const step = createStopRuntimesStep(
+      createRuntimeRegistry(() =>
+        Effect.succeed([
+          {
+            kind: "opencode",
+            runtimeId: "opencode-1",
+            runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4096" },
+            startedAt: "2026-10-03T10:00:00.000Z",
+            descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+          },
+          {
+            kind: "codex",
+            runtimeId: "codex-1",
+            runtimeRoute: { type: "stdio", identity: "codex-1" },
+            startedAt: "2026-10-03T10:00:00.000Z",
+            descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
+          },
+        ]),
+      ),
+      logger,
+    );
+
+    await Effect.runPromise(step.run());
+
+    expect(logger.infos).toEqual(["Stopping registered agent runtimes"]);
+    expect(logger.errors).toEqual([]);
+  });
+
   test("preserves runtime cleanup and lifecycle logging failures together", async () => {
     const persistenceError = new Error("openducktor.logs.append failed");
     const runtimeError = new HostOperationError({
@@ -225,6 +247,9 @@ describe("host lifecycle shutdown", () => {
               message: "ensureExternalDiscoveryReady should not be called",
             }),
           );
+        },
+        checkReady() {
+          return Effect.die("checkReady should not be called");
         },
         close() {
           return Effect.fail(

@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
+import { createHostRuntimeServiceTestDouble } from "../../test-support/host-runtime-service-test-double";
 import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
 import {
   createEffectHostCommandRouter,
@@ -28,7 +29,12 @@ test("routes role commands with validated input and rejects client-supplied IDs 
       }),
   });
   const router = toPromiseHostCommandRouter(
-    createEffectHostCommandRouter({ handlers: createWorkspaceSettingsCommandHandlers(service) }),
+    createEffectHostCommandRouter({
+      handlers: createWorkspaceSettingsCommandHandlers(
+        service,
+        createHostRuntimeServiceTestDouble(),
+      ),
+    }),
   );
   const input = { name: role.name, systemPrompt: role.systemPrompt };
   expect(await router.invoke("custom_agent_role_list")).toEqual([role]);

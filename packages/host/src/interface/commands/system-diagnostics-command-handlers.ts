@@ -1,3 +1,4 @@
+import type { RuntimeMcpDiagnosticsService } from "../../application/diagnostics/runtime-mcp-diagnostics-service";
 import type { SystemDiagnosticsService } from "../../application/diagnostics/system-diagnostics-service";
 import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
 import {
@@ -28,8 +29,14 @@ const parseRepoPath = (args: HostCommandArgs, command: string): string => {
 
 export const createSystemDiagnosticsCommandHandlers = (
   systemDiagnosticsService: SystemDiagnosticsService,
+  runtimeMcpDiagnosticsService: RuntimeMcpDiagnosticsService,
 ) =>
   ({
+    host_mcp_bridge_check: () => runtimeMcpDiagnosticsService.hostBridgeCheck(),
+    workspace_runtime_mcp_check: (args) =>
+      runtimeMcpDiagnosticsService.workspaceRuntimeMcpCheck(
+        parseRepoPath(args, "workspace_runtime_mcp_check"),
+      ),
     runtime_check: (args) => systemDiagnosticsService.runtimeCheck(parseRuntimeCheckForce(args)),
     task_store_check: (args) =>
       systemDiagnosticsService.taskStoreCheck(parseRepoPath(args, "task_store_check")),

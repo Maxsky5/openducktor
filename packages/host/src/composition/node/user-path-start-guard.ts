@@ -5,7 +5,7 @@ import type {
   ProcessEnvironmentResolution,
 } from "../../infrastructure/process/process-environment";
 import type { DevServerProcessPort } from "../../ports/dev-server-process-port";
-import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
+import type { RuntimeStarterPort } from "../../ports/runtime-registry-port";
 
 const checkUserPath = (
   resolution: ProcessEnvironmentResolution,
@@ -36,15 +36,15 @@ export const guardDevServerStart = (
 });
 
 export const guardRuntimeStart = (
-  registry: RuntimeRegistryPort,
+  starter: RuntimeStarterPort,
   resolution: ProcessEnvironmentResolution,
-): RuntimeRegistryPort => ({
-  ensureWorkspaceRuntime(input) {
+): RuntimeStarterPort => ({
+  startRuntime(input) {
     return checkUserPath(
       resolution,
       (error) =>
         new HostOperationError({
-          operation: "runtimeWorkspace.resolveEnvironment",
+          operation: "runtime.resolveEnvironment",
           message: `Failed to start ${input.descriptor.kind} runtime because the user PATH is unavailable. ${error.message}`,
           cause: error,
           details: {
@@ -53,15 +53,6 @@ export const guardRuntimeStart = (
             shell: error.shell,
           },
         }),
-    ).pipe(Effect.flatMap(() => registry.ensureWorkspaceRuntime(input)));
+    ).pipe(Effect.flatMap(() => starter.startRuntime(input)));
   },
-  findRuntimeById: (runtimeId) => registry.findRuntimeById(runtimeId),
-  findWorkspaceRuntime: (input) => registry.findWorkspaceRuntime(input),
-  listRuntimes: () => registry.listRuntimes(),
-  listRuntimesByRepo: (input) => registry.listRuntimesByRepo(input),
-  stopRuntime: (runtimeId) => registry.stopRuntime(runtimeId),
-  stopAllRuntimes: () => registry.stopAllRuntimes(),
-  stopSession: (input) => registry.stopSession(input),
-  probeSessionStatus: (input) => registry.probeSessionStatus(input),
-  probeMcpStatus: (input) => registry.probeMcpStatus(input),
 });

@@ -1,11 +1,14 @@
-import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
+import {
+  type AgentSessionLiveAdapterChange,
+  AgentSessionLiveRegistration,
+} from "../../ports/agent-session-live-adapter-port";
 import { expect, spyOn, test } from "bun:test";
 import type { AgentSessionLiveSnapshot } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createCodexLiveSessionProjection } from "./codex-live-session-projection";
 
-const snapshot = (externalSessionId: string): AgentSessionLiveSnapshot => ({
-  ref: { repoPath: "/repo", workingDirectory: "/repo", runtimeKind: "codex", externalSessionId },
+const snapshot = (externalSessionId: string, repoPath = "/repo"): AgentSessionLiveSnapshot => ({
+  ref: { repoPath, workingDirectory: repoPath, runtimeKind: "codex", externalSessionId },
   activity: "idle",
   title: externalSessionId,
   startedAt: "2026-07-16T10:00:00.000Z",
@@ -16,7 +19,7 @@ const snapshot = (externalSessionId: string): AgentSessionLiveSnapshot => ({
 
 test("empty deltas retain idle sessions and only explicit removals delete them", async () => {
   const projection = createCodexLiveSessionProjection({
-    runtime: { runtimeId: "runtime", repoPath: "/repo", workingDirectory: "/repo" },
+    runtime: { runtimeId: "runtime" },
     liveSessionLifecycle: {
       createRuntimeRegistration: (binding) =>
         new AgentSessionLiveRegistration(binding, (mutation) =>
@@ -34,7 +37,7 @@ test("empty deltas retain idle sessions and only explicit removals delete them",
       projection.applyMutation({ ...base, snapshotMode: "delta", snapshots: [], removedRefs: [] }),
     );
   }
-  expect(await Effect.runPromise(projection.listSnapshots("/repo"))).toEqual(sessions);
+  expect(await Effect.runPromise(projection.listSnapshots())).toEqual(sessions);
   await Effect.runPromise(
     projection.applyMutation({
       ...base,
@@ -43,12 +46,12 @@ test("empty deltas retain idle sessions and only explicit removals delete them",
       removedRefs: [sessions[0]!.ref],
     }),
   );
-  expect(await Effect.runPromise(projection.listSnapshots("/repo"))).toEqual(sessions.slice(1));
+  expect(await Effect.runPromise(projection.listSnapshots())).toEqual(sessions.slice(1));
 });
 
 test("invalid removal refs reject the whole delta before any state changes", async () => {
   const projection = createCodexLiveSessionProjection({
-    runtime: { runtimeId: "runtime", repoPath: "/repo", workingDirectory: "/repo" },
+    runtime: { runtimeId: "runtime" },
     liveSessionLifecycle: {
       createRuntimeRegistration: (binding) =>
         new AgentSessionLiveRegistration(binding, (mutation) =>
@@ -61,9 +64,9 @@ test("invalid removal refs reject the whole delta before any state changes", asy
   await Effect.runPromise(
     projection.applyMutation({ ...base, snapshotMode: "full", snapshots: [initial] }),
   );
-  for (const ref of [
-    { ...initial.ref, repoPath: "/other" },
-    { ...initial.ref, runtimeKind: "opencode" as const },
+  for (const { ref, message } of [
+    { ref: { ...initial.ref, externalSessionId: "" }, message: "externalSessionId" },
+    { ref: { ...initial.ref, runtimeKind: "opencode" as const }, message: "removedRefs" },
   ]) {
     await expect(
       Effect.runPromise(
@@ -74,15 +77,132 @@ test("invalid removal refs reject the whole delta before any state changes", asy
           removedRefs: [ref],
         }),
       ),
-    ).rejects.toThrow("removedRefs");
-    expect(await Effect.runPromise(projection.listSnapshots("/repo"))).toEqual([initial]);
+    ).rejects.toThrow(message);
+    expect(await Effect.runPromise(projection.listSnapshots())).toEqual([initial]);
   }
+});
+
+const recordingProjection = (changes: AgentSessionLiveAdapterChange[]) =>
+  createCodexLiveSessionProjection({
+    runtime: { runtimeId: "runtime" },
+    liveSessionLifecycle: {
+      createRuntimeRegistration: (binding) =>
+        new AgentSessionLiveRegistration(binding, (mutation) =>
+          mutation.pipe(
+            Effect.map((result) => {
+              changes.push(...result.changes);
+              return result.value;
+            }),
+          ),
+        ),
+    },
+  });
+
+test("keeps the sessions of every repository on the shared runtime", async () => {
+  const changes: AgentSessionLiveAdapterChange[] = [];
+  const projection = recordingProjection(changes);
+  const base = { runtimeId: "runtime", transcriptEvents: [], catalogInvalidated: false };
+  const repoA = snapshot("thread-a", "/repo-a");
+  const repoB = snapshot("thread-b", "/repo-b");
+
+  await Effect.runPromise(
+    projection.applyMutation({ ...base, snapshotMode: "full", snapshots: [repoA, repoB] }),
+  );
+  await Effect.runPromise(
+    projection.applyMutation({
+      ...base,
+      snapshotMode: "delta",
+      snapshots: [{ ...repoB, activity: "running" }],
+      removedRefs: [],
+    }),
+  );
+
+  expect(await Effect.runPromise(projection.listSnapshots())).toEqual([
+    repoA,
+    { ...repoB, activity: "running" },
+  ]);
+  expect(projection.hasSnapshot(repoA.ref)).toBe(true);
+  expect(changes.filter((change) => change.type === "session_removed")).toEqual([]);
+
+  // A full projection lists every owned session, so it removes only sessions that ended.
+  await Effect.runPromise(
+    projection.applyMutation({ ...base, snapshotMode: "full", snapshots: [repoA] }),
+  );
+  expect(await Effect.runPromise(projection.listSnapshots())).toEqual([repoA]);
+  expect(changes.filter((change) => change.type === "session_removed")).toEqual([
+    { type: "session_removed", ref: repoB.ref },
+  ]);
+});
+
+test("routes runtime-wide changes to each repository with a live session", async () => {
+  const changes: AgentSessionLiveAdapterChange[] = [];
+  const projection = recordingProjection(changes);
+  const base = { runtimeId: "runtime", transcriptEvents: [], catalogInvalidated: false };
+  const repoA = snapshot("thread-a", "/repo-a");
+  const repoB = snapshot("thread-b", "/repo-b");
+  const repoAOther = snapshot("thread-a2", "/repo-a");
+
+  await Effect.runPromise(
+    projection.applyMutation({
+      ...base,
+      snapshotMode: "delta",
+      snapshots: [],
+      removedRefs: [],
+      catalogInvalidated: true,
+      fault: "No live session",
+    }),
+  );
+  expect(changes).toEqual([]);
+
+  await Effect.runPromise(
+    projection.applyMutation({
+      ...base,
+      snapshotMode: "full",
+      snapshots: [repoA, repoB, repoAOther],
+    }),
+  );
+  changes.length = 0;
+  await Effect.runPromise(
+    projection.applyMutation({
+      ...base,
+      snapshotMode: "delta",
+      snapshots: [],
+      removedRefs: [],
+      catalogInvalidated: true,
+      fault: "Runtime event failed",
+    }),
+  );
+  await Effect.runPromise(
+    projection.applyMutation({
+      ...base,
+      snapshotMode: "delta",
+      snapshots: [],
+      removedRefs: [],
+      fault: "Session event failed",
+      faultRef: repoB.ref,
+    }),
+  );
+
+  const operation = "codex-live-session.process-event";
+  expect(changes).toEqual([
+    { type: "catalog_invalidated", repoPath: "/repo-a", runtimeKind: "codex" },
+    { type: "catalog_invalidated", repoPath: "/repo-b", runtimeKind: "codex" },
+    { type: "fault", repoPath: "/repo-a", operation, message: "Runtime event failed" },
+    { type: "fault", repoPath: "/repo-b", operation, message: "Runtime event failed" },
+    {
+      type: "fault",
+      repoPath: "/repo-b",
+      operation,
+      message: "Session event failed",
+      ref: repoB.ref,
+    },
+  ]);
 });
 
 test("text deltas preserve transcript order with zero snapshot equality serializations", () => {
   const transcript: string[] = [];
   const projection = createCodexLiveSessionProjection({
-    runtime: { runtimeId: "runtime", repoPath: "/repo", workingDirectory: "/repo" },
+    runtime: { runtimeId: "runtime" },
     liveSessionLifecycle: {
       createRuntimeRegistration: (binding) =>
         new AgentSessionLiveRegistration(binding, (mutation) =>

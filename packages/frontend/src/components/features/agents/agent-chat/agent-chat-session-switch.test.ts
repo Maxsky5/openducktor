@@ -183,7 +183,7 @@ test.each([
       const session = useSyncExternalStore(store.subscribe, () =>
         store.getSessionSnapshot(identity),
       );
-      useSelectedSessionHistoryLoad({ session, repoReadinessState: "ready" });
+      useSelectedSessionHistoryLoad({ session, runtimeReadinessState: "ready" });
       observedStates.push(
         useAgentChatTranscriptModel({
           session: session ? toAgentChatTranscriptSession(session) : null,

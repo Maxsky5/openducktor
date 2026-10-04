@@ -7,16 +7,12 @@ import {
 } from "@openducktor/core";
 import { requireCodexRuntimePolicy } from "./codex-session-policy";
 
-type CodexSessionThreadConfig = {
-  "mcp_servers.openducktor.enabled": true;
-  "mcp_servers.openducktor.enabled_tools": string[];
-};
-
 type CodexSessionScopePolicyBase = {
   /** Runtime session title. `undefined` keeps the current title. */
   title?: string;
   runtimePolicy: CodexEffectivePolicy;
-  threadConfig: CodexSessionThreadConfig;
+  /** OpenDucktor MCP tools that the session scope allows. */
+  enabledTools: string[];
 };
 
 export type CodexSessionScopePolicy =
@@ -28,11 +24,6 @@ export type CodexSessionScopePolicy =
       kind: "repository";
       sessionScope: Extract<AgentSessionScope, { kind: "repository" }>;
     });
-
-const buildThreadConfig = (enabledTools: readonly string[]): CodexSessionThreadConfig => ({
-  "mcp_servers.openducktor.enabled": true,
-  "mcp_servers.openducktor.enabled_tools": [...enabledTools],
-});
 
 export const resolveCodexSessionScopePolicy = (
   sessionScope: AgentSessionScope | null | undefined,
@@ -49,13 +40,13 @@ export const resolveCodexSessionScopePolicy = (
           kind: "repository",
           sessionScope,
           runtimePolicy: effectivePolicy,
-          threadConfig: buildThreadConfig(ODT_MCP_TOOL_NAMES),
+          enabledTools: [...ODT_MCP_TOOL_NAMES],
         }
       : {
           kind: "workflow",
           sessionScope,
           runtimePolicy: effectivePolicy,
-          threadConfig: buildThreadConfig(AGENT_ROLE_TOOL_POLICY[sessionScope.role]),
+          enabledTools: [...AGENT_ROLE_TOOL_POLICY[sessionScope.role]],
         };
   return withAgentSessionTitle(policy, sessionScope);
 };

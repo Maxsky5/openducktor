@@ -160,10 +160,7 @@ export type {
   PreparedRuntimeLiveSessionAdapter,
   RuntimeLiveSessionLifecyclePort,
 } from "./ports/runtime-live-session-lifecycle-port";
-export type {
-  RuntimeRegistryPort,
-  RuntimeWorkspaceStarterPort,
-} from "./ports/runtime-registry-port";
+export type { RuntimeRegistryPort, RuntimeStarterPort } from "./ports/runtime-registry-port";
 export type { SettingsConfigPort } from "./ports/settings-config-port";
 export type { SystemCommandPort } from "./ports/system-command-port";
 export type { TaskStorePort } from "./ports/task-repository-ports";

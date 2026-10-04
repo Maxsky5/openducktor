@@ -4,7 +4,7 @@ Use this map before you change `packages/frontend/src/state/operations/agent-orc
 
 The host owns live session truth for task and workspace sessions. SQLite owns their durable records. The renderer holds one projection of those sources. History loads only for the selected session.
 
-Pass primitive identity through these modules. Use `workspaceRepoPath` for repository session state. Pass `workspaceId` only to code that reads repository config or starts a runtime. Do not pass `ActiveWorkspace` into transcript, action, or read-model modules.
+Pass primitive identity through these modules. Use `workspaceRepoPath` for repository session state. Pass `workspaceId` only to code that reads repository config. Do not pass `ActiveWorkspace` into transcript, action, or read-model modules.
 
 ## Session store
 
@@ -94,13 +94,17 @@ The host detects shared notifications for all open workspaces. Shells deliver th
 
 ## Runtime readiness
 
-Files: `state/queries/checks.ts`, `operations/workspace/use-checks.ts`, `operations/workspace/use-repo-runtime-health.ts`, `lib/repo-runtime-health.ts`, `lib/repo-runtime-readiness.ts`, `lib/use-repo-runtime-readiness.ts`, and `packages/host/src/application/runtimes/runtime-orchestrator-service.ts`.
+Files: `state/queries/host-runtime-status.ts`, `state/host-runtime/host-runtime-status-owner.ts`, `state/providers/host-runtime-status-provider.tsx`, `lib/runtime-readiness.ts`, `lib/use-runtime-readiness.ts`, and `packages/host/src/application/runtimes/host-runtime-service.ts`.
 
-Owns the runtime health query and the mapping to starting, ready, blocked, or error.
+Owns the host runtime status of each kind and the mapping to ready, checking, or blocked.
 
-`RepoRuntimeHealthContext` is the only frontend runtime health context. Diagnostics can read it but cannot expose a second copy. App lifecycle starts a repository runtime. A diagnostic reads health only. It does not start or poll a runtime.
+The host starts each enabled kind at host startup. One shared runtime of each kind serves every workspace. The frontend never starts, ensures, or polls a runtime.
 
-`not_started` is a passive observation. During automatic startup, treat it as pending startup, not a terminal session error.
+The status owner subscribes to `openducktor://runtime-changed` before it reads the `runtime_status` baseline. It merges events into one Query snapshot by host instance and per-kind revision, so a late baseline cannot restore stale state. A reconnect reads one new baseline. A stream or read failure marks the status as not current.
+
+`HostRuntimeStatusContext` is the only frontend runtime status context. Session actions and selected-session reads require the exact kind of that session to be `ready` and current. A runtime ID change or loss of ready state invalidates runtime-dependent Query data of that kind in every workspace.
+
+Diagnostics show the host group (agent runtimes, CLI tools, OpenDucktor MCP bridge) before the selected workspace group (repository setup, task store, runtime MCP connections). `Restart` reads the restart impact, shows the affected live sessions in every workspace, and needs a confirmation.
 
 ## Selected history
 
@@ -168,7 +172,7 @@ Use a context reference for send and reply. It adds task ID, role, optional mode
 
 File: `handlers/prepare-session-send.ts`.
 
-Before a send to an idle or stopped session, make sure its configured runtime process exists and build transient system prompt context. This step does not attach observation, read a snapshot, resume a session, or classify pending input.
+Before a send to an idle or stopped session, build transient system prompt context. It does not start a runtime. The host rejects the send when the kind is not ready. This step does not attach observation, read a snapshot, resume a session, or classify pending input.
 
 ## Pending input
 
@@ -362,7 +366,8 @@ Startup is complete when task records and the first host snapshot have produced 
 | Context loads apart from history | `history/use-selected-session-context-load.test.tsx`, adapter context tests |
 | Browser reconnect uses one SSE channel | `local-host-transport.test.ts` |
 | Selected transcript display state | `transcript/session-transcript-state.test.ts`, `agent-chat-thread-state.test.ts`, selected view tests |
-| Existing idle send prepares runtime | `handlers/prepare-session-send.test.ts`, `handlers/session-actions-send.test.ts` |
+| Existing idle send prepares prompt context | `handlers/prepare-session-send.test.ts`, `handlers/session-actions-send.test.ts` |
+| Runtime status follows events by revision | `state/host-runtime/host-runtime-status-owner.test.ts` |
 | Replies use normalized refs | `handlers/session-actions-pending-input.test.ts` |
 | Read-only history and replies | Read-only transcript hook tests |
 

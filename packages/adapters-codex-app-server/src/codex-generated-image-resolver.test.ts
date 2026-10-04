@@ -11,7 +11,6 @@ import {
   createDeferred,
   createHarness,
   RecordingTransport,
-  makeRuntimeSummary,
 } from "./codex-app-server-adapter.test-harness";
 
 const ref = {
@@ -222,23 +221,14 @@ test("concurrent reads share history and a released runtime cannot publish their
   });
 }
 
-test("runtime replacement during route resolution rejects the read before history access", async () => {
-  const route = createDeferred<void>();
-  const { adapter, transports } = createHarness({
-    repoRuntimeResolver: {
-      requireRepoRuntime: async () => {
-        await route.promise;
-        return { ...makeRuntimeSummary("runtime-live"), repoPath: ref.repoPath };
-      },
-    },
-  });
+test("runtime replacement during client resolution rejects the read before history access", async () => {
+  const { adapter, transports } = createHarness();
   await adapter.prepareRuntime("runtime-live");
   const result = Promise.allSettled([
     adapter.resolveGeneratedImageSource({ ref, itemId: "image", revision: "old-output" }),
   ]);
   adapter.releaseRuntime("runtime-live");
   await adapter.prepareRuntime("runtime-live");
-  route.resolve();
   expect(await result).toMatchObject([
     {
       status: "rejected",

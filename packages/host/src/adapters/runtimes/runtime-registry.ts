@@ -1,321 +1,331 @@
-import { type RuntimeInstanceSummary, runtimeInstanceSummarySchema } from "@openducktor/contracts";
-import { Deferred, Effect, FiberId } from "effect";
-import { runtimeWorkspaceKey } from "../../domain/runtime-workspace-key";
+import {
+  type HostRuntimeFailure,
+  type HostRuntimeLifecycleTrigger,
+  type HostRuntimeStatus,
+  knownRuntimeKindValues,
+  type RuntimeDescriptor,
+  type RuntimeInstanceSummary,
+  type RuntimeKind,
+  runtimeKindSchema,
+} from "@openducktor/contracts";
+import { Deferred, type Duration, Effect, Fiber, FiberId, Option } from "effect";
 import {
   HostOperationError,
   HostResourceError,
   HostValidationError,
 } from "../../effect/host-errors";
 import type {
-  RuntimeRegistryError,
+  RuntimeLifecycleReservation,
   RuntimeRegistryPort,
-  RuntimeWorkspaceHandle,
-  RuntimeWorkspaceStarterPort,
+  RuntimeStarterPort,
 } from "../../ports/runtime-registry-port";
-import { probeCodexMcpStatus, probeOpenCodeMcpStatus } from "./runtime-registry-probes";
-import {
-  createRuntimeRegistryStore,
-  type WorkspaceRuntimeLookupInput,
-} from "./runtime-registry-store";
+import type { RuntimeAdmissionGate } from "./runtime-admission";
+import { createRuntimeSlot, type Slot, type SlotStatus, toStatus } from "./runtime-registry-slot";
+import { createRuntimeSlotLifecycle } from "./runtime-slot-lifecycle";
+import { describeUnavailableRuntime } from "./runtime-unavailable-reason";
 import {
   createRuntimeSessionOperations,
   probeRuntimeSessionStatus,
   type RuntimeSessionOperationsByKind,
   stopRuntimeSession,
 } from "./runtime-session-operations";
-export type CreateRuntimeRegistryInput = {
-  onRuntimeChanged?: (
-    runtime: RuntimeInstanceSummary,
-    state: "ready" | "stopped",
-  ) => Effect.Effect<void, HostOperationError>;
-  runtimes?: RuntimeInstanceSummary[];
-  workspaceStarter?: RuntimeWorkspaceStarterPort;
-  sessionOperations?: RuntimeSessionOperationsByKind;
-  hasActiveRuntimeSessions?: (
-    input: Parameters<RuntimeRegistryPort["ensureWorkspaceRuntime"]>[0],
-  ) => Effect.Effect<boolean, RuntimeRegistryError>;
-  resolveRuntimeExecutablePath?: (
-    input: Parameters<RuntimeRegistryPort["ensureWorkspaceRuntime"]>[0],
-  ) => Effect.Effect<string, RuntimeRegistryError>;
-};
 
-type RuntimeEnsureFlight = {
-  cancel: Deferred.Deferred<void>;
-  deferred: Deferred.Deferred<RuntimeInstanceSummary, RuntimeRegistryError>;
+export type CreateRuntimeRegistryInput = {
+  admission: RuntimeAdmissionGate;
+  starter: RuntimeStarterPort;
+  descriptorFor: (kind: RuntimeKind) => RuntimeDescriptor;
+  /** Receives every status change, including crashes reported outside a lifecycle action. */
+  onStatusChanged: (status: HostRuntimeStatus) => void;
+  /** Reads the version of a started executable. Missing version data never fails a start. */
+  probeVersion?: (kind: RuntimeKind, executablePath: string) => Effect.Effect<string | null>;
+  sessionOperations?: RuntimeSessionOperationsByKind;
+  now?: () => Date;
+  /** How long a lifecycle action or shutdown waits for admitted controls before it cancels them. */
+  controlGrace?: Duration.DurationInput;
 };
 
 export const createRuntimeRegistry = ({
-  runtimes = [],
-  workspaceStarter,
+  admission,
+  starter,
+  descriptorFor,
+  onStatusChanged,
+  probeVersion = () => Effect.succeed(null),
   sessionOperations = createRuntimeSessionOperations(),
-  hasActiveRuntimeSessions,
-  resolveRuntimeExecutablePath,
-  onRuntimeChanged,
-}: CreateRuntimeRegistryInput = {}): RuntimeRegistryPort => {
-  const store = createRuntimeRegistryStore(runtimes);
-  const handles = new Map<string, RuntimeWorkspaceHandle>();
-  const ensureFlights = new Map<string, RuntimeEnsureFlight>();
-  const findRegisteredWorkspaceRuntime = (input: WorkspaceRuntimeLookupInput) =>
-    store.findWorkspaceRuntime(input);
-  const requireWorkspaceRuntime = (input: WorkspaceRuntimeLookupInput, operation: string) =>
-    findRegisteredWorkspaceRuntime(input).pipe(
-      Effect.flatMap((runtime) => {
-        if (runtime) {
-          return Effect.succeed(runtime);
-        }
-        return Effect.fail(
-          new HostResourceError({
-            resource: "runtime",
-            operation,
-            message: `No live ${input.runtimeKind} workspace runtime found for repo '${input.repoPath}'.`,
-            details: {
-              runtimeKind: input.runtimeKind,
-              repoPath: input.repoPath,
-            },
-          }),
-        );
-      }),
-    );
-  const stopRegisteredRuntime = (runtimeId: string) =>
-    Effect.gen(function* () {
-      const runtime = store.get(runtimeId);
-      if (!runtime) {
-        return yield* Effect.fail(
-          new HostResourceError({
-            resource: "runtime",
-            operation: "runtimeRegistry.stopRuntime",
-            message: `Runtime not found: ${runtimeId}`,
-            details: { runtimeId },
-          }),
-        );
-      }
-      const handle = handles.get(runtimeId);
-      if (handle) {
-        yield* handle.stop();
-        handles.delete(runtimeId);
-      }
-      store.remove(runtimeId);
-      if (onRuntimeChanged) yield* onRuntimeChanged(runtime, "stopped");
-      return runtime;
-    });
-  const cancelStartingRuntimes = () => {
-    const flights = [...ensureFlights.values()];
-    if (flights.length === 0) {
-      return Effect.succeed(undefined);
+  now = () => new Date(),
+  controlGrace = "10 seconds",
+}: CreateRuntimeRegistryInput): RuntimeRegistryPort => {
+  const timestamp = () => now().toISOString();
+  const slots = new Map<RuntimeKind, Slot>(
+    knownRuntimeKindValues.map((kind) => [kind, createRuntimeSlot(kind, timestamp())]),
+  );
+  let shuttingDown = false;
+
+  const label = (kind: RuntimeKind) => descriptorFor(kind).label;
+  const unavailable = (slot: Slot) =>
+    describeUnavailableRuntime(label(slot.kind), slot.state, slot.failure);
+  /** A ready runtime accepts work unless a lifecycle action or shutdown owns it. */
+  const accepting = (slot: Slot) => slot.state === "ready" && !slot.reserved && !shuttingDown;
+  const syncAdmission = (slot: Slot) => {
+    if (accepting(slot)) {
+      admission.open(slot.kind);
+      return;
     }
-    return Effect.gen(function* () {
-      yield* Effect.forEach(flights, (flight) => Deferred.succeed(flight.cancel, undefined), {
-        concurrency: "unbounded",
-        discard: true,
-      });
-      yield* Effect.forEach(flights, (flight) => Effect.exit(Deferred.await(flight.deferred)), {
-        concurrency: "unbounded",
-        discard: true,
-      });
-    });
+    admission.close(slot.kind, { state: slot.state, ...unavailable(slot) });
   };
-  const makeRuntimeEnsureFlight = (): RuntimeEnsureFlight => ({
-    cancel: Deferred.unsafeMake(FiberId.none),
-    deferred: Deferred.unsafeMake(FiberId.none),
-  });
-  const completeRuntimeEnsureFlight = (
-    flightKey: string,
-    flight: RuntimeEnsureFlight,
-    startEffect: Effect.Effect<RuntimeInstanceSummary, RuntimeRegistryError>,
-  ) =>
-    Effect.gen(function* () {
-      const exit = yield* Effect.exit(
-        Effect.raceFirst(
-          startEffect,
-          Deferred.await(flight.cancel).pipe(Effect.zipRight(Effect.interrupt)),
-        ),
-      );
-      yield* Deferred.done(flight.deferred, exit);
-    }).pipe(
-      Effect.ensuring(
-        Effect.sync(() => {
-          if (ensureFlights.get(flightKey) === flight) {
-            ensureFlights.delete(flightKey);
-          }
+  const update = (slot: Slot, changes: Partial<SlotStatus>) => {
+    Object.assign(slot, changes, { updatedAt: timestamp(), revision: slot.revision + 1 });
+    syncAdmission(slot);
+    onStatusChanged(toStatus(slot));
+  };
+  const newFailure = (
+    trigger: HostRuntimeLifecycleTrigger,
+    phase: HostRuntimeFailure["phase"],
+    message: string,
+    nextAction: string,
+  ): HostRuntimeFailure => ({ trigger, phase, message, nextAction, occurredAt: timestamp() });
+
+  const requireSlot = (
+    kind: string,
+  ): Effect.Effect<Slot, HostValidationError<{ runtimeKind: string }>> => {
+    const parsed = runtimeKindSchema.safeParse(kind);
+    const slot = parsed.success ? slots.get(parsed.data) : undefined;
+    if (!slot) {
+      return Effect.fail(
+        new HostValidationError({
+          field: "runtimeKind",
+          message: `Unsupported runtime kind: ${kind}`,
+          details: { runtimeKind: kind },
         }),
+      );
+    }
+    return Effect.succeed(slot);
+  };
+
+  const { applyRequest, stopHandle } = createRuntimeSlotLifecycle({
+    starter,
+    descriptorFor,
+    probeVersion,
+    label,
+    update,
+    newFailure,
+    isShuttingDown: () => shuttingDown,
+  });
+
+  /**
+   * Waits for the controls that the kind admitted before admission closed. A control that outlasts
+   * the grace period is cancelled with `reason`, so one stuck control cannot block a restart,
+   * a settings change, or quit.
+   */
+  const drainOrCancel = (slot: Slot, reason: string) =>
+    // A reservation can run in an uninterruptible acquire step. The wait must stay interruptible,
+    // or the grace period cannot end it.
+    Effect.interruptible(admission.drain(slot.kind)).pipe(
+      Effect.timeoutOption(controlGrace),
+      Effect.flatMap((drained) =>
+        Option.isSome(drained) ? Effect.void : admission.cancel(slot.kind, reason),
       ),
     );
-  const ensureWorkspaceRuntimeOnce = (
-    input: Parameters<RuntimeRegistryPort["ensureWorkspaceRuntime"]>[0],
-  ) =>
-    Effect.gen(function* () {
-      const existingRuntime = yield* findRegisteredWorkspaceRuntime({
-        repoPath: input.repoPath,
-        runtimeKind: input.runtimeKind,
-      });
-      if (existingRuntime) {
-        const existingHandle = handles.get(existingRuntime.runtimeId);
-        let shouldRestart = existingHandle ? !existingHandle.isAlive() : false;
-        if (existingHandle && !shouldRestart && resolveRuntimeExecutablePath) {
-          const configuredExecutablePath = yield* resolveRuntimeExecutablePath(input);
-          const executablePathChanged =
-            existingHandle.configuredExecutablePath !== configuredExecutablePath;
-          if (executablePathChanged) {
-            const hasActiveSessions = hasActiveRuntimeSessions
-              ? yield* hasActiveRuntimeSessions(input)
-              : false;
-            shouldRestart = !hasActiveSessions;
-          }
-        }
-        if (existingHandle && shouldRestart) {
-          yield* stopRegisteredRuntime(existingRuntime.runtimeId);
-        } else {
-          const registeredRuntime = store.get(existingRuntime.runtimeId);
-          if (registeredRuntime) {
-            return yield* Effect.try({
-              try: () => runtimeInstanceSummarySchema.parse(registeredRuntime),
-              catch: (cause) =>
-                new HostValidationError({
-                  message: cause instanceof Error ? cause.message : String(cause),
-                  cause,
-                  details: { runtimeId: registeredRuntime.runtimeId },
-                }),
+
+  const releaseKinds = (reserved: ReadonlyArray<Slot>) =>
+    Effect.sync(() => {
+      for (const slot of reserved) {
+        if (!slot.reserved) continue;
+        slot.reserved = false;
+        syncAdmission(slot);
+      }
+    });
+
+  const registry: RuntimeRegistryPort = {
+    status: (kind) => requireSlot(kind).pipe(Effect.map(toStatus), Effect.orDie),
+    statuses: () => Effect.sync(() => [...slots.values()].map(toStatus)),
+    configure: (kind, settings) =>
+      requireSlot(kind).pipe(
+        Effect.orDie,
+        Effect.map((slot) =>
+          update(slot, {
+            enabled: settings.enabled,
+            configuredExecutablePath: settings.configuredExecutablePath,
+          }),
+        ),
+      ),
+    recordConfigurationFailure: (kind, message) =>
+      requireSlot(kind).pipe(
+        Effect.orDie,
+        Effect.map((slot) =>
+          update(slot, {
+            state: "error",
+            trigger: "host_startup",
+            failure: newFailure(
+              "host_startup",
+              "configuration",
+              `Cannot read the ${label(slot.kind)} runtime settings: ${message}`,
+              "Fix the OpenDucktor settings file, then restart OpenDucktor.",
+            ),
+          }),
+        ),
+      ),
+    reserve: (kinds) =>
+      Effect.gen(function* () {
+        const reserved = yield* Effect.suspend(() => {
+          if (shuttingDown) {
+            return new HostResourceError({
+              resource: "agent_runtime",
+              operation: "runtime.reserve",
+              message: "OpenDucktor is shutting down. Runtime actions are unavailable.",
             });
           }
-        }
-      }
-      if (!workspaceStarter) {
-        return yield* Effect.fail(
-          new HostResourceError({
-            resource: "runtimeWorkspaceStarter",
-            operation: "runtimeRegistry.ensureWorkspaceRuntime",
-            message: `Runtime kind ${input.runtimeKind} workspace startup is not configured in the TypeScript host.`,
-            details: {
-              runtimeKind: input.runtimeKind,
-              repoPath: input.repoPath,
-            },
-          }),
-        );
-      }
-      const handle = yield* workspaceStarter.startWorkspaceRuntime(input);
-      const parsed = yield* Effect.try({
-        try: () => runtimeInstanceSummarySchema.parse(handle.runtime),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-            details: {
-              runtimeKind: input.runtimeKind,
-              repoPath: input.repoPath,
-            },
-          }),
-      });
-      store.upsert(parsed);
-      handles.set(parsed.runtimeId, handle);
-      if (onRuntimeChanged) yield* onRuntimeChanged(parsed, "ready");
-      return parsed;
-    });
-  const registry: RuntimeRegistryPort = {
-    ensureWorkspaceRuntime(input) {
-      const flightKey = runtimeWorkspaceKey({
-        runtimeKind: input.runtimeKind,
-        repoPath: input.repoPath,
-      });
-      return Effect.uninterruptibleMask((restore) =>
-        Effect.gen(function* () {
-          const reservation = yield* Effect.sync(() => {
-            const existingFlight = ensureFlights.get(flightKey);
-            if (existingFlight) {
-              return { _tag: "existing" as const, flight: existingFlight };
-            }
-            const flight = makeRuntimeEnsureFlight();
-            ensureFlights.set(flightKey, flight);
-            return { _tag: "created" as const, flight };
-          });
-          if (reservation._tag === "existing") {
-            return yield* restore(Deferred.await(reservation.flight.deferred));
+          const requested = [...new Set(kinds)].map((kind) => slots.get(kind));
+          const busy = requested.find((slot) => slot?.reserved);
+          if (busy) {
+            return new HostResourceError({
+              resource: "agent_runtime",
+              operation: "runtime.reserve",
+              message: `A lifecycle action is already running for the ${label(busy.kind)} runtime. Wait for it to finish.`,
+              details: { runtimeKind: busy.kind },
+            });
           }
-          yield* Effect.forkDaemon(
-            restore(
-              completeRuntimeEnsureFlight(
-                flightKey,
-                reservation.flight,
-                ensureWorkspaceRuntimeOnce(input),
-              ),
+          const owned = requested.filter((slot): slot is Slot => slot !== undefined);
+          for (const slot of owned) {
+            slot.reserved = true;
+            syncAdmission(slot);
+          }
+          return Effect.succeed(owned);
+        });
+        // An interrupted drain must not leave the kinds reserved.
+        yield* Effect.forEach(
+          reserved,
+          (slot) =>
+            drainOrCancel(
+              slot,
+              `OpenDucktor stopped this action to apply a lifecycle action on the ${label(slot.kind)} runtime. Try again when the runtime is ready.`,
             ),
+          { concurrency: "unbounded", discard: true },
+        ).pipe(Effect.onError(() => releaseKinds(reserved)));
+        const reservation: RuntimeLifecycleReservation = {
+          kinds: reserved.map((slot) => slot.kind),
+          apply: (kind, request) =>
+            Effect.gen(function* () {
+              const slot = reserved.find((candidate) => candidate.kind === kind);
+              if (!slot?.reserved) {
+                return yield* new HostValidationError({
+                  field: "runtimeKind",
+                  message: `The ${kind} runtime is not part of this lifecycle reservation.`,
+                  details: { runtimeKind: kind },
+                });
+              }
+              // Shutdown waits for this action before it stops the remaining resources.
+              const applying = Deferred.unsafeMake<void>(FiberId.none);
+              slot.applying = applying;
+              return yield* applyRequest(slot, request).pipe(
+                Effect.ensuring(
+                  Effect.suspend(() => {
+                    if (slot.applying === applying) slot.applying = null;
+                    return Deferred.succeed(applying, undefined);
+                  }),
+                ),
+              );
+            }),
+          release: () => releaseKinds(reserved),
+        };
+        return reservation;
+      }),
+    requireReady: (kind) =>
+      requireSlot(kind).pipe(
+        Effect.orDie,
+        Effect.flatMap((slot) => {
+          if (accepting(slot) && slot.handle) {
+            return Effect.succeed(slot.handle.runtime);
+          }
+          const { message, nextAction } = unavailable(slot);
+          return Effect.fail(
+            new HostResourceError({
+              resource: "agent_runtime",
+              operation: "runtime.requireReady",
+              message: `${message} ${nextAction}`,
+              details: { runtimeKind: slot.kind, state: slot.state, nextAction },
+            }),
           );
-          return yield* restore(Deferred.await(reservation.flight.deferred));
         }),
-      );
-    },
-    listRuntimes() {
-      return Effect.succeed(store.list());
-    },
-    findRuntimeById(runtimeId) {
-      return Effect.succeed(store.get(runtimeId));
-    },
-    findWorkspaceRuntime(input) {
-      return findRegisteredWorkspaceRuntime(input);
-    },
-    listRuntimesByRepo(input) {
-      return Effect.sync(() => store.listByRepo(input));
-    },
-    stopRuntime(runtimeId) {
-      return Effect.as(stopRegisteredRuntime(runtimeId), true);
-    },
-    stopAllRuntimes() {
-      return Effect.gen(function* () {
-        yield* cancelStartingRuntimes();
+      ),
+    stopAllRuntimes: () =>
+      Effect.gen(function* () {
+        shuttingDown = true;
+        const owned = [...slots.values()];
+        for (const slot of owned) syncAdmission(slot);
+        yield* Effect.forEach(
+          owned.flatMap((slot) => (slot.startFiber ? [slot.startFiber] : [])),
+          Fiber.interrupt,
+          { concurrency: "unbounded", discard: true },
+        );
+        // A running lifecycle action cannot start anything now. Wait until it owns no resource.
+        yield* Effect.forEach(
+          owned.flatMap((slot) => (slot.applying ? [slot.applying] : [])),
+          Deferred.await,
+          { concurrency: "unbounded", discard: true },
+        );
+        // Admission is closed. Let admitted controls finish before their runtime stops.
+        yield* Effect.forEach(
+          owned,
+          (slot) =>
+            drainOrCancel(
+              slot,
+              `OpenDucktor stopped the ${label(slot.kind)} runtime before this action finished. Retry it after OpenDucktor starts again.`,
+            ),
+          { concurrency: "unbounded", discard: true },
+        );
         const stopped: RuntimeInstanceSummary[] = [];
         const errors: string[] = [];
-        for (const runtime of store.list()) {
-          const exit = yield* Effect.exit(stopRegisteredRuntime(runtime.runtimeId));
-          if (exit._tag === "Success") {
-            stopped.push(exit.value);
+        for (const slot of owned) {
+          const runtime = slot.handle?.runtime ?? null;
+          if (!slot.handle && !slot.orphanCleanup) continue;
+          const result = yield* stopHandle(
+            slot,
+            {
+              trigger: "shutdown",
+              enabled: slot.enabled,
+              configuredExecutablePath: slot.configuredExecutablePath,
+            },
+            "stopping",
+          );
+          if (result) {
+            update(slot, { state: "disabled", failure: null });
+            if (runtime) stopped.push(runtime);
           } else {
-            const message = `${exit.cause}`;
-            errors.push(`Failed stopping runtime ${runtime.runtimeId}: ${message}`);
+            errors.push(
+              `Failed stopping the ${slot.kind} runtime ${runtime?.runtimeId ?? "(partly started)"}: ${slot.failure?.message ?? "unknown error"}`,
+            );
           }
         }
         if (errors.length > 0) {
-          return yield* Effect.fail(
-            new HostOperationError({
-              operation: "runtimeRegistry.stopAllRuntimes",
-              message: errors.join("\n"),
-              details: { failures: errors },
-            }),
-          );
+          return yield* new HostOperationError({
+            operation: "runtimeRegistry.stopAllRuntimes",
+            message: errors.join("\n"),
+            details: { failures: errors },
+          });
         }
         return stopped;
-      });
-    },
-    stopSession(input) {
-      return Effect.gen(function* () {
-        const runtime = yield* requireWorkspaceRuntime(input, "runtimeRegistry.stopSession");
-        return yield* stopRuntimeSession({ input, runtime, sessionOperations });
-      });
-    },
-    probeSessionStatus(input) {
-      return Effect.gen(function* () {
-        const runtime = yield* findRegisteredWorkspaceRuntime(input);
-        return yield* probeRuntimeSessionStatus({
-          input,
-          runtime,
-          sessionOperations,
-        });
-      });
-    },
-    probeMcpStatus(input) {
-      if (input.runtimeKind === "opencode") {
-        return probeOpenCodeMcpStatus(input);
-      }
-      if (input.runtimeKind === "codex") {
-        return Effect.succeed(probeCodexMcpStatus(input));
-      }
-      return Effect.succeed({
-        supported: false,
-        connected: false,
-        serverStatus: null,
-        toolIds: [],
-        detail: null,
-        failureKind: null,
-      });
-    },
+      }),
+    // Stopping a session is a control, so a lifecycle action waits for it.
+    stopSession: (input) =>
+      admission.admit(
+        input.runtimeKind,
+        registry
+          .requireReady(input.runtimeKind)
+          .pipe(
+            Effect.flatMap((runtime) => stopRuntimeSession({ input, runtime, sessionOperations })),
+          ),
+      ),
+    probeSessionStatus: (input) =>
+      requireSlot(input.runtimeKind).pipe(
+        Effect.flatMap((slot) =>
+          probeRuntimeSessionStatus({
+            input,
+            runtime: slot.state === "ready" ? (slot.handle?.runtime ?? null) : null,
+            sessionOperations,
+          }),
+        ),
+      ),
   };
+  for (const slot of slots.values()) syncAdmission(slot);
   return registry;
 };

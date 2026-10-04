@@ -4,7 +4,7 @@ import { HostValidationError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import { type ToolDiscoveryPort, validateExactToolPath } from "../../ports/tool-discovery-port";
 
-export const readSavedRuntimeExecutablePath = ({
+const readSavedRuntimeExecutablePath = ({
   kind,
   settingsConfig,
 }: {

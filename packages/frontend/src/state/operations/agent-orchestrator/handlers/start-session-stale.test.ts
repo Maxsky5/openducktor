@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import {
   type AgentSessionCollection,
   emptyAgentSessionCollection,
@@ -14,6 +13,7 @@ import {
   taskFixture,
   workflowSessionStartSummary,
 } from "./start-session.test-helpers";
+import { createTestOpencodeSdkAdapter } from "./opencode-agent-engine.test-support";
 
 interface SessionsRefContract {
   current: AgentSessionCollection;
@@ -60,9 +60,7 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
       sessionsRef.current = replaceAgentSession(sessionsRef.current, session);
     };
 
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const originalStopSession = adapter.stopSession;
     adapter.stopSession = async () => {
       stopCalls += 1;
@@ -104,9 +102,7 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
     const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
     let stopCalls = 0;
 
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const originalStopSession = adapter.stopSession;
     adapter.stopSession = async () => {
       stopCalls += 1;
@@ -145,9 +141,7 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
     const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
     let stopCalls = 0;
 
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const originalStopSession = adapter.stopSession;
     adapter.stopSession = async () => {
       stopCalls += 1;
@@ -185,9 +179,7 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
   test("surfaces stale-start cleanup failures instead of masking them", async () => {
     const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
 
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const originalStopSession = adapter.stopSession;
     adapter.stopSession = async () => {
       throw new Error("stop boom");

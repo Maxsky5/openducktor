@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
+import type { RuntimeReadinessState } from "@/lib/runtime-readiness";
 import {
   type AgentSessionFixtureOverrides,
   createAgentSessionFixture,
@@ -39,14 +39,14 @@ const createSession = (overrides: CreateSessionOverrides = {}): AgentSessionStat
 
 const deriveLoadedTranscriptStateForSession = ({
   session,
-  repoReadinessState,
+  runtimeReadinessState,
 }: {
   session: AgentSessionState;
-  repoReadinessState: RepoRuntimeReadinessState;
+  runtimeReadinessState: RuntimeReadinessState;
 }) =>
   deriveLoadedAgentSessionTranscriptState({
     session,
-    repoReadinessState,
+    runtimeReadinessState,
   });
 
 const historyFailure = {
@@ -72,7 +72,7 @@ describe("deriveLoadedAgentSessionTranscriptState", () => {
           },
         ],
       }),
-      repoReadinessState: "ready",
+      runtimeReadinessState: "ready",
     });
 
     expect(transcriptState).toEqual({
@@ -95,7 +95,7 @@ describe("deriveLoadedAgentSessionTranscriptState", () => {
           },
         ],
       }),
-      repoReadinessState: "ready",
+      runtimeReadinessState: "ready",
     });
 
     expect(transcriptState).toEqual({ kind: "visible", historyFailure });
@@ -115,7 +115,7 @@ describe("deriveLoadedAgentSessionTranscriptState", () => {
           },
         ],
       }),
-      repoReadinessState: "ready",
+      runtimeReadinessState: "ready",
     });
 
     expect(transcriptState).toEqual({ kind: "visible", historyFailure });
@@ -128,7 +128,7 @@ describe("deriveLoadedAgentSessionTranscriptState", () => {
         historyLoadFailure: historyFailure,
         messages: [],
       }),
-      repoReadinessState: "ready",
+      runtimeReadinessState: "ready",
     });
 
     expect(transcriptState).toEqual({
@@ -154,7 +154,7 @@ describe("deriveLoadedAgentSessionTranscriptState", () => {
           },
         ],
       }),
-      repoReadinessState: "ready",
+      runtimeReadinessState: "ready",
     });
 
     expect(transcriptState).toEqual({ kind: "visible" });
@@ -176,7 +176,7 @@ describe("deriveLoadedAgentSessionTranscriptState", () => {
           },
         ],
       }),
-      repoReadinessState: "ready",
+      runtimeReadinessState: "ready",
     });
 
     expect(transcriptState).toEqual({ kind: "visible" });
@@ -191,7 +191,7 @@ describe("deriveLoadedAgentSessionTranscriptState", () => {
         workingDirectory: "/tmp/repo/worktree",
         messages: [],
       }),
-      repoReadinessState: "ready",
+      runtimeReadinessState: "ready",
     });
 
     expect(transcriptState).toEqual({
@@ -209,7 +209,7 @@ describe("deriveLoadedAgentSessionTranscriptState", () => {
         workingDirectory: "/tmp/repo/worktree",
         messages: [],
       }),
-      repoReadinessState: "ready",
+      runtimeReadinessState: "ready",
     });
 
     expect(transcriptState).toEqual({
@@ -234,7 +234,7 @@ describe("deriveLoadedAgentSessionTranscriptState", () => {
           },
         ],
       }),
-      repoReadinessState: "ready",
+      runtimeReadinessState: "ready",
     });
 
     expect(transcriptState).toEqual({
@@ -260,7 +260,7 @@ describe("deriveLoadedAgentSessionTranscriptState", () => {
           },
         ],
       }),
-      repoReadinessState: "ready",
+      runtimeReadinessState: "ready",
     });
 
     expect(transcriptState).toEqual({ kind: "visible" });
@@ -271,7 +271,7 @@ describe("runtime-bound transcript state", () => {
   test("waits for runtime readiness before surfacing runtime-backed empty states", () => {
     const transcriptState = deriveRuntimeBoundTranscriptEmptyState({
       reason: "sessionless",
-      repoReadinessState: "checking",
+      runtimeReadinessState: "checking",
     });
 
     expect(transcriptState).toEqual({ kind: "runtime_waiting" });
@@ -280,7 +280,7 @@ describe("runtime-bound transcript state", () => {
   test("surfaces runtime-backed empty states after runtime readiness", () => {
     const transcriptState = deriveRuntimeBoundTranscriptEmptyState({
       reason: "sessionless",
-      repoReadinessState: "ready",
+      runtimeReadinessState: "ready",
     });
 
     expect(transcriptState).toEqual({ kind: "empty", reason: "sessionless" });
@@ -289,7 +289,7 @@ describe("runtime-bound transcript state", () => {
   test("waits for runtime readiness before surfacing history loading", () => {
     const transcriptState = deriveRuntimeBoundTranscriptLoadingState({
       reason: "history",
-      repoReadinessState: "checking",
+      runtimeReadinessState: "checking",
     });
 
     expect(transcriptState).toEqual({ kind: "runtime_waiting" });
@@ -298,7 +298,7 @@ describe("runtime-bound transcript state", () => {
   test("surfaces history loading once runtime is ready", () => {
     const transcriptState = deriveRuntimeBoundTranscriptLoadingState({
       reason: "history",
-      repoReadinessState: "ready",
+      runtimeReadinessState: "ready",
     });
 
     expect(transcriptState).toEqual({ kind: "session_loading", reason: "history" });
@@ -307,7 +307,7 @@ describe("runtime-bound transcript state", () => {
   test("surfaces preparing loading once runtime is ready", () => {
     const transcriptState = deriveRuntimeBoundTranscriptLoadingState({
       reason: "preparing",
-      repoReadinessState: "ready",
+      runtimeReadinessState: "ready",
     });
 
     expect(transcriptState).toEqual({ kind: "session_loading", reason: "preparing" });
@@ -318,7 +318,7 @@ describe("read-model-bound transcript state", () => {
   test("keeps selected sessions waiting on runtime readiness before preparing", () => {
     const transcriptState = derivePendingSelectedSessionTranscriptState({
       readModelLoadState: readyAgentSessionReadModelLoadState("/tmp/repo"),
-      repoReadinessState: "checking",
+      runtimeReadinessState: "checking",
     });
 
     expect(transcriptState).toEqual({ kind: "runtime_waiting" });
@@ -327,7 +327,7 @@ describe("read-model-bound transcript state", () => {
   test("shows selected-session preparation once runtime is ready", () => {
     const transcriptState = derivePendingSelectedSessionTranscriptState({
       readModelLoadState: readyAgentSessionReadModelLoadState("/tmp/repo"),
-      repoReadinessState: "ready",
+      runtimeReadinessState: "ready",
     });
 
     expect(transcriptState).toEqual({ kind: "session_loading", reason: "preparing" });
@@ -340,7 +340,7 @@ describe("read-model-bound transcript state", () => {
         "Session read failed",
         "live-stream",
       ),
-      repoReadinessState: "checking",
+      runtimeReadinessState: "checking",
     });
 
     expect(transcriptState).toEqual({ kind: "failed", message: "Session read failed" });
@@ -349,7 +349,7 @@ describe("read-model-bound transcript state", () => {
   test("keeps sessionless tasks waiting on runtime while the read model loads", () => {
     const transcriptState = deriveSessionlessTaskTranscriptState({
       readModelLoadState: loadingAgentSessionReadModelLoadState("/tmp/repo"),
-      repoReadinessState: "checking",
+      runtimeReadinessState: "checking",
     });
 
     expect(transcriptState).toEqual({ kind: "runtime_waiting" });
@@ -358,7 +358,7 @@ describe("read-model-bound transcript state", () => {
   test("shows sessionless task preparation while the ready runtime read model loads", () => {
     const transcriptState = deriveSessionlessTaskTranscriptState({
       readModelLoadState: loadingAgentSessionReadModelLoadState("/tmp/repo"),
-      repoReadinessState: "ready",
+      runtimeReadinessState: "ready",
     });
 
     expect(transcriptState).toEqual({ kind: "session_loading", reason: "preparing" });
@@ -367,7 +367,7 @@ describe("read-model-bound transcript state", () => {
   test("shows sessionless empty state after the read model is ready", () => {
     const transcriptState = deriveSessionlessTaskTranscriptState({
       readModelLoadState: readyAgentSessionReadModelLoadState("/tmp/repo"),
-      repoReadinessState: "ready",
+      runtimeReadinessState: "ready",
     });
 
     expect(transcriptState).toEqual({ kind: "empty", reason: "sessionless" });
@@ -380,7 +380,7 @@ describe("read-model-bound transcript state", () => {
         "Session list failed",
         "live-stream",
       ),
-      repoReadinessState: "ready",
+      runtimeReadinessState: "ready",
     });
 
     expect(transcriptState).toEqual({ kind: "failed", message: "Session list failed" });
