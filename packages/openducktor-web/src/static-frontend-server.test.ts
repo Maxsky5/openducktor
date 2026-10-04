@@ -9,7 +9,7 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 
 // The packaged server runs under Node. Bundle its HTTP contract checks for that runtime.
-test("serves packaged assets with cache validation under Node", async () => {
+test("serves packaged assets with compression and cache validation under Node", async () => {
   const directory = await mkdtemp(join(tmpdir(), "odt-static-node-"));
   try {
     const result = await Bun.build({

@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, rm, stat, utimes, writeFile } from "node:fs/promises";
-import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
+import { gunzipSync } from "node:zlib";
 import { createBrowserRuntimeConfigState } from "./browser-runtime-config-state";
 import { runWebBoundary } from "./effect/web-errors";
+import { request as httpRequest } from "./node-http-test-client";
 import { RUNTIME_CONFIG_PATH } from "./runtime-config";
 import { startStaticFrontendServerEffect } from "./static-frontend-server";
 
@@ -17,6 +18,11 @@ const scriptPath = hashedName(script);
 const cssPath = "/assets/style-Ab_c-D12.css";
 const css = Buffer.from("body { color: red; }\n".repeat(100));
 const html = `<html><script src="${scriptPath}"></script></html>`;
+const decodedBody = (response: {
+  headers: import("node:http").IncomingHttpHeaders;
+  body: Buffer;
+}): Buffer =>
+  response.headers["content-encoding"] === "gzip" ? gunzipSync(response.body) : response.body;
 
 const withServer = async (
   check: (fixture: Awaited<ReturnType<typeof createFixture>>) => Promise<void>,
@@ -47,27 +53,7 @@ const createFixture = async () => {
     startStaticFrontendServerEffect({ packageRoot, frontendPort: 0 }, config),
   );
   const request = (requestPath: string, headers: Record<string, string> = {}, method = "GET") =>
-    new Promise<{ status: number; headers: import("node:http").IncomingHttpHeaders; body: Buffer }>(
-      (resolve, reject) => {
-        const incoming = httpRequest(
-          { hostname: "127.0.0.1", port: server.port, path: requestPath, method, headers },
-          (response) => {
-            const chunks: Buffer[] = [];
-            response.on("data", (chunk: Buffer) => chunks.push(chunk));
-            response.on("end", () =>
-              resolve({
-                status: response.statusCode ?? 0,
-                headers: response.headers,
-                body: Buffer.concat(chunks),
-              }),
-            );
-            response.on("error", reject);
-          },
-        );
-        incoming.on("error", reject);
-        incoming.end();
-      },
-    );
+    httpRequest(server.port, requestPath, headers, method);
   return { config, packageRoot, staticRoot, server, request };
 };
 
@@ -125,22 +111,36 @@ test("serves hashed assets with immutable caching and cache validation", () =>
     ] as const) {
       const first = await request(filePath, { "Accept-Encoding": "gzip" });
       assert.equal(first.status, 200);
-      assert.deepEqual(first.body, bytes);
+      assert.deepEqual(decodedBody(first), bytes);
       assert.equal(first.headers["content-type"], contentType);
-      assert.equal(first.headers["content-encoding"], undefined);
-      assert.equal(first.headers.vary, undefined);
+      assert.equal(first.headers["content-encoding"], "gzip");
+      assert.equal(first.headers.vary, "Accept-Encoding");
+      assert.ok(first.body.length < bytes.length / 2);
       assert.equal(first.headers["cache-control"], "public, max-age=31536000, immutable");
-      assert.equal(Number(first.headers["content-length"]), bytes.length);
-      const validated = await request(filePath, { "If-None-Match": first.headers.etag ?? "" });
+      assert.equal(first.headers["content-length"], undefined);
+      const identity = await request(filePath);
+      assert.deepEqual(identity.body, bytes);
+      assert.equal(identity.headers["content-encoding"], undefined);
+      assert.equal(identity.headers.vary, "Accept-Encoding");
+      assert.equal(Number(identity.headers["content-length"]), bytes.length);
+      const validated = await request(filePath, {
+        "If-None-Match": first.headers.etag ?? "",
+        "Accept-Encoding": "gzip",
+      });
       assert.equal(validated.status, 304);
       assert.equal(validated.body.length, 0);
       assert.equal(validated.headers.etag, first.headers.etag);
       assert.equal(validated.headers["cache-control"], first.headers["cache-control"]);
-      const head = await request(filePath, {}, "HEAD");
+      assert.equal(validated.headers.vary, first.headers.vary);
+      const head = await request(filePath, { "Accept-Encoding": "gzip" }, "HEAD");
       assert.equal(head.status, 200);
       assert.equal(head.body.length, 0);
       assert.equal(head.headers.etag, first.headers.etag);
       assert.equal(head.headers["content-length"], first.headers["content-length"]);
+      assert.equal(head.headers["content-encoding"], first.headers["content-encoding"]);
+      console.log(
+        `${filePath}: cold identity ${identity.body.length} bytes, gzip ${first.body.length} bytes, validated repeat ${validated.body.length} bytes`,
+      );
     }
   }));
 
@@ -158,7 +158,8 @@ test("keeps config fresh and rejects hosts and paths before cache validation", (
     });
     assert.equal(changed.status, 200);
     assert.equal(changed.headers["cache-control"], "no-store");
-    assert.equal(JSON.parse(changed.body.toString()).appToken, "second");
+    assert.equal(changed.headers.etag, undefined);
+    assert.equal(JSON.parse(decodedBody(changed).toString()).appToken, "second");
     for (const filePath of ["/", scriptPath, RUNTIME_CONFIG_PATH]) {
       assert.equal(
         (await request(filePath, { Host: "untrusted.example", "If-None-Match": "*" })).status,
@@ -185,6 +186,7 @@ test("loads changed hashes after a build and reports broken asset reads", () =>
   withServer(async (fixture) => {
     const { packageRoot, staticRoot, request } = fixture;
     const first = await request(scriptPath);
+    const firstHtml = await request("/", { "Accept-Encoding": "gzip" });
     const nextScript = Buffer.from("export const value = 'second build';\n".repeat(100));
     const nextPath = hashedName(nextScript);
     await fixture.server.close();
@@ -200,9 +202,20 @@ test("loads changed hashes after a build and reports broken asset reads", () =>
         fixture.config,
       ),
     );
-    const next = await request(nextPath, { "If-None-Match": first.headers.etag ?? "" });
+    const nextHtml = await request("/", {
+      "If-None-Match": firstHtml.headers.etag ?? "",
+      "Accept-Encoding": "gzip",
+    });
+    assert.equal(nextHtml.status, 200);
+    assert.notEqual(nextHtml.headers.etag, firstHtml.headers.etag);
+    assert.ok(decodedBody(nextHtml).toString().includes(nextPath));
+    const next = await request(nextPath, {
+      "If-None-Match": first.headers.etag ?? "",
+      "Accept-Encoding": "gzip",
+    });
     assert.equal(next.status, 200);
-    assert.deepEqual(next.body, nextScript);
+    assert.deepEqual(decodedBody(next), nextScript);
+    assert.ok(next.body.length < nextScript.length / 2);
     assert.notEqual(next.headers.etag, first.headers.etag);
     assert.equal((await request(scriptPath)).status, 404);
     await rm(path.join(staticRoot, nextPath));
