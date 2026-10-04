@@ -20,17 +20,11 @@ Workspace mode runs the Node host in-process and serves the frontend with Vite. 
 
 Workspace mode lets the OS assign frontend and backend ports, prints both resolved URLs, and publishes external MCP discovery to `runtime/dev-instances/<instanceId>/mcp-bridge.json`. Published installs keep fixed default ports and use `runtime/mcp-bridge.json`. For automatic development discovery, external MCP clients must set `OPENDUCKTOR_CHANNEL=dev` and the printed `OPENDUCKTOR_DEV_INSTANCE` value. Clients can instead use `ODT_HOST_URL` or `--host-url`.
 
-## Response compression and asset caching
+## Downloads and caching
 
-The Node HTTP server streams eligible text responses of at least 1 KiB through gzip when the client accepts it. This includes application assets and host JSON responses. It uses the declared content length when present. Otherwise, it reads only enough bytes to choose gzip or send the complete small body without compression. Responses retain their content type and status. `Vary: Accept-Encoding` keeps compressed and uncompressed cache entries separate. Compressed responses use weak ETags because compression changes the bytes.
+Published installs compress larger text responses when the client supports gzip. Browsers can reuse unchanged application files and load the current files after an upgrade.
 
-Live event streams, binary files, responses that already have a content encoding, partial responses, and responses with `Cache-Control: no-transform` bypass compression. Clients that do not advertise gzip support receive uncompressed content.
-
-HEAD does not read a body to choose gzip. For eligible text responses without a declared length, a client that accepts gzip receives no Content-Encoding or ETag. The server cancels the body without reading it. Static files have a known length, so their HEAD and 304 metadata use the same encoding decision as GET.
-
-Published installs serve Vite assets with content hashes in their names with `Cache-Control: public, max-age=31536000, immutable`. HTML and other application files require revalidation with an ETag. Unchanged files return `304` without a body. A new build changes the HTML validator and the URLs of changed hashed assets.
-
-Runtime configuration keeps `Cache-Control: no-store` and has no ETag. Each request reads the current backend URL and app token.
+Runtime configuration and connection credentials stay fresh. Live events stream without compression. Clients without gzip support receive the original content.
 
 ## Options
 
