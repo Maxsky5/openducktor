@@ -229,6 +229,11 @@ describe("workspace provider setup", () => {
     expect(h.transfer).not.toHaveBeenCalled();
     expect(await Effect.runPromise(h.service.commit(details(ref)))).toEqual(result);
     expect(h.write).toHaveBeenCalledTimes(1);
+    expect((await Effect.runPromise(h.service.progress(ref.setupId))).progress).toEqual(result);
+    await Effect.runPromise(h.service.discard(ref.setupId));
+    await expect(Effect.runPromise(h.service.progress(ref.setupId))).rejects.toThrow("not found");
+    await Effect.runPromise(h.service.discard(ref.setupId));
+    expect(h.write).toHaveBeenCalledTimes(1);
   });
   test("blocks enabled mapping failures and invalid snapshots but accepts disabled settings without authentication", async () => {
     const h = harness();
@@ -286,6 +291,12 @@ describe("workspace provider setup", () => {
     expect(h.write).toHaveBeenCalledTimes(2);
     expect(h.transfer).toHaveBeenCalledTimes(2);
     expect(h.complete).toHaveBeenCalledTimes(1);
+    const saved = structuredClone(h.config());
+    await Effect.runPromise(h.service.discard(ref.setupId));
+    await expect(Effect.runPromise(h.service.progress(ref.setupId))).rejects.toThrow("not found");
+    await Effect.runPromise(h.service.discard(ref.setupId));
+    expect(h.release).not.toHaveBeenCalled();
+    expect(h.config()).toEqual(saved);
   });
   test("keeps cleanup failures retryable and prevents stale revisions and owned sign-in events", async () => {
     const h = harness();

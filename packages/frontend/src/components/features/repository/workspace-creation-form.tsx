@@ -66,7 +66,7 @@ export function WorkspaceCreationFields({
           {controller.error ?? controller.validationError}
         </p>
       ) : null}
-      {controller.stage === "models" && controller.error ? (
+      {controller.stage === "models" && controller.error && !controller.committed ? (
         <Button
           type="button"
           variant="outline"
@@ -92,7 +92,12 @@ export function WorkspaceCreationBackAction({
 }): ReactElement | null {
   if (controller.stage === "repository") return null;
   return (
-    <Button type="button" variant="outline" disabled={controller.busy} onClick={controller.back}>
+    <Button
+      type="button"
+      variant="outline"
+      disabled={controller.busy || controller.committed}
+      onClick={controller.back}
+    >
       <ArrowLeft data-icon="inline-start" /> Back
     </Button>
   );

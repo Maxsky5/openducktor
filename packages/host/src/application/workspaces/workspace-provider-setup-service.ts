@@ -32,7 +32,7 @@ type Session = WorkspaceProviderSetupSession & {
   signInRevision: number | null;
   startingSignIn: boolean;
 };
-/** Keeps completed sessions so callers can recover after a lost commit reply. */
+/** Keeps completed sessions until acknowledgement so callers can recover a lost commit reply. */
 export const createWorkspaceProviderSetupService = (input: {
   git: Pick<GitPort, "canonicalizePath" | "isGitRepository">;
   newSetupId: () => string;
@@ -368,12 +368,12 @@ export const createWorkspaceProviderSetupService = (input: {
     discard(setupId: string) {
       return Effect.gen(function* () {
         const session = sessions.get(setupId);
-        if (!session || session.progress.phase === "complete") return;
+        if (!session) return;
         if (session.writes && !(session.startingSignIn && session.writes === 1))
           return yield* fail(
             "A setup operation is running. Wait for its result before cancelling.",
           );
-        yield* write(session, release(session));
+        if (session.progress.phase !== "complete") yield* write(session, release(session));
         sessions.delete(setupId);
       });
     },

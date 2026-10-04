@@ -26,6 +26,8 @@ The final action saves workspace details, provider settings, and model defaults 
 
 If credential transfer fails after the settings write, the workspace already exists. The form shows the saved progress and retries the same workspace. Read saved creation progress after an uncertain transport response. Do not start a second creation to recover the first one.
 
+The host keeps completed setup results until the frontend acknowledges them through the discard command. Acknowledgement removes the setup session and keeps saved workspace credentials. If acknowledgement fails, retry finishes cleanup without repeating workspace creation.
+
 Setup sessions last only for the current host process. A host restart clears unsaved setup credentials. A workspace saved before a later failure remains registered; review its connection in Settings.
 
 ## Implementation boundaries

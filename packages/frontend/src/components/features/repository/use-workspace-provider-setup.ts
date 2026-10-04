@@ -434,11 +434,19 @@ export function useWorkspaceProviderSetup(bridge = hostBridge) {
       },
       { keepError: true },
     );
-  const complete = () => {
-    stopListening();
+  const complete = async () => {
     const current = sessionRef.current;
-    if (current)
+    if (current) {
+      try {
+        await client.workspaceProviderSetupDiscard({ setupId: current.setupId });
+      } catch (cause) {
+        throw new Error(
+          `Workspace is saved. Setup acknowledgement failed: ${errorMessage(cause)}. Retry to finish opening it.`,
+        );
+      }
       queryClient.removeQueries({ queryKey: workspaceProviderSetupKeys.session(current.setupId) });
+    }
+    stopListening();
     applySession(null);
     setPat("");
   };

@@ -122,6 +122,8 @@ export function useWorkspaceCreation({
     dispatch({ type: "progress", value: "creating" });
     try {
       const completed = await runChange(async () => {
+        // A lost acknowledgement can remove the host setup before its reply arrives.
+        if (state.committed) return;
         const setup = await provider.ensureSelection();
         const workspaceInput: WorkspaceSelectionOperationsInput = {
           workspaceId: state.workspaceId.trim(),
@@ -139,12 +141,17 @@ export function useWorkspaceCreation({
         });
         if (outcome.workspace)
           dispatch({ type: "created", workspaceId: outcome.workspace.workspaceId });
-        if (outcome.error) throw new Error(outcome.error);
+        if (outcome.error || outcome.phase !== "complete")
+          throw new Error(
+            outcome.error ??
+              "Workspace creation is incomplete. Read saved creation progress and retry.",
+          );
+        dispatch({ type: "committed" });
       });
       if (!completed) return;
       dispatch({ type: "progress", value: "finishing" });
+      await provider.complete();
       await onSuccess?.(state.repoPath);
-      provider.complete();
     } catch (cause) {
       dispatch({ type: "error", error: errorMessage(cause), stage: "models" });
     } finally {
@@ -157,7 +164,7 @@ export function useWorkspaceCreation({
   return {
     provider,
     recoverCreation: async () => {
-      if (busy || submitInFlight.current) return;
+      if (busy || submitInFlight.current || state.committed) return;
       try {
         const saved = await provider.recover();
         if (!saved) return;
@@ -197,6 +204,7 @@ export function useWorkspaceCreation({
     tileColor: state.tileColor,
     modelDraft: state.modelDraft,
     createdWorkspaceId: state.createdWorkspaceId,
+    committed: state.committed,
     pickerOpen: state.pickerOpen,
     submitting,
     progress: state.progress,
@@ -215,7 +223,7 @@ export function useWorkspaceCreation({
       if (!busy && state.repoPath) dispatch({ type: "stage", stage: "provider" });
     },
     back: () => {
-      if (busy) return;
+      if (busy || state.committed) return;
       if (state.stage === "models") dispatch({ type: "stage", stage: "information" });
       else if (state.stage === "information") dispatch({ type: "stage", stage: "provider" });
       else if (state.stage === "provider" && !state.createdWorkspaceId)
@@ -336,6 +344,7 @@ type State = {
   editedId: boolean;
   modelDraft: WorkspaceModelDefaultsDraft;
   createdWorkspaceId: string | null;
+  committed: boolean;
   progress: "idle" | "creating" | "saving" | "finishing";
   error: string | null;
   errorStage: WorkspaceCreationStage | null;
@@ -355,6 +364,7 @@ type Action =
       updater: (current: WorkspaceModelDefaultsDraft) => WorkspaceModelDefaultsDraft;
     }
   | { type: "created"; workspaceId: string }
+  | { type: "committed" }
   | { type: "progress"; value: State["progress"] }
   | { type: "error"; error: string | null; stage: WorkspaceCreationStage | null };
 
@@ -369,6 +379,7 @@ const initialState: State = {
   editedId: false,
   modelDraft: emptyModelDraft(),
   createdWorkspaceId: null,
+  committed: false,
   progress: "idle",
   error: null,
   errorStage: null,
@@ -413,6 +424,8 @@ const reducer = (state: State, action: Action): State => {
       return { ...state, modelDraft: action.updater(state.modelDraft), error: null };
     case "created":
       return { ...state, createdWorkspaceId: action.workspaceId };
+    case "committed":
+      return { ...state, committed: true };
     case "progress":
       return { ...state, progress: action.value };
     case "error":
@@ -447,6 +460,7 @@ export type WorkspaceCreationController = {
   tileColor: string | null;
   modelDraft: WorkspaceModelDefaultsDraft;
   createdWorkspaceId: string | null;
+  committed: boolean;
   pickerOpen: boolean;
   submitting: boolean;
   progress: State["progress"];

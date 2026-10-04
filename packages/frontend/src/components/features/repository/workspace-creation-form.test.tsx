@@ -458,6 +458,111 @@ describe("workspace creation", () => {
     await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
     expect(commit.mock.calls[1]?.[0].setupId).toBe(commit.mock.calls[0]?.[0].setupId);
   });
+  test.each(["commit reply", "acknowledgement", "acknowledgement reply"] as const)(
+    "finishes creation after a lost %s without losing setup ownership",
+    async (failure) => {
+      let ownedId: string | undefined;
+      let failCommit = failure === "commit reply";
+      let failAcknowledgement = failure !== "commit reply";
+      const commit = mock(async (input) => {
+        const result = outcome(input);
+        if (failCommit) {
+          failCommit = false;
+          throw new Error("Commit reply lost");
+        }
+        return result;
+      });
+      const success = mock(() => {});
+      const h = createHookHarness(
+        () =>
+          useWorkspaceCreation({
+            workspaces: [],
+            commitWorkspaceProviderSetup: commit,
+            onSuccess: success,
+          }),
+        {},
+        { wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider> },
+      );
+      const discard = hostClient.workspaceProviderSetupDiscard;
+      const acknowledge = mock(async (ref) => {
+        if (failAcknowledgement) {
+          failAcknowledgement = false;
+          if (failure === "acknowledgement reply") await discard(ref);
+          throw new Error("Acknowledgement unavailable");
+        }
+        return discard(ref);
+      });
+      hostClient.workspaceProviderSetupDiscard = (ref) =>
+        ref.setupId === ownedId ? acknowledge(ref) : discard(ref);
+      await h.mount();
+      try {
+        await h.run(async (state) => {
+          await state.confirmRepo(`/completion-${failure.replaceAll(" ", "-")}`);
+        });
+        ownedId = h.getLatest().provider.session?.setupId;
+        await h.run(async (state) => {
+          await state.skipProvider();
+        });
+        await h.run((state) => state.next());
+        await h.run(async (state) => {
+          await state.submit();
+        });
+        expect(success).not.toHaveBeenCalled();
+        expect(h.getLatest().provider.session?.setupId).toBe(ownedId);
+        expect(h.getLatest().error).toContain(
+          failure === "commit reply" ? "Commit reply lost" : "Acknowledgement unavailable",
+        );
+        if (failure !== "commit reply") {
+          expect(h.getLatest().createdWorkspaceId).toBeTruthy();
+          await h.run((state) => state.back());
+          expect(h.getLatest().stage).toBe("models");
+        }
+        await h.run(async (state) => {
+          await state.submit();
+        });
+        expect(success).toHaveBeenCalledTimes(1);
+        expect(commit).toHaveBeenCalledTimes(failure === "commit reply" ? 2 : 1);
+        expect(acknowledge).toHaveBeenCalledTimes(failure === "commit reply" ? 1 : 2);
+        expect(h.getLatest().provider.session).toBeNull();
+        expect(h.getLatest().error).toBeNull();
+      } finally {
+        await h.unmount();
+        hostClient.workspaceProviderSetupDiscard = discard;
+      }
+    },
+  );
+  test("waits for acknowledgement before opening and retries a failed open without committing again", async () => {
+    let ownedId: string | undefined;
+    const commit = mock(async (input) => {
+      ownedId = input.setupId;
+      return outcome(input);
+    });
+    const onSuccess = mock((): void => {
+      throw new Error("Opening unavailable");
+    });
+    const discard = hostClient.workspaceProviderSetupDiscard;
+    const acknowledgement = Promise.withResolvers<void>();
+    hostClient.workspaceProviderSetupDiscard = async (ref) => {
+      if (ref.setupId === ownedId) await acknowledgement.promise;
+      await discard(ref);
+    };
+    try {
+      renderHarness({ commit, onSuccess });
+      await advanceToModels();
+      fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
+      await waitFor(() => expect(commit).toHaveBeenCalledTimes(1));
+      expect(onSuccess).not.toHaveBeenCalled();
+      acknowledgement.resolve();
+      await screen.findByText(/Opening unavailable/);
+      onSuccess.mockImplementation(() => {});
+      fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
+      await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(2));
+      expect(commit).toHaveBeenCalledTimes(1);
+    } finally {
+      acknowledgement.resolve();
+      hostClient.workspaceProviderSetupDiscard = discard;
+    }
+  });
   test("blocks blank names and unavailable selected models before saving", async () => {
     const commit = mock(async (input) => outcome(input));
     renderHarness({
