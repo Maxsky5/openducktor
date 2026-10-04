@@ -60,7 +60,7 @@ const createConsumerHarness = (
 };
 
 describe("agent session transcript event consumer", () => {
-  test("updates native Claude policy feedback in place without changing session activity", () => {
+  test("updates Claude permission mismatch warnings in place without changing session activity", () => {
     const liveRef = { ...sessionRef, runtimeKind: "claude" as const };
     const { consumer, sessionsRef } = createConsumerHarness(
       60_000,
@@ -69,8 +69,8 @@ describe("agent session transcript event consumer", () => {
     const before = getSession(sessionsRef).status;
     try {
       for (const message of [
-        "Automatic approvals requested; native mode is unconfirmed.",
-        "Claude reports automatic approvals are active.",
+        "Claude permission mode 'auto' was requested, but Claude reports 'default'. Check your Claude permission settings.",
+        "Claude permission mode 'auto' was requested, but Claude reports 'acceptEdits'. Check your Claude permission settings.",
       ])
         consumer.handle({
           type: "session_policy_notice",
@@ -83,12 +83,13 @@ describe("agent session transcript event consumer", () => {
       expect(getSessionMessages(sessionsRef).filter((message) => message.id === "policy")).toEqual([
         expect.objectContaining({
           role: "system",
-          content: "Claude reports automatic approvals are active.",
+          content:
+            "Claude permission mode 'auto' was requested, but Claude reports 'acceptEdits'. Check your Claude permission settings.",
           meta: {
             kind: "session_notice",
-            tone: "info",
+            tone: "warning",
             reason: "runtime_policy",
-            title: "Claude permission mode",
+            title: "Claude permission mode mismatch",
           },
         }),
       ]);

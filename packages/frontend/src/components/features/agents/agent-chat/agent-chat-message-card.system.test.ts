@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
+import { buildSessionPolicyNoticeMessage } from "@/state/operations/agent-orchestrator/support/session-notice-messages";
 import {
   createMessageCardElement,
   LONG_TRANSCRIPT_SAMPLE,
@@ -8,6 +9,23 @@ import {
 import { buildMessage } from "./agent-chat-test-fixtures";
 
 describe("AgentChatMessageCard system messages", () => {
+  test("renders a Claude permission mismatch as a warning card", () => {
+    const content =
+      "Claude permission mode 'auto' was requested, but Claude reports 'default'. Check your Claude permission settings.";
+    const html = renderToStaticMarkup(
+      createMessageCardElement({
+        message: buildSessionPolicyNoticeMessage("2026-10-05T10:00:00Z", content, "policy"),
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("border-warning-border");
+    expect(html).toContain("bg-warning-surface");
+    expect(html).toContain("text-warning-surface-foreground");
+    expect(html).toContain("Claude permission mode mismatch");
+    expect(html).toContain("Check your Claude permission settings.");
+  });
+
   test("renders user-stopped session notices as cancelled cards", () => {
     const html = renderToStaticMarkup(
       createMessageCardElement({

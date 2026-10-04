@@ -83,18 +83,13 @@ export const handleClaudeSdkMessage = ({
     const mode = message.permissionMode;
     if (mode && mode !== session.appliedPermissionMode) {
       session.appliedPermissionMode = mode;
-      if (session.requestedPermissionMode === "auto" || !session.requestedPermissionMode) {
-        let notice: string;
-        if (!session.requestedPermissionMode) notice = `Claude reports permission mode '${mode}'.`;
-        else if (mode === "auto") notice = "Claude reports automatic approvals are active.";
-        else
-          notice = `Automatic approvals requested. Claude reports permission mode '${mode}'; classifier review is not active.`;
+      if (session.requestedPermissionMode && mode !== session.requestedPermissionMode) {
         emit({
           type: "session_policy_notice",
           externalSessionId: session.externalSessionId,
           timestamp,
           messageId: `claude-permission-mode:${session.externalSessionId}`,
-          message: notice,
+          message: `Claude permission mode '${session.requestedPermissionMode}' was requested, but Claude reports '${mode}'. Check your Claude permission settings.`,
         });
       }
     }
