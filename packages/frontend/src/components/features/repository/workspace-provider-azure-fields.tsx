@@ -1,131 +1,103 @@
-import { useState, type ReactElement } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { ManagedConnection } from "../settings/azure-devops-connection-settings";
-import { ManualRepositoryForm } from "../settings/azure-devops-repository-settings";
+import type { ComponentProps, ReactElement } from "react";
+import { AzureDevOpsProviderCard } from "../settings/azure-devops-provider-card";
+import { azureProviderReadiness } from "../settings/azure-devops-provider-readiness";
+import { AzureDevOpsSetupArea } from "../settings/azure-devops-area-settings";
+import { AzureDevOpsConnectionSettings } from "../settings/azure-devops-connection-settings";
+import { AzureDevOpsRepositorySettings } from "../settings/azure-devops-repository-settings";
 import {
   azureRepositoryDraftErrors,
   azureRemoteMappingDraftListErrors,
   parseAzureRepositoryDraft,
   azureDevOpsHttpConsentCollectionUrl,
-  type AzureRepositoryDraftField,
 } from "../settings/azure-devops-git-provider-form-model";
 import type { FieldProps } from "./workspace-provider-fields";
 
 export function AzureSetupFields({ provider, disabled }: FieldProps): ReactElement {
   const { draft } = provider;
-  const [touched, setTouched] = useState<Set<AzureRepositoryDraftField>>(() => new Set());
   const parsed = parseAzureRepositoryDraft(draft.azure);
   const collectionUrl = parsed.success ? azureDevOpsHttpConsentCollectionUrl(parsed.data) : null;
-  const connectionInput = parsed.success
-    ? { repoPath: provider.session?.repoPath ?? "", repository: parsed.data }
-    : null;
+  const repoPath = provider.session?.repoPath ?? "";
+  const connectionInput = parsed.success ? { repoPath, repository: parsed.data } : null;
+  const connected = provider.connection.status === "connected";
+  const controller: ComponentProps<typeof AzureDevOpsRepositorySettings>["controller"] &
+    ComponentProps<typeof AzureDevOpsConnectionSettings>["controller"] &
+    ComponentProps<typeof AzureDevOpsSetupArea>["controller"] = {
+    draft: draft.azure,
+    updateDraft: (azure) => provider.update((current) => ({ ...current, azure })),
+    detectRepository: async () => {
+      await provider.retryDetection();
+      return false;
+    },
+    isDetecting: provider.detecting,
+    repositoryActionError: null,
+    connectionInput,
+    remoteMappingDrafts: draft.mappings,
+    updateRemoteMappings: (mappings) => provider.update((current) => ({ ...current, mappings })),
+    mappingErrors: azureRemoteMappingDraftListErrors(
+      draft.mappings,
+      parsed.success ? parsed.data : undefined,
+    ),
+    repositoryErrors: azureRepositoryDraftErrors(draft.azure),
+    httpCollectionUrl: collectionUrl,
+    consentGranted: collectionUrl !== null && draft.consent === collectionUrl,
+    setHttpConsent: (granted) =>
+      provider.update((current) => ({ ...current, consent: granted ? collectionUrl : null })),
+    providerEnabled: draft.enabled,
+    canManageConnection: connectionInput !== null,
+    httpConsentSaved: !collectionUrl || draft.consent === collectionUrl,
+    connectionState: provider.connection,
+    connectionReadFailed: false,
+    updatesReady: true,
+    isMutatingConnection: provider.pending !== null,
+    actionError: null,
+    pat: provider.pat,
+    setPat: provider.setPat,
+    savePat: () => void provider.savePat(),
+    startSignIn: () => void provider.startSignIn(),
+    cancelSignIn: () => void provider.cancelSignIn(),
+    disconnect: () => void provider.disconnect(),
+    retryConnectionRead: () => void provider.check(),
+    hasConnectedAccount: connected,
+    areaPaths: provider.areas,
+    areaPathsError: null,
+    selectedAreaPath: draft.areaPath,
+    canLoadAreaPaths: draft.enabled && connected && connectionInput !== null,
+    isLoadingAreaPaths: provider.pending === "Load work item areas",
+    reloadAreaPaths: () => void provider.loadAreas(),
+    setAreaPath: (areaPath) => provider.update((current) => ({ ...current, areaPath })),
+  };
   return (
-    <div className="grid gap-5">
-      <ManualRepositoryForm
+    <AzureDevOpsProviderCard
+      enabled={draft.enabled}
+      disabled={disabled}
+      onEnabledChange={(enabled) => provider.update((current) => ({ ...current, enabled }))}
+      readiness={azureProviderReadiness({
+        enabled: draft.enabled,
+        hasRepository: connectionInput !== null,
+        hasAccount: connected,
+        ready: provider.status?.health?.available === true,
+      })}
+      description="Link the repository and connect your account. You can choose a work item area later."
+    >
+      <AzureDevOpsRepositorySettings
+        controller={controller}
         disabled={disabled}
-        touchedFields={
-          provider.error
-            ? new Set<AzureRepositoryDraftField>([
-                "deployment",
-                "serviceUrl",
-                "organization",
-                "project",
-                "name",
-              ])
-            : touched
-        }
-        markFieldTouched={(field) => setTouched((current) => new Set(current).add(field))}
-        updateField={(field, value) =>
-          provider.update((current) => ({
-            ...current,
-            azure: { ...current.azure, [field]: value },
-          }))
-        }
-        controller={{
-          draft: draft.azure,
-          updateDraft: (azure) => provider.update((current) => ({ ...current, azure })),
-          remoteMappingDrafts: draft.mappings,
-          updateRemoteMappings: (mappings) =>
-            provider.update((current) => ({ ...current, mappings })),
-          mappingErrors: azureRemoteMappingDraftListErrors(
-            draft.mappings,
-            parsed.success ? parsed.data : undefined,
-          ),
-          repositoryErrors: azureRepositoryDraftErrors(draft.azure),
-          httpCollectionUrl: collectionUrl,
-          consentGranted: collectionUrl !== null && draft.consent === collectionUrl,
-          setHttpConsent: (granted) =>
-            provider.update((current) => ({ ...current, consent: granted ? collectionUrl : null })),
-        }}
+        repoPath={repoPath}
+        workspaceName={draft.azure.name || "Selected repository"}
+        defaultManualOpen={connectionInput === null}
+        showErrors={provider.error !== null}
       />
-      {draft.enabled ? (
-        <ManagedConnection
+      {connectionInput ? (
+        <AzureDevOpsConnectionSettings
+          controller={controller}
           disabled={disabled}
-          controller={{
-            draft: draft.azure,
-            providerEnabled: draft.enabled,
-            canManageConnection: connectionInput !== null,
-            connectionInput,
-            httpConsentSaved: !collectionUrl || draft.consent === collectionUrl,
-            connectionState: provider.connection,
-            connectionReadFailed: false,
-            updatesReady: true,
-            isMutatingConnection: provider.pending !== null,
-            actionError: provider.error,
-            pat: provider.pat,
-            setPat: provider.setPat,
-            savePat: () => {
-              void provider.savePat();
-            },
-            startSignIn: () => {
-              void provider.startSignIn();
-            },
-            cancelSignIn: () => {
-              void provider.cancelSignIn();
-            },
-            disconnect: () => {
-              void provider.disconnect();
-            },
-            retryConnectionRead: () => {
-              void provider.check();
-            },
+          onSaveSettings={async () => {
+            await provider.ensureSelection();
+            return true;
           }}
         />
-      ) : (
-        <p className="text-sm text-muted-foreground">
-          The integration will stay disabled. Authentication is optional.
-        </p>
-      )}
-      <div className="grid gap-2 border-t border-border pt-4">
-        <Label htmlFor="setup-azure-area">Work item area</Label>
-        <Input
-          id="setup-azure-area"
-          value={draft.areaPath}
-          list="setup-azure-areas"
-          disabled={disabled || !connectionInput}
-          onChange={(event) =>
-            provider.update((current) => ({ ...current, areaPath: event.currentTarget.value }))
-          }
-        />
-        <datalist id="setup-azure-areas">
-          {provider.areas.map((area) => (
-            <option key={area} value={area} />
-          ))}
-        </datalist>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={disabled || !draft.enabled || !connectionInput}
-          onClick={() => void provider.loadAreas()}
-        >
-          Load work item areas
-        </Button>
-        <p className="text-xs text-muted-foreground">
-          Work item imports need an area. You can create the workspace without one.
-        </p>
-      </div>
-    </div>
+      ) : null}
+      <AzureDevOpsSetupArea controller={controller} disabled={disabled} />
+    </AzureDevOpsProviderCard>
   );
 }

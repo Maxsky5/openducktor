@@ -125,10 +125,14 @@ export function WorkspaceCreationSubmitAction({
         </Button>
         <Button
           type="button"
+          aria-label="Continue to workspace information"
           disabled={controller.busy}
           onClick={() => void controller.continueProvider()}
         >
-          Continue to workspace information <ArrowRight data-icon="inline-end" />
+          {controller.provider.pending === "Check provider readiness"
+            ? "Checking connection…"
+            : "Continue"}{" "}
+          <ArrowRight data-icon="inline-end" />
         </Button>
       </div>
     );
@@ -326,13 +330,7 @@ function WorkspaceCreationStageFields({
       if (picker !== undefined && controller.pickerOpen) return picker;
       return <WorkspaceRepositoryChooser controller={controller} />;
     case "provider":
-      return (
-        <WorkspaceProviderFields
-          provider={controller.provider}
-          disabled={controller.busy}
-          onSkip={controller.skipProvider}
-        />
-      );
+      return <WorkspaceProviderFields provider={controller.provider} disabled={controller.busy} />;
     case "information":
       return <WorkspaceRepositoryFields controller={controller} />;
     case "models":

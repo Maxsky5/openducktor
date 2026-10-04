@@ -165,7 +165,7 @@ function UnsavedConnection({
   );
 }
 
-export function ManagedConnection({
+function ManagedConnection({
   controller,
   disabled,
 }: Pick<AzureDevOpsConnectionSettingsProps, "controller" | "disabled">): ReactElement {

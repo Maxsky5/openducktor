@@ -44,11 +44,6 @@ export const setupStatusObserverOptions = (
         queryKey: [...workspaceProviderSetupKeys.all, "skipped", "status"],
         staleTime: 0,
       });
-export const setupGithubOptions = (
-  client: HostClient,
-  ref: WorkspaceProviderSetupRef,
-  host: string,
-) => options(ref, "github", () => client.workspaceProviderSetupGithub({ ...ref, host }), host);
 export const setupAreasOptions = (
   client: HostClient,
   ref: WorkspaceProviderSetupRef,

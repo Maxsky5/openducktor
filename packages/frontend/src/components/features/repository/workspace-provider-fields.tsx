@@ -1,103 +1,60 @@
+import { FolderGit2, RefreshCcw } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Switch } from "@/components/ui/switch";
+import { GitProviderSelector } from "../settings/git-provider-selector";
 import type { WorkspaceProviderSetupController } from "./use-workspace-provider-setup";
 import { AzureSetupFields } from "./workspace-provider-azure-fields";
 import { GithubSetupFields } from "./workspace-provider-github-fields";
 
 export type FieldProps = { provider: WorkspaceProviderSetupController; disabled: boolean };
-export function WorkspaceProviderFields({
-  provider,
-  disabled,
-  onSkip,
-}: FieldProps & { onSkip: () => Promise<void> }): ReactElement {
+export function WorkspaceProviderFields({ provider, disabled }: FieldProps): ReactElement {
   const locked = disabled || provider.pending !== null;
   return (
-    <div className="grid gap-5 rounded-xl border border-border bg-card p-5 sm:p-6">
-      <div className="grid gap-1">
-        <Label htmlFor="setup-repository-path">Selected repository path</Label>
-        <Input id="setup-repository-path" value={provider.session?.repoPath ?? ""} readOnly />
+    <div className="grid min-w-0 gap-4">
+      <div className="flex min-w-0 items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2.5">
+        <FolderGit2 className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <div className="min-w-0">
+          <p className="text-xs text-muted-foreground">Selected repository</p>
+          <output
+            aria-label="Selected repository path"
+            className="block truncate font-mono text-xs text-foreground"
+            title={provider.session?.repoPath}
+          >
+            {provider.session?.repoPath}
+          </output>
+        </div>
       </div>
       <DetectionFeedback provider={provider} disabled={locked} />
-      <fieldset disabled={locked} className="grid gap-3">
-        <legend className="mb-2 text-sm font-medium">Git provider</legend>
-        <RadioGroup
-          value={provider.draft.providerId ?? "none"}
-          onValueChange={(value) => {
-            if (value === "none") void onSkip();
-            else if (value === "github" || value === "azure_devops")
-              provider.update((current) => ({ ...current, providerId: value }));
-          }}
-          className="flex flex-wrap gap-4"
-        >
-          {(
-            [
-              ["none", "No provider"],
-              ["github", "GitHub"],
-              ["azure_devops", "Azure DevOps"],
-            ] as const
-          ).map(([value, label]) => (
-            <Label
-              htmlFor={`setup-provider-${value}`}
-              key={value}
-              className="flex items-center gap-2"
-            >
-              <RadioGroupItem id={`setup-provider-${value}`} value={value} disabled={locked} />
-              {label}
-            </Label>
-          ))}
-        </RadioGroup>
-      </fieldset>
-      {provider.draft.providerId ? (
-        <>
-          <Label htmlFor="setup-provider-enabled" className="flex items-center gap-2">
-            <Switch
-              id="setup-provider-enabled"
-              checked={provider.draft.enabled}
-              disabled={locked}
-              onCheckedChange={(enabled) => provider.update((current) => ({ ...current, enabled }))}
-            />
-            Enable integration
-          </Label>
-          {provider.draft.providerId === "github" ? (
-            <GithubSetupFields provider={provider} disabled={locked} />
-          ) : (
-            <AzureSetupFields provider={provider} disabled={locked} />
-          )}
-          <Button
-            type="button"
-            variant="outline"
-            disabled={locked}
-            onClick={() => void provider.check()}
-          >
-            Check provider readiness
-          </Button>
-          {provider.status?.health ? (
-            <p role="status" className="text-sm">
-              {provider.status.health.available
-                ? "Provider connection and repository mapping are ready."
-                : provider.status.health.reason}
-            </p>
-          ) : null}
-        </>
+      <GitProviderSelector
+        disabled={locked}
+        selectedProviderId={provider.draft.providerId ?? "none"}
+        onSelect={(providerId) =>
+          provider.update((current) => ({
+            ...current,
+            providerId: providerId === "none" ? null : providerId,
+          }))
+        }
+      />
+      {provider.draft.providerId === "github" ? (
+        <GithubSetupFields provider={provider} disabled={locked} />
       ) : null}
-      {provider.pending ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          {provider.pending}...
-        </p>
+      {provider.draft.providerId === "azure_devops" ? (
+        <AzureSetupFields provider={provider} disabled={locked} />
       ) : null}
       {provider.error ? (
-        <div className="grid gap-2">
-          <p role="alert" className="text-sm text-destructive">
+        <div className="grid min-w-0 gap-3 rounded-lg border border-destructive-border bg-destructive-surface p-3">
+          <p
+            role="alert"
+            className="break-words text-xs leading-5 text-destructive-surface-foreground"
+          >
             {provider.error} Correct the input, read setup state, or retry the action.
           </p>
           {provider.session ? (
             <Button
               type="button"
+              size="sm"
               variant="outline"
+              className="justify-self-start"
               disabled={locked}
               onClick={() => void provider.recover()}
             >
@@ -110,67 +67,69 @@ export function WorkspaceProviderFields({
   );
 }
 
-function DetectionFeedback({ provider, disabled }: FieldProps): ReactElement {
-  const repository = provider.detection?.candidates[0]?.config.repository;
-  let detectedIdentity: string | null = null;
-  if (repository) {
-    detectedIdentity =
-      "deployment" in repository
-        ? `${repository.serviceUrl}/${repository.organization}/${repository.project}/${repository.name}`
-        : `${repository.host}/${repository.owner}/${repository.name}`;
-  }
+function DetectionFeedback({ provider, disabled }: FieldProps): ReactElement | null {
+  const message = detectionMessage(provider);
+  if (!message) return null;
   return (
-    <div className="grid gap-2">
-      {provider.detecting ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          Detecting Git provider...
-        </p>
-      ) : null}
-      {provider.detectionError ? (
-        <p role="alert" className="text-sm text-destructive">
-          {provider.detectionError} Retry detection, enter details manually, or skip setup.
-        </p>
-      ) : null}
-      {provider.detection?.outcome === "none" ? (
-        <p className="text-sm text-muted-foreground">
-          No supported provider was detected. Enter details manually or skip setup.
-        </p>
-      ) : null}
-      {provider.detection?.outcome === "ambiguous" ? (
-        <p className="text-sm text-muted-foreground">
-          Remotes identify different repositories or providers. Enter the intended repository
-          manually or skip setup.
-        </p>
-      ) : null}
-      {provider.draft.autoDetected && !provider.detectionProposal ? (
-        <p className="text-sm text-muted-foreground">
-          Detected from {provider.detection?.candidates[0]?.remoteNames.join(", ")}. Review the
-          details below.
-        </p>
-      ) : null}
-      {provider.detectionProposal ? (
-        <div className="grid gap-2">
-          <p className="break-all text-xs text-muted-foreground">
-            Detection found {detectedIdentity}. Your manual choices remain below.
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={disabled || provider.detecting}
-            onClick={() => void provider.acceptDetection()}
-          >
-            Use detected repository
-          </Button>
-        </div>
-      ) : null}
-      <Button
-        type="button"
-        variant="outline"
-        disabled={disabled || provider.detecting}
-        onClick={() => void provider.retryDetection()}
+    <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+      <p
+        role={provider.detectionError ? "alert" : "status"}
+        className="min-w-0 flex-1 break-words text-xs leading-5 text-muted-foreground"
       >
-        Retry detection
-      </Button>
+        {message}
+      </p>
+      {provider.detectionProposal ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={disabled || provider.detecting}
+          onClick={() => void provider.acceptDetection()}
+        >
+          Use detected repository
+        </Button>
+      ) : null}
+      {!provider.draft.providerId ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          disabled={disabled || provider.detecting}
+          onClick={() => void provider.retryDetection()}
+        >
+          <span
+            className={
+              provider.detecting ? "inline-flex size-3.5 animate-spin" : "inline-flex size-3.5"
+            }
+          >
+            <RefreshCcw className="size-3.5" />
+          </span>
+          Retry detection
+        </Button>
+      ) : null}
     </div>
   );
+}
+
+function detectionMessage(provider: FieldProps["provider"]): string | null {
+  const repository = provider.detection?.candidates[0]?.config.repository;
+  let identity: string | null = null;
+  if (repository) {
+    identity =
+      "deployment" in repository
+        ? `${repository.organization}/${repository.project}/${repository.name}`
+        : `${repository.host}/${repository.owner}/${repository.name}`;
+  }
+  let message: string | null = null;
+  if (provider.detecting) message = "Detecting Git provider…";
+  else if (provider.detectionError)
+    message = `${provider.detectionError} Retry detection or enter details manually.`;
+  else if (provider.detection?.outcome === "none")
+    message = "No supported remote found. Choose a provider below or skip setup.";
+  else if (provider.detection?.outcome === "ambiguous")
+    message =
+      "Remotes point to different repositories. Choose the provider and enter the intended repository.";
+  else if (provider.detectionProposal)
+    message = `Detected ${identity}. Your edits remain in the form.`;
+  return message;
 }

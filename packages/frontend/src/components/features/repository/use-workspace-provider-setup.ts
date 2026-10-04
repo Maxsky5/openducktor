@@ -2,7 +2,6 @@ import type {
   AzureDevOpsConnectionState,
   WorkspaceProviderSetupSession,
   WorkspaceProviderSetupDetection,
-  WorkspaceProviderSetupGithub,
 } from "@openducktor/contracts";
 import { azureDevOpsConnectionConfigurationFingerprint } from "@openducktor/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,7 +12,6 @@ import {
   setupDetectionOptions,
   setupStatusOptions,
   setupStatusObserverOptions,
-  setupGithubOptions,
   setupAreasOptions,
   setupProgressOptions,
   workspaceProviderSetupKeys,
@@ -48,7 +46,6 @@ export function useWorkspaceProviderSetup(bridge = hostBridge) {
   const [detectionProposal, setDetectionProposal] = useState(false);
   const [detecting, setDetecting] = useState(false);
   const statusQuery = useQuery(setupStatusObserverOptions(client, session));
-  const [github, setGithub] = useState<WorkspaceProviderSetupGithub | null>(null);
   const [areas, setAreas] = useState<string[]>([]);
   const [connection, setConnection] = useState<AzureDevOpsConnectionState>({
     status: "disconnected",
@@ -100,7 +97,6 @@ export function useWorkspaceProviderSetup(bridge = hostBridge) {
     version.current += 1;
     setDraft(next);
     clearStatus();
-    setGithub(null);
     setError(null);
     const connectionChanged =
       next.providerId !== before.providerId ||
@@ -179,6 +175,7 @@ export function useWorkspaceProviderSetup(bridge = hostBridge) {
     const current = sessionRef.current;
     if (!current) return;
     const localVersion = version.current;
+    let detected = false;
     setDetecting(true);
     setDetectionError(null);
     try {
@@ -196,6 +193,7 @@ export function useWorkspaceProviderSetup(bridge = hostBridge) {
         setDraft(next);
         accepted.current = null;
         setDetectionProposal(false);
+        detected = true;
       } else {
         setDetectionProposal(result.outcome === "detected");
       }
@@ -205,9 +203,11 @@ export function useWorkspaceProviderSetup(bridge = hostBridge) {
     } finally {
       if (sessionRef.current?.setupId === current.setupId) setDetecting(false);
     }
+    if (detected && mounted.current && sessionRef.current?.setupId === current.setupId)
+      await run("Check provider readiness", async () => readStatus(await ensureSelection()));
   };
   const acceptDetection = () =>
-    run("Use detected repository", async () => {
+    run("Check provider readiness", async () => {
       const candidate = detection?.outcome === "detected" ? detection.candidates[0] : null;
       if (!candidate) return;
       const next = {
@@ -219,13 +219,13 @@ export function useWorkspaceProviderSetup(bridge = hostBridge) {
       setPat("");
       setConnection({ status: "disconnected" });
       clearStatus();
-      setGithub(null);
       setAreas([]);
       edited.current = true;
       version.current += 1;
       draftRef.current = next;
       setDraft(next);
       setDetectionProposal(false);
+      if (next.enabled) await readStatus(await ensureSelection());
     });
   const stopListening = () => {
     unsubscribe.current?.();
@@ -284,7 +284,6 @@ export function useWorkspaceProviderSetup(bridge = hostBridge) {
     setDetectionError(null);
     setError(null);
     clearStatus();
-    setGithub(null);
     setAreas([]);
     setConnection({ status: "disconnected" });
     void retryDetection();
@@ -410,14 +409,6 @@ export function useWorkspaceProviderSetup(bridge = hostBridge) {
       clearStatus();
       setPat("");
     });
-  const inspectGithub = () =>
-    run("Check GitHub CLI", async () => {
-      const current = await sendSelection();
-      const result = await queryClient.fetchQuery(
-        setupGithubOptions(client, current, draftRef.current.github.host.trim()),
-      );
-      setGithub(result);
-    });
   const loadAreas = () =>
     run("Load work item areas", async () => {
       const current = await ensureSelection();
@@ -483,7 +474,6 @@ export function useWorkspaceProviderSetup(bridge = hostBridge) {
       operation || isCancelling || error || statusQuery.isFetching || statusQuery.isError
         ? null
         : (statusQuery.data ?? null),
-    github,
     areas,
     connection,
     pat,
@@ -496,7 +486,6 @@ export function useWorkspaceProviderSetup(bridge = hostBridge) {
     cancelSignIn,
     savePat,
     disconnect,
-    inspectGithub,
     loadAreas,
     ensureSelection,
     recover,

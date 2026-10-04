@@ -183,7 +183,8 @@ export function useWorkspaceCreation({
       return true;
     },
     continueProvider: async () => {
-      if (!busy && (await provider.check())) dispatch({ type: "stage", stage: "information" });
+      if (!busy && (provider.status?.health?.available || (await provider.check())))
+        dispatch({ type: "stage", stage: "information" });
     },
     skipProvider: async () => {
       if (!busy && (await provider.skip())) dispatch({ type: "stage", stage: "information" });

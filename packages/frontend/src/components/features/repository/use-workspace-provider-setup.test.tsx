@@ -53,6 +53,7 @@ function fixture(
     status?: Promise<void>;
     readStatus?: () => Promise<WorkspaceProviderSetupStatus>;
     progress?: () => Promise<void>;
+    areas?: string[];
   } = {},
 ) {
   const ref = { setupId: crypto.randomUUID(), revision: 0, repoPath: "/repo" };
@@ -135,6 +136,8 @@ function fixture(
       case "workspace_provider_setup_discard":
         await discard();
         return schema.parse(undefined);
+      case "workspace_provider_setup_areas":
+        return schema.parse(options.areas ?? []);
       case "workspace_provider_setup_cancel_sign_in":
         return schema.parse(undefined);
       default:
@@ -339,13 +342,7 @@ describe("workspace provider draft ownership", () => {
           <button type="button" onClick={() => void provider.begin("/repo")}>
             Choose repo
           </button>
-          <WorkspaceProviderFields
-            provider={provider}
-            disabled={false}
-            onSkip={async () => {
-              await provider.skip();
-            }}
-          />
+          <WorkspaceProviderFields provider={provider} disabled={false} />
         </>
       );
     }
@@ -357,14 +354,12 @@ describe("workspace provider draft ownership", () => {
     try {
       fireEvent.click(screen.getByRole("button", { name: "Choose repo" }));
       await waitFor(() =>
-        expect(screen.getByLabelText<HTMLInputElement>("Selected repository path").value).toBe(
-          "/repo",
-        ),
+        expect(screen.getByLabelText("Selected repository path").textContent).toBe("/repo"),
       );
       f.loseNextReply();
       fireEvent.click(screen.getByRole("radio", { name: "GitHub" }));
       await screen.findByText(/Configuration reply lost/);
-      fireEvent.change(screen.getByLabelText("Owner or organization"), {
+      fireEvent.change(screen.getByLabelText("Owner"), {
         target: { value: "kept" },
       });
       await screen.findByText(/Workspace setup changed/);
@@ -380,9 +375,76 @@ describe("workspace provider draft ownership", () => {
         () => expect(view.queryByRole("button", { name: "Read setup state" }) === null).toBe(true),
         { timeout: 200 },
       );
-      expect(screen.getByLabelText<HTMLInputElement>("Owner or organization").value).toBe("kept");
+      expect(screen.getByLabelText<HTMLInputElement>("Owner").value).toBe("kept");
     } finally {
       progress.resolve();
+      view.unmount();
+    }
+  });
+  test("shows and cancels a pending Microsoft sign-in in the shared Azure form", async () => {
+    const f = fixture(undefined, { signInEvent: false });
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <AzureSetup bridge={f.bridge} />
+      </QueryProvider>,
+    );
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Choose repo" }));
+      const signIn = await screen.findByRole<HTMLButtonElement>("button", {
+        name: "Sign in with Microsoft",
+      });
+      await waitFor(() => expect(signIn.disabled).toBe(false));
+      fireEvent.click(signIn);
+      await screen.findByText("CODE");
+      expect(screen.getByRole("button", { name: "Copy code" })).toBeTruthy();
+      expect(
+        screen.getByRole("link", { name: "Open Microsoft sign-in" }).getAttribute("href"),
+      ).toBe("https://microsoft.com/devicelogin");
+      fireEvent.click(screen.getByRole("button", { name: "Cancel sign-in" }));
+      await screen.findByRole("button", { name: "Sign in with Microsoft" });
+      expect(view.queryByText("CODE")).toBeNull();
+    } finally {
+      view.unmount();
+    }
+  });
+  test("can clear an optional Azure area before workspace creation", async () => {
+    const f = fixture(undefined, {
+      areas: ["Project", "Project\\Team"],
+      readStatus: async () => ({
+        health: null,
+        connection: { status: "connected", account: "user" },
+      }),
+    });
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <AzureSetup bridge={f.bridge} />
+      </QueryProvider>,
+    );
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Choose repo" }));
+      const signIn = await screen.findByRole<HTMLButtonElement>("button", {
+        name: "Sign in with Microsoft",
+      });
+      await waitFor(() => expect(signIn.disabled).toBe(false));
+      fireEvent.click(signIn);
+      const reload = await screen.findByRole<HTMLButtonElement>("button", {
+        name: "Reload area paths",
+      });
+      await waitFor(() => expect(reload.disabled).toBe(false));
+      fireEvent.click(reload);
+      const picker = await screen.findByRole<HTMLButtonElement>("button", { name: "Area path" });
+      await waitFor(() => expect(picker.disabled).toBe(false));
+      fireEvent.click(picker);
+      fireEvent.click(await screen.findByRole("option", { name: "Project\\Team" }));
+      await waitFor(() => expect(picker.textContent).toContain("Project\\Team"));
+      fireEvent.click(screen.getByRole("button", { name: "Clear area" }));
+      await waitFor(() => expect(picker.textContent).toContain("Choose an area path"));
+      expect(view.queryByRole("button", { name: "Clear area" })).toBeNull();
+      const last = f.selections.at(-1);
+      expect(
+        last?.kind === "configured" ? last.config.settings?.areaPath : undefined,
+      ).toBeUndefined();
+    } finally {
       view.unmount();
     }
   });
@@ -669,3 +731,25 @@ describe("workspace provider draft ownership", () => {
     ).toBe("incomplete");
   });
 });
+
+function AzureSetup({ bridge }: { bridge: typeof hostBridge }) {
+  const provider = useWorkspaceProviderSetup(bridge);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={async () => {
+          await provider.begin("/repo");
+          provider.update((draft) => ({
+            ...draft,
+            providerId: "azure_devops",
+            azure: { ...draft.azure, organization: "org", project: "Project", name: "repo" },
+          }));
+        }}
+      >
+        Choose repo
+      </button>
+      <WorkspaceProviderFields provider={provider} disabled={false} />
+    </>
+  );
+}

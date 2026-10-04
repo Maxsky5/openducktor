@@ -175,6 +175,106 @@ const advanceToModels = async () => {
 };
 
 describe("workspace creation", () => {
+  test("checks a detected provider before Continue and checks again after edits", async () => {
+    const detect = hostClient.workspaceProviderSetupDetect;
+    const status = hostClient.workspaceProviderSetupStatus;
+    const reads = mock(async () => ({
+      health: {
+        providerId: "github" as const,
+        enabled: true,
+        available: true,
+        executablePath: "/bin/gh",
+        version: null,
+        account: null,
+        authenticated: true,
+        repositoryMappingValid: true,
+      },
+      connection: null,
+    }));
+    let ownedId: string | undefined;
+    hostClient.workspaceProviderSetupDetect = async (ref) =>
+      ref.setupId === ownedId
+        ? {
+            outcome: "detected",
+            candidates: [
+              {
+                remoteNames: ["origin"],
+                config: {
+                  id: "github",
+                  enabled: true,
+                  autoDetected: true,
+                  repository: { host: "github.com", owner: "owner", name: "repo" },
+                },
+              },
+            ],
+          }
+        : detect(ref);
+    hostClient.workspaceProviderSetupStatus = async (ref) => {
+      if (ref.setupId !== ownedId) return status(ref);
+      return reads();
+    };
+    const h = createHookHarness(
+      () =>
+        useWorkspaceCreation({
+          workspaces: [],
+          commitWorkspaceProviderSetup: mock(async (input) => outcome(input)),
+        }),
+      {},
+      { wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider> },
+    );
+    // Capture only this setup so other parallel tests keep their own host fake.
+    const begin = hostClient.workspaceProviderSetupBegin;
+    hostClient.workspaceProviderSetupBegin = async (input) => {
+      const ref = await begin(input);
+      if (input.repoPath === "/early-provider-check") ownedId = ref.setupId;
+      return ref;
+    };
+    await h.mount();
+    try {
+      await h.run(async (state) => {
+        await state.confirmRepo("/early-provider-check");
+      });
+      await h.waitFor((state) => !state.provider.detecting && state.provider.pending === null);
+      expect(reads).toHaveBeenCalledTimes(1);
+      await h.waitFor((state) => state.provider.status?.health?.available === true);
+      expect(h.getLatest().stage).toBe("provider");
+      await h.run(async (state) => {
+        await state.continueProvider();
+      });
+      expect(h.getLatest().stage).toBe("information");
+      expect(reads).toHaveBeenCalledTimes(1);
+      await h.run((state) => {
+        state.back();
+      });
+      await h.run((state) => {
+        state.provider.update((draft) => ({
+          ...draft,
+          github: { ...draft.github, owner: "edited" },
+        }));
+      });
+      await h.waitFor((state) => state.provider.pending === null);
+      expect(h.getLatest().provider.status).toBeNull();
+      reads.mockImplementationOnce(async () => {
+        throw new Error("Repository access failed");
+      });
+      await h.run(async (state) => {
+        await state.continueProvider();
+      });
+      expect(reads).toHaveBeenCalledTimes(2);
+      expect(h.getLatest().stage).toBe("provider");
+      expect(h.getLatest().provider.error).toContain("Repository access failed");
+      await h.run(async (state) => {
+        await state.continueProvider();
+      });
+      expect(reads).toHaveBeenCalledTimes(3);
+      expect(h.getLatest().stage).toBe("information");
+    } finally {
+      await h.unmount();
+      hostClient.workspaceProviderSetupBegin = begin;
+      hostClient.workspaceProviderSetupDetect = detect;
+      hostClient.workspaceProviderSetupStatus = status;
+    }
+  });
   test("keeps cleanup failure visible before reopening a closed workspace", async () => {
     const closed = {
       ...record({ workspaceId: "closed", workspaceName: "Closed", repoPath: "/closed" }),
@@ -289,7 +389,7 @@ describe("workspace creation", () => {
     const commit = mock(async (input) => outcome(input));
     renderHarness({ commit });
     await chooseRepo();
-    expect(screen.getByLabelText<HTMLInputElement>("Selected repository path").value).toBe("/repo");
+    expect(screen.getByLabelText("Selected repository path").textContent).toBe("/repo");
     await skipProvider();
     fireEvent.change(screen.getByLabelText("Workspace name"), { target: { value: "Renamed" } });
     fireEvent.click(screen.getByRole("button", { name: "Continue to models" }));
@@ -299,6 +399,28 @@ describe("workspace creation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
     await skipProvider();
     expect(screen.getByLabelText<HTMLInputElement>("Workspace ID").value).toBe("renamed");
+    expect(commit).not.toHaveBeenCalled();
+  });
+  test("keeps provider selection on its step until Continue", async () => {
+    const commit = mock(async (input) => outcome(input));
+    renderHarness({ commit });
+    await chooseRepo();
+    fireEvent.click(screen.getByRole("radio", { name: "GitHub" }));
+    await screen.findByRole("switch", { name: "Enable GitHub" });
+    fireEvent.click(screen.getByRole("radio", { name: "No provider" }));
+    expect(screen.getByRole("radio", { name: "No provider" }).getAttribute("aria-checked")).toBe(
+      "true",
+    );
+    expect(screen.queryByLabelText("Workspace name")).toBeNull();
+    expect(commit).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Continue to workspace information" })
+          .disabled,
+      ).toBe(false),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Continue to workspace information" }));
+    await screen.findByLabelText("Workspace name");
     expect(commit).not.toHaveBeenCalled();
   });
   test("submits workspace details and current models only on the final action", async () => {

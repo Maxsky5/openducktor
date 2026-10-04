@@ -1,72 +1,79 @@
-import type { ReactElement } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { useState, type ComponentProps, type ReactElement } from "react";
+import { GithubGitProviderForm } from "../settings/github-git-provider-form";
 import type { FieldProps } from "./workspace-provider-fields";
 
 export function GithubSetupFields({ provider, disabled }: FieldProps): ReactElement {
-  return (
-    <div className="grid gap-4">
-      <div className="grid gap-3 sm:grid-cols-3">
-        {(
-          [
-            ["host", "Host"],
-            ["owner", "Owner or organization"],
-            ["name", "Repository"],
-          ] as const
-        ).map(([field, label]) => {
-          const error = provider.errors[`repository.${field}`];
-          return (
-            <div className="grid gap-1.5" key={field}>
-              <Label htmlFor={`setup-github-${field}`}>{label}</Label>
-              <Input
-                id={`setup-github-${field}`}
-                value={provider.draft.github[field]}
-                disabled={disabled}
-                aria-invalid={Boolean(error)}
-                aria-describedby={error ? `setup-github-${field}-error` : undefined}
-                onChange={(event) =>
-                  provider.update((current) => ({
-                    ...current,
-                    github: { ...current.github, [field]: event.currentTarget.value },
-                  }))
-                }
-              />
-              {error ? (
-                <p
-                  id={`setup-github-${field}-error`}
-                  className="text-xs text-destructive"
-                  role="alert"
-                >
-                  {error}
-                </p>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
-      <Button
-        type="button"
-        variant="outline"
-        disabled={disabled || Boolean(provider.errors["repository.host"])}
-        onClick={() => void provider.inspectGithub()}
-      >
-        Check GitHub CLI and authentication
-      </Button>
-      {provider.github ? (
-        <div className="text-sm" role="status">
-          <p>{provider.github.version ?? "GitHub CLI is unavailable."}</p>
-          <p>
-            {provider.github.authenticated
-              ? `Authenticated${provider.github.account ? ` as ${provider.github.account}` : ""} on ${provider.draft.github.host}.`
-              : (provider.github.reason ?? "Run gh auth login for this host.")}
-          </p>
-        </div>
-      ) : null}
-      <p className="text-xs text-muted-foreground">
-        GitHub uses the installed gh CLI. Install it if needed, then run gh auth login --hostname{" "}
-        {provider.draft.github.host || "github.com"}.
-      </p>
-    </div>
+  const [manualOpen, setManualOpen] = useState(
+    () => !provider.draft.github.owner || !provider.draft.github.name,
   );
+  return (
+    <GithubGitProviderForm
+      disabled={disabled}
+      repositoryErrors={githubErrors(provider)}
+      showErrors={provider.error !== null}
+      model={githubModel(provider, disabled, manualOpen, () => setManualOpen((open) => !open))}
+    />
+  );
+}
+
+function githubModel(
+  provider: FieldProps["provider"],
+  disabled: boolean,
+  manualOpen: boolean,
+  toggleManual: () => void,
+): ComponentProps<typeof GithubGitProviderForm>["model"] {
+  const { draft, status } = provider;
+  const health = status?.health;
+  const repositorySlug =
+    draft.github.owner && draft.github.name ? `${draft.github.owner}/${draft.github.name}` : null;
+  const ready = health?.available === true;
+  let cliStatus: ComponentProps<typeof GithubGitProviderForm>["model"]["cliStatus"] = "hidden";
+  if (draft.enabled && health) cliStatus = health.executablePath ? "installed" : "missing";
+  let readinessLabel = "Disabled";
+  if (draft.enabled) {
+    readinessLabel = "Not checked";
+    if (health) readinessLabel = ready ? "Ready" : "Not ready";
+  }
+  return {
+    cliStatus,
+    cliStatusLabel: health?.executablePath ? "gh installed" : "gh not found",
+    configuredProviderId: "github",
+    detectionMessage: null,
+    githubEnabled: draft.enabled,
+    githubHost: draft.github.host,
+    githubReadinessLabel: readinessLabel,
+    githubReadinessMessage: ready
+      ? "Provider connection and repository mapping are ready."
+      : (health?.reason ?? "Continue checks sign-in and repository access."),
+    githubReady: ready,
+    githubControlsDisabled: disabled,
+    hasConfiguredNonGithubProvider: false,
+    isDetecting: provider.detecting,
+    isManualConfigOpen: manualOpen || repositorySlug === null,
+    providerLabel: "GitHub",
+    providerDescription: "GitHub repository hosting.",
+    providerStatusLabel: "Pull requests disabled",
+    repositoryDraft: draft.github,
+    repositorySlug,
+    handleDetectFromOrigin: () => void provider.retryDetection(),
+    handleGithubEnabledChange: (enabled) => provider.update((current) => ({ ...current, enabled })),
+    handleRemoveConfiguredProvider: () =>
+      provider.update((current) => ({ ...current, providerId: null })),
+    handleRepositoryDraftFieldChange: (field, value) =>
+      provider.update((current) => ({
+        ...current,
+        github: { ...current.github, [field]: value },
+      })),
+    handleToggleManualEdit: toggleManual,
+  };
+}
+
+function githubErrors(provider: FieldProps["provider"]) {
+  return {
+    host: provider.errors["repository.host"] ? "Enter a valid GitHub host." : undefined,
+    owner: provider.errors["repository.owner"]
+      ? "Enter the repository owner or organization."
+      : undefined,
+    name: provider.errors["repository.name"] ? "Enter the repository name." : undefined,
+  };
 }

@@ -1,4 +1,4 @@
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { ArrowLeft, FolderGit2 } from "lucide-react";
 import { type ReactElement, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -231,8 +231,12 @@ function OpenRepositoryModalSession({
   });
   let description = "Choose a local Git repository to start a workspace.";
   if (showCreationFlow)
-    description =
-      "Choose a Git folder, configure its provider, review workspace details, and set model defaults.";
+    description = {
+      repository: "Choose a local Git folder for this workspace.",
+      provider: "Connect pull requests and work items, or skip this step.",
+      information: "Choose a name and appearance for this workspace.",
+      models: "Set default models for your agents. You can change these later.",
+    }[creation.stage];
   else if (hasClosedWorkspaces)
     description = "Start a new workspace or reopen one you closed earlier.";
 
@@ -246,8 +250,8 @@ function OpenRepositoryModalSession({
     >
       <DialogContent
         className={cn(
-          "grid max-h-[92vh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-0",
-          showCreationFlow || hasClosedWorkspaces ? "max-w-6xl" : "max-w-2xl",
+          "grid max-h-[88vh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-0",
+          showCreationFlow ? "max-w-6xl" : "max-w-4xl",
         )}
         {...(canDismiss ? {} : { closeButton: null })}
         onEscapeKeyDown={(event) => {
@@ -258,8 +262,8 @@ function OpenRepositoryModalSession({
         }}
       >
         <DialogHeader className="border-b border-border px-6 py-5">
-          <DialogTitle className="flex items-center gap-2 text-2xl">
-            <Sparkles className="size-5 text-primary" />
+          <DialogTitle className="flex items-center gap-2 text-lg">
+            <FolderGit2 className="size-5 text-muted-foreground" />
             Open a repository
           </DialogTitle>
           <DialogDescription>{description}</DialogDescription>
