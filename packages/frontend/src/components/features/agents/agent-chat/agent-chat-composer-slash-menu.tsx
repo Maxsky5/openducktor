@@ -1,8 +1,12 @@
 import type { AgentSlashCommand } from "@openducktor/core";
 import { ChevronRight, LoaderCircle, Terminal } from "lucide-react";
-import { type ReactElement, useEffect, useRef } from "react";
+import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import {
+  AgentChatComposerMenu,
+  AgentChatComposerMenuEmptyState,
+  AgentChatComposerMenuRow,
+} from "./agent-chat-composer-menu";
 import { getComposerPopupOptionId } from "./agent-chat-composer-menu-state";
 
 type AgentChatComposerSlashMenuProps = {
@@ -24,109 +28,77 @@ export function AgentChatComposerSlashMenu({
   onRetry,
   onSelectCommand,
 }: AgentChatComposerSlashMenuProps): ReactElement {
-  const commandButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-
-  useEffect(() => {
-    const activeCommand = commands[activeIndex];
-    if (!activeCommand) {
-      return;
-    }
-
-    commandButtonRefs.current[activeCommand.id]?.scrollIntoView({
-      block: "nearest",
-      inline: "nearest",
-    });
-  }, [activeIndex, commands]);
-
   return (
-    <div className="absolute bottom-full rounded-xl z-20 mb-2 border border-border bg-popover shadow-lg">
-      {isSlashCommandsLoading ? (
-        <div
-          role="status"
-          className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground"
-        >
-          <LoaderCircle className="size-4 animate-spin" />
-          <span>Loading slash commands…</span>
-        </div>
-      ) : null}
-      {slashCommandsError ? (
-        <div
-          role="alert"
-          className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-sm text-destructive"
-        >
-          <span className="min-w-0">{slashCommandsError}</span>
-          {onRetry ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-7 shrink-0 px-2"
-              onClick={onRetry}
+    <AgentChatComposerMenu
+      listboxId={listboxId}
+      label="Slash commands"
+      activeIndex={activeIndex}
+      items={commands}
+      isBusy={isSlashCommandsLoading && commands.length === 0}
+      feedback={
+        <>
+          {isSlashCommandsLoading ? (
+            <div
+              role="status"
+              className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground"
             >
-              Retry
-            </Button>
+              <LoaderCircle className="size-4 animate-spin" />
+              <span>Loading slash commands…</span>
+            </div>
           ) : null}
-        </div>
-      ) : null}
-      {commands.length === 0 && !isSlashCommandsLoading && !slashCommandsError ? (
-        <div role="status" className="px-3 py-2 text-sm text-muted-foreground">
-          No slash commands found.
-        </div>
-      ) : null}
-      <div
-        id={listboxId}
-        role="listbox"
-        aria-label="Slash commands"
-        aria-busy={(isSlashCommandsLoading && commands.length === 0) || undefined}
-        className="hide-scrollbar flex rounded-xl max-h-64 flex-col overflow-y-auto"
-      >
-        {commands.length > 0
-          ? commands.map((command, index) => {
-              const isActive = index === activeIndex;
-              return (
-                <button
-                  key={command.id}
-                  id={getComposerPopupOptionId(listboxId, index)}
-                  ref={(element) => {
-                    commandButtonRefs.current[command.id] = element;
-                  }}
-                  role="option"
-                  aria-selected={isActive}
-                  tabIndex={-1}
+          {slashCommandsError ? (
+            <div
+              role="alert"
+              className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-sm text-destructive"
+            >
+              <span className="min-w-0">{slashCommandsError}</span>
+              {onRetry ? (
+                <Button
                   type="button"
-                  className={cn(
-                    "flex w-full cursor-pointer gap-3 px-3 py-2 text-left transition-colors",
-                    isActive ? "bg-selected-surface" : "hover:bg-muted/80",
-                  )}
-                  onPointerDown={(event) => {
-                    event.preventDefault();
-                    onSelectCommand(command);
-                  }}
+                  size="sm"
+                  variant="outline"
+                  className="h-7 shrink-0 px-2"
+                  onClick={onRetry}
                 >
-                  <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                    <Terminal className="size-3.5" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-2 text-sm font-medium text-foreground">
-                      <span className="truncate">/{command.trigger}</span>
-                      {command.source ? (
-                        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                          {command.source}
-                        </span>
-                      ) : null}
-                    </span>
-                    {command.description ? (
-                      <span className="line-clamp-2 text-xs text-muted-foreground">
-                        {command.description}
-                      </span>
-                    ) : null}
-                  </span>
-                  <ChevronRight className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                </button>
-              );
-            })
-          : null}
-      </div>
-    </div>
+                  Retry
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+          {commands.length === 0 && !isSlashCommandsLoading && !slashCommandsError ? (
+            <AgentChatComposerMenuEmptyState title="No slash commands found." />
+          ) : null}
+        </>
+      }
+    >
+      {commands.map((command, index) => (
+        <AgentChatComposerMenuRow
+          key={command.id}
+          optionId={getComposerPopupOptionId(listboxId, index)}
+          isActive={index === activeIndex}
+          onSelect={() => onSelectCommand(command)}
+        >
+          <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+            <Terminal className="size-3.5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <span className="truncate">/{command.trigger}</span>
+              {command.source ? (
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                  {command.source}
+                </span>
+              ) : null}
+            </span>
+            {command.description ? (
+              <span className="line-clamp-2 text-xs text-muted-foreground">
+                {command.description}
+              </span>
+            ) : null}
+          </span>
+          <ChevronRight className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+        </AgentChatComposerMenuRow>
+      ))}
+    </AgentChatComposerMenu>
   );
 }

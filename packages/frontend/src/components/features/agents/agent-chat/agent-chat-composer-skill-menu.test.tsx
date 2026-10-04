@@ -46,43 +46,6 @@ describe("AgentChatComposerSkillMenu", () => {
     expect(activeSkill.getAttribute("tabindex")).toBe("-1");
   });
 
-  test("scrolls the active skill into view when keyboard navigation changes selection", () => {
-    const scrollIntoView = mock(() => {});
-    const original = Element.prototype.scrollIntoView;
-    Element.prototype.scrollIntoView = scrollIntoView;
-
-    try {
-      const rendered = render(
-        <AgentChatComposerSkillMenu
-          listboxId={LISTBOX_ID}
-          skills={SKILLS}
-          activeIndex={0}
-          skillsError={null}
-          isSkillsLoading={false}
-          onRetry={null}
-          onSelectSkill={() => {}}
-        />,
-      );
-
-      rendered.rerender(
-        <AgentChatComposerSkillMenu
-          listboxId={LISTBOX_ID}
-          skills={SKILLS}
-          activeIndex={1}
-          skillsError={null}
-          isSkillsLoading={false}
-          onRetry={null}
-          onSelectSkill={() => {}}
-        />,
-      );
-
-      expect(scrollIntoView).toHaveBeenCalledTimes(2);
-      expect(scrollIntoView).toHaveBeenLastCalledWith({ block: "nearest", inline: "nearest" });
-    } finally {
-      Element.prototype.scrollIntoView = original;
-    }
-  });
-
   test("mounts the controlled listbox while skills are loading", () => {
     render(
       <AgentChatComposerSkillMenu
@@ -177,6 +140,7 @@ describe("AgentChatComposerSkillMenu", () => {
     const emptyFeedback = screen.getByRole("status");
     expect(listbox.id).toBe(LISTBOX_ID);
     expect(listbox.contains(emptyFeedback)).toBe(false);
-    expect(emptyFeedback.textContent).toBe("No skills found.");
+    expect(emptyFeedback.textContent).toContain("No skills found.");
+    expect(emptyFeedback.textContent).toContain("Try a different name or clear your search.");
   });
 });

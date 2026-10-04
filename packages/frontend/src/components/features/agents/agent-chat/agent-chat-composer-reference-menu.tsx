@@ -1,8 +1,12 @@
 import type { AgentFileSearchResult, AgentSubagentReference } from "@openducktor/core";
 import { Bot, ChevronRight, LoaderCircle } from "lucide-react";
-import { type ReactElement, useEffect, useRef } from "react";
+import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import {
+  AgentChatComposerMenu,
+  AgentChatComposerMenuEmptyState,
+  AgentChatComposerMenuRow,
+} from "./agent-chat-composer-menu";
 import {
   getComposerPopupOptionId,
   resolveAgentChatComposerReferenceMenuVisibility,
@@ -39,108 +43,103 @@ export function AgentChatComposerReferenceMenu({
   onSelectFile,
   onSelectSubagent,
 }: AgentChatComposerReferenceMenuProps): ReactElement | null {
-  const {
-    hasResults,
-    showSubagentsLoading,
-    showFileSearchLoading,
-    showEmptyState,
-    shouldRenderMenu,
-  } = resolveAgentChatComposerReferenceMenuVisibility({
-    itemCount: items.length,
-    fileSearchError,
-    isFileSearchPending,
-    isFileSearchLoading,
-    subagentsError,
-    isSubagentsLoading,
-  });
+  const { showSubagentsLoading, showFileSearchLoading, showEmptyState, shouldRenderMenu } =
+    resolveAgentChatComposerReferenceMenuVisibility({
+      itemCount: items.length,
+      fileSearchError,
+      isFileSearchPending,
+      isFileSearchLoading,
+      subagentsError,
+      isSubagentsLoading,
+    });
 
   if (!shouldRenderMenu) {
     return null;
   }
 
   return (
-    <div className="absolute bottom-full z-20 mb-2 rounded-xl border border-border bg-popover shadow-lg">
-      {showSubagentsLoading ? (
-        <div
-          role="status"
-          className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground"
-        >
-          <LoaderCircle className="size-4 animate-spin" />
-          <span>Loading subagents</span>
-        </div>
-      ) : null}
-      {subagentsError ? (
-        <div
-          role="alert"
-          className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-sm text-destructive"
-        >
-          <span className="min-w-0">{subagentsError}</span>
-          {onRetrySubagents ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-7 shrink-0 px-2"
-              onClick={onRetrySubagents}
+    <AgentChatComposerMenu
+      listboxId={listboxId}
+      label="References"
+      activeIndex={activeIndex}
+      items={items}
+      isBusy={showSubagentsLoading || showFileSearchLoading}
+      feedback={
+        <>
+          {showSubagentsLoading ? (
+            <div
+              role="status"
+              className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground"
             >
-              Retry
-            </Button>
+              <LoaderCircle className="size-4 animate-spin" />
+              <span>Loading subagents</span>
+            </div>
           ) : null}
-        </div>
-      ) : null}
-      {showFileSearchLoading ? (
-        <div
-          role="status"
-          className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground"
-        >
-          <LoaderCircle className="size-4 animate-spin" />
-          <span>Searching files</span>
-        </div>
-      ) : null}
-      {fileSearchError ? (
-        <div role="alert" className="border-b border-border px-3 py-2 text-sm text-destructive">
-          {fileSearchError}
-        </div>
-      ) : null}
-      {showEmptyState ? (
-        <div role="status" className="px-3 py-2 text-sm text-muted-foreground">
-          {supportsSubagentReferences ? "No references found." : "No files found."}
-        </div>
-      ) : null}
-      <div
-        id={listboxId}
-        role="listbox"
-        aria-label="References"
-        aria-busy={showSubagentsLoading || showFileSearchLoading || undefined}
-        className="hide-scrollbar flex max-h-64 flex-col overflow-y-auto rounded-xl"
-      >
-        {hasResults
-          ? items.map((item, index) => {
-              const isActive = index === activeIndex;
-              if (item.kind === "subagent") {
-                return (
-                  <SubagentReferenceMenuRow
-                    key={item.id}
-                    optionId={getComposerPopupOptionId(listboxId, index)}
-                    subagent={item.subagent}
-                    isActive={isActive}
-                    onSelect={onSelectSubagent}
-                  />
-                );
-              }
-              return (
-                <FileReferenceMenuRow
-                  key={item.id}
-                  optionId={getComposerPopupOptionId(listboxId, index)}
-                  result={item.result}
-                  isActive={isActive}
-                  onSelect={onSelectFile}
-                />
-              );
-            })
-          : null}
-      </div>
-    </div>
+          {subagentsError ? (
+            <div
+              role="alert"
+              className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-sm text-destructive"
+            >
+              <span className="min-w-0">{subagentsError}</span>
+              {onRetrySubagents ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 shrink-0 px-2"
+                  onClick={onRetrySubagents}
+                >
+                  Retry
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+          {showFileSearchLoading ? (
+            <div
+              role="status"
+              className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground"
+            >
+              <LoaderCircle className="size-4 animate-spin" />
+              <span>Searching files</span>
+            </div>
+          ) : null}
+          {fileSearchError ? (
+            <div role="alert" className="border-b border-border px-3 py-2 text-sm text-destructive">
+              {fileSearchError}
+            </div>
+          ) : null}
+          {showEmptyState ? (
+            <AgentChatComposerMenuEmptyState
+              title={supportsSubagentReferences ? "No references found." : "No files found."}
+            />
+          ) : null}
+        </>
+      }
+    >
+      {items.map((item, index) => {
+        const isActive = index === activeIndex;
+        if (item.kind === "subagent") {
+          return (
+            <SubagentReferenceMenuRow
+              key={item.id}
+              optionId={getComposerPopupOptionId(listboxId, index)}
+              subagent={item.subagent}
+              isActive={isActive}
+              onSelect={onSelectSubagent}
+            />
+          );
+        }
+        return (
+          <FileReferenceMenuRow
+            key={item.id}
+            optionId={getComposerPopupOptionId(listboxId, index)}
+            result={item.result}
+            isActive={isActive}
+            onSelect={onSelectFile}
+          />
+        );
+      })}
+    </AgentChatComposerMenu>
   );
 }
 
@@ -157,32 +156,11 @@ function SubagentReferenceMenuRow({
   isActive,
   onSelect,
 }: SubagentReferenceMenuRowProps): ReactElement {
-  const rowRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!isActive) {
-      return;
-    }
-
-    rowRef.current?.scrollIntoView?.({
-      block: "nearest",
-      inline: "nearest",
-    });
-  }, [isActive]);
-
   return (
-    <button
-      ref={rowRef}
-      id={optionId}
-      role="option"
-      aria-selected={isActive}
-      tabIndex={-1}
-      type="button"
-      className={referenceMenuRowClassName(isActive)}
-      onPointerDown={(event) => {
-        event.preventDefault();
-        onSelect(subagent);
-      }}
+    <AgentChatComposerMenuRow
+      optionId={optionId}
+      isActive={isActive}
+      onSelect={() => onSelect(subagent)}
     >
       <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-teal-100 text-teal-700 dark:bg-teal-950/50 dark:text-teal-200">
         <Bot className="size-3.5" />
@@ -197,7 +175,7 @@ function SubagentReferenceMenuRow({
         ) : null}
       </span>
       <ChevronRight className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-    </button>
+    </AgentChatComposerMenuRow>
   );
 }
 
@@ -214,32 +192,11 @@ function FileReferenceMenuRow({
   isActive,
   onSelect,
 }: FileReferenceMenuRowProps): ReactElement {
-  const rowRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!isActive) {
-      return;
-    }
-
-    rowRef.current?.scrollIntoView?.({
-      block: "nearest",
-      inline: "nearest",
-    });
-  }, [isActive]);
-
   return (
-    <button
-      ref={rowRef}
-      id={optionId}
-      role="option"
-      aria-selected={isActive}
-      tabIndex={-1}
-      type="button"
-      className={referenceMenuRowClassName(isActive)}
-      onPointerDown={(event) => {
-        event.preventDefault();
-        onSelect(result);
-      }}
+    <AgentChatComposerMenuRow
+      optionId={optionId}
+      isActive={isActive}
+      onSelect={() => onSelect(result)}
     >
       <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
         <AgentChatFileReferenceIcon kind={result.kind} className="text-muted-foreground" />
@@ -249,13 +206,6 @@ function FileReferenceMenuRow({
         <span className="block truncate text-xs text-muted-foreground">{result.path}</span>
       </span>
       <ChevronRight className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-    </button>
-  );
-}
-
-function referenceMenuRowClassName(isActive: boolean): string {
-  return cn(
-    "flex w-full cursor-pointer gap-3 px-3 py-2 text-left transition-colors",
-    isActive ? "bg-selected-surface" : "hover:bg-muted/80",
+    </AgentChatComposerMenuRow>
   );
 }

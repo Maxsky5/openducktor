@@ -47,43 +47,6 @@ describe("AgentChatComposerSlashMenu", () => {
     expect(activeCommand.getAttribute("tabindex")).toBe("-1");
   });
 
-  test("scrolls the active command into view when keyboard navigation changes selection", () => {
-    const scrollIntoView = mock(() => {});
-    const original = Element.prototype.scrollIntoView;
-    Element.prototype.scrollIntoView = scrollIntoView;
-
-    try {
-      const rendered = render(
-        <AgentChatComposerSlashMenu
-          listboxId={LISTBOX_ID}
-          commands={COMMANDS}
-          activeIndex={0}
-          slashCommandsError={null}
-          isSlashCommandsLoading={false}
-          onRetry={null}
-          onSelectCommand={() => {}}
-        />,
-      );
-
-      rendered.rerender(
-        <AgentChatComposerSlashMenu
-          listboxId={LISTBOX_ID}
-          commands={COMMANDS}
-          activeIndex={1}
-          slashCommandsError={null}
-          isSlashCommandsLoading={false}
-          onRetry={null}
-          onSelectCommand={() => {}}
-        />,
-      );
-
-      expect(scrollIntoView).toHaveBeenCalledTimes(2);
-      expect(scrollIntoView).toHaveBeenLastCalledWith({ block: "nearest", inline: "nearest" });
-    } finally {
-      Element.prototype.scrollIntoView = original;
-    }
-  });
-
   test("shows runtime errors without hiding reusable prompt commands", () => {
     const firstCommand = COMMANDS[0];
     if (!firstCommand) {
@@ -170,6 +133,7 @@ describe("AgentChatComposerSlashMenu", () => {
     expect(listbox.id).toBe(LISTBOX_ID);
     expect(listbox.children).toHaveLength(0);
     expect(listbox.contains(emptyFeedback)).toBe(false);
-    expect(emptyFeedback.textContent).toBe("No slash commands found.");
+    expect(emptyFeedback.textContent).toContain("No slash commands found.");
+    expect(emptyFeedback.textContent).toContain("Try a different name or clear your search.");
   });
 });
